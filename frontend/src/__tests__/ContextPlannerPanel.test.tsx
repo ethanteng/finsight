@@ -31,15 +31,17 @@ describe('ContextPlannerPanel', () => {
               selectedPacks: ['account_details', 'investment_details'],
               needsSecondaryValidation: true,
               retirementInputs: { sources: {} },
-              retirementScenario: {
-                requested: true,
-                primary: {
-                  type: 'fixed_growth',
-                  annualRate: 0.03,
-                  source: '3% bump',
-                  overrides: { retirementAge: 65, annualContributionAmount: 12_000, sources: {} },
+              scenarioPlans: {
+                retirement: {
+                  requested: true,
+                  primary: {
+                    type: 'fixed_growth',
+                    annualRate: 0.03,
+                    source: '3% bump',
+                    overrides: { retirementAge: 65, annualContributionAmount: 12_000, sources: {} },
+                  },
+                  comparison: { type: 'flat_nominal', source: 'flat version' },
                 },
-                comparison: { type: 'flat_nominal', source: 'flat version' },
               },
               summary: 'The follow-up continues a portfolio comparison.',
               model: 'gpt-test',

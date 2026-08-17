@@ -5,6 +5,10 @@ import type {
   RetirementScenarioEvidence,
   RetirementScenarioPlan,
 } from '../scenarios/retirement-scenario';
+import type {
+  ScenarioEvidenceRecord,
+  ScenarioPlanRecord,
+} from '../scenarios/calculator-registry';
 
 export interface ShowTheMathDatabaseData {
   canonical_facts?: CanonicalFact[];
@@ -71,6 +75,8 @@ export interface EvidenceManifest {
     finalPacks: ContextPackId[];
     needsSecondaryValidation: boolean;
     summary: string;
+    scenarios?: ScenarioPlanRecord;
+    /** @deprecated Persisted manifests before registry-keyed scenario planning. */
     retirementScenario?: RetirementScenarioPlan;
     primaryTool?: {
       outcome: 'accepted' | 'expanded' | 'failed';
@@ -79,10 +85,14 @@ export interface EvidenceManifest {
       addedPacks: ContextPackId[];
       reason: string;
       durationMs: number;
+      scenarios?: ScenarioPlanRecord;
+      /** @deprecated Persisted manifests before registry-keyed scenario planning. */
       retirementScenario?: RetirementScenarioPlan;
     };
   };
   /** Deterministic what-if calculations and their explicit assumption ledger. */
+  scenarioExecutions?: ScenarioEvidenceRecord;
+  /** @deprecated Persisted manifests before registry-keyed scenario execution. */
   scenarioExecution?: RetirementScenarioEvidence;
   /**
    * Secondary validation objected to the answer's reasoning after it had passed

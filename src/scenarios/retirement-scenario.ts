@@ -1,5 +1,6 @@
 import { createHash } from 'crypto';
 import type { FinancialContextSnapshot } from '../openai/types';
+import type { CanonicalFact, CanonicalFactUnit } from '../openai/canonical-facts';
 import {
   analyzeRetirementPortfolio,
   type RetirementAnalysisInput,
@@ -629,6 +630,206 @@ export function compactRetirementScenarioExecution(
   };
 }
 
+function factId(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 80);
+}
+
+/** Convert retirement scenario outputs into registry-owned canonical evidence. */
+export function retirementScenarioCanonicalFacts(
+  execution: RetirementScenarioExecution
+): CanonicalFact[] {
+  if (execution.status !== 'completed') return [];
+  const facts: CanonicalFact[] = [];
+  const addInput = (
+    id: string,
+    label: string,
+    value: unknown,
+    unit: CanonicalFactUnit,
+    scenarioId: string
+  ) => {
+    if (typeof value !== 'number' || !Number.isFinite(value)) return;
+    facts.push({
+      id,
+      label,
+      value,
+      unit,
+      provenance: {
+        kind: 'scenario_input',
+        source: `retirementScenario.${scenarioId}.assumptions`,
+        scenarioId,
+        calculatorId: RETIREMENT_CALCULATOR_ID,
+        calculatorVersion: execution.version,
+      },
+    });
+  };
+  const addCalculation = (
+    id: string,
+    label: string,
+    value: unknown,
+    unit: CanonicalFactUnit,
+    scenarioId: string,
+    calculation?: { formula: string; inputFactIds: string[] }
+  ) => {
+    if (typeof value !== 'number' || !Number.isFinite(value)) return;
+    facts.push({
+      id,
+      label,
+      value,
+      unit,
+      provenance: {
+        kind: 'scenario_calculation',
+        source: `retirementScenario.${scenarioId}`,
+        scenarioId,
+        calculatorId: RETIREMENT_CALCULATOR_ID,
+        calculatorVersion: execution.version,
+        ...calculation,
+      },
+    });
+  };
+
+  for (const scenario of execution.scenarios) {
+    const prefix = `retirement_scenario_${factId(scenario.id)}`;
+    const assumptionUnits: Record<string, CanonicalFactUnit> = {
+      current_age: 'age',
+      retirement_age: 'age',
+      annual_withdrawal_amount: 'usd',
+      withdrawal_start_age: 'age',
+      life_expectancy: 'age',
+      pre_withdrawal_contributions: 'usd',
+      annual_growth_rate: 'ratio',
+    };
+    for (const assumption of scenario.assumptions) {
+      const unit = assumptionUnits[assumption.key];
+      if (!unit) continue;
+      addInput(
+        `${prefix}_assumption_${factId(assumption.key)}`,
+        `${scenario.label} ${assumption.label.toLowerCase()}`,
+        assumption.value,
+        unit,
+        scenario.id
+      );
+    }
+    addCalculation(`${prefix}_withdrawal_rate`, `${scenario.label} initial withdrawal rate`, scenario.analysis.metrics.withdrawalRate * 100, 'percent', scenario.id);
+    addCalculation(`${prefix}_years_of_expenses`, `${scenario.label} years of starting expenses`, scenario.analysis.metrics.yearsOfExpenses, 'years', scenario.id);
+    addCalculation(`${prefix}_projected_portfolio_at_withdrawal_start`, `${scenario.label} median projected portfolio at withdrawal start`, scenario.analysis.metrics.projectedPortfolioAtWithdrawalStart, 'usd', scenario.id);
+    addCalculation(`${prefix}_survival_rate`, `${scenario.label} historical survival rate`, scenario.analysis.stressTest.survivalRate * 100, 'percent', scenario.id);
+    addCalculation(`${prefix}_historical_sequence_count`, `${scenario.label} historical sequence count`, scenario.analysis.stressTest.totalSequences, 'count', scenario.id);
+    if (scenario.withdrawalPolicy.type === 'fixed_growth') {
+      const growthInputFactId = `${prefix}_assumption_annual_growth_rate`;
+      addCalculation(
+        `${prefix}_annual_withdrawal_growth`,
+        `${scenario.label} rate assumption`,
+        scenario.withdrawalPolicy.annualRate * 100,
+        'percent',
+        scenario.id,
+        facts.some((fact) => fact.id === growthInputFactId)
+          ? { formula: 'input * 100', inputFactIds: [growthInputFactId] }
+          : undefined
+      );
+    }
+    for (const percentile of ['p10', 'p25', 'p50', 'p75', 'p90'] as const) {
+      addCalculation(
+        `${prefix}_depletion_years_${percentile}`,
+        `${scenario.label} ${percentile} years until depletion`,
+        scenario.analysis.stressTest.depletionPercentiles[percentile],
+        'years',
+        scenario.id
+      );
+    }
+  }
+
+  if (execution.scenarios.length >= 2) {
+    const [primary, comparison] = execution.scenarios;
+    const primaryPrefix = `retirement_scenario_${factId(primary.id)}`;
+    const comparisonPrefix = `retirement_scenario_${factId(comparison.id)}`;
+    const comparisonId = `${primary.id}_vs_${comparison.id}`;
+    addCalculation(
+      `retirement_scenario_comparison_${factId(comparisonId)}_survival_rate_gap`,
+      `Absolute survival-rate gap between ${primary.label} and ${comparison.label}`,
+      Number((Math.abs(primary.analysis.stressTest.survivalRate - comparison.analysis.stressTest.survivalRate) * 100).toFixed(10)),
+      'percent',
+      comparisonId,
+      {
+        formula: 'abs(input[0] - input[1])',
+        inputFactIds: [`${primaryPrefix}_survival_rate`, `${comparisonPrefix}_survival_rate`],
+      }
+    );
+  }
+  return facts;
+}
+
+/** Deterministic disclosure for retirement what-if results. */
+export function describeRetirementScenarioExecution(
+  execution: RetirementScenarioExecution
+): string | null {
+  if (execution.status === 'unavailable') {
+    return `I could not run the requested scenario comparison: ${execution.reason}`;
+  }
+  if (execution.scenarios.length === 0) return null;
+
+  const labels = execution.scenarios.map((scenario) => scenario.label);
+  const assumptionMaps = execution.scenarios.map((scenario) =>
+    new Map(scenario.assumptions.map((assumption) => [assumption.key, assumption]))
+  );
+  const comparisonLedgersAvailable = assumptionMaps.slice(1).every((map) => map.size > 0);
+  const commonValue = (key: string): string | number | undefined => {
+    const first = assumptionMaps[0].get(key)?.value;
+    if (!comparisonLedgersAvailable) return first;
+    return assumptionMaps.every((map) => map.get(key)?.value === first) ? first : undefined;
+  };
+  const annualSpending = commonValue('annual_withdrawal_amount');
+  const annualContribution = commonValue('pre_withdrawal_contributions');
+  const currentAge = commonValue('current_age');
+  const retirementAge = commonValue('retirement_age');
+  const withdrawalStartAge = commonValue('withdrawal_start_age');
+  const lifeExpectancy = commonValue('life_expectancy');
+  const defaults = execution.scenarios.flatMap((scenario) => scenario.assumptions)
+    .filter((assumption) => assumption.origin === 'default' && assumption.key === 'annual_growth_rate');
+
+  const heldConstant = [
+    typeof annualSpending === 'number'
+      ? `starting spending of $${Math.round(annualSpending).toLocaleString('en-US')} a year in today's dollars`
+      : null,
+    typeof currentAge === 'number' ? `age ${currentAge} today` : null,
+    typeof retirementAge === 'number' ? `retirement at ${retirementAge}` : null,
+    typeof withdrawalStartAge === 'number' && withdrawalStartAge !== retirementAge
+      ? `withdrawals starting at ${withdrawalStartAge}`
+      : null,
+    typeof lifeExpectancy === 'number' ? `life expectancy ${lifeExpectancy}` : null,
+    typeof annualContribution === 'number'
+      ? annualContribution > 0
+        ? `$${Math.round(annualContribution).toLocaleString('en-US')} a year in pre-withdrawal contributions in today's dollars`
+        : 'no additional contributions before withdrawals begin'
+      : comparisonLedgersAvailable
+        ? null
+        : 'no additional contributions before withdrawals begin',
+  ].filter((item): item is string => Boolean(item));
+  const changedInputs = execution.scenarios.flatMap((scenario) => {
+    const currencyKeys = new Set(['annual_withdrawal_amount', 'pre_withdrawal_contributions']);
+    const changes = scenario.assumptions
+      .filter((assumption) => assumption.origin === 'user' && assumption.key !== 'withdrawal_policy')
+      .map((assumption) => `${assumption.label.toLowerCase()} ${
+        typeof assumption.value === 'number' && currencyKeys.has(assumption.key)
+          ? `$${Math.round(assumption.value).toLocaleString('en-US')}`
+          : assumption.value
+      }`);
+    return changes.length > 0 ? [`${scenario.label}: ${changes.join(', ')}`] : [];
+  });
+  const changesNotice = changedInputs.length > 0
+    ? ` User-supplied variant inputs: ${changedInputs.join('; ')}.`
+    : '';
+  const defaultNotice = defaults.length > 0
+    ? ` The fixed-growth rate was not specified, so I used the disclosed Ask Linc default of ${Number((Number(defaults[0].value) * 100).toFixed(4))}%.`
+    : '';
+  const action = labels.length > 1
+    ? `compared ${labels.join(' with ')}`
+    : `ran ${labels[0]}`;
+  const heldConstantNotice = heldConstant.length > 0
+    ? ` while holding ${heldConstant.join(', ')} constant`
+    : '';
+  return `Scenario assumptions: ${action}${heldConstantNotice}.${changesNotice}${defaultNotice} Change any assumption and I will re-run it.`;
+}
+
 export const retirementScenarioCalculator: ScenarioCalculatorDefinition<
   RetirementScenarioPlan,
   RetirementScenarioExecution,
@@ -733,7 +934,13 @@ export const retirementScenarioCalculator: ScenarioCalculatorDefinition<
     instructions: `When the user asks to run or compare a retirement scenario, set requested=true. A variant can change the withdrawal policy, starting annual retirement spending, annual pre-withdrawal contributions, retirement age, withdrawal start age, or life expectancy. Use historical_cpi when the request changes an input but does not change withdrawal growth. Values must come from the user's words; put the matching short wording in overrides.sources. The overrides object is always present; use null for every absent value and source. If retirementAge changes and withdrawalStartAge is not separately stated, repeat the retirement age as withdrawalStartAge. Policy meanings: historical_cpi follows each sequence's CPI, flat_nominal keeps the same nominal dollars, and fixed_growth applies one fixed annual increase. annualRate is decimal (3% is 0.03); use null when the user gives no fixed-growth rate so application code can disclose its default. Use primary for the requested case and comparison for an explicitly named second case. When there is no retirement scenario, set requested=false, use type=none for both variants, return null for rates and policy sources, and return override objects whose values and sources are all null.`,
     parsePlan: parseRetirementScenarioPlan,
   },
+  execution: {
+    progressMessage: 'Running the retirement scenarios',
+    failureMessage: 'The requested retirement scenario could not be calculated. The existing retirement baseline remains available.',
+  },
   execute: runRetirementScenario,
   unavailable,
   compactEvidence: compactRetirementScenarioExecution,
+  canonicalFacts: retirementScenarioCanonicalFacts,
+  describeAssumptions: describeRetirementScenarioExecution,
 };

@@ -30,13 +30,10 @@ import {
   RETIREMENT_CALCULATOR_ID,
   type RetirementScenarioPlan,
 } from '../scenarios/retirement-scenario';
-import { scenarioCalculatorRegistry } from '../scenarios/calculator-registry';
-
-const RETIREMENT_CALCULATOR = scenarioCalculatorRegistry.require<
-  RetirementScenarioPlan,
-  unknown,
-  unknown
->(RETIREMENT_CALCULATOR_ID);
+import {
+  scenarioCalculatorRegistry,
+  type ScenarioPlanRecord,
+} from '../scenarios/calculator-registry';
 
 export interface ContextPlan {
   source: 'context_planner' | 'fallback_all';
@@ -45,7 +42,7 @@ export interface ContextPlan {
   questionNeeds: QuestionNeeds;
   needsSecondaryValidation: boolean;
   retirementInputs?: ExtractedRetirementInputs;
-  retirementScenario?: RetirementScenarioPlan;
+  scenarioPlans: ScenarioPlanRecord;
   summary: string;
   model?: string;
   durationMs: number;
@@ -113,7 +110,7 @@ const NULLABLE_STRING = { type: ['string', 'null'] as const };
 export const CONTEXT_PLAN_JSON_SCHEMA = {
   type: 'object',
   additionalProperties: false,
-  required: ['packs', 'needsSecondaryValidation', 'retirementInputs', 'retirementScenario', 'summary'],
+  required: ['packs', 'needsSecondaryValidation', 'retirementInputs', 'scenarios', 'summary'],
   properties: {
     packs: {
       type: 'object',
@@ -140,7 +137,7 @@ export const CONTEXT_PLAN_JSON_SCHEMA = {
         },
       },
     },
-    retirementScenario: RETIREMENT_CALCULATOR.planner.jsonSchema,
+    scenarios: scenarioCalculatorRegistry.plannerJsonSchema(),
     summary: { type: 'string' },
   },
 } as const;
@@ -159,9 +156,9 @@ Important boundaries:
 
 Also extract retirement inputs the user actually stated in this decision. Never estimate or supply typical values. annualWithdrawalAmount means intended annual retirement spending in today's dollars, not salary, savings, portfolio value, or current spending. Convert a monthly amount only when it clearly refers to that retirement spending. A short answer takes its meaning from the assistant question immediately before it. The newest revision wins. Put the user's own short wording in sources; use null for an absent value and source.
 
-Retirement calculator contract:
-${RETIREMENT_CALCULATOR.planner.instructions}
-Do not use retirementScenario merely because an ordinary retirement projection was requested.
+Registered calculator contracts:
+${scenarioCalculatorRegistry.plannerInstructions()}
+Do not request a calculator scenario merely because an ordinary baseline analysis was requested.
 
 Return the required JSON object only.`;
 
@@ -215,10 +212,14 @@ export function parseContextPlan(raw: unknown, durationMs = 0, model?: string): 
   }
   const record = raw as Record<string, unknown>;
   const requestedPacks = getRequestedPacks(record.packs);
-  const retirementScenario = RETIREMENT_CALCULATOR.planner.parsePlan(record.retirementScenario);
+  const scenarioPlans = scenarioCalculatorRegistry.parsePlans(record.scenarios);
+  const retirementScenario = scenarioCalculatorRegistry.getPlan<RetirementScenarioPlan>(
+    scenarioPlans,
+    RETIREMENT_CALCULATOR_ID
+  );
   const selectedPacks = normalizeContextPacks([
     ...requestedPacks,
-    ...(retirementScenario ? RETIREMENT_CALCULATOR.requiredPacks : []),
+    ...scenarioCalculatorRegistry.requiredPacksForPlans(scenarioPlans),
   ]);
   const needsSecondaryValidation = record.needsSecondaryValidation === true;
   const retirementInputs = retirementInputsForBaseline(
@@ -235,7 +236,7 @@ export function parseContextPlan(raw: unknown, durationMs = 0, model?: string): 
     questionNeeds: questionNeedsFromPacks(selectedPacks, needsSecondaryValidation),
     needsSecondaryValidation,
     retirementInputs,
-    ...(retirementScenario && { retirementScenario }),
+    scenarioPlans,
     summary,
     model,
     durationMs,
@@ -251,6 +252,7 @@ export function fallbackContextPlan(durationMs = 0, summary = 'Context planner u
     selectedPacks,
     questionNeeds: questionNeedsFromPacks(selectedPacks, true),
     needsSecondaryValidation: true,
+    scenarioPlans: {},
     summary,
     durationMs,
   };

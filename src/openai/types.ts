@@ -1,6 +1,7 @@
 import { TierAwareContext } from '../data/orchestrator';
 import { Transaction as UnifiedTransaction, UnifiedFinancialData, Holding, Security } from '../services/financial-data-service';
 import type { RetirementScenarioExecution } from '../scenarios/retirement-scenario';
+import type { ScenarioExecutionRecord } from '../scenarios/calculator-registry';
 
 export interface QuestionNeeds {
   needsMarketContext: boolean;
@@ -193,7 +194,9 @@ export interface FinancialContextSnapshot {
     /** Machine-readable form of unavailableReason: only some causes are the user's to fix. */
     unavailableCode?: 'no_holdings' | 'service_error';
   };
-  /** Deterministic what-if results, scoped to this answer and its assumptions. */
+  /** Registry-keyed deterministic what-if results, scoped to this answer and its assumptions. */
+  scenarioExecutions?: ScenarioExecutionRecord;
+  /** @deprecated Compatibility for snapshots and fixtures created before registry-keyed execution. */
   retirementScenarioExecution?: RetirementScenarioExecution;
   financialSummary?: {
     computedAt?: Date | string;

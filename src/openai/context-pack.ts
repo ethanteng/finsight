@@ -1,10 +1,6 @@
 import type { FinancialContextSnapshot, QuestionNeeds } from './types';
 import type { CanonicalFactPack } from './canonical-facts';
-import {
-  RETIREMENT_CALCULATOR_ID,
-  type RetirementScenarioEvidence,
-  type RetirementScenarioExecution,
-} from '../scenarios/retirement-scenario';
+import { RETIREMENT_CALCULATOR_ID } from '../scenarios/retirement-scenario';
 import { scenarioCalculatorRegistry } from '../scenarios/calculator-registry';
 
 export interface QuestionContextPack {
@@ -60,12 +56,13 @@ export function buildQuestionContextPack(
   if (needs.needsRetirement) {
     details.retirementAnalysis = compactRetirementAnalysis(snapshot);
     details.retirementAnalysisNeedsInfo = snapshot.retirementAnalysisNeedsInfo;
-    if (snapshot.retirementScenarioExecution) {
-      details.retirementScenarios = scenarioCalculatorRegistry.compactEvidence<
-        RetirementScenarioExecution,
-        RetirementScenarioEvidence
-      >(RETIREMENT_CALCULATOR_ID, snapshot.retirementScenarioExecution);
-    }
+  }
+  const scenarioExecutions = snapshot.scenarioExecutions
+    ?? (snapshot.retirementScenarioExecution
+      ? { [RETIREMENT_CALCULATOR_ID]: snapshot.retirementScenarioExecution }
+      : undefined);
+  if (scenarioExecutions && Object.keys(scenarioExecutions).length > 0) {
+    details.scenarios = scenarioCalculatorRegistry.compactEvidenceRecord(scenarioExecutions);
   }
   if (needs.needsHomeValue) details.homeValue = snapshot.homeValueSummary;
 

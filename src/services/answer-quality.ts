@@ -45,6 +45,13 @@ function manifestOf(showTheMathData: unknown): EvidenceManifest | null {
   return manifest && typeof manifest === 'object' ? manifest as EvidenceManifest : null;
 }
 
+function scenarioExecutions(manifest: EvidenceManifest): Array<{ status?: string; durationMs?: number }> {
+  if (manifest.scenarioExecutions) {
+    return Object.values(manifest.scenarioExecutions) as Array<{ status?: string; durationMs?: number }>;
+  }
+  return manifest.scenarioExecution ? [manifest.scenarioExecution] : [];
+}
+
 /** The most recent rating wins because users can change a rating. */
 function latestRating(feedback: AnswerQualityConversation['feedback']): number | null {
   if (!feedback || feedback.length === 0) return null;
@@ -94,12 +101,20 @@ function toObservation(conversation: AnswerQualityConversation): AnswerQualityOb
   const primaryToolOutcome = planning?.primaryTool?.outcome
     ?? (toolAddedPacks.length > 0 ? 'expanded' : 'not_run');
   const lateExpansion = manifest.contextEscalated === true;
+  const executions = scenarioExecutions(manifest);
   const scenarioRequested = Boolean(
-    planning?.retirementScenario
+    (planning?.scenarios && Object.keys(planning.scenarios).length > 0)
+      || (planning?.primaryTool?.scenarios && Object.keys(planning.primaryTool.scenarios).length > 0)
+      || executions.length > 0
+      || planning?.retirementScenario
       || planning?.primaryTool?.retirementScenario
       || manifest.scenarioExecution
   );
-  const scenarioStatus = manifest.scenarioExecution?.status ?? 'not_run';
+  const scenarioStatus = executions.some((execution) => execution.status === 'unavailable')
+    ? 'unavailable'
+    : executions.some((execution) => execution.status === 'completed')
+      ? 'completed'
+      : 'not_run';
   return {
     id: conversation.id,
     createdAt: new Date(conversation.createdAt).toISOString(),
@@ -227,7 +242,13 @@ export function buildAnswerQualityReport(
     .map((manifest) => manifest.contextPlanning?.durationMs)
     .filter((duration): duration is number => typeof duration === 'number' && Number.isFinite(duration));
   const scenarioDurations = manifests
-    .map((manifest) => manifest.scenarioExecution?.durationMs)
+    .map((manifest) => {
+      if (typeof manifest.timings.scenarioMs === 'number') return manifest.timings.scenarioMs;
+      const executions = scenarioExecutions(manifest);
+      return executions.length > 0
+        ? executions.reduce((total, execution) => total + (execution.durationMs ?? 0), 0)
+        : undefined;
+    })
     .filter((duration): duration is number => typeof duration === 'number' && Number.isFinite(duration));
   const scenarioRequested = observations.filter((observation) => observation.scenarioRequested).length;
   const scenarioCompleted = observations.filter((observation) => observation.scenarioStatus === 'completed').length;

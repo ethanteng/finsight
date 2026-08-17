@@ -1,5 +1,6 @@
 import {
   buildPlannerTranscript,
+  CONTEXT_PLAN_JSON_SCHEMA,
   fallbackContextPlan,
   parseContextPlan,
 } from '../../openai/context-planner';
@@ -23,16 +24,25 @@ function rawPlan(selected: string[] = []): any {
         lifeExpectancy: null,
       },
     },
-    retirementScenario: {
-      requested: false,
-      primary: { type: 'none', annualRate: null, source: null },
-      comparison: { type: 'none', annualRate: null, source: null },
+    scenarios: {
+      retirement: {
+        requested: false,
+        primary: { type: 'none', annualRate: null, source: null },
+        comparison: { type: 'none', annualRate: null, source: null },
+      },
     },
     summary: 'This continues the retirement decision.',
   };
 }
 
 describe('context planner', () => {
+  it('builds the strict scenario object from registered calculator ids', () => {
+    expect(CONTEXT_PLAN_JSON_SCHEMA.properties.scenarios).toMatchObject({
+      required: ['retirement'],
+      properties: { retirement: { type: 'object' } },
+    });
+  });
+
   it('reads the active decision oldest first with assistant answers intact', () => {
     const transcript = buildPlannerTranscript('Re-run it.', [
       { question: '$10,000 per month.', answer: 'I will use that retirement spending target.' },
@@ -90,8 +100,8 @@ describe('context planner', () => {
   });
 
   it('returns a validated retirement withdrawal scenario separately from pack selection', () => {
-    const raw = rawPlan(['retirement_analysis']);
-    raw.retirementScenario = {
+    const raw = rawPlan();
+    raw.scenarios.retirement = {
       requested: true,
       primary: {
         type: 'fixed_growth',
@@ -115,7 +125,7 @@ describe('context planner', () => {
       comparison: { type: 'flat_nominal', annualRate: null, source: 'flat-dollar version', overrides: {} },
     };
     const plan = parseContextPlan(raw);
-    expect(plan.retirementScenario).toEqual({
+    expect(plan.scenarioPlans.retirement).toEqual({
       requested: true,
       primary: {
         type: 'fixed_growth',
@@ -134,6 +144,8 @@ describe('context planner', () => {
       },
       comparison: { type: 'flat_nominal', source: 'flat-dollar version' },
     });
+    expect(plan.requestedPacks).toEqual([]);
+    expect(plan.selectedPacks).toContain('retirement_analysis');
     expect(plan.retirementInputs).toMatchObject({
       currentAge: 45,
       annualWithdrawalAmount: 120_000,
@@ -150,7 +162,7 @@ describe('context planner', () => {
     raw.retirementInputs.sources.retirementAge = 'retire at 65';
     raw.retirementInputs.sources.annualWithdrawalAmount = 'spend $50,000';
     raw.retirementInputs.sources.withdrawalStartAge = 'retire at 65';
-    raw.retirementScenario = {
+    raw.scenarios.retirement = {
       requested: true,
       primary: {
         type: 'historical_cpi',
@@ -180,7 +192,7 @@ describe('context planner', () => {
       currentAge: 45,
       sources: { currentAge: 'I am 45' },
     });
-    expect(plan.retirementScenario?.primary.overrides).toMatchObject({
+    expect((plan.scenarioPlans.retirement as any)?.primary.overrides).toMatchObject({
       annualWithdrawalAmount: 50_000,
       retirementAge: 65,
       withdrawalStartAge: 65,

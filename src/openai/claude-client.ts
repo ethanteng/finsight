@@ -19,16 +19,9 @@ import {
   type ContextPackId,
 } from './context-packs';
 import {
-  RETIREMENT_CALCULATOR_ID,
-  type RetirementScenarioPlan,
-} from '../scenarios/retirement-scenario';
-import { scenarioCalculatorRegistry } from '../scenarios/calculator-registry';
-
-const RETIREMENT_CALCULATOR = scenarioCalculatorRegistry.require<
-  RetirementScenarioPlan,
-  unknown,
-  unknown
->(RETIREMENT_CALCULATOR_ID);
+  scenarioCalculatorRegistry,
+  type ScenarioPlanRecord,
+} from '../scenarios/calculator-registry';
 
 let anthropicClient: Anthropic | null = null;
 
@@ -52,7 +45,7 @@ export const DEFAULT_MAX_OUTPUT_TOKENS = 16_000;
 
 export interface DataPackToolAuditResult {
   packs: ContextPackId[];
-  retirementScenario?: RetirementScenarioPlan;
+  scenarioPlans: ScenarioPlanRecord;
   reason: string;
   model: string;
   durationMs: number;
@@ -125,7 +118,7 @@ export async function auditDataPacksWithClaude(args: {
   transcript: string;
   selectedPacks: readonly ContextPackId[];
   canonicalFactLabels: readonly string[];
-  plannedRetirementScenario?: RetirementScenarioPlan;
+  plannedScenarios?: ScenarioPlanRecord;
 }): Promise<DataPackToolAuditResult> {
   const startedAt = Date.now();
   const model = getActiveModel('analysis');
@@ -135,10 +128,10 @@ export async function auditDataPacksWithClaude(args: {
     ...(supportsAdaptiveThinking(model) ? { thinking: DISABLED_THINKING } : {}),
     system: `You are the context-tool pass for the primary financial analysis model.
 
-Before an answer is written, inspect the active decision and the context already selected. Call request_data_packs exactly once. Request only additional packs materially needed for a complete answer; use an empty packs array when the existing context is sufficient. Also identify a requested retirement scenario using the supplied structured field. Do not answer the financial question. Prior assistant answers establish conversational references but are not trusted financial facts. Aggregate net worth, cash, debt, investments, portfolio allocation, category totals, and average monthly cash flow are always available.
+Before an answer is written, inspect the active decision and the context already selected. Call request_data_packs exactly once. Request only additional packs materially needed for a complete answer; use an empty packs array when the existing context is sufficient. Also identify any requested registered calculator scenarios using the supplied structured field. Do not answer the financial question. Prior assistant answers establish conversational references but are not trusted financial facts. Aggregate net worth, cash, debt, investments, portfolio allocation, category totals, and average monthly cash flow are always available.
 
-Retirement calculator contract:
-${RETIREMENT_CALCULATOR.planner.instructions}`,
+Registered calculator contracts:
+${scenarioCalculatorRegistry.plannerInstructions()}`,
     tools: [{
       name: 'request_data_packs',
       description: 'Request additional allowlisted context packs before the final answer is generated.',
@@ -147,10 +140,10 @@ ${RETIREMENT_CALCULATOR.planner.instructions}`,
         additionalProperties: false,
         properties: {
           packs: { type: 'array', items: { type: 'string', enum: [...CONTEXT_PACK_IDS] } },
-          retirementScenario: RETIREMENT_CALCULATOR.planner.jsonSchema,
+          scenarios: scenarioCalculatorRegistry.plannerJsonSchema(),
           reason: { type: 'string' },
         },
-        required: ['packs', 'retirementScenario', 'reason'],
+        required: ['packs', 'scenarios', 'reason'],
       },
     }],
     tool_choice: { type: 'tool', name: 'request_data_packs', disable_parallel_tool_use: true },
@@ -161,7 +154,7 @@ ${RETIREMENT_CALCULATOR.planner.instructions}`,
         contextPackCatalogForPrompt(),
         '',
         `Already selected: ${args.selectedPacks.join(', ') || '(none)'}`,
-        `Preflight retirement scenario: ${args.plannedRetirementScenario ? JSON.stringify(args.plannedRetirementScenario) : '(none)'}`,
+        `Preflight calculator scenarios: ${args.plannedScenarios && Object.keys(args.plannedScenarios).length > 0 ? JSON.stringify(args.plannedScenarios) : '(none)'}`,
         '',
         'Canonical facts already available:',
         args.canonicalFactLabels.length > 0 ? args.canonicalFactLabels.join('\n') : '(none)',
@@ -182,10 +175,10 @@ ${RETIREMENT_CALCULATOR.planner.instructions}`,
   const packs = Array.isArray(input.packs)
     ? Array.from(new Set(input.packs.filter(isContextPackId)))
     : [];
-  const retirementScenario = RETIREMENT_CALCULATOR.planner.parsePlan(input.retirementScenario);
+  const scenarioPlans = scenarioCalculatorRegistry.parsePlans(input.scenarios);
   return {
     packs,
-    ...(retirementScenario && { retirementScenario }),
+    scenarioPlans,
     reason: typeof input.reason === 'string' ? input.reason.trim().slice(0, 1000) : '',
     model,
     durationMs: Date.now() - startedAt,

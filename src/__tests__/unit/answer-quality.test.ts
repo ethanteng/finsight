@@ -41,9 +41,11 @@ function conversation(options: {
           needsSecondaryValidation: false,
           summary: 'Test plan.',
           ...(options.scenario && {
-            retirementScenario: {
-              requested: true,
-              primary: { type: 'fixed_growth', annualRate: 0.03, source: '3% annual bump' },
+            scenarios: {
+              retirement: {
+                requested: true,
+                primary: { type: 'fixed_growth', annualRate: 0.03, source: '3% annual bump' },
+              },
             },
           }),
           ...((toolAdded.length > 0 || options.toolFailed) && {
@@ -58,8 +60,8 @@ function conversation(options: {
           }),
         },
         ...(options.scenario && options.scenario !== 'not_run' && {
-          scenarioExecution: options.scenario === 'completed'
-            ? {
+          scenarioExecutions: {
+            retirement: options.scenario === 'completed' ? {
                 version: 1,
                 calculator: 'retirement',
                 status: 'completed',
@@ -76,6 +78,7 @@ function conversation(options: {
                 durationMs: 8,
                 reason: 'Missing retirement baseline.',
               },
+          },
         }),
         ...(options.late && { contextEscalated: true }),
         modelCalls: [],

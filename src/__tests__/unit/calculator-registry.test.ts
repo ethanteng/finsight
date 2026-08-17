@@ -1,6 +1,8 @@
 import {
   ScenarioCalculatorRegistry,
   scenarioCalculatorRegistry,
+  type ScenarioCalculatorDefinition,
+  type ScenarioExecutionBase,
 } from '../../scenarios/calculator-registry';
 import {
   RETIREMENT_CALCULATOR_ID,
@@ -9,6 +11,61 @@ import {
 } from '../../scenarios/retirement-scenario';
 
 describe('scenario calculator registry', () => {
+  const fakeCalculator: ScenarioCalculatorDefinition<
+    { value: number },
+    ScenarioExecutionBase & { value: number },
+    ScenarioExecutionBase & { value: number }
+  > = {
+    id: 'fake',
+    version: 1,
+    label: 'Fake scenarios',
+    description: 'Test calculator',
+    requiredPacks: ['monthly_cash_flow'],
+    supportedOverrides: [],
+    defaults: [],
+    outputs: [],
+    planner: {
+      jsonSchema: { type: 'object' },
+      instructions: 'Read a fake scenario.',
+      parsePlan: (value) => {
+        const numeric = (value as { value?: unknown } | undefined)?.value;
+        return typeof numeric === 'number' ? { value: numeric } : undefined;
+      },
+    },
+    execution: { progressMessage: 'Running fake scenarios', failureMessage: 'Fake failed.' },
+    execute: async (_snapshot, plan) => ({
+      version: 1,
+      calculator: 'fake',
+      status: 'completed',
+      computedAt: '2026-08-17T00:00:00.000Z',
+      durationMs: 3,
+      value: plan.value,
+    }),
+    unavailable: (startedAt, reason) => ({
+      version: 1,
+      calculator: 'fake',
+      status: 'unavailable',
+      computedAt: new Date(startedAt).toISOString(),
+      durationMs: 0,
+      value: 0,
+      reason,
+    } as ScenarioExecutionBase & { value: number }),
+    compactEvidence: (execution) => ({ ...execution }),
+    canonicalFacts: (execution) => execution.status === 'completed' ? [{
+      id: 'fake_value',
+      label: 'Fake value',
+      value: execution.value,
+      unit: 'count',
+      provenance: {
+        kind: 'scenario_calculation',
+        source: 'scenario.fake',
+        calculatorId: 'fake',
+        calculatorVersion: 1,
+      },
+    }] : [],
+    describeAssumptions: (execution) => `Fake assumption: ${execution.value}.`,
+  };
+
   it('publishes the retirement calculator contract from one declaration', () => {
     expect(scenarioCalculatorRegistry.ids()).toEqual([RETIREMENT_CALCULATOR_ID]);
     expect(scenarioCalculatorRegistry.manifests()).toContainEqual(expect.objectContaining({
@@ -70,5 +127,40 @@ describe('scenario calculator registry', () => {
       retirementScenarioCalculator,
       retirementScenarioCalculator,
     ])).toThrow('Duplicate scenario calculator id: retirement');
+  });
+
+  it('drives planning, packs, execution, facts, disclosure, and evidence by calculator id', async () => {
+    const registry = new ScenarioCalculatorRegistry([fakeCalculator]);
+    expect(registry.plannerJsonSchema()).toMatchObject({
+      required: ['fake'],
+      properties: { fake: { type: 'object' } },
+    });
+    expect(registry.plannerInstructions()).toContain('Fake scenarios (key: fake)');
+    const plans = registry.parsePlans({ fake: { value: 7 } });
+    expect(plans).toEqual({ fake: { value: 7 } });
+    expect(registry.requiredPacksForPlans(plans)).toEqual(['monthly_cash_flow']);
+
+    const executions = await registry.executePlans({} as any, plans);
+    expect(executions.fake).toMatchObject({ calculator: 'fake', value: 7 });
+    expect(registry.compactEvidenceRecord(executions)).toMatchObject({ fake: { calculator: 'fake', value: 7 } });
+    expect(registry.canonicalFacts(executions)).toContainEqual(expect.objectContaining({ id: 'fake_value', value: 7 }));
+    expect(registry.assumptionDisclosures(executions)).toEqual(['Fake assumption: 7.']);
+  });
+
+  it('isolates a calculator failure and returns its declared unavailable result', async () => {
+    const failingCalculator = {
+      ...fakeCalculator,
+      id: 'failing',
+      execute: async () => {
+        throw new Error('boom');
+      },
+    };
+    const registry = new ScenarioCalculatorRegistry([fakeCalculator, failingCalculator]);
+    const executions = await registry.executePlans({} as any, {
+      fake: { value: 7 },
+      failing: { value: 9 },
+    });
+    expect(executions.fake.status).toBe('completed');
+    expect(executions.failing.status).toBe('unavailable');
   });
 });

@@ -1,6 +1,8 @@
 import type { FinancialContextSnapshot, QuestionNeeds } from './types';
 import { mergeAssetAllocation } from '../services/asset-class';
 import { mergeLabelKeyedTotals } from '../services/label-normalization';
+import { scenarioCalculatorRegistry } from '../scenarios/calculator-registry';
+import { RETIREMENT_CALCULATOR_ID } from '../scenarios/retirement-scenario';
 
 export type CanonicalFactUnit = 'usd' | 'percent' | 'months' | 'years' | 'age' | 'count' | 'ratio';
 
@@ -11,6 +13,7 @@ export interface CanonicalFactProvenance {
   formula?: string;
   inputFactIds?: string[];
   scenarioId?: string;
+  calculatorId?: string;
   calculatorVersion?: number;
 }
 
@@ -150,54 +153,6 @@ export function buildCanonicalFactPack(
         formula,
         inputFactIds,
         ...(asOf && { asOf }),
-      },
-    });
-  };
-  const addScenarioFact = (
-    id: string,
-    label: string,
-    value: unknown,
-    unit: CanonicalFactUnit,
-    scenarioId: string,
-    calculatorVersion: number,
-    displayable = true,
-    calculation?: Pick<CanonicalFactProvenance, 'formula' | 'inputFactIds'>
-  ) => {
-    if (!finite(value)) return;
-    facts.set(id, {
-      id,
-      label,
-      value,
-      unit,
-      ...(!displayable && { displayable: false }),
-      provenance: {
-        kind: 'scenario_calculation',
-        source: `retirementScenario.${scenarioId}`,
-        scenarioId,
-        calculatorVersion,
-        ...calculation,
-      },
-    });
-  };
-  const addScenarioInputFact = (
-    id: string,
-    label: string,
-    value: unknown,
-    unit: CanonicalFactUnit,
-    scenarioId: string,
-    calculatorVersion: number
-  ) => {
-    if (!finite(value)) return;
-    facts.set(id, {
-      id,
-      label,
-      value,
-      unit,
-      provenance: {
-        kind: 'scenario_input',
-        source: `retirementScenario.${scenarioId}.assumptions`,
-        scenarioId,
-        calculatorVersion,
       },
     });
   };
@@ -445,122 +400,12 @@ export function buildCanonicalFactPack(
     addSnapshotFact('withdrawal_start_age', 'Withdrawal start age', retirement._storedInputParams?.withdrawalStartAge, 'age', 'retirementAnalysis.inputs.withdrawalStartAge');
   }
 
-  const scenarioExecution = snapshot.retirementScenarioExecution;
-  if (needs.needsRetirement && scenarioExecution?.status === 'completed') {
-    for (const scenario of scenarioExecution.scenarios) {
-      const prefix = `retirement_scenario_${safeFactId(scenario.id)}`;
-      const version = scenarioExecution.version;
-      const assumptionUnits: Record<string, CanonicalFactUnit> = {
-        current_age: 'age',
-        retirement_age: 'age',
-        annual_withdrawal_amount: 'usd',
-        withdrawal_start_age: 'age',
-        life_expectancy: 'age',
-        pre_withdrawal_contributions: 'usd',
-        // Assumption ledgers store decimal rates. Keep the premise as a ratio;
-        // the displayable percent below is a verified deterministic conversion.
-        annual_growth_rate: 'ratio',
-      };
-      for (const assumption of scenario.assumptions) {
-        const unit = assumptionUnits[assumption.key];
-        if (!unit) continue;
-        addScenarioInputFact(
-          `${prefix}_assumption_${safeFactId(assumption.key)}`,
-          `${scenario.label} ${assumption.label.toLowerCase()}`,
-          assumption.value,
-          unit,
-          scenario.id,
-          version
-        );
-      }
-      addScenarioFact(
-        `${prefix}_withdrawal_rate`,
-        `${scenario.label} initial withdrawal rate`,
-        scenario.analysis.metrics.withdrawalRate * 100,
-        'percent',
-        scenario.id,
-        version
-      );
-      addScenarioFact(
-        `${prefix}_years_of_expenses`,
-        `${scenario.label} years of starting expenses`,
-        scenario.analysis.metrics.yearsOfExpenses,
-        'years',
-        scenario.id,
-        version
-      );
-      addScenarioFact(
-        `${prefix}_projected_portfolio_at_withdrawal_start`,
-        `${scenario.label} median projected portfolio at withdrawal start`,
-        scenario.analysis.metrics.projectedPortfolioAtWithdrawalStart,
-        'usd',
-        scenario.id,
-        version
-      );
-      addScenarioFact(
-        `${prefix}_survival_rate`,
-        `${scenario.label} historical survival rate`,
-        scenario.analysis.stressTest.survivalRate * 100,
-        'percent',
-        scenario.id,
-        version
-      );
-      addScenarioFact(
-        `${prefix}_historical_sequence_count`,
-        `${scenario.label} historical sequence count`,
-        scenario.analysis.stressTest.totalSequences,
-        'count',
-        scenario.id,
-        version
-      );
-      if (scenario.withdrawalPolicy.type === 'fixed_growth') {
-        const growthInputFactId = `${prefix}_assumption_annual_growth_rate`;
-        addScenarioFact(
-          `${prefix}_annual_withdrawal_growth`,
-          `${scenario.label} rate assumption`,
-          scenario.withdrawalPolicy.annualRate * 100,
-          'percent',
-          scenario.id,
-          version,
-          true,
-          facts.has(growthInputFactId)
-            ? { formula: 'input * 100', inputFactIds: [growthInputFactId] }
-            : undefined
-        );
-      }
-      for (const percentile of ['p10', 'p25', 'p50', 'p75', 'p90'] as const) {
-        addScenarioFact(
-          `${prefix}_depletion_years_${percentile}`,
-          `${scenario.label} ${percentile} years until depletion`,
-          scenario.analysis.stressTest.depletionPercentiles[percentile],
-          'years',
-          scenario.id,
-          version
-        );
-      }
-    }
-    if (scenarioExecution.scenarios.length >= 2) {
-      const [primary, comparison] = scenarioExecution.scenarios;
-      const primaryPrefix = `retirement_scenario_${safeFactId(primary.id)}`;
-      const comparisonPrefix = `retirement_scenario_${safeFactId(comparison.id)}`;
-      const comparisonId = `${primary.id}_vs_${comparison.id}`;
-      const comparisonPrefixId = `retirement_scenario_comparison_${safeFactId(comparisonId)}`;
-      addScenarioFact(
-        `${comparisonPrefixId}_survival_rate_gap`,
-        `Absolute survival-rate gap between ${primary.label} and ${comparison.label}`,
-        Number((Math.abs(
-          primary.analysis.stressTest.survivalRate - comparison.analysis.stressTest.survivalRate
-        ) * 100).toFixed(10)),
-        'percent',
-        comparisonId,
-        scenarioExecution.version,
-        true,
-        {
-          formula: 'abs(input[0] - input[1])',
-          inputFactIds: [`${primaryPrefix}_survival_rate`, `${comparisonPrefix}_survival_rate`],
-        }
-      );
-    }
+  const scenarioExecutions = snapshot.scenarioExecutions
+    ?? (snapshot.retirementScenarioExecution
+      ? { [RETIREMENT_CALCULATOR_ID]: snapshot.retirementScenarioExecution }
+      : undefined);
+  for (const fact of scenarioCalculatorRegistry.canonicalFacts(scenarioExecutions)) {
+    facts.set(fact.id, fact);
   }
 
   // Scenario premises and explicitly requested external context are canonical inputs too.

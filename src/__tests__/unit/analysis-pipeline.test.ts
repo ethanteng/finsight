@@ -1,7 +1,7 @@
 import { runAskLincAnalysis, selectValidationFeedback } from '../../openai/analysis-pipeline';
 import { UNVERIFIED_PROSE_NOTICE } from '../../openai/response-facts';
 import { SECONDARY_REVIEW_CAVEAT } from '../../openai/response-grounding';
-import { gatherContextSnapshot } from '../../openai/context-service';
+import { completeRetirementAnalysis, gatherContextSnapshot } from '../../openai/context-service';
 import { askClaude } from '../../openai/claude-client';
 import { auditDataPacksWithClaude } from '../../openai/claude-client';
 import { validateWithGemini } from '../../openai/response-validator';
@@ -12,6 +12,7 @@ import { scenarioCalculatorRegistry } from '../../scenarios/calculator-registry'
 
 jest.mock('../../openai/context-service', () => ({
   gatherContextSnapshot: jest.fn(),
+  completeRetirementAnalysis: jest.fn(),
 }));
 jest.mock('../../openai/claude-client', () => ({
   askClaude: jest.fn(),
@@ -33,6 +34,7 @@ jest.mock('../../openai/openai-fallback-client', () => ({
   askOpenAIWithPreparedPrompt: jest.fn(),
 }));
 const mockedGatherContext = gatherContextSnapshot as jest.MockedFunction<typeof gatherContextSnapshot>;
+const mockedCompleteRetirement = completeRetirementAnalysis as jest.MockedFunction<typeof completeRetirementAnalysis>;
 const mockedAskClaude = askClaude as jest.MockedFunction<typeof askClaude>;
 const mockedAuditPacks = auditDataPacksWithClaude as jest.MockedFunction<typeof auditDataPacksWithClaude>;
 const mockedPlanContext = planContext as jest.MockedFunction<typeof planContext>;
@@ -82,6 +84,7 @@ function contextPlan(packs: ContextPackId[] = [], secondary = false): ContextPla
     questionNeeds: questionNeedsFromPacks(selectedPacks, secondary),
     needsSecondaryValidation: secondary,
     retirementInputs: { sources: {} },
+    scenarioPlans: {},
     summary: 'Test plan.',
     model: 'test-planner',
     durationMs: 1,
@@ -92,6 +95,7 @@ describe('runAskLincAnalysis validation routing', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockedGatherContext.mockResolvedValue(snapshot());
+    mockedCompleteRetirement.mockImplementation(async (current) => current);
     mockedAskOpenAI.mockResolvedValue(JSON.stringify({ summary: 'Fallback answer.' }));
     mockedPlanContext.mockImplementation(async ({ question }) =>
       question.toLowerCase().includes('retir')
@@ -100,7 +104,7 @@ describe('runAskLincAnalysis validation routing', () => {
           ? contextPlan(['transaction_details', 'retirement_analysis'], true)
           : contextPlan()
     );
-    mockedAuditPacks.mockResolvedValue({ packs: [], reason: 'Enough context.', model: 'claude-test', durationMs: 1 });
+    mockedAuditPacks.mockResolvedValue({ packs: [], scenarioPlans: {}, reason: 'Enough context.', model: 'claude-test', durationMs: 1 });
   });
 
   it('skips the secondary model for a grounded balance lookup', async () => {
@@ -140,6 +144,7 @@ describe('runAskLincAnalysis validation routing', () => {
   it('lets the primary model widen the preflight plan before it writes the answer', async () => {
     mockedAuditPacks.mockResolvedValue({
       packs: ['investment_details'],
+      scenarioPlans: {},
       reason: 'The comparison needs individual holdings.',
       model: 'claude-test',
       durationMs: 7,
@@ -180,7 +185,7 @@ describe('runAskLincAnalysis validation routing', () => {
     expect(result.showTheMathData?.evidenceManifest.timings.contextToolMs).toBe(7);
   });
 
-  it('keeps preflight scenario overrides out of both baseline gathers', async () => {
+  it('keeps preflight scenario overrides out of the baseline gather and focused completion', async () => {
     const plan = contextPlan(['retirement_analysis'], true);
     plan.retirementInputs = {
       currentAge: 50,
@@ -194,7 +199,7 @@ describe('runAskLincAnalysis validation routing', () => {
         withdrawalStartAge: 'retire at 65',
       },
     };
-    plan.retirementScenario = {
+    plan.scenarioPlans.retirement = {
       requested: true,
       primary: {
         type: 'historical_cpi',
@@ -218,7 +223,7 @@ describe('runAskLincAnalysis validation routing', () => {
       computedAt: '2026-08-17T00:00:00.000Z',
       durationMs: 1,
       reason: 'Test baseline unavailable.',
-    });
+    } as any);
     mockedAskClaude.mockResolvedValue(JSON.stringify({ summary: 'I could not run the scenario.' }));
 
     await runAskLincAnalysis({
@@ -226,19 +231,22 @@ describe('runAskLincAnalysis validation routing', () => {
       userId: 'user-1',
     });
 
-    expect(mockedGatherContext).toHaveBeenCalledTimes(2);
-    for (const [args] of mockedGatherContext.mock.calls) {
-      expect(args.plannedRetirementInputs).toEqual({
-        currentAge: 50,
-        sources: { currentAge: 'I am 50' },
-      });
-    }
+    expect(mockedGatherContext).toHaveBeenCalledTimes(1);
+    expect(mockedGatherContext.mock.calls[0][0].plannedRetirementInputs).toEqual({
+      currentAge: 50,
+      sources: { currentAge: 'I am 50' },
+    });
     expect(mockedGatherContext.mock.calls[0][0]).toMatchObject({
       deferRetirementAnalysis: true,
       useExistingRetirementBaseline: true,
     });
-    expect(mockedGatherContext.mock.calls[1][0]).toMatchObject({
+    expect(mockedCompleteRetirement).toHaveBeenCalledTimes(1);
+    expect(mockedCompleteRetirement.mock.calls[0][1]).toMatchObject({
       useExistingRetirementBaseline: true,
+      plannedRetirementInputs: {
+        currentAge: 50,
+        sources: { currentAge: 'I am 50' },
+      },
     });
   });
 
@@ -259,25 +267,27 @@ describe('runAskLincAnalysis validation routing', () => {
     mockedPlanContext.mockResolvedValue(plan);
     mockedAuditPacks.mockResolvedValue({
       packs: [],
-      reason: 'This is a retirement scenario.',
-      model: 'claude-test',
-      durationMs: 2,
-      retirementScenario: {
-        requested: true,
-        primary: {
-          type: 'historical_cpi',
-          overrides: {
-            retirementAge: 65,
-            annualWithdrawalAmount: 50_000,
-            withdrawalStartAge: 65,
-            sources: {
-              retirementAge: 'retire at 65',
-              annualWithdrawalAmount: 'spend $50,000',
-              withdrawalStartAge: 'retire at 65',
+      scenarioPlans: {
+        retirement: {
+          requested: true,
+          primary: {
+            type: 'historical_cpi',
+            overrides: {
+              retirementAge: 65,
+              annualWithdrawalAmount: 50_000,
+              withdrawalStartAge: 65,
+              sources: {
+                retirementAge: 'retire at 65',
+                annualWithdrawalAmount: 'spend $50,000',
+                withdrawalStartAge: 'retire at 65',
+              },
             },
           },
         },
       },
+      reason: 'This is a retirement scenario.',
+      model: 'claude-test',
+      durationMs: 2,
     });
     mockedExecuteScenario.mockResolvedValue({
       version: 2,
@@ -286,7 +296,7 @@ describe('runAskLincAnalysis validation routing', () => {
       computedAt: '2026-08-17T00:00:00.000Z',
       durationMs: 1,
       reason: 'Test baseline unavailable.',
-    });
+    } as any);
     mockedAskClaude.mockResolvedValue(JSON.stringify({ summary: 'I could not run the scenario.' }));
 
     await runAskLincAnalysis({
@@ -294,7 +304,7 @@ describe('runAskLincAnalysis validation routing', () => {
       userId: 'user-1',
     });
 
-    expect(mockedGatherContext).toHaveBeenCalledTimes(2);
+    expect(mockedGatherContext).toHaveBeenCalledTimes(1);
     expect(mockedGatherContext.mock.calls[0][0]).toMatchObject({
       deferRetirementAnalysis: true,
       plannedRetirementInputs: expect.objectContaining({
@@ -302,7 +312,8 @@ describe('runAskLincAnalysis validation routing', () => {
         annualWithdrawalAmount: 50_000,
       }),
     });
-    expect(mockedGatherContext.mock.calls[1][0]).toMatchObject({
+    expect(mockedCompleteRetirement).toHaveBeenCalledTimes(1);
+    expect(mockedCompleteRetirement.mock.calls[0][1]).toMatchObject({
       useExistingRetirementBaseline: true,
       plannedRetirementInputs: {
         currentAge: 50,
@@ -313,7 +324,7 @@ describe('runAskLincAnalysis validation routing', () => {
 
   it('answers a scenario comparison from deterministic scenario facts', async () => {
     const plan = contextPlan(['retirement_analysis']);
-    plan.retirementScenario = {
+    plan.scenarioPlans.retirement = {
       requested: true,
       primary: { type: 'fixed_growth', annualRate: 0.03, source: '3% bump' },
       comparison: { type: 'flat_nominal', source: 'flat version' },
@@ -359,7 +370,8 @@ describe('runAskLincAnalysis validation routing', () => {
       evaluation: {
         snapshot: snapshot(),
         contextPlan: plan,
-        retirementScenarioExecution: scenarioExecution,
+        scenarioPlans: plan.scenarioPlans,
+        scenarioExecutions: { retirement: scenarioExecution },
         skipToneConfig: true,
         model: ({ userMessage }) => {
           expect(userMessage).toContain('retirement_scenario_fixed_survival_rate');
@@ -386,9 +398,11 @@ describe('runAskLincAnalysis validation routing', () => {
     });
 
     expect(result.showTheMathData?.evidenceManifest.validation.deterministic.valid).toBe(true);
-    expect(result.showTheMathData?.evidenceManifest.scenarioExecution).toMatchObject({
-      status: 'completed',
-      scenarios: [{ metrics: { survivalRate: 0.75 } }, { metrics: { survivalRate: 0.95 } }],
+    expect(result.showTheMathData?.evidenceManifest.scenarioExecutions).toMatchObject({
+      retirement: {
+        status: 'completed',
+        scenarios: [{ metrics: { survivalRate: 0.75 } }, { metrics: { survivalRate: 0.95 } }],
+      },
     });
     expect(result.showTheMathData?.evidenceManifest.timings.scenarioMs).toBe(12);
     expect(result.structuredResponse.summary).toContain('Scenario assumptions:');
@@ -396,13 +410,14 @@ describe('runAskLincAnalysis validation routing', () => {
 
   it('keeps scenario facts after late context escalation replaces the snapshot', async () => {
     const plan = contextPlan(['retirement_analysis']);
-    plan.retirementScenario = {
+    plan.scenarioPlans.retirement = {
       requested: true,
       primary: { type: 'flat_nominal', source: 'flat-dollar version' },
     };
     mockedPlanContext.mockResolvedValue(plan);
     mockedAuditPacks.mockResolvedValue({
       packs: [],
+      scenarioPlans: {},
       reason: 'Retirement scenario already planned.',
       model: 'test-claude',
       durationMs: 1,
@@ -466,17 +481,17 @@ describe('runAskLincAnalysis validation routing', () => {
       userId: 'user-1',
     });
 
-    expect(mockedGatherContext).toHaveBeenCalledTimes(3);
+    expect(mockedGatherContext).toHaveBeenCalledTimes(2);
     expect(mockedGatherContext.mock.calls[0][0].deferRetirementAnalysis).toBe(true);
+    expect(mockedCompleteRetirement).toHaveBeenCalledTimes(1);
     expect(mockedGatherContext.mock.calls[1][0].deferRetirementAnalysis).toBeUndefined();
     expect(mockedExecuteScenario).toHaveBeenCalledTimes(1);
     expect(result.showTheMathData?.evidenceManifest.contextEscalated).toBe(true);
     expect(result.showTheMathData?.evidenceManifest.facts).toContainEqual(
       expect.objectContaining({ id: 'retirement_scenario_flat_survival_rate', value: 95 })
     );
-    expect(result.showTheMathData?.evidenceManifest.scenarioExecution).toMatchObject({
-      status: 'completed',
-      scenarios: [{ id: 'flat' }],
+    expect(result.showTheMathData?.evidenceManifest.scenarioExecutions).toMatchObject({
+      retirement: { status: 'completed', scenarios: [{ id: 'flat' }] },
     });
     expect(result.structuredResponse.summary).toContain('Scenario assumptions:');
     expect(result.showTheMathData?.evidenceManifest.validation.deterministic.valid).toBe(true);
@@ -512,12 +527,12 @@ describe('runAskLincAnalysis validation routing', () => {
 
     await runAskLincAnalysis({ question: 'Review my retirement plan.', userId: 'user-1' });
 
-    expect(mockedGatherContext).toHaveBeenCalledTimes(2);
+    expect(mockedGatherContext).toHaveBeenCalledTimes(1);
     expect(mockedGatherContext.mock.calls[0][0].deferRetirementAnalysis).toBe(true);
-    expect(mockedGatherContext.mock.calls[1][0]).toMatchObject({
+    expect(mockedCompleteRetirement).toHaveBeenCalledTimes(1);
+    expect(mockedCompleteRetirement.mock.calls[0][1]).toMatchObject({
       plannedRetirementInputs: plan.retirementInputs,
     });
-    expect(mockedGatherContext.mock.calls[1][0].deferRetirementAnalysis).toBeUndefined();
   });
 
   it('retries a canonical-number mismatch before invoking another model', async () => {
@@ -760,9 +775,9 @@ describe('runAskLincAnalysis validation routing', () => {
       userId: 'user-1',
     });
 
-    expect(mockedGatherContext).toHaveBeenCalledTimes(2);
+    expect(mockedGatherContext).toHaveBeenCalledTimes(1);
     expect(mockedGatherContext.mock.calls[0][0].deferRetirementAnalysis).toBe(true);
-    expect(mockedGatherContext.mock.calls[1][0].deferRetirementAnalysis).toBeUndefined();
+    expect(mockedCompleteRetirement).toHaveBeenCalledTimes(1);
     expect(result.showTheMathData?.evidenceManifest.contextEscalated).toBeUndefined();
   });
 

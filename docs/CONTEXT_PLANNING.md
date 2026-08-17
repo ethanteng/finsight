@@ -26,11 +26,11 @@ flowchart LR
 ```
 
 1. The preflight planner reads the current message and both sides of the active decision's earlier turns. Assistant answers provide conversational references, not trusted financial facts.
-2. It returns strict JSON: a boolean for every allowlisted pack, whether independent reasoning review is useful, a short explanation, retirement inputs explicitly stated by the user, and any registered scenario overrides the user wants calculated.
+2. It returns strict JSON: a boolean for every allowlisted pack, whether independent reasoning review is useful, a short explanation, retirement inputs explicitly stated by the user, and a `scenarios` object keyed by registered calculator ID.
 3. Application code rejects unknown IDs and adds transitive pack dependencies. Models do not grant access, fetch records, or calculate financial values.
 4. The application loads the selected projection from the canonical snapshot. Aggregate net worth, cash, debt, investments, allocation, category totals, and average cash flow are always available. For retirement requests, the persisted retirement calculation waits until the primary audit completes.
-5. Before answering, the configured primary analysis model must call `request_data_packs`. It sees the transcript, selected pack IDs, available canonical fact labels, and the preflight scenario plan. It may accept the plan, request additional allowlisted packs, or add a supported scenario the preflight missed; it cannot remove packs or calculate outcomes.
-6. Requested additions are committed only after the wider data read succeeds. If a scenario was requested, application code removes scenario-only values from baseline inputs, reuses the existing completed baseline, reads the calculator contract from the registry, runs its deterministic executor, and adds validated inputs plus results as scenario-scoped canonical facts.
+5. Before answering, the configured primary analysis model must call `request_data_packs`. It sees the transcript, selected pack IDs, available canonical fact labels, and the keyed preflight scenario plans. It may accept the plans, request additional allowlisted packs, or add a supported scenario the preflight missed; it cannot remove packs or calculate outcomes.
+6. Requested additions are committed only after the wider data read succeeds. Registry manifests supply the combined required packs and executors. Retirement-specific baseline isolation remains application-owned; when packs do not widen, its deferred baseline is completed from the first snapshot instead of repeating the full context gather. Each calculator then supplies its validated scenario facts, compact evidence, and disclosure.
 7. The same primary model then writes the answer from the final fact pack. Deterministic grounding remains the last safety boundary. If an answer still reaches for evidence it did not receive, recovery is exhaustive: load all remaining allowlisted packs and re-check or regenerate. This recovery does not infer a pack from the shape of a number or from language rules.
 
 If the preflight call fails, the fallback is recall-safe and language-neutral: include every pack. If the primary tool audit fails, the preflight plan remains usable and the failure is recorded in the evidence manifest.
@@ -60,6 +60,6 @@ The Production tab's **Answer quality** report deliberately has no synthetic sco
 
 The old editable routing vocabulary and browser-side keyword question categories were retired because neither represents the production decision path.
 
-Every new evidence manifest stores the initial semantic plan, final packs, primary-tool outcome, scenario execution, planner/tool/calculator latency, and any late recovery. Older manifests remain readable as legacy observations.
+Every new evidence manifest stores the initial semantic plan, final packs, primary-tool outcome, registry-keyed scenario executions, planner/tool/calculator latency, and any late recovery. Older singular retirement manifests remain readable as legacy observations.
 
 See [Deterministic scenario modeling](SCENARIO_MODELING.md) for the boundary between semantic intent planning, deterministic calculation, and conditional scenario evidence.
