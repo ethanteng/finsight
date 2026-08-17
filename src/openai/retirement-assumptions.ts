@@ -122,9 +122,16 @@ export function describeRetirementScenarioAssumptions(
       ? `withdrawals starting at ${withdrawalStartAge}`
       : null,
     typeof lifeExpectancy === 'number' ? `life expectancy ${lifeExpectancy}` : null,
-    typeof annualContribution === 'number' && annualContribution > 0
-      ? `$${Math.round(annualContribution).toLocaleString('en-US')} a year in pre-withdrawal contributions in today's dollars`
-      : 'no additional contributions before withdrawals begin',
+    // Only treat contributions as held-constant when every compared ledger agrees.
+    // Differing values leave annualContribution undefined; do not fall through to
+    // the zero-contribution default or the disclosure contradicts the variant inputs.
+    typeof annualContribution === 'number'
+      ? annualContribution > 0
+        ? `$${Math.round(annualContribution).toLocaleString('en-US')} a year in pre-withdrawal contributions in today's dollars`
+        : 'no additional contributions before withdrawals begin'
+      : comparisonLedgersAvailable
+        ? null
+        : 'no additional contributions before withdrawals begin',
   ].filter((item): item is string => Boolean(item));
   const changedInputs = execution.scenarios.flatMap((scenario) => {
     const currencyKeys = new Set(['annual_withdrawal_amount', 'pre_withdrawal_contributions']);

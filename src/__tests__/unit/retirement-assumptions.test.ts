@@ -179,6 +179,7 @@ describe('describeRetirementScenarioAssumptions', () => {
 
     expect(line).toContain('starting spending of $40,000');
     expect(line).not.toContain('retirement at 65');
+    expect(line).not.toContain('no additional contributions before withdrawals begin');
     expect(line).toContain('User-supplied variant inputs');
     expect(line).toContain('retirement age 65');
     expect(line).toContain('$12,000');
