@@ -20,6 +20,7 @@ interface Observation {
   lateExpansion: boolean;
   scenarioRequested: boolean;
   scenarioStatus: 'completed' | 'unavailable' | 'not_run';
+  scenarioStatuses?: Record<string, 'completed' | 'unavailable'>;
 }
 
 interface AnswerQualityReport {
@@ -44,7 +45,16 @@ interface AnswerQualityReport {
     averagePlannerMs: number | null;
     byPack: Record<string, { selectedInitially: number; addedByPrimaryTool: number; presentFinally: number }>;
   };
-  scenarios?: { requested: number; completed: number; unavailable: number; notRun: number; averageMs: number | null };
+  scenarios?: {
+    requested: number;
+    completed: number;
+    unavailable: number;
+    notRun: number;
+    averageMs: number | null;
+    completedCalculations?: number;
+    unavailableCalculations?: number;
+    byCalculator?: Record<string, { completed: number; unavailable: number }>;
+  };
   users: { rated: number; positive: number; neutral: number; negative: number; averageRating: number | null };
   recent: Observation[];
 }
@@ -66,6 +76,28 @@ const PACK_LABELS: Record<string, string> = {
   market_context: 'Market context',
   search_context: 'Rates & rules',
 };
+
+const CALCULATOR_LABELS: Record<string, string> = {
+  retirement: 'Retirement scenario',
+  home_affordability: 'Home affordability',
+};
+
+function calculatorLabel(id: string): string {
+  return CALCULATOR_LABELS[id]
+    ?? id.replace(/_/g, ' ').replace(/^./, (letter) => letter.toUpperCase());
+}
+
+function scenarioRunSummary(answer: Observation): string {
+  const statuses = Object.entries(answer.scenarioStatuses ?? {});
+  if (statuses.length > 0) {
+    return statuses.map(([calculatorId, status]) =>
+      `${calculatorLabel(calculatorId)} ${status === 'completed' ? 'completed' : 'missing inputs'}`
+    ).join(' · ');
+  }
+  if (answer.scenarioStatus === 'completed') return 'Scenario completed';
+  if (answer.scenarioStatus === 'unavailable') return 'Scenario missing inputs';
+  return answer.scenarioRequested ? 'Scenario not run' : '';
+}
 
 const percent = (value: number | null) => value === null ? '—' : `${Math.round(value * 100)}%`;
 
@@ -132,6 +164,9 @@ export default function AnswerQualityPanel({
     unavailable: 0,
     notRun: 0,
     averageMs: null,
+    completedCalculations: 0,
+    unavailableCalculations: 0,
+    byCalculator: {},
   };
 
   return (
@@ -196,10 +231,23 @@ export default function AnswerQualityPanel({
             <h3 className="font-medium text-white">Scenario runner</h3>
             <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <div><div className="text-2xl font-semibold text-white">{scenarios.requested}</div><div className="text-xs text-gray-500">scenario requests</div></div>
-              <div><div className="text-2xl font-semibold text-green-300">{scenarios.completed}</div><div className="text-xs text-gray-500">completed</div></div>
-              <div><div className="text-2xl font-semibold text-yellow-300">{scenarios.unavailable}</div><div className="text-xs text-gray-500">unavailable</div></div>
+              <div><div className="text-2xl font-semibold text-green-300">{scenarios.completed}</div><div className="text-xs text-gray-500">answers with a completed scenario</div></div>
+              <div><div className="text-2xl font-semibold text-yellow-300">{scenarios.unavailable}</div><div className="text-xs text-gray-500">answers with no runnable scenario</div></div>
               <div><div className="text-2xl font-semibold text-white">{scenarios.averageMs === null ? '—' : `${Math.round(scenarios.averageMs)} ms`}</div><div className="text-xs text-gray-500">average calculation time</div></div>
             </div>
+            <div className="mt-3 text-xs text-gray-400">
+              {scenarios.completedCalculations ?? scenarios.completed} completed calculation(s) · {scenarios.unavailableCalculations ?? scenarios.unavailable} unavailable calculation(s)
+            </div>
+            {Object.keys(scenarios.byCalculator ?? {}).length > 0 && (
+              <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                {Object.entries(scenarios.byCalculator ?? {}).map(([calculatorId, counts]) => (
+                  <div key={calculatorId} className="rounded border border-gray-700 bg-gray-950/40 px-3 py-2 text-xs text-gray-400">
+                    <span className="font-medium text-gray-200">{calculatorLabel(calculatorId)}</span>
+                    {' · '}{counts.completed} completed · {counts.unavailable} unavailable
+                  </div>
+                ))}
+              </div>
+            )}
             {scenarios.notRun > 0 && (
               <div className="mt-3 text-xs text-red-300">{scenarios.notRun} requested scenario(s) did not reach the calculator.</div>
             )}
@@ -246,31 +294,32 @@ export default function AnswerQualityPanel({
           <h3 className="mt-6 font-medium text-white">Recent answers</h3>
           <div className="mt-3 max-h-[32rem] space-y-2 overflow-y-auto">
             {report.recent.length === 0 && <div className="text-sm text-gray-500">No answers with evidence yet.</div>}
-            {report.recent.map((answer) => (
-              <div key={answer.id} className="rounded-lg border border-gray-700 bg-gray-900 p-3">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex min-w-0 items-start gap-3">
-                    <span className={`mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full ${STATUS[answer.deliveryStatus].dot}`} />
-                    <div>
-                      <div className="text-sm text-gray-200">{answer.question}</div>
-                      <div className="mt-1 text-xs leading-5 text-gray-500">{answer.statusReason}</div>
-                      <div className="mt-1 text-[11px] text-gray-600">
-                        {answer.plannerSource === 'context_planner' ? 'semantic planner' : answer.plannerSource.replace('_', ' ')}
-                        {answer.toolAddedPacks.length > 0 && ` · primary tool added ${answer.toolAddedPacks.map((pack) => PACK_LABELS[pack] ?? pack).join(', ')}`}
-                        {answer.primaryToolOutcome === 'failed' && ' · primary tool audit failed'}
-                        {answer.lateExpansion && ' · late context recovery'}
-                        {answer.scenarioStatus === 'completed' && ' · scenario completed'}
-                        {answer.scenarioStatus === 'unavailable' && ' · scenario missing inputs'}
-                        {answer.scenarioRequested && answer.scenarioStatus === 'not_run' && ' · scenario not run'}
+            {report.recent.map((answer) => {
+              const scenarioSummary = scenarioRunSummary(answer);
+              return (
+                <div key={answer.id} className="rounded-lg border border-gray-700 bg-gray-900 p-3">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex min-w-0 items-start gap-3">
+                      <span className={`mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full ${STATUS[answer.deliveryStatus].dot}`} />
+                      <div>
+                        <div className="text-sm text-gray-200">{answer.question}</div>
+                        <div className="mt-1 text-xs leading-5 text-gray-500">{answer.statusReason}</div>
+                        <div className="mt-1 text-[11px] text-gray-600">
+                          {answer.plannerSource === 'context_planner' ? 'semantic planner' : answer.plannerSource.replace('_', ' ')}
+                          {answer.toolAddedPacks.length > 0 && ` · primary tool added ${answer.toolAddedPacks.map((pack) => PACK_LABELS[pack] ?? pack).join(', ')}`}
+                          {answer.primaryToolOutcome === 'failed' && ' · primary tool audit failed'}
+                          {answer.lateExpansion && ' · late context recovery'}
+                          {scenarioSummary && ` · ${scenarioSummary}`}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                  <div className={`shrink-0 text-xs font-medium ${STATUS[answer.deliveryStatus].text}`}>
-                    {STATUS[answer.deliveryStatus].label}
+                    <div className={`shrink-0 text-xs font-medium ${STATUS[answer.deliveryStatus].text}`}>
+                      {STATUS[answer.deliveryStatus].label}
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </>
       )}

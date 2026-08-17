@@ -13,6 +13,9 @@ export interface CanonicalFact {
     asOf?: string;
     formula?: string;
     inputFactIds?: string[];
+    scenarioId?: string;
+    calculatorId?: string;
+    calculatorVersion?: number;
   };
 }
 
@@ -24,6 +27,19 @@ export interface EvidenceManifest {
   contextSelection?: Record<string, boolean>;
   /** Set when a retry widened the context beyond what routing selected. */
   contextEscalated?: boolean;
+  contextPlanning?: {
+    scenarios?: Record<string, unknown>;
+    retirementScenario?: unknown;
+    primaryTool?: {
+      scenarios?: Record<string, unknown>;
+      retirementScenario?: unknown;
+      [key: string]: unknown;
+    };
+    [key: string]: unknown;
+  };
+  scenarioExecutions?: Record<string, unknown>;
+  /** Compatibility with evidence saved before registry-keyed execution. */
+  scenarioExecution?: unknown;
   modelCalls: Array<{
     phase: 'initial' | 'retry';
     provider: 'claude' | 'openai';
@@ -132,6 +148,16 @@ export function ShowTheMathContent({ data }: { data: Partial<ShowTheMathData> | 
       <CollapsibleSection title="Canonical facts and provenance" defaultOpen>
         <JsonBlock value={manifest.facts} />
       </CollapsibleSection>
+      {manifest.contextPlanning && (
+        <CollapsibleSection title="Context planning">
+          <JsonBlock value={manifest.contextPlanning} />
+        </CollapsibleSection>
+      )}
+      {Boolean(manifest.scenarioExecutions || manifest.scenarioExecution) && (
+        <CollapsibleSection title="Scenario calculations">
+          <JsonBlock value={manifest.scenarioExecutions ?? { retirement: manifest.scenarioExecution }} />
+        </CollapsibleSection>
+      )}
       <CollapsibleSection title="Deterministic validation">
         <JsonBlock value={manifest.validation} />
       </CollapsibleSection>

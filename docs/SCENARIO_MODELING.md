@@ -85,7 +85,7 @@ Each scenario ID is a SHA-256 content fingerprint of the portfolio and security 
 - policies and assumption origins (`user`, `inherited`, or `default`);
 - withdrawal rate, years of expenses, projected value at withdrawal start, survival rate, sequence count, and depletion percentiles.
 
-Records are persisted inside the conversation's Show the Math evidence manifest under `scenarioExecutions[calculatorId]`. The Answer Quality admin report reads both this keyed form and the legacy singular retirement field while counting requested, completed, unavailable, and unexpectedly unrun scenarios and reporting average calculation latency.
+Records are persisted inside the conversation's Show the Math evidence manifest under `scenarioExecutions[calculatorId]`, and the Show the Math UI exposes both the keyed plan and calculation records. The Answer Quality admin report reads this keyed form plus the legacy singular retirement field, keeps its existing answer-level completion summary, and reports completed or unavailable calculations per calculator so a mixed run cannot hide a successful peer.
 
 ## Relevant files
 
