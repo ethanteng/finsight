@@ -118,11 +118,18 @@ export function buildPlannerTranscript(
 ): string {
   const lines: string[] = [];
   for (const turn of [...recentTurns].reverse()) {
+    // Cap prior history only. The current message must stay intact: truncating it
+    // would drop pack requests or retirement-input revisions that the final
+    // reasoning prompt still sees, so the planner and the answer disagree.
     lines.push(`User: ${turn.question.slice(0, MAX_QUESTION_CHARS)}`);
     const answer = turn.answer?.trim();
-    if (answer) lines.push(`Assistant: ${answer.slice(0, MAX_ANSWER_CHARS)}`);
+    if (answer) {
+      lines.push(
+        `Assistant: ${answer.length > MAX_ANSWER_CHARS ? `${answer.slice(0, MAX_ANSWER_CHARS)}…` : answer}`
+      );
+    }
   }
-  lines.push(`User: ${question.slice(0, MAX_QUESTION_CHARS)}`);
+  lines.push(`User: ${question}`);
   return lines.join('\n');
 }
 

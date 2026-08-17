@@ -38,6 +38,20 @@ describe('context planner', () => {
     expect(transcript.endsWith('User: Re-run it.')).toBe(true);
   });
 
+  it('keeps the full current message while capping only prior history', () => {
+    const current = `Revise retirement age to 67. ${'x'.repeat(1200)}`;
+    const priorQuestion = `Earlier question ${'y'.repeat(1200)}`;
+    const priorAnswer = `Earlier answer ${'z'.repeat(1600)}`;
+    const transcript = buildPlannerTranscript(current, [
+      { question: priorQuestion, answer: priorAnswer },
+    ]);
+    expect(transcript).toContain(current);
+    expect(transcript).not.toContain(priorQuestion);
+    expect(transcript).toContain(priorQuestion.slice(0, 1000));
+    expect(transcript).toContain(`${priorAnswer.slice(0, 1500)}…`);
+    expect(transcript).not.toContain(priorAnswer);
+  });
+
   it('normalizes pack dependencies and validates extracted retirement inputs', () => {
     const plan = parseContextPlan(rawPlan(['retirement_analysis']), 12, 'gpt-test');
     expect(plan.requestedPacks).toEqual(['retirement_analysis']);
