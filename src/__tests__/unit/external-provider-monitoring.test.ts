@@ -75,6 +75,44 @@ describe('external provider monitoring', () => {
     );
   });
 
+  it('classifies AbortSignal.timeout TimeoutError as timeout, not network', async () => {
+    const failure = new DOMException('The operation was aborted due to timeout', 'TimeoutError');
+    const baseFetch = jest.fn(async () => {
+      throw failure;
+    }) as unknown as typeof fetch;
+    const monitoredFetch = createExternalProviderMonitoringFetch(baseFetch);
+
+    await expect(monitoredFetch('https://api.search.brave.com/res/v1/web/search'))
+      .rejects.toBe(failure);
+
+    expect(Sentry.captureMessage).toHaveBeenCalledWith(
+      'External provider brave_search request failed (timeout)',
+    );
+    expect(mockScope.setTags).toHaveBeenCalledWith(expect.objectContaining({
+      'external_provider.failure_kind': 'timeout',
+    }));
+  });
+
+  it('classifies Axios ECONNABORTED timeouts as timeout', async () => {
+    const client = axios.create({
+      adapter: async config => {
+        throw new axios.AxiosError('timeout of 1ms exceeded', 'ECONNABORTED', config);
+      },
+    });
+    instrumentExternalProviderAxios(client);
+
+    await expect(client.get('https://production.plaid.com/accounts/get')).rejects.toMatchObject({
+      code: 'ECONNABORTED',
+    });
+
+    expect(Sentry.captureMessage).toHaveBeenCalledWith(
+      'External provider plaid request failed (timeout)',
+    );
+    expect(mockScope.setTags).toHaveBeenCalledWith(expect.objectContaining({
+      'external_provider.failure_kind': 'timeout',
+    }));
+  });
+
   it('ignores Sentry transport and Ask Linc service responses', async () => {
     const baseFetch = jest.fn(async () => new Response('{}', { status: 500 })) as unknown as typeof fetch;
     const monitoredFetch = createExternalProviderMonitoringFetch(baseFetch);

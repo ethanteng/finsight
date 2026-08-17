@@ -158,13 +158,29 @@ export function reportExternalProviderHttpStatus(options: {
   );
 }
 
+function isTimeoutFailure(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+
+  const err = error as { name?: string; code?: string | number };
+  if (err.name === 'TimeoutError' || err.name === 'AbortError') return true;
+
+  const code = typeof err.code === 'string' ? err.code.toUpperCase() : '';
+  if (code === 'ECONNABORTED' || code === 'ETIMEDOUT' || code === 'ESOCKETTIMEDOUT') {
+    return true;
+  }
+
+  return false;
+}
+
 function reportNetworkFailure(
   metadata: ExternalRequestMetadata,
   error: unknown,
   durationMs: number,
 ): void {
   const errorName = error instanceof Error ? error.name : 'UnknownError';
-  const failureKind = errorName === 'AbortError' ? 'timeout' : 'network';
+  // AbortSignal.timeout() rejects with TimeoutError; AbortController.abort() and
+  // many app-level timers reject with AbortError. Axios timeouts use ECONNABORTED/ETIMEDOUT.
+  const failureKind = isTimeoutFailure(error) ? 'timeout' : 'network';
 
   try {
     Sentry.withScope(scope => {
