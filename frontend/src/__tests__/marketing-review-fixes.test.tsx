@@ -61,10 +61,37 @@ describe("marketing review fixes", () => {
       "See what a big decision changes. Before you make it.",
     );
     expect(screen.getByText(/buying a home, growing your family, changing jobs/i)).toBeInTheDocument();
+    expect(screen.getByText(/grounds each answer in your financial picture, goals, and real-life context/i)).toBeInTheDocument();
+    expect(screen.getByText(/stay in control of what you connect and share/i)).toBeInTheDocument();
     expect(USE_CASE_LINKS).toContainEqual({
       href: "/use-cases/family-planning",
       label: "Growing a Family",
     });
+  });
+
+  it("turns a natural-language question into a grounded decision path", () => {
+    render(<MarketingHome />);
+
+    expect(screen.getByRole("heading", { name: /same question.*a very different answer/i })).toBeInTheDocument();
+    expect(screen.getByText(/should i use my bonus to pay down the mortgage/i)).toBeInTheDocument();
+    expect(screen.getByText("WITHOUT YOUR FINANCIAL CONTEXT")).toBeInTheDocument();
+    expect(screen.getByText("WITH ASK LINC CONNECTED")).toBeInTheDocument();
+    expect(screen.getByText("GENERAL GUIDANCE")).toBeInTheDocument();
+    expect(screen.getByText("GROUNDED IN YOUR NUMBERS")).toBeInTheDocument();
+    expect(screen.getByText("ACCOUNTS")).toBeInTheDocument();
+    expect(screen.getByText("TRADEOFF")).toBeInTheDocument();
+    expect(screen.getByText("NEXT STEP")).toBeInTheDocument();
+    expect(screen.getByText(/latest available data and shows the source date/i)).toBeInTheDocument();
+    expect(screen.getByText(/money shapes where you live, how you care for family/i)).toBeInTheDocument();
+    expect(screen.getByText(/learning from real questions, improving it carefully/i)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /your financial ecosystem is already here/i })).toBeInTheDocument();
+    expect(screen.getByText("Plaid")).toBeInTheDocument();
+    expect(screen.getByText("SnapTrade")).toBeInTheDocument();
+    expect(screen.getByText("RentCast")).toBeInTheDocument();
+    expect(screen.getByText("FRED + market sources")).toBeInTheDocument();
+    expect(screen.getByText(/they are not a future roadmap/i)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /financial data is never used to train ai models/i })).toBeInTheDocument();
+    expect(screen.getByText(/no toggle.*no opt-out.*financial data stays yours/i)).toBeInTheDocument();
   });
 
   it("submits the redesigned contact form through the existing API", async () => {
