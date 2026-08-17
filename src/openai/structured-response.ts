@@ -419,3 +419,58 @@ export function toDisplayText(response: AskLincResponse): string {
 
   return parts.join('\n');
 }
+
+const DISPLAY_SECTION_HEADING = /^\*\*(Key Numbers|Insights|Suggested Actions):\*\*\s*$/gm;
+
+function displaySectionItems(section: string): string[] {
+  return section
+    .split(/^\s*-\s+/m)
+    .map(item => item.trim())
+    .filter(Boolean);
+}
+
+/**
+ * Rebuild a structured response from the compatibility Markdown saved before
+ * structured responses were persisted. This keeps existing conversation
+ * history eligible for the card layout without guessing at arbitrary prose.
+ */
+export function parseDisplayText(responseText: string): AskLincResponse | null {
+  const matches = [...responseText.matchAll(DISPLAY_SECTION_HEADING)];
+  if (matches.length === 0) return null;
+
+  const sections = new Map<string, string>();
+  for (let index = 0; index < matches.length; index += 1) {
+    const match = matches[index];
+    const contentStart = (match.index ?? 0) + match[0].length;
+    const contentEnd = matches[index + 1]?.index ?? responseText.length;
+    sections.set(match[1], responseText.slice(contentStart, contentEnd).trim());
+  }
+
+  const summary = responseText.slice(0, matches[0].index).trim();
+  const key_numbers: Record<string, ResponseKeyNumber> = {};
+  for (const item of displaySectionItems(sections.get('Key Numbers') ?? '')) {
+    const separator = item.indexOf(':');
+    if (separator < 1) continue;
+    const label = item.slice(0, separator).trim();
+    const formattedValue = item.slice(separator + 1).trim();
+    const value = Number(formattedValue.replace(/[$,%\s,]/g, ''));
+    if (!Number.isFinite(value)) continue;
+    const key = label.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+    if (!key) continue;
+    key_numbers[key] = {
+      value,
+      unit: formattedValue.includes('%') ? 'percent' : inferKeyNumberUnit(key),
+      provenance: '',
+    };
+  }
+
+  const insights = displaySectionItems(sections.get('Insights') ?? '');
+  const suggested_actions = displaySectionItems(sections.get('Suggested Actions') ?? '');
+
+  return {
+    summary: summary || 'No summary provided.',
+    key_numbers: Object.keys(key_numbers).length > 0 ? key_numbers : undefined,
+    insights: insights.length > 0 ? insights : undefined,
+    suggested_actions: suggested_actions.length > 0 ? suggested_actions : undefined,
+  };
+}

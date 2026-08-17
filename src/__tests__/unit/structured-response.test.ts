@@ -1,4 +1,5 @@
 import {
+  parseDisplayText,
   parseStructuredResponse,
   formatKeyNumberValue,
   toDisplayText,
@@ -143,5 +144,33 @@ describe('toDisplayText', () => {
   it('omits optional sections when absent', () => {
     const text = toDisplayText({ summary: 'Just a summary.' });
     expect(text).toBe('Just a summary.');
+  });
+});
+
+describe('parseDisplayText', () => {
+  it('rebuilds legacy flattened answers for rich history rendering', () => {
+    const displayText = toDisplayText({
+      summary: 'You have a healthy emergency cushion.',
+      key_numbers: {
+        total_cash: { value: 77655, unit: 'usd', provenance: 'total_cash' },
+        savings_rate: { value: 35.42, unit: 'percent', provenance: 'savings_rate' },
+      },
+      insights: ['Your cash covers substantially more than six months of expenses.'],
+      suggested_actions: ['Separate the emergency reserve from cash earmarked for other goals.'],
+    });
+
+    expect(parseDisplayText(displayText)).toEqual({
+      summary: 'You have a healthy emergency cushion.',
+      key_numbers: {
+        total_cash: { value: 77655, unit: 'usd', provenance: '' },
+        savings_rate: { value: 35.42, unit: 'percent', provenance: '' },
+      },
+      insights: ['Your cash covers substantially more than six months of expenses.'],
+      suggested_actions: ['Separate the emergency reserve from cash earmarked for other goals.'],
+    });
+  });
+
+  it('does not impose structure on arbitrary saved prose', () => {
+    expect(parseDisplayText('A plain answer with no generated sections.')).toBeNull();
   });
 });
