@@ -4,16 +4,46 @@ import { requireAuth } from '../auth/middleware';
 import { getPrismaClient } from '../prisma-client';
 import { runAskLincAnalysis } from '../openai/analysis-pipeline';
 import { PromptValidationError } from '../openai/errors';
-import { loadShowTheMathEvidence } from '../openai/show-the-math-db-service';
+import {
+  isEvidenceManifestData,
+  loadShowTheMathEvidence,
+} from '../openai/show-the-math-db-service';
 import { aiRateLimitMiddleware } from '../security/ai-rate-limiter';
 import { recordLlmAnalysis, recordLlmAnalysisFailure } from '../observability/llm-metrics';
 import { updateProfileFromAnsweredTurn } from '../profile/conversation-updater';
+import {
+  parseDisplayText,
+  parseStructuredResponse,
+  type AskLincResponse,
+} from '../openai/structured-response';
 
 const router = Router();
 
 function writeSse(res: Response, event: string, data: object): void {
   res.write(`event: ${event}\n`);
   res.write(`data: ${JSON.stringify(data)}\n\n`);
+}
+
+function storedStructuredResponse(stored: unknown): AskLincResponse | null {
+  if (!stored || typeof stored !== 'object') return null;
+  const candidate = (stored as { structuredResponse?: unknown }).structuredResponse;
+  if (!candidate || typeof candidate !== 'object') return null;
+  if (typeof (candidate as { summary?: unknown }).summary !== 'string') return null;
+  return parseStructuredResponse(JSON.stringify(candidate));
+}
+
+/**
+ * Card snapshots may be stored alone when an answer has no evidence manifest
+ * (for example output-validation fallbacks). Those rows must not look like
+ * Show the Math payloads, or the client gets a misleading empty evidence view
+ * instead of a clean 404.
+ */
+function hasShowTheMathPayload(stored: unknown): boolean {
+  if (!stored || typeof stored !== 'object') return false;
+  if (isEvidenceManifestData(stored)) return true;
+  const { structuredResponse: _structured, databaseData: _database, ...rest } =
+    stored as Record<string, unknown>;
+  return Object.keys(rest).length > 0;
 }
 
 router.post('/ask/display-real', aiRateLimitMiddleware, requireAuth, async (req, res) => {
@@ -109,13 +139,17 @@ router.post('/ask/display-real', aiRateLimitMiddleware, requireAuth, async (req,
         }
       }
 
+      const persistedAnalysis = {
+        ...(result.showTheMathData ?? {}),
+        structuredResponse: result.structuredResponse,
+      };
       const conversation = await getPrismaClient().conversation.create({
         data: {
           userId: user.id,
           question,
           answer: result.displayText,
           threadId: requestedThreadId,
-          showTheMathData: result.showTheMathData as object,
+          showTheMathData: persistedAnalysis as object,
         },
         select: { id: true, threadId: true },
       });
@@ -195,6 +229,10 @@ router.get('/conversations', requireAuth, async (req, res) => {
       // adopts its thread, so the next question continues from there.
       threadId: conversation.threadId ?? conversation.id,
       timestamp: conversation.createdAt.getTime(),
+      structuredResponse:
+        storedStructuredResponse(conversation.showTheMathData) ??
+        parseDisplayText(conversation.answer) ??
+        undefined,
     })),
   });
 });
@@ -205,7 +243,7 @@ router.get('/conversations/:id/show-the-math', requireAuth, async (req, res) => 
     where: { id, userId: req.user!.id },
   });
   if (!conversation) return res.status(404).json({ error: 'Conversation not found' });
-  if (!conversation.showTheMathData) {
+  if (!hasShowTheMathPayload(conversation.showTheMathData)) {
     return res.status(404).json({ error: 'No pipeline data available for this conversation' });
   }
   res.json(await loadShowTheMathEvidence(conversation.showTheMathData, req.user!.id));

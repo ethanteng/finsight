@@ -38,6 +38,7 @@ jest.mock('@sentry/node', () => ({
 describe('Ask route SSE lifecycle', () => {
   const conversation = {
     findMany: jest.fn().mockResolvedValue([]),
+    findFirst: jest.fn(),
     create: jest.fn().mockResolvedValue({ id: 'conversation-1' }),
   };
 
@@ -73,6 +74,138 @@ describe('Ask route SSE lifecycle', () => {
     expect(response.text).toContain('event: answerDelta');
     expect(response.text).toContain('event: result');
     expect(response.text).toContain('"conversationId":"conversation-1"');
+  });
+
+  it('persists the structured answer with its evidence for history rendering', async () => {
+    const structuredResponse = {
+      summary: 'You have a healthy cash cushion.',
+      key_numbers: {
+        total_cash: { value: 77655, unit: 'usd', provenance: 'total_cash' },
+      },
+      insights: ['Your reserve is above the usual range.'],
+      suggested_actions: ['Give the excess cash a specific job.'],
+    };
+    const showTheMathData = {
+      evidenceManifest: {
+        version: 1,
+        generatedAt: new Date().toISOString(),
+        snapshot: {},
+        facts: [],
+        modelCalls: [],
+        timings: { contextGatherMs: 1, promptBuildMs: 1, totalMs: 3 },
+        validation: { deterministic: { valid: true, issues: [] } },
+        evidenceRefs: { tickers: [], retirementAnalysis: false, marketContext: false },
+      },
+    };
+    (runAskLincAnalysis as jest.Mock).mockResolvedValue({
+      displayText: 'You have a healthy cash cushion.',
+      structuredResponse,
+      showTheMathData,
+    });
+
+    await request(createApp())
+      .post('/ask/display-real')
+      .send({ question: 'How is my emergency fund?' });
+
+    expect(conversation.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        showTheMathData: { ...showTheMathData, structuredResponse },
+      }),
+    }));
+  });
+
+  it('returns structured answers for saved and legacy conversations', async () => {
+    conversation.findMany.mockResolvedValueOnce([
+      {
+        id: 'saved-1',
+        question: 'How is my cash?',
+        answer: 'Flattened compatibility answer.',
+        threadId: 'thread-1',
+        createdAt: new Date('2026-08-17T12:00:00Z'),
+        showTheMathData: {
+          structuredResponse: {
+            summary: 'Your cash position is healthy.',
+            key_numbers: { total_cash: { value: 77655, unit: 'usd', provenance: 'total_cash' } },
+            insights: ['You have ample liquidity.'],
+            suggested_actions: ['Assign excess cash to a goal.'],
+          },
+        },
+      },
+      {
+        id: 'legacy-1',
+        question: 'What is my savings rate?',
+        answer: 'Your savings rate is strong.\n\n**Key Numbers:**\n- Savings Rate: 35.42%\n\n**Insights:**\n- You are saving consistently.',
+        threadId: null,
+        createdAt: new Date('2026-08-16T12:00:00Z'),
+        showTheMathData: null,
+      },
+      {
+        id: 'freeform-1',
+        question: 'Explain the key numbers section.',
+        answer: 'Keep this entire answer.\n\n**Key Numbers:**\nThis is explanatory prose, not a generated metric list.',
+        threadId: null,
+        createdAt: new Date('2026-08-15T12:00:00Z'),
+        showTheMathData: null,
+      },
+    ]);
+
+    const response = await request(createApp()).get('/conversations');
+
+    expect(response.status).toBe(200);
+    expect(response.body.conversations[0].structuredResponse).toMatchObject({
+      summary: 'Your cash position is healthy.',
+      key_numbers: { total_cash: { value: 77655, provenance: 'total_cash' } },
+    });
+    expect(response.body.conversations[1].structuredResponse).toEqual({
+      summary: 'Your savings rate is strong.',
+      key_numbers: { savings_rate: { value: 35.42, unit: 'percent', provenance: '' } },
+      insights: ['You are saving consistently.'],
+    });
+    expect(response.body.conversations[2].answer).toContain('This is explanatory prose');
+    expect(response.body.conversations[2].structuredResponse).toBeUndefined();
+  });
+
+  it('404s Show the Math when only a card snapshot was persisted', async () => {
+    conversation.findFirst.mockResolvedValueOnce({
+      id: 'cards-only-1',
+      userId: 'user-1',
+      showTheMathData: {
+        structuredResponse: { summary: 'Sanitized fallback answer.' },
+      },
+    });
+
+    const response = await request(createApp()).get('/conversations/cards-only-1/show-the-math');
+
+    expect(response.status).toBe(404);
+    expect(response.body.error).toBe('No pipeline data available for this conversation');
+  });
+
+  it('still expands Show the Math when evidence is present beside the card snapshot', async () => {
+    const evidenceManifest = {
+      version: 1,
+      generatedAt: '2026-08-17T12:00:00.000Z',
+      snapshot: {},
+      facts: [],
+      modelCalls: [],
+      timings: { contextGatherMs: 1, promptBuildMs: 1, totalMs: 3 },
+      validation: { deterministic: { valid: true, issues: [] } },
+      evidenceRefs: { tickers: [], retirementAnalysis: false, marketContext: false },
+    };
+    conversation.findFirst.mockResolvedValueOnce({
+      id: 'with-evidence-1',
+      userId: 'user-1',
+      showTheMathData: {
+        evidenceManifest,
+        structuredResponse: { summary: 'Your cash position is healthy.' },
+      },
+    });
+
+    const response = await request(createApp()).get('/conversations/with-evidence-1/show-the-math');
+
+    expect(response.status).toBe(200);
+    expect(response.body.evidenceManifest).toEqual(evidenceManifest);
+    expect(response.body.structuredResponse).toEqual({ summary: 'Your cash position is healthy.' });
+    expect(response.body.databaseData).toEqual({ canonical_facts: [] });
   });
 
   it('refreshes the stored profile from each answered turn', async () => {

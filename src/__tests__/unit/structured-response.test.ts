@@ -1,4 +1,5 @@
 import {
+  parseDisplayText,
   parseStructuredResponse,
   formatKeyNumberValue,
   toDisplayText,
@@ -143,5 +144,68 @@ describe('toDisplayText', () => {
   it('omits optional sections when absent', () => {
     const text = toDisplayText({ summary: 'Just a summary.' });
     expect(text).toBe('Just a summary.');
+  });
+});
+
+describe('parseDisplayText', () => {
+  it('rebuilds legacy flattened answers for rich history rendering', () => {
+    const displayText = toDisplayText({
+      summary: 'You have a healthy emergency cushion.',
+      key_numbers: {
+        total_cash: { value: 77655, unit: 'usd', provenance: 'total_cash' },
+        savings_rate: { value: 35.42, unit: 'percent', provenance: 'savings_rate' },
+      },
+      insights: ['Your cash covers substantially more than six months of expenses.'],
+      suggested_actions: ['Separate the emergency reserve from cash earmarked for other goals.'],
+    });
+
+    expect(parseDisplayText(displayText)).toEqual({
+      summary: 'You have a healthy emergency cushion.',
+      key_numbers: {
+        total_cash: { value: 77655, unit: 'usd', provenance: '' },
+        savings_rate: { value: 35.42, unit: 'percent', provenance: '' },
+      },
+      insights: ['Your cash covers substantially more than six months of expenses.'],
+      suggested_actions: ['Separate the emergency reserve from cash earmarked for other goals.'],
+    });
+  });
+
+  it('does not impose structure on arbitrary saved prose', () => {
+    expect(parseDisplayText('A plain answer with no generated sections.')).toBeNull();
+  });
+
+  it('keeps the original Markdown when a known heading contains freeform prose', () => {
+    const legacyAnswer = [
+      'Keep this summary and the explanation below.',
+      '',
+      '**Key Numbers:**',
+      'This heading is part of a freeform answer, not a generated metric list.',
+    ].join('\n');
+
+    expect(parseDisplayText(legacyAnswer)).toBeNull();
+  });
+
+  it('rejects a key-number section if any bullet cannot be parsed', () => {
+    const legacyAnswer = [
+      'Your liquidity is healthy.',
+      '',
+      '**Key Numbers:**',
+      '- Total Cash: $77,655',
+      '- This explanatory bullet is not a metric',
+    ].join('\n');
+
+    expect(parseDisplayText(legacyAnswer)).toBeNull();
+  });
+
+  it('still upgrades a valid answer with only one generated section', () => {
+    const displayText = toDisplayText({
+      summary: 'Your liquidity is healthy.',
+      insights: ['Your cash reserve covers more than six months of expenses.'],
+    });
+
+    expect(parseDisplayText(displayText)).toEqual({
+      summary: 'Your liquidity is healthy.',
+      insights: ['Your cash reserve covers more than six months of expenses.'],
+    });
   });
 });

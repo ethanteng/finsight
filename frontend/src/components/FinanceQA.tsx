@@ -1,20 +1,15 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { ArrowUp, Calculator, CheckCircle2, Database, Download, FileText, LoaderCircle, MessageSquarePlus, Sparkles } from 'lucide-react';
+import { ArrowUp, Calculator, CheckCircle2, Database, Download, FileText, Lightbulb, ListChecks, LoaderCircle, MessageSquarePlus, Sparkles } from 'lucide-react';
 import MarkdownRenderer from './MarkdownRenderer';
 import { useAnalytics } from './Analytics';
 import Feedback from './Feedback';
 import { ShowTheMathContent, DatabaseSourceSection, downloadShowTheMathAsText, type ShowTheMathData } from './ShowTheMathModal';
-import { formatKeyNumberValue, type DisplayKeyNumber } from '@/lib/formatKeyNumber';
+import { formatKeyNumberValue } from '@/lib/formatKeyNumber';
+import type { DisplayStructuredResponse, StructuredPromptHistory } from '@/lib/structured-answer';
 
-interface PromptHistory {
-  id: string;
-  question: string;
-  answer: string;
-  threadId?: string | null;
-  timestamp: number;
-}
+type PromptHistory = StructuredPromptHistory;
 
 interface FinanceQAProps {
   onNewAnswer?: (question: string, answer: string) => void;
@@ -63,12 +58,7 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, newDecisionNonc
   const prevSelectedTurnIdRef = useRef<string | null>(null);
   const [progressMessage, setProgressMessage] = useState<string | null>(null);
   const [streamingAnswer, setStreamingAnswer] = useState('');
-  const [structuredResponse, setStructuredResponse] = useState<{
-    summary: string;
-    key_numbers?: Record<string, DisplayKeyNumber | number>;
-    insights?: string[];
-    suggested_actions?: string[];
-  } | null>(null);
+  const [structuredResponse, setStructuredResponse] = useState<DisplayStructuredResponse | null>(null);
   const [showTheMathData, setShowTheMathData] = useState<ShowTheMathData | null>(null);
   const [loadingShowTheMath, setLoadingShowTheMath] = useState(false);
   const [showTheMathError, setShowTheMathError] = useState<string | null>(null);
@@ -156,7 +146,7 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, newDecisionNonc
       // Rows written before threads, or by a client that predates them, may still
       // have no threadId in storage. The row's own id is the effective thread key.
       setThreadId(selectedPrompt.threadId ?? selectedPrompt.id);
-      setStructuredResponse(null);
+      setStructuredResponse(selectedPrompt.structuredResponse ?? null);
       setShowTheMathData(null);
       setError('');
       setActiveView('answer');
@@ -439,11 +429,14 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, newDecisionNonc
               <div className="space-y-7">
                 <div className="flex items-center gap-2 text-sm font-semibold text-[#49725a]">{loading ? <LoaderCircle className="animate-spin" size={17} /> : <CheckCircle2 size={17} />} {loading ? (progressMessage || 'Building your answer') : 'Current answer'}</div>
                 {structuredResponse?.key_numbers && Object.keys(structuredResponse.key_numbers).length > 0 && (
-                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3" aria-label="Key numbers">{Object.entries(structuredResponse.key_numbers).map(([key, value]) => <div key={key} className="rounded-2xl bg-[#f3f2e9] p-4"><div className="text-xs font-semibold uppercase tracking-wider text-[#5e6b63]">{key.replace(/_/g, ' ')}</div><div className="mt-2 text-2xl font-semibold tracking-tight text-[#102319]">{formatKeyNumberValue(key, value)}</div>{typeof value === 'object' && value.provenance && <div className="mt-2 break-all text-[10px] text-[#66736b]">Source: {value.provenance}</div>}</div>)}</div>
+                  <section aria-labelledby="key-metrics-heading">
+                    <h3 id="key-metrics-heading" className="mb-3 text-sm font-semibold text-[#102319]">Key metrics</h3>
+                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{Object.entries(structuredResponse.key_numbers).map(([key, value]) => <div key={key} className="rounded-2xl border border-[#102319]/[0.06] bg-[#f3f2e9] p-4 shadow-[0_8px_24px_rgba(16,35,25,0.04)]"><div className="text-xs font-semibold uppercase tracking-wider text-[#5e6b63]">{key.replace(/_/g, ' ')}</div><div className="mt-2 text-2xl font-semibold tracking-tight text-[#102319]">{formatKeyNumberValue(key, value)}</div>{typeof value === 'object' && value.provenance && <div className="mt-2 text-[10px] capitalize text-[#66736b]">Source: {value.provenance.replace(/_/g, ' ')}</div>}</div>)}</div>
+                  </section>
                 )}
                 <div className="decision-answer prose prose-slate max-w-none text-[#48574e] prose-headings:text-[#102319] prose-a:text-[#397052]">{structuredResponse ? <MarkdownRenderer>{structuredResponse.summary}</MarkdownRenderer> : streamingAnswer ? <><MarkdownRenderer>{streamingAnswer}</MarkdownRenderer><span className="inline-block h-4 w-1.5 animate-pulse bg-[#102319]" /></> : answer ? <MarkdownRenderer>{answer}</MarkdownRenderer> : <div className="space-y-3" aria-label="Answer loading"><div className="h-4 w-11/12 animate-pulse rounded bg-[#dfe6d4]" /><div className="h-4 w-4/5 animate-pulse rounded bg-[#dfe6d4]" /><div className="h-4 w-2/3 animate-pulse rounded bg-[#dfe6d4]" /></div>}</div>
-                {structuredResponse?.insights && structuredResponse.insights.length > 0 && <section className="rounded-2xl border border-[#102319]/10 p-5"><h3 className="mb-3 font-semibold text-[#102319]">Key assumptions and decision factors</h3><ul className="space-y-3 text-sm leading-6 text-[#48675e]">{structuredResponse.insights.map((insight, index) => <li key={index} className="flex gap-3"><span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-[#49725a]" />{insight}</li>)}</ul></section>}
-                {structuredResponse?.suggested_actions && structuredResponse.suggested_actions.length > 0 && <section><h3 className="mb-3 font-semibold text-[#102319]">Ways to move forward</h3><div className="grid gap-3 sm:grid-cols-2">{structuredResponse.suggested_actions.map((action, index) => <div key={index} className="rounded-2xl bg-[#e2edff] p-4 text-sm leading-6 text-[#254b75]">{action}</div>)}</div><p className="mt-3 text-xs text-[#66736b]">Interactive scenario comparison is not yet available in the current product API.</p></section>}
+                {structuredResponse?.insights && structuredResponse.insights.length > 0 && <section aria-labelledby="takeaways-heading"><h3 id="takeaways-heading" className="mb-3 flex items-center gap-2 font-semibold text-[#102319]"><Lightbulb size={18} className="text-[#49725a]" />Takeaways</h3><ul className="grid gap-3 sm:grid-cols-2">{structuredResponse.insights.map((insight, index) => <li key={index} className="flex gap-3 rounded-2xl border border-[#397052]/10 bg-[#eef4ea] p-4 text-sm leading-6 text-[#365e4c]"><span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-[#d9e8d4] text-xs font-semibold text-[#28543a]">{index + 1}</span><span>{insight}</span></li>)}</ul></section>}
+                {structuredResponse?.suggested_actions && structuredResponse.suggested_actions.length > 0 && <section aria-labelledby="action-items-heading"><h3 id="action-items-heading" className="mb-3 flex items-center gap-2 font-semibold text-[#102319]"><ListChecks size={18} className="text-[#466f9d]" />Action items</h3><ol className="grid gap-3 sm:grid-cols-2">{structuredResponse.suggested_actions.map((action, index) => <li key={index} className="flex gap-3 rounded-2xl border border-[#466f9d]/10 bg-[#e2edff] p-4 text-sm leading-6 text-[#254b75]"><span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-white/70 text-xs font-semibold text-[#254b75]">{index + 1}</span><span>{action}</span></li>)}</ol></section>}
                 {conversationId && answer && !loading && <Feedback conversationId={conversationId} onFeedbackSubmitted={(score) => trackEvent('feedback_submitted', { score, user_tier: userTier })} />}
               </div>
             )}

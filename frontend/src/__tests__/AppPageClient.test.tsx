@@ -8,8 +8,11 @@ jest.mock('@/components/FinanceQA', () => ({
   __esModule: true,
   // Answering is what triggers a history reload, so the stub needs to be able
   // to fire it.
-  default: ({ onNewAnswer }: { onNewAnswer?: (q: string, a: string) => void }) => (
-    <button type="button" onClick={() => onNewAnswer?.('q', 'a')}>simulate answer</button>
+  default: ({ onNewAnswer, selectedPrompt }: { onNewAnswer?: (q: string, a: string) => void; selectedPrompt?: { structuredResponse?: { summary: string } } | null }) => (
+    <>
+      <button type="button" onClick={() => onNewAnswer?.('q', 'a')}>simulate answer</button>
+      {selectedPrompt?.structuredResponse && <div data-testid="selected-structured-summary">{selectedPrompt.structuredResponse.summary}</div>}
+    </>
   ),
 }));
 jest.mock('@/components/FinancialOverview', () => ({
@@ -112,6 +115,19 @@ describe('AppPageClient decision list', () => {
     const otherDecision = screen.getByRole('group', { name: 'Decision: How is my cash position?' });
     expect(otherDecision).not.toHaveTextContent('Resuming');
     expect(otherDecision).not.toHaveTextContent('A follow-up sees these turns.');
+  });
+
+  it('passes the saved structured answer through a history reload', async () => {
+    mockApi([{
+      ...turn('c1', 'thread-a', 'How is my emergency fund?', 100),
+      structuredResponse: { summary: 'Your emergency fund is healthy.' },
+    }]);
+
+    render(<AppPageClient />);
+
+    expect(await screen.findByTestId('selected-structured-summary')).toHaveTextContent(
+      'Your emergency fund is healthy.'
+    );
   });
 
   it('keeps a new decision clear when a history reload lands after it', async () => {

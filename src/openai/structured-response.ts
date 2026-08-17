@@ -419,3 +419,109 @@ export function toDisplayText(response: AskLincResponse): string {
 
   return parts.join('\n');
 }
+
+type DisplaySectionName = 'Key Numbers' | 'Insights' | 'Suggested Actions';
+
+const DISPLAY_SECTION_HEADING = /^\*\*(Key Numbers|Insights|Suggested Actions):\*\*\s*$/gm;
+const DISPLAY_SECTION_ORDER: Record<DisplaySectionName, number> = {
+  'Key Numbers': 0,
+  Insights: 1,
+  'Suggested Actions': 2,
+};
+
+/**
+ * Parse the bullet shape emitted by toDisplayText without dropping unmatched
+ * prose. A generated item may itself contain line breaks, so non-bullet lines
+ * after the first bullet remain part of that item; content before any bullet
+ * means this is ordinary Markdown rather than the compatibility format.
+ */
+function displaySectionItems(section: string): string[] | null {
+  const items: string[] = [];
+  let currentItem: string[] | null = null;
+
+  const pushCurrentItem = () => {
+    if (!currentItem) return;
+    const item = currentItem.join('\n').trim();
+    if (item) items.push(item);
+  };
+
+  for (const line of section.split(/\r?\n/)) {
+    const bullet = line.match(/^\s*-\s+(.+)$/);
+    if (bullet) {
+      pushCurrentItem();
+      currentItem = [bullet[1].trim()];
+      continue;
+    }
+    if (!line.trim()) continue;
+    if (!currentItem) return null;
+    currentItem.push(line.trim());
+  }
+
+  pushCurrentItem();
+  return items.length > 0 ? items : null;
+}
+
+function parseDisplayKeyNumber(item: string): [string, ResponseKeyNumber] | null {
+  const separator = item.indexOf(':');
+  if (separator < 1) return null;
+  const label = item.slice(0, separator).trim();
+  const formattedValue = item.slice(separator + 1).trim();
+  if (!/^-?(?:\$\d[\d,]*(?:\.\d+)?|\d[\d,]*(?:\.\d+)?%?)$/.test(formattedValue)) {
+    return null;
+  }
+
+  const value = Number(formattedValue.replace(/[$,%\s,]/g, ''));
+  if (!Number.isFinite(value)) return null;
+  const key = label.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+  if (!key) return null;
+
+  return [key, {
+    value,
+    unit: formattedValue.includes('%') ? 'percent' : inferKeyNumberUnit(key),
+    provenance: '',
+  }];
+}
+
+/**
+ * Rebuild a structured response from the compatibility Markdown saved before
+ * structured responses were persisted. This keeps existing conversation
+ * history eligible for the card layout without guessing at arbitrary prose.
+ */
+export function parseDisplayText(responseText: string): AskLincResponse | null {
+  const matches = [...responseText.matchAll(DISPLAY_SECTION_HEADING)];
+  if (matches.length === 0) return null;
+
+  const sections = new Map<DisplaySectionName, string[]>();
+  let previousSectionOrder = -1;
+  for (let index = 0; index < matches.length; index += 1) {
+    const match = matches[index];
+    const sectionName = match[1] as DisplaySectionName;
+    const sectionOrder = DISPLAY_SECTION_ORDER[sectionName];
+    if (sections.has(sectionName) || sectionOrder <= previousSectionOrder) return null;
+    const contentStart = (match.index ?? 0) + match[0].length;
+    const contentEnd = matches[index + 1]?.index ?? responseText.length;
+    const items = displaySectionItems(responseText.slice(contentStart, contentEnd).trim());
+    if (!items) return null;
+    sections.set(sectionName, items);
+    previousSectionOrder = sectionOrder;
+  }
+
+  const summary = responseText.slice(0, matches[0].index).trim();
+  const key_numbers: Record<string, ResponseKeyNumber> = {};
+  for (const item of sections.get('Key Numbers') ?? []) {
+    const parsed = parseDisplayKeyNumber(item);
+    if (!parsed) return null;
+    const [key, metric] = parsed;
+    key_numbers[key] = metric;
+  }
+
+  const insights = sections.get('Insights');
+  const suggested_actions = sections.get('Suggested Actions');
+
+  return {
+    summary: summary || 'No summary provided.',
+    key_numbers: Object.keys(key_numbers).length > 0 ? key_numbers : undefined,
+    insights,
+    suggested_actions,
+  };
+}

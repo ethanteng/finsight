@@ -1,5 +1,6 @@
 import type { CanonicalFact } from './canonical-facts';
 import type { ContextPackId } from './context-packs';
+import type { AskLincResponse } from './structured-response';
 import type {
   RetirementScenarioEvidence,
   RetirementScenarioPlan,
@@ -140,8 +141,14 @@ export interface EvidenceManifest {
   };
 }
 
-/** Compact manifest is persisted; database evidence is attached only on GET. */
+/** Compact answer and manifest are persisted; database evidence is attached only on GET. */
 export interface ShowTheMathData {
   evidenceManifest: EvidenceManifest;
+  /**
+   * The display-ready response is stored beside its evidence so reopening a
+   * conversation can restore the rich cards instead of falling back to the
+   * flattened Markdown compatibility string.
+   */
+  structuredResponse?: AskLincResponse;
   databaseData?: ShowTheMathDatabaseData;
 }

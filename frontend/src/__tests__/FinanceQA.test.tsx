@@ -69,6 +69,34 @@ describe('FinanceQA decision workspace', () => {
     expect(screen.getByText('Source detail for financial_summaries')).toBeInTheDocument();
   });
 
+  it('keeps saved structured answers in metric, takeaway, and action cards', () => {
+    render(<FinanceQA selectedPrompt={{
+      id: 'conversation-structured',
+      question: 'How much should I keep in an emergency fund?',
+      answer: 'Compatibility text.\n\n**Key Numbers:**\n- Total Cash: $77,655',
+      structuredResponse: {
+        summary: 'You already have a strong emergency cushion.',
+        key_numbers: {
+          total_cash: { value: 77655, unit: 'usd', provenance: 'total_cash' },
+          savings_rate: { value: 35.42, unit: 'percent', provenance: 'savings_rate' },
+        },
+        insights: ['Your cash covers more than the usual three-to-six-month range.'],
+        suggested_actions: ['Separate your emergency reserve from cash for other goals.'],
+      },
+      timestamp: Date.now(),
+    }} />);
+
+    expect(screen.getByRole('heading', { name: 'Key metrics' })).toBeInTheDocument();
+    expect(screen.getByText('$77,655')).toBeInTheDocument();
+    expect(screen.getByText('35.42%')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Takeaways' })).toBeInTheDocument();
+    expect(screen.getByText('Your cash covers more than the usual three-to-six-month range.')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Action items' })).toBeInTheDocument();
+    expect(screen.getByText('Separate your emergency reserve from cash for other goals.')).toBeInTheDocument();
+    expect(screen.getByText('You already have a strong emergency cushion.')).toBeInTheDocument();
+    expect(screen.queryByText('Compatibility text.')).not.toBeInTheDocument();
+  });
+
   it('empties the composer when a new decision starts', () => {
     // Opening a past turn pre-fills the composer with that question. "New
     // decision" clears the selection, and the previous question used to stay
