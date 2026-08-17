@@ -73,15 +73,17 @@ describe("marketing review fixes", () => {
     render(<MarketingHome />);
 
     expect(screen.getByRole("heading", { name: /same question.*a very different answer/i })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Without Ask Linc connected" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "With Ask Linc connected" })).toBeInTheDocument();
+    const generalPanel = screen.getByRole("heading", { name: "Without Ask Linc connected" }).closest("article");
+    const groundedPanel = screen.getByRole("heading", { name: "With Ask Linc connected" }).closest("article");
+    expect(generalPanel).not.toBeNull();
+    expect(groundedPanel).not.toBeNull();
     expect(screen.getAllByText(/should i use my \$30k bonus to pay down the mortgage/i)).toHaveLength(2);
-    expect(screen.getByText("GENERAL ANSWER")).toBeInTheDocument();
-    expect(screen.getByText("GROUNDED ANSWER")).toBeInTheDocument();
-    expect(screen.getByText("YOUR DECISION INPUTS")).toBeInTheDocument();
-    expect(screen.getByText("WHAT THIS ANSWER DOESN'T KNOW")).toBeInTheDocument();
-    expect(screen.getByText("LINC'S TAKE")).toBeInTheDocument();
-    expect(screen.getByText("NEXT STEP")).toBeInTheDocument();
+    expect(within(generalPanel as HTMLElement).getByText("GENERAL ANSWER")).toBeInTheDocument();
+    expect(within(generalPanel as HTMLElement).getByText("WHAT THIS ANSWER DOESN'T KNOW")).toBeInTheDocument();
+    expect(within(groundedPanel as HTMLElement).getByText("GROUNDED ANSWER")).toBeInTheDocument();
+    expect(within(groundedPanel as HTMLElement).getByText("YOUR DECISION INPUTS")).toBeInTheDocument();
+    expect(within(groundedPanel as HTMLElement).getByText("LINC'S TAKE")).toBeInTheDocument();
+    expect(within(groundedPanel as HTMLElement).getByText("NEXT STEP")).toBeInTheDocument();
     expect(screen.getByText(/latest available data and shows the source date/i)).toBeInTheDocument();
     expect(screen.getByText(/money shapes where you live, how you care for family/i)).toBeInTheDocument();
     expect(screen.getByText(/learning from real questions, improving it carefully/i)).toBeInTheDocument();
