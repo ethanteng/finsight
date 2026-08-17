@@ -4,7 +4,10 @@ import { requireAuth } from '../auth/middleware';
 import { getPrismaClient } from '../prisma-client';
 import { runAskLincAnalysis } from '../openai/analysis-pipeline';
 import { PromptValidationError } from '../openai/errors';
-import { loadShowTheMathEvidence } from '../openai/show-the-math-db-service';
+import {
+  isEvidenceManifestData,
+  loadShowTheMathEvidence,
+} from '../openai/show-the-math-db-service';
 import { aiRateLimitMiddleware } from '../security/ai-rate-limiter';
 import { recordLlmAnalysis, recordLlmAnalysisFailure } from '../observability/llm-metrics';
 import { updateProfileFromAnsweredTurn } from '../profile/conversation-updater';
@@ -27,6 +30,20 @@ function storedStructuredResponse(stored: unknown): AskLincResponse | null {
   if (!candidate || typeof candidate !== 'object') return null;
   if (typeof (candidate as { summary?: unknown }).summary !== 'string') return null;
   return parseStructuredResponse(JSON.stringify(candidate));
+}
+
+/**
+ * Card snapshots may be stored alone when an answer has no evidence manifest
+ * (for example output-validation fallbacks). Those rows must not look like
+ * Show the Math payloads, or the client gets a misleading empty evidence view
+ * instead of a clean 404.
+ */
+function hasShowTheMathPayload(stored: unknown): boolean {
+  if (!stored || typeof stored !== 'object') return false;
+  if (isEvidenceManifestData(stored)) return true;
+  const { structuredResponse: _structured, databaseData: _database, ...rest } =
+    stored as Record<string, unknown>;
+  return Object.keys(rest).length > 0;
 }
 
 router.post('/ask/display-real', aiRateLimitMiddleware, requireAuth, async (req, res) => {
@@ -226,7 +243,7 @@ router.get('/conversations/:id/show-the-math', requireAuth, async (req, res) => 
     where: { id, userId: req.user!.id },
   });
   if (!conversation) return res.status(404).json({ error: 'Conversation not found' });
-  if (!conversation.showTheMathData) {
+  if (!hasShowTheMathPayload(conversation.showTheMathData)) {
     return res.status(404).json({ error: 'No pipeline data available for this conversation' });
   }
   res.json(await loadShowTheMathEvidence(conversation.showTheMathData, req.user!.id));

@@ -38,6 +38,7 @@ jest.mock('@sentry/node', () => ({
 describe('Ask route SSE lifecycle', () => {
   const conversation = {
     findMany: jest.fn().mockResolvedValue([]),
+    findFirst: jest.fn(),
     create: jest.fn().mockResolvedValue({ id: 'conversation-1' }),
   };
 
@@ -152,6 +153,49 @@ describe('Ask route SSE lifecycle', () => {
       key_numbers: { savings_rate: { value: 35.42, unit: 'percent', provenance: '' } },
       insights: ['You are saving consistently.'],
     });
+  });
+
+  it('404s Show the Math when only a card snapshot was persisted', async () => {
+    conversation.findFirst.mockResolvedValueOnce({
+      id: 'cards-only-1',
+      userId: 'user-1',
+      showTheMathData: {
+        structuredResponse: { summary: 'Sanitized fallback answer.' },
+      },
+    });
+
+    const response = await request(createApp()).get('/conversations/cards-only-1/show-the-math');
+
+    expect(response.status).toBe(404);
+    expect(response.body.error).toBe('No pipeline data available for this conversation');
+  });
+
+  it('still expands Show the Math when evidence is present beside the card snapshot', async () => {
+    const evidenceManifest = {
+      version: 1,
+      generatedAt: '2026-08-17T12:00:00.000Z',
+      snapshot: {},
+      facts: [],
+      modelCalls: [],
+      timings: { contextGatherMs: 1, promptBuildMs: 1, totalMs: 3 },
+      validation: { deterministic: { valid: true, issues: [] } },
+      evidenceRefs: { tickers: [], retirementAnalysis: false, marketContext: false },
+    };
+    conversation.findFirst.mockResolvedValueOnce({
+      id: 'with-evidence-1',
+      userId: 'user-1',
+      showTheMathData: {
+        evidenceManifest,
+        structuredResponse: { summary: 'Your cash position is healthy.' },
+      },
+    });
+
+    const response = await request(createApp()).get('/conversations/with-evidence-1/show-the-math');
+
+    expect(response.status).toBe(200);
+    expect(response.body.evidenceManifest).toEqual(evidenceManifest);
+    expect(response.body.structuredResponse).toEqual({ summary: 'Your cash position is healthy.' });
+    expect(response.body.databaseData).toEqual({ canonical_facts: [] });
   });
 
   it('refreshes the stored profile from each answered turn', async () => {
