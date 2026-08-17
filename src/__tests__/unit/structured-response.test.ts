@@ -173,4 +173,39 @@ describe('parseDisplayText', () => {
   it('does not impose structure on arbitrary saved prose', () => {
     expect(parseDisplayText('A plain answer with no generated sections.')).toBeNull();
   });
+
+  it('keeps the original Markdown when a known heading contains freeform prose', () => {
+    const legacyAnswer = [
+      'Keep this summary and the explanation below.',
+      '',
+      '**Key Numbers:**',
+      'This heading is part of a freeform answer, not a generated metric list.',
+    ].join('\n');
+
+    expect(parseDisplayText(legacyAnswer)).toBeNull();
+  });
+
+  it('rejects a key-number section if any bullet cannot be parsed', () => {
+    const legacyAnswer = [
+      'Your liquidity is healthy.',
+      '',
+      '**Key Numbers:**',
+      '- Total Cash: $77,655',
+      '- This explanatory bullet is not a metric',
+    ].join('\n');
+
+    expect(parseDisplayText(legacyAnswer)).toBeNull();
+  });
+
+  it('still upgrades a valid answer with only one generated section', () => {
+    const displayText = toDisplayText({
+      summary: 'Your liquidity is healthy.',
+      insights: ['Your cash reserve covers more than six months of expenses.'],
+    });
+
+    expect(parseDisplayText(displayText)).toEqual({
+      summary: 'Your liquidity is healthy.',
+      insights: ['Your cash reserve covers more than six months of expenses.'],
+    });
+  });
 });

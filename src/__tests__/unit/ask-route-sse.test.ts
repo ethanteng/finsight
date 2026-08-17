@@ -139,6 +139,14 @@ describe('Ask route SSE lifecycle', () => {
         createdAt: new Date('2026-08-16T12:00:00Z'),
         showTheMathData: null,
       },
+      {
+        id: 'freeform-1',
+        question: 'Explain the key numbers section.',
+        answer: 'Keep this entire answer.\n\n**Key Numbers:**\nThis is explanatory prose, not a generated metric list.',
+        threadId: null,
+        createdAt: new Date('2026-08-15T12:00:00Z'),
+        showTheMathData: null,
+      },
     ]);
 
     const response = await request(createApp()).get('/conversations');
@@ -153,6 +161,8 @@ describe('Ask route SSE lifecycle', () => {
       key_numbers: { savings_rate: { value: 35.42, unit: 'percent', provenance: '' } },
       insights: ['You are saving consistently.'],
     });
+    expect(response.body.conversations[2].answer).toContain('This is explanatory prose');
+    expect(response.body.conversations[2].structuredResponse).toBeUndefined();
   });
 
   it('404s Show the Math when only a card snapshot was persisted', async () => {
