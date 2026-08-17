@@ -1,6 +1,6 @@
 import { buildQuestionContextPack } from '../../openai/context-pack';
 import { buildCanonicalFactPack } from '../../openai/canonical-facts';
-import { analyzeQuestionNeeds } from '../../openai/question-analysis';
+import { questionNeedsFromPacks } from '../../openai/context-packs';
 
 const snapshot = {
   accounts: [{ id: 'a', name: 'Checking', type: 'depository', balance: 100 }],
@@ -16,7 +16,7 @@ const snapshot = {
 describe('buildQuestionContextPack', () => {
   it('omits account and transaction rows from a net-worth lookup', () => {
     const question = 'What is my net worth?';
-    const needs = analyzeQuestionNeeds(question);
+    const needs = questionNeedsFromPacks([], false);
     const pack = buildQuestionContextPack(snapshot, needs, buildCanonicalFactPack(snapshot, question, needs));
     expect(pack.details).toEqual({});
     expect(JSON.stringify(pack)).not.toContain('Coffee');
@@ -25,7 +25,7 @@ describe('buildQuestionContextPack', () => {
 
   it('includes only requested transaction details', () => {
     const question = 'Show my recent transactions.';
-    const needs = analyzeQuestionNeeds(question);
+    const needs = questionNeedsFromPacks(['transaction_details'], false);
     const pack = buildQuestionContextPack(snapshot, needs, buildCanonicalFactPack(snapshot, question, needs));
     expect(pack.details.recentTransactions).toEqual(snapshot.bankingTransactions);
     expect(pack.details.accounts).toBeUndefined();

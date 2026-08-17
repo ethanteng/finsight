@@ -4,7 +4,7 @@
  * Every model the pipeline calls used to be pinned either in source or in a
  * Render environment variable, so changing one meant a deploy. The slots below
  * are stored as a JSON blob on the singleton `ai_prompt_config` row and cached
- * in memory, mirroring the response-tone and routing-vocabulary configs.
+ * in memory alongside the response-tone config.
  *
  * Resolution order per slot is admin setting → environment variable → shipped
  * default, so an existing deploy keeps its env-configured model until an admin
@@ -16,7 +16,7 @@ import { getPrismaClient } from '../prisma-client';
 
 export type ModelProvider = 'anthropic' | 'openai' | 'google';
 
-export type ModelSlotId = 'analysis' | 'fallback' | 'validation' | 'profile' | 'retirementInputs';
+export type ModelSlotId = 'analysis' | 'fallback' | 'validation' | 'profile' | 'contextPlanner';
 
 export interface ModelSlotMeta {
   id: ModelSlotId;
@@ -66,7 +66,7 @@ export const MODEL_SLOTS: ModelSlotMeta[] = [
     label: 'Primary analysis',
     provider: 'anthropic',
     description:
-      'Writes every Ask Linc answer. Changing this changes the voice and reasoning quality of the whole product.',
+      'Audits the preflight data-pack selection through a constrained tool, then writes every Ask Linc answer. Changing this changes the safety check, voice and reasoning quality of the whole product.',
     // Matches the model the admin override has been pointing at; a cold process
     // that fails to read the config now falls back to the same model the
     // request code is tuned for rather than to the previous generation.
@@ -99,11 +99,11 @@ export const MODEL_SLOTS: ModelSlotMeta[] = [
     shippedDefault: 'gpt-4o',
   },
   {
-    id: 'retirementInputs',
-    label: 'Retirement inputs',
+    id: 'contextPlanner',
+    label: 'Context planning',
     provider: 'openai',
     description:
-      'Reads a decision\'s turns for the age and spending figures a retirement projection needs. Proposes inputs only — the projection itself stays deterministic. Must support JSON schema structured output.',
+      'The preflight half of context planning: reads every turn in the active decision, selects the initial data packs, and extracts stated retirement inputs. The primary analysis model performs the second, tool-based audit. Must support JSON schema structured output.',
     shippedDefault: 'gpt-4o',
   },
 ];
@@ -255,16 +255,16 @@ export const SLOT_GENERATION_SETTINGS: Record<ModelSlotId, GenerationSettingMeta
         'Ceiling on the rewritten profile. Currently unset — a profile truncated mid-way would be stored as if it were complete, so raise this rather than lowering it.',
     }),
   ],
-  retirementInputs: [
+  contextPlanner: [
     temperatureSetting(
       '0',
-      'How much the extracted figures vary between identical conversations. Zero is deliberate: the projection is cached by exact parameters, so varying inputs would both move the numbers and miss the cache.'
+      'How much routing varies between identical decisions. Zero is deliberate: context selection and extracted inputs should be stable.'
     ),
     maxOutputTokensSetting({
-      shippedDefault: OMIT_SETTING,
+      shippedDefault: '1500',
       omittable: true,
       description:
-        'Ceiling on the extraction. The reply is a small fixed JSON object, so this is only worth setting to bound a runaway response.',
+        'Ceiling on the structured context plan. The response is a small fixed JSON object.',
     }),
   ],
 };

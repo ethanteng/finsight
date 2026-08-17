@@ -90,6 +90,12 @@ router.post('/ask/display-real', aiRateLimitMiddleware, requireAuth, async (req,
 
       const manifest = result.showTheMathData?.evidenceManifest;
       if (manifest) {
+        if (manifest.timings.planningMs !== undefined) {
+          span.setAttribute('ai.context_planning_ms', manifest.timings.planningMs);
+        }
+        if (manifest.timings.contextToolMs !== undefined) {
+          span.setAttribute('ai.context_tool_ms', manifest.timings.contextToolMs);
+        }
         span.setAttribute('ai.context_gather_ms', manifest.timings.contextGatherMs);
         span.setAttribute('ai.prompt_build_ms', manifest.timings.promptBuildMs);
         span.setAttribute('ai.model_ms', manifest.timings.modelMs);

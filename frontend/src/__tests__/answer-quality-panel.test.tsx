@@ -1,159 +1,81 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import AnswerQualityPanel from '@/components/admin/AnswerQualityPanel';
 
-const emptyRoutingTier = {
-  withheld: { samples: 0, missRate: null, ratedSamples: 0, averageRating: null },
-  supplied: { samples: 0, missRate: null, ratedSamples: 0, averageRating: null },
-  excessMissWhenWithheld: null,
-  ratingPenaltyWhenWithheld: null,
+const REPORT = {
+  window: { from: null, to: null, conversations: 6, withEvidence: 6 },
+  delivery: {
+    total: 6, clean: 4, recovered: 1, failed: 1, cleanRate: 0.667,
+    headline: '4 of 6 answers were delivered cleanly; 1 failed and needs review.',
+  },
+  evidence: { verified: 4, salvaged: 1, replaced: 1, verifiedRate: 0.667 },
+  planning: {
+    semanticPlans: 6,
+    fallbackPlans: 0,
+    plannerAccepted: 4,
+    primaryToolExpanded: 1,
+    primaryToolFailed: 0,
+    lateExpanded: 1,
+    plannerAcceptedRate: 0.667,
+    averagePlannerMs: 125,
+    byPack: {
+      account_details: { selectedInitially: 4, addedByPrimaryTool: 1, presentFinally: 5 },
+      transaction_details: { selectedInitially: 2, addedByPrimaryTool: 0, presentFinally: 3 },
+    },
+  },
+  users: { rated: 3, positive: 2, neutral: 0, negative: 1, averageRating: 3.67 },
+  recent: [{
+    id: 'c1',
+    createdAt: '2026-08-17T12:00:00.000Z',
+    question: 'Can I retire next year?',
+    rating: 1,
+    deliveryStatus: 'failed',
+    statusReason: 'The generated answer could not be verified, so the user received a fallback.',
+    outcome: 'replaced',
+    plannerSource: 'context_planner',
+    selectedPacks: ['retirement_analysis'],
+    finalPacks: ['retirement_analysis'],
+    toolAddedPacks: [],
+    primaryToolOutcome: 'accepted',
+    lateExpansion: false,
+  }],
 };
 
-function report(overrides: Record<string, unknown> = {}) {
-  return {
-    scorecard: {
-      score: 62,
-      status: 'yellow',
-      headline: '3 of the last 6 answers were solid, but 2 came out shaky and 1 went wrong.',
-      answers: 6,
-      counts: { green: 3, yellow: 2, red: 1 },
-      trend: { recentScore: 62, previousScore: 80, delta: -18, comparedAnswers: 3 },
-      reasons: [
-        {
-          id: 'replaced',
-          label: 'Answers we could not back up, so the user got a fallback instead',
-          severity: 'red',
-          answers: 1,
-          share: 0.167,
-          detail: null,
-          example: { id: 'c1', question: 'How much can I spend in retirement?' },
-        },
-        {
-          id: 'escalated',
-          label: 'Answers that needed a second attempt to find the right data',
-          severity: 'yellow',
-          answers: 2,
-          share: 0.333,
-          detail: 'usually went back for investment holdings',
-          example: { id: 'c2', question: 'Am I on track?' },
-        },
-      ],
-      ...(overrides.scorecard as object ?? {}),
-    },
-    window: { from: null, to: null, conversations: 6, withManifest: 6, rated: 4 },
-    quality: {
-      groundedRate: 0.83,
-      escalationRate: 0.33,
-      averageRating: 3.5,
-      byOutcome: {
-        passed: { samples: 5, ratedSamples: 3, averageRating: 4.3 },
-        salvaged: { samples: 0, ratedSamples: 0, averageRating: null },
-        replaced: { samples: 1, ratedSamples: 1, averageRating: 1 },
-      },
-      byEscalation: {
-        escalated: { samples: 2, ratedSamples: 1, averageRating: 4 },
-        notEscalated: { samples: 4, ratedSamples: 3, averageRating: 3.3 },
-      },
-    },
-    routing: { accountsIncluded: emptyRoutingTier, investmentDetailsIncluded: emptyRoutingTier },
-    recent: [
-      {
-        id: 'c1',
-        createdAt: '2026-08-15T18:54:08.000Z',
-        question: 'How much can I spend in retirement?',
-        rating: 1,
-        outcome: 'replaced',
-        grounded: false,
-        escalated: false,
-        withheld: ['investmentDetailsIncluded'],
-        unsupportedValues: 2,
-        grade: 'red',
-        gradeReason: 'We could not back up the answer, so it was replaced',
-      },
-    ],
-    ...overrides,
-  };
-}
-
-function mockReport(body: unknown) {
-  global.fetch = jest.fn().mockResolvedValue({ ok: true, status: 200, json: async () => body });
-}
-
 describe('AnswerQualityPanel', () => {
-  beforeEach(() => jest.clearAllMocks());
-
-  it('leads with the score, the light, and what is costing points', async () => {
-    mockReport(report());
-    render(<AnswerQualityPanel apiUrl="https://api.test" getAuthHeaders={() => ({})} />);
-
-    expect(await screen.findByText('62')).toBeInTheDocument();
-    expect(screen.getByText('Needs attention')).toBeInTheDocument();
-    expect(screen.getByText(/3 of the last 6 answers were solid/)).toBeInTheDocument();
-    // Both batch scores are named, because the headline score averages the whole
-    // window and a bare delta beside it would read as the headline moving.
-    expect(screen.getByText('▼ 18 pts — last 3 scored 62, previous 3 scored 80')).toBeInTheDocument();
-    expect(screen.getByText('Good: 3')).toBeInTheDocument();
-    expect(screen.getByText('Answers that needed a second attempt to find the right data')).toBeInTheDocument();
-    expect(screen.getByText('usually went back for investment holdings')).toBeInTheDocument();
+  beforeEach(() => {
+    global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => REPORT });
   });
 
-  it('keeps the routing correlations out of the way until they are asked for', async () => {
-    mockReport(report());
+  it('leads with a direct delivery verdict instead of a synthetic score', async () => {
     render(<AnswerQualityPanel apiUrl="https://api.test" getAuthHeaders={() => ({})} />);
-
-    await screen.findByText('62');
-    expect(screen.queryByText('Miss excess')).not.toBeInTheDocument();
-
-    fireEvent.click(screen.getByText('Show technical detail'));
-    await waitFor(() => expect(screen.getByText('Miss excess')).toBeInTheDocument());
-    expect(screen.getByText('Rating penalty')).toBeInTheDocument();
+    expect(await screen.findByText('Some answers failed')).toBeInTheDocument();
+    expect(screen.getByText('4 of 6 answers were delivered cleanly; 1 failed and needs review.')).toBeInTheDocument();
+    expect(screen.getAllByText('67%').length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByText('/ 100')).not.toBeInTheDocument();
   });
 
-  it('explains each recent answer in a sentence rather than jargon', async () => {
-    mockReport(report());
+  it('shows the four understandable quality stages', async () => {
     render(<AnswerQualityPanel apiUrl="https://api.test" getAuthHeaders={() => ({})} />);
-
-    await screen.findByText('62');
-    expect(screen.getByText('We could not back up the answer, so it was replaced')).toBeInTheDocument();
-    expect(screen.getByText('1/5')).toBeInTheDocument();
+    await screen.findByText('Delivered cleanly');
+    expect(screen.getByText('Evidence verified')).toBeInTheDocument();
+    expect(screen.getByText('Planner sufficient')).toBeInTheDocument();
+    expect(screen.getByText('User rating')).toBeInTheDocument();
+    expect(screen.getByText('4')).toBeInTheDocument();
+    expect(screen.getByText('accepted without additions')).toBeInTheDocument();
   });
 
-  it('does not credit a user verdict nobody gave when nothing has been rated', async () => {
-    mockReport(report({
-      scorecard: {
-        score: 100,
-        status: 'green',
-        headline: '4 of the last 4 answers were solid and none went wrong.',
-        answers: 4,
-        counts: { green: 4, yellow: 0, red: 0 },
-        trend: null,
-        reasons: [],
-      },
-      window: { from: null, to: null, conversations: 4, withManifest: 4, rated: 0 },
-      recent: [],
-    }));
+  it('keeps per-pack counts behind a simple detail control', async () => {
     render(<AnswerQualityPanel apiUrl="https://api.test" getAuthHeaders={() => ({})} />);
-
-    expect(await screen.findByText(/none have been rated by a user yet/)).toBeInTheDocument();
-    expect(screen.queryByText(/well rated/)).not.toBeInTheDocument();
+    await screen.findByText('How context planning is doing');
+    expect(screen.queryByText('Final answers')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByText('Show per-pack detail'));
+    expect(screen.getByText('Final answers')).toBeInTheDocument();
+    expect(screen.getByText('Accounts')).toBeInTheDocument();
   });
 
-  it('says so plainly when there is nothing to score yet', async () => {
-    mockReport(report({
-      scorecard: {
-        score: null,
-        status: 'unknown',
-        headline: 'No answers with evidence yet — the score appears once questions come in.',
-        answers: 0,
-        counts: { green: 0, yellow: 0, red: 0 },
-        trend: null,
-        reasons: [],
-      },
-      recent: [],
-    }));
+  it('explains recent answer status in plain language', async () => {
     render(<AnswerQualityPanel apiUrl="https://api.test" getAuthHeaders={() => ({})} />);
-
-    expect(await screen.findByText('No data yet')).toBeInTheDocument();
-    expect(screen.getByText(/the score appears once questions come in/)).toBeInTheDocument();
-    expect(screen.getByText('—')).toBeInTheDocument();
+    expect(await screen.findByText('Can I retire next year?')).toBeInTheDocument();
+    expect(screen.getByText(/could not be verified/)).toBeInTheDocument();
+    expect(screen.getByText('Failed')).toBeInTheDocument();
   });
 });

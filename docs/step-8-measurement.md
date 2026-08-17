@@ -19,8 +19,9 @@ account, or response text.
 | Total response p95 | <= 15,000 ms |
 | Deterministic grounding rate | 100% |
 
-The endpoint also reports model and validation latency, request success rate,
-fallback rate, and retry rate. These targets are initial operational budgets;
+The endpoint also reports semantic planning, primary data-tool, model, and
+validation latency, plus request success, planner fallback, tool expansion/tool
+failure, provider fallback, and retry rates. These targets are initial operational budgets;
 an unmeasured target is reported as `null`, not as passing. Adjust targets only
 after collecting a representative production window. First-token latency is
 reported only for genuinely streamed Claude responses; buffered responses and
@@ -56,15 +57,19 @@ snapshots and model responses through the production analysis pipeline and
 requires 100% across:
 
 - numerical accuracy and provenance;
-- contextual follow-up routing;
+- semantic contextual follow-up planning;
 - stale snapshot traceability;
 - missing-data non-invention;
 - retirement accumulation-phase facts and input handling without
   financial-rule defaults;
 - rejection and grounded retry of a model-invented amount.
 
-The scenarios exercise intent routing, question-specific prompt construction,
+The scenarios exercise explicit context plans, question-specific prompt construction,
 structured parsing, canonicalization, local arithmetic validation, retries, and
 evidence manifests without spending tokens or depending on provider
 availability. The authenticated end-to-end audit in
 `scripts/audit-canonical-facts-e2e.ts` remains the live-provider smoke test.
+
+Durable answer-level planning outcomes are reported in `/admin` Answer quality,
+including preflight fallback, primary-tool widening or failure, and late
+all-pack recovery. See `docs/CONTEXT_PLANNING.md`.

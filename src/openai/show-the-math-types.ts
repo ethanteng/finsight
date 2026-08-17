@@ -1,4 +1,5 @@
 import type { CanonicalFact } from './canonical-facts';
+import type { ContextPackId } from './context-packs';
 
 export interface ShowTheMathDatabaseData {
   canonical_facts?: CanonicalFact[];
@@ -10,8 +11,9 @@ export interface ShowTheMathDatabaseData {
 }
 
 /**
- * Context tiers still decided by question routing. Everything else is loaded on
- * every request, so only these can be withheld from an answer.
+ * Backward-compatible compact projection flags for the original five optional
+ * context types. New evidence uses contextPlanning for the complete nine-pack
+ * semantic plan, while these flags still describe what the snapshot read.
  */
 export const ROUTED_CONTEXT_TIERS = [
   'accountsIncluded',
@@ -25,17 +27,7 @@ export type RoutedContextTier = (typeof ROUTED_CONTEXT_TIERS)[number];
 
 export type ContextSelection = Record<RoutedContextTier, boolean>;
 
-/**
- * Which tiers a retry's widening actually switched on.
- *
- * An escalated request is evidence about the tiers the widening reached for and
- * no others. The personal tiers are switched on together, so an escalation is
- * charged to all of them that were withheld. Market and search context are
- * switched on only when the model reached for a percentage nobody supplied —
- * the signature of a missing rate — so they are charged only by the escalations
- * that actually implicate them. Widening them unconditionally would invent a
- * routing signal that isn't there.
- */
+/** Which legacy projection flags a primary-tool or late widening switched on. */
 export function widenedContextTiers(manifest: {
   contextSelection?: ContextSelection;
   routedContextSelection?: ContextSelection;
@@ -62,6 +54,27 @@ export interface EvidenceManifest {
    * describes the widened read.
    */
   contextEscalated?: boolean;
+  /** The primary analysis model added packs through its constrained pre-answer tool. */
+  contextToolExpanded?: boolean;
+  /** Complete semantic plan, including packs that are not represented by the legacy five-tier view. */
+  contextPlanning?: {
+    source: 'context_planner' | 'fallback_all';
+    model?: string;
+    durationMs: number;
+    requestedPacks: ContextPackId[];
+    selectedPacks: ContextPackId[];
+    finalPacks: ContextPackId[];
+    needsSecondaryValidation: boolean;
+    summary: string;
+    primaryTool?: {
+      outcome: 'accepted' | 'expanded' | 'failed';
+      model?: string;
+      requestedPacks: ContextPackId[];
+      addedPacks: ContextPackId[];
+      reason: string;
+      durationMs: number;
+    };
+  };
   /**
    * Secondary validation objected to the answer's reasoning after it had passed
    * grounding. The answer ships with a caveat rather than being discarded; the
@@ -69,9 +82,9 @@ export interface EvidenceManifest {
    */
   secondaryCaveat?: boolean;
   /**
-   * What routing selected before that widening. Present only when escalation
-   * happened; routing metrics score this, since contextSelection above records
-   * the correction rather than the prediction that needed correcting.
+   * What the preflight planner selected before a primary-tool or post-answer
+   * widening. Routing metrics score this prediction, while contextSelection
+   * records what the final answer actually received.
    */
   routedContextSelection?: ContextSelection;
   modelCalls: Array<{
@@ -83,6 +96,10 @@ export interface EvidenceManifest {
     durationMs: number;
   }>;
   timings: {
+    /** Semantic preflight planner latency; absent on manifests from before context planning. */
+    planningMs?: number;
+    /** Primary-model pack-audit latency; excludes any subsequent context retrieval. */
+    contextToolMs?: number;
     contextGatherMs: number;
     promptBuildMs: number;
     /** Added in Step 8; absent on older persisted evidence manifests. */

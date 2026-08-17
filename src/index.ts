@@ -845,9 +845,9 @@ app.get('/sync/status', async (req: Request, res: Response) => {
       }
     });
 
-    // Answer quality joined to context routing and user ratings. Reads the
-    // persisted evidence manifests rather than the process-local metrics, so it
-    // survives deploys and can be read against the questions that produced it.
+    // Answer quality joins semantic planning, evidence outcomes, and user
+    // ratings. Persisted manifests survive deploys and remain attributable to
+    // the questions that produced them.
     app.get('/admin/answer-quality', adminAuth, async (req: Request, res: Response) => {
       try {
         const { getPrismaClient } = await import('./prisma-client');
@@ -2348,132 +2348,53 @@ app.get('/admin/ai/response-tone', adminAuth, async (req: Request, res: Response
   }
 });
 
-// Admin: Read the question-routing vocabulary
-app.get('/admin/ai/routing-vocabulary', adminAuth, async (_req: Request, res: Response) => {
-  try {
-    const {
-      DEFAULT_ROUTING_TERMS, ROUTING_CATEGORY_META, loadRoutingVocabulary, getActiveRoutingTerms,
-    } = await import('./openai/routing-vocabulary');
-    const { AI_PROMPT_CONFIG_ID } = await import('./openai/prompt-config');
-    const { getPrismaClient } = await import('./prisma-client');
-
-    await loadRoutingVocabulary(true);
-    const config = await getPrismaClient().aiPromptConfig.findUnique({
-      where: { id: AI_PROMPT_CONFIG_ID },
-    });
-
-    res.json({
-      categories: ROUTING_CATEGORY_META,
-      terms: getActiveRoutingTerms(),
-      defaultTerms: DEFAULT_ROUTING_TERMS,
-      isDefault: !(config as { routingTerms?: unknown } | null)?.routingTerms,
-      lastEditedBy: config?.lastEditedBy || null,
-      updatedAt: config?.updatedAt || null,
-    });
-  } catch (error) {
-    console.error('Error fetching routing vocabulary:', error);
-    Sentry.captureException(error instanceof Error ? error : new Error(String(error)));
-    res.status(500).json({ error: 'Failed to fetch routing vocabulary' });
-  }
+// Admin: Describe the allowlisted context packs. Their definitions are code,
+// not mutable vocabulary, so changing what a pack means remains reviewable.
+app.get('/admin/ai/context-packs', adminAuth, async (_req: Request, res: Response) => {
+  const { CONTEXT_PACKS } = await import('./openai/context-packs');
+  res.json({ packs: CONTEXT_PACKS });
 });
 
-// Admin: Update the question-routing vocabulary
-app.put('/admin/ai/routing-vocabulary', adminAuth, async (req: Request, res: Response) => {
+// Admin: Run the same semantic preflight planner production uses against an
+// arbitrary active-decision transcript.
+app.post('/admin/ai/context-planner-preview', adminAuth, async (req: Request, res: Response) => {
   try {
-    const { terms } = req.body;
-    if (!terms || typeof terms !== 'object' || Array.isArray(terms)) {
-      return res.status(400).json({ error: 'terms must be an object of category -> string[]' });
-    }
-
-    const { ROUTING_CATEGORIES, setActiveRoutingTerms, compileTerm } =
-      await import('./openai/routing-vocabulary');
-    const { AI_PROMPT_CONFIG_ID, DEFAULT_RESPONSE_TONE } = await import('./openai/prompt-config');
-    const { getPrismaClient } = await import('./prisma-client');
-
-    // Validate before persisting: a term that compiles to nothing is a typo the
-    // admin should see now, not a category that silently stops matching.
-    const cleaned: Record<string, string[]> = {};
-    for (const category of ROUTING_CATEGORIES) {
-      const value = (terms as Record<string, unknown>)[category];
-      if (value === undefined) continue;
-      if (!Array.isArray(value) || value.some((term) => typeof term !== 'string')) {
-        return res.status(400).json({ error: `${category} must be an array of strings` });
-      }
-      const list = (value as string[]).map((term) => term.trim()).filter(Boolean);
-      const unusable = list.filter((term) => compileTerm(term) === null);
-      if (unusable.length > 0) {
-        return res.status(400).json({ error: `${category} has unusable terms: ${unusable.join(', ')}` });
-      }
-      cleaned[category] = Array.from(new Set(list));
-    }
-
-    const adminUser = (req as Request & { user?: { email?: string } }).user?.email || 'admin';
-    const prisma = getPrismaClient();
-    const existing = await prisma.aiPromptConfig.findUnique({ where: { id: AI_PROMPT_CONFIG_ID } });
-    const storedTerms = (existing as { routingTerms?: unknown } | null)?.routingTerms;
-
-    // Merge rather than replace: the admin UI sends every category, but a
-    // partial API call should edit the categories it names, not silently drop
-    // the rest. An explicit empty array still clears a category.
-    const merged = {
-      ...(storedTerms && typeof storedTerms === 'object' && !Array.isArray(storedTerms) ? storedTerms : {}),
-      ...cleaned,
-    };
-
-    const saved = await prisma.aiPromptConfig.upsert({
-      where: { id: AI_PROMPT_CONFIG_ID },
-      update: { routingTerms: merged, lastEditedBy: adminUser },
-      create: {
-        id: AI_PROMPT_CONFIG_ID,
-        responseTone: DEFAULT_RESPONSE_TONE,
-        routingTerms: merged,
-        lastEditedBy: adminUser,
-      },
-    });
-
-    res.json({ terms: setActiveRoutingTerms(merged), updatedAt: saved.updatedAt });
-  } catch (error) {
-    console.error('Error updating routing vocabulary:', error);
-    Sentry.captureException(error instanceof Error ? error : new Error(String(error)));
-    res.status(500).json({ error: 'Failed to update routing vocabulary' });
-  }
-});
-
-// Admin: See how a question routes, and which terms matched
-app.post('/admin/ai/routing-preview', adminAuth, async (req: Request, res: Response) => {
-  try {
-    const { question, recentQuestions } = req.body;
+    const { question, turns, tier } = req.body;
     if (typeof question !== 'string' || !question.trim()) {
       return res.status(400).json({ error: 'question must be a non-empty string' });
     }
-    // Optional, and optional on purpose: a short follow-up ("$125k a year",
-    // "yes") inherits the previous turn's needs, so previewing it alone shows
-    // routing that production would never produce. Callers that do not send
-    // history keep the old single-question behaviour.
-    if (recentQuestions !== undefined && !Array.isArray(recentQuestions)) {
-      return res.status(400).json({ error: 'recentQuestions must be an array of strings' });
+    if (turns !== undefined && !Array.isArray(turns)) {
+      return res.status(400).json({ error: 'turns must be an array of question/answer objects' });
     }
-    const priorQuestions: string[] = Array.isArray(recentQuestions)
-      ? recentQuestions.filter((entry: unknown): entry is string => typeof entry === 'string')
-      : [];
+    const recentTurns = (Array.isArray(turns) ? turns : []).slice(-10).map((turn: unknown) => {
+      if (!turn || typeof turn !== 'object' || Array.isArray(turn)) {
+        throw new Error('Every turn must be a question/answer object.');
+      }
+      const record = turn as Record<string, unknown>;
+      if (typeof record.question !== 'string' || !record.question.trim()) {
+        throw new Error('Every turn must have a non-empty question.');
+      }
+      return {
+        question: record.question.trim(),
+        answer: typeof record.answer === 'string' ? record.answer.trim() : undefined,
+      };
+    }).reverse();
 
-    const { ROUTING_CATEGORIES, loadRoutingVocabulary, matchingTerms } =
-      await import('./openai/routing-vocabulary');
-    const { analyzeQuestionNeeds } = await import('./openai/question-analysis');
-
-    await loadRoutingVocabulary(true);
-    const lowered = question.toLowerCase();
-
-    res.json({
-      needs: analyzeQuestionNeeds(question, priorQuestions),
-      matches: Object.fromEntries(
-        ROUTING_CATEGORIES.map((category) => [category, matchingTerms(category, lowered)])
-      ),
+    const { loadModelConfig } = await import('./openai/model-config');
+    const { planContext } = await import('./openai/context-planner');
+    const { CONTEXT_PACKS } = await import('./openai/context-packs');
+    await loadModelConfig(true);
+    const plan = await planContext({
+      question: question.trim(),
+      recentTurns,
+      tier: typeof tier === 'string' ? tier : undefined,
     });
+    res.json({ plan, packs: CONTEXT_PACKS });
   } catch (error) {
-    console.error('Error previewing question routing:', error);
+    console.error('Error previewing context planning:', error);
     Sentry.captureException(error instanceof Error ? error : new Error(String(error)));
-    res.status(500).json({ error: 'Failed to preview question routing' });
+    const message = error instanceof Error ? error.message : 'Failed to preview context planning';
+    res.status(message.startsWith('Every turn') ? 400 : 500).json({ error: message });
   }
 });
 

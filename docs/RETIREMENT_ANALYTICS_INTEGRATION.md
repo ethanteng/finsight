@@ -1,182 +1,36 @@
-# Retirement Analytics - Integration Implementation Summary
+# Retirement analytics integration
 
-## What Was Implemented
+Retirement analytics is an optional semantic context pack in the production Ask Linc pipeline.
 
-The retirement portfolio analysis module is now **fully integrated** with Ask Linc's conversation system. Users can now ask retirement-related questions and receive personalized analysis automatically.
+## Selection and inputs
 
-## Integration Points
+The preflight `contextPlanner` reads the complete active decision rather than looking for retirement keywords. It can select `retirement_analysis` from implied intent, follow-up answers, pronouns, or a changed scenario. That pack deterministically depends on investment details, user profile, and market context. The primary Claude model can add it through `request_data_packs` if the preflight omitted it.
 
-### 1. Question Detection (`src/openai/question-analysis.ts`)
+In the same structured pass, the planner extracts only retirement values the user actually stated: current age, retirement age, annual retirement spending, withdrawal start age, and life expectancy. It reads short replies in the context of the assistant question they answer and records the user's wording as the source. It does not estimate typical values. A deterministic parser remains only as a fallback if semantic extraction is unavailable; it does not decide whether the data pack is loaded.
 
-Added `needsRetirement` flag to detect retirement-related questions:
-- Keywords: "retirement", "retire", "withdrawal", "retirement planning", etc.
-- Automatically sets when retirement intent is detected
+## Context assembly
 
-### 2. Context Service Integration (`src/openai/context-service.ts`)
+`src/openai/context-service.ts`:
 
-Added `fetchOrCreateRetirementAnalysis()` function that:
-- Parses retirement parameters from user questions
-- Extracts age/retirement info from user profile
-- Checks for cached analysis (last 7 days)
-- Creates new analysis if needed
-- Stores results in database
-- Returns analysis for LLM context
+1. loads the user's persisted holdings and profile selected by the pack dependencies;
+2. resolves planner-extracted inputs with eligible persisted profile values;
+3. reports missing or confirmation-required inputs instead of inventing them;
+4. reuses a recent analysis only when both the portfolio fingerprint and all resolved inputs match;
+5. otherwise runs and persists the deterministic retirement analysis;
+6. supplies metrics, stress-test results, assumptions, input sources, and evidence IDs to canonical prompting and Show the Math.
 
-### 3. Question Parser (`src/retirement-analytics/retirement-question-parser.ts`)
+The default life-expectancy assumption is 95 when the user does not provide one, and the answer states the analysis assumptions. Stored annual spending is not silently carried into a new scenario; it requires an explicit confirmation where applicable.
 
-New utility that extracts:
-- Current age
-- Retirement age
-- Annual withdrawal amount
-- Withdrawal start age
-- Life expectancy
+## Relevant files
 
-From natural language questions using regex patterns.
+| File | Responsibility |
+| --- | --- |
+| `src/openai/context-packs.ts` | Retirement pack definition and dependencies |
+| `src/openai/context-planner.ts` | Semantic pack selection and input extraction |
+| `src/openai/context-service.ts` | Input resolution, cache matching, and analysis retrieval |
+| `src/openai/retirement-inputs.ts` | Deterministic precedence and missing-input rules |
+| `src/openai/retirement-input-extraction.ts` | Types and deterministic validation for planner-extracted inputs |
+| `src/retirement-analytics/retirement-question-parser.ts` | Deterministic extraction fallback only |
+| `src/retirement-analytics/` | Offline analysis and stress-test engine |
 
-### 4. Profile Age Extractor (`src/retirement-analytics/profile-age-extractor.ts`)
-
-New utility that extracts age and retirement age from user profile text when not provided in the question.
-
-### 5. Type Updates (`src/openai/types.ts`)
-
-- Added `needsRetirement` to `QuestionNeeds`
-- Added `retirementAnalysis` to `FinancialContextSnapshot`
-- Updated `dataQuality` structure to include `proxyUsage`
-
-## How It Works
-
-### User Flow
-
-1. **User asks retirement question**:
-   ```
-   "I'm 48 and plan to retire at 68. Can I withdraw $100,000 per year?"
-   ```
-
-2. **System detects retirement intent**:
-   - `question-analysis.ts` sets `needsRetirement = true`
-   - `needsMarketContext` also set (includes "retirement" keyword)
-
-3. **Context service gathers analysis**:
-   - Parses question for age, retirement age, withdrawal amount
-   - Checks user profile for age if not in question
-   - Checks database for recent matching analysis
-   - Creates new analysis if needed
-   - Stores in `retirement_analyses` table
-
-4. **LLM receives analysis**:
-   - Analysis included in `FinancialContextSnapshot`
-   - Prompt builder formats it with instructions
-   - LLM explains results using descriptive language
-
-5. **User receives personalized response**:
-   ```
-   "Based on your portfolio, historical analysis shows..."
-   ```
-
-## Database Storage
-
-Analysis results are stored in `retirement_analyses` table:
-- **Cached for 7 days** (configurable via `expiresAt`)
-- **User-scoped** (only accessible to that user)
-- **Parameter-matched** (reuses cache if parameters match)
-
-## Automatic Triggers
-
-Retirement analysis runs automatically when:
-- ✅ Question contains retirement keywords
-- ✅ User has investment holdings
-- ✅ User has required info (age + withdrawal amount)
-
-## Missing Parameter Handling
-
-If required parameters are missing:
-- **Current age**: Extracted from profile or question
-- **Withdrawal amount**: Must be in question (Linc could ask if missing)
-- **Retirement age**: Optional (assumes already retired if not provided)
-
-**Current behavior**: Returns `undefined` if missing required params
-**Future enhancement**: Linc could ask user for missing info
-
-## Caching Strategy
-
-1. **Check database** for analysis within last 7 days
-2. **Match parameters** (age, retirement age, withdrawal amount)
-3. **Reuse cached** if match found
-4. **Create new** if no match or expired
-
-## Performance Considerations
-
-- **First run**: 30-60 seconds (fetches historical data)
-- **Cached runs**: 5-10 seconds (uses database cache)
-- **Subsequent questions**: Instant (uses same cached analysis)
-
-## Example Integration Flow
-
-```typescript
-// User asks: "I'm 48, retiring at 68, want $100k/year. How's my portfolio?"
-
-// 1. Question analysis detects retirement intent
-questionNeeds.needsRetirement = true
-
-// 2. Context service calls fetchOrCreateRetirementAnalysis()
-//    - Parses: currentAge=48, retirementAge=68, annualWithdrawalAmount=100000
-//    - Extracts age from profile if needed
-//    - Checks database cache
-//    - Creates analysis if needed
-//    - Stores in database
-
-// 3. Analysis included in FinancialContextSnapshot
-snapshot.retirementAnalysis = { ... }
-
-// 4. Prompt builder formats for LLM
-//    - Includes analysis instructions
-//    - Formats characteristics, tradeoffs, metrics
-//    - Adds disclaimers
-
-// 5. LLM receives formatted analysis and explains to user
-```
-
-## Testing
-
-To test the integration:
-
-1. **Ensure user has investment holdings**
-2. **Ask a retirement question**:
-   ```
-   "I'm 48 and want to retire at 68. Can I withdraw $100,000 per year?"
-   ```
-3. **Check logs** for:
-   - "Running new retirement analysis for user: ..."
-   - "Retirement analysis completed and stored"
-4. **Verify database**:
-   ```sql
-   SELECT * FROM retirement_analyses 
-   WHERE "userId" = 'your-user-id' 
-   ORDER BY "computedAt" DESC LIMIT 1;
-   ```
-
-## Next Steps
-
-1. **Add UI components** to display analysis results
-2. **Enhance parameter extraction** (ask user for missing info)
-3. **Add analysis refresh** when portfolio changes significantly
-4. **Add comparison features** (compare different scenarios)
-
-## Files Modified
-
-- ✅ `src/openai/context-service.ts` - Added retirement analysis fetching
-- ✅ `src/openai/question-analysis.ts` - Added retirement detection
-- ✅ `src/openai/types.ts` - Added retirement types
-- ✅ `src/retirement-analytics/retirement-question-parser.ts` - NEW
-- ✅ `src/retirement-analytics/profile-age-extractor.ts` - NEW
-
-## Files Already Implemented (from previous work)
-
-- ✅ `src/retirement-analytics/index.ts` - Main analysis function
-- ✅ `src/openai/financial-reasoning-prompt.ts` - LLM formatting
-- ✅ `prisma/schema.prisma` - Database schema
-- ✅ All analytics engine modules
-
-## Status
-
-✅ **FULLY INTEGRATED** - Retirement analysis now works automatically with Ask Linc conversations!
+See [Semantic context planning](CONTEXT_PLANNING.md) for the full two-pass data-pack architecture.

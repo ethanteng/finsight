@@ -45,7 +45,7 @@ Users simply ask retirement-related questions to Ask Linc:
 
 **What Happens:**
 1. User asks a retirement-related question
-2. System detects retirement keywords/context
+2. The semantic planner reads the complete active decision and selects retirement context
 3. If user has investment holdings, system automatically runs retirement analysis
 4. Analysis results are included in the AI's context
 5. Linc provides a personalized explanation based on the analysis
@@ -203,30 +203,11 @@ Users will see these disclaimers automatically:
 
 ## Integration with Ask Linc
 
-### ⚠️ Current Implementation Status
+### Current implementation
 
-**Note**: Full automatic integration is not yet implemented. Currently, users must call the API endpoint directly. The following describes the intended behavior once integration is complete.
+Retirement analysis is automatically available through Ask Linc's semantic context planner. The planner reads the complete active Q&A decision, so follow-ups such as “what if I wait two more years?” can retain the retirement meaning without repeating a particular word. It also reads short answers in the context of the assistant question they answer.
 
-### Intended Automatic Inclusion (Future)
-
-The retirement analysis will be **automatically included** in Linc's context when:
-
-1. User asks a retirement-related question
-2. User has investment holdings
-3. User has a recent retirement analysis (cached in database)
-
-### Question Detection
-
-The system will detect retirement-related questions by looking for keywords like:
-- "retirement"
-- "retire"
-- "withdrawal"
-- "retirement planning"
-- "retirement readiness"
-- "sustainable withdrawal"
-- "retirement portfolio"
-
-**Current Implementation**: The `question-analysis.ts` already detects retirement keywords (`needsMarketContext` includes "retirement"), but the analysis isn't automatically triggered yet.
+When selected, the retirement pack brings its investment, profile, and market dependencies. The primary analysis model performs a second constrained pack audit before it answers. If required user inputs or investment holdings are unavailable, Linc asks for the missing information instead of estimating it.
 
 ### Contextual Responses
 
