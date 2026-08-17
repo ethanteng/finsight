@@ -1,6 +1,11 @@
 import type { FinancialContextSnapshot, QuestionNeeds } from './types';
 import type { CanonicalFactPack } from './canonical-facts';
-import { compactRetirementScenarioExecution } from '../scenarios/retirement-scenario';
+import {
+  RETIREMENT_CALCULATOR_ID,
+  type RetirementScenarioEvidence,
+  type RetirementScenarioExecution,
+} from '../scenarios/retirement-scenario';
+import { scenarioCalculatorRegistry } from '../scenarios/calculator-registry';
 
 export interface QuestionContextPack {
   facts: CanonicalFactPack;
@@ -56,7 +61,10 @@ export function buildQuestionContextPack(
     details.retirementAnalysis = compactRetirementAnalysis(snapshot);
     details.retirementAnalysisNeedsInfo = snapshot.retirementAnalysisNeedsInfo;
     if (snapshot.retirementScenarioExecution) {
-      details.retirementScenarios = compactRetirementScenarioExecution(snapshot.retirementScenarioExecution);
+      details.retirementScenarios = scenarioCalculatorRegistry.compactEvidence<
+        RetirementScenarioExecution,
+        RetirementScenarioEvidence
+      >(RETIREMENT_CALCULATOR_ID, snapshot.retirementScenarioExecution);
     }
   }
   if (needs.needsHomeValue) details.homeValue = snapshot.homeValueSummary;

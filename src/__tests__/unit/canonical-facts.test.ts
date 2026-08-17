@@ -229,7 +229,11 @@ describe('buildCanonicalFactPack', () => {
       id,
       label,
       withdrawalPolicy: policy,
-      assumptions: [],
+      assumptions: id === 'fixed' ? [
+        { key: 'annual_withdrawal_amount', label: 'Starting spending', value: 50_000, origin: 'user' },
+        { key: 'pre_withdrawal_contributions', label: 'Annual contributions', value: 12_000, origin: 'user' },
+        { key: 'retirement_age', label: 'Retirement age', value: 65, origin: 'user' },
+      ] : [],
       reusedBaseline: false,
       analysis: {
         metrics: {
@@ -277,6 +281,12 @@ describe('buildCanonicalFactPack', () => {
       unit: 'percent',
     }));
     expect(pack.facts).toContainEqual(expect.objectContaining({
+      id: 'retirement_scenario_fixed_assumption_pre_withdrawal_contributions',
+      value: 12_000,
+      unit: 'usd',
+      provenance: expect.objectContaining({ kind: 'scenario_input', scenarioId: 'fixed' }),
+    }));
+    expect(pack.facts).toContainEqual(expect.objectContaining({
       label: 'Absolute survival-rate gap between 3% annual withdrawal growth and Flat nominal withdrawals',
       value: 20,
       unit: 'percent',
@@ -290,6 +300,12 @@ describe('buildCanonicalFactPack', () => {
       }),
     }));
     expect(validateCanonicalFactPack(pack)).toEqual([]);
+
+    const gap = pack.facts.find((fact) => fact.id.endsWith('_survival_rate_gap'))!;
+    gap.value = 21;
+    expect(validateCanonicalFactPack(pack)).toContain(
+      `${gap.id} does not match its deterministic formula.`
+    );
   });
 
   it('reports one allocation fact per asset class when a snapshot has split buckets', () => {

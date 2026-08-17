@@ -10,9 +10,27 @@ interface ContextPack {
   dependencies: string[];
 }
 
+interface ScenarioCalculatorManifest {
+  id: string;
+  version: number;
+  label: string;
+  description: string;
+  requiredPacks: string[];
+  supportedOverrides: Array<{ id: string; label: string }>;
+  defaults: Array<{ id: string; value: string | number }>;
+  outputs: Array<{ id: string; label: string; unit: string }>;
+}
+
 interface PlannerTurn {
   question: string;
   answer: string;
+}
+
+interface RetirementScenarioVariant {
+  type: string;
+  annualRate?: number;
+  source?: string;
+  overrides?: Record<string, unknown> & { sources?: Record<string, string> };
 }
 
 interface PlannerResponse {
@@ -24,14 +42,15 @@ interface PlannerResponse {
     retirementInputs?: Record<string, unknown> & { sources?: Record<string, string> };
     retirementScenario?: {
       requested: true;
-      primary: { type: string; annualRate?: number; source?: string };
-      comparison?: { type: string; annualRate?: number; source?: string };
+      primary: RetirementScenarioVariant;
+      comparison?: RetirementScenarioVariant;
     };
     summary: string;
     model?: string;
     durationMs: number;
   };
   packs: ContextPack[];
+  calculators?: ScenarioCalculatorManifest[];
 }
 
 const EMPTY_TURN: PlannerTurn = { question: '', answer: '' };
@@ -44,6 +63,7 @@ export default function ContextPlannerPanel({
   getAuthHeaders: () => Record<string, string>;
 }) {
   const [packs, setPacks] = useState<ContextPack[]>([]);
+  const [calculators, setCalculators] = useState<ScenarioCalculatorManifest[]>([]);
   const [question, setQuestion] = useState('');
   const [turns, setTurns] = useState<PlannerTurn[]>([{ ...EMPTY_TURN }]);
   const [result, setResult] = useState<PlannerResponse | null>(null);
@@ -56,6 +76,7 @@ export default function ContextPlannerPanel({
         if (!response.ok) throw new Error('Failed to load context-pack definitions');
         const body = await response.json();
         setPacks(body.packs ?? []);
+        setCalculators(body.calculators ?? []);
       })
       .catch(() => setStatus('Failed to load context-pack definitions.'));
     // Authentication headers are intentionally read once when this panel mounts,
@@ -97,6 +118,7 @@ export default function ContextPlannerPanel({
       if (!response.ok) throw new Error(body.error || 'Context planner failed');
       setResult(body);
       setPacks(body.packs ?? packs);
+      setCalculators(body.calculators ?? calculators);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : 'Context planner failed');
     } finally {
@@ -116,6 +138,10 @@ export default function ContextPlannerPanel({
     if (policy.type === 'historical_cpi') return 'Historical CPI-linked withdrawals';
     return policy.type;
   };
+  const formatOverrides = (variant: RetirementScenarioVariant | undefined) =>
+    Object.entries(variant?.overrides ?? {})
+      .filter(([key, value]) => key !== 'sources' && value !== undefined && value !== null)
+      .map(([key, value]) => `${key}: ${String(value)}`);
 
   return (
     <div className="bg-gray-800 rounded-lg p-6 mb-6">
@@ -252,6 +278,36 @@ export default function ContextPlannerPanel({
             })}
           </div>
 
+          {calculators.length > 0 && (
+            <div className="mt-4 rounded border border-gray-700 bg-gray-900 p-3">
+              <div className="text-sm font-medium text-gray-200">Calculator registry</div>
+              <div className="mt-3 grid gap-3 lg:grid-cols-2">
+                {calculators.map((calculator) => (
+                  <div key={calculator.id} className="rounded border border-gray-800 bg-gray-950/40 p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="font-medium text-gray-100">{calculator.label}</span>
+                      <span className="text-xs text-gray-500">v{calculator.version}</span>
+                    </div>
+                    <p className="mt-1 text-xs leading-5 text-gray-400">{calculator.description}</p>
+                    <div className="mt-2 text-xs text-gray-400">
+                      Required packs: {calculator.requiredPacks.join(', ') || 'none'}
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      {calculator.supportedOverrides.map((override) => (
+                        <span key={override.id} className="rounded bg-gray-800 px-2 py-1 text-[11px] text-gray-300">
+                          {override.label}
+                        </span>
+                      ))}
+                    </div>
+                    <div className="mt-2 text-[11px] text-gray-500">
+                      {calculator.outputs.length} outputs · {calculator.defaults.length} disclosed defaults
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {retirementInputs.length > 0 && (
             <div className="mt-4 rounded border border-gray-700 bg-gray-900 p-3">
               <div className="text-sm font-medium text-gray-200">Retirement inputs read from the decision</div>
@@ -282,6 +338,18 @@ export default function ContextPlannerPanel({
                     .filter(Boolean).join(' · ')}
                 </p>
               )}
+              {[retirementScenario.primary, retirementScenario.comparison].map((variant, index) => {
+                const overrides = formatOverrides(variant);
+                if (overrides.length === 0) return null;
+                return (
+                  <div key={index} className="mt-2 flex flex-wrap gap-2 text-xs text-blue-200">
+                    <span className="text-gray-500">{index === 0 ? 'Run overrides:' : 'Comparison overrides:'}</span>
+                    {overrides.map((override) => (
+                      <span key={override} className="rounded bg-blue-900/40 px-2 py-1">{override}</span>
+                    ))}
+                  </div>
+                );
+              })}
             </div>
           )}
 

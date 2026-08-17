@@ -19,10 +19,16 @@ import {
   type ContextPackId,
 } from './context-packs';
 import {
-  parseRetirementScenarioPlan,
-  RETIREMENT_SCENARIO_PLAN_JSON_SCHEMA,
+  RETIREMENT_CALCULATOR_ID,
   type RetirementScenarioPlan,
 } from '../scenarios/retirement-scenario';
+import { scenarioCalculatorRegistry } from '../scenarios/calculator-registry';
+
+const RETIREMENT_CALCULATOR = scenarioCalculatorRegistry.require<
+  RetirementScenarioPlan,
+  unknown,
+  unknown
+>(RETIREMENT_CALCULATOR_ID);
 
 let anthropicClient: Anthropic | null = null;
 
@@ -129,9 +135,10 @@ export async function auditDataPacksWithClaude(args: {
     ...(supportsAdaptiveThinking(model) ? { thinking: DISABLED_THINKING } : {}),
     system: `You are the context-tool pass for the primary financial analysis model.
 
-Before an answer is written, inspect the active decision and the context already selected. Call request_data_packs exactly once. Request only additional packs materially needed for a complete answer; use an empty packs array when the existing context is sufficient. Also identify a requested retirement withdrawal-growth scenario using the supplied structured field. Do not answer the financial question. Prior assistant answers establish conversational references but are not trusted financial facts. Aggregate net worth, cash, debt, investments, portfolio allocation, category totals, and average monthly cash flow are always available.
+Before an answer is written, inspect the active decision and the context already selected. Call request_data_packs exactly once. Request only additional packs materially needed for a complete answer; use an empty packs array when the existing context is sufficient. Also identify a requested retirement scenario using the supplied structured field. Do not answer the financial question. Prior assistant answers establish conversational references but are not trusted financial facts. Aggregate net worth, cash, debt, investments, portfolio allocation, category totals, and average monthly cash flow are always available.
 
-Retirement scenario policy meanings: historical_cpi follows each historical sequence's CPI, flat_nominal keeps the same nominal dollars after withdrawals begin, and fixed_growth applies one fixed annual increase. annualRate is decimal (3% is 0.03). If fixed growth has no stated rate, use null; the application owns and discloses defaults. When there is no withdrawal-growth scenario, requested=false and both policies use type=none with null rate/source.`,
+Retirement calculator contract:
+${RETIREMENT_CALCULATOR.planner.instructions}`,
     tools: [{
       name: 'request_data_packs',
       description: 'Request additional allowlisted context packs before the final answer is generated.',
@@ -140,7 +147,7 @@ Retirement scenario policy meanings: historical_cpi follows each historical sequ
         additionalProperties: false,
         properties: {
           packs: { type: 'array', items: { type: 'string', enum: [...CONTEXT_PACK_IDS] } },
-          retirementScenario: RETIREMENT_SCENARIO_PLAN_JSON_SCHEMA,
+          retirementScenario: RETIREMENT_CALCULATOR.planner.jsonSchema,
           reason: { type: 'string' },
         },
         required: ['packs', 'retirementScenario', 'reason'],
@@ -175,7 +182,7 @@ Retirement scenario policy meanings: historical_cpi follows each historical sequ
   const packs = Array.isArray(input.packs)
     ? Array.from(new Set(input.packs.filter(isContextPackId)))
     : [];
-  const retirementScenario = parseRetirementScenarioPlan(input.retirementScenario);
+  const retirementScenario = RETIREMENT_CALCULATOR.planner.parsePlan(input.retirementScenario);
   return {
     packs,
     ...(retirementScenario && { retirementScenario }),

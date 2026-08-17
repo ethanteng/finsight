@@ -168,6 +168,96 @@ describe('retirement scenario runner', () => {
     }));
   });
 
+  it('applies traced contribution, retirement-date, spending, and longevity overrides', async () => {
+    const analyzer = jest.fn(async () => analysis(0.82));
+    const execution = await runRetirementScenario(snapshot(), {
+      requested: true,
+      primary: {
+        type: 'historical_cpi',
+        source: 'retire at 65, contribute $12,000, spend $50,000, and plan to 100',
+        overrides: {
+          annualWithdrawalAmount: 50_000,
+          annualContributionAmount: 12_000,
+          retirementAge: 65,
+          withdrawalStartAge: 65,
+          lifeExpectancy: 100,
+          sources: {
+            annualWithdrawalAmount: 'spend $50,000',
+            annualContributionAmount: 'contribute $12,000',
+            retirementAge: 'retire at 65',
+            withdrawalStartAge: 'retire at 65',
+            lifeExpectancy: 'plan to 100',
+          },
+        },
+      },
+    }, analyzer);
+
+    expect(execution.status).toBe('completed');
+    if (execution.status !== 'completed') return;
+    expect(analyzer).toHaveBeenCalledTimes(1);
+    expect(analyzer).toHaveBeenCalledWith(expect.objectContaining({
+      annualWithdrawalAmount: 50_000,
+      annualContributionAmount: 12_000,
+      retirementAge: 65,
+      withdrawalStartAge: 65,
+      lifeExpectancy: 100,
+      withdrawalPolicy: { type: 'historical_cpi' },
+    }));
+    expect(execution.scenarios[0].assumptions).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'annual_withdrawal_amount', value: 50_000, origin: 'user' }),
+      expect.objectContaining({ key: 'pre_withdrawal_contributions', value: 12_000, origin: 'user' }),
+      expect.objectContaining({ key: 'retirement_age', value: 65, origin: 'user' }),
+      expect.objectContaining({ key: 'life_expectancy', value: 100, origin: 'user' }),
+    ]));
+    expect(execution.scenarios[1]).toMatchObject({ reusedBaseline: true });
+  });
+
+  it('drops untraceable numeric overrides before execution', () => {
+    expect(parseRetirementScenarioPlan({
+      requested: true,
+      primary: {
+        type: 'historical_cpi',
+        overrides: {
+          annualWithdrawalAmount: 50_000,
+          annualContributionAmount: 12_000,
+          retirementAge: 65,
+          withdrawalStartAge: 65,
+          lifeExpectancy: 100,
+          sources: {
+            annualWithdrawalAmount: null,
+            annualContributionAmount: null,
+            retirementAge: null,
+            withdrawalStartAge: null,
+            lifeExpectancy: null,
+          },
+        },
+      },
+      comparison: { type: 'none' },
+    })).toEqual({ requested: true, primary: { type: 'historical_cpi' } });
+  });
+
+  it('rejects cross-field date overrides that cannot form a valid horizon', async () => {
+    const execution = await runRetirementScenario(snapshot(), {
+      requested: true,
+      primary: {
+        type: 'historical_cpi',
+        overrides: {
+          withdrawalStartAge: 100,
+          lifeExpectancy: 95,
+          sources: {
+            withdrawalStartAge: 'start at 100',
+            lifeExpectancy: 'plan to 95',
+          },
+        },
+      },
+    });
+
+    expect(execution).toMatchObject({
+      status: 'unavailable',
+      reason: expect.stringMatching(/life expectancy/i),
+    });
+  });
+
   it('returns an actionable unavailable result instead of estimating without a baseline', async () => {
     const execution = await runRetirementScenario({} as any, {
       requested: true,

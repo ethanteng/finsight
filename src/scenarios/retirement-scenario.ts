@@ -6,14 +6,46 @@ import {
   type RetirementAnalysisOutput,
   type WithdrawalPolicy,
 } from '../retirement-analytics';
+import type { ScenarioCalculatorDefinition } from './calculator-registry';
 
-export const RETIREMENT_SCENARIO_VERSION = 1 as const;
+export const RETIREMENT_SCENARIO_VERSION = 2 as const;
+export const RETIREMENT_CALCULATOR_ID = 'retirement' as const;
 export const DEFAULT_FIXED_WITHDRAWAL_GROWTH_RATE = 0.03;
 
-const PLANNED_POLICY_JSON_SCHEMA = {
+const RETIREMENT_OVERRIDE_FIELDS = [
+  'annualWithdrawalAmount',
+  'annualContributionAmount',
+  'retirementAge',
+  'withdrawalStartAge',
+  'lifeExpectancy',
+] as const;
+
+export type RetirementOverrideField = (typeof RETIREMENT_OVERRIDE_FIELDS)[number];
+
+const NULLABLE_NUMBER = { type: ['number', 'null'] as const };
+const NULLABLE_STRING = { type: ['string', 'null'] as const };
+
+const PLANNED_OVERRIDES_JSON_SCHEMA = {
   type: 'object',
   additionalProperties: false,
-  required: ['type', 'annualRate', 'source'],
+  required: [...RETIREMENT_OVERRIDE_FIELDS, 'sources'],
+  properties: {
+    ...Object.fromEntries(RETIREMENT_OVERRIDE_FIELDS.map((field) => [field, NULLABLE_NUMBER])),
+    sources: {
+      type: 'object',
+      additionalProperties: false,
+      required: [...RETIREMENT_OVERRIDE_FIELDS],
+      properties: Object.fromEntries(
+        RETIREMENT_OVERRIDE_FIELDS.map((field) => [field, NULLABLE_STRING])
+      ),
+    },
+  },
+} as const;
+
+const PLANNED_VARIANT_JSON_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['type', 'annualRate', 'source', 'overrides'],
   properties: {
     type: {
       type: 'string',
@@ -21,6 +53,7 @@ const PLANNED_POLICY_JSON_SCHEMA = {
     },
     annualRate: { type: ['number', 'null'] },
     source: { type: ['string', 'null'] },
+    overrides: PLANNED_OVERRIDES_JSON_SCHEMA,
   },
 } as const;
 
@@ -31,8 +64,8 @@ export const RETIREMENT_SCENARIO_PLAN_JSON_SCHEMA = {
   required: ['requested', 'primary', 'comparison'],
   properties: {
     requested: { type: 'boolean' },
-    primary: PLANNED_POLICY_JSON_SCHEMA,
-    comparison: PLANNED_POLICY_JSON_SCHEMA,
+    primary: PLANNED_VARIANT_JSON_SCHEMA,
+    comparison: PLANNED_VARIANT_JSON_SCHEMA,
   },
 } as const;
 
@@ -46,10 +79,23 @@ export interface PlannedWithdrawalPolicy {
   source?: string;
 }
 
+export interface PlannedRetirementOverrides {
+  annualWithdrawalAmount?: number;
+  annualContributionAmount?: number;
+  retirementAge?: number;
+  withdrawalStartAge?: number;
+  lifeExpectancy?: number;
+  sources: Partial<Record<RetirementOverrideField, string>>;
+}
+
+export interface PlannedRetirementVariant extends PlannedWithdrawalPolicy {
+  overrides?: PlannedRetirementOverrides;
+}
+
 export interface RetirementScenarioPlan {
   requested: true;
-  primary: PlannedWithdrawalPolicy;
-  comparison?: PlannedWithdrawalPolicy;
+  primary: PlannedRetirementVariant;
+  comparison?: PlannedRetirementVariant;
 }
 
 export type ScenarioAssumptionOrigin = 'user' | 'inherited' | 'default';
@@ -72,7 +118,8 @@ export interface RetirementScenarioResult {
 }
 
 export interface CompletedRetirementScenarioExecution {
-  version: typeof RETIREMENT_SCENARIO_VERSION;
+  /** Numeric so persisted v1 evidence remains readable after calculator upgrades. */
+  version: number;
   calculator: 'retirement';
   status: 'completed';
   computedAt: string;
@@ -82,7 +129,8 @@ export interface CompletedRetirementScenarioExecution {
 }
 
 export interface UnavailableRetirementScenarioExecution {
-  version: typeof RETIREMENT_SCENARIO_VERSION;
+  /** Numeric so persisted v1 evidence remains readable after calculator upgrades. */
+  version: number;
   calculator: 'retirement';
   status: 'unavailable';
   computedAt: string;
@@ -115,7 +163,56 @@ function shortSource(value: unknown): string | undefined {
   return source ? source.slice(0, 160) : undefined;
 }
 
-function parsePolicy(value: unknown): PlannedWithdrawalPolicy | undefined {
+const OVERRIDE_RANGES: Record<RetirementOverrideField, {
+  minimum: number;
+  maximum: number;
+  integer: boolean;
+}> = {
+  annualWithdrawalAmount: { minimum: 1, maximum: 100_000_000, integer: false },
+  annualContributionAmount: { minimum: 0, maximum: 100_000_000, integer: false },
+  retirementAge: { minimum: 30, maximum: 100, integer: true },
+  withdrawalStartAge: { minimum: 30, maximum: 120, integer: true },
+  lifeExpectancy: { minimum: 50, maximum: 120, integer: true },
+};
+
+function parseOverrides(value: unknown): PlannedRetirementOverrides | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const record = value as Record<string, unknown>;
+  const rawSources = record.sources && typeof record.sources === 'object' && !Array.isArray(record.sources)
+    ? record.sources as Record<string, unknown>
+    : {};
+  const overrides: PlannedRetirementOverrides = { sources: {} };
+
+  for (const field of RETIREMENT_OVERRIDE_FIELDS) {
+    const numericValue = finiteNumber(record[field]);
+    const source = shortSource(rawSources[field]);
+    const range = OVERRIDE_RANGES[field];
+    if (
+      numericValue === undefined ||
+      numericValue < range.minimum ||
+      numericValue > range.maximum ||
+      (range.integer && !Number.isInteger(numericValue)) ||
+      !source
+    ) {
+      continue;
+    }
+    overrides[field] = numericValue;
+    overrides.sources[field] = source;
+  }
+
+  // A changed retirement date normally changes the withdrawal start too. Keep
+  // them separate only when the user explicitly supplied both values.
+  if (overrides.retirementAge !== undefined && overrides.withdrawalStartAge === undefined) {
+    overrides.withdrawalStartAge = overrides.retirementAge;
+    overrides.sources.withdrawalStartAge = overrides.sources.retirementAge;
+  }
+
+  return RETIREMENT_OVERRIDE_FIELDS.some((field) => overrides[field] !== undefined)
+    ? overrides
+    : undefined;
+}
+
+function parseVariant(value: unknown): PlannedRetirementVariant | undefined {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
   const record = value as Record<string, unknown>;
   if (typeof record.type !== 'string' || !POLICY_TYPES.has(record.type as WithdrawalPolicyType)) {
@@ -129,10 +226,12 @@ function parsePolicy(value: unknown): PlannedWithdrawalPolicy | undefined {
   const annualRate = rawRate !== undefined && rawRate > -0.2 && rawRate <= 0.5
     ? rawRate
     : undefined;
+  const overrides = parseOverrides(record.overrides);
   return {
     type,
     ...(type === 'fixed_growth' && annualRate !== undefined && { annualRate }),
     ...(shortSource(record.source) && { source: shortSource(record.source) }),
+    ...(overrides && { overrides }),
   };
 }
 
@@ -141,9 +240,9 @@ export function parseRetirementScenarioPlan(value: unknown): RetirementScenarioP
   if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
   const record = value as Record<string, unknown>;
   if (record.requested !== true) return undefined;
-  const primary = parsePolicy(record.primary);
+  const primary = parseVariant(record.primary);
   if (!primary) return undefined;
-  const comparison = parsePolicy(record.comparison);
+  const comparison = parseVariant(record.comparison);
   return {
     requested: true,
     primary,
@@ -199,16 +298,106 @@ function resolvePolicy(planned: PlannedWithdrawalPolicy): {
   };
 }
 
-function policyKey(policy: WithdrawalPolicy): string {
-  return policy.type === 'fixed_growth'
-    ? `${policy.type}:${policy.annualRate}`
-    : policy.type;
-}
-
 function policyLabel(policy: WithdrawalPolicy): string {
   if (policy.type === 'flat_nominal') return 'Flat nominal withdrawals';
   if (policy.type === 'historical_cpi') return 'Historical CPI-linked withdrawals';
   return `${Number((policy.annualRate * 100).toFixed(4))}% annual withdrawal growth`;
+}
+
+const OVERRIDE_ASSUMPTIONS: Record<RetirementOverrideField, {
+  key: string;
+  label: string;
+}> = {
+  annualWithdrawalAmount: {
+    key: 'annual_withdrawal_amount',
+    label: 'Starting annual retirement spending in today\'s dollars',
+  },
+  annualContributionAmount: {
+    key: 'pre_withdrawal_contributions',
+    label: 'Annual contributions before withdrawals in today\'s dollars',
+  },
+  retirementAge: { key: 'retirement_age', label: 'Retirement age' },
+  withdrawalStartAge: { key: 'withdrawal_start_age', label: 'Withdrawal start age' },
+  lifeExpectancy: { key: 'life_expectancy', label: 'Life expectancy' },
+};
+
+function resolveVariant(
+  baseInput: RetirementAnalysisInput,
+  planned: PlannedRetirementVariant
+): {
+  input: RetirementAnalysisInput;
+  policy: WithdrawalPolicy;
+  assumptions: RetirementScenarioAssumption[];
+} {
+  const resolvedPolicy = resolvePolicy(planned);
+  const input: RetirementAnalysisInput = {
+    ...baseInput,
+    withdrawalPolicy: resolvedPolicy.policy,
+  };
+  const assumptions = [...resolvedPolicy.assumptions];
+  const overrides = planned.overrides;
+  if (!overrides) return { input, policy: resolvedPolicy.policy, assumptions };
+
+  for (const field of RETIREMENT_OVERRIDE_FIELDS) {
+    const value = overrides[field];
+    const source = overrides.sources[field];
+    if (value === undefined || !source) continue;
+    input[field] = value;
+    assumptions.push({
+      ...OVERRIDE_ASSUMPTIONS[field],
+      value,
+      origin: 'user',
+      source,
+    });
+  }
+
+  return { input, policy: resolvedPolicy.policy, assumptions };
+}
+
+function validateVariantInput(input: RetirementAnalysisInput): string | undefined {
+  if (input.retirementAge !== null && input.retirementAge < input.currentAge) {
+    return 'Retirement age cannot be earlier than current age.';
+  }
+  if (input.withdrawalStartAge < input.currentAge) {
+    return 'Withdrawal start age cannot be earlier than current age.';
+  }
+  if (input.lifeExpectancy <= input.withdrawalStartAge) {
+    return 'Life expectancy must be later than the withdrawal start age.';
+  }
+  if ((input.annualContributionAmount ?? 0) > 0 && input.withdrawalStartAge <= input.currentAge) {
+    return 'Pre-withdrawal contributions require a future withdrawal start date.';
+  }
+  return undefined;
+}
+
+function inputKey(input: RetirementAnalysisInput, policy: WithdrawalPolicy): string {
+  return JSON.stringify({
+    currentAge: input.currentAge,
+    retirementAge: input.retirementAge,
+    lifeExpectancy: input.lifeExpectancy,
+    annualWithdrawalAmount: input.annualWithdrawalAmount,
+    withdrawalStartAge: input.withdrawalStartAge,
+    annualContributionAmount: input.annualContributionAmount ?? 0,
+    policy,
+  });
+}
+
+function variantLabel(
+  policy: WithdrawalPolicy,
+  assumptions: readonly RetirementScenarioAssumption[]
+): string {
+  const changed = assumptions.filter((assumption) => assumption.origin === 'user' && assumption.key !== 'withdrawal_policy');
+  if (changed.length === 0) return policyLabel(policy);
+  const details = changed.slice(0, 2).map((assumption) => {
+    if (assumption.key === 'annual_withdrawal_amount') {
+      return `$${Number(assumption.value).toLocaleString('en-US')}/year spending`;
+    }
+    if (assumption.key === 'pre_withdrawal_contributions') {
+      return `$${Number(assumption.value).toLocaleString('en-US')}/year contributions`;
+    }
+    return `${assumption.label.toLowerCase()} ${assumption.value}`;
+  });
+  return `${policyLabel(policy)} with ${details.join(' and ')}`;
 }
 
 function scenarioId(
@@ -236,6 +425,7 @@ function scenarioId(
     lifeExpectancy: input.lifeExpectancy,
     annualWithdrawalAmount: input.annualWithdrawalAmount,
     withdrawalStartAge: input.withdrawalStartAge,
+    annualContributionAmount: input.annualContributionAmount ?? 0,
     policy,
     result: {
       metrics: analysis.metrics,
@@ -247,9 +437,15 @@ function scenarioId(
   return `retirement_${policy.type}_${digest}`;
 }
 
-function inheritedAssumptions(input: RetirementAnalysisInput): RetirementScenarioAssumption[] {
-  return [
+function inheritedAssumptions(
+  input: RetirementAnalysisInput,
+  existing: readonly RetirementScenarioAssumption[]
+): RetirementScenarioAssumption[] {
+  const existingKeys = new Set(existing.map((assumption) => assumption.key));
+  const assumptions: RetirementScenarioAssumption[] = [
     { key: 'current_age', label: 'Current age', value: input.currentAge, origin: 'inherited' },
+  ];
+  const candidates: RetirementScenarioAssumption[] = [
     {
       key: 'retirement_age',
       label: 'Retirement age',
@@ -271,11 +467,13 @@ function inheritedAssumptions(input: RetirementAnalysisInput): RetirementScenari
     { key: 'life_expectancy', label: 'Life expectancy', value: input.lifeExpectancy, origin: 'inherited' },
     {
       key: 'pre_withdrawal_contributions',
-      label: 'Additional contributions before withdrawals',
-      value: 0,
-      origin: 'default',
+      label: 'Annual contributions before withdrawals in today\'s dollars',
+      value: input.annualContributionAmount ?? 0,
+      origin: (input.annualContributionAmount ?? 0) > 0 ? 'inherited' : 'default',
     },
   ];
+  assumptions.push(...candidates.filter((assumption) => !existingKeys.has(assumption.key)));
+  return assumptions;
 }
 
 function unavailable(startedAt: number, reason: string): UnavailableRetirementScenarioExecution {
@@ -327,36 +525,43 @@ export async function runRetirementScenario(
     lifeExpectancy: stored.lifeExpectancy ?? 95,
     annualWithdrawalAmount: stored.annualWithdrawalAmount,
     withdrawalStartAge: stored.withdrawalStartAge,
+    annualContributionAmount: 0,
   };
   const baselinePolicy: WithdrawalPolicy = { type: 'historical_cpi' };
   const baselineScenarioId = scenarioId(baseInput, baselinePolicy, baseline as RetirementAnalysisOutput);
-  const inherited = inheritedAssumptions(baseInput);
-  const plannedPolicies = [plan.primary, plan.comparison].filter(
-    (item): item is PlannedWithdrawalPolicy => Boolean(item)
+  const plannedVariants = [plan.primary, plan.comparison].filter(
+    (item): item is PlannedRetirementVariant => Boolean(item)
   );
   if (!plan.comparison) {
-    plannedPolicies.push({ type: 'historical_cpi' });
+    plannedVariants.push({ type: 'historical_cpi' });
   }
 
-  const unique = new Map<string, ReturnType<typeof resolvePolicy>>();
-  for (const planned of plannedPolicies.slice(0, 2)) {
-    const resolved = resolvePolicy(planned);
-    if (!unique.has(policyKey(resolved.policy))) {
-      unique.set(policyKey(resolved.policy), resolved);
+  const unique = new Map<string, ReturnType<typeof resolveVariant>>();
+  for (const planned of plannedVariants.slice(0, 2)) {
+    const resolved = resolveVariant(baseInput, planned);
+    const invalidReason = validateVariantInput(resolved.input);
+    if (invalidReason) return unavailable(startedAt, invalidReason);
+    const key = inputKey(resolved.input, resolved.policy);
+    if (!unique.has(key)) {
+      unique.set(key, resolved);
     }
   }
 
   const scenarios: RetirementScenarioResult[] = [];
   for (const resolved of unique.values()) {
-    const reusedBaseline = policyKey(resolved.policy) === policyKey(baselinePolicy);
+    const reusedBaseline = inputKey(resolved.input, resolved.policy) === inputKey(baseInput, baselinePolicy);
     const analysis = reusedBaseline
       ? baseline as RetirementAnalysisOutput
-      : await analyze({ ...baseInput, withdrawalPolicy: resolved.policy });
+      : await analyze(resolved.input);
+    const assumptions = [
+      ...resolved.assumptions,
+      ...inheritedAssumptions(resolved.input, resolved.assumptions),
+    ];
     scenarios.push({
-      id: scenarioId(baseInput, resolved.policy, analysis),
-      label: policyLabel(resolved.policy),
+      id: scenarioId(resolved.input, resolved.policy, analysis),
+      label: variantLabel(resolved.policy, assumptions),
       withdrawalPolicy: resolved.policy,
-      assumptions: [...resolved.assumptions, ...inherited],
+      assumptions,
       analysis,
       reusedBaseline,
     });
@@ -423,3 +628,112 @@ export function compactRetirementScenarioExecution(
     })),
   };
 }
+
+export const retirementScenarioCalculator: ScenarioCalculatorDefinition<
+  RetirementScenarioPlan,
+  RetirementScenarioExecution,
+  RetirementScenarioEvidence
+> = {
+  id: RETIREMENT_CALCULATOR_ID,
+  version: RETIREMENT_SCENARIO_VERSION,
+  label: 'Retirement scenarios',
+  description: 'Compare retirement timing, spending, contributions, longevity, and withdrawal-growth assumptions.',
+  requiredPacks: ['retirement_analysis'],
+  supportedOverrides: [
+    {
+      id: 'withdrawal_policy',
+      label: 'Withdrawal policy',
+      description: 'Historical CPI-linked, flat nominal, or fixed annual withdrawal growth.',
+      valueType: 'enum',
+      options: ['historical_cpi', 'flat_nominal', 'fixed_growth'],
+    },
+    {
+      id: 'annual_withdrawal_growth_rate',
+      label: 'Annual withdrawal growth',
+      description: 'Fixed annual change in nominal withdrawals after withdrawals begin.',
+      valueType: 'percentage',
+      minimum: -0.2,
+      maximum: 0.5,
+    },
+    {
+      id: 'annual_withdrawal_amount',
+      label: 'Starting annual retirement spending',
+      description: 'Starting retirement spending in today\'s dollars.',
+      valueType: 'currency',
+      minimum: 1,
+      maximum: 100_000_000,
+    },
+    {
+      id: 'annual_contribution_amount',
+      label: 'Annual pre-withdrawal contributions',
+      description: 'Annual contributions in today\'s dollars before withdrawals begin.',
+      valueType: 'currency',
+      minimum: 0,
+      maximum: 100_000_000,
+    },
+    {
+      id: 'retirement_age',
+      label: 'Retirement age',
+      description: 'Age at retirement; also becomes withdrawal start age unless separately overridden.',
+      valueType: 'age',
+      minimum: 30,
+      maximum: 100,
+    },
+    {
+      id: 'withdrawal_start_age',
+      label: 'Withdrawal start age',
+      description: 'Age when modeled retirement withdrawals begin.',
+      valueType: 'age',
+      minimum: 30,
+      maximum: 120,
+    },
+    {
+      id: 'life_expectancy',
+      label: 'Life expectancy',
+      description: 'Age through which the withdrawal plan is modeled.',
+      valueType: 'age',
+      minimum: 50,
+      maximum: 120,
+    },
+  ],
+  defaults: [
+    {
+      id: 'withdrawal_policy',
+      value: 'historical_cpi',
+      description: 'The deployed retirement baseline follows each historical sequence\'s CPI.',
+    },
+    {
+      id: 'annual_withdrawal_growth_rate',
+      value: DEFAULT_FIXED_WITHDRAWAL_GROWTH_RATE,
+      description: 'Used only when fixed growth is requested without a rate.',
+      appliesWhen: 'withdrawal_policy is fixed_growth and no user rate is supplied',
+    },
+    {
+      id: 'annual_contribution_amount',
+      value: 0,
+      description: 'No additional contributions before withdrawals begin.',
+    },
+    {
+      id: 'life_expectancy',
+      value: 95,
+      description: 'Used when the completed baseline has no life-expectancy input.',
+    },
+  ],
+  outputs: [
+    { id: 'withdrawal_rate', label: 'Initial withdrawal rate', unit: 'percent', scope: 'variant', description: 'Starting spending divided by median real portfolio value at withdrawal start.' },
+    { id: 'years_of_expenses', label: 'Years of starting expenses', unit: 'years', scope: 'variant', description: 'Median real withdrawal-start portfolio divided by starting annual spending.' },
+    { id: 'projected_portfolio_at_withdrawal_start', label: 'Median portfolio at withdrawal start', unit: 'usd', scope: 'variant', description: 'Median real portfolio value across historical accumulation sequences.' },
+    { id: 'survival_rate', label: 'Historical survival rate', unit: 'percent', scope: 'variant', description: 'Share of modeled historical sequences that fund the complete horizon.' },
+    { id: 'historical_sequence_count', label: 'Historical sequence count', unit: 'count', scope: 'variant', description: 'Number of rolling historical sequences modeled.' },
+    { id: 'depletion_years_percentiles', label: 'Years-until-depletion percentiles', unit: 'years', scope: 'variant', description: 'P10, P25, P50, P75, and P90 years until depletion.' },
+    { id: 'survival_rate_gap', label: 'Survival-rate gap', unit: 'percent', scope: 'comparison', description: 'Absolute percentage-point gap between two variants.' },
+  ],
+  planner: {
+    jsonSchema: RETIREMENT_SCENARIO_PLAN_JSON_SCHEMA,
+    instructions: `When the user asks to run or compare a retirement scenario, set requested=true. A variant can change the withdrawal policy, starting annual retirement spending, annual pre-withdrawal contributions, retirement age, withdrawal start age, or life expectancy. Use historical_cpi when the request changes an input but does not change withdrawal growth. Values must come from the user's words; put the matching short wording in overrides.sources. The overrides object is always present; use null for every absent value and source. If retirementAge changes and withdrawalStartAge is not separately stated, repeat the retirement age as withdrawalStartAge. Policy meanings: historical_cpi follows each sequence's CPI, flat_nominal keeps the same nominal dollars, and fixed_growth applies one fixed annual increase. annualRate is decimal (3% is 0.03); use null when the user gives no fixed-growth rate so application code can disclose its default. Use primary for the requested case and comparison for an explicitly named second case. When there is no retirement scenario, set requested=false, use type=none for both variants, return null for rates and policy sources, and return override objects whose values and sources are all null.`,
+    parsePlan: parseRetirementScenarioPlan,
+  },
+  execute: runRetirementScenario,
+  unavailable,
+  compactEvidence: compactRetirementScenarioExecution,
+};

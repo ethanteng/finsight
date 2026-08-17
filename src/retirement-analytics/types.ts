@@ -36,6 +36,8 @@ export interface RetirementAnalysisInput {
   annualWithdrawalAmount: number; // in today's dollars
   withdrawalStartAge: number; // when withdrawals begin
   withdrawalPolicy?: WithdrawalPolicy; // defaults to historical CPI (constant real spending)
+  /** Annual pre-withdrawal contribution in today's dollars; defaults to zero. */
+  annualContributionAmount?: number;
   
   // Optional overrides
   inflationAssumption?: number; // override FRED data

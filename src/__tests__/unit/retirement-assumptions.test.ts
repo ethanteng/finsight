@@ -135,4 +135,52 @@ describe('describeRetirementScenarioAssumptions', () => {
       },
     } as any)).toContain('Historical data was unavailable');
   });
+
+  it('separates changed scenario inputs from values actually held constant', () => {
+    const line = describeRetirementScenarioAssumptions({
+      retirementScenarioExecution: {
+        status: 'completed',
+        version: 2,
+        calculator: 'retirement',
+        computedAt: '2026-08-17T00:00:00.000Z',
+        durationMs: 1,
+        baselineScenarioId: 'base',
+        scenarios: [{
+          id: 'later',
+          label: 'Retire at 65',
+          withdrawalPolicy: { type: 'historical_cpi' },
+          reusedBaseline: false,
+          analysis: {} as any,
+          assumptions: [
+            { key: 'current_age', label: 'Age', value: 50, origin: 'inherited' },
+            { key: 'retirement_age', label: 'Retirement age', value: 65, origin: 'user', source: 'retire at 65' },
+            { key: 'withdrawal_start_age', label: 'Withdrawal start age', value: 65, origin: 'user', source: 'retire at 65' },
+            { key: 'annual_withdrawal_amount', label: 'Spending', value: 40_000, origin: 'inherited' },
+            { key: 'life_expectancy', label: 'Life expectancy', value: 95, origin: 'inherited' },
+            { key: 'pre_withdrawal_contributions', label: 'Annual contributions', value: 12_000, origin: 'user', source: 'contribute $12,000' },
+          ],
+        }, {
+          id: 'base',
+          label: 'Current baseline',
+          withdrawalPolicy: { type: 'historical_cpi' },
+          reusedBaseline: true,
+          analysis: {} as any,
+          assumptions: [
+            { key: 'current_age', label: 'Age', value: 50, origin: 'inherited' },
+            { key: 'retirement_age', label: 'Retirement age', value: 60, origin: 'inherited' },
+            { key: 'withdrawal_start_age', label: 'Withdrawal start age', value: 60, origin: 'inherited' },
+            { key: 'annual_withdrawal_amount', label: 'Spending', value: 40_000, origin: 'inherited' },
+            { key: 'life_expectancy', label: 'Life expectancy', value: 95, origin: 'inherited' },
+            { key: 'pre_withdrawal_contributions', label: 'Annual contributions', value: 0, origin: 'default' },
+          ],
+        }],
+      },
+    } as any)!;
+
+    expect(line).toContain('starting spending of $40,000');
+    expect(line).not.toContain('retirement at 65');
+    expect(line).toContain('User-supplied variant inputs');
+    expect(line).toContain('retirement age 65');
+    expect(line).toContain('$12,000');
+  });
 });

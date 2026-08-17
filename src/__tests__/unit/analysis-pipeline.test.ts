@@ -8,7 +8,7 @@ import { validateWithGemini } from '../../openai/response-validator';
 import { askOpenAIWithPreparedPrompt } from '../../openai/openai-fallback-client';
 import { planContext, type ContextPlan } from '../../openai/context-planner';
 import { normalizeContextPacks, questionNeedsFromPacks, type ContextPackId } from '../../openai/context-packs';
-import { runRetirementScenario } from '../../scenarios/retirement-scenario';
+import { scenarioCalculatorRegistry } from '../../scenarios/calculator-registry';
 
 jest.mock('../../openai/context-service', () => ({
   gatherContextSnapshot: jest.fn(),
@@ -32,18 +32,13 @@ jest.mock('../../openai/response-validator', () => ({
 jest.mock('../../openai/openai-fallback-client', () => ({
   askOpenAIWithPreparedPrompt: jest.fn(),
 }));
-jest.mock('../../scenarios/retirement-scenario', () => ({
-  ...jest.requireActual('../../scenarios/retirement-scenario'),
-  runRetirementScenario: jest.fn(),
-}));
-
 const mockedGatherContext = gatherContextSnapshot as jest.MockedFunction<typeof gatherContextSnapshot>;
 const mockedAskClaude = askClaude as jest.MockedFunction<typeof askClaude>;
 const mockedAuditPacks = auditDataPacksWithClaude as jest.MockedFunction<typeof auditDataPacksWithClaude>;
 const mockedPlanContext = planContext as jest.MockedFunction<typeof planContext>;
 const mockedValidateWithGemini = validateWithGemini as jest.MockedFunction<typeof validateWithGemini>;
 const mockedAskOpenAI = askOpenAIWithPreparedPrompt as jest.MockedFunction<typeof askOpenAIWithPreparedPrompt>;
-const mockedRunRetirementScenario = runRetirementScenario as jest.MockedFunction<typeof runRetirementScenario>;
+const mockedExecuteScenario = jest.spyOn(scenarioCalculatorRegistry, 'execute');
 
 function snapshot() {
   return {
@@ -281,7 +276,7 @@ describe('runAskLincAnalysis validation routing', () => {
       model: 'test-claude',
       durationMs: 1,
     });
-    mockedRunRetirementScenario.mockResolvedValue({
+    mockedExecuteScenario.mockResolvedValue({
       version: 1,
       calculator: 'retirement',
       status: 'completed',
@@ -341,7 +336,7 @@ describe('runAskLincAnalysis validation routing', () => {
     });
 
     expect(mockedGatherContext).toHaveBeenCalledTimes(2);
-    expect(mockedRunRetirementScenario).toHaveBeenCalledTimes(1);
+    expect(mockedExecuteScenario).toHaveBeenCalledTimes(1);
     expect(result.showTheMathData?.evidenceManifest.contextEscalated).toBe(true);
     expect(result.showTheMathData?.evidenceManifest.facts).toContainEqual(
       expect.objectContaining({ id: 'retirement_scenario_flat_survival_rate', value: 95 })

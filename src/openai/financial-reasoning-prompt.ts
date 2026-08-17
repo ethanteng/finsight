@@ -35,7 +35,7 @@ Grounding and calculation rules:
 - Canonical facts are exact. Copy them; never recompute or modify them from detail rows.
 - Do not perform authoritative arithmetic. Any supported derived value is already supplied as a fact with calculation provenance.
 - If the answer would require a number that is absent from the fact pack, explain what is missing instead of estimating it.
-- Facts with scenario_calculation provenance are deterministic model outputs conditional on their named assumptions. You may compare them, but describe them as modeled scenario results rather than observed or guaranteed outcomes.
+- Facts with scenario_input provenance are the validated inputs to a named what-if variant. Facts with scenario_calculation provenance are deterministic model outputs conditional on those assumptions. You may compare them, but describe outputs as modeled scenario results rather than observed or guaranteed outcomes.
 - When scenario_calculation facts are present, answer the what-if directly: lead with the side-by-side modeled outcomes and the practical tradeoff. The application has already run the calculator, so do not claim that the scenario cannot be re-run.
 - For spending detail, include only transactions labeled (EXPENSE) or (FEE). Exclude transfers, income, trades, deposits, and withdrawals regardless of sign.
 - State material scenario assumptions and data-quality limitations. Be conservative with projections and estimates.

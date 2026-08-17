@@ -93,13 +93,45 @@ describe('context planner', () => {
     const raw = rawPlan(['retirement_analysis']);
     raw.retirementScenario = {
       requested: true,
-      primary: { type: 'fixed_growth', annualRate: 0.03, source: '3% bump per year' },
-      comparison: { type: 'flat_nominal', annualRate: null, source: 'flat-dollar version' },
+      primary: {
+        type: 'fixed_growth',
+        annualRate: 0.03,
+        source: '3% bump per year',
+        overrides: {
+          annualWithdrawalAmount: null,
+          annualContributionAmount: 12_000,
+          retirementAge: 65,
+          withdrawalStartAge: null,
+          lifeExpectancy: null,
+          sources: {
+            annualWithdrawalAmount: null,
+            annualContributionAmount: 'contribute $12,000',
+            retirementAge: 'retire at 65',
+            withdrawalStartAge: null,
+            lifeExpectancy: null,
+          },
+        },
+      },
+      comparison: { type: 'flat_nominal', annualRate: null, source: 'flat-dollar version', overrides: {} },
     };
     const plan = parseContextPlan(raw);
     expect(plan.retirementScenario).toEqual({
       requested: true,
-      primary: { type: 'fixed_growth', annualRate: 0.03, source: '3% bump per year' },
+      primary: {
+        type: 'fixed_growth',
+        annualRate: 0.03,
+        source: '3% bump per year',
+        overrides: {
+          annualContributionAmount: 12_000,
+          retirementAge: 65,
+          withdrawalStartAge: 65,
+          sources: {
+            annualContributionAmount: 'contribute $12,000',
+            retirementAge: 'retire at 65',
+            withdrawalStartAge: 'retire at 65',
+          },
+        },
+      },
       comparison: { type: 'flat_nominal', source: 'flat-dollar version' },
     });
   });
