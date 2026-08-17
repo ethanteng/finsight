@@ -178,4 +178,20 @@ describe('retirement scenario runner', () => {
       reason: expect.stringMatching(/baseline/i),
     });
   });
+
+  it('treats an empty securities list as missing investment details', async () => {
+    const incomplete = snapshot();
+    incomplete.investments.securities = [];
+    const analyzer = jest.fn(async () => analysis(0.7));
+    const execution = await runRetirementScenario(incomplete, {
+      requested: true,
+      primary: { type: 'flat_nominal' },
+    }, analyzer);
+
+    expect(analyzer).not.toHaveBeenCalled();
+    expect(execution).toMatchObject({
+      status: 'unavailable',
+      reason: expect.stringMatching(/investment holdings and security details/i),
+    });
+  });
 });

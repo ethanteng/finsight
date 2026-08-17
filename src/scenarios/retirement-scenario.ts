@@ -307,7 +307,7 @@ export async function runRetirementScenario(
   if (!baseline || !stored) {
     return unavailable(startedAt, 'A completed retirement baseline is required before scenarios can be compared.');
   }
-  if (!holdings?.length || !securities) {
+  if (!holdings?.length || !securities?.length) {
     return unavailable(startedAt, 'Investment holdings and security details are required to run a retirement scenario.');
   }
   if (
