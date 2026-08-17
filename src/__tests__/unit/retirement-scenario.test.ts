@@ -94,6 +94,11 @@ describe('retirement scenario runner', () => {
       primary: { type: 'none' },
       comparison: { type: 'none' },
     })).toBeUndefined();
+    expect(parseRetirementScenarioPlan({
+      requested: true,
+      primary: { type: 'fixed_growth', annualRate: -0.2, source: 'reduce 20% each year' },
+      comparison: { type: 'none' },
+    })?.primary.annualRate).toBe(-0.2);
   });
 
   it('runs two explicitly requested policies and holds the inherited baseline inputs constant', async () => {

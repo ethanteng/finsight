@@ -49,6 +49,7 @@ import {
   fallbackContextPlan,
   planContext,
   buildPlannerTranscript,
+  retirementInputsForBaseline,
   type ContextPlan,
 } from './context-planner';
 import {
@@ -234,6 +235,15 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
   let selectedPacks = [...initiallySelectedPacks];
   let questionNeeds = contextPlan.questionNeeds;
   let retirementScenarioPlan = evaluation?.retirementScenarioPlan ?? contextPlan.retirementScenario;
+  let retirementBaselineInputs = retirementInputsForBaseline(
+    contextPlan.retirementInputs,
+    retirementScenarioPlan
+  );
+  // The primary audit can discover a scenario the preflight missed. Delay any
+  // persisted retirement calculation until both planning passes have finished,
+  // otherwise hypothetical inputs can become the stored baseline before they
+  // are recognized as overrides.
+  const retirementAnalysisDeferred = !evaluation && questionNeeds.needsRetirement;
 
   // Step 1: Retrieve context (snapshot, profile, market summary, RAG)
   const contextGatherStartedAt = Date.now();
@@ -243,7 +253,9 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
     questionNeeds,
     tier,
     recentTurns,
-    plannedRetirementInputs: contextPlan.retirementInputs,
+    plannedRetirementInputs: retirementBaselineInputs,
+    deferRetirementAnalysis: retirementAnalysisDeferred,
+    useExistingRetirementBaseline: Boolean(retirementScenarioPlan),
     onProgress
   });
   let contextGatherMs = Date.now() - contextGatherStartedAt;
@@ -278,6 +290,10 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
       auditReason = toolResult.reason;
       auditDurationMs = toolResult.durationMs;
       retirementScenarioPlan = retirementScenarioPlan ?? toolResult.retirementScenario;
+      retirementBaselineInputs = retirementInputsForBaseline(
+        contextPlan.retirementInputs,
+        retirementScenarioPlan
+      );
       const widenedPacks = normalizeContextPacks([
         ...selectedPacks,
         ...toolResult.packs,
@@ -293,7 +309,7 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
         durationMs: toolResult.durationMs,
         ...(toolResult.retirementScenario && { retirementScenario: toolResult.retirementScenario }),
       };
-      if (addedPacks.length > 0) {
+      if (addedPacks.length > 0 || retirementAnalysisDeferred) {
         const widenedNeeds = questionNeedsFromPacks(widenedPacks, contextPlan.needsSecondaryValidation);
         const toolGatherStartedAt = Date.now();
         const widenedSnapshot = await gatherContextSnapshot({
@@ -302,7 +318,8 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
           questionNeeds: widenedNeeds,
           tier,
           recentTurns,
-          plannedRetirementInputs: contextPlan.retirementInputs,
+          plannedRetirementInputs: retirementBaselineInputs,
+          useExistingRetirementBaseline: Boolean(retirementScenarioPlan),
           onProgress,
         });
         contextGatherMs += Date.now() - toolGatherStartedAt;
@@ -328,6 +345,24 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
           : 'The primary-model data-pack audit could not be completed; the preflight plan was used.',
         durationMs: contextToolMs,
       };
+      if (retirementAnalysisDeferred) {
+        try {
+          const recoveryGatherStartedAt = Date.now();
+          snapshot = await gatherContextSnapshot({
+            userId,
+            question,
+            questionNeeds,
+            tier,
+            recentTurns,
+            plannedRetirementInputs: retirementBaselineInputs,
+            useExistingRetirementBaseline: Boolean(retirementScenarioPlan),
+            onProgress,
+          });
+          contextGatherMs += Date.now() - recoveryGatherStartedAt;
+        } catch (gatherError) {
+          console.error('Ask Linc: Retirement context recovery failed after the tool audit:', gatherError);
+        }
+      }
     }
   } else if (evaluation?.toolRequestedPacks?.length) {
     selectedPacks = normalizeContextPacks([...selectedPacks, ...evaluation.toolRequestedPacks]);
@@ -516,7 +551,8 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
             questionNeeds: escalatedNeeds,
             tier,
             recentTurns,
-            plannedRetirementInputs: contextPlan.retirementInputs,
+            plannedRetirementInputs: retirementBaselineInputs,
+            useExistingRetirementBaseline: Boolean(retirementScenarioPlan),
             onProgress,
           });
           // Scenario results are answer-scoped and never persisted into the

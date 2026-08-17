@@ -457,6 +457,9 @@ export function buildCanonicalFactPack(
         withdrawal_start_age: 'age',
         life_expectancy: 'age',
         pre_withdrawal_contributions: 'usd',
+        // Assumption ledgers store decimal rates. Keep the premise as a ratio;
+        // the displayable percent below is a verified deterministic conversion.
+        annual_growth_rate: 'ratio',
       };
       for (const assumption of scenario.assumptions) {
         const unit = assumptionUnits[assumption.key];
@@ -511,13 +514,18 @@ export function buildCanonicalFactPack(
         version
       );
       if (scenario.withdrawalPolicy.type === 'fixed_growth') {
+        const growthInputFactId = `${prefix}_assumption_annual_growth_rate`;
         addScenarioFact(
           `${prefix}_annual_withdrawal_growth`,
           `${scenario.label} rate assumption`,
           scenario.withdrawalPolicy.annualRate * 100,
           'percent',
           scenario.id,
-          version
+          version,
+          true,
+          facts.has(growthInputFactId)
+            ? { formula: 'input * 100', inputFactIds: [growthInputFactId] }
+            : undefined
         );
       }
       for (const percentile of ['p10', 'p25', 'p50', 'p75', 'p90'] as const) {

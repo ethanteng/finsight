@@ -57,6 +57,46 @@ export interface PlanContextArgs {
   tier?: UserTier | string;
 }
 
+const SCENARIO_OVERRIDE_INPUT_FIELDS = [
+  'retirementAge',
+  'annualWithdrawalAmount',
+  'withdrawalStartAge',
+  'lifeExpectancy',
+] as const;
+
+/**
+ * Keep hypothetical scenario values out of the canonical baseline. The same
+ * semantic pass extracts both shapes, so without this boundary an age or
+ * spending override can rebuild the baseline before the scenario runner sees
+ * it and erase the comparison the user requested.
+ */
+export function retirementInputsForBaseline(
+  inputs: ExtractedRetirementInputs | undefined,
+  scenario: RetirementScenarioPlan | undefined
+): ExtractedRetirementInputs | undefined {
+  if (!inputs || !scenario) return inputs;
+
+  const variants = [scenario.primary, scenario.comparison].filter(Boolean);
+  const overridden = new Set(
+    SCENARIO_OVERRIDE_INPUT_FIELDS.filter((field) =>
+      variants.some((variant) => variant?.overrides?.[field] !== undefined)
+    )
+  );
+  if (overridden.size === 0) return inputs;
+
+  const baseline: ExtractedRetirementInputs = { sources: {} };
+  if (inputs.currentAge !== undefined) {
+    baseline.currentAge = inputs.currentAge;
+    if (inputs.sources.currentAge) baseline.sources.currentAge = inputs.sources.currentAge;
+  }
+  for (const field of SCENARIO_OVERRIDE_INPUT_FIELDS) {
+    if (overridden.has(field) || inputs[field] === undefined) continue;
+    baseline[field] = inputs[field];
+    if (inputs.sources[field]) baseline.sources[field] = inputs.sources[field];
+  }
+  return baseline;
+}
+
 const PACK_PROPERTIES = Object.fromEntries(
   CONTEXT_PACK_IDS.map((id) => [id, { type: 'boolean' }])
 );
@@ -181,7 +221,10 @@ export function parseContextPlan(raw: unknown, durationMs = 0, model?: string): 
     ...(retirementScenario ? RETIREMENT_CALCULATOR.requiredPacks : []),
   ]);
   const needsSecondaryValidation = record.needsSecondaryValidation === true;
-  const retirementInputs = validateExtractedInputs(record.retirementInputs);
+  const retirementInputs = retirementInputsForBaseline(
+    validateExtractedInputs(record.retirementInputs),
+    retirementScenario
+  );
   const summary = typeof record.summary === 'string'
     ? record.summary.trim().slice(0, 1000)
     : '';

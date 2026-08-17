@@ -230,6 +230,7 @@ describe('buildCanonicalFactPack', () => {
       label,
       withdrawalPolicy: policy,
       assumptions: id === 'fixed' ? [
+        { key: 'annual_growth_rate', label: 'Annual withdrawal growth', value: 0.03, origin: 'user' },
         { key: 'annual_withdrawal_amount', label: 'Starting spending', value: 50_000, origin: 'user' },
         { key: 'pre_withdrawal_contributions', label: 'Annual contributions', value: 12_000, origin: 'user' },
         { key: 'retirement_age', label: 'Retirement age', value: 65, origin: 'user' },
@@ -276,9 +277,20 @@ describe('buildCanonicalFactPack', () => {
       }),
     ]);
     expect(pack.facts).toContainEqual(expect.objectContaining({
+      id: 'retirement_scenario_fixed_assumption_annual_growth_rate',
+      value: 0.03,
+      unit: 'ratio',
+      provenance: expect.objectContaining({ kind: 'scenario_input', scenarioId: 'fixed' }),
+    }));
+    expect(pack.facts).toContainEqual(expect.objectContaining({
       label: '3% annual withdrawal growth rate assumption',
       value: 3,
       unit: 'percent',
+      provenance: expect.objectContaining({
+        kind: 'scenario_calculation',
+        formula: 'input * 100',
+        inputFactIds: ['retirement_scenario_fixed_assumption_annual_growth_rate'],
+      }),
     }));
     expect(pack.facts).toContainEqual(expect.objectContaining({
       id: 'retirement_scenario_fixed_assumption_pre_withdrawal_contributions',
@@ -300,6 +312,13 @@ describe('buildCanonicalFactPack', () => {
       }),
     }));
     expect(validateCanonicalFactPack(pack)).toEqual([]);
+
+    const growth = pack.facts.find((fact) => fact.id === 'retirement_scenario_fixed_annual_withdrawal_growth')!;
+    growth.value = 4;
+    expect(validateCanonicalFactPack(pack)).toContain(
+      'retirement_scenario_fixed_annual_withdrawal_growth does not match its deterministic formula.'
+    );
+    growth.value = 3;
 
     const gap = pack.facts.find((fact) => fact.id.endsWith('_survival_rate_gap'))!;
     gap.value = 21;

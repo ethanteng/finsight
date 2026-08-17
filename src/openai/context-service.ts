@@ -24,6 +24,10 @@ interface GatherContextArgs {
   recentTurns?: Array<{ question: string; answer?: string }>;
   /** Semantic inputs already read by the context planner; avoids reading the transcript twice. */
   plannedRetirementInputs?: ExtractedRetirementInputs;
+  /** Skip the expensive/persisted retirement calculation until scenario planning is final. */
+  deferRetirementAnalysis?: boolean;
+  /** A scenario compares with the existing baseline, so its stored spending can be reused. */
+  useExistingRetirementBaseline?: boolean;
   /** Optional callback for progress updates (e.g. for SSE streaming) */
   onProgress?: (message: string) => void;
 }
@@ -67,6 +71,8 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
     tier,
     recentTurns = [],
     plannedRetirementInputs,
+    deferRetirementAnalysis = false,
+    useExistingRetirementBaseline = false,
     onProgress
   } = args;
 
@@ -352,7 +358,13 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
   let retirementAnalysis: FinancialContextSnapshot['retirementAnalysis'] | undefined;
   let retirementAnalysisNeedsInfo: FinancialContextSnapshot['retirementAnalysisNeedsInfo'] | undefined;
 
-  if (userId && questionNeeds.needsRetirement && investmentsSnapshot?.holdings && investmentsSnapshot.holdings.length > 0) {
+  if (
+    !deferRetirementAnalysis &&
+    userId &&
+    questionNeeds.needsRetirement &&
+    investmentsSnapshot?.holdings &&
+    investmentsSnapshot.holdings.length > 0
+  ) {
     try {
       onProgress?.('Building your retirement snapshot');
       const result = await fetchOrCreateRetirementAnalysis({
@@ -360,6 +372,7 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
         question,
         recentTurns,
         plannedRetirementInputs,
+        useExistingRetirementBaseline,
         userProfile: userProfile || '',
         holdings: investmentsSnapshot.holdings,
         securities: investmentsSnapshot.securities || [],
@@ -380,7 +393,7 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
         unavailableCode: 'service_error',
       };
     }
-  } else if (userId && questionNeeds.needsRetirement) {
+  } else if (!deferRetirementAnalysis && userId && questionNeeds.needsRetirement) {
     // Log why retirement analysis didn't trigger
     console.log('⚠️ Retirement analysis NOT triggered:', {
       reason: !investmentsSnapshot?.holdings ? 'No investment holdings' :
@@ -440,11 +453,21 @@ async function fetchOrCreateRetirementAnalysis(args: {
   question: string;
   recentTurns?: Array<{ question: string; answer?: string }>;
   plannedRetirementInputs?: ExtractedRetirementInputs;
+  useExistingRetirementBaseline?: boolean;
   userProfile: string;
   holdings: any[];
   securities: any[];
 }): Promise<RetirementAnalysisResolution> {
-  const { userId, question, recentTurns = [], plannedRetirementInputs, userProfile, holdings, securities } = args;
+  const {
+    userId,
+    question,
+    recentTurns = [],
+    plannedRetirementInputs,
+    useExistingRetirementBaseline = false,
+    userProfile,
+    holdings,
+    securities,
+  } = args;
 
   // Parse retirement parameters from the question and the turns that set it up.
   // A number the user gave two messages ago is an answer to this question, not
@@ -519,7 +542,7 @@ async function fetchOrCreateRetirementAnalysis(args: {
     profileAge,
     profileRetirementAge,
     storedInput,
-    allowStoredAnnualWithdrawal: confirmsStoredAnnualWithdrawal,
+    allowStoredAnnualWithdrawal: confirmsStoredAnnualWithdrawal || useExistingRetirementBaseline,
   });
 
   if (

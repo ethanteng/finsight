@@ -22,9 +22,10 @@ flowchart LR
 1. The OpenAI preflight planner identifies a requested scenario and returns a strict, typed override plan. It does not calculate results.
 2. The configured primary Claude model audits the plan while making its required `request_data_packs` call. It can supply a scenario plan when the preflight omitted one, but it does not receive data access or arithmetic authority.
 3. The registry supplies the calculator's required packs; application code ensures `retirement_analysis` and its dependencies are present.
-4. The scenario runner inherits the completed baseline's portfolio and planning inputs, validates traced user overrides, and runs at most two variants.
-5. Validated assumptions become `scenario_input` facts. Results become `scenario_calculation` facts with an immutable scenario ID and calculator version.
-6. The ordinary response validator verifies every displayed scenario value against those facts. A deterministic postscript states the assumptions even if the model omits them.
+4. Application code removes traced scenario overrides from the inputs used to gather the baseline. Retirement analysis is deferred until both planning passes finish, so a scenario discovered by either model cannot persist its hypothetical values as the baseline.
+5. The scenario runner inherits the completed baseline's portfolio and planning inputs, validates traced user overrides, and runs at most two variants.
+6. Validated assumptions become `scenario_input` facts. Decimal rate premises remain ratios; their displayable percentages are formula-checked `scenario_calculation` facts. Other results use the same scenario-scoped provenance and calculator version.
+7. The ordinary response validator verifies every displayed scenario value against those facts. A deterministic postscript states the assumptions even if the model omits them.
 
 If a baseline or required holding data is unavailable, the runner returns a specific unavailable result. Ask Linc explains the missing prerequisite instead of inventing a number.
 
