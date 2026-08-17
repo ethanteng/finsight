@@ -7,10 +7,10 @@ import { SiteFooter, SiteHeader } from "./SiteShell";
 import { MarketingGetStartedButton } from "./MarketingGetStartedButton";
 
 const scenarios = [
-  "How much house can we afford?",
+  "Where is our spending quietly drifting?",
   "Can one of us take parental leave?",
-  "Are we saving enough to retire?",
-  "Can I take a lower-paying job?",
+  "Is our portfolio taking too much risk?",
+  "What would let us retire two years sooner?",
 ];
 
 const ageScenarios = {
@@ -34,7 +34,9 @@ export default function Home() {
           <h1>See what a big decision changes. <em>Before you make it.</em></h1>
           <p className="hero-subhead">
             Buying a home, growing your family, changing jobs, or planning retirement?
-            Ask Linc uses your accounts to show what you can afford, what else changes, and what to do next.
+            Connect your accounts and ask in your own words. Linc grounds each answer in your
+            financial picture, goals, and real-life context—while you stay in control of what
+            you connect and share.
           </p>
           <div className="hero-actions">
             <MarketingGetStartedButton className="button button-primary" />
@@ -97,10 +99,10 @@ export default function Home() {
 
       <section className="proof-strip" aria-label="Product trust signals">
         <div className="shell proof-grid">
-          <p><strong>1 month free</strong><span>then $9/month · cancel anytime</span></p>
+          <p><strong>Your real context</strong><span>accounts, goals, spending, debt, and investments</span></p>
           <p><strong>Read-only</strong><span>Linc can&apos;t move your money</span></p>
-          <p><strong>Clear assumptions</strong><span>see the inputs and calculations</span></p>
-          <p><strong>Private by design</strong><span>sensitive labels removed before AI analysis</span></p>
+          <p><strong>Inspectable answers</strong><span>see the assumptions and calculations</span></p>
+          <p><strong>Never training data</strong><span>no opt-out or settings required</span></p>
         </div>
       </section>
 
@@ -111,13 +113,86 @@ export default function Home() {
         </div>
       </section>
 
+      <section className="section shell question-to-answer-section" id="ask">
+        <div className="section-heading split-heading">
+          <div>
+            <p className="section-kicker">THE CONTEXT DIFFERENCE</p>
+            <h2>Same question.<br />A very different answer.</h2>
+          </div>
+          <p>General guidance can sound sensible and still miss your life. Connected context turns the same question into a recommendation you can inspect, challenge, and act on.</p>
+        </div>
+
+        <div className="connection-comparison-grid">
+          <article className="connection-panel without-connection">
+            <header className="connection-panel-header">
+              <h3>Without Ask Linc connected</h3>
+              <span>GENERAL ANSWER</span>
+            </header>
+            <div className="connection-panel-body">
+              <div className="comparison-prompt">
+                <span>YOU ASK</span>
+                <p>Should I use my $30K bonus to pay down the mortgage, invest it, or keep it in cash for our move next year?</p>
+              </div>
+              <div className="comparison-response-lead">
+                <span className="brand-mark small">L</span>
+                <p>Here&apos;s a general framework for deciding how to use a bonus when several goals are competing.</p>
+              </div>
+              <ol className="generic-response-list">
+                <li><span>1</span><div><b>Protect your emergency fund</b><p>Keep three to six months of expenses available before putting extra cash elsewhere.</p></div></li>
+                <li><span>2</span><div><b>Compare debt and investing</b><p>Weigh your mortgage rate against the return you might earn by investing.</p></div></li>
+                <li><span>3</span><div><b>Consider splitting the bonus</b><p>Using some for each goal can be a reasonable compromise.</p></div></li>
+              </ol>
+              <div className="generic-response-caveat">
+                <span>WHAT THIS ANSWER DOESN&apos;T KNOW</span>
+                <p>Your cash balance, mortgage rate, retirement contributions, taxes, or how much the move will require.</p>
+              </div>
+            </div>
+          </article>
+
+          <article className="connection-panel with-connection">
+            <header className="connection-panel-header">
+              <h3>With Ask Linc connected</h3>
+              <span>GROUNDED ANSWER</span>
+            </header>
+            <div className="connection-panel-body">
+              <div className="comparison-prompt">
+                <span>YOU ASK</span>
+                <p>Should I use my $30K bonus to pay down the mortgage, invest it, or keep it in cash for our move next year?</p>
+              </div>
+              <div className="comparison-response-lead">
+                <span className="brand-mark small">L</span>
+                <p>I&apos;ll use your cash reserve, move target, mortgage rate, and retirement plan to compare the options.</p>
+              </div>
+
+              <div className="connected-money-card" aria-label="Illustrative connected financial context">
+                <div className="connected-money-head"><span>YOUR DECISION INPUTS</span><small>SAMPLE DATA</small></div>
+                <div className="cash-goal-row"><span>Cash today</span><b>$42K</b></div>
+                <div className="cash-track"><i style={{ width: "70%" }} /><em>Move-fund floor $60K</em></div>
+                <div className="connected-money-metrics">
+                  <span><i>BONUS</i><b>$30K</b></span>
+                  <span><i>MORTGAGE</i><b>6.4%</b></span>
+                  <span><i>401(K)</i><b>Match maxed</b></span>
+                </div>
+              </div>
+
+              <div className="grounded-recommendation">
+                <span>LINC&apos;S TAKE</span>
+                <h4>Keep $18K in cash to reach the move-fund floor. Put the remaining $12K toward retirement. Don&apos;t prepay the mortgage yet.</h4>
+              </div>
+              <div className="grounded-next-step"><span>NEXT STEP</span><p>Set aside the $18K now, then compare the tax impact of the remaining retirement options before contributing.</p></div>
+              <p className="connection-sample-note">Illustrative answer using sample accounts and assumptions you can inspect.</p>
+            </div>
+          </article>
+        </div>
+      </section>
+
       <section className="section shell model-section" id="how">
         <div className="section-heading split-heading">
           <div>
             <p className="section-kicker">THE DIFFERENCE</p>
             <h2>One decision affects<br />the rest of your plan.</h2>
           </div>
-          <p>A larger home can change childcare options, emergency savings, and retirement. Linc checks those tradeoffs together instead of treating each account as a separate chart.</p>
+          <p>Money shapes where you live, how you care for family, and the future you can plan for. But the full picture is often scattered across accounts, cards, loans, investment apps, and spreadsheets. Linc connects it and turns it into one decision-ready answer.</p>
         </div>
         <div className="model-grid">
           <article className="model-card model-inputs">
@@ -137,7 +212,7 @@ export default function Home() {
               <div className="signal signal-up"><span>10Y TREASURY</span><b>4.18%</b><i>↗</i></div>
               <div className="signal"><span>CORE INFLATION</span><b>2.7%</b><i>→</i></div>
               <div className="signal signal-down"><span>S&amp;P 500</span><b>5,982</b><i>↘</i></div>
-              <div className="signal-note">When rates or inflation matter, Linc includes them and shows the source date.</div>
+              <div className="signal-note">When a question depends on rates, inflation, or market performance, Linc uses the latest available data and shows the source date.</div>
             </div>
           </article>
           <article className="model-card reasoning-card">
@@ -150,6 +225,46 @@ export default function Home() {
             </div>
             <a className="reason-output" href="#scenarios">A decision, not another dashboard <span>→</span></a>
           </article>
+        </div>
+      </section>
+
+      <section className="ecosystem-section">
+        <div className="shell ecosystem-shell">
+          <div className="section-heading split-heading ecosystem-heading">
+            <div>
+              <p className="section-kicker light">CONNECTED TODAY</p>
+              <h2>Your financial ecosystem is already here.</h2>
+            </div>
+            <p>Ask Linc already brings banking, investments, property, and market context into the same analysis—so you can move from “what&apos;s happening?” to “what should I do next?” now.</p>
+          </div>
+
+          <div className="ecosystem-grid" aria-label="Data providers that power Ask Linc">
+            <article>
+              <span>01 · BANKING &amp; CREDIT</span>
+              <h3>Plaid</h3>
+              <p>Balances, transactions, cards, loans, and cash-flow history from your connected institutions.</p>
+            </article>
+            <article>
+              <span>02 · INVESTMENTS</span>
+              <h3>SnapTrade</h3>
+              <p>Brokerage and retirement accounts, holdings, and activity in the same financial picture.</p>
+            </article>
+            <article>
+              <span>03 · PROPERTY</span>
+              <h3>RentCast</h3>
+              <p>Current home-value context for housing, equity, and net-worth decisions.</p>
+            </article>
+            <article>
+              <span>04 · MARKETS &amp; ECONOMY</span>
+              <h3>FRED + market sources</h3>
+              <p>Rates, inflation, and market conditions pulled in when they matter, with source dates.</p>
+            </article>
+          </div>
+
+          <div className="ecosystem-outcome">
+            <div><span>AVAILABLE IN ASK LINC TODAY</span><strong>These connections already ground Linc&apos;s answers. They are not a future roadmap.</strong></div>
+            <Link href="/features">See how the system works <span>→</span></Link>
+          </div>
         </div>
       </section>
 
@@ -191,8 +306,9 @@ export default function Home() {
         <div className="shell privacy-shell">
           <div className="privacy-copy">
             <p className="section-kicker light">PRIVACY BY DESIGN</p>
-            <h2>Use your real numbers without handing over every identifying detail.</h2>
-            <p>Account credentials stay with connection providers. Before AI analysis, Ask Linc replaces sensitive account and merchant labels with neutral tokens.</p>
+            <h2>Your financial data is never used to train AI models.</h2>
+            <p>That promise does not depend on a setting or an opt-out. You choose what to connect and can disconnect or request deletion at any time. Credentials stay with connection providers, and sensitive labels are replaced before AI analysis.</p>
+            <div className="privacy-training-promise"><b>NO TRAINING</b><span>No toggle. No opt-out. Your financial data stays yours.</span></div>
             <Link className="light-link" href="/how-we-protect-your-data">See how your data is protected <span>→</span></Link>
           </div>
           <div className="privacy-flow" aria-label="How Ask Linc protects data">
@@ -204,7 +320,7 @@ export default function Home() {
           </div>
           <div className="privacy-points">
             <span><i>✓</i> Read-only access</span>
-            <span><i>✓</i> Not used for model training</span>
+            <span><i>✓</i> Never used for training</span>
             <span><i>✓</i> Disconnect anytime</span>
           </div>
         </div>
@@ -226,6 +342,7 @@ export default function Home() {
           <h2>I wanted an answer I could trust with my own money.</h2>
           <p>After getting laid off, I pasted my bank statements into ChatGPT to answer tough money questions—and immediately regretted it.</p>
           <p>Financial decisions need your real financial picture, reliable calculations, dated market inputs when they matter, and numbers you can inspect. So I built Ask Linc.</p>
+          <p>Ask Linc is still early. I&apos;m learning from real questions, improving it carefully, and expanding only when it makes the answers more useful and trustworthy.</p>
           <Link className="text-link" href="/about">Read the full story <span>→</span></Link>
         </div>
       </section>
@@ -260,7 +377,7 @@ export default function Home() {
       <section className="final-cta">
         <div className="shell final-cta-inner">
           <p className="section-kicker light">YOUR NEXT DECISION STARTS HERE</p>
-          <h2>See what your next decision means for everything else.</h2>
+          <h2>Ask the money question you actually need answered.</h2>
           <MarketingGetStartedButton className="button button-primary" />
         </div>
       </section>

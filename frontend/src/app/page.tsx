@@ -8,16 +8,16 @@ export async function generateMetadata({ searchParams }: { searchParams: Promise
   const params = await searchParams;
   const ref = params.ref;
   
-  let description = 'Ask Linc helps you plan big financial decisions—buying a home, growing a family, changing careers, and retirement—using your real accounts and calculations you can inspect.';
+  let description = 'Ask money questions in your own words and get decision-ready answers grounded in your real accounts, inspectable calculations, and relevant market context.';
   
   if (ref === 'blog.asklinc.com') {
-    description = 'Ask Linc helps you plan a home purchase, a growing family, a career change, and retirement using your real accounts and calculations you can inspect.';
+    description = 'Ask Linc turns your real accounts, goals, and relevant market context into clear answers, tradeoffs, and next steps for life’s big financial decisions.';
   }
   
   return {
     title: 'Ask Linc — Plan Big Financial Decisions With Your Real Numbers',
     description: description,
-    keywords: ['financial planning', 'home affordability planning', 'family financial planning', 'retirement planning', 'career change planning', 'personal finance AI'],
+    keywords: ['financial planning', 'AI financial assistant', 'natural language financial planning', 'home affordability planning', 'retirement planning', 'personal finance AI'],
     alternates: {
       canonical: 'https://asklinc.com',
     },

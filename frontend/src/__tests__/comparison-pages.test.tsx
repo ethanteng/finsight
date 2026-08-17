@@ -4,6 +4,53 @@ import MarketingSubpage from "@/components/marketing/MarketingSubpage";
 import { COMPARISONS, getComparison } from "@/lib/comparisons";
 
 describe("comparison pages", () => {
+  it("publishes the ChatGPT comparison model and route metadata", async () => {
+    const chatgpt = getComparison("chatgpt");
+
+    expect(chatgpt).toMatchObject({
+      competitorName: "ChatGPT",
+      headline: "Ask Linc vs ChatGPT",
+      relatedLink: {
+        href: "/blog/why-ai-apps-should-stop-using-a-single-model",
+      },
+    });
+    expect(chatgpt?.rows.map((row) => row.dimension)).toEqual([
+      "AI approach",
+      "Financial ecosystem",
+      "Privacy and security",
+      "Purpose",
+      "Price",
+    ]);
+    expect(chatgpt?.faqs).toHaveLength(5);
+    expect(generateStaticParams()).toContainEqual({ slug: "chatgpt" });
+
+    await expect(
+      generateMetadata({ params: Promise.resolve({ slug: "chatgpt" }) }),
+    ).resolves.toMatchObject({
+      title: "Ask Linc vs ChatGPT | Purpose-Built Financial AI vs General AI",
+      alternates: { canonical: "https://asklinc.com/vs/chatgpt" },
+      openGraph: { url: "https://asklinc.com/vs/chatgpt" },
+      robots: { index: true, follow: true },
+    });
+  });
+
+  it("renders ChatGPT in the comparison template with the multi-model article", async () => {
+    render(
+      await MarketingSubpage({
+        params: Promise.resolve({ slug: ["vs", "chatgpt"] }),
+      }),
+    );
+
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Ask Linc vs ChatGPT");
+    const comparison = screen.getByRole("table");
+    expect(within(comparison).getByText("AI approach")).toBeInTheDocument();
+    expect(within(comparison).getByText(/never used to train AI models/i)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Why Ask Linc uses multiple models" })).toHaveAttribute(
+      "href",
+      "/blog/why-ai-apps-should-stop-using-a-single-model",
+    );
+  });
+
   it("publishes the Boldin comparison model and route metadata", async () => {
     const boldin = getComparison("boldin");
 

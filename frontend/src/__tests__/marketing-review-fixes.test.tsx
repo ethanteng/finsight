@@ -61,10 +61,40 @@ describe("marketing review fixes", () => {
       "See what a big decision changes. Before you make it.",
     );
     expect(screen.getByText(/buying a home, growing your family, changing jobs/i)).toBeInTheDocument();
+    expect(screen.getByText(/grounds each answer in your financial picture, goals, and real-life context/i)).toBeInTheDocument();
+    expect(screen.getByText(/stay in control of what you connect and share/i)).toBeInTheDocument();
     expect(USE_CASE_LINKS).toContainEqual({
       href: "/use-cases/family-planning",
       label: "Growing a Family",
     });
+  });
+
+  it("turns a natural-language question into a grounded decision path", () => {
+    render(<MarketingHome />);
+
+    expect(screen.getByRole("heading", { name: /same question.*a very different answer/i })).toBeInTheDocument();
+    const generalPanel = screen.getByRole("heading", { name: "Without Ask Linc connected" }).closest("article");
+    const groundedPanel = screen.getByRole("heading", { name: "With Ask Linc connected" }).closest("article");
+    expect(generalPanel).not.toBeNull();
+    expect(groundedPanel).not.toBeNull();
+    expect(screen.getAllByText(/should i use my \$30k bonus to pay down the mortgage/i)).toHaveLength(2);
+    expect(within(generalPanel as HTMLElement).getByText("GENERAL ANSWER")).toBeInTheDocument();
+    expect(within(generalPanel as HTMLElement).getByText("WHAT THIS ANSWER DOESN'T KNOW")).toBeInTheDocument();
+    expect(within(groundedPanel as HTMLElement).getByText("GROUNDED ANSWER")).toBeInTheDocument();
+    expect(within(groundedPanel as HTMLElement).getByText("YOUR DECISION INPUTS")).toBeInTheDocument();
+    expect(within(groundedPanel as HTMLElement).getByText("LINC'S TAKE")).toBeInTheDocument();
+    expect(within(groundedPanel as HTMLElement).getByText("NEXT STEP")).toBeInTheDocument();
+    expect(screen.getByText(/latest available data and shows the source date/i)).toBeInTheDocument();
+    expect(screen.getByText(/money shapes where you live, how you care for family/i)).toBeInTheDocument();
+    expect(screen.getByText(/learning from real questions, improving it carefully/i)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /your financial ecosystem is already here/i })).toBeInTheDocument();
+    expect(screen.getByText("Plaid")).toBeInTheDocument();
+    expect(screen.getByText("SnapTrade")).toBeInTheDocument();
+    expect(screen.getByText("RentCast")).toBeInTheDocument();
+    expect(screen.getByText("FRED + market sources")).toBeInTheDocument();
+    expect(screen.getByText(/they are not a future roadmap/i)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /financial data is never used to train ai models/i })).toBeInTheDocument();
+    expect(screen.getByText(/no toggle.*no opt-out.*financial data stays yours/i)).toBeInTheDocument();
   });
 
   it("submits the redesigned contact form through the existing API", async () => {

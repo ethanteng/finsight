@@ -35,6 +35,7 @@ const STATIC_ROUTES: StaticRoute[] = [
 
   // Competitor comparisons
   { path: '/vs', changeFrequency: 'monthly', priority: 0.8 },
+  { path: '/vs/chatgpt', changeFrequency: 'monthly', priority: 0.8 },
   { path: '/vs/origin', changeFrequency: 'monthly', priority: 0.8 },
   { path: '/vs/portfoliopilot', changeFrequency: 'monthly', priority: 0.8 },
   { path: '/vs/monarch', changeFrequency: 'monthly', priority: 0.8 },

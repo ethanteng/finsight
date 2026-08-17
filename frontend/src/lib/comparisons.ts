@@ -7,9 +7,91 @@ export type ComparisonPage = {
   summary: string;
   rows: Array<{ dimension: string; askLinc: string; competitor: string }>;
   faqs: Array<{ question: string; answer: string }>;
+  relatedLink?: { href: string; label: string };
+  honestTake?: string;
 };
 
 export const COMPARISONS: ComparisonPage[] = [
+  {
+    slug: 'chatgpt',
+    competitorName: 'ChatGPT',
+    title: 'Ask Linc vs ChatGPT | Purpose-Built Financial AI vs General AI',
+    description:
+      'Compare Ask Linc and ChatGPT for personal finance across models, connected financial context, ecosystem, privacy, purpose, and price.',
+    headline: 'Ask Linc vs ChatGPT',
+    summary:
+      'ChatGPT is a broad AI product that now includes connected personal finance. Ask Linc is financial decision software from the ground up: multi-model analysis, an established financial-data ecosystem, inspectable calculations, and a hard rule that your data is never used for model training.',
+    rows: [
+      {
+        dimension: 'AI approach',
+        askLinc:
+          'Can use Claude for primary analysis, OpenAI as a provider fallback, and Gemini for validation—then relies on deterministic calculations where accuracy matters.',
+        competitor:
+          'Offers several OpenAI models and reasoning modes inside one provider’s model family and product ecosystem.',
+      },
+      {
+        dimension: 'Financial ecosystem',
+        askLinc:
+          'Already connects banking and debt through Plaid, investments through SnapTrade, property data through RentCast, economic data through FRED, and current market sources when the decision needs them.',
+        competitor:
+          'Finances connects accounts through Plaid, with Intuit support announced as coming soon and a broader partner vision still developing.',
+      },
+      {
+        dimension: 'Privacy and security',
+        askLinc:
+          'Your financial data is never used to train AI models. Connections are read-only, sensitive labels are replaced before analysis, and accounts can be disconnected anytime.',
+        competitor:
+          'Finances is read-only and does not expose full account numbers. Conversations follow the model-training setting selected in ChatGPT Data Controls; consumer plans offer an opt-out.',
+      },
+      {
+        dimension: 'Purpose',
+        askLinc:
+          'Purpose-built to turn connected household finances into a decision-ready answer with assumptions, tradeoffs, next steps, and calculations you can inspect.',
+        competitor:
+          'A general-purpose AI for writing, research, coding, images, and many other jobs. Personal finance is one experience inside the broader product.',
+      },
+      {
+        dimension: 'Price',
+        askLinc:
+          '1 month free, then $9/month flat for full access. Cancel anytime.',
+        competitor:
+          'Finances is currently available to U.S. Plus and Pro users. Plus is $20/month and Pro starts at $100/month; those plans also include ChatGPT’s broader non-financial tools.',
+      },
+    ],
+    relatedLink: {
+      href: '/blog/why-ai-apps-should-stop-using-a-single-model',
+      label: 'Why Ask Linc uses multiple models',
+    },
+    honestTake:
+      'Choose ChatGPT when you want one general AI subscription for many kinds of work. Choose Ask Linc when the job is a financial decision grounded in connected accounts, repeatable calculations, and a privacy boundary built specifically for money.',
+    faqs: [
+      {
+        question: 'Is Ask Linc better than ChatGPT for personal finance?',
+        answer:
+          'It depends on the job. ChatGPT is the stronger fit when you want one flexible AI for many tasks. Ask Linc is the stronger fit when you want a financial answer grounded in connected household accounts, dated market context, explicit tradeoffs, and calculations you can inspect.',
+      },
+      {
+        question: 'Why does Ask Linc use multiple AI models?',
+        answer:
+          'No model is best at every task. Ask Linc uses different models for different roles and combines them with retrieval, deterministic computation, validation, and provider fallback. That makes the product less dependent on the strengths, limits, or changes of one AI provider.',
+      },
+      {
+        question: 'Does Ask Linc use my financial data to train AI models?',
+        answer:
+          'No. Ask Linc never uses your financial data to train AI models. This is a product rule, not a setting you need to find and turn off.',
+      },
+      {
+        question: 'Can I use Ask Linc and ChatGPT together?',
+        answer:
+          'Yes. ChatGPT can remain your general-purpose assistant while Ask Linc handles financial decisions that benefit from connected accounts, purpose-built calculations, and a narrower privacy boundary.',
+      },
+      {
+        question: 'How do Ask Linc and ChatGPT prices compare?',
+        answer:
+          'Ask Linc includes a free first month and then costs $9/month. ChatGPT Finances is currently included with U.S. Plus and Pro plans; Plus is $20/month and Pro starts at $100/month. Check each product for current availability and pricing.',
+      },
+    ],
+  },
   {
     slug: 'origin',
     competitorName: 'Origin',
