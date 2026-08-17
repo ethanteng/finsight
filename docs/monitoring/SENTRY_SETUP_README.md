@@ -47,4 +47,28 @@ Sentry may still derive an IP address at ingestion time. In the Sentry project, 
 - `frontend/src/app/global-error.tsx` captures root React rendering failures.
 - `frontend/next.config.ts` uploads production source maps when build credentials are present, then removes browser source maps from the build output.
 
+## External provider failures
+
+The backend wraps its outbound `fetch` implementation and the shared Axios client used by
+provider SDKs during Sentry startup. HTTP 4xx and 5xx responses, timeouts, and network failures
+from external providers are reported as grouped Sentry issues. This covers current integrations
+such as Brave Search, Polygon, FRED, Alpha Vantage, RentCast, Tiingo, FMP, MailerLite, Plaid,
+SnapTrade, Stripe, and the live AI model catalogs, and it automatically covers future providers
+that use `fetch` or the shared Axios client.
+
+Provider events use stable tags for `external_provider.name`,
+`external_provider.operation`, `http.status_code`, `http.status_class`, and retryability.
+HTTP 4xx responses are warnings; HTTP 5xx and network failures are errors. Query strings,
+request and response bodies, headers, credentials, full endpoint paths, and user data are never
+attached. Sentry transport, Ask Linc services, localhost, and the production health endpoint are
+excluded to prevent recursion and false provider alerts.
+
+Useful Sentry searches after deployment:
+
+- All provider failures: `external_provider:true`
+- Provider 5xx responses: `external_provider:true http.status_class:5xx`
+- Provider 4xx responses: `external_provider:true http.status_class:4xx`
+- Network errors and timeouts: `external_provider:true http.status_class:network`
+- One provider: `external_provider.name:brave_search` or `external_provider.name:polygon`
+
 There is intentionally no public Sentry test page or API route. Verify changes with a controlled one-off event outside production, then inspect the resulting event for unexpected data before enabling or increasing trace sampling.

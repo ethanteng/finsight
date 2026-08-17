@@ -1,5 +1,6 @@
 import Stripe from 'stripe';
 import { getSubscriptionPlans, SubscriptionTier } from '../types/stripe';
+import { reportExternalProviderHttpStatus } from '../observability/external-provider-monitoring';
 
 // Lazy initialization of Stripe client to avoid issues in test environments
 let stripeClient: Stripe | null = null;
@@ -13,6 +14,16 @@ function getStripeClient(): Stripe {
     stripeClient = new Stripe(secretKey, {
       apiVersion: '2025-08-27.basil',
       typescript: true,
+    });
+    stripeClient.on('response', response => {
+      reportExternalProviderHttpStatus({
+        provider: 'stripe',
+        host: 'api.stripe.com',
+        method: response.method,
+        path: response.path,
+        status: response.status,
+        durationMs: response.elapsed,
+      });
     });
   }
   return stripeClient;
