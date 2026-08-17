@@ -22,6 +22,11 @@ interface PlannerResponse {
     selectedPacks: string[];
     needsSecondaryValidation: boolean;
     retirementInputs?: Record<string, unknown> & { sources?: Record<string, string> };
+    retirementScenario?: {
+      requested: true;
+      primary: { type: string; annualRate?: number; source?: string };
+      comparison?: { type: string; annualRate?: number; source?: string };
+    };
     summary: string;
     model?: string;
     durationMs: number;
@@ -101,6 +106,16 @@ export default function ContextPlannerPanel({
 
   const retirementInputs = Object.entries(result?.plan.retirementInputs ?? {})
     .filter(([key, value]) => key !== 'sources' && value !== undefined && value !== null);
+  const retirementScenario = result?.plan.retirementScenario;
+  const formatPolicy = (policy: { type: string; annualRate?: number } | undefined) => {
+    if (!policy) return 'Current baseline';
+    if (policy.type === 'fixed_growth') {
+      return `${policy.annualRate === undefined ? 'Default' : Number((policy.annualRate * 100).toFixed(4)) + '%'} annual growth`;
+    }
+    if (policy.type === 'flat_nominal') return 'Flat nominal withdrawals';
+    if (policy.type === 'historical_cpi') return 'Historical CPI-linked withdrawals';
+    return policy.type;
+  };
 
   return (
     <div className="bg-gray-800 rounded-lg p-6 mb-6">
@@ -247,6 +262,26 @@ export default function ContextPlannerPanel({
                   </span>
                 ))}
               </div>
+            </div>
+          )}
+
+          {retirementScenario && (
+            <div className="mt-4 rounded border border-blue-800 bg-blue-950/20 p-3">
+              <div className="text-sm font-medium text-blue-100">Retirement scenario request</div>
+              <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                <span className="rounded bg-blue-900/60 px-2 py-1 text-blue-200">
+                  Run: {formatPolicy(retirementScenario.primary)}
+                </span>
+                <span className="rounded bg-gray-800 px-2 py-1 text-gray-300">
+                  Compare with: {formatPolicy(retirementScenario.comparison)}
+                </span>
+              </div>
+              {(retirementScenario.primary.source || retirementScenario.comparison?.source) && (
+                <p className="mt-2 text-xs text-gray-400">
+                  Source wording: {[retirementScenario.primary.source, retirementScenario.comparison?.source]
+                    .filter(Boolean).join(' · ')}
+                </p>
+              )}
             </div>
           )}
 

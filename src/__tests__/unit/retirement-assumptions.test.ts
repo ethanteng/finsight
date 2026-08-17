@@ -1,4 +1,7 @@
-import { describeRetirementAssumptions } from '../../openai/retirement-assumptions';
+import {
+  describeRetirementAssumptions,
+  describeRetirementScenarioAssumptions,
+} from '../../openai/retirement-assumptions';
 
 /**
  * Every other guard in this area tries to stop a misread. This one assumes one
@@ -80,5 +83,56 @@ describe('describeRetirementAssumptions', () => {
     expect(describeRetirementAssumptions({} as any)).toBeNull();
     expect(describeRetirementAssumptions({ retirementAnalysis: {} } as any)).toBeNull();
     expect(describeRetirementAssumptions(analysis({}))).toBeNull();
+  });
+});
+
+describe('describeRetirementScenarioAssumptions', () => {
+  it('states the comparison, held-constant inputs, and a product default', () => {
+    const line = describeRetirementScenarioAssumptions({
+      retirementScenarioExecution: {
+        status: 'completed',
+        version: 1,
+        calculator: 'retirement',
+        computedAt: '2026-08-17T00:00:00.000Z',
+        durationMs: 1,
+        baselineScenarioId: 'base',
+        scenarios: [{
+          id: 'fixed',
+          label: '3% annual withdrawal growth',
+          withdrawalPolicy: { type: 'fixed_growth', annualRate: 0.03 },
+          reusedBaseline: false,
+          analysis: {} as any,
+          assumptions: [
+            { key: 'annual_growth_rate', label: 'Annual growth', value: 0.03, origin: 'default' },
+            { key: 'annual_withdrawal_amount', label: 'Spending', value: 40_000, origin: 'inherited' },
+            { key: 'current_age', label: 'Age', value: 50, origin: 'inherited' },
+            { key: 'retirement_age', label: 'Retirement', value: 60, origin: 'inherited' },
+            { key: 'life_expectancy', label: 'Life', value: 95, origin: 'inherited' },
+          ],
+        }, {
+          id: 'flat',
+          label: 'Flat nominal withdrawals',
+          withdrawalPolicy: { type: 'flat_nominal' },
+          reusedBaseline: false,
+          analysis: {} as any,
+          assumptions: [],
+        }],
+      },
+    } as any)!;
+
+    expect(line).toContain('compared 3% annual withdrawal growth with Flat nominal withdrawals');
+    expect(line).toContain('$40,000 a year');
+    expect(line).toContain('age 50 today');
+    expect(line).toContain('no additional contributions');
+    expect(line).toContain('Ask Linc default of 3%');
+  });
+
+  it('turns a calculator failure into a useful disclosure', () => {
+    expect(describeRetirementScenarioAssumptions({
+      retirementScenarioExecution: {
+        status: 'unavailable',
+        reason: 'Historical data was unavailable.',
+      },
+    } as any)).toContain('Historical data was unavailable');
   });
 });

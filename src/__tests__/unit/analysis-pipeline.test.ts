@@ -179,6 +179,89 @@ describe('runAskLincAnalysis validation routing', () => {
     expect(result.showTheMathData?.evidenceManifest.timings.contextToolMs).toBe(7);
   });
 
+  it('answers a scenario comparison from deterministic scenario facts', async () => {
+    const plan = contextPlan(['retirement_analysis']);
+    plan.retirementScenario = {
+      requested: true,
+      primary: { type: 'fixed_growth', annualRate: 0.03, source: '3% bump' },
+      comparison: { type: 'flat_nominal', source: 'flat version' },
+    };
+    const scenarioAnalysis = (survivalRate: number) => ({
+      metrics: {
+        withdrawalRate: 0.04,
+        yearsOfExpenses: 25,
+        projectedPortfolioAtWithdrawalStart: 1_000_000,
+      },
+      stressTest: {
+        survivalRate,
+        totalSequences: 100,
+        depletionPercentiles: { p10: 12, p25: 18, p50: 24, p75: 28, p90: 30 },
+      },
+    } as any);
+    const scenarioExecution = {
+      version: 1 as const,
+      calculator: 'retirement' as const,
+      status: 'completed' as const,
+      computedAt: '2026-08-17T00:00:00.000Z',
+      durationMs: 12,
+      baselineScenarioId: 'baseline',
+      scenarios: [{
+        id: 'fixed',
+        label: '3% annual withdrawal growth',
+        withdrawalPolicy: { type: 'fixed_growth' as const, annualRate: 0.03 },
+        assumptions: [{ key: 'annual_growth_rate', label: 'Growth', value: 0.03, origin: 'user' as const }],
+        analysis: scenarioAnalysis(0.75),
+        reusedBaseline: false,
+      }, {
+        id: 'flat',
+        label: 'Flat nominal withdrawals',
+        withdrawalPolicy: { type: 'flat_nominal' as const },
+        assumptions: [],
+        analysis: scenarioAnalysis(0.95),
+        reusedBaseline: false,
+      }],
+    };
+
+    const result = await runAskLincAnalysis({
+      question: 'Compare a 3% annual bump with the flat-dollar version.',
+      evaluation: {
+        snapshot: snapshot(),
+        contextPlan: plan,
+        retirementScenarioExecution: scenarioExecution,
+        skipToneConfig: true,
+        model: ({ userMessage }) => {
+          expect(userMessage).toContain('retirement_scenario_fixed_survival_rate');
+          expect(userMessage).toContain('retirement_scenario_flat_survival_rate');
+          return JSON.stringify({
+            summary: 'The fixed-growth scenario survived 75% of historical sequences versus 95% for the flat scenario.',
+            key_numbers: {
+              fixed_survival: {
+                value: 75,
+                unit: 'percent',
+                provenance: 'retirement_scenario_fixed_survival_rate',
+              },
+              flat_survival: {
+                value: 95,
+                unit: 'percent',
+                provenance: 'retirement_scenario_flat_survival_rate',
+              },
+            },
+            insights: [],
+            suggested_actions: [],
+          });
+        },
+      },
+    });
+
+    expect(result.showTheMathData?.evidenceManifest.validation.deterministic.valid).toBe(true);
+    expect(result.showTheMathData?.evidenceManifest.scenarioExecution).toMatchObject({
+      status: 'completed',
+      scenarios: [{ metrics: { survivalRate: 0.75 } }, { metrics: { survivalRate: 0.95 } }],
+    });
+    expect(result.showTheMathData?.evidenceManifest.timings.scenarioMs).toBe(12);
+    expect(result.structuredResponse.summary).toContain('Scenario assumptions:');
+  });
+
   it('records a failed primary-model pack audit without failing the answer', async () => {
     mockedAuditPacks.mockRejectedValue(new Error('tool unavailable'));
     mockedAskClaude.mockResolvedValue(JSON.stringify({ summary: 'Your net worth is $100.' }));

@@ -1,5 +1,9 @@
 import type { CanonicalFact } from './canonical-facts';
 import type { ContextPackId } from './context-packs';
+import type {
+  RetirementScenarioEvidence,
+  RetirementScenarioPlan,
+} from '../scenarios/retirement-scenario';
 
 export interface ShowTheMathDatabaseData {
   canonical_facts?: CanonicalFact[];
@@ -66,6 +70,7 @@ export interface EvidenceManifest {
     finalPacks: ContextPackId[];
     needsSecondaryValidation: boolean;
     summary: string;
+    retirementScenario?: RetirementScenarioPlan;
     primaryTool?: {
       outcome: 'accepted' | 'expanded' | 'failed';
       model?: string;
@@ -73,8 +78,11 @@ export interface EvidenceManifest {
       addedPacks: ContextPackId[];
       reason: string;
       durationMs: number;
+      retirementScenario?: RetirementScenarioPlan;
     };
   };
+  /** Deterministic what-if calculations and their explicit assumption ledger. */
+  scenarioExecution?: RetirementScenarioEvidence;
   /**
    * Secondary validation objected to the answer's reasoning after it had passed
    * grounding. The answer ships with a caveat rather than being discarded; the
@@ -100,6 +108,8 @@ export interface EvidenceManifest {
     planningMs?: number;
     /** Primary-model pack-audit latency; excludes any subsequent context retrieval. */
     contextToolMs?: number;
+    /** Deterministic scenario-calculator time, including any historical-data reads. */
+    scenarioMs?: number;
     contextGatherMs: number;
     promptBuildMs: number;
     /** Added in Step 8; absent on older persisted evidence manifests. */

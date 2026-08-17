@@ -1,7 +1,12 @@
 // Withdrawal Rate Solver
 // Computes historical withdrawal rate distribution via binary search over survival curve
 
-import { PortfolioMapping, HistoricalSequence } from '../types';
+import {
+  DEFAULT_WITHDRAWAL_POLICY,
+  PortfolioMapping,
+  HistoricalSequence,
+  WithdrawalPolicy,
+} from '../types';
 import { simulateWithdrawals } from './withdrawal-simulator';
 
 // ============================================================================
@@ -54,7 +59,8 @@ export function evaluateSurvival(
   sequences: HistoricalSequence[],
   portfolioMapping: PortfolioMapping,
   portfolioValueAtWithdrawalStart: number,
-  cache?: Map<number, number>
+  cache?: Map<number, number>,
+  withdrawalPolicy: WithdrawalPolicy = DEFAULT_WITHDRAWAL_POLICY
 ): number {
   const key = cacheKey(rate);
   const cached = cache?.get(key);
@@ -74,7 +80,8 @@ export function evaluateSurvival(
       portfolioMapping,
       portfolioValueAtWithdrawalStart,
       sequence,
-      annualWithdrawal
+      annualWithdrawal,
+      { withdrawalPolicy }
     );
     if (outcome.withdrawalSustainability) {
       survivors++;
@@ -94,7 +101,8 @@ export function findWithdrawalForSurvival(
   sequences: HistoricalSequence[],
   portfolioMapping: PortfolioMapping,
   portfolioValueAtWithdrawalStart: number,
-  cache: Map<number, number>
+  cache: Map<number, number>,
+  withdrawalPolicy: WithdrawalPolicy = DEFAULT_WITHDRAWAL_POLICY
 ): number {
   // Pre-check for unreachable targets
   const minSurvival = evaluateSurvival(
@@ -102,14 +110,16 @@ export function findWithdrawalForSurvival(
     sequences,
     portfolioMapping,
     portfolioValueAtWithdrawalStart,
-    cache
+    cache,
+    withdrawalPolicy
   );
   const maxSurvival = evaluateSurvival(
     MIN_WITHDRAWAL,
     sequences,
     portfolioMapping,
     portfolioValueAtWithdrawalStart,
-    cache
+    cache,
+    withdrawalPolicy
   );
 
   if (targetSurvival > maxSurvival) return MIN_WITHDRAWAL;
@@ -125,7 +135,8 @@ export function findWithdrawalForSurvival(
       sequences,
       portfolioMapping,
       portfolioValueAtWithdrawalStart,
-      cache
+      cache,
+      withdrawalPolicy
     );
 
     if (survivalFraction >= targetSurvival) {
@@ -148,7 +159,8 @@ export function findWithdrawalForSurvival(
 export function computeHistoricalWithdrawalRates(
   sequences: HistoricalSequence[],
   portfolioMapping: PortfolioMapping,
-  normalizedPortfolioValueAtWithdrawalStart: number
+  normalizedPortfolioValueAtWithdrawalStart: number,
+  withdrawalPolicy: WithdrawalPolicy = DEFAULT_WITHDRAWAL_POLICY
 ): WithdrawalDistribution {
   if (sequences.length === 0) {
     return {
@@ -168,7 +180,8 @@ export function computeHistoricalWithdrawalRates(
     sequences,
     portfolioMapping,
     normalizedPortfolioValueAtWithdrawalStart,
-    cache
+    cache,
+    withdrawalPolicy
   );
 
   // Solve p25 and p75
@@ -177,14 +190,16 @@ export function computeHistoricalWithdrawalRates(
     sequences,
     portfolioMapping,
     normalizedPortfolioValueAtWithdrawalStart,
-    cache
+    cache,
+    withdrawalPolicy
   );
   const p75 = findWithdrawalForSurvival(
     TARGET_SURVIVAL.p75,
     sequences,
     portfolioMapping,
     normalizedPortfolioValueAtWithdrawalStart,
-    cache
+    cache,
+    withdrawalPolicy
   );
 
   // Solve p10 and p90
@@ -193,14 +208,16 @@ export function computeHistoricalWithdrawalRates(
     sequences,
     portfolioMapping,
     normalizedPortfolioValueAtWithdrawalStart,
-    cache
+    cache,
+    withdrawalPolicy
   );
   const p90 = findWithdrawalForSurvival(
     TARGET_SURVIVAL.p90,
     sequences,
     portfolioMapping,
     normalizedPortfolioValueAtWithdrawalStart,
-    cache
+    cache,
+    withdrawalPolicy
   );
 
   // Enforce monotonicity: p10 ≤ p25 ≤ p50 ≤ p75 ≤ p90

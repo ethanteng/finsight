@@ -12,6 +12,7 @@ function conversation(options: {
   toolFailed?: boolean;
   final?: ContextPackId[];
   late?: boolean;
+  scenario?: 'completed' | 'unavailable' | 'not_run';
   manifest?: boolean;
 }): AnswerQualityConversation {
   const createdAt = new Date(Date.UTC(2026, 7, 17, 12, options.minute));
@@ -39,6 +40,12 @@ function conversation(options: {
           finalPacks: final,
           needsSecondaryValidation: false,
           summary: 'Test plan.',
+          ...(options.scenario && {
+            retirementScenario: {
+              requested: true,
+              primary: { type: 'fixed_growth', annualRate: 0.03, source: '3% annual bump' },
+            },
+          }),
           ...((toolAdded.length > 0 || options.toolFailed) && {
             primaryTool: {
               outcome: options.toolFailed ? 'failed' : 'expanded',
@@ -50,6 +57,26 @@ function conversation(options: {
             },
           }),
         },
+        ...(options.scenario && options.scenario !== 'not_run' && {
+          scenarioExecution: options.scenario === 'completed'
+            ? {
+                version: 1,
+                calculator: 'retirement',
+                status: 'completed',
+                computedAt: createdAt.toISOString(),
+                durationMs: 42,
+                baselineScenarioId: 'baseline',
+                scenarios: [],
+              }
+            : {
+                version: 1,
+                calculator: 'retirement',
+                status: 'unavailable',
+                computedAt: createdAt.toISOString(),
+                durationMs: 8,
+                reason: 'Missing retirement baseline.',
+              },
+        }),
         ...(options.late && { contextEscalated: true }),
         modelCalls: [],
         timings: { contextGatherMs: 1, promptBuildMs: 1, totalMs: 2 },
@@ -140,12 +167,30 @@ describe('answer quality report', () => {
     expect(report.planning).toMatchObject({ semanticPlans: 0, fallbackPlans: 1, plannerAcceptedRate: null });
   });
 
+  it('reports scenario completion, missing inputs, and planner requests that did not run', () => {
+    const report = buildAnswerQualityReport([
+      conversation({ id: 'scenario-complete', minute: 3, scenario: 'completed' }),
+      conversation({ id: 'scenario-unavailable', minute: 2, scenario: 'unavailable' }),
+      conversation({ id: 'scenario-not-run', minute: 1, scenario: 'not_run' }),
+    ]);
+
+    expect(report.scenarios).toEqual({
+      requested: 3,
+      completed: 1,
+      unavailable: 1,
+      notRun: 1,
+      averageMs: 25,
+    });
+    expect(report.recent[0]).toMatchObject({ scenarioRequested: true, scenarioStatus: 'completed' });
+  });
+
   it('returns explicit empty-state nulls', () => {
     const report = buildAnswerQualityReport([]);
     expect(report.delivery).toMatchObject({ total: 0, cleanRate: null });
     expect(report.evidence.verifiedRate).toBeNull();
     expect(report.planning.plannerAcceptedRate).toBeNull();
     expect(report.users.averageRating).toBeNull();
+    expect(report.scenarios).toEqual({ requested: 0, completed: 0, unavailable: 0, notRun: 0, averageMs: null });
     expect(report.window).toEqual({ from: null, to: null, conversations: 0, withEvidence: 0 });
   });
 });

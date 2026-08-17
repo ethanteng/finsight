@@ -1,7 +1,7 @@
 // Withdrawal Simulator
 // Phase 4: Withdrawal Simulation
 //
-// Simulates inflation-adjusted withdrawals with annual portfolio rebalancing.
+// Simulates explicit withdrawal-growth policies with annual portfolio rebalancing.
 //
 // WITHDRAWAL TIMING: End-of-period withdrawals.
 // Order each month: (1) apply returns to portfolio, (2) subtract withdrawal.
@@ -16,11 +16,31 @@
 // DEPLETION: portfolioValue clamped at zero (max(0, value - withdrawal)). Prevents
 // rebalancing or compounding negative assets; sequence is marked depleted and returns.
 
-import { PortfolioMapping, HistoricalSequence, PortfolioOutcome } from '../types';
+import {
+  DEFAULT_WITHDRAWAL_POLICY,
+  PortfolioMapping,
+  HistoricalSequence,
+  PortfolioOutcome,
+  WithdrawalPolicy,
+} from '../types';
+
+export interface WithdrawalSimulationOptions {
+  withdrawalDelayMonths?: number;
+  withdrawalPolicy?: WithdrawalPolicy;
+}
+
+function validateWithdrawalPolicy(policy: WithdrawalPolicy): void {
+  if (
+    policy.type === 'fixed_growth' &&
+    (!Number.isFinite(policy.annualRate) || policy.annualRate <= -1 || policy.annualRate > 1)
+  ) {
+    throw new Error('Fixed withdrawal growth must be greater than -100% and no more than 100% per year');
+  }
+}
 
 /**
- * Simulate inflation-adjusted withdrawals across a historical sequence.
- * Withdrawals grow with CPI each month (constant real spending).
+ * Simulate a withdrawal policy across a historical sequence. The default grows
+ * withdrawals with CPI each month (constant real spending).
  * Portfolio is rebalanced to target weights annually.
  *
  * Withdrawal timing: End-of-period (returns applied first, then withdrawal).
@@ -31,9 +51,11 @@ export function simulateWithdrawals(
   initialPortfolioValue: number,
   sequence: HistoricalSequence,
   annualWithdrawal: number,
-  options: { withdrawalDelayMonths?: number } = {}
+  options: WithdrawalSimulationOptions = {}
 ): PortfolioOutcome {
   const w = portfolioMapping;
+  const withdrawalPolicy = options.withdrawalPolicy ?? DEFAULT_WITHDRAWAL_POLICY;
+  validateWithdrawalPolicy(withdrawalPolicy);
   let usEquity = initialPortfolioValue * w.usEquityWeight;
   let intlEquity = initialPortfolioValue * w.internationalEquityWeight;
   let bonds = initialPortfolioValue * w.nominalBondsWeight;
@@ -68,8 +90,22 @@ export function simulateWithdrawals(
     // inflationRates[] are monthly (CPI_t/CPI_(t-1) - 1 from build-market-dataset). Not annual.
     const monthlyInflation = sequence.inflationRates[month] ?? 0;
     cumulativeInflation *= 1 + monthlyInflation;
-    monthlyWithdrawal *= 1 + monthlyInflation;
     const withdrawing = month >= withdrawalDelayMonths;
+
+    // Through the first withdrawal, keep the user's today-dollar spending
+    // target level with the sequence's CPI for every policy. After that first
+    // payment, the selected policy alone controls how the nominal amount
+    // changes. This makes comparisons isolate the policy instead of changing
+    // first-year purchasing power too.
+    if (withdrawalPolicy.type === 'historical_cpi' || month <= withdrawalDelayMonths) {
+      monthlyWithdrawal *= 1 + monthlyInflation;
+    } else if (
+      withdrawalPolicy.type === 'fixed_growth' &&
+      month > withdrawalDelayMonths &&
+      (month - withdrawalDelayMonths) % 12 === 0
+    ) {
+      monthlyWithdrawal *= 1 + withdrawalPolicy.annualRate;
+    }
     if (month + 1 === withdrawalDelayMonths) {
       portfolioValueAtWithdrawalStart = portfolioValue;
       realPortfolioValueAtWithdrawalStart = cumulativeInflation > 0

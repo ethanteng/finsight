@@ -79,3 +79,43 @@ export function describeRetirementAssumptions(
 
   return `This projection assumes ${parts.join('; ')}. Tell me if any of that is wrong and I will re-run it.`;
 }
+
+/** Deterministic disclosure for what-if results appended after model validation. */
+export function describeRetirementScenarioAssumptions(
+  snapshot: Pick<FinancialContextSnapshot, 'retirementScenarioExecution'>
+): string | null {
+  const execution = snapshot.retirementScenarioExecution;
+  if (!execution) return null;
+  if (execution.status === 'unavailable') {
+    return `I could not run the requested scenario comparison: ${execution.reason}`;
+  }
+  if (execution.scenarios.length === 0) return null;
+
+  const labels = execution.scenarios.map((scenario) => scenario.label);
+  const inherited = execution.scenarios[0].assumptions;
+  const value = (key: string) => inherited.find((assumption) => assumption.key === key)?.value;
+  const annualSpending = value('annual_withdrawal_amount');
+  const currentAge = value('current_age');
+  const retirementAge = value('retirement_age');
+  const lifeExpectancy = value('life_expectancy');
+  const defaults = execution.scenarios.flatMap((scenario) => scenario.assumptions)
+    .filter((assumption) => assumption.origin === 'default' && assumption.key === 'annual_growth_rate');
+
+  const heldConstant = [
+    typeof annualSpending === 'number'
+      ? `starting spending of $${Math.round(annualSpending).toLocaleString('en-US')} a year in today's dollars`
+      : null,
+    typeof currentAge === 'number' ? `age ${currentAge} today` : null,
+    typeof retirementAge === 'number' ? `retirement at ${retirementAge}` : null,
+    typeof lifeExpectancy === 'number' ? `life expectancy ${lifeExpectancy}` : null,
+    'no additional contributions before withdrawals begin',
+  ].filter((item): item is string => Boolean(item));
+  const defaultNotice = defaults.length > 0
+    ? ` The fixed-growth rate was not specified, so I used the disclosed Ask Linc default of ${Number((Number(defaults[0].value) * 100).toFixed(4))}%.`
+    : '';
+
+  const action = labels.length > 1
+    ? `compared ${labels.join(' with ')}`
+    : `ran ${labels[0]}`;
+  return `Scenario assumptions: ${action} while holding ${heldConstant.join(', ')} constant.${defaultNotice} Change any assumption and I will re-run it.`;
+}

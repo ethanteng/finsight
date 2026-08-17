@@ -5,11 +5,13 @@ import { mergeLabelKeyedTotals } from '../services/label-normalization';
 export type CanonicalFactUnit = 'usd' | 'percent' | 'months' | 'years' | 'age' | 'count' | 'ratio';
 
 export interface CanonicalFactProvenance {
-  kind: 'snapshot' | 'calculation' | 'user_input' | 'external_context';
+  kind: 'snapshot' | 'calculation' | 'user_input' | 'external_context' | 'scenario_calculation';
   source: string;
   asOf?: string;
   formula?: string;
   inputFactIds?: string[];
+  scenarioId?: string;
+  calculatorVersion?: number;
 }
 
 export interface CanonicalFact {
@@ -148,6 +150,32 @@ export function buildCanonicalFactPack(
         formula,
         inputFactIds,
         ...(asOf && { asOf }),
+      },
+    });
+  };
+  const addScenarioFact = (
+    id: string,
+    label: string,
+    value: unknown,
+    unit: CanonicalFactUnit,
+    scenarioId: string,
+    calculatorVersion: number,
+    displayable = true,
+    calculation?: Pick<CanonicalFactProvenance, 'formula' | 'inputFactIds'>
+  ) => {
+    if (!finite(value)) return;
+    facts.set(id, {
+      id,
+      label,
+      value,
+      unit,
+      ...(!displayable && { displayable: false }),
+      provenance: {
+        kind: 'scenario_calculation',
+        source: `retirementScenario.${scenarioId}`,
+        scenarioId,
+        calculatorVersion,
+        ...calculation,
       },
     });
   };
@@ -393,6 +421,96 @@ export function buildCanonicalFactPack(
     addSnapshotFact('retirement_age', 'Retirement age', retirement._storedInputParams?.retirementAge, 'age', 'retirementAnalysis.inputs.retirementAge');
     addSnapshotFact('annual_withdrawal_amount', 'Annual withdrawal amount', retirement._storedInputParams?.annualWithdrawalAmount, 'usd', 'retirementAnalysis.inputs.annualWithdrawalAmount');
     addSnapshotFact('withdrawal_start_age', 'Withdrawal start age', retirement._storedInputParams?.withdrawalStartAge, 'age', 'retirementAnalysis.inputs.withdrawalStartAge');
+  }
+
+  const scenarioExecution = snapshot.retirementScenarioExecution;
+  if (needs.needsRetirement && scenarioExecution?.status === 'completed') {
+    for (const scenario of scenarioExecution.scenarios) {
+      const prefix = `retirement_scenario_${safeFactId(scenario.id)}`;
+      const version = scenarioExecution.version;
+      addScenarioFact(
+        `${prefix}_withdrawal_rate`,
+        `${scenario.label} initial withdrawal rate`,
+        scenario.analysis.metrics.withdrawalRate * 100,
+        'percent',
+        scenario.id,
+        version
+      );
+      addScenarioFact(
+        `${prefix}_years_of_expenses`,
+        `${scenario.label} years of starting expenses`,
+        scenario.analysis.metrics.yearsOfExpenses,
+        'years',
+        scenario.id,
+        version
+      );
+      addScenarioFact(
+        `${prefix}_projected_portfolio_at_withdrawal_start`,
+        `${scenario.label} median projected portfolio at withdrawal start`,
+        scenario.analysis.metrics.projectedPortfolioAtWithdrawalStart,
+        'usd',
+        scenario.id,
+        version
+      );
+      addScenarioFact(
+        `${prefix}_survival_rate`,
+        `${scenario.label} historical survival rate`,
+        scenario.analysis.stressTest.survivalRate * 100,
+        'percent',
+        scenario.id,
+        version
+      );
+      addScenarioFact(
+        `${prefix}_historical_sequence_count`,
+        `${scenario.label} historical sequence count`,
+        scenario.analysis.stressTest.totalSequences,
+        'count',
+        scenario.id,
+        version
+      );
+      if (scenario.withdrawalPolicy.type === 'fixed_growth') {
+        addScenarioFact(
+          `${prefix}_annual_withdrawal_growth`,
+          `${scenario.label} rate assumption`,
+          scenario.withdrawalPolicy.annualRate * 100,
+          'percent',
+          scenario.id,
+          version
+        );
+      }
+      for (const percentile of ['p10', 'p25', 'p50', 'p75', 'p90'] as const) {
+        addScenarioFact(
+          `${prefix}_depletion_years_${percentile}`,
+          `${scenario.label} ${percentile} years until depletion`,
+          scenario.analysis.stressTest.depletionPercentiles[percentile],
+          'years',
+          scenario.id,
+          version
+        );
+      }
+    }
+    if (scenarioExecution.scenarios.length >= 2) {
+      const [primary, comparison] = scenarioExecution.scenarios;
+      const primaryPrefix = `retirement_scenario_${safeFactId(primary.id)}`;
+      const comparisonPrefix = `retirement_scenario_${safeFactId(comparison.id)}`;
+      const comparisonId = `${primary.id}_vs_${comparison.id}`;
+      const comparisonPrefixId = `retirement_scenario_comparison_${safeFactId(comparisonId)}`;
+      addScenarioFact(
+        `${comparisonPrefixId}_survival_rate_gap`,
+        `Absolute survival-rate gap between ${primary.label} and ${comparison.label}`,
+        Number((Math.abs(
+          primary.analysis.stressTest.survivalRate - comparison.analysis.stressTest.survivalRate
+        ) * 100).toFixed(10)),
+        'percent',
+        comparisonId,
+        scenarioExecution.version,
+        true,
+        {
+          formula: 'absolute value of primary survival rate - comparison survival rate, in percentage points',
+          inputFactIds: [`${primaryPrefix}_survival_rate`, `${comparisonPrefix}_survival_rate`],
+        }
+      );
+    }
   }
 
   // Scenario premises and explicitly requested external context are canonical inputs too.

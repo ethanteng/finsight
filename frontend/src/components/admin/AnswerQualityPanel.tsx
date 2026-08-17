@@ -18,6 +18,8 @@ interface Observation {
   toolAddedPacks: string[];
   primaryToolOutcome: 'accepted' | 'expanded' | 'failed' | 'not_run';
   lateExpansion: boolean;
+  scenarioRequested: boolean;
+  scenarioStatus: 'completed' | 'unavailable' | 'not_run';
 }
 
 interface AnswerQualityReport {
@@ -42,6 +44,7 @@ interface AnswerQualityReport {
     averagePlannerMs: number | null;
     byPack: Record<string, { selectedInitially: number; addedByPrimaryTool: number; presentFinally: number }>;
   };
+  scenarios?: { requested: number; completed: number; unavailable: number; notRun: number; averageMs: number | null };
   users: { rated: number; positive: number; neutral: number; negative: number; averageRating: number | null };
   recent: Observation[];
 }
@@ -123,6 +126,13 @@ export default function AnswerQualityPanel({
     : report?.delivery.recovered
       ? 'recovered'
       : 'clean';
+  const scenarios = report?.scenarios ?? {
+    requested: 0,
+    completed: 0,
+    unavailable: 0,
+    notRun: 0,
+    averageMs: null,
+  };
 
   return (
     <div className="mb-6 rounded-lg bg-gray-800 p-6">
@@ -182,6 +192,19 @@ export default function AnswerQualityPanel({
             />
           </div>
 
+          <div className="mt-4 rounded-lg border border-gray-700 bg-gray-900 p-4">
+            <h3 className="font-medium text-white">Scenario runner</h3>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <div><div className="text-2xl font-semibold text-white">{scenarios.requested}</div><div className="text-xs text-gray-500">scenario requests</div></div>
+              <div><div className="text-2xl font-semibold text-green-300">{scenarios.completed}</div><div className="text-xs text-gray-500">completed</div></div>
+              <div><div className="text-2xl font-semibold text-yellow-300">{scenarios.unavailable}</div><div className="text-xs text-gray-500">unavailable</div></div>
+              <div><div className="text-2xl font-semibold text-white">{scenarios.averageMs === null ? '—' : `${Math.round(scenarios.averageMs)} ms`}</div><div className="text-xs text-gray-500">average calculation time</div></div>
+            </div>
+            {scenarios.notRun > 0 && (
+              <div className="mt-3 text-xs text-red-300">{scenarios.notRun} requested scenario(s) did not reach the calculator.</div>
+            )}
+          </div>
+
           <div className="mt-6 rounded-lg border border-gray-700 bg-gray-900 p-4">
             <h3 className="font-medium text-white">How context planning is doing</h3>
             <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -236,6 +259,9 @@ export default function AnswerQualityPanel({
                         {answer.toolAddedPacks.length > 0 && ` · primary tool added ${answer.toolAddedPacks.map((pack) => PACK_LABELS[pack] ?? pack).join(', ')}`}
                         {answer.primaryToolOutcome === 'failed' && ' · primary tool audit failed'}
                         {answer.lateExpansion && ' · late context recovery'}
+                        {answer.scenarioStatus === 'completed' && ' · scenario completed'}
+                        {answer.scenarioStatus === 'unavailable' && ' · scenario missing inputs'}
+                        {answer.scenarioRequested && answer.scenarioStatus === 'not_run' && ' · scenario not run'}
                       </div>
                     </div>
                   </div>

@@ -5,7 +5,7 @@ import {
 } from '../../openai/context-planner';
 import { CONTEXT_PACK_IDS } from '../../openai/context-packs';
 
-function rawPlan(selected: string[] = []) {
+function rawPlan(selected: string[] = []): any {
   return {
     packs: Object.fromEntries(CONTEXT_PACK_IDS.map((pack) => [pack, selected.includes(pack)])),
     needsSecondaryValidation: true,
@@ -22,6 +22,11 @@ function rawPlan(selected: string[] = []) {
         withdrawalStartAge: null,
         lifeExpectancy: null,
       },
+    },
+    retirementScenario: {
+      requested: false,
+      primary: { type: 'none', annualRate: null, source: null },
+      comparison: { type: 'none', annualRate: null, source: null },
     },
     summary: 'This continues the retirement decision.',
   };
@@ -82,5 +87,20 @@ describe('context planner', () => {
     expect(plan.source).toBe('fallback_all');
     expect(plan.selectedPacks).toEqual([...CONTEXT_PACK_IDS]);
     expect(Object.values(plan.questionNeeds).every(Boolean)).toBe(true);
+  });
+
+  it('returns a validated retirement withdrawal scenario separately from pack selection', () => {
+    const raw = rawPlan(['retirement_analysis']);
+    raw.retirementScenario = {
+      requested: true,
+      primary: { type: 'fixed_growth', annualRate: 0.03, source: '3% bump per year' },
+      comparison: { type: 'flat_nominal', annualRate: null, source: 'flat-dollar version' },
+    };
+    const plan = parseContextPlan(raw);
+    expect(plan.retirementScenario).toEqual({
+      requested: true,
+      primary: { type: 'fixed_growth', annualRate: 0.03, source: '3% bump per year' },
+      comparison: { type: 'flat_nominal', source: 'flat-dollar version' },
+    });
   });
 });

@@ -21,6 +21,12 @@ In the same structured pass, the planner extracts only retirement values the use
 
 The default life-expectancy assumption is 95 when the user does not provide one, and the answer states the analysis assumptions. Stored annual spending is not silently carried into a new scenario; it requires an explicit confirmation where applicable.
 
+## Scenario comparison
+
+Once a matching retirement baseline exists, Ask Linc can deterministically compare historical CPI-linked, flat nominal, and fixed annual-growth withdrawal policies. Scenario intent is selected semantically by the same two-pass planning subsystem; the LLMs choose a typed policy plan but never calculate the result. The application runs each requested variant, promotes its metrics into the canonical fact pack with scenario provenance, validates the final answer against those facts, and appends an explicit assumption disclosure.
+
+See [Deterministic scenario modeling](SCENARIO_MODELING.md) for policy mechanics, evidence, and current limitations.
+
 ## Relevant files
 
 | File | Responsibility |
@@ -32,5 +38,6 @@ The default life-expectancy assumption is 95 when the user does not provide one,
 | `src/openai/retirement-input-extraction.ts` | Types and deterministic validation for planner-extracted inputs |
 | `src/retirement-analytics/retirement-question-parser.ts` | Deterministic extraction fallback only |
 | `src/retirement-analytics/` | Offline analysis and stress-test engine |
+| `src/scenarios/retirement-scenario.ts` | Retirement what-if policy planning and deterministic execution |
 
 See [Semantic context planning](CONTEXT_PLANNING.md) for the full two-pass data-pack architecture.

@@ -22,6 +22,7 @@ const REPORT = {
       transaction_details: { selectedInitially: 2, addedByPrimaryTool: 0, presentFinally: 3 },
     },
   },
+  scenarios: { requested: 3, completed: 2, unavailable: 1, notRun: 0, averageMs: 42 },
   users: { rated: 3, positive: 2, neutral: 0, negative: 1, averageRating: 3.67 },
   recent: [{
     id: 'c1',
@@ -37,6 +38,8 @@ const REPORT = {
     toolAddedPacks: [],
     primaryToolOutcome: 'accepted',
     lateExpansion: false,
+    scenarioRequested: true,
+    scenarioStatus: 'completed',
   }],
 };
 
@@ -70,6 +73,14 @@ describe('AnswerQualityPanel', () => {
     fireEvent.click(screen.getByText('Show per-pack detail'));
     expect(screen.getByText('Final answers')).toBeInTheDocument();
     expect(screen.getByText('Accounts')).toBeInTheDocument();
+  });
+
+  it('shows scenario completion and calculation timing', async () => {
+    render(<AnswerQualityPanel apiUrl="https://api.test" getAuthHeaders={() => ({})} />);
+    expect(await screen.findByText('Scenario runner')).toBeInTheDocument();
+    expect(screen.getByText('scenario requests')).toBeInTheDocument();
+    expect(screen.getByText('42 ms')).toBeInTheDocument();
+    expect(screen.getByText(/scenario completed/)).toBeInTheDocument();
   });
 
   it('explains recent answer status in plain language', async () => {

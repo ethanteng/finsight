@@ -37,7 +37,10 @@ import {
 } from './response-facts';
 import { validateCanonicalFactPack } from './canonical-facts';
 import { describeMissingInputs } from './missing-inputs';
-import { describeRetirementAssumptions } from './retirement-assumptions';
+import {
+  describeRetirementAssumptions,
+  describeRetirementScenarioAssumptions,
+} from './retirement-assumptions';
 import { askOpenAIWithPreparedPrompt } from './openai-fallback-client';
 import { createHash } from 'crypto';
 import { recordLlmAnalysisFailure } from '../observability/llm-metrics';
@@ -54,6 +57,12 @@ import {
   questionNeedsFromPacks,
   type ContextPackId,
 } from './context-packs';
+import {
+  compactRetirementScenarioExecution,
+  runRetirementScenario,
+  type RetirementScenarioExecution,
+  type RetirementScenarioPlan,
+} from '../scenarios/retirement-scenario';
 
 export interface RunAskLincAnalysisOptions {
   question: string;
@@ -72,6 +81,8 @@ export interface RunAskLincAnalysisOptions {
     snapshot: FinancialContextSnapshot;
     contextPlan?: ContextPlan;
     toolRequestedPacks?: ContextPackId[];
+    retirementScenarioPlan?: RetirementScenarioPlan;
+    retirementScenarioExecution?: RetirementScenarioExecution;
     model: (input: {
       systemPrompt: string;
       userMessage: string;
@@ -215,6 +226,7 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
   const initiallySelectedPacks = [...contextPlan.selectedPacks];
   let selectedPacks = [...initiallySelectedPacks];
   let questionNeeds = contextPlan.questionNeeds;
+  let retirementScenarioPlan = evaluation?.retirementScenarioPlan ?? contextPlan.retirementScenario;
 
   // Step 1: Retrieve context (snapshot, profile, market summary, RAG)
   const contextGatherStartedAt = Date.now();
@@ -237,7 +249,7 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
   // dependency expansion and data access remain application-owned.
   let contextTool: NonNullable<EvidenceManifest['contextPlanning']>['primaryTool'];
   let contextToolMs = 0;
-  if (!evaluation && selectedPacks.length < allContextPacks().length) {
+  if (!evaluation) {
     const toolAuditStartedAt = Date.now();
     let auditedPacks: ContextPackId[] = [];
     let auditModel: string | undefined;
@@ -252,12 +264,18 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
         canonicalFactLabels: (initialPromptInput.canonicalFacts?.facts ?? []).map(
           (fact) => `${fact.id}: ${fact.label}`
         ),
+        plannedRetirementScenario: retirementScenarioPlan,
       });
       auditedPacks = toolResult.packs;
       auditModel = toolResult.model;
       auditReason = toolResult.reason;
       auditDurationMs = toolResult.durationMs;
-      const widenedPacks = normalizeContextPacks([...selectedPacks, ...toolResult.packs]);
+      retirementScenarioPlan = retirementScenarioPlan ?? toolResult.retirementScenario;
+      const widenedPacks = normalizeContextPacks([
+        ...selectedPacks,
+        ...toolResult.packs,
+        ...(retirementScenarioPlan ? ['retirement_analysis' as const] : []),
+      ]);
       const addedPacks = widenedPacks.filter((pack) => !selectedPacks.includes(pack));
       contextTool = {
         outcome: addedPacks.length > 0 ? 'expanded' : 'accepted',
@@ -266,6 +284,7 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
         addedPacks: [],
         reason: toolResult.reason,
         durationMs: toolResult.durationMs,
+        ...(toolResult.retirementScenario && { retirementScenario: toolResult.retirementScenario }),
       };
       if (addedPacks.length > 0) {
         const widenedNeeds = questionNeedsFromPacks(widenedPacks, contextPlan.needsSecondaryValidation);
@@ -306,6 +325,26 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
   } else if (evaluation?.toolRequestedPacks?.length) {
     selectedPacks = normalizeContextPacks([...selectedPacks, ...evaluation.toolRequestedPacks]);
     questionNeeds = questionNeedsFromPacks(selectedPacks, contextPlan.needsSecondaryValidation);
+  }
+
+  let retirementScenarioExecution: RetirementScenarioExecution | undefined;
+  if (retirementScenarioPlan) {
+    onProgress?.('Running the retirement scenarios');
+    try {
+      retirementScenarioExecution = evaluation?.retirementScenarioExecution
+        ?? await runRetirementScenario(snapshot, retirementScenarioPlan);
+    } catch (error) {
+      console.error('Ask Linc: Retirement scenario execution failed:', error);
+      retirementScenarioExecution = {
+        version: 1,
+        calculator: 'retirement',
+        status: 'unavailable',
+        computedAt: new Date().toISOString(),
+        durationMs: 0,
+        reason: 'The requested retirement scenario could not be calculated. The existing retirement baseline remains available.',
+      };
+    }
+    snapshot = { ...snapshot, retirementScenarioExecution };
   }
 
   // Step 2: Build the prompt directly from the persisted canonical snapshot.
@@ -555,6 +594,10 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
   if (retirementAssumptions) {
     structuredResponse = appendNotice(structuredResponse, retirementAssumptions);
   }
+  const retirementScenarioAssumptions = describeRetirementScenarioAssumptions(snapshot);
+  if (retirementScenarioAssumptions) {
+    structuredResponse = appendNotice(structuredResponse, retirementScenarioAssumptions);
+  }
 
   // Step 6: Output validation (security)
   const displayText = toDisplayText(structuredResponse);
@@ -594,13 +637,18 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
         finalPacks: selectedPacks,
         needsSecondaryValidation: contextPlan.needsSecondaryValidation,
         summary: contextPlan.summary,
+        ...(retirementScenarioPlan && { retirementScenario: retirementScenarioPlan }),
         ...(contextTool && { primaryTool: contextTool }),
       },
+      ...(retirementScenarioExecution && {
+        scenarioExecution: compactRetirementScenarioExecution(retirementScenarioExecution),
+      }),
       ...(secondaryCaveat && { secondaryCaveat: true }),
       modelCalls,
       timings: {
         planningMs: contextPlan.durationMs,
         ...(contextTool && { contextToolMs }),
+        ...(retirementScenarioExecution && { scenarioMs: retirementScenarioExecution.durationMs }),
         contextGatherMs,
         promptBuildMs,
         modelMs: modelCalls.reduce((total, call) => total + call.durationMs, 0),

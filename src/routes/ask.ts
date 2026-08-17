@@ -96,6 +96,9 @@ router.post('/ask/display-real', aiRateLimitMiddleware, requireAuth, async (req,
         if (manifest.timings.contextToolMs !== undefined) {
           span.setAttribute('ai.context_tool_ms', manifest.timings.contextToolMs);
         }
+        if (manifest.timings.scenarioMs !== undefined) {
+          span.setAttribute('ai.scenario_ms', manifest.timings.scenarioMs);
+        }
         span.setAttribute('ai.context_gather_ms', manifest.timings.contextGatherMs);
         span.setAttribute('ai.prompt_build_ms', manifest.timings.promptBuildMs);
         span.setAttribute('ai.model_ms', manifest.timings.modelMs);

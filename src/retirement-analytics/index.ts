@@ -92,6 +92,14 @@ export async function analyzeRetirementPortfolio(
   const totalValue = input.holdings.reduce((sum, h) => sum + (h.institution_value || 0), 0);
   const portfolioMapping = await mapPortfolioToAssetBasket(input.holdings, input.securities, totalValue, dataProviderFactory, tickerToMetadata);
   const assumptions = populateAssumptions(portfolioMapping, input.holdings, input.securities);
+  const withdrawalPolicy = input.withdrawalPolicy ?? { type: 'historical_cpi' as const };
+  assumptions.push(
+    withdrawalPolicy.type === 'historical_cpi'
+      ? 'Retirement spending rises with each historical sequence\'s CPI after withdrawals begin (constant real spending)'
+      : withdrawalPolicy.type === 'flat_nominal'
+        ? 'Retirement spending stays at the same nominal dollar amount after withdrawals begin'
+        : `Retirement spending rises ${withdrawalPolicy.annualRate * 100}% on each withdrawal anniversary`
+  );
 
   // Model the full path from today through life expectancy. Contributions are
   // not an input today, so the accumulation phase deliberately assumes zero.
@@ -125,7 +133,8 @@ export async function analyzeRetirementPortfolio(
   const historicalWithdrawalRates = computeHistoricalWithdrawalRates(
     withdrawalSequences,
     portfolioMapping,
-    totalValue
+    totalValue,
+    withdrawalPolicy
   );
 
   // Phase 4: Simulate withdrawals for user scenario
@@ -135,7 +144,7 @@ export async function analyzeRetirementPortfolio(
       totalValue,
       sequence,
       input.annualWithdrawalAmount,
-      { withdrawalDelayMonths }
+      { withdrawalDelayMonths, withdrawalPolicy }
     )
   );
 

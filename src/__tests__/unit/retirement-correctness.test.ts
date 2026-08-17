@@ -129,6 +129,71 @@ describe('retirement correctness contracts', () => {
     expect(outcome.portfolioValueAtWithdrawalStart).toBeGreaterThan(1_000);
   });
 
+  it('compares flat, fixed-growth, and historical-CPI withdrawals from the same starting spending power', () => {
+    const sequence = flatSequence(36);
+    sequence.inflationRates = Array.from({ length: 36 }, () => 0.01);
+    const shared = {
+      withdrawalDelayMonths: 12,
+    };
+
+    const flat = simulateWithdrawals(
+      balancedMapping,
+      10_000,
+      sequence,
+      120,
+      { ...shared, withdrawalPolicy: { type: 'flat_nominal' } }
+    );
+    const fixed = simulateWithdrawals(
+      balancedMapping,
+      10_000,
+      sequence,
+      120,
+      { ...shared, withdrawalPolicy: { type: 'fixed_growth', annualRate: 0.12 } }
+    );
+    const cpi = simulateWithdrawals(
+      balancedMapping,
+      10_000,
+      sequence,
+      120,
+      { ...shared, withdrawalPolicy: { type: 'historical_cpi' } }
+    );
+
+    expect(flat.realPortfolioValueAtWithdrawalStart).toBeCloseTo(fixed.realPortfolioValueAtWithdrawalStart);
+    expect(fixed.realPortfolioValueAtWithdrawalStart).toBeCloseTo(cpi.realPortfolioValueAtWithdrawalStart);
+    expect(flat.finalValue).toBeGreaterThan(fixed.finalValue);
+    expect(fixed.finalValue).toBeGreaterThan(cpi.finalValue);
+  });
+
+  it('uses the same first withdrawal for every growth policy', () => {
+    const sequence = flatSequence(1);
+    sequence.inflationRates = [0.01];
+    const policies = [
+      { type: 'flat_nominal' as const },
+      { type: 'fixed_growth' as const, annualRate: 0.03 },
+      { type: 'historical_cpi' as const },
+    ];
+    const finalValues = policies.map((withdrawalPolicy) => simulateWithdrawals(
+      balancedMapping,
+      10_000,
+      sequence,
+      120,
+      { withdrawalPolicy }
+    ).finalValue);
+
+    expect(finalValues[0]).toBeCloseTo(finalValues[1]);
+    expect(finalValues[1]).toBeCloseTo(finalValues[2]);
+  });
+
+  it('rejects an invalid fixed withdrawal growth rate', () => {
+    expect(() => simulateWithdrawals(
+      balancedMapping,
+      10_000,
+      flatSequence(12),
+      120,
+      { withdrawalPolicy: { type: 'fixed_growth', annualRate: -1 } }
+    )).toThrow(/Fixed withdrawal growth/);
+  });
+
   it('builds a full accumulation and withdrawal timeline', () => {
     expect(buildRetirementTimeline({
       currentAge: 45,
