@@ -122,52 +122,67 @@ export default function Home() {
           <p>General guidance can sound sensible and still miss your life. Connected context turns the same question into a recommendation you can inspect, challenge, and act on.</p>
         </div>
 
-        <div className="context-comparison-demo">
-          <div className="comparison-question">
-            <div className="decision-demo-label"><span>?</span> ASK IN YOUR OWN WORDS</div>
-            <blockquote>“Should I use my bonus to pay down the mortgage, invest it, or keep it in cash for our move next year?”</blockquote>
-          </div>
+        <div className="connection-comparison-grid">
+          <article className="connection-panel without-connection">
+            <header className="connection-panel-header">
+              <h3>Without Ask Linc connected</h3>
+              <span>GENERAL ANSWER</span>
+            </header>
+            <div className="connection-panel-body">
+              <div className="comparison-prompt">
+                <span>YOU ASK</span>
+                <p>Should I use my $30K bonus to pay down the mortgage, invest it, or keep it in cash for our move next year?</p>
+              </div>
+              <div className="comparison-response-lead">
+                <span className="brand-mark small">L</span>
+                <p>Here&apos;s a general framework for deciding how to use a bonus when several goals are competing.</p>
+              </div>
+              <ol className="generic-response-list">
+                <li><span>1</span><div><b>Protect your emergency fund</b><p>Keep three to six months of expenses available before putting extra cash elsewhere.</p></div></li>
+                <li><span>2</span><div><b>Compare debt and investing</b><p>Weigh your mortgage rate against the return you might earn by investing.</p></div></li>
+                <li><span>3</span><div><b>Consider splitting the bonus</b><p>Using some for each goal can be a reasonable compromise.</p></div></li>
+              </ol>
+              <div className="generic-response-caveat">
+                <span>WHAT THIS ANSWER DOESN&apos;T KNOW</span>
+                <p>Your cash balance, mortgage rate, retirement contributions, taxes, or how much the move will require.</p>
+              </div>
+            </div>
+          </article>
 
-          <div className="context-comparison-grid">
-            <article className="context-answer-card generic-answer-card">
-              <div className="comparison-card-head">
-                <div className="decision-demo-label"><span>A</span> WITHOUT YOUR FINANCIAL CONTEXT</div>
-                <small>GENERAL GUIDANCE</small>
+          <article className="connection-panel with-connection">
+            <header className="connection-panel-header">
+              <h3>With Ask Linc connected</h3>
+              <span>GROUNDED ANSWER</span>
+            </header>
+            <div className="connection-panel-body">
+              <div className="comparison-prompt">
+                <span>YOU ASK</span>
+                <p>Should I use my $30K bonus to pay down the mortgage, invest it, or keep it in cash for our move next year?</p>
               </div>
-              <div className="decision-summary generic-summary">
-                <span>A REASONABLE START</span>
-                <h3>Compare the options, keep enough emergency cash, and choose the one that best fits your goals.</h3>
+              <div className="comparison-response-lead">
+                <span className="brand-mark small">L</span>
+                <p>I&apos;ll use your cash reserve, move target, mortgage rate, and retirement plan to compare the options.</p>
               </div>
-              <div className="generic-steps">
-                <div><span>01</span><p>Compare your mortgage rate with the return you might earn by investing.</p></div>
-                <div><span>02</span><p>Keep three to six months of expenses available for emergencies.</p></div>
-                <div><span>03</span><p>Consider splitting the bonus if more than one goal matters.</p></div>
-              </div>
-              <p className="decision-answer-note">Useful principles—but this answer does not know your cash balance, mortgage, taxes, retirement plan, or moving timeline.</p>
-            </article>
 
-            <article className="context-answer-card grounded-answer-card">
-              <div className="comparison-card-head">
-                <div className="decision-demo-label"><span>B</span> WITH ASK LINC CONNECTED</div>
-                <small>GROUNDED IN YOUR NUMBERS</small>
+              <div className="connected-money-card" aria-label="Illustrative connected financial context">
+                <div className="connected-money-head"><span>YOUR DECISION INPUTS</span><small>SAMPLE DATA</small></div>
+                <div className="cash-goal-row"><span>Cash today</span><b>$42K</b></div>
+                <div className="cash-track"><i style={{ width: "70%" }} /><em>Move-fund floor $60K</em></div>
+                <div className="connected-money-metrics">
+                  <span><i>BONUS</i><b>$30K</b></span>
+                  <span><i>MORTGAGE</i><b>6.4%</b></span>
+                  <span><i>401(K)</i><b>Match maxed</b></span>
+                </div>
               </div>
-              <div className="grounded-context" aria-label="Financial context used for the illustrative Ask Linc answer">
-                <span><i>ACCOUNTS</i><b>Cash · mortgage · 401(k)</b></span>
-                <span><i>YOUR GOAL</i><b>Move next year</b></span>
-                <span><i>RELEVANT DATA</i><b>Current rates · dated</b></span>
+
+              <div className="grounded-recommendation">
+                <span>LINC&apos;S TAKE</span>
+                <h4>Keep $18K in cash to reach the move-fund floor. Put the remaining $12K toward retirement. Don&apos;t prepay the mortgage yet.</h4>
               </div>
-              <div className="decision-summary">
-                <span>DIRECT ANSWER</span>
-                <h3>Keep the move fund intact. Put the dollars above that cash floor toward retirement first.</h3>
-              </div>
-              <div className="decision-path">
-                <div><span>WHY</span><p>Your upcoming move makes accessible cash more useful than a slightly smaller mortgage balance.</p></div>
-                <div><span>TRADEOFF</span><p>Extra mortgage payments reduce interest. Retirement contributions may add tax savings, but the money is less flexible.</p></div>
-                <div><span>NEXT STEP</span><p>Set the cash floor, compare the after-tax options, and revisit the split if the move date or rates change.</p></div>
-              </div>
-              <p className="decision-answer-note">Illustrative answer using sample data. Change an assumption and Linc shows what changes with it.</p>
-            </article>
-          </div>
+              <div className="grounded-next-step"><span>NEXT STEP</span><p>Set aside the $18K now, then compare the tax impact of the remaining retirement options before contributing.</p></div>
+              <p className="connection-sample-note">Illustrative answer using sample accounts and assumptions you can inspect.</p>
+            </div>
+          </article>
         </div>
       </section>
 

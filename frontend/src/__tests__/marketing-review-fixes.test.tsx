@@ -73,13 +73,14 @@ describe("marketing review fixes", () => {
     render(<MarketingHome />);
 
     expect(screen.getByRole("heading", { name: /same question.*a very different answer/i })).toBeInTheDocument();
-    expect(screen.getByText(/should i use my bonus to pay down the mortgage/i)).toBeInTheDocument();
-    expect(screen.getByText("WITHOUT YOUR FINANCIAL CONTEXT")).toBeInTheDocument();
-    expect(screen.getByText("WITH ASK LINC CONNECTED")).toBeInTheDocument();
-    expect(screen.getByText("GENERAL GUIDANCE")).toBeInTheDocument();
-    expect(screen.getByText("GROUNDED IN YOUR NUMBERS")).toBeInTheDocument();
-    expect(screen.getByText("ACCOUNTS")).toBeInTheDocument();
-    expect(screen.getByText("TRADEOFF")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Without Ask Linc connected" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "With Ask Linc connected" })).toBeInTheDocument();
+    expect(screen.getAllByText(/should i use my \$30k bonus to pay down the mortgage/i)).toHaveLength(2);
+    expect(screen.getByText("GENERAL ANSWER")).toBeInTheDocument();
+    expect(screen.getByText("GROUNDED ANSWER")).toBeInTheDocument();
+    expect(screen.getByText("YOUR DECISION INPUTS")).toBeInTheDocument();
+    expect(screen.getByText("WHAT THIS ANSWER DOESN'T KNOW")).toBeInTheDocument();
+    expect(screen.getByText("LINC'S TAKE")).toBeInTheDocument();
     expect(screen.getByText("NEXT STEP")).toBeInTheDocument();
     expect(screen.getByText(/latest available data and shows the source date/i)).toBeInTheDocument();
     expect(screen.getByText(/money shapes where you live, how you care for family/i)).toBeInTheDocument();
