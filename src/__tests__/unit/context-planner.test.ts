@@ -93,14 +93,97 @@ describe('context planner', () => {
     const raw = rawPlan(['retirement_analysis']);
     raw.retirementScenario = {
       requested: true,
-      primary: { type: 'fixed_growth', annualRate: 0.03, source: '3% bump per year' },
-      comparison: { type: 'flat_nominal', annualRate: null, source: 'flat-dollar version' },
+      primary: {
+        type: 'fixed_growth',
+        annualRate: 0.03,
+        source: '3% bump per year',
+        overrides: {
+          annualWithdrawalAmount: null,
+          annualContributionAmount: 12_000,
+          retirementAge: 65,
+          withdrawalStartAge: null,
+          lifeExpectancy: null,
+          sources: {
+            annualWithdrawalAmount: null,
+            annualContributionAmount: 'contribute $12,000',
+            retirementAge: 'retire at 65',
+            withdrawalStartAge: null,
+            lifeExpectancy: null,
+          },
+        },
+      },
+      comparison: { type: 'flat_nominal', annualRate: null, source: 'flat-dollar version', overrides: {} },
     };
     const plan = parseContextPlan(raw);
     expect(plan.retirementScenario).toEqual({
       requested: true,
-      primary: { type: 'fixed_growth', annualRate: 0.03, source: '3% bump per year' },
+      primary: {
+        type: 'fixed_growth',
+        annualRate: 0.03,
+        source: '3% bump per year',
+        overrides: {
+          annualContributionAmount: 12_000,
+          retirementAge: 65,
+          withdrawalStartAge: 65,
+          sources: {
+            annualContributionAmount: 'contribute $12,000',
+            retirementAge: 'retire at 65',
+            withdrawalStartAge: 'retire at 65',
+          },
+        },
+      },
       comparison: { type: 'flat_nominal', source: 'flat-dollar version' },
+    });
+    expect(plan.retirementInputs).toMatchObject({
+      currentAge: 45,
+      annualWithdrawalAmount: 120_000,
+    });
+    expect(plan.retirementInputs?.retirementAge).toBeUndefined();
+    expect(plan.retirementInputs?.withdrawalStartAge).toBeUndefined();
+  });
+
+  it('does not let hypothetical inputs rebuild the baseline they are meant to compare with', () => {
+    const raw = rawPlan(['retirement_analysis']);
+    raw.retirementInputs.retirementAge = 65;
+    raw.retirementInputs.annualWithdrawalAmount = 50_000;
+    raw.retirementInputs.withdrawalStartAge = 65;
+    raw.retirementInputs.sources.retirementAge = 'retire at 65';
+    raw.retirementInputs.sources.annualWithdrawalAmount = 'spend $50,000';
+    raw.retirementInputs.sources.withdrawalStartAge = 'retire at 65';
+    raw.retirementScenario = {
+      requested: true,
+      primary: {
+        type: 'historical_cpi',
+        annualRate: null,
+        source: null,
+        overrides: {
+          annualWithdrawalAmount: 50_000,
+          annualContributionAmount: null,
+          retirementAge: 65,
+          withdrawalStartAge: 65,
+          lifeExpectancy: null,
+          sources: {
+            annualWithdrawalAmount: 'spend $50,000',
+            annualContributionAmount: null,
+            retirementAge: 'retire at 65',
+            withdrawalStartAge: 'retire at 65',
+            lifeExpectancy: null,
+          },
+        },
+      },
+      comparison: { type: 'none', annualRate: null, source: null, overrides: {} },
+    };
+
+    const plan = parseContextPlan(raw);
+
+    expect(plan.retirementInputs).toEqual({
+      currentAge: 45,
+      sources: { currentAge: 'I am 45' },
+    });
+    expect(plan.retirementScenario?.primary.overrides).toMatchObject({
+      annualWithdrawalAmount: 50_000,
+      retirementAge: 65,
+      withdrawalStartAge: 65,
     });
   });
 });

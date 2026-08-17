@@ -182,11 +182,12 @@ Initial allocation:
   bonds = initialPortfolioValue * nominalBondsWeight
   cash = initialPortfolioValue * cashWeight
 
-Per month (end-of-period: returns first, then withdrawal):
+Per month (end-of-period: returns first, then contribution/withdrawal):
   1. usEquity *= 1 + usRet; intlEquity *= 1 + intlRet; bonds *= 1 + bondRet; cash *= 1 + cashRet
   2. portfolioValue = usEquity + intlEquity + bonds + cash
-  3. update monthlyWithdrawal according to the selected policy
-  4. portfolioValue = max(0, portfolioValue - monthlyWithdrawal)  (clamp at zero; sequence marked depleted)
+  3. before withdrawals begin, add annualContributionAmount / 12, indexed by cumulative sequence CPI, at the target allocation
+  4. update monthlyWithdrawal according to the selected policy
+  5. portfolioValue = max(0, portfolioValue - monthlyWithdrawal)  (clamp at zero; sequence marked depleted)
 
 Between-rebalance months (proportional scaling after withdrawal):
   scale = portfolioValue / (portfolioValue + monthlyWithdrawal)
@@ -200,7 +201,7 @@ Annual rebalance (every 12 months):
   cash = portfolioValue * cashWeight
 ```
 
-The default withdrawal policy is `historical_cpi`, which applies each sequence's monthly CPI rate and therefore models constant real spending. Scenario calculations can instead use `flat_nominal` or `fixed_growth`. All policies translate today's spending target through CPI until withdrawals start; after that point, flat nominal spending freezes and fixed growth applies the requested rate on withdrawal anniversaries. See [Deterministic scenario modeling](SCENARIO_MODELING.md).
+The default withdrawal policy is `historical_cpi`, which applies each sequence's monthly CPI rate and therefore models constant real spending. Scenario calculations can instead use `flat_nominal` or `fixed_growth`. All policies translate today's spending target through CPI until withdrawals start; after that point, flat nominal spending freezes and fixed growth applies the requested rate on withdrawal anniversaries. The registered retirement calculator can also override spending, pre-withdrawal contributions, retirement/withdrawal dates, and life expectancy. See [Deterministic scenario modeling](SCENARIO_MODELING.md).
 
 ### Real Return (inflation-adjusted)
 

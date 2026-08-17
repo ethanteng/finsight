@@ -5,7 +5,7 @@ import { mergeLabelKeyedTotals } from '../services/label-normalization';
 export type CanonicalFactUnit = 'usd' | 'percent' | 'months' | 'years' | 'age' | 'count' | 'ratio';
 
 export interface CanonicalFactProvenance {
-  kind: 'snapshot' | 'calculation' | 'user_input' | 'external_context' | 'scenario_calculation';
+  kind: 'snapshot' | 'calculation' | 'user_input' | 'external_context' | 'scenario_input' | 'scenario_calculation';
   source: string;
   asOf?: string;
   formula?: string;
@@ -176,6 +176,28 @@ export function buildCanonicalFactPack(
         scenarioId,
         calculatorVersion,
         ...calculation,
+      },
+    });
+  };
+  const addScenarioInputFact = (
+    id: string,
+    label: string,
+    value: unknown,
+    unit: CanonicalFactUnit,
+    scenarioId: string,
+    calculatorVersion: number
+  ) => {
+    if (!finite(value)) return;
+    facts.set(id, {
+      id,
+      label,
+      value,
+      unit,
+      provenance: {
+        kind: 'scenario_input',
+        source: `retirementScenario.${scenarioId}.assumptions`,
+        scenarioId,
+        calculatorVersion,
       },
     });
   };
@@ -428,6 +450,29 @@ export function buildCanonicalFactPack(
     for (const scenario of scenarioExecution.scenarios) {
       const prefix = `retirement_scenario_${safeFactId(scenario.id)}`;
       const version = scenarioExecution.version;
+      const assumptionUnits: Record<string, CanonicalFactUnit> = {
+        current_age: 'age',
+        retirement_age: 'age',
+        annual_withdrawal_amount: 'usd',
+        withdrawal_start_age: 'age',
+        life_expectancy: 'age',
+        pre_withdrawal_contributions: 'usd',
+        // Assumption ledgers store decimal rates. Keep the premise as a ratio;
+        // the displayable percent below is a verified deterministic conversion.
+        annual_growth_rate: 'ratio',
+      };
+      for (const assumption of scenario.assumptions) {
+        const unit = assumptionUnits[assumption.key];
+        if (!unit) continue;
+        addScenarioInputFact(
+          `${prefix}_assumption_${safeFactId(assumption.key)}`,
+          `${scenario.label} ${assumption.label.toLowerCase()}`,
+          assumption.value,
+          unit,
+          scenario.id,
+          version
+        );
+      }
       addScenarioFact(
         `${prefix}_withdrawal_rate`,
         `${scenario.label} initial withdrawal rate`,
@@ -469,13 +514,18 @@ export function buildCanonicalFactPack(
         version
       );
       if (scenario.withdrawalPolicy.type === 'fixed_growth') {
+        const growthInputFactId = `${prefix}_assumption_annual_growth_rate`;
         addScenarioFact(
           `${prefix}_annual_withdrawal_growth`,
           `${scenario.label} rate assumption`,
           scenario.withdrawalPolicy.annualRate * 100,
           'percent',
           scenario.id,
-          version
+          version,
+          true,
+          facts.has(growthInputFactId)
+            ? { formula: 'input * 100', inputFactIds: [growthInputFactId] }
+            : undefined
         );
       }
       for (const percentile of ['p10', 'p25', 'p50', 'p75', 'p90'] as const) {
@@ -506,7 +556,7 @@ export function buildCanonicalFactPack(
         scenarioExecution.version,
         true,
         {
-          formula: 'absolute value of primary survival rate - comparison survival rate, in percentage points',
+          formula: 'abs(input[0] - input[1])',
           inputFactIds: [`${primaryPrefix}_survival_rate`, `${comparisonPrefix}_survival_rate`],
         }
       );
@@ -551,7 +601,11 @@ export function validateCanonicalFactPack(pack: CanonicalFactPack): string[] {
   const facts = new Map(pack.facts.map((fact) => [fact.id, fact]));
   for (const fact of pack.facts) {
     if (!Number.isFinite(fact.value)) issues.push(`${fact.id} is not finite.`);
-    if (fact.provenance.kind !== 'calculation') continue;
+    if (
+      fact.provenance.kind !== 'calculation' &&
+      fact.provenance.kind !== 'scenario_calculation'
+    ) continue;
+    if (fact.provenance.kind === 'scenario_calculation' && !fact.provenance.formula) continue;
     const inputs = fact.provenance.inputFactIds?.map((id) => facts.get(id));
     if (!inputs || inputs.some((input) => !input)) {
       issues.push(`${fact.id} references a missing calculation input.`);
@@ -568,6 +622,8 @@ export function validateCanonicalFactPack(pack: CanonicalFactPack): string[] {
       expected = inputs.reduce((total, input) => total + input!.value, 0);
     } else if (fact.provenance.formula === 'input * 100') {
       expected = inputs[0]!.value * 100;
+    } else if (fact.provenance.formula === 'abs(input[0] - input[1])') {
+      expected = Math.abs(inputs[0]!.value - inputs[1]!.value);
     }
     if (expected !== undefined && Math.abs(expected - fact.value) > 0.000001) {
       issues.push(`${fact.id} does not match its deterministic formula.`);

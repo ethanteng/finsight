@@ -5,6 +5,16 @@ const PACKS = [
   { id: 'account_details', label: 'Account details', description: 'Individual balances.', cost: 'local', dependencies: [] },
   { id: 'investment_details', label: 'Investment details', description: 'Individual holdings.', cost: 'local', dependencies: ['account_details'] },
 ];
+const CALCULATORS = [{
+  id: 'retirement',
+  version: 2,
+  label: 'Retirement scenarios',
+  description: 'Compare retirement assumptions.',
+  requiredPacks: ['retirement_analysis'],
+  supportedOverrides: [{ id: 'retirement_age', label: 'Retirement age' }],
+  defaults: [{ id: 'annual_contribution_amount', value: 0 }],
+  outputs: [{ id: 'survival_rate', label: 'Survival rate', unit: 'percent' }],
+}];
 
 describe('ContextPlannerPanel', () => {
   it('tests a full Q&A decision and explains dependency-added packs', async () => {
@@ -14,6 +24,7 @@ describe('ContextPlannerPanel', () => {
           ok: true,
           json: async () => ({
             packs: PACKS,
+            calculators: CALCULATORS,
             plan: {
               source: 'context_planner',
               requestedPacks: ['investment_details'],
@@ -22,7 +33,12 @@ describe('ContextPlannerPanel', () => {
               retirementInputs: { sources: {} },
               retirementScenario: {
                 requested: true,
-                primary: { type: 'fixed_growth', annualRate: 0.03, source: '3% bump' },
+                primary: {
+                  type: 'fixed_growth',
+                  annualRate: 0.03,
+                  source: '3% bump',
+                  overrides: { retirementAge: 65, annualContributionAmount: 12_000, sources: {} },
+                },
                 comparison: { type: 'flat_nominal', source: 'flat version' },
               },
               summary: 'The follow-up continues a portfolio comparison.',
@@ -32,7 +48,7 @@ describe('ContextPlannerPanel', () => {
           }),
         } as Response;
       }
-      return { ok: true, json: async () => ({ packs: PACKS }) } as Response;
+      return { ok: true, json: async () => ({ packs: PACKS, calculators: CALCULATORS }) } as Response;
     }) as typeof fetch;
 
     render(<ContextPlannerPanel apiUrl="https://api.test" getAuthHeaders={() => ({})} />);
@@ -46,8 +62,13 @@ describe('ContextPlannerPanel', () => {
     expect(screen.getByText('dependency')).toBeInTheDocument();
     expect(screen.getByText('selected')).toBeInTheDocument();
     expect(screen.getByText('Retirement scenario request')).toBeInTheDocument();
+    expect(screen.getByText('Calculator registry')).toBeInTheDocument();
+    expect(screen.getByText('Retirement scenarios')).toBeInTheDocument();
+    expect(screen.getByText('Retirement age')).toBeInTheDocument();
     expect(screen.getByText('Run: 3% annual growth')).toBeInTheDocument();
     expect(screen.getByText('Compare with: Flat nominal withdrawals')).toBeInTheDocument();
+    expect(screen.getByText('retirementAge: 65')).toBeInTheDocument();
+    expect(screen.getByText('annualContributionAmount: 12000')).toBeInTheDocument();
     await waitFor(() => {
       const post = (global.fetch as jest.Mock).mock.calls.find(([, init]) => init?.method === 'POST');
       const body = JSON.parse(post[1].body);

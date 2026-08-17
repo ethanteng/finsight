@@ -8,7 +8,7 @@ export interface CanonicalFact {
   unit: 'usd' | 'percent' | 'months' | 'years' | 'age' | 'count' | 'ratio';
   displayable?: boolean;
   provenance: {
-    kind: 'snapshot' | 'calculation' | 'user_input' | 'external_context';
+    kind: 'snapshot' | 'calculation' | 'user_input' | 'external_context' | 'scenario_input' | 'scenario_calculation';
     source: string;
     asOf?: string;
     formula?: string;

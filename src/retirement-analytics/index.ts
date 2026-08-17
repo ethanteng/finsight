@@ -93,6 +93,10 @@ export async function analyzeRetirementPortfolio(
   const portfolioMapping = await mapPortfolioToAssetBasket(input.holdings, input.securities, totalValue, dataProviderFactory, tickerToMetadata);
   const assumptions = populateAssumptions(portfolioMapping, input.holdings, input.securities);
   const withdrawalPolicy = input.withdrawalPolicy ?? { type: 'historical_cpi' as const };
+  const annualContributionAmount = input.annualContributionAmount ?? 0;
+  if (!Number.isFinite(annualContributionAmount) || annualContributionAmount < 0) {
+    throw new Error('Annual contributions must be a finite, non-negative amount');
+  }
   assumptions.push(
     withdrawalPolicy.type === 'historical_cpi'
       ? 'Retirement spending rises with each historical sequence\'s CPI after withdrawals begin (constant real spending)'
@@ -101,18 +105,22 @@ export async function analyzeRetirementPortfolio(
         : `Retirement spending rises ${withdrawalPolicy.annualRate * 100}% on each withdrawal anniversary`
   );
 
-  // Model the full path from today through life expectancy. Contributions are
-  // not an input today, so the accumulation phase deliberately assumes zero.
+  // Model the full path from today through life expectancy, including explicit
+  // pre-withdrawal contributions when the scenario supplies them.
   const timeline = buildRetirementTimeline(input);
   const { yearsToWithdrawalStart, withdrawalYears, totalAnalysisYears, withdrawalDelayMonths } = timeline;
   if (yearsToWithdrawalStart > 0) {
     assumptions.push(
-      `Portfolio grows for ${yearsToWithdrawalStart} years before withdrawals begin; no additional contributions are assumed`
+      annualContributionAmount > 0
+        ? `Portfolio grows for ${yearsToWithdrawalStart} years before withdrawals begin with $${annualContributionAmount.toLocaleString('en-US')} in annual contributions, indexed with historical CPI`
+        : `Portfolio grows for ${yearsToWithdrawalStart} years before withdrawals begin; no additional contributions are assumed`
     );
   }
   const timelineBucket = snapToHorizonBucket(withdrawalYears);
   const timelineBucketNote = yearsToWithdrawalStart > 0
-    ? `Historical sequences include ${yearsToWithdrawalStart} years of pre-withdrawal growth with no additional contributions before the ${withdrawalYears}-year withdrawal period.`
+    ? annualContributionAmount > 0
+      ? `Historical sequences include ${yearsToWithdrawalStart} years of pre-withdrawal growth with $${annualContributionAmount.toLocaleString('en-US')} in annual contributions, stated in today's dollars, before the ${withdrawalYears}-year withdrawal period.`
+      : `Historical sequences include ${yearsToWithdrawalStart} years of pre-withdrawal growth with no additional contributions before the ${withdrawalYears}-year withdrawal period.`
     : 'Withdrawals begin immediately; no pre-withdrawal accumulation period is modeled.';
 
   const fredApiKey = process.env.FRED_API_KEY || 'test_fred_key';
@@ -144,7 +152,7 @@ export async function analyzeRetirementPortfolio(
       totalValue,
       sequence,
       input.annualWithdrawalAmount,
-      { withdrawalDelayMonths, withdrawalPolicy }
+      { withdrawalDelayMonths, withdrawalPolicy, annualContributionAmount }
     )
   );
 

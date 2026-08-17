@@ -129,6 +129,29 @@ describe('retirement correctness contracts', () => {
     expect(outcome.portfolioValueAtWithdrawalStart).toBeGreaterThan(1_000);
   });
 
+  it('adds inflation-linked contributions only before withdrawals begin', () => {
+    const outcome = simulateWithdrawals(
+      balancedMapping,
+      1_200,
+      flatSequence(24),
+      600,
+      { withdrawalDelayMonths: 12, annualContributionAmount: 120 }
+    );
+
+    expect(outcome.portfolioValueAtWithdrawalStart).toBeCloseTo(1_320);
+    expect(outcome.finalValue).toBeCloseTo(720);
+  });
+
+  it('rejects invalid contribution inputs', () => {
+    expect(() => simulateWithdrawals(
+      balancedMapping,
+      1_200,
+      flatSequence(12),
+      0,
+      { withdrawalDelayMonths: 12, annualContributionAmount: -1 }
+    )).toThrow(/contributions/i);
+  });
+
   it('compares flat, fixed-growth, and historical-CPI withdrawals from the same starting spending power', () => {
     const sequence = flatSequence(36);
     sequence.inflationRates = Array.from({ length: 36 }, () => 0.01);

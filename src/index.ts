@@ -2352,7 +2352,8 @@ app.get('/admin/ai/response-tone', adminAuth, async (req: Request, res: Response
 // not mutable vocabulary, so changing what a pack means remains reviewable.
 app.get('/admin/ai/context-packs', adminAuth, async (_req: Request, res: Response) => {
   const { CONTEXT_PACKS } = await import('./openai/context-packs');
-  res.json({ packs: CONTEXT_PACKS });
+  const { scenarioCalculatorRegistry } = await import('./scenarios/calculator-registry');
+  res.json({ packs: CONTEXT_PACKS, calculators: scenarioCalculatorRegistry.manifests() });
 });
 
 // Admin: Run the same semantic preflight planner production uses against an
@@ -2383,13 +2384,14 @@ app.post('/admin/ai/context-planner-preview', adminAuth, async (req: Request, re
     const { loadModelConfig } = await import('./openai/model-config');
     const { planContext } = await import('./openai/context-planner');
     const { CONTEXT_PACKS } = await import('./openai/context-packs');
+    const { scenarioCalculatorRegistry } = await import('./scenarios/calculator-registry');
     await loadModelConfig(true);
     const plan = await planContext({
       question: question.trim(),
       recentTurns,
       tier: typeof tier === 'string' ? tier : undefined,
     });
-    res.json({ plan, packs: CONTEXT_PACKS });
+    res.json({ plan, packs: CONTEXT_PACKS, calculators: scenarioCalculatorRegistry.manifests() });
   } catch (error) {
     console.error('Error previewing context planning:', error);
     Sentry.captureException(error instanceof Error ? error : new Error(String(error)));

@@ -27,10 +27,16 @@ import {
 } from './retirement-input-extraction';
 import type { QuestionNeeds } from './types';
 import {
-  parseRetirementScenarioPlan,
-  RETIREMENT_SCENARIO_PLAN_JSON_SCHEMA,
+  RETIREMENT_CALCULATOR_ID,
   type RetirementScenarioPlan,
 } from '../scenarios/retirement-scenario';
+import { scenarioCalculatorRegistry } from '../scenarios/calculator-registry';
+
+const RETIREMENT_CALCULATOR = scenarioCalculatorRegistry.require<
+  RetirementScenarioPlan,
+  unknown,
+  unknown
+>(RETIREMENT_CALCULATOR_ID);
 
 export interface ContextPlan {
   source: 'context_planner' | 'fallback_all';
@@ -49,6 +55,46 @@ export interface PlanContextArgs {
   question: string;
   recentTurns?: readonly RetirementInputTurn[];
   tier?: UserTier | string;
+}
+
+const SCENARIO_OVERRIDE_INPUT_FIELDS = [
+  'retirementAge',
+  'annualWithdrawalAmount',
+  'withdrawalStartAge',
+  'lifeExpectancy',
+] as const;
+
+/**
+ * Keep hypothetical scenario values out of the canonical baseline. The same
+ * semantic pass extracts both shapes, so without this boundary an age or
+ * spending override can rebuild the baseline before the scenario runner sees
+ * it and erase the comparison the user requested.
+ */
+export function retirementInputsForBaseline(
+  inputs: ExtractedRetirementInputs | undefined,
+  scenario: RetirementScenarioPlan | undefined
+): ExtractedRetirementInputs | undefined {
+  if (!inputs || !scenario) return inputs;
+
+  const variants = [scenario.primary, scenario.comparison].filter(Boolean);
+  const overridden = new Set(
+    SCENARIO_OVERRIDE_INPUT_FIELDS.filter((field) =>
+      variants.some((variant) => variant?.overrides?.[field] !== undefined)
+    )
+  );
+  if (overridden.size === 0) return inputs;
+
+  const baseline: ExtractedRetirementInputs = { sources: {} };
+  if (inputs.currentAge !== undefined) {
+    baseline.currentAge = inputs.currentAge;
+    if (inputs.sources.currentAge) baseline.sources.currentAge = inputs.sources.currentAge;
+  }
+  for (const field of SCENARIO_OVERRIDE_INPUT_FIELDS) {
+    if (overridden.has(field) || inputs[field] === undefined) continue;
+    baseline[field] = inputs[field];
+    if (inputs.sources[field]) baseline.sources[field] = inputs.sources[field];
+  }
+  return baseline;
 }
 
 const PACK_PROPERTIES = Object.fromEntries(
@@ -94,7 +140,7 @@ export const CONTEXT_PLAN_JSON_SCHEMA = {
         },
       },
     },
-    retirementScenario: RETIREMENT_SCENARIO_PLAN_JSON_SCHEMA,
+    retirementScenario: RETIREMENT_CALCULATOR.planner.jsonSchema,
     summary: { type: 'string' },
   },
 } as const;
@@ -113,11 +159,9 @@ Important boundaries:
 
 Also extract retirement inputs the user actually stated in this decision. Never estimate or supply typical values. annualWithdrawalAmount means intended annual retirement spending in today's dollars, not salary, savings, portfolio value, or current spending. Convert a monthly amount only when it clearly refers to that retirement spending. A short answer takes its meaning from the assistant question immediately before it. The newest revision wins. Put the user's own short wording in sources; use null for an absent value and source.
 
-When the user asks to run or compare a retirement withdrawal-growth scenario, set retirementScenario.requested=true. Use:
-- historical_cpi for withdrawals that follow actual inflation/CPI in each historical sequence;
-- flat_nominal for the same nominal dollar amount after withdrawals begin;
-- fixed_growth for a fixed annual bump, with annualRate as a decimal (3% is 0.03).
-Use the primary policy for the requested case and comparison for an explicitly named comparison case. If no comparison is named, set comparison.type=none; the application will compare against its current baseline. If fixed growth is requested without a rate, use null so the application can disclose its default. Put the user's short wording in source. For no such scenario, requested=false and use type=none, annualRate=null, source=null for both policy objects. Do not use retirementScenario merely because an ordinary retirement projection was requested.
+Retirement calculator contract:
+${RETIREMENT_CALCULATOR.planner.instructions}
+Do not use retirementScenario merely because an ordinary retirement projection was requested.
 
 Return the required JSON object only.`;
 
@@ -171,13 +215,16 @@ export function parseContextPlan(raw: unknown, durationMs = 0, model?: string): 
   }
   const record = raw as Record<string, unknown>;
   const requestedPacks = getRequestedPacks(record.packs);
-  const retirementScenario = parseRetirementScenarioPlan(record.retirementScenario);
+  const retirementScenario = RETIREMENT_CALCULATOR.planner.parsePlan(record.retirementScenario);
   const selectedPacks = normalizeContextPacks([
     ...requestedPacks,
-    ...(retirementScenario ? ['retirement_analysis' as const] : []),
+    ...(retirementScenario ? RETIREMENT_CALCULATOR.requiredPacks : []),
   ]);
   const needsSecondaryValidation = record.needsSecondaryValidation === true;
-  const retirementInputs = validateExtractedInputs(record.retirementInputs);
+  const retirementInputs = retirementInputsForBaseline(
+    validateExtractedInputs(record.retirementInputs),
+    retirementScenario
+  );
   const summary = typeof record.summary === 'string'
     ? record.summary.trim().slice(0, 1000)
     : '';

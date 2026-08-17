@@ -27,6 +27,8 @@ import {
 export interface WithdrawalSimulationOptions {
   withdrawalDelayMonths?: number;
   withdrawalPolicy?: WithdrawalPolicy;
+  /** Annual contribution in today's dollars, applied monthly before withdrawals begin. */
+  annualContributionAmount?: number;
 }
 
 function validateWithdrawalPolicy(policy: WithdrawalPolicy): void {
@@ -56,6 +58,10 @@ export function simulateWithdrawals(
   const w = portfolioMapping;
   const withdrawalPolicy = options.withdrawalPolicy ?? DEFAULT_WITHDRAWAL_POLICY;
   validateWithdrawalPolicy(withdrawalPolicy);
+  const annualContributionAmount = options.annualContributionAmount ?? 0;
+  if (!Number.isFinite(annualContributionAmount) || annualContributionAmount < 0) {
+    throw new Error('Annual contributions must be a finite, non-negative amount');
+  }
   let usEquity = initialPortfolioValue * w.usEquityWeight;
   let intlEquity = initialPortfolioValue * w.internationalEquityWeight;
   let bonds = initialPortfolioValue * w.nominalBondsWeight;
@@ -91,6 +97,19 @@ export function simulateWithdrawals(
     const monthlyInflation = sequence.inflationRates[month] ?? 0;
     cumulativeInflation *= 1 + monthlyInflation;
     const withdrawing = month >= withdrawalDelayMonths;
+
+    // Contributions are expressed in today's dollars, just like the starting
+    // withdrawal. Index them with the historical sequence's CPI and invest them
+    // at the target allocation after this month's returns. They stop before the
+    // first withdrawal so the two phases never overlap.
+    if (!withdrawing && annualContributionAmount > 0) {
+      const monthlyContribution = (annualContributionAmount / 12) * cumulativeInflation;
+      usEquity += monthlyContribution * w.usEquityWeight;
+      intlEquity += monthlyContribution * w.internationalEquityWeight;
+      bonds += monthlyContribution * w.nominalBondsWeight;
+      cash += monthlyContribution * w.cashWeight;
+      portfolioValue += monthlyContribution;
+    }
 
     // Through the first withdrawal, keep the user's today-dollar spending
     // target level with the sequence's CPI for every policy. After that first
