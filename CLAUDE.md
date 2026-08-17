@@ -90,12 +90,15 @@ Plaid/SnapTrade → financial-ingestion.ts → financial-calculations.ts
                                       → openai/context-planner.ts (semantic preflight)
                                       → openai/context-service.ts
                                       → Claude request_data_packs audit
+                                      → deterministic scenario runner (when requested)
                                       → financial-reasoning-prompt.ts
                                       → Claude/OpenAI fallback
                                       → deterministic response validation → user
 ```
 
 `contextPlanner` refers to the two-pass subsystem documented in `docs/CONTEXT_PLANNING.md`: the OpenAI `contextPlanner` model slot proposes the initial packs, and the configured Primary analysis model may widen them through a constrained tool before it writes the answer. Data-pack routing must not be rebuilt from question keywords or regular expressions.
+
+Supported what-if calculations run in application-owned scenario calculators after context planning. Models may identify a typed scenario request, but they do not compute outcomes. See `docs/SCENARIO_MODELING.md`.
 
 ### Profile protection
 

@@ -20,6 +20,11 @@ describe('ContextPlannerPanel', () => {
               selectedPacks: ['account_details', 'investment_details'],
               needsSecondaryValidation: true,
               retirementInputs: { sources: {} },
+              retirementScenario: {
+                requested: true,
+                primary: { type: 'fixed_growth', annualRate: 0.03, source: '3% bump' },
+                comparison: { type: 'flat_nominal', source: 'flat version' },
+              },
               summary: 'The follow-up continues a portfolio comparison.',
               model: 'gpt-test',
               durationMs: 40,
@@ -40,6 +45,9 @@ describe('ContextPlannerPanel', () => {
     expect(screen.getByText('The follow-up continues a portfolio comparison.')).toBeInTheDocument();
     expect(screen.getByText('dependency')).toBeInTheDocument();
     expect(screen.getByText('selected')).toBeInTheDocument();
+    expect(screen.getByText('Retirement scenario request')).toBeInTheDocument();
+    expect(screen.getByText('Run: 3% annual growth')).toBeInTheDocument();
+    expect(screen.getByText('Compare with: Flat nominal withdrawals')).toBeInTheDocument();
     await waitFor(() => {
       const post = (global.fetch as jest.Mock).mock.calls.find(([, init]) => init?.method === 'POST');
       const body = JSON.parse(post[1].body);

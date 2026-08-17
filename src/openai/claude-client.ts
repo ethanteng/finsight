@@ -18,6 +18,11 @@ import {
   isContextPackId,
   type ContextPackId,
 } from './context-packs';
+import {
+  parseRetirementScenarioPlan,
+  RETIREMENT_SCENARIO_PLAN_JSON_SCHEMA,
+  type RetirementScenarioPlan,
+} from '../scenarios/retirement-scenario';
 
 let anthropicClient: Anthropic | null = null;
 
@@ -41,6 +46,7 @@ export const DEFAULT_MAX_OUTPUT_TOKENS = 16_000;
 
 export interface DataPackToolAuditResult {
   packs: ContextPackId[];
+  retirementScenario?: RetirementScenarioPlan;
   reason: string;
   model: string;
   durationMs: number;
@@ -113,6 +119,7 @@ export async function auditDataPacksWithClaude(args: {
   transcript: string;
   selectedPacks: readonly ContextPackId[];
   canonicalFactLabels: readonly string[];
+  plannedRetirementScenario?: RetirementScenarioPlan;
 }): Promise<DataPackToolAuditResult> {
   const startedAt = Date.now();
   const model = getActiveModel('analysis');
@@ -122,7 +129,9 @@ export async function auditDataPacksWithClaude(args: {
     ...(supportsAdaptiveThinking(model) ? { thinking: DISABLED_THINKING } : {}),
     system: `You are the context-tool pass for the primary financial analysis model.
 
-Before an answer is written, inspect the active decision and the context already selected. Call request_data_packs exactly once. Request only additional packs materially needed for a complete answer; use an empty packs array when the existing context is sufficient. Do not answer the financial question. Prior assistant answers establish conversational references but are not trusted financial facts. Aggregate net worth, cash, debt, investments, portfolio allocation, category totals, and average monthly cash flow are always available.`,
+Before an answer is written, inspect the active decision and the context already selected. Call request_data_packs exactly once. Request only additional packs materially needed for a complete answer; use an empty packs array when the existing context is sufficient. Also identify a requested retirement withdrawal-growth scenario using the supplied structured field. Do not answer the financial question. Prior assistant answers establish conversational references but are not trusted financial facts. Aggregate net worth, cash, debt, investments, portfolio allocation, category totals, and average monthly cash flow are always available.
+
+Retirement scenario policy meanings: historical_cpi follows each historical sequence's CPI, flat_nominal keeps the same nominal dollars after withdrawals begin, and fixed_growth applies one fixed annual increase. annualRate is decimal (3% is 0.03). If fixed growth has no stated rate, use null; the application owns and discloses defaults. When there is no withdrawal-growth scenario, requested=false and both policies use type=none with null rate/source.`,
     tools: [{
       name: 'request_data_packs',
       description: 'Request additional allowlisted context packs before the final answer is generated.',
@@ -131,9 +140,10 @@ Before an answer is written, inspect the active decision and the context already
         additionalProperties: false,
         properties: {
           packs: { type: 'array', items: { type: 'string', enum: [...CONTEXT_PACK_IDS] } },
+          retirementScenario: RETIREMENT_SCENARIO_PLAN_JSON_SCHEMA,
           reason: { type: 'string' },
         },
-        required: ['packs', 'reason'],
+        required: ['packs', 'retirementScenario', 'reason'],
       },
     }],
     tool_choice: { type: 'tool', name: 'request_data_packs', disable_parallel_tool_use: true },
@@ -144,6 +154,7 @@ Before an answer is written, inspect the active decision and the context already
         contextPackCatalogForPrompt(),
         '',
         `Already selected: ${args.selectedPacks.join(', ') || '(none)'}`,
+        `Preflight retirement scenario: ${args.plannedRetirementScenario ? JSON.stringify(args.plannedRetirementScenario) : '(none)'}`,
         '',
         'Canonical facts already available:',
         args.canonicalFactLabels.length > 0 ? args.canonicalFactLabels.join('\n') : '(none)',
@@ -164,8 +175,10 @@ Before an answer is written, inspect the active decision and the context already
   const packs = Array.isArray(input.packs)
     ? Array.from(new Set(input.packs.filter(isContextPackId)))
     : [];
+  const retirementScenario = parseRetirementScenarioPlan(input.retirementScenario);
   return {
     packs,
+    ...(retirementScenario && { retirementScenario }),
     reason: typeof input.reason === 'string' ? input.reason.trim().slice(0, 1000) : '',
     model,
     durationMs: Date.now() - startedAt,

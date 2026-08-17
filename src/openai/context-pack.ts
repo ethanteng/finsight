@@ -1,5 +1,6 @@
 import type { FinancialContextSnapshot, QuestionNeeds } from './types';
 import type { CanonicalFactPack } from './canonical-facts';
+import { compactRetirementScenarioExecution } from '../scenarios/retirement-scenario';
 
 export interface QuestionContextPack {
   facts: CanonicalFactPack;
@@ -54,6 +55,9 @@ export function buildQuestionContextPack(
   if (needs.needsRetirement) {
     details.retirementAnalysis = compactRetirementAnalysis(snapshot);
     details.retirementAnalysisNeedsInfo = snapshot.retirementAnalysisNeedsInfo;
+    if (snapshot.retirementScenarioExecution) {
+      details.retirementScenarios = compactRetirementScenarioExecution(snapshot.retirementScenarioExecution);
+    }
   }
   if (needs.needsHomeValue) details.homeValue = snapshot.homeValueSummary;
 

@@ -3,6 +3,21 @@
 
 import { Holding, Security } from '../services/financial-data-service';
 
+/**
+ * How retirement spending changes after withdrawals begin.
+ *
+ * All policies start from the same amount in today's dollars. When retirement
+ * is in the future, that amount is indexed by the historical sequence's CPI up
+ * to the withdrawal start so policy comparisons begin with the same purchasing
+ * power. The policy controls increases after that point.
+ */
+export type WithdrawalPolicy =
+  | { type: 'historical_cpi' }
+  | { type: 'flat_nominal' }
+  | { type: 'fixed_growth'; annualRate: number };
+
+export const DEFAULT_WITHDRAWAL_POLICY: WithdrawalPolicy = { type: 'historical_cpi' };
+
 // ============================================================================
 // Input Types (Section 2.1)
 // ============================================================================
@@ -20,6 +35,7 @@ export interface RetirementAnalysisInput {
   // Withdrawal assumptions (required)
   annualWithdrawalAmount: number; // in today's dollars
   withdrawalStartAge: number; // when withdrawals begin
+  withdrawalPolicy?: WithdrawalPolicy; // defaults to historical CPI (constant real spending)
   
   // Optional overrides
   inflationAssumption?: number; // override FRED data

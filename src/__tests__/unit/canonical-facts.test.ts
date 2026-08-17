@@ -223,6 +223,75 @@ describe('buildCanonicalFactPack', () => {
     expect(validateCanonicalFactPack(pack)).toEqual([]);
   });
 
+  it('grounds multiple modeled outcomes as scenario-scoped facts', () => {
+    const data = snapshot();
+    const scenario = (id: string, label: string, survivalRate: number, policy: any) => ({
+      id,
+      label,
+      withdrawalPolicy: policy,
+      assumptions: [],
+      reusedBaseline: false,
+      analysis: {
+        metrics: {
+          withdrawalRate: 0.04,
+          yearsOfExpenses: 25,
+          projectedPortfolioAtWithdrawalStart: 1_000_000,
+        },
+        stressTest: {
+          survivalRate,
+          totalSequences: 100,
+          depletionPercentiles: { p10: 12, p25: 18, p50: 24, p75: 28, p90: 30 },
+        },
+      },
+    });
+    data.retirementScenarioExecution = {
+      version: 1,
+      calculator: 'retirement',
+      status: 'completed',
+      computedAt: '2026-08-17T00:00:00.000Z',
+      durationMs: 10,
+      baselineScenarioId: 'base',
+      scenarios: [
+        scenario('fixed', '3% annual withdrawal growth', 0.75, { type: 'fixed_growth', annualRate: 0.03 }),
+        scenario('flat', 'Flat nominal withdrawals', 0.95, { type: 'flat_nominal' }),
+      ],
+    };
+
+    const pack = buildCanonicalFactPack(data, 'Compare the scenarios.', needs('retirement_analysis'));
+    const survivalFacts = pack.facts.filter((fact) => fact.id.endsWith('_survival_rate'));
+    expect(survivalFacts).toEqual([
+      expect.objectContaining({
+        value: 75,
+        unit: 'percent',
+        provenance: expect.objectContaining({ kind: 'scenario_calculation', scenarioId: 'fixed' }),
+      }),
+      expect.objectContaining({
+        value: 95,
+        unit: 'percent',
+        provenance: expect.objectContaining({ kind: 'scenario_calculation', scenarioId: 'flat' }),
+      }),
+    ]);
+    expect(pack.facts).toContainEqual(expect.objectContaining({
+      label: '3% annual withdrawal growth rate assumption',
+      value: 3,
+      unit: 'percent',
+    }));
+    expect(pack.facts).toContainEqual(expect.objectContaining({
+      label: 'Absolute survival-rate gap between 3% annual withdrawal growth and Flat nominal withdrawals',
+      value: 20,
+      unit: 'percent',
+      provenance: expect.objectContaining({
+        kind: 'scenario_calculation',
+        scenarioId: 'fixed_vs_flat',
+        inputFactIds: [
+          'retirement_scenario_fixed_survival_rate',
+          'retirement_scenario_flat_survival_rate',
+        ],
+      }),
+    }));
+    expect(validateCanonicalFactPack(pack)).toEqual([]);
+  });
+
   it('reports one allocation fact per asset class when a snapshot has split buckets', () => {
     // A snapshot persisted before asset types were normalized: Plaid's "etf" and
     // SnapTrade's "ETF" as separate rows. The fact id is case-folded, so without a

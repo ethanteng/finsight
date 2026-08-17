@@ -8,6 +8,7 @@ import { validateWithGemini } from '../../openai/response-validator';
 import { askOpenAIWithPreparedPrompt } from '../../openai/openai-fallback-client';
 import { planContext, type ContextPlan } from '../../openai/context-planner';
 import { normalizeContextPacks, questionNeedsFromPacks, type ContextPackId } from '../../openai/context-packs';
+import { runRetirementScenario } from '../../scenarios/retirement-scenario';
 
 jest.mock('../../openai/context-service', () => ({
   gatherContextSnapshot: jest.fn(),
@@ -31,6 +32,10 @@ jest.mock('../../openai/response-validator', () => ({
 jest.mock('../../openai/openai-fallback-client', () => ({
   askOpenAIWithPreparedPrompt: jest.fn(),
 }));
+jest.mock('../../scenarios/retirement-scenario', () => ({
+  ...jest.requireActual('../../scenarios/retirement-scenario'),
+  runRetirementScenario: jest.fn(),
+}));
 
 const mockedGatherContext = gatherContextSnapshot as jest.MockedFunction<typeof gatherContextSnapshot>;
 const mockedAskClaude = askClaude as jest.MockedFunction<typeof askClaude>;
@@ -38,6 +43,7 @@ const mockedAuditPacks = auditDataPacksWithClaude as jest.MockedFunction<typeof 
 const mockedPlanContext = planContext as jest.MockedFunction<typeof planContext>;
 const mockedValidateWithGemini = validateWithGemini as jest.MockedFunction<typeof validateWithGemini>;
 const mockedAskOpenAI = askOpenAIWithPreparedPrompt as jest.MockedFunction<typeof askOpenAIWithPreparedPrompt>;
+const mockedRunRetirementScenario = runRetirementScenario as jest.MockedFunction<typeof runRetirementScenario>;
 
 function snapshot() {
   return {
@@ -177,6 +183,175 @@ describe('runAskLincAnalysis validation routing', () => {
     });
     expect(result.showTheMathData?.evidenceManifest.contextToolExpanded).toBe(true);
     expect(result.showTheMathData?.evidenceManifest.timings.contextToolMs).toBe(7);
+  });
+
+  it('answers a scenario comparison from deterministic scenario facts', async () => {
+    const plan = contextPlan(['retirement_analysis']);
+    plan.retirementScenario = {
+      requested: true,
+      primary: { type: 'fixed_growth', annualRate: 0.03, source: '3% bump' },
+      comparison: { type: 'flat_nominal', source: 'flat version' },
+    };
+    const scenarioAnalysis = (survivalRate: number) => ({
+      metrics: {
+        withdrawalRate: 0.04,
+        yearsOfExpenses: 25,
+        projectedPortfolioAtWithdrawalStart: 1_000_000,
+      },
+      stressTest: {
+        survivalRate,
+        totalSequences: 100,
+        depletionPercentiles: { p10: 12, p25: 18, p50: 24, p75: 28, p90: 30 },
+      },
+    } as any);
+    const scenarioExecution = {
+      version: 1 as const,
+      calculator: 'retirement' as const,
+      status: 'completed' as const,
+      computedAt: '2026-08-17T00:00:00.000Z',
+      durationMs: 12,
+      baselineScenarioId: 'baseline',
+      scenarios: [{
+        id: 'fixed',
+        label: '3% annual withdrawal growth',
+        withdrawalPolicy: { type: 'fixed_growth' as const, annualRate: 0.03 },
+        assumptions: [{ key: 'annual_growth_rate', label: 'Growth', value: 0.03, origin: 'user' as const }],
+        analysis: scenarioAnalysis(0.75),
+        reusedBaseline: false,
+      }, {
+        id: 'flat',
+        label: 'Flat nominal withdrawals',
+        withdrawalPolicy: { type: 'flat_nominal' as const },
+        assumptions: [],
+        analysis: scenarioAnalysis(0.95),
+        reusedBaseline: false,
+      }],
+    };
+
+    const result = await runAskLincAnalysis({
+      question: 'Compare a 3% annual bump with the flat-dollar version.',
+      evaluation: {
+        snapshot: snapshot(),
+        contextPlan: plan,
+        retirementScenarioExecution: scenarioExecution,
+        skipToneConfig: true,
+        model: ({ userMessage }) => {
+          expect(userMessage).toContain('retirement_scenario_fixed_survival_rate');
+          expect(userMessage).toContain('retirement_scenario_flat_survival_rate');
+          return JSON.stringify({
+            summary: 'The fixed-growth scenario survived 75% of historical sequences versus 95% for the flat scenario.',
+            key_numbers: {
+              fixed_survival: {
+                value: 75,
+                unit: 'percent',
+                provenance: 'retirement_scenario_fixed_survival_rate',
+              },
+              flat_survival: {
+                value: 95,
+                unit: 'percent',
+                provenance: 'retirement_scenario_flat_survival_rate',
+              },
+            },
+            insights: [],
+            suggested_actions: [],
+          });
+        },
+      },
+    });
+
+    expect(result.showTheMathData?.evidenceManifest.validation.deterministic.valid).toBe(true);
+    expect(result.showTheMathData?.evidenceManifest.scenarioExecution).toMatchObject({
+      status: 'completed',
+      scenarios: [{ metrics: { survivalRate: 0.75 } }, { metrics: { survivalRate: 0.95 } }],
+    });
+    expect(result.showTheMathData?.evidenceManifest.timings.scenarioMs).toBe(12);
+    expect(result.structuredResponse.summary).toContain('Scenario assumptions:');
+  });
+
+  it('keeps scenario facts after late context escalation replaces the snapshot', async () => {
+    const plan = contextPlan(['retirement_analysis']);
+    plan.retirementScenario = {
+      requested: true,
+      primary: { type: 'flat_nominal', source: 'flat-dollar version' },
+    };
+    mockedPlanContext.mockResolvedValue(plan);
+    mockedAuditPacks.mockResolvedValue({
+      packs: [],
+      reason: 'Retirement scenario already planned.',
+      model: 'test-claude',
+      durationMs: 1,
+    });
+    mockedRunRetirementScenario.mockResolvedValue({
+      version: 1,
+      calculator: 'retirement',
+      status: 'completed',
+      computedAt: '2026-08-17T00:00:00.000Z',
+      durationMs: 9,
+      baselineScenarioId: 'baseline',
+      scenarios: [{
+        id: 'flat',
+        label: 'Flat nominal withdrawals',
+        withdrawalPolicy: { type: 'flat_nominal' },
+        assumptions: [
+          { key: 'annual_withdrawal_amount', label: 'Spending', value: 40_000, origin: 'inherited' },
+          { key: 'current_age', label: 'Current age', value: 50, origin: 'inherited' },
+          { key: 'retirement_age', label: 'Retirement age', value: 60, origin: 'inherited' },
+          { key: 'life_expectancy', label: 'Life expectancy', value: 95, origin: 'inherited' },
+        ],
+        analysis: {
+          metrics: {
+            withdrawalRate: 0.04,
+            yearsOfExpenses: 25,
+            projectedPortfolioAtWithdrawalStart: 1_000_000,
+          },
+          stressTest: {
+            survivalRate: 0.95,
+            totalSequences: 100,
+            depletionPercentiles: { p10: 12, p25: 18, p50: 24, p75: 28, p90: 30 },
+          },
+        },
+        reusedBaseline: false,
+      }],
+    } as any);
+    mockedGatherContext
+      .mockResolvedValueOnce(snapshot())
+      .mockResolvedValueOnce(snapshot());
+    mockedAskClaude
+      .mockResolvedValueOnce(JSON.stringify({
+        summary: 'Your largest holding is worth $250,000 under the flat scenario.',
+        insights: [],
+        suggested_actions: [],
+      }))
+      .mockResolvedValueOnce(JSON.stringify({
+        summary: 'The flat-dollar scenario survived 95% of historical sequences.',
+        key_numbers: {
+          flat_survival: {
+            value: 95,
+            unit: 'percent',
+            provenance: 'retirement_scenario_flat_survival_rate',
+          },
+        },
+        insights: [],
+        suggested_actions: [],
+      }));
+
+    const result = await runAskLincAnalysis({
+      question: 'Compare a flat-dollar retirement withdrawal plan.',
+      userId: 'user-1',
+    });
+
+    expect(mockedGatherContext).toHaveBeenCalledTimes(2);
+    expect(mockedRunRetirementScenario).toHaveBeenCalledTimes(1);
+    expect(result.showTheMathData?.evidenceManifest.contextEscalated).toBe(true);
+    expect(result.showTheMathData?.evidenceManifest.facts).toContainEqual(
+      expect.objectContaining({ id: 'retirement_scenario_flat_survival_rate', value: 95 })
+    );
+    expect(result.showTheMathData?.evidenceManifest.scenarioExecution).toMatchObject({
+      status: 'completed',
+      scenarios: [{ id: 'flat' }],
+    });
+    expect(result.structuredResponse.summary).toContain('Scenario assumptions:');
+    expect(result.showTheMathData?.evidenceManifest.validation.deterministic.valid).toBe(true);
   });
 
   it('records a failed primary-model pack audit without failing the answer', async () => {

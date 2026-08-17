@@ -185,7 +185,7 @@ Initial allocation:
 Per month (end-of-period: returns first, then withdrawal):
   1. usEquity *= 1 + usRet; intlEquity *= 1 + intlRet; bonds *= 1 + bondRet; cash *= 1 + cashRet
   2. portfolioValue = usEquity + intlEquity + bonds + cash
-  3. monthlyWithdrawal *= 1 + monthlyInflation  (inflationRates[] are monthly: CPI_t/CPI_(t-1) - 1, not annual)
+  3. update monthlyWithdrawal according to the selected policy
   4. portfolioValue = max(0, portfolioValue - monthlyWithdrawal)  (clamp at zero; sequence marked depleted)
 
 Between-rebalance months (proportional scaling after withdrawal):
@@ -199,6 +199,8 @@ Annual rebalance (every 12 months):
   bonds = portfolioValue * nominalBondsWeight
   cash = portfolioValue * cashWeight
 ```
+
+The default withdrawal policy is `historical_cpi`, which applies each sequence's monthly CPI rate and therefore models constant real spending. Scenario calculations can instead use `flat_nominal` or `fixed_growth`. All policies translate today's spending target through CPI until withdrawals start; after that point, flat nominal spending freezes and fixed growth applies the requested rate on withdrawal anniversaries. See [Deterministic scenario modeling](SCENARIO_MODELING.md).
 
 ### Real Return (inflation-adjusted)
 
@@ -317,6 +319,7 @@ The LLMs are instructed to **use the provided values as authoritative** and not 
 | Withdrawal simulation | `src/retirement-analytics/engine/withdrawal-simulator.ts` |
 | Historical withdrawal rates | `src/retirement-analytics/engine/withdrawal-rate-solver.ts` |
 | Stress test / percentiles | `src/retirement-analytics/engine/outcome-analyzer.ts` |
+| Retirement scenario orchestration | `src/scenarios/retirement-scenario.ts` |
 | Data quality | `src/retirement-analytics/interpretation/uncertainty-quantifier.ts` |
 | Prompt building | `src/openai/context-pack.ts`, `src/openai/financial-reasoning-prompt.ts` |
 | Gemini validation context | `src/openai/response-validator.ts` |

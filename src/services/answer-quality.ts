@@ -35,6 +35,8 @@ export interface AnswerQualityObservation {
   toolAddedPacks: ContextPackId[];
   primaryToolOutcome: 'accepted' | 'expanded' | 'failed' | 'not_run';
   lateExpansion: boolean;
+  scenarioRequested: boolean;
+  scenarioStatus: 'completed' | 'unavailable' | 'not_run';
 }
 
 function manifestOf(showTheMathData: unknown): EvidenceManifest | null {
@@ -92,6 +94,12 @@ function toObservation(conversation: AnswerQualityConversation): AnswerQualityOb
   const primaryToolOutcome = planning?.primaryTool?.outcome
     ?? (toolAddedPacks.length > 0 ? 'expanded' : 'not_run');
   const lateExpansion = manifest.contextEscalated === true;
+  const scenarioRequested = Boolean(
+    planning?.retirementScenario
+      || planning?.primaryTool?.retirementScenario
+      || manifest.scenarioExecution
+  );
+  const scenarioStatus = manifest.scenarioExecution?.status ?? 'not_run';
   return {
     id: conversation.id,
     createdAt: new Date(conversation.createdAt).toISOString(),
@@ -105,6 +113,8 @@ function toObservation(conversation: AnswerQualityConversation): AnswerQualityOb
     toolAddedPacks,
     primaryToolOutcome,
     lateExpansion,
+    scenarioRequested,
+    scenarioStatus,
     ...deliveryStatus({ outcome, rating, lateExpansion }),
   };
 }
@@ -165,6 +175,13 @@ export interface AnswerQualityReport {
       presentFinally: number;
     }>;
   };
+  scenarios: {
+    requested: number;
+    completed: number;
+    unavailable: number;
+    notRun: number;
+    averageMs: number | null;
+  };
   users: {
     rated: number;
     positive: number;
@@ -209,6 +226,12 @@ export function buildAnswerQualityReport(
   const plannerDurations = manifests
     .map((manifest) => manifest.contextPlanning?.durationMs)
     .filter((duration): duration is number => typeof duration === 'number' && Number.isFinite(duration));
+  const scenarioDurations = manifests
+    .map((manifest) => manifest.scenarioExecution?.durationMs)
+    .filter((duration): duration is number => typeof duration === 'number' && Number.isFinite(duration));
+  const scenarioRequested = observations.filter((observation) => observation.scenarioRequested).length;
+  const scenarioCompleted = observations.filter((observation) => observation.scenarioStatus === 'completed').length;
+  const scenarioUnavailable = observations.filter((observation) => observation.scenarioStatus === 'unavailable').length;
   const ratings = observations
     .map((observation) => observation.rating)
     .filter((rating): rating is number => rating !== null);
@@ -245,6 +268,13 @@ export function buildAnswerQualityReport(
       plannerAcceptedRate: rate(plannerAccepted, semantic.length),
       averagePlannerMs: average(plannerDurations),
       byPack,
+    },
+    scenarios: {
+      requested: scenarioRequested,
+      completed: scenarioCompleted,
+      unavailable: scenarioUnavailable,
+      notRun: Math.max(0, scenarioRequested - scenarioCompleted - scenarioUnavailable),
+      averageMs: average(scenarioDurations),
     },
     users: {
       rated: ratings.length,
