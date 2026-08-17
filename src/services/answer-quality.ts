@@ -19,6 +19,8 @@ export interface AnswerQualityConversation {
 }
 
 export type DeliveryStatus = 'clean' | 'recovered' | 'failed';
+export type ScenarioStatus = 'completed' | 'unavailable' | 'not_run';
+export type ScenarioExecutionStatus = Exclude<ScenarioStatus, 'not_run'>;
 
 export interface AnswerQualityObservation {
   id: string;
@@ -36,13 +38,37 @@ export interface AnswerQualityObservation {
   primaryToolOutcome: 'accepted' | 'expanded' | 'failed' | 'not_run';
   lateExpansion: boolean;
   scenarioRequested: boolean;
-  scenarioStatus: 'completed' | 'unavailable' | 'not_run';
+  /** Answer-level summary retained for the existing admin UI. */
+  scenarioStatus: ScenarioStatus;
+  /** Calculator-level outcomes prevent a mixed run from hiding completed peers. */
+  scenarioStatuses: Record<string, ScenarioExecutionStatus>;
 }
 
 function manifestOf(showTheMathData: unknown): EvidenceManifest | null {
   if (!showTheMathData || typeof showTheMathData !== 'object') return null;
   const manifest = (showTheMathData as { evidenceManifest?: unknown }).evidenceManifest;
   return manifest && typeof manifest === 'object' ? manifest as EvidenceManifest : null;
+}
+
+interface ScenarioExecutionObservation {
+  calculatorId: string;
+  status?: string;
+  durationMs?: number;
+}
+
+function scenarioExecutions(manifest: EvidenceManifest): ScenarioExecutionObservation[] {
+  if (manifest.scenarioExecutions) {
+    return Object.entries(manifest.scenarioExecutions).map(([calculatorId, execution]) => ({
+      calculatorId,
+      status: execution.status,
+      durationMs: execution.durationMs,
+    }));
+  }
+  return manifest.scenarioExecution ? [{
+    calculatorId: manifest.scenarioExecution.calculator ?? 'retirement',
+    status: manifest.scenarioExecution.status,
+    durationMs: manifest.scenarioExecution.durationMs,
+  }] : [];
 }
 
 /** The most recent rating wins because users can change a rating. */
@@ -94,12 +120,27 @@ function toObservation(conversation: AnswerQualityConversation): AnswerQualityOb
   const primaryToolOutcome = planning?.primaryTool?.outcome
     ?? (toolAddedPacks.length > 0 ? 'expanded' : 'not_run');
   const lateExpansion = manifest.contextEscalated === true;
+  const executions = scenarioExecutions(manifest);
   const scenarioRequested = Boolean(
-    planning?.retirementScenario
+    (planning?.scenarios && Object.keys(planning.scenarios).length > 0)
+      || (planning?.primaryTool?.scenarios && Object.keys(planning.primaryTool.scenarios).length > 0)
+      || executions.length > 0
+      || planning?.retirementScenario
       || planning?.primaryTool?.retirementScenario
       || manifest.scenarioExecution
   );
-  const scenarioStatus = manifest.scenarioExecution?.status ?? 'not_run';
+  const scenarioStatuses = Object.fromEntries(executions.flatMap((execution) =>
+    execution.status === 'completed' || execution.status === 'unavailable'
+      ? [[execution.calculatorId, execution.status]]
+      : []
+  )) as Record<string, ScenarioExecutionStatus>;
+  // A partially successful answer completed scenario work. The per-calculator
+  // record above preserves any unavailable peers instead of losing that signal.
+  const scenarioStatus: ScenarioStatus = executions.some((execution) => execution.status === 'completed')
+    ? 'completed'
+    : executions.some((execution) => execution.status === 'unavailable')
+      ? 'unavailable'
+      : 'not_run';
   return {
     id: conversation.id,
     createdAt: new Date(conversation.createdAt).toISOString(),
@@ -115,6 +156,7 @@ function toObservation(conversation: AnswerQualityConversation): AnswerQualityOb
     lateExpansion,
     scenarioRequested,
     scenarioStatus,
+    scenarioStatuses,
     ...deliveryStatus({ outcome, rating, lateExpansion }),
   };
 }
@@ -181,6 +223,12 @@ export interface AnswerQualityReport {
     unavailable: number;
     notRun: number;
     averageMs: number | null;
+    completedCalculations: number;
+    unavailableCalculations: number;
+    byCalculator: Record<string, {
+      completed: number;
+      unavailable: number;
+    }>;
   };
   users: {
     rated: number;
@@ -226,12 +274,24 @@ export function buildAnswerQualityReport(
   const plannerDurations = manifests
     .map((manifest) => manifest.contextPlanning?.durationMs)
     .filter((duration): duration is number => typeof duration === 'number' && Number.isFinite(duration));
-  const scenarioDurations = manifests
-    .map((manifest) => manifest.scenarioExecution?.durationMs)
+  const scenarioExecutionObservations = manifests.flatMap(scenarioExecutions);
+  const scenarioDurations = scenarioExecutionObservations
+    .map((execution) => execution.durationMs)
     .filter((duration): duration is number => typeof duration === 'number' && Number.isFinite(duration));
   const scenarioRequested = observations.filter((observation) => observation.scenarioRequested).length;
   const scenarioCompleted = observations.filter((observation) => observation.scenarioStatus === 'completed').length;
   const scenarioUnavailable = observations.filter((observation) => observation.scenarioStatus === 'unavailable').length;
+  const calculatorIds = Array.from(new Set(
+    scenarioExecutionObservations.map((execution) => execution.calculatorId)
+  )).sort();
+  const scenarioByCalculator = Object.fromEntries(calculatorIds.map((calculatorId) => [calculatorId, {
+    completed: scenarioExecutionObservations.filter(
+      (execution) => execution.calculatorId === calculatorId && execution.status === 'completed'
+    ).length,
+    unavailable: scenarioExecutionObservations.filter(
+      (execution) => execution.calculatorId === calculatorId && execution.status === 'unavailable'
+    ).length,
+  }]));
   const ratings = observations
     .map((observation) => observation.rating)
     .filter((rating): rating is number => rating !== null);
@@ -275,6 +335,13 @@ export function buildAnswerQualityReport(
       unavailable: scenarioUnavailable,
       notRun: Math.max(0, scenarioRequested - scenarioCompleted - scenarioUnavailable),
       averageMs: average(scenarioDurations),
+      completedCalculations: scenarioExecutionObservations.filter(
+        (execution) => execution.status === 'completed'
+      ).length,
+      unavailableCalculations: scenarioExecutionObservations.filter(
+        (execution) => execution.status === 'unavailable'
+      ).length,
+      byCalculator: scenarioByCalculator,
     },
     users: {
       rated: ratings.length,

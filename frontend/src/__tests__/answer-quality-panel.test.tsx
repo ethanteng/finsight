@@ -22,7 +22,19 @@ const REPORT = {
       transaction_details: { selectedInitially: 2, addedByPrimaryTool: 0, presentFinally: 3 },
     },
   },
-  scenarios: { requested: 3, completed: 2, unavailable: 1, notRun: 0, averageMs: 42 },
+  scenarios: {
+    requested: 3,
+    completed: 2,
+    unavailable: 1,
+    notRun: 0,
+    averageMs: 42,
+    completedCalculations: 2,
+    unavailableCalculations: 1,
+    byCalculator: {
+      retirement: { completed: 2, unavailable: 0 },
+      home_affordability: { completed: 0, unavailable: 1 },
+    },
+  },
   users: { rated: 3, positive: 2, neutral: 0, negative: 1, averageRating: 3.67 },
   recent: [{
     id: 'c1',
@@ -40,6 +52,7 @@ const REPORT = {
     lateExpansion: false,
     scenarioRequested: true,
     scenarioStatus: 'completed',
+    scenarioStatuses: { retirement: 'completed', home_affordability: 'unavailable' },
   }],
 };
 
@@ -80,7 +93,9 @@ describe('AnswerQualityPanel', () => {
     expect(await screen.findByText('Scenario runner')).toBeInTheDocument();
     expect(screen.getByText('scenario requests')).toBeInTheDocument();
     expect(screen.getByText('42 ms')).toBeInTheDocument();
-    expect(screen.getByText(/scenario completed/)).toBeInTheDocument();
+    expect(screen.getByText(/retirement scenario completed/i)).toBeInTheDocument();
+    expect(screen.getByText(/home affordability missing inputs/i)).toBeInTheDocument();
+    expect(screen.getByText(/2 completed calculation\(s\)/i)).toBeInTheDocument();
   });
 
   it('explains recent answer status in plain language', async () => {

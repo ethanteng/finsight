@@ -19,13 +19,13 @@ flowchart LR
     I --> J["Answer plus assumption disclosure"]
 ```
 
-1. The OpenAI preflight planner identifies a requested scenario and returns a strict, typed override plan. It does not calculate results.
-2. The configured primary Claude model audits the plan while making its required `request_data_packs` call. It can supply a scenario plan when the preflight omitted one, but it does not receive data access or arithmetic authority.
-3. The registry supplies the calculator's required packs; application code ensures `retirement_analysis` and its dependencies are present.
-4. Application code removes traced scenario overrides from the inputs used to gather the baseline. Retirement analysis is deferred until both planning passes finish, so a scenario discovered by either model cannot persist its hypothetical values as the baseline.
-5. The scenario runner inherits the completed baseline's portfolio and planning inputs, validates traced user overrides, and runs at most two variants.
-6. Validated assumptions become `scenario_input` facts. Decimal rate premises remain ratios; their displayable percentages are formula-checked `scenario_calculation` facts. Other results use the same scenario-scoped provenance and calculator version.
-7. The ordinary response validator verifies every displayed scenario value against those facts. A deterministic postscript states the assumptions even if the model omits them.
+1. The OpenAI preflight planner identifies requested scenarios and returns a strict `scenarios` object keyed by registered calculator ID. It does not calculate results.
+2. The configured primary Claude model audits the same keyed plans while making its required `request_data_packs` call. It can supply a plan the preflight omitted, but it does not receive data access or arithmetic authority.
+3. The registry supplies required packs for every planned calculator and the pipeline widens context once for their combined dependencies.
+4. Application code removes traced retirement overrides from the inputs used to gather its baseline. Retirement analysis is deferred until both planning passes finish, then completed from the already-loaded snapshot when packs did not widen. A scenario discovered by either model cannot persist its hypothetical values as the baseline, and ordinary retirement requests no longer repeat a full context gather.
+5. The registry executes each planned calculator by ID. The retirement runner inherits the completed baseline's portfolio and planning inputs, validates traced user overrides, and runs at most two variants.
+6. Each calculator promotes its own validated inputs and outputs into `scenario_input` and `scenario_calculation` facts. It also owns compact evidence and deterministic assumption disclosure hooks.
+7. The ordinary response validator verifies every displayed scenario value against those facts. Registry disclosures are appended even if the model omits them.
 
 If a baseline or required holding data is unavailable, the runner returns a specific unavailable result. Ask Linc explains the missing prerequisite instead of inventing a number.
 
@@ -39,8 +39,9 @@ If a baseline or required holding data is unavailable, the runner returns a spec
 - named defaults and when they apply;
 - the outputs the calculator can promote into evidence;
 - its strict planner schema, semantic instructions, parser, executor, unavailable result, and compact evidence projection.
+- its canonical-fact projection and deterministic assumption disclosure.
 
-The registry is used by the preflight schema, primary-model audit, pack widening, execution, Show the Math compaction, and the admin Context Planner panel. A model can propose a registered plan, but it cannot add a pack, override, default, or output that the declaration does not support.
+The registry builds the keyed preflight and primary-audit schemas, parses plans, combines their required packs, executes them, projects canonical facts, compacts Show the Math evidence, and produces assumption disclosures. A model can propose a registered plan, but it cannot add a calculator, pack, override, default, or output that application code did not register.
 
 ## Retirement withdrawal policies
 
@@ -84,20 +85,20 @@ Each scenario ID is a SHA-256 content fingerprint of the portfolio and security 
 - policies and assumption origins (`user`, `inherited`, or `default`);
 - withdrawal rate, years of expenses, projected value at withdrawal start, survival rate, sequence count, and depletion percentiles.
 
-That record is persisted inside the conversation's Show the Math evidence manifest. The Answer Quality admin report counts requested, completed, unavailable, and unexpectedly unrun scenarios and reports average calculation latency.
+Records are persisted inside the conversation's Show the Math evidence manifest under `scenarioExecutions[calculatorId]`, and the Show the Math UI exposes both the keyed plan and calculation records. The Answer Quality admin report reads this keyed form plus the legacy singular retirement field, keeps its existing answer-level completion summary, and reports completed or unavailable calculations per calculator so a mixed run cannot hide a successful peer.
 
 ## Relevant files
 
 | File | Responsibility |
 | --- | --- |
 | `src/scenarios/calculator-registry.ts` | Calculator manifest, lookup, parsing, execution, and evidence contracts |
-| `src/scenarios/retirement-scenario.ts` | Plan schema, validation, execution, IDs, assumption ledger, compact evidence |
+| `src/scenarios/retirement-scenario.ts` | Plan schema, validation, execution, IDs, assumption ledger, canonical facts, disclosure, and compact evidence |
 | `src/retirement-analytics/engine/withdrawal-simulator.ts` | Withdrawal policy mechanics |
 | `src/openai/context-planner.ts` | Semantic scenario identification in the preflight pass |
 | `src/openai/claude-client.ts` | Scenario audit in the primary model's forced tool call |
 | `src/openai/analysis-pipeline.ts` | Pack widening, scenario execution, prompting, validation, and evidence |
 | `src/openai/canonical-facts.ts` | Scenario-scoped facts and provenance |
-| `src/openai/retirement-assumptions.ts` | Deterministic user-facing assumption disclosure |
+| `src/openai/retirement-assumptions.ts` | Baseline retirement disclosure and legacy scenario-disclosure compatibility |
 | `src/services/answer-quality.ts` | Scenario operational metrics |
 
 ## Next registered calculators

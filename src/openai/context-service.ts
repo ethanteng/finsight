@@ -354,64 +354,7 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
   const incomeAnalysis = incomeResult?.text;
   const expenseAnalysis = expenseResult?.text;
 
-  // Fetch or create deterministic retirement analysis only for retirement questions.
-  let retirementAnalysis: FinancialContextSnapshot['retirementAnalysis'] | undefined;
-  let retirementAnalysisNeedsInfo: FinancialContextSnapshot['retirementAnalysisNeedsInfo'] | undefined;
-
-  if (
-    !deferRetirementAnalysis &&
-    userId &&
-    questionNeeds.needsRetirement &&
-    investmentsSnapshot?.holdings &&
-    investmentsSnapshot.holdings.length > 0
-  ) {
-    try {
-      onProgress?.('Building your retirement snapshot');
-      const result = await fetchOrCreateRetirementAnalysis({
-        userId,
-        question,
-        recentTurns,
-        plannedRetirementInputs,
-        useExistingRetirementBaseline,
-        userProfile: userProfile || '',
-        holdings: investmentsSnapshot.holdings,
-        securities: investmentsSnapshot.securities || [],
-      });
-      if (result.needsInfo) {
-        retirementAnalysisNeedsInfo = result.needsInfo;
-      } else {
-        retirementAnalysis = result.analysis;
-      }
-    } catch (error) {
-      console.error('❌ Error fetching/creating retirement analysis:', error);
-      console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace');
-      retirementAnalysisNeedsInfo = {
-        missingParams: [],
-        detectedParams: {},
-        unavailableReason:
-          'Retirement analysis could not be completed because the portfolio analysis service failed. Ask the user to try again later instead of estimating from aggregates alone.',
-        unavailableCode: 'service_error',
-      };
-    }
-  } else if (!deferRetirementAnalysis && userId && questionNeeds.needsRetirement) {
-    // Log why retirement analysis didn't trigger
-    console.log('⚠️ Retirement analysis NOT triggered:', {
-      reason: !investmentsSnapshot?.holdings ? 'No investment holdings' :
-              investmentsSnapshot.holdings.length === 0 ? 'Empty holdings array' :
-              'Unknown reason',
-      hasInvestmentsSnapshot: !!investmentsSnapshot,
-      holdingsLength: investmentsSnapshot?.holdings?.length || 0
-    });
-    retirementAnalysisNeedsInfo = {
-      missingParams: [],
-      detectedParams: {},
-      unavailableReason:
-        'No linked investment holdings are available for retirement analysis. Ask the user to connect investment accounts or provide portfolio details instead of estimating from net-worth aggregates alone.',
-      unavailableCode: 'no_holdings',
-    };
-  }
-
-  return {
+  const assembledSnapshot: FinancialContextSnapshot = {
     accounts: accountSummaries,
     bankingTransactions: transactionSummaries,
     investments: investmentsSnapshot,
@@ -435,9 +378,18 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
     userProfile,
     homeValueSummary,
     financialSummary: financialSummary || undefined,
-    retirementAnalysis,
-    retirementAnalysisNeedsInfo,
   };
+
+  if (deferRetirementAnalysis) return assembledSnapshot;
+  return completeRetirementAnalysis(assembledSnapshot, {
+    userId,
+    question,
+    questionNeeds,
+    recentTurns,
+    plannedRetirementInputs,
+    useExistingRetirementBaseline,
+    onProgress,
+  });
 }
 
 type RetirementAnalysis = NonNullable<FinancialContextSnapshot['retirementAnalysis']>;
@@ -445,6 +397,91 @@ type RetirementAnalysis = NonNullable<FinancialContextSnapshot['retirementAnalys
 interface RetirementAnalysisResolution {
   analysis?: RetirementAnalysis;
   needsInfo?: FinancialContextSnapshot['retirementAnalysisNeedsInfo'];
+}
+
+export interface CompleteRetirementAnalysisArgs {
+  userId?: string;
+  question: string;
+  questionNeeds: QuestionNeeds;
+  recentTurns?: Array<{ question: string; answer?: string }>;
+  plannedRetirementInputs?: ExtractedRetirementInputs;
+  useExistingRetirementBaseline?: boolean;
+  onProgress?: (message: string) => void;
+}
+
+/**
+ * Complete only the deferred retirement baseline using context already loaded
+ * for the primary pack audit. This avoids repeating snapshot, profile, search,
+ * market, and cash-flow retrieval when the pack selection did not widen.
+ */
+export async function completeRetirementAnalysis(
+  snapshot: FinancialContextSnapshot,
+  args: CompleteRetirementAnalysisArgs
+): Promise<FinancialContextSnapshot> {
+  const {
+    userId,
+    question,
+    questionNeeds,
+    recentTurns = [],
+    plannedRetirementInputs,
+    useExistingRetirementBaseline = false,
+    onProgress,
+  } = args;
+  if (!userId || !questionNeeds.needsRetirement) return snapshot;
+
+  const holdings = snapshot.investments?.holdings;
+  const securities = snapshot.investments?.securities ?? [];
+  if (!holdings?.length) {
+    console.log('⚠️ Retirement analysis NOT triggered:', {
+      reason: !holdings ? 'No investment holdings' : 'Empty holdings array',
+      hasInvestmentsSnapshot: Boolean(snapshot.investments),
+      holdingsLength: holdings?.length ?? 0,
+    });
+    return {
+      ...snapshot,
+      retirementAnalysis: undefined,
+      retirementAnalysisNeedsInfo: {
+        missingParams: [],
+        detectedParams: {},
+        unavailableReason:
+          'No linked investment holdings are available for retirement analysis. Ask the user to connect investment accounts or provide portfolio details instead of estimating from net-worth aggregates alone.',
+        unavailableCode: 'no_holdings',
+      },
+    };
+  }
+
+  try {
+    onProgress?.('Building your retirement snapshot');
+    const result = await fetchOrCreateRetirementAnalysis({
+      userId,
+      question,
+      recentTurns,
+      plannedRetirementInputs,
+      useExistingRetirementBaseline,
+      userProfile: snapshot.userProfile || '',
+      holdings,
+      securities,
+    });
+    return {
+      ...snapshot,
+      retirementAnalysis: result.analysis,
+      retirementAnalysisNeedsInfo: result.needsInfo,
+    };
+  } catch (error) {
+    console.error('❌ Error fetching/creating retirement analysis:', error);
+    console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace');
+    return {
+      ...snapshot,
+      retirementAnalysis: undefined,
+      retirementAnalysisNeedsInfo: {
+        missingParams: [],
+        detectedParams: {},
+        unavailableReason:
+          'Retirement analysis could not be completed because the portfolio analysis service failed. Ask the user to try again later instead of estimating from aggregates alone.',
+        unavailableCode: 'service_error',
+      },
+    };
+  }
 }
 
 /** Fetch a matching retirement analysis or create one from explicit, persisted inputs. */

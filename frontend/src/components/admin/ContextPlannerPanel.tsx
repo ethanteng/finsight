@@ -17,7 +17,7 @@ interface ScenarioCalculatorManifest {
   description: string;
   requiredPacks: string[];
   supportedOverrides: Array<{ id: string; label: string }>;
-  defaults: Array<{ id: string; value: string | number }>;
+  defaults: Array<{ id: string; value: string | number | boolean }>;
   outputs: Array<{ id: string; label: string; unit: string }>;
 }
 
@@ -40,6 +40,14 @@ interface PlannerResponse {
     selectedPacks: string[];
     needsSecondaryValidation: boolean;
     retirementInputs?: Record<string, unknown> & { sources?: Record<string, string> };
+    scenarioPlans?: Record<string, unknown> & {
+      retirement?: {
+        requested: true;
+        primary: RetirementScenarioVariant;
+        comparison?: RetirementScenarioVariant;
+      };
+    };
+    /** Compatibility with a backend deployed before registry-keyed planning. */
     retirementScenario?: {
       requested: true;
       primary: RetirementScenarioVariant;
@@ -128,7 +136,13 @@ export default function ContextPlannerPanel({
 
   const retirementInputs = Object.entries(result?.plan.retirementInputs ?? {})
     .filter(([key, value]) => key !== 'sources' && value !== undefined && value !== null);
-  const retirementScenario = result?.plan.retirementScenario;
+  const scenarioPlans = result?.plan.scenarioPlans
+    ?? (result?.plan.retirementScenario
+      ? { retirement: result.plan.retirementScenario }
+      : {});
+  const retirementScenario = scenarioPlans.retirement as PlannerResponse['plan']['retirementScenario'];
+  const otherScenarioPlans = Object.entries(scenarioPlans)
+    .filter(([id]) => id !== 'retirement');
   const formatPolicy = (policy: { type: string; annualRate?: number } | undefined) => {
     if (!policy) return 'Current baseline';
     if (policy.type === 'fixed_growth') {
@@ -352,6 +366,17 @@ export default function ContextPlannerPanel({
               })}
             </div>
           )}
+
+          {otherScenarioPlans.map(([id, plan]) => (
+            <div key={id} className="mt-4 rounded border border-blue-800 bg-blue-950/20 p-3">
+              <div className="text-sm font-medium text-blue-100">
+                {calculators.find((calculator) => calculator.id === id)?.label ?? id}
+              </div>
+              <pre className="mt-2 overflow-x-auto whitespace-pre-wrap text-xs text-blue-200">
+                {JSON.stringify(plan, null, 2)}
+              </pre>
+            </div>
+          ))}
 
           <p className="mt-3 text-xs text-gray-500">
             This tester shows preflight selection. In a live answer, the primary model sees the available fact labels and may add packs before it writes anything.

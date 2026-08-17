@@ -30,4 +30,30 @@ describe('buildQuestionContextPack', () => {
     expect(pack.details.recentTransactions).toEqual(snapshot.bankingTransactions);
     expect(pack.details.accounts).toBeUndefined();
   });
+
+  it('publishes compact scenario evidence by registered calculator id', () => {
+    const question = 'Compare my retirement scenarios.';
+    const needs = questionNeedsFromPacks(['retirement_analysis'], true);
+    const scenarioSnapshot = {
+      ...snapshot,
+      scenarioExecutions: {
+        retirement: {
+          version: 2,
+          calculator: 'retirement',
+          status: 'unavailable',
+          computedAt: '2026-08-17T00:00:00.000Z',
+          durationMs: 2,
+          reason: 'Missing baseline.',
+        },
+      },
+    } as any;
+    const pack = buildQuestionContextPack(
+      scenarioSnapshot,
+      needs,
+      buildCanonicalFactPack(scenarioSnapshot, question, needs)
+    );
+    expect(pack.details.scenarios).toMatchObject({
+      retirement: { status: 'unavailable', reason: 'Missing baseline.' },
+    });
+  });
 });

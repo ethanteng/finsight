@@ -41,9 +41,11 @@ function conversation(options: {
           needsSecondaryValidation: false,
           summary: 'Test plan.',
           ...(options.scenario && {
-            retirementScenario: {
-              requested: true,
-              primary: { type: 'fixed_growth', annualRate: 0.03, source: '3% annual bump' },
+            scenarios: {
+              retirement: {
+                requested: true,
+                primary: { type: 'fixed_growth', annualRate: 0.03, source: '3% annual bump' },
+              },
             },
           }),
           ...((toolAdded.length > 0 || options.toolFailed) && {
@@ -58,8 +60,8 @@ function conversation(options: {
           }),
         },
         ...(options.scenario && options.scenario !== 'not_run' && {
-          scenarioExecution: options.scenario === 'completed'
-            ? {
+          scenarioExecutions: {
+            retirement: options.scenario === 'completed' ? {
                 version: 1,
                 calculator: 'retirement',
                 status: 'completed',
@@ -76,6 +78,7 @@ function conversation(options: {
                 durationMs: 8,
                 reason: 'Missing retirement baseline.',
               },
+          },
         }),
         ...(options.late && { contextEscalated: true }),
         modelCalls: [],
@@ -180,8 +183,51 @@ describe('answer quality report', () => {
       unavailable: 1,
       notRun: 1,
       averageMs: 25,
+      completedCalculations: 1,
+      unavailableCalculations: 1,
+      byCalculator: { retirement: { completed: 1, unavailable: 1 } },
     });
-    expect(report.recent[0]).toMatchObject({ scenarioRequested: true, scenarioStatus: 'completed' });
+    expect(report.recent[0]).toMatchObject({
+      scenarioRequested: true,
+      scenarioStatus: 'completed',
+      scenarioStatuses: { retirement: 'completed' },
+    });
+  });
+
+  it('preserves completed and unavailable outcomes when calculators have mixed results', () => {
+    const mixed = conversation({ id: 'mixed-scenarios', minute: 1, scenario: 'completed' });
+    const manifest = (mixed.showTheMathData as any).evidenceManifest;
+    manifest.contextPlanning.scenarios.home_affordability = { requested: true };
+    manifest.scenarioExecutions.home_affordability = {
+      version: 1,
+      calculator: 'home_affordability',
+      status: 'unavailable',
+      computedAt: new Date(mixed.createdAt).toISOString(),
+      durationMs: 18,
+      reason: 'Missing purchase price.',
+    };
+
+    const report = buildAnswerQualityReport([mixed]);
+
+    expect(report.recent[0]).toMatchObject({
+      scenarioStatus: 'completed',
+      scenarioStatuses: {
+        retirement: 'completed',
+        home_affordability: 'unavailable',
+      },
+    });
+    expect(report.scenarios).toMatchObject({
+      requested: 1,
+      completed: 1,
+      unavailable: 0,
+      completedCalculations: 1,
+      unavailableCalculations: 1,
+      averageMs: 30,
+      byCalculator: {
+        home_affordability: { completed: 0, unavailable: 1 },
+        retirement: { completed: 1, unavailable: 0 },
+      },
+    });
   });
 
   it('returns explicit empty-state nulls', () => {
@@ -190,7 +236,16 @@ describe('answer quality report', () => {
     expect(report.evidence.verifiedRate).toBeNull();
     expect(report.planning.plannerAcceptedRate).toBeNull();
     expect(report.users.averageRating).toBeNull();
-    expect(report.scenarios).toEqual({ requested: 0, completed: 0, unavailable: 0, notRun: 0, averageMs: null });
+    expect(report.scenarios).toEqual({
+      requested: 0,
+      completed: 0,
+      unavailable: 0,
+      notRun: 0,
+      averageMs: null,
+      completedCalculations: 0,
+      unavailableCalculations: 0,
+      byCalculator: {},
+    });
     expect(report.window).toEqual({ from: null, to: null, conversations: 0, withEvidence: 0 });
   });
 });

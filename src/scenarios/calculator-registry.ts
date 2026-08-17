@@ -1,9 +1,18 @@
 import type { FinancialContextSnapshot } from '../openai/types';
 import type { ContextPackId } from '../openai/context-packs';
+import type { CanonicalFact } from '../openai/canonical-facts';
 import { retirementScenarioCalculator } from './retirement-scenario';
 
-export type ScenarioOverrideValueType = 'currency' | 'percentage' | 'age' | 'enum';
-export type ScenarioOutputUnit = 'usd' | 'percent' | 'years' | 'count';
+export type ScenarioOverrideValueType =
+  | 'currency'
+  | 'percentage'
+  | 'age'
+  | 'months'
+  | 'years'
+  | 'number'
+  | 'boolean'
+  | 'enum';
+export type ScenarioOutputUnit = 'usd' | 'percent' | 'months' | 'years' | 'count' | 'ratio';
 
 export interface ScenarioOverrideDefinition {
   id: string;
@@ -17,7 +26,7 @@ export interface ScenarioOverrideDefinition {
 
 export interface ScenarioDefaultDefinition {
   id: string;
-  value: string | number;
+  value: string | number | boolean;
   description: string;
   appliesWhen?: string;
 }
@@ -41,19 +50,48 @@ export interface ScenarioCalculatorManifest {
   outputs: readonly ScenarioOutputDefinition[];
 }
 
-export interface ScenarioCalculatorDefinition<Plan, Execution, Evidence>
+export interface ScenarioCalculatorDefinition<
+  Plan,
+  Execution extends ScenarioExecutionBase,
+  Evidence extends ScenarioExecutionBase,
+>
   extends ScenarioCalculatorManifest {
   planner: {
     jsonSchema: Readonly<Record<string, unknown>>;
     instructions: string;
     parsePlan(value: unknown): Plan | undefined;
   };
+  execution: {
+    progressMessage: string;
+    failureMessage: string;
+  };
   execute(snapshot: FinancialContextSnapshot, plan: Plan): Promise<Execution>;
   unavailable(startedAt: number, reason: string): Execution;
   compactEvidence(execution: Execution): Evidence;
+  canonicalFacts(execution: Execution): CanonicalFact[];
+  describeAssumptions(execution: Execution): string | null;
 }
 
 type AnyScenarioCalculator = ScenarioCalculatorDefinition<any, any, any>;
+
+export interface ScenarioExecutionBase {
+  version: number;
+  calculator: string;
+  status: 'completed' | 'unavailable';
+  computedAt: string;
+  durationMs: number;
+  reason?: string;
+}
+
+export type ScenarioPlanRecord = Record<string, unknown>;
+export type ScenarioExecutionRecord = Record<string, ScenarioExecutionBase>;
+export type ScenarioEvidenceRecord = Record<string, ScenarioExecutionBase>;
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+}
 
 function freezeManifest(definition: AnyScenarioCalculator): ScenarioCalculatorManifest {
   return Object.freeze({
@@ -98,7 +136,54 @@ export class ScenarioCalculatorRegistry {
     return [...this.calculators.values()].map(freezeManifest);
   }
 
-  require<Plan, Execution, Evidence>(
+  plannerJsonSchema(): Readonly<Record<string, unknown>> {
+    const ids = this.ids();
+    return {
+      type: 'object',
+      additionalProperties: false,
+      required: ids,
+      properties: Object.fromEntries(
+        ids.map((id) => [id, this.require(id).planner.jsonSchema])
+      ),
+    };
+  }
+
+  plannerInstructions(): string {
+    return [...this.calculators.values()]
+      .map((definition) => `${definition.label} (key: ${definition.id}):\n${definition.planner.instructions}`)
+      .join('\n\n');
+  }
+
+  parsePlans(value: unknown): ScenarioPlanRecord {
+    const record = asRecord(value);
+    const plans: ScenarioPlanRecord = {};
+    for (const [id, definition] of this.calculators) {
+      const plan = definition.planner.parsePlan(record[id]);
+      if (plan !== undefined) plans[id] = plan;
+    }
+    return plans;
+  }
+
+  mergePlans(primary: ScenarioPlanRecord, fallback: ScenarioPlanRecord): ScenarioPlanRecord {
+    return Object.fromEntries(this.ids().flatMap((id) => {
+      const plan = primary[id] ?? fallback[id];
+      return plan === undefined ? [] : [[id, plan]];
+    }));
+  }
+
+  getPlan<Plan>(plans: ScenarioPlanRecord | undefined, id: string): Plan | undefined {
+    return plans?.[id] as Plan | undefined;
+  }
+
+  requiredPacksForPlans(plans: ScenarioPlanRecord): ContextPackId[] {
+    // Only registered calculator ids are authoritative. Ignore unknown keys so a
+    // malformed plan object cannot take down pack selection with require().
+    return Array.from(new Set(
+      this.ids().flatMap((id) => (plans[id] === undefined ? [] : this.requiredPacks(id)))
+    ));
+  }
+
+  require<Plan, Execution extends ScenarioExecutionBase, Evidence extends ScenarioExecutionBase>(
     id: string
   ): ScenarioCalculatorDefinition<Plan, Execution, Evidence> {
     const definition = this.calculators.get(id);
@@ -107,23 +192,78 @@ export class ScenarioCalculatorRegistry {
   }
 
   parsePlan<Plan>(id: string, value: unknown): Plan | undefined {
-    return this.require<Plan, unknown, unknown>(id).planner.parsePlan(value);
+    return this.require<Plan, ScenarioExecutionBase, ScenarioExecutionBase>(id).planner.parsePlan(value);
   }
 
   requiredPacks(id: string): ContextPackId[] {
     return [...this.require(id).requiredPacks];
   }
 
-  async execute<Plan, Execution>(
+  async execute<Plan, Execution extends ScenarioExecutionBase>(
     id: string,
     snapshot: FinancialContextSnapshot,
     plan: Plan
   ): Promise<Execution> {
-    return this.require<Plan, Execution, unknown>(id).execute(snapshot, plan);
+    return this.require<Plan, Execution, ScenarioExecutionBase>(id).execute(snapshot, plan);
   }
 
-  compactEvidence<Execution, Evidence>(id: string, execution: Execution): Evidence {
+  async executePlans(
+    snapshot: FinancialContextSnapshot,
+    plans: ScenarioPlanRecord,
+    supplied: ScenarioExecutionRecord = {},
+    onProgress?: (message: string) => void
+  ): Promise<ScenarioExecutionRecord> {
+    const executions: ScenarioExecutionRecord = {};
+    for (const id of this.ids()) {
+      const plan = plans[id];
+      if (plan === undefined) continue;
+      const definition = this.require<unknown, ScenarioExecutionBase, ScenarioExecutionBase>(id);
+      const suppliedExecution = supplied[id];
+      if (suppliedExecution) {
+        executions[id] = suppliedExecution;
+        continue;
+      }
+      onProgress?.(definition.execution.progressMessage);
+      const startedAt = Date.now();
+      try {
+        executions[id] = await this.execute(id, snapshot, plan);
+      } catch (error) {
+        console.error(`Ask Linc: ${id} scenario execution failed:`, error);
+        executions[id] = definition.unavailable(startedAt, definition.execution.failureMessage);
+      }
+    }
+    return executions;
+  }
+
+  compactEvidence<Execution extends ScenarioExecutionBase, Evidence extends ScenarioExecutionBase>(id: string, execution: Execution): Evidence {
     return this.require<unknown, Execution, Evidence>(id).compactEvidence(execution);
+  }
+
+  compactEvidenceRecord(executions: ScenarioExecutionRecord): ScenarioEvidenceRecord {
+    return Object.fromEntries(this.ids().flatMap((id) => {
+      const execution = executions[id];
+      return execution === undefined ? [] : [[id, this.compactEvidence(id, execution)]];
+    }));
+  }
+
+  canonicalFacts(executions: ScenarioExecutionRecord | undefined): CanonicalFact[] {
+    if (!executions) return [];
+    return this.ids().flatMap((id) => {
+      const execution = executions[id];
+      if (!execution) return [];
+      return this.require<unknown, ScenarioExecutionBase, ScenarioExecutionBase>(id).canonicalFacts(execution);
+    });
+  }
+
+  assumptionDisclosures(executions: ScenarioExecutionRecord | undefined): string[] {
+    if (!executions) return [];
+    return this.ids().flatMap((id) => {
+      const execution = executions[id];
+      if (!execution) return [];
+      const disclosure = this.require<unknown, ScenarioExecutionBase, ScenarioExecutionBase>(id)
+        .describeAssumptions(execution);
+      return disclosure ? [disclosure] : [];
+    });
   }
 }
 

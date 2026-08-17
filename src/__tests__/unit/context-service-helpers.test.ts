@@ -16,8 +16,52 @@ const {
   deriveCategory,
   deriveInvestmentSnapshot,
   buildHomeValueSummary,
-  deduplicateLiabilitySections
+  deduplicateLiabilitySections,
+  completeRetirementAnalysis,
 } = jest.requireActual('../../openai/context-service');
+
+describe('completeRetirementAnalysis', () => {
+  const snapshot = {
+    accounts: [],
+    bankingTransactions: [],
+    metadata: {},
+    tierContext: {},
+  };
+  const questionNeeds = {
+    needsMarketContext: false,
+    needsSearchContext: false,
+    needsHomeValue: false,
+    needsInvestments: true,
+    needsRetirement: true,
+    needsAccountDetails: false,
+    needsTransactionDetails: false,
+    needsMonthlyCashFlow: false,
+    needsUserProfile: true,
+    needsSecondaryValidation: true,
+  };
+
+  it('marks a deferred baseline unavailable without repeating context retrieval when holdings are absent', async () => {
+    const completed = await completeRetirementAnalysis(snapshot, {
+      userId: 'user-1',
+      question: 'Review retirement.',
+      questionNeeds,
+    });
+    expect(completed).toMatchObject({
+      retirementAnalysisNeedsInfo: {
+        unavailableCode: 'no_holdings',
+      },
+    });
+  });
+
+  it('leaves non-retirement context untouched', async () => {
+    const completed = await completeRetirementAnalysis(snapshot, {
+      userId: 'user-1',
+      question: 'What is my net worth?',
+      questionNeeds: { ...questionNeeds, needsRetirement: false },
+    });
+    expect(completed).toBe(snapshot);
+  });
+});
 
 describe('deriveTransactionTypeLabel', () => {
   it.each([

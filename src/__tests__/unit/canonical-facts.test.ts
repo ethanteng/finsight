@@ -249,7 +249,7 @@ describe('buildCanonicalFactPack', () => {
         },
       },
     });
-    data.retirementScenarioExecution = {
+    data.scenarioExecutions = { retirement: {
       version: 1,
       calculator: 'retirement',
       status: 'completed',
@@ -260,7 +260,7 @@ describe('buildCanonicalFactPack', () => {
         scenario('fixed', '3% annual withdrawal growth', 0.75, { type: 'fixed_growth', annualRate: 0.03 }),
         scenario('flat', 'Flat nominal withdrawals', 0.95, { type: 'flat_nominal' }),
       ],
-    };
+    } };
 
     const pack = buildCanonicalFactPack(data, 'Compare the scenarios.', needs('retirement_analysis'));
     const survivalFacts = pack.facts.filter((fact) => fact.id.endsWith('_survival_rate'));
@@ -268,7 +268,7 @@ describe('buildCanonicalFactPack', () => {
       expect.objectContaining({
         value: 75,
         unit: 'percent',
-        provenance: expect.objectContaining({ kind: 'scenario_calculation', scenarioId: 'fixed' }),
+        provenance: expect.objectContaining({ kind: 'scenario_calculation', calculatorId: 'retirement', scenarioId: 'fixed' }),
       }),
       expect.objectContaining({
         value: 95,
