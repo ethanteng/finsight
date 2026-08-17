@@ -8,7 +8,6 @@ import {
   extractAgeFromProfile,
   extractRetirementAgeFromProfile,
 } from '../../retirement-analytics/profile-age-extractor';
-import { analyzeQuestionNeeds } from '../../openai/question-analysis';
 
 /**
  * The same phrasings had to be recognised in three places, and every copy had
@@ -73,22 +72,17 @@ const NON_RETIREMENT_PHRASINGS = [
 describe('retirement language', () => {
   it.each(RETIREMENT_PHRASINGS)('recognizes retirement intent in %j', (question) => {
     expect(mentionsRetirement(question)).toBe(true);
-    // The router and the parser must agree, or the analysis is requested
-    // without the parameters needed to run it.
-    expect(analyzeQuestionNeeds(question).needsRetirement).toBe(true);
     expect(parseRetirementQuestion(question).hasRetirementIntent).toBe(true);
   });
 
   it.each(NON_RETIREMENT_PHRASINGS)('does not see retirement in %j', (question) => {
     expect(mentionsRetirement(question)).toBe(false);
-    expect(analyzeQuestionNeeds(question).needsRetirement).toBe(false);
     expect(parseRetirementQuestion(question).hasRetirementIntent).toBe(false);
   });
 
   it('still routes a question that means both senses', () => {
     const question = 'should I retire my mortgage early so I can retire at 62?';
     expect(mentionsRetirement(question)).toBe(true);
-    expect(analyzeQuestionNeeds(question).needsRetirement).toBe(true);
   });
 
   it.each([

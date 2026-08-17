@@ -20,12 +20,12 @@ Ask Linc behaves like an **AI financial analyst**, not a generic chatbot. The sy
 
 ```mermaid
 flowchart LR
-    A[User question] --> B[Question-needs router]
+    A[Active decision transcript] --> B[Semantic preflight planner]
     B --> C[Canonical snapshot projection]
-    B -->|only when requested| D[Market or search context]
-    C --> E[Concise structured prompt]
-    D --> E
-    E --> F[Claude]
+    C --> D[Primary Claude data-pack tool]
+    D -->|add packs| C
+    D --> E[Concise structured prompt]
+    E --> F[Claude answer]
     F -->|provider unavailable; same prompt| K[OpenAI fallback]
     K --> G
     F --> G[Deterministic grounding]
@@ -42,14 +42,14 @@ flowchart LR
 ## System Flow
 
 1. **User question** → Input validation (security, off-topic rejection)
-2. **Classify question needs** → decide whether account rows, transaction rows, holdings, market context, search, retirement analysis, or secondary validation are relevant
-3. **Retrieve a canonical projection** → `SummaryCacheService.getSnapshotForAnalysis()` always loads aggregate truth and opts into large JSON columns only as needed
-4. **Retrieve optional context** → market and search providers run only for explicit external/current-market questions
+2. **Plan context semantically** → the preflight model reads the complete active Q&A decision and returns strict allowlisted pack choices, validation needs, and explicitly stated retirement inputs
+3. **Validate the plan** → application code rejects unknown IDs, adds pack dependencies, and loads the canonical projection; aggregate truth is always present
+4. **Let the primary model audit its inputs** → Claude must call the constrained `request_data_packs` tool and may only add allowlisted packs before answering
 5. **Build canonical facts and a compact context pack** → application code calculates cash flow, savings rate, and requested transaction aggregates; unrelated sections are omitted
 6. **LLM analysis** → Claude returns one structured JSON object; if Claude is unavailable, OpenAI receives the exact already-built prompt without gathering context again
 7. **Ground deterministically** → every key number must copy a canonical fact's value, unit, and provenance; every money or percentage in prose must match a fact
 8. **Validate selectively** → Gemini is reserved for projections, retirement, comparisons, recommendations, and other complex calculations
-9. **Retry once when needed** → validation issues are fed back to the active provider using the same context pack; a still-ungrounded answer is replaced with a safe response
+9. **Recover and retry when needed** → an unsupported value first triggers an exhaustive all-pack read; unresolved validation issues are fed back to the active provider, and a still-ungrounded answer is salvaged or replaced safely
 10. **Structured response** → JSON with `summary`, `key_numbers`, `insights`, `suggested_actions`
 
 ---
@@ -157,7 +157,8 @@ The API returns:
 |------|---------|
 | `src/services/canonical-financial-snapshot.ts` | Produces canonical financial metrics and source-quality metadata |
 | `src/openai/context-service.ts` | Loads persisted canonical values and assembles LLM context |
-| `src/openai/question-analysis.ts` | Selects question-specific data and validation needs |
+| `src/openai/context-packs.ts` | Defines allowlisted optional packs and deterministic dependencies |
+| `src/openai/context-planner.ts` | Reads the active decision and proposes initial packs and validation needs |
 | `src/openai/canonical-facts.ts` | Builds and locally validates question-specific numeric facts and calculations |
 | `src/openai/context-pack.ts` | Produces the compact detail payload selected for the question |
 | `src/openai/cash-flow-context.ts` | Builds monthly income/expense context from the canonical summary |
@@ -165,7 +166,7 @@ The API returns:
 | `src/openai/financial-reasoning-prompt.ts` | Structured reasoning prompt template |
 | `src/openai/structured-response.ts` | Response schema and JSON parser |
 | `src/openai/response-facts.ts` | Normalizes and validates response values, units, provenance, and prose claims |
-| `src/openai/claude-client.ts` | Claude Sonnet integration |
+| `src/openai/claude-client.ts` | Claude data-pack tool audit and final-answer integration |
 | `src/openai/openai-fallback-client.ts` | OpenAI provider fallback using the already-built prompt |
 | `src/openai/response-validator.ts` | Optional Gemini validation |
 | `src/openai/show-the-math-db-service.ts` | Lazily expands compact evidence manifests |
@@ -180,7 +181,7 @@ The API returns:
 | Variable | Required | Purpose |
 |----------|----------|---------|
 | `ANTHROPIC_API_KEY` | Yes | Claude Sonnet API key |
-| `OPENAI_API_KEY` | Yes for provider fallback | OpenAI fallback API key |
+| `OPENAI_API_KEY` | Yes | OpenAI semantic preflight and provider fallback API key |
 | `OPENAI_FALLBACK_MODEL` | No | Override OpenAI fallback model (default: `gpt-4o`) |
 | `ENABLE_RESPONSE_VALIDATION` | No | Set to `true` for Gemini validation (default: `false`) |
 | `GOOGLE_AI_API_KEY` or `GEMINI_API_KEY` | No | For Gemini validation when enabled |
@@ -193,6 +194,8 @@ The API returns:
 - If Claude is unavailable, the pipeline calls OpenAI with the same prepared prompt and does not reload the snapshot, RAG, or market context
 - Response includes `structuredResponse` when available
 - `/ai/performance` reports process-local stage percentiles and quality rates
+
+See [Semantic context planning](../CONTEXT_PLANNING.md) for the complete selection, widening, fallback, and admin measurement design.
 
 ---
 

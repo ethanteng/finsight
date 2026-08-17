@@ -1,5 +1,5 @@
 import { buildCanonicalFactPack } from '../../openai/canonical-facts';
-import { analyzeQuestionNeeds } from '../../openai/question-analysis';
+import { questionNeedsFromPacks } from '../../openai/context-packs';
 import {
   canonicalizeResponseNumbers,
   hasUnsupportedPercentValue,
@@ -21,7 +21,7 @@ const snapshot = {
 
 describe('canonical response facts', () => {
   const question = 'What is my net worth?';
-  const pack = buildCanonicalFactPack(snapshot, question, analyzeQuestionNeeds(question));
+  const pack = buildCanonicalFactPack(snapshot, question, questionNeedsFromPacks([], false));
 
   it('replaces matching legacy model values with server-authored unit and provenance', () => {
     const response = canonicalizeResponseNumbers({ summary: 'Your net worth is -$5,000.', key_numbers: { net_worth: -5000 } }, pack);
@@ -90,7 +90,7 @@ describe('canonical response facts', () => {
 
   it('accepts typed scenario premises supplied by the user', () => {
     const scenarioQuestion = 'Can I afford a $500k house with 20% down?';
-    const scenarioPack = buildCanonicalFactPack(snapshot, scenarioQuestion, analyzeQuestionNeeds(scenarioQuestion));
+    const scenarioPack = buildCanonicalFactPack(snapshot, scenarioQuestion, questionNeedsFromPacks([], true));
     expect(validateResponseFacts({
       summary: 'A $500,000 home with 20% down is the scenario to compare with your cash flow.',
       key_numbers: {
@@ -140,7 +140,7 @@ describe('rounded canonical values', () => {
     },
   } as any;
   const question = 'Evaluate my entire financial portfolio, including my income and spending.';
-  const pack = buildCanonicalFactPack(messy, question, analyzeQuestionNeeds(question));
+  const pack = buildCanonicalFactPack(messy, question, questionNeedsFromPacks([], true));
 
   it.each([
     ['$1.92 million', 'Your portfolio is worth $1.92 million.'],

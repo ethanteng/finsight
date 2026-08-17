@@ -87,12 +87,22 @@ describe('model config', () => {
       expect(isModelSlotId('embedding')).toBe(false);
     });
 
-    it('offers retirement input extraction as a configurable slot', () => {
-      // Every model the pipeline calls is admin-selectable. A model that reads
-      // the numbers feeding a projection should not be the one exception,
-      // pinned in source where changing it means a deploy.
-      const slot = MODEL_SLOTS.find(entry => entry.id === 'retirementInputs');
+    it('offers semantic context planning as a configurable slot', () => {
+      const slot = MODEL_SLOTS.find(entry => entry.id === 'contextPlanner');
       expect(slot).toMatchObject({ provider: 'openai', shippedDefault: 'gpt-4o' });
+    });
+
+    it('maps a legacy retirementInputs override onto contextPlanner', () => {
+      setActiveModelOverrides({ retirementInputs: 'gpt-4.1-mini' } as Record<string, string>);
+      expect(getActiveModel('contextPlanner')).toBe('gpt-4.1-mini');
+    });
+
+    it('prefers an explicit contextPlanner override over a legacy alias', () => {
+      setActiveModelOverrides({
+        retirementInputs: 'gpt-4.1-mini',
+        contextPlanner: 'gpt-4.1',
+      } as Record<string, string>);
+      expect(getActiveModel('contextPlanner')).toBe('gpt-4.1');
     });
   });
 

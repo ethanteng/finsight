@@ -1,7 +1,8 @@
 import { runAskLincAnalysis } from '../openai/analysis-pipeline';
-import { analyzeQuestionNeeds } from '../openai/question-analysis';
 import { resolveRetirementInputs } from '../openai/retirement-inputs';
 import type { FinancialContextSnapshot } from '../openai/types';
+import { normalizeContextPacks, questionNeedsFromPacks } from '../openai/context-packs';
+import type { ContextPlan } from '../openai/context-planner';
 
 export type AskLincEvalCategory =
   | 'numerical_accuracy'
@@ -191,10 +192,18 @@ export async function runAskLincEvalSet(): Promise<AskLincEvalResult[]> {
   });
 
   let followUpPrompt = '';
-  const followUpNeeds = analyzeQuestionNeeds(
-    'What about that one instead?',
-    ['How should I diversify my investment portfolio?']
-  );
+  const followUpPacks = normalizeContextPacks(['investment_details']);
+  const followUpPlan: ContextPlan = {
+    source: 'context_planner',
+    requestedPacks: ['investment_details'],
+    selectedPacks: followUpPacks,
+    questionNeeds: questionNeedsFromPacks(followUpPacks, true),
+    needsSecondaryValidation: true,
+    retirementInputs: { sources: {} },
+    summary: 'The current message continues the portfolio comparison.',
+    model: 'offline-context-planner',
+    durationMs: 0,
+  };
   const followUp = await runAskLincAnalysis({
     question: 'What about that one instead?',
     conversationHistory: [{
@@ -206,6 +215,7 @@ export async function runAskLincEvalSet(): Promise<AskLincEvalResult[]> {
     enableValidation: false,
     evaluation: {
       snapshot: baseSnapshot(),
+      contextPlan: followUpPlan,
       skipToneConfig: true,
       model: ({ userMessage }) => {
         followUpPrompt = userMessage;
@@ -307,7 +317,7 @@ export async function runAskLincEvalSet(): Promise<AskLincEvalResult[]> {
     {
       id: 'follow-up-inherits-question-intent-through-pipeline',
       category: 'follow_up',
-      passed: followUpNeeds.needsInvestments && followUpNeeds.needsAccountDetails &&
+      passed: followUpPlan.questionNeeds.needsInvestments && followUpPlan.questionNeeds.needsAccountDetails &&
         followUpFactIds.includes('portfolio_value') &&
         followUpPrompt.includes('How should I diversify my investment portfolio?'),
       detail: 'A short follow-up inherits portfolio intent and receives the corresponding compact context and history.',

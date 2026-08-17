@@ -3,8 +3,11 @@ import { UNVERIFIED_PROSE_NOTICE } from '../../openai/response-facts';
 import { SECONDARY_REVIEW_CAVEAT } from '../../openai/response-grounding';
 import { gatherContextSnapshot } from '../../openai/context-service';
 import { askClaude } from '../../openai/claude-client';
+import { auditDataPacksWithClaude } from '../../openai/claude-client';
 import { validateWithGemini } from '../../openai/response-validator';
 import { askOpenAIWithPreparedPrompt } from '../../openai/openai-fallback-client';
+import { planContext, type ContextPlan } from '../../openai/context-planner';
+import { normalizeContextPacks, questionNeedsFromPacks, type ContextPackId } from '../../openai/context-packs';
 
 jest.mock('../../openai/context-service', () => ({
   gatherContextSnapshot: jest.fn(),
@@ -12,6 +15,11 @@ jest.mock('../../openai/context-service', () => ({
 jest.mock('../../openai/claude-client', () => ({
   askClaude: jest.fn(),
   askClaudeStream: jest.fn(),
+  auditDataPacksWithClaude: jest.fn(),
+}));
+jest.mock('../../openai/context-planner', () => ({
+  ...jest.requireActual('../../openai/context-planner'),
+  planContext: jest.fn(),
 }));
 jest.mock('../../openai/prompt-config', () => ({
   getActiveResponseTone: jest.fn(() => 'Be concise.'),
@@ -26,6 +34,8 @@ jest.mock('../../openai/openai-fallback-client', () => ({
 
 const mockedGatherContext = gatherContextSnapshot as jest.MockedFunction<typeof gatherContextSnapshot>;
 const mockedAskClaude = askClaude as jest.MockedFunction<typeof askClaude>;
+const mockedAuditPacks = auditDataPacksWithClaude as jest.MockedFunction<typeof auditDataPacksWithClaude>;
+const mockedPlanContext = planContext as jest.MockedFunction<typeof planContext>;
 const mockedValidateWithGemini = validateWithGemini as jest.MockedFunction<typeof validateWithGemini>;
 const mockedAskOpenAI = askOpenAIWithPreparedPrompt as jest.MockedFunction<typeof askOpenAIWithPreparedPrompt>;
 
@@ -62,11 +72,34 @@ function snapshot() {
   } as any;
 }
 
+function contextPlan(packs: ContextPackId[] = [], secondary = false): ContextPlan {
+  const selectedPacks = normalizeContextPacks(packs);
+  return {
+    source: 'context_planner',
+    requestedPacks: packs,
+    selectedPacks,
+    questionNeeds: questionNeedsFromPacks(selectedPacks, secondary),
+    needsSecondaryValidation: secondary,
+    retirementInputs: { sources: {} },
+    summary: 'Test plan.',
+    model: 'test-planner',
+    durationMs: 1,
+  };
+}
+
 describe('runAskLincAnalysis validation routing', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockedGatherContext.mockResolvedValue(snapshot());
     mockedAskOpenAI.mockResolvedValue(JSON.stringify({ summary: 'Fallback answer.' }));
+    mockedPlanContext.mockImplementation(async ({ question }) =>
+      question.toLowerCase().includes('retir')
+        ? contextPlan(['retirement_analysis'], true)
+        : question.toLowerCase().includes('evaluate my spending')
+          ? contextPlan(['transaction_details', 'retirement_analysis'], true)
+          : contextPlan()
+    );
+    mockedAuditPacks.mockResolvedValue({ packs: [], reason: 'Enough context.', model: 'claude-test', durationMs: 1 });
   });
 
   it('skips the secondary model for a grounded balance lookup', async () => {
@@ -101,6 +134,64 @@ describe('runAskLincAnalysis validation routing', () => {
     });
 
     expect(mockedValidateWithGemini).toHaveBeenCalledTimes(1);
+  });
+
+  it('lets the primary model widen the preflight plan before it writes the answer', async () => {
+    mockedAuditPacks.mockResolvedValue({
+      packs: ['investment_details'],
+      reason: 'The comparison needs individual holdings.',
+      model: 'claude-test',
+      durationMs: 7,
+    });
+    mockedGatherContext
+      .mockResolvedValueOnce(snapshot())
+      .mockResolvedValueOnce({
+        ...snapshot(),
+        contextSelection: {
+          ...snapshot().contextSelection,
+          accountsIncluded: true,
+          investmentDetailsIncluded: true,
+        },
+      } as any);
+    mockedAskClaude.mockResolvedValue(JSON.stringify({ summary: 'I reviewed the holding details.' }));
+
+    const result = await runAskLincAnalysis({
+      question: 'Compare the two options we discussed.',
+      userId: 'user-1',
+    });
+
+    expect(mockedGatherContext).toHaveBeenCalledTimes(2);
+    expect(mockedGatherContext.mock.calls[1][0].questionNeeds).toMatchObject({
+      needsAccountDetails: true,
+      needsInvestments: true,
+    });
+    expect(mockedAskClaude).toHaveBeenCalledTimes(1);
+    expect(result.showTheMathData?.evidenceManifest.contextPlanning).toMatchObject({
+      selectedPacks: [],
+      finalPacks: ['account_details', 'investment_details'],
+      primaryTool: {
+        outcome: 'expanded',
+        requestedPacks: ['investment_details'],
+        addedPacks: ['account_details', 'investment_details'],
+      },
+    });
+    expect(result.showTheMathData?.evidenceManifest.contextToolExpanded).toBe(true);
+    expect(result.showTheMathData?.evidenceManifest.timings.contextToolMs).toBe(7);
+  });
+
+  it('records a failed primary-model pack audit without failing the answer', async () => {
+    mockedAuditPacks.mockRejectedValue(new Error('tool unavailable'));
+    mockedAskClaude.mockResolvedValue(JSON.stringify({ summary: 'Your net worth is $100.' }));
+
+    const result = await runAskLincAnalysis({ question: 'What is my net worth?', userId: 'user-1' });
+
+    expect(mockedGatherContext).toHaveBeenCalledTimes(1);
+    expect(mockedAskClaude).toHaveBeenCalledTimes(1);
+    expect(result.showTheMathData?.evidenceManifest.contextPlanning?.primaryTool).toMatchObject({
+      outcome: 'failed',
+      requestedPacks: [],
+      addedPacks: [],
+    });
   });
 
   it('retries a canonical-number mismatch before invoking another model', async () => {
@@ -254,10 +345,7 @@ describe('runAskLincAnalysis validation routing', () => {
     expect(result.showTheMathData?.evidenceManifest.contextEscalated).toBe(true);
   });
 
-  it('reaches for outside context when the missing number was a rate', async () => {
-    // A percentage nobody supplied is the signature of a figure no connected
-    // account holds. The personal tiers cannot answer it, so the widening has
-    // to go outside or the retry is handed the same fact pack twice.
+  it('makes every remaining pack available after an unsupported answer', async () => {
     mockedAskClaude
       .mockResolvedValueOnce(JSON.stringify({
         summary: 'Inflation is running at 3.1%, so your costs will climb.',
@@ -280,10 +368,7 @@ describe('runAskLincAnalysis validation routing', () => {
     expect(result.showTheMathData?.evidenceManifest.contextEscalated).toBe(true);
   });
 
-  it('leaves outside context alone when the missing number was an amount', async () => {
-    // A missing dollar figure is personal — a balance, a transaction, a total.
-    // Widening to search for one would spend a third-party call on nearly every
-    // escalation, and would charge those tiers with a miss they had no part in.
+  it('does not use the unsupported value type as a routing heuristic', async () => {
     mockedAskClaude
       .mockResolvedValueOnce(JSON.stringify({
         summary: 'Your largest holding is worth $250,000.',
@@ -301,8 +386,8 @@ describe('runAskLincAnalysis validation routing', () => {
     expect(mockedGatherContext).toHaveBeenCalledTimes(2);
     expect(mockedGatherContext.mock.calls[1][0].questionNeeds).toMatchObject({
       needsAccountDetails: true,
-      needsMarketContext: false,
-      needsSearchContext: false,
+      needsMarketContext: true,
+      needsSearchContext: true,
     });
     expect(result.showTheMathData?.evidenceManifest.contextEscalated).toBe(true);
   });
@@ -333,6 +418,10 @@ describe('runAskLincAnalysis validation routing', () => {
   });
 
   it('does not widen the context when every tier is already loaded', async () => {
+    mockedPlanContext.mockResolvedValue(contextPlan([
+      'account_details', 'transaction_details', 'investment_details', 'monthly_cash_flow',
+      'user_profile', 'home_value', 'retirement_analysis', 'market_context', 'search_context',
+    ], true));
     mockedAskClaude.mockResolvedValue(JSON.stringify({
       summary: 'Your portfolio could reach $250,000.',
       insights: [],

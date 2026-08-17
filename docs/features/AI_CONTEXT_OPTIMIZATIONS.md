@@ -1,5 +1,7 @@
 # AI Context Optimizations - Implementation Summary
 
+> Historical note: the keyword-scored conversation and question routing described below has been superseded by the semantic two-pass context planner in `docs/CONTEXT_PLANNING.md`. It must not be used as the design for current data-pack selection.
+
 **Date**: October 20, 2025
 **File Modified**: `src/openai.ts`
 
@@ -212,4 +214,3 @@ Successfully optimized AI context construction with significant improvements in:
 - **Cost savings** (~50% reduction)
 
 All while maintaining 100% functionality and improving code maintainability.
-

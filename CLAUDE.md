@@ -62,7 +62,7 @@ The main entry point is `src/index.ts`; user-facing Ask routes are isolated in `
 
 - **`auth/`** — JWT auth, middleware (`optionalAuth`, `requireAuth`, `adminAuth`), encrypted user service, Resend email, SnapTrade auth, manual accounts
 - **`data/`** — Data orchestration (`orchestrator.ts`), caching, persistence, and external data providers: FRED economic indicators (`providers/fred.ts`), Alpha Vantage market data, Brave Search API for RAG (`providers/search.ts`)
-- **`openai/`** — Canonical AI pipeline: question-specific context selection, canonical facts, structured prompting, provider fallback, deterministic grounding, and lazy evidence
+- **`openai/`** — Canonical AI pipeline: semantic context planning, primary-model data-pack tools, canonical facts, structured prompting, provider fallback, deterministic grounding, and lazy evidence
 - **`services/`** — Business logic split into financial ingestion, calculations, snapshot/source persistence, profile/market services, billing, and integrations
 - **`profile/`** — User profile orchestration, enrichment, and encryption
 - **`security/`** — AI rate limiting, prompt validation, output validation, security logging
@@ -87,11 +87,15 @@ Next.js App Router structure:
 ```
 Plaid/SnapTrade → financial-ingestion.ts → financial-calculations.ts
                                       → financial-snapshot-persistence.ts
+                                      → openai/context-planner.ts (semantic preflight)
                                       → openai/context-service.ts
+                                      → Claude request_data_packs audit
                                       → financial-reasoning-prompt.ts
                                       → Claude/OpenAI fallback
                                       → deterministic response validation → user
 ```
+
+`contextPlanner` refers to the two-pass subsystem documented in `docs/CONTEXT_PLANNING.md`: the OpenAI `contextPlanner` model slot proposes the initial packs, and the configured Primary analysis model may widen them through a constrained tool before it writes the answer. Data-pack routing must not be rebuilt from question keywords or regular expressions.
 
 ### Profile protection
 

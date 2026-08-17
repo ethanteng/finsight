@@ -1,7 +1,7 @@
 import { ModelSlotId, getActiveNumericGenerationSetting } from './model-config';
 
 /** The OpenAI slots — the ones whose calls take these parameters. */
-export type OpenAISlotId = Extract<ModelSlotId, 'fallback' | 'profile' | 'retirementInputs'>;
+export type OpenAISlotId = Extract<ModelSlotId, 'fallback' | 'profile' | 'contextPlanner'>;
 
 /**
  * The tuning parameters for one OpenAI call, ready to spread into the request.

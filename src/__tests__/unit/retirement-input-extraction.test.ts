@@ -1,63 +1,10 @@
 /**
  * The extractor proposes inputs to a financial projection, so what it is not
- * allowed to do matters more than what it reads. These cover the two halves
- * that run without a model: the transcript it reads from, and the bounds every
- * proposed value has to clear.
+ * allowed to do matters more than what it reads. These cover the deterministic
+ * bounds every context-planner proposal has to clear.
  */
 
-import {
-  buildExtractionTranscript,
-  validateExtractedInputs,
-} from '../../openai/retirement-input-extraction';
-
-describe('buildExtractionTranscript', () => {
-  it('reads oldest turn first so "the last question" is unambiguous', () => {
-    const transcript = buildExtractionTranscript('Yes, $125K.', [
-      { question: 'How much per year?', answer: 'I need your spending target.' },
-      { question: 'Can I retire at 62?', answer: 'Depends on your spending.' },
-    ]);
-
-    expect(transcript).toBe(
-      [
-        'User: Can I retire at 62?',
-        'Assistant: Depends on your spending.',
-        'User: How much per year?',
-        'Assistant: I need your spending target.',
-        'User: Yes, $125K.',
-      ].join('\n')
-    );
-  });
-
-  it('includes the assistant answers, which is what disambiguates a bare reply', () => {
-    // "62" is an age or a dollar figure depending only on what was asked. The
-    // pattern matcher could never see this and resolved it with a magnitude
-    // floor instead.
-    const transcript = buildExtractionTranscript('62', [
-      { question: 'When can I retire?', answer: 'What age do you plan to retire?' },
-    ]);
-
-    expect(transcript).toContain('Assistant: What age do you plan to retire?');
-    expect(transcript.trim().endsWith('User: 62')).toBe(true);
-  });
-
-  it('truncates a long answer, which only has to establish what was asked', () => {
-    const transcript = buildExtractionTranscript('62', [
-      { question: 'When can I retire?', answer: `What age do you plan to retire? ${'x'.repeat(5000)}` },
-    ]);
-
-    const assistantLine = transcript.split('\n').find(line => line.startsWith('Assistant:'))!;
-    expect(assistantLine.length).toBeLessThan(1600);
-    // The part that disambiguates the reply is the part that survives.
-    expect(assistantLine).toContain('What age do you plan to retire?');
-  });
-
-  it('handles a first question with no history and turns with no answer yet', () => {
-    expect(buildExtractionTranscript('Can I retire at 62?', [])).toBe('User: Can I retire at 62?');
-    expect(buildExtractionTranscript('And at 65?', [{ question: 'Can I retire at 62?' }])).toBe(
-      ['User: Can I retire at 62?', 'User: And at 65?'].join('\n')
-    );
-  });
-});
+import { validateExtractedInputs } from '../../openai/retirement-input-extraction';
 
 describe('validateExtractedInputs', () => {
   const noSources = { currentAge: null, retirementAge: null, annualWithdrawalAmount: null, withdrawalStartAge: null, lifeExpectancy: null };

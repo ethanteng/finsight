@@ -12,12 +12,11 @@
  */
 
 import { UserTier } from '../data/types';
-import { analyzeQuestionNeeds } from './question-analysis';
 import { gatherContextSnapshot } from './context-service';
 import { buildPromptInputFromSnapshot, buildFinancialReasoningPrompt } from './financial-reasoning-prompt';
 import { loadResponseToneConfig } from './prompt-config';
 import { loadModelConfig } from './model-config';
-import { askClaude, askClaudeStream } from './claude-client';
+import { askClaude, askClaudeStream, auditDataPacksWithClaude } from './claude-client';
 import { parseStructuredResponse, toDisplayText, extractPartialSummary, AskLincResponse } from './structured-response';
 import { validateUserPrompt, getRejectionMessage } from '../security/prompt-validation';
 import { validateLLMResponse } from '../security/output-validation';
@@ -32,7 +31,6 @@ import {
 } from './response-grounding';
 import {
   canonicalizeResponseNumbers,
-  hasUnsupportedPercentValue,
   hasUnsupportedValueIssue,
   salvageUngroundedResponse,
   validateResponseFacts,
@@ -40,11 +38,22 @@ import {
 import { validateCanonicalFactPack } from './canonical-facts';
 import { describeMissingInputs } from './missing-inputs';
 import { describeRetirementAssumptions } from './retirement-assumptions';
-import { loadRoutingVocabulary } from './routing-vocabulary';
 import { askOpenAIWithPreparedPrompt } from './openai-fallback-client';
 import { createHash } from 'crypto';
 import { recordLlmAnalysisFailure } from '../observability/llm-metrics';
-import type { FinancialContextSnapshot, QuestionNeeds } from './types';
+import type { FinancialContextSnapshot } from './types';
+import {
+  fallbackContextPlan,
+  planContext,
+  buildPlannerTranscript,
+  type ContextPlan,
+} from './context-planner';
+import {
+  allContextPacks,
+  normalizeContextPacks,
+  questionNeedsFromPacks,
+  type ContextPackId,
+} from './context-packs';
 
 export interface RunAskLincAnalysisOptions {
   question: string;
@@ -61,6 +70,8 @@ export interface RunAskLincAnalysisOptions {
   /** Deterministic dependency seam for the offline end-to-end evaluation suite. */
   evaluation?: {
     snapshot: FinancialContextSnapshot;
+    contextPlan?: ContextPlan;
+    toolRequestedPacks?: ContextPackId[];
     model: (input: {
       systemPrompt: string;
       userMessage: string;
@@ -186,26 +197,24 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
     throw new PromptValidationError(`Prompt rejected: ${validation.reason}`, validation.reason, userMessage);
   }
 
-  onProgress?.('Loading your financial snapshot');
-
-  // Newest first. Routing looks at the questions; input extraction needs the
-  // answers too, since a short reply only means something beside what was asked.
+  // Newest first. The context planner receives both sides of the decision,
+  // since a short reply only means something beside what the assistant asked.
   const recentTurns = conversationHistory
     .slice()
     .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
     .map((entry) => ({ question: entry.question, answer: entry.answer }));
-  const recentQuestions = recentTurns.map((turn) => turn.question);
-  // Routing vocabulary is admin-editable, so refresh it before matching. Never
-  // throws; a stale or default vocabulary still routes.
-  if (!evaluation) await loadRoutingVocabulary();
-  const questionNeeds = analyzeQuestionNeeds(question, recentQuestions);
-
-  // Covers every model this request can reach: the input extractor that runs
-  // during context gathering, then the primary, fallback and second-review
-  // models. Loading it after context gathering left a cold process using the
-  // shipped default for the extractor on its first retirement question,
-  // ignoring an admin override that was set precisely to avoid that.
+  // Covers the semantic context planner first, then every model the selected
+  // packs and final analysis can reach.
   await loadModelConfig();
+
+  onProgress?.('Planning the data needed for this decision');
+  const contextPlan = evaluation?.contextPlan
+    ?? (evaluation
+      ? fallbackContextPlan(0, 'Offline evaluation supplied the complete context.')
+      : await planContext({ question, recentTurns, tier }));
+  const initiallySelectedPacks = [...contextPlan.selectedPacks];
+  let selectedPacks = [...initiallySelectedPacks];
+  let questionNeeds = contextPlan.questionNeeds;
 
   // Step 1: Retrieve context (snapshot, profile, market summary, RAG)
   const contextGatherStartedAt = Date.now();
@@ -215,12 +224,89 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
     questionNeeds,
     tier,
     recentTurns,
+    plannedRetirementInputs: contextPlan.retirementInputs,
     onProgress
   });
   let contextGatherMs = Date.now() - contextGatherStartedAt;
   // What routing chose, before any widening. Routing metrics have to score the
   // prediction, not the correction it triggered.
   const routedContextSelection = snapshot.contextSelection;
+
+  // The primary model gets one constrained, tool-based opportunity to widen
+  // what the preflight planner selected. It can name allowlisted packs only;
+  // dependency expansion and data access remain application-owned.
+  let contextTool: NonNullable<EvidenceManifest['contextPlanning']>['primaryTool'];
+  let contextToolMs = 0;
+  if (!evaluation && selectedPacks.length < allContextPacks().length) {
+    const toolAuditStartedAt = Date.now();
+    let auditedPacks: ContextPackId[] = [];
+    let auditModel: string | undefined;
+    let auditReason = '';
+    let auditDurationMs = 0;
+    try {
+      onProgress?.('Checking whether the analysis needs any additional data');
+      const initialPromptInput = buildPromptInputFromSnapshot(question, snapshot, questionNeeds, []);
+      const toolResult = await auditDataPacksWithClaude({
+        transcript: buildPlannerTranscript(question, recentTurns),
+        selectedPacks,
+        canonicalFactLabels: (initialPromptInput.canonicalFacts?.facts ?? []).map(
+          (fact) => `${fact.id}: ${fact.label}`
+        ),
+      });
+      auditedPacks = toolResult.packs;
+      auditModel = toolResult.model;
+      auditReason = toolResult.reason;
+      auditDurationMs = toolResult.durationMs;
+      const widenedPacks = normalizeContextPacks([...selectedPacks, ...toolResult.packs]);
+      const addedPacks = widenedPacks.filter((pack) => !selectedPacks.includes(pack));
+      contextTool = {
+        outcome: addedPacks.length > 0 ? 'expanded' : 'accepted',
+        model: toolResult.model,
+        requestedPacks: toolResult.packs,
+        addedPacks: [],
+        reason: toolResult.reason,
+        durationMs: toolResult.durationMs,
+      };
+      if (addedPacks.length > 0) {
+        const widenedNeeds = questionNeedsFromPacks(widenedPacks, contextPlan.needsSecondaryValidation);
+        const toolGatherStartedAt = Date.now();
+        const widenedSnapshot = await gatherContextSnapshot({
+          userId,
+          question,
+          questionNeeds: widenedNeeds,
+          tier,
+          recentTurns,
+          plannedRetirementInputs: contextPlan.retirementInputs,
+          onProgress,
+        });
+        contextGatherMs += Date.now() - toolGatherStartedAt;
+        // Commit the wider selection only after its data was loaded successfully.
+        snapshot = widenedSnapshot;
+        selectedPacks = widenedPacks;
+        questionNeeds = widenedNeeds;
+        contextTool.addedPacks = addedPacks;
+      }
+      contextToolMs = toolResult.durationMs;
+    } catch (error) {
+      // The preflight plan is already valid and useful. A tool-audit failure
+      // must not turn a healthy analysis request into an outage.
+      console.warn('Ask Linc: Primary data-pack audit or widening failed; using the context plan:', error);
+      contextToolMs = auditDurationMs || Date.now() - toolAuditStartedAt;
+      contextTool = {
+        outcome: 'failed',
+        ...(auditModel && { model: auditModel }),
+        requestedPacks: auditedPacks,
+        addedPacks: [],
+        reason: auditedPacks.length > 0
+          ? `The primary model requested more context, but it could not be loaded; the preflight plan was used. ${auditReason}`.trim()
+          : 'The primary-model data-pack audit could not be completed; the preflight plan was used.',
+        durationMs: contextToolMs,
+      };
+    }
+  } else if (evaluation?.toolRequestedPacks?.length) {
+    selectedPacks = normalizeContextPacks([...selectedPacks, ...evaluation.toolRequestedPacks]);
+    questionNeeds = questionNeedsFromPacks(selectedPacks, contextPlan.needsSecondaryValidation);
+  }
 
   // Step 2: Build the prompt directly from the persisted canonical snapshot.
   const promptBuildStartedAt = Date.now();
@@ -364,39 +450,32 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
     // let the retry answer the question it was actually asked. Routing predicts
     // what a question needs; this reacts to what it turned out to need.
     if (!evaluation && hasUnsupportedValueIssue(groundingResult.issues)) {
-      // The personal tiers are switched on together: they are database reads
-      // already gathered for this request, and which of them held the missing
-      // number is not worth guessing at.
-      //
-      // The outside tiers are not free — search is a live call to a third party
-      // — so they are switched on only when the evidence points at them. A
-      // percentage nobody supplied is that evidence: rates, inflation and tax
-      // brackets are what the model reaches for when it needs a figure no
-      // connected account holds. This is also what keeps the routing metrics
-      // readable, since a widened tier is charged with a miss: without the
-      // gate, an escalation over a missing transaction total would count
-      // against market and search context every time.
-      const reachedForRate = hasUnsupportedPercentValue(groundingResult.issues);
-      const escalatedNeeds = {
-        ...questionNeeds,
-        needsAccountDetails: true,
-        needsTransactionDetails: true,
-        needsInvestments: true,
-        needsRetirement: true,
-        needsMarketContext: questionNeeds.needsMarketContext || reachedForRate,
-        needsSearchContext: questionNeeds.needsSearchContext || reachedForRate,
-      };
-      // Whether re-gathering can add anything, asked of the needs themselves —
-      // a list of tiers here would silently stop covering a newly added one.
-      const widens = (Object.keys(escalatedNeeds) as Array<keyof QuestionNeeds>).some(
-        (need) => Boolean(escalatedNeeds[need]) !== Boolean(questionNeeds[need])
+      // Semantic planning and the primary tool pass have already had their say.
+      // If the answer still reached for missing evidence, the deterministic
+      // recovery is exhaustive rather than another language heuristic: make
+      // every remaining allowlisted pack available and re-check the answer.
+      const escalatedPacks = allContextPacks();
+      const escalatedNeeds = questionNeedsFromPacks(
+        escalatedPacks,
+        contextPlan.needsSecondaryValidation
       );
+      const widens = escalatedPacks.some((pack) => !selectedPacks.includes(pack));
       if (widens) {
         try {
           onProgress?.('Loading more of your financial data');
           const escalationStartedAt = Date.now();
-          snapshot = await gatherContextSnapshot({ userId, question, questionNeeds: escalatedNeeds, tier, recentTurns, onProgress });
+          snapshot = await gatherContextSnapshot({
+            userId,
+            question,
+            questionNeeds: escalatedNeeds,
+            tier,
+            recentTurns,
+            plannedRetirementInputs: contextPlan.retirementInputs,
+            onProgress,
+          });
           contextGatherMs += Date.now() - escalationStartedAt;
+          selectedPacks = escalatedPacks;
+          questionNeeds = escalatedNeeds;
           promptInput = buildPromptInput(snapshot, escalatedNeeds);
           factPack = promptInput.canonicalFacts!;
           contextEscalated = true;
@@ -502,13 +581,26 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
       },
       facts: factPack.facts,
       contextSelection: snapshot.contextSelection,
-      ...(contextEscalated && {
-        contextEscalated: true,
-        ...(routedContextSelection && { routedContextSelection }),
-      }),
+      ...(contextEscalated && { contextEscalated: true }),
+      ...((contextEscalated || (contextTool?.addedPacks.length ?? 0) > 0) &&
+        routedContextSelection && { routedContextSelection }),
+      ...((contextTool?.addedPacks.length ?? 0) > 0 && { contextToolExpanded: true }),
+      contextPlanning: {
+        source: contextPlan.source,
+        ...(contextPlan.model && { model: contextPlan.model }),
+        durationMs: contextPlan.durationMs,
+        requestedPacks: contextPlan.requestedPacks,
+        selectedPacks: initiallySelectedPacks,
+        finalPacks: selectedPacks,
+        needsSecondaryValidation: contextPlan.needsSecondaryValidation,
+        summary: contextPlan.summary,
+        ...(contextTool && { primaryTool: contextTool }),
+      },
       ...(secondaryCaveat && { secondaryCaveat: true }),
       modelCalls,
       timings: {
+        planningMs: contextPlan.durationMs,
+        ...(contextTool && { contextToolMs }),
         contextGatherMs,
         promptBuildMs,
         modelMs: modelCalls.reduce((total, call) => total + call.durationMs, 0),

@@ -9,11 +9,10 @@
  * another. A third only allowed a single connector between the verb and the
  * number, so "retiring by age 62" could not match "by" and "age" together.
  *
- * Every site now imports from here. Deliberately dependency-free: the router
- * calls this on every question.
+ * Every fallback parser now imports from here. Semantic context routing is
+ * handled by the context planner; these patterns exist only when extraction is
+ * unavailable and the deterministic retirement parser must recover locally.
  */
-
-import { matchesCategory } from '../openai/routing-vocabulary';
 
 /** "retire the mortgage" is debt payoff, not retirement planning. */
 const DEBT_PAYOFF =
@@ -72,10 +71,11 @@ function mentionsRunway(text: string): boolean {
 }
 
 /**
- * The words themselves are admin-configurable (routing-vocabulary), because
- * every gap in them has cost an answer. This module owns how they are applied:
- * the debt-payoff exclusion, and the age patterns below.
+ * A deliberately broad fallback intent pattern. It does not select context in
+ * production; the semantic planner does that before this parser can run.
  */
+const RETIREMENT_INTENT =
+  /\b(?:retir\w*|withdrawals?|draw\s*down|nest\s+egg|financial\s+independence|stop\s+working|quit\s+working)\b/i;
 
 /**
  * Connectors people put between the verb and the age, in any combination:
@@ -116,7 +116,7 @@ function withoutDebtPayoff(text: string): string {
 export function mentionsRetirement(text: string): boolean {
   if (!text) return false;
   const stripped = withoutDebtPayoff(text);
-  return matchesCategory('retirement', stripped) || mentionsRunway(stripped);
+  return RETIREMENT_INTENT.test(stripped) || mentionsRunway(stripped);
 }
 
 function firstMatchInRange(

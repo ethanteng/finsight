@@ -127,7 +127,7 @@ describe('LLM stage metrics', () => {
         promptCharacters: 100, responseCharacters: 50, durationMs: 200,
       }],
       timings: {
-        contextGatherMs: 20, promptBuildMs: 5, modelMs: 200,
+        planningMs: 12, contextToolMs: 8, contextGatherMs: 20, promptBuildMs: 5, modelMs: 200,
         validationMs: 10, timeToFirstAnswerTokenMs: 100, totalMs: 240,
       },
       validation: { deterministic: { valid: true, issues: [] } },
@@ -136,6 +136,8 @@ describe('LLM stage metrics', () => {
     recordLlmAnalysis(manifest);
     const metrics = getLlmMetricsSnapshot();
     expect(metrics.stages.model.p95Ms).toBe(200);
+    expect(metrics.stages.planning.p95Ms).toBe(12);
+    expect(metrics.stages.contextTool.p95Ms).toBe(8);
     expect(metrics.quality.deterministicGroundingRate).toBe(1);
     expect(metrics.quality.fallbackRate).toBe(0);
     expect(metrics.baselineCandidate.stages.total.remainingSamples).toBe(99);
@@ -154,7 +156,7 @@ describe('LLM stage metrics', () => {
           promptCharacters: 100, responseCharacters: 50, durationMs: 200,
         }],
         timings: {
-          contextGatherMs: 20, promptBuildMs: 5, modelMs: 200,
+          planningMs: 12, contextGatherMs: 20, promptBuildMs: 5, modelMs: 200,
           validationMs: 10, timeToFirstAnswerTokenMs: 100, totalMs: 240,
         },
         validation: { deterministic: { valid: true, issues: [] } },
@@ -181,7 +183,7 @@ describe('LLM stage metrics', () => {
           promptCharacters: 100, responseCharacters: 50, durationMs: 200,
         }],
         timings: {
-          contextGatherMs: 20, promptBuildMs: 5, modelMs: 200,
+          planningMs: 12, contextGatherMs: 20, promptBuildMs: 5, modelMs: 200,
           validationMs: 10, totalMs: 240,
         },
         validation: { deterministic: { valid: true, issues: [] } },

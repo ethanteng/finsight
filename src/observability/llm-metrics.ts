@@ -19,6 +19,8 @@ export const LLM_PERFORMANCE_TARGETS = {
 type Sample = {
   at: string;
   success: boolean;
+  planningMs?: number;
+  contextToolMs?: number;
   contextGatherMs?: number;
   promptBuildMs?: number;
   modelMs?: number;
@@ -33,6 +35,9 @@ type Sample = {
   widenedContext?: RoutedContextTier[];
   fallbackUsed: boolean;
   retryUsed: boolean;
+  plannerFallback: boolean;
+  contextToolExpanded: boolean;
+  contextToolFailed: boolean;
 };
 
 const samples: Sample[] = [];
@@ -73,6 +78,8 @@ export function recordLlmAnalysis(manifest: EvidenceManifest, success = true): v
   const sample: Sample = {
     at: manifest.generatedAt,
     success,
+    planningMs: manifest.timings.planningMs,
+    contextToolMs: manifest.timings.contextToolMs,
     contextGatherMs: manifest.timings.contextGatherMs,
     promptBuildMs: manifest.timings.promptBuildMs,
     modelMs: manifest.timings.modelMs,
@@ -88,6 +95,9 @@ export function recordLlmAnalysis(manifest: EvidenceManifest, success = true): v
     widenedContext: widenedContextTiers(manifest),
     fallbackUsed: manifest.modelCalls.some(call => call.provider === 'openai'),
     retryUsed: manifest.modelCalls.some(call => call.phase === 'retry'),
+    plannerFallback: manifest.contextPlanning?.source === 'fallback_all',
+    contextToolExpanded: manifest.contextPlanning?.primaryTool?.outcome === 'expanded',
+    contextToolFailed: manifest.contextPlanning?.primaryTool?.outcome === 'failed',
   };
   samples.push(sample);
   if (samples.length > MAX_SAMPLES) samples.splice(0, samples.length - MAX_SAMPLES);
@@ -100,6 +110,9 @@ export function recordLlmAnalysisFailure(totalMs: number): void {
     totalMs,
     fallbackUsed: false,
     retryUsed: false,
+    plannerFallback: false,
+    contextToolExpanded: false,
+    contextToolFailed: false,
   });
   if (samples.length > MAX_SAMPLES) samples.splice(0, samples.length - MAX_SAMPLES);
 }
@@ -158,6 +171,8 @@ export function getLlmMetricsSnapshot() {
     : grounded.filter(sample => sample.grounded).length / grounded.length;
 
   const stages = {
+    planning: summarize(samples.map(sample => sample.planningMs)),
+    contextTool: summarize(samples.map(sample => sample.contextToolMs)),
     contextGather: summarize(samples.map(sample => sample.contextGatherMs)),
     promptBuild: summarize(samples.map(sample => sample.promptBuildMs)),
     model: summarize(samples.map(sample => sample.modelMs)),
@@ -167,6 +182,10 @@ export function getLlmMetricsSnapshot() {
   };
 
   const baselineStages = {
+    planning: baselineStage(stages.planning.samples, stages.planning.p50Ms, stages.planning.p95Ms),
+    // The tool does not run when preflight selected every pack, so its sample
+    // gate is visible but does not block the end-to-end baseline.
+    contextTool: baselineStage(stages.contextTool.samples, stages.contextTool.p50Ms, stages.contextTool.p95Ms),
     contextGather: baselineStage(stages.contextGather.samples, stages.contextGather.p50Ms, stages.contextGather.p95Ms),
     promptBuild: baselineStage(stages.promptBuild.samples, stages.promptBuild.p50Ms, stages.promptBuild.p95Ms),
     model: baselineStage(stages.model.samples, stages.model.p50Ms, stages.model.p95Ms),
@@ -178,6 +197,7 @@ export function getLlmMetricsSnapshot() {
   // Keep that baseline independently gated so it cannot block otherwise
   // representative request/stage latency baselines forever.
   const coreBaselineReady = [
+    baselineStages.planning,
     baselineStages.contextGather,
     baselineStages.promptBuild,
     baselineStages.model,
@@ -205,6 +225,9 @@ export function getLlmMetricsSnapshot() {
       answerDeliveredRate: rate(sample => sample.success && (sample.outcome ?? 'passed') !== 'replaced'),
       salvageRate: rate(sample => sample.outcome === 'salvaged'),
       contextEscalationRate: rate(sample => sample.contextEscalated === true),
+      plannerFallbackRate: rate(sample => sample.plannerFallback),
+      contextToolExpansionRate: rate(sample => sample.contextToolExpanded),
+      contextToolFailureRate: rate(sample => sample.contextToolFailed),
       // Delivered, but with a reviewer's objection attached.
       secondaryCaveatRate: rate(sample => sample.secondaryCaveat === true),
     },

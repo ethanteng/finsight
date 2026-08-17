@@ -43,7 +43,7 @@ describe('generation settings', () => {
     it('keeps each OpenAI call on the temperature it was hardcoded with', () => {
       expect(openAIGenerationParams('fallback')).toEqual({ temperature: 0.2, max_tokens: 16_000 });
       expect(openAIGenerationParams('profile')).toEqual({ temperature: 0.1 });
-      expect(openAIGenerationParams('retirementInputs')).toEqual({ temperature: 0 });
+      expect(openAIGenerationParams('contextPlanner')).toEqual({ temperature: 0, max_tokens: 1500 });
     });
 
     it('sends Gemini nothing, as the validator did before these settings existed', () => {
@@ -80,8 +80,8 @@ describe('generation settings', () => {
 
   describe('omission', () => {
     it('drops a parameter set to off rather than sending a default', () => {
-      setActiveGenerationSettings({ retirementInputs: { temperature: OMIT_SETTING } });
-      expect(openAIGenerationParams('retirementInputs')).toEqual({});
+      setActiveGenerationSettings({ contextPlanner: { temperature: OMIT_SETTING, maxOutputTokens: OMIT_SETTING } });
+      expect(openAIGenerationParams('contextPlanner')).toEqual({});
     });
 
     it('adds a parameter that ships omitted once a value is set', () => {

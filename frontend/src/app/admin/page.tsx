@@ -4,7 +4,7 @@ import MarkdownRenderer from '../../components/MarkdownRenderer';
 import PageMeta from '../../components/PageMeta';
 import AuthenticatedPageHeader from '../../components/authenticated/AuthenticatedPageHeader';
 import AnswerQualityPanel from '../../components/admin/AnswerQualityPanel';
-import RoutingVocabularyPanel from '../../components/admin/RoutingVocabularyPanel';
+import ContextPlannerPanel from '../../components/admin/ContextPlannerPanel';
 import ModelConfigPanel from '../../components/admin/ModelConfigPanel';
 
 interface ProductionUser {
@@ -682,37 +682,7 @@ export default function AdminPage() {
     return text.length > maxLength ? text.substring(0, maxLength) + '...' : text;
   };
 
-  const getQuestionCategories = (conversations: ProductionConversation[] | undefined) => {
-    const categories: { [key: string]: number } = {};
-
-    if (!conversations) return categories;
-
-    conversations.forEach(conv => {
-      const question = conv.question.toLowerCase();
-
-      if (question.includes('spend') || question.includes('expense') || question.includes('cost')) {
-        categories['Spending Analysis'] = (categories['Spending Analysis'] || 0) + 1;
-      } else if (question.includes('save') || question.includes('emergency fund') || question.includes('savings')) {
-        categories['Savings'] = (categories['Savings'] || 0) + 1;
-      } else if (question.includes('invest') || question.includes('portfolio') || question.includes('asset')) {
-        categories['Investments'] = (categories['Investments'] || 0) + 1;
-      } else if (question.includes('debt') || question.includes('credit') || question.includes('loan')) {
-        categories['Debt'] = (categories['Debt'] || 0) + 1;
-      } else if (question.includes('budget') || question.includes('income') || question.includes('cash flow')) {
-        categories['Budgeting'] = (categories['Budgeting'] || 0) + 1;
-      } else if (question.includes('retirement') || question.includes('401k') || question.includes('ira')) {
-        categories['Retirement'] = (categories['Retirement'] || 0) + 1;
-      } else {
-        categories['Other'] = (categories['Other'] || 0) + 1;
-      }
-    });
-
-    return categories;
-  };
-
   const renderProductionTab = () => {
-    const questionCategories = getQuestionCategories(productionConversations);
-
     return (
       <div>
         {/* Header with refresh button */}
@@ -765,21 +735,6 @@ export default function AdminPage() {
               {productionUsers.length > 0 ? Math.round(productionUsers.filter(u => u.conversationCount > 1).length / productionUsers.length * 100) : 0}%
             </div>
             <div className="text-gray-400 text-sm">Multi-Question Users</div>
-          </div>
-        </div>
-
-        {/* Question Categories */}
-        <div className="bg-gray-800 rounded-lg p-6 mb-8">
-          <h2 className="text-xl font-semibold mb-4">Question Categories</h2>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-            {Object.entries(questionCategories)
-              .sort(([,a], [,b]) => b - a)
-              .map(([category, count]) => (
-                <div key={category} className="rounded-xl border border-[#102319]/10 bg-[#f8f7ef] p-3">
-                  <div className="text-lg font-semibold text-blue-400">{count}</div>
-                  <div className="text-sm text-gray-400">{category}</div>
-                </div>
-              ))}
           </div>
         </div>
 
@@ -1378,7 +1333,7 @@ export default function AdminPage() {
         </div>
 
         <ModelConfigPanel apiUrl={API_URL} getAuthHeaders={getAuthHeaders} />
-        <RoutingVocabularyPanel apiUrl={API_URL} getAuthHeaders={getAuthHeaders} />
+        <ContextPlannerPanel apiUrl={API_URL} getAuthHeaders={getAuthHeaders} />
       </div>
     );
   };

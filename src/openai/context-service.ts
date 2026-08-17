@@ -6,6 +6,7 @@ import { QuestionNeeds, FinancialContextSnapshot, TransactionSummaryItem, Invest
 import { buildAccountSummaries } from './account-summary';
 import { buildCanonicalCashFlowAnalyses } from './cash-flow-context';
 import { resolveRetirementInputs, retirementPortfolioFingerprint } from './retirement-inputs';
+import type { ExtractedRetirementInputs } from './retirement-input-extraction';
 
 interface GatherContextArgs {
   userId?: string;
@@ -21,6 +22,8 @@ interface GatherContextArgs {
    * depending entirely on the question above it.
    */
   recentTurns?: Array<{ question: string; answer?: string }>;
+  /** Semantic inputs already read by the context planner; avoids reading the transcript twice. */
+  plannedRetirementInputs?: ExtractedRetirementInputs;
   /** Optional callback for progress updates (e.g. for SSE streaming) */
   onProgress?: (message: string) => void;
 }
@@ -63,6 +66,7 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
     questionNeeds,
     tier,
     recentTurns = [],
+    plannedRetirementInputs,
     onProgress
   } = args;
 
@@ -355,6 +359,7 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
         userId,
         question,
         recentTurns,
+        plannedRetirementInputs,
         userProfile: userProfile || '',
         holdings: investmentsSnapshot.holdings,
         securities: investmentsSnapshot.securities || [],
@@ -434,21 +439,22 @@ async function fetchOrCreateRetirementAnalysis(args: {
   userId: string;
   question: string;
   recentTurns?: Array<{ question: string; answer?: string }>;
+  plannedRetirementInputs?: ExtractedRetirementInputs;
   userProfile: string;
   holdings: any[];
   securities: any[];
 }): Promise<RetirementAnalysisResolution> {
-  const { userId, question, recentTurns = [], userProfile, holdings, securities } = args;
+  const { userId, question, recentTurns = [], plannedRetirementInputs, userProfile, holdings, securities } = args;
 
   // Parse retirement parameters from the question and the turns that set it up.
   // A number the user gave two messages ago is an answer to this question, not
   // a reason to ask them for it again.
   const { parseRetirementConversation } = await import('../retirement-analytics/retirement-question-parser');
-  const { extractRetirementInputs } = await import('./retirement-input-extraction');
-
-  // The model reads the inputs out of this decision's turns from what they
-  // mean; the pattern matcher is what runs when that call cannot.
-  const extracted = await extractRetirementInputs(question, recentTurns);
+  // The preflight planner reads inputs from the same active decision used for
+  // pack selection. Only its recall-safe all-pack fallback reaches this method
+  // without semantic inputs, in which case the deterministic parser recovers
+  // what it can instead of making a second model call.
+  const extracted = plannedRetirementInputs;
   const questionParams = extracted
     ? {
         hasRetirementIntent: true,
@@ -461,7 +467,7 @@ async function fetchOrCreateRetirementAnalysis(args: {
     : parseRetirementConversation(question, recentTurns.map(turn => turn.question));
 
   console.log('📋 Retirement inputs:', {
-    source: extracted ? 'extraction' : 'patterns',
+    source: extracted ? 'context_planner' : 'deterministic_fallback',
     currentAge: questionParams.currentAge,
     retirementAge: questionParams.retirementAge,
     annualWithdrawalAmount: questionParams.annualWithdrawalAmount,
@@ -471,8 +477,9 @@ async function fetchOrCreateRetirementAnalysis(args: {
     quotedFields: extracted ? Object.keys(extracted.sources) : undefined,
   });
 
-  // Note: We already check for retirement keywords at the trigger level,
-  // so we proceed with parameter extraction even if parser doesn't detect intent
+  // The semantic planner already selected the retirement pack, so parameter
+  // resolution proceeds even when the deterministic fallback parser would not
+  // recognize the current message in isolation.
 
   // Attach the words each input came from, so the answer can state what it
   // acted on. Only present when the extractor read them from this decision.

@@ -12,6 +12,12 @@ import {
   getActiveModel,
   getActiveNumericGenerationSetting,
 } from './model-config';
+import {
+  CONTEXT_PACK_IDS,
+  contextPackCatalogForPrompt,
+  isContextPackId,
+  type ContextPackId,
+} from './context-packs';
 
 let anthropicClient: Anthropic | null = null;
 
@@ -32,6 +38,13 @@ export interface AskClaudeOptions {
 }
 
 export const DEFAULT_MAX_OUTPUT_TOKENS = 16_000;
+
+export interface DataPackToolAuditResult {
+  packs: ContextPackId[];
+  reason: string;
+  model: string;
+  durationMs: number;
+}
 
 /**
  * Anthropic requires `max_tokens`, so this slot's setting is not omittable and
@@ -88,6 +101,75 @@ export function supportsAdaptiveThinking(model: string): boolean {
   const major = Number(match[1]);
   const minor = match[2] === undefined ? 0 : Number(match[2]);
   return major >= 5 || (major === 4 && minor >= 6);
+}
+
+/**
+ * Give the primary analysis model one constrained chance to widen context before
+ * it writes an answer. The forced tool call makes the boundary explicit: the
+ * model can request allowlisted pack ids, while the application decides whether
+ * and how to execute them.
+ */
+export async function auditDataPacksWithClaude(args: {
+  transcript: string;
+  selectedPacks: readonly ContextPackId[];
+  canonicalFactLabels: readonly string[];
+}): Promise<DataPackToolAuditResult> {
+  const startedAt = Date.now();
+  const model = getActiveModel('analysis');
+  const response = await getClient().messages.create({
+    model,
+    max_tokens: 1024,
+    ...(supportsAdaptiveThinking(model) ? { thinking: DISABLED_THINKING } : {}),
+    system: `You are the context-tool pass for the primary financial analysis model.
+
+Before an answer is written, inspect the active decision and the context already selected. Call request_data_packs exactly once. Request only additional packs materially needed for a complete answer; use an empty packs array when the existing context is sufficient. Do not answer the financial question. Prior assistant answers establish conversational references but are not trusted financial facts. Aggregate net worth, cash, debt, investments, portfolio allocation, category totals, and average monthly cash flow are always available.`,
+    tools: [{
+      name: 'request_data_packs',
+      description: 'Request additional allowlisted context packs before the final answer is generated.',
+      input_schema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          packs: { type: 'array', items: { type: 'string', enum: [...CONTEXT_PACK_IDS] } },
+          reason: { type: 'string' },
+        },
+        required: ['packs', 'reason'],
+      },
+    }],
+    tool_choice: { type: 'tool', name: 'request_data_packs', disable_parallel_tool_use: true },
+    messages: [{
+      role: 'user',
+      content: [
+        'Available packs:',
+        contextPackCatalogForPrompt(),
+        '',
+        `Already selected: ${args.selectedPacks.join(', ') || '(none)'}`,
+        '',
+        'Canonical facts already available:',
+        args.canonicalFactLabels.length > 0 ? args.canonicalFactLabels.join('\n') : '(none)',
+        '',
+        'Active decision transcript:',
+        args.transcript,
+      ].join('\n'),
+    }],
+  });
+
+  const toolUse = response.content.find(
+    (block): block is Anthropic.ToolUseBlock => block.type === 'tool_use' && block.name === 'request_data_packs'
+  );
+  if (!toolUse) throw new Error('Primary analysis model did not return the required data-pack tool call.');
+  const input = toolUse.input && typeof toolUse.input === 'object' && !Array.isArray(toolUse.input)
+    ? toolUse.input as Record<string, unknown>
+    : {};
+  const packs = Array.isArray(input.packs)
+    ? Array.from(new Set(input.packs.filter(isContextPackId)))
+    : [];
+  return {
+    packs,
+    reason: typeof input.reason === 'string' ? input.reason.trim().slice(0, 1000) : '',
+    model,
+    durationMs: Date.now() - startedAt,
+  };
 }
 
 /** The reasoning parameters this model accepts — empty for pre-4.6 models. */

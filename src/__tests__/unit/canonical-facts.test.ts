@@ -1,5 +1,7 @@
 import { buildCanonicalFactPack, validateCanonicalFactPack } from '../../openai/canonical-facts';
-import { analyzeQuestionNeeds } from '../../openai/question-analysis';
+import { questionNeedsFromPacks, type ContextPackId } from '../../openai/context-packs';
+
+const needs = (...packs: ContextPackId[]) => questionNeedsFromPacks(packs, false);
 
 function snapshot() {
   return {
@@ -26,7 +28,7 @@ describe('buildCanonicalFactPack', () => {
     // These all come from snapshot columns that are read on every request, so
     // withholding them buys nothing and only decides whether the model can cite
     // a number it can already see.
-    const pack = buildCanonicalFactPack(snapshot(), 'What is my net worth?', analyzeQuestionNeeds('What is my net worth?'));
+    const pack = buildCanonicalFactPack(snapshot(), 'What is my net worth?', needs());
     expect(pack.facts.map((fact) => fact.id)).toEqual([
       'net_worth',
       'total_cash',
@@ -44,7 +46,7 @@ describe('buildCanonicalFactPack', () => {
     // Accounts, transactions, and holdings are extra JSON columns fetched only
     // when the question routes to them; those facts stay routed.
     const question = 'What is my net worth?';
-    const pack = buildCanonicalFactPack(snapshot(), question, analyzeQuestionNeeds(question));
+    const pack = buildCanonicalFactPack(snapshot(), question, needs());
     const ids = pack.facts.map((fact) => fact.id);
 
     expect(ids.some((id) => id.startsWith('account_balance_'))).toBe(false);
@@ -59,7 +61,7 @@ describe('buildCanonicalFactPack', () => {
     const question = 'Evaluate my entire financial portfolio, including my income and spending. ' +
       'Give me your assessment of its strengths and weaknesses, especially as it relates to ' +
       'my goal of retiring by age 62 or sooner.';
-    const pack = buildCanonicalFactPack(snapshot(), question, analyzeQuestionNeeds(question));
+    const pack = buildCanonicalFactPack(snapshot(), question, needs('transaction_details', 'retirement_analysis'));
 
     expect(pack.facts.map((fact) => fact.id)).toEqual(expect.arrayContaining([
       'net_worth',
@@ -79,10 +81,10 @@ describe('buildCanonicalFactPack', () => {
     const data = snapshot();
     data.bankingTransactions = [];
     const question = 'How much do I spend each month?';
-    const needs = analyzeQuestionNeeds(question);
-    const pack = buildCanonicalFactPack(data, question, needs);
+    const questionNeeds = needs();
+    const pack = buildCanonicalFactPack(data, question, questionNeeds);
 
-    expect(needs.needsTransactionDetails).toBe(false);
+    expect(questionNeeds.needsTransactionDetails).toBe(false);
     expect(pack.facts.find((fact) => fact.id === 'category_spending_dining')).toMatchObject({
       value: 32,
       unit: 'usd',
@@ -99,7 +101,7 @@ describe('buildCanonicalFactPack', () => {
       byMonth: { '2026-06': {}, '2026-07': {}, '2026-08': {} },
     };
     const question = 'What is my savings rate?';
-    const pack = buildCanonicalFactPack(data, question, analyzeQuestionNeeds(question));
+    const pack = buildCanonicalFactPack(data, question, needs());
 
     expect(pack.facts.find((fact) => fact.id === 'category_spending_dining')?.label)
       .toBe('Dining spending over the last 3 months (total, not a monthly average)');
@@ -116,7 +118,7 @@ describe('buildCanonicalFactPack', () => {
       'Anything I should know?',
       'hi',
     ]) {
-      const pack = buildCanonicalFactPack(data, question, analyzeQuestionNeeds(question));
+      const pack = buildCanonicalFactPack(data, question, needs());
       expect(pack.facts.map((fact) => fact.id)).toEqual(expect.arrayContaining([
         'net_worth',
         'average_monthly_operating_cash_flow',
@@ -127,7 +129,7 @@ describe('buildCanonicalFactPack', () => {
   });
 
   it('supplies and validates deterministic cash-flow calculations', () => {
-    const pack = buildCanonicalFactPack(snapshot(), 'What is my savings rate?', analyzeQuestionNeeds('What is my savings rate?'));
+    const pack = buildCanonicalFactPack(snapshot(), 'What is my savings rate?', needs());
     expect(pack.facts.find((fact) => fact.id === 'average_monthly_operating_cash_flow')?.value).toBe(2500);
     expect(pack.facts.find((fact) => fact.id === 'savings_rate')?.value).toBe(25);
     expect(validateCanonicalFactPack(pack)).toEqual([]);
@@ -138,7 +140,7 @@ describe('buildCanonicalFactPack', () => {
 
   it('includes the compact balance-sheet and cash-flow facts needed for an affordability decision', () => {
     const question = 'Can I afford to buy a $500k house?';
-    const pack = buildCanonicalFactPack(snapshot(), question, analyzeQuestionNeeds(question));
+    const pack = buildCanonicalFactPack(snapshot(), question, needs());
     expect(pack.facts.map((fact) => fact.id)).toEqual(expect.arrayContaining([
       'net_worth',
       'total_cash',
@@ -159,8 +161,8 @@ describe('buildCanonicalFactPack', () => {
     const data = snapshot();
     data.marketContext = 'The current average mortgage rate is 6.5%.';
     const question = 'How do current mortgage rates affect me?';
-    const needs = { ...analyzeQuestionNeeds(question), needsMarketContext: true };
-    const pack = buildCanonicalFactPack(data, question, needs);
+    const questionNeeds = needs('market_context');
+    const pack = buildCanonicalFactPack(data, question, questionNeeds);
     expect(pack.facts).toContainEqual(expect.objectContaining({
       id: 'market_context_percent_1',
       value: 6.5,
@@ -171,7 +173,7 @@ describe('buildCanonicalFactPack', () => {
 
   it('recognizes common user-entered retirement premises', () => {
     const question = 'Can I retire at 55 with 2 million?';
-    const pack = buildCanonicalFactPack(snapshot(), question, analyzeQuestionNeeds(question));
+    const pack = buildCanonicalFactPack(snapshot(), question, needs('retirement_analysis'));
     expect(pack.facts).toEqual(expect.arrayContaining([
       expect.objectContaining({ value: 55, unit: 'age', provenance: expect.objectContaining({ kind: 'user_input' }) }),
       expect.objectContaining({ value: 2_000_000, unit: 'usd', provenance: expect.objectContaining({ kind: 'user_input' }) }),
@@ -180,13 +182,13 @@ describe('buildCanonicalFactPack', () => {
 
   it('does not treat retirement account abbreviations as magnitudes', () => {
     const question = 'What is my 401k balance compared to my 403b and 457b?';
-    const pack = buildCanonicalFactPack(snapshot(), question, analyzeQuestionNeeds(question));
+    const pack = buildCanonicalFactPack(snapshot(), question, needs('investment_details'));
     expect(pack.facts.some((fact) => fact.value === 401_000 || fact.value === 403_000_000_000 || fact.value === 457_000_000_000)).toBe(false);
   });
 
   it('aggregates only expense and fee transactions with traceable inputs', () => {
     const question = 'Which merchant has my largest purchases?';
-    const pack = buildCanonicalFactPack(snapshot(), question, analyzeQuestionNeeds(question));
+    const pack = buildCanonicalFactPack(snapshot(), question, needs('transaction_details'));
     const merchant = pack.facts.find((fact) => fact.id === 'merchant_spending_cafe');
     expect(merchant).toMatchObject({ value: 32, unit: 'usd' });
     expect(merchant?.provenance.inputFactIds).toHaveLength(2);
@@ -211,7 +213,7 @@ describe('buildCanonicalFactPack', () => {
       _storedInputParams: { currentAge: 50, retirementAge: 65, annualWithdrawalAmount: 40_000, withdrawalStartAge: 65 },
     };
     const question = 'Am I on track for retirement?';
-    const pack = buildCanonicalFactPack(data, question, analyzeQuestionNeeds(question));
+    const pack = buildCanonicalFactPack(data, question, needs('retirement_analysis'));
     expect(pack.facts.find((fact) => fact.id === 'withdrawal_rate_ratio')).toMatchObject({ value: 0.04, displayable: false });
     expect(pack.facts.find((fact) => fact.id === 'withdrawal_rate')).toMatchObject({
       value: 4,
@@ -238,7 +240,7 @@ describe('buildCanonicalFactPack', () => {
       ],
     };
     const question = 'What is my asset allocation?';
-    const pack = buildCanonicalFactPack(data, question, analyzeQuestionNeeds(question));
+    const pack = buildCanonicalFactPack(data, question, needs('investment_details'));
     const allocationFacts = pack.facts.filter((fact) => fact.id.startsWith('allocation'));
 
     expect(allocationFacts.map((fact) => fact.id).sort()).toEqual([
@@ -268,7 +270,7 @@ describe('buildCanonicalFactPack', () => {
       },
     };
     const question = 'How much am I spending by category?';
-    const pack = buildCanonicalFactPack(data, question, analyzeQuestionNeeds(question));
+    const pack = buildCanonicalFactPack(data, question, needs('transaction_details'));
     const categoryFacts = pack.facts.filter((fact) => fact.id.startsWith('category_spending'));
 
     expect(categoryFacts.map((fact) => fact.id).sort()).toEqual([
