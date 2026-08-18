@@ -326,7 +326,6 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
         (widenedPacks.includes('search_context') && finalSearchQueries.length > 0)
       ) {
         const widenedNeeds = questionNeedsFromPacks(widenedPacks, contextPlan.needsSecondaryValidation);
-        searchRetrievalAttempted = widenedNeeds.needsSearchContext && finalSearchQueries.length > 0;
         const toolGatherStartedAt = Date.now();
         const widenedSnapshot = await gatherContextSnapshot({
           userId,
@@ -345,6 +344,9 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
         selectedPacks = widenedPacks;
         questionNeeds = widenedNeeds;
         contextTool.addedPacks = addedPacks;
+        // Mark retrieval only after a successful gather so a failed widen can
+        // still fall through to the deferred-search recovery path below.
+        searchRetrievalAttempted = widenedNeeds.needsSearchContext && finalSearchQueries.length > 0;
       }
       contextToolMs = toolResult.durationMs;
     } catch (error) {

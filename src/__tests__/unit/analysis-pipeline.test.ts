@@ -330,6 +330,55 @@ describe('runAskLincAnalysis validation routing', () => {
     });
   });
 
+  it('recovers deferred search retrieval when the primary widen gather fails', async () => {
+    const preflight = contextPlan(['search_context']);
+    mockedPlanContext.mockResolvedValue(preflight);
+    mockedAuditPacks.mockResolvedValue({
+      packs: ['transaction_details'],
+      searchQueries: preflight.searchQueries,
+      scenarioPlans: {},
+      reason: 'Also need spending detail.',
+      model: 'claude-test',
+      durationMs: 2,
+    });
+    mockedGatherContext
+      .mockResolvedValueOnce(snapshot())
+      .mockRejectedValueOnce(new Error('temporary widen failure'))
+      .mockResolvedValueOnce({
+        ...snapshot(),
+        searchContext: 'Recovered search evidence.',
+        searchContextMetadata: {
+          queries: preflight.searchQueries,
+          cacheHits: 0,
+          providerCalls: 1,
+          resultCount: 2,
+          retrievedAt: '2026-08-17T00:00:00.000Z',
+        },
+        contextSelection: {
+          ...snapshot().contextSelection,
+          searchContextRequested: true,
+        },
+      } as any);
+    mockedAskClaude.mockResolvedValue(JSON.stringify({ summary: 'Answered with recovered search evidence.' }));
+
+    const result = await runAskLincAnalysis({
+      question: 'What is the current public rate?',
+      userId: 'user-1',
+      userTier: 'standard',
+    });
+
+    expect(mockedGatherContext).toHaveBeenCalledTimes(3);
+    expect(mockedGatherContext.mock.calls[2][0]).toMatchObject({
+      searchQueries: preflight.searchQueries,
+    });
+    expect(result.showTheMathData?.evidenceManifest.contextPlanning?.primaryTool?.outcome).toBe('failed');
+    expect(result.showTheMathData?.evidenceManifest.evidenceRefs.search).toMatchObject({
+      queries: preflight.searchQueries,
+      providerCalls: 1,
+      resultCount: 2,
+    });
+  });
+
   it('defers baseline persistence when the primary audit discovers the scenario', async () => {
     const plan = contextPlan(['retirement_analysis'], true);
     plan.retirementInputs = {
