@@ -420,6 +420,13 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
     finalSearchQueries = evaluation.toolSearchQueries ?? finalSearchQueries;
   }
 
+  // The semantic planner and its constrained audit define what this question
+  // actually needs. Validation may later load every pack as an evidence-recovery
+  // measure, but that broader read is not permission to introduce an unrelated
+  // user-facing ask or disclosure. Keep the two meanings separate before the
+  // late recovery path can replace questionNeeds with its exhaustive selection.
+  const plannedQuestionNeeds = { ...questionNeeds };
+
   const scenarioExecutions = await scenarioCalculatorRegistry.executePlans(
     snapshot,
     scenarioPlans,
@@ -672,7 +679,7 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
   // When something the question needed is missing and the user is the one who
   // can supply it, ask for it. Appended after validation because it is
   // server-authored: these values come from persisted state, not the model.
-  const missingInputsAsk = describeMissingInputs(snapshot, questionNeeds);
+  const missingInputsAsk = describeMissingInputs(snapshot, plannedQuestionNeeds);
   if (missingInputsAsk) {
     structuredResponse = appendNotice(structuredResponse, missingInputsAsk);
   }
@@ -684,7 +691,7 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
   // A scenario disclosure already contains the inherited baseline plus every
   // changed/defaulted variant input. Appending the baseline sentence too would
   // repeat the same ages and spending immediately before it.
-  const retirementAssumptions = scenarioExecutions[RETIREMENT_CALCULATOR_ID]
+  const retirementAssumptions = !plannedQuestionNeeds.needsRetirement || scenarioExecutions[RETIREMENT_CALCULATOR_ID]
     ? null
     : describeRetirementAssumptions(snapshot);
   if (retirementAssumptions) {

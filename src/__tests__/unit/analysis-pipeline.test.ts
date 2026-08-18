@@ -75,6 +75,65 @@ function snapshot() {
   } as any;
 }
 
+function cachedRetirementAnalysis() {
+  return {
+    summary: {
+      characteristics: {
+        growthPotential: 'moderate',
+        drawdownResistance: 'moderate',
+        withdrawalFragility: 'moderate',
+        inflationProtection: 'moderate',
+      },
+      tradeoffs: { upside: 'Growth', downside: 'Volatility' },
+      primaryObservation: 'A cached projection exists.',
+      confidence: 'medium',
+      timelineBucket: '20',
+      timelineBucketNote: 'Twenty-year horizon.',
+    },
+    metrics: {
+      withdrawalRate: 0.04,
+      equityAllocation: 70,
+      yearsOfExpenses: 25,
+      historicalWithdrawalRates: {
+        p10: 0.03,
+        p25: 0.035,
+        p50: 0.04,
+        p75: 0.045,
+        p90: 0.05,
+      },
+    },
+    stressTest: {
+      survivalRate: 0.9,
+      totalSequences: 100,
+      depletionPercentiles: { p10: 12, p25: 18, p50: 25, p75: 30, p90: 35 },
+      worstSequences: { byDepletion: [], byDrawdown: [], byRecovery: [] },
+    },
+    historicalImplications: [],
+    dataQuality: {
+      completeness: 1,
+      priceHistoryCoverage: 1,
+      metadataConfidence: 'high',
+      portfolioMappingConfidence: 'high',
+      proxiedValuePercentage: 0,
+      proxyUsage: {
+        usEquityProxy: 'SPY',
+        internationalEquityProxy: 'VXUS',
+        bondsProxy: 'BND',
+        unmappedHoldings: [],
+        mappingMethod: 'direct',
+      },
+      assumptions: [],
+      missingData: [],
+    },
+    disclaimers: [],
+    _storedInputParams: {
+      annualWithdrawalAmount: 120_000,
+      retirementAge: 65,
+      currentAge: 45,
+    },
+  };
+}
+
 function contextPlan(packs: ContextPackId[] = [], secondary = false): ContextPlan {
   const selectedPacks = normalizeContextPacks(packs);
   return {
@@ -815,6 +874,71 @@ describe('runAskLincAnalysis validation routing', () => {
       needsRetirement: true,
     });
     expect(result.showTheMathData?.evidenceManifest.contextEscalated).toBe(true);
+  });
+
+  it('does not turn recovery-only retirement context into a retirement input ask', async () => {
+    mockedGatherContext
+      .mockResolvedValueOnce(snapshot())
+      .mockResolvedValueOnce({
+        ...snapshot(),
+        retirementAnalysisNeedsInfo: {
+          missingParams: ['annualWithdrawalAmount'],
+          detectedParams: { annualWithdrawalAmount: 120_000 },
+          confirmationRequiredParams: ['annualWithdrawalAmount'],
+        },
+      } as any);
+    mockedAskClaude
+      .mockResolvedValueOnce(JSON.stringify({
+        summary: 'Your largest holding is worth $250,000.',
+        insights: [],
+        suggested_actions: [],
+      }))
+      .mockResolvedValueOnce(JSON.stringify({
+        summary: 'Your net worth is $100.',
+        insights: [],
+        suggested_actions: [],
+      }));
+
+    const result = await runAskLincAnalysis({
+      question: 'Is my investment portfolio overexposed to technology?',
+      userId: 'user-1',
+    });
+
+    expect(mockedGatherContext.mock.calls[1][0].questionNeeds.needsRetirement).toBe(true);
+    expect(result.showTheMathData?.evidenceManifest.contextEscalated).toBe(true);
+    expect(result.structuredResponse.summary).toBe('Your net worth is $100.');
+    expect(result.displayText).not.toContain('retirement projection');
+    expect(result.displayText).not.toContain('$120,000');
+  });
+
+  it('does not disclose a recovery-only cached retirement projection', async () => {
+    mockedGatherContext
+      .mockResolvedValueOnce(snapshot())
+      .mockResolvedValueOnce({
+        ...snapshot(),
+        retirementAnalysis: cachedRetirementAnalysis(),
+      } as any);
+    mockedAskClaude
+      .mockResolvedValueOnce(JSON.stringify({
+        summary: 'Your largest holding is worth $250,000.',
+        insights: [],
+        suggested_actions: [],
+      }))
+      .mockResolvedValueOnce(JSON.stringify({
+        summary: 'Your net worth is $100.',
+        insights: [],
+        suggested_actions: [],
+      }));
+
+    const result = await runAskLincAnalysis({
+      question: 'What about domestic versus international exposure?',
+      userId: 'user-1',
+    });
+
+    expect(result.showTheMathData?.evidenceManifest.contextEscalated).toBe(true);
+    expect(result.structuredResponse.summary).toBe('Your net worth is $100.');
+    expect(result.displayText).not.toContain('This projection assumes');
+    expect(result.displayText).not.toContain('$120,000');
   });
 
   it('makes every remaining pack available after an unsupported answer', async () => {
