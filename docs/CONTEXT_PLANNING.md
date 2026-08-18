@@ -61,9 +61,9 @@ The Production tab's **Answer quality** report deliberately has no synthetic sco
 
 - clean, corrected, and failed delivery outcomes;
 - deterministic evidence verification;
-- semantic planner acceptance, primary-tool expansions and failures, late all-pack recoveries, and planner fallback usage;
+- planner sufficiency (acceptance rate, primary-tool expansions/failures, and late evidence recoveries);
 - user ratings;
-- requested, completed, unavailable, and unexpectedly unrun scenarios, plus calculator latency.
+- requested, completed, unavailable, and unexpectedly unrun scenarios, plus calculator latency;
 - requested and completed public-search retrievals, planned-query volume, Brave provider calls, cache reuse, results, and unavailable evidence.
 
 The old editable routing vocabulary and browser-side keyword question categories were retired because neither represents the production decision path.
