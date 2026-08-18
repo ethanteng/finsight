@@ -30,12 +30,13 @@ export interface RentCastHomeValue {
 }
 
 /**
- * RentCast answered, but the answer cannot be used for this address: it has no
- * listing, or the AVM payload is not a usable valuation. This is a property of
- * one address and will keep happening for it, so callers must not treat it as
- * an outage — a scheduled job that fails on this would stay red forever.
- * Anything else (auth, quota, 5xx, network) is a plain Error: the integration
- * itself is unavailable and someone needs to act.
+ * Definitive "this address cannot be valued" signal — currently local address
+ * validation that never reaches RentCast. Callers must not treat it as an
+ * outage: the same address will fail the same way on every run.
+ *
+ * Do not use this for malformed HTTP 200 payloads. Those are provider-side
+ * contract failures (schema regressions, bad AVM shapes) and must stay plain
+ * Errors so the cron goes red. A RentCast 404 already returns null.
  */
 export class RentCastValuationError extends Error {
   constructor(message: string) {
@@ -101,24 +102,27 @@ function normalizeSubjectProperty(value: unknown): RentCastSubjectProperty | und
 }
 
 function normalizeHomeValue(value: unknown): RentCastHomeValue {
+  // Shape/contract failures are plain Errors (provider), not RentCastValuationError.
+  // A schema regression that breaks every AVM must turn the cron red; classifying
+  // it as an address problem would hide the outage whenever any profile skips.
   if (!value || typeof value !== 'object') {
-    throw new RentCastValuationError('RentCast returned an invalid home value response');
+    throw new Error('RentCast returned an invalid home value response');
   }
 
   const raw = value as Record<string, unknown>;
   if (!finitePositive(raw.price)) {
-    throw new RentCastValuationError('RentCast returned an invalid estimated price');
+    throw new Error('RentCast returned an invalid estimated price');
   }
   if (!finitePositive(raw.priceRangeLow) || !finitePositive(raw.priceRangeHigh)) {
-    throw new RentCastValuationError('RentCast returned an invalid estimated price range');
+    throw new Error('RentCast returned an invalid estimated price range');
   }
   if (raw.priceRangeLow > raw.price || raw.price > raw.priceRangeHigh) {
-    throw new RentCastValuationError('RentCast returned an inconsistent estimated price range');
+    throw new Error('RentCast returned an inconsistent estimated price range');
   }
 
   const subjectProperty = normalizeSubjectProperty(raw.subjectProperty);
   if (!subjectProperty) {
-    throw new RentCastValuationError('RentCast returned a home value without subject property identity');
+    throw new Error('RentCast returned a home value without subject property identity');
   }
 
   return {

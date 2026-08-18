@@ -97,6 +97,16 @@ describe('ProfileManager RentCast identity persistence', () => {
     expect(update).not.toHaveBeenCalled();
   });
 
+  it('rethrows a provider failure instead of collapsing it to null', async () => {
+    mockGetHomeValue.mockRejectedValue(new Error('RentCast API error (503): unavailable'));
+    jest.spyOn(manager, 'getOriginalProfile').mockResolvedValue('Existing profile');
+    const update = jest.spyOn(manager, 'updateProfile').mockResolvedValue();
+
+    await expect(manager.updateHomeValue('user-1', '1 Main St, Austin, TX 78701'))
+      .rejects.toThrow('RentCast API error (503)');
+    expect(update).not.toHaveBeenCalled();
+  });
+
   it('carries the stored property ID through a manual value override', async () => {
     jest.spyOn(manager, 'getOriginalProfile').mockResolvedValue(
       serializePersonalContextDocument({}, {

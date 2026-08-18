@@ -353,12 +353,6 @@ export class ProfileManager {
   }
 
   /**
-   * Update home value for a user by fetching from RentCast API
-   * @param userId - User ID
-   * @param address - Home address
-   * @returns Updated home value or null if fetch failed
-   */
-  /**
    * Refresh the stored home value from RentCast.
    *
    * Returns null when RentCast simply has no usable valuation for this address
@@ -367,9 +361,9 @@ export class ProfileManager {
    * on every attempt, so callers must not read it as an outage.
    *
    * Throws when the valuation could not be attempted at all: a missing API key,
-   * auth or quota rejection, a RentCast outage, or a failure writing the
-   * profile. Those need someone to act, and swallowing them here is what let a
-   * broken integration look identical to an unlistable house.
+   * auth or quota rejection, a RentCast outage, a malformed provider payload, or
+   * a failure writing the profile. Those need someone to act, and swallowing them
+   * here is what let a broken integration look identical to an unlistable house.
    */
   async updateHomeValue(userId: string, address: string): Promise<number | null> {
     try {
