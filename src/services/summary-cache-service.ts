@@ -155,7 +155,11 @@ export class SummaryCacheService {
           `SummaryCacheService: retaining ${previous!.status} snapshot for user ${userId}; ` +
           `refusing to replace with ${canonical.status} provider data`
         );
-        return previous as any;
+        // Flag the retention on the way out. The returned snapshot is the *previous*
+        // revision, so its status describes the run that produced it, not this one --
+        // a caller reading status alone cannot tell a successful refresh from one that
+        // fell back. Not persisted: it describes this call, not the stored revision.
+        return { ...(previous as any), retainedPriorRevision: true } as any;
       }
       if (previous && previousAgeMs !== null && previousAgeMs > RETAINED_SNAPSHOT_MAX_AGE_MS) {
         console.warn(

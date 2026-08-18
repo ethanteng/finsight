@@ -2204,6 +2204,10 @@ app.post('/api/refresh-summary', requireAuth, async (req: Request, res: Response
       computedAt: payload.computedAt,
       asOf: payload.asOf,
       status: payload.status,
+      // True when a provider failed and the prior revision was kept instead. The status
+      // above then belongs to that older revision, so it cannot be read as this refresh
+      // having reached the providers.
+      retainedPriorRevision: Boolean((payload as any).retainedPriorRevision),
     });
   } catch (error) {
     console.error('❌ Failed to refresh financial summary:', error);

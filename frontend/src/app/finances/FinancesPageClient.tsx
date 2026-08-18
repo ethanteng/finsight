@@ -350,10 +350,22 @@ export default function FinancesPageClient() {
         // A 'stale' result is still a successful refresh: it only means a provider's own
         // data is older than our window, which another refresh cannot change. Only a
         // missing source is worth reporting as a partial outcome.
+        //
+        // A retained revision has to be checked separately. When a provider fails, the
+        // server keeps the previous revision rather than publishing an incomplete one,
+        // and returns *its* status -- which can be 'current'. Reading status alone would
+        // report a refresh that never reached the providers as a success.
         const sourceMissing = body.status === 'partial' || body.status === 'unavailable';
-        setRefreshSummaryMessage(sourceMissing
-          ? { kind: 'warning', text: 'Refresh completed, but some connected-source data was unavailable.' }
-          : { kind: 'success', text: 'Totals refreshed from your connected providers.' });
+        if (body.retainedPriorRevision) {
+          setRefreshSummaryMessage({
+            kind: 'warning',
+            text: 'Some accounts could not be reached, so your previous totals are still shown. Check Accounts & context if this keeps happening.',
+          });
+        } else {
+          setRefreshSummaryMessage(sourceMissing
+            ? { kind: 'warning', text: 'Refresh completed, but some connected-source data was unavailable.' }
+            : { kind: 'success', text: 'Totals refreshed from your connected providers.' });
+        }
       } else {
         console.error('Failed to refresh summary:', res.status, body);
         setRefreshSummaryMessage({
