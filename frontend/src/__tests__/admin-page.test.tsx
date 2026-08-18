@@ -130,6 +130,56 @@ describe('AdminPage', () => {
     });
   });
 
+  it('refreshes all market contexts with one all-tier request', async () => {
+    render(<AdminPage />);
+
+    await waitFor(() => {
+      expect(screen.queryByText('Loading admin data...')).not.toBeInTheDocument();
+    });
+    fireEvent.click(await screen.findByText('Market News'));
+    const refreshAll = await screen.findByText('Refresh All Contexts');
+    const fetchMock = global.fetch as jest.Mock;
+    fetchMock.mockClear();
+
+    fireEvent.click(refreshAll);
+
+    await waitFor(() => {
+      const refreshCalls = fetchMock.mock.calls.filter(([url]) =>
+        String(url).includes('/admin/market-news/refresh')
+      );
+      expect(refreshCalls).toHaveLength(1);
+      expect(refreshCalls[0][0]).toMatch(/\/admin\/market-news\/refresh$/);
+      expect(refreshCalls[0][1]).toMatchObject({ method: 'POST' });
+    });
+  });
+
+  it('shows a visible message when a market refresh is already running', async () => {
+    render(<AdminPage />);
+
+    await waitFor(() => {
+      expect(screen.queryByText('Loading admin data...')).not.toBeInTheDocument();
+    });
+    fireEvent.click(await screen.findByText('Market News'));
+    const refreshButtons = await screen.findAllByText('Refresh');
+    const fetchMock = global.fetch as jest.Mock;
+    fetchMock.mockImplementation((url: string) => {
+      if (url.includes('/admin/market-news/refresh/starter')) {
+        return Promise.resolve({
+          ok: false,
+          status: 409,
+          json: async () => ({ reason: 'active_lease' }),
+        });
+      }
+      return Promise.resolve({ ok: true, json: async () => ({}) });
+    });
+
+    fireEvent.click(refreshButtons[0]);
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'A market context refresh is already in progress. Try again when it finishes.'
+    );
+  });
+
   it('should handle empty market context gracefully', async () => {
     marketContextsAvailable = false;
 

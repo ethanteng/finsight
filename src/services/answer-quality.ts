@@ -42,6 +42,12 @@ export interface AnswerQualityObservation {
   scenarioStatus: ScenarioStatus;
   /** Calculator-level outcomes prevent a mixed run from hiding completed peers. */
   scenarioStatuses: Record<string, ScenarioExecutionStatus>;
+  searchRequested: boolean;
+  searchQueryCount: number;
+  searchRetrieved: boolean;
+  searchProviderCalls: number;
+  searchCacheHits: number;
+  searchResultCount: number;
 }
 
 function manifestOf(showTheMathData: unknown): EvidenceManifest | null {
@@ -141,6 +147,9 @@ function toObservation(conversation: AnswerQualityConversation): AnswerQualityOb
     : executions.some((execution) => execution.status === 'unavailable')
       ? 'unavailable'
       : 'not_run';
+  const finalSearchQueries = planning?.primaryTool?.searchQueries ?? planning?.searchQueries ?? [];
+  const searchEvidence = manifest.evidenceRefs?.search;
+  const searchRequested = finalPacks.includes('search_context') && finalSearchQueries.length > 0;
   return {
     id: conversation.id,
     createdAt: new Date(conversation.createdAt).toISOString(),
@@ -157,6 +166,12 @@ function toObservation(conversation: AnswerQualityConversation): AnswerQualityOb
     scenarioRequested,
     scenarioStatus,
     scenarioStatuses,
+    searchRequested,
+    searchQueryCount: finalSearchQueries.length,
+    searchRetrieved: Boolean(searchEvidence),
+    searchProviderCalls: searchEvidence?.providerCalls ?? 0,
+    searchCacheHits: searchEvidence?.cacheHits ?? 0,
+    searchResultCount: searchEvidence?.resultCount ?? 0,
     ...deliveryStatus({ outcome, rating, lateExpansion }),
   };
 }
@@ -230,6 +245,17 @@ export interface AnswerQualityReport {
       unavailable: number;
     }>;
   };
+  search: {
+    requested: number;
+    retrieved: number;
+    unavailable: number;
+    retrievalRate: number | null;
+    plannedQueries: number;
+    providerCalls: number;
+    cacheHits: number;
+    cacheReuseRate: number | null;
+    resultCount: number;
+  };
   users: {
     rated: number;
     positive: number;
@@ -292,6 +318,10 @@ export function buildAnswerQualityReport(
       (execution) => execution.calculatorId === calculatorId && execution.status === 'unavailable'
     ).length,
   }]));
+  const searchRequested = observations.filter((observation) => observation.searchRequested);
+  const searchRetrieved = searchRequested.filter((observation) => observation.searchRetrieved).length;
+  const searchProviderCalls = searchRequested.reduce((total, observation) => total + observation.searchProviderCalls, 0);
+  const searchCacheHits = searchRequested.reduce((total, observation) => total + observation.searchCacheHits, 0);
   const ratings = observations
     .map((observation) => observation.rating)
     .filter((rating): rating is number => rating !== null);
@@ -342,6 +372,17 @@ export function buildAnswerQualityReport(
         (execution) => execution.status === 'unavailable'
       ).length,
       byCalculator: scenarioByCalculator,
+    },
+    search: {
+      requested: searchRequested.length,
+      retrieved: searchRetrieved,
+      unavailable: searchRequested.length - searchRetrieved,
+      retrievalRate: rate(searchRetrieved, searchRequested.length),
+      plannedQueries: searchRequested.reduce((total, observation) => total + observation.searchQueryCount, 0),
+      providerCalls: searchProviderCalls,
+      cacheHits: searchCacheHits,
+      cacheReuseRate: rate(searchCacheHits, searchCacheHits + searchProviderCalls),
+      resultCount: searchRequested.reduce((total, observation) => total + observation.searchResultCount, 0),
     },
     users: {
       rated: ratings.length,

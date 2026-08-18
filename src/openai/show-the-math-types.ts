@@ -1,6 +1,7 @@
 import type { CanonicalFact } from './canonical-facts';
 import type { ContextPackId } from './context-packs';
 import type { AskLincResponse } from './structured-response';
+import type { PlannedSearchQuery } from '../data/search-types';
 import type {
   RetirementScenarioEvidence,
   RetirementScenarioPlan,
@@ -74,6 +75,7 @@ export interface EvidenceManifest {
     selectedPacks: ContextPackId[];
     finalPacks: ContextPackId[];
     needsSecondaryValidation: boolean;
+    searchQueries?: PlannedSearchQuery[];
     summary: string;
     scenarios?: ScenarioPlanRecord;
     /** @deprecated Persisted manifests before registry-keyed scenario planning. */
@@ -87,6 +89,7 @@ export interface EvidenceManifest {
       durationMs: number;
       scenarios?: ScenarioPlanRecord;
       /** @deprecated Persisted manifests before registry-keyed scenario planning. */
+      searchQueries?: PlannedSearchQuery[];
       retirementScenario?: RetirementScenarioPlan;
     };
   };
@@ -148,6 +151,13 @@ export interface EvidenceManifest {
     marketContext: boolean;
     marketContextDigest?: string;
     searchContextDigest?: string;
+    search?: {
+      queries: PlannedSearchQuery[];
+      cacheHits: number;
+      providerCalls: number;
+      resultCount: number;
+      retrievedAt: string;
+    };
   };
 }
 

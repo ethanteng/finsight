@@ -7,6 +7,7 @@ import { buildAccountSummaries } from './account-summary';
 import { buildCanonicalCashFlowAnalyses } from './cash-flow-context';
 import { resolveRetirementInputs, retirementPortfolioFingerprint } from './retirement-inputs';
 import type { ExtractedRetirementInputs } from './retirement-input-extraction';
+import type { PlannedSearchQuery } from '../data/search-types';
 
 interface GatherContextArgs {
   userId?: string;
@@ -24,6 +25,10 @@ interface GatherContextArgs {
   recentTurns?: Array<{ question: string; answer?: string }>;
   /** Semantic inputs already read by the context planner; avoids reading the transcript twice. */
   plannedRetirementInputs?: ExtractedRetirementInputs;
+  /** Standalone public queries produced by the two-pass semantic planner. */
+  searchQueries?: readonly PlannedSearchQuery[];
+  /** Do not call an external search provider until the primary audit is final. */
+  deferSearchContext?: boolean;
   /** Skip the expensive/persisted retirement calculation until scenario planning is final. */
   deferRetirementAnalysis?: boolean;
   /** A scenario compares with the existing baseline, so its stored spending can be reused. */
@@ -71,6 +76,8 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
     tier,
     recentTurns = [],
     plannedRetirementInputs,
+    searchQueries = [],
+    deferSearchContext = false,
     deferRetirementAnalysis = false,
     useExistingRetirementBaseline = false,
     onProgress
@@ -311,7 +318,7 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
 
   // These operations are independent of one another — run them concurrently
   // instead of serially to cut the time spent gathering context before the LLM call.
-  if (questionNeeds.needsSearchContext) onProgress?.('Searching financial knowledge base');
+  if (questionNeeds.needsSearchContext && !deferSearchContext) onProgress?.('Searching financial knowledge base');
   if (questionNeeds.needsMarketContext) onProgress?.('Fetching market context');
   if (questionNeeds.needsUserProfile) onProgress?.('Preparing your profile');
 
@@ -320,14 +327,14 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
     ? sortedTransactions.slice(0, MAX_PROMPT_TRANSACTIONS)
     : [];
 
-  const [tierContext, searchContext, marketContext, userOverrides, userProfile] = await Promise.all([
+  const [tierContext, searchContextResult, marketContext, userOverrides, userProfile] = await Promise.all([
     dataOrchestrator.buildTierAwareContext(
       tier,
       tierContextAccounts,
       tierContextTransactions,
       { includeMarketContext: false }
     ),
-    maybeFetchSearchContext(question, questionNeeds, tier),
+    maybeFetchSearchContext(searchQueries, questionNeeds, tier, deferSearchContext),
     maybeFetchMarketContext(questionNeeds, tier),
     fetchUserOverrides(),
     questionNeeds.needsUserProfile
@@ -373,7 +380,16 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
       marketContextRequested: questionNeeds.needsMarketContext,
       searchContextRequested: questionNeeds.needsSearchContext,
     },
-    searchContext,
+    searchContext: searchContextResult?.summary,
+    ...(searchContextResult && {
+      searchContextMetadata: {
+        queries: searchContextResult.queries,
+        cacheHits: searchContextResult.cacheHits,
+        providerCalls: searchContextResult.providerCalls,
+        resultCount: searchContextResult.results.length,
+        retrievedAt: searchContextResult.lastUpdate.toISOString(),
+      },
+    }),
     marketContext,
     userProfile,
     homeValueSummary,
@@ -1029,17 +1045,17 @@ function buildHomeValueSummary(homeData: HomeData): string {
 }
 
 async function maybeFetchSearchContext(
-  question: string,
+  searchQueries: readonly PlannedSearchQuery[],
   questionNeeds: QuestionNeeds,
-  tier: UserTier
-): Promise<string | undefined> {
-  if (!questionNeeds.needsSearchContext) {
+  tier: UserTier,
+  deferred: boolean
+) {
+  if (!questionNeeds.needsSearchContext || deferred || searchQueries.length === 0) {
     return undefined;
   }
 
   try {
-    const result = await dataOrchestrator.getSearchContext(question, tier);
-    return result?.summary;
+    return await dataOrchestrator.getSearchContextForQueries(searchQueries, tier) ?? undefined;
   } catch (error) {
     console.warn('Search context fetch failed', error);
     return undefined;

@@ -19,33 +19,6 @@ export interface MarketNewsData {
   relevance: number; // 0-1, how relevant to current market conditions
 }
 
-// Global rate limiter for Brave Search API calls
-class BraveSearchRateLimiter {
-  private static instance: BraveSearchRateLimiter;
-  private lastCallTime: number = 0;
-  private readonly MIN_INTERVAL = 1100; // 1.1 seconds between calls
-
-  static getInstance(): BraveSearchRateLimiter {
-    if (!BraveSearchRateLimiter.instance) {
-      BraveSearchRateLimiter.instance = new BraveSearchRateLimiter();
-    }
-    return BraveSearchRateLimiter.instance;
-  }
-
-  async waitForNextCall(): Promise<void> {
-    const now = Date.now();
-    const timeSinceLastCall = now - this.lastCallTime;
-    
-    if (timeSinceLastCall < this.MIN_INTERVAL) {
-      const waitTime = this.MIN_INTERVAL - timeSinceLastCall;
-      console.log(`BraveSearchRateLimiter: Waiting ${waitTime}ms before next API call`);
-      await new Promise(resolve => setTimeout(resolve, waitTime));
-    }
-    
-    this.lastCallTime = Date.now();
-  }
-}
-
 // Polygon.io rate limiter for Premium tier
 class PolygonRateLimiter {
   private static instance: PolygonRateLimiter;
@@ -84,14 +57,12 @@ export class MarketNewsAggregator {
   private sources: Map<string, MarketNewsSource> = new Map();
   private dataCache: Map<string, MarketNewsData[]> = new Map();
   private searchProvider: SearchProvider;
-  private rateLimiter: BraveSearchRateLimiter;
   private polygonRateLimiter: PolygonRateLimiter;
   private polygonClient: any;
   
   constructor() {
     this.initializeSources();
     this.searchProvider = new SearchProvider(process.env.SEARCH_API_KEY || '', 'brave');
-    this.rateLimiter = BraveSearchRateLimiter.getInstance();
     this.polygonRateLimiter = PolygonRateLimiter.getInstance();
   }
   
@@ -403,24 +374,21 @@ export class MarketNewsAggregator {
     try {
       // Search for current financial news and market trends
       const searchQueries = [
-        'current mortgage rates 2026',
-        'federal reserve interest rate today',
-        'inflation rate latest news',
-        'stock market trends today',
-        'economic indicators latest',
-        'job market latest news'
+        'current US mortgage rates',
+        'Federal Reserve interest rate latest',
+        'US inflation latest',
+        'US stock market trends',
+        'US economic indicators latest',
+        'US labor market latest'
       ];
       
       const searchData: MarketNewsData[] = [];
       
       for (const query of searchQueries) {
         try {
-          // Use global rate limiter to prevent concurrent API calls
-          await this.rateLimiter.waitForNextCall();
-          
           const results = await this.searchProvider.search(query, {
             maxResults: 3,
-            timeRange: 'day'
+            freshness: 'pd'
           });
           
           for (const result of results) {

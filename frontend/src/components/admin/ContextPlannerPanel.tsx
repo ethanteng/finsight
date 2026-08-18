@@ -39,6 +39,11 @@ interface PlannerResponse {
     requestedPacks: string[];
     selectedPacks: string[];
     needsSecondaryValidation: boolean;
+    searchQueries?: Array<{
+      query: string;
+      purpose: 'rate' | 'rule' | 'price' | 'news' | 'other';
+      freshness: 'pd' | 'pw' | 'pm' | 'py' | null;
+    }>;
     retirementInputs?: Record<string, unknown> & { sources?: Record<string, string> };
     scenarioPlans?: Record<string, unknown> & {
       retirement?: {
@@ -292,6 +297,25 @@ export default function ContextPlannerPanel({
             })}
           </div>
 
+          {result.plan.searchQueries && result.plan.searchQueries.length > 0 && (
+            <div className="mt-4 rounded border border-blue-800 bg-blue-950/20 p-3">
+              <div className="text-sm font-medium text-blue-100">Planned public searches</div>
+              <p className="mt-1 text-xs text-gray-400">
+                These standalone queries are sent to Brave only after the primary model reviews the plan.
+              </p>
+              <div className="mt-3 space-y-2">
+                {result.plan.searchQueries.map((search, index) => (
+                  <div key={`${search.query}-${index}`} className="rounded border border-blue-900/60 bg-gray-950/40 p-2">
+                    <div className="text-sm text-gray-200">{search.query}</div>
+                    <div className="mt-1 text-[11px] uppercase tracking-wide text-blue-300">
+                      {search.purpose} · {search.freshness ?? 'no freshness filter'}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {calculators.length > 0 && (
             <div className="mt-4 rounded border border-gray-700 bg-gray-900 p-3">
               <div className="text-sm font-medium text-gray-200">Calculator registry</div>
@@ -379,7 +403,7 @@ export default function ContextPlannerPanel({
           ))}
 
           <p className="mt-3 text-xs text-gray-500">
-            This tester shows preflight selection. In a live answer, the primary model sees the available fact labels and may add packs before it writes anything.
+            This tester shows preflight selection and its initial search plan. In a live answer, the primary model sees the available fact labels and may add packs or refine these queries before retrieval.
           </p>
         </div>
       )}

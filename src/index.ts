@@ -2238,8 +2238,9 @@ app.get('/profile/snaptrade-status', requireAuth, async (req: Request, res: Resp
   }
 });
 
-// Test endpoint for RAG search functionality
-app.get('/test/search-context', async (req: Request, res: Response) => {
+// Admin-only provider diagnostic. Production analysis never sends a raw user
+// prompt through this endpoint; it uses the validated semantic query plan.
+app.get('/test/search-context', adminAuth, async (req: Request, res: Response) => {
   try {
     const { query, tier = 'standard' } = req.query;
 
@@ -2713,16 +2714,32 @@ app.get('/admin/market-news/history/:tier', adminAuth, async (req: Request, res:
   }
 });
 
-// Admin: Force refresh market context
-app.post('/admin/market-news/refresh/:tier', adminAuth, async (req: Request, res: Response) => {
-  try {
-    const { tier } = req.params;
+const ALL_MARKET_NEWS_TIERS = [UserTier.STARTER, UserTier.STANDARD, UserTier.PREMIUM] as const;
 
+async function refreshAdminMarketNewsContexts(
+  res: Response,
+  tiers: readonly UserTier[],
+  requestedTier?: UserTier
+): Promise<void> {
+  try {
     const { MarketNewsManager } = await import('./market-news/manager');
     const manager = new MarketNewsManager();
-    await manager.updateMarketContext(tier as UserTier);
+    const result = await manager.refreshMarketContexts(tiers, { force: true });
 
-    res.json({ success: true });
+    if (!result.refreshed) {
+      res.status(409).json({
+        success: false,
+        requestedTier: requestedTier ?? 'all',
+        reason: result.reason,
+      });
+      return;
+    }
+
+    res.json({
+      success: true,
+      requestedTier: requestedTier ?? 'all',
+      refreshedTiers: tiers,
+    });
   } catch (error) {
     console.error('Error refreshing market context:', error);
 
@@ -2735,6 +2752,21 @@ app.post('/admin/market-news/refresh/:tier', adminAuth, async (req: Request, res
 
     res.status(500).json({ error: 'Failed to refresh market context' });
   }
+}
+
+// Admin: Force-refresh every tier from one shared external evidence batch.
+app.post('/admin/market-news/refresh', adminAuth, async (_req: Request, res: Response) => {
+  await refreshAdminMarketNewsContexts(res, ALL_MARKET_NEWS_TIERS);
+});
+
+// Admin: Force-refresh one tier without changing the semantics of its control.
+app.post('/admin/market-news/refresh/:tier', adminAuth, async (req: Request, res: Response) => {
+  const { tier } = req.params;
+  if (!Object.values(UserTier).includes(tier as UserTier)) {
+    res.status(400).json({ error: 'Invalid tier' });
+    return;
+  }
+  await refreshAdminMarketNewsContexts(res, [tier as UserTier], tier as UserTier);
 });
 
 const PORT = process.env.PORT || 3000;
@@ -2788,13 +2820,18 @@ if (require.main === module) {
         const { MarketNewsManager } = await import('./market-news/manager');
         const manager = new MarketNewsManager();
 
-        // Update for all tiers (including Starter for future flexibility)
-        // Note: Starter tier currently returns empty context, but this allows for future changes
-        await Promise.all([
-          manager.updateMarketContext(UserTier.STARTER),
-          manager.updateMarketContext(UserTier.STANDARD),
-          manager.updateMarketContext(UserTier.PREMIUM)
+        // Collect external inputs once. Tier-specific synthesis reuses the same
+        // raw batch, so six Brave searches do not become eighteen.
+        const refreshResult = await manager.refreshMarketContexts([
+          UserTier.STARTER,
+          UserTier.STANDARD,
+          UserTier.PREMIUM,
         ]);
+
+        if (!refreshResult.refreshed) {
+          console.log(`ℹ️ Market news refresh skipped: ${refreshResult.reason}`);
+          return;
+        }
 
         console.log('✅ Market news context refresh completed');
       } catch (error) {

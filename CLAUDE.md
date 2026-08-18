@@ -87,16 +87,17 @@ Next.js App Router structure:
 ```
 Plaid/SnapTrade → financial-ingestion.ts → financial-calculations.ts
                                       → financial-snapshot-persistence.ts
-                                      → openai/context-planner.ts (semantic preflight)
-                                      → openai/context-service.ts
-                                      → Claude request_data_packs audit
+                                      → openai/context-planner.ts (semantic packs + search-query preflight)
+                                      → openai/context-service.ts (local context; web search deferred)
+                                      → Claude request_data_packs + query audit
+                                      → validated Brave retrieval (only when selected)
                                       → deterministic scenario runner (when requested)
                                       → financial-reasoning-prompt.ts
                                       → Claude/OpenAI fallback
                                       → deterministic response validation → user
 ```
 
-`contextPlanner` refers to the two-pass subsystem documented in `docs/CONTEXT_PLANNING.md`: the OpenAI `contextPlanner` model slot proposes the initial packs, and the configured Primary analysis model may widen them through a constrained tool before it writes the answer. Data-pack routing must not be rebuilt from question keywords or regular expressions.
+`contextPlanner` refers to the two-pass subsystem documented in `docs/CONTEXT_PLANNING.md`: the OpenAI `contextPlanner` model slot proposes the initial packs and standalone public search queries, and the configured Primary analysis model may widen the packs or refine the query plan through a constrained tool before retrieval and answer generation. Data-pack or search routing must not be rebuilt from question keywords or regular expressions, and the raw user prompt must not be used as a search-query fallback.
 
 Supported what-if calculations run in application-owned scenario calculators after context planning. Models may identify a typed scenario request, but they do not compute outcomes. See `docs/SCENARIO_MODELING.md`.
 

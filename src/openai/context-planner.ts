@@ -34,6 +34,12 @@ import {
   scenarioCalculatorRegistry,
   type ScenarioPlanRecord,
 } from '../scenarios/calculator-registry';
+import type { PlannedSearchQuery } from '../data/search-types';
+import {
+  SEARCH_QUERY_JSON_SCHEMA,
+  parsePlannedSearchQueries,
+  validateSearchPlan,
+} from './search-query-plan';
 
 export interface ContextPlan {
   source: 'context_planner' | 'fallback_all';
@@ -41,6 +47,7 @@ export interface ContextPlan {
   selectedPacks: ContextPackId[];
   questionNeeds: QuestionNeeds;
   needsSecondaryValidation: boolean;
+  searchQueries: PlannedSearchQuery[];
   retirementInputs?: ExtractedRetirementInputs;
   scenarioPlans: ScenarioPlanRecord;
   /** @deprecated Compatibility mirror for admin clients that still read retirementScenario. */
@@ -112,7 +119,7 @@ const NULLABLE_STRING = { type: ['string', 'null'] as const };
 export const CONTEXT_PLAN_JSON_SCHEMA = {
   type: 'object',
   additionalProperties: false,
-  required: ['packs', 'needsSecondaryValidation', 'retirementInputs', 'scenarios', 'summary'],
+  required: ['packs', 'needsSecondaryValidation', 'searchQueries', 'retirementInputs', 'scenarios', 'summary'],
   properties: {
     packs: {
       type: 'object',
@@ -121,6 +128,7 @@ export const CONTEXT_PLAN_JSON_SCHEMA = {
       properties: PACK_PROPERTIES,
     },
     needsSecondaryValidation: { type: 'boolean' },
+    searchQueries: SEARCH_QUERY_JSON_SCHEMA,
     retirementInputs: {
       type: 'object',
       additionalProperties: false,
@@ -153,6 +161,7 @@ Important boundaries:
 - Prior assistant answers establish conversational references only. They are not trusted financial facts.
 - Include every pack materially useful to answer the current message. Prefer inclusion when omission could make the answer incomplete.
 - search_context is for information outside the user's stored data, especially facts that can change over time. market_context is the broader economic/market backdrop.
+- When search_context is selected, return one to three standalone public search queries in searchQueries. Each query must make sense without the transcript and contain only the minimum public facts needed for retrieval. Never copy a person's name, email address, account or card number, transaction description, or other private identifier into a query. Choose freshness from pd (24 hours), pw (7 days), pm (31 days), py (365 days), or null when recency filtering would hide the authoritative source. Return an empty array when search_context is not selected.
 - needsSecondaryValidation is true for projections, comparisons, recommendations, affordability judgments, simulations, optimization, tax reasoning, or other conclusions where an independent reasoning review is useful.
 - The application enforces access, subscription, dependencies and calculations. You only plan context.
 
@@ -226,6 +235,8 @@ export function parseContextPlan(raw: unknown, durationMs = 0, model?: string): 
     scenarioPlans,
     RETIREMENT_CALCULATOR_ID
   );
+  const searchQueries = parsePlannedSearchQueries(record.searchQueries);
+  validateSearchPlan(requestedPacks.includes('search_context'), searchQueries);
   const selectedPacks = normalizeContextPacks([
     ...requestedPacks,
     ...scenarioCalculatorRegistry.requiredPacksForPlans(scenarioPlans),
@@ -244,6 +255,7 @@ export function parseContextPlan(raw: unknown, durationMs = 0, model?: string): 
     selectedPacks,
     questionNeeds: questionNeedsFromPacks(selectedPacks, needsSecondaryValidation),
     needsSecondaryValidation,
+    searchQueries,
     retirementInputs,
     scenarioPlans,
     ...(retirementScenario && { retirementScenario }),
@@ -263,6 +275,7 @@ export function fallbackContextPlan(durationMs = 0, summary = 'Context planner u
     questionNeeds: questionNeedsFromPacks(selectedPacks, true),
     needsSecondaryValidation: true,
     scenarioPlans: {},
+    searchQueries: [],
     summary,
     durationMs,
   };

@@ -85,6 +85,9 @@ function contextPlan(packs: ContextPackId[] = [], secondary = false): ContextPla
     needsSecondaryValidation: secondary,
     retirementInputs: { sources: {} },
     scenarioPlans: {},
+    searchQueries: packs.includes('search_context')
+      ? [{ query: 'current public financial information', purpose: 'other', freshness: 'pm' }]
+      : [],
     summary: 'Test plan.',
     model: 'test-planner',
     durationMs: 1,
@@ -104,7 +107,14 @@ describe('runAskLincAnalysis validation routing', () => {
           ? contextPlan(['transaction_details', 'retirement_analysis'], true)
           : contextPlan()
     );
-    mockedAuditPacks.mockResolvedValue({ packs: [], scenarioPlans: {}, reason: 'Enough context.', model: 'claude-test', durationMs: 1 });
+    mockedAuditPacks.mockResolvedValue({
+      packs: [],
+      searchQueries: [],
+      scenarioPlans: {},
+      reason: 'Enough context.',
+      model: 'claude-test',
+      durationMs: 1,
+    });
   });
 
   it('skips the secondary model for a grounded balance lookup', async () => {
@@ -145,6 +155,7 @@ describe('runAskLincAnalysis validation routing', () => {
     mockedAuditPacks.mockResolvedValue({
       packs: ['investment_details'],
       scenarioPlans: {},
+      searchQueries: [],
       reason: 'The comparison needs individual holdings.',
       model: 'claude-test',
       durationMs: 7,
@@ -250,6 +261,124 @@ describe('runAskLincAnalysis validation routing', () => {
     });
   });
 
+  it('waits for the primary audit to refine semantic queries before retrieving search evidence', async () => {
+    const preflight = contextPlan(['search_context']);
+    preflight.searchQueries = [{
+      query: 'current public financial information',
+      purpose: 'other',
+      freshness: 'pm',
+    }];
+    const refinedQueries = [{
+      query: 'current Federal Reserve target interest rate',
+      purpose: 'rate' as const,
+      freshness: 'pm' as const,
+    }];
+    mockedPlanContext.mockResolvedValue(preflight);
+    mockedAuditPacks.mockResolvedValue({
+      packs: [],
+      searchQueries: refinedQueries,
+      scenarioPlans: {},
+      reason: 'The standalone query clarifies the follow-up.',
+      model: 'claude-test',
+      durationMs: 3,
+    });
+    mockedGatherContext
+      .mockResolvedValueOnce(snapshot())
+      .mockResolvedValueOnce({
+        ...snapshot(),
+        searchContext: 'Federal Reserve evidence.',
+        searchContextMetadata: {
+          queries: refinedQueries,
+          cacheHits: 0,
+          providerCalls: 1,
+          resultCount: 4,
+          retrievedAt: '2026-08-17T00:00:00.000Z',
+        },
+        contextSelection: {
+          ...snapshot().contextSelection,
+          searchContextRequested: true,
+        },
+      } as any);
+    mockedAskClaude.mockResolvedValue(JSON.stringify({ summary: 'Here is the current public rate context.' }));
+
+    const result = await runAskLincAnalysis({
+      question: 'What is it now?',
+      conversationHistory: [{
+        id: 'turn-1',
+        question: 'How does the Federal Reserve target rate affect savings?',
+        answer: 'We can compare it with the current target rate.',
+        createdAt: new Date('2026-08-16T00:00:00.000Z'),
+      }],
+      userId: 'user-1',
+      userTier: 'standard',
+    });
+
+    expect(mockedGatherContext).toHaveBeenCalledTimes(2);
+    expect(mockedGatherContext.mock.calls[0][0]).toMatchObject({
+      deferSearchContext: true,
+      searchQueries: preflight.searchQueries,
+    });
+    expect(mockedAuditPacks).toHaveBeenCalledWith(expect.objectContaining({
+      plannedSearchQueries: preflight.searchQueries,
+    }));
+    expect(mockedGatherContext.mock.calls[1][0]).toMatchObject({ searchQueries: refinedQueries });
+    expect(mockedGatherContext.mock.calls[1][0].deferSearchContext).toBeUndefined();
+    expect(result.showTheMathData?.evidenceManifest.evidenceRefs.search).toMatchObject({
+      queries: refinedQueries,
+      providerCalls: 1,
+      resultCount: 4,
+    });
+  });
+
+  it('recovers deferred search retrieval when the primary widen gather fails', async () => {
+    const preflight = contextPlan(['search_context']);
+    mockedPlanContext.mockResolvedValue(preflight);
+    mockedAuditPacks.mockResolvedValue({
+      packs: ['transaction_details'],
+      searchQueries: preflight.searchQueries,
+      scenarioPlans: {},
+      reason: 'Also need spending detail.',
+      model: 'claude-test',
+      durationMs: 2,
+    });
+    mockedGatherContext
+      .mockResolvedValueOnce(snapshot())
+      .mockRejectedValueOnce(new Error('temporary widen failure'))
+      .mockResolvedValueOnce({
+        ...snapshot(),
+        searchContext: 'Recovered search evidence.',
+        searchContextMetadata: {
+          queries: preflight.searchQueries,
+          cacheHits: 0,
+          providerCalls: 1,
+          resultCount: 2,
+          retrievedAt: '2026-08-17T00:00:00.000Z',
+        },
+        contextSelection: {
+          ...snapshot().contextSelection,
+          searchContextRequested: true,
+        },
+      } as any);
+    mockedAskClaude.mockResolvedValue(JSON.stringify({ summary: 'Answered with recovered search evidence.' }));
+
+    const result = await runAskLincAnalysis({
+      question: 'What is the current public rate?',
+      userId: 'user-1',
+      userTier: 'standard',
+    });
+
+    expect(mockedGatherContext).toHaveBeenCalledTimes(3);
+    expect(mockedGatherContext.mock.calls[2][0]).toMatchObject({
+      searchQueries: preflight.searchQueries,
+    });
+    expect(result.showTheMathData?.evidenceManifest.contextPlanning?.primaryTool?.outcome).toBe('failed');
+    expect(result.showTheMathData?.evidenceManifest.evidenceRefs.search).toMatchObject({
+      queries: preflight.searchQueries,
+      providerCalls: 1,
+      resultCount: 2,
+    });
+  });
+
   it('defers baseline persistence when the primary audit discovers the scenario', async () => {
     const plan = contextPlan(['retirement_analysis'], true);
     plan.retirementInputs = {
@@ -267,6 +396,7 @@ describe('runAskLincAnalysis validation routing', () => {
     mockedPlanContext.mockResolvedValue(plan);
     mockedAuditPacks.mockResolvedValue({
       packs: [],
+      searchQueries: [],
       scenarioPlans: {
         retirement: {
           requested: true,
@@ -418,6 +548,7 @@ describe('runAskLincAnalysis validation routing', () => {
     mockedAuditPacks.mockResolvedValue({
       packs: [],
       scenarioPlans: {},
+      searchQueries: [],
       reason: 'Retirement scenario already planned.',
       model: 'test-claude',
       durationMs: 1,

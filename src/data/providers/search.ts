@@ -1,4 +1,5 @@
-import { SearchResult } from '../orchestrator';
+import type { SearchResult } from '../orchestrator';
+import type { SearchFreshness } from '../search-types';
 
 export interface SearchProviderConfig {
   apiKey: string;
@@ -6,6 +7,19 @@ export interface SearchProviderConfig {
   provider: 'bing' | 'google' | 'brave' | 'serpapi';
   maxResults?: number;
   timeout?: number;
+}
+
+export interface SearchProviderOptions {
+  maxResults?: number;
+  /** Brave freshness code: pd, pw, pm or py. */
+  freshness?: SearchFreshness;
+  /** Legacy option retained for non-Brave providers and old callers. */
+  timeRange?: string;
+  region?: string;
+  /** Search-result language, for example en. */
+  language?: string;
+  /** Response-interface language, for example en-US. */
+  uiLanguage?: string;
 }
 
 // Global rate limiter for Brave Search API calls
@@ -67,12 +81,7 @@ export class SearchProvider {
     }
   }
 
-  async search(query: string, options: {
-    maxResults?: number;
-    timeRange?: string;
-    region?: string;
-    language?: string;
-  } = {}): Promise<SearchResult[]> {
+  async search(query: string, options: SearchProviderOptions = {}): Promise<SearchResult[]> {
     console.log('SearchProvider: Starting search for query:', query);
     console.log('SearchProvider: Using provider:', this.config.provider);
     
@@ -80,7 +89,9 @@ export class SearchProvider {
       maxResults = this.config.maxResults,
       timeRange = 'day',
       region = 'US',
-      language = 'en-US'
+      language = 'en',
+      uiLanguage = 'en-US',
+      freshness,
     } = options;
 
     try {
@@ -88,17 +99,19 @@ export class SearchProvider {
         maxResults,
         timeRange,
         region,
-        language
+        language,
+        uiLanguage,
+        freshness,
       });
 
       console.log('SearchProvider: Raw search results received');
-      const formattedResults = this.formatResults(results, query);
+      const formattedResults = this.formatResults(results);
       console.log('SearchProvider: Formatted', formattedResults.length, 'results');
       
       return formattedResults;
     } catch (error) {
       console.error('SearchProvider: Search failed:', error);
-      return [];
+      throw error;
     }
   }
 
@@ -205,18 +218,13 @@ export class SearchProvider {
     if (this.config.apiKey === 'test_search_key' || this.config.apiKey.startsWith('test_') || process.env.GITHUB_ACTIONS) {
       console.log('SearchProvider: Using mock data for test environment or CI/CD');
       return {
-        query: query,
-        results: [
-          {
+        web: {
+          results: [{
             title: 'Test Search Result',
-            snippet: 'This is a mock search result for testing purposes. The query was: ' + query,
+            description: 'This is a mock search result for testing purposes. The query was: ' + query,
             url: 'https://example.com/test-result',
-            source: 'example.com',
-            relevance: 0.9
-          }
-        ],
-        summary: 'Mock search results for testing',
-        lastUpdate: new Date().toISOString()
+          }],
+        },
       };
     }
     
@@ -227,8 +235,12 @@ export class SearchProvider {
       q: query,
       count: options.maxResults?.toString() || '10',
       country: options.region || 'US',
-      language: options.language || 'en'
+      search_lang: options.language || 'en',
+      ui_lang: options.uiLanguage || 'en-US',
+      safesearch: 'moderate',
+      result_filter: 'web',
     });
+    if (options.freshness) params.set('freshness', options.freshness);
 
     console.log('SearchProvider: Brave search params:', params.toString());
 
@@ -287,7 +299,7 @@ export class SearchProvider {
     return response.json();
   }
 
-  private formatResults(rawResults: any, query: string): SearchResult[] {
+  private formatResults(rawResults: any): SearchResult[] {
     const { provider } = this.config;
     
     switch (provider) {
@@ -360,41 +372,4 @@ export class SearchProvider {
     }));
   }
 
-  // Helper method to enhance financial queries
-  enhanceFinancialQuery(query: string): string {
-    const financialKeywords = [
-      'mortgage rates', 'CD rates', 'savings rates', 'investment advice',
-      'retirement planning', 'tax strategies', 'budgeting tips',
-      'credit card rates', 'loan rates', 'financial planning',
-      'auto loan rate', 'personal loan rate', 'student loan rate',
-      'home equity rate', 'heloc rate', 'money market rate',
-      'investment account rate', 'ira rate', '401k rate', 'annuity rate',
-      'tariffs', 'inflation', 'inflation rate', 'unemployment rate'
-    ];
-
-    const hasFinancialKeyword = financialKeywords.some(keyword => 
-      query.toLowerCase().includes(keyword)
-    );
-
-    if (hasFinancialKeyword) {
-      return `${query} financial advice 2025`;
-    }
-
-    return query;
-  }
-
-  // Helper method to filter financial results
-  filterFinancialResults(results: SearchResult[]): SearchResult[] {
-    const financialDomains = [
-      'bankrate.com', 'nerdwallet.com', 'investopedia.com',
-      'fool.com', 'morningstar.com', 'yahoo.com/finance',
-      'marketwatch.com', 'wsj.com', 'bloomberg.com',
-      'reuters.com', 'cnbc.com', 'forbes.com'
-    ];
-
-    return results.filter(result => {
-      const url = result.url.toLowerCase();
-      return financialDomains.some(domain => url.includes(domain));
-    });
-  }
-} 
+}
