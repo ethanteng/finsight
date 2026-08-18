@@ -31,7 +31,7 @@ export const CONTEXT_PACKS: ContextPackMeta[] = [
   {
     id: 'account_details',
     label: 'Account details',
-    description: 'Individual account names, institutions, types and balances. Aggregate cash, debt and investment totals are already always available.',
+    description: 'Individual account names, institutions, types and balances, plus available credit-card APRs, loan rates, payment amounts, due dates, loan terms, status and repayment plans. Aggregate cash, debt and investment totals are already always available.',
     cost: 'local',
     dependencies: [],
   },

@@ -327,8 +327,13 @@ export async function persistSnapTradeActivitiesToDb(
     
     for (const activity of activities) {
       try {
-        // Generate a unique activity ID (SnapTrade activities might not have a stable ID)
-        const activityId = activity.id || 
+        const namespacedId = typeof activity.id === 'string' ? activity.id : undefined;
+        const providerActivityId = activity.activityId
+          || activity.snapTradeData?.activity_id
+          || (namespacedId?.startsWith('snaptrade-') ? namespacedId.slice('snaptrade-'.length) : namespacedId);
+        // Prefer SnapTrade's provider ID. The deterministic fallback is only for
+        // legacy/malformed observations that lack one.
+        const activityId = providerActivityId ||
                           `${activity.symbol?.symbol?.symbol || 'unknown'}_${activity.trade_date || activity.settlement_date}_${activity.type}_${activity.units}`;
         
         // Check if activity already exists
@@ -338,19 +343,25 @@ export async function persistSnapTradeActivitiesToDb(
         
         const activityData = {
           snapTradeUserId: snapTradeUser.id,
-          accountId: activity.account?.id || null,
-          amount: activity.amount || null,
-          currency: activity.currency || null,
-          description: activity.description || null,
-          fee: activity.fee || null,
-          fxRate: activity.fx_rate || null,
-          institution: activity.institution || activity.account?.institution || null,
-          price: activity.price || null,
-          settlementDate: activity.settlement_date ? new Date(activity.settlement_date) : null,
-          symbol: activity.symbol?.symbol?.symbol || null,
-          tradeDate: activity.trade_date ? new Date(activity.trade_date) : null,
-          type: activity.type || null,
-          units: activity.units || null,
+          accountId: activity.account?.id || activity.account_id || null,
+          amount: activity.amount ?? null,
+          currency: typeof activity.currency === 'string'
+            ? activity.currency
+            : activity.currency?.code || activity.iso_currency_code || null,
+          description: activity.description || activity.snapTradeData?.description || activity.name || null,
+          fee: activity.fee ?? activity.fees ?? null,
+          fxRate: activity.fx_rate ?? activity.snapTradeData?.fx_rate ?? null,
+          institution: activity.institution || activity.snapTradeData?.institution || activity.account?.institution || null,
+          price: activity.price ?? null,
+          settlementDate: (activity.settlement_date || activity.snapTradeData?.settlement_date)
+            ? new Date(activity.settlement_date || activity.snapTradeData.settlement_date)
+            : null,
+          symbol: activity.symbol?.symbol?.symbol || activity.ticker_symbol || activity.security_name || null,
+          tradeDate: (activity.trade_date || activity.snapTradeData?.trade_date || activity.date)
+            ? new Date(activity.trade_date || activity.snapTradeData?.trade_date || activity.date)
+            : null,
+          type: activity.snapTradeData?.type || activity.type || null,
+          units: activity.units ?? activity.quantity ?? null,
           rawData: activity,
         };
         

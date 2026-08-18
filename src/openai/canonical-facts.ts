@@ -366,13 +366,85 @@ export function buildCanonicalFactPack(
       Boolean(account.institution && question.toLowerCase().includes(account.institution.toLowerCase()))
     );
     for (const account of matchedAccounts.length > 0 ? matchedAccounts : snapshot.accounts) {
+      const accountId = safeFactId(account.id);
       addSnapshotFact(
-        `account_balance_${safeFactId(account.id)}`,
+        `account_balance_${accountId}`,
         `${account.name} balance`,
         account.balance,
         'usd',
         `accounts.${account.id}.balance`
       );
+
+      for (const [index, liability] of (account.liabilityDetails ?? []).entries()) {
+        const liabilityId = `${accountId}_${liability.kind}_${index + 1}`;
+        const sourcePrefix = `accounts.${account.id}.liabilityDetails.${index}`;
+        const liabilityAsOf = isoString(liability.retrievedAt);
+
+        addSnapshotFact(
+          `liability_interest_rate_${liabilityId}`,
+          `${account.name} ${liability.kind} interest rate`,
+          liability.interestRatePercentage,
+          'percent',
+          `${sourcePrefix}.interestRatePercentage`,
+          true,
+          liabilityAsOf,
+        );
+        for (const [aprIndex, apr] of (liability.aprs ?? []).entries()) {
+          const aprId = `${liabilityId}_${safeFactId(apr.type)}_${aprIndex + 1}`;
+          addSnapshotFact(
+            `liability_apr_${aprId}`,
+            `${account.name} ${apr.type.replace(/_/g, ' ')}`,
+            apr.percentage,
+            'percent',
+            `${sourcePrefix}.aprs.${aprIndex}.percentage`,
+            true,
+            liabilityAsOf,
+          );
+          addSnapshotFact(
+            `liability_apr_balance_${aprId}`,
+            `${account.name} balance subject to ${apr.type.replace(/_/g, ' ')}`,
+            apr.balanceSubjectToApr,
+            'usd',
+            `${sourcePrefix}.aprs.${aprIndex}.balanceSubjectToApr`,
+            true,
+            liabilityAsOf,
+          );
+          addSnapshotFact(
+            `liability_interest_charge_${aprId}`,
+            `${account.name} latest ${apr.type.replace(/_/g, ' ')} interest charge`,
+            apr.interestChargeAmount,
+            'usd',
+            `${sourcePrefix}.aprs.${aprIndex}.interestChargeAmount`,
+            true,
+            liabilityAsOf,
+          );
+        }
+
+        const monetaryFacts: Array<[string, string, keyof typeof liability, unknown]> = [
+          ['minimum_payment', 'minimum payment', 'minimumPaymentAmount', liability.minimumPaymentAmount],
+          ['next_monthly_payment', 'next monthly payment', 'nextMonthlyPayment', liability.nextMonthlyPayment],
+          ['last_payment', 'last payment', 'lastPaymentAmount', liability.lastPaymentAmount],
+          ['last_statement_balance', 'last statement balance', 'lastStatementBalance', liability.lastStatementBalance],
+          ['origination_principal', 'original principal', 'originationPrincipalAmount', liability.originationPrincipalAmount],
+          ['outstanding_interest', 'outstanding interest', 'outstandingInterestAmount', liability.outstandingInterestAmount],
+          ['escrow_balance', 'escrow balance', 'escrowBalance', liability.escrowBalance],
+          ['past_due', 'past-due amount', 'pastDueAmount', liability.pastDueAmount],
+          ['current_late_fee', 'current late fee', 'currentLateFee', liability.currentLateFee],
+          ['ytd_interest_paid', 'year-to-date interest paid', 'ytdInterestPaid', liability.ytdInterestPaid],
+          ['ytd_principal_paid', 'year-to-date principal paid', 'ytdPrincipalPaid', liability.ytdPrincipalPaid],
+        ];
+        for (const [factName, label, sourceField, value] of monetaryFacts) {
+          addSnapshotFact(
+            `liability_${factName}_${liabilityId}`,
+            `${account.name} ${label}`,
+            value,
+            'usd',
+            `${sourcePrefix}.${sourceField}`,
+            true,
+            liabilityAsOf,
+          );
+        }
+      }
     }
   }
 

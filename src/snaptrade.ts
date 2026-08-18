@@ -1,7 +1,6 @@
 // SnapTrade integration using official SDK
 import { Snaptrade } from 'snaptrade-typescript-sdk';
 import { PrismaClient } from '@prisma/client';
-import { v4 as uuidv4 } from 'uuid';
 
 // Initialize Prisma client lazily to avoid import issues during ts-node startup
 let prisma: PrismaClient | null = null;
@@ -53,13 +52,43 @@ const snaptrade = new Snaptrade({
   clientId: credentials.clientId,
 });
 
+const SNAPTRADE_ACTIVITY_PAGE_SIZE = 1000;
+
+function finiteNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function connectionId(value: unknown): string | undefined {
+  if (typeof value === 'string' && value) return value;
+  if (value && typeof value === 'object' && typeof (value as any).id === 'string') {
+    return (value as any).id;
+  }
+  return undefined;
+}
+
+function inferSnapTradeAccountType(account: any): { type: string; subtype: string } {
+  const rawType = String(account.raw_type || '').trim().toLowerCase();
+  const descriptor = `${rawType} ${String(account.name || '').toLowerCase()}`;
+  if (descriptor.includes('mortgage')) return { type: 'loan', subtype: 'mortgage' };
+  if (descriptor.includes('401k') || descriptor.includes('401(k)')) return { type: 'investment', subtype: '401k' };
+  if (descriptor.includes('ira') || descriptor.includes('roth')) return { type: 'investment', subtype: 'ira' };
+  if (descriptor.includes('hsa')) return { type: 'investment', subtype: 'hsa' };
+  if (descriptor.includes('529')) return { type: 'investment', subtype: '529' };
+  return { type: 'investment', subtype: rawType || 'brokerage' };
+}
+
 // Enhanced SnapTrade service class using official SDK
 export class SnapTradeService {
+  private readonly client: Snaptrade;
+
+  constructor(client: Snaptrade = snaptrade) {
+    this.client = client;
+  }
   
   // Health check using official SDK
   async healthCheck(): Promise<boolean> {
     try {
-      const status = await snaptrade.apiStatus.check();
+      const status = await this.client.apiStatus.check();
       console.log('SnapTrade API Status:', status.data);
       return true;
     } catch (error) {
@@ -103,7 +132,7 @@ export class SnapTradeService {
       }
       
       // Register user with SnapTrade
-      const registration = await snaptrade.authentication.registerSnapTradeUser({
+      const registration = await this.client.authentication.registerSnapTradeUser({
         userId,
       });
       
@@ -231,7 +260,7 @@ export class SnapTradeService {
     try {
       console.log('🔍 Getting login redirect for user:', userId);
       
-      const loginData = await snaptrade.authentication.loginSnapTradeUser({ 
+      const loginData = await this.client.authentication.loginSnapTradeUser({
         userId, 
         userSecret 
       });
@@ -254,111 +283,60 @@ export class SnapTradeService {
     }
   }
 
-    // Get user accounts
+  // Get user accounts
   async getUserAccounts(userId: string, userSecret: string): Promise<{ success: boolean; data?: any; error?: string }> {
     try {
       console.log('🔍 Getting accounts for user:', userId);
-      
-      // Try to get user holdings first, which should include account information
-      const holdings = await snaptrade.accountInformation.getAllUserHoldings({
-        userId,
-        userSecret,
-      });
-      
-      console.log('🔍 Holdings retrieved successfully');
-      
-      // Extract unique accounts from holdings
-      const accounts = new Map();
-      if (holdings.data && Array.isArray(holdings.data)) {
-        holdings.data.forEach((accountHolding: any) => {
-          console.log('🔍 Processing account holding:', accountHolding);
-          
-          if (accountHolding.account) {
-            const account = accountHolding.account;
-            const accountId = account.id;
-            
-            if (accountId && !accounts.has(accountId)) {
-              // Calculate true account value: sum of non-cash-equivalent positions + cash balance.
-              // Positions with cash_equivalent=true (e.g. money-market funds) are already
-              // counted in balance.cash, so including both would double-count them.
-              // Note: total_value is deprecated by SnapTrade and documented as potentially
-              // double-counting cash-equivalent assets, so we don't use it.
-              const positions: any[] = Array.isArray(accountHolding.positions) ? accountHolding.positions : [];
-              const nonCashEquivPositionsSum = positions
-                .filter((p: any) => !p.cash_equivalent)
-                .reduce((sum: number, p: any) => sum + (p.price || 0) * (p.units || 0), 0);
-              const cashSum = Array.isArray(accountHolding.balances)
-                ? accountHolding.balances.reduce((sum: number, b: any) => sum + (b.cash || 0), 0)
-                : 0;
-              let totalValue = nonCashEquivPositionsSum + cashSum;
 
-              // Fallback: if we have no positions data at all, use total_value
-              if (totalValue === 0 && accountHolding.total_value?.value) {
-                totalValue = accountHolding.total_value.value;
-              }
-              
-              // Debug logging
-              console.log(`🔍 Account ${account.name} (${accountId}):`, {
-                accountHoldingTotalValue: accountHolding.total_value,
-                accountTotalValue: account.total_value,
-                balances: account.balances,
-                calculatedTotal: totalValue
-              });
-              
-              // Determine account type based on account properties
-              let accountType = 'investment'; // default
-              let accountSubtype = '';
-              
-              if (account.type) {
-                accountType = account.type;
-              } else {
-                // Determine account type based on account name patterns
-                const accountName = (account.name || '').toLowerCase();
-                if (accountName.includes('mortgage')) {
-                  accountType = 'loan';
-                  accountSubtype = 'mortgage';
-                } else if (accountName.includes('brokerage')) {
-                  accountType = 'brokerage';
-                } else if (accountName.includes('treasury')) {
-                  accountType = 'treasury';
-                } else if (accountName.includes('ira') || accountName.includes('roth')) {
-                  accountType = 'ira';
-                } else if (accountName.includes('401k') || accountName.includes('401(k)')) {
-                  accountType = '401k';
-                } else if (accountName.includes('hsa')) {
-                  accountType = 'hsa';
-                } else if (accountName.includes('529')) {
-                  accountType = '529';
-                } else {
-                  // Default to investment for unknown account types
-                  accountType = 'investment';
-                }
-              }
-              
-              // Add subtype if available (API may provide it for mortgage/loan accounts)
-              if (account.subtype) {
-                accountSubtype = account.subtype;
-              }
-
-              accounts.set(accountId, {
-                id: accountId,
-                name: account.name || `Account ${account.number}`,
-                type: accountType,
-                subtype: accountSubtype,
-                institution: account.brokerage_authorization?.brokerage?.display_name || account.brokerage_authorization?.brokerage?.name || 'Unknown',
-                balance: totalValue,
-                accountNumber: account.number,
-                syncStatus: account.sync_status
-              });
-            }
-          }
-        });
+      const [accountsResponse, connectionsResponse] = await Promise.all([
+        this.client.accountInformation.listUserAccounts({ userId, userSecret }),
+        this.client.connections.listBrokerageAuthorizations({ userId, userSecret })
+          .catch(error => {
+            console.warn('SnapTrade connection status unavailable; continuing with account data:', error);
+            return { data: [] } as any;
+          }),
+      ]);
+      const connections = new Map<string, any>();
+      for (const connection of Array.isArray(connectionsResponse.data) ? connectionsResponse.data : []) {
+        if (connection?.id) connections.set(connection.id, connection);
       }
+      const rawAccounts = Array.isArray(accountsResponse.data) ? accountsResponse.data : [];
+      const accounts = rawAccounts.flatMap((account: any) => {
+        if (!account?.id) return [];
+        const authorization = connections.get(connectionId(account.brokerage_authorization) || '');
+        const accountType = inferSnapTradeAccountType(account);
+        const holdingsSync = account.sync_status?.holdings;
+        const transactionsSync = account.sync_status?.transactions;
+        return [{
+          id: account.id,
+          name: account.name || `Account ${account.number || account.id}`,
+          type: accountType.type,
+          subtype: accountType.subtype,
+          institution: account.institution_name
+            || authorization?.brokerage?.display_name
+            || authorization?.brokerage?.name
+            || authorization?.name
+            || 'Unknown',
+          balance: finiteNumber(account.balance?.total?.amount),
+          balanceCurrency: account.balance?.total?.currency || 'USD',
+          accountNumber: account.number,
+          brokerageAuthorizationId: connectionId(account.brokerage_authorization),
+          syncStatus: account.sync_status,
+          holdingsInitialSyncCompleted: holdingsSync?.initial_sync_completed,
+          transactionsInitialSyncCompleted: transactionsSync?.initial_sync_completed,
+          lastSuccessfulHoldingsSync: holdingsSync?.last_successful_sync || null,
+          lastSuccessfulTransactionsSync: transactionsSync?.last_successful_sync || null,
+          connectionDisabled: Boolean(authorization?.disabled),
+          connectionDisabledAt: authorization?.disabled_date || null,
+          dataFreshnessMode: authorization?.data_freshness_mode,
+          status: account.status,
+        }];
+      });
       
       return { 
         success: true, 
         data: {
-          accounts: Array.from(accounts.values())
+          accounts
         }
       };
     } catch (error: any) {
@@ -377,21 +355,53 @@ export class SnapTradeService {
   }
 
   // Get user holdings
-  async getUserHoldings(userId: string, userSecret: string): Promise<{ success: boolean; data?: any; error?: string }> {
+  async getUserHoldings(
+    userId: string,
+    userSecret: string,
+    prefetchedAccounts?: any,
+  ): Promise<{ success: boolean; data?: any; error?: string; errors?: Array<{ accountId: string; error: string }> }> {
     try {
       console.log('🔍 Getting holdings for user:', userId);
-      
-      const holdings = await snaptrade.accountInformation.getAllUserHoldings({
-        userId,
-        userSecret,
+      const accountsResult = prefetchedAccounts || await this.getUserAccounts(userId, userSecret);
+      if (!accountsResult.success || !Array.isArray(accountsResult.data?.accounts)) {
+        return { success: false, error: accountsResult.error || 'Failed to get SnapTrade accounts' };
+      }
+
+      const settled = await Promise.allSettled(accountsResult.data.accounts.map(async (account: any) => {
+        const response = await this.client.accountInformation.getUserHoldings({
+          accountId: account.id,
+          userId,
+          userSecret,
+        });
+        return {
+          ...response.data,
+          account: {
+            ...account,
+            id: account.id,
+            name: account.name,
+            number: account.accountNumber,
+            institution_name: account.institution,
+            sync_status: account.syncStatus,
+          },
+        };
+      }));
+
+      const data: any[] = [];
+      const errors: Array<{ accountId: string; error: string }> = [];
+      settled.forEach((result, index) => {
+        const account = accountsResult.data.accounts[index];
+        if (result.status === 'fulfilled') data.push(result.value);
+        else errors.push({
+          accountId: account.id,
+          error: result.reason instanceof Error ? result.reason.message : String(result.reason),
+        });
       });
-      
-      console.log('🔍 Holdings retrieved successfully');
-      
-      return { 
-        success: true, 
-        data: holdings.data
-      };
+
+      if (data.length === 0 && errors.length > 0) {
+        return { success: false, error: 'Failed to fetch holdings for every SnapTrade account', errors };
+      }
+      console.log(`🔍 Holdings retrieved for ${data.length} SnapTrade account(s)`);
+      return { success: true, data, errors };
     } catch (error: any) {
       // Check if it's a 401 Unauthorized error (invalid credentials)
       const is401 = error?.status === 401 || error?.code === 'ERR_BAD_REQUEST' && error?.status === 401;
@@ -427,7 +437,9 @@ export class SnapTradeService {
       }
       
       // Get activities for each account
-      const allActivities = [];
+      const allActivities: any[] = [];
+      const errors: Array<{ accountId: string; error: string }> = [];
+      const seenActivities = new Set<string>();
       
       // ✅ Set date range for activities (configurable via INVESTMENT_HISTORY_YEARS env var)
       const endDate = new Date().toISOString().split('T')[0]; // Today (YYYY-MM-DD)
@@ -441,43 +453,55 @@ export class SnapTradeService {
         try {
           console.log(`🔍 Getting activities for account: ${account.name} (${account.id})`);
           
-          const activities = await snaptrade.accountInformation.getAccountActivities({
-            accountId: account.id,
-            userId,
-            userSecret,
-            startDate,  // ✅ Required parameter
-            endDate,    // ✅ Required parameter
-            type: "BUY,SELL,DIVIDEND,CONTRIBUTION,WITHDRAWAL,REI,INTEREST,FEE,OPTIONEXPIRATION,OPTIONASSIGNMENT,OPTIONEXERCISE", // ✅ All transaction types
-            limit: 1000 // Get up to 1000 activities per account
-          });
-          
-          // ✅ SnapTrade API returns: { data: { data: [...], pagination: {...} } }
-          // So activities.data.data is the actual array of activities
-          const activitiesArray = activities.data?.data || activities.data;
-          
-          console.log(`🔍 SnapTrade API response for ${account.name}:`, {
-            hasData: !!activities.data,
-            hasNestedData: !!activities.data?.data,
-            isArray: Array.isArray(activitiesArray),
-            length: Array.isArray(activitiesArray) ? activitiesArray.length : 'N/A',
-            pagination: activities.data?.pagination
-          });
-          
-          if (activitiesArray && Array.isArray(activitiesArray)) {
-            // ✅ Add account info to each activity (including account_id for transaction mapping)
-            const accountActivities = activitiesArray.map((activity: any) => ({
-              ...activity,
-              account_id: account.id,  // ✅ Add account ID for linking
-              account_name: account.name,
-              account_number: account.accountNumber,
-              institution: activity.institution || account.institution
-            }));
-            
-            allActivities.push(...accountActivities);
-            console.log(`🔍 Found ${accountActivities.length} activities for account ${account.name}`);
-          } else {
-            console.log(`⚠️  No activities data returned for ${account.name} - activitiesArray is ${activitiesArray === null ? 'null' : activitiesArray === undefined ? 'undefined' : 'not an array (type: ' + typeof activitiesArray + ')'}`);
+          let offset = 0;
+          let total = Number.POSITIVE_INFINITY;
+          let accountActivityCount = 0;
+
+          while (offset < total) {
+            const response = await this.client.accountInformation.getAccountActivities({
+              accountId: account.id,
+              userId,
+              userSecret,
+              startDate,
+              endDate,
+              // Do not send a type filter. That preserves transfers, splits,
+              // taxes, stock dividends, and future provider activity types.
+              limit: SNAPTRADE_ACTIVITY_PAGE_SIZE,
+              offset,
+            });
+            const page = Array.isArray(response.data?.data)
+              ? response.data.data
+              : Array.isArray(response.data) ? response.data : [];
+            const reportedTotal = response.data?.pagination?.total;
+            total = typeof reportedTotal === 'number' && Number.isFinite(reportedTotal)
+              ? Math.max(0, reportedTotal)
+              : offset + page.length;
+
+            if (page.length === 0) {
+              if (offset < total) {
+                throw new Error(`SnapTrade activity pagination stalled at ${offset} of ${total}`);
+              }
+              break;
+            }
+
+            for (const activity of page) {
+              const activityKey = `${account.id}:${activity.id || `${activity.trade_date}:${activity.type}:${activity.amount}`}`;
+              if (seenActivities.has(activityKey)) continue;
+              seenActivities.add(activityKey);
+              allActivities.push({
+                ...activity,
+                account_id: account.id,
+                account_name: account.name,
+                account_number: account.accountNumber,
+                institution: activity.institution || account.institution,
+                transactions_last_successful_sync: account.lastSuccessfulTransactionsSync,
+                connection_disabled: account.connectionDisabled,
+              });
+              accountActivityCount++;
+            }
+            offset += page.length;
           }
+          console.log(`🔍 Found ${accountActivityCount} activities for account ${account.name}`);
         } catch (accountError: any) {
           // Check if it's a 401 Unauthorized error (invalid credentials)
           const is401 = accountError?.status === 401 || accountError?.code === 'ERR_BAD_REQUEST' && accountError?.status === 401;
@@ -486,6 +510,10 @@ export class SnapTradeService {
           } else {
             console.error(`🔍 Error getting activities for account ${account.name}:`, accountError);
           }
+          errors.push({
+            accountId: account.id,
+            error: accountError instanceof Error ? accountError.message : String(accountError),
+          });
           // Continue with other accounts even if one fails
         }
       }
@@ -496,8 +524,9 @@ export class SnapTradeService {
         success: true,
         data: {
           activities: allActivities,
-          total: allActivities.length
-        }
+          total: allActivities.length,
+          errors,
+        },
       };
     } catch (error: any) {
       // Check if it's a 401 Unauthorized error (invalid credentials)
@@ -520,7 +549,7 @@ export class SnapTradeService {
       console.log('🔍 Deleting SnapTrade user:', userId);
       
       // First, try to delete from SnapTrade
-      const deleteResponse = await snaptrade.authentication.deleteSnapTradeUser({ 
+      const deleteResponse = await this.client.authentication.deleteSnapTradeUser({
         userId 
       });
       
@@ -628,18 +657,24 @@ if (process.env.NODE_ENV === 'test' || process.env.GITHUB_ACTIONS) {
     console.log('SnapTrade: Mock getUserHoldings called with:', userId);
     return {
       success: true,
-      data: {
-        holdings: [
-          {
-            id: 'mock-holding-1',
-            accountId: 'mock-account-1',
-            symbol: 'AAPL',
-            quantity: 10,
-            price: 150.00,
-            value: 1500.00
-          }
-        ]
-      }
+      data: [{
+        account: {
+          id: 'mock-account-1',
+          name: 'Mock Investment Account',
+          number: '0001',
+          sync_status: {
+            holdings: { initial_sync_completed: true, last_successful_sync: '2026-08-18T00:00:00Z' },
+          },
+        },
+        balances: [{ currency: { code: 'USD' }, cash: 0 }],
+        positions: [{
+          symbol: { id: 'mock-security-1', symbol: { symbol: 'AAPL', description: 'Apple Inc.' } },
+          units: 10,
+          price: 150,
+          average_purchase_price: 100,
+          currency: { code: 'USD' },
+        }],
+      }],
     };
   };
   

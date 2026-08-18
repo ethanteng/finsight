@@ -54,4 +54,19 @@ describe('account summaries', () => {
     expect(summary.id).toBe('plaid-abc');
     expect(summary.balance).toBe(4200);
   });
+
+  it('retains Plaid liability terms and promotes the primary APR', () => {
+    const liabilityDetails = [{
+      provider: 'plaid' as const,
+      kind: 'credit' as const,
+      retrievedAt: '2026-08-18T12:00:00Z',
+      aprs: [{ type: 'purchase_apr', percentage: 19.99 }],
+      minimumPaymentAmount: 50,
+      nextPaymentDueDate: '2026-09-01',
+    }];
+    const [summary] = buildAccountSummaries([account({ liabilityDetails })]);
+
+    expect(summary.interestRate).toBe(19.99);
+    expect(summary.liabilityDetails).toEqual(liabilityDetails);
+  });
 });

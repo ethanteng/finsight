@@ -6,7 +6,7 @@ export interface DataSourceConfig {
   description: string;
   tiers: UserTier[];
   category: 'account' | 'market' | 'external' | 'economic';
-  provider: 'plaid' | 'fred' | 'massive' | 'tiingo' | 'fmp' | 'internal' | 'brave' | 'rentcast';
+  provider: 'plaid' | 'snaptrade' | 'fred' | 'massive' | 'tiingo' | 'fmp' | 'internal' | 'brave' | 'rentcast';
   cacheDuration: number; // milliseconds
   rateLimit?: number; // requests per minute
   isLive: boolean;
@@ -66,6 +66,26 @@ export const dataSourceRegistry: Record<string, DataSourceConfig> = {
     provider: 'plaid',
     cacheDuration: 15 * 60 * 1000, // 15 minutes
     isLive: true
+  },
+  'plaid-liabilities': {
+    id: 'plaid-liabilities',
+    name: 'Credit and Loan Terms',
+    description: 'Credit-card APRs and available mortgage or student-loan rates, payments, due dates, balances and terms',
+    tiers: [UserTier.STARTER, UserTier.STANDARD, UserTier.PREMIUM],
+    category: 'account',
+    provider: 'plaid',
+    cacheDuration: 24 * 60 * 60 * 1000,
+    isLive: false,
+  },
+  'snaptrade-investments': {
+    id: 'snaptrade-investments',
+    name: 'Brokerage Accounts, Holdings, and Activity',
+    description: 'Account-specific brokerage holdings and complete paginated investment activity with provider sync status',
+    tiers: [UserTier.STARTER, UserTier.STANDARD, UserTier.PREMIUM],
+    category: 'account',
+    provider: 'snaptrade',
+    cacheDuration: 15 * 60 * 1000,
+    isLive: true,
   },
 
   'fmp-fund-exposures': {

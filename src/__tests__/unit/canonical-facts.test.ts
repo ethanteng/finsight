@@ -54,6 +54,51 @@ describe('buildCanonicalFactPack', () => {
     expect(ids.some((id) => id.startsWith('holding_value_'))).toBe(false);
   });
 
+  it('makes Plaid liability rates and payment amounts citable account facts', () => {
+    const data = snapshot();
+    data.accounts = [{
+      id: 'credit-1',
+      name: 'Rewards Card',
+      type: 'credit',
+      balance: 1200,
+      liabilityDetails: [{
+        provider: 'plaid',
+        kind: 'credit',
+        retrievedAt: '2026-08-18T12:00:00Z',
+        aprs: [{
+          type: 'purchase_apr',
+          percentage: 19.99,
+          balanceSubjectToApr: 1000,
+          interestChargeAmount: 12,
+        }],
+        minimumPaymentAmount: 50,
+      }],
+    }];
+
+    const pack = buildCanonicalFactPack(
+      data,
+      'What is the APR and minimum payment on my Rewards Card?',
+      needs('account_details'),
+    );
+
+    expect(pack.facts.find(fact => fact.id.startsWith('liability_apr_'))).toMatchObject({
+      value: 19.99,
+      unit: 'percent',
+      provenance: {
+        kind: 'snapshot',
+        source: 'accounts.credit-1.liabilityDetails.0.aprs.0.percentage',
+        asOf: '2026-08-18T12:00:00.000Z',
+      },
+    });
+    expect(pack.facts.find(fact => fact.id.startsWith('liability_minimum_payment_'))).toMatchObject({
+      value: 50,
+      unit: 'usd',
+      provenance: {
+        source: 'accounts.credit-1.liabilityDetails.0.minimumPaymentAmount',
+      },
+    });
+  });
+
   it('grounds FMP exposures and Tiingo quote/performance observations as external facts', () => {
     const data = snapshot();
     data.investments = {

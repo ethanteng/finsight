@@ -24,6 +24,9 @@ jest.mock('@prisma/client', () => {
     manualAccount: {
       findMany: jest.fn(),
     },
+    snapTradeUser: {
+      findUnique: jest.fn(),
+    },
   };
 
   const PrismaClient = jest.fn(() => mockPrisma);
@@ -44,6 +47,7 @@ const { __mockPrisma: mockPrisma } = jest.requireMock('@prisma/client') as {
     accessToken: { findMany: jest.Mock };
     transaction: { findMany: jest.Mock };
     manualAccount: { findMany: jest.Mock };
+    snapTradeUser: { findUnique: jest.Mock };
   };
 };
 
@@ -140,6 +144,7 @@ describe('FinancialDataService investment persistence safeguards', () => {
     (mockPrisma.accessToken.findMany as any).mockResolvedValue([]);
     (mockPrisma.transaction.findMany as any).mockResolvedValue([]);
     (mockPrisma.manualAccount.findMany as any).mockResolvedValue([]);
+    (mockPrisma.snapTradeUser.findUnique as any).mockResolvedValue(null);
     mockGetOriginalProfile.mockReset();
   });
 
@@ -248,5 +253,97 @@ describe('FinancialDataService investment persistence safeguards', () => {
     const result = await (service as any).fetchHomeValue('user-123');
 
     expect(result.propertyId).toBe('property-123');
+  });
+
+  it('preserves SnapTrade provider timestamps and stable activity IDs', async () => {
+    (mockPrisma.snapTradeUser.findUnique as any).mockResolvedValue({ userSecret: 'secret' });
+    mockSnapTradeService.getUserAccounts.mockResolvedValue({
+      success: true,
+      data: {
+        accounts: [{
+          id: 'brokerage-1',
+          name: 'Brokerage',
+          type: 'investment',
+          subtype: 'brokerage',
+          institution: 'Broker',
+          balance: 2500,
+          balanceCurrency: 'USD',
+          lastSuccessfulHoldingsSync: '2026-08-17T20:00:00Z',
+          lastSuccessfulTransactionsSync: '2026-08-17T21:00:00Z',
+          connectionDisabled: true,
+          connectionDisabledAt: '2026-08-18T00:00:00Z',
+          dataFreshnessMode: 'delayed',
+        }],
+      },
+    });
+    mockSnapTradeService.getUserHoldings.mockResolvedValue({
+      success: true,
+      data: [{
+        account: {
+          id: 'brokerage-1',
+          name: 'Brokerage',
+          lastSuccessfulHoldingsSync: '2026-08-17T20:00:00Z',
+        },
+        balances: [],
+        positions: [],
+      }],
+    });
+    mockSnapTradeService.getUserActivities.mockResolvedValue({
+      success: true,
+      data: {
+        activities: [{
+          id: 'activity-uuid',
+          account_id: 'brokerage-1',
+          type: 'STOCK_DIVIDEND',
+          amount: 25,
+          trade_date: '2026-08-16',
+          symbol: { id: 'security-1', symbol: 'ABC', description: 'ABC Fund' },
+        }, {
+          id: 'buy-uuid',
+          account_id: 'brokerage-1',
+          type: 'BUY',
+          amount: -250,
+          units: 2,
+          price: 125,
+          trade_date: '2026-08-15',
+          symbol: { id: 'security-2', symbol: 'XYZ', description: 'XYZ Fund' },
+        }],
+      },
+    });
+
+    const service = new FinancialDataService();
+    const result = await (service as any).fetchSnapTradeData('user-123', {
+      includeInvestments: true,
+      includeTransactions: true,
+    });
+
+    expect(mockSnapTradeService.getUserHoldings).toHaveBeenCalledWith(
+      'user-123',
+      'secret',
+      expect.objectContaining({ success: true }),
+    );
+    expect(result.accounts[0]).toMatchObject({
+      snapshotTimestamp: '2026-08-17T20:00:00Z',
+      lastSyncedAt: '2026-08-17T20:00:00Z',
+      connectionDisabled: true,
+      dataFreshnessMode: 'delayed',
+    });
+    expect(result.transactions[0]).toMatchObject({
+      id: 'snaptrade-activity-uuid',
+      transaction_id: 'snaptrade-activity-uuid',
+      activityId: 'activity-uuid',
+      source: 'snaptrade',
+      amount: 25,
+      ticker_symbol: 'ABC',
+      security_name: 'ABC Fund',
+    });
+    expect(result.transactions[1]).toMatchObject({
+      id: 'snaptrade-buy-uuid',
+      type: 'buy',
+      amount: -250,
+    });
+    expect(result.errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({ error: expect.stringContaining('connection is disabled') }),
+    ]));
   });
 });
