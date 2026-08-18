@@ -119,7 +119,7 @@ The platform supports OpenAI (GPT-4), Anthropic (Claude), and Google (Gemini) wi
 |---|---|
 | Plaid | Bank account/transaction data |
 | SnapTrade | Investment portfolio data |
-| FRED | Economic indicators |
+| FRED | Economic indicators and published rate benchmarks |
 | Alpha Vantage | Market data |
 | RentCast | Home valuation |
 | Brave Search | RAG for real-time financial info |

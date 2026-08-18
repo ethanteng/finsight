@@ -17,8 +17,8 @@ Add these to your `.env.local` file:
 TIINGO_API_KEY=your_tiingo_api_key_here
 FMP_API_KEY=your_fmp_api_key_here
 
-# Already present (verify these exist):
-FRED_API_KEY=8f76d1f46abac57d0a20979bd9d8312f
+# Used by other market-context features, not the retirement stress-test engine:
+FRED_API_KEY=your_fred_api_key_here
 ALPHA_VANTAGE_API_KEY=062AEP9BK5045MT1
 ```
 
@@ -250,7 +250,7 @@ The analysis should return a JSON object with:
 
 Watch for:
 - ✅ "Running retirement analysis for user: ..."
-- ✅ Provider initialization messages (Tiingo, FMP, FRED)
+- ✅ Provider initialization messages (Tiingo and FMP)
 - ✅ Sequence generation progress
 - ❌ Any error messages
 
@@ -335,7 +335,6 @@ LIMIT 5;
 The module caches:
 - Price history (24 hours)
 - Security metadata (7 days)
-- FRED data (24 hours)
 
 Clear cache by restarting the server (in-memory cache) or manually deleting cache entries.
 

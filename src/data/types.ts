@@ -4,14 +4,20 @@ export interface MarketDataPoint {
   date: string;
   source: string;
   lastUpdated: string;
+  seriesId?: string;
+  unit?: 'percent' | 'index';
+  transformation?: 'lin' | 'pc1';
 }
 
 export interface EconomicIndicator {
-  cpi: MarketDataPoint;
-  fedRate: MarketDataPoint;
-  mortgageRate: MarketDataPoint;
-  creditCardAPR: MarketDataPoint;
-  unemployment?: MarketDataPoint; // Optional for backward compatibility
+  /** CPIAUCSL transformed by FRED to percent change from one year ago. */
+  cpi?: MarketDataPoint;
+  fedRate?: MarketDataPoint;
+  mortgageRate?: MarketDataPoint;
+  creditCardAPR?: MarketDataPoint;
+  unemployment?: MarketDataPoint;
+  treasury10Y?: MarketDataPoint;
+  cd12Month?: MarketDataPoint;
 }
 
 export interface LiveMarketData {
@@ -81,4 +87,4 @@ export interface CacheService {
   get<T>(key: string): Promise<T | null>;
   set<T>(key: string, data: T, ttl?: number): Promise<void>; // Will be used in Step 4
   invalidate(pattern: string): Promise<void>; // Will be used in Step 4
-} 
+}

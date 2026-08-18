@@ -38,10 +38,13 @@ jest.mock('../../market-news/aggregator', () => ({
 jest.mock('../../data/providers/fred', () => ({
   FREDProvider: jest.fn().mockImplementation(() => ({
     getEconomicIndicators: jest.fn().mockResolvedValue({
-      cpi: { value: 3.2, date: '2024-01-01', source: 'FRED' },
+      cpi: { value: 3.2, date: '2024-01-01', source: 'FRED', transformation: 'pc1', unit: 'percent' },
       fedRate: { value: 4.33, date: '2024-01-01', source: 'FRED' },
       mortgageRate: { value: 6.5, date: '2024-01-01', source: 'FRED' },
-      creditCardAPR: { value: 15.5, date: '2024-01-01', source: 'FRED' }
+      creditCardAPR: { value: 15.5, date: '2024-01-01', source: 'FRED' },
+      unemployment: { value: 4.2, date: '2024-01-01', source: 'FRED' },
+      treasury10Y: { value: 4.25, date: '2024-01-01', source: 'FRED' },
+      cd12Month: { value: 1.75, date: '2024-01-01', source: 'FRED' }
     }),
     getLiveMarketData: jest.fn().mockResolvedValue({
       cdRates: { value: 5.25, date: '2024-01-01', source: 'FRED' },

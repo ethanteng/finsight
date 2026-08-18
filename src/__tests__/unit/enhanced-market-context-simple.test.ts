@@ -50,7 +50,9 @@ describe('Enhanced Market Context System - Core Functionality', () => {
         cpi: { value: 3.1, date: '2025-07-31', source: 'FRED', lastUpdated: '2025-08-01T05:57:37.801Z' },
         fedRate: { value: 5.25, date: '2025-07-31', source: 'FRED', lastUpdated: '2025-08-01T05:57:37.801Z' },
         mortgageRate: { value: 6.72, date: '2025-07-31', source: 'FRED', lastUpdated: '2025-08-01T05:57:37.801Z' },
-        creditCardAPR: { value: 24.59, date: '2025-07-31', source: 'FRED', lastUpdated: '2025-08-01T05:57:37.801Z' }
+        creditCardAPR: { value: 24.59, date: '2025-07-31', source: 'FRED', lastUpdated: '2025-08-01T05:57:37.801Z' },
+        treasury10Y: { value: 4.25, date: '2025-07-31', source: 'FRED', lastUpdated: '2025-08-01T05:57:37.801Z' },
+        cd12Month: { value: 1.75, date: '2025-07-01', source: 'FRED', lastUpdated: '2025-08-01T05:57:37.801Z' }
       });
 
       const context = await dataOrchestrator.getMarketContextSummary(UserTier.STANDARD);
@@ -58,6 +60,9 @@ describe('Enhanced Market Context System - Core Functionality', () => {
       expect(context).toContain('ECONOMIC INDICATORS');
       expect(context).toContain('Fed Funds Rate: 5.25%');
       expect(context).toContain('CPI (YoY): 3.1%');
+      expect(context).toContain('10-Year Treasury Rate: 4.25%');
+      expect(context).toContain('FDIC National 12-Month CD Rate: 1.75%');
+      expect(context).toContain('observation date: 2025-07-01');
       expect(context).not.toContain('LIVE MARKET DATA');
     });
 
@@ -167,8 +172,8 @@ describe('Enhanced Market Context System - Core Functionality', () => {
 
       const context = await dataOrchestrator.getMarketContextSummary(UserTier.STANDARD);
 
-      expect(context).toContain('High interest rates favor savers');
-      expect(context).toContain('consider high-yield savings accounts and CDs');
+      expect(context).toContain('An elevated policy rate raises borrowing costs');
+      expect(context).toContain('compare current deposit offers before acting');
     });
 
     it('should generate insights for high inflation', async () => {

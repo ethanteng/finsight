@@ -33,14 +33,13 @@ The retirement analysis uses **rolling historical windows**, not Monte Carlo sim
 
 | Component                 | Deterministic? | Notes                                                                                                                                             |
 | ------------------------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Asset returns**         | ✅ Yes          | When not in test mode: historical data from Tiingo API (or cache). Same inputs → same returns. Deterministic.                                    |
+| **Asset returns**         | ✅ Yes          | Loaded from the checked-in historical market returns CSV. Same file and inputs produce the same sequences.                                     |
 | **Withdrawal simulation** | ✅ Yes          | Pure arithmetic; no randomness.                                                                                                                   |
 | **Outcome analysis**      | ✅ Yes          | Percentiles, survival rates from fixed outcomes.                                                                                                  |
-| **Inflation rates**       | ✅ Yes          | Historical CPIAUCSL from FRED; MoM rates computed deterministically. Fallback 0.0026/mo (≈3.2% YoY) when FRED unavailable. See `sliceInflationRates()` in `stress-tester.ts`. |
-| **Tiingo mock data**      | ❌ No           | Only in test mode (`test_tiingo_key` or `GITHUB_ACTIONS`): uses `Math.random()` for returns. Outside test mode, Tiingo is deterministic.           |
+| **Inflation rates**       | ✅ Yes          | Loaded from the checked-in historical market returns CSV alongside the return series. No runtime FRED call is made by the stress tester.         |
 
 
-**Impact:** Inflation affects `realReturn` (inflation-adjusted return) in `calculateRealReturn()`. With FRED CPI, inflation is now deterministic; `realReturn` is fully deterministic when using real asset and CPI data. **Outside test mode**, the full retirement analysis (asset returns from Tiingo, inflation from FRED) is deterministic.
+**Impact:** Inflation affects `realReturn` (inflation-adjusted return) in `calculateRealReturn()`. Because both returns and inflation come from the versioned local dataset, the historical retirement sequences do not depend on FRED availability or release revisions at runtime.
 
 ---
 
@@ -107,8 +106,7 @@ The following data is passed to Claude (Ask Linc), OpenAI (fallback), and Gemini
 | ------------------------- | --------------------------------------------------------- | ------------------------------ |
 | Retirement analysis entry | `src/retirement-analytics/index.ts`                       | `analyzeRetirementPortfolio()` |
 | Rolling sequences         | `src/retirement-analytics/engine/stress-tester.ts`        | `generateRollingSequences()`   |
-| Inflation (FRED CPI)      | `src/retirement-analytics/engine/stress-tester.ts`        | `sliceInflationRates()`        |
-| CPI fetch                 | `src/data/providers/fred.ts`                             | `getCPIObservations()`         |
+| Historical inflation     | `src/retirement-analytics/engine/historical-data-loader.ts` | `loadHistoricalReturns()`    |
 | Withdrawal simulation     | `src/retirement-analytics/engine/withdrawal-simulator.ts` | `simulateWithdrawals()`        |
 | Context assembly          | `src/openai/context-service.ts`                           | `gatherContextSnapshot()`      |
 | Profile enhancement       | `src/profile/plaid-enhancer.ts`                           | `integrateInsightsWithAI()`    |

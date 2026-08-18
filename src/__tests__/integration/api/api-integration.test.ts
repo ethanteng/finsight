@@ -107,7 +107,15 @@ describe('API Integration Tests', () => {
           expect(marketContext.economicIndicators).toBeDefined();
 
           if (marketContext.economicIndicators) {
-            const { cpi, fedRate, mortgageRate, creditCardAPR } = marketContext.economicIndicators;
+            const {
+              cpi,
+              fedRate,
+              mortgageRate,
+              creditCardAPR,
+              unemployment,
+              treasury10Y,
+              cd12Month,
+            } = marketContext.economicIndicators;
 
             // Verify data structure
             expect(cpi).toHaveProperty('value');
@@ -116,6 +124,10 @@ describe('API Integration Tests', () => {
             expect(fedRate).toHaveProperty('value');
             expect(mortgageRate).toHaveProperty('value');
             expect(creditCardAPR).toHaveProperty('value');
+            expect(unemployment).toHaveProperty('value');
+            expect(treasury10Y).toHaveProperty('value');
+            expect(cd12Month).toHaveProperty('value');
+            expect(cpi).toHaveProperty('transformation', 'pc1');
 
             // Log data for debugging
             // console.log(`${tier} tier FRED data:`, {
@@ -132,6 +144,9 @@ describe('API Integration Tests', () => {
             expect(typeof fedRate.value).toBe('number');
             expect(typeof mortgageRate.value).toBe('number');
             expect(typeof creditCardAPR.value).toBe('number');
+            expect(typeof unemployment.value).toBe('number');
+            expect(typeof treasury10Y.value).toBe('number');
+            expect(typeof cd12Month.value).toBe('number');
           }
         }
       }

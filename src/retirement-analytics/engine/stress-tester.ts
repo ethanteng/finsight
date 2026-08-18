@@ -6,7 +6,6 @@
 
 import { HistoricalSequence, PortfolioMapping, TimelineBucket } from '../types';
 import { DataProviderFactory } from '../data/data-provider-factory';
-import { FREDProvider } from '../../data/providers/fred';
 import { loadHistoricalReturns } from './historical-data-loader';
 
 /**
@@ -25,7 +24,6 @@ export function snapToHorizonBucket(withdrawalYears: number): TimelineBucket {
 export async function generateRollingSequences(
   withdrawalYears: number,
   _dataProviderFactory: DataProviderFactory,
-  _fredProvider: FREDProvider,
   _minHistoryYears: number = 50
 ): Promise<{ sequences: HistoricalSequence[]; missingData: string[] }> {
   const data = loadHistoricalReturns();

@@ -310,7 +310,7 @@ async function testRetirementAnalysis() {
     console.error('Troubleshooting:');
     console.error('  1. Verify the user ID exists in the database');
     console.error('  2. Check that the user has investment holdings');
-    console.error('  3. Verify environment variables are set (TIINGO_API_KEY, FMP_API_KEY, FRED_API_KEY)');
+    console.error('  3. Verify environment variables are set (TIINGO_API_KEY, FMP_API_KEY)');
     console.error('  4. Check database connection');
     console.error('  5. Review error stack trace above');
     

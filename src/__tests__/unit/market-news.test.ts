@@ -137,7 +137,7 @@ describe('Market News System', () => {
         ]
       };
 
-      // Mock multiple fetch calls for different FRED indicators (CPI, FEDFUNDS, MORTGAGE30US, DGS10)
+      // Mock multiple fetch calls for configured FRED indicators.
       (fetch as jest.Mock)
         .mockResolvedValueOnce({
           ok: true,
@@ -270,6 +270,28 @@ describe('Market News System', () => {
 
       const context = await synthesizer.synthesizeMarketContext(mockData, UserTier.STANDARD);
       expect(context.keyEvents).toContain('Federal Reserve rate at 5.5% - high interest rate environment');
+    });
+
+    test('should present transformed CPI as year-over-year percent, not an index level', () => {
+      const prompt = (synthesizer as any).buildSynthesisPrompt([
+        {
+          source: 'fred',
+          timestamp: new Date('2026-08-01T00:00:00Z'),
+          data: {
+            series: 'CPIAUCSL',
+            name: 'Inflation Rate (CPI, YoY)',
+            value: 3.2,
+            date: '2026-07-01',
+            unit: 'percent',
+            transformation: 'pc1',
+          },
+          type: 'economic_indicator' as const,
+          relevance: 0.9,
+        },
+      ], UserTier.STANDARD);
+
+      expect(prompt).toContain('Inflation Rate (CPI, YoY): 3.2% (2026-07-01)');
+      expect(prompt).not.toContain('(CPI index)');
     });
   });
 
