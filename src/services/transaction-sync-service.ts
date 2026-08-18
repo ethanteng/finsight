@@ -38,9 +38,13 @@ export class TransactionSyncService {
       const modified: any[] = [];
       const removed: any[] = [];
       let currentCursor: string | null = cursor || null;
+      // Preserve the cursor that started this sync so a mid-pagination mutation
+      // can restart from the same acknowledgement boundary (Plaid guidance).
+      const paginationStartCursor: string | null = currentCursor;
       let hasMore = true;
       let syncError: string | undefined;
       let cursorResetAttempted = false;
+      let mutationRestartAttempted = false;
 
       // Paginate through all changes
       while (hasMore) {
@@ -60,6 +64,24 @@ export class TransactionSyncService {
           const errorCode = error?.response?.data?.error_code;
           const errorMessage = error?.response?.data?.error_message || error.message;
 
+          // Underlying data changed while paging. Restart from the original
+          // cursor for this sync — not from null, and not from next_cursor.
+          if (errorCode === 'TRANSACTIONS_SYNC_MUTATION_DURING_PAGINATION') {
+            if (mutationRestartAttempted) {
+              throw error;
+            }
+            console.warn(
+              `Transaction sync mutation during pagination; restarting from sync start cursor: ${errorMessage}`
+            );
+            currentCursor = paginationStartCursor;
+            mutationRestartAttempted = true;
+            added.length = 0;
+            modified.length = 0;
+            removed.length = 0;
+            hasMore = true;
+            continue;
+          }
+
           // If cursor is invalid/expired, reset cursor and retry without cursor
           // This will fetch all transactions from the beginning
           if (errorCode === 'INVALID_CURSOR' || errorCode === 'CURSOR_EXPIRED') {
@@ -75,6 +97,7 @@ export class TransactionSyncService {
             added.length = 0;
             modified.length = 0;
             removed.length = 0;
+            hasMore = true;
             syncError = `Cursor was reset: ${errorMessage}`;
             // Continue loop - will retry without cursor on next iteration
             continue;

@@ -126,4 +126,44 @@ describe('TransactionSyncService cursor durability', () => {
 
     expect(prisma.account.findFirst).not.toHaveBeenCalled();
   });
+
+  it('restarts pagination from the sync-start cursor on mid-page mutation', async () => {
+    transactionsSync
+      .mockResolvedValueOnce({
+        data: {
+          added: [{ transaction_id: 'tx-stale-page', account_id: 'account-1' }],
+          modified: [],
+          removed: [],
+          next_cursor: 'cursor-page-2',
+          has_more: true,
+        },
+      })
+      .mockRejectedValueOnce({
+        response: {
+          data: {
+            error_code: 'TRANSACTIONS_SYNC_MUTATION_DURING_PAGINATION',
+            error_message: 'mutated',
+          },
+        },
+      })
+      .mockResolvedValueOnce({
+        data: {
+          added: [],
+          modified: [],
+          removed: [],
+          next_cursor: 'cursor-stable',
+          has_more: false,
+        },
+      });
+
+    await expect(
+      TransactionSyncService.syncTransactionsForToken('access-token')
+    ).resolves.toMatchObject({ success: true, cursor: 'cursor-stable' });
+
+    expect(transactionsSync).toHaveBeenNthCalledWith(3, {
+      access_token: 'access-token',
+      cursor: 'cursor-before',
+    });
+    expect(prisma.account.findFirst).not.toHaveBeenCalled();
+  });
 });
