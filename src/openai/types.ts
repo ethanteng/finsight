@@ -52,6 +52,12 @@ export interface InvestmentExternalData {
   asOf: string;
   sources: Array<'fmp' | 'tiingo'>;
   portfolioExposure?: {
+    /**
+     * Oldest contributing FMP observation. These aggregates are derived only
+     * from fund metadata, so they are no fresher than their stalest input --
+     * and never as fresh as the top-level asOf, which includes live quotes.
+     */
+    metadataAsOf?: string;
     countryAllocations: Array<{ name: string; percentage: number }>;
     sectorAllocations: Array<{ name: string; percentage: number }>;
     countryCoverage: number;

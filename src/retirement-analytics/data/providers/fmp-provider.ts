@@ -58,6 +58,14 @@ interface FMPSectorWeighting {
 }
 
 export const FMP_METADATA_VERSION = 2;
+/** Phrases that name a money-market or cash-reserve product, not merely mention cash. */
+const CASH_PRODUCT_PATTERNS: RegExp[] = [
+  /\bmoney market\b/,
+  /\bmoney fund\b/,
+  /\bcash reserves?\b/,
+  /\bcash management\b/,
+  /\bcash sweep\b/,
+];
 const FMP_REQUEST_TIMEOUT_MS = 10_000;
 
 export class FMPProvider {
@@ -537,17 +545,18 @@ export class FMPProvider {
   }
 
   /**
-   * Classify from FMP's free-text sector/industry/name. Cash must be detected
-   * explicitly: `assetClass` takes precedence over the broker security type in
-   * the portfolio engines, so defaulting a money-market fund to 'Equity' would
-   * silently move a cash sleeve into the equity allocation.
+   * Classify from FMP's free-text sector/industry/name.
+   *
+   * `assetClass` takes precedence over the broker security type in the
+   * portfolio engines, so both directions are costly: defaulting a
+   * money-market fund to 'Equity' moves a cash sleeve into equities, and a
+   * bare "cash" word match moves equity strategies that merely have the word
+   * in their name (Pacer US Cash Cows, cash-flow tilts) into cash. Match only
+   * phrases that name an actual cash product.
    */
   private deriveAssetClass(sector: string, industry: string, name: string): string {
     const text = `${sector} ${industry} ${name}`;
-    if (text.includes('money market') || text.includes('cash reserves')
-        || /\bcash\b/.test(text)) {
-      return 'Cash';
-    }
+    if (CASH_PRODUCT_PATTERNS.some(pattern => pattern.test(text))) return 'Cash';
     if (text.includes('bond') || text.includes('fixed income') || text.includes('treasury')
         || text.includes('tips') || text.includes('aggregate')) {
       return 'Fixed Income';

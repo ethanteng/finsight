@@ -164,6 +164,9 @@ function buildPortfolioExposure(
 ): InvestmentExternalData['portfolioExposure'] | undefined {
   const totalValue = positions.reduce((sum, position) => sum + Math.max(0, position.value), 0);
   if (totalValue <= 0 || metadata.size === 0) return undefined;
+  const metadataTimes = [...metadata.values()]
+    .map(item => item.lastUpdated?.getTime())
+    .filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
   const countryValues = new Map<string, number>();
   const sectorValues = new Map<string, number>();
   let countryCoverageValue = 0;
@@ -189,6 +192,7 @@ function buildPortfolioExposure(
   }
 
   return {
+    ...(metadataTimes.length && { metadataAsOf: new Date(Math.min(...metadataTimes)).toISOString() }),
     countryAllocations: exposurePercentages(countryValues, totalValue),
     sectorAllocations: exposurePercentages(sectorValues, totalValue),
     countryCoverage: countryCoverageValue / totalValue,

@@ -135,6 +135,28 @@ describe('FMP Starter fund metadata', () => {
     expect(mapping.usEquityWeight).toBe(0);
   });
 
+  it('does not read a "cash" in an equity fund name as a cash product', () => {
+    const cowz = (provider as any).parseProfile(
+      { symbol: 'COWZ', companyName: 'Pacer US Cash Cows 100 ETF', country: 'US', isEtf: true },
+      'COWZ',
+    ) as SecurityMetadata;
+    expect(cowz.assetClass).toBe('Equity');
+
+    const flow = (provider as any).parseProfile(
+      { symbol: 'COWS', companyName: 'Amplify Cash Flow Dividend Leaders ETF', country: 'US', isEtf: true },
+      'COWS',
+    ) as SecurityMetadata;
+    expect(flow.assetClass).toBe('Equity');
+
+    for (const name of ['Vanguard Federal Money Market Fund', 'Fidelity Government Cash Reserves']) {
+      const cash = (provider as any).parseProfile(
+        { symbol: 'XXXXX', companyName: name, country: 'US', isEtf: false },
+        'XXXXX',
+      ) as SecurityMetadata;
+      expect(cash.assetClass).toBe('Cash');
+    }
+  });
+
   it('only treats five/six character X-suffixed tickers as mutual funds', () => {
     expect(looksLikeMutualFundTicker('VTSAX')).toBe(true);
     expect(looksLikeMutualFundTicker('SPAXX')).toBe(true);

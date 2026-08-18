@@ -380,19 +380,22 @@ export function buildCanonicalFactPack(
     const externalAsOf = external?.asOf;
     const portfolioExposure = external?.portfolioExposure;
     if (portfolioExposure) {
-      addExternalFact('external_country_coverage_source', 'FMP country-exposure coverage source', portfolioExposure.countryCoverage, 'ratio', 'investments.externalData.portfolioExposure.countryCoverage', externalAsOf, false);
+      // Derived purely from FMP fund metadata, so these carry the FMP
+      // observation time rather than the newest time across all sources.
+      const exposureAsOf = portfolioExposure.metadataAsOf || externalAsOf;
+      addExternalFact('external_country_coverage_source', 'FMP country-exposure coverage source', portfolioExposure.countryCoverage, 'ratio', 'investments.externalData.portfolioExposure.countryCoverage', exposureAsOf, false);
       addCalculatedFact('external_country_coverage', 'Portfolio coverage for FMP country exposure', portfolioExposure.countryCoverage * 100, 'percent', 'input * 100', ['external_country_coverage_source']);
-      addExternalFact('external_sector_coverage_source', 'FMP sector-exposure coverage source', portfolioExposure.sectorCoverage, 'ratio', 'investments.externalData.portfolioExposure.sectorCoverage', externalAsOf, false);
+      addExternalFact('external_sector_coverage_source', 'FMP sector-exposure coverage source', portfolioExposure.sectorCoverage, 'ratio', 'investments.externalData.portfolioExposure.sectorCoverage', exposureAsOf, false);
       addCalculatedFact('external_sector_coverage', 'Portfolio coverage for FMP sector exposure', portfolioExposure.sectorCoverage * 100, 'percent', 'input * 100', ['external_sector_coverage_source']);
-      addExternalFact('external_expense_coverage_source', 'FMP expense-ratio coverage source', portfolioExposure.expenseRatioCoverage, 'ratio', 'investments.externalData.portfolioExposure.expenseRatioCoverage', externalAsOf, false);
+      addExternalFact('external_expense_coverage_source', 'FMP expense-ratio coverage source', portfolioExposure.expenseRatioCoverage, 'ratio', 'investments.externalData.portfolioExposure.expenseRatioCoverage', exposureAsOf, false);
       addCalculatedFact('external_expense_coverage', 'Portfolio coverage for FMP expense ratios', portfolioExposure.expenseRatioCoverage * 100, 'percent', 'input * 100', ['external_expense_coverage_source']);
-      addExternalFact('external_portfolio_expense_ratio_source', 'FMP portfolio fee drag source', portfolioExposure.expenseRatioWeighted, 'ratio', 'investments.externalData.portfolioExposure.expenseRatioWeighted', externalAsOf, false);
+      addExternalFact('external_portfolio_expense_ratio_source', 'FMP portfolio fee drag source', portfolioExposure.expenseRatioWeighted, 'ratio', 'investments.externalData.portfolioExposure.expenseRatioWeighted', exposureAsOf, false);
       addCalculatedFact('external_portfolio_expense_ratio', 'Annual fee drag across enriched holdings (FMP)', portfolioExposure.expenseRatioWeighted * 100, 'percent', 'input * 100', ['external_portfolio_expense_ratio_source']);
       for (const exposure of portfolioExposure.countryAllocations.slice(0, 15)) {
-        addExternalFact(`external_country_${safeFactId(exposure.name)}`, `${exposure.name} country exposure across enriched holdings (FMP)`, exposure.percentage, 'percent', `investments.externalData.portfolioExposure.countryAllocations.${safeFactId(exposure.name)}`, externalAsOf);
+        addExternalFact(`external_country_${safeFactId(exposure.name)}`, `${exposure.name} country exposure across enriched holdings (FMP)`, exposure.percentage, 'percent', `investments.externalData.portfolioExposure.countryAllocations.${safeFactId(exposure.name)}`, exposureAsOf);
       }
       for (const exposure of portfolioExposure.sectorAllocations.slice(0, 15)) {
-        addExternalFact(`external_sector_${safeFactId(exposure.name)}`, `${exposure.name} sector exposure across enriched holdings (FMP)`, exposure.percentage, 'percent', `investments.externalData.portfolioExposure.sectorAllocations.${safeFactId(exposure.name)}`, externalAsOf);
+        addExternalFact(`external_sector_${safeFactId(exposure.name)}`, `${exposure.name} sector exposure across enriched holdings (FMP)`, exposure.percentage, 'percent', `investments.externalData.portfolioExposure.sectorAllocations.${safeFactId(exposure.name)}`, exposureAsOf);
       }
     }
 
