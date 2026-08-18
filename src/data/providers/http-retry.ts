@@ -54,18 +54,44 @@ function bindTimeoutToResponse(
     clearTimeout(timeout);
   };
 
-  signal.addEventListener('abort', () => {
-    void response.body?.cancel().catch(() => undefined);
-    cleanup();
-  }, { once: true });
-
   if (!response.body) {
     cleanup();
     return response;
   }
 
+  // Locking the body means later abort must cancel this reader — body.cancel()
+  // alone is a no-op once the stream is locked.
   const reader = response.body.getReader();
+  let streamController: ReadableStreamDefaultController<Uint8Array> | undefined;
+  const abortError = () => new DOMException('The operation was aborted.', 'AbortError');
+
+  const abortBody = () => {
+    void reader.cancel(abortError()).catch(() => undefined);
+    try {
+      streamController?.error(abortError());
+    } catch {
+      // Controller may already be closed or errored.
+    }
+    cleanup();
+  };
+
+  if (signal.aborted) {
+    abortBody();
+  } else {
+    signal.addEventListener('abort', abortBody, { once: true });
+  }
+
   const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      streamController = controller;
+      if (signal.aborted) {
+        try {
+          controller.error(abortError());
+        } catch {
+          // Already aborted before start completed.
+        }
+      }
+    },
     async pull(controller) {
       try {
         const { done, value } = await reader.read();

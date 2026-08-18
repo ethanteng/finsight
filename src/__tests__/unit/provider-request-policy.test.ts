@@ -40,13 +40,9 @@ describe('provider request policy', () => {
   });
 
   it('keeps the abort timeout active while the response body is consumed', async () => {
-    let releaseChunk: ((chunk: Uint8Array) => void) | undefined;
     const body = new ReadableStream<Uint8Array>({
-      start(controller) {
-        releaseChunk = (chunk) => {
-          controller.enqueue(chunk);
-          controller.close();
-        };
+      start() {
+        // Intentionally never enqueue — simulate a stalled provider body.
       },
     });
     const fetchImplementation = jest.fn().mockResolvedValue(
@@ -59,10 +55,7 @@ describe('provider request policy', () => {
       maxAttempts: 1,
     });
 
-    await new Promise(resolve => setTimeout(resolve, 60));
-    releaseChunk?.(new TextEncoder().encode('late'));
-
-    await expect(response.text()).rejects.toThrow();
+    await expect(response.text()).rejects.toMatchObject({ name: 'AbortError' });
     expect(fetchImplementation).toHaveBeenCalledTimes(1);
   });
 });
