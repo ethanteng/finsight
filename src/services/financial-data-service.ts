@@ -1756,8 +1756,11 @@ export class FinancialDataService {
           
           if (activitiesResult.success && activitiesResult.data?.activities) {
             for (const activityError of activitiesResult.data.errors || []) {
+              const rawErrorAccountId = String(activityError.accountId || 'unknown');
               errors.push({
-                accountId: activityError.accountId,
+                accountId: rawErrorAccountId.startsWith('snaptrade-')
+                  ? rawErrorAccountId
+                  : `snaptrade-${rawErrorAccountId}`,
                 error: `SnapTrade activities incomplete: ${activityError.error}`,
                 timestamp: new Date(),
               });
