@@ -231,7 +231,9 @@ export class ProfileManager {
 
     // Writing the first structured document also removes stale financial prose
     // left by the former profile builder while retaining the independent home record.
-    const home = this.storedHomeFromExtracted(currentStoredText);
+    // Re-read the home record: extraction makes its own model call, and a RentCast
+    // refresh landing during that window would otherwise be written back over.
+    const home = this.storedHomeFromExtracted(await this.getOriginalProfile(userId));
     await this.updateProfile(userId, serializePersonalContextDocument(updatedFacts, home));
     console.log(`Personal context updated for user: ${userId}`);
   }

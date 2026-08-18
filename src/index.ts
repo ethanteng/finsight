@@ -1367,6 +1367,12 @@ app.put('/profile', requireAuth, async (req: Request, res: Response) => {
 
     res.json({ success: true, memory: savedMemory });
   } catch (error) {
+    // A rejected field or value is user input, not a server fault: answer 400
+    // and keep it out of Sentry.
+    if (error instanceof Error && error.message.startsWith('Invalid personal context')) {
+      return res.status(400).json({ error: error.message });
+    }
+
     console.error('Failed to update personal context:', error);
 
     // Capture error in Sentry
@@ -1376,9 +1382,6 @@ app.put('/profile', requireAuth, async (req: Request, res: Response) => {
       Sentry.captureMessage('Unknown error in profile update endpoint', 'error');
     }
 
-    if (error instanceof Error && error.message.startsWith('Invalid personal context')) {
-      return res.status(400).json({ error: error.message });
-    }
     res.status(500).json({ error: 'Failed to update personal context' });
   }
 });

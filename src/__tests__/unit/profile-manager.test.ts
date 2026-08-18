@@ -67,6 +67,31 @@ describe('ProfileManager personal context', () => {
     });
   });
 
+  it('keeps a home refresh that lands while extraction is running', async () => {
+    const before = serializePersonalContextDocument({}, {
+      address: '123 Main St', propertyId: 'property-123', rentCastValue: 500000, manualValue: null,
+      valueLow: 450000, valueHigh: 550000, lastUpdated: '2026-08-01T00:00:00.000Z',
+    });
+    const afterRefresh = serializePersonalContextDocument({}, {
+      address: '123 Main St', propertyId: 'property-123', rentCastValue: 525000, manualValue: null,
+      valueLow: 470000, valueHigh: 580000, lastUpdated: '2026-08-18T00:00:00.000Z',
+    });
+    const read = jest.spyOn(manager, 'getOriginalProfile')
+      .mockResolvedValueOnce(before)
+      .mockResolvedValueOnce(afterRefresh);
+    const update = jest.spyOn(manager, 'updateProfile').mockResolvedValue();
+    extractAndMerge.mockImplementation(async () => replacePersonalContextManually({ age: 45 }));
+
+    await manager.updateProfileFromConversation('user-1', {
+      id: 'conversation-1', question: 'I am 45.', createdAt: new Date(),
+    });
+
+    expect(read).toHaveBeenCalledTimes(2);
+    const stored = parseStoredPersonalContextDocument(update.mock.calls[0][1]);
+    expect(stored?.home?.rentCastValue).toBe(525000);
+    expect(personalContextValues(stored?.facts || {})).toEqual({ age: 45 });
+  });
+
   it('skips a write when a structured document receives no new facts', async () => {
     const facts = replacePersonalContextManually({ age: 45 }, '2026-08-18T00:00:00.000Z');
     const stored = serializePersonalContextDocument(facts, null);

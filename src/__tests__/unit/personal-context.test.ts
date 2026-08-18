@@ -74,6 +74,93 @@ describe('personal context', () => {
     expect(updated).toEqual({});
   });
 
+  it('rejects a value that the evidence quote does not state', () => {
+    const existing = replacePersonalContextManually({ city: 'Austin' }, observedAt);
+    const updated = applyPersonalContextOperations(existing, [
+      {
+        field: 'city', action: 'set', stringValue: 'Boston', numberValue: null,
+        numberListValue: [], evidence: 'I live in Austin',
+      },
+    ], {
+      question: 'I live in Austin, so what should I budget for property tax?',
+      conversationId: 'conversation-1',
+      observedAt,
+    });
+    expect(personalContextValues(updated)).toEqual({ city: 'Austin' });
+  });
+
+  it('accepts a location the evidence quote does state', () => {
+    const updated = applyPersonalContextOperations({}, [
+      {
+        field: 'city', action: 'set', stringValue: 'Austin', numberValue: null,
+        numberListValue: [], evidence: 'I live in Austin',
+      },
+    ], {
+      question: 'I live in Austin, so what should I budget for property tax?',
+      conversationId: 'conversation-1',
+      observedAt,
+    });
+    expect(personalContextValues(updated)).toEqual({ city: 'Austin' });
+  });
+
+  it('rejects an occupation the evidence quote does not state', () => {
+    const updated = applyPersonalContextOperations({}, [
+      {
+        field: 'occupation', action: 'set', stringValue: 'Investment banker', numberValue: null,
+        numberListValue: [], evidence: 'I am a nurse',
+      },
+    ], {
+      question: 'I am a nurse. How much should I save?',
+      conversationId: 'conversation-1',
+      observedAt,
+    });
+    expect(updated).toEqual({});
+  });
+
+  it('binds dependent counts and ages to the numbers in the quote', () => {
+    const spelled = applyPersonalContextOperations({}, [
+      {
+        field: 'dependentCount', action: 'set', stringValue: null, numberValue: 2,
+        numberListValue: [], evidence: 'I have two kids',
+      },
+      {
+        field: 'dependentAges', action: 'set', stringValue: null, numberValue: null,
+        numberListValue: [8, 11], evidence: 'my kids are 8 and 11',
+      },
+    ], {
+      question: 'I have two kids, my kids are 8 and 11. How much should I put in a 529?',
+      conversationId: 'conversation-1',
+      observedAt,
+    });
+    expect(personalContextValues(spelled)).toEqual({ dependentCount: 2, dependentAges: [8, 11] });
+
+    const mismatched = applyPersonalContextOperations({}, [
+      {
+        field: 'dependentAges', action: 'set', stringValue: null, numberValue: null,
+        numberListValue: [3], evidence: 'my kids are 8 and 11',
+      },
+    ], {
+      question: 'my kids are 8 and 11',
+      conversationId: 'conversation-1',
+      observedAt,
+    });
+    expect(mismatched).toEqual({});
+  });
+
+  it('reads curly apostrophes the same way as straight ones', () => {
+    const updated = applyPersonalContextOperations({}, [
+      {
+        field: 'retirementStatus', action: 'set', stringValue: 'retired', numberValue: null,
+        numberListValue: [], evidence: 'I\u2019m retired',
+      },
+    ], {
+      question: 'I\u2019m retired now. Should I move to bonds?',
+      conversationId: 'conversation-1',
+      observedAt,
+    });
+    expect(personalContextValues(updated)).toEqual({ retirementStatus: 'retired' });
+  });
+
   it('does not persist forbidden financial details hidden inside an allowed string field', () => {
     const updated = applyPersonalContextOperations({}, [
       {
