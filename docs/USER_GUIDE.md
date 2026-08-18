@@ -605,7 +605,7 @@ Ask Linc offers three subscription tiers with differentiated access to features:
 
 **Limitations:**
 - ❌ No economic indicators
-- ❌ No live market data
+- ❌ No premium Polygon market and yield-curve context
 - ❌ No RAG system access (real-time financial search)
 - ❌ Limited market context in AI responses
 
@@ -628,8 +628,7 @@ Ask Linc offers three subscription tiers with differentiated access to features:
 - ✅ Inflation impact analysis
 
 **Limitations:**
-- ❌ No live market data (CD rates, Treasury yields)
-- ❌ No real-time stock market data
+- ❌ No premium Polygon market and yield-curve context
 - ❌ Limited market intelligence
 
 **Best For:**

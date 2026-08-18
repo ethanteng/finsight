@@ -220,8 +220,7 @@ export class DataSourceManager {
       case UserTier.STARTER:
         limitations.push('No economic context for financial decisions');
         limitations.push('No real-time search for current financial information');
-        limitations.push('No live market data for investment insights');
-        limitations.push('No external market data feeds');
+        limitations.push('No premium Polygon market and yield-curve context');
         break;
       case UserTier.STANDARD:
         limitations.push('No premium Polygon market and yield-curve context');
