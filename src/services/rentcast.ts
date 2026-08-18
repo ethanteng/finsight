@@ -29,6 +29,21 @@ export interface RentCastHomeValue {
   subjectProperty: RentCastSubjectProperty;
 }
 
+/**
+ * RentCast answered, but the answer cannot be used for this address: it has no
+ * listing, or the AVM payload is not a usable valuation. This is a property of
+ * one address and will keep happening for it, so callers must not treat it as
+ * an outage — a scheduled job that fails on this would stay red forever.
+ * Anything else (auth, quota, 5xx, network) is a plain Error: the integration
+ * itself is unavailable and someone needs to act.
+ */
+export class RentCastValuationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'RentCastValuationError';
+  }
+}
+
 const REQUEST_TIMEOUT_MS = 10_000;
 const MAX_ATTEMPTS = 3;
 const RETRY_BASE_DELAY_MS = 250;
@@ -87,23 +102,23 @@ function normalizeSubjectProperty(value: unknown): RentCastSubjectProperty | und
 
 function normalizeHomeValue(value: unknown): RentCastHomeValue {
   if (!value || typeof value !== 'object') {
-    throw new Error('RentCast returned an invalid home value response');
+    throw new RentCastValuationError('RentCast returned an invalid home value response');
   }
 
   const raw = value as Record<string, unknown>;
   if (!finitePositive(raw.price)) {
-    throw new Error('RentCast returned an invalid estimated price');
+    throw new RentCastValuationError('RentCast returned an invalid estimated price');
   }
   if (!finitePositive(raw.priceRangeLow) || !finitePositive(raw.priceRangeHigh)) {
-    throw new Error('RentCast returned an invalid estimated price range');
+    throw new RentCastValuationError('RentCast returned an invalid estimated price range');
   }
   if (raw.priceRangeLow > raw.price || raw.price > raw.priceRangeHigh) {
-    throw new Error('RentCast returned an inconsistent estimated price range');
+    throw new RentCastValuationError('RentCast returned an inconsistent estimated price range');
   }
 
   const subjectProperty = normalizeSubjectProperty(raw.subjectProperty);
   if (!subjectProperty) {
-    throw new Error('RentCast returned a home value without subject property identity');
+    throw new RentCastValuationError('RentCast returned a home value without subject property identity');
   }
 
   return {
@@ -156,7 +171,7 @@ export class RentCastService {
   async getHomeValue(address: string): Promise<RentCastHomeValue | null> {
     const cleanAddress = address.trim();
     if (!this.validateAddress(cleanAddress)) {
-      throw new Error('A valid property address is required');
+      throw new RentCastValuationError('A valid property address is required');
     }
 
     const url = new URL(`${this.baseUrl}/avm/value`);

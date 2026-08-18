@@ -1514,8 +1514,19 @@ app.post('/profile/home', requireAuth, async (req: Request, res: Response) => {
     const { ProfileManager } = await import('./profile/manager');
     const profileManager = new ProfileManager();
 
-    // Fetch home value from RentCast and update profile
-    const homeValue = await profileManager.updateHomeValue(req.user!.id, address);
+    // Fetch home value from RentCast and update profile. A null return means
+    // RentCast has nothing usable for this address; a throw means the lookup
+    // could not be attempted, which is not the user's address to fix.
+    let homeValue;
+    try {
+      homeValue = await profileManager.updateHomeValue(req.user!.id, address);
+    } catch (error) {
+      console.error('Home value lookup unavailable:', error);
+      Sentry.captureException(error);
+      return res.status(503).json({
+        error: 'Home valuations are temporarily unavailable. Please try again later.'
+      });
+    }
 
     if (!homeValue) {
       return res.status(404).json({
@@ -1588,11 +1599,20 @@ app.post('/profile/home/refresh', requireAuth, async (req: Request, res: Respons
     }
 
     // Refresh home value from RentCast
-    const homeValue = await profileManager.updateHomeValue(req.user!.id, currentHomeData.address);
+    let homeValue;
+    try {
+      homeValue = await profileManager.updateHomeValue(req.user!.id, currentHomeData.address);
+    } catch (error) {
+      console.error('Home value refresh unavailable:', error);
+      Sentry.captureException(error);
+      return res.status(503).json({
+        error: 'Home valuations are temporarily unavailable. Please try again later.'
+      });
+    }
 
     if (!homeValue) {
-      return res.status(500).json({
-        error: 'Unable to refresh home value. The RentCast API may be temporarily unavailable.'
+      return res.status(422).json({
+        error: 'RentCast has no current valuation for the address on file. The previous value is unchanged.'
       });
     }
 

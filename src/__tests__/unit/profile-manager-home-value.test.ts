@@ -7,6 +7,9 @@ jest.mock('../../profile/personal-context-extractor', () => ({
 }));
 
 jest.mock('../../services/rentcast', () => ({
+  // The real error class: ProfileManager classifies on it to decide whether a
+  // failure is this address's problem or the integration's.
+  ...(jest.requireActual('../../services/rentcast') as object),
   RentCastService: jest.fn(() => ({
     validateAddress: () => true,
     getHomeValue: mockGetHomeValue,

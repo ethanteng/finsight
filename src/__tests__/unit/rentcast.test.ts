@@ -1,5 +1,5 @@
 import { afterAll, beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { RentCastService } from '../../services/rentcast';
+import { RentCastService, RentCastValuationError } from '../../services/rentcast';
 
 const originalFetch = global.fetch;
 const mockFetch = jest.fn<typeof fetch>();
@@ -114,6 +114,27 @@ describe('RentCastService', () => {
 
     await expect(new RentCastService().getHomeValue('1 Main St'))
       .rejects.toThrow('without subject property identity');
+  });
+
+  it('marks an unusable valuation as this address\u2019s problem, not an outage', async () => {
+    // A scheduled job must be able to tell "this house has no estimate" from
+    // "RentCast is down"; only the latter should turn the job red.
+    mockFetch.mockResolvedValue(response({
+      ...validValue,
+      priceRangeLow: 800_000,
+      priceRangeHigh: 900_000,
+    }));
+
+    await expect(new RentCastService().getHomeValue('1 Main St'))
+      .rejects.toBeInstanceOf(RentCastValuationError);
+  });
+
+  it('leaves an unreachable provider as a plain error', async () => {
+    mockFetch.mockResolvedValue(response({ message: 'forbidden' }, 403));
+
+    const error = await new RentCastService().getHomeValue('1 Main St').catch(e => e);
+    expect(error).toBeInstanceOf(Error);
+    expect(error).not.toBeInstanceOf(RentCastValuationError);
   });
 
   it('rejects obviously incomplete input locally without imposing formatting rules', async () => {

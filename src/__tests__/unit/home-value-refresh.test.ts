@@ -93,7 +93,13 @@ describe('HomeValueRefreshService.refreshUserHomeValue', () => {
   it('reports a provider failure instead of throwing', async () => {
     mockUpdateHomeValue.mockRejectedValue(new Error('RentCast down'));
 
-    await expect(service.refreshUserHomeValue('user-1')).resolves.toBe('failed');
+    await expect(service.refreshUserHomeValue('user-1')).resolves.toBe('failed-provider');
+  });
+
+  it('separates an address RentCast cannot value from the provider being down', async () => {
+    mockUpdateHomeValue.mockResolvedValue(null);
+
+    await expect(service.refreshUserHomeValue('user-1')).resolves.toBe('failed-address');
   });
 
   it('skips a user with no home address', async () => {
@@ -160,5 +166,24 @@ describe('HomeValueRefreshService.refreshAllHomeValues', () => {
 
     expect(results.refreshedUserIds).toEqual([]);
     expect(results.failed).toBe(1);
+  });
+
+  it('counts an unvaluable address apart from an unreachable provider', async () => {
+    // The scheduled job fails on the second and only reports the first: an
+    // address RentCast cannot value fails the same way on every run.
+    mockProfileFindMany.mockResolvedValue([{ userId: 'unvaluable-1' }, { userId: 'outage-1' }]);
+    mockUpdateHomeValue
+      .mockResolvedValueOnce(null)
+      .mockRejectedValueOnce(new Error('RentCast API error (503): unavailable'));
+
+    const results = await service.refreshAllHomeValues();
+
+    expect(results.failed).toBe(2);
+    expect(results.unvaluableAddresses).toBe(1);
+    expect(results.providerFailures).toBe(1);
+    expect(results.errors).toEqual([
+      { userId: 'unvaluable-1', error: expect.any(String), kind: 'address' },
+      { userId: 'outage-1', error: expect.any(String), kind: 'provider' },
+    ]);
   });
 });
