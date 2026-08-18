@@ -1,0 +1,252 @@
+import Link from "next/link";
+import { MarketingGetStartedButton } from "./MarketingGetStartedButton";
+import { PageCta, SiteFooter, SiteHeader } from "./SiteShell";
+
+const connectedPicture = [
+  {
+    number: "01",
+    label: "BANKING + BORROWING",
+    title: "Cash flow, cards, and loans",
+    source: "Connected with Plaid · manual accounts supported",
+    description: "Bring checking, savings, credit cards, loans, and other balances into one view of the money moving through your life.",
+    examples: ["Checking + savings", "Credit cards", "Loans + debt", "Manual balances"],
+    understands: [
+      "Balances and available cash",
+      "Transactions, merchants, and spending categories",
+      "Month-by-month income, expenses, and cash flow",
+    ],
+    question: "Where is our spending drifting—and what can we safely commit to next?",
+  },
+  {
+    number: "02",
+    label: "INVESTMENTS",
+    title: "Your portfolio, looked through",
+    source: "Connected with SnapTrade · enriched by FMP + Tiingo",
+    description: "See brokerage accounts, investment positions, and cash alongside the details that make those holdings meaningful to a plan.",
+    examples: ["Brokerage accounts", "Retirement accounts", "Positions + cash", "Funds + ETFs"],
+    understands: [
+      "Allocation and concentration across holdings",
+      "Fund fees plus sector and country exposure",
+      "Current quotes and recent holding performance",
+    ],
+    question: "Am I taking more risk—or paying more in fund fees—than my plan needs?",
+  },
+  {
+    number: "03",
+    label: "PROPERTY + THE REST",
+    title: "The parts that do not live at a bank",
+    source: "Property estimates from RentCast · add other assets manually",
+    description: "Round out net worth with a home value and the accounts or assets that cannot be linked automatically.",
+    examples: ["Primary home", "Other property", "Cash on hand", "Other assets"],
+    understands: [
+      "A dated home-value estimate and 85% range",
+      "A property match informed by comparable homes",
+      "How manually added balances affect net worth and goals",
+    ],
+    question: "What does this home decision do to our cash, net worth, and retirement plan?",
+  },
+] as const;
+
+const outsideContext = [
+  {
+    number: "01",
+    title: "Rates and borrowing costs",
+    source: "Federal Reserve data · Massive",
+    description: "Mortgage, credit-card, CD, Treasury, and policy-rate benchmarks help Linc compare your choices with the wider rate environment.",
+    matters: "Useful for refinancing, debt payoff, saving, and home-buying questions.",
+  },
+  {
+    number: "02",
+    title: "Markets and the investments you own",
+    source: "Tiingo · FMP · market news",
+    description: "Quotes, adjusted price history, fund details, and holding-linked news add current context without replacing the balances reported by your accounts.",
+    matters: "Useful for performance, concentration, fees, and portfolio-risk questions.",
+  },
+  {
+    number: "03",
+    title: "Long-run planning history",
+    source: "Kenneth French · Robert Shiller",
+    description: "Source-backed histories for U.S. and international stocks, government bonds, Treasury bills, and inflation support retirement stress tests.",
+    matters: "Useful for testing a plan across many real market environments—not one invented forecast.",
+  },
+  {
+    number: "04",
+    title: "Current public evidence",
+    source: "Focused web sources · dated financial news",
+    description: "When a question depends on a changing rule, limit, rate, or current event, Linc can bring in focused public information with its source date.",
+    matters: "Useful when the right answer depends on what is true now.",
+  },
+] as const;
+
+const decisionExamples = [
+  {
+    label: "HOME",
+    question: "Can we afford a $700K home without pausing retirement savings?",
+    context: ["Cash", "Spending", "Mortgage rates", "Property value", "Retirement"],
+  },
+  {
+    label: "CASH FLOW",
+    question: "Why were our expenses higher last month—and is it becoming a pattern?",
+    context: ["Transactions", "Merchants", "Income", "Monthly totals", "Cash reserve"],
+  },
+  {
+    label: "PORTFOLIO",
+    question: "How concentrated are we after looking through the funds we own?",
+    context: ["Positions", "Fund exposure", "Allocation", "Fees", "Current prices"],
+  },
+  {
+    label: "RETIREMENT",
+    question: "What would let us retire two years sooner without making the plan fragile?",
+    context: ["Savings", "Spending", "Asset mix", "Inflation", "Market history"],
+  },
+] as const;
+
+const answerSteps = [
+  ["01", "Start with your question", "Ask in plain language. The decision—not the data source—sets the direction."],
+  ["02", "Use your relevant picture", "Linc starts with connected balances, cash flow, investments, property, goals, and other details that can change the answer."],
+  ["03", "Add outside context when it matters", "Rates, markets, current evidence, or long-run history join the analysis only when they are useful for the decision."],
+  ["04", "Show the conclusion and the work", "The recommendation keeps the important inputs, assumptions, calculations, source dates, and uncertainty visible."],
+] as const;
+
+function EcosystemMap() {
+  return (
+    <div className="integration-map" aria-label="Ask Linc combines your financial picture with relevant outside context">
+      <div className="integration-map-top"><span>YOUR FINANCIAL ECOSYSTEM</span><small>CONNECTED AROUND THE QUESTION</small></div>
+      <div className="integration-map-stage">
+        <span className="integration-map-node map-cash"><small>YOUR MONEY</small><b>Cash flow</b></span>
+        <span className="integration-map-node map-investments"><small>YOUR MONEY</small><b>Investments</b></span>
+        <span className="integration-map-node map-property"><small>YOUR LIFE</small><b>Property</b></span>
+        <span className="integration-map-core"><i className="brand-mark" aria-hidden="true">L</i><b>Your question</b><small>Only the useful context</small></span>
+        <span className="integration-map-node map-rates"><small>OUTSIDE CONTEXT</small><b>Rates + economy</b></span>
+        <span className="integration-map-node map-current"><small>OUTSIDE CONTEXT</small><b>What is current</b></span>
+        <span className="integration-map-node map-history"><small>PLANNING CONTEXT</small><b>Market history</b></span>
+      </div>
+      <div className="integration-map-output"><small>THE RESULT</small><strong>One answer that understands how the pieces affect each other.</strong></div>
+    </div>
+  );
+}
+
+export default function IntegrationsPage() {
+  return (
+    <main className="marketing-site subpage integrations-page">
+      <SiteHeader />
+
+      <section className="integration-hero shell">
+        <div>
+          <p className="section-kicker">THE DATA BEHIND THE ANSWER</p>
+          <h1>Your finances live in many places. <em>Your answer shouldn&apos;t.</em></h1>
+          <p className="subhero-copy">Connect the accounts you use, add what cannot be linked, and let Ask Linc bring in the rates, markets, property data, and planning history that matter for the question in front of you.</p>
+          <div className="hero-actions">
+            <MarketingGetStartedButton className="button button-primary" trackingLocation="integrations_hero" />
+            <Link className="text-link" href="/features">See how Linc reaches an answer</Link>
+          </div>
+        </div>
+        <EcosystemMap />
+      </section>
+
+      <section className="integration-principles" aria-label="How Ask Linc handles connected financial data">
+        <div className="shell">
+          <span><strong>READ-ONLY CONNECTIONS</strong><small>Linc cannot move your money</small></span>
+          <span><strong>YOUR CHOICE</strong><small>Connect, add, or disconnect data</small></span>
+          <span><strong>RELEVANT CONTEXT</strong><small>Only what the question needs</small></span>
+          <span><strong>SOURCE DATES</strong><small>Freshness stays visible</small></span>
+        </div>
+      </section>
+
+      <section className="integration-owned-section shell">
+        <div className="integration-section-heading">
+          <div>
+            <p className="section-kicker">START WITH YOUR FINANCIAL PICTURE</p>
+            <h2>Connect the accounts. Add the rest.</h2>
+          </div>
+          <p>Linc can work across the everyday, long-term, and harder-to-connect parts of your finances—so a decision does not get reduced to one balance or one account.</p>
+        </div>
+
+        <div className="connected-source-grid" aria-label="Financial accounts and information you can use with Ask Linc">
+          {connectedPicture.map((item) => (
+            <article className="connected-source-card" key={item.number}>
+              <div className="connected-source-top"><span>{item.number} / {item.label}</span><small>{item.source}</small></div>
+              <h3>{item.title}</h3>
+              <p>{item.description}</p>
+              <div className="connection-tags" aria-label={`Examples for ${item.title}`}>{item.examples.map((example) => <span key={example}>{example}</span>)}</div>
+              <div className="connected-understands">
+                <small>WHAT LINC CAN UNDERSTAND</small>
+                <ul>{item.understands.map((detail) => <li key={detail}>{detail}</li>)}</ul>
+              </div>
+              <blockquote>“{item.question}”</blockquote>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section className="integration-context-section dark-band">
+        <div className="shell">
+          <div className="integration-section-heading on-dark">
+            <div>
+              <p className="section-kicker light">THEN ADD THE WORLD AROUND IT</p>
+              <h2>Outside context, when it can change the decision.</h2>
+            </div>
+            <p>Your accounts explain where you are. Rates, markets, current evidence, and long-run history help explain the environment you are making the decision in.</p>
+          </div>
+
+          <div className="outside-context-grid" aria-label="Financial and economic information Ask Linc can use">
+            {outsideContext.map((item) => (
+              <article key={item.number}>
+                <div><span>{item.number}</span><small>{item.source}</small></div>
+                <h3>{item.title}</h3>
+                <p>{item.description}</p>
+                <strong>{item.matters}</strong>
+              </article>
+            ))}
+          </div>
+
+          <div className="integration-context-note">
+            <span className="brand-mark" aria-hidden="true">L</span>
+            <p><small>CONTEXT WITH A PURPOSE</small><strong>Linc does not pile every available data point into every answer. It selects the facts that can materially change the recommendation.</strong></p>
+          </div>
+        </div>
+      </section>
+
+      <section className="integration-decisions-section shell">
+        <div className="integration-section-heading">
+          <div>
+            <p className="section-kicker">WHY THE BREADTH MATTERS</p>
+            <h2>Real questions cross account boundaries.</h2>
+          </div>
+          <p>A financial decision rarely belongs to one category. The useful answer comes from seeing the tradeoffs between cash, debt, investments, property, goals, and outside conditions.</p>
+        </div>
+
+        <div className="integration-question-grid" aria-label="Questions Ask Linc can answer with connected context">
+          {decisionExamples.map((item, index) => (
+            <article key={item.label}>
+              <span>{String(index + 1).padStart(2, "0")} / {item.label}</span>
+              <h3>“{item.question}”</h3>
+              <div><small>LINC CAN CONNECT</small>{item.context.map((fact) => <b key={fact}>{fact}</b>)}</div>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section className="integration-answer-section">
+        <div className="shell">
+          <div className="integration-answer-heading">
+            <p className="section-kicker">FROM QUESTION TO ANSWER</p>
+            <h2>The ecosystem stays behind the scenes. <em>The reasoning stays visible.</em></h2>
+          </div>
+          <ol className="integration-answer-flow" aria-label="How Ask Linc turns connected data into an answer">
+            {answerSteps.map(([number, title, description]) => (
+              <li key={number}><span>{number}</span><strong>{title}</strong><p>{description}</p></li>
+            ))}
+          </ol>
+          <div className="integration-privacy-bridge">
+            <div><small>YOUR DATA, YOUR CONTROL</small><strong>Account connections are read-only. You decide what to connect, and your financial data is never used to train AI models.</strong></div>
+            <Link href="/how-we-protect-your-data">See how your data is protected <span>→</span></Link>
+          </div>
+        </div>
+      </section>
+
+      <PageCta title="Bring the whole picture to your next financial question." />
+      <SiteFooter />
+    </main>
+  );
+}

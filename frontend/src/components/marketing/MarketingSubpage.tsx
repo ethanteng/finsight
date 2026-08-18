@@ -244,7 +244,7 @@ function FeaturesPage() {
               <p className="section-kicker light">BREADTH ACROSS THE PLAN · DEPTH INSIDE THE DATA</p>
               <h2>A financial ecosystem built for the question.</h2>
             </div>
-            <p>Coverage across cash, debt, investments, property, the economy, current evidence, and long-run history keeps the whole plan connected. Detail inside each integration lets Linc answer specific questions instead of stopping at top-line totals. Coverage varies by plan and by what the question requires.</p>
+            <p>Coverage across cash, debt, investments, property, the economy, current evidence, and long-run history keeps the whole plan connected. Detail inside each integration lets Linc answer specific questions instead of stopping at top-line totals. What Linc uses depends on what you connect and what the question requires.</p>
           </div>
 
           <div className="coverage-grid" aria-label="Ask Linc data-source coverage">
@@ -265,7 +265,10 @@ function FeaturesPage() {
               <p className="section-kicker light">FROM SOURCE TO ANSWER</p>
               <h3>More context when it helps. Less when it doesn&apos;t.</h3>
               <p>Ask Linc keeps personal facts, dated external context, and calculated results distinct. That makes the final recommendation easier to inspect—and harder for an AI model to blur together.</p>
-              <Link className="light-link" href="/use-cases">See the decisions Linc can help with →</Link>
+              <div className="fact-routing-links">
+                <Link className="light-link" href="/integrations">Explore everything Linc can connect and use →</Link>
+                <Link className="light-link" href="/use-cases">See the decisions Linc can help with →</Link>
+              </div>
             </div>
             <div>
               <ol className="fact-routing-steps" aria-label="How data reaches an Ask Linc answer">

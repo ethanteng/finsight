@@ -28,6 +28,7 @@ const STATIC_ROUTES: StaticRoute[] = [
 
   // Core marketing
   { path: '/features', changeFrequency: 'monthly', priority: 0.9 },
+  { path: '/integrations', changeFrequency: 'monthly', priority: 0.9 },
   { path: '/pricing', changeFrequency: 'monthly', priority: 0.9 },
   { path: '/about', changeFrequency: 'monthly', priority: 0.7 },
   { path: '/faq', changeFrequency: 'monthly', priority: 0.7 },

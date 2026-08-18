@@ -267,7 +267,7 @@ export default function Home() {
 
           <div className="ecosystem-outcome">
             <div><span>ONE QUESTION, THE RELEVANT FACTS</span><strong>Linc does not throw the whole data stack at every answer. It selects the useful facts, runs repeatable calculations, and keeps assumptions, sources, and dates visible.</strong></div>
-            <Link href="/features#data-ecosystem">Explore the data ecosystem <span>→</span></Link>
+            <Link href="/integrations">Explore the data ecosystem <span>→</span></Link>
           </div>
         </div>
       </section>
