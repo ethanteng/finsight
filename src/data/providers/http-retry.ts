@@ -38,6 +38,62 @@ function retryDelayMs(response: Response, attempt: number): number {
 }
 
 /**
+ * Keep the per-attempt abort timer alive until the caller finishes consuming
+ * (or cancels) the response body. Clearing the timer when headers arrive would
+ * allow a stalled body read to hang indefinitely.
+ */
+function bindTimeoutToResponse(
+  response: Response,
+  timeout: ReturnType<typeof setTimeout>,
+  signal: AbortSignal,
+): Response {
+  let cleanedUp = false;
+  const cleanup = () => {
+    if (cleanedUp) return;
+    cleanedUp = true;
+    clearTimeout(timeout);
+  };
+
+  signal.addEventListener('abort', () => {
+    void response.body?.cancel().catch(() => undefined);
+    cleanup();
+  }, { once: true });
+
+  if (!response.body) {
+    cleanup();
+    return response;
+  }
+
+  const reader = response.body.getReader();
+  const stream = new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      try {
+        const { done, value } = await reader.read();
+        if (done) {
+          cleanup();
+          controller.close();
+          return;
+        }
+        controller.enqueue(value);
+      } catch (error) {
+        cleanup();
+        controller.error(error);
+      }
+    },
+    cancel(reason) {
+      cleanup();
+      return reader.cancel(reason);
+    },
+  });
+
+  return new Response(stream, {
+    status: response.status,
+    statusText: response.statusText,
+    headers: response.headers,
+  });
+}
+
+/**
  * Fetch with an explicit per-attempt timeout and one bounded retry for transient
  * transport, rate-limit, and server failures. The final HTTP response is
  * returned to the provider so it can preserve its endpoint-specific error.
@@ -62,19 +118,24 @@ export async function fetchWithBoundedRetry(
     try {
       response = await fetchImplementation(input, { ...init, signal: controller.signal });
     } catch (error) {
+      clearTimeout(timeout);
       if (attempt === maxAttempts) throw error;
       const delay = DEFAULT_RETRY_DELAY_MS * attempt;
       if (delay > maxRetryDelayMs) throw error;
       await sleep(delay);
       continue;
-    } finally {
-      clearTimeout(timeout);
     }
 
-    if (!retryableStatus(response.status) || attempt === maxAttempts) return response;
+    if (!retryableStatus(response.status) || attempt === maxAttempts) {
+      return bindTimeoutToResponse(response, timeout, controller.signal);
+    }
 
     const delay = retryDelayMs(response, attempt);
-    if (delay > maxRetryDelayMs) return response;
+    if (delay > maxRetryDelayMs) {
+      return bindTimeoutToResponse(response, timeout, controller.signal);
+    }
+
+    clearTimeout(timeout);
     await response.body?.cancel().catch(() => undefined);
     await sleep(delay);
   }

@@ -38,4 +38,31 @@ describe('provider request policy', () => {
       .rejects.toEqual({ status: 400 });
     expect(operation).toHaveBeenCalledTimes(1);
   });
+
+  it('keeps the abort timeout active while the response body is consumed', async () => {
+    let releaseChunk: ((chunk: Uint8Array) => void) | undefined;
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        releaseChunk = (chunk) => {
+          controller.enqueue(chunk);
+          controller.close();
+        };
+      },
+    });
+    const fetchImplementation = jest.fn().mockResolvedValue(
+      new Response(body, { status: 200, headers: { 'content-type': 'text/plain' } }),
+    );
+
+    const response = await fetchWithBoundedRetry('https://example.com/body', {}, {
+      fetchImplementation,
+      requestTimeoutMs: 40,
+      maxAttempts: 1,
+    });
+
+    await new Promise(resolve => setTimeout(resolve, 60));
+    releaseChunk?.(new TextEncoder().encode('late'));
+
+    await expect(response.text()).rejects.toThrow();
+    expect(fetchImplementation).toHaveBeenCalledTimes(1);
+  });
 });
