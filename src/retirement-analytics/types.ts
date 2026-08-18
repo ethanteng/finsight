@@ -291,7 +291,7 @@ export interface PriceTimeSeries {
   dates: Date[];
   prices: number[];
   returns: number[]; // monthly returns
-  provider: 'polygon' | 'tiingo' | 'alpha_vantage';
+  provider: 'polygon' | 'tiingo';
 }
 
 export interface SecurityMetadata {

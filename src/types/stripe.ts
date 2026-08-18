@@ -111,7 +111,7 @@ export interface TierAccess {
 export const TIER_ACCESS: TierAccess = {
   starter: ['basic-analysis', 'account-balances'],
   standard: ['basic-analysis', 'account-balances', 'economic-indicators', 'rag-system'],
-  premium: ['basic-analysis', 'account-balances', 'economic-indicators', 'rag-system', 'live-market-data']
+  premium: ['basic-analysis', 'account-balances', 'economic-indicators', 'rag-system', 'advanced-market-context']
 };
 
 // Subscription Plan Configuration
@@ -169,7 +169,7 @@ export function getSubscriptionPlans(): Record<SubscriptionTier, SubscriptionPla
         'Transaction history', 
         'Economic indicators',
         'RAG system access',
-        'Live market data',
+        'Advanced market context',
         'Advanced analytics'
       ],
       stripePriceId: SINGLE_PRICE_ID

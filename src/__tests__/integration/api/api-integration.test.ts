@@ -176,117 +176,12 @@ describe('API Integration Tests', () => {
     });
   });
 
-  describe('Alpha Vantage API Integration', () => {
-    itNetwork('should test Alpha Vantage API key configuration', async () => {
-      const response = await request(app)
-        .get('/test/alpha-vantage-api-key');
-
-      expect(response.status).toBe(200);
-      expect(response.body).toHaveProperty('alphaVantageApiKey');
-      expect(response.body).toHaveProperty('alphaVantageApiKeyLength');
-      expect(response.body).toHaveProperty('isTestKey');
-
-      // Log the API key status for debugging
-      // console.log('Alpha Vantage API Key Status:', {
-      //   key: response.body.alphaVantageApiKey,
-      //   length: response.body.alphaVantageApiKeyLength,
-      //   isTestKey: response.body.isTestKey
-      // });
-    });
-
-    itNetwork('should test Alpha Vantage live market data for Premium tier', async () => {
-      const response = await request(app)
-        .get('/test/market-data/premium');
-
-      expect(response.status).toBe(200);
-      expect(response.body).toHaveProperty('tier', 'premium');
-      expect(response.body).toHaveProperty('marketContext');
-
-      const { marketContext } = response.body;
-
-      // Premium should have both economic indicators and live market data
-      expect(marketContext.economicIndicators).toBeDefined();
-      expect(marketContext.liveMarketData).toBeDefined();
-
-      if (marketContext.liveMarketData) {
-        const { cdRates, treasuryYields, mortgageRates } = marketContext.liveMarketData;
-
-        // Verify CD rates structure
-        expect(Array.isArray(cdRates)).toBe(true);
-        expect(cdRates.length).toBeGreaterThan(0);
-
-        cdRates.forEach((cd: any) => {
-          expect(cd).toHaveProperty('term');
-          expect(cd).toHaveProperty('rate');
-          expect(cd).toHaveProperty('institution');
-          expect(cd).toHaveProperty('lastUpdated');
-          expect(typeof cd.rate).toBe('number');
-        });
-
-        // Verify Treasury yields structure
-        expect(Array.isArray(treasuryYields)).toBe(true);
-        expect(treasuryYields.length).toBeGreaterThan(0);
-
-        treasuryYields.forEach((t: any) => {
-          expect(t).toHaveProperty('term');
-          expect(t).toHaveProperty('yield');
-          expect(t).toHaveProperty('lastUpdated');
-          expect(typeof t.yield).toBe('number');
-        });
-
-        // Verify Mortgage rates structure
-        expect(Array.isArray(mortgageRates)).toBe(true);
-        expect(mortgageRates.length).toBeGreaterThan(0);
-
-        mortgageRates.forEach((m: any) => {
-          expect(m).toHaveProperty('type');
-          expect(m).toHaveProperty('rate');
-          expect(m).toHaveProperty('lastUpdated');
-          expect(typeof m.rate).toBe('number');
-        });
-
-        // Log data for debugging
-        // console.log('Premium tier Alpha Vantage data:', {
-        //   cdRatesCount: cdRates.length,
-        //   treasuryYieldsCount: treasuryYields.length,
-        //   mortgageRatesCount: mortgageRates.length,
-        //   sampleCDRate: cdRates[0],
-        //   sampleTreasuryYield: treasuryYields[0],
-        //   sampleMortgageRate: mortgageRates[0]
-        // });
-      }
-    });
-
-    itNetwork('should test Alpha Vantage with real questions for Premium tier', async () => {
-      const questions = [
-        'What are the current CD rates?',
-        'What are the current treasury yields?',
-        'What are the current mortgage rates?'
-      ];
-
-      for (const question of questions) {
-        const response = await request(app)
-          .post('/ask/display-real')
-          .set('Authorization', `Bearer ${authToken}`)
-          .send({
-            question
-          });
-
-        // The AI pipeline is mocked in this config (see integration/setup.ts), so
-        // this endpoint is deterministic — a 500 here is a real regression.
-        expect(response.status).toBe(200);
-        expect(response.body).toHaveProperty('answer');
-        // console.log(`Premium Question: "${question}" - Answer: ${response.body.answer.substring(0, 100)}...`);
-      }
-    });
-  });
-
   describe('Tier Access Control', () => {
     itNetwork('should verify tier access restrictions', async () => {
       const tierTests = [
-        { tier: 'starter', shouldHaveEconomicData: false, shouldHaveLiveData: false },
-        { tier: 'standard', shouldHaveEconomicData: true, shouldHaveLiveData: false },
-        { tier: 'premium', shouldHaveEconomicData: true, shouldHaveLiveData: true }
+        { tier: 'starter', shouldHaveEconomicData: false },
+        { tier: 'standard', shouldHaveEconomicData: true },
+        { tier: 'premium', shouldHaveEconomicData: true }
       ];
 
       for (const test of tierTests) {
@@ -305,17 +200,9 @@ describe('API Integration Tests', () => {
           expect(marketContext.economicIndicators).toBeUndefined();
         }
 
-        if (test.shouldHaveLiveData) {
-          expect(marketContext.liveMarketData).toBeDefined();
-        } else {
-          expect(marketContext.liveMarketData).toBeUndefined();
-        }
-
         // console.log(`${test.tier} tier access:`, {
         //   hasEconomicData: !!marketContext.economicIndicators,
-        //   hasLiveData: !!marketContext.liveMarketData,
-        //   expectedEconomicData: test.shouldHaveEconomicData,
-        //   expectedLiveData: test.shouldHaveLiveData
+        //   expectedEconomicData: test.shouldHaveEconomicData
         // });
       }
     });
@@ -447,7 +334,7 @@ describe('API Integration Tests', () => {
     //       const shouldHaveSourceAttribution = answer.includes('source:') ||
     //                                         answer.includes('sources:') ||
     //                                         answer.includes('federal reserve') ||
-    //                                         answer.includes('alpha vantage');
+    //                                         answer.includes('polygon');
 
     //       expect(shouldHaveSourceAttribution).toBe(true);
 
@@ -570,7 +457,7 @@ describe('API Integration Tests', () => {
       // This test verifies the system is working, not the AI response content
     });
 
-    itNetwork('should include Alpha Vantage source attribution for market data', async () => {
+    itNetwork('should handle Brave-sourced current rate questions', async () => {
       const response = await request(app)
         .post('/ask/display-real')
         .set('Authorization', `Bearer ${authToken}`)
@@ -590,7 +477,7 @@ describe('API Integration Tests', () => {
       expect(typeof answer).toBe('string');
       expect(answer.length).toBeGreaterThan(0);
 
-      // console.log(`Alpha Vantage source attribution test: ${answer.substring(0, 100)}...`);
+      // console.log(`Brave source attribution test: ${answer.substring(0, 100)}...`);
 
       // Note: In a real environment, the AI would include source attribution
       // This test verifies the system is working, not the AI response content
@@ -624,7 +511,7 @@ describe('API Integration Tests', () => {
     //                                          !answer.includes('sources:') &&
     //                                          !answer.includes('federal reserve') &&
     //                                          !answer.includes('fred') &&
-    //                                          !answer.includes('alpha vantage');
+    //                                          !answer.includes('polygon');
 
     //     expect(shouldNotHaveSourceAttribution).toBe(true);
 
@@ -632,7 +519,7 @@ describe('API Integration Tests', () => {
     //   }
     // });
 
-    itNetwork('should include both sources when using FRED and Alpha Vantage data', async () => {
+    itNetwork('should handle questions combining FRED and search context', async () => {
       const response = await request(app)
         .post('/ask/display-real')
         .set('Authorization', `Bearer ${authToken}`)

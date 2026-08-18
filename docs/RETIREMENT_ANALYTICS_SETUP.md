@@ -17,9 +17,8 @@ Add these to your `.env.local` file:
 TIINGO_API_KEY=your_tiingo_api_key_here
 FMP_API_KEY=your_fmp_api_key_here
 
-# Used by other market-context features, not the retirement stress-test engine:
+# Optional: used by other market-context features, not the retirement stress-test engine
 FRED_API_KEY=your_fred_api_key_here
-ALPHA_VANTAGE_API_KEY=062AEP9BK5045MT1
 ```
 
 **Note**: If you don't have API keys yet, the module will use mock data for testing (keys starting with `test_`).

@@ -527,12 +527,11 @@ Ask Linc integrates real-time market data and economic indicators into financial
 - **Mortgage Rates**: 30-year and 15-year fixed rates
 - **Credit Card APR**: Average credit card interest rates
 
-**Live Market Data (Premium Tier):**
-- **Treasury Yields**: 1Y, 5Y, 10Y, 30Y for rate planning
-- **CD Rates**: Current certificate of deposit rates
-- **Inflation Data**: CPI, Core CPI, PCE, year-over-year metrics
+**Advanced Market Context (Premium Tier):**
+- **Treasury Yield Curve**: Multi-maturity yields for rate planning
+- **Inflation Data**: CPI, Core CPI, PCE, and related metrics
 - **Inflation Expectations**: Market and model-based forecasts
-- **Stock Market Data**: Real-time data from 60+ exchanges worldwide
+- **Broad Market Movement**: Equity index context via Polygon/Massive
 - **Professional News**: Reuters, Bloomberg, and other professional sources
 
 ### RAG System (Retrieval-Augmented Generation)
@@ -605,7 +604,7 @@ Ask Linc offers three subscription tiers with differentiated access to features:
 
 **Limitations:**
 - ❌ No economic indicators
-- ❌ No live market data
+- ❌ No premium Polygon market and yield-curve context
 - ❌ No RAG system access (real-time financial search)
 - ❌ Limited market context in AI responses
 
@@ -632,7 +631,7 @@ Ask Linc offers three subscription tiers with differentiated access to features:
 
 **Limitations:**
 - ❌ No institution-level CD offers or full live Treasury yield curve
-- ❌ No real-time stock market data
+- ❌ No premium Polygon market and yield-curve context
 - ❌ Limited market intelligence
 
 **Best For:**
@@ -643,13 +642,12 @@ Ask Linc offers three subscription tiers with differentiated access to features:
 ### Premium Tier
 
 **All Standard Features Plus:**
-- ✅ Live market data (Alpha Vantage/Polygon.io):
-  - CD Rates
-  - Treasury Yields (1Y, 5Y, 10Y, 30Y)
-  - Live Mortgage Rates
-  - Stock Market Data (60+ exchanges)
+- ✅ Advanced market context (Polygon/Massive):
+  - Broad-market movement through SPY daily bars
+  - Treasury yields (1Y, 5Y, 10Y)
+  - Realized inflation and inflation expectations
 - ✅ Complete market intelligence
-- ✅ Professional news integration (Reuters, Bloomberg)
+- ✅ Current financial-news context through Brave Search
 - ✅ Advanced market analytics
 - ✅ Inflation expectations and forecasting
 - ✅ Real-time rate comparisons
@@ -670,7 +668,7 @@ Ask Linc offers three subscription tiers with differentiated access to features:
 | Basic Financial Analysis | ✅ | ✅ | ✅ |
 | Economic Indicators | ❌ | ✅ | ✅ |
 | RAG System (Real-Time Search) | ❌ | ✅ | ✅ |
-| Live Market Data | ❌ | ❌ | ✅ |
+| Advanced Market Context | ❌ | ❌ | ✅ |
 | Professional News | ❌ | ❌ | ✅ |
 | Advanced Analytics | ❌ | ❌ | ✅ |
 

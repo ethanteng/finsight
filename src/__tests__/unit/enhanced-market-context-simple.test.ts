@@ -1,19 +1,15 @@
 import { DataOrchestrator } from '../../data/orchestrator';
 import { UserTier } from '../../data/types';
 import { FREDProvider } from '../../data/providers/fred';
-import { AlphaVantageProvider } from '../../data/providers/alpha-vantage';
 
 // Mock the providers
 jest.mock('../../data/providers/fred');
-jest.mock('../../data/providers/alpha-vantage');
 
 const MockFREDProvider = FREDProvider as jest.MockedClass<typeof FREDProvider>;
-const MockAlphaVantageProvider = AlphaVantageProvider as jest.MockedClass<typeof AlphaVantageProvider>;
 
 describe('Enhanced Market Context System - Core Functionality', () => {
   let dataOrchestrator: DataOrchestrator;
   let mockFredProvider: jest.Mocked<FREDProvider>;
-  let mockAlphaVantageProvider: jest.Mocked<AlphaVantageProvider>;
 
   beforeEach(() => {
     // Clear all mocks
@@ -24,12 +20,7 @@ describe('Enhanced Market Context System - Core Functionality', () => {
       getEconomicIndicators: jest.fn(),
     } as any;
 
-    mockAlphaVantageProvider = {
-      getLiveMarketData: jest.fn(),
-    } as any;
-
     MockFREDProvider.mockImplementation(() => mockFredProvider);
-    MockAlphaVantageProvider.mockImplementation(() => mockAlphaVantageProvider);
 
     // Create orchestrator instance
     dataOrchestrator = new DataOrchestrator();
@@ -66,7 +57,7 @@ describe('Enhanced Market Context System - Core Functionality', () => {
       expect(context).not.toContain('LIVE MARKET DATA');
     });
 
-    it('should provide full market data for premium tier', async () => {
+    it('should provide FRED economic indicators for premium tier', async () => {
       mockFredProvider.getEconomicIndicators.mockResolvedValue({
         cpi: { value: 3.1, date: '2025-07-31', source: 'FRED', lastUpdated: '2025-08-01T05:57:37.801Z' },
         fedRate: { value: 5.25, date: '2025-07-31', source: 'FRED', lastUpdated: '2025-08-01T05:57:37.801Z' },
@@ -74,28 +65,10 @@ describe('Enhanced Market Context System - Core Functionality', () => {
         creditCardAPR: { value: 24.59, date: '2025-07-31', source: 'FRED', lastUpdated: '2025-08-01T05:57:37.801Z' }
       });
 
-      mockAlphaVantageProvider.getLiveMarketData.mockResolvedValue({
-        cdRates: [
-          { term: '3-month', rate: 5.25, institution: 'Test Bank', lastUpdated: '2025-08-01T05:57:37.801Z' },
-          { term: '6-month', rate: 5.35, institution: 'Test Bank', lastUpdated: '2025-08-01T05:57:37.801Z' }
-        ],
-        treasuryYields: [
-          { term: '1-month', yield: 5.12, lastUpdated: '2025-08-01T05:57:37.801Z' },
-          { term: '3-month', yield: 5.18, lastUpdated: '2025-08-01T05:57:37.801Z' }
-        ],
-        mortgageRates: [
-          { type: '30-year-fixed', rate: 6.85, lastUpdated: '2025-08-01T05:57:37.801Z' },
-          { type: '15-year-fixed', rate: 6.25, lastUpdated: '2025-08-01T05:57:37.801Z' }
-        ]
-      });
-
       const context = await dataOrchestrator.getMarketContextSummary(UserTier.PREMIUM);
 
       expect(context).toContain('ECONOMIC INDICATORS');
-      expect(context).toContain('LIVE MARKET DATA');
-      expect(context).toContain('CD Rates: 3-month: 5.25%, 6-month: 5.35%');
-      expect(context).toContain('Treasury Yields: 1-month: 5.12%, 3-month: 5.18%');
-      expect(context).toContain('Mortgage Rates: 30-year-fixed: 6.85%, 15-year-fixed: 6.25%');
+      expect(context).not.toContain('LIVE MARKET DATA');
     });
   });
 
@@ -143,22 +116,6 @@ describe('Enhanced Market Context System - Core Functionality', () => {
       expect(context).not.toContain('ECONOMIC INDICATORS');
     });
 
-    it('should handle Alpha Vantage API errors gracefully', async () => {
-      mockFredProvider.getEconomicIndicators.mockResolvedValue({
-        cpi: { value: 3.1, date: '2025-07-31', source: 'FRED', lastUpdated: '2025-08-01T05:57:37.801Z' },
-        fedRate: { value: 5.25, date: '2025-07-31', source: 'FRED', lastUpdated: '2025-08-01T05:57:37.801Z' },
-        mortgageRate: { value: 6.72, date: '2025-07-31', source: 'FRED', lastUpdated: '2025-08-01T05:57:37.801Z' },
-        creditCardAPR: { value: 24.59, date: '2025-07-31', source: 'FRED', lastUpdated: '2025-08-01T05:57:37.801Z' }
-      });
-
-      mockAlphaVantageProvider.getLiveMarketData.mockRejectedValue(new Error('Alpha Vantage API error'));
-
-      const context = await dataOrchestrator.getMarketContextSummary(UserTier.PREMIUM);
-
-      // Should still return context with economic indicators, but no live market data
-      expect(context).toContain('ECONOMIC INDICATORS');
-      expect(context).not.toContain('LIVE MARKET DATA');
-    });
   });
 
   describe('Market Insights', () => {

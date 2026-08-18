@@ -49,32 +49,10 @@ jest.mock('../../data/providers/fred', () => {
         treasury10Y: { value: 4.25, date: '2024-01-01', source: 'FRED' },
         cd12Month: { value: 1.75, date: '2024-01-01', source: 'FRED' }
       }),
-      getLiveMarketData: jest.fn().mockResolvedValue({
-        cdRates: { value: 5.25, date: '2024-01-01', source: 'FRED' },
-        treasuryYields: { value: 4.5, date: '2024-01-01', source: 'FRED' },
-        stockData: { value: 4500, date: '2024-01-01', source: 'FRED' }
-      }),
       getDataPoint: jest.fn().mockResolvedValue({ value: 4.33, date: '2024-01-01', source: 'FRED' })
     }))
   };
 });
-
-jest.mock('../../data/providers/alpha-vantage', () => ({
-  AlphaVantageProvider: jest.fn().mockImplementation(() => ({
-    getEconomicIndicators: jest.fn().mockResolvedValue({
-      cpi: { value: 3.2, date: '2024-01-01', source: 'Alpha Vantage' },
-      fedRate: { value: 4.33, date: '2024-01-01', source: 'Alpha Vantage' },
-      mortgageRate: { value: 6.5, date: '2024-01-01', source: 'Alpha Vantage' },
-      creditCardAPR: { value: 15.5, date: '2024-01-01', source: 'Alpha Vantage' }
-    }),
-    getLiveMarketData: jest.fn().mockResolvedValue({
-      cdRates: { value: 5.25, date: '2024-01-01', source: 'Alpha Vantage' },
-      treasuryYields: { value: 4.5, date: '2024-01-01', source: 'Alpha Vantage' },
-      stockData: { value: 4500, date: '2024-01-01', source: 'Alpha Vantage' }
-    }),
-    getDataPoint: jest.fn().mockResolvedValue({ value: 4.5, date: '2024-01-01', source: 'Alpha Vantage' })
-  }))
-}));
 
 jest.mock('../../data/providers/search', () => ({
   SearchProvider: jest.fn().mockImplementation(() => ({

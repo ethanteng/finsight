@@ -28,6 +28,7 @@ describe('FREDProvider', () => {
   });
 
   afterEach(() => {
+    jest.useRealTimers();
     global.fetch = originalFetch;
     if (originalGithubActions === undefined) {
       delete process.env.GITHUB_ACTIONS;
@@ -144,12 +145,16 @@ describe('FREDProvider', () => {
   });
 
   it('caches mock-mode observations so repeated reads stay identical', async () => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date('2026-08-18T05:25:18.303Z'));
     const provider = new FREDProvider('test_fred_key');
 
     const first = await provider.getDataPoint('DFF');
+    jest.setSystemTime(new Date('2026-08-18T05:25:18.320Z'));
     const second = await provider.getDataPoint('DFF');
 
     expect(first).toEqual(second);
+    expect(second.lastUpdated).toBe('2026-08-18T05:25:18.303Z');
     expect(fetchMock).not.toHaveBeenCalled();
   });
 

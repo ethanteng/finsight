@@ -300,20 +300,10 @@ if (isTestEnvironment) {
 **FRED Provider**:
 ```typescript
 // Deterministic provider data for test keys / CI; still cached by series + units
-if (this.apiKey === 'test_fred_key' ||
-    this.apiKey.startsWith('test_') ||
-    process.env.GITHUB_ACTIONS) {
-  return this.buildMockDataPoint(seriesId, units);
-}
-```
-
-**Alpha Vantage Provider**:
-```typescript
-// CI/CD safety check
-if (this.apiKey === 'your_alpha_vantage_api_key' ||
-    process.env.GITHUB_ACTIONS) {
-  console.log('Alpha Vantage: Using mock data in test/CI environment');
-  return this.getMockMarketData();
+if (this.isMockMode()) {
+  const dataPoint = { /* deterministic value plus series metadata */ };
+  await cacheService.set(cacheKey, dataPoint, cacheTtlMs);
+  return dataPoint;
 }
 ```
 
@@ -384,16 +374,13 @@ jest.mock('../../plaid', () => ({
 ```bash
 # Test Environment (.env.test)
 FRED_API_KEY=test_fred_key
-ALPHA_VANTAGE_API_KEY=test_alpha_vantage_key
 POLYGON_API_KEY=test_polygon_key
 
 # CI/CD Environment (GitHub Actions)
 FRED_API_KEY: ${{ secrets.FRED_API_KEY }}           # Test key
-ALPHA_VANTAGE_API_KEY: ${{ secrets.ALPHA_VANTAGE_API_KEY }}  # Test key
 
 # Production Environment (Render)
 FRED_API_KEY: ${{ secrets.FRED_API_KEY_REAL }}      # Real key
-ALPHA_VANTAGE_API_KEY: ${{ secrets.ALPHA_VANTAGE_API_KEY_REAL }}  # Real key
 ```
 
 #### Key Validation Rules
@@ -439,7 +426,6 @@ if (process.env.GITHUB_ACTIONS || process.env.CI) {
 ```typescript
 // Create shared mock data constants
 export const MOCK_FRED_DATA = { /* consistent structure */ };
-export const MOCK_ALPHA_VANTAGE_DATA = { /* consistent structure */ };
 ```
 
 #### Issue: Environment Detection Failing

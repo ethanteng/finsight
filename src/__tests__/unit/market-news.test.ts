@@ -248,13 +248,13 @@ describe('Market News System', () => {
       const mockData = [
         { source: 'fred', timestamp: new Date(), data: {}, type: 'economic_indicator' as const, relevance: 0.8 },
         { source: 'brave_search', timestamp: new Date(), data: {}, type: 'news_article' as const, relevance: 0.6 },
-        { source: 'alpha_vantage', timestamp: new Date(), data: {}, type: 'market_data' as const, relevance: 0.7 }
+        { source: 'polygon', timestamp: new Date(), data: {}, type: 'market_data' as const, relevance: 0.7 }
       ];
 
       const context = await synthesizer.synthesizeMarketContext(mockData, UserTier.STANDARD);
       expect(context.dataSources).toContain('fred');
       expect(context.dataSources).toContain('brave_search');
-      expect(context.dataSources).not.toContain('alpha_vantage');
+      expect(context.dataSources).not.toContain('polygon');
     });
 
     test('should extract key events correctly', async () => {

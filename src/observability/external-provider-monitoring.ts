@@ -20,7 +20,6 @@ const PROVIDERS_BY_HOST: Record<string, string> = {
   'api.search.brave.com': 'brave_search',
   'api.polygon.io': 'polygon',
   'api.stlouisfed.org': 'fred',
-  'www.alphavantage.co': 'alpha_vantage',
   'financialmodelingprep.com': 'fmp',
   'api.tiingo.com': 'tiingo',
   'api.rentcast.io': 'rentcast',

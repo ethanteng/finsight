@@ -1,4 +1,4 @@
-import { DataProvider, EconomicIndicator, LiveMarketData, MarketDataPoint } from '../types';
+import { DataProvider, EconomicIndicator, MarketDataPoint } from '../types';
 import { cacheService } from '../cache';
 
 type FREDUnits = 'lin' | 'pc1';
@@ -139,10 +139,6 @@ export class FREDProvider implements DataProvider {
     }
 
     return indicators;
-  }
-
-  async getLiveMarketData(): Promise<LiveMarketData | null> {
-    return null;
   }
 
   async getDataPoint(
