@@ -186,7 +186,8 @@ export function sliceHistoricalSequence(
   const dates = sequence.assetBasketReturns.usEquity.length;
   if (offset >= dates) throw new Error('Withdrawal start must fall inside the historical sequence');
   const startDate = new Date(sequence.startDate);
-  startDate.setMonth(startDate.getMonth() + offset);
+  // Sequence boundaries are UTC month starts (see loadHistoricalReturns).
+  startDate.setUTCMonth(startDate.getUTCMonth() + offset);
   return {
     ...sequence,
     startDate,
