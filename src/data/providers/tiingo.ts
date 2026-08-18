@@ -2,7 +2,10 @@ const TIINGO_API_BASE_URL = 'https://api.tiingo.com';
 const REQUEST_TIMEOUT_MS = 10_000;
 const MAX_ATTEMPTS = 2;
 const DEFAULT_RETRY_DELAY_MS = 1_000;
-const MAX_RETRY_DELAY_MS = 60_000;
+// Every caller runs inside a user request, so a retry is only worth waiting for
+// when it is short. A longer Retry-After means "come back later", and we fail
+// fast instead of holding the question open for a minute.
+const MAX_RETRY_DELAY_MS = 2_000;
 
 type FetchImplementation = typeof fetch;
 
@@ -63,6 +66,7 @@ interface TiingoProviderOptions {
   sleep?: SleepImplementation;
   requestTimeoutMs?: number;
   maxAttempts?: number;
+  maxRetryDelayMs?: number;
 }
 
 /** Shared, bounded Tiingo client for the Power-plan endpoints used by Ask Linc. */
@@ -73,6 +77,7 @@ export class TiingoProvider {
   private readonly sleep: SleepImplementation;
   private readonly requestTimeoutMs: number;
   private readonly maxAttempts: number;
+  private readonly maxRetryDelayMs: number;
 
   constructor(apiKey: string, options: TiingoProviderOptions = {}) {
     this.apiKey = apiKey.trim();
@@ -81,6 +86,7 @@ export class TiingoProvider {
     this.sleep = options.sleep ?? delay;
     this.requestTimeoutMs = options.requestTimeoutMs ?? REQUEST_TIMEOUT_MS;
     this.maxAttempts = Math.max(1, options.maxAttempts ?? MAX_ATTEMPTS);
+    this.maxRetryDelayMs = Math.max(0, options.maxRetryDelayMs ?? MAX_RETRY_DELAY_MS);
   }
 
   async getEodPrices(
@@ -160,8 +166,10 @@ export class TiingoProvider {
 
       const error = new Error(`Tiingo API error for ${path}: HTTP ${response.status}`);
       if (!this.isRetryableStatus(response.status) || attempt === this.maxAttempts) throw error;
+      const retryDelayMs = this.getRetryDelayMs(response, attempt);
+      if (retryDelayMs > this.maxRetryDelayMs) throw error;
       lastError = error;
-      await this.sleep(this.getRetryDelayMs(response, attempt));
+      await this.sleep(retryDelayMs);
     }
 
     throw lastError instanceof Error ? lastError : new Error(`Tiingo request failed for ${path}`);
@@ -171,20 +179,15 @@ export class TiingoProvider {
     return status === 408 || status === 429 || status >= 500;
   }
 
+  /** Suggested wait before the next attempt; the caller gives up if it is too long. */
   private getRetryDelayMs(response: Response, attempt: number): number {
     const retryAfter = response.headers?.get('retry-after');
     if (retryAfter) {
       const seconds = Number.parseFloat(retryAfter);
-      if (Number.isFinite(seconds)) {
-        return Math.min(MAX_RETRY_DELAY_MS, Math.max(0, seconds * 1_000));
-      }
+      if (Number.isFinite(seconds)) return Math.max(0, seconds * 1_000);
       const retryAt = Date.parse(retryAfter);
-      if (Number.isFinite(retryAt)) {
-        return Math.min(MAX_RETRY_DELAY_MS, Math.max(0, retryAt - Date.now()));
-      }
+      if (Number.isFinite(retryAt)) return Math.max(0, retryAt - Date.now());
     }
-    return response.status === 429
-      ? MAX_RETRY_DELAY_MS
-      : Math.min(MAX_RETRY_DELAY_MS, DEFAULT_RETRY_DELAY_MS * attempt);
+    return DEFAULT_RETRY_DELAY_MS * attempt;
   }
 }

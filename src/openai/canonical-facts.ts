@@ -390,13 +390,13 @@ export function buildCanonicalFactPack(
       addCalculatedFact('external_sector_coverage', 'Portfolio coverage for FMP sector exposure', portfolioExposure.sectorCoverage * 100, 'percent', 'input * 100', ['external_sector_coverage_source']);
       addExternalFact('external_expense_coverage_source', 'FMP expense-ratio coverage source', portfolioExposure.expenseRatioCoverage, 'ratio', 'investments.externalData.portfolioExposure.expenseRatioCoverage', externalAsOf, false);
       addCalculatedFact('external_expense_coverage', 'Portfolio coverage for FMP expense ratios', portfolioExposure.expenseRatioCoverage * 100, 'percent', 'input * 100', ['external_expense_coverage_source']);
-      addExternalFact('external_portfolio_expense_ratio_source', 'FMP portfolio expense ratio source', portfolioExposure.expenseRatioWeighted, 'ratio', 'investments.externalData.portfolioExposure.expenseRatioWeighted', externalAsOf, false);
-      addCalculatedFact('external_portfolio_expense_ratio', 'FMP portfolio weighted expense ratio', portfolioExposure.expenseRatioWeighted * 100, 'percent', 'input * 100', ['external_portfolio_expense_ratio_source']);
+      addExternalFact('external_portfolio_expense_ratio_source', 'FMP portfolio fee drag source', portfolioExposure.expenseRatioWeighted, 'ratio', 'investments.externalData.portfolioExposure.expenseRatioWeighted', externalAsOf, false);
+      addCalculatedFact('external_portfolio_expense_ratio', 'Annual fee drag across enriched holdings (FMP)', portfolioExposure.expenseRatioWeighted * 100, 'percent', 'input * 100', ['external_portfolio_expense_ratio_source']);
       for (const exposure of portfolioExposure.countryAllocations.slice(0, 15)) {
-        addExternalFact(`external_country_${safeFactId(exposure.name)}`, `${exposure.name} portfolio country exposure`, exposure.percentage, 'percent', `investments.externalData.portfolioExposure.countryAllocations.${safeFactId(exposure.name)}`, externalAsOf);
+        addExternalFact(`external_country_${safeFactId(exposure.name)}`, `${exposure.name} country exposure across enriched holdings (FMP)`, exposure.percentage, 'percent', `investments.externalData.portfolioExposure.countryAllocations.${safeFactId(exposure.name)}`, externalAsOf);
       }
       for (const exposure of portfolioExposure.sectorAllocations.slice(0, 15)) {
-        addExternalFact(`external_sector_${safeFactId(exposure.name)}`, `${exposure.name} portfolio sector exposure`, exposure.percentage, 'percent', `investments.externalData.portfolioExposure.sectorAllocations.${safeFactId(exposure.name)}`, externalAsOf);
+        addExternalFact(`external_sector_${safeFactId(exposure.name)}`, `${exposure.name} sector exposure across enriched holdings (FMP)`, exposure.percentage, 'percent', `investments.externalData.portfolioExposure.sectorAllocations.${safeFactId(exposure.name)}`, externalAsOf);
       }
     }
 
@@ -414,7 +414,7 @@ export function buildCanonicalFactPack(
         addCalculatedFact(`external_return_${id}`, `${security.ticker} adjusted trailing-12-month return`, security.trailing12MonthReturn * 100, 'percent', 'input * 100', [`external_return_${id}_source`]);
       }
       if (security.expenseRatio !== undefined) {
-        addExternalFact(`external_expense_${id}_source`, `${security.ticker} expense ratio source`, security.expenseRatio, 'ratio', `investments.externalData.securities.${id}.expenseRatio`, externalAsOf, false);
+        addExternalFact(`external_expense_${id}_source`, `${security.ticker} expense ratio source`, security.expenseRatio, 'ratio', `investments.externalData.securities.${id}.expenseRatio`, security.metadataAsOf || externalAsOf, false);
         addCalculatedFact(`external_expense_${id}`, `${security.ticker} expense ratio`, security.expenseRatio * 100, 'percent', 'input * 100', [`external_expense_${id}_source`]);
       }
     }
@@ -422,12 +422,12 @@ export function buildCanonicalFactPack(
       const id = safeFactId(security.ticker);
       for (const exposure of security.countryAllocations ?? []) {
         const sourceId = `external_${id}_country_${safeFactId(exposure.name)}_source`;
-        addExternalFact(sourceId, `${security.ticker} ${exposure.name} country weight source`, exposure.weight, 'ratio', `investments.externalData.securities.${id}.countryAllocations.${safeFactId(exposure.name)}`, externalAsOf, false);
+        addExternalFact(sourceId, `${security.ticker} ${exposure.name} country weight source`, exposure.weight, 'ratio', `investments.externalData.securities.${id}.countryAllocations.${safeFactId(exposure.name)}`, security.metadataAsOf || externalAsOf, false);
         addCalculatedFact(`external_${id}_country_${safeFactId(exposure.name)}`, `${security.ticker} ${exposure.name} country weight`, exposure.weight * 100, 'percent', 'input * 100', [sourceId]);
       }
       for (const exposure of security.sectorAllocations ?? []) {
         const sourceId = `external_${id}_sector_${safeFactId(exposure.name)}_source`;
-        addExternalFact(sourceId, `${security.ticker} ${exposure.name} sector weight source`, exposure.weight, 'ratio', `investments.externalData.securities.${id}.sectorAllocations.${safeFactId(exposure.name)}`, externalAsOf, false);
+        addExternalFact(sourceId, `${security.ticker} ${exposure.name} sector weight source`, exposure.weight, 'ratio', `investments.externalData.securities.${id}.sectorAllocations.${safeFactId(exposure.name)}`, security.metadataAsOf || externalAsOf, false);
         addCalculatedFact(`external_${id}_sector_${safeFactId(exposure.name)}`, `${security.ticker} ${exposure.name} sector weight`, exposure.weight * 100, 'percent', 'input * 100', [sourceId]);
       }
     }
@@ -442,8 +442,8 @@ export function buildCanonicalFactPack(
     addSnapshotFact('cash_allocation', 'Cash allocation', retirement.metrics.cashAllocation, 'percent', 'retirementAnalysis.metrics.cashAllocation');
     addSnapshotFact('international_allocation', 'International equity allocation', retirement.metrics.internationalAllocation, 'percent', 'retirementAnalysis.metrics.internationalAllocation');
     if (retirement.metrics.expenseRatioWeighted !== undefined) {
-      addSnapshotFact('portfolio_expense_ratio_source', 'Portfolio weighted expense ratio source', retirement.metrics.expenseRatioWeighted, 'ratio', 'retirementAnalysis.metrics.expenseRatioWeighted', false);
-      addCalculatedFact('portfolio_expense_ratio', 'Portfolio weighted expense ratio', retirement.metrics.expenseRatioWeighted * 100, 'percent', 'input * 100', ['portfolio_expense_ratio_source']);
+      addSnapshotFact('portfolio_expense_ratio_source', 'Portfolio fee drag source', retirement.metrics.expenseRatioWeighted, 'ratio', 'retirementAnalysis.metrics.expenseRatioWeighted', false);
+      addCalculatedFact('portfolio_expense_ratio', 'Annual fee drag across the whole portfolio', retirement.metrics.expenseRatioWeighted * 100, 'percent', 'input * 100', ['portfolio_expense_ratio_source']);
     }
     if (retirement.metrics.expenseRatioCoverage !== undefined) {
       addSnapshotFact('expense_ratio_coverage_source', 'Expense-ratio coverage source', retirement.metrics.expenseRatioCoverage, 'ratio', 'retirementAnalysis.metrics.expenseRatioCoverage', false);
@@ -460,7 +460,7 @@ export function buildCanonicalFactPack(
     for (const exposure of (retirement.metrics.countryAllocation ?? []).slice(0, 15)) {
       addSnapshotFact(
         `country_exposure_${safeFactId(exposure.name)}`,
-        `${exposure.name} portfolio country exposure`,
+        `${exposure.name} country exposure from retirement analysis`,
         exposure.percentage,
         'percent',
         `retirementAnalysis.metrics.countryAllocation.${safeFactId(exposure.name)}`
@@ -469,7 +469,7 @@ export function buildCanonicalFactPack(
     for (const exposure of (retirement.metrics.sectorAllocation ?? []).slice(0, 15)) {
       addSnapshotFact(
         `sector_exposure_${safeFactId(exposure.name)}`,
-        `${exposure.name} portfolio sector exposure`,
+        `${exposure.name} sector exposure from retirement analysis`,
         exposure.percentage,
         'percent',
         `retirementAnalysis.metrics.sectorAllocation.${safeFactId(exposure.name)}`

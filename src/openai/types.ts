@@ -56,6 +56,7 @@ export interface InvestmentExternalData {
     sectorAllocations: Array<{ name: string; percentage: number }>;
     countryCoverage: number;
     sectorCoverage: number;
+    /** Annual fee drag over the whole portfolio; pair with expenseRatioCoverage. */
     expenseRatioWeighted: number;
     expenseRatioCoverage: number;
   };
@@ -79,6 +80,8 @@ export interface InvestmentExternalData {
     };
     trailing12MonthReturn?: number;
     performanceThrough?: string;
+    /** When the FMP metadata for this security was observed (may be cached). */
+    metadataAsOf?: string;
   }>;
 }
 

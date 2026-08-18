@@ -1,4 +1,4 @@
-import { FMPProvider } from '../../retirement-analytics/data/providers/fmp-provider';
+import { FMPProvider, looksLikeMutualFundTicker } from '../../retirement-analytics/data/providers/fmp-provider';
 import { analyzePortfolio } from '../../retirement-analytics/engine/portfolio-analyzer';
 import { mapPortfolioToAssetBasket } from '../../retirement-analytics/engine/portfolio-mapper';
 import type { SecurityMetadata } from '../../retirement-analytics/types';
@@ -110,6 +110,37 @@ describe('FMP Starter fund metadata', () => {
       countryAllocations: [],
       sectorAllocations: [],
     });
+  });
+
+  it('keeps money-market funds out of the equity allocation', async () => {
+    const metadata = (provider as any).parseProfile(
+      { symbol: 'VMFXX', companyName: 'Vanguard Federal Money Market Fund', country: 'US', isEtf: false },
+      'VMFXX',
+    ) as SecurityMetadata;
+    expect(metadata.assetClass).toBe('Cash');
+
+    const holdings = [{
+      id: 'h1', account_id: 'a1', security_id: 's1',
+      institution_value: 10_000, ticker_symbol: 'VMFXX', security_name: metadata.securityName,
+    }] as any;
+    const securities = [{ security_id: 's1', ticker_symbol: 'VMFXX', name: metadata.securityName, type: 'cash' }] as any;
+    const preFetched = new Map([['VMFXX', metadata]]);
+
+    const metrics = await analyzePortfolio(holdings, securities, undefined, preFetched);
+    expect(metrics.cashAllocation).toBe(100);
+    expect(metrics.equityAllocation).toBe(0);
+
+    const mapping = await mapPortfolioToAssetBasket(holdings, securities, 10_000, undefined, preFetched);
+    expect(mapping.cashWeight).toBeCloseTo(1);
+    expect(mapping.usEquityWeight).toBe(0);
+  });
+
+  it('only treats five/six character X-suffixed tickers as mutual funds', () => {
+    expect(looksLikeMutualFundTicker('VTSAX')).toBe(true);
+    expect(looksLikeMutualFundTicker('SPAXX')).toBe(true);
+    expect(looksLikeMutualFundTicker('NFLX')).toBe(false);
+    expect(looksLikeMutualFundTicker('CVX')).toBe(false);
+    expect(looksLikeMutualFundTicker('FDX')).toBe(false);
   });
 
   it('uses look-through countries in portfolio metrics and retirement mapping', async () => {

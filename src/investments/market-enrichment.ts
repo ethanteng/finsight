@@ -1,6 +1,7 @@
 import { TiingoIexQuote, TiingoProvider } from '../data/providers/tiingo';
 import type { Holding, Security } from '../services/financial-data-service';
 import { DataProviderFactory } from '../retirement-analytics/data/data-provider-factory';
+import { looksLikeMutualFundTicker } from '../retirement-analytics/data/providers/fmp-provider';
 import type { SecurityMetadata } from '../retirement-analytics/types';
 import type { InvestmentExternalData } from '../openai/types';
 
@@ -50,8 +51,11 @@ export async function enrichInvestmentSnapshot(
   const tickers = selected.map(position => position.ticker);
   // Mutual funds publish one daily NAV and are not IEX-traded. Their Tiingo
   // EOD history is still useful, but including them in the IEX batch can make
-  // the whole quote request fail on some symbols.
-  const iexTickers = tickers.filter(ticker => !/X$/.test(ticker) && /^[A-Z.]{1,6}$/.test(ticker));
+  // the whole quote request fail on some symbols. Match only the five/six
+  // character mutual-fund pattern — a plain /X$/ test would also drop
+  // exchange-traded equities such as NFLX, CVX and FDX.
+  const iexTickers = tickers.filter(ticker =>
+    !looksLikeMutualFundTicker(ticker) && /^[A-Z.]{1,6}$/.test(ticker));
   const providerFactory = new DataProviderFactory(tiingoKey || 'test_tiingo_key', fmpKey || 'test_fmp_key');
   const historyEnd = new Date();
   const historyStart = new Date(historyEnd);
@@ -109,6 +113,11 @@ export async function enrichInvestmentSnapshot(
       trailing12MonthReturn,
       performanceThrough: trailing12MonthReturn !== undefined && history?.dates.length
         ? history.dates[history.dates.length - 1].toISOString()
+        : undefined,
+      // The aggregate asOf is the newest observation across every source, so
+      // fee and allocation facts carry their own (possibly older) FMP time.
+      metadataAsOf: item?.lastUpdated && Number.isFinite(item.lastUpdated.getTime())
+        ? item.lastUpdated.toISOString()
         : undefined,
     }];
   });
