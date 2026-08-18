@@ -24,8 +24,13 @@ const { __mockPrisma: mockPrisma } = jest.requireMock('../../prisma-client') as 
 
 import { persistSnapTradeActivitiesToDb } from '../../data/persistence';
 
-/** The account-scoped key the current code writes for a provider-less activity. */
-const SCOPED_ID = 'brokerage-1_XYZ_2026-08-15_BUY_2';
+// The two layers scope their synthesized keys differently, so keep them
+// distinct rather than mixing one layer's legacy key with the other's
+// scoped id — that pairing never occurs in production.
+/** What financial-data-service sends as `activityId` for a provider-less activity. */
+const FDS_SCOPED_ID = 'brokerage-1-2026-08-15-security-2-BUY-2';
+/** What this function synthesizes when the activity carries no id at all. */
+const PERSISTENCE_SCOPED_ID = 'brokerage-1_XYZ_2026-08-15_BUY_2';
 
 describe('SnapTrade activity legacy-key migration', () => {
   beforeEach(() => {
@@ -54,14 +59,15 @@ describe('SnapTrade activity legacy-key migration', () => {
         : null,
     );
 
+    // Both fields as financial-data-service actually emits them.
     await persistSnapTradeActivitiesToDb('user-1', [
-      activity({ activityId: SCOPED_ID, legacyActivityId: legacyKey }),
+      activity({ activityId: FDS_SCOPED_ID, legacyActivityId: legacyKey }),
     ]);
 
     expect(mockPrisma.snapTradeActivity.update).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { activityId: legacyKey },
-        data: { activityId: SCOPED_ID },
+        data: { activityId: FDS_SCOPED_ID },
       }),
     );
     // Migrated, so the sync must not insert a second row beside the legacy one.
@@ -83,7 +89,7 @@ describe('SnapTrade activity legacy-key migration', () => {
     expect(mockPrisma.snapTradeActivity.update).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { activityId: legacyFallback },
-        data: { activityId: SCOPED_ID },
+        data: { activityId: PERSISTENCE_SCOPED_ID },
       }),
     );
     expect(mockPrisma.snapTradeActivity.create).not.toHaveBeenCalled();
