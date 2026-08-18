@@ -12,12 +12,12 @@ type PersistedBalance = {
 
 export async function loadPersistedPlaidData(
     userId: string,
-    options: { includeTransactions: boolean; includeInvestments: boolean }
+    options: { includeTransactions: boolean; includeInvestments: boolean; includeLiabilities?: boolean }
   ): Promise<{ data: any; lastSynced: Date | null; isFresh: boolean } | null> {
     // Persisted snapshots currently store only account/core balance data. When
-    // investment holdings are requested we must force a live Plaid fetch to keep
-    // portfolio analytics accurate.
-    if (options.includeInvestments) {
+    // investment holdings or liability terms are requested we must force a live
+    // Plaid fetch to keep portfolio analytics and debt terms accurate.
+    if (options.includeInvestments || options.includeLiabilities) {
       return null;
     }
 
