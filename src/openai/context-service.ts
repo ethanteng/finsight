@@ -810,7 +810,10 @@ async function fetchOrCreateRetirementAnalysis(args: {
         'Check Tiingo API status and rate limits.');
     }
 
-    const insufficientHistory = errorMessage.startsWith('Insufficient historical market data:');
+    const { InsufficientHistoricalDataError } = await import(
+      '../retirement-analytics/engine/stress-tester'
+    );
+    const insufficientHistory = error instanceof InsufficientHistoricalDataError;
     return {
       needsInfo: {
         missingParams: [],
