@@ -14,7 +14,7 @@ Ask Linc is a comprehensive financial analysis platform that combines AI-powered
 - **External APIs**:
   - Plaid (banking data)
   - SnapTrade (investment data)
-  - FRED (economic indicators)
+  - FRED (latest published economic indicators and rate benchmarks)
   - Polygon/Massive (market and Treasury data)
   - RentCast (home valuations)
   - **Brave Search API** (real-time financial information)
@@ -47,6 +47,7 @@ Ask Linc is a comprehensive financial analysis platform that combines AI-powered
 - **Features**:
     - Proactive caching with scheduled updates
     - Tier-based data access
+    - Latest published observations with their observation dates
     - Scheduled economic-indicator refreshes
     - Treasury yield-curve, inflation, and broad-market context
 

@@ -1,8 +1,81 @@
 import { DataProvider, EconomicIndicator, MarketDataPoint } from '../types';
 import { cacheService } from '../cache';
 
+type FREDUnits = 'lin' | 'pc1';
+
+export interface FREDSeriesConfig {
+  seriesId: string;
+  name: string;
+  unit: 'percent' | 'index';
+  transformation: FREDUnits;
+  cacheTtlMs: number;
+}
+
+const FOUR_HOURS_MS = 4 * 60 * 60 * 1000;
+const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
+const REQUEST_TIMEOUT_MS = 10_000;
+const RECENT_OBSERVATION_LIMIT = 12;
+
+/**
+ * Canonical FRED series used by Ask Linc.
+ *
+ * CPIAUCSL is an index, so the API's `pc1` transformation is required before
+ * its value can truthfully be described as year-over-year inflation.
+ */
+export const FRED_ECONOMIC_SERIES = {
+  cpi: {
+    seriesId: 'CPIAUCSL',
+    name: 'Inflation Rate (CPI, YoY)',
+    unit: 'percent',
+    transformation: 'pc1',
+    cacheTtlMs: TWENTY_FOUR_HOURS_MS,
+  },
+  fedRate: {
+    seriesId: 'DFF',
+    name: 'Federal Funds Effective Rate',
+    unit: 'percent',
+    transformation: 'lin',
+    cacheTtlMs: FOUR_HOURS_MS,
+  },
+  mortgageRate: {
+    seriesId: 'MORTGAGE30US',
+    name: '30-Year Fixed Mortgage Average',
+    unit: 'percent',
+    transformation: 'lin',
+    cacheTtlMs: TWENTY_FOUR_HOURS_MS,
+  },
+  creditCardAPR: {
+    seriesId: 'TERMCBCCALLNS',
+    name: 'Commercial Bank Credit Card Rate, All Accounts',
+    unit: 'percent',
+    transformation: 'lin',
+    cacheTtlMs: TWENTY_FOUR_HOURS_MS,
+  },
+  unemployment: {
+    seriesId: 'UNRATE',
+    name: 'Unemployment Rate',
+    unit: 'percent',
+    transformation: 'lin',
+    cacheTtlMs: TWENTY_FOUR_HOURS_MS,
+  },
+  treasury10Y: {
+    seriesId: 'DGS10',
+    name: '10-Year Treasury Constant Maturity Rate',
+    unit: 'percent',
+    transformation: 'lin',
+    cacheTtlMs: FOUR_HOURS_MS,
+  },
+  cd12Month: {
+    seriesId: 'NDR12MCD',
+    name: 'FDIC National 12-Month CD Rate',
+    unit: 'percent',
+    transformation: 'lin',
+    cacheTtlMs: TWENTY_FOUR_HOURS_MS,
+  },
+} as const satisfies Record<keyof EconomicIndicator, FREDSeriesConfig>;
+
 interface FREDResponse {
-  observations: Array<{
+  observations?: Array<{
     realtime_start: string;
     realtime_end: string;
     date: string;
@@ -10,200 +83,230 @@ interface FREDResponse {
   }>;
 }
 
+interface GetDataPointOptions {
+  units?: FREDUnits;
+  cacheTtlMs?: number;
+}
+
+const MOCK_VALUES: Record<keyof EconomicIndicator, number> = {
+  cpi: 3.1,
+  fedRate: 5.25,
+  mortgageRate: 6.85,
+  creditCardAPR: 24.59,
+  unemployment: 4.2,
+  treasury10Y: 4.25,
+  cd12Month: 1.75,
+};
+
 export class FREDProvider implements DataProvider {
-  private baseUrl = 'https://api.stlouisfed.org/fred/series/observations';
-  private apiKey: string;
+  private readonly baseUrl = 'https://api.stlouisfed.org/fred/series/observations';
+  private readonly apiKey: string;
 
   constructor(apiKey: string) {
-    this.apiKey = apiKey;
+    this.apiKey = apiKey.trim();
   }
 
   async getEconomicIndicators(): Promise<EconomicIndicator> {
-    console.log('FRED Provider: getEconomicIndicators called with API key:', this.apiKey);
-    console.log('FRED Provider: API key length:', this.apiKey.length);
-    console.log('FRED Provider: API key trimmed:', this.apiKey.trim());
-    console.log('FRED Provider: Is test key?', this.apiKey === 'test_fred_key');
-    console.log('FRED Provider: Is test key (trimmed)?', this.apiKey.trim() === 'test_fred_key');
-    
-    const cacheKey = 'economic_indicators';
-    const cached = await cacheService.get<EconomicIndicator>(cacheKey);
-    if (cached) {
-      console.log('FRED Provider: Returning cached data');
-      return cached;
+    this.assertConfigured();
+
+    const entries = Object.entries(FRED_ECONOMIC_SERIES) as Array<
+      [keyof EconomicIndicator, FREDSeriesConfig]
+    >;
+    const settled = await Promise.allSettled(entries.map(async ([key, config]) => ({
+      key,
+      value: await this.getDataPoint(config.seriesId, {
+        units: config.transformation,
+        cacheTtlMs: config.cacheTtlMs,
+      }),
+    })));
+
+    const indicators: EconomicIndicator = {};
+    const failures: string[] = [];
+
+    settled.forEach((result, index) => {
+      if (result.status === 'fulfilled') {
+        indicators[result.value.key] = result.value.value;
+        return;
+      }
+
+      const config = entries[index][1];
+      failures.push(config.seriesId);
+      console.error(`FRED Provider: failed to fetch ${config.seriesId}:`, result.reason);
+    });
+
+    if (Object.keys(indicators).length === 0) {
+      throw new Error(`FRED returned no usable economic indicators (${failures.join(', ')})`);
     }
 
-    // Use mock data for test environment
-    if (this.apiKey === 'test_fred_key' || this.apiKey.startsWith('test_')) {
-      console.log('FRED Provider: Using mock data for test environment');
-      const mockIndicators: EconomicIndicator = {
-        cpi: { value: 3.1, date: '2024-01', source: 'FRED (mock)', lastUpdated: new Date().toISOString() },
-        fedRate: { value: 5.25, date: '2024-01', source: 'FRED (mock)', lastUpdated: new Date().toISOString() },
-        mortgageRate: { value: 6.85, date: '2024-01', source: 'FRED (mock)', lastUpdated: new Date().toISOString() },
-        creditCardAPR: { value: 24.59, date: '2024-01', source: 'FRED (mock)', lastUpdated: new Date().toISOString() },
-        unemployment: { value: 4.2, date: '2024-01', source: 'FRED (mock)', lastUpdated: new Date().toISOString() }
-      };
-      
-      await cacheService.set(cacheKey, mockIndicators, 24 * 60 * 60 * 1000); // 24 hours
-      console.log('FRED Provider: Mock data set in cache');
-      return mockIndicators;
-    }
-
-    // Fetch each indicator individually and handle errors gracefully
-    const now = new Date().toISOString();
-    const fallback = {
-      cpi: { value: 3.1, date: '2024-01', source: 'FRED (fallback)', lastUpdated: now },
-      fedRate: { value: 5.25, date: '2024-01', source: 'FRED (fallback)', lastUpdated: now },
-      mortgageRate: { value: 6.85, date: '2024-01', source: 'FRED (fallback)', lastUpdated: now },
-      creditCardAPR: { value: 24.59, date: '2024-01', source: 'FRED (fallback)', lastUpdated: now },
-      unemployment: { value: 4.2, date: '2024-01', source: 'FRED (fallback)', lastUpdated: now }
-    };
-
-    const [cpi, fedRate, mortgageRate, creditCardAPR, unemployment] = await Promise.all([
-      this.getDataPoint('CPIAUCSL').catch(e => { console.error('CPI error:', e); return fallback.cpi; }),
-      this.getDataPoint('FEDFUNDS').catch(e => { console.error('FedFunds error:', e); return fallback.fedRate; }),
-      this.getDataPoint('MORTGAGE30US').catch(e => { console.error('Mortgage error:', e); return fallback.mortgageRate; }),
-      // Temporarily use fallback for credit card APR due to FRED API issues
-      Promise.resolve(fallback.creditCardAPR).catch(e => { console.error('CreditCardAPR error:', e); return fallback.creditCardAPR; }),
-      this.getDataPoint('UNRATE').catch(e => { console.error('Unemployment error:', e); return fallback.unemployment; })
-    ]);
-
-    const indicators: EconomicIndicator = {
-      cpi,
-      fedRate,
-      mortgageRate,
-      creditCardAPR,
-      unemployment
-    };
-
-    await cacheService.set(cacheKey, indicators, 24 * 60 * 60 * 1000); // 24 hours
     return indicators;
   }
 
-  async getDataPoint(seriesId: string): Promise<MarketDataPoint> {
-    const cacheKey = `fred_${seriesId}`;
+  async getDataPoint(
+    seriesId: string,
+    options: GetDataPointOptions = {}
+  ): Promise<MarketDataPoint> {
+    this.assertConfigured();
+
+    const units = options.units ?? 'lin';
+    const configEntry = Object.entries(FRED_ECONOMIC_SERIES).find(
+      ([, config]) => config.seriesId === seriesId
+    ) as [keyof EconomicIndicator, FREDSeriesConfig] | undefined;
+    const unit = seriesId === 'CPIAUCSL' && units === 'lin'
+      ? 'index'
+      : configEntry?.[1].unit ?? 'percent';
+    const cacheKey = `economic_indicators:fred:${seriesId}:${units}`;
     const cached = await cacheService.get<MarketDataPoint>(cacheKey);
     if (cached) return cached;
 
-    // Use mock data for test environment or CI/CD
-    if (this.apiKey === 'test_fred_key' || this.apiKey.startsWith('test_') || process.env.GITHUB_ACTIONS) {
-      console.log('FRED Provider: Using mock data for test environment or CI/CD');
-      
-      // Return appropriate mock values for different series
-      let mockValue = 3.1; // Default mock value
-      let mockDate = '2024-01';
-      
-      switch (seriesId) {
-        case 'CPIAUCSL':
-          mockValue = 3.1;
-          mockDate = '2024-01';
-          break;
-        case 'FEDFUNDS':
-          mockValue = 5.25;
-          mockDate = '2024-01';
-          break;
-        case 'MORTGAGE30US':
-          mockValue = 6.85;
-          mockDate = '2024-01';
-          break;
-        case 'UNRATE':
-          mockValue = 4.2;
-          mockDate = '2024-01';
-          break;
-        default:
-          mockValue = 3.1;
-          mockDate = '2024-01';
-      }
-      
-      const mockData: MarketDataPoint = {
-        value: mockValue,
-        date: mockDate,
+    // Mock/CI responses must still go through the same cache key so repeated
+    // reads return identical lastUpdated timestamps (and match live behavior).
+    if (this.isMockMode()) {
+      const key = configEntry?.[0];
+      const dataPoint: MarketDataPoint = {
+        value: seriesId === 'CPIAUCSL' && units === 'lin'
+          ? 320
+          : key ? MOCK_VALUES[key] : 3.1,
+        date: '2024-01-01',
         source: 'FRED (mock)',
-        lastUpdated: new Date().toISOString()
+        lastUpdated: new Date().toISOString(),
+        seriesId,
+        unit,
+        transformation: units,
       };
-      
-      await cacheService.set(cacheKey, mockData, 24 * 60 * 60 * 1000); // 24 hours
-      return mockData;
+      await cacheService.set(
+        cacheKey,
+        dataPoint,
+        options.cacheTtlMs ?? TWENTY_FOUR_HOURS_MS
+      );
+      return dataPoint;
     }
 
-    console.log(`FRED Provider: Fetching real data for ${seriesId}`);
-    const url = `${this.baseUrl}?series_id=${seriesId}&api_key=${this.apiKey}&file_type=json&limit=1&sort_order=desc`;
-    
+    const url = new URL(this.baseUrl);
+    url.searchParams.set('series_id', seriesId);
+    url.searchParams.set('api_key', this.apiKey);
+    url.searchParams.set('file_type', 'json');
+    url.searchParams.set('limit', String(RECENT_OBSERVATION_LIMIT));
+    url.searchParams.set('sort_order', 'desc');
+    url.searchParams.set('units', units);
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
     try {
-      const response = await fetch(url);
+      const response = await fetch(url, { signal: controller.signal });
       if (!response.ok) {
-        throw new Error(`FRED API error: ${response.status}`);
+        throw new Error(`FRED API error for ${seriesId}: HTTP ${response.status}`);
       }
 
       const data = (await response.json()) as FREDResponse;
-      const observation = data.observations[0];
-      
+      const observation = data.observations?.find((candidate) => {
+        if (candidate.value === '.') return false;
+        return Number.isFinite(Number.parseFloat(candidate.value));
+      });
+
+      if (!observation) {
+        throw new Error(`FRED returned no numeric observations for ${seriesId}`);
+      }
+
+      const value = Number.parseFloat(observation.value);
       const dataPoint: MarketDataPoint = {
-        value: parseFloat(observation.value),
+        value,
         date: observation.date,
         source: 'FRED',
-        lastUpdated: new Date().toISOString()
+        lastUpdated: new Date().toISOString(),
+        seriesId,
+        unit,
+        transformation: units,
       };
 
-      await cacheService.set(cacheKey, dataPoint, 24 * 60 * 60 * 1000); // 24 hours
-      console.log(`FRED Provider: Real data fetched for ${seriesId}:`, dataPoint);
+      await cacheService.set(
+        cacheKey,
+        dataPoint,
+        options.cacheTtlMs ?? TWENTY_FOUR_HOURS_MS
+      );
       return dataPoint;
-    } catch (error) {
-      console.error(`Error fetching FRED data for ${seriesId}:`, error);
-      throw error;
+    } finally {
+      clearTimeout(timeout);
     }
   }
 
   /**
-   * Fetch CPIAUCSL observations for a date range.
-   * Used for retirement analytics inflation (month-over-month rates).
-   * Forward-fills missing values (FRED uses "." for missing) to preserve month alignment.
+   * Fetch CPIAUCSL index observations for a date range.
+   * Used only by callers that need index levels rather than current YoY inflation.
+   * Missing observations are forward-filled after the first valid value; leading
+   * missing observations are omitted instead of fabricating an index value.
    */
   async getCPIObservations(
     startDate: Date,
     endDate: Date
   ): Promise<Array<{ date: string; value: number }>> {
+    this.assertConfigured();
+
     const startStr = startDate.toISOString().split('T')[0];
     const endStr = endDate.toISOString().split('T')[0];
-    const cacheKey = `fred_CPIAUCSL_range_${startStr}_${endStr}`;
+    const cacheKey = `fred:CPIAUCSL:range:${startStr}:${endStr}`;
     const cached = await cacheService.get<Array<{ date: string; value: number }>>(cacheKey);
     if (cached) return cached;
 
-    // Test/mock mode: deterministic mock CPI (0.2% MoM growth)
-    if (this.apiKey === 'test_fred_key' || this.apiKey.startsWith('test_') || process.env.GITHUB_ACTIONS) {
+    if (this.isMockMode()) {
       const observations = this.generateMockCPIObservations(startDate, endDate);
-      await cacheService.set(cacheKey, observations, 24 * 60 * 60 * 1000);
+      await cacheService.set(cacheKey, observations, TWENTY_FOUR_HOURS_MS);
       return observations;
     }
 
-    const url = `${this.baseUrl}?series_id=CPIAUCSL&api_key=${this.apiKey}&file_type=json&observation_start=${startStr}&observation_end=${endStr}&sort_order=asc`;
-    const response = await fetch(url);
-    if (!response.ok) {
-      throw new Error(`FRED API error: ${response.status}`);
-    }
-    const data = (await response.json()) as FREDResponse;
-    const raw = data.observations || [];
+    const url = new URL(this.baseUrl);
+    url.searchParams.set('series_id', 'CPIAUCSL');
+    url.searchParams.set('api_key', this.apiKey);
+    url.searchParams.set('file_type', 'json');
+    url.searchParams.set('observation_start', startStr);
+    url.searchParams.set('observation_end', endStr);
+    url.searchParams.set('sort_order', 'asc');
+    url.searchParams.set('units', 'lin');
 
-    // Forward-fill missing values: never skip; CPI[i] = CPI[i-1] when value is "." or invalid
-    const observations: Array<{ date: string; value: number }> = [];
-    let lastValidValue: number | null = null;
-    for (const obs of raw) {
-      const parsed = parseFloat(obs.value);
-      const isMissing = Number.isNaN(parsed) || obs.value === '.';
-      const value: number | null = isMissing ? lastValidValue : parsed;
-      if (value != null) {
-        if (!isMissing) lastValidValue = value;
-        observations.push({ date: obs.date, value });
-      } else if (lastValidValue != null) {
-        observations.push({ date: obs.date, value: lastValidValue });
-      } else {
-        // First observation(s) missing: use 100 as default to avoid skipping
-        lastValidValue = 100;
-        observations.push({ date: obs.date, value: 100 });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+    try {
+      const response = await fetch(url, { signal: controller.signal });
+      if (!response.ok) {
+        throw new Error(`FRED API error for CPIAUCSL: HTTP ${response.status}`);
       }
-    }
 
-    await cacheService.set(cacheKey, observations, 24 * 60 * 60 * 1000);
-    return observations;
+      const data = (await response.json()) as FREDResponse;
+      const observations: Array<{ date: string; value: number }> = [];
+      let lastValidValue: number | undefined;
+
+      for (const observation of data.observations ?? []) {
+        const parsed = Number.parseFloat(observation.value);
+        if (observation.value !== '.' && Number.isFinite(parsed)) {
+          lastValidValue = parsed;
+        }
+        if (lastValidValue !== undefined) {
+          observations.push({ date: observation.date, value: lastValidValue });
+        }
+      }
+
+      if (observations.length === 0) {
+        throw new Error('FRED returned no numeric CPIAUCSL observations');
+      }
+
+      await cacheService.set(cacheKey, observations, TWENTY_FOUR_HOURS_MS);
+      return observations;
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  private assertConfigured(): void {
+    if (!this.apiKey) {
+      throw new Error('FRED_API_KEY is not configured');
+    }
+  }
+
+  private isMockMode(): boolean {
+    return this.apiKey === 'test_fred_key'
+      || this.apiKey.startsWith('test_')
+      || Boolean(process.env.GITHUB_ACTIONS);
   }
 
   private generateMockCPIObservations(
@@ -217,7 +320,7 @@ export class FREDProvider implements DataProvider {
     while (current <= end) {
       const dateStr = `${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, '0')}-01`;
       observations.push({ date: dateStr, value: cpi });
-      cpi *= 1.002; // 0.2% MoM growth (deterministic)
+      cpi *= 1.002;
       current.setMonth(current.getMonth() + 1);
     }
     return observations;

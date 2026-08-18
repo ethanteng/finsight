@@ -1,5 +1,6 @@
 import { UserTier } from '../data/types';
 import { SearchProvider } from '../data/providers/search';
+import { FREDProvider, FRED_ECONOMIC_SERIES } from '../data/providers/fred';
 
 // Polygon.io client will be initialized in constructor
 const restClient: any = null;
@@ -57,12 +58,17 @@ export class MarketNewsAggregator {
   private sources: Map<string, MarketNewsSource> = new Map();
   private dataCache: Map<string, MarketNewsData[]> = new Map();
   private searchProvider: SearchProvider;
+  private fredProvider: FREDProvider;
   private polygonRateLimiter: PolygonRateLimiter;
   private polygonClient: any;
   
   constructor() {
     this.initializeSources();
     this.searchProvider = new SearchProvider(process.env.SEARCH_API_KEY || '', 'brave');
+    const fredApiKey = process.env.NODE_ENV === 'test' || process.env.GITHUB_ACTIONS
+      ? 'test_fred_key'
+      : process.env.FRED_API_KEY || '';
+    this.fredProvider = new FREDProvider(fredApiKey);
     this.polygonRateLimiter = PolygonRateLimiter.getInstance();
   }
   
@@ -292,69 +298,30 @@ export class MarketNewsAggregator {
   
   private async fetchFREDData(): Promise<MarketNewsData[]> {
     try {
-      // Skip real API calls in test environment or CI/CD
-      if (process.env.NODE_ENV === 'test' || process.env.GITHUB_ACTIONS) {
-        console.log('MarketNewsAggregator: Using mock data for FRED in test/CI environment');
-        return [
-          {
-            source: 'fred',
-            timestamp: new Date(),
-            data: {
-              series: 'CPIAUCSL',
-              name: 'Consumer Price Index',
-              value: 3.1,
-              date: '2024-01'
-            },
-            type: 'economic_indicator',
-            relevance: 0.8
-          }
-        ];
-      }
-      
-      // Fetch key economic indicators from FRED
-      const indicators = [
-        { series: 'CPIAUCSL', name: 'Consumer Price Index' },
-        { series: 'FEDFUNDS', name: 'Federal Funds Rate' },
-        { series: 'MORTGAGE30US', name: '30-Year Fixed Rate Mortgage' },
-        { series: 'DGS10', name: '10-Year Treasury Rate' }
-      ];
-      
-      const fredData: MarketNewsData[] = [];
-      
-      for (const indicator of indicators) {
-        try {
-          const response = await fetch(
-            `https://api.stlouisfed.org/fred/series/observations?series_id=${indicator.series}&api_key=${process.env.FRED_API_KEY}&file_type=json&limit=1&sort_order=desc`
-          );
-          
-          if (!response.ok) {
-            console.error(`FRED API error for ${indicator.series}:`, response.status);
-            continue;
-          }
-          
-          const data = (await response.json()) as { observations?: Array<{ date: string; value: string }> };
-          const latestObservation = data.observations?.[0];
-          
-          if (latestObservation && latestObservation.value !== '.') {
-            fredData.push({
-              source: 'fred',
-              timestamp: new Date(latestObservation.date),
-              data: {
-                series: indicator.series,
-                name: indicator.name,
-                value: parseFloat(latestObservation.value),
-                date: latestObservation.date
-              },
-              type: 'economic_indicator',
-              relevance: this.calculateEconomicRelevance(indicator.series, parseFloat(latestObservation.value))
-            });
-          }
-        } catch (error) {
-          console.error(`Error fetching FRED data for ${indicator.series}:`, error);
-        }
-      }
-      
-      return fredData;
+      const indicators = await this.fredProvider.getEconomicIndicators();
+      const configuredSeries = Object.entries(FRED_ECONOMIC_SERIES) as Array<
+        [keyof typeof FRED_ECONOMIC_SERIES, (typeof FRED_ECONOMIC_SERIES)[keyof typeof FRED_ECONOMIC_SERIES]]
+      >;
+
+      return configuredSeries.flatMap(([key, config]) => {
+        const point = indicators[key];
+        if (!point) return [];
+
+        return [{
+          source: 'fred',
+          timestamp: new Date(point.date),
+          data: {
+            series: config.seriesId,
+            name: config.name,
+            value: point.value,
+            date: point.date,
+            unit: point.unit,
+            transformation: point.transformation,
+          },
+          type: 'economic_indicator' as const,
+          relevance: this.calculateEconomicRelevance(config.seriesId, point.value),
+        }];
+      });
     } catch (error) {
       console.error('Error fetching FRED data:', error);
       return [];
@@ -584,12 +551,12 @@ export class MarketNewsAggregator {
   
   private calculateEconomicRelevance(series: string, value: number): number {
     // Higher relevance for key economic indicators
-    const keyIndicators = ['CPIAUCSL', 'FEDFUNDS', 'MORTGAGE30US'];
+    const keyIndicators = ['CPIAUCSL', 'DFF', 'FEDFUNDS', 'MORTGAGE30US', 'DGS10'];
     const baseRelevance = keyIndicators.includes(series) ? 0.8 : 0.6;
     
     // Adjust relevance based on value significance
-    if (series === 'FEDFUNDS' && value > 5) return 1.0; // High rates are very relevant
-    if (series === 'CPIAUCSL' && value > 300) return 0.9; // High inflation is relevant
+    if (['DFF', 'FEDFUNDS'].includes(series) && value > 5) return 1.0; // High rates are very relevant
+    if (series === 'CPIAUCSL' && value > 3) return 0.9; // Elevated YoY inflation is relevant
     if (series === 'MORTGAGE30US' && value > 7) return 0.9; // High mortgage rates are relevant
     
     return baseRelevance;

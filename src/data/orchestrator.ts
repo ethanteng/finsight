@@ -233,21 +233,29 @@ export class DataOrchestrator {
    */
   private processEconomicData(data: EconomicIndicator): string {
     const summary = [];
+    const formatPoint = (label: string, point: NonNullable<EconomicIndicator[keyof EconomicIndicator]>) =>
+      `• ${label}: ${point.value}% (observation date: ${point.date})`;
 
     if (data.fedRate) {
-      summary.push(`• Fed Funds Rate: ${data.fedRate.value}%`);
+      summary.push(formatPoint('Fed Funds Rate', data.fedRate));
     }
     if (data.cpi) {
-      summary.push(`• CPI (YoY): ${data.cpi.value}%`);
+      summary.push(formatPoint('CPI (YoY)', data.cpi));
     }
     if (data.mortgageRate) {
-      summary.push(`• Mortgage Rate: ${data.mortgageRate.value}%`);
+      summary.push(formatPoint('Mortgage Rate', data.mortgageRate));
     }
     if (data.creditCardAPR) {
-      summary.push(`• Credit Card APR: ${data.creditCardAPR.value}%`);
+      summary.push(formatPoint('Credit Card APR', data.creditCardAPR));
     }
     if (data.unemployment) {
-      summary.push(`• Unemployment Rate: ${data.unemployment.value}%`);
+      summary.push(formatPoint('Unemployment Rate', data.unemployment));
+    }
+    if (data.treasury10Y) {
+      summary.push(formatPoint('10-Year Treasury Rate', data.treasury10Y));
+    }
+    if (data.cd12Month) {
+      summary.push(formatPoint('FDIC National 12-Month CD Rate', data.cd12Month));
     }
 
     return summary.join('\n');
@@ -259,7 +267,7 @@ export class DataOrchestrator {
   private extractKeyMetrics(data: EconomicIndicator): MarketContextSummary['keyMetrics'] {
     return {
       fedRate: data.fedRate?.value?.toString() || 'N/A',
-      treasury10Y: 'N/A', // Not available in current EconomicIndicator type
+      treasury10Y: data.treasury10Y?.value?.toString() || 'N/A',
       cpi: data.cpi?.value?.toString() || 'N/A',
       unemployment: data.unemployment?.value?.toString() || 'N/A',
       sp500: 'N/A'
@@ -273,7 +281,7 @@ export class DataOrchestrator {
     const insights = [];
 
     if (data.fedRate && data.fedRate.value > 5) {
-      insights.push('• High interest rates favor savers - consider high-yield savings accounts and CDs');
+      insights.push('• An elevated policy rate raises borrowing costs and can support higher cash yields; compare current deposit offers before acting');
     }
 
     if (data.cpi && data.cpi.value > 3) {
@@ -281,7 +289,11 @@ export class DataOrchestrator {
     }
 
     if (data.mortgageRate && data.mortgageRate.value > 6) {
-      insights.push('• High mortgage rates suggest waiting for refinancing opportunities');
+      insights.push('• Mortgage rates are elevated; refinancing generally requires comparing this market average with the borrower’s current rate and closing costs');
+    }
+
+    if (data.creditCardAPR && data.creditCardAPR.value > 20) {
+      insights.push('• Average credit card borrowing costs are high, increasing the value of paying down revolving balances');
     }
 
     if (data.unemployment && data.unemployment.value < 5) {

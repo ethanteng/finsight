@@ -100,14 +100,14 @@ UNAVAILABLE DATA SOURCES (upgrade to access):
 ```
 
 ### 8. Market Context (Conditional)
-- **Economic Indicators**: CPI, Fed rates, mortgage rates, credit card APRs
+- **Economic Indicators**: CPI inflation (YoY), federal funds rate, mortgage and credit-card averages, unemployment, 10-year Treasury, and national 12-month CD rate
 - **Current Market Data**: Treasury yields, broad-market movement, and current public rate information
 - **Source**: FRED API, Brave Search, and Polygon/Massive
 - **Example**:
 ```
 MARKET CONTEXT:
 Economic Indicators:
-- CPI Index: 3.1% (2025-01-15)
+- CPI inflation (YoY): 3.1% (2025-01-15)
 - Fed Funds Rate: 5.50%
 - Average 30-year Mortgage Rate: 7.12%
 - Average Credit Card APR: 24.59%

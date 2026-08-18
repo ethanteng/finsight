@@ -307,7 +307,7 @@ const FeaturesPage = () => {
                         <div>
                           <h3 className="font-semibold text-foreground mb-1">FRED (Federal Reserve)</h3>
                           <p className="text-[1rem] text-muted-foreground leading-relaxed">
-                            CPI, Fed funds rate, mortgage rates, credit card APR, unemployment. Powers <span className="text-primary/90">inflation-aware analysis</span>, refinance decisions, and debt strategy.
+                            CPI inflation (YoY), federal funds rate, mortgage and credit-card averages, unemployment, 10-year Treasury, and the FDIC national 12-month CD rate. Powers <span className="text-primary/90">inflation-aware analysis</span>, refinance decisions, and debt strategy.
                           </p>
                         </div>
                       </div>

@@ -299,12 +299,11 @@ if (isTestEnvironment) {
 
 **FRED Provider**:
 ```typescript
-// Enhanced safety check
-if (this.apiKey === 'test_fred_key' ||
-    this.apiKey.startsWith('test_') ||
-    process.env.GITHUB_ACTIONS) {
-  console.log('FRED: Using mock data in test/CI environment');
-  return this.getMockFredData();
+// Deterministic provider data for test keys / CI; still cached by series + units
+if (this.isMockMode()) {
+  const dataPoint = { /* deterministic value plus series metadata */ };
+  await cacheService.set(cacheKey, dataPoint, cacheTtlMs);
+  return dataPoint;
 }
 ```
 
@@ -325,11 +324,8 @@ if (process.env.NODE_ENV === 'test' || process.env.GITHUB_ACTIONS) {
   return process.env.POLYGON_API_KEY; // Fake key for tests and CI/CD
 }
 
-// Added FRED API safety check
-if (process.env.NODE_ENV === 'test' || process.env.GITHUB_ACTIONS) {
-  console.log('MarketNewsAggregator: Using mock data for FRED in test/CI environment');
-  return [/* mock data */];
-}
+// FRED aggregation delegates to FREDProvider, so test-key behavior, series
+// transformations, missing-value handling, and caching are shared by both paths.
 ```
 
 #### 4. **AI Service Safety**

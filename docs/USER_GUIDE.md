@@ -616,17 +616,21 @@ Ask Linc offers three subscription tiers with differentiated access to features:
 ### Standard Tier
 
 **All Starter Features Plus:**
-- ✅ Economic indicators (FRED API):
-  - Consumer Price Index (CPI)
-  - Federal Reserve Rate
-  - Mortgage Rates
-  - Credit Card APR
+- ✅ Latest published economic indicators and benchmarks (FRED API):
+  - CPI inflation, year-over-year
+  - Federal funds effective rate
+  - 30-year fixed mortgage market average
+  - Commercial-bank credit card rate
+  - Unemployment rate
+  - 10-year Treasury rate
+  - FDIC national 12-month CD rate
 - ✅ RAG system access (real-time financial information search)
 - ✅ Enhanced AI responses with economic context
 - ✅ Market-aware financial recommendations
 - ✅ Inflation impact analysis
 
 **Limitations:**
+- ❌ No institution-level CD offers or full live Treasury yield curve
 - ❌ No premium Polygon market and yield-curve context
 - ❌ Limited market intelligence
 

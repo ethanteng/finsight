@@ -4,14 +4,20 @@ export interface MarketDataPoint {
   date: string;
   source: string;
   lastUpdated: string;
+  seriesId?: string;
+  unit?: 'percent' | 'index';
+  transformation?: 'lin' | 'pc1';
 }
 
 export interface EconomicIndicator {
-  cpi: MarketDataPoint;
-  fedRate: MarketDataPoint;
-  mortgageRate: MarketDataPoint;
-  creditCardAPR: MarketDataPoint;
-  unemployment?: MarketDataPoint; // Optional for backward compatibility
+  /** CPIAUCSL transformed by FRED to percent change from one year ago. */
+  cpi?: MarketDataPoint;
+  fedRate?: MarketDataPoint;
+  mortgageRate?: MarketDataPoint;
+  creditCardAPR?: MarketDataPoint;
+  unemployment?: MarketDataPoint;
+  treasury10Y?: MarketDataPoint;
+  cd12Month?: MarketDataPoint;
 }
 
 // User Tier Types - will be used in Step 4

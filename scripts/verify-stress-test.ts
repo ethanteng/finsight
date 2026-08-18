@@ -9,7 +9,6 @@ import { simulateWithdrawals } from '../src/retirement-analytics/engine/withdraw
 import { analyzeOutcomes } from '../src/retirement-analytics/engine/outcome-analyzer';
 import { computeHistoricalWithdrawalRates } from '../src/retirement-analytics/engine/withdrawal-rate-solver';
 import type { DataProviderFactory } from '../src/retirement-analytics/data/data-provider-factory';
-import type { FREDProvider } from '../src/data/providers/fred';
 
 async function main() {
   const withdrawalYears = 27;
@@ -17,13 +16,11 @@ async function main() {
   const annualWithdrawal = 50_000;
 
   const mockDataProvider = {} as DataProviderFactory;
-  const mockFred = {} as FREDProvider;
 
   console.log('Running stress test with historical data...');
   const { sequences, missingData } = await generateRollingSequences(
     withdrawalYears,
     mockDataProvider,
-    mockFred,
     50
   );
 

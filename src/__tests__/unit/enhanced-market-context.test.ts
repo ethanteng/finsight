@@ -389,8 +389,8 @@ describe('Enhanced Market Context System', () => {
 
       const context = await dataOrchestrator.getMarketContextSummary(UserTier.STANDARD);
 
-      expect(context).toContain('High interest rates favor savers');
-      expect(context).toContain('consider high-yield savings accounts and CDs');
+      expect(context).toContain('An elevated policy rate raises borrowing costs');
+      expect(context).toContain('compare current deposit offers before acting');
     });
 
     it('should generate insights for high inflation', async () => {
@@ -417,8 +417,8 @@ describe('Enhanced Market Context System', () => {
 
       const context = await dataOrchestrator.getMarketContextSummary(UserTier.STANDARD);
 
-      expect(context).toContain('High mortgage rates suggest waiting');
-      expect(context).toContain('refinancing opportunities');
+      expect(context).toContain('Mortgage rates are elevated');
+      expect(context).toContain('comparing this market average with the borrower’s current rate and closing costs');
     });
 
   });

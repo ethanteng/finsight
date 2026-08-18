@@ -83,8 +83,8 @@ export const dataSourceRegistry: Record<string, DataSourceConfig> = {
   // Economic Indicators (Standard+)
   'fred-cpi': {
     id: 'fred-cpi',
-    name: 'Consumer Price Index',
-    description: 'Inflation rate tracking via CPI data',
+    name: 'CPI Inflation Rate',
+    description: 'Year-over-year inflation calculated from CPIAUCSL by FRED',
     tiers: [UserTier.STANDARD, UserTier.PREMIUM],
     category: 'economic',
     provider: 'fred',
@@ -94,19 +94,19 @@ export const dataSourceRegistry: Record<string, DataSourceConfig> = {
   },
   'fred-fed-rate': {
     id: 'fred-fed-rate',
-    name: 'Federal Reserve Rate',
-    description: 'Current Federal Funds Rate',
+    name: 'Federal Funds Effective Rate',
+    description: 'Latest published daily federal funds effective rate',
     tiers: [UserTier.STANDARD, UserTier.PREMIUM],
     category: 'economic',
     provider: 'fred',
-    cacheDuration: 24 * 60 * 60 * 1000, // 24 hours
+    cacheDuration: 4 * 60 * 60 * 1000, // 4 hours
     isLive: false,
     upgradeBenefit: 'Understand how Fed policy affects your loans and savings'
   },
   'fred-mortgage-rate': {
     id: 'fred-mortgage-rate',
     name: 'Mortgage Rates',
-    description: 'Current 30-year fixed mortgage rates',
+    description: 'Latest Freddie Mac 30-year fixed mortgage market average',
     tiers: [UserTier.STANDARD, UserTier.PREMIUM],
     category: 'economic',
     provider: 'fred',
@@ -116,14 +116,47 @@ export const dataSourceRegistry: Record<string, DataSourceConfig> = {
   },
   'fred-credit-card-apr': {
     id: 'fred-credit-card-apr',
-    name: 'Credit Card APR',
-    description: 'Average credit card interest rates',
+    name: 'Average Credit Card Rate',
+    description: 'Latest published commercial-bank credit card rate for all accounts',
     tiers: [UserTier.STANDARD, UserTier.PREMIUM],
     category: 'economic',
     provider: 'fred',
     cacheDuration: 24 * 60 * 60 * 1000, // 24 hours
     isLive: false,
     upgradeBenefit: 'Understand credit card costs and debt management'
+  },
+  'fred-unemployment': {
+    id: 'fred-unemployment',
+    name: 'Unemployment Rate',
+    description: 'Latest published U.S. unemployment rate',
+    tiers: [UserTier.STANDARD, UserTier.PREMIUM],
+    category: 'economic',
+    provider: 'fred',
+    cacheDuration: 24 * 60 * 60 * 1000,
+    isLive: false,
+    upgradeBenefit: 'Add labor-market context to financial planning'
+  },
+  'fred-treasury-10y': {
+    id: 'fred-treasury-10y',
+    name: '10-Year Treasury Rate',
+    description: 'Latest numeric 10-year Treasury constant-maturity rate',
+    tiers: [UserTier.STANDARD, UserTier.PREMIUM],
+    category: 'economic',
+    provider: 'fred',
+    cacheDuration: 4 * 60 * 60 * 1000,
+    isLive: false,
+    upgradeBenefit: 'Compare borrowing and investment rates with a Treasury benchmark'
+  },
+  'fred-cd-12-month': {
+    id: 'fred-cd-12-month',
+    name: 'National 12-Month CD Rate',
+    description: 'FDIC national average rate for 12-month CDs (NDR12MCD)',
+    tiers: [UserTier.STANDARD, UserTier.PREMIUM],
+    category: 'economic',
+    provider: 'fred',
+    cacheDuration: 24 * 60 * 60 * 1000,
+    isLive: false,
+    upgradeBenefit: 'Compare CD offers with the FDIC national average'
   },
 
   // Premium market context is supplied by Polygon/Massive in the persisted

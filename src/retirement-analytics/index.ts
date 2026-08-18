@@ -5,7 +5,6 @@ import { RetirementAnalysisInput, RetirementAnalysisOutput } from './types';
 import { analyzePortfolio } from './engine/portfolio-analyzer';
 import { mapPortfolioToAssetBasket, populateAssumptions } from './engine/portfolio-mapper';
 import { DataProviderFactory } from './data/data-provider-factory';
-import { FREDProvider } from '../data/providers/fred';
 import {
   calculateHistoricalPriceCoverage,
   generateRollingSequences,
@@ -122,14 +121,10 @@ export async function analyzeRetirementPortfolio(
       : `Historical sequences include ${yearsToWithdrawalStart} years of pre-withdrawal growth with no additional contributions before the ${withdrawalYears}-year withdrawal period.`
     : 'Withdrawals begin immediately; no pre-withdrawal accumulation period is modeled.';
 
-  const fredApiKey = process.env.FRED_API_KEY || 'test_fred_key';
-  const fredProvider = new FREDProvider(fredApiKey);
-
   // Phase 3: Generate rolling sequences (with graceful degradation)
   const { sequences, missingData: stressTestMissingData } = await generateRollingSequences(
     totalAnalysisYears,
     dataProviderFactory,
-    fredProvider,
     50 // minHistoryYears
   );
 

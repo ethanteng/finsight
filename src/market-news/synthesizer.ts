@@ -143,7 +143,7 @@ MARKET OUTLOOK:
       if (item.type === 'economic_indicator') {
         // FRED format: { series, name, value, date }
         if (d.series && d.value != null) {
-          const units = d.series === 'CPIAUCSL' ? ' (CPI index)' : ['FEDFUNDS', 'MORTGAGE30US', 'DGS10'].includes(String(d.series)) ? '%' : '';
+          const units = d.unit === 'percent' ? '%' : d.unit === 'index' ? ' (index)' : '';
           lines.push(`- ${item.source} | ${d.name || d.series}: ${d.value}${units} (${d.date || 'N/A'})`);
         } else if (d.inflationContext) {
           lines.push(`- ${item.source} | ${d.inflationContext}`);
@@ -195,11 +195,11 @@ MARKET OUTLOOK:
       if (item.type === 'economic_indicator') {
         const ind = item.data as Record<string, unknown>;
         // FRED format
-        if (ind.series === 'FEDFUNDS' && Number(ind.value) > 5) {
+        if (['DFF', 'FEDFUNDS'].includes(String(ind.series)) && Number(ind.value) > 5) {
           events.push(`Federal Reserve rate at ${ind.value}% - high interest rate environment`);
         }
-        if (ind.series === 'CPIAUCSL' && Number(ind.value) > 300) {
-          events.push(`Inflation rate elevated at ${ind.value} - cost of living concerns`);
+        if (ind.series === 'CPIAUCSL' && Number(ind.value) > 3) {
+          events.push(`Inflation rate elevated at ${ind.value}% year-over-year - cost of living concerns`);
         }
         if (ind.series === 'MORTGAGE30US' && Number(ind.value) > 7) {
           events.push(`Mortgage rates high at ${ind.value}% - housing market impact`);
