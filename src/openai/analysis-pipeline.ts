@@ -614,15 +614,29 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
           selectedPacks = escalatedPacks;
           questionNeeds = escalatedNeeds;
           // Recovery reads every pack so the retry can cite the evidence the
-          // first answer reached for. `retirementAnalysisNeedsInfo` is not
-          // evidence: it is a standing instruction to ask the user for
-          // retirement inputs, carrying the detected values behind that ask.
-          // Handing it to a question that never planned for retirement would
-          // move the leak this file blocks server-side into the model's prose,
-          // where no grounding check catches it.
+          // first answer reached for. Two parts of the retirement pack are not
+          // that evidence, and both put the user's retirement inputs in front
+          // of a question that never asked for them:
+          //  - `retirementAnalysisNeedsInfo` is a standing instruction to ask
+          //    the user for those inputs, carrying the detected values with it.
+          //  - `_storedInputParams` becomes canonical facts for current age,
+          //    retirement age, spending, and withdrawal age, which is what
+          //    makes a stray "$120,000" survive grounding in the retry.
+          // Dropping both leaves the analysis itself — allocations, survival
+          // rate, depletion percentiles — so recovery still supplies the
+          // evidence it exists to supply.
           const snapshotForPrompt = plannedQuestionNeeds.needsRetirement
             ? snapshot
-            : { ...snapshot, retirementAnalysisNeedsInfo: undefined };
+            : {
+                ...snapshot,
+                retirementAnalysisNeedsInfo: undefined,
+                ...(snapshot.retirementAnalysis && {
+                  retirementAnalysis: {
+                    ...snapshot.retirementAnalysis,
+                    _storedInputParams: undefined,
+                  },
+                }),
+              };
           promptInput = buildPromptInput(snapshotForPrompt, escalatedNeeds);
           factPack = promptInput.canonicalFacts!;
           contextEscalated = true;
