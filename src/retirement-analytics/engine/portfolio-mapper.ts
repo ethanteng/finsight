@@ -259,19 +259,19 @@ export function populateAssumptions(
   }
 
   if (mapping.usEquityWeight > 0 || mapping.internationalEquityWeight > 0) {
-    assumptions.push('US equity exposure uses the Shiller US equity total-return history');
+    assumptions.push('US equity exposure uses the Kenneth French broad US market total-return history (Mkt-RF plus RF)');
   }
 
   if (mapping.internationalEquityWeight > 0) {
-    assumptions.push('International equity currently uses the same US equity return history, so international diversification effects are not modeled');
+    assumptions.push('International equity exposure uses the Kenneth French EAFE-plus-Canada market return in US dollars; emerging markets are not modeled separately');
   }
 
   if (mapping.nominalBondsWeight > 0) {
-    assumptions.push('Bond exposure uses the Shiller historical bond-return series');
+    assumptions.push('Bond exposure uses the Shiller synthetic 10-year US government-bond total-return history');
   }
 
   if (mapping.cashWeight > 0) {
-    assumptions.push('Cash holdings assumed to earn treasury bill rate');
+    assumptions.push('Cash holdings use the Kenneth French one-month US Treasury-bill return (RF)');
   }
 
   return assumptions;

@@ -4,19 +4,92 @@
  * No API calls. Fully deterministic and offline.
  */
 
+import { createHash } from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
 
 export interface HistoricalReturns {
   dates: Date[];
   usEquityReturns: number[];
-  intlEquityReturns: number[];
+  intlEquityReturns: Array<number | null>;
   bondReturns: number[];
   cashReturns: number[];
   inflationRates: number[];
+  metadata?: HistoricalDatasetMetadata;
 }
 
 const DEFAULT_CSV_PATH = path.join(__dirname, '../../../data/historical_market_returns.csv');
+const DEFAULT_METADATA_PATH = path.join(__dirname, '../../../data/historical_market_returns.metadata.json');
+
+export interface HistoricalDatasetMetadata {
+  schemaVersion: number;
+  firstMonth: string;
+  lastMonth: string;
+  rowCount: number;
+  generatedFromSourceRetrieval: string;
+  series: Record<string, {
+    source: string;
+    description: string;
+    firstMonth: string;
+    lastMonth: string;
+  }>;
+  sources: Record<string, {
+    provider: string;
+    documentationUrl: string;
+    sourceVintage: string;
+    firstObservation: string;
+    lastObservation: string;
+    sha256: string;
+  }>;
+  methodology: {
+    rollingWindows: string;
+    internationalAvailability: string;
+  };
+}
+
+let defaultDatasetCache: HistoricalReturns | null = null;
+
+function monthOrdinal(date: Date): number {
+  return date.getUTCFullYear() * 12 + date.getUTCMonth();
+}
+
+function loadMetadata(): HistoricalDatasetMetadata {
+  if (!fs.existsSync(DEFAULT_METADATA_PATH)) {
+    throw new Error(`Historical market metadata file not found: ${DEFAULT_METADATA_PATH}`);
+  }
+  const metadata = JSON.parse(fs.readFileSync(DEFAULT_METADATA_PATH, 'utf8')) as HistoricalDatasetMetadata;
+  if (metadata.schemaVersion !== 2) {
+    throw new Error(`Unsupported historical market metadata schema: ${metadata.schemaVersion}`);
+  }
+  return metadata;
+}
+
+let datasetVersionCache: string | null = null;
+
+function fileDigest(filePath: string): string {
+  return createHash('sha256').update(fs.readFileSync(path.resolve(filePath))).digest('hex');
+}
+
+/**
+ * Fingerprint of the returns actually used, for cache invalidation.
+ *
+ * Deliberately hashes the generated files rather than the upstream source
+ * snapshots: a builder correction or an edit to the checked-in dataset changes
+ * the returns without touching the three downloaded sources, and callers that
+ * key a stored analysis on this string must recompute in that case too. The
+ * metadata file carries the source hashes, so those remain covered.
+ */
+export function getHistoricalDatasetVersion(): string {
+  if (datasetVersionCache) return datasetVersionCache;
+  // Validates the dataset and its metadata before either is fingerprinted.
+  const metadata = loadHistoricalReturns().metadata;
+  if (!metadata) throw new Error('Historical dataset metadata is unavailable');
+  datasetVersionCache =
+    `v${metadata.schemaVersion}` +
+    `|returns:${fileDigest(DEFAULT_CSV_PATH)}` +
+    `|metadata:${fileDigest(DEFAULT_METADATA_PATH)}`;
+  return datasetVersionCache;
+}
 
 /**
  * Load historical returns from the unified CSV.
@@ -24,6 +97,9 @@ const DEFAULT_CSV_PATH = path.join(__dirname, '../../../data/historical_market_r
  */
 export function loadHistoricalReturns(csvPath: string = DEFAULT_CSV_PATH): HistoricalReturns {
   const resolved = path.resolve(csvPath);
+  if (resolved === path.resolve(DEFAULT_CSV_PATH) && defaultDatasetCache) {
+    return defaultDatasetCache;
+  }
   if (!fs.existsSync(resolved)) {
     throw new Error(
       `Historical market returns file not found: ${resolved}. Run 'npm run build:market-dataset' to generate it.`
@@ -44,7 +120,7 @@ export function loadHistoricalReturns(csvPath: string = DEFAULT_CSV_PATH): Histo
 
   const dates: Date[] = [];
   const usEquityReturns: number[] = [];
-  const intlEquityReturns: number[] = [];
+  const intlEquityReturns: Array<number | null> = [];
   const bondReturns: number[] = [];
   const cashReturns: number[] = [];
   const inflationRates: number[] = [];
@@ -60,19 +136,26 @@ export function loadHistoricalReturns(csvPath: string = DEFAULT_CSV_PATH): Histo
     const year = parseInt(yearStr, 10);
     const month = parseInt(monthStr || '1', 10) - 1;
 
-    const rawValues = [usStr, intlStr, bondsStr, cashStr, inflationStr];
-    const values = rawValues.map(Number);
+    const requiredRawValues = [usStr, bondsStr, cashStr, inflationStr];
+    const requiredValues = requiredRawValues.map(Number);
+    const internationalValue = intlStr === 'NA' ? null : Number(intlStr);
     if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(dateStr) || !Number.isInteger(year) || month < 0 || month > 11 ||
-        rawValues.some(value => value.trim() === '') ||
-        values.some(value => !Number.isFinite(value))) {
+        requiredRawValues.some(value => value.trim() === '') || intlStr.trim() === '' ||
+        requiredValues.some(value => !Number.isFinite(value) || value <= -1) ||
+        (internationalValue !== null && (!Number.isFinite(internationalValue) || internationalValue <= -1))) {
       throw new Error(`Invalid historical return row ${i + 1}: ${lines[i]}`);
     }
-    dates.push(new Date(year, month, 1));
-    usEquityReturns.push(values[0]);
-    intlEquityReturns.push(values[1]);
-    bondReturns.push(values[2]);
-    cashReturns.push(values[3]);
-    inflationRates.push(values[4]);
+    const date = new Date(Date.UTC(year, month, 1));
+    const previousDate = dates[dates.length - 1];
+    if (previousDate && monthOrdinal(date) !== monthOrdinal(previousDate) + 1) {
+      throw new Error(`Historical return dates are not contiguous at row ${i + 1}: ${lines[i]}`);
+    }
+    dates.push(date);
+    usEquityReturns.push(requiredValues[0]);
+    intlEquityReturns.push(internationalValue);
+    bondReturns.push(requiredValues[1]);
+    cashReturns.push(requiredValues[2]);
+    inflationRates.push(requiredValues[3]);
   }
 
   const n = dates.length;
@@ -86,12 +169,24 @@ export function loadHistoricalReturns(csvPath: string = DEFAULT_CSV_PATH): Histo
     throw new Error('Array length mismatch in historical returns');
   }
 
-  return {
+  const metadata = resolved === path.resolve(DEFAULT_CSV_PATH) ? loadMetadata() : undefined;
+  if (metadata && (
+    metadata.rowCount !== n ||
+    metadata.firstMonth !== lines[1].slice(0, 7) ||
+    metadata.lastMonth !== lines[lines.length - 1].slice(0, 7)
+  )) {
+    throw new Error('Historical market metadata does not match the generated return file');
+  }
+
+  const result = {
     dates,
     usEquityReturns,
     intlEquityReturns,
     bondReturns,
     cashReturns,
     inflationRates,
+    metadata,
   };
+  if (resolved === path.resolve(DEFAULT_CSV_PATH)) defaultDatasetCache = result;
+  return result;
 }

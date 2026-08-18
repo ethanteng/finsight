@@ -122,11 +122,21 @@ export async function analyzeRetirementPortfolio(
     : 'Withdrawals begin immediately; no pre-withdrawal accumulation period is modeled.';
 
   // Phase 3: Generate rolling sequences (with graceful degradation)
-  const { sequences, missingData: stressTestMissingData } = await generateRollingSequences(
+  const {
+    sequences,
+    missingData: stressTestMissingData,
+    historicalData,
+  } = await generateRollingSequences(
     totalAnalysisYears,
-    dataProviderFactory,
+    portfolioMapping,
     50 // minHistoryYears
   );
+  if (historicalData) {
+    assumptions.push(
+      `Historical simulation uses ${historicalData.firstMonth} through ${historicalData.lastMonth}; ` +
+      'monthly rolling start windows overlap and are not statistically independent observations'
+    );
+  }
 
   // Phase 3b: Compute historical withdrawal rate distribution (before user scenario)
   const withdrawalSequences = withdrawalDelayMonths > 0
@@ -222,7 +232,8 @@ export async function analyzeRetirementPortfolio(
     timelineMetrics,
     withdrawalMetrics,
     dataQuality,
-    timelineBucketNote
+    timelineBucketNote,
+    historicalData
   );
 }
 

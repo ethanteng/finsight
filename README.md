@@ -63,6 +63,22 @@ Ask Linc is a comprehensive financial analysis platform that combines AI-powered
     - Source attribution and transparency
     - Tier-aware access control
 
+### Historical Retirement Market Data
+
+Retirement stress tests run entirely from the checked-in, monthly dataset in
+`data/historical_market_returns.csv`. Its source snapshots and generated
+metadata are versioned so production analysis never depends on a live market
+data request:
+
+- Kenneth French broad US market total returns and one-month Treasury-bill returns
+- Kenneth French EAFE-plus-Canada market returns for international equity
+- Robert Shiller 10-year US government-bond returns and CPI inflation
+
+Run `npm run refresh:market-datasets` to download validated official snapshots,
+update their hashes and vintages, and rebuild the unified dataset. Monthly
+rolling stress-test windows overlap and must be described as historical shares,
+not independent probability estimates.
+
 ### **4. Tier-Based Access Control**
 - **Tiers**: Starter, Standard, Premium
 - **Features**:

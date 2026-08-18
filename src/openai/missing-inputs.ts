@@ -27,6 +27,33 @@ const MAX_ASKS = 2;
 
 const HOME_VALUE_UNAVAILABLE = 'Home value data is currently unavailable.';
 
+/**
+ * "Shorten the timeline" is not an instruction anyone can follow. The engine
+ * knows how far its record reaches, so say which timeline would work, and why
+ * this portfolio's record is shorter than the full history when it is.
+ */
+function describeHistoryLimit(
+  limit: NonNullable<FinancialContextSnapshot['retirementAnalysisNeedsInfo']>['historyLimit']
+): string {
+  const because = limit?.limitedByInternationalHistory
+    ? 'Because your portfolio holds international equity, I model it against the developed-international record, which is shorter than the US one'
+    : 'I model against the complete historical record for the asset classes you hold';
+  const span = limit?.firstMonth && limit.lastMonth
+    ? ` (${limit.firstMonth} through ${limit.lastMonth})`
+    : '';
+
+  if (!limit || limit.maxTimelineYears <= 0) {
+    return `${because}${span}, and it is too short to project this portfolio at all. ` +
+      'I would rather say so than invent returns to fill the gap.';
+  }
+
+  const target = limit.maxTimelineAge != null
+    ? `through age ${limit.maxTimelineAge}`
+    : `about ${limit.maxTimelineYears} years out`;
+  return `That timeline runs past the history I can model. ${because}${span}, ` +
+    `so ask again ${target} or earlier and I will run the projection without inventing returns.`;
+}
+
 export function collectMissingInputAsks(
   snapshot: Pick<FinancialContextSnapshot,
     'retirementAnalysisNeedsInfo' | 'homeValueSummary' | 'financialSummary'>,
@@ -45,6 +72,11 @@ export function collectMissingInputAsks(
         id: 'retirement_no_holdings',
         message: 'I could not run a retirement projection because no investment holdings are connected. ' +
           'Link an investment account and ask again, and I will include it.',
+      });
+    } else if (needsInfo?.unavailableCode === 'insufficient_history') {
+      asks.push({
+        id: 'retirement_insufficient_history',
+        message: describeHistoryLimit(needsInfo.historyLimit),
       });
     }
   }

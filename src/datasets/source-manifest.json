@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "sources": {
+    "shiller": {
+      "provider": "Robert J. Shiller",
+      "file": "src/datasets/ie_data.xls",
+      "documentationUrl": "https://shillerdata.com/",
+      "downloadUrl": "https://img1.wsimg.com/blobby/go/e5e77e0b-59d1-44d9-ab25-4763ac982e53/downloads/e27e58c1-8ae0-488c-a976-a298708c7175/ie_data.xls?ver=1785857394436",
+      "retrievedAt": "2026-08-18T17:22:32.892Z",
+      "sourceVintage": "2026-08",
+      "firstObservation": "1871-01",
+      "lastObservation": "2026-08",
+      "sha256": "71c3636da5269b074489db41ecf0dcf0caef6275d1f3ecaf753ddaca2b81db2f"
+    },
+    "frenchUsFactors": {
+      "provider": "Kenneth R. French Data Library",
+      "file": "src/datasets/F-F_Research_Data_Factors.csv",
+      "documentationUrl": "https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/data_library/f-f_factors.html",
+      "downloadUrl": "https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/ftp/F-F_Research_Data_Factors_CSV.zip",
+      "retrievedAt": "2026-08-18T17:22:32.892Z",
+      "sourceVintage": "2026-06",
+      "firstObservation": "1926-07",
+      "lastObservation": "2026-06",
+      "sha256": "9ddf8f5b510f8730acca0fc3d899085d757c92378d7ea66b7c8d864354fa1209"
+    },
+    "frenchInternationalIndices": {
+      "provider": "Kenneth R. French Data Library",
+      "file": "src/datasets/F-F_International_Indices.dat",
+      "documentationUrl": "https://mba.tuck.dartmouth.edu/pages/Faculty/ken.french/Data_Library/int_index_port_formed.html",
+      "downloadUrl": "https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/ftp/F-F_International_Indices.zip",
+      "retrievedAt": "2026-08-18T17:22:32.892Z",
+      "sourceVintage": "2025-12",
+      "firstObservation": "1975-01",
+      "lastObservation": "2025-12",
+      "sha256": "047aab4e9ae512f3759fde34e8e49b8ff12a162fad4e8d36ec5b8c99b8d06266"
+    }
+  }
+}

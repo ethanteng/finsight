@@ -240,6 +240,19 @@ export interface DataQualityReport {
   missingData: string[]; // list of tickers with incomplete data
 }
 
+export interface HistoricalDataSummary {
+  firstMonth: string;
+  lastMonth: string;
+  sourceRetrievedAt: string;
+  monthlyStartWindowsOverlap: true;
+  series: Record<string, {
+    source: string;
+    description: string;
+    firstMonth: string;
+    lastMonth: string;
+  }>;
+}
+
 // ============================================================================
 // Output Format (Section 6.3)
 // ============================================================================
@@ -308,6 +321,9 @@ export interface RetirementAnalysisOutput {
   }>;
   
   dataQuality: DataQualityReport;
+
+  /** Source range and methodology supplied to the LLM with historical results. */
+  historicalData?: HistoricalDataSummary;
   
   disclaimers: string[]; // Pre-formatted disclaimer text
 }

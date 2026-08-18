@@ -1,12 +1,21 @@
 import { describe, expect, it } from '@jest/globals';
-import { mkdtempSync, rmSync, writeFileSync } from 'fs';
+import { createHash } from 'crypto';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
+import * as XLSX from 'xlsx';
 import { mapPortfolioToAssetBasket } from '../../retirement-analytics/engine/portfolio-mapper';
 import { analyzePortfolio } from '../../retirement-analytics/engine/portfolio-analyzer';
 import { simulateWithdrawals } from '../../retirement-analytics/engine/withdrawal-simulator';
-import { calculateHistoricalPriceCoverage } from '../../retirement-analytics/engine/stress-tester';
-import { loadHistoricalReturns } from '../../retirement-analytics/engine/historical-data-loader';
+import {
+  calculateHistoricalPriceCoverage,
+  generateRollingSequences,
+  InsufficientHistoricalDataError,
+} from '../../retirement-analytics/engine/stress-tester';
+import {
+  getHistoricalDatasetVersion,
+  loadHistoricalReturns,
+} from '../../retirement-analytics/engine/historical-data-loader';
 import { computeHistoricalWithdrawalRates } from '../../retirement-analytics/engine/withdrawal-rate-solver';
 import { buildRetirementTimeline } from '../../retirement-analytics';
 import { calculateDataQuality } from '../../retirement-analytics/interpretation/uncertainty-quantifier';
@@ -244,13 +253,132 @@ describe('retirement correctness contracts', () => {
     );
   });
 
-  it('describes the actual international historical proxy instead of claiming VXUS coverage', () => {
+  it('describes the independent French international history and its scope', () => {
     const quality = calculateDataQuality([], [], balancedMapping, 1, []);
 
-    expect(quality.proxyUsage.internationalEquityProxy).toContain('US equity history');
-    expect(quality.missingData).toContain(
+    expect(quality.proxyUsage.internationalEquityProxy).toContain('EAFE-plus-Canada');
+    expect(quality.missingData).not.toContain(
       'Independent international equity return history is unavailable; US equity returns are used as its proxy'
     );
+  });
+
+  it('loads the extended source-backed history and explicit international availability', () => {
+    const history = loadHistoricalReturns();
+    const month = (date: Date) => `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}`;
+
+    expect(history.dates).toHaveLength(1200);
+    expect(month(history.dates[0])).toBe('1926-07');
+    expect(month(history.dates[history.dates.length - 1])).toBe('2026-06');
+    expect(history.intlEquityReturns[0]).toBeNull();
+    expect(history.intlEquityReturns[history.dates.findIndex(date => month(date) === '1975-01')]).toBeCloseTo(0.1779);
+    expect(history.intlEquityReturns[history.dates.findIndex(date => month(date) === '2026-01')]).toBeNull();
+    expect(history.metadata?.series.intl_equity.firstMonth).toBe('1975-01');
+  });
+
+  it('aligns Shiller bond returns to the month in which they were earned', () => {
+    const history = loadHistoricalReturns();
+    const workbook = XLSX.readFile(join(process.cwd(), 'src/datasets/ie_data.xls'));
+    const sheet = workbook.Sheets.Data;
+    let february1970Row = -1;
+    for (let row = 8; row < 2_000; row++) {
+      if (sheet[XLSX.utils.encode_cell({ r: row, c: 0 })]?.v === 1970.02) {
+        february1970Row = row;
+        break;
+      }
+    }
+    expect(february1970Row).toBeGreaterThan(8);
+    const januaryForwardBondGross = Number(
+      sheet[XLSX.utils.encode_cell({ r: february1970Row - 1, c: 17 })]?.v
+    );
+    const historyIndex = history.dates.findIndex(
+      date => date.getUTCFullYear() === 1970 && date.getUTCMonth() === 1
+    );
+
+    expect(history.bondReturns[historyIndex]).toBeCloseTo(januaryForwardBondGross - 1, 6);
+  });
+
+  it('selects source history based on active sleeves', async () => {
+    const usOnly = { ...balancedMapping, usEquityWeight: 1, internationalEquityWeight: 0, nominalBondsWeight: 0 };
+    const usResult = await generateRollingSequences(30, usOnly);
+    const internationalResult = await generateRollingSequences(30, balancedMapping);
+
+    expect(usResult.sequences).toHaveLength(841);
+    expect(usResult.historicalData?.firstMonth).toBe('1926-07');
+    expect(internationalResult.sequences).toHaveLength(253);
+    expect(internationalResult.historicalData?.firstMonth).toBe('1975-01');
+    expect(internationalResult.historicalData?.lastMonth).toBe('2025-12');
+  });
+
+  it('rejects a horizon longer than the active-sleeve history', async () => {
+    await expect(generateRollingSequences(60, balancedMapping)).rejects.toBeInstanceOf(
+      InsufficientHistoricalDataError
+    );
+  });
+
+  const rejectionOf = async (
+    run: Promise<unknown>
+  ): Promise<InsufficientHistoricalDataError> => {
+    try {
+      await run;
+    } catch (error) {
+      if (error instanceof InsufficientHistoricalDataError) return error;
+      throw error;
+    }
+    throw new Error('Expected InsufficientHistoricalDataError, but the call resolved');
+  };
+
+  it('reports the longest horizon it could model, and what shortened it', async () => {
+    const error = await rejectionOf(generateRollingSequences(60, balancedMapping));
+
+    expect(error.maxTimelineYears).toBe(51);
+    expect(error.limitedByInternationalHistory).toBe(true);
+    expect(error.firstMonth).toBe('1975-01');
+    expect(error.lastMonth).toBe('2025-12');
+  });
+
+  it('offers no horizon at all when the record is below the engine minimum', async () => {
+    // A 60-year floor is longer than the international record, so nothing works.
+    const error = await rejectionOf(generateRollingSequences(30, balancedMapping, 60));
+
+    expect(error.maxTimelineYears).toBe(0);
+  });
+
+  it('does not blame the international sleeve when the whole record is too short', async () => {
+    const usOnly = { ...balancedMapping, usEquityWeight: 1, internationalEquityWeight: 0, nominalBondsWeight: 0 };
+    const error = await rejectionOf(generateRollingSequences(120, usOnly));
+
+    expect(error.limitedByInternationalHistory).toBe(false);
+    expect(error.maxTimelineYears).toBe(100);
+  });
+
+  it('fingerprints the generated dataset, not only the upstream source snapshots', () => {
+    const digest = (relativePath: string) =>
+      createHash('sha256').update(readFileSync(join(process.cwd(), relativePath))).digest('hex');
+    const version = getHistoricalDatasetVersion();
+
+    // A builder correction changes the generated returns without moving any
+    // source hash, so a version built from sources alone would leave stale
+    // analyses cached. Both generated files must be in the fingerprint.
+    expect(version).toContain(digest('data/historical_market_returns.csv'));
+    expect(version).toContain(digest('data/historical_market_returns.metadata.json'));
+  });
+
+  it('keeps the checked-in source snapshots in sync with their recorded provenance', () => {
+    const manifest = JSON.parse(
+      readFileSync(join(process.cwd(), 'src/datasets/source-manifest.json'), 'utf8')
+    ) as {
+      sources: Record<string, { file: string; sha256: string }>;
+    };
+    const metadataSources = loadHistoricalReturns().metadata?.sources ?? {};
+
+    expect(Object.keys(manifest.sources).sort()).toEqual(Object.keys(metadataSources).sort());
+    for (const [key, source] of Object.entries(manifest.sources)) {
+      const actual = createHash('sha256')
+        .update(readFileSync(join(process.cwd(), source.file)))
+        .digest('hex');
+      expect(actual).toBe(source.sha256);
+      expect(metadataSources[key].sha256).toBe(source.sha256);
+    }
   });
 
   it('rejects blank historical return cells instead of coercing them to zero', () => {

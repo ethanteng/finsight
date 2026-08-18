@@ -605,7 +605,10 @@ async function fetchOrCreateRetirementAnalysis(args: {
     },
     orderBy: { computedAt: 'desc' }
   });
-  const storedInput = (recentAnalysis?.analysisInput || {}) as Record<string, number | null | undefined>;
+  const storedAnalysisInput = (recentAnalysis?.analysisInput || {}) as Record<string, unknown>;
+  const storedInput = storedAnalysisInput as Record<string, number | null | undefined>;
+  const { getHistoricalDatasetVersion } = await import('../retirement-analytics/engine/historical-data-loader');
+  const historicalDatasetVersion = getHistoricalDatasetVersion();
   const confirmsStoredAnnualWithdrawal =
     /\b(?:yes|same|unchanged|continue|keep (?:it|that|the same)|use (?:it|that|the same|my previous|the previous)(?: amount)?)\b/i.test(question);
   const {
@@ -664,7 +667,8 @@ async function fetchOrCreateRetirementAnalysis(args: {
       storedInput.retirementAge === retirementAge &&
       storedInput.annualWithdrawalAmount === annualWithdrawalAmount &&
       storedInput.withdrawalStartAge === withdrawalStartAge &&
-      (storedInput.lifeExpectancy ?? 95) === lifeExpectancy
+      (storedInput.lifeExpectancy ?? 95) === lifeExpectancy &&
+      storedAnalysisInput.historicalDatasetVersion === historicalDatasetVersion
     ) {
       console.log('📦 Using cached retirement analysis from database');
       const cachedAnalysis = recentAnalysis.historicalImplications as any;
@@ -730,7 +734,8 @@ async function fetchOrCreateRetirementAnalysis(args: {
       retirementAge,
       lifeExpectancy,
       annualWithdrawalAmount,
-      withdrawalStartAge
+      withdrawalStartAge,
+      historicalDatasetVersion,
     };
 
     console.log('🔄 Running new retirement analysis for user:', userId);
@@ -803,6 +808,36 @@ async function fetchOrCreateRetirementAnalysis(args: {
     } else if (errorMessage.includes('No price data returned')) {
       console.error('💡 Retirement analysis failed due to empty price data from Tiingo API. ' +
         'Check Tiingo API status and rate limits.');
+    }
+
+    const { InsufficientHistoricalDataError } = await import(
+      '../retirement-analytics/engine/stress-tester'
+    );
+    if (error instanceof InsufficientHistoricalDataError) {
+      const { maxTimelineYears } = error;
+      // The engine knows exactly how far the record reaches. Carry that through
+      // as data so the ask can name a timeline rather than say "shorter".
+      const maxTimelineAge = maxTimelineYears > 0 && currentAge != null
+        ? currentAge + maxTimelineYears
+        : undefined;
+      return {
+        needsInfo: {
+          missingParams: [],
+          detectedParams: {},
+          unavailableReason: maxTimelineYears > 0
+            ? `${errorMessage}. Ask the user to model through age ${maxTimelineAge ?? `${maxTimelineYears} years out`} ` +
+              'or earlier instead of estimating beyond the available history.'
+            : `${errorMessage}. Do not estimate beyond the available history.`,
+          unavailableCode: 'insufficient_history',
+          historyLimit: {
+            maxTimelineYears,
+            maxTimelineAge,
+            firstMonth: error.firstMonth ?? undefined,
+            lastMonth: error.lastMonth ?? undefined,
+            limitedByInternationalHistory: error.limitedByInternationalHistory,
+          },
+        },
+      };
     }
 
     return {

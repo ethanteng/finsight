@@ -4,9 +4,49 @@
 // Uses local historical data from data/historical_market_returns.csv.
 // Fully deterministic and offline. No ETF or FRED API calls for sequence data.
 
-import { HistoricalSequence, PortfolioMapping, TimelineBucket } from '../types';
-import { DataProviderFactory } from '../data/data-provider-factory';
+import { HistoricalDataSummary, HistoricalSequence, PortfolioMapping, TimelineBucket } from '../types';
 import { loadHistoricalReturns } from './historical-data-loader';
+
+export class InsufficientHistoricalDataError extends Error {
+  constructor(
+    public readonly requestedMonths: number,
+    public readonly availableMonths: number,
+    public readonly firstMonth: string | null,
+    public readonly lastMonth: string | null,
+    public readonly minimumHistoryMonths: number = 0,
+    /** True when an active international sleeve is what narrowed the window. */
+    public readonly limitedByInternationalHistory: boolean = false
+  ) {
+    const requestedYears = requestedMonths / 12;
+    const availableYears = availableMonths / 12;
+    const requirement = availableMonths < requestedMonths
+      ? `the requested ${requestedYears.toFixed(1)}-year horizon exceeds`
+      : `the analysis requires at least ${(minimumHistoryMonths / 12).toFixed(1)} years, but found`;
+    super(
+      `Insufficient historical market data: ${requirement} ` +
+      `${availableYears.toFixed(1)} years of complete active-sleeve history` +
+      (firstMonth && lastMonth ? ` (${firstMonth} through ${lastMonth})` : '') +
+      (limitedByInternationalHistory ? ", limited by the portfolio's international sleeve" : '')
+    );
+    this.name = 'InsufficientHistoricalDataError';
+  }
+
+  /**
+   * Longest horizon this portfolio can actually be modeled over, in whole years.
+   *
+   * Zero when the window is below the engine's own minimum, because then no
+   * timeline works and asking the user to shorten one would send them in
+   * circles.
+   */
+  get maxTimelineYears(): number {
+    if (this.availableMonths < this.minimumHistoryMonths) return 0;
+    return Math.floor(this.availableMonths / 12);
+  }
+}
+
+function dateString(date: Date): string {
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}`;
+}
 
 /**
  * Return exact withdrawal years as string (no bucketing).
@@ -22,38 +62,77 @@ export function snapToHorizonBucket(withdrawalYears: number): TimelineBucket {
  * Uses monthly start windows.
  */
 export async function generateRollingSequences(
-  withdrawalYears: number,
-  _dataProviderFactory: DataProviderFactory,
-  _minHistoryYears: number = 50
-): Promise<{ sequences: HistoricalSequence[]; missingData: string[] }> {
+  analysisYears: number,
+  mapping: PortfolioMapping,
+  minHistoryYears: number = 50
+): Promise<{
+  sequences: HistoricalSequence[];
+  missingData: string[];
+  historicalData?: HistoricalDataSummary;
+}> {
   const data = loadHistoricalReturns();
   const { dates, usEquityReturns, intlEquityReturns, bondReturns, cashReturns, inflationRates } = data;
 
-  const horizonMonths = Math.round(withdrawalYears * 12);
-  const today = new Date();
-  const latestStartDate = new Date(today.getFullYear(), today.getMonth(), 1);
-  latestStartDate.setMonth(latestStartDate.getMonth() - horizonMonths);
+  const horizonMonths = Math.round(analysisYears * 12);
+  if (!Number.isFinite(horizonMonths) || horizonMonths <= 0) {
+    throw new Error('Historical analysis horizon must be positive');
+  }
+
+  const internationalRequired = mapping.internationalEquityWeight > 0;
+  const usable = dates.map((_, index) =>
+    !internationalRequired || intlEquityReturns[index] !== null
+  );
+  const firstUsable = usable.indexOf(true);
+  const lastUsable = usable.lastIndexOf(true);
+  const availableMonths = firstUsable < 0 ? 0 : lastUsable - firstUsable + 1;
+  const firstMonth = firstUsable < 0 ? null : dateString(dates[firstUsable]);
+  const lastMonth = lastUsable < 0 ? null : dateString(dates[lastUsable]);
+
+  if (
+    firstUsable < 0 ||
+    usable.slice(firstUsable, lastUsable + 1).some(value => !value) ||
+    availableMonths < horizonMonths ||
+    availableMonths < minHistoryYears * 12
+  ) {
+    throw new InsufficientHistoricalDataError(
+      horizonMonths,
+      availableMonths,
+      firstMonth,
+      lastMonth,
+      minHistoryYears * 12,
+      // Only claim the international sleeve is the constraint when it actually
+      // cost months; otherwise the whole dataset is simply too short.
+      internationalRequired && availableMonths < dates.length
+    );
+  }
+
+  const activeDates = dates.slice(firstUsable, lastUsable + 1);
+  const activeUsEquity = usEquityReturns.slice(firstUsable, lastUsable + 1);
+  const activeInternational = intlEquityReturns.slice(firstUsable, lastUsable + 1);
+  const activeBonds = bondReturns.slice(firstUsable, lastUsable + 1);
+  const activeCash = cashReturns.slice(firstUsable, lastUsable + 1);
+  const activeInflation = inflationRates.slice(firstUsable, lastUsable + 1);
 
   const sequences: HistoricalSequence[] = [];
   const missingData: string[] = [];
 
-  for (let i = 0; i <= dates.length - horizonMonths; i++) {
-    const startDate = dates[i];
-    if (startDate > latestStartDate) break;
-
+  for (let i = 0; i <= activeDates.length - horizonMonths; i++) {
+    const startDate = activeDates[i];
     const endIndex = i + horizonMonths - 1;
-    const endDate = dates[endIndex];
+    const endDate = activeDates[endIndex];
 
-    const usEquity = usEquityReturns.slice(i, endIndex + 1);
-    const internationalEquity = intlEquityReturns.slice(i, endIndex + 1);
-    const nominalBonds = bondReturns.slice(i, endIndex + 1);
-    const cash = cashReturns.slice(i, endIndex + 1);
-    const seqInflationRates = inflationRates.slice(i, endIndex + 1);
+    const usEquity = activeUsEquity.slice(i, endIndex + 1);
+    const internationalEquity = activeInternational
+      .slice(i, endIndex + 1)
+      .map(value => value ?? 0);
+    const nominalBonds = activeBonds.slice(i, endIndex + 1);
+    const cash = activeCash.slice(i, endIndex + 1);
+    const seqInflationRates = activeInflation.slice(i, endIndex + 1);
 
-    const startYear = startDate.getFullYear();
-    const startMonth = startDate.getMonth() + 1;
-    const endYear = endDate.getFullYear();
-    const endMonth = endDate.getMonth() + 1;
+    const startYear = startDate.getUTCFullYear();
+    const startMonth = startDate.getUTCMonth() + 1;
+    const endYear = endDate.getUTCFullYear();
+    const endMonth = endDate.getUTCMonth() + 1;
 
     const sequenceId = `${startYear}-${String(startMonth).padStart(2, '0')}_to_${endYear}-${String(endMonth).padStart(2, '0')}`;
 
@@ -72,10 +151,18 @@ export async function generateRollingSequences(
   }
 
   console.log(
-    `Generated ${sequences.length} rolling sequences (monthly starts, ${withdrawalYears}-year horizon, full data only)`
+    `Generated ${sequences.length} rolling sequences (monthly overlapping starts, ${analysisYears}-year horizon, full data only)`
   );
 
-  return { sequences, missingData };
+  const historicalData = data.metadata && firstMonth && lastMonth ? {
+    firstMonth,
+    lastMonth,
+    sourceRetrievedAt: data.metadata.generatedFromSourceRetrieval,
+    monthlyStartWindowsOverlap: true as const,
+    series: data.metadata.series,
+  } : undefined;
+
+  return { sequences, missingData, historicalData };
 }
 
 /**
@@ -89,7 +176,7 @@ export function calculateHistoricalPriceCoverage(
 ): number {
   if (minimumMonths <= 0) throw new Error('minimumMonths must be positive');
   const data = loadHistoricalReturns();
-  const sleeves: Array<[number, number[]]> = [
+  const sleeves: Array<[number, Array<number | null>]> = [
     [mapping.usEquityWeight, data.usEquityReturns],
     [mapping.internationalEquityWeight, data.intlEquityReturns],
     [mapping.nominalBondsWeight, data.bondReturns],
@@ -100,7 +187,9 @@ export function calculateHistoricalPriceCoverage(
 
   const weightedCoverage = sleeves.reduce((total, [weight, observations]) => {
     if (weight <= 0) return total;
-    const usable = observations.filter(Number.isFinite).length;
+    const usable = observations.filter(
+      (value): value is number => typeof value === 'number' && Number.isFinite(value)
+    ).length;
     return total + weight * Math.min(1, usable / minimumMonths);
   }, 0);
   return weightedCoverage / activeWeight;
@@ -115,7 +204,8 @@ export function sliceHistoricalSequence(
   const dates = sequence.assetBasketReturns.usEquity.length;
   if (offset >= dates) throw new Error('Withdrawal start must fall inside the historical sequence');
   const startDate = new Date(sequence.startDate);
-  startDate.setMonth(startDate.getMonth() + offset);
+  // Sequence boundaries are UTC month starts (see loadHistoricalReturns).
+  startDate.setUTCMonth(startDate.getUTCMonth() + offset);
   return {
     ...sequence,
     startDate,

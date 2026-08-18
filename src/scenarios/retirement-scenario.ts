@@ -924,7 +924,7 @@ export const retirementScenarioCalculator: ScenarioCalculatorDefinition<
     { id: 'withdrawal_rate', label: 'Initial withdrawal rate', unit: 'percent', scope: 'variant', description: 'Starting spending divided by median real portfolio value at withdrawal start.' },
     { id: 'years_of_expenses', label: 'Years of starting expenses', unit: 'years', scope: 'variant', description: 'Median real withdrawal-start portfolio divided by starting annual spending.' },
     { id: 'projected_portfolio_at_withdrawal_start', label: 'Median portfolio at withdrawal start', unit: 'usd', scope: 'variant', description: 'Median real portfolio value across historical accumulation sequences.' },
-    { id: 'survival_rate', label: 'Historical survival rate', unit: 'percent', scope: 'variant', description: 'Share of modeled historical sequences that fund the complete horizon.' },
+    { id: 'survival_rate', label: 'Historical rolling-window survival share', unit: 'percent', scope: 'variant', description: 'Share of overlapping monthly historical windows that fund the complete horizon; the windows are not independent observations.' },
     { id: 'historical_sequence_count', label: 'Historical sequence count', unit: 'count', scope: 'variant', description: 'Number of rolling historical sequences modeled.' },
     { id: 'depletion_years_percentiles', label: 'Years-until-depletion percentiles', unit: 'years', scope: 'variant', description: 'P10, P25, P50, P75, and P90 years until depletion.' },
     { id: 'survival_rate_gap', label: 'Survival-rate gap', unit: 'percent', scope: 'comparison', description: 'Absolute percentage-point gap between two variants.' },

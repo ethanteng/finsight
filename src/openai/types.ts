@@ -217,6 +217,18 @@ export interface FinancialContextSnapshot {
       assumptions: string[];
       missingData: string[];
     };
+    historicalData?: {
+      firstMonth: string;
+      lastMonth: string;
+      sourceRetrievedAt: string;
+      monthlyStartWindowsOverlap: true;
+      series: Record<string, {
+        source: string;
+        description: string;
+        firstMonth: string;
+        lastMonth: string;
+      }>;
+    };
     disclaimers: string[];
     _storedInputParams?: {
       currentAge?: number;
@@ -255,7 +267,22 @@ export interface FinancialContextSnapshot {
     /** When retirement analysis cannot run despite a retirement question (e.g. no holdings). */
     unavailableReason?: string;
     /** Machine-readable form of unavailableReason: only some causes are the user's to fix. */
-    unavailableCode?: 'no_holdings' | 'service_error';
+    unavailableCode?: 'no_holdings' | 'insufficient_history' | 'service_error';
+    /**
+     * What the history actually allows, when its length is what blocked the run.
+     * Present only with unavailableCode 'insufficient_history', so the ask can
+     * name a timeline the user can act on instead of saying "shorter".
+     */
+    historyLimit?: {
+      /** Longest modelable horizon in whole years; 0 when no timeline works. */
+      maxTimelineYears: number;
+      /** Oldest age the timeline can run to, when the current age is known. */
+      maxTimelineAge?: number;
+      firstMonth?: string;
+      lastMonth?: string;
+      /** True when an active international sleeve is what narrowed the window. */
+      limitedByInternationalHistory: boolean;
+    };
   };
   /** Registry-keyed deterministic what-if results, scoped to this answer and its assumptions. */
   scenarioExecutions?: ScenarioExecutionRecord;

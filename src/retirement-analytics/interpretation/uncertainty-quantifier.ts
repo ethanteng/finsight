@@ -51,9 +51,6 @@ export function calculateDataQuality(
   const proxiedValuePercentage = totalValue > 0 ? proxiedValue / totalValue : 0;
 
   const missingData = [...portfolioMapping.unmappedHoldings, ...stressTestMissingData];
-  if (portfolioMapping.internationalEquityWeight > 0) {
-    missingData.push('Independent international equity return history is unavailable; US equity returns are used as its proxy');
-  }
 
   return {
     completeness,
@@ -62,9 +59,9 @@ export function calculateDataQuality(
     portfolioMappingConfidence: portfolioMapping.mappingConfidence,
     proxiedValuePercentage,
     proxyUsage: {
-      usEquityProxy: 'Shiller US equity total-return history',
-      internationalEquityProxy: 'Shiller US equity history (international proxy)',
-      bondsProxy: 'Shiller historical bond-return series',
+      usEquityProxy: 'Kenneth French broad US market total-return history',
+      internationalEquityProxy: 'Kenneth French EAFE-plus-Canada market return history',
+      bondsProxy: 'Shiller synthetic 10-year US government-bond total-return history',
       unmappedHoldings: portfolioMapping.unmappedHoldings,
       mappingMethod: portfolioMapping.mappingMethod
     },
@@ -107,6 +104,7 @@ export function generateDisclaimers(
   const disclaimers: string[] = [];
 
   disclaimers.push('Past performance does not predict future results. Historical analysis shows what happened in the past but cannot guarantee future outcomes.');
+  disclaimers.push('Monthly rolling historical windows overlap; their survival share is descriptive and is not an estimate based on independent observations.');
   disclaimers.push('Analysis assumes fixed real-dollar withdrawals. Adaptive withdrawal strategies may improve outcomes.');
   disclaimers.push('Portfolio mapped to broad market indices for historical simulation. Your actual holdings may behave differently.');
   disclaimers.push('Analysis does not account for taxes, fees, or transaction costs.');

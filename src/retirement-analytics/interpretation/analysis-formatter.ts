@@ -8,7 +8,8 @@ import {
   PortfolioCompositionMetrics,
   TimelineMetrics,
   WithdrawalSustainabilityMetrics,
-  DataQualityReport
+  DataQualityReport,
+  HistoricalDataSummary
 } from '../types';
 import { calculateConfidenceCeiling, generateDisclaimers } from './uncertainty-quantifier';
 
@@ -23,7 +24,8 @@ export function formatAnalysisOutput(
   timelineMetrics: TimelineMetrics,
   withdrawalMetrics: WithdrawalSustainabilityMetrics,
   dataQuality: DataQualityReport,
-  timelineBucketNote?: string
+  timelineBucketNote?: string,
+  historicalData?: HistoricalDataSummary
 ): RetirementAnalysisOutput {
   // Enforce confidence ceiling
   const confidence = calculateConfidenceCeiling(dataQuality);
@@ -74,6 +76,7 @@ export function formatAnalysisOutput(
     },
     historicalImplications,
     dataQuality,
+    historicalData,
     disclaimers
   };
 }
