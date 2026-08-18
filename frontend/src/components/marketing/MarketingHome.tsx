@@ -235,35 +235,39 @@ export default function Home() {
               <p className="section-kicker light">CONNECTED TODAY</p>
               <h2>Your financial ecosystem is already here.</h2>
             </div>
-            <p>Ask Linc already brings banking, investments, property, and market context into the same analysis—so you can move from “what&apos;s happening?” to “what should I do next?” now.</p>
+            <p>Broad enough to see the whole plan. Deep enough to examine the accounts, holdings, property estimates, and outside conditions that can change the decision.</p>
           </div>
 
           <div className="ecosystem-grid" aria-label="Data providers that power Ask Linc">
             <article>
-              <span>01 · BANKING &amp; CREDIT</span>
-              <h3>Plaid</h3>
-              <p>Balances, transactions, cards, loans, and cash-flow history from your connected institutions.</p>
+              <span>01 · MONEY IN MOTION</span>
+              <small className="ecosystem-providers">PLAID</small>
+              <h3>Accounts + cash flow</h3>
+              <p>Checking, savings, cards, loans, balances, transactions, and month-by-month income and spending.</p>
             </article>
             <article>
-              <span>02 · INVESTMENTS</span>
-              <h3>SnapTrade</h3>
-              <p>Brokerage and retirement accounts, holdings, and activity in the same financial picture.</p>
+              <span>02 · PORTFOLIO INTELLIGENCE</span>
+              <small className="ecosystem-providers">SNAPTRADE · FMP · TIINGO</small>
+              <h3>Investments, looked through</h3>
+              <p>Brokerage positions and cash, plus fund fees, sector and country exposure, quotes, and recent returns.</p>
             </article>
             <article>
               <span>03 · PROPERTY</span>
-              <h3>RentCast</h3>
-              <p>Current home-value context for housing, equity, and net-worth decisions.</p>
+              <small className="ecosystem-providers">RENTCAST</small>
+              <h3>Home value, with a range</h3>
+              <p>A current property estimate, its dated 85% range, and a validated property match for housing and net-worth decisions.</p>
             </article>
             <article>
-              <span>04 · MARKETS &amp; ECONOMY</span>
-              <h3>FRED + market sources</h3>
-              <p>Rates, inflation, and market conditions pulled in when they matter, with source dates.</p>
+              <span>04 · MARKETS + PLANNING</span>
+              <small className="ecosystem-providers">FRED · MASSIVE · BRAVE · FRENCH / SHILLER</small>
+              <h3>Rates, markets + history</h3>
+              <p>Inflation, consumer and Treasury rates, current market evidence, and long-run history for stress tests.</p>
             </article>
           </div>
 
           <div className="ecosystem-outcome">
-            <div><span>AVAILABLE IN ASK LINC TODAY</span><strong>These connections already ground Linc&apos;s answers. They are not a future roadmap.</strong></div>
-            <Link href="/features">See how the system works <span>→</span></Link>
+            <div><span>ONE QUESTION, THE RELEVANT FACTS</span><strong>Linc does not throw the whole data stack at every answer. It selects the useful facts, runs repeatable calculations, and keeps assumptions, sources, and dates visible.</strong></div>
+            <Link href="/features#data-ecosystem">Explore the data ecosystem <span>→</span></Link>
           </div>
         </div>
       </section>

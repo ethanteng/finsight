@@ -2,15 +2,15 @@ import type { Metadata } from 'next';
 import MarketingSubpage from '../../components/marketing/MarketingSubpage';
 
 export const metadata: Metadata = {
-  title: 'How Ask Linc Works — Accounts, What-Ifs, and Clear Math',
-  description: 'Connect your accounts, ask a plain-language question, compare what-if scenarios, and inspect the assumptions and calculations.',
-  keywords: ['financial features', 'AI financial tools', 'money management features', 'financial analysis tools', 'investment features'],
+  title: 'How Ask Linc Works — Connected Data and Clear Math',
+  description: 'See how Ask Linc combines connected accounts with portfolio, property, economic, market, and historical data to answer financial questions with inspectable math.',
+  keywords: ['financial data integrations', 'AI financial tools', 'connected financial accounts', 'financial analysis tools', 'investment data'],
   alternates: {
     canonical: 'https://asklinc.com/features',
   },
   openGraph: {
-    title: 'How Ask Linc Works — Accounts, What-Ifs, and Clear Math',
-    description: 'Connect your accounts, ask a plain-language question, compare what-if scenarios, and inspect the assumptions and calculations.',
+    title: 'How Ask Linc Works — Connected Data and Clear Math',
+    description: 'See how Ask Linc combines connected accounts with portfolio, property, economic, market, and historical data to answer financial questions with inspectable math.',
     type: 'website',
     url: 'https://asklinc.com/features',
     siteName: 'Ask Linc',
@@ -25,8 +25,8 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'How Ask Linc Works — Accounts, What-Ifs, and Clear Math',
-    description: 'Connect your accounts, ask a plain-language question, compare what-if scenarios, and inspect the assumptions and calculations.',
+    title: 'How Ask Linc Works — Connected Data and Clear Math',
+    description: 'See how Ask Linc combines connected accounts with portfolio, property, economic, market, and historical data to answer financial questions with inspectable math.',
     images: ['https://asklinc.com/og-image.jpg'],
   },
   robots: {

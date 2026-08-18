@@ -364,8 +364,28 @@ describe('buildHomeValueSummary', () => {
   it('includes a range line only when both bounds are present', () => {
     const both = buildHomeValueSummary({ address: '1 Main St', valueMid: 750000, valueLow: 700000, valueHigh: 800000 });
     const lowOnly = buildHomeValueSummary({ address: '1 Main St', valueMid: 750000, valueLow: 700000 });
-    expect(both).toContain('Estimated range: $700,000 – $800,000');
+    expect(both).toContain('Estimated range (85% confidence): $700,000 – $800,000');
     expect(lowOnly).not.toContain('Estimated range');
+  });
+
+  it('identifies RentCast provenance and suppresses estimate bounds for a manual value', () => {
+    const estimate = buildHomeValueSummary({
+      address: '1 Main St',
+      valueMid: 750000,
+      valueLow: 700000,
+      valueHigh: 800000,
+      isManualOverride: false,
+    });
+    const manual = buildHomeValueSummary({
+      address: '1 Main St',
+      valueMid: 775000,
+      valueLow: 700000,
+      valueHigh: 800000,
+      isManualOverride: true,
+    });
+    expect(estimate).toContain('Source: RentCast automated valuation model');
+    expect(manual).toContain('Source: User-provided manual value');
+    expect(manual).not.toContain('Estimated range');
   });
 
   it('reports an unusable estimate as Unknown instead of NaN', () => {
@@ -386,6 +406,12 @@ describe('buildHomeValueSummary', () => {
 
   it('emits one line per populated field and nothing for the empty ones', () => {
     const summary = buildHomeValueSummary({ address: '1 Main St', valueMid: 750000 });
-    expect(summary.split('\n')).toHaveLength(2);
+    expect(summary.split('\n')).toHaveLength(3);
+  });
+
+  it('omits the address line when the snapshot has no stored address', () => {
+    const summary = buildHomeValueSummary({ address: '', valueMid: 750000 });
+    expect(summary).not.toContain('Address:');
+    expect(summary).toContain('Estimated value: $750,000');
   });
 });

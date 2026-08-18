@@ -134,7 +134,7 @@ describe('personal context', () => {
       preferredName: 'Ethan', age: 42, dependentCount: 2, dependentAges: [11, 8],
     }, observedAt);
     const serialized = serializePersonalContextDocument(facts, {
-      address: '123 Main St, Austin, TX', rentCastValue: 500_000, manualValue: null,
+      address: '123 Main St, Austin, TX', propertyId: 'property-123', rentCastValue: 500_000, manualValue: null,
       valueLow: 450_000, valueHigh: 550_000, lastUpdated: observedAt,
     }, observedAt);
     const parsed = parseStoredPersonalContextDocument(serialized);
@@ -142,6 +142,7 @@ describe('personal context', () => {
       preferredName: 'Ethan', age: 42, dependentCount: 2, dependentAges: [8, 11],
     });
     expect(parsed?.home?.rentCastValue).toBe(500_000);
+    expect(parsed?.home?.propertyId).toBe('property-123');
   });
 
   it('imports only conservative biographical facts from a legacy profile', () => {

@@ -105,6 +105,7 @@ export class SummaryCacheService {
         // A manual point value deliberately has no estimate range.
         home: data.homeValue ? {
           address: data.homeValue.address,
+          propertyId: data.homeValue.propertyId,
           valueMid: data.homeValue.valueMid,
           valueLow: data.homeValue.isManualOverride ? null : data.homeValue.valueLow,
           valueHigh: data.homeValue.isManualOverride ? null : data.homeValue.valueHigh,

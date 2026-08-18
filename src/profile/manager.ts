@@ -84,6 +84,7 @@ export class ProfileManager {
     if (!home.address) return null;
     return {
       address: home.address,
+      propertyId: home.propertyId,
       rentCastValue: home.rentCastValue,
       manualValue: home.manualValue,
       valueLow: home.valueLow,
@@ -242,6 +243,7 @@ export class ProfileManager {
    */
   extractHomeData(profileText: string): {
     address: string | null;
+    propertyId: string | null;
     value: number | null;
     rentCastValue: number | null;
     manualValue: number | null;
@@ -252,6 +254,7 @@ export class ProfileManager {
   } {
     const result = {
       address: null as string | null,
+      propertyId: null as string | null,
       value: null as number | null,
       rentCastValue: null as number | null,
       manualValue: null as number | null,
@@ -265,6 +268,7 @@ export class ProfileManager {
     if (document?.home) {
       const home = document.home;
       result.address = home.address;
+      result.propertyId = home.propertyId ?? null;
       result.rentCastValue = typeof home.rentCastValue === 'number' && home.rentCastValue > 0
         ? home.rentCastValue
         : null;
@@ -286,6 +290,11 @@ export class ProfileManager {
     const addressMatches = [...profileText.matchAll(/HOME_ADDRESS:\s*(.+?)(?:\n|$)/g)];
     if (addressMatches.length > 0) {
       result.address = addressMatches[addressMatches.length - 1][1].trim();
+    }
+
+    const propertyIdMatches = [...profileText.matchAll(/HOME_RENTCAST_PROPERTY_ID:\s*(.+?)(?:\n|$)/g)];
+    if (propertyIdMatches.length > 0) {
+      result.propertyId = propertyIdMatches[propertyIdMatches.length - 1][1].trim();
     }
 
     // Extract manual override - use LAST as most recent
@@ -369,8 +378,29 @@ export class ProfileManager {
       const currentStoredText = await this.getOriginalProfile(userId);
       const facts = this.factsFromStoredText(currentStoredText);
       const currentHome = this.extractHomeData(currentStoredText);
+      const providerPropertyId = homeValueData.subjectProperty.id.trim().replace(/[\r\n]/g, '');
+      const normalizeAddress = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, '');
+      const isSameStoredAddress = currentHome.address
+        ? normalizeAddress(currentHome.address) === normalizeAddress(address)
+        : false;
+
+      if (
+        isSameStoredAddress &&
+        currentHome.propertyId &&
+        providerPropertyId &&
+        currentHome.propertyId !== providerPropertyId
+      ) {
+        console.error('RentCast property identity changed for the stored address', {
+          previousPropertyId: currentHome.propertyId,
+          returnedPropertyId: providerPropertyId,
+        });
+        return null;
+      }
+
+      const canonicalAddress = homeValueData.subjectProperty.formattedAddress.replace(/\s+/g, ' ').trim();
       const home: StoredHomeContext = {
-        address,
+        address: canonicalAddress || address,
+        propertyId: providerPropertyId || null,
         rentCastValue: homeValueData.price,
         manualValue: currentHome.manualValue,
         valueLow: homeValueData.priceRangeLow,
@@ -423,6 +453,7 @@ export class ProfileManager {
     const now = new Date().toISOString();
     const home: StoredHomeContext = {
       address: currentHomeData.address,
+      propertyId: currentHomeData.propertyId,
       rentCastValue: currentHomeData.rentCastValue,
       manualValue: manualValue > 0 ? manualValue : null,
       valueLow: currentHomeData.valueLow,
@@ -456,6 +487,7 @@ export class ProfileManager {
       this.factsFromStoredText(currentProfile),
       {
         address: currentHome.address,
+        propertyId: currentHome.propertyId,
         rentCastValue: currentHome.rentCastValue,
         manualValue: null,
         valueLow: currentHome.valueLow,

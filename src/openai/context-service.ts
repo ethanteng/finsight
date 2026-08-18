@@ -87,6 +87,7 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
   let bankingTransactions: Transaction[] = [];
   let investmentsSnapshot: InvestmentSnapshot | undefined;
   let homeValueSummary: string | undefined;
+  let homeValueData: HomeData | undefined;
   let metadata: UnifiedFinancialData['metadata'] = { ...DEFAULT_METADATA };
   let financialSummary: FinancialContextSnapshot['financialSummary'] | null = null;
   let transactionSummary: FinancialContextSnapshot['transactionSummary'];
@@ -211,18 +212,30 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
           : null;
         if (homeValue !== null && homeValue !== undefined) {
           if (typeof homeValue === 'number' && Number.isFinite(homeValue)) {
-            const valueLine = `Home value: ${new Intl.NumberFormat('en-US', {
-              style: 'currency',
-              currency: 'USD',
-              maximumFractionDigits: 0
-            }).format(homeValue)}`;
-            homeValueSummary = storedHome?.address
-              ? `Home address: ${storedHome.address}\n${valueLine}`
-              : valueLine;
+            const isManualOverride = Boolean(storedHome?.isManualOverride);
+            homeValueData = {
+              address: typeof storedHome?.address === 'string' ? storedHome.address : '',
+              propertyId: typeof storedHome?.propertyId === 'string' ? storedHome.propertyId : null,
+              valueMid: homeValue,
+              valueLow: !isManualOverride && typeof storedHome?.valueLow === 'number' && Number.isFinite(storedHome.valueLow)
+                ? storedHome.valueLow
+                : null,
+              valueHigh: !isManualOverride && typeof storedHome?.valueHigh === 'number' && Number.isFinite(storedHome.valueHigh)
+                ? storedHome.valueHigh
+                : null,
+              lastUpdated: typeof storedHome?.lastUpdated === 'string' ? storedHome.lastUpdated : null,
+              isManualOverride,
+            };
+            homeValueSummary = buildHomeValueSummary(homeValueData);
           } else {
             // HomeData object
             if (typeof homeValue.valueMid === 'number') {
-              homeValueSummary = buildHomeValueSummary(homeValue);
+              const normalizedHomeValue: HomeData = {
+                ...homeValue,
+                propertyId: typeof homeValue.propertyId === 'string' ? homeValue.propertyId : null,
+              };
+              homeValueData = normalizedHomeValue;
+              homeValueSummary = buildHomeValueSummary(normalizedHomeValue);
             } else if (homeValue.address) {
               // Address exists but value is 0
               homeValueSummary = `Home address: ${homeValue.address}. Home value estimate is not currently available, but the user owns this property.`;
@@ -398,6 +411,7 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
     marketContext,
     userProfile,
     homeValueSummary,
+    homeValueData,
     financialSummary: financialSummary || undefined,
   };
 
@@ -1028,21 +1042,29 @@ function buildHomeValueSummary(homeData: HomeData): string {
   const midValue = formatCurrency(homeData.valueMid);
   const lowValue = typeof homeData.valueLow === 'number' ? formatCurrency(homeData.valueLow) : undefined;
   const highValue = typeof homeData.valueHigh === 'number' ? formatCurrency(homeData.valueHigh) : undefined;
-  const rangeLine =
-    lowValue && highValue ? `Estimated range: ${lowValue} – ${highValue}` : undefined;
+  const rangeLine = !homeData.isManualOverride && lowValue && highValue
+    ? `Estimated range (85% confidence): ${lowValue} – ${highValue}`
+    : undefined;
 
-  const lastUpdated = homeData.lastUpdated
-    ? new Date(homeData.lastUpdated).toLocaleDateString('en-US', {
+  const lastUpdatedDate = homeData.lastUpdated ? new Date(homeData.lastUpdated) : null;
+  const lastUpdated = lastUpdatedDate && !Number.isNaN(lastUpdatedDate.getTime())
+    ? lastUpdatedDate.toLocaleDateString('en-US', {
         month: 'short',
         day: 'numeric',
-        year: 'numeric'
+        year: 'numeric',
+        timeZone: 'UTC',
       })
     : undefined;
 
+  // The numeric snapshot path has no stored address for some users; an empty
+  // "Address:" line only adds a blank field to the model's context.
+  const address = homeData.address?.trim();
+
   const lines = [
-    `Address: ${homeData.address}`,
-    `Estimated value: ${midValue}`,
+    address ? `Address: ${address}` : undefined,
+    `${homeData.isManualOverride ? 'User-provided value' : 'Estimated value'}: ${midValue}`,
     rangeLine,
+    `Source: ${homeData.isManualOverride ? 'User-provided manual value' : 'RentCast automated valuation model'}`,
     lastUpdated ? `Last updated: ${lastUpdated}` : undefined
   ].filter(Boolean) as string[];
 

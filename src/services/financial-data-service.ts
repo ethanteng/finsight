@@ -136,6 +136,7 @@ export interface PortfolioAnalysis {
 
 export interface HomeData {
   address: string;
+  propertyId: string | null;
   valueLow: number | null;
   valueMid: number | null;
   valueHigh: number | null;
@@ -1820,6 +1821,7 @@ export class FinancialDataService {
       const parsed = managerHome
         ? {
             address: managerHome.address,
+            propertyId: managerHome.propertyId,
             value: managerHome.value,
             valueLow: managerHome.valueLow,
             valueHigh: managerHome.valueHigh,
@@ -1839,6 +1841,7 @@ export class FinancialDataService {
 
       return {
         address: parsed.address,
+        propertyId: parsed.propertyId,
         valueLow: parsed.valueLow,
         valueMid: parsed.value,
         valueHigh: parsed.valueHigh,
@@ -1853,10 +1856,14 @@ export class FinancialDataService {
 
   /** Parse HOME_ADDRESS, HOME_VALUE_MANUAL, HOME_VALUE, etc. from profile text.
    * Uses LAST occurrence for each field when duplicates exist (latest RentCast, latest manual override). */
-  private parseHomeDataFromProfileText(profileData: string): { address: string | null; value: number | null; valueLow: number | null; valueHigh: number | null; lastUpdated: Date | null; isManualOverride: boolean } | null {
+  private parseHomeDataFromProfileText(profileData: string): { address: string | null; propertyId: string | null; value: number | null; valueLow: number | null; valueHigh: number | null; lastUpdated: Date | null; isManualOverride: boolean } | null {
     const addressMatches = [...profileData.matchAll(/HOME_ADDRESS:\s*(.+?)(?:\n|$)/g)];
     if (addressMatches.length === 0) return null;
     const address = addressMatches[addressMatches.length - 1][1].trim();
+    const propertyIdMatches = [...profileData.matchAll(/HOME_RENTCAST_PROPERTY_ID:\s*(.+?)(?:\n|$)/g)];
+    const propertyId = propertyIdMatches.length > 0
+      ? propertyIdMatches[propertyIdMatches.length - 1][1].trim()
+      : null;
 
     const manualMatches = [...profileData.matchAll(/HOME_VALUE_MANUAL:\s*([\d,]+(?:\.\d+)?)/g)];
     const manualMatch = manualMatches.length > 0 ? manualMatches[manualMatches.length - 1] : null;
@@ -1876,6 +1883,7 @@ export class FinancialDataService {
     }
     return {
       address,
+      propertyId,
       value: value && value > 0 ? value : null,
       valueLow: valueLowMatches.length > 0 ? parseFloat(valueLowMatches[valueLowMatches.length - 1][1].replace(/,/g, '')) : null,
       valueHigh: valueHighMatches.length > 0 ? parseFloat(valueHighMatches[valueHighMatches.length - 1][1].replace(/,/g, '')) : null,

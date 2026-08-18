@@ -122,7 +122,8 @@ export function buildCanonicalFactPack(
     value: unknown,
     unit: CanonicalFactUnit,
     source: string,
-    displayable = true
+    displayable = true,
+    sourceAsOf?: string
   ) => {
     if (!finite(value)) return;
     facts.set(id, {
@@ -131,7 +132,7 @@ export function buildCanonicalFactPack(
       value,
       unit,
       ...(!displayable && { displayable: false }),
-      provenance: { kind: 'snapshot', source, ...(asOf && { asOf }) },
+      provenance: { kind: 'snapshot', source, ...((sourceAsOf || asOf) && { asOf: sourceAsOf || asOf }) },
     });
   };
   const addExternalFact = (
@@ -214,12 +215,48 @@ export function buildCanonicalFactPack(
   // model can cite a number it can already see. Two production bugs came from
   // guessing wrong, so these facts are no longer routed at all.
   const overview = snapshot.financialSummary?.financialOverview;
+  const home = snapshot.homeValueData;
+  // financialSummary.asOf is the oldest expiring source in the snapshot, so a
+  // home fact stamped with it can contradict its own range bounds. Use the home
+  // observation time whenever it describes the same value.
+  const homeObservedAt = isoString(home?.lastUpdated);
+  const homeMidpointAsOf = home && finite(home.valueMid) && home.valueMid === overview?.homeValue
+    ? homeObservedAt
+    : undefined;
   if (overview) {
     addSnapshotFact('net_worth', 'Net worth', overview.netWorth, 'usd', 'financialSummary.financialOverview.netWorth');
     addSnapshotFact('total_cash', 'Total cash', overview.totalCash, 'usd', 'financialSummary.financialOverview.totalCash');
     addSnapshotFact('total_investments', 'Total investments', overview.totalInvestments, 'usd', 'financialSummary.financialOverview.totalInvestments');
     addSnapshotFact('total_debt', 'Total debt', overview.totalDebt, 'usd', 'financialSummary.financialOverview.totalDebt');
-    addSnapshotFact('home_value', 'Home value', overview.homeValue, 'usd', 'financialSummary.financialOverview.homeValue');
+    addSnapshotFact('home_value', 'Home value', overview.homeValue, 'usd', 'financialSummary.financialOverview.homeValue', true, homeMidpointAsOf);
+  }
+
+  if (
+    needs.needsHomeValue &&
+    home &&
+    !home.isManualOverride &&
+    finite(home.valueLow) &&
+    finite(home.valueHigh) &&
+    home.valueLow <= home.valueHigh
+  ) {
+    addSnapshotFact(
+      'home_value_low',
+      'Home value estimate 85% range lower bound',
+      home.valueLow,
+      'usd',
+      'contextSnapshot.homeValueData.valueLow',
+      true,
+      homeObservedAt
+    );
+    addSnapshotFact(
+      'home_value_high',
+      'Home value estimate 85% range upper bound',
+      home.valueHigh,
+      'usd',
+      'contextSnapshot.homeValueData.valueHigh',
+      true,
+      homeObservedAt
+    );
   }
 
   addSnapshotFact('average_monthly_income', 'Average monthly income', snapshot.averageMonthlyIncome, 'usd', 'contextSnapshot.averageMonthlyIncome');

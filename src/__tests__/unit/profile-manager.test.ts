@@ -82,7 +82,7 @@ describe('ProfileManager personal context', () => {
 
   it('parses home data from the structured document', () => {
     const stored = serializePersonalContextDocument({}, {
-      address: '123 Main St', rentCastValue: 500000, manualValue: 525000,
+      address: '123 Main St', propertyId: null, rentCastValue: 500000, manualValue: 525000,
       valueLow: 450000, valueHigh: 550000, lastUpdated: '2026-08-18T00:00:00.000Z',
     });
     expect(manager.extractHomeData(stored)).toEqual(expect.objectContaining({

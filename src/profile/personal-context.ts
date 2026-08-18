@@ -69,6 +69,7 @@ export type PersonalContextFacts = Partial<Record<PersonalContextField, Personal
 
 export interface StoredHomeContext {
   address: string | null;
+  propertyId: string | null;
   rentCastValue: number | null;
   manualValue: number | null;
   valueLow: number | null;
@@ -198,6 +199,10 @@ export function parseStoredPersonalContextDocument(raw: string): StoredPersonalC
     const home = rawHome && typeof rawHome.address === 'string' && rawHome.address.trim().length <= 500
       ? {
           address: rawHome.address.trim() || null,
+          propertyId: typeof rawHome.propertyId === 'string' && rawHome.propertyId.trim().length > 0
+            && rawHome.propertyId.trim().length <= 500
+            ? rawHome.propertyId.trim()
+            : null,
           rentCastValue: finiteNullableNumber(rawHome.rentCastValue),
           manualValue: finiteNullableNumber(rawHome.manualValue),
           valueLow: finiteNullableNumber(rawHome.valueLow),
