@@ -267,13 +267,15 @@ async function main() {
   const userId = (register.body.user as Json)?.id as string;
   log('Registered', { userId });
 
-  log('Set profile with age/retirement parameters for retirement analysis');
+  // Bounded personal context only accepts allowlisted biographical fields.
+  // Retirement age, spending goals, and risk tolerance must come from the
+  // question / scenario path — they are intentionally not stored here.
+  log('Set remembered personal context age for retirement analysis');
   await api('/profile', {
     method: 'PUT',
     token,
     body: {
-      profileText:
-        'User is 48 years old and plans to retire at age 68. Annual retirement spending goal is $100,000. Risk tolerance is moderate.',
+      memory: { age: 48 },
     },
   });
 
