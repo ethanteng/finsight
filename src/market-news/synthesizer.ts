@@ -78,7 +78,13 @@ export class MarketNewsSynthesizer {
     };
   }
   
-  private filterDataForTier(data: MarketNewsData[], tier: UserTier): MarketNewsData[] {
+  /**
+   * Tier-scoped evidence used for both synthesis and rawData persistence.
+   * Callers that save market-news rows should persist this list (not the
+   * unfiltered aggregate), so omitted points like a superseded FRED DGS10
+   * do not linger in Premium rawData.
+   */
+  filterDataForTier(data: MarketNewsData[], tier: UserTier): MarketNewsData[] {
     switch (tier) {
       case UserTier.STARTER:
         return []; // No market news for starter tier (can be changed in future)

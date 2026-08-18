@@ -54,8 +54,8 @@ export class MarketNewsManager {
     try {
       const rawData = await this.aggregator.aggregateMarketData();
       await Promise.all(Array.from(new Set(tiers)).map(async (tier) => {
+        const tierRawData = this.synthesizer.filterDataForTier(rawData, tier);
         const context = await this.synthesizer.synthesizeMarketContext(rawData, tier);
-        const tierRawData = rawData.filter(item => context.dataSources.includes(item.source));
         await this.saveMarketContext(context, tierRawData);
         console.log(`Market context updated for tier: ${tier}`);
       }));

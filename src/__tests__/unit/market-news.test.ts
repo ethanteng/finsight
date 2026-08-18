@@ -336,10 +336,20 @@ describe('Market News System', () => {
           relevance: 0.8,
         },
         {
+          source: 'fred',
+          timestamp: new Date(),
+          data: { series: 'DGS10', value: 4.68 },
+          type: 'economic_indicator' as const,
+          relevance: 0.8,
+        },
+        {
           source: 'massive',
           timestamp: new Date(),
-          data: { symbol: 'SPY' },
-          type: 'market_data' as const,
+          data: {
+            symbol: 'TREASURY_YIELDS',
+            yields: { '10_year': 4.68 },
+          },
+          type: 'rate_information' as const,
           relevance: 0.8,
         },
       ];
@@ -351,13 +361,17 @@ describe('Market News System', () => {
         dataSources: tier === UserTier.STARTER
           ? []
           : tier === UserTier.STANDARD
-            ? ['brave_search']
-            : ['brave_search', 'massive'],
+            ? ['brave_search', 'fred']
+            : ['brave_search', 'fred', 'massive'],
         keyEvents: [],
         lastUpdate: new Date(),
       }));
+      const realSynthesizer = new MarketNewsSynthesizer();
       (manager as any).aggregator = { aggregateMarketData: aggregate };
-      (manager as any).synthesizer = { synthesizeMarketContext: synthesize };
+      (manager as any).synthesizer = {
+        synthesizeMarketContext: synthesize,
+        filterDataForTier: realSynthesizer.filterDataForTier.bind(realSynthesizer),
+      };
       const save = jest.spyOn(manager as any, 'saveMarketContext').mockResolvedValue(undefined);
 
       await manager.updateMarketContexts([UserTier.STARTER, UserTier.STANDARD, UserTier.PREMIUM]);
@@ -367,8 +381,10 @@ describe('Market News System', () => {
       expect(synthesize.mock.calls.every(([data]) => data === rawData)).toBe(true);
       const savedRawData = save.mock.calls.map(call => call[1] as MarketNewsData[]);
       expect(savedRawData[0]).toEqual([]);
-      expect(savedRawData[1].map(item => item.source)).toEqual(['brave_search']);
+      expect(savedRawData[1].map(item => item.source)).toEqual(['brave_search', 'fred']);
+      expect(savedRawData[1].some(item => item.data.series === 'DGS10')).toBe(true);
       expect(savedRawData[2].map(item => item.source)).toEqual(['brave_search', 'massive']);
+      expect(savedRawData[2].some(item => item.data.series === 'DGS10')).toBe(false);
     });
   });
 
