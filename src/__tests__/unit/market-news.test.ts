@@ -50,23 +50,41 @@ describe('Market News System', () => {
     jest.clearAllMocks();
     
     // Create mock aggregator instance
+    // Shaped like real aggregator output: the manager checks which datasets a
+    // batch actually carries, not merely which providers answered.
     mockAggregator = {
       aggregateMarketData: jest.fn().mockResolvedValue([
         {
-          title: 'Mock Market News',
-          content: 'This is mock market news data for testing',
           source: 'fred',
-          url: 'https://example.com/mock-fred-news',
-          publishedAt: new Date().toISOString(),
-          category: 'economic'
+          timestamp: new Date(),
+          data: { series: 'CPIAUCSL', name: 'Inflation Rate (CPI, YoY)', value: 3.2 },
+          type: 'economic_indicator' as const,
+          relevance: 0.9
         },
         {
-          title: 'Mock Search News',
-          content: 'This is mock search news data for testing',
+          source: 'fred',
+          timestamp: new Date(),
+          data: { series: 'DFF', name: 'Federal Funds Effective Rate', value: 4.25 },
+          type: 'economic_indicator' as const,
+          relevance: 0.9
+        },
+        {
+          source: 'fred',
+          timestamp: new Date(),
+          data: { series: 'DGS10', name: '10-Year Treasury', value: 4.1 },
+          type: 'economic_indicator' as const,
+          relevance: 0.8
+        },
+        {
           source: 'brave_search',
-          url: 'https://example.com/mock-search-news',
-          publishedAt: new Date().toISOString(),
-          category: 'general'
+          timestamp: new Date(),
+          data: {
+            title: 'Mock Search News',
+            description: 'This is mock search news data for testing',
+            url: 'https://example.com/mock-search-news'
+          },
+          type: 'news_article' as const,
+          relevance: 0.6
         }
       ]),
       fetchMassiveData: jest.fn().mockResolvedValue([]),
@@ -365,6 +383,16 @@ describe('Market News System', () => {
             yields: { '10_year': 4.68 },
           },
           type: 'rate_information' as const,
+          relevance: 0.8,
+        },
+        {
+          source: 'massive',
+          timestamp: new Date(),
+          data: {
+            symbol: 'INFLATION_EXPECTATIONS',
+            expectations: { model_5_year: 2.3 },
+          },
+          type: 'economic_indicator' as const,
           relevance: 0.8,
         },
       ];
