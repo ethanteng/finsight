@@ -36,9 +36,11 @@ describe('Massive market context normalization', () => {
           date: '2026-08-14',
           yield_1_month: 3.79,
           yield_3_month: 3.86,
+          yield_6_month: 3.9,
           yield_1_year: 3.98,
           yield_2_year: 4.17,
           yield_5_year: 4.36,
+          yield_7_year: 4.51,
           yield_10_year: 4.68,
           yield_30_year: 5.25,
         }],
@@ -78,9 +80,11 @@ describe('Massive market context normalization', () => {
         yields: {
           '1_month': 3.79,
           '3_month': 3.86,
+          '6_month': 3.9,
           '1_year': 3.98,
           '2_year': 4.17,
           '5_year': 4.36,
+          '7_year': 4.51,
           '10_year': 4.68,
           '30_year': 5.25,
         },
@@ -157,11 +161,23 @@ describe('Massive market context normalization', () => {
           expectations: { model_1_year: 2.393703 },
         },
       },
+      {
+        source: 'massive',
+        timestamp: new Date('2026-08-14T00:00:00Z'),
+        type: 'rate_information',
+        relevance: 0.9,
+        data: {
+          symbol: 'TREASURY_YIELDS',
+          date: '2026-08-14',
+          yields: { '6_month': 3.9, '7_year': 4.51 },
+        },
+      },
     ] as MarketNewsData[]);
 
     expect(formatted).toContain('SPY adjusted daily close: $772.67 on 2026-08-17');
     expect(formatted).toContain('[Massive status: DELAYED]');
     expect(formatted).toContain('Inflation expectations (2026-08-01): 1Y model: 2.39%');
+    expect(formatted).toContain('U.S. Treasury yields (2026-08-14): 6M: 3.90%, 7Y: 4.51%');
     expect(formatted).not.toContain('undefined');
     expect(formatted).not.toContain('5Y market');
   });

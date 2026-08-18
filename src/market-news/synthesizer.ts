@@ -189,10 +189,12 @@ MARKET OUTLOOK:
           const formatted = this.formatPercentageRecord(d.yields, {
             '1_month': '1M',
             '3_month': '3M',
+            '6_month': '6M',
             '1_year': '1Y',
             '2_year': '2Y',
             '3_year': '3Y',
             '5_year': '5Y',
+            '7_year': '7Y',
             '10_year': '10Y',
             '20_year': '20Y',
             '30_year': '30Y',

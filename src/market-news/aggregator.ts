@@ -273,10 +273,12 @@ export class MarketNewsAggregator {
     const yields = this.compactNumbers({
       '1_month': result.yield_1_month,
       '3_month': result.yield_3_month,
+      '6_month': result.yield_6_month,
       '1_year': result.yield_1_year,
       '2_year': result.yield_2_year,
       '3_year': result.yield_3_year,
       '5_year': result.yield_5_year,
+      '7_year': result.yield_7_year,
       '10_year': result.yield_10_year,
       '20_year': result.yield_20_year,
       '30_year': result.yield_30_year,

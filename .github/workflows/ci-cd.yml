@@ -240,7 +240,7 @@ jobs:
           FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
           SEARCH_API_KEY: ${{ secrets.SEARCH_API_KEY }}
           FINNHUB_API_KEY: test_finnhub_key
-          POLYGON_API_KEY: test_polygon_key
+          MASSIVE_API_KEY: test_massive_key
           PROFILE_ENCRYPTION_KEY: "QffTMJcTkYC8Nyk/T9jH83958GLtdei8YzgDQ0PDCaw="
           JWT_SECRET: test-jwt-secret-for-security-tests
           NODE_ENV: test
@@ -385,7 +385,7 @@ jobs:
           FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
           SEARCH_API_KEY: ${{ secrets.SEARCH_API_KEY }}
           FINNHUB_API_KEY: test_finnhub_key
-          POLYGON_API_KEY: test_polygon_key
+          MASSIVE_API_KEY: test_massive_key
           PROFILE_ENCRYPTION_KEY: "QffTMJcTkYC8Nyk/T9jH83958GLtdei8YzgDQ0PDCaw="
           JWT_SECRET: test-jwt-secret-for-security-tests
           NODE_ENV: test
@@ -494,7 +494,7 @@ jobs:
           FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
           SEARCH_API_KEY: ${{ secrets.SEARCH_API_KEY }}
           FINNHUB_API_KEY: test_finnhub_key
-          POLYGON_API_KEY: test_polygon_key
+          MASSIVE_API_KEY: test_massive_key
           PROFILE_ENCRYPTION_KEY: "QffTMJcTkYC8Nyk/T9jH83958GLtdei8YzgDQ0PDCaw="
           JWT_SECRET: test-jwt-secret-for-security-tests
           NODE_ENV: test
@@ -524,7 +524,7 @@ jobs:
           FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
           SEARCH_API_KEY: ${{ secrets.SEARCH_API_KEY }}
           FINNHUB_API_KEY: test_finnhub_key
-          POLYGON_API_KEY: test_polygon_key
+          MASSIVE_API_KEY: test_massive_key
           PROFILE_ENCRYPTION_KEY: "QffTMJcTkYC8Nyk/T9jH83958GLtdei8YzgDQ0PDCaw="
           JWT_SECRET: test-jwt-secret-for-security-tests
           NODE_ENV: test

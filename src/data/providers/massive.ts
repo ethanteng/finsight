@@ -31,10 +31,12 @@ export interface MassiveTreasuryYield {
   date?: string;
   yield_1_month?: number;
   yield_3_month?: number;
+  yield_6_month?: number;
   yield_1_year?: number;
   yield_2_year?: number;
   yield_3_year?: number;
   yield_5_year?: number;
+  yield_7_year?: number;
   yield_10_year?: number;
   yield_20_year?: number;
   yield_30_year?: number;
