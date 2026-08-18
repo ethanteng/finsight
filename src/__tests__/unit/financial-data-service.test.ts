@@ -204,6 +204,10 @@ describe('FinancialDataService investment persistence safeguards', () => {
     });
 
     expect(fetchPlaidSpy).toHaveBeenCalledTimes(1);
+    expect(fetchPlaidSpy.mock.calls[0][1]).toEqual(expect.objectContaining({
+      includeInvestments: true,
+      includeLiabilities: false,
+    }));
     expect(result.investments.holdings).toEqual([mockHolding]);
     expect(result.investments.portfolio.totalValue).toBe(mockHolding.institution_value);
   });
@@ -307,6 +311,14 @@ describe('FinancialDataService investment persistence safeguards', () => {
           price: 125,
           trade_date: '2026-08-15',
           symbol: { id: 'security-2', symbol: 'XYZ', description: 'XYZ Fund' },
+        }, {
+          id: 'split-uuid',
+          account_id: 'brokerage-1',
+          type: 'SPLIT',
+          units: 10,
+          price: 50,
+          trade_date: '2026-08-14',
+          symbol: { id: 'security-3', symbol: 'SPLT', description: 'Split Fund' },
         }],
       },
     });
@@ -341,6 +353,11 @@ describe('FinancialDataService investment persistence safeguards', () => {
       id: 'snaptrade-buy-uuid',
       type: 'buy',
       amount: -250,
+    });
+    expect(result.transactions[2]).toMatchObject({
+      id: 'snaptrade-split-uuid',
+      type: 'split',
+      amount: 0,
     });
     expect(result.errors).toEqual(expect.arrayContaining([
       expect.objectContaining({ error: expect.stringContaining('connection is disabled') }),

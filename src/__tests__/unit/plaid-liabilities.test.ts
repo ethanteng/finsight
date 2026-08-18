@@ -1,5 +1,6 @@
 import {
   fetchAllPlaidInvestmentTransactions,
+  fetchAllPlaidTransactions,
   normalizePlaidLiabilities,
 } from '../../services/plaid-liabilities';
 
@@ -39,6 +40,51 @@ describe('Plaid investment pagination and liabilities', () => {
       start_date: '2024-01-01',
       end_date: '2026-01-01',
     })).rejects.toThrow('pagination stalled at 0 of 10');
+  });
+
+  it('fetches and deduplicates every banking transaction page', async () => {
+    const client = {
+      transactionsGet: jest.fn()
+        .mockResolvedValueOnce({
+          data: {
+            transactions: [{ transaction_id: 'one' }, { transaction_id: 'two' }],
+            total_transactions: 3,
+          },
+        })
+        .mockResolvedValueOnce({
+          data: {
+            transactions: [{ transaction_id: 'two' }, { transaction_id: 'three' }],
+            total_transactions: 3,
+          },
+        }),
+    };
+
+    const result = await fetchAllPlaidTransactions(client as any, {
+      access_token: 'token',
+      start_date: '2026-01-01',
+      end_date: '2026-08-18',
+      options: { include_personal_finance_category: true },
+    });
+
+    expect(result.map(transaction => transaction.transaction_id)).toEqual(['one', 'two', 'three']);
+    expect(client.transactionsGet.mock.calls.map(([request]) => request.options)).toEqual([
+      { include_personal_finance_category: true, count: 500, offset: 0 },
+      { include_personal_finance_category: true, count: 500, offset: 2 },
+    ]);
+  });
+
+  it('fails rather than looping on a stalled banking transaction page', async () => {
+    const client = {
+      transactionsGet: jest.fn().mockResolvedValue({
+        data: { transactions: [], total_transactions: 2 },
+      }),
+    };
+
+    await expect(fetchAllPlaidTransactions(client as any, {
+      access_token: 'token',
+      start_date: '2026-01-01',
+      end_date: '2026-08-18',
+    })).rejects.toThrow('pagination stalled at 0 of 2');
   });
 
   it('normalizes credit, mortgage, and student-loan details by account', () => {

@@ -1,6 +1,11 @@
 // SnapTrade integration using official SDK
 import { Snaptrade } from 'snaptrade-typescript-sdk';
 import { PrismaClient } from '@prisma/client';
+import {
+  getProviderRequestTimeoutMs,
+  type ProviderRetryOptions,
+  withTransientProviderRetry,
+} from './services/provider-request-policy';
 
 // Initialize Prisma client lazily to avoid import issues during ts-node startup
 let prisma: PrismaClient | null = null;
@@ -50,6 +55,9 @@ console.log('SnapTrade Configuration:', {
 const snaptrade = new Snaptrade({
   consumerKey: credentials.consumerKey,
   clientId: credentials.clientId,
+  baseOptions: {
+    timeout: getProviderRequestTimeoutMs('SNAPTRADE_REQUEST_TIMEOUT_MS'),
+  },
 });
 
 const SNAPTRADE_ACTIVITY_PAGE_SIZE = 1000;
@@ -80,15 +88,21 @@ function inferSnapTradeAccountType(account: any): { type: string; subtype: strin
 // Enhanced SnapTrade service class using official SDK
 export class SnapTradeService {
   private readonly client: Snaptrade;
+  private readonly retryOptions: ProviderRetryOptions;
 
-  constructor(client: Snaptrade = snaptrade) {
+  constructor(client: Snaptrade = snaptrade, retryOptions: ProviderRetryOptions = {}) {
     this.client = client;
+    this.retryOptions = retryOptions;
+  }
+
+  private read<T>(operation: () => Promise<T>): Promise<T> {
+    return withTransientProviderRetry(operation, this.retryOptions);
   }
   
   // Health check using official SDK
   async healthCheck(): Promise<boolean> {
     try {
-      const status = await this.client.apiStatus.check();
+      const status = await this.read(() => this.client.apiStatus.check());
       console.log('SnapTrade API Status:', status.data);
       return true;
     } catch (error) {
@@ -289,8 +303,8 @@ export class SnapTradeService {
       console.log('🔍 Getting accounts for user:', userId);
 
       const [accountsResponse, connectionsResponse] = await Promise.all([
-        this.client.accountInformation.listUserAccounts({ userId, userSecret }),
-        this.client.connections.listBrokerageAuthorizations({ userId, userSecret })
+        this.read(() => this.client.accountInformation.listUserAccounts({ userId, userSecret })),
+        this.read(() => this.client.connections.listBrokerageAuthorizations({ userId, userSecret }))
           .catch(error => {
             console.warn('SnapTrade connection status unavailable; continuing with account data:', error);
             return { data: [] } as any;
@@ -368,11 +382,11 @@ export class SnapTradeService {
       }
 
       const settled = await Promise.allSettled(accountsResult.data.accounts.map(async (account: any) => {
-        const response = await this.client.accountInformation.getUserHoldings({
+        const response = await this.read(() => this.client.accountInformation.getUserHoldings({
           accountId: account.id,
           userId,
           userSecret,
-        });
+        }));
         return {
           ...response.data,
           account: {
@@ -458,7 +472,7 @@ export class SnapTradeService {
           let accountActivityCount = 0;
 
           while (offset < total) {
-            const response = await this.client.accountInformation.getAccountActivities({
+            const response = await this.read(() => this.client.accountInformation.getAccountActivities({
               accountId: account.id,
               userId,
               userSecret,
@@ -468,7 +482,7 @@ export class SnapTradeService {
               // taxes, stock dividends, and future provider activity types.
               limit: SNAPTRADE_ACTIVITY_PAGE_SIZE,
               offset,
-            });
+            }));
             const page = Array.isArray(response.data?.data)
               ? response.data.data
               : Array.isArray(response.data) ? response.data : [];

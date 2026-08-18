@@ -6,7 +6,7 @@ export interface DataSourceConfig {
   description: string;
   tiers: UserTier[];
   category: 'account' | 'market' | 'external' | 'economic';
-  provider: 'plaid' | 'snaptrade' | 'fred' | 'massive' | 'tiingo' | 'fmp' | 'internal' | 'brave' | 'rentcast';
+  provider: 'plaid' | 'snaptrade' | 'fred' | 'massive' | 'tiingo' | 'fmp' | 'internal' | 'brave' | 'rentcast' | 'shiller-french';
   cacheDuration: number; // milliseconds
   rateLimit?: number; // requests per minute
   isLive: boolean;
@@ -120,6 +120,17 @@ export const dataSourceRegistry: Record<string, DataSourceConfig> = {
     cacheDuration: 5 * 60 * 1000,
     isLive: true,
     upgradeBenefit: 'Add live broad-market quotes and structured market news',
+  },
+  'historical-retirement-markets': {
+    id: 'historical-retirement-markets',
+    name: 'Historical Retirement Market Data',
+    description: 'Versioned Shiller U.S. market history and Kenneth French U.S. factor and international index snapshots used by deterministic retirement stress tests',
+    tiers: [UserTier.PREMIUM],
+    category: 'market',
+    provider: 'shiller-french',
+    cacheDuration: 30 * 24 * 60 * 60 * 1000,
+    isLive: false,
+    upgradeBenefit: 'Run deterministic retirement stress tests across U.S. and international market history',
   },
 
   // Home Valuations (All tiers)

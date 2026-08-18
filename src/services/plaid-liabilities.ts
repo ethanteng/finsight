@@ -3,11 +3,19 @@ import type {
   InvestmentsTransactionsGetRequest,
   LiabilitiesObject,
   PlaidApi,
+  Transaction as PlaidTransaction,
+  TransactionsGetRequest,
 } from 'plaid';
+import {
+  type ProviderRetryOptions,
+  withTransientProviderRetry,
+} from './provider-request-policy';
 
 const PLAID_INVESTMENT_PAGE_SIZE = 500;
+const PLAID_TRANSACTION_PAGE_SIZE = 500;
 
 type InvestmentTransactionsClient = Pick<PlaidApi, 'investmentsTransactionsGet'>;
+type TransactionsClient = Pick<PlaidApi, 'transactionsGet'>;
 
 export interface PlaidLiabilityApr {
   type: string;
@@ -79,20 +87,22 @@ export async function fetchAllPlaidInvestmentTransactions(
   request: Omit<InvestmentsTransactionsGetRequest, 'options'> & {
     options?: InvestmentsTransactionsGetRequest['options'];
   },
+  retryOptions: ProviderRetryOptions = {},
 ): Promise<InvestmentTransaction[]> {
   const transactions: InvestmentTransaction[] = [];
+  const seenIds = new Set<string>();
   let offset = 0;
   let total = Number.POSITIVE_INFINITY;
 
   while (offset < total) {
-    const response = await client.investmentsTransactionsGet({
+    const response = await withTransientProviderRetry(() => client.investmentsTransactionsGet({
       ...request,
       options: {
         ...(request.options ?? {}),
         count: PLAID_INVESTMENT_PAGE_SIZE,
         offset,
       },
-    });
+    }), retryOptions);
     const page = Array.isArray(response.data.investment_transactions)
       ? response.data.investment_transactions
       : [];
@@ -108,7 +118,59 @@ export async function fetchAllPlaidInvestmentTransactions(
       break;
     }
 
-    transactions.push(...page);
+    for (const transaction of page) {
+      if (seenIds.has(transaction.investment_transaction_id)) continue;
+      seenIds.add(transaction.investment_transaction_id);
+      transactions.push(transaction);
+    }
+    offset += page.length;
+  }
+
+  return transactions;
+}
+
+/** Fetch a complete transactions/get window without hanging on a stalled page. */
+export async function fetchAllPlaidTransactions(
+  client: TransactionsClient,
+  request: Omit<TransactionsGetRequest, 'options'> & {
+    options?: TransactionsGetRequest['options'];
+  },
+  retryOptions: ProviderRetryOptions = {},
+): Promise<PlaidTransaction[]> {
+  const transactions: PlaidTransaction[] = [];
+  const seenIds = new Set<string>();
+  let offset = 0;
+  let total = Number.POSITIVE_INFINITY;
+
+  while (offset < total) {
+    const response = await withTransientProviderRetry(() => client.transactionsGet({
+      ...request,
+      options: {
+        ...(request.options ?? {}),
+        count: PLAID_TRANSACTION_PAGE_SIZE,
+        offset,
+      },
+    }), retryOptions);
+    const page = Array.isArray(response.data.transactions) ? response.data.transactions : [];
+    const reportedTotal = response.data.total_transactions;
+    total = typeof reportedTotal === 'number' && Number.isFinite(reportedTotal)
+      ? Math.max(0, reportedTotal)
+      : offset + page.length;
+
+    if (page.length === 0) {
+      if (offset < total) {
+        throw new Error(`Plaid transaction pagination stalled at ${offset} of ${total}`);
+      }
+      break;
+    }
+
+    for (const transaction of page) {
+      if (seenIds.has(transaction.transaction_id)) continue;
+      seenIds.add(transaction.transaction_id);
+      transactions.push(transaction);
+    }
+    // Advance by provider rows, not unique rows, so a duplicated boundary item
+    // cannot make this loop request the same offset forever.
     offset += page.length;
   }
 

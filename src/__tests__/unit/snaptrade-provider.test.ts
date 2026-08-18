@@ -106,4 +106,18 @@ describe('SnapTrade provider retrieval', () => {
     expect(fake.accountInformation.getAccountActivities.mock.calls.every(([request]: any[]) => request.type === undefined))
       .toBe(true);
   });
+
+  it('retries transient account reads but does not broaden the retry indefinitely', async () => {
+    const fake = client();
+    fake.accountInformation.listUserAccounts
+      .mockRejectedValueOnce({ status: 503 })
+      .mockResolvedValueOnce({ data: [] });
+    const sleep = jest.fn().mockResolvedValue(undefined);
+
+    const result = await new SnapTradeService(fake, { sleep }).getUserAccounts('user', 'secret');
+
+    expect(result.success).toBe(true);
+    expect(fake.accountInformation.listUserAccounts).toHaveBeenCalledTimes(2);
+    expect(sleep).toHaveBeenCalledWith(500);
+  });
 });

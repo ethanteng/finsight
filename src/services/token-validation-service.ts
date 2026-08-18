@@ -1,6 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import { Configuration, PlaidApi, PlaidEnvironments } from 'plaid';
 import { SnapTradeService } from '../snaptrade';
+import { getProviderRequestTimeoutMs, withTransientProviderRetry } from './provider-request-policy';
 
 const prisma = new PrismaClient();
 
@@ -28,6 +29,7 @@ const credentials = getPlaidCredentials();
 const configuration = new Configuration({
   basePath: useSandbox ? PlaidEnvironments.sandbox : PlaidEnvironments[credentials.env as keyof typeof PlaidEnvironments],
   baseOptions: {
+    timeout: getProviderRequestTimeoutMs('PLAID_REQUEST_TIMEOUT_MS'),
     headers: {
       'PLAID-CLIENT-ID': credentials.clientId,
       'PLAID-SECRET': credentials.secret,
@@ -86,9 +88,9 @@ export class TokenValidationService {
   private async validatePlaidToken(token: string, tokenId: string): Promise<PlaidTokenHealth> {
     try {
       // Try to get accounts as a lightweight check
-      await plaidClient.accountsGet({
+      await withTransientProviderRetry(() => plaidClient.accountsGet({
         access_token: token
-      });
+      }));
 
       return {
         tokenId,
@@ -195,4 +197,3 @@ export class TokenValidationService {
     };
   }
 }
-

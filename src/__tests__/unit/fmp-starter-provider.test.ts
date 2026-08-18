@@ -165,6 +165,23 @@ describe('FMP Starter fund metadata', () => {
     expect(looksLikeMutualFundTicker('FDX')).toBe(false);
   });
 
+  it('retries a transient FMP response without waiting beyond the request budget', async () => {
+    const fetchImplementation = jest.fn()
+      .mockResolvedValueOnce({ ok: false, status: 503, headers: { get: () => null } })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => [{ symbol: 'SPY' }],
+      });
+    const sleep = jest.fn().mockResolvedValue(undefined);
+    const retryingProvider = new FMPProvider('real-key', { fetchImplementation, sleep });
+
+    await expect((retryingProvider as any).fetchList('/profile', 'spy'))
+      .resolves.toEqual([{ symbol: 'SPY' }]);
+    expect(fetchImplementation).toHaveBeenCalledTimes(2);
+    expect(sleep).toHaveBeenCalledWith(1000);
+  });
+
   it('uses look-through countries in portfolio metrics and retirement mapping', async () => {
     const metadata: SecurityMetadata = {
       tickerSymbol: 'VXUS',

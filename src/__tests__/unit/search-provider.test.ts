@@ -4,10 +4,14 @@ import { SearchProvider } from '../../data/providers/search';
 
 describe('Brave Search provider', () => {
   const originalGithubActions = process.env.GITHUB_ACTIONS;
+  const noWait = { waitForNextCall: jest.fn().mockResolvedValue(undefined) };
+  const noSleep = jest.fn().mockResolvedValue(undefined);
 
   beforeEach(() => {
     delete process.env.GITHUB_ACTIONS;
     global.fetch = jest.fn();
+    noWait.waitForNextCall.mockClear();
+    noSleep.mockClear();
   });
 
   afterAll(() => {
@@ -29,7 +33,10 @@ describe('Brave Search provider', () => {
         },
       }),
     });
-    const provider = new SearchProvider('real-brave-key', 'brave');
+    const provider = new SearchProvider('real-brave-key', 'brave', {
+      rateLimiter: noWait,
+      sleep: noSleep,
+    });
     const query = 'current Federal Reserve target interest rate';
 
     const results = await provider.search(query, { freshness: 'pm', maxResults: 3 });
@@ -49,9 +56,32 @@ describe('Brave Search provider', () => {
       status: 429,
       text: async () => 'rate limited',
     });
-    const provider = new SearchProvider('real-brave-key', 'brave');
+    const provider = new SearchProvider('real-brave-key', 'brave', {
+      rateLimiter: noWait,
+      sleep: noSleep,
+    });
 
     await expect(provider.search('current mortgage rates', { freshness: 'pd' }))
       .rejects.toThrow('Brave search failed: 429');
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('retries a transient Brave failure and rate-limits every attempt', async () => {
+    (global.fetch as jest.Mock)
+      .mockResolvedValueOnce({ ok: false, status: 503, headers: { get: () => null } })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ web: { results: [] } }),
+      });
+    const provider = new SearchProvider('real-brave-key', 'brave', {
+      rateLimiter: noWait,
+      sleep: noSleep,
+    });
+
+    await expect(provider.search('current treasury yields')).resolves.toEqual([]);
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+    expect(noWait.waitForNextCall).toHaveBeenCalledTimes(2);
+    expect(noSleep).toHaveBeenCalledWith(1000);
   });
 });

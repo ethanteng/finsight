@@ -1,5 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import { Configuration, PlaidApi, PlaidEnvironments } from 'plaid';
+import { getProviderRequestTimeoutMs, withTransientProviderRetry } from './services/provider-request-policy';
+import { fetchAllPlaidTransactions } from './services/plaid-liabilities';
 
 // Initialize Prisma client lazily to avoid import issues during ts-node startup
 let prisma: PrismaClient | null = null;
@@ -37,6 +39,7 @@ const credentials = getPlaidCredentials();
 const configuration = new Configuration({
   basePath: useSandbox ? PlaidEnvironments.sandbox : PlaidEnvironments[credentials.env],
   baseOptions: {
+    timeout: getProviderRequestTimeoutMs('PLAID_REQUEST_TIMEOUT_MS'),
     headers: {
       'PLAID-CLIENT-ID': credentials.clientId,
       'PLAID-SECRET': credentials.secret,
@@ -89,29 +92,29 @@ export async function syncAllAccounts(userId?: string): Promise<SyncResult> {
     for (const { token } of accessTokens) {
       try {
         // Get accounts for this token
-        const accountsResponse = await plaidClient.accountsGet({
+        const accountsResponse = await withTransientProviderRetry(() => plaidClient.accountsGet({
           access_token: token,
-        });
+        }));
 
-        // Collect unique accounts (deduplicate by name + type + subtype like in /plaid/all-accounts)
+        // Provider IDs are stable across renames and avoid collapsing two
+        // same-type accounts that happen to share a display name.
         console.log(`Token ${token.substring(0, 8)}... accounts:`, accountsResponse.data.accounts.map(a => a.name));
         for (const account of accountsResponse.data.accounts) {
-          const accountKey = `${account.name}-${account.type}-${account.subtype}`;
+          const accountKey = account.account_id;
           if (!allAccounts.has(accountKey)) {
             allAccounts.set(accountKey, account);
           }
         }
 
         // Get transactions for this token
-        const transactionsResponse = await plaidClient.transactionsGet({
+        const plaidTransactions = await fetchAllPlaidTransactions(plaidClient, {
           access_token: token,
           start_date: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // Last 30 days
           end_date: new Date().toISOString().split('T')[0],
         });
 
-        // Collect unique transactions (deduplicate by name + amount + date like accounts)
-        for (const transaction of transactionsResponse.data.transactions) {
-          const transactionKey = `${transaction.name}-${transaction.amount}-${transaction.date}`;
+        for (const transaction of plaidTransactions) {
+          const transactionKey = transaction.transaction_id;
           if (!allTransactions.has(transactionKey)) {
             allTransactions.set(transactionKey, transaction);
           }
@@ -306,4 +309,4 @@ export async function getLastSyncInfo(userId?: string) {
     console.error('Error getting sync status:', error);
     return null;
   }
-} 
+}

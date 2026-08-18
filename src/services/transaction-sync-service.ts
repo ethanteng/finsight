@@ -3,6 +3,7 @@ import { plaidClient } from '../plaid';
 import { processTransactionData } from '../plaid';
 import { TransactionCategorizationService } from './transaction-categorization-service';
 import { TransactionNormalizationService } from './transaction-normalization-service';
+import { withTransientProviderRetry } from './provider-request-policy';
 
 const prisma = new PrismaClient();
 const categorizationService = new TransactionCategorizationService();
@@ -49,10 +50,10 @@ export class TransactionSyncService {
       // Paginate through all changes
       while (hasMore) {
         try {
-          const syncResp = await plaidClient.transactionsSync({
+          const syncResp = await withTransientProviderRetry(() => plaidClient.transactionsSync({
             access_token: accessToken,
             cursor: currentCursor || undefined,
-          });
+          }));
 
           added.push(...syncResp.data.added);
           modified.push(...syncResp.data.modified);

@@ -304,6 +304,15 @@ describe('Tier System', () => {
         expect(source.description.length).toBeGreaterThan(10);
       });
     });
+
+    test('should register the versioned Shiller/French retirement inputs', () => {
+      expect(dataSourceRegistry['historical-retirement-markets']).toMatchObject({
+        provider: 'shiller-french',
+        category: 'market',
+        isLive: false,
+        tiers: [UserTier.PREMIUM],
+      });
+    });
   });
 
   describe('Tier Upgrade Path', () => {

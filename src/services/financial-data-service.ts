@@ -12,10 +12,12 @@ import { mergeFinancialSources } from './financial-calculations';
 import { loadPersistedPlaidData } from './financial-source-persistence';
 import { normalizeAssetType, resolveAssetTypeWithHeuristics } from './asset-class';
 import {
+  fetchAllPlaidTransactions,
   fetchAllPlaidInvestmentTransactions,
   normalizePlaidLiabilities,
   type PlaidLiabilityDetails,
 } from './plaid-liabilities';
+import { getProviderRequestTimeoutMs, withTransientProviderRetry } from './provider-request-policy';
 
 const prisma = new PrismaClient();
 
@@ -43,6 +45,7 @@ const credentials = getPlaidCredentials();
 const configuration = new Configuration({
   basePath: useSandbox ? PlaidEnvironments.sandbox : PlaidEnvironments[credentials.env as keyof typeof PlaidEnvironments],
   baseOptions: {
+    timeout: getProviderRequestTimeoutMs('PLAID_REQUEST_TIMEOUT_MS'),
     headers: {
       'PLAID-CLIENT-ID': credentials.clientId,
       'PLAID-SECRET': credentials.secret,
@@ -234,7 +237,7 @@ export class FinancialDataService {
   async getUserFinancialData(userId: string, options?: {
     includeTransactions?: boolean;
     includeInvestments?: boolean;
-    /** Defaults to includeInvestments; full snapshots include debt terms while balance-only views avoid an extra Plaid call. */
+    /** Off by default; snapshot/analysis ingestion opts in while display-only investment views avoid an extra Plaid call. */
     includeLiabilities?: boolean;
     includeHomeValue?: boolean;
     skipCategorization?: boolean; // ✅ NEW: Skip categorization for UI-only requests (performance optimization)
@@ -245,7 +248,7 @@ export class FinancialDataService {
     const opts = {
       includeTransactions: options?.includeTransactions ?? true,
       includeInvestments: options?.includeInvestments ?? true,
-      includeLiabilities: options?.includeLiabilities ?? (options?.includeInvestments ?? true),
+      includeLiabilities: options?.includeLiabilities ?? false,
       includeHomeValue: options?.includeHomeValue ?? true
     };
 
@@ -958,12 +961,12 @@ export class FinancialDataService {
           const requestTimestamp = new Date().toISOString();
 
           // Get accounts
-          const accountsResponse = await plaidClient.accountsGet({
+          const accountsResponse = await withTransientProviderRetry(() => plaidClient.accountsGet({
             access_token: tokenRecord.token
-          });
+          }));
 
           // Get institution data for these accounts
-          const item = await plaidClient.itemGet({ access_token: tokenRecord.token });
+          const item = await withTransientProviderRetry(() => plaidClient.itemGet({ access_token: tokenRecord.token }));
           const itemData = item.data.item as Record<string, any>;
           const itemLastUpdated = itemData?.last_updated_datetime || requestTimestamp;
 
@@ -977,10 +980,10 @@ export class FinancialDataService {
           const rawInstitutionId = item.data.item.institution_id;
           if (rawInstitutionId) {
             try {
-              const institutionResponse = await plaidClient.institutionsGetById({
+              const institutionResponse = await withTransientProviderRetry(() => plaidClient.institutionsGetById({
                 institution_id: rawInstitutionId,
                 country_codes: ['US' as CountryCode]
-              });
+              }));
               const inst = institutionResponse.data.institution;
               institutionName = inst?.name ?? undefined;
               institutionId = inst?.institution_id ?? undefined;
@@ -1054,9 +1057,9 @@ export class FinancialDataService {
           if (options.includeLiabilities && hasLiabilityAccounts) {
             asyncTasks.push((async () => {
               try {
-                const liabilitiesResponse = await plaidClient.liabilitiesGet({
+                const liabilitiesResponse = await withTransientProviderRetry(() => plaidClient.liabilitiesGet({
                   access_token: tokenRecord.token,
-                });
+                }));
                 const liabilityDetails = normalizePlaidLiabilities(
                   liabilitiesResponse.data.liabilities,
                   requestTimestamp,
@@ -1089,9 +1092,9 @@ export class FinancialDataService {
           if (options.includeInvestments && hasInvestmentAccounts) {
             asyncTasks.push((async () => {
               try {
-                const holdingsResponse = await plaidClient.investmentsHoldingsGet({
+                const holdingsResponse = await withTransientProviderRetry(() => plaidClient.investmentsHoldingsGet({
                   access_token: tokenRecord.token
-                });
+                }));
 
                 console.log(`📊 Plaid: Token ${tokenRecord.id.substring(0, 8)}... fetched ${holdingsResponse.data.holdings?.length || 0} holdings and ${holdingsResponse.data.securities?.length || 0} securities`);
 
@@ -1203,37 +1206,15 @@ export class FinancialDataService {
                     transaction_id: tx.transaction_id
                 });
 
-              const transactionsResponse = await plaidClient.transactionsGet({
+              const plaidTransactions = await fetchAllPlaidTransactions(plaidClient, {
                 access_token: tokenRecord.token,
                 start_date: startDate,
                 end_date: endDate,
                 options: {
-                    count: 500,
                     include_personal_finance_category: true
                 }
               });
-
-                transactions.push(...transactionsResponse.data.transactions.map(mapTransaction));
-
-                let fetchedTransactions = transactionsResponse.data.transactions.length;
-                const totalTransactions = transactionsResponse.data.total_transactions;
-
-                while (fetchedTransactions < totalTransactions) {
-                  const pagedResponse = await plaidClient.transactionsGet({
-                    access_token: tokenRecord.token,
-                    start_date: startDate,
-                    end_date: endDate,
-                    options: {
-                      count: 500,
-                      offset: fetchedTransactions,
-                      include_personal_finance_category: true
-                    }
-                  });
-
-                  transactions.push(...pagedResponse.data.transactions.map(mapTransaction));
-
-                  fetchedTransactions += pagedResponse.data.transactions.length;
-                }
+              transactions.push(...plaidTransactions.map(mapTransaction));
             } catch (transactionError: any) {
               console.error('Error fetching transactions for token:', transactionError?.response?.data?.error_code);
               errors.push({
@@ -1806,9 +1787,14 @@ export class FinancialDataService {
               // value. Only infer cash direction when the provider omitted amount.
               let normalizedAmount = providerAmount ?? (price * quantity);
               if (providerAmount === undefined) {
-                if (transactionType === 'BUY' || transactionType === 'WITHDRAWAL' || transactionType === 'FEE' || transactionType === 'TAX') {
+                const normalizedType = String(transactionType).toUpperCase();
+                if (['SPLIT', 'STOCK_DIVIDEND', 'TRANSFER'].includes(normalizedType)) {
+                  // These can move units without moving account cash. A market
+                  // value is not a defensible substitute for a missing amount.
+                  normalizedAmount = 0;
+                } else if (['BUY', 'WITHDRAWAL', 'FEE', 'TAX'].includes(normalizedType)) {
                   normalizedAmount = -Math.abs(normalizedAmount);
-                } else if (transactionType === 'SELL' || transactionType === 'CONTRIBUTION' || transactionType === 'DIVIDEND' || transactionType === 'INTEREST') {
+                } else if (['SELL', 'CONTRIBUTION', 'DIVIDEND', 'INTEREST', 'REI'].includes(normalizedType)) {
                   normalizedAmount = Math.abs(normalizedAmount);
                 }
               }

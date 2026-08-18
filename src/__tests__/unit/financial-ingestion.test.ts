@@ -98,6 +98,9 @@ describe('financial ingestion balance refresh semantics', () => {
     });
 
     expect(getAccountBalances).not.toHaveBeenCalled();
-    expect(getUserFinancialData).toHaveBeenCalled();
+    expect(getUserFinancialData).toHaveBeenCalledWith('user-1', expect.objectContaining({
+      includeInvestments: true,
+      includeLiabilities: true,
+    }));
   });
 });

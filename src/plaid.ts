@@ -7,6 +7,7 @@ import { TransactionSyncService } from './services/transaction-sync-service';
 import { matchAccountsAcrossConnections, toConnectionAccount } from './services/plaid-connection-supersede';
 import { normalizeAssetType } from './services/asset-class';
 import { normalizeLabel } from './services/label-normalization';
+import { getProviderRequestTimeoutMs } from './services/provider-request-policy';
 
 // Initialize Prisma client lazily to avoid import issues during ts-node startup
 let prisma: PrismaClient | null = null;
@@ -44,6 +45,7 @@ const credentials = getPlaidCredentials();
 const configuration = new Configuration({
   basePath: useSandbox ? PlaidEnvironments.sandbox : PlaidEnvironments[credentials.env],
   baseOptions: {
+    timeout: getProviderRequestTimeoutMs('PLAID_REQUEST_TIMEOUT_MS'),
     headers: {
       'PLAID-CLIENT-ID': credentials.clientId,
       'PLAID-SECRET': credentials.secret,
