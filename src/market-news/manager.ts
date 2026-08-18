@@ -8,11 +8,22 @@ import {
   acquireScheduledRefreshLease,
   completeScheduledRefreshLease,
   failScheduledRefreshLease,
+  releaseScheduledRefreshLease,
 } from './refresh-lease';
 
 const MARKET_NEWS_REFRESH_JOB = 'market-news-refresh';
 const MARKET_NEWS_REFRESH_INTERVAL_MS = 3.75 * 60 * 60 * 1000;
 const MARKET_NEWS_REFRESH_LEASE_MS = 30 * 60 * 1000;
+const ALL_MARKET_NEWS_TIERS: readonly UserTier[] = [
+  UserTier.STARTER,
+  UserTier.STANDARD,
+  UserTier.PREMIUM,
+];
+
+function coversAllMarketNewsTiers(tiers: readonly UserTier[]): boolean {
+  const unique = new Set(tiers);
+  return ALL_MARKET_NEWS_TIERS.every((tier) => unique.has(tier));
+}
 
 export class MarketNewsManager {
   private aggregator: MarketNewsAggregator;
@@ -68,7 +79,15 @@ export class MarketNewsManager {
 
     try {
       await this.updateMarketContexts(tiers);
-      await completeScheduledRefreshLease(MARKET_NEWS_REFRESH_JOB, lease.ownerId);
+      // Only a full-tier run advances the success window. A single-tier admin
+      // force refresh still holds the cluster lease while it runs, but must not
+      // mark the scheduled job fresh or sibling tiers stay stale until the
+      // interval elapses.
+      if (coversAllMarketNewsTiers(tiers)) {
+        await completeScheduledRefreshLease(MARKET_NEWS_REFRESH_JOB, lease.ownerId);
+      } else {
+        await releaseScheduledRefreshLease(MARKET_NEWS_REFRESH_JOB, lease.ownerId);
+      }
       return { refreshed: true };
     } catch (error) {
       await failScheduledRefreshLease(MARKET_NEWS_REFRESH_JOB, lease.ownerId, error).catch((leaseError) => {

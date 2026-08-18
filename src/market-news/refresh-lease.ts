@@ -89,6 +89,22 @@ export async function completeScheduledRefreshLease(name: string, ownerId: strin
   });
 }
 
+/**
+ * Drop an active lease without recording a successful full run. Partial admin
+ * refreshes must not advance lastCompletedAt, or the scheduled all-tier job
+ * would be treated as already_fresh and skip untouched tiers.
+ */
+export async function releaseScheduledRefreshLease(name: string, ownerId: string): Promise<void> {
+  const now = new Date();
+  await getPrismaClient().scheduledJobLease.updateMany({
+    where: { name, ownerId },
+    data: {
+      leaseUntil: now,
+      lastError: null,
+    },
+  });
+}
+
 export async function failScheduledRefreshLease(
   name: string,
   ownerId: string,

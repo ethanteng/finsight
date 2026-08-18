@@ -4,6 +4,7 @@ import {
   acquireScheduledRefreshLease,
   completeScheduledRefreshLease,
   failScheduledRefreshLease,
+  releaseScheduledRefreshLease,
 } from '../../market-news/refresh-lease';
 
 jest.mock('../../prisma-client', () => ({ getPrismaClient: jest.fn() }));
@@ -99,5 +100,23 @@ describe('scheduled market-news refresh lease', () => {
       where: { name: 'market-news-refresh', ownerId: 'owner-2' },
       data: expect.objectContaining({ leaseUntil: expect.any(Date), lastError: 'provider unavailable' }),
     });
+  });
+
+  it('releases a partial run without advancing lastCompletedAt', async () => {
+    const prisma = prismaMock();
+    prisma.scheduledJobLease.updateMany.mockResolvedValue({ count: 1 });
+    mockedGetPrismaClient.mockReturnValue(prisma as any);
+
+    await releaseScheduledRefreshLease('market-news-refresh', 'owner-partial');
+
+    expect(prisma.scheduledJobLease.updateMany).toHaveBeenCalledWith({
+      where: { name: 'market-news-refresh', ownerId: 'owner-partial' },
+      data: {
+        leaseUntil: expect.any(Date),
+        lastError: null,
+      },
+    });
+    const data = prisma.scheduledJobLease.updateMany.mock.calls[0][0].data;
+    expect(data).not.toHaveProperty('lastCompletedAt');
   });
 });
