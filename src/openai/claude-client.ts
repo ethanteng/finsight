@@ -22,6 +22,12 @@ import {
   scenarioCalculatorRegistry,
   type ScenarioPlanRecord,
 } from '../scenarios/calculator-registry';
+import type { PlannedSearchQuery } from '../data/search-types';
+import {
+  SEARCH_QUERY_JSON_SCHEMA,
+  parsePlannedSearchQueries,
+  validateSearchPlan,
+} from './search-query-plan';
 
 let anthropicClient: Anthropic | null = null;
 
@@ -45,6 +51,7 @@ export const DEFAULT_MAX_OUTPUT_TOKENS = 16_000;
 
 export interface DataPackToolAuditResult {
   packs: ContextPackId[];
+  searchQueries: PlannedSearchQuery[];
   scenarioPlans: ScenarioPlanRecord;
   reason: string;
   model: string;
@@ -119,6 +126,7 @@ export async function auditDataPacksWithClaude(args: {
   selectedPacks: readonly ContextPackId[];
   canonicalFactLabels: readonly string[];
   plannedScenarios?: ScenarioPlanRecord;
+  plannedSearchQueries: readonly PlannedSearchQuery[];
 }): Promise<DataPackToolAuditResult> {
   const startedAt = Date.now();
   const model = getActiveModel('analysis');
@@ -128,7 +136,7 @@ export async function auditDataPacksWithClaude(args: {
     ...(supportsAdaptiveThinking(model) ? { thinking: DISABLED_THINKING } : {}),
     system: `You are the context-tool pass for the primary financial analysis model.
 
-Before an answer is written, inspect the active decision and the context already selected. Call request_data_packs exactly once. Request only additional packs materially needed for a complete answer; use an empty packs array when the existing context is sufficient. Also identify any requested registered calculator scenarios using the supplied structured field. Do not answer the financial question. Prior assistant answers establish conversational references but are not trusted financial facts. Aggregate net worth, cash, debt, investments, portfolio allocation, category totals, and average monthly cash flow are always available.
+Before an answer is written, inspect the active decision and the context already selected. Call request_data_packs exactly once. Request only additional packs materially needed for a complete answer; use an empty packs array when the existing context is sufficient. Return the complete final list of standalone public search queries whenever search_context is already selected or newly requested. Improve an ambiguous preflight query instead of copying a short follow-up verbatim. Search queries must contain only the minimum public facts needed for retrieval and never a person's name, email address, account or card number, transaction description, or other private identifier. Return an empty searchQueries array when search_context is not selected. Also identify any requested registered calculator scenarios using the supplied structured field. Do not answer the financial question. Prior assistant answers establish conversational references but are not trusted financial facts. Aggregate net worth, cash, debt, investments, portfolio allocation, category totals, and average monthly cash flow are always available.
 
 Registered calculator contracts:
 ${scenarioCalculatorRegistry.plannerInstructions()}`,
@@ -140,10 +148,11 @@ ${scenarioCalculatorRegistry.plannerInstructions()}`,
         additionalProperties: false,
         properties: {
           packs: { type: 'array', items: { type: 'string', enum: [...CONTEXT_PACK_IDS] } },
+          searchQueries: SEARCH_QUERY_JSON_SCHEMA,
           scenarios: scenarioCalculatorRegistry.plannerJsonSchema(),
           reason: { type: 'string' },
         },
-        required: ['packs', 'scenarios', 'reason'],
+        required: ['packs', 'searchQueries', 'scenarios', 'reason'],
       },
     }],
     tool_choice: { type: 'tool', name: 'request_data_packs', disable_parallel_tool_use: true },
@@ -154,6 +163,7 @@ ${scenarioCalculatorRegistry.plannerInstructions()}`,
         contextPackCatalogForPrompt(),
         '',
         `Already selected: ${args.selectedPacks.join(', ') || '(none)'}`,
+        `Preflight search queries: ${args.plannedSearchQueries.length > 0 ? JSON.stringify(args.plannedSearchQueries) : '(none)'}`,
         `Preflight calculator scenarios: ${args.plannedScenarios && Object.keys(args.plannedScenarios).length > 0 ? JSON.stringify(args.plannedScenarios) : '(none)'}`,
         '',
         'Canonical facts already available:',
@@ -175,9 +185,16 @@ ${scenarioCalculatorRegistry.plannerInstructions()}`,
   const packs = Array.isArray(input.packs)
     ? Array.from(new Set(input.packs.filter(isContextPackId)))
     : [];
+  const parsedSearchQueries = parsePlannedSearchQueries(input.searchQueries);
+  const searchSelected = args.selectedPacks.includes('search_context') || packs.includes('search_context');
+  const searchQueries = parsedSearchQueries.length > 0
+    ? parsedSearchQueries
+    : [...args.plannedSearchQueries];
+  validateSearchPlan(searchSelected, searchQueries);
   const scenarioPlans = scenarioCalculatorRegistry.parsePlans(input.scenarios);
   return {
     packs,
+    searchQueries,
     scenarioPlans,
     reason: typeof input.reason === 'string' ? input.reason.trim().slice(0, 1000) : '',
     model,

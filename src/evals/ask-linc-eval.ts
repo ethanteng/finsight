@@ -201,6 +201,7 @@ export async function runAskLincEvalSet(): Promise<AskLincEvalResult[]> {
     needsSecondaryValidation: true,
     retirementInputs: { sources: {} },
     scenarioPlans: {},
+    searchQueries: [],
     summary: 'The current message continues the portfolio comparison.',
     model: 'offline-context-planner',
     durationMs: 0,

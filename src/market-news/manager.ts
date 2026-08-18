@@ -4,6 +4,15 @@ import { getPrismaClient } from '../prisma-client';
 import { MarketNewsAggregator } from './aggregator';
 import { MarketNewsSynthesizer, MarketNewsContext } from './synthesizer';
 import { MarketNewsData } from './aggregator';
+import {
+  acquireScheduledRefreshLease,
+  completeScheduledRefreshLease,
+  failScheduledRefreshLease,
+} from './refresh-lease';
+
+const MARKET_NEWS_REFRESH_JOB = 'market-news-refresh';
+const MARKET_NEWS_REFRESH_INTERVAL_MS = 3.75 * 60 * 60 * 1000;
+const MARKET_NEWS_REFRESH_LEASE_MS = 30 * 60 * 1000;
 
 export class MarketNewsManager {
   private aggregator: MarketNewsAggregator;
@@ -22,19 +31,50 @@ export class MarketNewsManager {
   }
   
   async updateMarketContext(tier: UserTier): Promise<void> {
+    await this.updateMarketContexts([tier]);
+  }
+
+  /**
+   * Collect external market evidence once, then derive every tier's view from
+   * that same timestamped batch. The previous cron called updateMarketContext
+   * three times and repeated the six Brave searches for each tier.
+   */
+  async updateMarketContexts(tiers: readonly UserTier[]): Promise<void> {
     try {
-      // Aggregate fresh market data
       const rawData = await this.aggregator.aggregateMarketData();
-      
-      // Synthesize into context
-      const context = await this.synthesizer.synthesizeMarketContext(rawData, tier);
-      
-      // Save to database
-      await this.saveMarketContext(context, rawData);
-      
-      console.log(`Market context updated for tier: ${tier}`);
+      await Promise.all(Array.from(new Set(tiers)).map(async (tier) => {
+        const context = await this.synthesizer.synthesizeMarketContext(rawData, tier);
+        await this.saveMarketContext(context, rawData);
+        console.log(`Market context updated for tier: ${tier}`);
+      }));
     } catch (error) {
-      console.error('Error updating market context:', error);
+      console.error('Error updating market contexts:', error);
+      throw error;
+    }
+  }
+
+  /** Run one cluster-wide refresh, or report why another instance need not repeat it. */
+  async refreshMarketContexts(
+    tiers: readonly UserTier[],
+    options: { force?: boolean } = {}
+  ): Promise<{ refreshed: boolean; reason?: 'active_lease' | 'already_fresh' }> {
+    const lease = await acquireScheduledRefreshLease({
+      name: MARKET_NEWS_REFRESH_JOB,
+      minimumIntervalMs: MARKET_NEWS_REFRESH_INTERVAL_MS,
+      leaseDurationMs: MARKET_NEWS_REFRESH_LEASE_MS,
+      force: options.force,
+    });
+    if (!lease.acquired) return { refreshed: false, reason: lease.reason };
+
+    try {
+      await this.updateMarketContexts(tiers);
+      await completeScheduledRefreshLease(MARKET_NEWS_REFRESH_JOB, lease.ownerId);
+      return { refreshed: true };
+    } catch (error) {
+      await failScheduledRefreshLease(MARKET_NEWS_REFRESH_JOB, lease.ownerId, error).catch((leaseError) => {
+        console.error('Failed to release market-news refresh lease:', leaseError);
+      });
+      throw error;
     }
   }
   

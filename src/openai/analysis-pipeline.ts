@@ -66,6 +66,7 @@ import {
   type ScenarioExecutionRecord,
   type ScenarioPlanRecord,
 } from '../scenarios/calculator-registry';
+import type { PlannedSearchQuery } from '../data/search-types';
 
 export interface RunAskLincAnalysisOptions {
   question: string;
@@ -84,6 +85,7 @@ export interface RunAskLincAnalysisOptions {
     snapshot: FinancialContextSnapshot;
     contextPlan?: ContextPlan;
     toolRequestedPacks?: ContextPackId[];
+    toolSearchQueries?: PlannedSearchQuery[];
     scenarioPlans?: ScenarioPlanRecord;
     scenarioExecutions?: ScenarioExecutionRecord;
     model: (input: {
@@ -234,6 +236,7 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
     scenarioPlans,
     RETIREMENT_CALCULATOR_ID
   );
+  let finalSearchQueries = [...contextPlan.searchQueries];
   let retirementBaselineInputs = retirementInputsForBaseline(
     contextPlan.retirementInputs,
     retirementScenarioPlan
@@ -253,6 +256,8 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
     tier,
     recentTurns,
     plannedRetirementInputs: retirementBaselineInputs,
+    searchQueries: finalSearchQueries,
+    deferSearchContext: true,
     deferRetirementAnalysis: retirementAnalysisDeferred,
     useExistingRetirementBaseline: Boolean(retirementScenarioPlan),
     onProgress
@@ -267,6 +272,7 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
   // dependency expansion and data access remain application-owned.
   let contextTool: NonNullable<EvidenceManifest['contextPlanning']>['primaryTool'];
   let contextToolMs = 0;
+  let searchRetrievalAttempted = false;
   if (!evaluation) {
     const toolAuditStartedAt = Date.now();
     let auditedPacks: ContextPackId[] = [];
@@ -283,11 +289,13 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
           (fact) => `${fact.id}: ${fact.label}`
         ),
         plannedScenarios: scenarioPlans,
+        plannedSearchQueries: finalSearchQueries,
       });
       auditedPacks = toolResult.packs;
       auditModel = toolResult.model;
       auditReason = toolResult.reason;
       auditDurationMs = toolResult.durationMs;
+      finalSearchQueries = [...toolResult.searchQueries];
       scenarioPlans = scenarioCalculatorRegistry.mergePlans(scenarioPlans, toolResult.scenarioPlans);
       retirementScenarioPlan = scenarioCalculatorRegistry.getPlan<RetirementScenarioPlan>(
         scenarioPlans,
@@ -310,10 +318,15 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
         addedPacks: [],
         reason: toolResult.reason,
         durationMs: toolResult.durationMs,
+        searchQueries: toolResult.searchQueries,
         ...(Object.keys(toolResult.scenarioPlans).length > 0 && { scenarios: toolResult.scenarioPlans }),
       };
-      if (addedPacks.length > 0) {
+      if (
+        addedPacks.length > 0 ||
+        (widenedPacks.includes('search_context') && finalSearchQueries.length > 0)
+      ) {
         const widenedNeeds = questionNeedsFromPacks(widenedPacks, contextPlan.needsSecondaryValidation);
+        searchRetrievalAttempted = widenedNeeds.needsSearchContext && finalSearchQueries.length > 0;
         const toolGatherStartedAt = Date.now();
         const widenedSnapshot = await gatherContextSnapshot({
           userId,
@@ -322,6 +335,7 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
           tier,
           recentTurns,
           plannedRetirementInputs: retirementBaselineInputs,
+          searchQueries: finalSearchQueries,
           useExistingRetirementBaseline: Boolean(retirementScenarioPlan),
           onProgress,
         });
@@ -351,6 +365,31 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
     }
 
     if (
+      !searchRetrievalAttempted &&
+      questionNeeds.needsSearchContext &&
+      finalSearchQueries.length > 0
+    ) {
+      try {
+        searchRetrievalAttempted = true;
+        const recoveryGatherStartedAt = Date.now();
+        snapshot = await gatherContextSnapshot({
+          userId,
+          question,
+          questionNeeds,
+          tier,
+          recentTurns,
+          plannedRetirementInputs: retirementBaselineInputs,
+          searchQueries: finalSearchQueries,
+          useExistingRetirementBaseline: Boolean(retirementScenarioPlan),
+          onProgress,
+        });
+        contextGatherMs += Date.now() - recoveryGatherStartedAt;
+      } catch (gatherError) {
+        console.error('Ask Linc: Search context recovery failed after the tool audit:', gatherError);
+      }
+    }
+
+    if (
       retirementAnalysisDeferred &&
       !snapshot.retirementAnalysis &&
       !snapshot.retirementAnalysisNeedsInfo
@@ -371,9 +410,12 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
         console.error('Ask Linc: Deferred retirement analysis could not be completed:', completionError);
       }
     }
-  } else if (evaluation?.toolRequestedPacks?.length) {
-    selectedPacks = normalizeContextPacks([...selectedPacks, ...evaluation.toolRequestedPacks]);
-    questionNeeds = questionNeedsFromPacks(selectedPacks, contextPlan.needsSecondaryValidation);
+  } else {
+    if (evaluation.toolRequestedPacks?.length) {
+      selectedPacks = normalizeContextPacks([...selectedPacks, ...evaluation.toolRequestedPacks]);
+      questionNeeds = questionNeedsFromPacks(selectedPacks, contextPlan.needsSecondaryValidation);
+    }
+    finalSearchQueries = evaluation.toolSearchQueries ?? finalSearchQueries;
   }
 
   const scenarioExecutions = await scenarioCalculatorRegistry.executePlans(
@@ -549,6 +591,7 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
             tier,
             recentTurns,
             plannedRetirementInputs: retirementBaselineInputs,
+            searchQueries: finalSearchQueries,
             useExistingRetirementBaseline: Boolean(retirementScenarioPlan),
             onProgress,
           });
@@ -686,6 +729,7 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
         selectedPacks: initiallySelectedPacks,
         finalPacks: selectedPacks,
         needsSecondaryValidation: contextPlan.needsSecondaryValidation,
+        searchQueries: contextPlan.searchQueries,
         summary: contextPlan.summary,
         ...(Object.keys(scenarioPlans).length > 0 && { scenarios: scenarioPlans }),
         ...(contextTool && { primaryTool: contextTool }),
@@ -722,6 +766,7 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
         marketContext: Boolean(snapshot.marketContext),
         ...(marketContextDigest && { marketContextDigest }),
         ...(searchContextDigest && { searchContextDigest }),
+        ...(snapshot.searchContextMetadata && { search: snapshot.searchContextMetadata }),
       },
     },
   };

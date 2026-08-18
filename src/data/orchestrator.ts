@@ -4,6 +4,8 @@ import { AlphaVantageProvider } from './providers/alpha-vantage';
 import { SearchProvider } from './providers/search';
 import { cacheService } from './cache';
 import { DataSourceManager, dataSourceRegistry } from './sources';
+import { createHash } from 'crypto';
+import type { PlannedSearchQuery } from './search-types';
 
 export interface TierAwareContext {
   accounts: any[];
@@ -29,9 +31,12 @@ export interface TierAwareContext {
 
 export interface SearchContext {
   query: string;
+  queries: PlannedSearchQuery[];
   results: SearchResult[];
   summary: string;
   lastUpdate: Date;
+  cacheHits: number;
+  providerCalls: number;
 }
 
 export interface SearchResult {
@@ -62,6 +67,7 @@ export class DataOrchestrator {
   private fredProvider: FREDProvider;
   private alphaVantageProvider: AlphaVantageProvider;
   private searchProvider: SearchProvider;
+  private readonly searchProviderType: 'bing' | 'google' | 'brave' | 'serpapi';
   private marketContextCache: Map<string, MarketContextSummary> = new Map();
   private searchCache: Map<string, SearchContext> = new Map();
   private lastContextRefresh: Date = new Date(0);
@@ -93,8 +99,8 @@ export class DataOrchestrator {
     this.alphaVantageProvider = new AlphaVantageProvider(alphaVantageApiKey || '');
 
     // Make search provider configurable
-    const searchProviderType = process.env.SEARCH_PROVIDER || 'brave';
-    this.searchProvider = new SearchProvider(searchApiKey || '', searchProviderType as 'bing' | 'google' | 'brave' | 'serpapi');
+    this.searchProviderType = (process.env.SEARCH_PROVIDER || 'brave') as 'bing' | 'google' | 'brave' | 'serpapi';
+    this.searchProvider = new SearchProvider(searchApiKey || '', this.searchProviderType);
 
     console.log('DataOrchestrator: Search provider initialized with key:', searchApiKey ? 'PRESENT' : 'MISSING');
     console.log('DataOrchestrator: Search provider type:', process.env.SEARCH_PROVIDER || 'brave');
@@ -512,7 +518,17 @@ export class DataOrchestrator {
   }
 
   async getSearchContext(query: string, tier: UserTier): Promise<SearchContext | null> {
-    console.log('DataOrchestrator: getSearchContext called with query:', query, 'tier:', tier);
+    return this.getSearchContextForQueries([
+      { query, purpose: 'other', freshness: null },
+    ], tier);
+  }
+
+  /** Retrieve a validated semantic query plan, caching each standalone query independently. */
+  async getSearchContextForQueries(
+    queries: readonly PlannedSearchQuery[],
+    tier: UserTier
+  ): Promise<SearchContext | null> {
+    console.log('DataOrchestrator: getSearchContextForQueries called with queries:', queries, 'tier:', tier);
 
     const tierAccess = this.getTierAccess(tier);
     console.log('DataOrchestrator: Tier access hasSearchContext:', tierAccess.hasSearchContext);
@@ -522,39 +538,74 @@ export class DataOrchestrator {
       return null;
     }
 
-    const cacheKey = `search_${tier}_${this.hashQuery(query)}`;
-    const cached = this.searchCache.get(cacheKey);
+    if (queries.length === 0) return null;
 
-    if (cached && this.isSearchFresh(cached.lastUpdate)) {
-      console.log('DataOrchestrator: Using cached search results');
-      return cached;
+    const contexts: SearchContext[] = [];
+    let cacheHits = 0;
+    let providerCalls = 0;
+    for (const request of queries) {
+      // Search evidence is public and provider output is tier-independent. The
+      // access check above still gates retrieval, while one identical provider
+      // request can be reused by Standard and Premium users.
+      const cacheKey = `search_${this.hashSearchRequest(request)}`;
+      const cached = this.searchCache.get(cacheKey);
+      if (cached && this.isSearchFresh(cached.lastUpdate)) {
+        console.log('DataOrchestrator: Using cached search results for query:', request.query);
+        cacheHits += 1;
+        contexts.push(cached);
+        continue;
+      }
+
+      console.log('DataOrchestrator: Performing new search for query:', request.query);
+      try {
+        const results = await this.searchProvider.search(request.query, {
+          freshness: request.freshness ?? undefined,
+        });
+        providerCalls += 1;
+        console.log('DataOrchestrator: Search completed, found', results.length, 'results');
+        const context: SearchContext = {
+          query: request.query,
+          queries: [{ ...request }],
+          results,
+          summary: await this.generateSearchSummary(results, request.query),
+          lastUpdate: new Date(),
+          cacheHits: 0,
+          providerCalls: 1,
+        };
+        this.searchCache.set(cacheKey, context);
+        contexts.push(context);
+      } catch (error) {
+        console.error('DataOrchestrator: Failed to get search context:', error);
+        return null;
+      }
     }
 
-    console.log('DataOrchestrator: Performing new search for query:', query);
-    try {
-      const results = await this.searchProvider.search(query);
-      console.log('DataOrchestrator: Search completed, found', results.length, 'results');
-
-      const summary = await this.generateSearchSummary(results, query);
-
-      const searchContext: SearchContext = {
-        query,
-        results,
-        summary,
-        lastUpdate: new Date()
-      };
-
-      this.searchCache.set(cacheKey, searchContext);
-      return searchContext;
-    } catch (error) {
-      console.error('DataOrchestrator: Failed to get search context:', error);
-      return null;
+    const resultsByUrl = new Map<string, SearchResult>();
+    for (const context of contexts) {
+      for (const result of context.results) {
+        if (!resultsByUrl.has(result.url)) resultsByUrl.set(result.url, result);
+      }
     }
+    return {
+      query: queries.map((request) => request.query).join(' | '),
+      queries: queries.map((request) => ({ ...request })),
+      results: Array.from(resultsByUrl.values()),
+      summary: contexts.map((context) => context.summary).join('\n\n'),
+      lastUpdate: new Date(),
+      cacheHits,
+      providerCalls,
+    };
   }
 
-  private hashQuery(query: string): string {
-    // Simple hash for cache key
-    return query.toLowerCase().replace(/[^a-z0-9]/g, '').substring(0, 20);
+  private hashSearchRequest(request: PlannedSearchQuery): string {
+    return createHash('sha256').update(JSON.stringify({
+      provider: this.searchProviderType,
+      query: request.query.trim().replace(/\s+/g, ' ').toLocaleLowerCase('en-US'),
+      freshness: request.freshness,
+      country: 'US',
+      searchLanguage: 'en',
+      maxResults: 10,
+    })).digest('hex');
   }
 
   private isSearchFresh(lastUpdate: Date): boolean {
@@ -570,7 +621,7 @@ export class DataOrchestrator {
     const summary = topResults.map(result => {
       // Clean HTML tags from snippet
       const cleanSnippet = result.snippet.replace(/<[^>]*>/g, '');
-      return `• ${result.title}: ${cleanSnippet} (Source: ${result.source})`;
+      return `• ${result.title}: ${cleanSnippet} (Source: ${result.source}; ${result.url})`;
     }).join('\n');
 
     return `Latest real-time information for "${query}":\n${summary}`;

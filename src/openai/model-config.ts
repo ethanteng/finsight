@@ -103,7 +103,7 @@ export const MODEL_SLOTS: ModelSlotMeta[] = [
     label: 'Context planning',
     provider: 'openai',
     description:
-      'The preflight half of context planning: reads every turn in the active decision, selects the initial data packs, and extracts stated retirement inputs. The primary analysis model performs the second, tool-based audit. Must support JSON schema structured output.',
+      'The preflight half of context planning: reads every turn in the active decision, selects the initial data packs, plans standalone public search queries, and extracts stated retirement inputs. The primary analysis model performs the second, tool-based pack and query audit. Must support JSON schema structured output.',
     shippedDefault: 'gpt-4o',
   },
 ];

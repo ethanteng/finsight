@@ -2238,8 +2238,9 @@ app.get('/profile/snaptrade-status', requireAuth, async (req: Request, res: Resp
   }
 });
 
-// Test endpoint for RAG search functionality
-app.get('/test/search-context', async (req: Request, res: Response) => {
+// Admin-only provider diagnostic. Production analysis never sends a raw user
+// prompt through this endpoint; it uses the validated semantic query plan.
+app.get('/test/search-context', adminAuth, async (req: Request, res: Response) => {
   try {
     const { query, tier = 'standard' } = req.query;
 
@@ -2720,9 +2721,9 @@ app.post('/admin/market-news/refresh/:tier', adminAuth, async (req: Request, res
 
     const { MarketNewsManager } = await import('./market-news/manager');
     const manager = new MarketNewsManager();
-    await manager.updateMarketContext(tier as UserTier);
+    const result = await manager.refreshMarketContexts([tier as UserTier], { force: true });
 
-    res.json({ success: true });
+    res.json({ success: result.refreshed, ...(!result.refreshed && { reason: result.reason }) });
   } catch (error) {
     console.error('Error refreshing market context:', error);
 
@@ -2788,13 +2789,18 @@ if (require.main === module) {
         const { MarketNewsManager } = await import('./market-news/manager');
         const manager = new MarketNewsManager();
 
-        // Update for all tiers (including Starter for future flexibility)
-        // Note: Starter tier currently returns empty context, but this allows for future changes
-        await Promise.all([
-          manager.updateMarketContext(UserTier.STARTER),
-          manager.updateMarketContext(UserTier.STANDARD),
-          manager.updateMarketContext(UserTier.PREMIUM)
+        // Collect external inputs once. Tier-specific synthesis reuses the same
+        // raw batch, so six Brave searches do not become eighteen.
+        const refreshResult = await manager.refreshMarketContexts([
+          UserTier.STARTER,
+          UserTier.STANDARD,
+          UserTier.PREMIUM,
         ]);
+
+        if (!refreshResult.refreshed) {
+          console.log(`ℹ️ Market news refresh skipped: ${refreshResult.reason}`);
+          return;
+        }
 
         console.log('✅ Market news context refresh completed');
       } catch (error) {

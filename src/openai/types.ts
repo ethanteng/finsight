@@ -2,6 +2,7 @@ import { TierAwareContext } from '../data/orchestrator';
 import { Transaction as UnifiedTransaction, UnifiedFinancialData, Holding, Security } from '../services/financial-data-service';
 import type { RetirementScenarioExecution } from '../scenarios/retirement-scenario';
 import type { ScenarioExecutionRecord } from '../scenarios/calculator-registry';
+import type { PlannedSearchQuery } from '../data/search-types';
 
 export interface QuestionNeeds {
   needsMarketContext: boolean;
@@ -78,6 +79,13 @@ export interface FinancialContextSnapshot {
     searchContextRequested: boolean;
   };
   searchContext?: string;
+  searchContextMetadata?: {
+    queries: PlannedSearchQuery[];
+    cacheHits: number;
+    providerCalls: number;
+    resultCount: number;
+    retrievedAt: string;
+  };
   marketContext?: string;
   userProfile?: string;
   homeValueSummary?: string;

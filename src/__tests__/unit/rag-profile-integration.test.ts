@@ -93,6 +93,7 @@ describe('RAG & Intelligent Profile System Unit Tests', () => {
         if (testCase.tier === 'standard' || testCase.tier === 'premium') {
           MockDataOrchestrator.getSearchContext.mockResolvedValue({
             query: testCase.question,
+            queries: [{ query: testCase.question, purpose: 'other', freshness: null }],
             results: [
               {
                 title: 'Current Economic Data',
@@ -103,7 +104,9 @@ describe('RAG & Intelligent Profile System Unit Tests', () => {
               }
             ],
             summary: 'Current unemployment rate is 4.2% as of July 2025',
-            lastUpdate: new Date()
+            lastUpdate: new Date(),
+            cacheHits: 0,
+            providerCalls: 1,
           });
         } else {
           MockDataOrchestrator.getSearchContext.mockResolvedValue(null);
@@ -207,6 +210,7 @@ describe('RAG & Intelligent Profile System Unit Tests', () => {
       // Mock RAG data
       MockDataOrchestrator.getSearchContext.mockResolvedValue({
         query: 'What are current refinance rates?',
+        queries: [{ query: 'What are current refinance rates?', purpose: 'rate', freshness: null }],
         results: [
           {
             title: 'Current Mortgage Rates',
@@ -217,7 +221,9 @@ describe('RAG & Intelligent Profile System Unit Tests', () => {
           }
         ],
         summary: 'Current refinance rates are around 6.57% as of July 2025',
-        lastUpdate: new Date()
+        lastUpdate: new Date(),
+        cacheHits: 0,
+        providerCalls: 1,
       });
 
       mockProfileManager.getOriginalProfile.mockResolvedValue('A 35-year-old with a mortgage');
@@ -247,6 +253,7 @@ describe('RAG & Intelligent Profile System Unit Tests', () => {
     it('should allow RAG access for Standard tier', async () => {
       MockDataOrchestrator.getSearchContext.mockResolvedValue({
         query: 'What is the current unemployment rate?',
+        queries: [{ query: 'What is the current unemployment rate?', purpose: 'rate', freshness: null }],
         results: [
           {
             title: 'Economic Data',
@@ -257,7 +264,9 @@ describe('RAG & Intelligent Profile System Unit Tests', () => {
           }
         ],
         summary: 'Unemployment rate is 4.2% as of July 2025',
-        lastUpdate: new Date()
+        lastUpdate: new Date(),
+        cacheHits: 0,
+        providerCalls: 1,
       });
 
       const result = await MockDataOrchestrator.getSearchContext('What is the current unemployment rate?', 'standard' as UserTier);

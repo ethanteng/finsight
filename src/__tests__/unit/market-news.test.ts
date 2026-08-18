@@ -304,6 +304,34 @@ describe('Market News System', () => {
         manager.updateMarketContext(UserTier.STANDARD)
       ).resolves.not.toThrow();
     });
+
+    test('should fetch one external batch for all scheduled tier contexts', async () => {
+      const rawData = [{
+        source: 'brave_search',
+        timestamp: new Date(),
+        data: { title: 'One shared batch' },
+        type: 'news_article' as const,
+        relevance: 0.8,
+      }];
+      const aggregate = jest.fn().mockResolvedValue(rawData);
+      const synthesize = jest.fn(async (_data, tier: UserTier) => ({
+        contextText: `${tier} context`,
+        summary: `${tier} summary`,
+        availableTiers: [tier],
+        dataSources: ['brave_search'],
+        keyEvents: [],
+        lastUpdate: new Date(),
+      }));
+      (manager as any).aggregator = { aggregateMarketData: aggregate };
+      (manager as any).synthesizer = { synthesizeMarketContext: synthesize };
+      jest.spyOn(manager as any, 'saveMarketContext').mockResolvedValue(undefined);
+
+      await manager.updateMarketContexts([UserTier.STARTER, UserTier.STANDARD, UserTier.PREMIUM]);
+
+      expect(aggregate).toHaveBeenCalledTimes(1);
+      expect(synthesize).toHaveBeenCalledTimes(3);
+      expect(synthesize.mock.calls.every(([data]) => data === rawData)).toBe(true);
+    });
   });
 
   describe('Tier-based Access Control', () => {

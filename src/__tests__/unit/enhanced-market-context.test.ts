@@ -123,6 +123,43 @@ describe('Enhanced Market Context System', () => {
       expect(MockSearchProvider.mock.results[0].value.search).toHaveBeenCalledTimes(1);
     });
 
+    test('should execute, merge, deduplicate and independently cache a semantic query plan', async () => {
+      const search = MockSearchProvider.mock.results[0].value.search;
+      search.mockImplementation(async (query: string) => [{
+        title: query,
+        snippet: `Evidence for ${query}`,
+        url: query.includes('Federal') ? 'https://federalreserve.gov/rates' : 'https://example.com/shared',
+        source: 'Brave',
+        relevance: 0.9,
+      }, {
+        title: 'Shared evidence',
+        snippet: 'Shared result',
+        url: 'https://example.com/shared',
+        source: 'Brave',
+        relevance: 0.8,
+      }]);
+      const queries = [{
+        query: 'current Federal Reserve target rate',
+        purpose: 'rate' as const,
+        freshness: 'pm' as const,
+      }, {
+        query: 'current US high yield savings account rates',
+        purpose: 'rate' as const,
+        freshness: 'pw' as const,
+      }];
+
+      const first = await dataOrchestrator.getSearchContextForQueries(queries, UserTier.STANDARD);
+      const second = await dataOrchestrator.getSearchContextForQueries(queries, UserTier.PREMIUM);
+
+      expect(search).toHaveBeenNthCalledWith(1, queries[0].query, { freshness: 'pm' });
+      expect(search).toHaveBeenNthCalledWith(2, queries[1].query, { freshness: 'pw' });
+      expect(first).toMatchObject({ providerCalls: 2, cacheHits: 0 });
+      expect(first?.results).toHaveLength(2);
+      expect(first?.summary).toContain('https://federalreserve.gov/rates');
+      expect(second).toMatchObject({ providerCalls: 0, cacheHits: 2 });
+      expect(search).toHaveBeenCalledTimes(2);
+    });
+
     test('should handle search errors gracefully', async () => {
       MockSearchProvider.mock.results[0].value.search.mockRejectedValue(new Error('Search API error'));
 

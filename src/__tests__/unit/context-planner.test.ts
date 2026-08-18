@@ -31,6 +31,9 @@ function rawPlan(selected: string[] = []): any {
         comparison: { type: 'none', annualRate: null, source: null },
       },
     },
+    searchQueries: selected.includes('search_context')
+      ? [{ query: 'current Federal Reserve interest rate', purpose: 'rate', freshness: 'pm' }]
+      : [],
     summary: 'This continues the retirement decision.',
   };
 }
@@ -97,6 +100,35 @@ describe('context planner', () => {
     expect(plan.source).toBe('fallback_all');
     expect(plan.selectedPacks).toEqual([...CONTEXT_PACK_IDS]);
     expect(Object.values(plan.questionNeeds).every(Boolean)).toBe(true);
+    expect(plan.searchQueries).toEqual([]);
+  });
+
+  it('validates standalone semantic search queries with freshness metadata', () => {
+    const plan = parseContextPlan(rawPlan(['search_context']));
+
+    expect(plan.searchQueries).toEqual([{
+      query: 'current Federal Reserve interest rate',
+      purpose: 'rate',
+      freshness: 'pm',
+    }]);
+  });
+
+  it('rejects search selection without a safe public query', () => {
+    const raw = rawPlan(['search_context']);
+    raw.searchQueries = [];
+
+    expect(() => parseContextPlan(raw)).toThrow('without a valid standalone search query');
+  });
+
+  it('rejects obvious private identifiers in generated search queries', () => {
+    const raw = rawPlan(['search_context']);
+    raw.searchQueries = [{
+      query: 'look up statement for customer@example.com',
+      purpose: 'other',
+      freshness: null,
+    }];
+
+    expect(() => parseContextPlan(raw)).toThrow('without a valid standalone search query');
   });
 
   it('returns a validated retirement withdrawal scenario separately from pack selection', () => {

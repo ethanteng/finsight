@@ -30,6 +30,11 @@ describe('ContextPlannerPanel', () => {
               requestedPacks: ['investment_details'],
               selectedPacks: ['account_details', 'investment_details'],
               needsSecondaryValidation: true,
+              searchQueries: [{
+                query: 'current Federal Reserve interest rate',
+                purpose: 'rate',
+                freshness: 'pm',
+              }],
               retirementInputs: { sources: {} },
               scenarioPlans: {
                 retirement: {
@@ -63,6 +68,9 @@ describe('ContextPlannerPanel', () => {
     expect(screen.getByText('The follow-up continues a portfolio comparison.')).toBeInTheDocument();
     expect(screen.getByText('dependency')).toBeInTheDocument();
     expect(screen.getByText('selected')).toBeInTheDocument();
+    expect(screen.getByText('Planned public searches')).toBeInTheDocument();
+    expect(screen.getByText('current Federal Reserve interest rate')).toBeInTheDocument();
+    expect(screen.getByText('rate · pm')).toBeInTheDocument();
     expect(screen.getByText('Retirement scenario request')).toBeInTheDocument();
     expect(screen.getByText('Calculator registry')).toBeInTheDocument();
     expect(screen.getByText('Retirement scenarios')).toBeInTheDocument();

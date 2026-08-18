@@ -13,6 +13,8 @@ function conversation(options: {
   final?: ContextPackId[];
   late?: boolean;
   scenario?: 'completed' | 'unavailable' | 'not_run';
+  searchPlanned?: boolean;
+  search?: { providerCalls: number; cacheHits: number; resultCount: number };
   manifest?: boolean;
 }): AnswerQualityConversation {
   const createdAt = new Date(Date.UTC(2026, 7, 17, 12, options.minute));
@@ -40,6 +42,9 @@ function conversation(options: {
           finalPacks: final,
           needsSecondaryValidation: false,
           summary: 'Test plan.',
+          ...((options.search || options.searchPlanned) && {
+            searchQueries: [{ query: 'current Federal Reserve interest rate', purpose: 'rate', freshness: 'pm' }],
+          }),
           ...(options.scenario && {
             scenarios: {
               retirement: {
@@ -84,7 +89,18 @@ function conversation(options: {
         modelCalls: [],
         timings: { contextGatherMs: 1, promptBuildMs: 1, totalMs: 2 },
         validation: { deterministic: { valid: outcome === 'passed', issues: [], outcome } },
-        evidenceRefs: { tickers: [], retirementAnalysis: false, marketContext: false },
+        evidenceRefs: {
+          tickers: [],
+          retirementAnalysis: false,
+          marketContext: false,
+          ...(options.search && {
+            search: {
+              queries: [{ query: 'current Federal Reserve interest rate', purpose: 'rate', freshness: 'pm' }],
+              ...options.search,
+              retrievedAt: createdAt.toISOString(),
+            },
+          }),
+        },
       },
     },
   };
@@ -230,6 +246,31 @@ describe('answer quality report', () => {
     });
   });
 
+  it('reports planned search retrieval, provider calls, and cache reuse', () => {
+    const report = buildAnswerQualityReport([
+      conversation({
+        id: 'search-live',
+        minute: 2,
+        selected: ['search_context'],
+        search: { providerCalls: 1, cacheHits: 1, resultCount: 5 },
+      }),
+      conversation({ id: 'search-unavailable', minute: 1, selected: ['search_context'], searchPlanned: true }),
+    ]);
+
+    expect(report.search).toEqual({
+      requested: 2,
+      retrieved: 1,
+      unavailable: 1,
+      retrievalRate: 0.5,
+      plannedQueries: 2,
+      providerCalls: 1,
+      cacheHits: 1,
+      cacheReuseRate: 0.5,
+      resultCount: 5,
+    });
+    expect(report.recent[0]).toMatchObject({ searchRequested: true, searchRetrieved: true });
+  });
+
   it('returns explicit empty-state nulls', () => {
     const report = buildAnswerQualityReport([]);
     expect(report.delivery).toMatchObject({ total: 0, cleanRate: null });
@@ -245,6 +286,17 @@ describe('answer quality report', () => {
       completedCalculations: 0,
       unavailableCalculations: 0,
       byCalculator: {},
+    });
+    expect(report.search).toEqual({
+      requested: 0,
+      retrieved: 0,
+      unavailable: 0,
+      retrievalRate: null,
+      plannedQueries: 0,
+      providerCalls: 0,
+      cacheHits: 0,
+      cacheReuseRate: null,
+      resultCount: 0,
     });
     expect(report.window).toEqual({ from: null, to: null, conversations: 0, withEvidence: 0 });
   });

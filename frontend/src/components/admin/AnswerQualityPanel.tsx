@@ -21,6 +21,12 @@ interface Observation {
   scenarioRequested: boolean;
   scenarioStatus: 'completed' | 'unavailable' | 'not_run';
   scenarioStatuses?: Record<string, 'completed' | 'unavailable'>;
+  searchRequested: boolean;
+  searchQueryCount: number;
+  searchRetrieved: boolean;
+  searchProviderCalls: number;
+  searchCacheHits: number;
+  searchResultCount: number;
 }
 
 interface AnswerQualityReport {
@@ -54,6 +60,17 @@ interface AnswerQualityReport {
     completedCalculations?: number;
     unavailableCalculations?: number;
     byCalculator?: Record<string, { completed: number; unavailable: number }>;
+  };
+  search?: {
+    requested: number;
+    retrieved: number;
+    unavailable: number;
+    retrievalRate: number | null;
+    plannedQueries: number;
+    providerCalls: number;
+    cacheHits: number;
+    cacheReuseRate: number | null;
+    resultCount: number;
   };
   users: { rated: number; positive: number; neutral: number; negative: number; averageRating: number | null };
   recent: Observation[];
@@ -168,6 +185,17 @@ export default function AnswerQualityPanel({
     unavailableCalculations: 0,
     byCalculator: {},
   };
+  const search = report?.search ?? {
+    requested: 0,
+    retrieved: 0,
+    unavailable: 0,
+    retrievalRate: null,
+    plannedQueries: 0,
+    providerCalls: 0,
+    cacheHits: 0,
+    cacheReuseRate: null,
+    resultCount: 0,
+  };
 
   return (
     <div className="mb-6 rounded-lg bg-gray-800 p-6">
@@ -253,6 +281,22 @@ export default function AnswerQualityPanel({
             )}
           </div>
 
+          <div className="mt-4 rounded-lg border border-gray-700 bg-gray-900 p-4">
+            <h3 className="font-medium text-white">Public search evidence</h3>
+            <p className="mt-1 text-xs leading-5 text-gray-500">
+              Search is counted only when the semantic plan asks for outside, time-sensitive information. Cache hits replace provider calls without changing the evidence delivered to the answer.
+            </p>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <div><div className="text-2xl font-semibold text-white">{search.requested}</div><div className="text-xs text-gray-500">answers requested search</div></div>
+              <div><div className="text-2xl font-semibold text-green-300">{percent(search.retrievalRate)}</div><div className="text-xs text-gray-500">search retrieval completed</div></div>
+              <div><div className="text-2xl font-semibold text-blue-300">{search.providerCalls}</div><div className="text-xs text-gray-500">Brave provider calls</div></div>
+              <div><div className="text-2xl font-semibold text-white">{percent(search.cacheReuseRate)}</div><div className="text-xs text-gray-500">queries served from cache</div></div>
+            </div>
+            <div className="mt-3 text-xs text-gray-500">
+              {search.plannedQueries} planned queries · {search.cacheHits} cache hits · {search.resultCount} results · {search.unavailable} requests without evidence
+            </div>
+          </div>
+
           <div className="mt-6 rounded-lg border border-gray-700 bg-gray-900 p-4">
             <h3 className="font-medium text-white">How context planning is doing</h3>
             <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -310,6 +354,8 @@ export default function AnswerQualityPanel({
                           {answer.primaryToolOutcome === 'failed' && ' · primary tool audit failed'}
                           {answer.lateExpansion && ' · late context recovery'}
                           {scenarioSummary && ` · ${scenarioSummary}`}
+                          {answer.searchRequested && answer.searchRetrieved && ` · search loaded ${answer.searchResultCount} results`}
+                          {answer.searchRequested && !answer.searchRetrieved && ' · search evidence unavailable'}
                         </div>
                       </div>
                     </div>

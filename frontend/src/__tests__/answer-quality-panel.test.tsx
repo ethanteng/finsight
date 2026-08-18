@@ -35,6 +35,17 @@ const REPORT = {
       home_affordability: { completed: 0, unavailable: 1 },
     },
   },
+  search: {
+    requested: 3,
+    retrieved: 2,
+    unavailable: 1,
+    retrievalRate: 0.667,
+    plannedQueries: 4,
+    providerCalls: 2,
+    cacheHits: 2,
+    cacheReuseRate: 0.5,
+    resultCount: 9,
+  },
   users: { rated: 3, positive: 2, neutral: 0, negative: 1, averageRating: 3.67 },
   recent: [{
     id: 'c1',
@@ -53,6 +64,12 @@ const REPORT = {
     scenarioRequested: true,
     scenarioStatus: 'completed',
     scenarioStatuses: { retirement: 'completed', home_affordability: 'unavailable' },
+    searchRequested: true,
+    searchQueryCount: 2,
+    searchRetrieved: true,
+    searchProviderCalls: 1,
+    searchCacheHits: 1,
+    searchResultCount: 5,
   }],
 };
 
@@ -96,6 +113,14 @@ describe('AnswerQualityPanel', () => {
     expect(screen.getByText(/retirement scenario completed/i)).toBeInTheDocument();
     expect(screen.getByText(/home affordability missing inputs/i)).toBeInTheDocument();
     expect(screen.getByText(/2 completed calculation\(s\)/i)).toBeInTheDocument();
+  });
+
+  it('shows search retrieval and cache usage separately from planning', async () => {
+    render(<AnswerQualityPanel apiUrl="https://api.test" getAuthHeaders={() => ({})} />);
+    expect(await screen.findByText('Public search evidence')).toBeInTheDocument();
+    expect(screen.getByText('Brave provider calls')).toBeInTheDocument();
+    expect(screen.getByText('queries served from cache')).toBeInTheDocument();
+    expect(screen.getByText(/search loaded 5 results/)).toBeInTheDocument();
   });
 
   it('explains recent answer status in plain language', async () => {
