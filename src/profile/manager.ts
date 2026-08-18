@@ -118,7 +118,7 @@ export class ProfileManager {
       let section = `
 
 HOME_ADDRESS: ${homeData.address}
-HOME_VALUE: ${rentCastValue}
+${homeData.propertyId ? `HOME_RENTCAST_PROPERTY_ID: ${homeData.propertyId}\n` : ''}HOME_VALUE: ${rentCastValue}
 HOME_VALUE_LOW: ${valueLow}
 HOME_VALUE_HIGH: ${valueHigh}
 HOME_VALUE_LAST_UPDATED: ${lastUpdated}`;
@@ -128,7 +128,7 @@ HOME_VALUE_LAST_UPDATED: ${lastUpdated}`;
 
       // Match each field with optional trailing newline (?:\n|$) so fields at end-of-string are removed
       const withoutSection = profileText.replace(
-        /HOME_ADDRESS:.*?(?:\n|$)|HOME_VALUE:.*?(?:\n|$)|HOME_VALUE_LOW:.*?(?:\n|$)|HOME_VALUE_HIGH:.*?(?:\n|$)|HOME_VALUE_LAST_UPDATED:.*?(?:\n|$)|HOME_VALUE_MANUAL:.*?(?:\n|$)/g,
+        /HOME_ADDRESS:.*?(?:\n|$)|HOME_RENTCAST_PROPERTY_ID:.*?(?:\n|$)|HOME_VALUE:.*?(?:\n|$)|HOME_VALUE_LOW:.*?(?:\n|$)|HOME_VALUE_HIGH:.*?(?:\n|$)|HOME_VALUE_LAST_UPDATED:.*?(?:\n|$)|HOME_VALUE_MANUAL:.*?(?:\n|$)/g,
         ''
       ).trim();
 
@@ -303,7 +303,7 @@ HOME_VALUE_MANUAL: ${nlValue}`;
         
         // Remove any existing home data markers including HOME_VALUE_MANUAL; use (?:\n|$) so fields at end-of-string are removed
         finalProfile = finalProfile.replace(
-          /HOME_ADDRESS:.*?(?:\n|$)|HOME_VALUE:.*?(?:\n|$)|HOME_VALUE_LOW:.*?(?:\n|$)|HOME_VALUE_HIGH:.*?(?:\n|$)|HOME_VALUE_LAST_UPDATED:.*?(?:\n|$)|HOME_VALUE_MANUAL:.*?(?:\n|$)/g,
+          /HOME_ADDRESS:.*?(?:\n|$)|HOME_RENTCAST_PROPERTY_ID:.*?(?:\n|$)|HOME_VALUE:.*?(?:\n|$)|HOME_VALUE_LOW:.*?(?:\n|$)|HOME_VALUE_HIGH:.*?(?:\n|$)|HOME_VALUE_LAST_UPDATED:.*?(?:\n|$)|HOME_VALUE_MANUAL:.*?(?:\n|$)/g,
           ''
         ).trim();
         
@@ -315,7 +315,7 @@ HOME_VALUE_MANUAL: ${nlValue}`;
           let homeDataSection = `
 
 HOME_ADDRESS: ${existingHomeData.address}
-HOME_VALUE: ${rentCastVal}
+${existingHomeData.propertyId ? `HOME_RENTCAST_PROPERTY_ID: ${existingHomeData.propertyId}\n` : ''}HOME_VALUE: ${rentCastVal}
 HOME_VALUE_LOW: ${valueLow}
 HOME_VALUE_HIGH: ${valueHigh}
 HOME_VALUE_LAST_UPDATED: ${existingHomeData.lastUpdated?.toISOString() || new Date().toISOString()}`;
@@ -324,6 +324,20 @@ HOME_VALUE_LAST_UPDATED: ${existingHomeData.lastUpdated?.toISOString() || new Da
           }
           finalProfile = finalProfile + homeDataSection;
         }
+      } else if (
+        existingHomeData.address &&
+        existingHomeData.propertyId &&
+        updatedHomeData.address &&
+        !updatedHomeData.propertyId &&
+        existingHomeData.address.toLowerCase().replace(/[^a-z0-9]/g, '') ===
+          updatedHomeData.address.toLowerCase().replace(/[^a-z0-9]/g, '')
+      ) {
+        // Property identity is provider-managed metadata. Preserve it when the
+        // conversational profile rewrite keeps the same home but omits the marker.
+        const addressMarkerIndex = finalProfile.lastIndexOf('HOME_ADDRESS:');
+        const addressLineEnd = finalProfile.indexOf('\n', addressMarkerIndex);
+        const insertAt = addressLineEnd === -1 ? finalProfile.length : addressLineEnd + 1;
+        finalProfile = `${finalProfile.slice(0, insertAt)}HOME_RENTCAST_PROPERTY_ID: ${existingHomeData.propertyId}\n${finalProfile.slice(insertAt)}`;
       }
       
       await this.updateProfile(userId, finalProfile);
@@ -406,6 +420,7 @@ HOME_VALUE_LAST_UPDATED: ${existingHomeData.lastUpdated?.toISOString() || new Da
    */
   extractHomeData(profileText: string): {
     address: string | null;
+    propertyId: string | null;
     value: number | null;
     rentCastValue: number | null;
     manualValue: number | null;
@@ -416,6 +431,7 @@ HOME_VALUE_LAST_UPDATED: ${existingHomeData.lastUpdated?.toISOString() || new Da
   } {
     const result = {
       address: null as string | null,
+      propertyId: null as string | null,
       value: null as number | null,
       rentCastValue: null as number | null,
       manualValue: null as number | null,
@@ -429,6 +445,11 @@ HOME_VALUE_LAST_UPDATED: ${existingHomeData.lastUpdated?.toISOString() || new Da
     const addressMatches = [...profileText.matchAll(/HOME_ADDRESS:\s*(.+?)(?:\n|$)/g)];
     if (addressMatches.length > 0) {
       result.address = addressMatches[addressMatches.length - 1][1].trim();
+    }
+
+    const propertyIdMatches = [...profileText.matchAll(/HOME_RENTCAST_PROPERTY_ID:\s*(.+?)(?:\n|$)/g)];
+    if (propertyIdMatches.length > 0) {
+      result.propertyId = propertyIdMatches[propertyIdMatches.length - 1][1].trim();
     }
 
     // Extract manual override - use LAST as most recent
@@ -511,6 +532,25 @@ HOME_VALUE_LAST_UPDATED: ${existingHomeData.lastUpdated?.toISOString() || new Da
 
       // Get current profile
       const currentProfile = await this.getOriginalProfile(userId);
+      const currentHomeData = this.extractHomeData(currentProfile);
+      const providerPropertyId = homeValueData.subjectProperty.id.trim();
+      const normalizeAddress = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, '');
+      const isSameStoredAddress = currentHomeData.address
+        ? normalizeAddress(currentHomeData.address) === normalizeAddress(address)
+        : false;
+
+      if (
+        isSameStoredAddress &&
+        currentHomeData.propertyId &&
+        providerPropertyId &&
+        currentHomeData.propertyId !== providerPropertyId
+      ) {
+        console.error('RentCast property identity changed for the stored address', {
+          previousPropertyId: currentHomeData.propertyId,
+          returnedPropertyId: providerPropertyId,
+        });
+        return null;
+      }
       
       // Preserve manual override if it exists (use last occurrence when duplicates exist)
       const manualOverrideMatches = [...currentProfile.matchAll(/HOME_VALUE_MANUAL:\s*(\d+(?:\.\d+)?)/g)];
@@ -520,15 +560,16 @@ HOME_VALUE_LAST_UPDATED: ${existingHomeData.lastUpdated?.toISOString() || new Da
       
       // Remove any existing home data (but preserve manual override); use (?:\n|$) so fields at end-of-string are removed
       let updatedProfile = currentProfile.replace(
-        /HOME_ADDRESS:.*?(?:\n|$)|HOME_VALUE:.*?(?:\n|$)|HOME_VALUE_LOW:.*?(?:\n|$)|HOME_VALUE_HIGH:.*?(?:\n|$)|HOME_VALUE_LAST_UPDATED:.*?(?:\n|$)/g,
+        /HOME_ADDRESS:.*?(?:\n|$)|HOME_RENTCAST_PROPERTY_ID:.*?(?:\n|$)|HOME_VALUE:.*?(?:\n|$)|HOME_VALUE_LOW:.*?(?:\n|$)|HOME_VALUE_HIGH:.*?(?:\n|$)|HOME_VALUE_LAST_UPDATED:.*?(?:\n|$)/g,
         ''
       ).trim();
 
       // Add new home data to profile
+      const canonicalAddress = homeValueData.subjectProperty.formattedAddress.replace(/\s+/g, ' ').trim();
       let homeDataSection = `
 
-HOME_ADDRESS: ${address}
-HOME_VALUE: ${homeValueData.price}
+HOME_ADDRESS: ${canonicalAddress}
+${providerPropertyId ? `HOME_RENTCAST_PROPERTY_ID: ${providerPropertyId.replace(/[\r\n]/g, '')}\n` : ''}HOME_VALUE: ${homeValueData.price}
 HOME_VALUE_LOW: ${homeValueData.priceRangeLow}
 HOME_VALUE_HIGH: ${homeValueData.priceRangeHigh}
 HOME_VALUE_LAST_UPDATED: ${new Date().toISOString()}`;
@@ -707,7 +748,7 @@ HOME_VALUE_LAST_UPDATED: ${new Date().toISOString()}`;
     
     // Remove home data (including manual override); use (?:\n|$) so fields at end-of-string are removed
     const updatedProfile = currentProfile.replace(
-      /HOME_ADDRESS:.*?(?:\n|$)|HOME_VALUE:.*?(?:\n|$)|HOME_VALUE_LOW:.*?(?:\n|$)|HOME_VALUE_HIGH:.*?(?:\n|$)|HOME_VALUE_MANUAL:.*?(?:\n|$)|HOME_VALUE_LAST_UPDATED:.*?(?:\n|$)/g,
+      /HOME_ADDRESS:.*?(?:\n|$)|HOME_RENTCAST_PROPERTY_ID:.*?(?:\n|$)|HOME_VALUE:.*?(?:\n|$)|HOME_VALUE_LOW:.*?(?:\n|$)|HOME_VALUE_HIGH:.*?(?:\n|$)|HOME_VALUE_MANUAL:.*?(?:\n|$)|HOME_VALUE_LAST_UPDATED:.*?(?:\n|$)/g,
       ''
     ).trim();
 

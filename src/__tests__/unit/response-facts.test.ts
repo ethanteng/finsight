@@ -119,6 +119,61 @@ describe('canonical response facts', () => {
   });
 });
 
+describe('RentCast canonical estimate bounds', () => {
+  const homeSnapshot = {
+    ...snapshot,
+    financialSummary: {
+      computedAt: '2026-08-18T00:00:00.000Z',
+      financialOverview: {
+        ...snapshot.financialSummary.financialOverview,
+        homeValue: 750_000,
+      },
+    },
+    homeValueData: {
+      address: '1 Main St',
+      propertyId: 'property-123',
+      valueMid: 750_000,
+      valueLow: 700_000,
+      valueHigh: 810_000,
+      lastUpdated: '2026-08-17T00:00:00.000Z',
+      isManualOverride: false,
+    },
+  } as any;
+
+  it('adds both 85% bounds when the home-value pack is selected', () => {
+    const needs = { ...questionNeedsFromPacks([], false), needsHomeValue: true };
+    const factPack = buildCanonicalFactPack(homeSnapshot, 'What is my home worth?', needs);
+
+    expect(factPack.facts).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'home_value_low',
+        value: 700_000,
+        provenance: expect.objectContaining({ asOf: '2026-08-17T00:00:00.000Z' }),
+      }),
+      expect.objectContaining({ id: 'home_value_high', value: 810_000 }),
+    ]));
+  });
+
+  it('does not expose bounds when home value is not selected or the value is manual', () => {
+    const unselected = buildCanonicalFactPack(
+      homeSnapshot,
+      'What is my net worth?',
+      questionNeedsFromPacks([], false)
+    );
+    const manual = buildCanonicalFactPack(
+      {
+        ...homeSnapshot,
+        homeValueData: { ...homeSnapshot.homeValueData, isManualOverride: true },
+      },
+      'What is my home worth?',
+      { ...questionNeedsFromPacks([], false), needsHomeValue: true }
+    );
+
+    expect(unselected.facts.some((fact: any) => fact.id === 'home_value_low')).toBe(false);
+    expect(manual.facts.some((fact: any) => fact.id === 'home_value_low')).toBe(false);
+  });
+});
+
 describe('rounded canonical values', () => {
   // The values behind the reported failure: every canonical fact carries full
   // precision, and the UI itself renders them rounded.

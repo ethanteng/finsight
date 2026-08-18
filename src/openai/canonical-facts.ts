@@ -122,7 +122,8 @@ export function buildCanonicalFactPack(
     value: unknown,
     unit: CanonicalFactUnit,
     source: string,
-    displayable = true
+    displayable = true,
+    sourceAsOf?: string
   ) => {
     if (!finite(value)) return;
     facts.set(id, {
@@ -131,7 +132,7 @@ export function buildCanonicalFactPack(
       value,
       unit,
       ...(!displayable && { displayable: false }),
-      provenance: { kind: 'snapshot', source, ...(asOf && { asOf }) },
+      provenance: { kind: 'snapshot', source, ...((sourceAsOf || asOf) && { asOf: sourceAsOf || asOf }) },
     });
   };
   const addExternalFact = (
@@ -220,6 +221,36 @@ export function buildCanonicalFactPack(
     addSnapshotFact('total_investments', 'Total investments', overview.totalInvestments, 'usd', 'financialSummary.financialOverview.totalInvestments');
     addSnapshotFact('total_debt', 'Total debt', overview.totalDebt, 'usd', 'financialSummary.financialOverview.totalDebt');
     addSnapshotFact('home_value', 'Home value', overview.homeValue, 'usd', 'financialSummary.financialOverview.homeValue');
+  }
+
+  const home = snapshot.homeValueData;
+  if (
+    needs.needsHomeValue &&
+    home &&
+    !home.isManualOverride &&
+    finite(home.valueLow) &&
+    finite(home.valueHigh) &&
+    home.valueLow <= home.valueHigh
+  ) {
+    const homeAsOf = isoString(home.lastUpdated);
+    addSnapshotFact(
+      'home_value_low',
+      'Home value estimate 85% range lower bound',
+      home.valueLow,
+      'usd',
+      'contextSnapshot.homeValueData.valueLow',
+      true,
+      homeAsOf
+    );
+    addSnapshotFact(
+      'home_value_high',
+      'Home value estimate 85% range upper bound',
+      home.valueHigh,
+      'usd',
+      'contextSnapshot.homeValueData.valueHigh',
+      true,
+      homeAsOf
+    );
   }
 
   addSnapshotFact('average_monthly_income', 'Average monthly income', snapshot.averageMonthlyIncome, 'usd', 'contextSnapshot.averageMonthlyIncome');
