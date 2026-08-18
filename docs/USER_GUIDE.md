@@ -527,12 +527,11 @@ Ask Linc integrates real-time market data and economic indicators into financial
 - **Mortgage Rates**: 30-year and 15-year fixed rates
 - **Credit Card APR**: Average credit card interest rates
 
-**Live Market Data (Premium Tier):**
-- **Treasury Yields**: 1Y, 5Y, 10Y, 30Y for rate planning
-- **CD Rates**: Current certificate of deposit rates
-- **Inflation Data**: CPI, Core CPI, PCE, year-over-year metrics
+**Advanced Market Context (Premium Tier):**
+- **Treasury Yield Curve**: Multi-maturity yields for rate planning
+- **Inflation Data**: CPI, Core CPI, PCE, and related metrics
 - **Inflation Expectations**: Market and model-based forecasts
-- **Stock Market Data**: Real-time data from 60+ exchanges worldwide
+- **Broad Market Movement**: Equity index context via Polygon/Massive
 - **Professional News**: Reuters, Bloomberg, and other professional sources
 
 ### RAG System (Retrieval-Augmented Generation)
