@@ -199,7 +199,7 @@ export const dataSourceRegistry: Record<string, DataSourceConfig> = {
   'massive-market-context': {
     id: 'massive-market-context',
     name: 'Advanced Market Context',
-    description: 'SPY daily movement, the Treasury yield curve, and inflation expectations',
+    description: 'The Treasury yield curve, inflation expectations, and adjusted SPY daily bars when no live quote is available',
     tiers: [UserTier.PREMIUM],
     category: 'external',
     provider: 'massive',

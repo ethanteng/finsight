@@ -3,6 +3,7 @@ import { mergeAssetAllocation } from '../services/asset-class';
 import { mergeLabelKeyedTotals } from '../services/label-normalization';
 import { scenarioCalculatorRegistry } from '../scenarios/calculator-registry';
 import { RETIREMENT_CALCULATOR_ID } from '../scenarios/retirement-scenario';
+import { questionMentionsSecurity } from './security-question-match';
 
 export type CanonicalFactUnit = 'usd' | 'percent' | 'months' | 'years' | 'age' | 'count' | 'ratio';
 
@@ -361,14 +362,9 @@ export function buildCanonicalFactPack(
   // column, which is only selected when the question routed to investments.
   if (needs.needsInvestments || needs.needsRetirement) {
     const holdings = snapshot.investments?.holdings || [];
-    const matchedHoldings = holdings.filter((holding) => {
-      const ticker = holding.ticker_symbol?.trim();
-      const name = holding.security_name?.trim();
-      return Boolean(
-        (ticker && new RegExp(`\\b${ticker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(question)) ||
-        (name && question.toLowerCase().includes(name.toLowerCase()))
-      );
-    });
+    const matchedHoldings = holdings.filter((holding) =>
+      questionMentionsSecurity(question, holding.ticker_symbol, holding.security_name)
+    );
     for (const holding of matchedHoldings.length > 0 ? matchedHoldings : holdings) {
       const holdingId = safeFactId(holding.id || `${holding.account_id}_${holding.security_id}`);
       addSnapshotFact(
@@ -402,8 +398,7 @@ export function buildCanonicalFactPack(
 
     const externalSecurities = external?.securities ?? [];
     const matchedExternal = externalSecurities.filter(security =>
-      new RegExp(`\\b${security.ticker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(question)
-      || Boolean(security.name && question.toLowerCase().includes(security.name.toLowerCase()))
+      questionMentionsSecurity(question, security.ticker, security.name)
     );
     for (const security of externalSecurities) {
       const id = safeFactId(security.ticker);

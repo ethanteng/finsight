@@ -2,6 +2,7 @@ import type { FinancialContextSnapshot, QuestionNeeds } from './types';
 import type { CanonicalFactPack } from './canonical-facts';
 import { RETIREMENT_CALCULATOR_ID } from '../scenarios/retirement-scenario';
 import { scenarioCalculatorRegistry } from '../scenarios/calculator-registry';
+import { questionMentionsSecurity } from './security-question-match';
 
 export interface QuestionContextPack {
   facts: CanonicalFactPack;
@@ -67,8 +68,7 @@ export function buildQuestionContextPack(
   if (needs.needsInvestments && snapshot.investments) {
     const externalData = snapshot.investments.externalData;
     const matchingExternalSecurities = externalData?.securities.filter(security =>
-      new RegExp(`\\b${security.ticker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(question)
-      || Boolean(security.name && question.toLowerCase().includes(security.name.toLowerCase()))
+      questionMentionsSecurity(question, security.ticker, security.name)
     ) ?? [];
     const compactExternalData = externalData ? {
       ...externalData,
