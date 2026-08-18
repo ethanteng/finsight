@@ -232,12 +232,12 @@ async function refreshTransactions() {
       if (unvaluableAddresses > 0) {
         console.warn(`[${homeEndTimestamp}] ℹ️ ${unvaluableAddresses} address(es) have no RentCast valuation; leaving the prior value in place`);
       }
+      // Only provider failures fail the phase. An all-unvaluable batch (including
+      // the single-user case) must stay green — failing it recreates the permanent
+      // red cron this change exists to eliminate. Malformed RentCast payloads are
+      // classified as provider failures, so a real outage still goes red here.
       if (providerFailures > 0) {
         phaseErrors.push(`Home value refresh could not reach RentCast for ${providerFailures}/${results.total} eligible user(s)`);
-      } else if (results.total > 0 && results.failed === results.total) {
-        // Backstop for a failure this classification does not know about yet:
-        // one unlistable house is normal, every house at once is not.
-        phaseErrors.push(`Home value refresh failed for every eligible user (${results.total})`);
       }
     } catch (error) {
       const errorTimestamp = new Date().toISOString();
