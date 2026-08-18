@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import AnswerQualityPanel from '@/components/admin/AnswerQualityPanel';
 
 const REPORT = {
@@ -10,7 +10,7 @@ const REPORT = {
   evidence: { verified: 4, salvaged: 1, replaced: 1, verifiedRate: 0.667 },
   planning: {
     semanticPlans: 6,
-    fallbackPlans: 0,
+    fallbackPlans: 2,
     plannerAccepted: 4,
     primaryToolExpanded: 1,
     primaryToolFailed: 0,
@@ -92,17 +92,16 @@ describe('AnswerQualityPanel', () => {
     expect(screen.getByText('Evidence verified')).toBeInTheDocument();
     expect(screen.getByText('Planner sufficient')).toBeInTheDocument();
     expect(screen.getByText('User rating')).toBeInTheDocument();
-    expect(screen.getByText('4')).toBeInTheDocument();
-    expect(screen.getByText('accepted without additions')).toBeInTheDocument();
+    expect(screen.getByText(/1 expanded before answering/)).toBeInTheDocument();
+    expect(screen.getByText(/2 planner fallback\(s\)/)).toBeInTheDocument();
   });
 
-  it('keeps per-pack counts behind a simple detail control', async () => {
+  it('does not expose the context-planning operations card', async () => {
     render(<AnswerQualityPanel apiUrl="https://api.test" getAuthHeaders={() => ({})} />);
-    await screen.findByText('How context planning is doing');
-    expect(screen.queryByText('Final answers')).not.toBeInTheDocument();
-    fireEvent.click(screen.getByText('Show per-pack detail'));
-    expect(screen.getByText('Final answers')).toBeInTheDocument();
-    expect(screen.getByText('Accounts')).toBeInTheDocument();
+    await screen.findByText('Delivered cleanly');
+    expect(screen.queryByText('How context planning is doing')).not.toBeInTheDocument();
+    expect(screen.queryByText('Show per-pack detail')).not.toBeInTheDocument();
+    expect(screen.queryByText('Context planner')).not.toBeInTheDocument();
   });
 
   it('shows scenario completion and calculation timing', async () => {
@@ -113,6 +112,8 @@ describe('AnswerQualityPanel', () => {
     expect(screen.getByText(/retirement scenario completed/i)).toBeInTheDocument();
     expect(screen.getByText(/home affordability missing inputs/i)).toBeInTheDocument();
     expect(screen.getByText(/2 completed calculation\(s\)/i)).toBeInTheDocument();
+    expect(screen.getByText(/2 completed · 0 unavailable/)).toBeInTheDocument();
+    expect(screen.getByText(/0 completed · 1 unavailable/)).toBeInTheDocument();
   });
 
   it('shows search retrieval and cache usage separately from planning', async () => {

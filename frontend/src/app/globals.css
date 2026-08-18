@@ -306,6 +306,7 @@
 .authenticated-site .hover\:bg-gray-500:hover { background-color: #ecece4; }
 .authenticated-site .bg-gray-800.rounded-lg,
 .authenticated-site .bg-gray-800.rounded-xl { border-radius: 1.25rem; box-shadow: 0 18px 45px rgb(16 35 25 / .055); }
+.authenticated-site .border-gray-800,
 .authenticated-site .border-gray-700,
 .authenticated-site .border-gray-600 { border-color: rgb(16 35 25 / .14); }
 .authenticated-site .text-white,
@@ -313,7 +314,9 @@
 .authenticated-site .text-gray-200 { color: var(--auth-ink); }
 .authenticated-site .text-gray-300,
 .authenticated-site .text-gray-400,
-.authenticated-site .text-gray-500 { color: #66736b; }
+.authenticated-site .text-gray-500,
+.authenticated-site .text-gray-600,
+.authenticated-site .text-gray-700 { color: #5e6b63; }
 .authenticated-site .bg-blue-600,
 .authenticated-site .bg-blue-700,
 .authenticated-site .bg-green-600,
@@ -328,18 +331,25 @@
 .authenticated-site .hover\:bg-blue-700:hover,
 .authenticated-site .hover\:bg-green-700:hover { background-color: var(--auth-forest); }
 /* Matched on substring rather than exact class so every opacity variant is
-   covered. Listing them one by one left bg-*-900/50 and /60 unmapped, which
-   rendered a dark Tailwind background under text this block had already
-   remapped to a dark ink — dark on dark, in the admin badges and routing chips.
+   covered. Listing them one by one left bg-*-900/50, /60, and the 950-scale
+   chips unmapped, which rendered a dark Tailwind background under text this
+   block had already remapped to a dark ink — dark on dark, in the admin
+   badges, scenario chips, and routing chips.
    Note this matches the class string, not the applied state: a state-prefixed
    utility like hover:bg-green-900 would take the light value unconditionally,
    so give those an explicit rule if one is ever added. */
+.authenticated-site [class*="bg-gray-950"] { background-color: #e5e7de; }
+.authenticated-site [class*="bg-blue-950"],
 .authenticated-site [class*="bg-blue-900"] { background-color: rgb(198 219 255 / .45); }
+.authenticated-site [class*="bg-green-950"],
+.authenticated-site [class*="bg-green-900"] { background-color: rgb(201 242 223 / .6); }
+.authenticated-site [class*="bg-yellow-950"] { background-color: #f4ead0; }
+.authenticated-site [class*="bg-red-950"] { background-color: #f8e8e3; }
 .authenticated-site .text-blue-100,
 .authenticated-site .text-blue-200,
 .authenticated-site .text-blue-300,
 .authenticated-site .text-blue-400 { color: #365d49; }
-.authenticated-site [class*="bg-green-900"] { background-color: rgb(201 242 223 / .6); }
+.authenticated-site .text-green-100,
 .authenticated-site .text-green-200,
 .authenticated-site .text-green-300,
 .authenticated-site .text-green-400 { color: #28704d; }
@@ -348,9 +358,12 @@
 .authenticated-site .text-orange-400 { color: #8a5f28; }
 .authenticated-site .bg-yellow-800,
 .authenticated-site [class*="bg-yellow-900"] { background-color: #f4ead0; }
+.authenticated-site .text-yellow-100,
+.authenticated-site .text-yellow-200,
 .authenticated-site .text-yellow-300,
 .authenticated-site .text-yellow-400 { color: #76510f; }
 .authenticated-site [class*="bg-red-900"] { background-color: #f8e8e3; }
+.authenticated-site .text-red-100,
 .authenticated-site .text-red-200,
 .authenticated-site .text-red-300,
 .authenticated-site .text-red-400 { color: #8b3027; }

@@ -55,21 +55,18 @@ The optional packs are accounts, transactions, investments, monthly cash flow, p
 
 ## Admin and measurement
 
-The `/admin` AI Settings tab contains:
-
-- **Models in use** — configures the `contextPlanner` preflight slot and the Primary analysis slot used for both the tool audit and final answer.
-- **Context planner** — runs the production preflight planner against a full Q&A transcript and explains direct versus dependency-added packs, planned public queries, purposes, and freshness windows.
-- **Calculator registry** — shows each registered calculator's version, required packs, supported overrides, defaults, and outputs.
+The `/admin` AI Settings tab contains **Models in use**, which configures the `contextPlanner` preflight slot and the Primary analysis slot used for both the tool audit and final answer.
 
 The Production tab's **Answer quality** report deliberately has no synthetic score. It separately reports:
 
 - clean, corrected, and failed delivery outcomes;
 - deterministic evidence verification;
-- semantic planner acceptance, primary-tool expansions and failures, late all-pack recoveries, and planner fallback usage;
+- planner sufficiency (acceptance rate, primary-tool expansions/failures, late evidence recoveries, and any preflight fallbacks);
 - user ratings;
-- initial, tool-added, and final usage for every pack;
-- requested, completed, unavailable, and unexpectedly unrun scenarios, plus calculator latency.
+- requested, completed, unavailable, and unexpectedly unrun scenarios, plus calculator latency;
 - requested and completed public-search retrievals, planned-query volume, Brave provider calls, cache reuse, results, and unavailable evidence.
+
+Two admin-authenticated endpoints stay available for ops without a browser surface: `GET /admin/ai/context-packs` returns the allowlisted pack definitions and calculator manifests, and `POST /admin/ai/context-planner-preview` runs the production preflight planner against a supplied transcript. Both are intentionally API-only; no admin page calls them.
 
 The old editable routing vocabulary and browser-side keyword question categories were retired because neither represents the production decision path.
 
