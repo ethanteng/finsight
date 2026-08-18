@@ -90,14 +90,23 @@ export class MarketNewsSynthesizer {
         );
         
       case UserTier.PREMIUM: {
-        // Massive supplies the full Treasury curve for Premium. Avoid giving the
-        // model a second, possibly differently dated, FRED 10-year observation.
-        const hasMassiveTreasuryCurve = data.some(item =>
-          item.source === 'massive'
-          && item.type === 'rate_information'
-          && item.data?.symbol === 'TREASURY_YIELDS',
-        );
-        return hasMassiveTreasuryCurve
+        // Massive may return a partial Treasury curve. Only drop FRED's 10-year
+        // point when Massive actually provides a finite 10-year yield, so Premium
+        // never loses the maturity entirely on a sparse Massive row.
+        const hasMassiveTenYearYield = data.some(item => {
+          if (
+            item.source !== 'massive'
+            || item.type !== 'rate_information'
+            || item.data?.symbol !== 'TREASURY_YIELDS'
+          ) {
+            return false;
+          }
+          const yields = item.data.yields;
+          if (!this.isRecord(yields)) return false;
+          const tenYear = yields['10_year'];
+          return typeof tenYear === 'number' && Number.isFinite(tenYear);
+        });
+        return hasMassiveTenYearYield
           ? data.filter(item => !(
             item.source === 'fred'
             && item.type === 'economic_indicator'

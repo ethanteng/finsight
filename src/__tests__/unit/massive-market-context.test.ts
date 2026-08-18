@@ -198,4 +198,33 @@ describe('Massive market context normalization', () => {
     expect(premiumData.some(item => item.data.series === 'CPIAUCSL')).toBe(true);
     expect(premiumData.some(item => item.source === 'massive')).toBe(true);
   });
+
+  it('keeps FRED DGS10 for Premium when Massive returns a partial curve without 10Y', () => {
+    const synthesizer = new MarketNewsSynthesizer();
+    const data = [
+      {
+        source: 'fred',
+        timestamp: new Date('2026-08-14T00:00:00Z'),
+        type: 'economic_indicator',
+        relevance: 0.8,
+        data: { series: 'DGS10', value: 4.68, date: '2026-08-14' },
+      },
+      {
+        source: 'massive',
+        timestamp: new Date('2026-08-14T00:00:00Z'),
+        type: 'rate_information',
+        relevance: 0.9,
+        data: {
+          symbol: 'TREASURY_YIELDS',
+          date: '2026-08-14',
+          yields: { '1_month': 3.79, '3_month': 3.86 },
+        },
+      },
+    ] as MarketNewsData[];
+
+    const premiumData = (synthesizer as any).filterDataForTier(data, UserTier.PREMIUM) as MarketNewsData[];
+
+    expect(premiumData.some(item => item.data.series === 'DGS10')).toBe(true);
+    expect(premiumData.some(item => item.source === 'massive')).toBe(true);
+  });
 });
