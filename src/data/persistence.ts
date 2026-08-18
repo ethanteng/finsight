@@ -346,6 +346,9 @@ export async function persistSnapTradeActivitiesToDb(
 
         // Rows written before the synthesized ID was account-scoped live under the
         // old key. Migrate that row instead of inserting a duplicate beside it.
+        // The legacy key was not user-scoped, so only migrate a row this SnapTrade
+        // user already owns — otherwise findUnique + update would reparent another
+        // user's activity onto this sync.
         const legacyActivityId = typeof activity.legacyActivityId === 'string'
           ? activity.legacyActivityId
           : undefined;
@@ -353,7 +356,7 @@ export async function persistSnapTradeActivitiesToDb(
           const legacy = await prisma.snapTradeActivity.findUnique({
             where: { activityId: legacyActivityId },
           });
-          if (legacy) {
+          if (legacy && legacy.snapTradeUserId === snapTradeUser.id) {
             await prisma.snapTradeActivity.update({
               where: { activityId: legacyActivityId },
               data: { activityId },
