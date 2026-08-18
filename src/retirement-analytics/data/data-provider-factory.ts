@@ -4,29 +4,23 @@
 import { PriceHistory, SecurityMetadata } from '../types';
 import { TiingoProvider } from './providers/tiingo-provider';
 import { FMPProvider } from './providers/fmp-provider';
-import { AlphaVantageProvider } from '../../data/providers/alpha-vantage';
 import { dbCache } from './db-cache';
 
 export class DataProviderFactory {
   private tiingoProvider: TiingoProvider;
   private fmpProvider: FMPProvider;
-  private alphaVantageProvider?: AlphaVantageProvider;
 
   constructor(
     tiingoApiKey: string,
-    fmpApiKey: string,
-    alphaVantageApiKey?: string
+    fmpApiKey: string
   ) {
     this.tiingoProvider = new TiingoProvider(tiingoApiKey);
     this.fmpProvider = new FMPProvider(fmpApiKey);
-    if (alphaVantageApiKey) {
-      this.alphaVantageProvider = new AlphaVantageProvider(alphaVantageApiKey);
-    }
   }
 
   /**
    * Get price history with provider fallback chain
-   * Tiingo preferred for long history, Polygon/Alpha Vantage for recent data
+   * Tiingo is the configured provider for adjusted security price history.
    */
   async getPriceHistory(ticker: string, startDate: Date, endDate: Date): Promise<PriceHistory> {
     // Try Tiingo first (best for long history with dividend adjustments)
@@ -39,19 +33,7 @@ export class DataProviderFactory {
         data: tiingoData
       };
     } catch (error) {
-      console.warn(`Tiingo failed for ${ticker}, trying fallback:`, error);
-      
-      // Fallback to Alpha Vantage if available
-      if (this.alphaVantageProvider) {
-        try {
-          // Alpha Vantage returns different format, would need normalization
-          // For now, re-throw to indicate we need Tiingo
-          throw new Error(`Price history requires Tiingo provider for ${ticker}`);
-        } catch (fallbackError) {
-          throw new Error(`All price history providers failed for ${ticker}`);
-        }
-      }
-      
+      console.warn(`Tiingo failed for ${ticker}:`, error);
       throw error;
     }
   }

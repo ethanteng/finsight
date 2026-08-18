@@ -238,7 +238,6 @@ jobs:
           PLAID_ENV: sandbox
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
-          ALPHA_VANTAGE_API_KEY: ${{ secrets.ALPHA_VANTAGE_API_KEY }}
           SEARCH_API_KEY: ${{ secrets.SEARCH_API_KEY }}
           FINNHUB_API_KEY: test_finnhub_key
           POLYGON_API_KEY: test_polygon_key
@@ -384,7 +383,6 @@ jobs:
           PLAID_ENV: sandbox
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
-          ALPHA_VANTAGE_API_KEY: ${{ secrets.ALPHA_VANTAGE_API_KEY }}
           SEARCH_API_KEY: ${{ secrets.SEARCH_API_KEY }}
           FINNHUB_API_KEY: test_finnhub_key
           POLYGON_API_KEY: test_polygon_key
@@ -494,7 +492,6 @@ jobs:
           PLAID_ENV: sandbox
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
-          ALPHA_VANTAGE_API_KEY: ${{ secrets.ALPHA_VANTAGE_API_KEY }}
           SEARCH_API_KEY: ${{ secrets.SEARCH_API_KEY }}
           FINNHUB_API_KEY: test_finnhub_key
           POLYGON_API_KEY: test_polygon_key
@@ -525,7 +522,6 @@ jobs:
           PLAID_ENV: sandbox
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
-          ALPHA_VANTAGE_API_KEY: ${{ secrets.ALPHA_VANTAGE_API_KEY }}
           SEARCH_API_KEY: ${{ secrets.SEARCH_API_KEY }}
           FINNHUB_API_KEY: test_finnhub_key
           POLYGON_API_KEY: test_polygon_key

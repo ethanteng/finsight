@@ -116,7 +116,7 @@ export const WhatYouCanAsk = () => {
               <div className="bg-purple-500/5 p-4 rounded-lg border border-purple-500/20">
                 <p className="text-sm text-purple-700 font-semibold mb-3">You unlock:</p>
                 <div className="text-sm text-purple-600 space-y-2">
-                  <p>Live market data and forward-looking planning tools — so you can stress-test decisions and understand the tradeoffs.</p>
+                  <p>Advanced market context and forward-looking planning tools — so you can stress-test decisions and understand the tradeoffs.</p>
                 </div>
               </div>
             </div>

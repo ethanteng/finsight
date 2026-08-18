@@ -285,7 +285,7 @@ function getTierFeatures(tier: string): string[] {
       ];
     case 'premium':
       return [
-        'Live market data and news',
+        'Advanced market context and news',
         'Real-time portfolio tracking',
         'Advanced investment insights',
         'Priority support and features'

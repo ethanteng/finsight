@@ -19,7 +19,6 @@ FMP_API_KEY=your_fmp_api_key_here
 
 # Already present (verify these exist):
 FRED_API_KEY=8f76d1f46abac57d0a20979bd9d8312f
-ALPHA_VANTAGE_API_KEY=062AEP9BK5045MT1
 ```
 
 **Note**: If you don't have API keys yet, the module will use mock data for testing (keys starting with `test_`).

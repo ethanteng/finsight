@@ -123,12 +123,13 @@ describe('Enhanced Market Context API Integration', () => {
     });
 
     itNetwork('should return enhanced market context for premium tier', async () => {
-      const mockContext = 'CURRENT MARKET CONTEXT (Updated: 7/31/2025, 10:57:41 PM):\n\nECONOMIC INDICATORS:\n• Fed Funds Rate: 4.33%\n• CPI (YoY): 321.5%\n• Mortgage Rate: 6.72%\n• Credit Card APR: 24.59%\n\nLIVE MARKET DATA:\n• CD Rates: 3-month: 5.25%, 6-month: 5.35%, 1-year: 5.45%\n• Treasury Yields: 1-month: 5.12%, 3-month: 5.18%, 6-month: 5.25%\n• Mortgage Rates: 30-year-fixed: 6.85%, 15-year-fixed: 6.25%\n\nKEY INSIGHTS:\n• Elevated inflation suggests TIPS and inflation-protected investments may be beneficial\n• High mortgage rates suggest waiting for refinancing opportunities\n• High-yield CD rates available - consider laddering CDs for steady income\n• Attractive Treasury yields available for conservative investors\n\nUse this current market context to provide informed financial advice. Always reference specific data points when making recommendations.';
+      // Orchestrator fallback is FRED-only; Premium Polygon context lives in market-news.
+      const mockContext = 'CURRENT MARKET CONTEXT (Updated: 7/31/2025, 10:57:41 PM):\n\nECONOMIC INDICATORS:\n• Fed Funds Rate: 4.33%\n• CPI (YoY): 321.5%\n• Mortgage Rate: 6.72%\n• Credit Card APR: 24.59%\n\nKEY INSIGHTS:\n• Elevated inflation suggests TIPS and inflation-protected investments may be beneficial\n• High mortgage rates suggest waiting for refinancing opportunities\n\nUse this current market context to provide informed financial advice. Always reference specific data points when making recommendations.';
 
       MockDataOrchestrator.getMarketContextSummary.mockResolvedValue(mockContext);
       MockDataOrchestrator.getCacheStats.mockResolvedValue({
-        size: 5,
-        keys: ['fred_MORTGAGE30US', 'fred_FEDFUNDS', 'fred_CPIAUCSL', 'economic_indicators', 'live_market_data'],
+        size: 4,
+        keys: ['fred_MORTGAGE30US', 'fred_FEDFUNDS', 'fred_CPIAUCSL', 'economic_indicators'],
         marketContextCache: {
           size: 3,
           keys: ['market_context_starter', 'market_context_standard', 'market_context_premium'],
@@ -144,10 +145,9 @@ describe('Enhanced Market Context API Integration', () => {
 
       expect(response.body.tier).toBe('premium');
       expect(response.body.marketContextSummary).toContain('ECONOMIC INDICATORS');
-      expect(response.body.marketContextSummary).toContain('LIVE MARKET DATA');
-      expect(response.body.marketContextSummary).toContain('CD Rates: 3-month: 5.25%');
-      expect(response.body.marketContextSummary).toContain('Treasury Yields: 1-month: 5.12%');
-      expect(response.body.contextLength).toBeGreaterThan(800);
+      expect(response.body.marketContextSummary).not.toContain('LIVE MARKET DATA');
+      expect(response.body.marketContextSummary).toContain('Fed Funds Rate: 4.33%');
+      expect(response.body.contextLength).toBeGreaterThan(400);
     });
 
     itNetwork('should handle missing query parameters', async () => {
