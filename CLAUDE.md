@@ -64,7 +64,7 @@ The main entry point is `src/index.ts`; user-facing Ask routes are isolated in `
 - **`data/`** — Data orchestration (`orchestrator.ts`), caching, persistence, and external data providers: FRED economic indicators (`providers/fred.ts`), Brave Search API for RAG (`providers/search.ts`), Massive macro data (`providers/massive.ts`), and Tiingo Power quotes/news/adjusted prices (`providers/tiingo.ts`)
 - **`openai/`** — Canonical AI pipeline: semantic context planning, primary-model data-pack tools, canonical facts, structured prompting, provider fallback, deterministic grounding, and lazy evidence
 - **`services/`** — Business logic split into financial ingestion, calculations, snapshot/source persistence, profile/market services, billing, and integrations
-- **`profile/`** — User profile orchestration, enrichment, and encryption
+- **`profile/`** — Bounded personal-context extraction, merging, home metadata, and encryption
 - **`security/`** — AI rate limiting, prompt validation, output validation, security logging
 - **`routes/`** — Ask, AI diagnostics, performance, and Stripe routes
 - **`retirement-analytics/`** — Retirement planning calculations
@@ -101,9 +101,9 @@ Plaid/SnapTrade → financial-ingestion.ts → financial-calculations.ts
 
 Supported what-if calculations run in application-owned scenario calculators after context planning. Models may identify a typed scenario request, but they do not compute outcomes. See `docs/SCENARIO_MODELING.md`.
 
-### Profile protection
+### Remembered personal context
 
-User profiles are encrypted at rest. The removed tokenization/de-tokenization stack is not part of the current analysis path; context selection limits model input to what each question requires.
+“What Linc remembers about you” is a bounded, field-level memory of user-stated biographical details such as age, location, household, and employment. It is encrypted at rest. Financial facts, goals, risk tolerance, and scenario assumptions belong to canonical data or active conversation context and must not be added to this memory. The extractor emits validated set/clear operations; it never appends free-form summaries.
 
 ### Tier System
 

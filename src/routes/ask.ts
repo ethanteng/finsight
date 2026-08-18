@@ -171,13 +171,12 @@ router.post('/ask/display-real', aiRateLimitMiddleware, requireAuth, async (req,
         res.json(payload);
       }
 
-      // Keep the stored profile current from what this turn revealed. Deliberately
-      // not awaited: the answer is already sent, and extraction runs its own model call.
+      // Keep bounded personal context current from explicit facts in the user's
+      // message. Deliberately not awaited: extraction runs its own model call.
       void updateProfileFromAnsweredTurn({
         userId: user.id,
         conversationId: conversation.id,
         question,
-        answer: result.displayText,
       }).catch(error => {
         // updateProfileFromAnsweredTurn handles its own failures; this guards the
         // unawaited promise so nothing can escape as an unhandled rejection.

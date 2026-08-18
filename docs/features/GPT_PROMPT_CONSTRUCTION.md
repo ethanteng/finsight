@@ -39,16 +39,18 @@ Mortgage rates: 30-year fixed: 7.12%, 15-year fixed: 6.45%
   - Proactively offer to complete previous incomplete analyses
   - Build comprehensive insights by combining information across conversation turns
 
-### 4. User Profile (Conditional)
+### 4. What Linc Remembers About the User (Conditional)
 - **When**: Only for authenticated users
-- **Content**: Natural language profile built from conversations
-- **Purpose**: Personalize advice based on personal situation, family status, occupation, financial goals
-- **Source**: AI-extracted from previous conversations and Plaid data
+- **Content**: A formatted projection of bounded, structured biographical fields
+- **Purpose**: Personalize advice using stable details such as age, general location, household, and occupation
+- **Source**: User statements extracted as validated field-level set/clear operations, plus manual edits
+- **Excluded**: Financial facts, goals, risk tolerance, scenario assumptions, sensitive traits, and exact contact/address data
 - **Example**:
 ```
-USER PROFILE:
-I am 35 years old with 2 children. I work as a software engineer earning $120k annually.
-My financial goals include saving for college and retirement. I have moderate risk tolerance.
+WHAT LINC REMEMBERS ABOUT THE USER:
+- Age: 35
+- Dependents: 2
+- Occupation: Software engineer
 ```
 
 ### 5. Financial Data Section

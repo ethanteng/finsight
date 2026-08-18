@@ -19,7 +19,7 @@ This project is **Ask Linc** (`finsight`): an Express/TypeScript backend (port *
 ### Environment variables (gotchas)
 
 - The backend loads **`.env.local` at the repo root** (via `dotenv` in `src/index.ts`) when `NODE_ENV !== production` — **not `.env`**, despite the README. The frontend loads `frontend/.env.local`. Both files already exist in this VM (they are git-ignored) with local dev values.
-- **`OPENAI_API_KEY` must be a non-empty string or the backend will not even boot** — `src/profile/extractor.ts` constructs the OpenAI client at module-load time and the SDK throws on a missing key. `.env.local` contains a placeholder so the server starts and all non-AI flows work. To exercise the AI chat (`/ask`) end-to-end you must replace it with a real OpenAI key (and optionally `ANTHROPIC_API_KEY` / `GOOGLE_AI_API_KEY` for the Claude pipeline and market-news synthesis).
+- **`OPENAI_API_KEY` must be a non-empty string or the backend will not even boot** — `src/profile/personal-context-extractor.ts` constructs the OpenAI client at module-load time and the SDK throws on a missing key. `.env.local` contains a placeholder so the server starts and all non-AI flows work. To exercise the AI chat (`/ask`) end-to-end you must replace it with a real OpenAI key (and optionally `ANTHROPIC_API_KEY` / `GOOGLE_AI_API_KEY` for the Claude pipeline and market-news synthesis).
 - `ENABLE_USER_AUTH=true` is set locally so register/login flows are active. All third-party integrations (Plaid, SnapTrade, Stripe, market-data APIs, email) are optional and only fail lazily when their specific feature is invoked.
 
 ### Verifying the environment

@@ -71,7 +71,7 @@ The following data is passed to Claude (Ask Linc), OpenAI (fallback), and Gemini
 
 | Component                              | Source                                            | Why Non-Deterministic                                                                                            |
 | -------------------------------------- | ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| **User profile**                       | `loadUserProfile()` → `PlaidProfileEnhancer`      | Uses **OpenAI (gpt-4o)** to integrate Plaid insights into the profile. Runs on each context gather.              |
+| **Remembered personal context update** | `extractPersonalContextPatch()`                    | Uses the configured OpenAI profile slot after answered turns; output is a strict field-level patch validated against the user's exact words. |
 | **Market context (when generated)**    | `MarketNewsSynthesizer.synthesizeMarketContext()` | Uses **Gemini** to synthesize raw market data into text. Non-deterministic at generation time (temperature 0.3). |
 | **Transaction categorization (fresh)** | `TransactionCategorizationService`                | Uses **OpenAI** when categorizing new transactions. Deterministic when using cached/DB values.                   |
 | **Search results**                     | Brave/external search API                         | Index changes over time; same query can return different results.                                                |
@@ -83,8 +83,8 @@ The following data is passed to Claude (Ask Linc), OpenAI (fallback), and Gemini
 
 ### Ask Linc (Claude + Optional Gemini Validation)
 
-- **Inputs:** `canonicalSnapshot`, `userProfile`, `marketSummary`, `ragKnowledge`, `conversationHistory`
-- **Non-deterministic:** `userProfile` (when PlaidProfileEnhancer runs), `marketSummary` (when freshly synthesized)
+- **Inputs:** `canonicalSnapshot`, bounded remembered personal context, `marketSummary`, `ragKnowledge`, `conversationHistory`
+- **Non-deterministic:** remembered-context extraction when a new answered turn is persisted, `marketSummary` (when freshly synthesized)
 - **Deterministic:** `canonicalSnapshot`, `ragKnowledge` (for same search results), `conversationHistory`
 
 ### OpenAI Fallback (Prompt Builder Path)
@@ -109,7 +109,7 @@ The following data is passed to Claude (Ask Linc), OpenAI (fallback), and Gemini
 | Historical inflation     | `src/retirement-analytics/engine/historical-data-loader.ts` | `loadHistoricalReturns()`    |
 | Withdrawal simulation     | `src/retirement-analytics/engine/withdrawal-simulator.ts` | `simulateWithdrawals()`        |
 | Context assembly          | `src/openai/context-service.ts`                           | `gatherContextSnapshot()`      |
-| Profile enhancement       | `src/profile/plaid-enhancer.ts`                           | `integrateInsightsWithAI()`    |
+| Personal-context update   | `src/profile/personal-context-extractor.ts`               | `extractAndMerge()`            |
 | Market synthesis          | `src/market-news/synthesizer.ts`                          | `synthesizeMarketContext()`    |
 | Search summary            | `src/data/orchestrator.ts`                                | `generateSearchSummary()`      |
 
@@ -118,7 +118,7 @@ The following data is passed to Claude (Ask Linc), OpenAI (fallback), and Gemini
 
 ## Part 5: Recommendations
 
-1. **Profile enhancement:** Consider caching enhanced profiles or running enhancement asynchronously to reduce non-determinism on each request.
+1. **Personal context:** Extraction runs asynchronously after the answer, emits only a bounded field patch, and is validated against exact evidence from the user message.
 2. **Market context:** Cached market context from DB is deterministic; ensure refresh jobs run on a schedule rather than on-demand during user requests when consistency matters.
 3. **Transaction categorization:** Once categorized and persisted, transactions are deterministic. Ensure categorization runs before snapshot computation for stable income/expense analysis.
 

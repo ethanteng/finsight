@@ -2,7 +2,7 @@
  * One definition of how people write about retiring.
  *
  * This existed in three places — the question router, the question parser, and
- * the profile extractor — and each copy had drifted. Two of them tested for the
+ * the former free-form profile extractor — and each copy had drifted. Two of them tested for the
  * substrings "retire" and "retirement", which "retiring" contains neither of, so
  * a question whose stated goal was "retiring by age 62" routed as a
  * non-retirement question in one place and returned no parameters at all in

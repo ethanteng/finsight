@@ -57,12 +57,12 @@ This document provides comprehensive documentation for the testing implementatio
 #### ✅ Core System Tests
 - **RAG System**: `rag-system.test.ts` (14 tests)
 - **RAG Components**: `rag-components.test.ts` (13 tests)
-- **RAG + Profile Integration**: `rag-profile-integration.test.ts` (14 tests)
+- **Context Service Helpers**: `context-service-helpers.test.ts`
 
 #### ✅ Profile Management Tests
-- **Profile Manager**: `profile-manager.test.ts` (14 tests)
-- **Profile Extractor**: `profile-extractor.test.ts` (22 tests)
-- **PlaidProfileEnhancer**: `plaid-profile-enhancer.test.ts` (25 tests)
+- **Personal Context Rules**: `personal-context.test.ts`
+- **Personal Context Extractor**: `personal-context-extractor.test.ts`
+- **Profile Manager Storage/Migration**: `profile-manager.test.ts`
 
 #### ✅ Tier System Tests
 - **Tier System**: `tier-system.test.ts` (14 tests)
@@ -813,7 +813,7 @@ describe('Mock Tests', () => {
 - **Profile Encryption Tests**: ✅ Complete encryption workflow validation
 - **Admin Endpoint Tests**: ✅ **17 tests passing** - Admin system fully tested
 - **Email System Tests**: ✅ **Resend integration working** - No more SMTP errors
-- **Profile Manager Tests**: ✅ **10 tests passing** - Intelligent profile building validated
+- **Personal Context Tests**: ✅ Bounded extraction, field replacement, legacy filtering, and encrypted storage validated
 - **🔒 Real Security Tests**: ✅ Actual security implementation validated
 
 ### Quality Indicators

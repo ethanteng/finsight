@@ -320,7 +320,7 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
   // instead of serially to cut the time spent gathering context before the LLM call.
   if (questionNeeds.needsSearchContext && !deferSearchContext) onProgress?.('Searching financial knowledge base');
   if (questionNeeds.needsMarketContext) onProgress?.('Fetching market context');
-  if (questionNeeds.needsUserProfile) onProgress?.('Preparing your profile');
+  if (questionNeeds.needsUserProfile) onProgress?.('Preparing remembered personal context');
 
   const tierContextAccounts = questionNeeds.needsAccountDetails ? accounts : [];
   const tierContextTransactions = questionNeeds.needsTransactionDetails
@@ -338,7 +338,7 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
     maybeFetchMarketContext(questionNeeds, tier),
     fetchUserOverrides(),
     questionNeeds.needsUserProfile
-      ? loadUserProfile(userId)
+      ? loadPersonalContext(userId)
       : Promise.resolve(undefined),
     questionNeeds.needsInvestments && investmentsSnapshot?.holdings?.length
       ? import('../investments/market-enrichment').then(({ enrichInvestmentSnapshot }) =>
@@ -356,13 +356,6 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
 
   const monthlyIncomeOverride = userOverrides.monthlyIncomeOverride;
   const monthlyExpenseOverride = userOverrides.monthlyExpenseOverride;
-
-  if (questionNeeds.needsHomeValue && userProfile && homeValueSummary === 'Home value data is currently unavailable.') {
-    const address = userProfile.match(/HOME_ADDRESS:\s*(.+)/)?.[1]?.trim();
-    if (address) {
-      homeValueSummary = `Home address: ${address}. Home value estimate is not currently available, but the user owns this property.`;
-    }
-  }
 
   const { incomeResult, expenseResult, monthlyAnalysis } = buildCanonicalCashFlowAnalyses(
     transactionSummary,
@@ -1097,7 +1090,7 @@ async function maybeFetchMarketContext(
   }
 }
 
-async function loadUserProfile(userId?: string): Promise<string | undefined> {
+async function loadPersonalContext(userId?: string): Promise<string | undefined> {
   if (!userId) {
     return undefined;
   }
@@ -1106,93 +1099,18 @@ async function loadUserProfile(userId?: string): Promise<string | undefined> {
     const { ProfileManager } = await import('../profile/manager');
     const profileManager = new ProfileManager();
 
-    const profile = await profileManager.getOriginalProfile(userId);
-    if (profile) {
-      const normalized = profileManager.normalizeProfileHomeDataSection(profile);
-      const deduped = profileManager.deduplicateHomeValueManual(normalized);
-      return deduplicateLiabilitySections(deduped);
-    }
+    const personalContext = await profileManager.getPersonalContextForModel(userId);
+    if (personalContext) return personalContext;
     return undefined;
   } catch (error) {
-    console.warn('Profile load failed', error);
+    console.warn('Remembered personal context load failed', error);
     return undefined;
   }
-}
-
-/**
- * Remove duplicate "LIABILITIES INFORMATION" sections from profile text
- * GPT may add this section multiple times during profile enhancement
- */
-function deduplicateLiabilitySections(profileText: string): string {
-  // Match "LIABILITIES INFORMATION:" followed by content until the next section header or end
-  // Pattern: "LIABILITIES INFORMATION:" followed by text (including newlines) until next section marker or end
-  const liabilityPattern = /LIABILITIES INFORMATION:[\s\S]*?(?=\n\n(?:# |[A-Z][A-Z\s]+:)|$)/gi;
-  const matches = [...profileText.matchAll(liabilityPattern)];
-
-  if (!matches || matches.length <= 1) {
-    // No duplicates found
-    return profileText;
-  }
-
-  // Keep only the most complete version (longest one)
-  const sortedMatches = matches.map(m => ({
-    text: m[0],
-    index: m.index!,
-    length: m[0].length
-  })).sort((a, b) => b.length - a.length);
-
-  const keepMatch = sortedMatches[0];
-  const removeMatches = sortedMatches.slice(1);
-
-  // Build deduplicated text by removing duplicates
-  let deduplicated = profileText;
-
-  // Remove duplicates in reverse order (to preserve indices)
-  for (const match of removeMatches.sort((a, b) => b.index - a.index)) {
-    // Remove the match, preserving surrounding structure
-    const before = deduplicated.slice(0, match.index);
-    const after = deduplicated.slice(match.index + match.text.length);
-
-    // Clean up any double newlines that might result
-    deduplicated = (before.trimEnd() + '\n\n' + after.trimStart()).replace(/\n{3,}/g, '\n\n');
-  }
-
-  // Ensure we have the kept match (in case it was removed)
-  if (!deduplicated.includes('LIABILITIES INFORMATION:')) {
-    // Find insertion point (before "# Accounts" section if present, or after User Profile)
-    const accountsIndex = deduplicated.indexOf('# Accounts');
-    if (accountsIndex > 0) {
-      const beforeAccounts = deduplicated.slice(0, accountsIndex).trimEnd();
-      const afterAccounts = deduplicated.slice(accountsIndex);
-      deduplicated = beforeAccounts + '\n\n' + keepMatch.text.trim() + '\n\n' + afterAccounts;
-    } else {
-      // Insert after User Profile section if present
-      const userProfileEnd = deduplicated.indexOf('# User Profile');
-      if (userProfileEnd >= 0) {
-        const nextSectionMatch = deduplicated.slice(userProfileEnd).match(/\n\n# [A-Z]/);
-        if (nextSectionMatch && nextSectionMatch.index) {
-          const insertIndex = userProfileEnd + nextSectionMatch.index;
-          deduplicated = deduplicated.slice(0, insertIndex) + '\n\n' + keepMatch.text.trim() + deduplicated.slice(insertIndex);
-        } else {
-          deduplicated = deduplicated.trimEnd() + '\n\n' + keepMatch.text.trim();
-        }
-      } else {
-        deduplicated = deduplicated.trimEnd() + '\n\n' + keepMatch.text.trim();
-      }
-    }
-  }
-
-  // Final cleanup of excessive newlines
-  deduplicated = deduplicated.replace(/\n{3,}/g, '\n\n');
-
-  console.warn(`⚠️ deduplicateLiabilitySections: Removed ${removeMatches.length} duplicate "LIABILITIES INFORMATION" section(s) from profile`);
-
-  return deduplicated;
 }
 
 // Exported for unit testing. These are the pure helpers behind
 // gatherContextSnapshot — category derivation, transaction summarisation,
-// investment and home-value formatting, and profile deduplication. Exporting
+// investment and home-value formatting. Exporting
 // them lets the tests exercise the logic directly rather than through the
 // orchestrator's network and database calls. Same convention as src/plaid.ts.
 export {
@@ -1200,6 +1118,5 @@ export {
   deriveTransactionTypeLabel,
   deriveCategory,
   deriveInvestmentSnapshot,
-  buildHomeValueSummary,
-  deduplicateLiabilitySections
+  buildHomeValueSummary
 };

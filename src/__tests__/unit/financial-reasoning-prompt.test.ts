@@ -52,7 +52,7 @@ describe('buildFinancialReasoningPrompt – user message assembly', () => {
     expect(userMessage).toContain('How much do I spend each month?');
     expect(userMessage).toContain('CANONICAL');
     expect(userMessage).toContain('# Financial Overview');
-    expect(userMessage).toContain('## User Profile');
+    expect(userMessage).toContain('## What Linc Remembers About the User');
     expect(userMessage).toContain('## Daily Market Summary');
     expect(userMessage).toContain('## Retrieved Financial Knowledge');
   });
@@ -66,7 +66,7 @@ describe('buildFinancialReasoningPrompt – user message assembly', () => {
       ragKnowledge: ''
     });
     expect(userMessage).toContain('(No financial data available)');
-    expect(userMessage).not.toContain('## User Profile');
+    expect(userMessage).not.toContain('## What Linc Remembers About the User');
     expect(userMessage).not.toContain('## Daily Market Summary');
     expect(userMessage).not.toContain('## Retrieved Financial Knowledge');
   });

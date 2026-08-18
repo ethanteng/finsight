@@ -93,7 +93,7 @@ const FeaturesPage = () => {
                   <p className="mt-2 text-xs text-muted-foreground tracking-[0.12em] uppercase font-medium">Ask follow-ups. Change assumptions. Explore tradeoffs.</p>
                 </div>
                 <p className="text-[1.0625rem] text-muted-foreground leading-[1.75]">
-                  Most financial tools treat every question as isolated. Ask Linc doesn&apos;t. It understands your finances as a <span className="text-primary/90">connected system</span>—remembering your goals, age, risk tolerance, and past assumptions as part of an ongoing conversation. That means you can ask:
+                  Most financial tools treat every question as isolated. Ask Linc doesn&apos;t. It understands your finances as a <span className="text-primary/90">connected system</span>—combining current account data, the active conversation, and a small set of biographical details you have shared. That means you can ask:
                 </p>
                 <div className="space-y-3 border-l-2 border-primary/50 pl-5 py-1">
                   <p className="text-[1.0625rem] text-foreground/80 leading-relaxed italic">&ldquo;Are we still on track to retire if we slow down contributions?&rdquo;</p>

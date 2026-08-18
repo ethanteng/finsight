@@ -61,7 +61,7 @@ The pipeline uses these existing systems as inputs:
 | System | Source | Purpose |
 |--------|--------|---------|
 | Financial snapshot | Plaid, SnapTrade, CSV, manual entry | Normalized financial state |
-| User profile | `ProfileManager` | Goals, risk tolerance, retirement plans, inferred context |
+| Remembered personal context | `ProfileManager` | Bounded user-stated biography: age, general location, household, occupation, and employment/retirement status |
 | Market summary | FRED, Brave Search, Massive | Interest rates, inflation, and market trends when explicitly relevant |
 | RAG | `dataOrchestrator.getSearchContext` | Current rates, laws, limits, and external financial concepts when explicitly relevant |
 | Retirement analysis | `analyzeRetirementPortfolio` | Portfolio stress test, historical withdrawal rate percentiles |

@@ -1,5 +1,7 @@
 # 🔒 User Profile Anonymization - Implementation Specification
 
+> Superseded August 18, 2026. This document describes a retired free-form profile and tokenization design. Current remembered personal context is bounded, structured, encrypted at rest, and implemented in `src/profile/personal-context.ts` and `src/profile/manager.ts`.
+
 ## **Overview**
 
 This specification outlines the implementation of user profile anonymization to protect user privacy when profile data is included in AI prompts, aligning with the platform's existing dual-data privacy system and **integrating with the newly implemented profile encryption at rest**.
@@ -1223,4 +1225,4 @@ The user profile anonymization system has been **fully implemented and tested** 
 - **Comprehensive Privacy**: Personal names, amounts, locations, and financial details are protected
 - **Maintained Functionality**: All existing profile features work exactly as before
 
-**The implementation is production-ready and meets all specified requirements.** 
+**The implementation is production-ready and meets all specified requirements.**

@@ -33,14 +33,12 @@ describe('updateProfileFromAnsweredTurn', () => {
       userId: 'user-1',
       conversationId: 'conversation-1',
       question: 'When can I retire?',
-      answer: 'Based on your balances, around age 62.',
       createdAt: new Date('2026-08-16T00:00:00.000Z'),
     });
 
     expect(updateProfileFromConversation).toHaveBeenCalledWith('user-1', {
       id: 'conversation-1',
       question: 'When can I retire?',
-      answer: 'Based on your balances, around age 62.',
       createdAt: new Date('2026-08-16T00:00:00.000Z'),
     });
   });
@@ -52,7 +50,6 @@ describe('updateProfileFromAnsweredTurn', () => {
       userId: 'user-1',
       conversationId: 'conversation-1',
       question: 'When can I retire?',
-      answer: 'Around age 62.',
     });
 
     expect(updateProfileFromConversation).not.toHaveBeenCalled();
@@ -66,7 +63,6 @@ describe('updateProfileFromAnsweredTurn', () => {
         userId: 'user-1',
         conversationId: 'conversation-1',
         question: 'When can I retire?',
-        answer: 'Around age 62.',
       })
     ).resolves.toBeUndefined();
 

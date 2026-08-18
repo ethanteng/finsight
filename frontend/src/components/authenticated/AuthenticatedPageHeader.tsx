@@ -15,7 +15,7 @@ interface AuthenticatedPageHeaderProps {
 const links = [
   { href: '/app', label: 'Decisions', page: 'app' as const, icon: MessageSquareText },
   { href: '/finances', label: 'Finances', page: 'finances' as const, icon: WalletCards },
-  { href: '/profile', label: 'Accounts & profile', page: 'profile' as const, icon: Settings },
+  { href: '/profile', label: 'Accounts & context', page: 'profile' as const, icon: Settings },
 ];
 
 export default function AuthenticatedPageHeader({

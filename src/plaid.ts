@@ -1,6 +1,5 @@
 import { Configuration, PlaidApi, PlaidEnvironments, Products, CountryCode } from 'plaid';
 import { PrismaClient } from '@prisma/client';
-import { enhanceProfileWithInvestmentData, enhanceProfileWithLiabilityData, enhanceProfileWithEnrichmentData } from './profile/enhancer';
 import { BalanceService } from './services/balance-service';
 import { FinancialDataService } from './services/financial-data-service';
 import { SnapTradeService } from './snaptrade';
@@ -1434,19 +1433,6 @@ export const setupPlaidRoutes = (app: any) => {
         analysis: portfolioAnalysis
       });
 
-      // Enhance user profile with investment data (if user is authenticated)
-      if (req.user?.id) {
-        try {
-          await enhanceProfileWithInvestmentData(
-            req.user.id,
-            processedHoldings,
-            [] // No transactions in this endpoint
-          );
-        } catch (profileError) {
-          console.error('Error enhancing profile with investment data:', profileError);
-          // Don't fail the request if profile enhancement fails
-        }
-      }
         } catch (error) {
           console.error(`Error fetching holdings for token ${tokenRecord.id}:`, error);
         }
@@ -1515,19 +1501,6 @@ export const setupPlaidRoutes = (app: any) => {
         analysis: activityAnalysis
       });
 
-      // Enhance user profile with investment data (if user is authenticated)
-      if (req.user?.id) {
-        try {
-          await enhanceProfileWithInvestmentData(
-            req.user.id,
-            [], // No holdings in this endpoint
-            processedTransactions
-          );
-        } catch (profileError) {
-          console.error('Error enhancing profile with investment data:', profileError);
-          // Don't fail the request if profile enhancement fails
-        }
-      }
         } catch (error) {
           console.error(`Error fetching investment transactions for token ${tokenRecord.id}:`, error);
         }
@@ -1605,18 +1578,6 @@ export const setupPlaidRoutes = (app: any) => {
             request_id: liabilitiesResponse.data.request_id
           });
 
-          // Enhance user profile with liability data (if user is authenticated)
-          if (req.user?.id) {
-            try {
-              await enhanceProfileWithLiabilityData(
-                req.user.id,
-                liabilitiesResponse.data.accounts
-              );
-            } catch (profileError) {
-              console.error('Error enhancing profile with liability data:', profileError);
-              // Don't fail the request if profile enhancement fails
-            }
-          }
         } catch (error) {
           console.error(`Error fetching liabilities for token ${tokenRecord.id}:`, error);
         }
@@ -1670,18 +1631,6 @@ export const setupPlaidRoutes = (app: any) => {
             request_id: enrichResponse.data.request_id
           });
 
-          // Enhance user profile with enrichment data (if user is authenticated)
-          if (req.user?.id) {
-            try {
-              await enhanceProfileWithEnrichmentData(
-                req.user.id,
-                enrichResponse.data.enriched_transactions
-              );
-            } catch (profileError) {
-              console.error('Error enhancing profile with enrichment data:', profileError);
-              // Don't fail the request if profile enhancement fails
-            }
-          }
         } catch (error) {
           console.error(`Error enriching transactions for token ${tokenRecord.id}:`, error);
         }

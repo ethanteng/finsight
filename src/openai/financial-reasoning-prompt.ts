@@ -94,7 +94,14 @@ export function buildFinancialReasoningPrompt(input: FinancialReasoningPromptInp
     financialContext || '(No financial data available)'
   );
 
-  if (userProfile) contextParts.push('', '## User Profile', userProfile);
+  if (userProfile) {
+    contextParts.push(
+      '',
+      '## What Linc Remembers About the User',
+      'These are bounded, user-stated biographical details. They are not a source of financial balances or scenario assumptions.',
+      userProfile
+    );
+  }
   if (marketSummary) contextParts.push('', '## Daily Market Summary', marketSummary);
   if (ragKnowledge) contextParts.push('', '## Retrieved Financial Knowledge', ragKnowledge);
 

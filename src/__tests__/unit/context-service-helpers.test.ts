@@ -16,7 +16,6 @@ const {
   deriveCategory,
   deriveInvestmentSnapshot,
   buildHomeValueSummary,
-  deduplicateLiabilitySections,
   completeRetirementAnalysis,
 } = jest.requireActual('../../openai/context-service');
 
@@ -388,64 +387,5 @@ describe('buildHomeValueSummary', () => {
   it('emits one line per populated field and nothing for the empty ones', () => {
     const summary = buildHomeValueSummary({ address: '1 Main St', valueMid: 750000 });
     expect(summary.split('\n')).toHaveLength(2);
-  });
-});
-
-describe('deduplicateLiabilitySections', () => {
-  it('leaves text with no liabilities section untouched', () => {
-    const text = '# User Profile\nSome details.';
-    expect(deduplicateLiabilitySections(text)).toBe(text);
-  });
-
-  it('leaves a single liabilities section untouched', () => {
-    const text = '# User Profile\nDetails.\n\nLIABILITIES INFORMATION:\n- Mortgage: $400,000';
-    expect(deduplicateLiabilitySections(text)).toBe(text);
-  });
-
-  it('keeps the most complete section when the same one appears twice', () => {
-    // Duplicated sections waste context and can contradict each other, so the
-    // longest (most complete) copy wins.
-    const text = [
-      '# User Profile',
-      'Details.',
-      '',
-      'LIABILITIES INFORMATION:\n- Mortgage: $400,000',
-      '',
-      'LIABILITIES INFORMATION:\n- Mortgage: $400,000\n- Car loan: $18,000\n- Student loan: $22,000',
-      '',
-      '# Accounts',
-      'Checking'
-    ].join('\n');
-
-    const result = deduplicateLiabilitySections(text);
-    expect(result.match(/LIABILITIES INFORMATION:/g)).toHaveLength(1);
-    expect(result).toContain('Student loan: $22,000');
-    expect(result).toContain('# Accounts');
-  });
-
-  it('never leaves the profile without the liabilities it kept', () => {
-    const text = [
-      'LIABILITIES INFORMATION:\n- A',
-      '',
-      'LIABILITIES INFORMATION:\n- A\n- B',
-      '',
-      '# Accounts'
-    ].join('\n');
-    const result = deduplicateLiabilitySections(text);
-    expect(result).toContain('LIABILITIES INFORMATION:');
-    expect(result).toContain('- B');
-  });
-
-  it('collapses runs of blank lines left behind by a removal', () => {
-    const text = [
-      '# User Profile',
-      '',
-      'LIABILITIES INFORMATION:\n- A',
-      '',
-      'LIABILITIES INFORMATION:\n- A\n- B\n- C',
-      '',
-      '# Accounts'
-    ].join('\n');
-    expect(deduplicateLiabilitySections(text)).not.toMatch(/\n{3,}/);
   });
 });

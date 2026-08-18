@@ -1149,14 +1149,14 @@ export default function ProfilePage() {
   return (
     <>
       <PageMeta
-        title="Account Settings | Manage Ask Linc Profile"
-        description="Take control of your Ask Linc experience. Manage your account settings, update personal information, review connected financial accounts, and customize your AI financial assistant preferences."
+        title="Accounts & Personal Context | Ask Linc"
+        description="Manage connected accounts and the personal details Linc remembers for future financial decisions."
       />
       <div className="authenticated-site min-h-screen">
         <AuthenticatedPageHeader
           activePage="profile"
           eyebrow="Accounts & context"
-          title="Your profile"
+          title="Your accounts & context"
           email={userEmail}
           homeHref="/app"
           onLogout={() => {
@@ -1169,7 +1169,7 @@ export default function ProfilePage() {
 
         <main className="mx-auto max-w-[1200px] p-5 py-10 sm:px-6 md:py-12">
           <div className="authenticated-intro mb-10"><h2>Keep your financial context current.</h2><p>Manage the accounts and household details that ground every Ask Linc answer.</p></div>
-          {/* User Profile Section */}
+          {/* Remembered Personal Context Section */}
           <UserProfile userId={userEmail ? 'user' : undefined} />
 
           {/* Account Management Section */}
@@ -1675,7 +1675,7 @@ export default function ProfilePage() {
                     <li>• Transaction history</li>
                     <li>• Conversation history</li>
                     <li>• Account balances and sync data</li>
-                    <li>• Financial profile</li>
+                    <li>• What Linc remembers about you</li>
                   </ul>
                   <p className="text-sm text-red-400 mb-4 font-medium">
                     This action cannot be undone.

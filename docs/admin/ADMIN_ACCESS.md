@@ -63,7 +63,7 @@ ADMIN_EMAILS= admin@example.com , manager@example.com , owner@example.com
 - List all production users
 - Update user tiers (Starter/Standard/Premium)
 - View user conversation counts and activity
-- **View user financial profiles** - See the financial profile text that users see on their profile page
+- **View remembered personal context** - See the bounded biographical context shown to Linc
 - **View linked financial institutions** - See real-time data of users' connected financial institutions and accounts
 - **Account details** - View account names, types, and subtypes without sensitive balance information
 
@@ -131,8 +131,8 @@ Please log in with an admin account to access this dashboard.
 - `src/__tests__/unit/admin-endpoints.test.ts`: Tests admin endpoint functionality
 
 ### New Admin Endpoints
-- **`GET /admin/user-financial-data/:userId`**: Fetches user's financial profile and linked institutions
-  - Returns financial profile text and last updated timestamp
+- **`GET /admin/user-financial-data/:userId`**: Fetches a user's remembered personal context and linked institutions
+  - Returns formatted personal context and its last updated timestamp
   - Returns linked financial institutions with account details
   - Automatically fetches live Plaid data when database accounts are unavailable
   - Groups accounts by institution for organized display

@@ -2,7 +2,7 @@
  * Ask Linc Analysis Pipeline
  *
  * Orchestrates the LLM-driven financial reasoning pipeline:
- * 1. Retrieve financial snapshot, user profile, market summary
+ * 1. Retrieve financial snapshot, bounded personal context, market summary
  * 2. Call RAG retrieval
  * 3. LLM financial reasoning (Claude Sonnet)
  * 4. Optional validation (Gemini)
