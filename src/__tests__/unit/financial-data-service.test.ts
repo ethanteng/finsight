@@ -411,8 +411,45 @@ describe('FinancialDataService investment persistence safeguards', () => {
     expect(result.transactions[0]).toMatchObject({
       activityId: 'brokerage-1-2026-08-15-security-2-BUY-2',
       id: 'snaptrade-brokerage-1-2026-08-15-security-2-BUY-2',
-      legacyActivityId: 'snaptrade-2026-08-15-security-2',
+      // Byte-for-byte the key this row was persisted under before the ID was
+      // account-scoped: `${date}-${securityId}-${type}-${units}`, with no
+      // `snaptrade-` prefix. Anything else migrates nothing and the next sync
+      // inserts a duplicate beside the legacy row.
+      legacyActivityId: '2026-08-15-security-2-BUY-2',
     });
+  });
+
+  it('omits the legacy key when SnapTrade supplied a provider ID', async () => {
+    (mockPrisma.snapTradeUser.findUnique as any).mockResolvedValue({ userSecret: 'secret' });
+    mockSnapTradeService.getUserAccounts.mockResolvedValue({
+      success: true,
+      data: { accounts: [{ id: 'brokerage-1', name: 'Brokerage', balance: 100 }] },
+    });
+    mockSnapTradeService.getUserHoldings.mockResolvedValue({ success: true, data: [] });
+    mockSnapTradeService.getUserActivities.mockResolvedValue({
+      success: true,
+      data: {
+        activities: [{
+          id: 'provider-uuid',
+          account_id: 'brokerage-1',
+          type: 'BUY',
+          amount: -250,
+          units: 2,
+          price: 125,
+          trade_date: '2026-08-15',
+          symbol: { id: 'security-2', symbol: 'XYZ', description: 'XYZ Fund' },
+        }],
+      },
+    });
+
+    const service = new FinancialDataService();
+    const result = await (service as any).fetchSnapTradeData('user-123', {
+      includeInvestments: true,
+      includeTransactions: true,
+    });
+
+    expect(result.transactions[0].activityId).toBe('provider-uuid');
+    expect(result.transactions[0]).not.toHaveProperty('legacyActivityId');
   });
 
   it('reports an empty brokerage account as zero rather than an unknown balance', async () => {
