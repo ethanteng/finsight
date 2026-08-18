@@ -30,6 +30,58 @@ const securitySections = [
   ["06", "No ads. No data brokerage.", "Ask Linc does not sell your data, share it with advertisers, or build an advertising profile around your finances."],
 ];
 
+const ecosystemCoverage = [
+  {
+    number: "01",
+    title: "Accounts and cash flow",
+    providers: "Plaid",
+    description: "The day-to-day financial picture behind your decision, normalized across the institutions you connect.",
+    details: ["Accounts, balances, cards, and loans", "Transactions, merchants, and category spending", "Monthly income, expenses, and cash flow"],
+  },
+  {
+    number: "02",
+    title: "Brokerage and portfolio detail",
+    providers: "SnapTrade · FMP · Tiingo",
+    description: "Your positions become more than ticker symbols, with the portfolio-level detail needed to discuss concentration, cost, and recent performance.",
+    details: ["Brokerage accounts, positions, and cash", "Fund fees plus sector and country exposure", "Quotes, adjusted history, and ticker-linked news"],
+  },
+  {
+    number: "03",
+    title: "Property value",
+    providers: "RentCast",
+    description: "Housing and net-worth questions can use a current estimate without pretending a property value is more precise than it is.",
+    details: ["Estimate informed by up to 20 comparables", "Dated midpoint and 85% estimate range", "Standardized address and validated property match"],
+  },
+  {
+    number: "04",
+    title: "Rates and the economy",
+    providers: "FRED · Massive",
+    description: "Published benchmarks ground comparisons about borrowing, saving, inflation, and the wider rate environment.",
+    details: ["Inflation, unemployment, and Fed policy", "Mortgage, credit-card, Treasury, and CD rates", "Treasury curve and inflation expectations"],
+  },
+  {
+    number: "05",
+    title: "Long-view planning history",
+    providers: "Kenneth French · Robert Shiller",
+    description: "Retirement stress tests use source-backed monthly histories instead of asking an AI model to invent market behavior.",
+    details: ["U.S. and developed international equities", "Government bonds and Treasury bills", "Inflation-adjusted rolling retirement windows"],
+  },
+  {
+    number: "06",
+    title: "Current public evidence",
+    providers: "Brave Search · market news",
+    description: "When the answer depends on something current, Linc can retrieve focused public evidence and keep it separate from your personal facts.",
+    details: ["Current rules, limits, and financial news", "Question-specific retrieval when needed", "Source links, dates, and extracted facts"],
+  },
+] as const;
+
+const factRoutingSteps = [
+  ["01", "Start with the baseline", "Net worth, cash, debt, investments, home value, spending, and income give every financial question a consistent starting point."],
+  ["02", "Add only what the question needs", "Account, transaction, investment, home, market, or current-public context is selected when it can materially change the answer."],
+  ["03", "Normalize and calculate", "Provider records become compact financial facts. Scenario and retirement math runs in repeatable application calculations."],
+  ["04", "Keep the answer checkable", "Important numbers stay tied to facts; live inputs keep their source dates, and material uncertainty is shown as a range or caveat."],
+] as const;
+
 const comparisonData = {
   chatgpt: {
     eyebrow: "PURPOSE-BUILT FINANCIAL AI VS GENERAL-PURPOSE AI",
@@ -185,7 +237,47 @@ function FeaturesPage() {
           </article>
         </div>
       </section>
-      <section className="context-section dark-band"><div className="shell context-layout"><div className="context-copy"><p className="section-kicker light">THE FACTS BEHIND THE DECISION</p><h2>One place for the numbers that affect your choice.</h2><p>Ask Linc brings together your cash, debt, investments, property, goals, and relevant market data before it answers.</p><Link className="light-link" href="/use-cases">See the decisions Linc can help with →</Link></div><div className="context-map" aria-label="Data sources connected by Ask Linc"><div className="context-row"><b>YOUR MONEY</b><span>Plaid<small>banking + debt</small></span><span>SnapTrade<small>investments</small></span></div><div className="context-row"><b>WHAT YOU OWN</b><span>RentCast<small>home values</small></span><span>FMP + Tiingo<small>funds + price history</small></span></div><div className="context-row"><b>RELEVANT CONTEXT</b><span>FRED<small>rates + inflation</small></span><span>Brave + Massive<small>market context</small></span></div><div className="context-output"><span className="brand-mark">L</span><div><small>THE OUTPUT</small><strong>A recommendation with the assumptions and math attached.</strong></div></div></div></div></section>
+      <section className="context-section dark-band ecosystem-detail-section" id="data-ecosystem">
+        <div className="shell">
+          <div className="ecosystem-detail-heading">
+            <div>
+              <p className="section-kicker light">BREADTH ACROSS THE PLAN · DEPTH INSIDE THE DATA</p>
+              <h2>A financial ecosystem built for the question.</h2>
+            </div>
+            <p>Coverage across cash, debt, investments, property, the economy, current evidence, and long-run history keeps the whole plan connected. Detail inside each integration lets Linc answer specific questions instead of stopping at top-line totals. Coverage varies by plan and by what the question requires.</p>
+          </div>
+
+          <div className="coverage-grid" aria-label="Ask Linc data-source coverage">
+            {ecosystemCoverage.map((item) => (
+              <article className="coverage-card" key={item.number}>
+                <div className="coverage-card-top"><span>{item.number}</span><small>{item.providers}</small></div>
+                <h3>{item.title}</h3>
+                <p>{item.description}</p>
+                <ul>
+                  {item.details.map((detail) => <li key={detail}>{detail}</li>)}
+                </ul>
+              </article>
+            ))}
+          </div>
+
+          <div className="fact-routing">
+            <div className="fact-routing-copy">
+              <p className="section-kicker light">FROM SOURCE TO ANSWER</p>
+              <h3>More context when it helps. Less when it doesn&apos;t.</h3>
+              <p>Ask Linc keeps personal facts, dated external context, and calculated results distinct. That makes the final recommendation easier to inspect—and harder for an AI model to blur together.</p>
+              <Link className="light-link" href="/use-cases">See the decisions Linc can help with →</Link>
+            </div>
+            <div>
+              <ol className="fact-routing-steps" aria-label="How data reaches an Ask Linc answer">
+                {factRoutingSteps.map(([number, title, description]) => (
+                  <li key={number}><span>{number}</span><div><strong>{title}</strong><p>{description}</p></div></li>
+                ))}
+              </ol>
+              <div className="context-output"><span className="brand-mark">L</span><div><small>THE OUTPUT</small><strong>A recommendation with the relevant facts, assumptions, math, sources, and uncertainty attached.</strong></div></div>
+            </div>
+          </div>
+        </div>
+      </section>
       <PageCta />
     </StandardPage>
   );

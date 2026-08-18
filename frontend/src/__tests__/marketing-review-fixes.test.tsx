@@ -2,6 +2,7 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MarketingContactForm } from "@/components/marketing/MarketingContactForm";
 import MarketingHome from "@/components/marketing/MarketingHome";
+import MarketingSubpage from "@/components/marketing/MarketingSubpage";
 import { SiteHeader } from "@/components/marketing/SiteShell";
 import { USE_CASE_LINKS } from "@/lib/site-nav";
 
@@ -88,13 +89,30 @@ describe("marketing review fixes", () => {
     expect(screen.getByText(/money shapes where you live, how you care for family/i)).toBeInTheDocument();
     expect(screen.getByText(/learning from real questions, improving it carefully/i)).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /your financial ecosystem is already here/i })).toBeInTheDocument();
-    expect(screen.getByText("Plaid")).toBeInTheDocument();
-    expect(screen.getByText("SnapTrade")).toBeInTheDocument();
-    expect(screen.getByText("RentCast")).toBeInTheDocument();
-    expect(screen.getByText("FRED + market sources")).toBeInTheDocument();
-    expect(screen.getByText(/they are not a future roadmap/i)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Accounts + cash flow" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Investments, looked through" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Home value, with a range" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Rates, markets + history" })).toBeInTheDocument();
+    expect(screen.getByText(/fund fees, sector and country exposure/i)).toBeInTheDocument();
+    expect(screen.getByText(/does not throw the whole data stack at every answer/i)).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /financial data is never used to train ai models/i })).toBeInTheDocument();
     expect(screen.getByText(/no toggle.*no opt-out.*financial data stays yours/i)).toBeInTheDocument();
+  });
+
+  it("explains the data ecosystem on the features page without exposing a raw provider dump", async () => {
+    const page = await MarketingSubpage({ params: Promise.resolve({ slug: ["features"] }) });
+    render(page);
+
+    expect(screen.getByRole("heading", { name: /a financial ecosystem built for the question/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Accounts and cash flow" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Brokerage and portfolio detail" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Property value" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Rates and the economy" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Long-view planning history" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Current public evidence" })).toBeInTheDocument();
+    expect(screen.getByText(/up to 20 comparables/i)).toBeInTheDocument();
+    expect(screen.getByText(/fund fees plus sector and country exposure/i)).toBeInTheDocument();
+    expect(screen.getByText(/important numbers stay tied to facts/i)).toBeInTheDocument();
   });
 
   it("submits the redesigned contact form through the existing API", async () => {
