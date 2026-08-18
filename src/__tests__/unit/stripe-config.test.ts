@@ -108,7 +108,7 @@ describe('Stripe Configuration', () => {
       expect(premiumFeatures).toContain('account-balances');
       expect(premiumFeatures).toContain('economic-indicators');
       expect(premiumFeatures).toContain('rag-system');
-      expect(premiumFeatures).toContain('live-market-data');
+      expect(premiumFeatures).toContain('advanced-market-context');
     });
 
     it('should have more features for higher tiers', () => {
@@ -176,7 +176,7 @@ describe('Subscription Plan Features', () => {
   it('should have premium tier with all features', () => {
     const plans = require('../../types/stripe').SUBSCRIPTION_PLANS;
     const premium = plans.premium;
-    expect(premium.features).toContain('Live market data');
+    expect(premium.features).toContain('Advanced market context');
     expect(premium.features).toContain('Advanced analytics');
   });
 });
