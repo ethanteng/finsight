@@ -69,6 +69,7 @@ export type PersonalContextFacts = Partial<Record<PersonalContextField, Personal
 
 export interface StoredHomeContext {
   address: string | null;
+  propertyId: string | null;
   rentCastValue: number | null;
   manualValue: number | null;
   valueLow: number | null;
@@ -198,6 +199,10 @@ export function parseStoredPersonalContextDocument(raw: string): StoredPersonalC
     const home = rawHome && typeof rawHome.address === 'string' && rawHome.address.trim().length <= 500
       ? {
           address: rawHome.address.trim() || null,
+          propertyId: typeof rawHome.propertyId === 'string' && rawHome.propertyId.trim().length > 0
+            && rawHome.propertyId.trim().length <= 500
+            ? rawHome.propertyId.trim()
+            : null,
           rentCastValue: finiteNullableNumber(rawHome.rentCastValue),
           manualValue: finiteNullableNumber(rawHome.manualValue),
           valueLow: finiteNullableNumber(rawHome.valueLow),
@@ -314,17 +319,48 @@ export function formatPersonalContextForModel(facts: PersonalContextFacts): stri
   return lines.join('\n');
 }
 
+function normalizeQuote(value: string): string {
+  return value.toLocaleLowerCase().replace(/[’]/g, "'").replace(/\s+/g, ' ').trim();
+}
+
 function normalizedEvidenceIsPresent(question: string, evidence: string): boolean {
-  const normalize = (value: string) => value.toLocaleLowerCase().replace(/[’]/g, "'").replace(/\s+/g, ' ').trim();
-  const normalizedEvidence = normalize(evidence);
-  return normalizedEvidence.length >= 2 && normalize(question).includes(normalizedEvidence);
+  const normalizedEvidence = normalizeQuote(evidence);
+  return normalizedEvidence.length >= 2 && normalizeQuote(question).includes(normalizedEvidence);
+}
+
+const NUMBER_WORDS: Record<string, number> = {
+  zero: 0, no: 0, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7,
+  eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12, thirteen: 13, fourteen: 14,
+  fifteen: 15, sixteen: 16, seventeen: 17, eighteen: 18, nineteen: 19, twenty: 20,
+};
+
+/**
+ * The evidence quote has to carry the value itself, not just a sentence of the
+ * right shape. Without this an operation can pair `city: "Boston"` with the
+ * quote "I live in Austin" and durably replace the stored city.
+ */
+function evidenceStatesText(evidence: string, value: unknown): boolean {
+  if (typeof value !== 'string') return false;
+  const normalizedValue = normalizeQuote(value);
+  return normalizedValue.length > 0 && normalizeQuote(evidence).includes(normalizedValue);
+}
+
+/** Numbers may be quoted as digits or, for small counts, as an English word. */
+function evidenceStatesNumber(evidence: string, value: unknown): boolean {
+  if (typeof value !== 'number') return false;
+  const normalizedEvidence = normalizeQuote(evidence);
+  if (new RegExp(`(?<![\\d.,])${value}(?![\\d.,])`).test(normalizedEvidence)) return true;
+  const words = Object.keys(NUMBER_WORDS).filter(candidate => NUMBER_WORDS[candidate] === value);
+  return words.length > 0 && new RegExp(`\\b(?:${words.join('|')})\\b`).test(normalizedEvidence);
 }
 
 function evidenceDirectlySupportsOperation(
   operation: PersonalContextOperation,
   value?: PersonalContextValues[PersonalContextField]
 ): boolean {
-  const evidence = operation.evidence;
+  // Mobile keyboards produce curly apostrophes; normalize so "I’m retired"
+  // is read the same way as "I'm retired".
+  const evidence = operation.evidence.replace(/[’]/g, "'");
   if (operation.action === 'clear') {
     return /\b(?:forget|remove|clear|do not remember|don't remember|no longer|not\s+\w+\s+anymore)\b/i.test(evidence)
       && /\b(?:i|i'm|i’ve|i've|my|me|we|we're|our)\b/i.test(evidence);
@@ -332,7 +368,8 @@ function evidenceDirectlySupportsOperation(
 
   switch (operation.field) {
     case 'preferredName':
-      return /\b(?:my name is|call me|i go by|i prefer to be called)\b/i.test(evidence);
+      return /\b(?:my name is|call me|i go by|i prefer to be called)\b/i.test(evidence)
+        && evidenceStatesText(evidence, value);
     case 'age': {
       if (typeof value !== 'number') return false;
       const age = String(value);
@@ -341,19 +378,28 @@ function evidenceDirectlySupportsOperation(
     case 'city':
     case 'stateOrProvince':
     case 'country':
-      return /\b(?:i\s+(?:live|reside)|i'm\s+(?:living|based|located)|i\s+am\s+(?:living|based|located)|i (?:just )?moved to|my (?:city|state|province|country|location))\b/i.test(evidence);
+      return /\b(?:i\s+(?:live|reside)|i'm\s+(?:living|based|located)|i\s+am\s+(?:living|based|located)|i (?:just )?moved to|my (?:city|state|province|country|location))\b/i.test(evidence)
+        && evidenceStatesText(evidence, value);
     case 'householdStatus': {
       if (typeof value !== 'string') return false;
       const status = value.replace('-', '[- ]');
       return new RegExp(`\\b(?:i'm|i\\s+am|we're|we\\s+are)\\s+${status}\\b|\\bmy household status is\\s+${status}\\b`, 'i').test(evidence);
     }
     case 'dependentCount':
-    case 'dependentAges':
-      return /\b(?:i|we)\s+have\s+(?:(?![.;]).){0,60}\b(?:child|children|kid|kids|dependent|dependents)\b|\b(?:my|our)\s+(?:child|children|kid|kids|dependent|dependents)\b/i.test(evidence);
+    case 'dependentAges': {
+      const mentionsDependents = /\b(?:i|we)\s+have\s+(?:(?![.;]).){0,60}\b(?:child|children|kid|kids|dependent|dependents)\b|\b(?:my|our)\s+(?:child|children|kid|kids|dependent|dependents)\b/i.test(evidence);
+      if (!mentionsDependents) return false;
+      if (operation.field === 'dependentCount') return evidenceStatesNumber(evidence, value);
+      return Array.isArray(value)
+        && value.length > 0
+        && value.every(age => evidenceStatesNumber(evidence, age));
+    }
     case 'occupation':
-      return /\b(?:i\s+(?:work|am employed)\s+as|i'm\s+(?:a|an)|i\s+am\s+(?:a|an)|my (?:job|occupation|role) is)\b/i.test(evidence);
+      return /\b(?:i\s+(?:work|am employed)\s+as|i'm\s+(?:a|an)|i\s+am\s+(?:a|an)|my (?:job|occupation|role) is)\b/i.test(evidence)
+        && evidenceStatesText(evidence, value);
     case 'industry':
-      return /\b(?:i\s+work\s+in|i'm\s+in|i\s+am\s+in|my industry is)\b/i.test(evidence);
+      return /\b(?:i\s+work\s+in|i'm\s+in|i\s+am\s+in|my industry is)\b/i.test(evidence)
+        && evidenceStatesText(evidence, value);
     case 'employmentStatus': {
       if (typeof value !== 'string') return false;
       const status = value.replace('-', '[- ]');

@@ -1,5 +1,5 @@
 import { TierAwareContext } from '../data/orchestrator';
-import { Transaction as UnifiedTransaction, UnifiedFinancialData, Holding, Security } from '../services/financial-data-service';
+import { Transaction as UnifiedTransaction, UnifiedFinancialData, Holding, Security, HomeData } from '../services/financial-data-service';
 import type { RetirementScenarioExecution } from '../scenarios/retirement-scenario';
 import type { ScenarioExecutionRecord } from '../scenarios/calculator-registry';
 import type { PlannedSearchQuery } from '../data/search-types';
@@ -133,6 +133,8 @@ export interface FinancialContextSnapshot {
   marketContext?: string;
   userProfile?: string;
   homeValueSummary?: string;
+  /** Structured RentCast value data used for fact provenance and uncertainty bounds. */
+  homeValueData?: HomeData;
   retirementAnalysis?: {
     summary: {
       characteristics: {
