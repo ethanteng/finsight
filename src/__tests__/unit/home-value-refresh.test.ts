@@ -29,6 +29,7 @@ const { PrismaClient: mockPrismaClient } = jest.requireMock('@prisma/client') as
 import {
   HomeValueRefreshService,
   HOME_VALUE_MIN_REFRESH_AGE_MS,
+  runHomeValueRefresh,
 } from '../../services/home-value-refresh';
 
 const daysAgo = (days: number) => new Date(Date.now() - days * 24 * 60 * 60 * 1000);
@@ -93,7 +94,13 @@ describe('HomeValueRefreshService.refreshUserHomeValue', () => {
   it('reports a provider failure instead of throwing', async () => {
     mockUpdateHomeValue.mockRejectedValue(new Error('RentCast down'));
 
-    await expect(service.refreshUserHomeValue('user-1')).resolves.toBe('failed');
+    await expect(service.refreshUserHomeValue('user-1')).resolves.toBe('failed-provider');
+  });
+
+  it('separates an address RentCast cannot value from the provider being down', async () => {
+    mockUpdateHomeValue.mockResolvedValue(null);
+
+    await expect(service.refreshUserHomeValue('user-1')).resolves.toBe('failed-address');
   });
 
   it('skips a user with no home address', async () => {
@@ -101,6 +108,28 @@ describe('HomeValueRefreshService.refreshUserHomeValue', () => {
 
     await expect(service.refreshUserHomeValue('user-1')).resolves.toBe('skipped-no-address');
     expect(mockUpdateHomeValue).not.toHaveBeenCalled();
+  });
+});
+
+describe('runHomeValueRefresh standalone entry point', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockGetOriginalProfile.mockResolvedValue('profile text');
+    mockExtractHomeData.mockReturnValue({
+      address: '1 Main St',
+      lastUpdated: daysAgo(70),
+      isManualOverride: false,
+    });
+  });
+
+  it('exits nonzero on a provider failure but not on an unvaluable address', async () => {
+    mockProfileFindMany.mockResolvedValue([{ userId: 'unvaluable-1' }]);
+    mockUpdateHomeValue.mockResolvedValue(null);
+    await expect(runHomeValueRefresh()).resolves.toBeUndefined();
+
+    mockProfileFindMany.mockResolvedValue([{ userId: 'outage-1' }]);
+    mockUpdateHomeValue.mockRejectedValue(new Error('RentCast API error (503): unavailable'));
+    await expect(runHomeValueRefresh()).rejects.toThrow('could not reach RentCast');
   });
 });
 
@@ -160,5 +189,39 @@ describe('HomeValueRefreshService.refreshAllHomeValues', () => {
 
     expect(results.refreshedUserIds).toEqual([]);
     expect(results.failed).toBe(1);
+  });
+
+  it('reports zero provider failures when every eligible address is unvaluable', async () => {
+    // The cron fails only on providerFailures, so this batch must not produce
+    // one: a single user with an unlistable address would otherwise keep the
+    // job red on every run.
+    mockProfileFindMany.mockResolvedValue([{ userId: 'unvaluable-1' }]);
+    mockUpdateHomeValue.mockResolvedValue(null);
+
+    const results = await service.refreshAllHomeValues();
+
+    expect(results.total).toBe(1);
+    expect(results.failed).toBe(1);
+    expect(results.unvaluableAddresses).toBe(1);
+    expect(results.providerFailures).toBe(0);
+  });
+
+  it('counts an unvaluable address apart from an unreachable provider', async () => {
+    // The scheduled job fails on the second and only reports the first: an
+    // address RentCast cannot value fails the same way on every run.
+    mockProfileFindMany.mockResolvedValue([{ userId: 'unvaluable-1' }, { userId: 'outage-1' }]);
+    mockUpdateHomeValue
+      .mockResolvedValueOnce(null)
+      .mockRejectedValueOnce(new Error('RentCast API error (503): unavailable'));
+
+    const results = await service.refreshAllHomeValues();
+
+    expect(results.failed).toBe(2);
+    expect(results.unvaluableAddresses).toBe(1);
+    expect(results.providerFailures).toBe(1);
+    expect(results.errors).toEqual([
+      { userId: 'unvaluable-1', error: expect.any(String), kind: 'address' },
+      { userId: 'outage-1', error: expect.any(String), kind: 'provider' },
+    ]);
   });
 });

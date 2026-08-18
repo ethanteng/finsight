@@ -29,6 +29,22 @@ export interface RentCastHomeValue {
   subjectProperty: RentCastSubjectProperty;
 }
 
+/**
+ * Definitive "this address cannot be valued" signal — currently local address
+ * validation that never reaches RentCast. Callers must not treat it as an
+ * outage: the same address will fail the same way on every run.
+ *
+ * Do not use this for malformed HTTP 200 payloads. Those are provider-side
+ * contract failures (schema regressions, bad AVM shapes) and must stay plain
+ * Errors so the cron goes red. A RentCast 404 already returns null.
+ */
+export class RentCastValuationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'RentCastValuationError';
+  }
+}
+
 const REQUEST_TIMEOUT_MS = 10_000;
 const MAX_ATTEMPTS = 3;
 const RETRY_BASE_DELAY_MS = 250;
@@ -86,6 +102,9 @@ function normalizeSubjectProperty(value: unknown): RentCastSubjectProperty | und
 }
 
 function normalizeHomeValue(value: unknown): RentCastHomeValue {
+  // Shape/contract failures are plain Errors (provider), not RentCastValuationError.
+  // A schema regression that breaks every AVM must turn the cron red; classifying
+  // it as an address problem would hide the outage whenever any profile skips.
   if (!value || typeof value !== 'object') {
     throw new Error('RentCast returned an invalid home value response');
   }
@@ -156,7 +175,7 @@ export class RentCastService {
   async getHomeValue(address: string): Promise<RentCastHomeValue | null> {
     const cleanAddress = address.trim();
     if (!this.validateAddress(cleanAddress)) {
-      throw new Error('A valid property address is required');
+      throw new RentCastValuationError('A valid property address is required');
     }
 
     const url = new URL(`${this.baseUrl}/avm/value`);

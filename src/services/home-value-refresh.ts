@@ -18,7 +18,18 @@ export type HomeValueRefreshOutcome =
   | 'skipped-manual-override'
   | 'skipped-recent'
   | 'skipped-no-address'
-  | 'failed';
+  /** RentCast answered and has no usable valuation for this address. Permanent
+   *  for that address, so it must not be read as the integration being down. */
+  | 'failed-address'
+  /** The valuation could not be attempted: missing key, auth, quota, outage,
+   *  or a failure persisting the result. Someone needs to act on this. */
+  | 'failed-provider';
+
+export interface HomeValueRefreshFailure {
+  userId: string;
+  error: string;
+  kind: 'address' | 'provider';
+}
 
 export class HomeValueRefreshService {
   /**
@@ -28,7 +39,12 @@ export class HomeValueRefreshService {
   async refreshAllHomeValues(): Promise<{
     total: number;
     successful: number;
+    /** unvaluableAddresses + providerFailures, kept for callers that only log a total. */
     failed: number;
+    /** Addresses RentCast has no usable valuation for. Expected to recur. */
+    unvaluableAddresses: number;
+    /** Users whose valuation could not be attempted. Actionable. */
+    providerFailures: number;
     /**
      * Users whose stored value actually changed. Callers must recompute these
      * users' snapshots: the finances page reads the persisted snapshot and
@@ -36,7 +52,7 @@ export class HomeValueRefreshService {
      * update would never reach the page.
      */
     refreshedUserIds: string[];
-    errors: Array<{ userId: string; error: string }>;
+    errors: HomeValueRefreshFailure[];
   }> {
     console.log('HomeValueRefresh: Starting home value refresh for all users');
     const prisma = new PrismaClient();
@@ -45,8 +61,10 @@ export class HomeValueRefreshService {
       total: 0,
       successful: 0,
       failed: 0,
+      unvaluableAddresses: 0,
+      providerFailures: 0,
       refreshedUserIds: [] as string[],
-      errors: [] as Array<{ userId: string; error: string }>
+      errors: [] as HomeValueRefreshFailure[]
     };
 
     try {
@@ -73,12 +91,23 @@ export class HomeValueRefreshService {
 
           results.total++;
 
-          if (outcome === 'failed') {
+          if (outcome === 'failed-address' || outcome === 'failed-provider') {
             results.failed++;
-            results.errors.push({
-              userId: profile.userId,
-              error: 'Failed to fetch updated home value from RentCast'
-            });
+            if (outcome === 'failed-address') {
+              results.unvaluableAddresses++;
+              results.errors.push({
+                userId: profile.userId,
+                error: 'RentCast has no usable valuation for this address',
+                kind: 'address'
+              });
+            } else {
+              results.providerFailures++;
+              results.errors.push({
+                userId: profile.userId,
+                error: 'Could not fetch an updated home value from RentCast',
+                kind: 'provider'
+              });
+            }
           } else {
             results.successful++;
             if (outcome === 'refreshed') {
@@ -87,16 +116,20 @@ export class HomeValueRefreshService {
           }
 
           // Only pace requests that actually reached RentCast.
-          if (outcome === 'refreshed' || outcome === 'failed') {
+          if (outcome !== 'skipped-manual-override' && outcome !== 'skipped-recent') {
             await new Promise(resolve => setTimeout(resolve, 1000));
           }
 
         } catch (error) {
+          // refreshUserHomeValue already absorbs its own failures, so reaching
+          // here means something outside it broke. Treat that as actionable.
           results.failed++;
+          results.providerFailures++;
           const errorMessage = error instanceof Error ? error.message : 'Unknown error';
           results.errors.push({
             userId: profile.userId,
-            error: errorMessage
+            error: errorMessage,
+            kind: 'provider'
           });
           console.error(`HomeValueRefresh: Error refreshing home value for user ${profile.userId}:`, error);
         }
@@ -106,6 +139,8 @@ export class HomeValueRefreshService {
         total: results.total,
         successful: results.successful,
         failed: results.failed,
+        unvaluableAddresses: results.unvaluableAddresses,
+        providerFailures: results.providerFailures,
         errorCount: results.errors.length
       });
 
@@ -161,12 +196,14 @@ export class HomeValueRefreshService {
         return 'refreshed';
       }
 
-      console.error(`HomeValueRefresh: Failed to refresh home value for user ${userId}`);
-      return 'failed';
+      // updateHomeValue returns null only when RentCast has nothing usable for
+      // this address; anything it could not attempt is thrown and caught below.
+      console.warn(`HomeValueRefresh: No usable valuation for user ${userId}'s address`);
+      return 'failed-address';
 
     } catch (error) {
-      console.error(`HomeValueRefresh: Error refreshing home value for user ${userId}:`, error);
-      return 'failed';
+      console.error(`HomeValueRefresh: Could not refresh home value for user ${userId}:`, error);
+      return 'failed-provider';
     }
   }
 }
@@ -186,11 +223,22 @@ export async function runHomeValueRefresh(): Promise<void> {
     console.log('Home value refresh completed:', {
       total: results.total,
       successful: results.successful,
-      failed: results.failed
+      failed: results.failed,
+      unvaluableAddresses: results.unvaluableAddresses,
+      providerFailures: results.providerFailures
     });
 
     if (results.errors.length > 0) {
       console.log('Errors encountered:', results.errors);
+    }
+
+    // Same rule the scheduled cron applies: an address RentCast cannot value is
+    // reported, an integration we could not reach fails the run. Without this a
+    // standalone invocation exits 0 through a total outage.
+    if (results.providerFailures > 0) {
+      throw new Error(
+        `Home value refresh could not reach RentCast for ${results.providerFailures}/${results.total} eligible user(s)`
+      );
     }
   } catch (error) {
     console.error('Home value refresh failed:', error);

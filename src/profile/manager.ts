@@ -1,6 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import { ProfileEncryptionService } from './encryption';
 import { PersonalContextExtractor } from './personal-context-extractor';
+import { RentCastValuationError } from '../services/rentcast';
 import {
   formatPersonalContextForModel,
   parseStoredPersonalContextDocument,
@@ -352,10 +353,17 @@ export class ProfileManager {
   }
 
   /**
-   * Update home value for a user by fetching from RentCast API
-   * @param userId - User ID
-   * @param address - Home address
-   * @returns Updated home value or null if fetch failed
+   * Refresh the stored home value from RentCast.
+   *
+   * Returns null when RentCast simply has no usable valuation for this address
+   * — an unlisted property, an address it cannot match, or an identity change
+   * we refuse to accept. That outcome is a property of the address and repeats
+   * on every attempt, so callers must not read it as an outage.
+   *
+   * Throws when the valuation could not be attempted at all: a missing API key,
+   * auth or quota rejection, a RentCast outage, a malformed provider payload, or
+   * a failure writing the profile. Those need someone to act, and swallowing them
+   * here is what let a broken integration look identical to an unlistable house.
    */
   async updateHomeValue(userId: string, address: string): Promise<number | null> {
     try {
@@ -415,8 +423,12 @@ export class ProfileManager {
       
       return homeValueData.price;
     } catch (error) {
+      if (error instanceof RentCastValuationError) {
+        console.warn(`No usable RentCast valuation for user ${userId}'s address:`, error.message);
+        return null;
+      }
       console.error('Failed to update home value:', error);
-      return null;
+      throw error;
     }
   }
 

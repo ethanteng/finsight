@@ -219,10 +219,25 @@ async function refreshTransactions() {
       const results = await new HomeValueRefreshService().refreshAllHomeValues();
       homeRefreshedUserIds = results.refreshedUserIds;
       const homeEndTimestamp = new Date().toISOString();
-      console.log(`[${homeEndTimestamp}] ✅ Home value refresh completed. Users: ${results.successful}/${results.total}, failed: ${results.failed}, values changed: ${homeRefreshedUserIds.length}`);
+      const unvaluableAddresses = results.unvaluableAddresses || 0;
+      const providerFailures = results.providerFailures || 0;
+      console.log(`[${homeEndTimestamp}] ✅ Home value refresh completed. Users: ${results.successful}/${results.total}, unvaluable addresses: ${unvaluableAddresses}, provider failures: ${providerFailures}, values changed: ${homeRefreshedUserIds.length}`);
       if (results.errors.length > 0) {
         console.error(`[${homeEndTimestamp}] ⚠️ Home value refresh errors:`, results.errors);
-        phaseErrors.push(`Home value refresh failed for ${results.failed}/${results.total} eligible user(s)`);
+      }
+
+      // An address RentCast cannot value fails identically on every run. Failing
+      // the cron for it would leave this job permanently red and stop the exit
+      // code from meaning anything, so only report it.
+      if (unvaluableAddresses > 0) {
+        console.warn(`[${homeEndTimestamp}] ℹ️ ${unvaluableAddresses} address(es) have no RentCast valuation; leaving the prior value in place`);
+      }
+      // Only provider failures fail the phase. An all-unvaluable batch (including
+      // the single-user case) must stay green — failing it recreates the permanent
+      // red cron this change exists to eliminate. Malformed RentCast payloads are
+      // classified as provider failures, so a real outage still goes red here.
+      if (providerFailures > 0) {
+        phaseErrors.push(`Home value refresh could not reach RentCast for ${providerFailures}/${results.total} eligible user(s)`);
       }
     } catch (error) {
       const errorTimestamp = new Date().toISOString();

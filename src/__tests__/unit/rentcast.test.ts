@@ -1,5 +1,5 @@
 import { afterAll, beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { RentCastService } from '../../services/rentcast';
+import { RentCastService, RentCastValuationError } from '../../services/rentcast';
 
 const originalFetch = global.fetch;
 const mockFetch = jest.fn<typeof fetch>();
@@ -116,11 +116,34 @@ describe('RentCastService', () => {
       .rejects.toThrow('without subject property identity');
   });
 
+  it('treats a malformed successful payload as a provider failure, not an address problem', async () => {
+    // A 200 with an unusable AVM shape is a contract/outage signal. Classifying
+    // it as RentCastValuationError would hide a schema regression whenever any
+    // eligible profile skips or refreshes successfully.
+    mockFetch.mockResolvedValue(response({
+      ...validValue,
+      priceRangeLow: 800_000,
+      priceRangeHigh: 900_000,
+    }));
+
+    const error = await new RentCastService().getHomeValue('1 Main St').catch(e => e);
+    expect(error).toBeInstanceOf(Error);
+    expect(error).not.toBeInstanceOf(RentCastValuationError);
+  });
+
+  it('leaves an unreachable provider as a plain error', async () => {
+    mockFetch.mockResolvedValue(response({ message: 'forbidden' }, 403));
+
+    const error = await new RentCastService().getHomeValue('1 Main St').catch(e => e);
+    expect(error).toBeInstanceOf(Error);
+    expect(error).not.toBeInstanceOf(RentCastValuationError);
+  });
+
   it('rejects obviously incomplete input locally without imposing formatting rules', async () => {
     const service = new RentCastService();
     expect(service.validateAddress('main street')).toBe(false);
     expect(service.validateAddress('1 main st')).toBe(true);
-    await expect(service.getHomeValue('main street')).rejects.toThrow('valid property address');
+    await expect(service.getHomeValue('main street')).rejects.toBeInstanceOf(RentCastValuationError);
     expect(mockFetch).not.toHaveBeenCalled();
   });
 });
