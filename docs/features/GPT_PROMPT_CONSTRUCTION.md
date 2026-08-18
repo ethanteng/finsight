@@ -102,7 +102,7 @@ UNAVAILABLE DATA SOURCES (upgrade to access):
 ### 8. Market Context (Conditional)
 - **Economic Indicators**: CPI inflation (YoY), federal funds rate, mortgage and credit-card averages, unemployment, 10-year Treasury, and national 12-month CD rate
 - **Current Market Data**: Treasury yields, broad-market movement, and current public rate information
-- **Source**: FRED API, Brave Search, and Polygon/Massive
+- **Source**: FRED API, Brave Search, and Massive
 - **Example**:
 ```
 MARKET CONTEXT:
@@ -131,7 +131,7 @@ Economic Indicators:
 ### Primary Data Sources
 1. **Plaid API**: Account balances, transactions, investments
 2. **FRED API**: Economic indicators and rates
-3. **Polygon/Massive**: Market movement, Treasury yields, and inflation context
+3. **Massive**: Delayed SPY daily movement, the Treasury yield curve, and inflation expectations
 4. **Search APIs**: Real-time financial information
 5. **User Conversations**: Profile building and context
 

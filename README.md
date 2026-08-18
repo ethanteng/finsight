@@ -2,7 +2,7 @@
 
 ## **Project Overview**
 
-Ask Linc is a comprehensive financial analysis platform that combines AI-powered insights with real-time market data to help users understand and optimize their financial health. The platform features privacy-protected data processing, tier-based access control, seamless integration with financial institutions, and a sophisticated **Retrieval-Augmented Generation (RAG)** system for real-time financial intelligence.
+Ask Linc is a comprehensive financial analysis platform that combines AI-powered insights with connected financial data and relevant market context to help users understand and optimize their financial health. The platform features privacy-protected data processing, tier-based access control, seamless integration with financial institutions, and a sophisticated **Retrieval-Augmented Generation (RAG)** system for current public financial information.
 
 ## 🏗️ **Architecture & Tech Stack**
 
@@ -15,7 +15,7 @@ Ask Linc is a comprehensive financial analysis platform that combines AI-powered
   - Plaid (banking data)
   - SnapTrade (investment data)
   - FRED (latest published economic indicators and rate benchmarks)
-  - Polygon/Massive (market and Treasury data)
+  - Massive (formerly Polygon.io; delayed SPY daily bars, Treasury curve, and inflation expectations)
   - RentCast (home valuations)
   - **Brave Search API** (real-time financial information)
 
@@ -43,7 +43,7 @@ Ask Linc is a comprehensive financial analysis platform that combines AI-powered
 
 ### **2. Enhanced Market Context System**
 - **Purpose**: Provides current economic and market context for informed financial advice
-- **Data Sources**: FRED (economic indicators), Brave Search (current public information), Polygon/Massive (Premium market context)
+- **Data Sources**: FRED (economic indicators), Brave Search (current public information), Massive (Premium market context)
 - **Features**:
     - Proactive caching with scheduled updates
     - Tier-based data access
@@ -189,7 +189,8 @@ SNAPTRADE_ENV_PROD="production"
 
 # Market Data APIs
 FRED_API_KEY="your_fred_api_key"
-POLYGON_API_KEY="your_polygon_api_key"  # For Premium tier market news (Polygon.io)
+MASSIVE_API_KEY="your_massive_api_key"  # Preferred for Premium market context
+POLYGON_API_KEY="your_polygon_api_key"  # Backward-compatible alias for existing deployments
 
 # Home Valuation API
 RENTCAST_API_KEY="your_rentcast_api_key"

@@ -34,7 +34,7 @@ jest.mock('../../data/providers/search', () => ({
   SearchProvider: jest.fn().mockImplementation(() => mockSearchProvider)
 }));
 
-import { MarketNewsAggregator } from '../../market-news/aggregator';
+import { MarketNewsAggregator, MarketNewsData } from '../../market-news/aggregator';
 import { MarketNewsSynthesizer } from '../../market-news/synthesizer';
 import { MarketNewsManager } from '../../market-news/manager';
 import { UserTier } from '../../data/types';
@@ -69,8 +69,7 @@ describe('Market News System', () => {
           category: 'general'
         }
       ]),
-      initializePolygonClient: jest.fn().mockResolvedValue(undefined),
-      fetchPolygonData: jest.fn().mockResolvedValue([]),
+      fetchMassiveData: jest.fn().mockResolvedValue([]),
       fetchFREDData: jest.fn().mockResolvedValue([]),
       fetchBraveSearchData: jest.fn().mockResolvedValue([])
     };
@@ -248,13 +247,13 @@ describe('Market News System', () => {
       const mockData = [
         { source: 'fred', timestamp: new Date(), data: {}, type: 'economic_indicator' as const, relevance: 0.8 },
         { source: 'brave_search', timestamp: new Date(), data: {}, type: 'news_article' as const, relevance: 0.6 },
-        { source: 'polygon', timestamp: new Date(), data: {}, type: 'market_data' as const, relevance: 0.7 }
+        { source: 'massive', timestamp: new Date(), data: {}, type: 'market_data' as const, relevance: 0.7 }
       ];
 
       const context = await synthesizer.synthesizeMarketContext(mockData, UserTier.STANDARD);
       expect(context.dataSources).toContain('fred');
       expect(context.dataSources).toContain('brave_search');
-      expect(context.dataSources).not.toContain('polygon');
+      expect(context.dataSources).not.toContain('massive');
     });
 
     test('should extract key events correctly', async () => {
@@ -328,31 +327,48 @@ describe('Market News System', () => {
     });
 
     test('should fetch one external batch for all scheduled tier contexts', async () => {
-      const rawData = [{
-        source: 'brave_search',
-        timestamp: new Date(),
-        data: { title: 'One shared batch' },
-        type: 'news_article' as const,
-        relevance: 0.8,
-      }];
+      const rawData = [
+        {
+          source: 'brave_search',
+          timestamp: new Date(),
+          data: { title: 'One shared batch' },
+          type: 'news_article' as const,
+          relevance: 0.8,
+        },
+        {
+          source: 'massive',
+          timestamp: new Date(),
+          data: { symbol: 'SPY' },
+          type: 'market_data' as const,
+          relevance: 0.8,
+        },
+      ];
       const aggregate = jest.fn().mockResolvedValue(rawData);
       const synthesize = jest.fn(async (_data, tier: UserTier) => ({
         contextText: `${tier} context`,
         summary: `${tier} summary`,
         availableTiers: [tier],
-        dataSources: ['brave_search'],
+        dataSources: tier === UserTier.STARTER
+          ? []
+          : tier === UserTier.STANDARD
+            ? ['brave_search']
+            : ['brave_search', 'massive'],
         keyEvents: [],
         lastUpdate: new Date(),
       }));
       (manager as any).aggregator = { aggregateMarketData: aggregate };
       (manager as any).synthesizer = { synthesizeMarketContext: synthesize };
-      jest.spyOn(manager as any, 'saveMarketContext').mockResolvedValue(undefined);
+      const save = jest.spyOn(manager as any, 'saveMarketContext').mockResolvedValue(undefined);
 
       await manager.updateMarketContexts([UserTier.STARTER, UserTier.STANDARD, UserTier.PREMIUM]);
 
       expect(aggregate).toHaveBeenCalledTimes(1);
       expect(synthesize).toHaveBeenCalledTimes(3);
       expect(synthesize.mock.calls.every(([data]) => data === rawData)).toBe(true);
+      const savedRawData = save.mock.calls.map(call => call[1] as MarketNewsData[]);
+      expect(savedRawData[0]).toEqual([]);
+      expect(savedRawData[1].map(item => item.source)).toEqual(['brave_search']);
+      expect(savedRawData[2].map(item => item.source)).toEqual(['brave_search', 'massive']);
     });
   });
 

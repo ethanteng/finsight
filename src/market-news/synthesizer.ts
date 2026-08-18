@@ -89,8 +89,22 @@ export class MarketNewsSynthesizer {
           d.source === 'brave_search'
         );
         
-      case UserTier.PREMIUM:
-        return data; // Full access to all data including complete Polygon.io suite
+      case UserTier.PREMIUM: {
+        // Massive supplies the full Treasury curve for Premium. Avoid giving the
+        // model a second, possibly differently dated, FRED 10-year observation.
+        const hasMassiveTreasuryCurve = data.some(item =>
+          item.source === 'massive'
+          && item.type === 'rate_information'
+          && item.data?.symbol === 'TREASURY_YIELDS',
+        );
+        return hasMassiveTreasuryCurve
+          ? data.filter(item => !(
+            item.source === 'fred'
+            && item.type === 'economic_indicator'
+            && item.data?.series === 'DGS10'
+          ))
+          : data;
+      }
         
       default:
         return [];
@@ -145,25 +159,49 @@ MARKET OUTLOOK:
         if (d.series && d.value != null) {
           const units = d.unit === 'percent' ? '%' : d.unit === 'index' ? ' (index)' : '';
           lines.push(`- ${item.source} | ${d.name || d.series}: ${d.value}${units} (${d.date || 'N/A'})`);
-        } else if (d.inflationContext) {
-          lines.push(`- ${item.source} | ${d.inflationContext}`);
-        } else if (d.expectationsContext) {
-          lines.push(`- ${item.source} | ${d.expectationsContext}`);
+        } else if (d.symbol === 'INFLATION_EXPECTATIONS' && this.isRecord(d.expectations)) {
+          const formatted = this.formatPercentageRecord(d.expectations, {
+            model_1_year: '1Y model',
+            model_5_year: '5Y model',
+            model_10_year: '10Y model',
+            model_30_year: '30Y model',
+            market_5_year: '5Y market',
+            market_10_year: '10Y market',
+            forward_years_5_to_10: '5Y-10Y forward',
+          });
+          if (formatted) {
+            lines.push(`- ${item.source} | Inflation expectations (${d.date || 'date unavailable'}): ${formatted}`);
+          }
         } else {
           lines.push(`- ${item.source} | ${JSON.stringify(d)}`);
         }
       } else if (item.type === 'rate_information') {
-        if (d.rateContext) {
-          lines.push(`- ${item.source} | ${d.rateContext}`);
-        } else if (d.yields && typeof d.yields === 'object') {
-          const yields = d.yields as Record<string, unknown>;
-          lines.push(`- ${item.source} | Treasury Yields: ${JSON.stringify(yields)}`);
+        if (this.isRecord(d.yields)) {
+          const formatted = this.formatPercentageRecord(d.yields, {
+            '1_month': '1M',
+            '3_month': '3M',
+            '1_year': '1Y',
+            '2_year': '2Y',
+            '3_year': '3Y',
+            '5_year': '5Y',
+            '10_year': '10Y',
+            '20_year': '20Y',
+            '30_year': '30Y',
+          });
+          if (formatted) {
+            lines.push(`- ${item.source} | U.S. Treasury yields (${d.date || 'date unavailable'}): ${formatted}`);
+          }
         } else {
           lines.push(`- ${item.source}: ${JSON.stringify(item.data)}`);
         }
       } else if (item.type === 'market_data') {
-        const parts = [`${d.symbol || 'Market'}: $${d.currentPrice ?? 'N/A'}`];
-        if (d.changePercent != null) parts.push(`(${Number(d.changePercent).toFixed(2)}% change)`);
+        const price = d.closingPrice ?? d.currentPrice;
+        const parts = [`${d.symbol || 'Market'} adjusted daily close: $${price ?? 'N/A'}`];
+        if (d.date) parts.push(`on ${d.date}`);
+        if (d.changePercent != null && Number.isFinite(Number(d.changePercent))) {
+          parts.push(`(${Number(d.changePercent).toFixed(2)}% vs. prior trading day)`);
+        }
+        if (d.feedStatus) parts.push(`[Massive status: ${d.feedStatus}]`);
         lines.push(`- ${item.source} | ${parts.join(' ')}`);
       } else if (item.type === 'news_article') {
         lines.push(`- ${item.source} | News: "${d.title || 'Untitled'}" - ${String(d.description || '').slice(0, 150)}...`);
@@ -174,6 +212,24 @@ MARKET OUTLOOK:
 
     return lines.join('\n');
   }
+
+  private isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === 'object' && value !== null && !Array.isArray(value);
+  }
+
+  private formatPercentageRecord(
+    values: Record<string, unknown>,
+    labels: Record<string, string>,
+  ): string {
+    return Object.entries(labels)
+      .flatMap(([key, label]) => {
+        const value = values[key];
+        return typeof value === 'number' && Number.isFinite(value)
+          ? [`${label}: ${value.toFixed(2)}%`]
+          : [];
+      })
+      .join(', ');
+  }
   
   private getTierContext(tier: UserTier): string {
     switch (tier) {
@@ -182,7 +238,7 @@ MARKET OUTLOOK:
       case UserTier.STANDARD:
         return 'Basic economic indicators and general market trends from FRED and web search';
       case UserTier.PREMIUM:
-        return 'Comprehensive market intelligence including real-time data, professional news, advanced analytics, and detailed market analysis from Polygon.io';
+        return 'Scheduled market context from FRED and Brave Search, plus Massive adjusted SPY daily bars, the U.S. Treasury yield curve, and inflation expectations';
       default:
         return 'Standard market context';
     }
@@ -203,10 +259,6 @@ MARKET OUTLOOK:
         }
         if (ind.series === 'MORTGAGE30US' && Number(ind.value) > 7) {
           events.push(`Mortgage rates high at ${ind.value}% - housing market impact`);
-        }
-        // Polygon inflation format
-        if (ind.cpi != null && Number(ind.cpi_year_over_year) > 3) {
-          events.push(`Inflation year-over-year at ${Number(ind.cpi_year_over_year).toFixed(1)}% - cost of living concerns`);
         }
       }
     }

@@ -18,7 +18,8 @@ const AXIOS_STARTED_AT = Symbol.for('ask-linc.external-provider-axios-started-at
 
 const PROVIDERS_BY_HOST: Record<string, string> = {
   'api.search.brave.com': 'brave_search',
-  'api.polygon.io': 'polygon',
+  'api.massive.com': 'massive',
+  'api.polygon.io': 'massive',
   'api.stlouisfed.org': 'fred',
   'financialmodelingprep.com': 'fmp',
   'api.tiingo.com': 'tiingo',

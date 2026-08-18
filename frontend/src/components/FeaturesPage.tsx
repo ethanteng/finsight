@@ -316,7 +316,7 @@ const FeaturesPage = () => {
                           <BarChart3 className="h-5 w-5 text-primary" />
                         </div>
                         <div>
-                          <h3 className="font-semibold text-foreground mb-1">Polygon.io</h3>
+                          <h3 className="font-semibold text-foreground mb-1">Massive</h3>
                           <p className="text-[1rem] text-muted-foreground leading-relaxed">
                             Stock aggregates, Treasury yields, inflation, and inflation expectations. Powers <span className="text-primary/90">comprehensive market intelligence</span> for answers.
                           </p>

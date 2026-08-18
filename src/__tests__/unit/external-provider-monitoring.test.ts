@@ -25,7 +25,7 @@ describe('external provider monitoring', () => {
 
   it.each([
     ['Brave Search', 'https://api.search.brave.com/res/v1/web/search?q=private+query&key=secret', 429, 'brave_search'],
-    ['Polygon', 'https://api.polygon.io/v2/aggs/ticker/AAPL/range/1/day?apiKey=secret', 503, 'polygon'],
+    ['Massive', 'https://api.massive.com/v2/aggs/ticker/AAPL/range/1/day?apiKey=secret', 503, 'massive'],
   ])('reports %s HTTP failures without request details', async (_label, url, status, provider) => {
     const baseFetch = jest.fn(async () => new Response('{}', { status })) as unknown as typeof fetch;
     const monitoredFetch = createExternalProviderMonitoringFetch(baseFetch);
@@ -54,7 +54,7 @@ describe('external provider monitoring', () => {
     const baseFetch = jest.fn(async () => new Response('{}', { status: 200 })) as unknown as typeof fetch;
     const monitoredFetch = createExternalProviderMonitoringFetch(baseFetch);
 
-    await monitoredFetch('https://api.polygon.io/v2/aggs/ticker/AAPL');
+    await monitoredFetch('https://api.massive.com/v2/aggs/ticker/AAPL');
 
     expect(Sentry.withScope).not.toHaveBeenCalled();
     expect(Sentry.captureMessage).not.toHaveBeenCalled();

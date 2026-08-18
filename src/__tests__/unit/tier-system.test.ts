@@ -40,13 +40,13 @@ describe('Tier System', () => {
       expect(accountSources.length).toBeGreaterThan(0);
       expect(economicSources.length).toBeGreaterThan(0);
 
-      // Brave search is available, while Polygon market context is Premium only.
+      // Brave search is available, while Massive market context is Premium only.
       const externalSources = sources.filter(s => s.category === 'external');
       const braveSearchSources = externalSources.filter(s => s.provider === 'brave');
-      const polygonSources = externalSources.filter(s => s.provider === 'polygon');
+      const massiveSources = externalSources.filter(s => s.provider === 'massive');
 
       expect(braveSearchSources.length).toBeGreaterThan(0);
-      expect(polygonSources.length).toBe(0);
+      expect(massiveSources.length).toBe(0);
     });
 
     test('should get correct sources for Premium tier', () => {
@@ -108,11 +108,11 @@ describe('Tier System', () => {
 
       expect(starterLimitations.length).toBeGreaterThan(0);
       expect(starterLimitations.some(l => l.includes('economic context'))).toBe(true);
-      expect(starterLimitations.some(l => l.includes('Polygon'))).toBe(true);
+      expect(starterLimitations.some(l => l.includes('Massive'))).toBe(true);
       expect(starterLimitations.some(l => l.includes('live market data'))).toBe(false);
 
       expect(standardLimitations.length).toBeGreaterThan(0);
-      expect(standardLimitations.some(l => l.includes('Polygon'))).toBe(true);
+      expect(standardLimitations.some(l => l.includes('Massive'))).toBe(true);
 
       expect(premiumLimitations.length).toBe(1);
       expect(premiumLimitations[0]).toContain('Full access');
@@ -269,10 +269,10 @@ describe('Tier System', () => {
         expect(source.tiers).toContain(UserTier.PREMIUM);
         // External sources should not be available for Starter
         expect(source.tiers).not.toContain(UserTier.STARTER);
-        // Brave search is available for Standard; Polygon context is Premium only.
+        // Brave search is available for Standard; Massive context is Premium only.
         if (source.provider === 'brave') {
           expect(source.tiers).toContain(UserTier.STANDARD);
-        } else if (source.provider === 'polygon') {
+        } else if (source.provider === 'massive') {
           expect(source.tiers).not.toContain(UserTier.STANDARD);
         }
       });

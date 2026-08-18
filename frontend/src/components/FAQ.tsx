@@ -9,7 +9,7 @@ export const FAQ = () => {
     },
     {
       question: "How does the AI know what's going on in the market?",
-      answer: "On its own, it doesn't. That's why Linc pulls in real-time data — like CD rates, bond yields, and current news — and feeds it into the AI as context for your questions."
+      answer: "On its own, it doesn't. That's why Linc pulls in latest-published rate benchmarks, market context, and current public information and feeds them into the AI as context for your questions."
     }
   ];
 
@@ -50,4 +50,4 @@ export const FAQ = () => {
       </div>
     </section>
   );
-}; 
+};

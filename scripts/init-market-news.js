@@ -54,7 +54,7 @@ KEY DEVELOPMENTS:
 
 MARKET OUTLOOK:
 Current conditions favor a balanced approach to financial planning. Elevated rates provide opportunities for CD investments and bond ladders. Consider maintaining liquidity while taking advantage of higher yields for retirement planning.`,
-        dataSources: ['polygon', 'fred', 'brave_search'],
+        dataSources: ['massive', 'fred', 'brave_search'],
         keyEvents: ['Federal Reserve policy', 'Treasury yield curve', 'Market sentiment', 'Corporate earnings'],
         availableTiers: ['premium'],
         isActive: true,

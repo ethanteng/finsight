@@ -56,9 +56,9 @@ export const GPTCapabilities = () => {
           <div className="bg-green/5 border border-green/20 rounded-lg p-8 space-y-4">
             <h3 className="text-2xl font-bold text-navy">That&#39;s where Linc makes a real difference.</h3>
             <p className="text-lg text-muted-foreground leading-relaxed">
-              We feed trusted real-time data into ChatGPT behind the scenes — so when you ask, 
+              We feed trusted financial data and relevant market context into ChatGPT behind the scenes — so when you ask,
               <span className="font-semibold text-navy"> &ldquo;Should I roll over this CD?&rdquo;</span>, 
-              you get an answer based on <span className="font-semibold text-green">today&#39;s best rates</span> and 
+              you get an answer based on <span className="font-semibold text-green">current available rate context</span> and
               <span className="font-semibold text-green"> your actual accounts.</span>
             </p>
           </div>
@@ -66,4 +66,4 @@ export const GPTCapabilities = () => {
       </div>
     </section>
   );
-}; 
+};
