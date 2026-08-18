@@ -108,6 +108,8 @@ describe('Tier System', () => {
 
       expect(starterLimitations.length).toBeGreaterThan(0);
       expect(starterLimitations.some(l => l.includes('economic context'))).toBe(true);
+      expect(starterLimitations.some(l => l.includes('Polygon'))).toBe(true);
+      expect(starterLimitations.some(l => l.includes('live market data'))).toBe(false);
 
       expect(standardLimitations.length).toBeGreaterThan(0);
       expect(standardLimitations.some(l => l.includes('Polygon'))).toBe(true);
@@ -193,13 +195,16 @@ describe('Tier System', () => {
       const premiumAccess = orchestrator.getTierAccess(UserTier.PREMIUM);
 
       expect(starterAccess.hasEconomicContext).toBe(false);
-      expect(starterAccess.hasLiveData).toBe(false);
+      expect(starterAccess.hasSearchContext).toBe(false);
+      expect(starterAccess.hasScenarioPlanning).toBe(false);
 
       expect(standardAccess.hasEconomicContext).toBe(true);
-      expect(standardAccess.hasLiveData).toBe(false);
+      expect(standardAccess.hasSearchContext).toBe(true);
+      expect(standardAccess.hasScenarioPlanning).toBe(false);
 
       expect(premiumAccess.hasEconomicContext).toBe(true);
-      expect(premiumAccess.hasLiveData).toBe(false);
+      expect(premiumAccess.hasSearchContext).toBe(true);
+      expect(premiumAccess.hasScenarioPlanning).toBe(true);
     });
   });
 

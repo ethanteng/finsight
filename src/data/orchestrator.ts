@@ -48,7 +48,6 @@ export interface SearchResult {
 export interface MarketContextSummary {
   lastUpdate: Date;
   economicSummary: string;
-  marketSummary: string;
   searchSummary?: string;
   keyMetrics: {
     fedRate: string;
@@ -103,7 +102,6 @@ export class DataOrchestrator {
         return {
           tier: UserTier.STARTER,
           hasEconomicContext: false,
-          hasLiveData: false,
           hasScenarioPlanning: false,
           hasSearchContext: false
         };
@@ -112,7 +110,6 @@ export class DataOrchestrator {
         return {
           tier: UserTier.STANDARD,
           hasEconomicContext: true,
-          hasLiveData: false,
           hasScenarioPlanning: false,
           hasSearchContext: true
         };
@@ -121,8 +118,6 @@ export class DataOrchestrator {
         return {
           tier: UserTier.PREMIUM,
           hasEconomicContext: true,
-          // Polygon/Massive premium context is cached via market-news, not live feeds.
-          hasLiveData: false,
           hasScenarioPlanning: true,
           hasSearchContext: true
         };
@@ -131,7 +126,6 @@ export class DataOrchestrator {
         return {
           tier: UserTier.STARTER,
           hasEconomicContext: false,
-          hasLiveData: false,
           hasScenarioPlanning: false,
           hasSearchContext: false
         };
@@ -172,7 +166,6 @@ export class DataOrchestrator {
       const context: MarketContextSummary = {
         lastUpdate: new Date(),
         economicSummary: '',
-        marketSummary: '',
         keyMetrics: {
           fedRate: 'N/A',
           treasury10Y: 'N/A',
@@ -226,10 +219,6 @@ export class DataOrchestrator {
       formatted += `ECONOMIC INDICATORS:\n${context.economicSummary}\n\n`;
     }
 
-    if (context.marketSummary) {
-      formatted += `LIVE MARKET DATA:\n${context.marketSummary}\n\n`;
-    }
-
     if (context.insights.length > 0) {
       formatted += `KEY INSIGHTS:\n${context.insights.join('\n')}\n\n`;
     }
@@ -273,7 +262,7 @@ export class DataOrchestrator {
       treasury10Y: 'N/A', // Not available in current EconomicIndicator type
       cpi: data.cpi?.value?.toString() || 'N/A',
       unemployment: data.unemployment?.value?.toString() || 'N/A',
-      sp500: 'N/A' // Will be updated by live data
+      sp500: 'N/A'
     };
   }
 

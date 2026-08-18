@@ -25,7 +25,6 @@ export enum UserTier {
 export interface TierAccess {
   tier: UserTier; // Will be used in Step 4
   hasEconomicContext: boolean;
-  hasLiveData: boolean;
   hasScenarioPlanning: boolean;
   hasSearchContext: boolean;
 }
