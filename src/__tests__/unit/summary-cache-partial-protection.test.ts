@@ -56,7 +56,11 @@ describe('SummaryCacheService partial-provider protection', () => {
   });
 
   it('retains a usable prior snapshot instead of publishing disappearing assets', async () => {
-    getLatestFinancialSnapshot.mockResolvedValue({ status: 'current', financialOverview: { netWorth: 1 } });
+    getLatestFinancialSnapshot.mockResolvedValue({
+      status: 'current',
+      computedAt: new Date(Date.now() - 2 * 60 * 60 * 1000),
+      financialOverview: { netWorth: 1 },
+    });
 
     await expect(SummaryCacheService.computeForUser('user-1')).resolves.toMatchObject({
       status: 'current',
@@ -65,6 +69,35 @@ describe('SummaryCacheService partial-provider protection', () => {
 
     expect(upsertFinancialSnapshot).not.toHaveBeenCalled();
     expect(saveHistoricalSnapshot).not.toHaveBeenCalled();
+  });
+
+  it('retains the full snapshot view so callers still receive account detail', async () => {
+    getLatestFinancialSnapshot.mockResolvedValue({
+      status: 'current',
+      computedAt: new Date(),
+      accounts: [{ account_id: 'checking-1' }],
+    });
+
+    await SummaryCacheService.computeForUser('user-1');
+
+    expect(getLatestFinancialSnapshot).toHaveBeenCalledWith('user-1', 'full');
+  });
+
+  it('stops retaining once the prior snapshot outlives the protection window', async () => {
+    // A connection stuck in ITEM_LOGIN_REQUIRED keeps partialData true until the
+    // user re-authenticates. Retaining forever would keep serving week-old
+    // figures under the stored 'current' status.
+    getLatestFinancialSnapshot.mockResolvedValue({
+      status: 'current',
+      computedAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000),
+      financialOverview: { netWorth: 1 },
+    });
+
+    await expect(SummaryCacheService.computeForUser('user-1')).resolves.toMatchObject({
+      status: 'partial',
+    });
+
+    expect(upsertFinancialSnapshot).toHaveBeenCalledTimes(1);
   });
 
   it('allows a first partial snapshot so available sources remain visible', async () => {

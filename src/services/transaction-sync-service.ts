@@ -29,7 +29,7 @@ export class TransactionSyncService {
     try {
       const tokenRecord = await prisma.accessToken.findUnique({
         where: { token: accessToken },
-        select: { id: true, userId: true, transactionSyncCursor: true },
+        select: { id: true, userId: true, transactionSyncCursor: true, institutionName: true },
       });
       if (!tokenRecord) throw new Error('Unknown Plaid connection');
       if (!cursor) cursor = tokenRecord.transactionSyncCursor || undefined;
@@ -107,6 +107,12 @@ export class TransactionSyncService {
           throw error;
         }
       }
+
+      // Plaid can report changes for an account opened after this connection was
+      // linked, and nothing on the scheduled path creates account rows. Create
+      // them here, before the unknown-account guard in upsertTransaction would
+      // fail the sync and pin the cursor to the same page on every future run.
+      await this.backfillMissingAccounts(accessToken, tokenRecord, [...added, ...modified]);
 
       // Process added transactions
       let addedCount = 0;
@@ -212,6 +218,69 @@ export class TransactionSyncService {
         cursor: null,
         error: errorMessage,
       };
+    }
+  }
+
+  /**
+   * Create account rows for any account this page references that we do not
+   * already store. Accounts are otherwise only written by request-driven Plaid
+   * flows (link, /sync, refresh), so a bank account opened after linking would
+   * make every scheduled sync fail on the same page forever: the cursor is only
+   * advanced once every change persists.
+   *
+   * Only genuinely absent rows are created. An account_id that already belongs
+   * to another connection or user is left alone, and the caller's unknown-account
+   * guard still refuses to attribute transactions to it.
+   */
+  private static async backfillMissingAccounts(
+    accessToken: string,
+    connection: { id: string; userId: string | null; institutionName?: string | null },
+    transactions: any[]
+  ): Promise<void> {
+    const referenced = new Set(
+      transactions
+        .map((transaction) => transaction?.account_id)
+        .filter((accountId: unknown): accountId is string => typeof accountId === 'string' && accountId.length > 0)
+    );
+    if (referenced.size === 0) return;
+
+    const known = await prisma.account.findMany({
+      where: { plaidAccountId: { in: Array.from(referenced) } },
+      select: { plaidAccountId: true },
+    });
+    known.forEach((account) => referenced.delete(account.plaidAccountId));
+    if (referenced.size === 0) return;
+
+    console.log(
+      `Transaction sync: ${referenced.size} account(s) unknown locally; fetching accounts for this Plaid Item`
+    );
+    const accountsResponse = await plaidClient.accountsGet({ access_token: accessToken });
+    for (const account of accountsResponse.data.accounts) {
+      if (!referenced.has(account.account_id)) continue;
+      // A concurrent sync may create the same row first; upsert keeps that safe
+      // and deliberately leaves an existing row's fields untouched.
+      await prisma.account.upsert({
+        where: { plaidAccountId: account.account_id },
+        update: {},
+        create: {
+          plaidAccountId: account.account_id,
+          name: account.name,
+          officialName: account.official_name || null,
+          mask: account.mask || null,
+          type: String(account.type),
+          subtype: account.subtype ? String(account.subtype) : null,
+          currentBalance: account.balances?.current ?? null,
+          availableBalance: account.balances?.available ?? null,
+          limit: account.balances?.limit ?? null,
+          currency: account.balances?.iso_currency_code ?? null,
+          institution: connection.institutionName || null,
+          persistentAccountId: account.persistent_account_id || null,
+          userId: connection.userId,
+          accessTokenId: connection.id,
+          lastSynced: new Date(),
+        },
+      });
+      console.log(`Transaction sync: created account row for ${account.account_id}`);
     }
   }
 

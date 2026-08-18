@@ -27,6 +27,31 @@ function getClient(): GoogleGenerativeAI {
   return genAIClient;
 }
 
+function isRecordValue(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Whether Massive supplied a usable 10-year Treasury yield. Both the Premium
+ * tier filter (which drops FRED's duplicate DGS10 point) and the refresh
+ * evidence check depend on this, so they must agree on what "supplied" means.
+ */
+export function hasMassiveTenYearYield(data: MarketNewsData[]): boolean {
+  return data.some(item => {
+    if (
+      item.source !== 'massive'
+      || item.type !== 'rate_information'
+      || item.data?.symbol !== 'TREASURY_YIELDS'
+    ) {
+      return false;
+    }
+    const yields = item.data.yields;
+    if (!isRecordValue(yields)) return false;
+    const tenYear = yields['10_year'];
+    return typeof tenYear === 'number' && Number.isFinite(tenYear);
+  });
+}
+
 export class MarketNewsSynthesizer {
   async synthesizeMarketContext(
     rawData: MarketNewsData[],
@@ -100,20 +125,7 @@ export class MarketNewsSynthesizer {
         // Massive may return a partial Treasury curve. Only drop FRED's 10-year
         // point when Massive actually provides a finite 10-year yield, so Premium
         // never loses the maturity entirely on a sparse Massive row.
-        const hasMassiveTenYearYield = data.some(item => {
-          if (
-            item.source !== 'massive'
-            || item.type !== 'rate_information'
-            || item.data?.symbol !== 'TREASURY_YIELDS'
-          ) {
-            return false;
-          }
-          const yields = item.data.yields;
-          if (!this.isRecord(yields)) return false;
-          const tenYear = yields['10_year'];
-          return typeof tenYear === 'number' && Number.isFinite(tenYear);
-        });
-        const filtered = hasMassiveTenYearYield
+        const filtered = hasMassiveTenYearYield(data)
           ? data.filter(item => !(
             item.source === 'fred'
             && item.type === 'economic_indicator'

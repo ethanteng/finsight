@@ -16,6 +16,11 @@ import {
   type HistoryWriteIntent,
 } from './financial-history-service';
 
+// How long a prior snapshot may stand in for a partial rebuild. Long enough to
+// ride out a provider outage across a daily refresh cycle, short enough that a
+// connection needing user action cannot freeze the snapshot indefinitely.
+const RETAINED_SNAPSHOT_MAX_AGE_MS = 48 * 60 * 60 * 1000;
+
 export interface SummaryComputeOptions {
   categorize?: boolean;
   history?: HistoryWriteIntent;
@@ -127,14 +132,36 @@ export class SummaryCacheService {
     // Retention is a successful protective outcome for this user — return the
     // prior snapshot instead of throwing, so scheduled refreshAllUsers does not
     // treat every flaky connection as a hard cron failure.
+    //
+    // Only a transient outage earns this. Some provider failures persist for
+    // days (ITEM_LOGIN_REQUIRED until the user re-authenticates), and retaining
+    // indefinitely would freeze the snapshot: its stored status stays 'current'
+    // because nothing recomputes it, so the page and the LLM would keep quoting
+    // week-old figures as current. Past the window, persist the partial
+    // snapshot and let its quality flags say what is missing.
     if (data.metadata?.partialData && (canonical.status === 'partial' || canonical.status === 'unavailable')) {
-      const previous = await getLatestFinancialSnapshot(userId, 'summary');
-      if (previous && (previous.status === 'current' || previous.status === 'stale')) {
+      const previous = await getLatestFinancialSnapshot(userId, 'full');
+      const previousComputedAt = previous?.computedAt ? new Date(previous.computedAt) : null;
+      const previousAgeMs = previousComputedAt && !Number.isNaN(previousComputedAt.getTime())
+        ? computedAt.getTime() - previousComputedAt.getTime()
+        : null;
+      const retainable = previous
+        && (previous.status === 'current' || previous.status === 'stale')
+        && previousAgeMs !== null
+        && previousAgeMs <= RETAINED_SNAPSHOT_MAX_AGE_MS;
+
+      if (retainable) {
         console.warn(
-          `SummaryCacheService: retaining ${previous.status} snapshot for user ${userId}; ` +
+          `SummaryCacheService: retaining ${previous!.status} snapshot for user ${userId}; ` +
           `refusing to replace with ${canonical.status} provider data`
         );
         return previous as any;
+      }
+      if (previous && previousAgeMs !== null && previousAgeMs > RETAINED_SNAPSHOT_MAX_AGE_MS) {
+        console.warn(
+          `SummaryCacheService: prior snapshot for user ${userId} is ${Math.round(previousAgeMs / 3600000)}h old; ` +
+          `persisting ${canonical.status} provider data rather than freezing it further`
+        );
       }
     }
 

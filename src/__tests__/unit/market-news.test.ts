@@ -344,6 +344,20 @@ describe('Market News System', () => {
           relevance: 0.8,
         },
         {
+          source: 'fred',
+          timestamp: new Date(),
+          data: { series: 'CPIAUCSL', value: 3.2 },
+          type: 'economic_indicator' as const,
+          relevance: 0.8,
+        },
+        {
+          source: 'fred',
+          timestamp: new Date(),
+          data: { series: 'DFF', value: 4.25 },
+          type: 'economic_indicator' as const,
+          relevance: 0.8,
+        },
+        {
           source: 'massive',
           timestamp: new Date(),
           data: {
@@ -382,10 +396,13 @@ describe('Market News System', () => {
       expect(synthesize.mock.calls.every(([data]) => data === rawData)).toBe(true);
       const savedRawData = save.mock.calls.map(call => call[1] as MarketNewsData[]);
       expect(savedRawData[0]).toEqual([]);
-      expect(savedRawData[1].map(item => item.source)).toEqual(['brave_search', 'fred']);
+      expect(new Set(savedRawData[1].map(item => item.source))).toEqual(new Set(['brave_search', 'fred']));
       expect(savedRawData[1].some(item => item.data.series === 'DGS10')).toBe(true);
-      expect(savedRawData[2].map(item => item.source)).toEqual(['brave_search', 'massive']);
+      // Premium drops only the duplicated 10-year point; the rest of the FRED
+      // baseline still reaches the prompt.
+      expect(new Set(savedRawData[2].map(item => item.source))).toEqual(new Set(['brave_search', 'fred', 'massive']));
       expect(savedRawData[2].some(item => item.data.series === 'DGS10')).toBe(false);
+      expect(savedRawData[2].some(item => item.data.series === 'CPIAUCSL')).toBe(true);
     });
   });
 

@@ -2309,17 +2309,9 @@ app.get('/market-news/context/:tier', async (req: Request, res: Response) => {
     const tier = asString(req.params.tier);
     const { MarketNewsManager } = await import('./market-news/manager');
     const manager = new MarketNewsManager();
-    // Get the full context object from database
-    const contextRecord = await manager.prisma.marketNewsContext.findFirst({
-      where: {
-        availableTiers: { has: tier },
-        isActive: true,
-      },
-      orderBy: [
-        { manualOverride: 'desc' },
-        { lastUpdate: 'desc' },
-      ]
-    });
+    // Same selection rule the answer path uses, so the admin UI cannot show a
+    // different context than the one users receive.
+    const contextRecord = await manager.getActiveMarketContextRecord(tier as UserTier);
 
     if (!contextRecord) {
       return res.status(404).json({ error: 'Market context not found for this tier' });
@@ -2754,7 +2746,10 @@ async function refreshAdminMarketNewsContexts(
   try {
     const { MarketNewsManager } = await import('./market-news/manager');
     const manager = new MarketNewsManager();
-    const result = await manager.refreshMarketContexts(tiers, { force: true });
+    const result = await manager.refreshMarketContexts(tiers, {
+      force: true,
+      clearManualOverride: true,
+    });
 
     if (!result.refreshed) {
       res.status(409).json({
