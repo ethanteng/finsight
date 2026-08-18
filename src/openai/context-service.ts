@@ -813,15 +813,40 @@ async function fetchOrCreateRetirementAnalysis(args: {
     const { InsufficientHistoricalDataError } = await import(
       '../retirement-analytics/engine/stress-tester'
     );
-    const insufficientHistory = error instanceof InsufficientHistoricalDataError;
+    if (error instanceof InsufficientHistoricalDataError) {
+      const { maxTimelineYears } = error;
+      // The engine knows exactly how far the record reaches. Carry that through
+      // as data so the ask can name a timeline rather than say "shorter".
+      const maxTimelineAge = maxTimelineYears > 0 && currentAge != null
+        ? currentAge + maxTimelineYears
+        : undefined;
+      return {
+        needsInfo: {
+          missingParams: [],
+          detectedParams: {},
+          unavailableReason: maxTimelineYears > 0
+            ? `${errorMessage}. Ask the user to model through age ${maxTimelineAge ?? `${maxTimelineYears} years out`} ` +
+              'or earlier instead of estimating beyond the available history.'
+            : `${errorMessage}. Do not estimate beyond the available history.`,
+          unavailableCode: 'insufficient_history',
+          historyLimit: {
+            maxTimelineYears,
+            maxTimelineAge,
+            firstMonth: error.firstMonth ?? undefined,
+            lastMonth: error.lastMonth ?? undefined,
+            limitedByInternationalHistory: error.limitedByInternationalHistory,
+          },
+        },
+      };
+    }
+
     return {
       needsInfo: {
         missingParams: [],
         detectedParams: {},
-        unavailableReason: insufficientHistory
-          ? `${errorMessage}. Ask the user to shorten the modeled timeline instead of estimating beyond the available history.`
-          : 'Retirement analysis could not be completed because the portfolio analysis service failed. Ask the user to try again later instead of estimating from aggregates alone.',
-        unavailableCode: insufficientHistory ? 'insufficient_history' : 'service_error',
+        unavailableReason:
+          'Retirement analysis could not be completed because the portfolio analysis service failed. Ask the user to try again later instead of estimating from aggregates alone.',
+        unavailableCode: 'service_error',
       },
     };
   }

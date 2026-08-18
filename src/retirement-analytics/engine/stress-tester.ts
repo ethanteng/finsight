@@ -13,7 +13,9 @@ export class InsufficientHistoricalDataError extends Error {
     public readonly availableMonths: number,
     public readonly firstMonth: string | null,
     public readonly lastMonth: string | null,
-    public readonly minimumHistoryMonths: number = 0
+    public readonly minimumHistoryMonths: number = 0,
+    /** True when an active international sleeve is what narrowed the window. */
+    public readonly limitedByInternationalHistory: boolean = false
   ) {
     const requestedYears = requestedMonths / 12;
     const availableYears = availableMonths / 12;
@@ -23,9 +25,22 @@ export class InsufficientHistoricalDataError extends Error {
     super(
       `Insufficient historical market data: ${requirement} ` +
       `${availableYears.toFixed(1)} years of complete active-sleeve history` +
-      (firstMonth && lastMonth ? ` (${firstMonth} through ${lastMonth})` : '')
+      (firstMonth && lastMonth ? ` (${firstMonth} through ${lastMonth})` : '') +
+      (limitedByInternationalHistory ? ", limited by the portfolio's international sleeve" : '')
     );
     this.name = 'InsufficientHistoricalDataError';
+  }
+
+  /**
+   * Longest horizon this portfolio can actually be modeled over, in whole years.
+   *
+   * Zero when the window is below the engine's own minimum, because then no
+   * timeline works and asking the user to shorten one would send them in
+   * circles.
+   */
+  get maxTimelineYears(): number {
+    if (this.availableMonths < this.minimumHistoryMonths) return 0;
+    return Math.floor(this.availableMonths / 12);
   }
 }
 
@@ -84,7 +99,10 @@ export async function generateRollingSequences(
       availableMonths,
       firstMonth,
       lastMonth,
-      minHistoryYears * 12
+      minHistoryYears * 12,
+      // Only claim the international sleeve is the constraint when it actually
+      // cost months; otherwise the whole dataset is simply too short.
+      internationalRequired && availableMonths < dates.length
     );
   }
 

@@ -58,21 +58,65 @@ describe('missing input asks', () => {
     )).toEqual([]);
   });
 
-  it('offers a shorter timeline when the requested horizon exceeds available history', () => {
-    const asks = collectMissingInputAsks(
-      {
-        retirementAnalysisNeedsInfo: {
-          missingParams: [],
-          detectedParams: {},
-          unavailableReason: 'Insufficient historical market data.',
-          unavailableCode: 'insufficient_history',
-        },
-      } as any,
-      { needsRetirement: true, needsHomeValue: false }
-    );
+  const insufficientHistoryAsk = (historyLimit?: Record<string, unknown>) => collectMissingInputAsks(
+    {
+      retirementAnalysisNeedsInfo: {
+        missingParams: [],
+        detectedParams: {},
+        unavailableReason: 'Insufficient historical market data.',
+        unavailableCode: 'insufficient_history',
+        historyLimit,
+      },
+    } as any,
+    { needsRetirement: true, needsHomeValue: false }
+  );
+
+  it('names the timeline that would work instead of asking for a shorter one', () => {
+    const asks = insufficientHistoryAsk({
+      maxTimelineYears: 51,
+      maxTimelineAge: 86,
+      firstMonth: '1975-01',
+      lastMonth: '2025-12',
+      limitedByInternationalHistory: true,
+    });
 
     expect(asks[0]).toMatchObject({ id: 'retirement_insufficient_history' });
-    expect(asks[0].message).toContain('Shorten the timeline');
+    // "Shorten the timeline" is not something a user can act on; an age is.
+    expect(asks[0].message).toContain('through age 86');
+    expect(asks[0].message).toContain('1975-01 through 2025-12');
+    expect(asks[0].message).toContain('international equity');
+  });
+
+  it('does not blame the international sleeve when it is not the constraint', () => {
+    const asks = insufficientHistoryAsk({
+      maxTimelineYears: 100,
+      maxTimelineAge: 130,
+      firstMonth: '1926-07',
+      lastMonth: '2026-06',
+      limitedByInternationalHistory: false,
+    });
+
+    expect(asks[0].message).toContain('through age 130');
+    expect(asks[0].message).not.toContain('international equity');
+  });
+
+  it('does not offer to shorten a timeline when no timeline would work', () => {
+    const asks = insufficientHistoryAsk({
+      maxTimelineYears: 0,
+      firstMonth: '1975-01',
+      lastMonth: '2025-12',
+      limitedByInternationalHistory: true,
+    });
+
+    expect(asks[0].message).toContain('too short to project this portfolio at all');
+    expect(asks[0].message).not.toContain('ask again');
+  });
+
+  it('still explains itself when the engine reported no history limit', () => {
+    const asks = insufficientHistoryAsk(undefined);
+
+    expect(asks[0]).toMatchObject({ id: 'retirement_insufficient_history' });
+    expect(asks[0].message).toContain('too short to project this portfolio at all');
   });
 
   it('asks for a home value only when the question needed one', () => {

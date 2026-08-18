@@ -315,6 +315,42 @@ describe('retirement correctness contracts', () => {
     );
   });
 
+  const rejectionOf = async (
+    run: Promise<unknown>
+  ): Promise<InsufficientHistoricalDataError> => {
+    try {
+      await run;
+    } catch (error) {
+      if (error instanceof InsufficientHistoricalDataError) return error;
+      throw error;
+    }
+    throw new Error('Expected InsufficientHistoricalDataError, but the call resolved');
+  };
+
+  it('reports the longest horizon it could model, and what shortened it', async () => {
+    const error = await rejectionOf(generateRollingSequences(60, balancedMapping));
+
+    expect(error.maxTimelineYears).toBe(51);
+    expect(error.limitedByInternationalHistory).toBe(true);
+    expect(error.firstMonth).toBe('1975-01');
+    expect(error.lastMonth).toBe('2025-12');
+  });
+
+  it('offers no horizon at all when the record is below the engine minimum', async () => {
+    // A 60-year floor is longer than the international record, so nothing works.
+    const error = await rejectionOf(generateRollingSequences(30, balancedMapping, 60));
+
+    expect(error.maxTimelineYears).toBe(0);
+  });
+
+  it('does not blame the international sleeve when the whole record is too short', async () => {
+    const usOnly = { ...balancedMapping, usEquityWeight: 1, internationalEquityWeight: 0, nominalBondsWeight: 0 };
+    const error = await rejectionOf(generateRollingSequences(120, usOnly));
+
+    expect(error.limitedByInternationalHistory).toBe(false);
+    expect(error.maxTimelineYears).toBe(100);
+  });
+
   it('fingerprints the generated dataset, not only the upstream source snapshots', () => {
     const digest = (relativePath: string) =>
       createHash('sha256').update(readFileSync(join(process.cwd(), relativePath))).digest('hex');
