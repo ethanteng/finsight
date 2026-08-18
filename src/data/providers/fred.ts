@@ -158,10 +158,15 @@ export class FREDProvider implements DataProvider {
     const unit = seriesId === 'CPIAUCSL' && units === 'lin'
       ? 'index'
       : configEntry?.[1].unit ?? 'percent';
+    const cacheKey = `economic_indicators:fred:${seriesId}:${units}`;
+    const cached = await cacheService.get<MarketDataPoint>(cacheKey);
+    if (cached) return cached;
 
+    // Mock/CI responses must still go through the same cache key so repeated
+    // reads return identical lastUpdated timestamps (and match live behavior).
     if (this.isMockMode()) {
       const key = configEntry?.[0];
-      return {
+      const dataPoint: MarketDataPoint = {
         value: seriesId === 'CPIAUCSL' && units === 'lin'
           ? 320
           : key ? MOCK_VALUES[key] : 3.1,
@@ -172,11 +177,13 @@ export class FREDProvider implements DataProvider {
         unit,
         transformation: units,
       };
+      await cacheService.set(
+        cacheKey,
+        dataPoint,
+        options.cacheTtlMs ?? TWENTY_FOUR_HOURS_MS
+      );
+      return dataPoint;
     }
-
-    const cacheKey = `economic_indicators:fred:${seriesId}:${units}`;
-    const cached = await cacheService.get<MarketDataPoint>(cacheKey);
-    if (cached) return cached;
 
     const url = new URL(this.baseUrl);
     url.searchParams.set('series_id', seriesId);

@@ -143,6 +143,16 @@ describe('FREDProvider', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  it('caches mock-mode observations so repeated reads stay identical', async () => {
+    const provider = new FREDProvider('test_fred_key');
+
+    const first = await provider.getDataPoint('DFF');
+    const second = await provider.getDataPoint('DFF');
+
+    expect(first).toEqual(second);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it('caches valid observations by series and transformation', async () => {
     fetchMock.mockResolvedValue(fredResponse([{ date: '2026-08-01', value: '3.0' }]));
     const provider = new FREDProvider('real_key_for_test');
