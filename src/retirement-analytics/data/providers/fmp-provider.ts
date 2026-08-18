@@ -58,6 +58,14 @@ interface FMPSectorWeighting {
 }
 
 export const FMP_METADATA_VERSION = 2;
+/** Phrases that name a money-market or cash-reserve product, not merely mention cash. */
+const CASH_PRODUCT_PATTERNS: RegExp[] = [
+  /\bmoney market\b/,
+  /\bmoney fund\b/,
+  /\bcash reserves?\b/,
+  /\bcash management\b/,
+  /\bcash sweep\b/,
+];
 const FMP_REQUEST_TIMEOUT_MS = 10_000;
 
 export class FMPProvider {
@@ -256,19 +264,11 @@ export class FMPProvider {
    * Parse regular profile response (new /stable/profile endpoint)
    */
   private parseProfile(data: FMPProfileResponse, ticker: string): SecurityMetadata {
-    // Determine asset class from sector/industry/name or infer from ETF status
-    let assetClass: string | undefined;
+    // Determine asset class from sector/industry/name
     const sector = data.sector?.toLowerCase() || '';
     const industry = data.industry?.toLowerCase() || '';
     const name = (data.companyName || data.name || '').toLowerCase();
-    
-    if (sector.includes('bond') || industry.includes('bond') || industry.includes('fixed income') ||
-        name.includes('bond') || name.includes('fixed income') || name.includes('treasury') ||
-        name.includes('tips') || name.includes('aggregate') || name.includes('corporate bond')) {
-      assetClass = 'Fixed Income';
-    } else {
-      assetClass = 'Equity';
-    }
+    const assetClass = this.deriveAssetClass(sector, industry, name);
 
     // Profile country/sector describe a single-name equity, not fund look-through
     // weights. Treating ETF/mutual-fund domicile as coverage='available' would
@@ -405,11 +405,11 @@ export class FMPProvider {
     const fundData = this.buildFundData({}, ticker, countries, sectors);
     const name = profile?.companyName || profile?.name || ticker;
     const nameLower = name.toLowerCase();
-    const assetClass = nameLower.includes('bond') || nameLower.includes('fixed income')
-      ? 'Fixed Income'
-      : nameLower.includes('money market') || nameLower.includes('cash')
-        ? 'Cash'
-        : 'Equity';
+    const assetClass = this.deriveAssetClass(
+      profile?.sector?.toLowerCase() || '',
+      profile?.industry?.toLowerCase() || '',
+      nameLower,
+    );
     return {
       tickerSymbol: ticker,
       securityName: name,
@@ -544,7 +544,36 @@ export class FMPProvider {
     return fallback ? 'International' : undefined;
   }
 
-  private looksLikeMutualFund(ticker: string): boolean {
-    return /^[A-Z]{4,5}X$/.test(ticker.trim().toUpperCase());
+  /**
+   * Classify from FMP's free-text sector/industry/name.
+   *
+   * `assetClass` takes precedence over the broker security type in the
+   * portfolio engines, so both directions are costly: defaulting a
+   * money-market fund to 'Equity' moves a cash sleeve into equities, and a
+   * bare "cash" word match moves equity strategies that merely have the word
+   * in their name (Pacer US Cash Cows, cash-flow tilts) into cash. Match only
+   * phrases that name an actual cash product.
+   */
+  private deriveAssetClass(sector: string, industry: string, name: string): string {
+    const text = `${sector} ${industry} ${name}`;
+    if (CASH_PRODUCT_PATTERNS.some(pattern => pattern.test(text))) return 'Cash';
+    if (text.includes('bond') || text.includes('fixed income') || text.includes('treasury')
+        || text.includes('tips') || text.includes('aggregate')) {
+      return 'Fixed Income';
+    }
+    return 'Equity';
   }
+
+  private looksLikeMutualFund(ticker: string): boolean {
+    return looksLikeMutualFundTicker(ticker);
+  }
+}
+
+/**
+ * US mutual-fund tickers are five or six characters ending in X (VTSAX, SPAXX).
+ * Deliberately narrower than /X$/, which also matches exchange-traded equities
+ * such as NFLX, CVX and FDX.
+ */
+export function looksLikeMutualFundTicker(ticker: string): boolean {
+  return /^[A-Z]{4,5}X$/.test(ticker.trim().toUpperCase());
 }

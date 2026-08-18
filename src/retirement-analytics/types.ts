@@ -54,7 +54,12 @@ export interface PortfolioCompositionMetrics {
   cashAllocation: number; // percentage
   internationalAllocation: number; // percentage (non-US holdings)
   concentrationRisk: number; // Herfindahl-Hirschman Index (HHI) across top 10 holdings
-  expenseRatioWeighted: number; // weighted average expense ratio
+  /**
+   * Annual fee drag over the WHOLE portfolio: sum of (holding weight x fund fee)
+   * for holdings with a known fee. This is not an average across covered
+   * holdings — read it together with expenseRatioCoverage.
+   */
+  expenseRatioWeighted: number;
   /** Portfolio weight with a known fund fee or a direct-security zero fee (0-1). */
   expenseRatioCoverage: number;
   /** Look-through country exposure for the portion of the portfolio covered by FMP. */

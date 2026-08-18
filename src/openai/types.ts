@@ -52,10 +52,17 @@ export interface InvestmentExternalData {
   asOf: string;
   sources: Array<'fmp' | 'tiingo'>;
   portfolioExposure?: {
+    /**
+     * Oldest contributing FMP observation. These aggregates are derived only
+     * from fund metadata, so they are no fresher than their stalest input --
+     * and never as fresh as the top-level asOf, which includes live quotes.
+     */
+    metadataAsOf?: string;
     countryAllocations: Array<{ name: string; percentage: number }>;
     sectorAllocations: Array<{ name: string; percentage: number }>;
     countryCoverage: number;
     sectorCoverage: number;
+    /** Annual fee drag over the whole portfolio; pair with expenseRatioCoverage. */
     expenseRatioWeighted: number;
     expenseRatioCoverage: number;
   };
@@ -79,6 +86,8 @@ export interface InvestmentExternalData {
     };
     trailing12MonthReturn?: number;
     performanceThrough?: string;
+    /** When the FMP metadata for this security was observed (may be cached). */
+    metadataAsOf?: string;
   }>;
 }
 

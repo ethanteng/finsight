@@ -66,6 +66,7 @@ describe('buildCanonicalFactPack', () => {
         asOf: '2026-08-18T15:00:00Z',
         sources: ['fmp', 'tiingo'],
         portfolioExposure: {
+          metadataAsOf: '2026-08-11T00:00:00Z',
           countryAllocations: [{ name: 'United States', percentage: 98 }],
           sectorAllocations: [{ name: 'Technology', percentage: 35 }],
           countryCoverage: 1,
@@ -96,6 +97,11 @@ describe('buildCanonicalFactPack', () => {
     expect(pack.facts.find(fact => fact.id === 'external_expense_spy')).toMatchObject({ value: 0.09, unit: 'percent' });
     expect(pack.facts.find(fact => fact.id === 'external_spy_sector_technology')).toMatchObject({ value: 35, unit: 'percent' });
     expect(pack.facts.find(fact => fact.id === 'external_sector_technology')).toMatchObject({ value: 35, unit: 'percent' });
+    // FMP-derived aggregates carry the FMP observation time, not the newer quote time.
+    expect(pack.facts.find(fact => fact.id === 'external_country_coverage_source')?.provenance)
+      .toMatchObject({ kind: 'external_context', asOf: '2026-08-11T00:00:00.000Z' });
+    expect(pack.facts.find(fact => fact.id === 'external_quote_spy')?.provenance)
+      .toMatchObject({ asOf: '2026-08-18T15:00:00.000Z' });
     expect(validateCanonicalFactPack(pack)).toEqual([]);
   });
 
