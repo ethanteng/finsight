@@ -6,7 +6,7 @@ export interface DataSourceConfig {
   description: string;
   tiers: UserTier[];
   category: 'account' | 'market' | 'external' | 'economic';
-  provider: 'plaid' | 'fred' | 'polygon' | 'internal' | 'brave' | 'rentcast';
+  provider: 'plaid' | 'fred' | 'massive' | 'internal' | 'brave' | 'rentcast';
   cacheDuration: number; // milliseconds
   rateLimit?: number; // requests per minute
   isLive: boolean;
@@ -159,19 +159,19 @@ export const dataSourceRegistry: Record<string, DataSourceConfig> = {
     upgradeBenefit: 'Compare CD offers with the FDIC national average'
   },
 
-  // Premium market context is supplied by Polygon/Massive in the persisted
-  // market-news pipeline. It includes SPY daily bars, the Treasury yield curve,
-  // realized inflation, and inflation expectations.
-  'polygon-market-context': {
-    id: 'polygon-market-context',
+  // Premium market context is supplied by Massive (formerly Polygon.io) in the
+  // persisted market-news pipeline. It includes SPY daily bars, the Treasury
+  // yield curve, and inflation expectations. Realized inflation comes from FRED.
+  'massive-market-context': {
+    id: 'massive-market-context',
     name: 'Advanced Market Context',
-    description: 'Market movement, Treasury yield curve, and inflation context',
+    description: 'SPY daily movement, the Treasury yield curve, and inflation expectations',
     tiers: [UserTier.PREMIUM],
     category: 'external',
-    provider: 'polygon',
+    provider: 'massive',
     cacheDuration: 4 * 60 * 60 * 1000,
     isLive: false,
-    upgradeBenefit: 'Add market movement, yield-curve, and inflation context to financial analysis'
+    upgradeBenefit: 'Add market movement, yield-curve, and inflation-expectations context to financial analysis'
   },
 
   // Search Context (Standard+)
@@ -253,10 +253,10 @@ export class DataSourceManager {
       case UserTier.STARTER:
         limitations.push('No economic context for financial decisions');
         limitations.push('No real-time search for current financial information');
-        limitations.push('No premium Polygon market and yield-curve context');
+        limitations.push('No premium Massive market and yield-curve context');
         break;
       case UserTier.STANDARD:
-        limitations.push('No premium Polygon market and yield-curve context');
+        limitations.push('No premium Massive market and yield-curve context');
         break;
       case UserTier.PREMIUM:
         limitations.push('Full access to all data sources');

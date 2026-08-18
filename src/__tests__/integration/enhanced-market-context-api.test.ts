@@ -123,7 +123,7 @@ describe('Enhanced Market Context API Integration', () => {
     });
 
     itNetwork('should return enhanced market context for premium tier', async () => {
-      // Orchestrator fallback is FRED-only; Premium Polygon context lives in market-news.
+      // Orchestrator fallback is FRED-only; Premium Massive context lives in market-news.
       const mockContext = 'CURRENT MARKET CONTEXT (Updated: 7/31/2025, 10:57:41 PM):\n\nECONOMIC INDICATORS:\n• Fed Funds Rate: 4.33%\n• CPI (YoY): 321.5%\n• Mortgage Rate: 6.72%\n• Credit Card APR: 24.59%\n\nKEY INSIGHTS:\n• Elevated inflation suggests TIPS and inflation-protected investments may be beneficial\n• High mortgage rates suggest waiting for refinancing opportunities\n\nUse this current market context to provide informed financial advice. Always reference specific data points when making recommendations.';
 
       MockDataOrchestrator.getMarketContextSummary.mockResolvedValue(mockContext);

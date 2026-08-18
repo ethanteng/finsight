@@ -319,10 +319,11 @@ if (this.config.apiKey === 'test_search_key' ||
 
 #### 3. **Market News Aggregator Safety**
 ```typescript
-// Enhanced API key handling
-if (process.env.NODE_ENV === 'test' || process.env.GITHUB_ACTIONS) {
-  return process.env.POLYGON_API_KEY; // Fake key for tests and CI/CD
-}
+// Massive provider tests inject a fake fetch implementation. Higher-level unit
+// tests mock MarketNewsAggregator, so no external request is made in CI.
+const provider = new MassiveProvider('test_massive_key', {
+  fetchImplementation: jest.fn(),
+});
 
 // FRED aggregation delegates to FREDProvider, so test-key behavior, series
 // transformations, missing-value handling, and caching are shared by both paths.
@@ -374,7 +375,7 @@ jest.mock('../../plaid', () => ({
 ```bash
 # Test Environment (.env.test)
 FRED_API_KEY=test_fred_key
-POLYGON_API_KEY=test_polygon_key
+MASSIVE_API_KEY=test_massive_key
 
 # CI/CD Environment (GitHub Actions)
 FRED_API_KEY: ${{ secrets.FRED_API_KEY }}           # Test key

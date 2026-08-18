@@ -19,7 +19,7 @@
 
 ## Introduction
 
-Ask Linc is an AI-powered financial analysis platform designed to help you understand, optimize, and manage your complete financial picture. By combining advanced artificial intelligence with real-time market data and seamless integration with your financial institutions, Ask Linc provides personalized financial insights that adapt to your unique situation.
+Ask Linc is an AI-powered financial analysis platform designed to help you understand, optimize, and manage your complete financial picture. By combining advanced artificial intelligence with connected financial data and relevant market context, Ask Linc provides personalized financial insights that adapt to your unique situation.
 
 ### What Makes Ask Linc Different
 
@@ -27,7 +27,7 @@ Ask Linc is an AI-powered financial analysis platform designed to help you under
 
 **Intelligent Context Building**: Unlike traditional financial apps that treat each question in isolation, Ask Linc builds context across conversations. The AI remembers your previous questions and proactively connects new information to provide comprehensive analysis.
 
-**Real-Time Market Intelligence**: Access current rates, economic indicators, and market data from 60+ exchanges worldwide, integrated directly into your financial advice.
+**Market Intelligence**: Access latest-published rates and economic indicators, current public search results, and scheduled broad-market context integrated into your financial advice.
 
 **Holistic Coverage**: Get advice about any financial institution or product—not just those you've connected. The platform uses real-time search to provide current information about rates, products, and services from banks, credit unions, fintech companies, and investment platforms.
 
@@ -517,22 +517,22 @@ Simply ask retirement-related questions:
 
 ## Market Intelligence
 
-### Real-Time Financial Data
+### Market and Economic Data
 
-Ask Linc integrates real-time market data and economic indicators into financial advice:
+Ask Linc integrates latest-published economic observations, current public search results, and scheduled market context into financial advice:
 
 **Economic Indicators (Standard+ Tiers):**
-- **Consumer Price Index (CPI)**: Inflation tracking
-- **Federal Reserve Rate**: Current Fed funds rate
-- **Mortgage Rates**: 30-year and 15-year fixed rates
-- **Credit Card APR**: Average credit card interest rates
+- **Consumer Price Index (CPI)**: Year-over-year inflation
+- **Federal Reserve Rate**: Latest published effective federal funds rate
+- **Mortgage Rates**: Latest published 30-year fixed mortgage average
+- **Credit Card APR**: Latest published commercial-bank credit card rate
+- **Treasury and CD Benchmarks**: 10-year Treasury and FDIC national 12-month CD rates
 
 **Advanced Market Context (Premium Tier):**
 - **Treasury Yield Curve**: Multi-maturity yields for rate planning
-- **Inflation Data**: CPI, Core CPI, PCE, and related metrics
 - **Inflation Expectations**: Market and model-based forecasts
-- **Broad Market Movement**: Equity index context via Polygon/Massive
-- **Professional News**: Reuters, Bloomberg, and other professional sources
+- **Broad Market Movement**: Delayed SPY daily-close context via Massive
+- **Current Public Information**: Brave Search results from available web sources
 
 ### RAG System (Retrieval-Augmented Generation)
 
@@ -569,9 +569,7 @@ All real-time information includes transparent source citations for verification
 ### Market News Integration
 
 **Professional Sources:**
-- Reuters
-- Bloomberg
-- Financial news aggregators
+- Current public web sources returned by Brave Search
 
 **Market Context:**
 - Current market conditions
@@ -582,7 +580,7 @@ All real-time information includes transparent source citations for verification
 **Tier-Based Access:**
 - **Starter**: Basic financial analysis without market context
 - **Standard**: Economic indicators and basic market trends
-- **Premium**: Complete market intelligence including real-time data from 60+ exchanges
+- **Premium**: Standard context plus delayed SPY daily bars, the Treasury curve, and inflation expectations from Massive
 
 ---
 
@@ -604,7 +602,7 @@ Ask Linc offers three subscription tiers with differentiated access to features:
 
 **Limitations:**
 - ❌ No economic indicators
-- ❌ No premium Polygon market and yield-curve context
+- ❌ No premium Massive market and yield-curve context
 - ❌ No RAG system access (real-time financial search)
 - ❌ Limited market context in AI responses
 
@@ -630,8 +628,8 @@ Ask Linc offers three subscription tiers with differentiated access to features:
 - ✅ Inflation impact analysis
 
 **Limitations:**
-- ❌ No institution-level CD offers or full live Treasury yield curve
-- ❌ No premium Polygon market and yield-curve context
+- ❌ No institution-level CD offers or full multi-maturity Treasury yield curve
+- ❌ No premium Massive market and yield-curve context
 - ❌ Limited market intelligence
 
 **Best For:**
@@ -642,21 +640,18 @@ Ask Linc offers three subscription tiers with differentiated access to features:
 ### Premium Tier
 
 **All Standard Features Plus:**
-- ✅ Advanced market context (Polygon/Massive):
+- ✅ Advanced market context (Massive):
   - Broad-market movement through SPY daily bars
-  - Treasury yields (1Y, 5Y, 10Y)
-  - Realized inflation and inflation expectations
-- ✅ Complete market intelligence
+  - Available Treasury yields from 1 month through 30 years
+  - Model and market inflation expectations when published
 - ✅ Current financial-news context through Brave Search
-- ✅ Advanced market analytics
-- ✅ Inflation expectations and forecasting
-- ✅ Real-time rate comparisons
+- ✅ Inflation-expectations context
 - ✅ Market explanation capabilities
 
 **Best For:**
 - Serious investors
 - Users planning major financial decisions (refinancing, investments)
-- Those wanting professional-grade market intelligence
+- Those wanting additional market and yield-curve context
 - Retirement planning with market context
 
 ### Tier Comparison Summary
@@ -1040,7 +1035,7 @@ Ask Linc stores connected financial data and profile information so it can build
 
 ## Conclusion
 
-Ask Linc provides a comprehensive, privacy-first platform for understanding and optimizing your financial health. By combining advanced AI with real-time market data and seamless account integration, Ask Linc delivers personalized financial insights that adapt to your unique situation.
+Ask Linc provides a comprehensive, privacy-first platform for understanding and optimizing your financial health. By combining advanced AI with connected account data and relevant market context, Ask Linc delivers personalized financial insights that adapt to your unique situation.
 
 **Key Takeaways:**
 - **Privacy-First**: Your sensitive data is never exposed to AI services

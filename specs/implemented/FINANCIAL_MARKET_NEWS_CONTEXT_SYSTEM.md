@@ -1,5 +1,14 @@
 # 📰 **Financial Market News Context System**
 
+> **Historical design record:** The proposal below predates Polygon.io's rename
+> to Massive and contains aspirational endpoints, real-time claims, SDK examples,
+> and tier behavior that are not part of the current implementation. The
+> authoritative implementation is `src/data/providers/massive.ts` plus
+> `src/market-news/`. Today Massive contributes delayed SPY daily bars, the
+> available U.S. Treasury yield curve, and available inflation expectations on
+> the scheduled four-hour refresh. FRED supplies realized inflation, while Brave
+> Search supplies current public web context.
+
 ## **Concept Overview**
 
 A dynamic AI-built market news context system that intelligently aggregates and synthesizes financial market information from multiple data sources to provide enhanced context for AI responses. This system continuously updates with the latest market news, trends, and insights to improve the relevance and value of financial advice.

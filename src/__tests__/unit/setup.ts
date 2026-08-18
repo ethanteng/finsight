@@ -28,8 +28,7 @@ jest.mock('../../market-news/aggregator', () => ({
         category: 'general'
       }
     ]),
-    initializePolygonClient: jest.fn().mockResolvedValue(undefined),
-    fetchPolygonData: jest.fn().mockResolvedValue([]),
+    fetchMassiveData: jest.fn().mockResolvedValue([]),
     fetchFREDData: jest.fn().mockResolvedValue([]),
     fetchBraveSearchData: jest.fn().mockResolvedValue([])
   }))

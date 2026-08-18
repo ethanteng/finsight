@@ -8,9 +8,9 @@ import {
 
 jest.mock('../../market-news/refresh-lease', () => ({
   acquireScheduledRefreshLease: jest.fn(),
-  completeScheduledRefreshLease: jest.fn(),
-  failScheduledRefreshLease: jest.fn(),
-  releaseScheduledRefreshLease: jest.fn(),
+  completeScheduledRefreshLease: jest.fn().mockResolvedValue(undefined),
+  failScheduledRefreshLease: jest.fn().mockResolvedValue(undefined),
+  releaseScheduledRefreshLease: jest.fn().mockResolvedValue(undefined),
 }));
 
 jest.mock('../../market-news/aggregator', () => ({
@@ -21,6 +21,7 @@ jest.mock('../../market-news/aggregator', () => ({
 
 jest.mock('../../market-news/synthesizer', () => ({
   MarketNewsSynthesizer: jest.fn().mockImplementation(() => ({
+    filterDataForTier: jest.fn().mockReturnValue([]),
     synthesizeMarketContext: jest.fn().mockImplementation(async (_data, tier: UserTier) => ({
       tier,
       contextText: `${tier} context`,

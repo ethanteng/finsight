@@ -1,7 +1,7 @@
 export const WhyItsDifferent = () => {
   const differentiators = [
     "Not a tracker. Not a robo-advisor. Not a static dashboard.",
-    "This is on-demand financial analysis, powered by ChatGPT + real-time market awareness.", 
+    "This is on-demand financial analysis, powered by ChatGPT + relevant market awareness.",
     "You ask the questions. Linc finds the answers — in your data and in the world."
   ];
 
@@ -28,4 +28,4 @@ export const WhyItsDifferent = () => {
       </div>
     </section>
   );
-}; 
+};
