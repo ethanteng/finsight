@@ -379,6 +379,9 @@ export function applyPersonalContextOperations(
     if (!(PERSONAL_CONTEXT_FIELDS as readonly string[]).includes(operation.field)) continue;
     if (!normalizedEvidenceIsPresent(args.question, operation.evidence)) continue;
     if (operation.action === 'clear') {
+      // Same fail-closed evidence gate as set: a quoted substring alone is not
+      // enough. Clear language must appear in the user-authored evidence quote.
+      if (!evidenceDirectlySupportsOperation(operation)) continue;
       delete updated[operation.field];
       if (operation.field === 'dependentCount') delete updated.dependentAges;
       continue;

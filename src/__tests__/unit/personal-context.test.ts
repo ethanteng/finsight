@@ -116,6 +116,19 @@ describe('personal context', () => {
     expect(personalContextValues(updated)).toEqual({ age: 42 });
   });
 
+  it('rejects a clear whose evidence quote lacks an explicit forget/clear request', () => {
+    const existing = replacePersonalContextManually({ age: 42, occupation: 'Teacher' }, observedAt);
+    const updated = applyPersonalContextOperations(existing, [
+      {
+        field: 'occupation', action: 'clear', stringValue: null, numberValue: null,
+        numberListValue: [], evidence: "I'm 42",
+      },
+    ], {
+      question: "I'm 42 and still teaching.", conversationId: 'conversation-3', observedAt,
+    });
+    expect(personalContextValues(updated)).toEqual({ age: 42, occupation: 'Teacher' });
+  });
+
   it('round-trips bounded facts and home data in the encrypted document payload', () => {
     const facts = replacePersonalContextManually({
       preferredName: 'Ethan', age: 42, dependentCount: 2, dependentAges: [11, 8],
