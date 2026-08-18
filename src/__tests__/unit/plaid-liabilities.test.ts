@@ -70,6 +70,7 @@ describe('Plaid investment pagination and liabilities', () => {
         interest_rate_percentage: 5.5,
         minimum_payment_amount: 250,
         outstanding_interest_amount: 80,
+        loan_name: 'Jane Doe Federal Direct Loan',
         loan_status: { type: 'repayment', end_date: null },
         repayment_plan: { type: 'income-based repayment', description: 'Income based' },
         ytd_interest_paid: 350,
@@ -89,8 +90,8 @@ describe('Plaid investment pagination and liabilities', () => {
       nextMonthlyPayment: 2400,
       ytdInterestPaid: 12000,
       ytdPrincipalPaid: 8000,
-      propertyAddress: expect.objectContaining({ region: 'TX', postalCode: '78701' }),
     })]);
+    expect(result.get('mortgage-1')?.[0]).not.toHaveProperty('propertyAddress');
     expect(result.get('student-1')).toEqual([expect.objectContaining({
       kind: 'student',
       interestRatePercentage: 5.5,
@@ -99,5 +100,6 @@ describe('Plaid investment pagination and liabilities', () => {
       repaymentPlanType: 'income-based repayment',
       repaymentPlanDescription: 'Income based',
     })]);
+    expect(result.get('student-1')?.[0]).not.toHaveProperty('loanName');
   });
 });

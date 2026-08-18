@@ -43,20 +43,12 @@ export interface PlaidLiabilityDetails {
   hasPmi?: boolean;
   hasPrepaymentPenalty?: boolean;
   expectedPayoffDate?: string;
-  loanName?: string;
   loanStatus?: string;
   loanStatusEndDate?: string;
   repaymentPlanType?: string;
   repaymentPlanDescription?: string;
   ytdInterestPaid?: number;
   ytdPrincipalPaid?: number;
-  propertyAddress?: {
-    street?: string;
-    city?: string;
-    region?: string;
-    postalCode?: string;
-    country?: string;
-  };
 }
 
 function finite(value: unknown): number | undefined {
@@ -162,13 +154,8 @@ export function normalizePlaidLiabilities(
   }
 
   for (const liability of liabilities?.mortgage ?? []) {
-    const address = compact({
-      street: text(liability.property_address?.street),
-      city: text(liability.property_address?.city),
-      region: text(liability.property_address?.region),
-      postalCode: text(liability.property_address?.postal_code),
-      country: text(liability.property_address?.country),
-    });
+    // Intentionally omit property_address: street-level mortgage addresses are
+    // PII and would flow into the account-details LLM context pack.
     add(liability.account_id, compact({
       provider: 'plaid' as const,
       kind: 'mortgage' as const,
@@ -191,11 +178,12 @@ export function normalizePlaidLiabilities(
       hasPrepaymentPenalty: boolean(liability.has_prepayment_penalty),
       ytdInterestPaid: finite(liability.ytd_interest_paid),
       ytdPrincipalPaid: finite(liability.ytd_principal_paid),
-      propertyAddress: Object.keys(address).length ? address : undefined,
     }));
   }
 
   for (const liability of liabilities?.student ?? []) {
+    // Intentionally omit loan_name: provider loan names often include the
+    // borrower's personal name and are not needed for rate/payment analysis.
     add(liability.account_id, compact({
       provider: 'plaid' as const,
       kind: 'student' as const,
@@ -211,7 +199,6 @@ export function normalizePlaidLiabilities(
       originationDate: text(liability.origination_date),
       outstandingInterestAmount: finite(liability.outstanding_interest_amount),
       expectedPayoffDate: text(liability.expected_payoff_date),
-      loanName: text(liability.loan_name),
       loanStatus: text(liability.loan_status?.type),
       loanStatusEndDate: text(liability.loan_status?.end_date),
       repaymentPlanType: text(liability.repayment_plan?.type),
