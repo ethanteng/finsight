@@ -557,11 +557,11 @@ export class DataOrchestrator {
       }
 
       console.log('DataOrchestrator: Performing new search for query:', request.query);
+      providerCalls += 1;
       try {
         const results = await this.searchProvider.search(request.query, {
           freshness: request.freshness ?? undefined,
         });
-        providerCalls += 1;
         console.log('DataOrchestrator: Search completed, found', results.length, 'results');
         const context: SearchContext = {
           query: request.query,

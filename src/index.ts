@@ -2714,34 +2714,32 @@ app.get('/admin/market-news/history/:tier', adminAuth, async (req: Request, res:
   }
 });
 
-// Admin: Force refresh market context
-app.post('/admin/market-news/refresh/:tier', adminAuth, async (req: Request, res: Response) => {
-  try {
-    const { tier } = req.params;
-    if (!Object.values(UserTier).includes(tier as UserTier)) {
-      return res.status(400).json({ error: 'Invalid tier' });
-    }
+const ALL_MARKET_NEWS_TIERS = [UserTier.STARTER, UserTier.STANDARD, UserTier.PREMIUM] as const;
 
+async function refreshAdminMarketNewsContexts(
+  res: Response,
+  tiers: readonly UserTier[],
+  requestedTier?: UserTier
+): Promise<void> {
+  try {
     const { MarketNewsManager } = await import('./market-news/manager');
     const manager = new MarketNewsManager();
-    // Shared Brave collection feeds every tier synthesis. Refresh the full set
-    // under one lease so parallel admin "refresh all" clicks cannot leave
-    // sibling tiers stale after racing on market-news-refresh.
-    const result = await manager.refreshMarketContexts([
-      UserTier.STARTER,
-      UserTier.STANDARD,
-      UserTier.PREMIUM,
-    ], { force: true });
+    const result = await manager.refreshMarketContexts(tiers, { force: true });
 
     if (!result.refreshed) {
-      return res.status(409).json({
+      res.status(409).json({
         success: false,
-        requestedTier: tier,
+        requestedTier: requestedTier ?? 'all',
         reason: result.reason,
       });
+      return;
     }
 
-    res.json({ success: true, requestedTier: tier, refreshedTiers: ['starter', 'standard', 'premium'] });
+    res.json({
+      success: true,
+      requestedTier: requestedTier ?? 'all',
+      refreshedTiers: tiers,
+    });
   } catch (error) {
     console.error('Error refreshing market context:', error);
 
@@ -2754,6 +2752,21 @@ app.post('/admin/market-news/refresh/:tier', adminAuth, async (req: Request, res
 
     res.status(500).json({ error: 'Failed to refresh market context' });
   }
+}
+
+// Admin: Force-refresh every tier from one shared external evidence batch.
+app.post('/admin/market-news/refresh', adminAuth, async (_req: Request, res: Response) => {
+  await refreshAdminMarketNewsContexts(res, ALL_MARKET_NEWS_TIERS);
+});
+
+// Admin: Force-refresh one tier without changing the semantics of its control.
+app.post('/admin/market-news/refresh/:tier', adminAuth, async (req: Request, res: Response) => {
+  const { tier } = req.params;
+  if (!Object.values(UserTier).includes(tier as UserTier)) {
+    res.status(400).json({ error: 'Invalid tier' });
+    return;
+  }
+  await refreshAdminMarketNewsContexts(res, [tier as UserTier], tier as UserTier);
 });
 
 const PORT = process.env.PORT || 3000;

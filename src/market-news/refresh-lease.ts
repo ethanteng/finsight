@@ -2,7 +2,7 @@ import { randomUUID } from 'crypto';
 import { Prisma } from '@prisma/client';
 import { getPrismaClient } from '../prisma-client';
 
-const PROCESS_OWNER_ID = process.env.RENDER_INSTANCE_ID || `${process.pid}-${randomUUID()}`;
+const PROCESS_IDENTITY = process.env.RENDER_INSTANCE_ID || String(process.pid);
 
 export interface ScheduledRefreshLeaseOptions {
   name: string;
@@ -24,6 +24,10 @@ export async function acquireScheduledRefreshLease(
   options: ScheduledRefreshLeaseOptions
 ): Promise<ScheduledRefreshLease> {
   const prisma = getPrismaClient();
+  // A fencing token belongs to one acquisition, not one process. If a stale
+  // run outlives its lease, its completion must not release a successor lease
+  // acquired by the same application instance.
+  const ownerId = `${PROCESS_IDENTITY}:${randomUUID()}`;
   const now = new Date();
   const dueBefore = new Date(now.getTime() - options.minimumIntervalMs);
   const leaseUntil = new Date(now.getTime() + options.leaseDurationMs);
@@ -43,24 +47,24 @@ export async function acquireScheduledRefreshLease(
       ...freshnessWhere,
     },
     data: {
-      ownerId: PROCESS_OWNER_ID,
+      ownerId,
       leaseUntil,
       lastStartedAt: now,
       lastError: null,
     },
   });
-  if (updated.count === 1) return { acquired: true, ownerId: PROCESS_OWNER_ID };
+  if (updated.count === 1) return { acquired: true, ownerId };
 
   try {
     await prisma.scheduledJobLease.create({
       data: {
         name: options.name,
-        ownerId: PROCESS_OWNER_ID,
+        ownerId,
         leaseUntil,
         lastStartedAt: now,
       },
     });
-    return { acquired: true, ownerId: PROCESS_OWNER_ID };
+    return { acquired: true, ownerId };
   } catch (error) {
     if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== 'P2002') throw error;
   }
@@ -68,7 +72,7 @@ export async function acquireScheduledRefreshLease(
   const existing = await prisma.scheduledJobLease.findUnique({ where: { name: options.name } });
   return {
     acquired: false,
-    ownerId: PROCESS_OWNER_ID,
+    ownerId,
     reason: existing && existing.leaseUntil > now ? 'active_lease' : 'already_fresh',
   };
 }
@@ -100,4 +104,3 @@ export async function failScheduledRefreshLease(
     },
   });
 }
-

@@ -184,7 +184,7 @@ describe('Enhanced Market Context System', () => {
       }], UserTier.STANDARD);
 
       expect(result).toMatchObject({
-        providerCalls: 1,
+        providerCalls: 2,
         cacheHits: 0,
         query: 'current Federal Reserve target rate',
       });

@@ -426,7 +426,7 @@ export default function AdminPage() {
     try {
       // One admin call refreshes every tier from a shared evidence batch under a
       // single cluster lease. Parallel per-tier posts would race and skip siblings.
-      const response = await fetch(`${API_URL}/admin/market-news/refresh/standard`, {
+      const response = await fetch(`${API_URL}/admin/market-news/refresh`, {
         method: 'POST',
         headers: getAuthHeaders()
       });
@@ -435,6 +435,7 @@ export default function AdminPage() {
       if (!response.ok) {
         const body = await response.json().catch(() => ({}));
         console.error('Failed to refresh market contexts:', response.status, body);
+        throw new Error(`Market context refresh failed with status ${response.status}`);
       }
 
       await loadMarketNewsContexts();
@@ -601,9 +602,20 @@ export default function AdminPage() {
       console.log(`Refresh response status: ${response.status}`);
 
       if (response.ok) {
-        console.log('Refresh successful, reloading contexts...');
-        // Forced refresh synthesizes every tier from one shared batch.
-        await loadMarketNewsContexts();
+        console.log('Refresh successful, reloading context...');
+        const contextResponse = await fetch(`${API_URL}/market-news/context/${tier}`, {
+          headers: getAuthHeaders()
+        });
+
+        if (contextResponse.ok) {
+          const data = await contextResponse.json();
+          setMarketNewsContexts(prev => ({
+            ...prev,
+            [tier]: data
+          }));
+        } else {
+          console.error('Failed to reload context:', contextResponse.status, contextResponse.statusText);
+        }
       } else if (response.status === 401 || response.status === 403) {
         console.error('Authentication error:', response.status, response.statusText);
         setError('Authentication required for admin access');

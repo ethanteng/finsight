@@ -130,6 +130,29 @@ describe('AdminPage', () => {
     });
   });
 
+  it('refreshes all market contexts with one all-tier request', async () => {
+    render(<AdminPage />);
+
+    await waitFor(() => {
+      expect(screen.queryByText('Loading admin data...')).not.toBeInTheDocument();
+    });
+    fireEvent.click(await screen.findByText('Market News'));
+    const refreshAll = await screen.findByText('Refresh All Contexts');
+    const fetchMock = global.fetch as jest.Mock;
+    fetchMock.mockClear();
+
+    fireEvent.click(refreshAll);
+
+    await waitFor(() => {
+      const refreshCalls = fetchMock.mock.calls.filter(([url]) =>
+        String(url).includes('/admin/market-news/refresh')
+      );
+      expect(refreshCalls).toHaveLength(1);
+      expect(refreshCalls[0][0]).toMatch(/\/admin\/market-news\/refresh$/);
+      expect(refreshCalls[0][1]).toMatchObject({ method: 'POST' });
+    });
+  });
+
   it('should handle empty market context gracefully', async () => {
     marketContextsAvailable = false;
 

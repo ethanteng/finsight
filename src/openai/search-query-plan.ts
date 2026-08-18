@@ -19,6 +19,7 @@ const FRESHNESS_SET = new Set<string>(SEARCH_FRESHNESS_VALUES);
 const SENSITIVE_QUERY_PATTERNS = [
   /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i,
   /\b\d{3}-\d{2}-\d{4}\b/,
+  /\b\d{9}\b/,
   /\b(?:\d[ -]*?){12,19}\b/,
 ];
 

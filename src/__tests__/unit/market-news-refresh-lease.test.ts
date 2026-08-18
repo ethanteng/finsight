@@ -63,6 +63,26 @@ describe('scheduled market-news refresh lease', () => {
     })).resolves.toMatchObject({ acquired: false, reason: 'active_lease' });
   });
 
+  it('uses a distinct fencing token for every acquisition', async () => {
+    const prisma = prismaMock();
+    prisma.scheduledJobLease.updateMany.mockResolvedValue({ count: 1 });
+    mockedGetPrismaClient.mockReturnValue(prisma as any);
+
+    const options = {
+      name: 'market-news-refresh',
+      minimumIntervalMs: 60_000,
+      leaseDurationMs: 30_000,
+    };
+    const first = await acquireScheduledRefreshLease(options);
+    const second = await acquireScheduledRefreshLease(options);
+
+    expect(first.acquired).toBe(true);
+    expect(second.acquired).toBe(true);
+    expect(first.ownerId).not.toBe(second.ownerId);
+    expect(prisma.scheduledJobLease.updateMany.mock.calls[0][0].data.ownerId).toBe(first.ownerId);
+    expect(prisma.scheduledJobLease.updateMany.mock.calls[1][0].data.ownerId).toBe(second.ownerId);
+  });
+
   it('releases only the owner lease and records completion or failure', async () => {
     const prisma = prismaMock();
     prisma.scheduledJobLease.updateMany.mockResolvedValue({ count: 1 });

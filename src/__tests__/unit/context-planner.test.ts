@@ -131,6 +131,17 @@ describe('context planner', () => {
     expect(() => parseContextPlan(raw)).toThrow('without a valid standalone search query');
   });
 
+  it('rejects an unformatted nine-digit Social Security number', () => {
+    const raw = rawPlan(['search_context']);
+    raw.searchQueries = [{
+      query: 'look up benefits for 123456789',
+      purpose: 'rule',
+      freshness: null,
+    }];
+
+    expect(() => parseContextPlan(raw)).toThrow('without a valid standalone search query');
+  });
+
   it('returns a validated retirement withdrawal scenario separately from pack selection', () => {
     const raw = rawPlan();
     raw.scenarios.retirement = {
