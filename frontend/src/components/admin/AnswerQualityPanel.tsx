@@ -133,7 +133,7 @@ function CountCard({
     <div className="rounded-lg border border-gray-700 bg-gray-900 p-4">
       <div className="text-xs font-medium uppercase tracking-wide text-gray-500">{title}</div>
       <div className={`mt-1 text-3xl font-semibold ${tone}`}>{value}</div>
-      <div className="mt-1 text-xs leading-5 text-gray-400">{detail}</div>
+      <div className="mt-1 text-xs leading-5 text-[#3f4d45]">{detail}</div>
     </div>
   );
 }
@@ -262,7 +262,7 @@ export default function AnswerQualityPanel({
               <div><div className="text-2xl font-semibold text-yellow-300">{scenarios.unavailable}</div><div className="text-xs text-gray-500">answers with no runnable scenario</div></div>
               <div><div className="text-2xl font-semibold text-white">{scenarios.averageMs === null ? '—' : `${Math.round(scenarios.averageMs)} ms`}</div><div className="text-xs text-gray-500">average calculation time</div></div>
             </div>
-            <div className="mt-3 text-sm text-gray-300">
+            <div className="mt-3 text-sm font-medium text-[#3f4d45]">
               {scenarios.completedCalculations ?? scenarios.completed} completed calculation(s) · {scenarios.unavailableCalculations ?? scenarios.unavailable} unavailable calculation(s)
             </div>
             {Object.keys(scenarios.byCalculator ?? {}).length > 0 && (
@@ -270,7 +270,7 @@ export default function AnswerQualityPanel({
                 {Object.entries(scenarios.byCalculator ?? {}).map(([calculatorId, counts]) => (
                   <div
                     key={calculatorId}
-                    className="rounded-full border border-gray-600 bg-gray-600 px-3 py-1.5 text-xs font-medium text-gray-200"
+                    className="rounded-full border border-[#102319]/18 bg-[#e9eee5] px-3 py-1.5 text-xs font-semibold text-[#102319]"
                   >
                     <span>{calculatorLabel(calculatorId)}</span>
                     {' · '}{counts.completed} completed · {counts.unavailable} unavailable
@@ -294,7 +294,7 @@ export default function AnswerQualityPanel({
               <div><div className="text-2xl font-semibold text-blue-300">{search.providerCalls}</div><div className="text-xs text-gray-500">Brave provider calls</div></div>
               <div><div className="text-2xl font-semibold text-white">{percent(search.cacheReuseRate)}</div><div className="text-xs text-gray-500">queries served from cache</div></div>
             </div>
-            <div className="mt-3 text-xs text-gray-500">
+            <div className="mt-3 text-xs font-medium text-[#3f4d45]">
               {search.plannedQueries} planned queries · {search.cacheHits} cache hits · {search.resultCount} results · {search.unavailable} requests without evidence
             </div>
           </div>
@@ -311,8 +311,8 @@ export default function AnswerQualityPanel({
                       <span className={`mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full ${STATUS[answer.deliveryStatus].dot}`} />
                       <div>
                         <div className="text-sm text-gray-200">{answer.question}</div>
-                        <div className="mt-1 text-xs leading-5 text-gray-500">{answer.statusReason}</div>
-                        <div className="mt-1 text-xs text-gray-500">
+                        <div className="mt-1 text-xs leading-5 text-[#3f4d45]">{answer.statusReason}</div>
+                        <div className="mt-1 text-xs text-[#3f4d45]">
                           {answer.plannerSource === 'context_planner' ? 'semantic planner' : answer.plannerSource.replace('_', ' ')}
                           {answer.toolAddedPacks.length > 0 && ` · primary tool added ${answer.toolAddedPacks.map((pack) => PACK_LABELS[pack] ?? pack).join(', ')}`}
                           {answer.primaryToolOutcome === 'failed' && ' · primary tool audit failed'}

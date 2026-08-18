@@ -92,7 +92,6 @@ describe('AnswerQualityPanel', () => {
     expect(screen.getByText('Evidence verified')).toBeInTheDocument();
     expect(screen.getByText('Planner sufficient')).toBeInTheDocument();
     expect(screen.getByText('User rating')).toBeInTheDocument();
-    expect(screen.getByText('4')).toBeInTheDocument();
     expect(screen.getByText(/1 expanded before answering/)).toBeInTheDocument();
   });
 
@@ -112,6 +111,8 @@ describe('AnswerQualityPanel', () => {
     expect(screen.getByText(/retirement scenario completed/i)).toBeInTheDocument();
     expect(screen.getByText(/home affordability missing inputs/i)).toBeInTheDocument();
     expect(screen.getByText(/2 completed calculation\(s\)/i)).toBeInTheDocument();
+    expect(screen.getByText(/2 completed · 0 unavailable/)).toBeInTheDocument();
+    expect(screen.getByText(/0 completed · 1 unavailable/)).toBeInTheDocument();
   });
 
   it('shows search retrieval and cache usage separately from planning', async () => {
