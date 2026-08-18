@@ -408,13 +408,14 @@ export default function FinancesPageClient() {
   }
 
   // While the background rebuild is being polled for, the out-of-sync notice would just be
-  // telling the user to do what the page is already doing.
-  const visibleWarnings = awaitingRevision
-    ? overview.warnings.filter(warning =>
-        warning.code !== 'manual-accounts-out-of-sync' &&
-        warning.code !== 'home-metadata-out-of-sync'
-      )
-    : overview.warnings;
+  // telling the user to do what the page is already doing. Also drop `stale` even if an
+  // older backend still emits it — that status is not actionable and must not resurface.
+  const visibleWarnings = overview.warnings.filter(warning => {
+    if (warning.code === 'stale') return false;
+    if (!awaitingRevision) return true;
+    return warning.code !== 'manual-accounts-out-of-sync'
+      && warning.code !== 'home-metadata-out-of-sync';
+  });
 
   // When the newest source time is missing entirely the server predates the field, so fall
   // back to the oldest one it does send rather than dropping the line mid-deploy.
