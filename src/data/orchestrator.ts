@@ -575,10 +575,13 @@ export class DataOrchestrator {
         this.searchCache.set(cacheKey, context);
         contexts.push(context);
       } catch (error) {
-        console.error('DataOrchestrator: Failed to get search context:', error);
-        return null;
+        // Keep successful sibling queries. Returning null for the whole plan
+        // would discard usable public evidence when only one Brave call fails.
+        console.error('DataOrchestrator: Failed to get search context for query:', request.query, error);
       }
     }
+
+    if (contexts.length === 0) return null;
 
     const resultsByUrl = new Map<string, SearchResult>();
     for (const context of contexts) {
@@ -587,8 +590,8 @@ export class DataOrchestrator {
       }
     }
     return {
-      query: queries.map((request) => request.query).join(' | '),
-      queries: queries.map((request) => ({ ...request })),
+      query: contexts.map((context) => context.query).join(' | '),
+      queries: contexts.flatMap((context) => context.queries),
       results: Array.from(resultsByUrl.values()),
       summary: contexts.map((context) => context.summary).join('\n\n'),
       lastUpdate: new Date(),

@@ -160,6 +160,43 @@ describe('Enhanced Market Context System', () => {
       expect(search).toHaveBeenCalledTimes(2);
     });
 
+    test('should keep successful sibling queries when one provider call fails', async () => {
+      const search = MockSearchProvider.mock.results[0].value.search;
+      search.mockImplementation(async (query: string) => {
+        if (query.includes('mortgage')) throw new Error('Brave rate limited');
+        return [{
+          title: 'Federal Reserve',
+          snippet: 'Current target range.',
+          url: 'https://federalreserve.gov/rates',
+          source: 'Brave',
+          relevance: 0.9,
+        }];
+      });
+
+      const result = await dataOrchestrator.getSearchContextForQueries([{
+        query: 'current Federal Reserve target rate',
+        purpose: 'rate',
+        freshness: 'pm',
+      }, {
+        query: 'current US mortgage rates',
+        purpose: 'rate',
+        freshness: 'pd',
+      }], UserTier.STANDARD);
+
+      expect(result).toMatchObject({
+        providerCalls: 1,
+        cacheHits: 0,
+        query: 'current Federal Reserve target rate',
+      });
+      expect(result?.queries).toEqual([{
+        query: 'current Federal Reserve target rate',
+        purpose: 'rate',
+        freshness: 'pm',
+      }]);
+      expect(result?.results).toHaveLength(1);
+      expect(search).toHaveBeenCalledTimes(2);
+    });
+
     test('should handle search errors gracefully', async () => {
       MockSearchProvider.mock.results[0].value.search.mockRejectedValue(new Error('Search API error'));
 
