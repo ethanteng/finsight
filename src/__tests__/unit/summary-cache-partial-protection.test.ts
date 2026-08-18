@@ -56,11 +56,12 @@ describe('SummaryCacheService partial-provider protection', () => {
   });
 
   it('retains a usable prior snapshot instead of publishing disappearing assets', async () => {
-    getLatestFinancialSnapshot.mockResolvedValue({ status: 'current' });
+    getLatestFinancialSnapshot.mockResolvedValue({ status: 'current', financialOverview: { netWorth: 1 } });
 
-    await expect(SummaryCacheService.computeForUser('user-1')).rejects.toThrow(
-      'Refusing to replace existing financial snapshot with partial provider data'
-    );
+    await expect(SummaryCacheService.computeForUser('user-1')).resolves.toMatchObject({
+      status: 'current',
+      financialOverview: { netWorth: 1 },
+    });
 
     expect(upsertFinancialSnapshot).not.toHaveBeenCalled();
     expect(saveHistoricalSnapshot).not.toHaveBeenCalled();

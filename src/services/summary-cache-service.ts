@@ -123,12 +123,18 @@ export class SummaryCacheService {
     // otherwise makes assets disappear from the finances page and LLM context.
     // First-time users still receive the partial snapshot so the available
     // sources are visible and its quality flags explain the limitation.
+    //
+    // Retention is a successful protective outcome for this user — return the
+    // prior snapshot instead of throwing, so scheduled refreshAllUsers does not
+    // treat every flaky connection as a hard cron failure.
     if (data.metadata?.partialData && (canonical.status === 'partial' || canonical.status === 'unavailable')) {
       const previous = await getLatestFinancialSnapshot(userId, 'summary');
       if (previous && (previous.status === 'current' || previous.status === 'stale')) {
-        throw new Error(
-          `Refusing to replace existing financial snapshot with ${canonical.status} provider data`
+        console.warn(
+          `SummaryCacheService: retaining ${previous.status} snapshot for user ${userId}; ` +
+          `refusing to replace with ${canonical.status} provider data`
         );
+        return previous as any;
       }
     }
 
