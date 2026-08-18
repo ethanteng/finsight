@@ -28,6 +28,10 @@ export function buildAccountSummaries(
     const balance = typeof preferredBalance === 'number' && Number.isFinite(preferredBalance)
       ? preferredBalance
       : null;
+    const liabilityDetails = account.liabilityDetails;
+    const primaryLiability = liabilityDetails?.[0];
+    const primaryApr = primaryLiability?.aprs?.find(apr => apr.type === 'purchase_apr')
+      ?? primaryLiability?.aprs?.[0];
 
     return {
       id,
@@ -36,7 +40,10 @@ export function buildAccountSummaries(
       subtype: account.subtype || account.type,
       balance,
       institution: account.institution,
-      interestRate: (account as Account & { interestRate?: number }).interestRate,
+      interestRate: primaryLiability?.interestRatePercentage
+        ?? primaryApr?.percentage
+        ?? (account as Account & { interestRate?: number }).interestRate,
+      liabilityDetails,
     };
   });
 }

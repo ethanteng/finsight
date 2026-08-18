@@ -1,4 +1,5 @@
 import { PrismaClient } from '@prisma/client';
+import { withTransientProviderRetry } from './provider-request-policy';
 import { PlaidApi } from 'plaid';
 import { cacheService } from '../data/cache';
 
@@ -163,9 +164,9 @@ export class BalanceService {
     accessToken: string,
     plaidClient: PlaidApi
   ): Promise<BalanceData[]> {
-    const response = await plaidClient.accountsBalanceGet({
+    const response = await withTransientProviderRetry(() => plaidClient.accountsBalanceGet({
       access_token: accessToken,
-    });
+    }));
 
     return response.data.accounts.map(account => ({
       account_id: account.account_id,

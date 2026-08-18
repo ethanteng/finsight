@@ -1,5 +1,6 @@
 import { DataProvider, EconomicIndicator, MarketDataPoint } from '../types';
 import { cacheService } from '../cache';
+import { discardResponseBody, fetchWithBoundedRetry, type BoundedFetchOptions } from './http-retry';
 
 type FREDUnits = 'lin' | 'pc1';
 
@@ -15,6 +16,14 @@ const FOUR_HOURS_MS = 4 * 60 * 60 * 1000;
 const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
 const REQUEST_TIMEOUT_MS = 10_000;
 const RECENT_OBSERVATION_LIMIT = 12;
+
+interface FREDProviderOptions {
+  fetchImplementation?: typeof fetch;
+  sleep?: BoundedFetchOptions['sleep'];
+  requestTimeoutMs?: number;
+  maxAttempts?: number;
+  maxRetryDelayMs?: number;
+}
 
 /**
  * Canonical FRED series used by Ask Linc.
@@ -101,9 +110,11 @@ const MOCK_VALUES: Record<keyof EconomicIndicator, number> = {
 export class FREDProvider implements DataProvider {
   private readonly baseUrl = 'https://api.stlouisfed.org/fred/series/observations';
   private readonly apiKey: string;
+  private readonly requestOptions: FREDProviderOptions;
 
-  constructor(apiKey: string) {
+  constructor(apiKey: string, options: FREDProviderOptions = {}) {
     this.apiKey = apiKey.trim();
+    this.requestOptions = options;
   }
 
   async getEconomicIndicators(): Promise<EconomicIndicator> {
@@ -189,45 +200,39 @@ export class FREDProvider implements DataProvider {
     url.searchParams.set('sort_order', 'desc');
     url.searchParams.set('units', units);
 
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-
-    try {
-      const response = await fetch(url, { signal: controller.signal });
-      if (!response.ok) {
-        throw new Error(`FRED API error for ${seriesId}: HTTP ${response.status}`);
-      }
-
-      const data = (await response.json()) as FREDResponse;
-      const observation = data.observations?.find((candidate) => {
-        if (candidate.value === '.') return false;
-        return Number.isFinite(Number.parseFloat(candidate.value));
-      });
-
-      if (!observation) {
-        throw new Error(`FRED returned no numeric observations for ${seriesId}`);
-      }
-
-      const value = Number.parseFloat(observation.value);
-      const dataPoint: MarketDataPoint = {
-        value,
-        date: observation.date,
-        source: 'FRED',
-        lastUpdated: new Date().toISOString(),
-        seriesId,
-        unit,
-        transformation: units,
-      };
-
-      await cacheService.set(
-        cacheKey,
-        dataPoint,
-        options.cacheTtlMs ?? TWENTY_FOUR_HOURS_MS
-      );
-      return dataPoint;
-    } finally {
-      clearTimeout(timeout);
+    const response = await this.fetch(url);
+    if (!response.ok) {
+      await discardResponseBody(response);
+      throw new Error(`FRED API error for ${seriesId}: HTTP ${response.status}`);
     }
+
+    const data = (await response.json()) as FREDResponse;
+    const observation = data.observations?.find((candidate) => {
+      if (candidate.value === '.') return false;
+      return Number.isFinite(Number.parseFloat(candidate.value));
+    });
+
+    if (!observation) {
+      throw new Error(`FRED returned no numeric observations for ${seriesId}`);
+    }
+
+    const value = Number.parseFloat(observation.value);
+    const dataPoint: MarketDataPoint = {
+      value,
+      date: observation.date,
+      source: 'FRED',
+      lastUpdated: new Date().toISOString(),
+      seriesId,
+      unit,
+      transformation: units,
+    };
+
+    await cacheService.set(
+      cacheKey,
+      dataPoint,
+      options.cacheTtlMs ?? TWENTY_FOUR_HOURS_MS
+    );
+    return dataPoint;
   }
 
   /**
@@ -263,38 +268,42 @@ export class FREDProvider implements DataProvider {
     url.searchParams.set('sort_order', 'asc');
     url.searchParams.set('units', 'lin');
 
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-
-    try {
-      const response = await fetch(url, { signal: controller.signal });
-      if (!response.ok) {
-        throw new Error(`FRED API error for CPIAUCSL: HTTP ${response.status}`);
-      }
-
-      const data = (await response.json()) as FREDResponse;
-      const observations: Array<{ date: string; value: number }> = [];
-      let lastValidValue: number | undefined;
-
-      for (const observation of data.observations ?? []) {
-        const parsed = Number.parseFloat(observation.value);
-        if (observation.value !== '.' && Number.isFinite(parsed)) {
-          lastValidValue = parsed;
-        }
-        if (lastValidValue !== undefined) {
-          observations.push({ date: observation.date, value: lastValidValue });
-        }
-      }
-
-      if (observations.length === 0) {
-        throw new Error('FRED returned no numeric CPIAUCSL observations');
-      }
-
-      await cacheService.set(cacheKey, observations, TWENTY_FOUR_HOURS_MS);
-      return observations;
-    } finally {
-      clearTimeout(timeout);
+    const response = await this.fetch(url);
+    if (!response.ok) {
+      await discardResponseBody(response);
+      throw new Error(`FRED API error for CPIAUCSL: HTTP ${response.status}`);
     }
+
+    const data = (await response.json()) as FREDResponse;
+    const observations: Array<{ date: string; value: number }> = [];
+    let lastValidValue: number | undefined;
+
+    for (const observation of data.observations ?? []) {
+      const parsed = Number.parseFloat(observation.value);
+      if (observation.value !== '.' && Number.isFinite(parsed)) {
+        lastValidValue = parsed;
+      }
+      if (lastValidValue !== undefined) {
+        observations.push({ date: observation.date, value: lastValidValue });
+      }
+    }
+
+    if (observations.length === 0) {
+      throw new Error('FRED returned no numeric CPIAUCSL observations');
+    }
+
+    await cacheService.set(cacheKey, observations, TWENTY_FOUR_HOURS_MS);
+    return observations;
+  }
+
+  private async fetch(url: URL): Promise<Response> {
+    return fetchWithBoundedRetry(url, {}, {
+      fetchImplementation: this.requestOptions.fetchImplementation,
+      sleep: this.requestOptions.sleep,
+      requestTimeoutMs: this.requestOptions.requestTimeoutMs ?? REQUEST_TIMEOUT_MS,
+      maxAttempts: this.requestOptions.maxAttempts,
+      maxRetryDelayMs: this.requestOptions.maxRetryDelayMs,
+    });
   }
 
   private assertConfigured(): void {

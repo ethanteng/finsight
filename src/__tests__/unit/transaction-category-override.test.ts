@@ -62,6 +62,29 @@ describe('cash-flow type implied by a chosen category', () => {
   });
 });
 
+describe('SnapTrade activity types newly ingested without a type filter', () => {
+  // financial-data-service stamps every SnapTrade activity with source and
+  // snapTradeData, and transfer direction is read from SnapTrade's sign
+  // convention, so the fixtures have to carry that marker to mean anything.
+  const snapTrade = (activity: Record<string, unknown>) => ({
+    ...activity,
+    source: 'snaptrade',
+    snapTradeData: { type: activity.type },
+  });
+
+  it('maps transfers, taxes, splits, and stock dividends deterministically', () => {
+    expect(resolveCanonicalTransactionType(snapTrade({ type: 'TRANSFER', amount: 500 })))
+      .toBe('transfer_in');
+    expect(resolveCanonicalTransactionType(snapTrade({ type: 'TRANSFER', amount: -500 })))
+      .toBe('transfer_out');
+    expect(resolveCanonicalTransactionType(snapTrade({ type: 'TAX', amount: -12 }))).toBe('fee');
+    expect(resolveCanonicalTransactionType(snapTrade({ type: 'SPLIT' }))).toBe('adjustment');
+    // Paid in shares rather than cash, so it is an adjustment and not income.
+    expect(resolveCanonicalTransactionType(snapTrade({ type: 'STOCK_DIVIDEND', amount: 25 })))
+      .toBe('adjustment');
+  });
+});
+
 describe('provider transaction id resolution', () => {
   it('mirrors the order the snapshot builder uses', () => {
     expect(resolveProviderTransactionId({ transaction_id: 'a', id: 'b' })).toBe('a');

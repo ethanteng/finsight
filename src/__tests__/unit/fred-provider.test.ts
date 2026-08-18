@@ -124,6 +124,19 @@ describe('FREDProvider', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it('retries a transient FRED response within the bounded request budget', async () => {
+    fetchMock
+      .mockResolvedValueOnce(fredResponse([], 503))
+      .mockResolvedValueOnce(fredResponse([{ date: '2026-08-18', value: '4.3' }]));
+    const sleep = jest.fn().mockResolvedValue(undefined);
+
+    const result = await new FREDProvider('real_key_for_test', { sleep }).getDataPoint('DGS10');
+
+    expect(result.value).toBe(4.3);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(sleep).toHaveBeenCalledWith(1000);
+  });
+
   it('does not cache a missing observation and uses the next numeric observation', async () => {
     fetchMock
       .mockResolvedValueOnce(fredResponse([

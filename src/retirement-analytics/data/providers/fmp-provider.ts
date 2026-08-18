@@ -4,6 +4,11 @@
 import { FundExposure, FundExposureData, SecurityMetadata } from '../../types';
 import { cacheService } from '../../../data/cache';
 import { dbCache } from '../db-cache';
+import {
+  discardResponseBody,
+  fetchWithBoundedRetry,
+  type BoundedFetchOptions,
+} from '../../../data/providers/http-retry';
 
 interface FMPProfileResponse {
   symbol: string;
@@ -68,12 +73,22 @@ const CASH_PRODUCT_PATTERNS: RegExp[] = [
 ];
 const FMP_REQUEST_TIMEOUT_MS = 10_000;
 
+interface FMPProviderOptions {
+  fetchImplementation?: typeof fetch;
+  sleep?: BoundedFetchOptions['sleep'];
+  requestTimeoutMs?: number;
+  maxAttempts?: number;
+  maxRetryDelayMs?: number;
+}
+
 export class FMPProvider {
   private baseUrl = 'https://financialmodelingprep.com/stable';
   private apiKey: string;
+  private readonly requestOptions: FMPProviderOptions;
 
-  constructor(apiKey: string) {
+  constructor(apiKey: string, options: FMPProviderOptions = {}) {
     this.apiKey = apiKey;
+    this.requestOptions = options;
   }
 
   /**
@@ -381,19 +396,20 @@ export class FMPProvider {
     const url = new URL(`${this.baseUrl}${path}`);
     url.searchParams.set('symbol', ticker.trim().toUpperCase());
     url.searchParams.set('apikey', this.apiKey);
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), FMP_REQUEST_TIMEOUT_MS);
-    try {
-      const response = await fetch(url, { signal: controller.signal });
-      if (!response.ok) {
-        throw new Error(`FMP API error for ${path}: HTTP ${response.status}`);
-      }
-      const body = await response.json();
-      if (!Array.isArray(body)) throw new Error(`FMP API returned an unexpected response for ${path}`);
-      return body as T[];
-    } finally {
-      clearTimeout(timeout);
+    const response = await fetchWithBoundedRetry(url, {}, {
+      fetchImplementation: this.requestOptions.fetchImplementation,
+      sleep: this.requestOptions.sleep,
+      requestTimeoutMs: this.requestOptions.requestTimeoutMs ?? FMP_REQUEST_TIMEOUT_MS,
+      maxAttempts: this.requestOptions.maxAttempts,
+      maxRetryDelayMs: this.requestOptions.maxRetryDelayMs,
+    });
+    if (!response.ok) {
+      await discardResponseBody(response);
+      throw new Error(`FMP API error for ${path}: HTTP ${response.status}`);
     }
+    const body = await response.json();
+    if (!Array.isArray(body)) throw new Error(`FMP API returned an unexpected response for ${path}`);
+    return body as T[];
   }
 
   private parseFundAllocationsWithoutInfo(

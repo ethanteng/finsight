@@ -261,6 +261,53 @@ describe('canonical financial snapshot', () => {
     expect(snapshot.financialOverview.totalInvestments).toBe(44_817.23);
   });
 
+  it('ages a brokerage balance on the investment window, not the cash window', () => {
+    const accounts = [
+      {
+        // SnapTrade stamps the account with the provider's last successful
+        // holdings sync, which advances daily at best and not at all over a
+        // weekend. Two days old is a correctly-synced brokerage, not a stale one.
+        account_id: 'snaptrade-brokerage',
+        source: 'snaptrade',
+        type: 'investment',
+        subtype: 'brokerage',
+        snapshotTimestamp: '2026-08-12T12:00:00.000Z',
+        balance: { current: 61_400, iso_currency_code: 'USD' },
+      },
+      {
+        account_id: 'checking',
+        source: 'plaid',
+        type: 'depository',
+        subtype: 'checking',
+        snapshotTimestamp: '2026-08-14T11:00:00.000Z',
+        balance: { current: 10_000, iso_currency_code: 'USD' },
+      },
+    ];
+    const options = {
+      computedAt,
+      reportingCurrency: 'USD',
+      balanceMaxAgeMs: 24 * 60 * 60 * 1000,
+      investmentMaxAgeMs: 4 * 24 * 60 * 60 * 1000,
+    };
+
+    const snapshot = buildCanonicalSnapshotCore({ accounts }, options);
+    expect(snapshot.quality.staleSourceIds).toEqual([]);
+    expect(snapshot.status).toBe('current');
+
+    // The brokerage window still expires — it is longer, not absent.
+    const longStale = buildCanonicalSnapshotCore(
+      {
+        accounts: [
+          { ...accounts[0], snapshotTimestamp: '2026-08-04T12:00:00.000Z' },
+          accounts[1],
+        ],
+      },
+      options
+    );
+    expect(longStale.quality.staleSourceIds).toEqual(['account:snaptrade-brokerage']);
+    expect(longStale.status).toBe('stale');
+  });
+
   it('expires a provider home estimate but not a manual one', () => {
     const stale = { valueMid: 1_200_000, lastUpdated: '2026-06-09T17:13:46.455Z' };
     const accounts = [{

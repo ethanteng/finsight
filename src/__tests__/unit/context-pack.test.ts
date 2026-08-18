@@ -31,6 +31,35 @@ describe('buildQuestionContextPack', () => {
     expect(pack.details.accounts).toBeUndefined();
   });
 
+  it('includes liability terms only with the account-details pack', () => {
+    const liabilitySnapshot = {
+      ...snapshot,
+      accounts: [{
+        ...snapshot.accounts[0],
+        liabilityDetails: [{
+          provider: 'plaid',
+          kind: 'credit',
+          retrievedAt: '2026-08-18T12:00:00Z',
+          aprs: [{ type: 'purchase_apr', percentage: 19.99 }],
+          minimumPaymentAmount: 50,
+        }],
+      }],
+    } as any;
+    const question = 'What is my credit card APR?';
+    const needs = questionNeedsFromPacks(['account_details'], false);
+    const pack = buildQuestionContextPack(
+      liabilitySnapshot,
+      needs,
+      buildCanonicalFactPack(liabilitySnapshot, question, needs),
+      question,
+    );
+
+    expect((pack.details.accounts as any[])[0].liabilityDetails[0]).toMatchObject({
+      kind: 'credit',
+      minimumPaymentAmount: 50,
+    });
+  });
+
   it('publishes compact scenario evidence by registered calculator id', () => {
     const question = 'Compare my retirement scenarios.';
     const needs = questionNeedsFromPacks(['retirement_analysis'], true);

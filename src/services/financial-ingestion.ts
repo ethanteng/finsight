@@ -58,6 +58,7 @@ export async function ingestFinancialData(
   const data = await new FinancialDataService().getUserFinancialData(userId, {
     includeTransactions: true,
     includeInvestments: true,
+    includeLiabilities: true,
     includeHomeValue: true,
     skipCategorization: !options.categorize,
     shouldPersistTransactions: options.categorize,

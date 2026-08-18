@@ -31,9 +31,14 @@ const getPlaidCredentials = () => {
 };
 
 const credentials = getPlaidCredentials();
+const configuredTimeout = Number.parseInt(process.env.PLAID_REQUEST_TIMEOUT_MS || '', 10);
+const plaidRequestTimeout = Number.isFinite(configuredTimeout) && configuredTimeout > 0
+  ? configuredTimeout
+  : 15000;
 const configuration = new Configuration({
   basePath: useSandbox ? PlaidEnvironments.sandbox : PlaidEnvironments[credentials.env],
   baseOptions: {
+    timeout: plaidRequestTimeout,
     headers: {
       'PLAID-CLIENT-ID': credentials.clientId,
       'PLAID-SECRET': credentials.secret,

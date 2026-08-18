@@ -11,6 +11,14 @@ import { resolveCanonicalTransactionType } from './canonical-transaction-adapter
 import { mergeFinancialSources } from './financial-calculations';
 import { loadPersistedPlaidData } from './financial-source-persistence';
 import { normalizeAssetType, resolveAssetTypeWithHeuristics } from './asset-class';
+import {
+  fetchAllPlaidTransactions,
+  fetchAllPlaidInvestmentTransactions,
+  isOptionalLiabilityCoverageError,
+  normalizePlaidLiabilities,
+  type PlaidLiabilityDetails,
+} from './plaid-liabilities';
+import { getProviderRequestTimeoutMs, withTransientProviderRetry } from './provider-request-policy';
 
 const prisma = new PrismaClient();
 
@@ -38,6 +46,7 @@ const credentials = getPlaidCredentials();
 const configuration = new Configuration({
   basePath: useSandbox ? PlaidEnvironments.sandbox : PlaidEnvironments[credentials.env as keyof typeof PlaidEnvironments],
   baseOptions: {
+    timeout: getProviderRequestTimeoutMs('PLAID_REQUEST_TIMEOUT_MS'),
     headers: {
       'PLAID-CLIENT-ID': credentials.clientId,
       'PLAID-SECRET': credentials.secret,
@@ -67,10 +76,19 @@ export interface Account {
   institution_url?: string;
   source: 'plaid' | 'snaptrade';
   transactions?: Array<any>;
+  plaidAccountId?: string;
+  plaidOriginalName?: string;
   persistentAccountId?: string | null;
   sourceConnectionId?: string;
   snapshotTimestamp?: string;
   lastSyncedAt?: string;
+  liabilityDetails?: PlaidLiabilityDetails[];
+  syncStatus?: unknown;
+  /** Undefined when the provider's connection status could not be read. */
+  connectionDisabled?: boolean;
+  connectionStatusUnavailable?: boolean;
+  connectionDisabledAt?: string;
+  dataFreshnessMode?: string;
 }
 
 export interface Balance {
@@ -222,6 +240,8 @@ export class FinancialDataService {
   async getUserFinancialData(userId: string, options?: {
     includeTransactions?: boolean;
     includeInvestments?: boolean;
+    /** Off by default; snapshot/analysis ingestion opts in while display-only investment views avoid an extra Plaid call. */
+    includeLiabilities?: boolean;
     includeHomeValue?: boolean;
     skipCategorization?: boolean; // ✅ NEW: Skip categorization for UI-only requests (performance optimization)
     collectCategorizationDetails?: boolean; // ✅ NEW: Collect detailed categorization results for logging/debugging
@@ -231,6 +251,7 @@ export class FinancialDataService {
     const opts = {
       includeTransactions: options?.includeTransactions ?? true,
       includeInvestments: options?.includeInvestments ?? true,
+      includeLiabilities: options?.includeLiabilities ?? false,
       includeHomeValue: options?.includeHomeValue ?? true
     };
 
@@ -239,6 +260,7 @@ export class FinancialDataService {
       userId,
       opts.includeTransactions ? 'tx' : 'no-tx',
       opts.includeInvestments ? 'inv' : 'no-inv',
+      opts.includeLiabilities ? 'liabilities' : 'no-liabilities',
       opts.includeHomeValue ? 'home' : 'no-home'
     ];
     const cacheKey = cacheKeyParts.join(':');
@@ -812,13 +834,14 @@ export class FinancialDataService {
           const snapTradeTransactions = mergedData.investments.transactions
             .filter(tx => {
               const txId = (tx as any).id || (tx as any).transaction_id;
-              return txId && txId.startsWith('snaptrade-');
+              return (tx as any).source === 'snaptrade' || (txId && txId.startsWith('snaptrade-'));
             })
             .map(tx => ({
               ...tx,
               id: (tx as any).id || (tx as any).transaction_id,
-              // Extract SnapTrade activity ID from transaction id format "snaptrade-{activityId}"
-              activityId: ((tx as any).id || '').replace('snaptrade-', '')
+              activityId: (tx as any).activityId
+                || (tx as any).snapTradeData?.activity_id
+                || ((tx as any).id || '').replace(/^snaptrade-/, '')
             }));
           
           if (snapTradeTransactions.length > 0) {
@@ -941,12 +964,12 @@ export class FinancialDataService {
           const requestTimestamp = new Date().toISOString();
 
           // Get accounts
-          const accountsResponse = await plaidClient.accountsGet({
+          const accountsResponse = await withTransientProviderRetry(() => plaidClient.accountsGet({
             access_token: tokenRecord.token
-          });
+          }));
 
           // Get institution data for these accounts
-          const item = await plaidClient.itemGet({ access_token: tokenRecord.token });
+          const item = await withTransientProviderRetry(() => plaidClient.itemGet({ access_token: tokenRecord.token }));
           const itemData = item.data.item as Record<string, any>;
           const itemLastUpdated = itemData?.last_updated_datetime || requestTimestamp;
 
@@ -960,10 +983,10 @@ export class FinancialDataService {
           const rawInstitutionId = item.data.item.institution_id;
           if (rawInstitutionId) {
             try {
-              const institutionResponse = await plaidClient.institutionsGetById({
+              const institutionResponse = await withTransientProviderRetry(() => plaidClient.institutionsGetById({
                 institution_id: rawInstitutionId,
                 country_codes: ['US' as CountryCode]
-              });
+              }));
               const inst = institutionResponse.data.institution;
               institutionName = inst?.name ?? undefined;
               institutionId = inst?.institution_id ?? undefined;
@@ -977,6 +1000,7 @@ export class FinancialDataService {
             console.warn(`⚠️ Plaid: institution_id is null for token ${tokenRecord.id.substring(0, 8)}... — accounts will be added without institution name`);
           }
 
+          const tokenAccountsById = new Map<string, Account>();
           for (const account of accountsResponse.data.accounts) {
             // ✅ CRITICAL: Always set plaidAccountId from account.account_id for Plaid accounts
             // This ensures consistent account identity across the system
@@ -985,19 +1009,19 @@ export class FinancialDataService {
             // Use custom name from database if available, otherwise use name from Plaid API
             const accountName = customNamesMap.get(plaidAccountId) || account.name;
 
-            accounts.push({
+            const normalizedAccount: Account = {
               account_id: plaidAccountId,
               id: plaidAccountId, // Alias for compatibility
               name: accountName, // ✅ Use custom name from database if available
               plaidOriginalName: account.name, // ✅ For deduplication: use original Plaid name (custom renames break name-based dedup)
               type: account.type,
-              subtype: account.subtype,
+              subtype: account.subtype || '',
               balance: {
                 current: account.balances.current ?? null,
-                available: account.balances.available,
-                limit: account.balances.limit,
+                available: account.balances.available ?? undefined,
+                limit: account.balances.limit ?? undefined,
                 iso_currency_code: account.balances.iso_currency_code || 'USD',
-                unofficial_currency_code: account.balances.unofficial_currency_code
+                unofficial_currency_code: account.balances.unofficial_currency_code ?? undefined
               },
               institution: institutionName,
               institution_id: institutionId,
@@ -1016,23 +1040,62 @@ export class FinancialDataService {
                   : undefined,
               snapshotTimestamp: itemLastUpdated,
               lastSyncedAt: itemLastUpdated
-            });
+            };
+            accounts.push(normalizedAccount);
+            tokenAccountsById.set(plaidAccountId, normalizedAccount);
 
             balances[account.account_id] = account.balances;
           }
 
-            const hasInvestmentAccounts = accountsResponse.data.accounts.some(acc =>
-              acc.type === 'investment' || (acc.subtype && INVESTMENT_SUBTYPES.includes(acc.subtype.toLowerCase()))
-            );
+          const hasInvestmentAccounts = accountsResponse.data.accounts.some(acc =>
+            acc.type === 'investment' || (acc.subtype && INVESTMENT_SUBTYPES.includes(acc.subtype.toLowerCase()))
+          );
 
           const asyncTasks: Promise<void>[] = [];
+
+          const hasLiabilityAccounts = accountsResponse.data.accounts.some(account =>
+            account.type === 'credit' || account.type === 'loan'
+          );
+
+          if (options.includeLiabilities && hasLiabilityAccounts) {
+            asyncTasks.push((async () => {
+              try {
+                const liabilitiesResponse = await withTransientProviderRetry(() => plaidClient.liabilitiesGet({
+                  access_token: tokenRecord.token,
+                }));
+                const liabilityDetails = normalizePlaidLiabilities(
+                  liabilitiesResponse.data.liabilities,
+                  requestTimestamp,
+                );
+                for (const [accountId, details] of liabilityDetails) {
+                  const account = tokenAccountsById.get(accountId);
+                  if (account) account.liabilityDetails = details;
+                }
+              } catch (liabilityError: any) {
+                const errorCode = liabilityError?.response?.data?.error_code;
+                const errorMessage = liabilityError?.response?.data?.error_message || liabilityError?.message;
+                if (isOptionalLiabilityCoverageError(errorCode)) {
+                  console.warn(`Plaid liability details unavailable for token ${tokenRecord.id}: ${errorCode}`);
+                  return;
+                }
+                console.error(
+                  `Error fetching Plaid liability details for token ${tokenRecord.id}: ${errorCode || 'UNKNOWN'} - ${errorMessage}`
+                );
+                errors.push({
+                  tokenId: tokenRecord.id,
+                  error: errorMessage,
+                  timestamp: new Date(),
+                });
+              }
+            })());
+          }
 
           if (options.includeInvestments && hasInvestmentAccounts) {
             asyncTasks.push((async () => {
               try {
-                const holdingsResponse = await plaidClient.investmentsHoldingsGet({
+                const holdingsResponse = await withTransientProviderRetry(() => plaidClient.investmentsHoldingsGet({
                   access_token: tokenRecord.token
-                });
+                }));
 
                 console.log(`📊 Plaid: Token ${tokenRecord.id.substring(0, 8)}... fetched ${holdingsResponse.data.holdings?.length || 0} holdings and ${holdingsResponse.data.securities?.length || 0} securities`);
 
@@ -1082,13 +1145,13 @@ export class FinancialDataService {
                     const investmentHistoryDays = investmentHistoryYears * 365;
                     const startDate = new Date(Date.now() - investmentHistoryDays * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
                     
-                    const investmentTransactionsResponse = await plaidClient.investmentsTransactionsGet({
+                    const investmentTransactions = await fetchAllPlaidInvestmentTransactions(plaidClient, {
                       access_token: tokenRecord.token,
                       start_date: startDate,
                       end_date: endDate
                     });
                     
-                    for (const invTxn of investmentTransactionsResponse.data.investment_transactions) {
+                    for (const invTxn of investmentTransactions) {
                       transactions.push({
                         id: invTxn.investment_transaction_id,
                         transaction_id: invTxn.investment_transaction_id,
@@ -1144,37 +1207,15 @@ export class FinancialDataService {
                     transaction_id: tx.transaction_id
                 });
 
-              const transactionsResponse = await plaidClient.transactionsGet({
+              const plaidTransactions = await fetchAllPlaidTransactions(plaidClient, {
                 access_token: tokenRecord.token,
                 start_date: startDate,
                 end_date: endDate,
                 options: {
-                    count: 500,
                     include_personal_finance_category: true
                 }
               });
-
-                transactions.push(...transactionsResponse.data.transactions.map(mapTransaction));
-
-                let fetchedTransactions = transactionsResponse.data.transactions.length;
-                const totalTransactions = transactionsResponse.data.total_transactions;
-
-                while (fetchedTransactions < totalTransactions) {
-                  const pagedResponse = await plaidClient.transactionsGet({
-                    access_token: tokenRecord.token,
-                    start_date: startDate,
-                    end_date: endDate,
-                    options: {
-                      count: 500,
-                      offset: fetchedTransactions,
-                      include_personal_finance_category: true
-                    }
-                  });
-
-                  transactions.push(...pagedResponse.data.transactions.map(mapTransaction));
-
-                  fetchedTransactions += pagedResponse.data.transactions.length;
-                }
+              transactions.push(...plaidTransactions.map(mapTransaction));
             } catch (transactionError: any) {
               console.error('Error fetching transactions for token:', transactionError?.response?.data?.error_code);
               errors.push({
@@ -1368,8 +1409,19 @@ export class FinancialDataService {
           
           const fetchedAt = new Date().toISOString();
 
+          if (accountsResult.data.connectionStatusError) {
+            errors.push({
+              error: `SnapTrade connection status unavailable: ${accountsResult.data.connectionStatusError}`,
+              timestamp: new Date(),
+            });
+          }
+
           for (const account of accountsResult.data.accounts) {
-            const balance = account.balance?.value ?? account.currentBalance ?? null;
+            const balance = typeof account.balance === 'number' && Number.isFinite(account.balance)
+              ? account.balance
+              : typeof account.currentBalance === 'number' && Number.isFinite(account.currentBalance)
+                ? account.currentBalance
+                : null;
             // ✅ CRITICAL: SnapTrade accounts use account_id format: snaptrade-{id}
             // Do NOT set plaidAccountId for SnapTrade accounts (they don't have one)
             const accountId = account.id.startsWith('snaptrade-') ? account.id : `snaptrade-${account.id}`;
@@ -1381,20 +1433,41 @@ export class FinancialDataService {
               account_id: accountId, // ✅ Primary unique identifier for SnapTrade accounts
               id: accountId, // Alias for compatibility
               name: accountName, // ✅ Use custom name from database if available
-              type: 'investment',
-              subtype: 'brokerage',
+              type: account.type || 'investment',
+              subtype: account.subtype || 'brokerage',
               balance: {
                 current: balance,
                 available: balance,
-                iso_currency_code: 'USD'
+                iso_currency_code: account.balanceCurrency || 'USD'
               },
               institution: account.institution || 'Unknown', // ✅ Use actual institution name (e.g., "Public") instead of hardcoded "SnapTrade"
               source: 'snaptrade',
               persistentAccountId: accountId, // ✅ Set for SnapTrade accounts
               // ✅ Do NOT set plaidAccountId - SnapTrade accounts don't have one
-              snapshotTimestamp: fetchedAt,
-              lastSyncedAt: fetchedAt
+              snapshotTimestamp: account.lastSuccessfulHoldingsSync || fetchedAt,
+              lastSyncedAt: account.lastSuccessfulHoldingsSync
+                || account.lastSuccessfulTransactionsSync
+                || undefined,
+              syncStatus: account.syncStatus,
+              connectionDisabled: account.connectionDisabled,
+              connectionStatusUnavailable: account.connectionStatusUnavailable,
+              connectionDisabledAt: account.connectionDisabledAt || undefined,
+              dataFreshnessMode: account.dataFreshnessMode,
             });
+
+            if (account.connectionDisabled) {
+              errors.push({
+                accountId,
+                error: 'SnapTrade connection is disabled; showing the last cached brokerage state.',
+                timestamp: new Date(),
+              });
+            } else if (account.connectionStatusUnavailable) {
+              errors.push({
+                accountId,
+                error: 'SnapTrade connection health could not be verified; this balance may come from a disabled connection.',
+                timestamp: new Date(),
+              });
+            }
           }
         } else {
           // Check if it's a 401 Unauthorized error (invalid credentials)
@@ -1433,10 +1506,21 @@ export class FinancialDataService {
       // Get holdings if option is enabled
       if (options.includeInvestments) {
         try {
-          const holdingsResult = await snapTradeService.getUserHoldings(userId, snapTradeUser.userSecret);
+          const holdingsResult = await snapTradeService.getUserHoldings(
+            userId,
+            snapTradeUser.userSecret,
+            accountsData,
+          );
           
           if (holdingsResult.success && holdingsResult.data) {
             console.log(`📊 SnapTrade: Received ${holdingsResult.data.length} account holdings from API`);
+            for (const holdingError of holdingsResult.errors || []) {
+              errors.push({
+                accountId: `snaptrade-${holdingError.accountId}`,
+                error: `SnapTrade holdings incomplete: ${holdingError.error}`,
+                timestamp: new Date(),
+              });
+            }
             // Build a map of account balances: non-cash-equivalent positions + cash balance.
             // Using the same logic as snaptrade.ts to avoid double-counting cash_equivalent
             // positions (money-market funds reported as both a position and in balance.cash).
@@ -1445,6 +1529,9 @@ export class FinancialDataService {
             let totalPositionsProcessed = 0;
             for (const accountHolding of holdingsResult.data) {
               const accountId = `snaptrade-${accountHolding.account?.id}`;
+              const holdingsAsOf = accountHolding.account?.lastSuccessfulHoldingsSync
+                || accountHolding.account?.sync_status?.holdings?.last_successful_sync
+                || new Date().toISOString();
               const holdingPositions: any[] = Array.isArray(accountHolding.positions) ? accountHolding.positions : [];
               const holdingBalances: any[] = Array.isArray(accountHolding.balances) ? accountHolding.balances : [];
               const nonCashEquivSum = holdingPositions
@@ -1454,7 +1541,14 @@ export class FinancialDataService {
               const trueAccountValue = nonCashEquivSum + cashBalanceSum
                 || accountHolding.total_value?.value  // fallback if no positions/balances
                 || 0;
-              if (trueAccountValue > 0) {
+              // Record the computed value whenever the provider actually returned
+              // holdings data, zero included. Skipping zero leaves an empty account
+              // with a null balance, which marks the whole canonical snapshot
+              // partial rather than reporting the account as empty.
+              const hasHoldingValueInputs = holdingPositions.length > 0
+                || holdingBalances.length > 0
+                || typeof accountHolding.total_value?.value === 'number';
+              if (hasHoldingValueInputs) {
                 accountBalanceMap.set(accountId, trueAccountValue);
               }
               
@@ -1515,7 +1609,7 @@ export class FinancialDataService {
                       ? positionPrice * positionUnits
                       : null,
                     institution_price: positionPrice,
-                    institution_price_as_of: new Date().toISOString(),
+                    institution_price_as_of: holdingsAsOf,
                     cost_basis: averagePurchasePrice !== null && positionUnits !== null
                       ? averagePurchasePrice * positionUnits
                       : null,
@@ -1528,7 +1622,9 @@ export class FinancialDataService {
                       open_pnl: position.open_pnl,
                       average_purchase_price: position.average_purchase_price,
                       account_name: accountHolding.account?.name,
-                      account_number: accountHolding.account?.number
+                      account_number: accountHolding.account?.number,
+                      holdings_last_successful_sync: holdingsAsOf,
+                      connection_disabled: accountHolding.account?.connectionDisabled,
                     }
                   };
 
@@ -1575,7 +1671,7 @@ export class FinancialDataService {
                       security_id: 'cash',
                       institution_value: uninvestedCash,
                       institution_price: 1,
-                      institution_price_as_of: new Date().toISOString(),
+                      institution_price_as_of: holdingsAsOf,
                       cost_basis: uninvestedCash,
                       quantity: uninvestedCash,
                       iso_currency_code: 'USD',
@@ -1584,7 +1680,9 @@ export class FinancialDataService {
                       ticker_symbol: 'CASH',
                       snapTradeData: {
                         account_name: accountHolding.account?.name,
-                        account_number: accountHolding.account?.number
+                        account_number: accountHolding.account?.number,
+                        holdings_last_successful_sync: holdingsAsOf,
+                        connection_disabled: accountHolding.account?.connectionDisabled,
                       }
                     };
 
@@ -1600,7 +1698,7 @@ export class FinancialDataService {
                         ticker_symbol: 'CASH',
                         iso_currency_code: 'USD',
                         close_price: 1,
-                        close_price_as_of: new Date().toISOString()
+                        close_price_as_of: holdingsAsOf
                       });
                     }
                   }
@@ -1660,14 +1758,35 @@ export class FinancialDataService {
           const activitiesResult = await snapTradeService.getUserActivities(userId, snapTradeUser.userSecret, accountsData);
           
           if (activitiesResult.success && activitiesResult.data?.activities) {
+            for (const activityError of activitiesResult.data.errors || []) {
+              const rawErrorAccountId = String(activityError.accountId || 'unknown');
+              errors.push({
+                accountId: rawErrorAccountId.startsWith('snaptrade-')
+                  ? rawErrorAccountId
+                  : `snaptrade-${rawErrorAccountId}`,
+                error: `SnapTrade activities incomplete: ${activityError.error}`,
+                timestamp: new Date(),
+              });
+            }
             for (const activity of activitiesResult.data.activities) {
               // ✅ SnapTrade getAccountActivities API response structure
               // Documentation: https://docs.snaptrade.com/reference/account-information_getaccountactivities
               
               // Get security information from symbol object
               const symbol = activity.symbol;
-              const securityId = symbol?.id || symbol?.symbol || 'unknown';
-              const securityName = symbol?.description || symbol?.raw_symbol || 'Unknown';
+              const nestedSymbol = symbol?.symbol && typeof symbol.symbol === 'object'
+                ? symbol.symbol
+                : symbol;
+              const tickerSymbol = typeof symbol?.symbol === 'string'
+                ? symbol.symbol
+                : nestedSymbol?.symbol || nestedSymbol?.raw_symbol;
+              const securityId = typeof symbol?.id === 'string'
+                ? symbol.id
+                : tickerSymbol || 'unknown';
+              const securityName = nestedSymbol?.description
+                || nestedSymbol?.raw_symbol
+                || tickerSymbol
+                || 'Unknown';
               
               // Get transaction type (BUY, SELL, DIVIDEND, CONTRIBUTION, WITHDRAWAL, REI, INTEREST, FEE, etc.)
               const transactionType = activity.type || 'unknown';
@@ -1678,19 +1797,33 @@ export class FinancialDataService {
               // Get price per unit
               const price = activity.price || 0;
               
-              // Get total amount (already calculated by SnapTrade)
-              const amount = activity.amount || (price * quantity);
+              const providerAmount = typeof activity.amount === 'number' && Number.isFinite(activity.amount)
+                ? activity.amount
+                : undefined;
               
               // Get date (prefer trade_date, fallback to settlement_date)
               const date = activity.trade_date || activity.settlement_date || new Date().toISOString();
               
-              // Normalize amount sign based on transaction type
-              // SELL/WITHDRAWAL/FEE should be negative, BUY/CONTRIBUTION/DIVIDEND should be positive
-              let normalizedAmount = amount;
-              if (transactionType === 'SELL' || transactionType === 'WITHDRAWAL' || transactionType === 'FEE') {
-                normalizedAmount = -Math.abs(amount);
-              } else if (transactionType === 'BUY' || transactionType === 'CONTRIBUTION' || transactionType === 'DIVIDEND' || transactionType === 'INTEREST' || transactionType === 'REI') {
-                normalizedAmount = Math.abs(amount);
+              // SnapTrade signs amount by its effect on account cash (for example,
+              // buys are negative and sells are positive). Preserve that provider
+              // value. Only infer cash direction when the provider omitted amount.
+              let normalizedAmount = providerAmount ?? (price * quantity);
+              if (providerAmount === undefined) {
+                const normalizedType = String(transactionType).toUpperCase();
+                if (['SPLIT', 'STOCK_DIVIDEND', 'TRANSFER'].includes(normalizedType)) {
+                  // These can move units without moving account cash. A market
+                  // value is not a defensible substitute for a missing amount.
+                  normalizedAmount = 0;
+                } else if (['BUY', 'REI', 'WITHDRAWAL', 'FEE', 'TAX'].includes(normalizedType)) {
+                  // REI reinvests a distribution into units, so cash leaves the
+                  // account exactly as it does for a buy. It is never an inflow.
+                  normalizedAmount = -Math.abs(normalizedAmount);
+                // STOCK_DIVIDEND is deliberately absent here: it pays in shares,
+                // so forcing a positive amount would assert cash the user never
+                // received. It is handled as a non-cash adjustment above.
+                } else if (['SELL', 'CONTRIBUTION', 'DIVIDEND', 'INTEREST'].includes(normalizedType)) {
+                  normalizedAmount = Math.abs(normalizedAmount);
+                }
               }
               
               // Build transaction name
@@ -1700,10 +1833,32 @@ export class FinancialDataService {
               }
               
               // Convert SnapTrade activity to standard transaction format
+              const rawAccountId = String(activity.account_id || 'unknown');
+              const providerActivityId = activity.id === undefined || activity.id === null || activity.id === ''
+                ? null
+                : String(activity.id);
+              // SnapTradeActivity.activityId is globally unique, so a synthesized id
+              // must be scoped to the account. An unscoped date/security/type/quantity
+              // key lets two users' identical trades collide on a single row.
+              const rawActivityId = providerActivityId
+                ?? `${rawAccountId}-${date}-${securityId}-${transactionType}-${quantity}`;
+              const transactionId = rawActivityId.startsWith('snaptrade-')
+                ? rawActivityId
+                : `snaptrade-${rawActivityId}`;
+              // Key used before the id was scoped. Carried so persistence can migrate
+              // an existing row instead of writing a duplicate alongside it.
+              const legacyActivityId = providerActivityId ? undefined : `snaptrade-${date}-${securityId}`;
               transactions.push({
-                id: activity.id || `snaptrade-${date}-${securityId}`,
-                account_id: `snaptrade-${activity.account_id || 'unknown'}`,
+                id: transactionId,
+                transaction_id: transactionId,
+                activityId: rawActivityId,
+                ...(legacyActivityId && { legacyActivityId }),
+                account_id: rawAccountId.startsWith('snaptrade-')
+                  ? rawAccountId
+                  : `snaptrade-${rawAccountId}`,
                 security_id: securityId,
+                ticker_symbol: tickerSymbol,
+                security_name: securityName,
                 amount: normalizedAmount,
                 date: date,
                 name: transactionName.trim(),
@@ -1714,7 +1869,9 @@ export class FinancialDataService {
                 subtype: activity.option_type?.toLowerCase(),
                 iso_currency_code: activity.currency?.code || symbol?.currency?.code || 'USD',
                 unofficial_currency_code: activity.currency?.code !== 'USD' ? activity.currency?.code : undefined,
+                source: 'snaptrade',
                 snapTradeData: {
+                  activity_id: rawActivityId,
                   type: transactionType,
                   option_type: activity.option_type,
                   description: activity.description,
@@ -1723,7 +1880,9 @@ export class FinancialDataService {
                   fx_rate: activity.fx_rate,
                   institution: activity.institution,
                   external_reference_id: activity.external_reference_id,
-                  account_name: activity.account_name
+                  account_name: activity.account_name,
+                  transactions_last_successful_sync: activity.transactions_last_successful_sync,
+                  connection_disabled: activity.connection_disabled,
                 }
               });
             }

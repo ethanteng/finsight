@@ -327,30 +327,65 @@ export async function persistSnapTradeActivitiesToDb(
     
     for (const activity of activities) {
       try {
-        // Generate a unique activity ID (SnapTrade activities might not have a stable ID)
-        const activityId = activity.id || 
-                          `${activity.symbol?.symbol?.symbol || 'unknown'}_${activity.trade_date || activity.settlement_date}_${activity.type}_${activity.units}`;
+        const namespacedId = typeof activity.id === 'string' ? activity.id : undefined;
+        const providerActivityId = activity.activityId
+          || activity.snapTradeData?.activity_id
+          || (namespacedId?.startsWith('snaptrade-') ? namespacedId.slice('snaptrade-'.length) : namespacedId);
+        // Prefer SnapTrade's provider ID. The deterministic fallback is only for
+        // legacy/malformed observations that lack one, and must be scoped to the
+        // account: activityId is globally unique, so an unscoped symbol/date/type/units
+        // key lets two users' identical trades collide on a single row.
+        const fallbackAccountId = activity.account?.id || activity.account_id || 'unknown';
+        const activityId = providerActivityId ||
+                          `${fallbackAccountId}_${activity.symbol?.symbol?.symbol || 'unknown'}_${activity.trade_date || activity.settlement_date}_${activity.type}_${activity.units}`;
         
         // Check if activity already exists
-        const existing = await prisma.snapTradeActivity.findUnique({
+        let existing = await prisma.snapTradeActivity.findUnique({
           where: { activityId },
         });
+
+        // Rows written before the synthesized ID was account-scoped live under the
+        // old key. Migrate that row instead of inserting a duplicate beside it.
+        // The legacy key was not user-scoped, so only migrate a row this SnapTrade
+        // user already owns — otherwise findUnique + update would reparent another
+        // user's activity onto this sync.
+        const legacyActivityId = typeof activity.legacyActivityId === 'string'
+          ? activity.legacyActivityId
+          : undefined;
+        if (!existing && legacyActivityId && legacyActivityId !== activityId) {
+          const legacy = await prisma.snapTradeActivity.findUnique({
+            where: { activityId: legacyActivityId },
+          });
+          if (legacy && legacy.snapTradeUserId === snapTradeUser.id) {
+            await prisma.snapTradeActivity.update({
+              where: { activityId: legacyActivityId },
+              data: { activityId },
+            });
+            existing = legacy;
+          }
+        }
         
         const activityData = {
           snapTradeUserId: snapTradeUser.id,
-          accountId: activity.account?.id || null,
-          amount: activity.amount || null,
-          currency: activity.currency || null,
-          description: activity.description || null,
-          fee: activity.fee || null,
-          fxRate: activity.fx_rate || null,
-          institution: activity.institution || activity.account?.institution || null,
-          price: activity.price || null,
-          settlementDate: activity.settlement_date ? new Date(activity.settlement_date) : null,
-          symbol: activity.symbol?.symbol?.symbol || null,
-          tradeDate: activity.trade_date ? new Date(activity.trade_date) : null,
-          type: activity.type || null,
-          units: activity.units || null,
+          accountId: activity.account?.id || activity.account_id || null,
+          amount: activity.amount ?? null,
+          currency: typeof activity.currency === 'string'
+            ? activity.currency
+            : activity.currency?.code || activity.iso_currency_code || null,
+          description: activity.description || activity.snapTradeData?.description || activity.name || null,
+          fee: activity.fee ?? activity.fees ?? null,
+          fxRate: activity.fx_rate ?? activity.snapTradeData?.fx_rate ?? null,
+          institution: activity.institution || activity.snapTradeData?.institution || activity.account?.institution || null,
+          price: activity.price ?? null,
+          settlementDate: (activity.settlement_date || activity.snapTradeData?.settlement_date)
+            ? new Date(activity.settlement_date || activity.snapTradeData.settlement_date)
+            : null,
+          symbol: activity.symbol?.symbol?.symbol || activity.ticker_symbol || activity.security_name || null,
+          tradeDate: (activity.trade_date || activity.snapTradeData?.trade_date || activity.date)
+            ? new Date(activity.trade_date || activity.snapTradeData?.trade_date || activity.date)
+            : null,
+          type: activity.snapTradeData?.type || activity.type || null,
+          units: activity.units ?? activity.quantity ?? null,
           rawData: activity,
         };
         

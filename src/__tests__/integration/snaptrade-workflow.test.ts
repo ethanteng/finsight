@@ -1,7 +1,5 @@
 import request from 'supertest';
 import { app } from '../../index';
-import { createTestUser } from '../unit/factories/user.factory';
-import { hashPassword } from '../../auth/utils';
 import { testPrisma } from '../setup/test-database-ci';
 import { getPrismaClient } from '../../prisma-client';
 
@@ -19,44 +17,48 @@ jest.mock('snaptrade-typescript-sdk', () => ({
         data: { success: true }
       })
     },
+    connections: {
+      listBrokerageAuthorizations: jest.fn().mockResolvedValue({
+        data: [{
+          id: 'connection-1',
+          disabled: false,
+          data_freshness_mode: 'realtime',
+          brokerage: { display_name: 'Test Brokerage' }
+        }]
+      })
+    },
     accountInformation: {
-      listUserAccount: jest.fn().mockResolvedValue({
-        data: [
-          { id: 'acc-1', name: 'Test Investment Account', balance: 10000 }
-        ]
-      }),
-      listUserHoldings: jest.fn().mockResolvedValue({
-        data: [
-          { symbol: 'AAPL', quantity: 10, value: 1500 },
-          { symbol: 'GOOGL', quantity: 5, value: 1200 }
-        ]
-      }),
-      getAllUserHoldings: jest.fn().mockResolvedValue({
+      listUserAccounts: jest.fn().mockResolvedValue({
         data: [
           {
-            account: {
-              id: 'acc-1',
-              name: 'Test Investment Account',
-              type: 'investment',
-              balances: [{ cash: 10000 }]
-            },
-            total_value: { value: 10000 },
-            positions: [
-              { symbol: 'AAPL', quantity: 10, value: 1500 },
-              { symbol: 'GOOGL', quantity: 5, value: 1200 }
-            ]
+            id: 'acc-1',
+            name: 'Test Investment Account',
+            number: '0001',
+            brokerage_authorization: 'connection-1',
+            institution_name: 'Test Brokerage',
+            balance: { total: { amount: 10000, currency: 'USD' } },
+            sync_status: {
+              holdings: { initial_sync_completed: true, last_successful_sync: '2026-08-18T00:00:00Z' },
+              transactions: { initial_sync_completed: true, last_successful_sync: '2026-08-18T00:00:00Z' }
+            }
           }
         ]
       }),
-      listUserActivities: jest.fn().mockResolvedValue({
-        data: [
-          { id: 'act-1', type: 'buy', symbol: 'AAPL', quantity: 10, date: '2024-01-15' }
-        ]
+      getUserHoldings: jest.fn().mockResolvedValue({
+        data: {
+          balances: [{ currency: { code: 'USD' }, cash: 0 }],
+          positions: [{
+            symbol: { id: 'security-1', symbol: { symbol: 'AAPL', description: 'Apple Inc.' } },
+            units: 10,
+            price: 150
+          }]
+        }
       }),
       getAccountActivities: jest.fn().mockResolvedValue({
-        data: [
-          { id: 'act-1', type: 'buy', symbol: 'AAPL', quantity: 10, date: '2024-01-15' }
-        ]
+        data: {
+          data: [{ id: 'act-1', type: 'buy', symbol: 'AAPL', quantity: 10, date: '2024-01-15' }],
+          pagination: { offset: 0, limit: 1000, total: 1 }
+        }
       })
     }
   }))
@@ -181,9 +183,8 @@ describe('SnapTrade Workflow Integration Tests', () => {
 
       expect(holdingsResponse.body).toHaveProperty('success', true);
       expect(holdingsResponse.body).toHaveProperty('message', 'Holdings retrieved successfully');
-      expect(holdingsResponse.body.data).toHaveProperty('holdings');
-      expect(holdingsResponse.body.data.holdings).toHaveLength(1);
-      expect(holdingsResponse.body.data.holdings[0]).toHaveProperty('symbol', 'AAPL');
+      expect(holdingsResponse.body.data).toHaveLength(1);
+      expect(holdingsResponse.body.data[0].positions[0].symbol.symbol).toHaveProperty('symbol', 'AAPL');
 
       // Step 8: Get user activities
       const activitiesResponse = await request(app)

@@ -1,5 +1,11 @@
 import type { SearchResult } from '../orchestrator';
 import type { SearchFreshness } from '../search-types';
+import {
+  discardResponseBody,
+  fetchWithBoundedRetry,
+  type BoundedFetchOptions,
+  type ProviderRequestInit,
+} from './http-retry';
 
 export interface SearchProviderConfig {
   apiKey: string;
@@ -20,6 +26,15 @@ export interface SearchProviderOptions {
   language?: string;
   /** Response-interface language, for example en-US. */
   uiLanguage?: string;
+}
+
+interface SearchProviderClientOptions {
+  fetchImplementation?: typeof fetch;
+  sleep?: BoundedFetchOptions['sleep'];
+  requestTimeoutMs?: number;
+  maxAttempts?: number;
+  maxRetryDelayMs?: number;
+  rateLimiter?: { waitForNextCall(): Promise<void> };
 }
 
 // Global rate limiter for Brave Search API calls
@@ -53,17 +68,23 @@ export class SearchProvider {
   private config: SearchProviderConfig;
   private readonly DEFAULT_TIMEOUT = 10000;
   private readonly DEFAULT_MAX_RESULTS = 10;
-  private rateLimiter: BraveSearchRateLimiter;
+  private rateLimiter: { waitForNextCall(): Promise<void> };
+  private readonly clientOptions: SearchProviderClientOptions;
 
-  constructor(apiKey: string, provider: 'bing' | 'google' | 'brave' | 'serpapi' = 'bing') {
+  constructor(
+    apiKey: string,
+    provider: 'bing' | 'google' | 'brave' | 'serpapi' = 'bing',
+    clientOptions: SearchProviderClientOptions = {},
+  ) {
     this.config = {
       apiKey,
       baseUrl: this.getBaseUrl(provider),
       provider,
       maxResults: this.DEFAULT_MAX_RESULTS,
-      timeout: this.DEFAULT_TIMEOUT
+      timeout: clientOptions.requestTimeoutMs ?? this.DEFAULT_TIMEOUT
     };
-    this.rateLimiter = BraveSearchRateLimiter.getInstance();
+    this.clientOptions = clientOptions;
+    this.rateLimiter = clientOptions.rateLimiter ?? BraveSearchRateLimiter.getInstance();
   }
 
   private getBaseUrl(provider: string): string {
@@ -159,15 +180,15 @@ export class SearchProvider {
       safeSearch: 'Moderate'
     });
 
-    const response = await fetch(`${this.config.baseUrl}?${params}`, {
+    const response = await this.request(`${this.config.baseUrl}?${params}`, {
       headers: {
         'Ocp-Apim-Subscription-Key': this.config.apiKey,
         'Accept': 'application/json'
-      },
-      signal: AbortSignal.timeout(this.config.timeout!)
+      }
     });
 
     if (!response.ok) {
+      await discardResponseBody(response);
       throw new Error(`Bing search failed: ${response.status}`);
     }
 
@@ -198,11 +219,10 @@ export class SearchProvider {
       lr: `lang_${options.language?.split('-')[0] || 'en'}`
     });
 
-    const response = await fetch(`${this.config.baseUrl}?${params}`, {
-      signal: AbortSignal.timeout(this.config.timeout!)
-    });
+    const response = await this.request(`${this.config.baseUrl}?${params}`);
 
     if (!response.ok) {
+      await discardResponseBody(response);
       throw new Error(`Google search failed: ${response.status}`);
     }
 
@@ -228,9 +248,6 @@ export class SearchProvider {
       };
     }
     
-    // Use global rate limiter for Brave Search API calls
-    await this.rateLimiter.waitForNextCall();
-    
     const params = new URLSearchParams({
       q: query,
       count: options.maxResults?.toString() || '10',
@@ -244,14 +261,13 @@ export class SearchProvider {
 
     console.log('SearchProvider: Brave search params:', params.toString());
 
-    const response = await fetch(`${this.config.baseUrl}?${params}`, {
+    const response = await this.request(`${this.config.baseUrl}?${params}`, {
       headers: {
         'Accept': 'application/json',
         'X-Subscription-Token': this.config.apiKey,
         'User-Agent': 'Finsight-Financial-App/1.0'
-      },
-      signal: AbortSignal.timeout(this.config.timeout!)
-    });
+      }
+    }, true);
 
     console.log('SearchProvider: Brave search response status:', response.status);
 
@@ -288,15 +304,25 @@ export class SearchProvider {
       tbs: options.timeRange === 'day' ? 'qdr:d' : 'qdr:w'
     });
 
-    const response = await fetch(`${this.config.baseUrl}?${params}`, {
-      signal: AbortSignal.timeout(this.config.timeout!)
-    });
+    const response = await this.request(`${this.config.baseUrl}?${params}`);
 
     if (!response.ok) {
+      await discardResponseBody(response);
       throw new Error(`SerpAPI search failed: ${response.status}`);
     }
 
     return response.json();
+  }
+
+  private async request(url: string, init: ProviderRequestInit = {}, rateLimited = false): Promise<Response> {
+    return fetchWithBoundedRetry(url, init, {
+      fetchImplementation: this.clientOptions.fetchImplementation,
+      sleep: this.clientOptions.sleep,
+      requestTimeoutMs: this.config.timeout,
+      maxAttempts: this.clientOptions.maxAttempts,
+      maxRetryDelayMs: this.clientOptions.maxRetryDelayMs,
+      beforeAttempt: rateLimited ? () => this.rateLimiter.waitForNextCall() : undefined,
+    });
   }
 
   private formatResults(rawResults: any): SearchResult[] {

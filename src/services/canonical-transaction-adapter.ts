@@ -52,6 +52,28 @@ function getPersonalFinanceCategory(transaction: any): { primary: string; detail
   };
 }
 
+/**
+ * Transfer direction is the one classification here that cannot come from the
+ * activity type alone, and the raw sign that carries it is provider-specific:
+ * SnapTrade signs an activity by its effect on account cash (positive = cash in),
+ * while Plaid signs an investment transaction by cash debited (positive = cash
+ * out), explicitly including transfers. Every other branch classifies by type and
+ * leaves the sign to canonicalCashFlowAmount, which is precisely what keeps them
+ * provider-agnostic — so reading the sign here has to be provider-aware.
+ */
+function resolveTransferDirection(transaction: any): CanonicalTransactionType {
+  const amount = typeof transaction?.amount === 'number' && Number.isFinite(transaction.amount)
+    ? transaction.amount
+    : null;
+  // An unsigned or zero transfer has no direction we can establish. Return an
+  // adjustment rather than guessing: it still keeps the row off the AI
+  // categorization path without asserting a cash flow that may not exist.
+  if (amount === null || amount === 0) return 'adjustment';
+  const positiveMeansCashIn = transaction?.source === 'snaptrade' || Boolean(transaction?.snapTradeData);
+  const movesCashIn = positiveMeansCashIn ? amount > 0 : amount < 0;
+  return movesCashIn ? 'transfer_in' : 'transfer_out';
+}
+
 function resolveProviderInvestmentType(transaction: any): CanonicalTransactionType | null {
   const rawType = String(
     transaction?.type || transaction?.activity_type || transaction?.snapTradeData?.type || ''
@@ -68,17 +90,25 @@ function resolveProviderInvestmentType(transaction: any): CanonicalTransactionTy
   // reinvestment can be reported as type=buy, subtype=dividend.
   if (['buy', 'purchase', 'rei', 'reinvestment'].includes(rawType)) return 'buy';
   if (['sell', 'redemption', 'liquidation'].includes(rawType)) return 'sell';
-  if (['fee', 'commission'].includes(rawType)) return 'fee';
+  if (['fee', 'commission', 'tax'].includes(rawType)) return 'fee';
   if (['dividend', 'interest', 'distribution'].includes(rawType)) return 'income';
   if (['contribution', 'deposit'].includes(rawType)) return 'deposit';
   if (['withdrawal'].includes(rawType)) return 'withdrawal';
+  // Non-cash corporate actions must stay off the AI path and out of cash-flow
+  // totals. A stock dividend pays in shares rather than cash, so it belongs here
+  // and not with the cash-paying 'dividend' above.
+  if (['split', 'stock_split', 'stock_dividend', 'merger', 'spinoff', 'spin_off'].includes(rawType)) {
+    return 'adjustment';
+  }
+  if (rawType === 'transfer') return resolveTransferDirection(transaction);
 
   if (['dividend', 'interest', 'distribution'].some(value => rawSubtype.includes(value))) {
     return 'income';
   }
-  if (['fee', 'commission'].some(value => rawSubtype.includes(value))) return 'fee';
+  if (['fee', 'commission', 'tax'].some(value => rawSubtype.includes(value))) return 'fee';
   if (['contribution', 'deposit'].some(value => rawSubtype.includes(value))) return 'deposit';
   if (rawSubtype.includes('withdrawal')) return 'withdrawal';
+  if (['split', 'merger', 'spin'].some(value => rawSubtype.includes(value))) return 'adjustment';
 
   return null;
 }

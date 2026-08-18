@@ -3,6 +3,7 @@ import { Transaction as UnifiedTransaction, UnifiedFinancialData, Holding, Secur
 import type { RetirementScenarioExecution } from '../scenarios/retirement-scenario';
 import type { ScenarioExecutionRecord } from '../scenarios/calculator-registry';
 import type { PlannedSearchQuery } from '../data/search-types';
+import type { PlaidLiabilityDetails } from '../services/plaid-liabilities';
 
 export interface QuestionNeeds {
   needsMarketContext: boolean;
@@ -25,6 +26,7 @@ export interface AccountSummaryItem {
   balance: number | null;
   institution?: string;
   interestRate?: number;
+  liabilityDetails?: PlaidLiabilityDetails[];
 }
 
 export interface TransactionSummaryItem {

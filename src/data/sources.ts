@@ -6,7 +6,7 @@ export interface DataSourceConfig {
   description: string;
   tiers: UserTier[];
   category: 'account' | 'market' | 'external' | 'economic';
-  provider: 'plaid' | 'fred' | 'massive' | 'tiingo' | 'fmp' | 'internal' | 'brave' | 'rentcast';
+  provider: 'plaid' | 'snaptrade' | 'fred' | 'massive' | 'tiingo' | 'fmp' | 'internal' | 'brave' | 'rentcast' | 'shiller-french';
   cacheDuration: number; // milliseconds
   rateLimit?: number; // requests per minute
   isLive: boolean;
@@ -67,6 +67,26 @@ export const dataSourceRegistry: Record<string, DataSourceConfig> = {
     cacheDuration: 15 * 60 * 1000, // 15 minutes
     isLive: true
   },
+  'plaid-liabilities': {
+    id: 'plaid-liabilities',
+    name: 'Credit and Loan Terms',
+    description: 'Credit-card APRs and available mortgage or student-loan rates, payments, due dates, balances and terms',
+    tiers: [UserTier.STARTER, UserTier.STANDARD, UserTier.PREMIUM],
+    category: 'account',
+    provider: 'plaid',
+    cacheDuration: 24 * 60 * 60 * 1000,
+    isLive: false,
+  },
+  'snaptrade-investments': {
+    id: 'snaptrade-investments',
+    name: 'Brokerage Accounts, Holdings, and Activity',
+    description: 'Account-specific brokerage holdings and complete paginated investment activity with provider sync status',
+    tiers: [UserTier.STARTER, UserTier.STANDARD, UserTier.PREMIUM],
+    category: 'account',
+    provider: 'snaptrade',
+    cacheDuration: 15 * 60 * 1000,
+    isLive: true,
+  },
 
   'fmp-fund-exposures': {
     id: 'fmp-fund-exposures',
@@ -100,6 +120,17 @@ export const dataSourceRegistry: Record<string, DataSourceConfig> = {
     cacheDuration: 5 * 60 * 1000,
     isLive: true,
     upgradeBenefit: 'Add live broad-market quotes and structured market news',
+  },
+  'historical-retirement-markets': {
+    id: 'historical-retirement-markets',
+    name: 'Historical Retirement Market Data',
+    description: 'Versioned Shiller U.S. market history and Kenneth French U.S. factor and international index snapshots used by deterministic retirement stress tests',
+    tiers: [UserTier.PREMIUM],
+    category: 'market',
+    provider: 'shiller-french',
+    cacheDuration: 30 * 24 * 60 * 60 * 1000,
+    isLive: false,
+    upgradeBenefit: 'Run deterministic retirement stress tests across U.S. and international market history',
   },
 
   // Home Valuations (All tiers)
