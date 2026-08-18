@@ -270,19 +270,30 @@ export class FMPProvider {
       assetClass = 'Equity';
     }
 
-    // Determine geographic focus
+    // Profile country/sector describe a single-name equity, not fund look-through
+    // weights. Treating ETF/mutual-fund domicile as coverage='available' would
+    // override name/ticker international heuristics (e.g. US-domiciled VXUS).
+    const isFund = Boolean(data.isEtf) || this.looksLikeMutualFund(ticker);
+
+    // Determine geographic focus. For funds, prefer name/description signals over
+    // legal domicile (US-domiciled international ETFs are common).
+    const nameForGeo = data.companyName || data.name || ticker;
     let geographicFocus: string | undefined;
-    const country = data.country?.toLowerCase() || '';
-    if (country.includes('united states') || country.includes('usa') || country === 'us') {
-      geographicFocus = 'US';
-    } else if (country && country !== 'united states' && country !== 'us') {
-      geographicFocus = 'International';
+    if (isFund) {
+      geographicFocus = this.deriveGeographicFocus([], data.country, nameForGeo, data.description);
+    } else {
+      const country = data.country?.toLowerCase() || '';
+      if (country.includes('united states') || country.includes('usa') || country === 'us') {
+        geographicFocus = 'US';
+      } else if (country && country !== 'united states' && country !== 'us') {
+        geographicFocus = 'International';
+      }
     }
 
-    const countryAllocations = data.country
+    const countryAllocations = !isFund && data.country
       ? [{ name: data.country, weight: 1 }]
       : [];
-    const sectorAllocations = data.sector
+    const sectorAllocations = !isFund && data.sector
       ? [{ name: data.sector, weight: 1 }]
       : [];
 
@@ -295,7 +306,11 @@ export class FMPProvider {
       geographicFocus,
       isETF: data.isEtf || false,
       fundData: {
-        instrumentType: data.isEtf ? 'etf' : 'equity',
+        instrumentType: data.isEtf
+          ? 'etf'
+          : this.looksLikeMutualFund(ticker)
+            ? 'mutual_fund'
+            : 'equity',
         currency: data.currency,
         countryAllocations,
         sectorAllocations,
@@ -419,16 +434,8 @@ export class FMPProvider {
     countries: FMPCountryWeighting[],
     sectors: FMPSectorWeighting[],
   ): FundExposureData {
-    const countryAllocations = this.normalizeExposures(
-      countries,
-      row => row.country,
-      row => row.weightPercentage ?? row.weight,
-    );
-    const sectorAllocations = this.normalizeExposures(
-      sectors,
-      row => row.sector ?? row.industry,
-      row => row.weightPercentage ?? row.exposure ?? row.weight,
-    );
+    const countryAllocations = this.normalizeCountryExposures(countries);
+    const sectorAllocations = this.normalizeSectorExposures(sectors);
     return {
       instrumentType: this.looksLikeMutualFund(ticker) ? 'mutual_fund' : 'etf',
       assetUnderManagement: info.assetUnderManagement ?? info.aum,
@@ -448,15 +455,13 @@ export class FMPProvider {
     };
   }
 
-  private normalizeExposures<T>(
-    rows: T[],
-    getName: (_row: T) => string | undefined,
-    getWeight: (_row: T) => string | number | undefined,
-  ): FundExposure[] {
+  private normalizeCountryExposures(rows: FMPCountryWeighting[]): FundExposure[] {
     const combined = new Map<string, number>();
     for (const row of rows) {
-      const name = getName(row)?.trim();
-      const weight = this.normalizeAllocationWeight(getWeight(row));
+      const name = row.country?.trim();
+      const weight = row.weightPercentage !== undefined && row.weightPercentage !== null
+        ? this.normalizeAllocationWeight(row.weightPercentage, true)
+        : this.normalizeAllocationWeight(row.weight, false);
       if (!name || weight === undefined || weight < 0) continue;
       combined.set(name, (combined.get(name) ?? 0) + weight);
     }
@@ -465,12 +470,38 @@ export class FMPProvider {
       .sort((left, right) => right.weight - left.weight);
   }
 
-  private normalizeAllocationWeight(value: string | number | undefined): number | undefined {
+  private normalizeSectorExposures(rows: FMPSectorWeighting[]): FundExposure[] {
+    const combined = new Map<string, number>();
+    for (const row of rows) {
+      const name = (row.sector ?? row.industry)?.trim();
+      // Prefer explicit percentage fields; fall back to fractional exposure/weight.
+      const weight = row.weightPercentage !== undefined && row.weightPercentage !== null
+        ? this.normalizeAllocationWeight(row.weightPercentage, true)
+        : this.normalizeAllocationWeight(row.exposure ?? row.weight, false);
+      if (!name || weight === undefined || weight < 0) continue;
+      combined.set(name, (combined.get(name) ?? 0) + weight);
+    }
+    return [...combined.entries()]
+      .map(([name, weight]) => ({ name, weight }))
+      .sort((left, right) => right.weight - left.weight);
+  }
+
+  /**
+   * @param treatAsPercentage When true (FMP `weightPercentage` fields), values
+   *   like `0.5` mean 0.5% even without a `%` suffix. Fractional `weight` /
+   *   `exposure` fields stay as 0-1 unless they include `%` or exceed 1.
+   */
+  private normalizeAllocationWeight(
+    value: string | number | undefined,
+    treatAsPercentage = false,
+  ): number | undefined {
     if (value === undefined || value === null) return undefined;
     const text = String(value).trim();
     const numeric = Number.parseFloat(text.replace('%', ''));
     if (!Number.isFinite(numeric)) return undefined;
-    return text.includes('%') || numeric > 1 ? numeric / 100 : numeric;
+    return text.includes('%') || treatAsPercentage || numeric > 1
+      ? numeric / 100
+      : numeric;
   }
 
   private normalizeExpenseRatio(value: number | undefined): number | undefined {

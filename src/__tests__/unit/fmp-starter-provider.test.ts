@@ -64,6 +64,54 @@ describe('FMP Starter fund metadata', () => {
     expect(metadata.fundData?.sectorAllocations).toEqual([{ name: 'Technology', weight: 0.3 }]);
   });
 
+  it('treats numeric weightPercentage values as percentages even when <= 1', () => {
+    const metadata = (provider as any).parseETFInfo(
+      { symbol: 'VXUS', name: 'Vanguard Total International Stock ETF', assetClass: 'Equity' },
+      'VXUS',
+      [
+        { country: 'Japan', weightPercentage: 0.5 },
+        { country: 'United Kingdom', weightPercentage: 0.25 },
+        { country: 'Other', weight: 0.9925 },
+      ],
+      [
+        { sector: 'Financial Services', weightPercentage: 0.8 },
+        { sector: 'Technology', exposure: 0.15 },
+      ],
+    ) as SecurityMetadata;
+
+    expect(metadata.fundData?.countryAllocations).toEqual([
+      { name: 'Other', weight: 0.9925 },
+      { name: 'Japan', weight: 0.005 },
+      { name: 'United Kingdom', weight: 0.0025 },
+    ]);
+    expect(metadata.fundData?.sectorAllocations).toEqual([
+      { name: 'Technology', weight: 0.15 },
+      { name: 'Financial Services', weight: 0.008 },
+    ]);
+  });
+
+  it('does not treat ETF/mutual-fund profile domicile as look-through coverage', () => {
+    const metadata = (provider as any).parseProfile(
+      {
+        symbol: 'VXUS',
+        companyName: 'Vanguard Total International Stock ETF',
+        isEtf: true,
+        country: 'US',
+        sector: 'Financial Services',
+      },
+      'VXUS',
+    ) as SecurityMetadata;
+
+    expect(metadata.geographicFocus).toBe('International');
+    expect(metadata.fundData).toMatchObject({
+      instrumentType: 'etf',
+      countryCoverage: 'unavailable',
+      sectorCoverage: 'unavailable',
+      countryAllocations: [],
+      sectorAllocations: [],
+    });
+  });
+
   it('uses look-through countries in portfolio metrics and retirement mapping', async () => {
     const metadata: SecurityMetadata = {
       tickerSymbol: 'VXUS',
