@@ -50,6 +50,7 @@ export async function analyzeRetirementPortfolio(
   // Phase 2: Initialize data providers (needed for FMP metadata)
   const tiingoApiKey = process.env.TIINGO_API_KEY || 'test_tiingo_key';
   const fmpApiKey = process.env.FMP_API_KEY || 'test_fmp_key';
+  const alphaVantageApiKey = process.env.ALPHA_VANTAGE_API_KEY;
   
   // Log FMP API key status (without exposing the actual key)
   if (fmpApiKey === 'test_fmp_key' || fmpApiKey.startsWith('test_')) {
@@ -58,7 +59,7 @@ export async function analyzeRetirementPortfolio(
     console.log('✅ FMP_API_KEY is set - will attempt to fetch real metadata');
   }
   
-  const dataProviderFactory = new DataProviderFactory(tiingoApiKey, fmpApiKey);
+  const dataProviderFactory = new DataProviderFactory(tiingoApiKey, fmpApiKey, alphaVantageApiKey);
 
   // OPTIMIZATION: Fetch FMP metadata once for all unique tickers, then share between functions
   // This avoids duplicate API calls between analyzePortfolio and mapPortfolioToAssetBasket

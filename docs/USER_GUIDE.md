@@ -640,12 +640,13 @@ Ask Linc offers three subscription tiers with differentiated access to features:
 ### Premium Tier
 
 **All Standard Features Plus:**
-- ✅ Advanced market context (Polygon/Massive):
-  - Broad-market movement through SPY daily bars
-  - Treasury yields (1Y, 5Y, 10Y)
-  - Realized inflation and inflation expectations
+- ✅ Live market data (Alpha Vantage/Polygon.io):
+  - CD Rates
+  - Treasury Yields (1Y, 5Y, 10Y, 30Y)
+  - Live Mortgage Rates
+  - Stock Market Data (60+ exchanges)
 - ✅ Complete market intelligence
-- ✅ Current financial-news context through Brave Search
+- ✅ Professional news integration (Reuters, Bloomberg)
 - ✅ Advanced market analytics
 - ✅ Inflation expectations and forecasting
 - ✅ Real-time rate comparisons

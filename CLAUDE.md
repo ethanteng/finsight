@@ -61,7 +61,7 @@ npx prisma studio                # Open Prisma Studio UI
 The main entry point is `src/index.ts`; user-facing Ask routes are isolated in `src/routes/ask.ts`. Key subdirectories:
 
 - **`auth/`** — JWT auth, middleware (`optionalAuth`, `requireAuth`, `adminAuth`), encrypted user service, Resend email, SnapTrade auth, manual accounts
-- **`data/`** — Data orchestration (`orchestrator.ts`), caching, persistence, and external data providers: FRED economic indicators (`providers/fred.ts`) and Brave Search API for RAG (`providers/search.ts`); Polygon/Massive market context is collected under `market-news/`
+- **`data/`** — Data orchestration (`orchestrator.ts`), caching, persistence, and external data providers: FRED economic indicators (`providers/fred.ts`), Alpha Vantage market data, Brave Search API for RAG (`providers/search.ts`)
 - **`openai/`** — Canonical AI pipeline: semantic context planning, primary-model data-pack tools, canonical facts, structured prompting, provider fallback, deterministic grounding, and lazy evidence
 - **`services/`** — Business logic split into financial ingestion, calculations, snapshot/source persistence, profile/market services, billing, and integrations
 - **`profile/`** — User profile orchestration, enrichment, and encryption
@@ -120,7 +120,7 @@ The platform supports OpenAI (GPT-4), Anthropic (Claude), and Google (Gemini) wi
 | Plaid | Bank account/transaction data |
 | SnapTrade | Investment portfolio data |
 | FRED | Economic indicators |
-| Polygon/Massive | Market movement, Treasury yields, and inflation context |
+| Alpha Vantage | Market data |
 | RentCast | Home valuation |
 | Brave Search | RAG for real-time financial info |
 | Stripe | Subscription billing |

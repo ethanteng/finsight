@@ -553,7 +553,7 @@ model AssetPriceHistory {
   close          Float
   adjustedClose  Float?   // Dividend/split adjusted (from Tiingo)
   volume         BigInt
-  provider       String   // 'polygon', 'tiingo'
+  provider       String   // 'polygon', 'tiingo', 'alpha_vantage'
   cachedAt       DateTime @default(now())
 
   @@unique([tickerSymbol, date, provider])

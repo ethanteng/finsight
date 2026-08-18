@@ -101,8 +101,8 @@ UNAVAILABLE DATA SOURCES (upgrade to access):
 
 ### 8. Market Context (Conditional)
 - **Economic Indicators**: CPI, Fed rates, mortgage rates, credit card APRs
-- **Current Market Data**: Treasury yields, broad-market movement, and current public rate information
-- **Source**: FRED API, Brave Search, and Polygon/Massive
+- **Live Market Data**: CD rates, treasury yields, current mortgage rates
+- **Source**: FRED API, Alpha Vantage, market data aggregators
 - **Example**:
 ```
 MARKET CONTEXT:
@@ -131,7 +131,7 @@ Economic Indicators:
 ### Primary Data Sources
 1. **Plaid API**: Account balances, transactions, investments
 2. **FRED API**: Economic indicators and rates
-3. **Polygon/Massive**: Market movement, Treasury yields, and inflation context
+3. **Alpha Vantage**: Market data and financial metrics
 4. **Search APIs**: Real-time financial information
 5. **User Conversations**: Profile building and context
 
@@ -167,6 +167,7 @@ TEST_USER_TIER=starter
 
 # Data Source API Keys
 FRED_API_KEY=your_fred_key
+ALPHA_VANTAGE_API_KEY=your_alpha_vantage_key
 SEARCH_API_KEY=your_search_key
 ```
 

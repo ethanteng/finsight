@@ -1,5 +1,6 @@
-import { UserTier, TierAccess, EconomicIndicator } from './types';
+import { UserTier, TierAccess, EconomicIndicator, LiveMarketData } from './types';
 import { FREDProvider } from './providers/fred';
+import { AlphaVantageProvider } from './providers/alpha-vantage';
 import { SearchProvider } from './providers/search';
 import { cacheService } from './cache';
 import { DataSourceManager, dataSourceRegistry } from './sources';
@@ -11,6 +12,7 @@ export interface TierAwareContext {
   transactions: any[];
   marketContext: {
     economicIndicators?: EconomicIndicator;
+    liveMarketData?: LiveMarketData;
     searchContext?: SearchContext;
   };
   tierInfo: {
@@ -63,6 +65,7 @@ export interface MarketContextSummary {
 
 export class DataOrchestrator {
   private fredProvider: FREDProvider;
+  private alphaVantageProvider: AlphaVantageProvider;
   private searchProvider: SearchProvider;
   private readonly searchProviderType: 'bing' | 'google' | 'brave' | 'serpapi';
   private marketContextCache: Map<string, MarketContextSummary> = new Map();
@@ -74,20 +77,26 @@ export class DataOrchestrator {
   constructor() {
     // For integration tests and CI/CD, use test API keys to avoid hitting live APIs
     const fredApiKey = (process.env.NODE_ENV === 'test' || process.env.GITHUB_ACTIONS) ? 'test_fred_key' : process.env.FRED_API_KEY;
+    const alphaVantageApiKey = (process.env.NODE_ENV === 'test' || process.env.GITHUB_ACTIONS) ? 'test_alpha_vantage_key' : process.env.ALPHA_VANTAGE_API_KEY;
     const searchApiKey = (process.env.NODE_ENV === 'test' || process.env.GITHUB_ACTIONS) ? 'test_search_key' : process.env.SEARCH_API_KEY;
 
     console.log('DataOrchestrator: Initializing with API keys:');
     console.log('DataOrchestrator: FRED_API_KEY:', fredApiKey ? 'SET' : 'NOT SET');
+    console.log('DataOrchestrator: ALPHA_VANTAGE_API_KEY:', alphaVantageApiKey ? 'SET' : 'NOT SET');
     console.log('DataOrchestrator: SEARCH_API_KEY:', searchApiKey ? 'SET' : 'NOT SET');
 
     if (!fredApiKey) {
       console.warn('FRED_API_KEY not set, economic indicators will be unavailable');
+    }
+    if (!alphaVantageApiKey) {
+      console.warn('ALPHA_VANTAGE_API_KEY not set, live market data will be unavailable');
     }
     if (!searchApiKey) {
       console.warn('SEARCH_API_KEY not set, search context will be unavailable');
     }
 
     this.fredProvider = new FREDProvider(fredApiKey || '');
+    this.alphaVantageProvider = new AlphaVantageProvider(alphaVantageApiKey || '');
 
     // Make search provider configurable
     this.searchProviderType = (process.env.SEARCH_PROVIDER || 'brave') as 'bing' | 'google' | 'brave' | 'serpapi';
@@ -197,6 +206,19 @@ export class DataOrchestrator {
         }
       }
 
+      // Fetch live market data for Premium tier
+      if (access.hasLiveData) {
+        try {
+          const liveData = await this.alphaVantageProvider.getLiveMarketData(tier);
+          if (liveData) {
+            context.marketSummary = this.processLiveMarketData(liveData);
+            context.insights.push(...this.generateMarketInsights(liveData));
+          }
+        } catch (error) {
+          console.error('DataOrchestrator: Error fetching live market data:', error);
+        }
+      }
+
       // Cache the processed context
       this.marketContextCache.set(cacheKey, context);
       console.log('DataOrchestrator: Market context refreshed and cached for tier:', tier);
@@ -264,6 +286,25 @@ export class DataOrchestrator {
   }
 
   /**
+   * Process live market data into readable summary
+   */
+  private processLiveMarketData(data: LiveMarketData): string {
+    const summary = [];
+
+    if (data.cdRates && data.cdRates.length > 0) {
+      summary.push(`• CD Rates: ${data.cdRates.slice(0, 3).map(cd => `${cd.term}: ${cd.rate}%`).join(', ')}`);
+    }
+    if (data.treasuryYields && data.treasuryYields.length > 0) {
+      summary.push(`• Treasury Yields: ${data.treasuryYields.slice(0, 3).map(t => `${t.term}: ${t.yield}%`).join(', ')}`);
+    }
+    if (data.mortgageRates && data.mortgageRates.length > 0) {
+      summary.push(`• Mortgage Rates: ${data.mortgageRates.slice(0, 2).map(m => `${m.type}: ${m.rate}%`).join(', ')}`);
+    }
+
+    return summary.join('\n');
+  }
+
+  /**
    * Extract key metrics for quick reference
    */
   private extractKeyMetrics(data: EconomicIndicator): MarketContextSummary['keyMetrics'] {
@@ -303,6 +344,31 @@ export class DataOrchestrator {
     return insights;
   }
 
+  /**
+   * Generate market insights for GPT context
+   */
+  private generateMarketInsights(data: LiveMarketData): string[] {
+    const insights = [];
+
+    // Check CD rates for savings opportunities
+    if (data.cdRates && data.cdRates.length > 0) {
+      const highYieldCDs = data.cdRates.filter(cd => cd.rate > 4);
+      if (highYieldCDs.length > 0) {
+        insights.push('• High-yield CD rates available - consider laddering CDs for steady income');
+      }
+    }
+
+    // Check Treasury yields for safe investment opportunities
+    if (data.treasuryYields && data.treasuryYields.length > 0) {
+      const highYieldTreasuries = data.treasuryYields.filter(t => t.yield > 4);
+      if (highYieldTreasuries.length > 0) {
+        insights.push('• Attractive Treasury yields available for conservative investors');
+      }
+    }
+
+    return insights;
+  }
+
   async buildTierAwareContext(
     tier: UserTier,
     accounts: any[] = [],
@@ -324,7 +390,7 @@ export class DataOrchestrator {
     // market-data fetch when a question-specific context loader owns that work.
     const marketContext = options.includeMarketContext === false
       ? {}
-      : await this.getMarketContextForSources(availableSources);
+      : await this.getMarketContextForSources(availableSources, tier);
 
     // Generate upgrade hints
     const upgradeHints = unavailableSources.map(source => ({
@@ -358,16 +424,24 @@ export class DataOrchestrator {
   }
 
   private async getMarketContextForSources(
-    availableSources: any[]
-  ): Promise<{ economicIndicators?: EconomicIndicator }> {
-    const context: { economicIndicators?: EconomicIndicator } = {};
+    availableSources: any[],
+    tier: UserTier
+  ): Promise<{ economicIndicators?: EconomicIndicator; liveMarketData?: LiveMarketData }> {
+    const context: { economicIndicators?: EconomicIndicator; liveMarketData?: LiveMarketData } = {};
 
     // Check if economic indicators are available
     const hasEconomicSources = availableSources.some(source =>
       source.category === 'economic' && source.provider === 'fred'
     );
 
-    if (hasEconomicSources) {
+    // Check if live market data is available
+    const hasLiveDataSources = availableSources.some(source =>
+      source.category === 'external' && source.provider === 'alpha-vantage'
+    );
+
+    // FRED and Alpha Vantage are independent upstreams — fetch them concurrently.
+    const fetchEconomicIndicators = async () => {
+      if (!hasEconomicSources) return;
       console.log('DataOrchestrator: Fetching economic indicators...');
       try {
         context.economicIndicators = await this.fredProvider.getEconomicIndicators();
@@ -375,19 +449,37 @@ export class DataOrchestrator {
       } catch (error) {
         console.error('DataOrchestrator: Error fetching economic indicators:', error);
       }
-    }
+    };
+
+    const fetchLiveMarketData = async () => {
+      if (!hasLiveDataSources) return;
+      console.log('DataOrchestrator: Fetching live market data...');
+      try {
+        const liveMarketData = await this.alphaVantageProvider.getLiveMarketData(tier);
+        if (liveMarketData) {
+          context.liveMarketData = liveMarketData as LiveMarketData;
+          console.log('DataOrchestrator: Live market data fetched successfully');
+        }
+      } catch (error) {
+        console.error('DataOrchestrator: Error fetching live market data:', error);
+      }
+    };
+
+    await Promise.all([fetchEconomicIndicators(), fetchLiveMarketData()]);
 
     return context;
   }
 
   async getMarketContext(tier: UserTier): Promise<{
     economicIndicators?: EconomicIndicator;
+    liveMarketData?: LiveMarketData;
   }> {
     console.log('DataOrchestrator: getMarketContext called with tier:', tier);
     const access = this.getTierAccess(tier);
     console.log('DataOrchestrator: Tier access:', access);
     const context: {
       economicIndicators?: EconomicIndicator;
+      liveMarketData?: LiveMarketData;
     } = {};
 
     if (access.hasEconomicContext) {
@@ -396,8 +488,33 @@ export class DataOrchestrator {
       console.log('DataOrchestrator: Economic indicators fetched:', context.economicIndicators);
     }
 
+    if (access.hasLiveData) {
+      console.log('DataOrchestrator: Fetching live market data...');
+      const liveMarketData = await this.alphaVantageProvider.getLiveMarketData(tier);
+      if (liveMarketData) {
+        context.liveMarketData = liveMarketData as LiveMarketData;
+      }
+    }
+
     console.log('DataOrchestrator: Returning context:', context);
     return context;
+  }
+
+  private async getLiveMarketData(tier: UserTier): Promise<LiveMarketData | null> {
+    const cacheKey = 'live_market_data';
+    const cached = await cacheService.get<LiveMarketData>(cacheKey);
+    if (cached) return cached;
+
+    try {
+      const liveData = await this.alphaVantageProvider.getLiveMarketData(tier);
+      if (liveData) {
+        await cacheService.set(cacheKey, liveData, 5 * 60 * 1000); // 5 minutes
+      }
+      return liveData;
+    } catch (error) {
+      console.error('Error fetching live market data:', error);
+      throw error; // Live data is critical for Premium tier
+    }
   }
 
   async getSearchContext(query: string, tier: UserTier): Promise<SearchContext | null> {

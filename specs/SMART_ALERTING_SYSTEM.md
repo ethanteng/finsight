@@ -34,7 +34,7 @@ After AI responses, the system intelligently suggests relevant alerts based on:
 ### **2. Market Rate Alerts**
 - **Example**: "Alert when CD rates go above 5%"
 - **Use Case**: Investment opportunities, refinancing decisions
-- **Data Source**: FRED API
+- **Data Source**: Alpha Vantage, FRED APIs
 - **Frequency**: Hourly monitoring
 
 ### **3. Spending Threshold Alerts**
@@ -146,7 +146,7 @@ model AlertSettings {
 {
   "type": "MARKET_RATE",
   "metric": "CD_RATES_12_MONTH",
-  "source": "fred",
+  "source": "alpha_vantage",
   "operator": "above",
   "threshold": 5.0,
   "description": "High CD rate opportunity"
@@ -255,7 +255,8 @@ interface AlertProposal {
 
 #### **Real-Time Data Integration**
 1. **Market Data Monitoring**
-   - FRED API integration for rates and economic indicators
+   - Alpha Vantage API integration for rates
+   - FRED API integration for economic indicators
    - Real-time data caching and updates
 
 2. **Account Balance Monitoring**
@@ -339,7 +340,7 @@ interface AlertProposal {
    This will help you catch the best refinancing opportunities.
    ```
 3. **User Action**: Clicks "Yes, create alert"
-4. **System Action**: Creates alert monitoring mortgage rates via FRED
+4. **System Action**: Creates alert monitoring mortgage rates via Alpha Vantage
 5. **Trigger**: When rates drop below 6.0% → Email sent
 
 ### **Example 3: Spending Alert**
@@ -776,4 +777,4 @@ describe('Alert Workflow', () => {
 
 ---
 
-**This specification provides a comprehensive roadmap for implementing the Smart Alerting System, ensuring it integrates seamlessly with the existing platform while providing significant value to users through proactive financial monitoring.**
+**This specification provides a comprehensive roadmap for implementing the Smart Alerting System, ensuring it integrates seamlessly with the existing platform while providing significant value to users through proactive financial monitoring.** 

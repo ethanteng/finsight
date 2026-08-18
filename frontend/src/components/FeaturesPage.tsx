@@ -312,6 +312,17 @@ const FeaturesPage = () => {
                         </div>
                       </div>
                       <div className="flex flex-col sm:flex-row gap-4 items-start">
+                        <div className="h-10 w-10 rounded-lg bg-secondary/10 flex items-center justify-center shrink-0">
+                          <BarChart3 className="h-5 w-5 text-secondary" />
+                        </div>
+                        <div>
+                          <h3 className="font-semibold text-foreground mb-1">Alpha Vantage</h3>
+                          <p className="text-[1rem] text-muted-foreground leading-relaxed">
+                            Live CD rates, Treasury yields, mortgage rates, and stock data. Used for <span className="text-primary/90">real-time market context</span> when comparing savings options or tracking investments.
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex flex-col sm:flex-row gap-4 items-start">
                         <div className="h-10 w-10 rounded-lg bg-primary/8 flex items-center justify-center shrink-0">
                           <BarChart3 className="h-5 w-5 text-primary" />
                         </div>

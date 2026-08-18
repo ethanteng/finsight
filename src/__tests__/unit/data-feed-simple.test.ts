@@ -40,10 +40,11 @@ describe('Data Feed Architecture (Simple)', () => {
       const context = await mockDataOrchestrator.getMarketContext(UserTier.STANDARD);
       
       expect(context.economicIndicators).toBeDefined();
+      expect(context.liveMarketData).toBeUndefined();
       expect(mockDataOrchestrator.getMarketContext).toHaveBeenCalledWith(UserTier.STANDARD);
     });
 
-    it('should provide economic indicators for PREMIUM tier', async () => {
+    it('should provide all data for PREMIUM tier', async () => {
       const mockEconomicIndicators = {
         cpi: { value: 3.2, date: '2024-01-01' },
         fedRate: { value: 5.5, date: '2024-01-01' },
@@ -51,13 +52,30 @@ describe('Data Feed Architecture (Simple)', () => {
         creditCardAPR: { value: 24.5, date: '2024-01-01' },
       };
 
+      const mockLiveMarketData = {
+        cdRates: [
+          { term: '1-year', rate: 5.0 },
+          { term: '2-year', rate: 5.2 },
+        ],
+        treasuryYields: [
+          { term: '1-month', yield: 5.1 },
+          { term: '3-month', yield: 5.2 },
+        ],
+        mortgageRates: [
+          { type: '30-year-fixed', rate: 7.2 },
+          { type: '15-year-fixed', rate: 6.8 },
+        ],
+      };
+
       mockDataOrchestrator.getMarketContext.mockResolvedValue({
         economicIndicators: mockEconomicIndicators,
+        liveMarketData: mockLiveMarketData,
       });
 
       const context = await mockDataOrchestrator.getMarketContext(UserTier.PREMIUM);
       
       expect(context.economicIndicators).toBeDefined();
+      expect(context.liveMarketData).toBeDefined();
       expect(mockDataOrchestrator.getMarketContext).toHaveBeenCalledWith(UserTier.PREMIUM);
     });
   });
@@ -84,6 +102,47 @@ describe('Data Feed Architecture (Simple)', () => {
       expect(context.economicIndicators.creditCardAPR).toHaveProperty('value');
     });
 
+    it('should handle Alpha Vantage provider responses', async () => {
+      const mockLiveMarketData = {
+        cdRates: [
+          { term: '1-year', rate: 5.0 },
+          { term: '2-year', rate: 5.2 },
+        ],
+        treasuryYields: [
+          { term: '1-month', yield: 5.1 },
+          { term: '3-month', yield: 5.2 },
+        ],
+        mortgageRates: [
+          { type: '30-year-fixed', rate: 7.2 },
+          { type: '15-year-fixed', rate: 6.8 },
+        ],
+      };
+
+      mockDataOrchestrator.getMarketContext.mockResolvedValue({
+        liveMarketData: mockLiveMarketData,
+      });
+
+      const context = await mockDataOrchestrator.getMarketContext(UserTier.PREMIUM);
+      
+      expect(Array.isArray(context.liveMarketData.cdRates)).toBe(true);
+      expect(Array.isArray(context.liveMarketData.treasuryYields)).toBe(true);
+      expect(Array.isArray(context.liveMarketData.mortgageRates)).toBe(true);
+
+      context.liveMarketData.cdRates.forEach((cd: any) => {
+        expect(cd).toHaveProperty('term');
+        expect(cd).toHaveProperty('rate');
+      });
+
+      context.liveMarketData.treasuryYields.forEach((treasury: any) => {
+        expect(treasury).toHaveProperty('term');
+        expect(treasury).toHaveProperty('yield');
+      });
+
+      context.liveMarketData.mortgageRates.forEach((mortgage: any) => {
+        expect(mortgage).toHaveProperty('type');
+        expect(mortgage).toHaveProperty('rate');
+      });
+    });
   });
 
   describe('Error Handling', () => {
@@ -147,6 +206,51 @@ describe('Data Feed Architecture (Simple)', () => {
       });
     });
 
+    it('should validate live market data structure', () => {
+      const validMarketData = {
+        cdRates: [
+          { term: '1-year', rate: 5.0 },
+          { term: '2-year', rate: 5.2 },
+        ],
+        treasuryYields: [
+          { term: '1-month', yield: 5.1 },
+          { term: '3-month', yield: 5.2 },
+        ],
+        mortgageRates: [
+          { type: '30-year-fixed', rate: 7.2 },
+          { type: '15-year-fixed', rate: 6.8 },
+        ],
+      };
+
+      expect(validMarketData).toHaveProperty('cdRates');
+      expect(validMarketData).toHaveProperty('treasuryYields');
+      expect(validMarketData).toHaveProperty('mortgageRates');
+
+      expect(Array.isArray(validMarketData.cdRates)).toBe(true);
+      expect(Array.isArray(validMarketData.treasuryYields)).toBe(true);
+      expect(Array.isArray(validMarketData.mortgageRates)).toBe(true);
+
+      validMarketData.cdRates.forEach(cd => {
+        expect(cd).toHaveProperty('term');
+        expect(cd).toHaveProperty('rate');
+        expect(typeof cd.term).toBe('string');
+        expect(typeof cd.rate).toBe('number');
+      });
+
+      validMarketData.treasuryYields.forEach(treasury => {
+        expect(treasury).toHaveProperty('term');
+        expect(treasury).toHaveProperty('yield');
+        expect(typeof treasury.term).toBe('string');
+        expect(typeof treasury.yield).toBe('number');
+      });
+
+      validMarketData.mortgageRates.forEach(mortgage => {
+        expect(mortgage).toHaveProperty('type');
+        expect(mortgage).toHaveProperty('rate');
+        expect(typeof mortgage.type).toBe('string');
+        expect(typeof mortgage.rate).toBe('number');
+      });
+    });
   });
 
   describe('Performance', () => {
@@ -168,4 +272,4 @@ describe('Data Feed Architecture (Simple)', () => {
       });
     });
   });
-});
+}); 

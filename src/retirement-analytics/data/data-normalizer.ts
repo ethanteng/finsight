@@ -9,7 +9,7 @@ import { PriceTimeSeries } from '../types';
  * This function is reserved for future provider integrations
  */
 export function normalizeProviderResponse(
-  provider: 'polygon' | 'tiingo',
+  provider: 'polygon' | 'tiingo' | 'alpha_vantage',
   rawData: any,
   ticker: string
 ): PriceTimeSeries {
@@ -19,6 +19,6 @@ export function normalizeProviderResponse(
   }
 
   // For other providers, normalization would happen here
-  // Polygon normalization can be added if it becomes a price-history source.
+  // Phase 2: Polygon/Alpha Vantage normalization pending if needed
   throw new Error(`Normalization not implemented for provider: ${provider}`);
 }

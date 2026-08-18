@@ -6,7 +6,7 @@ A dynamic AI-built market news context system that intelligently aggregates and 
 
 ## **Core Objectives**
 
-1. **Real-Time Market Intelligence**: Continuously aggregate news and market context from Brave Search, FRED, Polygon, and other financial sources
+1. **Real-Time Market Intelligence**: Continuously aggregate news from Finnhub, FRED, Alpha Vantage, and other financial sources
 2. **AI-Enhanced Synthesis**: Use AI to process and synthesize complex market data into actionable insights
 3. **Tier-Aware Access**: Provide different levels of market context based on user subscription tiers
 4. **Admin Management**: Allow manual editing and oversight of market context content
@@ -29,7 +29,7 @@ model MarketNewsContext {
   createdAt       DateTime @default(now())
   
   // Source tracking
-  dataSources     String[] // Array of sources used (Polygon.io, FRED, Brave Search, etc.)
+  dataSources     String[] // Array of sources used (Polygon.io, FRED, AlphaVantage, etc.)
   keyEvents       String[] // Array of major market events identified
   
   // Tier configuration
@@ -54,7 +54,7 @@ model MarketNewsHistory {
   
   // Content snapshot
   contextText     String   @db.Text
-  dataSources     String[] // Array of sources used (Polygon.io, FRED, Brave Search, etc.)
+  dataSources     String[] // Array of sources used (Polygon.io, FRED, AlphaVantage, etc.)
   keyEvents       String[]
   
   // Change tracking
@@ -538,6 +538,13 @@ export class MarketNewsAggregator {
       enabled: true
     });
     
+    // Fallback sources (if needed)
+    this.sources.set('alpha_vantage', {
+      id: 'alpha_vantage', 
+      name: 'Alpha Vantage Market Data',
+      priority: 4, // Fallback only
+      enabled: false // Disabled by default
+    });
   }
   
   async aggregateMarketData(): Promise<MarketNewsData[]> {
@@ -572,6 +579,8 @@ export class MarketNewsAggregator {
         return this.fetchFREDData();
       case 'brave_search':
         return this.fetchBraveSearchData();
+      case 'alpha_vantage':
+        return this.fetchAlphaVantageData(); // Fallback only
       default:
         return [];
     }
@@ -934,6 +943,9 @@ FRED_API_KEY_REAL=your_production_fred_key
 POLYGON_API_KEY=your_polygon_api_key
 POLYGON_API_KEY_REAL=your_production_polygon_api_key
 
+# Keep existing keys for fallback
+ALPHA_VANTAGE_API_KEY=your_alpha_vantage_key
+ALPHA_VANTAGE_API_KEY_REAL=your_production_alpha_vantage_key
 ```
 
 ### **Environment Variable Configuration**
@@ -1867,4 +1879,4 @@ The implementation is ready for deployment with:
 
 ---
 
-*This specification provides a comprehensive framework for implementing a Financial Market News Context System that enhances AI responses with real-time market intelligence while maintaining the existing tier-based access control and admin management capabilities.*
+*This specification provides a comprehensive framework for implementing a Financial Market News Context System that enhances AI responses with real-time market intelligence while maintaining the existing tier-based access control and admin management capabilities.* 
