@@ -42,6 +42,27 @@ describe('Tiingo Power client', () => {
     expect(sleep).toHaveBeenCalledWith(0);
   });
 
+  it('fails fast instead of holding a user request for a long Retry-After', async () => {
+    const fetchImplementation = jest.fn().mockResolvedValue(response(429, {}, { 'retry-after': '60' }));
+    const sleep = jest.fn().mockResolvedValue(undefined);
+    const provider = new TiingoProvider('power-key', { fetchImplementation, sleep, maxAttempts: 3 });
+
+    await expect(provider.getNews({ tickers: ['SPY'] })).rejects.toThrow('HTTP 429');
+    expect(fetchImplementation).toHaveBeenCalledTimes(1);
+    expect(sleep).not.toHaveBeenCalled();
+  });
+
+  it('retries a rate limit that carries no Retry-After with a bounded backoff', async () => {
+    const fetchImplementation = jest.fn()
+      .mockResolvedValueOnce(response(429, {}))
+      .mockResolvedValueOnce(response(200, []));
+    const sleep = jest.fn().mockResolvedValue(undefined);
+    const provider = new TiingoProvider('power-key', { fetchImplementation, sleep, maxAttempts: 2 });
+
+    await expect(provider.getNews({ tickers: ['SPY'] })).resolves.toEqual([]);
+    expect(sleep).toHaveBeenCalledWith(1_000);
+  });
+
   it('uses the prior month for returns and drops Tiingo future month-end labels', () => {
     const provider = new RetirementTiingoProvider('test_tiingo_key');
     const series = (provider as any).convertToMonthlyReturns(
