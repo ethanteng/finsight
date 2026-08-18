@@ -187,7 +187,16 @@ export default function UserProfile({ userId }: UserProfileProps) {
         setDependentAgesText((savedMemory.dependentAges || []).join(', '));
         setEditing(false);
       } else {
-        setError('Failed to save remembered details');
+        let message = 'Failed to save remembered details';
+        try {
+          const errorData = await response.json();
+          if (typeof errorData?.error === 'string' && errorData.error) {
+            message = errorData.error;
+          }
+        } catch {
+          // Keep the generic message when the body is not JSON.
+        }
+        setError(message);
       }
     } catch (error) {
       console.error('Failed to save remembered details:', error);
