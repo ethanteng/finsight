@@ -1828,9 +1828,21 @@ export class FinancialDataService {
               // value. Only infer cash direction when the provider omitted amount.
               let normalizedAmount = providerAmount ?? (price * quantity);
               if (providerAmount === undefined) {
-                if (transactionType === 'BUY' || transactionType === 'WITHDRAWAL' || transactionType === 'FEE' || transactionType === 'TAX') {
+                if (
+                  transactionType === 'BUY'
+                  || transactionType === 'REI'
+                  || transactionType === 'WITHDRAWAL'
+                  || transactionType === 'FEE'
+                  || transactionType === 'TAX'
+                ) {
                   normalizedAmount = -Math.abs(normalizedAmount);
-                } else if (transactionType === 'SELL' || transactionType === 'CONTRIBUTION' || transactionType === 'DIVIDEND' || transactionType === 'INTEREST') {
+                } else if (
+                  transactionType === 'SELL'
+                  || transactionType === 'CONTRIBUTION'
+                  || transactionType === 'DIVIDEND'
+                  || transactionType === 'STOCK_DIVIDEND'
+                  || transactionType === 'INTEREST'
+                ) {
                   normalizedAmount = Math.abs(normalizedAmount);
                 }
               }
