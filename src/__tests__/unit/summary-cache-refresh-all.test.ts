@@ -79,7 +79,9 @@ describe('SummaryCacheService.refreshAllUsers', () => {
     await expect(SummaryCacheService.refreshAllUsers()).resolves.toEqual({
       success: true,
       usersProcessed: 3,
+      usersFailed: 0,
       processedUserIds: ['snaptrade-holdings-user', 'manual-only-user', 'home-only-user'],
+      errors: [],
     });
     expect(computeForUser).toHaveBeenCalledWith('snaptrade-holdings-user', { categorize: true });
     expect(computeForUser).toHaveBeenCalledWith('manual-only-user', { categorize: true });
@@ -92,9 +94,11 @@ describe('SummaryCacheService.refreshAllUsers', () => {
     const consoleError = jest.spyOn(console, 'error').mockImplementation(() => {});
 
     await expect(SummaryCacheService.refreshAllUsers()).resolves.toEqual({
-      success: true,
+      success: false,
       usersProcessed: 1,
+      usersFailed: 1,
       processedUserIds: ['b'],
+      errors: [{ userId: 'a', error: 'provider down' }],
     });
     expect(computeForUser).toHaveBeenCalledTimes(2);
     consoleError.mockRestore();

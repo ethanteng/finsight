@@ -1,6 +1,12 @@
 #!/usr/bin/env node
 
 const { BalanceService } = require('../dist/services/balance-service');
+const { FinancialRevisionService } = require('../dist/services/financial-revision-service');
+const {
+  acquireScheduledRefreshLease,
+  completeScheduledRefreshLease,
+  failScheduledRefreshLease,
+} = require('../dist/market-news/refresh-lease');
 const { Configuration, PlaidApi, PlaidEnvironments } = require('plaid');
 require('dotenv').config({ path: '.env.local' });
 
@@ -36,32 +42,42 @@ const configuration = new Configuration({
 });
 
 const plaidClient = new PlaidApi(configuration);
+// Separate from financial-data-refresh (transaction + summary cron). Sharing that
+// lease caused overlapping Render crons to skip each other with exit 0, and made
+// /health/cron attribute balance-only completions to the transaction job.
+const BALANCE_REFRESH_JOB = 'balance-data-refresh';
+const BALANCE_REFRESH_LEASE_MS = 6 * 60 * 60 * 1000;
 
 async function runBalanceRefreshCron() {
   const timestamp = new Date().toISOString();
   console.log(`[${timestamp}] 🚀 Starting scheduled balance refresh...`);
-  
+  const lease = await acquireScheduledRefreshLease({
+    name: BALANCE_REFRESH_JOB,
+    minimumIntervalMs: 0,
+    leaseDurationMs: BALANCE_REFRESH_LEASE_MS,
+    force: true,
+  });
+  if (!lease.acquired) {
+    console.log(`[${timestamp}] ℹ️ Balance refresh skipped: ${lease.reason}`);
+    return { skipped: true, reason: lease.reason };
+  }
+
+  let prisma;
   try {
     // Get all users with access tokens
     const { PrismaClient } = require('@prisma/client');
-    const prisma = new PrismaClient();
+    prisma = new PrismaClient();
     
     const users = await prisma.user.findMany({
       where: {
         accessTokens: {
-          some: {}
+          some: { isActive: true, supersededAt: null }
         },
         isActive: true
       },
       select: {
         id: true,
         email: true,
-        accessTokens: {
-          select: {
-            id: true,
-            token: true
-          }
-        }
       }
     });
 
@@ -73,7 +89,18 @@ async function runBalanceRefreshCron() {
     for (const user of users) {
       try {
         console.log(`[${timestamp}] 🔄 Refreshing balances for user ${user.email} (${user.id})`);
-        await BalanceService.refreshAllUserBalances(user.id, plaidClient);
+        const refresh = await BalanceService.refreshAllUserBalances(user.id, plaidClient);
+        if (refresh.failed > 0) {
+          throw new Error(
+            `${refresh.failed}/${refresh.totalTokens} Plaid connection(s) failed: ${refresh.errors.map(item => item.error).join('; ')}`
+          );
+        }
+        // Account rows are not the user-facing contract. Rebuild the canonical
+        // snapshot immediately so the refreshed balances reach the UI and LLM.
+        await FinancialRevisionService.recompute(user.id, {
+          categorize: false,
+          history: { kind: 'daily', reason: 'balance-refresh' },
+        });
         totalRefreshed++;
         console.log(`[${timestamp}] ✅ Successfully refreshed balances for user ${user.email}`);
       } catch (error) {
@@ -90,12 +117,21 @@ async function runBalanceRefreshCron() {
     console.log(`[${timestamp}] ❌ Errors: ${totalErrors} users`);
     console.log(`[${timestamp}] 💾 Cache stats: ${cacheStats.size} entries`);
     
-    await prisma.$disconnect();
+    if (totalErrors > 0) {
+      throw new Error(`Balance refresh failed for ${totalErrors}/${users.length} user(s)`);
+    }
+
+    await completeScheduledRefreshLease(BALANCE_REFRESH_JOB, lease.ownerId);
+    return { skipped: false, totalRefreshed, totalErrors };
   } catch (error) {
     console.error(`[${timestamp}] 💥 Unexpected error in balance refresh cron:`, error);
+    await failScheduledRefreshLease(BALANCE_REFRESH_JOB, lease.ownerId, error).catch((leaseError) => {
+      console.error('Failed to record balance refresh failure:', leaseError);
+    });
+    throw error;
+  } finally {
+    if (prisma) await prisma.$disconnect();
   }
-  
-  console.log(`[${timestamp}] 🏁 Balance refresh cron finished\n`);
 }
 
 // If run directly, execute immediately

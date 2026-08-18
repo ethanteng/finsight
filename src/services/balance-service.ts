@@ -118,19 +118,42 @@ export class BalanceService {
   /**
    * Force refresh all balances for a user (for background jobs)
    */
-  static async refreshAllUserBalances(userId: string, plaidClient: PlaidApi): Promise<void> {
+  static async refreshAllUserBalances(
+    userId: string,
+    plaidClient: PlaidApi
+  ): Promise<{
+    totalTokens: number;
+    successful: number;
+    failed: number;
+    errors: Array<{ tokenId: string; error: string }>;
+  }> {
     const accessTokens = await getPrismaClient().accessToken.findMany({
       where: { userId, isActive: true, supersededAt: null }
     });
 
+    const errors: Array<{ tokenId: string; error: string }> = [];
+    let successful = 0;
+
     for (const tokenRecord of accessTokens) {
       try {
         await this.getAccountBalances(tokenRecord.token, plaidClient, true);
+        successful++;
         console.log(`BalanceService: Refreshed balances for user ${userId}, token ${tokenRecord.id}`);
       } catch (error) {
         console.error(`BalanceService: Error refreshing balances for user ${userId}:`, error);
+        errors.push({
+          tokenId: tokenRecord.id,
+          error: error instanceof Error ? error.message : String(error),
+        });
       }
     }
+
+    return {
+      totalTokens: accessTokens.length,
+      successful,
+      failed: errors.length,
+      errors,
+    };
   }
 
   /**

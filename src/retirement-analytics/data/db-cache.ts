@@ -5,6 +5,11 @@ import { getPrismaClient } from '../../prisma-client';
 import { PriceTimeSeries } from '../types';
 import { SecurityMetadata } from '../types';
 
+// Fund composition and classification data change much less often than prices,
+// but they still need a bounded lifetime. Keeping the TTL here makes both the
+// single-symbol and batch FMP paths obey the same cache contract.
+export const SECURITY_METADATA_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
 export class DatabaseCache {
   private prisma = getPrismaClient();
 
@@ -357,6 +362,10 @@ export class DatabaseCache {
         return null;
       }
 
+      if (record.lastUpdated.getTime() < Date.now() - SECURITY_METADATA_TTL_MS) {
+        return null;
+      }
+
       // Convert database record to SecurityMetadata format
       return {
         tickerSymbol: record.tickerSymbol,
@@ -433,7 +442,10 @@ export class DatabaseCache {
     if (tickers.length === 0) return result;
     try {
       const records = await this.prisma.securityMetadata.findMany({
-        where: { tickerSymbol: { in: tickers } }
+        where: {
+          tickerSymbol: { in: tickers },
+          lastUpdated: { gte: new Date(Date.now() - SECURITY_METADATA_TTL_MS) }
+        }
       });
       for (const record of records) {
         result.set(record.tickerSymbol, {

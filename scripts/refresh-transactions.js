@@ -136,13 +136,34 @@ const { TransactionSyncService } = require(path.join(distPath, 'services/transac
 const { SummaryCacheService } = require(path.join(distPath, 'services/summary-cache-service'));
 const { HomeValueRefreshService } = require(path.join(distPath, 'services/home-value-refresh'));
 const { FinancialRevisionService } = require(path.join(distPath, 'services/financial-revision-service'));
+const {
+  acquireScheduledRefreshLease,
+  completeScheduledRefreshLease,
+  failScheduledRefreshLease,
+} = require(path.join(distPath, 'market-news/refresh-lease'));
 require('dotenv').config({ path: '.env.local' });
+
+const FINANCIAL_REFRESH_JOB = 'financial-data-refresh';
+const FINANCIAL_REFRESH_LEASE_MS = 6 * 60 * 60 * 1000;
 
 async function refreshTransactions() {
   const startTime = Date.now();
   const startTimestamp = new Date().toISOString();
   console.log(`[${startTimestamp}] 🚀 Starting scheduled transaction sync...`);
-  
+  const lease = await acquireScheduledRefreshLease({
+    name: FINANCIAL_REFRESH_JOB,
+    minimumIntervalMs: 0,
+    leaseDurationMs: FINANCIAL_REFRESH_LEASE_MS,
+    force: true,
+  });
+  if (!lease.acquired) {
+    console.log(`[${new Date().toISOString()}] ℹ️ Financial refresh skipped: ${lease.reason}`);
+    return { skipped: true, reason: lease.reason };
+  }
+
+  const phaseErrors = [];
+  let homeRefreshedUserIds = [];
+
   try {
     const result = await TransactionSyncService.syncAllActiveTokens();
     
@@ -180,80 +201,100 @@ async function refreshTransactions() {
       console.log(`[${syncTimestamp}] 📊 Total tokens: ${result.totalTokens}`);
       console.log(`[${syncTimestamp}] ✅ Successful: ${result.successful}`);
       console.log(`[${syncTimestamp}] ❌ Failed: ${result.failed}`);
-    }
-  } catch (error) {
-    const errorTimestamp = new Date().toISOString();
-    console.error(`[${errorTimestamp}] 💥 Unexpected error in transaction sync:`, error);
-    process.exit(1);
-  }
-  
-  let homeRefreshedUserIds = [];
-
-  // Refresh home values before the summary rebuild below, so a new estimate
-  // lands in the same snapshot rather than waiting a day to show up. The
-  // service skips manual overrides and anything valued within 25 days, so
-  // this only reaches RentCast for estimates that have aged out.
-  try {
-    const homeTimestamp = new Date().toISOString();
-    console.log(`[${homeTimestamp}] 🏠 Refreshing home values...`);
-    const results = await new HomeValueRefreshService().refreshAllHomeValues();
-    homeRefreshedUserIds = results.refreshedUserIds;
-    const homeEndTimestamp = new Date().toISOString();
-    console.log(`[${homeEndTimestamp}] ✅ Home value refresh completed. Users: ${results.successful}/${results.total}, failed: ${results.failed}, values changed: ${homeRefreshedUserIds.length}`);
-    if (results.errors.length > 0) {
-      console.error(`[${homeEndTimestamp}] ⚠️ Home value refresh errors:`, results.errors);
-    }
-  } catch (error) {
-    const errorTimestamp = new Date().toISOString();
-    console.error(`[${errorTimestamp}] ⚠️ Home value refresh failed:`, error);
-    // Do not fail the entire cron; the summary rebuild is still worth running
-  }
-
-  // After transactions sync, refresh cached summaries for all users
-  try {
-    const summaryTimestamp = new Date().toISOString();
-    console.log(`[${summaryTimestamp}] 🧮 Refreshing cached financial summaries for all users...`);
-    const result = await SummaryCacheService.refreshAllUsers();
-    const summaryEndTimestamp = new Date().toISOString();
-    console.log(`[${summaryEndTimestamp}] ✅ Summary cache refresh completed. Users processed: ${result.usersProcessed}`);
-
-    // refreshAllUsers only covers users with an active Plaid connection. A user
-    // who has a home value but no connection would otherwise keep a snapshot
-    // holding the old figure: the finances page reads the persisted snapshot
-    // and skips the live profile once meta.home exists.
-    const covered = new Set(result.processedUserIds || []);
-    const missed = homeRefreshedUserIds.filter((userId) => !covered.has(userId));
-    for (const userId of missed) {
-      try {
-        await FinancialRevisionService.recompute(userId, {
-          categorize: false,
-          history: { kind: 'material', reason: 'home-value-refreshed' },
+      result.results
+        .filter((item) => !item.result.success)
+        .forEach((item) => {
+          console.error(`[${syncTimestamp}]   - Token ${item.tokenId.substring(0, 8)}...: ${item.result.error}`);
         });
-        console.log(`[${new Date().toISOString()}] ✅ Recomputed snapshot for home-only user ${userId}`);
-      } catch (error) {
-        console.error(`[${new Date().toISOString()}] ⚠️ Snapshot recompute failed for user ${userId}:`, error);
-      }
+      phaseErrors.push(`Transaction sync failed for ${result.failed}/${result.totalTokens} Plaid connection(s)`);
     }
+
+    // Refresh home values before the summary rebuild below, so a new estimate
+    // lands in the same snapshot rather than waiting a day to show up. The
+    // service skips manual overrides and anything valued within 25 days, so
+    // this only reaches RentCast for estimates that have aged out.
+    try {
+      const homeTimestamp = new Date().toISOString();
+      console.log(`[${homeTimestamp}] 🏠 Refreshing home values...`);
+      const results = await new HomeValueRefreshService().refreshAllHomeValues();
+      homeRefreshedUserIds = results.refreshedUserIds;
+      const homeEndTimestamp = new Date().toISOString();
+      console.log(`[${homeEndTimestamp}] ✅ Home value refresh completed. Users: ${results.successful}/${results.total}, failed: ${results.failed}, values changed: ${homeRefreshedUserIds.length}`);
+      if (results.errors.length > 0) {
+        console.error(`[${homeEndTimestamp}] ⚠️ Home value refresh errors:`, results.errors);
+        phaseErrors.push(`Home value refresh failed for ${results.failed}/${results.total} eligible user(s)`);
+      }
+    } catch (error) {
+      const errorTimestamp = new Date().toISOString();
+      console.error(`[${errorTimestamp}] ⚠️ Home value refresh failed:`, error);
+      phaseErrors.push(`Home value refresh failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+
+    // After transactions sync, refresh cached summaries for all users.
+    try {
+      const summaryTimestamp = new Date().toISOString();
+      console.log(`[${summaryTimestamp}] 🧮 Refreshing cached financial summaries for all users...`);
+      const result = await SummaryCacheService.refreshAllUsers();
+      const summaryEndTimestamp = new Date().toISOString();
+      console.log(`[${summaryEndTimestamp}] ${result.success ? '✅' : '⚠️'} Summary cache refresh completed. Users processed: ${result.usersProcessed}, failed: ${result.usersFailed}`);
+      if (!result.success) {
+        console.error(`[${summaryEndTimestamp}] ⚠️ Summary refresh errors:`, result.errors);
+        phaseErrors.push(`Summary refresh failed for ${result.usersFailed} user(s)`);
+      }
+
+      // A newly discovered home-only user may not yet satisfy the SQL selection
+      // used by refreshAllUsers, so explicitly recompute any refreshed user the
+      // batch did not cover.
+      const covered = new Set([
+        ...(result.processedUserIds || []),
+        ...(result.errors || []).map((item) => item.userId),
+      ]);
+      const missed = homeRefreshedUserIds.filter((userId) => !covered.has(userId));
+      for (const userId of missed) {
+        try {
+          await FinancialRevisionService.recompute(userId, {
+            categorize: false,
+            history: { kind: 'material', reason: 'home-value-refreshed' },
+          });
+          console.log(`[${new Date().toISOString()}] ✅ Recomputed snapshot for home-only user ${userId}`);
+        } catch (error) {
+          console.error(`[${new Date().toISOString()}] ⚠️ Snapshot recompute failed for user ${userId}:`, error);
+          phaseErrors.push(`Snapshot recompute failed for user ${userId}`);
+        }
+      }
+    } catch (error) {
+      const errorTimestamp = new Date().toISOString();
+      console.error(`[${errorTimestamp}] ⚠️ Summary cache refresh failed:`, error);
+      phaseErrors.push(`Summary refresh failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+
+    if (phaseErrors.length > 0) {
+      throw new Error(phaseErrors.join(' | '));
+    }
+
+    await completeScheduledRefreshLease(FINANCIAL_REFRESH_JOB, lease.ownerId);
+
+    const endTime = Date.now();
+    const endTimestamp = new Date().toISOString();
+    const durationMs = endTime - startTime;
+    const durationSeconds = Math.round(durationMs / 1000);
+    const durationMinutes = Math.floor(durationSeconds / 60);
+    const remainingSeconds = durationSeconds % 60;
+
+    console.log(`[${endTimestamp}] 🏁 Transaction sync + summary refresh finished`);
+    if (durationMinutes > 0) {
+      console.log(`[${endTimestamp}] ⏱️  Total duration: ${durationMinutes}m ${remainingSeconds}s (${durationMs}ms)`);
+    } else {
+      console.log(`[${endTimestamp}] ⏱️  Total duration: ${durationSeconds}s (${durationMs}ms)`);
+    }
+    console.log(); // Empty line for readability
+    return { skipped: false };
   } catch (error) {
-    const errorTimestamp = new Date().toISOString();
-    console.error(`[${errorTimestamp}] ⚠️ Summary cache refresh failed:`, error);
-    // Do not fail the entire cron; proceed
+    await failScheduledRefreshLease(FINANCIAL_REFRESH_JOB, lease.ownerId, error).catch((leaseError) => {
+      console.error('Failed to record financial refresh failure:', leaseError);
+    });
+    throw error;
   }
-  
-  const endTime = Date.now();
-  const endTimestamp = new Date().toISOString();
-  const durationMs = endTime - startTime;
-  const durationSeconds = Math.round(durationMs / 1000);
-  const durationMinutes = Math.floor(durationSeconds / 60);
-  const remainingSeconds = durationSeconds % 60;
-  
-  console.log(`[${endTimestamp}] 🏁 Transaction sync + summary refresh finished`);
-  if (durationMinutes > 0) {
-    console.log(`[${endTimestamp}] ⏱️  Total duration: ${durationMinutes}m ${remainingSeconds}s (${durationMs}ms)`);
-  } else {
-    console.log(`[${endTimestamp}] ⏱️  Total duration: ${durationSeconds}s (${durationMs}ms)`);
-  }
-  console.log(); // Empty line for readability
 }
 
 // If run directly, execute immediately
@@ -271,4 +312,3 @@ if (require.main === module) {
 }
 
 module.exports = { refreshTransactions };
-

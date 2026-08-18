@@ -1135,7 +1135,9 @@ async function maybeFetchMarketContext(
   try {
     const { MarketNewsManager } = await import('../market-news/manager');
     const marketNewsManager = new MarketNewsManager();
-    return await marketNewsManager.getMarketContext(tier);
+    const storedContext = await marketNewsManager.getMarketContext(tier);
+    if (storedContext.trim()) return storedContext;
+    throw new Error(`No stored market-news context is available for ${tier}`);
   } catch (primaryError) {
     console.warn('Market news context failed, attempting orchestrator fallback', primaryError);
     try {

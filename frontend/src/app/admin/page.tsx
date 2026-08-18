@@ -449,7 +449,10 @@ export default function AdminPage() {
       }
 
       await loadMarketNewsContexts();
-      setMarketRefreshNotice({ ok: true, message: 'All market contexts refreshed.' });
+      setMarketRefreshNotice({
+        ok: true,
+        message: 'All market contexts refreshed. Any manual edits were replaced by the generated context.'
+      });
       console.log('All market contexts refresh completed');
     } catch (err) {
       console.error('Error refreshing all market contexts:', err);
@@ -628,7 +631,7 @@ export default function AdminPage() {
           }));
           setMarketRefreshNotice({
             ok: true,
-            message: `${tier[0].toUpperCase()}${tier.slice(1)} market context refreshed.`
+            message: `${tier[0].toUpperCase()}${tier.slice(1)} market context refreshed. Any manual edit for this tier was replaced by the generated context.`
           });
         } else {
           console.error('Failed to reload context:', contextResponse.status, contextResponse.statusText);
