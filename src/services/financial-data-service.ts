@@ -1836,11 +1836,13 @@ export class FinancialDataService {
                   || transactionType === 'TAX'
                 ) {
                   normalizedAmount = -Math.abs(normalizedAmount);
+                // STOCK_DIVIDEND is deliberately absent below: it pays in shares,
+                // so forcing a positive amount would assert cash the user never
+                // received. It classifies as a non-cash adjustment instead.
                 } else if (
                   transactionType === 'SELL'
                   || transactionType === 'CONTRIBUTION'
                   || transactionType === 'DIVIDEND'
-                  || transactionType === 'STOCK_DIVIDEND'
                   || transactionType === 'INTEREST'
                 ) {
                   normalizedAmount = Math.abs(normalizedAmount);
