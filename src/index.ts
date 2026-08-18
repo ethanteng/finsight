@@ -433,27 +433,6 @@ app.get('/test/fred-api-key', async (req: Request, res: Response) => {
   }
 });
 
-// Test endpoint to check Alpha Vantage API key
-app.get('/test/alpha-vantage-api-key', async (req: Request, res: Response) => {
-  try {
-    const alphaVantageApiKey = process.env.ALPHA_VANTAGE_API_KEY;
-    res.json({
-      alphaVantageApiKey: alphaVantageApiKey ? `${alphaVantageApiKey.substring(0, 8)}...` : 'not set',
-      alphaVantageApiKeyLength: alphaVantageApiKey ? alphaVantageApiKey.length : 0,
-      isTestKey: alphaVantageApiKey === 'your_alpha_vantage_api_key'
-    });
-  } catch (err) {
-    // Capture error in Sentry
-    if (err instanceof Error) {
-      Sentry.captureException(err);
-      res.status(500).json({ error: err.message });
-    } else {
-      Sentry.captureMessage('Unknown error in test Alpha Vantage API key endpoint', 'error');
-      res.status(500).json({ error: 'Unknown error' });
-    }
-  }
-});
-
 // Test endpoint for enhanced market context
 app.get('/test/enhanced-market-context', async (req: Request, res: Response) => {
   try {

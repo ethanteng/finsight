@@ -15,7 +15,7 @@ Ask Linc is a comprehensive financial analysis platform that combines AI-powered
   - Plaid (banking data)
   - SnapTrade (investment data)
   - FRED (economic indicators)
-  - Alpha Vantage (market data)
+  - Polygon/Massive (market and Treasury data)
   - RentCast (home valuations)
   - **Brave Search API** (real-time financial information)
 
@@ -42,13 +42,13 @@ Ask Linc is a comprehensive financial analysis platform that combines AI-powered
     - Locally validated authoritative numbers
 
 ### **2. Enhanced Market Context System**
-- **Purpose**: Provides real-time market data for informed financial advice
-- **Data Sources**: FRED (economic indicators), Alpha Vantage (live market data)
+- **Purpose**: Provides current economic and market context for informed financial advice
+- **Data Sources**: FRED (economic indicators), Brave Search (current public information), Polygon/Massive (Premium market context)
 - **Features**:
     - Proactive caching with scheduled updates
     - Tier-based data access
-    - Real-time economic indicators
-    - Live CD rates, treasury yields, mortgage rates
+    - Scheduled economic-indicator refreshes
+    - Treasury yield-curve, inflation, and broad-market context
 
 ### **3. RAG System**
 - **Purpose**: Enhances AI responses with real-time financial information
@@ -188,7 +188,6 @@ SNAPTRADE_ENV_PROD="production"
 
 # Market Data APIs
 FRED_API_KEY="your_fred_api_key"
-ALPHA_VANTAGE_API_KEY="your_alpha_vantage_api_key"
 POLYGON_API_KEY="your_polygon_api_key"  # For Premium tier market news (Polygon.io)
 
 # Home Valuation API
