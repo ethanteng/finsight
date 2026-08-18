@@ -941,6 +941,106 @@ describe('runAskLincAnalysis validation routing', () => {
     expect(result.displayText).not.toContain('$120,000');
   });
 
+  it('keeps the recovery prompt free of the retirement input directive', async () => {
+    // The needs-info block is written at the model: "ask the user to connect
+    // investment accounts". Prose is not checked against the fact pack, so an
+    // instruction the recovery read never asked for would reach the user.
+    mockedGatherContext
+      .mockResolvedValueOnce(snapshot())
+      .mockResolvedValueOnce({
+        ...snapshot(),
+        retirementAnalysisNeedsInfo: {
+          missingParams: [],
+          detectedParams: { annualWithdrawalAmount: 120_000 },
+          confirmationRequiredParams: ['annualWithdrawalAmount'],
+          unavailableReason:
+            'No linked investment holdings are available for retirement analysis. Ask the user to connect investment accounts.',
+          unavailableCode: 'no_holdings',
+        },
+      } as any);
+    mockedAskClaude
+      .mockResolvedValueOnce(JSON.stringify({
+        summary: 'Your largest holding is worth $250,000.',
+        insights: [],
+        suggested_actions: [],
+      }))
+      .mockResolvedValueOnce(JSON.stringify({
+        summary: 'Your net worth is $100.',
+        insights: [],
+        suggested_actions: [],
+      }));
+
+    const result = await runAskLincAnalysis({
+      question: 'Is my investment portfolio overexposed to technology?',
+      userId: 'user-1',
+    });
+
+    expect(result.showTheMathData?.evidenceManifest.contextEscalated).toBe(true);
+    const retryUserMessage = mockedAskClaude.mock.calls[1][1];
+    expect(retryUserMessage).not.toContain('retirementAnalysisNeedsInfo');
+    expect(retryUserMessage).not.toContain('Ask the user to connect investment accounts');
+    expect(retryUserMessage).not.toContain('120000');
+  });
+
+  it('still asks for a missing retirement input when the question planned for retirement', async () => {
+    // The gate is the planned scope, not the absence of escalation: a question
+    // that asked for the projection still gets the ask that unblocks it.
+    mockedGatherContext.mockResolvedValue({
+      ...snapshot(),
+      retirementAnalysisNeedsInfo: {
+        missingParams: ['annualWithdrawalAmount'],
+        detectedParams: {},
+      },
+    } as any);
+    mockedAskClaude
+      .mockResolvedValueOnce(JSON.stringify({
+        summary: 'Your largest holding is worth $250,000.',
+        insights: [],
+        suggested_actions: [],
+      }))
+      .mockResolvedValueOnce(JSON.stringify({
+        summary: 'Your net worth is $100.',
+        insights: [],
+        suggested_actions: [],
+      }));
+
+    const result = await runAskLincAnalysis({
+      question: 'Am I on track for retirement?',
+      userId: 'user-1',
+    });
+
+    expect(result.showTheMathData?.evidenceManifest.contextEscalated).toBe(true);
+    expect(result.displayText).toContain('how much you expect to spend per year once retired');
+    expect(mockedAskClaude.mock.calls[1][1]).toContain('retirementAnalysisNeedsInfo');
+  });
+
+  it('still discloses retirement assumptions when the question planned for retirement', async () => {
+    mockedGatherContext.mockResolvedValue({
+      ...snapshot(),
+      retirementAnalysis: cachedRetirementAnalysis(),
+    } as any);
+    mockedAskClaude
+      .mockResolvedValueOnce(JSON.stringify({
+        summary: 'Your largest holding is worth $250,000.',
+        insights: [],
+        suggested_actions: [],
+      }))
+      .mockResolvedValueOnce(JSON.stringify({
+        summary: 'Your net worth is $100.',
+        insights: [],
+        suggested_actions: [],
+      }));
+
+    const result = await runAskLincAnalysis({
+      question: 'Am I on track for retirement?',
+      userId: 'user-1',
+    });
+
+    expect(result.showTheMathData?.evidenceManifest.contextEscalated).toBe(true);
+    expect(result.displayText).toContain('This projection assumes');
+    expect(result.displayText).toContain('$120,000 a year');
+  });
+
   it('makes every remaining pack available after an unsupported answer', async () => {
     mockedAskClaude
       .mockResolvedValueOnce(JSON.stringify({

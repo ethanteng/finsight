@@ -613,7 +613,17 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
           contextGatherMs += Date.now() - escalationStartedAt;
           selectedPacks = escalatedPacks;
           questionNeeds = escalatedNeeds;
-          promptInput = buildPromptInput(snapshot, escalatedNeeds);
+          // Recovery reads every pack so the retry can cite the evidence the
+          // first answer reached for. `retirementAnalysisNeedsInfo` is not
+          // evidence: it is a standing instruction to ask the user for
+          // retirement inputs, carrying the detected values behind that ask.
+          // Handing it to a question that never planned for retirement would
+          // move the leak this file blocks server-side into the model's prose,
+          // where no grounding check catches it.
+          const snapshotForPrompt = plannedQuestionNeeds.needsRetirement
+            ? snapshot
+            : { ...snapshot, retirementAnalysisNeedsInfo: undefined };
+          promptInput = buildPromptInput(snapshotForPrompt, escalatedNeeds);
           factPack = promptInput.canonicalFacts!;
           contextEscalated = true;
         } catch (error) {
@@ -691,9 +701,10 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
   // A scenario disclosure already contains the inherited baseline plus every
   // changed/defaulted variant input. Appending the baseline sentence too would
   // repeat the same ages and spending immediately before it.
-  const retirementAssumptions = !plannedQuestionNeeds.needsRetirement || scenarioExecutions[RETIREMENT_CALCULATOR_ID]
-    ? null
-    : describeRetirementAssumptions(snapshot);
+  const retirementAssumptions =
+    plannedQuestionNeeds.needsRetirement && !scenarioExecutions[RETIREMENT_CALCULATOR_ID]
+      ? describeRetirementAssumptions(snapshot)
+      : null;
   if (retirementAssumptions) {
     structuredResponse = appendNotice(structuredResponse, retirementAssumptions);
   }
