@@ -332,14 +332,35 @@ export async function persistSnapTradeActivitiesToDb(
           || activity.snapTradeData?.activity_id
           || (namespacedId?.startsWith('snaptrade-') ? namespacedId.slice('snaptrade-'.length) : namespacedId);
         // Prefer SnapTrade's provider ID. The deterministic fallback is only for
-        // legacy/malformed observations that lack one.
+        // legacy/malformed observations that lack one, and must be scoped to the
+        // account: activityId is globally unique, so an unscoped symbol/date/type/units
+        // key lets two users' identical trades collide on a single row.
+        const fallbackAccountId = activity.account?.id || activity.account_id || 'unknown';
         const activityId = providerActivityId ||
-                          `${activity.symbol?.symbol?.symbol || 'unknown'}_${activity.trade_date || activity.settlement_date}_${activity.type}_${activity.units}`;
+                          `${fallbackAccountId}_${activity.symbol?.symbol?.symbol || 'unknown'}_${activity.trade_date || activity.settlement_date}_${activity.type}_${activity.units}`;
         
         // Check if activity already exists
-        const existing = await prisma.snapTradeActivity.findUnique({
+        let existing = await prisma.snapTradeActivity.findUnique({
           where: { activityId },
         });
+
+        // Rows written before the synthesized ID was account-scoped live under the
+        // old key. Migrate that row instead of inserting a duplicate beside it.
+        const legacyActivityId = typeof activity.legacyActivityId === 'string'
+          ? activity.legacyActivityId
+          : undefined;
+        if (!existing && legacyActivityId && legacyActivityId !== activityId) {
+          const legacy = await prisma.snapTradeActivity.findUnique({
+            where: { activityId: legacyActivityId },
+          });
+          if (legacy) {
+            await prisma.snapTradeActivity.update({
+              where: { activityId: legacyActivityId },
+              data: { activityId },
+            });
+            existing = legacy;
+          }
+        }
         
         const activityData = {
           snapTradeUserId: snapTradeUser.id,

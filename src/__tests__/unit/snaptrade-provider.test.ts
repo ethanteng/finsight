@@ -54,6 +54,54 @@ describe('SnapTrade provider retrieval', () => {
     expect(fake.accountInformation.getAllUserHoldings).toBeUndefined();
   });
 
+  it('reports unknown connection health when the authorization lookup fails', async () => {
+    const fake = client();
+    fake.accountInformation.listUserAccounts.mockResolvedValue({
+      data: [{ id: 'account-1', brokerage_authorization: 'connection-1', name: 'Brokerage' }],
+    });
+    fake.connections.listBrokerageAuthorizations.mockRejectedValue(new Error('503 Service Unavailable'));
+
+    const result = await new SnapTradeService(fake).getUserAccounts('user', 'secret');
+
+    // Never claim a connection is enabled just because we could not read it.
+    expect(result.data.accounts[0].connectionDisabled).toBeUndefined();
+    expect(result.data.accounts[0].connectionStatusUnavailable).toBe(true);
+    expect(result.data.connectionStatusError).toContain('503 Service Unavailable');
+  });
+
+  it('treats a missing authorization record as unknown rather than enabled', async () => {
+    const fake = client();
+    fake.accountInformation.listUserAccounts.mockResolvedValue({
+      data: [{ id: 'account-1', brokerage_authorization: { id: 'connection-1' }, name: 'Brokerage' }],
+    });
+    fake.connections.listBrokerageAuthorizations.mockResolvedValue({ data: [{ id: 'other-connection' }] });
+
+    const result = await new SnapTradeService(fake).getUserAccounts('user', 'secret');
+
+    expect(result.data.accounts[0].connectionDisabled).toBeUndefined();
+    expect(result.data.accounts[0].connectionStatusUnavailable).toBe(true);
+    expect(result.data.connectionStatusError).toBeUndefined();
+  });
+
+  it('falls back to total_value when the account rollup is missing', async () => {
+    const fake = client();
+    fake.accountInformation.listUserAccounts.mockResolvedValue({
+      data: [
+        { id: 'no-rollup', name: 'Cash Only', total_value: { value: 4200, currency: { code: 'CAD' } } },
+        { id: 'no-balance-at-all', name: 'Unknown' },
+      ],
+    });
+
+    const result = await new SnapTradeService(fake).getUserAccounts('user', 'secret');
+
+    expect(result.data.accounts[0]).toEqual(expect.objectContaining({
+      balance: 4200,
+      balanceCurrency: 'CAD',
+    }));
+    // Genuinely absent stays null so holdings can supply the value instead.
+    expect(result.data.accounts[1].balance).toBeNull();
+  });
+
   it('fetches account-specific holdings using prefetched accounts', async () => {
     const fake = client();
     fake.accountInformation.getUserHoldings

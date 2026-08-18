@@ -66,6 +66,31 @@ function connectionId(value: unknown): string | undefined {
   return undefined;
 }
 
+function currencyCode(value: unknown): string | undefined {
+  if (typeof value === 'string' && value.trim()) return value.trim();
+  if (value && typeof value === 'object' && typeof (value as any).code === 'string') {
+    return (value as any).code;
+  }
+  return undefined;
+}
+
+// SnapTrade reports the account rollup as balance.total across current SDKs, but
+// older payloads and some brokerages only carry total_value. A missing rollup is
+// left as null so callers can fall back to holdings instead of inventing a zero.
+function accountTotalBalance(account: any): number | null {
+  const candidates = [
+    account?.balance?.total?.amount,
+    account?.balance?.total,
+    account?.total_value?.value,
+    account?.total_value,
+  ];
+  for (const candidate of candidates) {
+    const value = finiteNumber(candidate);
+    if (value !== null) return value;
+  }
+  return null;
+}
+
 function inferSnapTradeAccountType(account: any): { type: string; subtype: string } {
   const rawType = String(account.raw_type || '').trim().toLowerCase();
   const descriptor = `${rawType} ${String(account.name || '').toLowerCase()}`;
@@ -288,22 +313,37 @@ export class SnapTradeService {
     try {
       console.log('🔍 Getting accounts for user:', userId);
 
-      const [accountsResponse, connectionsResponse] = await Promise.all([
+      const [accountsResponse, connectionsResult] = await Promise.all([
         this.client.accountInformation.listUserAccounts({ userId, userSecret }),
         this.client.connections.listBrokerageAuthorizations({ userId, userSecret })
+          .then((response: any) => ({ ok: true as const, data: response?.data }))
           .catch(error => {
             console.warn('SnapTrade connection status unavailable; continuing with account data:', error);
-            return { data: [] } as any;
+            return {
+              ok: false as const,
+              error: error instanceof Error ? error.message : String(error),
+            };
           }),
       ]);
+      // A failed authorization lookup means connection health is unknown, not
+      // healthy. Reporting connectionDisabled: false here would let a disabled
+      // connection's cached balances be presented as current.
+      const connectionStatusError = connectionsResult.ok ? undefined : connectionsResult.error;
       const connections = new Map<string, any>();
-      for (const connection of Array.isArray(connectionsResponse.data) ? connectionsResponse.data : []) {
+      for (const connection of connectionsResult.ok && Array.isArray(connectionsResult.data)
+        ? connectionsResult.data
+        : []) {
         if (connection?.id) connections.set(connection.id, connection);
       }
       const rawAccounts = Array.isArray(accountsResponse.data) ? accountsResponse.data : [];
       const accounts = rawAccounts.flatMap((account: any) => {
         if (!account?.id) return [];
-        const authorization = connections.get(connectionId(account.brokerage_authorization) || '');
+        const authorizationId = connectionId(account.brokerage_authorization);
+        const authorization = connections.get(authorizationId || '');
+        // Unknown when the lookup failed outright, and also when it succeeded but
+        // did not return the authorization this account points at.
+        const connectionStatusUnavailable = Boolean(connectionStatusError)
+          || Boolean(authorizationId && !authorization);
         const accountType = inferSnapTradeAccountType(account);
         const holdingsSync = account.sync_status?.holdings;
         const transactionsSync = account.sync_status?.transactions;
@@ -317,16 +357,19 @@ export class SnapTradeService {
             || authorization?.brokerage?.name
             || authorization?.name
             || 'Unknown',
-          balance: finiteNumber(account.balance?.total?.amount),
-          balanceCurrency: account.balance?.total?.currency || 'USD',
+          balance: accountTotalBalance(account),
+          balanceCurrency: currencyCode(account.balance?.total?.currency)
+            || currencyCode(account.total_value?.currency)
+            || 'USD',
           accountNumber: account.number,
-          brokerageAuthorizationId: connectionId(account.brokerage_authorization),
+          brokerageAuthorizationId: authorizationId,
           syncStatus: account.sync_status,
           holdingsInitialSyncCompleted: holdingsSync?.initial_sync_completed,
           transactionsInitialSyncCompleted: transactionsSync?.initial_sync_completed,
           lastSuccessfulHoldingsSync: holdingsSync?.last_successful_sync || null,
           lastSuccessfulTransactionsSync: transactionsSync?.last_successful_sync || null,
-          connectionDisabled: Boolean(authorization?.disabled),
+          connectionDisabled: connectionStatusUnavailable ? undefined : Boolean(authorization?.disabled),
+          connectionStatusUnavailable,
           connectionDisabledAt: authorization?.disabled_date || null,
           dataFreshnessMode: authorization?.data_freshness_mode,
           status: account.status,
@@ -336,7 +379,8 @@ export class SnapTradeService {
       return { 
         success: true, 
         data: {
-          accounts
+          accounts,
+          connectionStatusError,
         }
       };
     } catch (error: any) {

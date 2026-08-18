@@ -13,6 +13,7 @@ import { loadPersistedPlaidData } from './financial-source-persistence';
 import { normalizeAssetType, resolveAssetTypeWithHeuristics } from './asset-class';
 import {
   fetchAllPlaidInvestmentTransactions,
+  isOptionalLiabilityCoverageError,
   normalizePlaidLiabilities,
   type PlaidLiabilityDetails,
 } from './plaid-liabilities';
@@ -80,7 +81,9 @@ export interface Account {
   lastSyncedAt?: string;
   liabilityDetails?: PlaidLiabilityDetails[];
   syncStatus?: unknown;
+  /** Undefined when the provider's connection status could not be read. */
   connectionDisabled?: boolean;
+  connectionStatusUnavailable?: boolean;
   connectionDisabledAt?: string;
   dataFreshnessMode?: string;
 }
@@ -1067,19 +1070,17 @@ export class FinancialDataService {
                 }
               } catch (liabilityError: any) {
                 const errorCode = liabilityError?.response?.data?.error_code;
-                const optionalCoverageErrors = new Set([
-                  'PRODUCTS_NOT_SUPPORTED',
-                  'NO_LIABILITY_ACCOUNTS',
-                  'ADDITIONAL_CONSENT_REQUIRED',
-                ]);
-                if (optionalCoverageErrors.has(errorCode)) {
+                const errorMessage = liabilityError?.response?.data?.error_message || liabilityError?.message;
+                if (isOptionalLiabilityCoverageError(errorCode)) {
                   console.warn(`Plaid liability details unavailable for token ${tokenRecord.id}: ${errorCode}`);
                   return;
                 }
-                console.error('Error fetching Plaid liability details for token:', errorCode);
+                console.error(
+                  `Error fetching Plaid liability details for token ${tokenRecord.id}: ${errorCode || 'UNKNOWN'} - ${errorMessage}`
+                );
                 errors.push({
                   tokenId: tokenRecord.id,
-                  error: liabilityError?.response?.data?.error_message || liabilityError.message,
+                  error: errorMessage,
                   timestamp: new Date(),
                 });
               }
@@ -1427,6 +1428,13 @@ export class FinancialDataService {
           
           const fetchedAt = new Date().toISOString();
 
+          if (accountsResult.data.connectionStatusError) {
+            errors.push({
+              error: `SnapTrade connection status unavailable: ${accountsResult.data.connectionStatusError}`,
+              timestamp: new Date(),
+            });
+          }
+
           for (const account of accountsResult.data.accounts) {
             const balance = typeof account.balance === 'number' && Number.isFinite(account.balance)
               ? account.balance
@@ -1461,6 +1469,7 @@ export class FinancialDataService {
                 || undefined,
               syncStatus: account.syncStatus,
               connectionDisabled: account.connectionDisabled,
+              connectionStatusUnavailable: account.connectionStatusUnavailable,
               connectionDisabledAt: account.connectionDisabledAt || undefined,
               dataFreshnessMode: account.dataFreshnessMode,
             });
@@ -1469,6 +1478,12 @@ export class FinancialDataService {
               errors.push({
                 accountId,
                 error: 'SnapTrade connection is disabled; showing the last cached brokerage state.',
+                timestamp: new Date(),
+              });
+            } else if (account.connectionStatusUnavailable) {
+              errors.push({
+                accountId,
+                error: 'SnapTrade connection health could not be verified; this balance may come from a disabled connection.',
                 timestamp: new Date(),
               });
             }
@@ -1545,7 +1560,14 @@ export class FinancialDataService {
               const trueAccountValue = nonCashEquivSum + cashBalanceSum
                 || accountHolding.total_value?.value  // fallback if no positions/balances
                 || 0;
-              if (trueAccountValue > 0) {
+              // Record the computed value whenever the provider actually returned
+              // holdings data, zero included. Skipping zero leaves an empty account
+              // with a null balance, which marks the whole canonical snapshot
+              // partial rather than reporting the account as empty.
+              const hasHoldingValueInputs = holdingPositions.length > 0
+                || holdingBalances.length > 0
+                || typeof accountHolding.total_value?.value === 'number';
+              if (hasHoldingValueInputs) {
                 accountBalanceMap.set(accountId, trueAccountValue);
               }
               
@@ -1820,15 +1842,26 @@ export class FinancialDataService {
               }
               
               // Convert SnapTrade activity to standard transaction format
-              const rawActivityId = String(activity.id || `${date}-${securityId}-${transactionType}-${quantity}`);
+              const rawAccountId = String(activity.account_id || 'unknown');
+              const providerActivityId = activity.id === undefined || activity.id === null || activity.id === ''
+                ? null
+                : String(activity.id);
+              // SnapTradeActivity.activityId is globally unique, so a synthesized id
+              // must be scoped to the account. An unscoped date/security/type/quantity
+              // key lets two users' identical trades collide on a single row.
+              const rawActivityId = providerActivityId
+                ?? `${rawAccountId}-${date}-${securityId}-${transactionType}-${quantity}`;
               const transactionId = rawActivityId.startsWith('snaptrade-')
                 ? rawActivityId
                 : `snaptrade-${rawActivityId}`;
-              const rawAccountId = String(activity.account_id || 'unknown');
+              // Key used before the id was scoped. Carried so persistence can migrate
+              // an existing row instead of writing a duplicate alongside it.
+              const legacyActivityId = providerActivityId ? undefined : `snaptrade-${date}-${securityId}`;
               transactions.push({
                 id: transactionId,
                 transaction_id: transactionId,
                 activityId: rawActivityId,
+                ...(legacyActivityId && { legacyActivityId }),
                 account_id: rawAccountId.startsWith('snaptrade-')
                   ? rawAccountId
                   : `snaptrade-${rawAccountId}`,

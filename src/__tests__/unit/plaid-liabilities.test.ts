@@ -1,5 +1,6 @@
 import {
   fetchAllPlaidInvestmentTransactions,
+  isOptionalLiabilityCoverageError,
   normalizePlaidLiabilities,
 } from '../../services/plaid-liabilities';
 
@@ -101,5 +102,25 @@ describe('Plaid investment pagination and liabilities', () => {
       repaymentPlanDescription: 'Income based',
     })]);
     expect(result.get('student-1')?.[0]).not.toHaveProperty('loanName');
+  });
+
+  it('treats missing liability coverage as absent data, not a fetch failure', () => {
+    // Items linked before Liabilities was consented answer INVALID_PRODUCT, and
+    // an item still completing its initial pull answers PRODUCT_NOT_READY. Both
+    // are common enough to fire on every snapshot for affected users.
+    for (const code of [
+      'PRODUCTS_NOT_SUPPORTED',
+      'NO_LIABILITY_ACCOUNTS',
+      'ADDITIONAL_CONSENT_REQUIRED',
+      'INVALID_PRODUCT',
+      'PRODUCT_NOT_READY',
+      'PRODUCTS_NOT_READY',
+    ]) {
+      expect(isOptionalLiabilityCoverageError(code)).toBe(true);
+    }
+
+    for (const code of ['ITEM_LOGIN_REQUIRED', 'RATE_LIMIT_EXCEEDED', undefined, null, '']) {
+      expect(isOptionalLiabilityCoverageError(code)).toBe(false);
+    }
   });
 });
