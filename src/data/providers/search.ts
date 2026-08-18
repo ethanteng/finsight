@@ -1,6 +1,7 @@
 import type { SearchResult } from '../orchestrator';
 import type { SearchFreshness } from '../search-types';
 import {
+  discardResponseBody,
   fetchWithBoundedRetry,
   type BoundedFetchOptions,
   type ProviderRequestInit,
@@ -187,6 +188,7 @@ export class SearchProvider {
     });
 
     if (!response.ok) {
+      await discardResponseBody(response);
       throw new Error(`Bing search failed: ${response.status}`);
     }
 
@@ -220,6 +222,7 @@ export class SearchProvider {
     const response = await this.request(`${this.config.baseUrl}?${params}`);
 
     if (!response.ok) {
+      await discardResponseBody(response);
       throw new Error(`Google search failed: ${response.status}`);
     }
 
@@ -304,6 +307,7 @@ export class SearchProvider {
     const response = await this.request(`${this.config.baseUrl}?${params}`);
 
     if (!response.ok) {
+      await discardResponseBody(response);
       throw new Error(`SerpAPI search failed: ${response.status}`);
     }
 

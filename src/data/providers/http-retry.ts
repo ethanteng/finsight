@@ -120,6 +120,23 @@ function bindTimeoutToResponse(
 }
 
 /**
+ * Release a response the caller will not read.
+ *
+ * The per-attempt abort timer stays armed until the body is read, cancelled, or
+ * aborted, so a provider that throws on a non-OK status without touching the
+ * body would otherwise hold both the socket and the timer open for the whole
+ * timeout window. Callers that *do* read an error body (Brave) must not call
+ * this.
+ */
+export async function discardResponseBody(response: Response): Promise<void> {
+  try {
+    await response.body?.cancel();
+  } catch {
+    // Already consumed, locked, or errored — nothing left to release.
+  }
+}
+
+/**
  * Fetch with an explicit per-attempt timeout and one bounded retry for transient
  * transport, rate-limit, and server failures. The final HTTP response is
  * returned to the provider so it can preserve its endpoint-specific error.

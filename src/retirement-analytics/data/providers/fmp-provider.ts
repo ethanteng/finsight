@@ -5,6 +5,7 @@ import { FundExposure, FundExposureData, SecurityMetadata } from '../../types';
 import { cacheService } from '../../../data/cache';
 import { dbCache } from '../db-cache';
 import {
+  discardResponseBody,
   fetchWithBoundedRetry,
   type BoundedFetchOptions,
 } from '../../../data/providers/http-retry';
@@ -403,6 +404,7 @@ export class FMPProvider {
       maxRetryDelayMs: this.requestOptions.maxRetryDelayMs,
     });
     if (!response.ok) {
+      await discardResponseBody(response);
       throw new Error(`FMP API error for ${path}: HTTP ${response.status}`);
     }
     const body = await response.json();

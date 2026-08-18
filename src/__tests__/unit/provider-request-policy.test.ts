@@ -1,4 +1,4 @@
-import { fetchWithBoundedRetry } from '../../data/providers/http-retry';
+import { discardResponseBody, fetchWithBoundedRetry } from '../../data/providers/http-retry';
 import {
   getProviderRequestTimeoutMs,
   withTransientProviderRetry,
@@ -57,5 +57,46 @@ describe('provider request policy', () => {
 
     await expect(response.text()).rejects.toMatchObject({ name: 'AbortError' });
     expect(fetchImplementation).toHaveBeenCalledTimes(1);
+  });
+
+  it('releases an unread error body instead of holding it until the timeout', async () => {
+    let cancelled: unknown;
+    const body = new ReadableStream<Uint8Array>({
+      start() {
+        // Server sent headers and then stalled — nothing to enqueue.
+      },
+      cancel(reason) {
+        cancelled = reason ?? 'cancelled';
+      },
+    });
+    const fetchImplementation = jest.fn().mockResolvedValue(
+      new Response(body, { status: 500, statusText: 'Internal Server Error' }),
+    );
+
+    const response = await fetchWithBoundedRetry('https://example.com/error', {}, {
+      fetchImplementation,
+      maxAttempts: 1,
+      requestTimeoutMs: 30_000,
+    });
+
+    expect(response.ok).toBe(false);
+    await discardResponseBody(response);
+    expect(cancelled).toBeDefined();
+    // A body left unread would keep the attempt's abort timer armed for the
+    // full request timeout, so Jest would still be holding a handle here.
+  });
+
+  it('tolerates a discarded body that was already consumed', async () => {
+    const fetchImplementation = jest.fn().mockResolvedValue(
+      new Response('boom', { status: 502 }),
+    );
+
+    const response = await fetchWithBoundedRetry('https://example.com/read-then-discard', {}, {
+      fetchImplementation,
+      maxAttempts: 1,
+    });
+
+    await expect(response.text()).resolves.toBe('boom');
+    await expect(discardResponseBody(response)).resolves.toBeUndefined();
   });
 });

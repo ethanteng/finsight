@@ -319,6 +319,14 @@ describe('FinancialDataService investment persistence safeguards', () => {
           price: 50,
           trade_date: '2026-08-14',
           symbol: { id: 'security-3', symbol: 'SPLT', description: 'Split Fund' },
+        }, {
+          id: 'rei-uuid',
+          account_id: 'brokerage-1',
+          type: 'REI',
+          units: 3,
+          price: 20,
+          trade_date: '2026-08-13',
+          symbol: { id: 'security-4', symbol: 'REIF', description: 'Reinvest Fund' },
         }],
       },
     });
@@ -358,6 +366,13 @@ describe('FinancialDataService investment persistence safeguards', () => {
       id: 'snaptrade-split-uuid',
       type: 'split',
       amount: 0,
+    });
+    // Reinvestment buys units with the distribution, so the inferred cash
+    // effect is an outflow — never a positive amount.
+    expect(result.transactions[3]).toMatchObject({
+      id: 'snaptrade-rei-uuid',
+      type: 'rei',
+      amount: -60,
     });
     expect(result.errors).toEqual(expect.arrayContaining([
       expect.objectContaining({ error: expect.stringContaining('connection is disabled') }),

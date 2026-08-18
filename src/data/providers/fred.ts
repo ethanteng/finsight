@@ -1,6 +1,6 @@
 import { DataProvider, EconomicIndicator, MarketDataPoint } from '../types';
 import { cacheService } from '../cache';
-import { fetchWithBoundedRetry, type BoundedFetchOptions } from './http-retry';
+import { discardResponseBody, fetchWithBoundedRetry, type BoundedFetchOptions } from './http-retry';
 
 type FREDUnits = 'lin' | 'pc1';
 
@@ -202,6 +202,7 @@ export class FREDProvider implements DataProvider {
 
     const response = await this.fetch(url);
     if (!response.ok) {
+      await discardResponseBody(response);
       throw new Error(`FRED API error for ${seriesId}: HTTP ${response.status}`);
     }
 
@@ -269,6 +270,7 @@ export class FREDProvider implements DataProvider {
 
     const response = await this.fetch(url);
     if (!response.ok) {
+      await discardResponseBody(response);
       throw new Error(`FRED API error for CPIAUCSL: HTTP ${response.status}`);
     }
 
