@@ -1818,6 +1818,9 @@ export class FinancialDataService {
                   // REI reinvests a distribution into units, so cash leaves the
                   // account exactly as it does for a buy. It is never an inflow.
                   normalizedAmount = -Math.abs(normalizedAmount);
+                // STOCK_DIVIDEND is deliberately absent here: it pays in shares,
+                // so forcing a positive amount would assert cash the user never
+                // received. It is handled as a non-cash adjustment above.
                 } else if (['SELL', 'CONTRIBUTION', 'DIVIDEND', 'INTEREST'].includes(normalizedType)) {
                   normalizedAmount = Math.abs(normalizedAmount);
                 }
