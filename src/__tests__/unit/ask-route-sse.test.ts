@@ -208,7 +208,7 @@ describe('Ask route SSE lifecycle', () => {
     expect(response.body.databaseData).toEqual({ canonical_facts: [] });
   });
 
-  it('refreshes the stored profile from each answered turn', async () => {
+  it('refreshes personal context from each answered turn', async () => {
     (runAskLincAnalysis as jest.Mock).mockResolvedValue({
       displayText: 'You can retire around 62.',
       structuredResponse: { summary: 'You can retire around 62.' },
@@ -222,11 +222,10 @@ describe('Ask route SSE lifecycle', () => {
       userId: 'user-1',
       conversationId: 'conversation-1',
       question: 'When can I retire?',
-      answer: 'You can retire around 62.',
     });
   });
 
-  it('refreshes the stored profile from a streamed turn as well', async () => {
+  it('refreshes personal context from a streamed turn as well', async () => {
     (runAskLincAnalysis as jest.Mock).mockImplementation(async options => {
       options.onAnswerDelta?.('You can retire around 62.');
       return {
@@ -244,7 +243,6 @@ describe('Ask route SSE lifecycle', () => {
       userId: 'user-1',
       conversationId: 'conversation-1',
       question: 'When can I retire?',
-      answer: 'You can retire around 62.',
     });
   });
 

@@ -100,11 +100,12 @@ not independent probability estimates.
 ### **6. AI Conversation Context Enhancement**
 - **Purpose**: Enables AI to build context across multiple conversation turns
 - **Features**:
-    - Intelligent conversation history analysis
-    - Automatic detection of context building opportunities
-    - Proactive completion of incomplete analyses
+    - Grouped conversation turns and active-decision context
+    - Question-specific canonical data packs
+    - Bounded “What Linc remembers about you” details (age, location, household, and employment)
+    - Field-level updates that replace or clear stale details instead of appending summaries
     - Seamless multi-turn financial conversations
-    - Enhanced user experience with contextual memory
+    - Financial facts, goals, and scenario assumptions remain in their authoritative sources
 
 ### **7. MailerLite User Sync System**
 - **Purpose**: Automatically synchronizes user data to MailerLite for email marketing
@@ -116,13 +117,13 @@ not independent probability estimates.
 - **Purpose**: Track and include home values in Net Worth calculations
 - **Data Source**: RentCast API for real-time property valuations
 - **Features**:
-    - AI-powered address detection from conversations
+    - Home records kept separate from remembered personal context
     - Manual home address entry in profile settings
     - Automatic valuation with price ranges (low, mid, high)
     - Monthly automatic value refresh
     - Manual refresh capability
     - Integrated into Financial Overview Net Worth calculation
-    - Encrypted storage in user profile
+    - Encrypted storage alongside remembered personal context
     - Available to authenticated users
 
 ## 🚀 **Quick Start**

@@ -58,8 +58,8 @@ export const CONTEXT_PACKS: ContextPackMeta[] = [
   },
   {
     id: 'user_profile',
-    label: 'User profile',
-    description: 'Persisted goals, ages, family situation, risk preferences and other user-stated planning context.',
+    label: 'What Linc remembers about the user',
+    description: 'Explicitly user-stated age, coarse location, household, dependents, occupation and employment context. Never contains financial summaries, inferred preferences or assistant-authored facts.',
     cost: 'local',
     dependencies: [],
   },
@@ -68,7 +68,7 @@ export const CONTEXT_PACKS: ContextPackMeta[] = [
     label: 'Home value',
     description: 'Home address and the latest available property valuation context.',
     cost: 'local',
-    dependencies: ['user_profile'],
+    dependencies: [],
   },
   {
     id: 'retirement_analysis',

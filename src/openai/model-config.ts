@@ -92,10 +92,10 @@ export const MODEL_SLOTS: ModelSlotMeta[] = [
   },
   {
     id: 'profile',
-    label: 'Profile extraction',
+    label: 'Personal context extraction',
     provider: 'openai',
     description:
-      'Reads each answered question and updates the stored financial profile with anything new it reveals.',
+      'Reads only the user message and extracts bounded, explicitly stated biographical details for “What Linc remembers about you.” The selected model must support strict JSON-schema outputs.',
     shippedDefault: 'gpt-4o',
   },
   {
@@ -246,13 +246,13 @@ export const SLOT_GENERATION_SETTINGS: Record<ModelSlotId, GenerationSettingMeta
   profile: [
     temperatureSetting(
       '0.1',
-      'How much the rewritten profile varies between identical conversations. Low values keep an unchanged conversation from churning the stored profile.'
+      'How much the structured personal-context patch varies between identical user messages. Low values keep unchanged details stable.'
     ),
     maxOutputTokensSetting({
       shippedDefault: OMIT_SETTING,
       omittable: true,
       description:
-        'Ceiling on the rewritten profile. Currently unset — a profile truncated mid-way would be stored as if it were complete, so raise this rather than lowering it.',
+        'Ceiling on the small structured personal-context patch. The application rejects malformed or incomplete output instead of storing it.',
     }),
   ],
   contextPlanner: [

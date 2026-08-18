@@ -824,10 +824,10 @@ export default function AdminPage() {
                   {/* Show expanded view when clicked */}
                   {selectedSession === user.userId && (
                     <div className="mt-4 space-y-4">
-                      {/* Financial Profile Section */}
+                      {/* Remembered Personal Context Section */}
                       <div className="bg-gray-600 rounded-lg p-4">
                         <div className="flex justify-between items-center mb-3">
-                          <h3 className="text-lg font-semibold text-white">Financial Profile</h3>
+                          <h3 className="text-lg font-semibold text-white">What Linc remembers</h3>
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
@@ -843,9 +843,9 @@ export default function AdminPage() {
                         {userFinancialData[user.userId] ? (
                           <div className="space-y-3">
                             <div className="bg-gray-700 rounded p-3">
-                              <div className="text-sm font-medium text-blue-300 mb-2">Profile Summary</div>
+                              <div className="text-sm font-medium text-blue-300 mb-2">Remembered personal context</div>
                               <div className="text-sm text-gray-300 mb-2">
-                                {userFinancialData[user.userId].profile.text || 'No profile available'}
+                                {userFinancialData[user.userId].profile.text || 'No remembered details'}
                               </div>
                               {userFinancialData[user.userId].profile.lastUpdated && (
                                 <div className="text-xs text-gray-500">
@@ -888,7 +888,7 @@ export default function AdminPage() {
                           </div>
                         ) : (
                           <div className="text-sm text-gray-500 italic">
-                            Click "Load Financial Data" to view user's financial profile and linked institutions
+                            Click "Load Financial Data" to view remembered personal context and linked institutions
                           </div>
                         )}
                       </div>

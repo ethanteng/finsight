@@ -15,9 +15,27 @@ interface HomeData {
   isManualOverride?: boolean;
 }
 
+interface PersonalMemory {
+  preferredName?: string;
+  age?: number;
+  city?: string;
+  stateOrProvince?: string;
+  country?: string;
+  householdStatus?: string;
+  dependentCount?: number;
+  dependentAges?: number[];
+  occupation?: string;
+  industry?: string;
+  employmentStatus?: string;
+  retirementStatus?: string;
+}
+
+const EMPTY_MEMORY: PersonalMemory = {};
+
 export default function UserProfile({ userId }: UserProfileProps) {
-  const [profileText, setProfileText] = useState<string>('');
-  const [originalProfileText, setOriginalProfileText] = useState<string>('');
+  const [memory, setMemory] = useState<PersonalMemory>(EMPTY_MEMORY);
+  const [originalMemory, setOriginalMemory] = useState<PersonalMemory>(EMPTY_MEMORY);
+  const [dependentAgesText, setDependentAgesText] = useState('');
   const [loading, setLoading] = useState(false);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -61,15 +79,16 @@ export default function UserProfile({ userId }: UserProfileProps) {
 
       if (response.ok) {
         const data = await response.json();
-        const profileTextValue = data.profile?.profileText || '';
-        setProfileText(profileTextValue);
-        setOriginalProfileText(profileTextValue);
+        const loadedMemory = data.memory || EMPTY_MEMORY;
+        setMemory(loadedMemory);
+        setOriginalMemory(loadedMemory);
+        setDependentAgesText((loadedMemory.dependentAges || []).join(', '));
       } else {
-        console.error('Failed to load profile:', response.status);
+        console.error('Failed to load remembered details:', response.status);
       }
     } catch (error) {
-      console.error('Failed to load profile:', error);
-      setError('Failed to load profile');
+      console.error('Failed to load remembered details:', error);
+      setError('Failed to load remembered details');
     } finally {
       setLoading(false);
     }
@@ -126,7 +145,7 @@ export default function UserProfile({ userId }: UserProfileProps) {
     }
   }, [userId, loadProfile, loadHomeData]);
 
-  const saveProfile = async (newText: string) => {
+  const saveMemory = async () => {
     setSaving(true);
     setError('');
     try {
@@ -139,33 +158,62 @@ export default function UserProfile({ userId }: UserProfileProps) {
         headers['Authorization'] = `Bearer ${token}`;
       }
 
+      const dependentAges = dependentAgesText
+        .split(',')
+        .map(value => value.trim())
+        .filter(Boolean)
+        .map(Number);
+      if (dependentAges.some(age => !Number.isInteger(age) || age < 0 || age > 100)) {
+        setError('Dependent ages must be whole numbers between 0 and 100.');
+        setSaving(false);
+        return;
+      }
+      const memoryToSave: PersonalMemory = {
+        ...memory,
+        dependentAges: dependentAges.length ? dependentAges : undefined,
+      };
+
       const response = await fetch(`${API_URL}/profile`, {
         method: 'PUT',
         headers,
-        body: JSON.stringify({ profileText: newText })
+        body: JSON.stringify({ memory: memoryToSave })
       });
 
       if (response.ok) {
-        setProfileText(newText);
-        setOriginalProfileText(newText);
+        const data = await response.json();
+        const savedMemory = data.memory || memoryToSave;
+        setMemory(savedMemory);
+        setOriginalMemory(savedMemory);
+        setDependentAgesText((savedMemory.dependentAges || []).join(', '));
         setEditing(false);
       } else {
-        setError('Failed to save profile');
+        let message = 'Failed to save remembered details';
+        try {
+          const errorData = await response.json();
+          if (typeof errorData?.error === 'string' && errorData.error) {
+            message = errorData.error;
+          }
+        } catch {
+          // Keep the generic message when the body is not JSON.
+        }
+        setError(message);
       }
     } catch (error) {
-      console.error('Failed to save profile:', error);
-      setError('Failed to save profile');
+      console.error('Failed to save remembered details:', error);
+      setError('Failed to save remembered details');
     } finally {
       setSaving(false);
     }
   };
 
   const handleEdit = () => {
+    setDependentAgesText((memory.dependentAges || []).join(', '));
     setEditing(true);
   };
 
   const handleCancel = () => {
-    setProfileText(originalProfileText);
+    setMemory(originalMemory);
+    setDependentAgesText((originalMemory.dependentAges || []).join(', '));
     setEditing(false);
   };
 
@@ -383,6 +431,23 @@ export default function UserProfile({ userId }: UserProfileProps) {
     });
   };
 
+  const updateMemory = (field: keyof PersonalMemory, value: string | number | undefined) => {
+    setMemory(current => ({ ...current, [field]: value === '' ? undefined : value }));
+  };
+
+  const rememberedItems = [
+    ['Preferred name', memory.preferredName],
+    ['Age', memory.age],
+    ['Location', [memory.city, memory.stateOrProvince, memory.country].filter(Boolean).join(', ')],
+    ['Household', memory.householdStatus],
+    ['Dependents', memory.dependentCount],
+    ['Dependent ages', memory.dependentAges?.join(', ')],
+    ['Occupation', memory.occupation],
+    ['Industry', memory.industry],
+    ['Employment', memory.employmentStatus],
+    ['Retirement status', memory.retirementStatus],
+  ].filter(([, value]) => value !== undefined && value !== '');
+
   if (!userId) {
     return null;
   }
@@ -390,7 +455,12 @@ export default function UserProfile({ userId }: UserProfileProps) {
   return (
     <div className="bg-gray-800 rounded-lg p-6 mb-6">
       <div className="flex justify-between items-center mb-4">
-        <h3 className="text-lg font-semibold text-white">Your Financial Profile</h3>
+        <div>
+          <h3 className="text-lg font-semibold text-white">What Linc remembers about you</h3>
+          <p className="mt-1 max-w-2xl text-sm text-gray-400">
+            Only biographical details you tell Linc directly. Your balances, spending, accounts, goals, and assumptions live elsewhere and are never added here.
+          </p>
+        </div>
         {!loading && (
           <button
             onClick={editing ? handleCancel : handleEdit}
@@ -402,21 +472,59 @@ export default function UserProfile({ userId }: UserProfileProps) {
       </div>
 
       {loading ? (
-        <div className="text-gray-400">Loading profile...</div>
+        <div className="text-gray-400">Loading remembered details...</div>
       ) : editing ? (
-        <div>
-          <textarea
-            value={profileText}
-            onChange={(e) => setProfileText(e.target.value)}
-            className="w-full h-32 p-3 border border-gray-600 rounded-lg bg-gray-700 text-white placeholder-gray-400 resize-none"
-            placeholder="Your profile will be built automatically as you chat with Linc..."
-          />
+        <div className="space-y-4">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="text-sm text-gray-300">Preferred name
+              <input value={memory.preferredName || ''} onChange={event => updateMemory('preferredName', event.target.value)} maxLength={80} className="mt-1 w-full rounded-lg border border-gray-600 bg-gray-700 px-3 py-2 text-white" />
+            </label>
+            <label className="text-sm text-gray-300">Age
+              <input type="number" min="0" max="120" value={memory.age ?? ''} onChange={event => updateMemory('age', event.target.value === '' ? undefined : Number(event.target.value))} className="mt-1 w-full rounded-lg border border-gray-600 bg-gray-700 px-3 py-2 text-white" />
+            </label>
+            <label className="text-sm text-gray-300">City
+              <input value={memory.city || ''} onChange={event => updateMemory('city', event.target.value)} maxLength={100} className="mt-1 w-full rounded-lg border border-gray-600 bg-gray-700 px-3 py-2 text-white" />
+            </label>
+            <label className="text-sm text-gray-300">State or province
+              <input value={memory.stateOrProvince || ''} onChange={event => updateMemory('stateOrProvince', event.target.value)} maxLength={100} className="mt-1 w-full rounded-lg border border-gray-600 bg-gray-700 px-3 py-2 text-white" />
+            </label>
+            <label className="text-sm text-gray-300">Country
+              <input value={memory.country || ''} onChange={event => updateMemory('country', event.target.value)} maxLength={100} className="mt-1 w-full rounded-lg border border-gray-600 bg-gray-700 px-3 py-2 text-white" />
+            </label>
+            <label className="text-sm text-gray-300">Household status
+              <select value={memory.householdStatus || ''} onChange={event => updateMemory('householdStatus', event.target.value)} className="mt-1 w-full rounded-lg border border-gray-600 bg-gray-700 px-3 py-2 text-white">
+                <option value="">Not remembered</option><option value="single">Single</option><option value="partnered">Partnered</option><option value="married">Married</option><option value="separated">Separated</option><option value="divorced">Divorced</option><option value="widowed">Widowed</option>
+              </select>
+            </label>
+            <label className="text-sm text-gray-300">Number of dependents
+              <input type="number" min="0" max="20" value={memory.dependentCount ?? ''} onChange={event => updateMemory('dependentCount', event.target.value === '' ? undefined : Number(event.target.value))} className="mt-1 w-full rounded-lg border border-gray-600 bg-gray-700 px-3 py-2 text-white" />
+            </label>
+            <label className="text-sm text-gray-300">Dependent ages <span className="text-gray-500">(comma-separated)</span>
+              <input value={dependentAgesText} onChange={event => setDependentAgesText(event.target.value)} placeholder="8, 11" className="mt-1 w-full rounded-lg border border-gray-600 bg-gray-700 px-3 py-2 text-white" />
+            </label>
+            <label className="text-sm text-gray-300">Occupation
+              <input value={memory.occupation || ''} onChange={event => updateMemory('occupation', event.target.value)} maxLength={140} className="mt-1 w-full rounded-lg border border-gray-600 bg-gray-700 px-3 py-2 text-white" />
+            </label>
+            <label className="text-sm text-gray-300">Industry
+              <input value={memory.industry || ''} onChange={event => updateMemory('industry', event.target.value)} maxLength={140} className="mt-1 w-full rounded-lg border border-gray-600 bg-gray-700 px-3 py-2 text-white" />
+            </label>
+            <label className="text-sm text-gray-300">Employment status
+              <select value={memory.employmentStatus || ''} onChange={event => updateMemory('employmentStatus', event.target.value)} className="mt-1 w-full rounded-lg border border-gray-600 bg-gray-700 px-3 py-2 text-white">
+                <option value="">Not remembered</option><option value="employed">Employed</option><option value="self-employed">Self-employed</option><option value="unemployed">Unemployed</option><option value="student">Student</option><option value="homemaker">Homemaker</option><option value="retired">Retired</option><option value="other">Other</option>
+              </select>
+            </label>
+            <label className="text-sm text-gray-300">Retirement status
+              <select value={memory.retirementStatus || ''} onChange={event => updateMemory('retirementStatus', event.target.value)} className="mt-1 w-full rounded-lg border border-gray-600 bg-gray-700 px-3 py-2 text-white">
+                <option value="">Not remembered</option><option value="not-retired">Not retired</option><option value="partially-retired">Partially retired</option><option value="retired">Retired</option>
+              </select>
+            </label>
+          </div>
           {error && (
             <div className="text-red-400 text-sm mt-2">{error}</div>
           )}
           <div className="mt-3 flex gap-2">
             <button
-              onClick={() => saveProfile(profileText)}
+              onClick={saveMemory}
               disabled={saving}
               className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-blue-800 transition-colors"
             >
@@ -432,17 +540,19 @@ export default function UserProfile({ userId }: UserProfileProps) {
         </div>
       ) : (
         <div>
-          {profileText ? (
-            <>
-              <p className="text-gray-300 whitespace-pre-wrap">{profileText}</p>
-              <div className="mt-4 text-xs text-gray-500">
-                This profile is built automatically from your conversations with Linc and your financial data.
-              </div>
-            </>
+          {rememberedItems.length > 0 ? (
+            <dl className="grid gap-3 sm:grid-cols-2">
+              {rememberedItems.map(([label, value]) => (
+                <div key={String(label)} className="rounded-lg bg-gray-700 px-4 py-3">
+                  <dt className="text-xs uppercase tracking-wide text-gray-400">{label}</dt>
+                  <dd className="mt-1 text-white">{String(value)}</dd>
+                </div>
+              ))}
+            </dl>
           ) : (
             <div className="text-gray-400">
-              <p>Your financial profile will be built automatically as you chat with Linc.</p>
-              <p className="text-sm mt-2">Start asking questions to build your profile!</p>
+              <p>Linc is not remembering any personal details yet.</p>
+              <p className="text-sm mt-2">You can add them here, or mention them naturally in a conversation.</p>
             </div>
           )}
         </div>

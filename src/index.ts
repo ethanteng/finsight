@@ -1027,7 +1027,7 @@ app.get('/sync/status', async (req: Request, res: Response) => {
       }
     });
 
-    // Admin endpoint to get user financial profile and linked institutions
+    // Admin endpoint to get remembered personal context and linked institutions
     app.get('/admin/user-financial-data/:userId', adminAuth, async (req: Request, res: Response) => {
       try {
         const { getPrismaClient } = await import('./prisma-client');
@@ -1041,10 +1041,10 @@ app.get('/sync/status', async (req: Request, res: Response) => {
 
         console.log('Admin: Fetching financial data for user:', userId);
 
-        // Get user profile using ProfileManager to get the current encrypted profile
+        // Format the bounded personal context instead of exposing its encrypted storage document.
         const { ProfileManager } = await import('./profile/manager');
         const profileManager = new ProfileManager();
-        const currentProfileText = await profileManager.getOriginalProfile(userId);
+        const currentPersonalContext = await profileManager.getPersonalContextForModel(userId);
 
         // Get user profile metadata for lastUpdated
         const userProfile = await prisma.userProfile.findUnique({
@@ -1263,7 +1263,7 @@ app.get('/sync/status', async (req: Request, res: Response) => {
 
         const financialData = {
           profile: {
-            text: currentProfileText || 'No profile available - user has not had any conversations yet',
+            text: currentPersonalContext || 'Linc does not remember any personal details yet',
             lastUpdated: userProfile?.lastUpdated || null
           },
           institutions: institutions,
@@ -1337,9 +1337,8 @@ app.get('/profile', requireAuth, async (req: Request, res: Response) => {
   try {
     const { ProfileManager } = await import('./profile/manager');
     const profileManager = new ProfileManager();
-    const profileText = await profileManager.getOriginalProfile(req.user!.id);
-
-    res.json({ profile: { profileText } });
+    const memory = await profileManager.getPersonalContext(req.user!.id);
+    res.json({ memory });
   } catch (error) {
     console.error('Failed to fetch profile:', error);
 
@@ -1356,19 +1355,25 @@ app.get('/profile', requireAuth, async (req: Request, res: Response) => {
 
 app.put('/profile', requireAuth, async (req: Request, res: Response) => {
   try {
-    const { profileText } = req.body;
+    const { memory } = req.body;
 
-    if (typeof profileText !== 'string') {
-      return res.status(400).json({ error: 'profileText must be a string' });
+    if (!memory || typeof memory !== 'object' || Array.isArray(memory)) {
+      return res.status(400).json({ error: 'memory must be an object' });
     }
 
     const { ProfileManager } = await import('./profile/manager');
     const profileManager = new ProfileManager();
-    await profileManager.updateProfile(req.user!.id, profileText);
+    const savedMemory = await profileManager.replacePersonalContext(req.user!.id, memory);
 
-    res.json({ success: true });
+    res.json({ success: true, memory: savedMemory });
   } catch (error) {
-    console.error('Failed to update profile:', error);
+    // A rejected field or value is user input, not a server fault: answer 400
+    // and keep it out of Sentry.
+    if (error instanceof Error && error.message.startsWith('Invalid personal context')) {
+      return res.status(400).json({ error: error.message });
+    }
+
+    console.error('Failed to update personal context:', error);
 
     // Capture error in Sentry
     if (error instanceof Error) {
@@ -1377,7 +1382,7 @@ app.put('/profile', requireAuth, async (req: Request, res: Response) => {
       Sentry.captureMessage('Unknown error in profile update endpoint', 'error');
     }
 
-    res.status(500).json({ error: 'Failed to update profile' });
+    res.status(500).json({ error: 'Failed to update personal context' });
   }
 });
 
@@ -1390,8 +1395,6 @@ app.get('/profile/home', requireAuth, async (req: Request, res: Response) => {
     const profileManager = new ProfileManager();
 
     const profileText = await profileManager.getOriginalProfile(req.user!.id);
-    console.log('🏠 Profile text length:', profileText.length);
-    console.log('🏠 Profile text preview:', profileText.substring(0, 200));
 
     const homeData = profileManager.extractHomeData(profileText);
     console.log('🏠 Extracted home data:', homeData);

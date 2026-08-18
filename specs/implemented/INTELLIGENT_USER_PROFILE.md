@@ -1,5 +1,7 @@
 # 🧠 **Intelligent User Profile System**
 
+> Superseded August 18, 2026. The free-form financial profile described below was removed. The current implementation is the bounded, structured “What Linc remembers about you” system in `src/profile/personal-context.ts`, `src/profile/personal-context-extractor.ts`, and `src/profile/manager.ts`. This file remains as historical design context only.
+
 ## **Concept Overview**
 
 A dynamic AI-built user profile system that intelligently builds and maintains user profiles by:

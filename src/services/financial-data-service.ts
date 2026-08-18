@@ -1794,12 +1794,13 @@ export class FinancialDataService {
   private async fetchHomeValue(userId: string): Promise<HomeData | null> {
     try {
       let profileData: string;
+      let profileManager: import('../profile/manager').ProfileManager | null = null;
 
       // Use ProfileManager to get decrypted profile (handles encrypted_profile_data)
       // Direct prisma.userProfile.profileText fails when profile is encrypted - profileText is empty
       try {
         const { ProfileManager } = await import('../profile/manager');
-        const profileManager = new ProfileManager();
+        profileManager = new ProfileManager();
         profileData = await profileManager.getOriginalProfile(userId);
       } catch (profileError) {
         console.warn('fetchHomeValue: ProfileManager unavailable, falling back to profileText:', profileError);
@@ -1814,7 +1815,20 @@ export class FinancialDataService {
         return null;
       }
 
-      const parsed = this.parseHomeDataFromProfileText(profileData);
+      const managerHome = profileManager && typeof profileManager.extractHomeData === 'function'
+        ? profileManager.extractHomeData(profileData)
+        : null;
+      const parsed = managerHome
+        ? {
+            address: managerHome.address,
+            propertyId: managerHome.propertyId,
+            value: managerHome.value,
+            valueLow: managerHome.valueLow,
+            valueHigh: managerHome.valueHigh,
+            lastUpdated: managerHome.lastUpdated,
+            isManualOverride: managerHome.isManualOverride,
+          }
+        : this.parseHomeDataFromProfileText(profileData);
       if (!parsed?.address) {
         return null;
       }

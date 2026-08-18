@@ -1,10 +1,21 @@
 import { PrismaClient } from '@prisma/client';
 import { ProfileEncryptionService } from './encryption';
-import { ProfileExtractor } from './extractor';
+import { PersonalContextExtractor } from './personal-context-extractor';
+import {
+  formatPersonalContextForModel,
+  parseStoredPersonalContextDocument,
+  personalContextFromLegacyText,
+  personalContextValues,
+  replacePersonalContextManually,
+  serializePersonalContextDocument,
+  type PersonalContextFacts,
+  type PersonalContextValues,
+  type StoredHomeContext,
+} from './personal-context';
 
 export class ProfileManager {
   private encryptionService: ProfileEncryptionService;
-  private profileExtractor: ProfileExtractor;
+  private personalContextExtractor: PersonalContextExtractor;
 
   constructor() {
     const encryptionKey = process.env.PROFILE_ENCRYPTION_KEY;
@@ -18,10 +29,11 @@ export class ProfileManager {
     }
     
     this.encryptionService = new ProfileEncryptionService(encryptionKey);
-    this.profileExtractor = new ProfileExtractor();
+    this.personalContextExtractor = new PersonalContextExtractor();
   }
 
-  // Method to get original (non-anonymized) profile for user display
+  // Internal raw-storage read used by migration and the separate home-value feature.
+  // User/model-facing callers should use getPersonalContext* instead.
   async getOriginalProfile(userId: string): Promise<string> {
     const prisma = new PrismaClient();
     
@@ -60,119 +72,45 @@ export class ProfileManager {
     }
   }
 
-  /**
-   * Remove duplicate HOME_VALUE_MANUAL entries from profile text.
-   * When the LLM or merge logic produces multiple HOME_VALUE_MANUAL lines, keep only the last one
-   * (the most recent user-specified value).
-   * Public for use by loadUserProfile and other consumers of profile-for-AI.
-   */
-  deduplicateHomeValueManual(profileText: string): string {
-    const matches = [...profileText.matchAll(/HOME_VALUE_MANUAL:\s*([\d,]+(?:\.\d+)?)\n?/g)];
-    if (matches.length <= 1) return profileText;
-    const lastValue = matches[matches.length - 1][1];
-    let updated = profileText.replace(/HOME_VALUE_MANUAL:\s*[\d,]+(?:\.\d+)?\n?/g, '');
-    if (updated.includes('HOME_VALUE_LAST_UPDATED:')) {
-      updated = updated.replace(
-        /(HOME_VALUE_LAST_UPDATED:[^\n]+)(\n|$)/,
-        `$1\nHOME_VALUE_MANUAL: ${lastValue}\n`
-      );
-    } else if (updated.includes('HOME_VALUE_HIGH:')) {
-      updated = updated.replace(
-        /(HOME_VALUE_HIGH:[^\n]+)(\n|$)/,
-        `$1\nHOME_VALUE_MANUAL: ${lastValue}\n`
-      );
-    } else if (updated.includes('HOME_VALUE:')) {
-      updated = updated.replace(
-        /(HOME_VALUE:[^\n]+)(\n|$)/,
-        `$1\nHOME_VALUE_MANUAL: ${lastValue}\n`
-      );
-    } else if (updated.includes('HOME_ADDRESS:')) {
-      updated = updated.replace(
-        /(HOME_ADDRESS:[^\n]+)(\n|$)/,
-        `$1\nHOME_VALUE_MANUAL: ${lastValue}\n`
-      );
-    } else {
-      updated = updated.trimEnd() + (updated.endsWith('\n') ? '' : '\n') + `HOME_VALUE_MANUAL: ${lastValue}\n`;
-    }
-    return updated;
+  private factsFromStoredText(profileText: string): PersonalContextFacts {
+    const document = parseStoredPersonalContextDocument(profileText);
+    return document?.facts ?? personalContextFromLegacyText(profileText);
   }
 
-  /**
-   * Normalize the home data section in profile text to ensure it uses:
-   * - Latest RentCast data (HOME_VALUE, LOW, HIGH, LAST_UPDATED)
-   * - Latest user manual override (HOME_VALUE_MANUAL) if set
-   * - Natural language fallback when no structured data exists
-   * Rebuilds the structured section from extracted data to eliminate duplicates and stale values.
-   */
-  normalizeProfileHomeDataSection(profileText: string): string {
-    const homeData = this.extractHomeData(profileText);
-
-    // If we have address, rebuild the section with canonical values
-    if (homeData.address) {
-      const rentCastValue = homeData.rentCastValue ?? 0;
-      // LOW/HIGH are RentCast confidence bounds - derive from rentCastValue only, not manual override
-      const valueLow = homeData.valueLow ?? (rentCastValue > 0 ? Math.round(rentCastValue * 0.9) : 0);
-      const valueHigh = homeData.valueHigh ?? (rentCastValue > 0 ? Math.round(rentCastValue * 1.1) : 0);
-      const lastUpdated = homeData.lastUpdated?.toISOString() || new Date().toISOString();
-
-      let section = `
-
-HOME_ADDRESS: ${homeData.address}
-${homeData.propertyId ? `HOME_RENTCAST_PROPERTY_ID: ${homeData.propertyId}\n` : ''}HOME_VALUE: ${rentCastValue}
-HOME_VALUE_LOW: ${valueLow}
-HOME_VALUE_HIGH: ${valueHigh}
-HOME_VALUE_LAST_UPDATED: ${lastUpdated}`;
-      if (homeData.manualValue != null && homeData.manualValue > 0) {
-        section += `\nHOME_VALUE_MANUAL: ${homeData.manualValue}`;
-      }
-
-      // Match each field with optional trailing newline (?:\n|$) so fields at end-of-string are removed
-      const withoutSection = profileText.replace(
-        /HOME_ADDRESS:.*?(?:\n|$)|HOME_RENTCAST_PROPERTY_ID:.*?(?:\n|$)|HOME_VALUE:.*?(?:\n|$)|HOME_VALUE_LOW:.*?(?:\n|$)|HOME_VALUE_HIGH:.*?(?:\n|$)|HOME_VALUE_LAST_UPDATED:.*?(?:\n|$)|HOME_VALUE_MANUAL:.*?(?:\n|$)/g,
-        ''
-      ).trim();
-
-      return withoutSection + section;
-    }
-
-    // No address - try natural language fallback for value when user mentioned home value in prompt
-    const nlValue = this.extractHomeValueFromNaturalLanguage(profileText);
-    if (nlValue != null && nlValue > 0) {
-      const section = `
-
-HOME_ADDRESS: Not specified
-HOME_VALUE: ${nlValue}
-HOME_VALUE_LOW: ${Math.round(nlValue * 0.9)}
-HOME_VALUE_HIGH: ${Math.round(nlValue * 1.1)}
-HOME_VALUE_LAST_UPDATED: ${new Date().toISOString()}
-HOME_VALUE_MANUAL: ${nlValue}`;
-      return profileText.trimEnd() + section;
-    }
-
-    return profileText;
+  private storedHomeFromExtracted(profileText: string): StoredHomeContext | null {
+    const document = parseStoredPersonalContextDocument(profileText);
+    if (document) return document.home;
+    const home = this.extractHomeData(profileText);
+    if (!home.address) return null;
+    return {
+      address: home.address,
+      propertyId: home.propertyId,
+      rentCastValue: home.rentCastValue,
+      manualValue: home.manualValue,
+      valueLow: home.valueLow,
+      valueHigh: home.valueHigh,
+      lastUpdated: home.lastUpdated?.toISOString() ?? null,
+    };
   }
 
-  /**
-   * Try to extract home value from natural language in profile (e.g. "my home is worth $1.2M", "estimated value of $1,535,000").
-   * Used as fallback when no structured home data exists.
-   */
-  private extractHomeValueFromNaturalLanguage(profileText: string): number | null {
-    const homeValuePatterns = [
-      /(?:home|house|property)\s*(?:is\s+)?(?:worth|valued?\s+at|estimated?\s+at|valued?)\s*\$?([\d,]+(?:\.[\d]+)?)\s*(?:million|M|k|K)?/i,
-      /(?:worth|valued?|estimated?)\s*(?:at\s+)?\$?([\d,]+(?:\.[\d]+)?)\s*(?:million|M|k|K)?\s*(?:for\s+)?(?:my|our|the)\s+(?:home|house|property)/i,
-      /(?:manually\s+)?(?:estimated?\s+)?(?:value\s+of|worth)\s*\$?([\d,]+(?:\.[\d]+)?)\s*(?:million|M|k|K)?/i,
-      /\$([\d,]+(?:\.[\d]+)?)\s*(?:million|M|k|K)?\s*(?:for\s+)?(?:my|our|the)\s+(?:home|house|property)/i,
-    ];
-    for (const re of homeValuePatterns) {
-      const m = profileText.match(re);
-      if (m) {
-        let num = parseFloat(m[1].replace(/,/g, ''));
-        if (/\b(million|M)\b/i.test(m[0])) num *= 1_000_000;
-        else if (/\b(k|K)\b/i.test(m[0])) num *= 1_000;
-        if (num > 0 && num < 1e9) return num;
-      }
-    }
-    return null;
+  async getPersonalContextFacts(userId: string): Promise<PersonalContextFacts> {
+    return this.factsFromStoredText(await this.getOriginalProfile(userId));
+  }
+
+  async getPersonalContext(userId: string): Promise<PersonalContextValues> {
+    return personalContextValues(await this.getPersonalContextFacts(userId));
+  }
+
+  async getPersonalContextForModel(userId: string): Promise<string> {
+    return formatPersonalContextForModel(await this.getPersonalContextFacts(userId));
+  }
+
+  async replacePersonalContext(userId: string, input: Record<string, unknown>): Promise<PersonalContextValues> {
+    const profileText = await this.getOriginalProfile(userId);
+    const facts = replacePersonalContextManually(input);
+    const home = this.storedHomeFromExtracted(profileText);
+    await this.updateProfile(userId, serializePersonalContextDocument(facts, home));
+    return personalContextValues(facts);
   }
 
   async updateProfile(userId: string, newProfileText: string): Promise<void> {
@@ -243,7 +181,7 @@ HOME_VALUE_MANUAL: ${nlValue}`;
       } else {
         // Create new profile
         const profileHash = `profile_${userId}_${Date.now()}`;
-        const newProfile = await prisma.userProfile.create({
+        await prisma.userProfile.create({
           data: { 
             email: user.email,
             profileHash,
@@ -274,147 +212,30 @@ HOME_VALUE_MANUAL: ${nlValue}`;
   }
 
   async updateProfileFromConversation(userId: string, conversation: any): Promise<void> {
-    // Use the intelligent ProfileExtractor to analyze the conversation
-    // and intelligently update the profile instead of dumb appending
-    const currentProfile = await this.getOriginalProfile(userId); // Use original profile for enhancement
-    
-    const updatedProfile = await this.profileExtractor.extractAndUpdateProfile(
-      userId,
-      conversation,
-      currentProfile
+    const currentStoredText = await this.getOriginalProfile(userId);
+    const currentFacts = this.factsFromStoredText(currentStoredText);
+    const updatedFacts = await this.personalContextExtractor.extractAndMerge(
+      {
+        id: conversation.id,
+        question: conversation.question,
+        createdAt: conversation.createdAt ?? new Date(),
+      },
+      currentFacts
     );
-    
-    // After extraction, check if home value was added by detectAndFetchHomeValue
-    // Get the latest profile which may now have structured home data
-    const latestProfile = await this.getOriginalProfile(userId);
-    const existingHomeData = this.extractHomeData(latestProfile);
-    
-    // Only update if the profile actually changed
-    if (updatedProfile !== currentProfile) {
-      // Preserve structured home data if it exists
-      let finalProfile = updatedProfile;
-      
-      // Check if the updated profile has home data
-      const updatedHomeData = this.extractHomeData(updatedProfile);
-      
-      // If we have home data in the DB but not in the AI-generated profile, preserve it
-      if (existingHomeData.address && !updatedHomeData.address) {
-        console.log('💾 Preserving structured home data that was added during extraction');
-        
-        // Remove any existing home data markers including HOME_VALUE_MANUAL; use (?:\n|$) so fields at end-of-string are removed
-        finalProfile = finalProfile.replace(
-          /HOME_ADDRESS:.*?(?:\n|$)|HOME_RENTCAST_PROPERTY_ID:.*?(?:\n|$)|HOME_VALUE:.*?(?:\n|$)|HOME_VALUE_LOW:.*?(?:\n|$)|HOME_VALUE_HIGH:.*?(?:\n|$)|HOME_VALUE_LAST_UPDATED:.*?(?:\n|$)|HOME_VALUE_MANUAL:.*?(?:\n|$)/g,
-          ''
-        ).trim();
-        
-        // Re-add the structured home data (RentCast + manual override when set)
-        if (existingHomeData.address) {
-          const rentCastVal = existingHomeData.rentCastValue ?? 0;
-          const valueLow = existingHomeData.valueLow ?? (rentCastVal > 0 ? Math.round(rentCastVal * 0.9) : 0);
-          const valueHigh = existingHomeData.valueHigh ?? (rentCastVal > 0 ? Math.round(rentCastVal * 1.1) : 0);
-          let homeDataSection = `
 
-HOME_ADDRESS: ${existingHomeData.address}
-${existingHomeData.propertyId ? `HOME_RENTCAST_PROPERTY_ID: ${existingHomeData.propertyId}\n` : ''}HOME_VALUE: ${rentCastVal}
-HOME_VALUE_LOW: ${valueLow}
-HOME_VALUE_HIGH: ${valueHigh}
-HOME_VALUE_LAST_UPDATED: ${existingHomeData.lastUpdated?.toISOString() || new Date().toISOString()}`;
-          if (existingHomeData.manualValue != null && existingHomeData.manualValue > 0) {
-            homeDataSection += `\nHOME_VALUE_MANUAL: ${existingHomeData.manualValue}`;
-          }
-          finalProfile = finalProfile + homeDataSection;
-        }
-      } else if (
-        existingHomeData.address &&
-        existingHomeData.propertyId &&
-        updatedHomeData.address &&
-        !updatedHomeData.propertyId &&
-        existingHomeData.address.toLowerCase().replace(/[^a-z0-9]/g, '') ===
-          updatedHomeData.address.toLowerCase().replace(/[^a-z0-9]/g, '')
-      ) {
-        // Property identity is provider-managed metadata. Preserve it when the
-        // conversational profile rewrite keeps the same home but omits the marker.
-        const addressMarkerIndex = finalProfile.lastIndexOf('HOME_ADDRESS:');
-        const addressLineEnd = finalProfile.indexOf('\n', addressMarkerIndex);
-        const marker = `HOME_RENTCAST_PROPERTY_ID: ${existingHomeData.propertyId}`;
-        // When HOME_ADDRESS is the final line it has no trailing newline, so the
-        // marker has to start one instead of running onto the address value.
-        finalProfile = addressLineEnd === -1
-          ? `${finalProfile}\n${marker}`
-          : `${finalProfile.slice(0, addressLineEnd + 1)}${marker}\n${finalProfile.slice(addressLineEnd + 1)}`;
-      }
-      
-      await this.updateProfile(userId, finalProfile);
-      console.log(`Profile intelligently updated for user: ${userId}`);
-    } else {
-      console.log(`No new profile information found for user: ${userId}`);
+    const alreadyStructured = Boolean(parseStoredPersonalContextDocument(currentStoredText));
+    if (alreadyStructured && JSON.stringify(updatedFacts) === JSON.stringify(currentFacts)) {
+      console.log(`No new personal context found for user: ${userId}`);
+      return;
     }
-    
-    // ✅ After profile update, check if address was detected but value wasn't fetched
-    // This handles the case where GPT added address in natural language but detectAndFetchHomeValue
-    // didn't trigger (e.g., if it ran before the profile was saved)
-    const finalProfile = await this.getOriginalProfile(userId);
-    const finalHomeData = this.extractHomeData(finalProfile);
-    
-    // If we have an address but no value (or value is 0), try to fetch it
-    if (finalHomeData.address && (!finalHomeData.value || finalHomeData.value === 0)) {
-      console.log(`ProfileManager: Address detected but value missing, attempting to fetch home value for: ${finalHomeData.address}`);
-      try {
-        const homeValue = await this.updateHomeValue(userId, finalHomeData.address);
-        if (homeValue) {
-          console.log(`ProfileManager: Successfully fetched home value: $${homeValue}`);
-        } else {
-          console.log('ProfileManager: Failed to fetch home value, but address is saved');
-        }
-      } catch (error) {
-        console.error('ProfileManager: Error fetching home value:', error);
-        // Don't throw - address is still saved
-      }
-    }
-  }
 
-  private extractProfileFromConversation(conversation: any): string {
-    // This method is now deprecated - use ProfileExtractor instead
-    // Keeping for backward compatibility but it should not be used
-    console.warn('extractProfileFromConversation is deprecated - use ProfileExtractor instead');
-    
-    if (conversation.question && conversation.answer) {
-      return `Q: ${conversation.question}\nA: ${conversation.answer}`;
-    }
-    return conversation.question || conversation.answer || '';
-  }
-
-  /**
-   * Emergency recovery method for profiles that may have been overwritten
-   * This can help restore profile data from backup or other sources
-   */
-  async recoverProfile(userId: string, backupProfileText: string): Promise<void> {
-    console.log(`Attempting to recover profile for user: ${userId}`);
-    
-    const currentProfile = await this.getOriginalProfile(userId);
-    
-    if (currentProfile.trim() && currentProfile !== backupProfileText) {
-      // If current profile exists and is different, append backup as recovery
-      const recoveredProfile = `${currentProfile}\n\n--- RECOVERED DATA ---\n${backupProfileText}`;
-      await this.updateProfile(userId, recoveredProfile);
-      console.log(`Profile recovered and appended for user: ${userId}`);
-    } else if (!currentProfile.trim()) {
-      // If no current profile, restore from backup
-      await this.updateProfile(userId, backupProfileText);
-      console.log(`Profile fully restored from backup for user: ${userId}`);
-    } else {
-      console.log(`Profile recovery not needed for user: ${userId}`);
-    }
-  }
-
-  /**
-   * Get profile history to help with recovery
-   */
-  async getProfileHistory(userId: string): Promise<string[]> {
-    // This could be enhanced to actually track profile history
-    // For now, return current profile as single history item
-    const currentProfile = await this.getOriginalProfile(userId);
-    return currentProfile ? [currentProfile] : [];
+    // Writing the first structured document also removes stale financial prose
+    // left by the former profile builder while retaining the independent home record.
+    // Re-read the home record: extraction makes its own model call, and a RentCast
+    // refresh landing during that window would otherwise be written back over.
+    const home = this.storedHomeFromExtracted(await this.getOriginalProfile(userId));
+    await this.updateProfile(userId, serializePersonalContextDocument(updatedFacts, home));
+    console.log(`Personal context updated for user: ${userId}`);
   }
 
   /**
@@ -444,6 +265,28 @@ HOME_VALUE_LAST_UPDATED: ${existingHomeData.lastUpdated?.toISOString() || new Da
       lastUpdated: null as Date | null,
       isManualOverride: false
     };
+
+    const document = parseStoredPersonalContextDocument(profileText);
+    if (document?.home) {
+      const home = document.home;
+      result.address = home.address;
+      result.propertyId = home.propertyId ?? null;
+      result.rentCastValue = typeof home.rentCastValue === 'number' && home.rentCastValue > 0
+        ? home.rentCastValue
+        : null;
+      result.manualValue = typeof home.manualValue === 'number' && home.manualValue > 0
+        ? home.manualValue
+        : null;
+      result.valueLow = typeof home.valueLow === 'number' ? home.valueLow : null;
+      result.valueHigh = typeof home.valueHigh === 'number' ? home.valueHigh : null;
+      if (home.lastUpdated) {
+        const parsed = new Date(home.lastUpdated);
+        if (!Number.isNaN(parsed.getTime())) result.lastUpdated = parsed;
+      }
+      result.isManualOverride = result.manualValue != null;
+      result.value = result.manualValue ?? result.rentCastValue;
+      return result;
+    }
 
     // Extract home address (use last occurrence)
     const addressMatches = [...profileText.matchAll(/HOME_ADDRESS:\s*(.+?)(?:\n|$)/g)];
@@ -534,59 +377,39 @@ HOME_VALUE_LAST_UPDATED: ${existingHomeData.lastUpdated?.toISOString() || new Da
         return null;
       }
 
-      // Get current profile
-      const currentProfile = await this.getOriginalProfile(userId);
-      const currentHomeData = this.extractHomeData(currentProfile);
-      const providerPropertyId = homeValueData.subjectProperty.id.trim();
+      const currentStoredText = await this.getOriginalProfile(userId);
+      const facts = this.factsFromStoredText(currentStoredText);
+      const currentHome = this.extractHomeData(currentStoredText);
+      const providerPropertyId = homeValueData.subjectProperty.id.trim().replace(/[\r\n]/g, '');
       const normalizeAddress = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, '');
-      const isSameStoredAddress = currentHomeData.address
-        ? normalizeAddress(currentHomeData.address) === normalizeAddress(address)
+      const isSameStoredAddress = currentHome.address
+        ? normalizeAddress(currentHome.address) === normalizeAddress(address)
         : false;
 
       if (
         isSameStoredAddress &&
-        currentHomeData.propertyId &&
+        currentHome.propertyId &&
         providerPropertyId &&
-        currentHomeData.propertyId !== providerPropertyId
+        currentHome.propertyId !== providerPropertyId
       ) {
         console.error('RentCast property identity changed for the stored address', {
-          previousPropertyId: currentHomeData.propertyId,
+          previousPropertyId: currentHome.propertyId,
           returnedPropertyId: providerPropertyId,
         });
         return null;
       }
-      
-      // Preserve manual override if it exists (use last occurrence when duplicates exist)
-      const manualOverrideMatches = [...currentProfile.matchAll(/HOME_VALUE_MANUAL:\s*(\d+(?:\.\d+)?)/g)];
-      const manualOverride = manualOverrideMatches.length > 0
-        ? manualOverrideMatches[manualOverrideMatches.length - 1][0]
-        : null;
-      
-      // Remove any existing home data (but preserve manual override); use (?:\n|$) so fields at end-of-string are removed
-      let updatedProfile = currentProfile.replace(
-        /HOME_ADDRESS:.*?(?:\n|$)|HOME_RENTCAST_PROPERTY_ID:.*?(?:\n|$)|HOME_VALUE:.*?(?:\n|$)|HOME_VALUE_LOW:.*?(?:\n|$)|HOME_VALUE_HIGH:.*?(?:\n|$)|HOME_VALUE_LAST_UPDATED:.*?(?:\n|$)/g,
-        ''
-      ).trim();
 
-      // Add new home data to profile
       const canonicalAddress = homeValueData.subjectProperty.formattedAddress.replace(/\s+/g, ' ').trim();
-      let homeDataSection = `
-
-HOME_ADDRESS: ${canonicalAddress}
-${providerPropertyId ? `HOME_RENTCAST_PROPERTY_ID: ${providerPropertyId.replace(/[\r\n]/g, '')}\n` : ''}HOME_VALUE: ${homeValueData.price}
-HOME_VALUE_LOW: ${homeValueData.priceRangeLow}
-HOME_VALUE_HIGH: ${homeValueData.priceRangeHigh}
-HOME_VALUE_LAST_UPDATED: ${new Date().toISOString()}`;
-
-      // Re-add manual override if it existed (manual override takes precedence)
-      if (manualOverride) {
-        homeDataSection += `\n${manualOverride}`;
-      }
-
-      updatedProfile = updatedProfile + homeDataSection;
-
-      // Save updated profile
-      await this.updateProfile(userId, updatedProfile);
+      const home: StoredHomeContext = {
+        address: canonicalAddress || address,
+        propertyId: providerPropertyId || null,
+        rentCastValue: homeValueData.price,
+        manualValue: currentHome.manualValue,
+        valueLow: homeValueData.priceRangeLow,
+        valueHigh: homeValueData.priceRangeHigh,
+        lastUpdated: new Date().toISOString(),
+      };
+      await this.updateProfile(userId, serializePersonalContextDocument(facts, home));
 
       console.log(`Home value updated for user ${userId}: $${homeValueData.price}`);
       
@@ -629,81 +452,18 @@ HOME_VALUE_LAST_UPDATED: ${new Date().toISOString()}`;
       throw new Error('No home address found. Please add a home address first.');
     }
 
-    // Remove existing manual override if present; use (?:\n|$) so last line without newline is removed
-    let updatedProfile = currentProfile.replace(
-      /HOME_VALUE_MANUAL:.*?(?:\n|$)/g,
-      ''
-    );
-
-    // Trim trailing whitespace but preserve at least one trailing newline for regex matching
-    // This ensures regex patterns can match properly
-    updatedProfile = updatedProfile.trimEnd();
-    
-    // Ensure profile ends with a newline for regex matching (after trimEnd)
-    if (!updatedProfile.endsWith('\n')) {
-      updatedProfile += '\n';
-    }
-
-    // Add or update manual override
-    if (manualValue > 0) {
-      // Check if home data section exists
-      if (!updatedProfile.includes('HOME_ADDRESS:')) {
-        throw new Error('Home data section not found in profile');
-      }
-
-      let overrideAdded = false;
-
-      // Add manual override after the last home data field
-      // Find the last HOME_VALUE_LAST_UPDATED line and add manual override after it
-      if (updatedProfile.includes('HOME_VALUE_LAST_UPDATED:')) {
-        // Match with or without trailing newline, ensure we add one
-        updatedProfile = updatedProfile.replace(
-          /(HOME_VALUE_LAST_UPDATED:.*?)(\n|$)/,
-          `$1\nHOME_VALUE_MANUAL: ${manualValue}\n`
-        );
-        overrideAdded = true;
-      } else {
-        // If no LAST_UPDATED, add after HOME_VALUE_HIGH or HOME_VALUE
-        if (updatedProfile.includes('HOME_VALUE_HIGH:')) {
-          updatedProfile = updatedProfile.replace(
-            /(HOME_VALUE_HIGH:.*?)(\n|$)/,
-            `$1\nHOME_VALUE_MANUAL: ${manualValue}\n`
-          );
-          overrideAdded = true;
-        } else if (updatedProfile.includes('HOME_VALUE:')) {
-          updatedProfile = updatedProfile.replace(
-            /(HOME_VALUE:.*?)(\n|$)/,
-            `$1\nHOME_VALUE_MANUAL: ${manualValue}\n`
-          );
-          overrideAdded = true;
-        } else {
-          // If no anchor field exists, append after HOME_ADDRESS
-          updatedProfile = updatedProfile.replace(
-            /(HOME_ADDRESS:.*?)(\n|$)/,
-            `$1HOME_VALUE_MANUAL: ${manualValue}\n`
-          );
-          overrideAdded = true;
-        }
-      }
-
-      // Verify override was added
-      if (!overrideAdded || !updatedProfile.includes(`HOME_VALUE_MANUAL: ${manualValue}`)) {
-        throw new Error('Failed to add manual override to profile');
-      }
-    }
-
-    // Update last updated timestamp
     const now = new Date().toISOString();
-    if (updatedProfile.includes('HOME_VALUE_LAST_UPDATED:')) {
-      updatedProfile = updatedProfile.replace(
-        /HOME_VALUE_LAST_UPDATED:.*?\n/,
-        `HOME_VALUE_LAST_UPDATED: ${now}\n`
-      );
-    }
-
+    const home: StoredHomeContext = {
+      address: currentHomeData.address,
+      propertyId: currentHomeData.propertyId,
+      rentCastValue: currentHomeData.rentCastValue,
+      manualValue: manualValue > 0 ? manualValue : null,
+      valueLow: currentHomeData.valueLow,
+      valueHigh: currentHomeData.valueHigh,
+      lastUpdated: now,
+    };
+    const updatedProfile = serializePersonalContextDocument(this.factsFromStoredText(currentProfile), home, now);
     await this.updateProfile(userId, updatedProfile);
-    
-    // Return updated home data
     return this.extractHomeData(updatedProfile);
   }
 
@@ -722,24 +482,23 @@ HOME_VALUE_LAST_UPDATED: ${new Date().toISOString()}`;
   }> {
     const currentProfile = await this.getOriginalProfile(userId);
     
-    // Remove manual override; use (?:\n|$) so last line without newline is removed
-    let updatedProfile = currentProfile.replace(
-      /HOME_VALUE_MANUAL:.*?(?:\n|$)/g,
-      ''
+    const currentHome = this.extractHomeData(currentProfile);
+    if (!currentHome.address) throw new Error('No home address found.');
+    const now = new Date().toISOString();
+    const updatedProfile = serializePersonalContextDocument(
+      this.factsFromStoredText(currentProfile),
+      {
+        address: currentHome.address,
+        propertyId: currentHome.propertyId,
+        rentCastValue: currentHome.rentCastValue,
+        manualValue: null,
+        valueLow: currentHome.valueLow,
+        valueHigh: currentHome.valueHigh,
+        lastUpdated: now,
+      },
+      now
     );
-
-    // Trim trailing whitespace but preserve at least one trailing newline for regex matching
-    // This ensures subsequent regex patterns in updateHomeValue can match properly
-    updatedProfile = updatedProfile.trimEnd();
-    
-    // Ensure profile ends with a newline for regex matching (after trimEnd)
-    if (!updatedProfile.endsWith('\n')) {
-      updatedProfile += '\n';
-    }
-
     await this.updateProfile(userId, updatedProfile);
-    
-    // Return updated home data (will now use estimate)
     return this.extractHomeData(updatedProfile);
   }
 
@@ -749,14 +508,10 @@ HOME_VALUE_LAST_UPDATED: ${new Date().toISOString()}`;
    */
   async removeHomeData(userId: string): Promise<void> {
     const currentProfile = await this.getOriginalProfile(userId);
-    
-    // Remove home data (including manual override); use (?:\n|$) so fields at end-of-string are removed
-    const updatedProfile = currentProfile.replace(
-      /HOME_ADDRESS:.*?(?:\n|$)|HOME_RENTCAST_PROPERTY_ID:.*?(?:\n|$)|HOME_VALUE:.*?(?:\n|$)|HOME_VALUE_LOW:.*?(?:\n|$)|HOME_VALUE_HIGH:.*?(?:\n|$)|HOME_VALUE_MANUAL:.*?(?:\n|$)|HOME_VALUE_LAST_UPDATED:.*?(?:\n|$)/g,
-      ''
-    ).trim();
-
-    await this.updateProfile(userId, updatedProfile);
+    await this.updateProfile(
+      userId,
+      serializePersonalContextDocument(this.factsFromStoredText(currentProfile), null)
+    );
     console.log(`Home data removed for user ${userId}`);
   }
 }

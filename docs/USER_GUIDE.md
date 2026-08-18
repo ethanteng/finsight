@@ -759,34 +759,11 @@ Ask Linc stores connected financial data and profile information so it can build
 
 ## Advanced Features
 
-### User Profile System
+### What Linc Remembers About You
 
-**Intelligent Profile Building:**
-- Automatically extracts information from conversations
-- Analyzes financial data to enhance profile
-- Builds comprehensive financial picture
-- Updates organically through interactions
+Linc keeps a small, editable set of biographical details that you state in conversation, including your preferred name, age, general location, household and dependents, occupation, industry, employment status, and retirement status. When you provide an update, Linc edits the matching field rather than appending another summary.
 
-**Profile Information:**
-- Age and demographics
-- Income and employment
-- Family situation
-- Financial goals
-- Risk tolerance
-- Investment strategy
-
-**How It Enhances Analysis:**
-- Personalized financial advice
-- Age-appropriate recommendations
-- Goal-oriented planning
-- Risk-aware suggestions
-- Context-aware responses
-
-**Profile Management:**
-- View your profile
-- Edit information
-- Add details manually
-- Control what's included
+Account balances, income, debt, spending, investments, institutions, home values, financial goals, risk tolerance, and scenario assumptions are not stored in this memory. Those details come from connected or manual financial data, the active conversation, or a purpose-built analysis. You can review, edit, or clear the remembered fields under **Accounts & context**.
 
 ### Manual Account Management
 
@@ -1049,7 +1026,7 @@ Ask Linc provides a comprehensive, privacy-first platform for understanding and 
 2. Connect your financial institutions
 3. Start asking questions
 4. Explore features based on your tier
-5. Build your financial profile
+5. Review what Linc remembers about you under **Accounts & context**
 
 **Continuing Your Journey:**
 - Review your financial overview regularly

@@ -85,7 +85,7 @@ export function collectMissingInputAsks(
   if (needs.needsHomeValue && snapshot.homeValueSummary === HOME_VALUE_UNAVAILABLE) {
     asks.push({
       id: 'home_value',
-      message: 'I do not have a current value for your home. Add it under Accounts & profile, or tell me ' +
+      message: 'I do not have a current value for your home. Add it under Accounts & context, or tell me ' +
         'what you think it is worth, and I will factor it in.',
     });
   }
@@ -103,7 +103,7 @@ export function collectMissingInputAsks(
     asks.push({
       id: 'unavailable_sources',
       message: `${count === 1 ? 'One of your account connections is' : `${count} of your account connections are`} ` +
-        'not reporting right now, so the totals above may be incomplete. Reconnecting under Accounts & profile ' +
+        'not reporting right now, so the totals above may be incomplete. Reconnecting under Accounts & context ' +
         'will fill the gap.',
     });
   }
