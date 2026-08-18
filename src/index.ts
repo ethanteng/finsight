@@ -2718,12 +2718,30 @@ app.get('/admin/market-news/history/:tier', adminAuth, async (req: Request, res:
 app.post('/admin/market-news/refresh/:tier', adminAuth, async (req: Request, res: Response) => {
   try {
     const { tier } = req.params;
+    if (!Object.values(UserTier).includes(tier as UserTier)) {
+      return res.status(400).json({ error: 'Invalid tier' });
+    }
 
     const { MarketNewsManager } = await import('./market-news/manager');
     const manager = new MarketNewsManager();
-    const result = await manager.refreshMarketContexts([tier as UserTier], { force: true });
+    // Shared Brave collection feeds every tier synthesis. Refresh the full set
+    // under one lease so parallel admin "refresh all" clicks cannot leave
+    // sibling tiers stale after racing on market-news-refresh.
+    const result = await manager.refreshMarketContexts([
+      UserTier.STARTER,
+      UserTier.STANDARD,
+      UserTier.PREMIUM,
+    ], { force: true });
 
-    res.json({ success: result.refreshed, ...(!result.refreshed && { reason: result.reason }) });
+    if (!result.refreshed) {
+      return res.status(409).json({
+        success: false,
+        requestedTier: tier,
+        reason: result.reason,
+      });
+    }
+
+    res.json({ success: true, requestedTier: tier, refreshedTiers: ['starter', 'standard', 'premium'] });
   } catch (error) {
     console.error('Error refreshing market context:', error);
 

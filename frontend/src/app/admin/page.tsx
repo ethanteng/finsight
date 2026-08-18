@@ -422,29 +422,21 @@ export default function AdminPage() {
   const refreshAllMarketContexts = async () => {
     setRefreshingAllContexts(true);
     console.log('Starting refresh of all market contexts...');
-    const tiers = ['starter', 'standard', 'premium'];
 
     try {
-      // Refresh all tiers in parallel
-      await Promise.all(
-        tiers.map(async (tier) => {
-          console.log(`Refreshing market context for tier: ${tier}`);
-          const response = await fetch(`${API_URL}/admin/market-news/refresh/${tier}`, {
-            method: 'POST',
-            headers: getAuthHeaders()
-          });
+      // One admin call refreshes every tier from a shared evidence batch under a
+      // single cluster lease. Parallel per-tier posts would race and skip siblings.
+      const response = await fetch(`${API_URL}/admin/market-news/refresh/standard`, {
+        method: 'POST',
+        headers: getAuthHeaders()
+      });
 
-          console.log(`Refresh response for ${tier}: ${response.status}`);
+      console.log(`Refresh-all response status: ${response.status}`);
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        console.error('Failed to refresh market contexts:', response.status, body);
+      }
 
-          if (response.ok) {
-            console.log(`Successfully refreshed ${tier} tier`);
-          } else {
-            console.error(`Failed to refresh ${tier} tier: ${response.status}`);
-          }
-        })
-      );
-
-      // After refreshing, reload the contexts
       await loadMarketNewsContexts();
       console.log('All market contexts refresh completed');
     } catch (err) {
@@ -609,24 +601,9 @@ export default function AdminPage() {
       console.log(`Refresh response status: ${response.status}`);
 
       if (response.ok) {
-        console.log('Refresh successful, reloading context...');
-        // Reload the specific context
-        const contextResponse = await fetch(`${API_URL}/market-news/context/${tier}`, {
-          headers: getAuthHeaders()
-        });
-
-        console.log(`Context reload status: ${contextResponse.status}`);
-
-        if (contextResponse.ok) {
-          const data = await contextResponse.json();
-          console.log('Context data received:', data);
-          setMarketNewsContexts(prev => ({
-            ...prev,
-            [tier]: data
-          }));
-        } else {
-          console.error('Failed to reload context:', contextResponse.status, contextResponse.statusText);
-        }
+        console.log('Refresh successful, reloading contexts...');
+        // Forced refresh synthesizes every tier from one shared batch.
+        await loadMarketNewsContexts();
       } else if (response.status === 401 || response.status === 403) {
         console.error('Authentication error:', response.status, response.statusText);
         setError('Authentication required for admin access');
