@@ -8,34 +8,38 @@ import { generateRollingSequences } from '../src/retirement-analytics/engine/str
 import { simulateWithdrawals } from '../src/retirement-analytics/engine/withdrawal-simulator';
 import { analyzeOutcomes } from '../src/retirement-analytics/engine/outcome-analyzer';
 import { computeHistoricalWithdrawalRates } from '../src/retirement-analytics/engine/withdrawal-rate-solver';
-import type { DataProviderFactory } from '../src/retirement-analytics/data/data-provider-factory';
+import type { PortfolioMapping } from '../src/retirement-analytics/types';
 
 async function main() {
-  const withdrawalYears = 27;
+  const analysisYears = 27;
   const totalValue = 1_000_000;
   const annualWithdrawal = 50_000;
 
-  const mockDataProvider = {} as DataProviderFactory;
+  const portfolioMapping: PortfolioMapping = {
+    usEquityWeight: 0.6,
+    internationalEquityWeight: 0.2,
+    nominalBondsWeight: 0.15,
+    cashWeight: 0.05,
+    mappingConfidence: 'high',
+    unmappedHoldings: [],
+    mappingMethod: 'direct',
+  };
 
   console.log('Running stress test with historical data...');
-  const { sequences, missingData } = await generateRollingSequences(
-    withdrawalYears,
-    mockDataProvider,
+  const { sequences, missingData, historicalData } = await generateRollingSequences(
+    analysisYears,
+    portfolioMapping,
     50
   );
 
   console.log('Sequences:', sequences.length);
   console.log('Missing data:', missingData.length);
-
-  const portfolioMapping = {
-    usEquityWeight: 0.6,
-    internationalEquityWeight: 0.2,
-    nominalBondsWeight: 0.15,
-    cashWeight: 0.05,
-    mappingConfidence: 'high' as const,
-    unmappedHoldings: [] as string[],
-    mappingMethod: 'direct' as const,
-  };
+  if (historicalData) {
+    console.log(
+      'Active history:',
+      `${historicalData.firstMonth} through ${historicalData.lastMonth}`
+    );
+  }
 
   const historicalRates = computeHistoricalWithdrawalRates(
     sequences,
