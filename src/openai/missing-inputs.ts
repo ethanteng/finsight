@@ -46,6 +46,12 @@ export function collectMissingInputAsks(
         message: 'I could not run a retirement projection because no investment holdings are connected. ' +
           'Link an investment account and ask again, and I will include it.',
       });
+    } else if (needsInfo?.unavailableCode === 'insufficient_history') {
+      asks.push({
+        id: 'retirement_insufficient_history',
+        message: 'That retirement timeline is longer than the complete historical record available for the ' +
+          'portfolio’s active asset classes. Shorten the timeline and I can run the projection without inventing returns.',
+      });
     }
   }
 

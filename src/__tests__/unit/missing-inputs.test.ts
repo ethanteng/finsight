@@ -58,6 +58,23 @@ describe('missing input asks', () => {
     )).toEqual([]);
   });
 
+  it('offers a shorter timeline when the requested horizon exceeds available history', () => {
+    const asks = collectMissingInputAsks(
+      {
+        retirementAnalysisNeedsInfo: {
+          missingParams: [],
+          detectedParams: {},
+          unavailableReason: 'Insufficient historical market data.',
+          unavailableCode: 'insufficient_history',
+        },
+      } as any,
+      { needsRetirement: true, needsHomeValue: false }
+    );
+
+    expect(asks[0]).toMatchObject({ id: 'retirement_insufficient_history' });
+    expect(asks[0].message).toContain('Shorten the timeline');
+  });
+
   it('asks for a home value only when the question needed one', () => {
     const snapshot = { homeValueSummary: 'Home value data is currently unavailable.' };
 

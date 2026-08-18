@@ -605,7 +605,10 @@ async function fetchOrCreateRetirementAnalysis(args: {
     },
     orderBy: { computedAt: 'desc' }
   });
-  const storedInput = (recentAnalysis?.analysisInput || {}) as Record<string, number | null | undefined>;
+  const storedAnalysisInput = (recentAnalysis?.analysisInput || {}) as Record<string, unknown>;
+  const storedInput = storedAnalysisInput as Record<string, number | null | undefined>;
+  const { getHistoricalDatasetVersion } = await import('../retirement-analytics/engine/historical-data-loader');
+  const historicalDatasetVersion = getHistoricalDatasetVersion();
   const confirmsStoredAnnualWithdrawal =
     /\b(?:yes|same|unchanged|continue|keep (?:it|that|the same)|use (?:it|that|the same|my previous|the previous)(?: amount)?)\b/i.test(question);
   const {
@@ -664,7 +667,8 @@ async function fetchOrCreateRetirementAnalysis(args: {
       storedInput.retirementAge === retirementAge &&
       storedInput.annualWithdrawalAmount === annualWithdrawalAmount &&
       storedInput.withdrawalStartAge === withdrawalStartAge &&
-      (storedInput.lifeExpectancy ?? 95) === lifeExpectancy
+      (storedInput.lifeExpectancy ?? 95) === lifeExpectancy &&
+      storedAnalysisInput.historicalDatasetVersion === historicalDatasetVersion
     ) {
       console.log('📦 Using cached retirement analysis from database');
       const cachedAnalysis = recentAnalysis.historicalImplications as any;
@@ -730,7 +734,8 @@ async function fetchOrCreateRetirementAnalysis(args: {
       retirementAge,
       lifeExpectancy,
       annualWithdrawalAmount,
-      withdrawalStartAge
+      withdrawalStartAge,
+      historicalDatasetVersion,
     };
 
     console.log('🔄 Running new retirement analysis for user:', userId);
@@ -805,13 +810,15 @@ async function fetchOrCreateRetirementAnalysis(args: {
         'Check Tiingo API status and rate limits.');
     }
 
+    const insufficientHistory = errorMessage.startsWith('Insufficient historical market data:');
     return {
       needsInfo: {
         missingParams: [],
         detectedParams: {},
-        unavailableReason:
-          'Retirement analysis could not be completed because the portfolio analysis service failed. Ask the user to try again later instead of estimating from aggregates alone.',
-        unavailableCode: 'service_error',
+        unavailableReason: insufficientHistory
+          ? `${errorMessage}. Ask the user to shorten the modeled timeline instead of estimating beyond the available history.`
+          : 'Retirement analysis could not be completed because the portfolio analysis service failed. Ask the user to try again later instead of estimating from aggregates alone.',
+        unavailableCode: insufficientHistory ? 'insufficient_history' : 'service_error',
       },
     };
   }

@@ -1,252 +1,354 @@
 #!/usr/bin/env npx ts-node
 /**
- * Build unified historical market returns dataset from local sources.
+ * Build the deterministic monthly return dataset used by retirement analysis.
  *
- * Transforms src/datasets/ (Shiller ie_data.xls, Kenneth French F-F_Research_Data_Factors.csv)
- * into data/historical_market_returns.csv.
+ * Series:
+ * - US equity: Kenneth French broad US market return (Mkt-RF + RF)
+ * - International equity: Kenneth French EAFE-plus-Canada market return
+ * - Bonds: Shiller synthetic 10-year US government-bond total return
+ * - Cash: Kenneth French one-month Treasury-bill return (RF)
+ * - Inflation: monthly change in Shiller CPI
  *
- * No downloads or API calls. Fully deterministic.
- *
- * Output schema: date,us_equity,intl_equity,bonds,cash,inflation
- * All values are monthly returns as decimals.
- *
- * Data sources:
- * - US equity, bonds, inflation: Shiller ie_data.xls
- * - Cash: Kenneth French RF (1-month T-bill); intl: US equity proxy (see below)
- *
- * International equity: intl_equity = us_equity. International diversification is not
- * currently modeled. Mkt-RF is US market excess return, not international.
+ * Source snapshots are refreshed separately with `npm run refresh:market-datasets`.
+ * Runtime analysis never calls these external sites.
  */
 
+import { createHash } from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as XLSX from 'xlsx';
 
-const SHILLER_PATH = path.join(__dirname, '../src/datasets/ie_data.xls');
-const FRENCH_PATH = path.join(__dirname, '../src/datasets/F-F_Research_Data_Factors.csv');
+const DATASET_DIR = path.join(__dirname, '../src/datasets');
+const SHILLER_PATH = path.join(DATASET_DIR, 'ie_data.xls');
+const FRENCH_US_PATH = path.join(DATASET_DIR, 'F-F_Research_Data_Factors.csv');
+const FRENCH_INTERNATIONAL_PATH = path.join(DATASET_DIR, 'F-F_International_Indices.dat');
+const SOURCE_MANIFEST_PATH = path.join(DATASET_DIR, 'source-manifest.json');
 const OUTPUT_PATH = path.join(__dirname, '../data/historical_market_returns.csv');
+const OUTPUT_METADATA_PATH = path.join(__dirname, '../data/historical_market_returns.metadata.json');
 
-// Shiller Data sheet: row 7 = headers, row 8+ = data
-// Col 0=Date, 1=P, 2=D (trailing 12mo), 3=E, 4=CPI, 6=GS10, 17=Bond Returns (1+r)
 const SHILLER_DATA_ROW = 8;
-const SHILLER_COL = { DATE: 0, P: 1, D: 2, CPI: 4, GS10: 6, BOND_RETURNS: 17 };
+const SHILLER_COL = { DATE: 0, CPI: 4, BOND_RETURNS: 17 };
 
-interface MonthlyRow {
-  year: number;
-  month: number;
-  dateStr: string;
-  usEquity: number;
+export interface ShillerMonthlyRow {
+  date: string;
   bonds: number;
   inflation: number;
 }
 
-function loadShillerData(): MonthlyRow[] {
-  const wb = XLSX.readFile(SHILLER_PATH);
-  const sheet = wb.Sheets['Data'];
+export interface FrenchUsMonthlyRow {
+  date: string;
+  usEquity: number;
+  cash: number;
+}
+
+export interface UnifiedMonthlyRow {
+  date: string;
+  usEquity: number;
+  internationalEquity: number | null;
+  bonds: number;
+  cash: number;
+  inflation: number;
+}
+
+interface SourceManifestEntry {
+  provider: string;
+  file: string;
+  documentationUrl: string;
+  downloadUrl: string;
+  retrievedAt: string;
+  sourceVintage: string;
+  firstObservation: string;
+  lastObservation: string;
+  sha256: string;
+}
+
+interface SourceManifest {
+  schemaVersion: number;
+  sources: Record<string, SourceManifestEntry>;
+}
+
+export interface HistoricalDatasetMetadata {
+  schemaVersion: number;
+  firstMonth: string;
+  lastMonth: string;
+  rowCount: number;
+  generatedFromSourceRetrieval: string;
+  series: Record<string, {
+    source: string;
+    description: string;
+    firstMonth: string;
+    lastMonth: string;
+  }>;
+  sources: Record<string, SourceManifestEntry>;
+  methodology: {
+    rollingWindows: string;
+    internationalAvailability: string;
+  };
+}
+
+function sha256File(filePath: string): string {
+  return createHash('sha256').update(fs.readFileSync(filePath)).digest('hex');
+}
+
+function monthOrdinal(date: string): number {
+  const [year, month] = date.split('-').map(Number);
+  return year * 12 + month - 1;
+}
+
+function assertContiguous(dates: string[], label: string): void {
+  const seen = new Set<string>();
+  for (let index = 0; index < dates.length; index++) {
+    const date = dates[index];
+    if (seen.has(date)) throw new Error(`${label} contains duplicate month ${date}`);
+    seen.add(date);
+    if (index > 0 && monthOrdinal(date) !== monthOrdinal(dates[index - 1]) + 1) {
+      throw new Error(`${label} is not contiguous between ${dates[index - 1]} and ${date}`);
+    }
+  }
+}
+
+function shillerMonth(value: unknown): string | null {
+  if (typeof value === 'number') {
+    const year = Math.floor(value);
+    const month = Math.round((value - year) * 100);
+    return month >= 1 && month <= 12
+      ? `${year}-${String(month).padStart(2, '0')}`
+      : null;
+  }
+  const match = String(value || '').trim().match(/^(\d{4})\.(\d{1,2})$/);
+  if (!match) return null;
+  const month = Number(match[2]);
+  return month >= 1 && month <= 12 ? `${match[1]}-${String(month).padStart(2, '0')}` : null;
+}
+
+export function loadShillerData(filePath = SHILLER_PATH): ShillerMonthlyRow[] {
+  const workbook = XLSX.readFile(filePath);
+  const sheet = workbook.Sheets.Data;
   if (!sheet) throw new Error('Shiller Data sheet not found');
 
-  const rows: MonthlyRow[] = [];
-  let prevP: number | null = null;
-  let prevD: number | null = null;
-  let prevCpi: number | null = null;
+  const rows: ShillerMonthlyRow[] = [];
+  let previousDate: string | null = null;
+  let previousCpi: number | null = null;
+  let previousBondGrossReturn: number | null = null;
 
-  for (let r = SHILLER_DATA_ROW; ; r++) {
-    const dateCell = sheet[XLSX.utils.encode_cell({ r, c: SHILLER_COL.DATE })];
+  for (let row = SHILLER_DATA_ROW; ; row++) {
+    const dateCell = sheet[XLSX.utils.encode_cell({ r: row, c: SHILLER_COL.DATE })];
     if (!dateCell || dateCell.v === undefined || dateCell.v === null) break;
+    const date = shillerMonth(dateCell.v);
+    if (!date) continue;
 
-    const dateVal = dateCell.v;
-    let year: number;
-    let month: number;
-    if (typeof dateVal === 'number') {
-      year = Math.floor(dateVal);
-      month = Math.round((dateVal - year) * 100);
-    } else {
-      const parts = String(dateVal).split('.');
-      year = parseInt(parts[0], 10);
-      month = parseInt(parts[1] || '1', 10);
+    const cpi = Number(sheet[XLSX.utils.encode_cell({ r: row, c: SHILLER_COL.CPI })]?.v);
+    const currentBondGrossReturn = Number(
+      sheet[XLSX.utils.encode_cell({ r: row, c: SHILLER_COL.BOND_RETURNS })]?.v
+    );
+
+    if (previousDate && previousCpi !== null && previousBondGrossReturn !== null) {
+      if (!Number.isFinite(cpi) || cpi <= 0) break;
+      rows.push({
+        date,
+        // Shiller row t's bond cell is the return from t to t+1. Therefore the
+        // return earned into the current month is stored on the previous row.
+        bonds: previousBondGrossReturn - 1,
+        inflation: cpi / previousCpi - 1,
+      });
     }
-    if (month < 1 || month > 12) continue;
 
-    if (year < 1970) continue;
+    previousDate = date;
+    previousCpi = Number.isFinite(cpi) && cpi > 0 ? cpi : null;
+    previousBondGrossReturn = Number.isFinite(currentBondGrossReturn)
+      ? currentBondGrossReturn
+      : null;
+  }
 
-    const p = parseFloat(sheet[XLSX.utils.encode_cell({ r, c: SHILLER_COL.P })]?.v);
-    const d = parseFloat(sheet[XLSX.utils.encode_cell({ r, c: SHILLER_COL.D })]?.v);
-    const cpi = parseFloat(sheet[XLSX.utils.encode_cell({ r, c: SHILLER_COL.CPI })]?.v);
-    const bondReturnsCell = sheet[XLSX.utils.encode_cell({ r, c: SHILLER_COL.BOND_RETURNS })]?.v;
+  assertContiguous(rows.map(row => row.date), 'Shiller monthly return data');
+  return rows;
+}
 
-    if (isNaN(p) || isNaN(cpi)) continue;
-    if (prevP === null || prevCpi === null) {
-      prevP = p;
-      prevD = d;
-      prevCpi = cpi;
+export function loadFrenchUsData(filePath = FRENCH_US_PATH): FrenchUsMonthlyRow[] {
+  const rows: FrenchUsMonthlyRow[] = [];
+  for (const line of fs.readFileSync(filePath, 'utf8').split(/\r?\n/)) {
+    const parts = line.split(',').map(value => value.trim());
+    if (!/^\d{6}$/.test(parts[0] || '') || parts.length < 5) continue;
+
+    const mktRf = Number(parts[1]);
+    const rf = Number(parts[4]);
+    if (!Number.isFinite(mktRf) || !Number.isFinite(rf) || mktRf <= -99 || rf <= -99) {
+      throw new Error(`Invalid Kenneth French US factor row: ${line}`);
+    }
+    rows.push({
+      date: `${parts[0].slice(0, 4)}-${parts[0].slice(4)}`,
+      // Rm-Rf and RF are simple monthly percentage returns over the same month.
+      usEquity: (mktRf + rf) / 100,
+      cash: rf / 100,
+    });
+  }
+  assertContiguous(rows.map(row => row.date), 'Kenneth French US factor data');
+  return rows;
+}
+
+export function loadFrenchInternationalData(filePath = FRENCH_INTERNATIONAL_PATH): Map<string, number> {
+  const rows = new Map<string, number>();
+  let started = false;
+  for (const line of fs.readFileSync(filePath, 'utf8').split(/\r?\n/)) {
+    const match = line.match(/^\s*(\d{6})\s+(-?\d+(?:\.\d+)?)/);
+    if (!match) {
+      if (started) break;
       continue;
     }
-
-    // US equity: total_return = (price_t + dividend_t/12) / price_(t-1) - 1
-    // D is trailing 12-month dividend total; monthly = D/12
-    const monthlyDividend = (isNaN(d) ? 0 : d) / 12;
-    const priceReturn = p / prevP - 1;
-    const dividendYield = monthlyDividend / prevP;
-    const usEquity = priceReturn + dividendYield;
-
-    // Inflation: CPI_t / CPI_(t-1) - 1
-    const inflation = cpi / prevCpi - 1;
-
-    // Bonds: Shiller col 17 "Bond Returns" is (1 + monthly_return); bond_return = value - 1.
-    // This is a proper return series, not yield. Fallback: GS10 yield as monthly return proxy.
-    let bonds: number;
-    if (bondReturnsCell != null && typeof bondReturnsCell === 'number') {
-      bonds = bondReturnsCell - 1;
-    } else {
-      const gs10 = parseFloat(sheet[XLSX.utils.encode_cell({ r, c: SHILLER_COL.GS10 })]?.v) || 5;
-      bonds = Math.pow(1 + gs10 / 100, 1 / 12) - 1;
+    started = true;
+    const marketReturn = Number(match[2]);
+    if (!Number.isFinite(marketReturn) || marketReturn <= -99) {
+      throw new Error(`Invalid Kenneth French international market row: ${line}`);
     }
-
-    prevP = p;
-    prevD = d;
-    prevCpi = cpi;
-
-    rows.push({
-      year,
-      month,
-      dateStr: `${year}-${String(month).padStart(2, '0')}`,
-      usEquity,
-      bonds,
-      inflation,
-    });
+    rows.set(`${match[1].slice(0, 4)}-${match[1].slice(4)}`, marketReturn / 100);
   }
-
+  assertContiguous(Array.from(rows.keys()), 'Kenneth French international index data');
   return rows;
 }
 
-interface FrenchRow {
-  year: number;
-  month: number;
-  dateStr: string;
-  mktRf: number;
-  rf: number;
+function readAndVerifySourceManifest(): SourceManifest {
+  const manifest = JSON.parse(fs.readFileSync(SOURCE_MANIFEST_PATH, 'utf8')) as SourceManifest;
+  if (manifest.schemaVersion !== 1) throw new Error('Unsupported market source manifest schema');
+  for (const source of Object.values(manifest.sources)) {
+    const resolved = path.join(__dirname, '..', source.file);
+    const actualHash = sha256File(resolved);
+    if (actualHash !== source.sha256) {
+      throw new Error(`Source hash mismatch for ${source.file}; refresh source snapshots before building`);
+    }
+  }
+  return manifest;
 }
 
-function loadFrenchData(): FrenchRow[] {
-  const content = fs.readFileSync(FRENCH_PATH, 'utf-8');
-  const lines = content.split('\n').filter((l) => l.trim());
-  const rows: FrenchRow[] = [];
+export function buildUnifiedRows(
+  shiller = loadShillerData(),
+  frenchUs = loadFrenchUsData(),
+  frenchInternational = loadFrenchInternationalData()
+): UnifiedMonthlyRow[] {
+  const shillerByDate = new Map(shiller.map(row => [row.date, row]));
+  const rows = frenchUs.flatMap(row => {
+    const shillerRow = shillerByDate.get(row.date);
+    if (!shillerRow) return [];
+    return [{
+      date: row.date,
+      usEquity: row.usEquity,
+      internationalEquity: frenchInternational.get(row.date) ?? null,
+      bonds: shillerRow.bonds,
+      cash: row.cash,
+      inflation: shillerRow.inflation,
+    }];
+  });
+  if (rows.length < 1_000) throw new Error(`Unified history contains only ${rows.length} months`);
+  assertContiguous(rows.map(row => row.date), 'Unified historical market data');
 
-  for (const line of lines) {
-    if (line.startsWith('The ') || line.startsWith('Copyright') || line.startsWith(',')) continue;
-    const parts = line.split(',').map((s) => s.trim());
-    if (parts.length < 5) continue;
-
-    const dateStr = parts[0];
-    if (!/^\d{6}$/.test(dateStr)) continue;
-
-    const year = parseInt(dateStr.slice(0, 4), 10);
-    const month = parseInt(dateStr.slice(4, 6), 10);
-    const mktRf = parseFloat(parts[1]);
-    const rf = parseFloat(parts[4]);
-
-    if (year < 1970 || isNaN(mktRf) || isNaN(rf)) continue;
-
-    rows.push({
-      year,
-      month,
-      dateStr: `${year}-${String(month).padStart(2, '0')}`,
-      mktRf,
-      rf,
-    });
+  const internationalMonths = rows.filter(row => row.internationalEquity !== null);
+  if (internationalMonths.length < 500) {
+    throw new Error(`Unified history contains only ${internationalMonths.length} international months`);
   }
-
   return rows;
 }
 
-function buildUnifiedDataset(): string {
-  const shiller = loadShillerData();
-  const frenchMap = new Map<string, FrenchRow>();
-  for (const row of loadFrenchData()) {
-    frenchMap.set(row.dateStr, row);
-  }
-
-  const lines: string[] = ['date,us_equity,intl_equity,bonds,cash,inflation'];
-
-  for (const row of shiller) {
-    const french = frenchMap.get(row.dateStr);
-    // intl_equity = us_equity (international diversification not modeled; Mkt-RF is US, not intl)
-    const intlEquity = row.usEquity;
-    const cash = french ? french.rf / 100 : 0;
-
-    lines.push(
-      [
-        row.dateStr,
-        row.usEquity.toFixed(6),
-        intlEquity.toFixed(6),
-        row.bonds.toFixed(6),
-        cash.toFixed(6),
-        row.inflation.toFixed(6),
-      ].join(',')
-    );
-  }
-
-  return lines.join('\n');
+function rangeFor(rows: UnifiedMonthlyRow[], predicate: (row: UnifiedMonthlyRow) => boolean) {
+  const matching = rows.filter(predicate);
+  if (matching.length === 0) throw new Error('Cannot describe an empty historical series');
+  return { firstMonth: matching[0].date, lastMonth: matching[matching.length - 1].date };
 }
 
-function sanityCheck(csvContent: string): void {
-  const lines = csvContent.split('\n').filter((l) => l && !l.startsWith('date'));
-  if (lines.length === 0) throw new Error('No data rows');
+function buildMetadata(rows: UnifiedMonthlyRow[], manifest: SourceManifest): HistoricalDatasetMetadata {
+  const allRange = rangeFor(rows, () => true);
+  const internationalRange = rangeFor(rows, row => row.internationalEquity !== null);
+  const retrievalDates = Object.values(manifest.sources)
+    .map(source => source.retrievedAt)
+    .sort();
+  const retrievedAt = retrievalDates[retrievalDates.length - 1] || '';
+  return {
+    schemaVersion: 2,
+    ...allRange,
+    rowCount: rows.length,
+    generatedFromSourceRetrieval: retrievedAt,
+    series: {
+      us_equity: {
+        source: 'frenchUsFactors',
+        description: 'Value-weighted return of the broad US market, calculated as Mkt-RF plus RF',
+        ...allRange,
+      },
+      intl_equity: {
+        source: 'frenchInternationalIndices',
+        description: 'Value-weighted EAFE-plus-Canada market return in US dollars',
+        ...internationalRange,
+      },
+      bonds: {
+        source: 'shiller',
+        description: 'Synthetic 10-year US government-bond total return aligned to the month earned',
+        ...allRange,
+      },
+      cash: {
+        source: 'frenchUsFactors',
+        description: 'One-month US Treasury-bill return (RF)',
+        ...allRange,
+      },
+      inflation: {
+        source: 'shiller',
+        description: 'Monthly change in US CPI',
+        ...allRange,
+      },
+    },
+    sources: manifest.sources,
+    methodology: {
+      rollingWindows: 'Monthly rolling start dates overlap and are not statistically independent observations.',
+      internationalAvailability:
+        'Rows outside the French international index range contain NA for international equity and are excluded when that sleeve is active.',
+    },
+  };
+}
 
-  let sumUs = 0;
-  let sumBonds = 0;
-  let sumCash = 0;
-  let count = 0;
+export function serializeRows(rows: UnifiedMonthlyRow[]): string {
+  const lines = ['date,us_equity,intl_equity,bonds,cash,inflation'];
+  for (const row of rows) {
+    lines.push([
+      row.date,
+      row.usEquity.toFixed(6),
+      row.internationalEquity === null ? 'NA' : row.internationalEquity.toFixed(6),
+      row.bonds.toFixed(6),
+      row.cash.toFixed(6),
+      row.inflation.toFixed(6),
+    ].join(','));
+  }
+  return `${lines.join('\n')}\n`;
+}
 
-  for (const line of lines) {
-    const parts = line.split(',');
-    if (parts.length < 6) continue;
-    const us = parseFloat(parts[1]);
-    const bonds = parseFloat(parts[3]);
-    const cash = parseFloat(parts[4]);
-    if (!isNaN(us) && !isNaN(bonds) && !isNaN(cash)) {
-      sumUs += us;
-      sumBonds += bonds;
-      sumCash += cash;
-      count++;
+function geometricAnnualized(rows: UnifiedMonthlyRow[], value: (row: UnifiedMonthlyRow) => number): number {
+  const logGrowth = rows.reduce((total, row) => total + Math.log1p(value(row)), 0);
+  return Math.expm1((logGrowth / rows.length) * 12);
+}
+
+function sanityCheck(rows: UnifiedMonthlyRow[]): void {
+  for (const row of rows) {
+    const values = [row.usEquity, row.bonds, row.cash, row.inflation];
+    if (values.some(value => !Number.isFinite(value) || value <= -1)) {
+      throw new Error(`Invalid unified return values for ${row.date}`);
     }
   }
-
-  if (count === 0) throw new Error('Sanity check: no valid data rows (need us_equity, bonds, cash)');
-
-  const months = count;
-  const years = months / 12;
-
-  const annUs = Math.pow(1 + sumUs / count, 12) - 1;
-  const annBonds = Math.pow(1 + sumBonds / count, 12) - 1;
-  const annCash = Math.pow(1 + sumCash / count, 12) - 1;
-
-  console.log('Sanity check (annualized returns):');
-  console.log('  US equities:', (annUs * 100).toFixed(2) + '%');
-  console.log('  Bonds:', (annBonds * 100).toFixed(2) + '%');
-  console.log('  Cash:', (annCash * 100).toFixed(2) + '%');
-  console.log('  Months:', months);
-
-  if (annUs > 0.15) {
-    console.warn('  WARNING: US equities >15% - check dividend handling (D/12)');
+  const annualizedUs = geometricAnnualized(rows, row => row.usEquity);
+  const annualizedBonds = geometricAnnualized(rows, row => row.bonds);
+  const annualizedCash = geometricAnnualized(rows, row => row.cash);
+  if (annualizedUs < 0.04 || annualizedUs > 0.15) {
+    throw new Error(`US equity annualized sanity check failed: ${annualizedUs}`);
   }
-  if (annUs < 0.05) {
-    console.warn('  WARNING: US equities <5% - check data');
-  }
+  console.log('Geometric annualized sanity check:');
+  console.log(`  US equities: ${(annualizedUs * 100).toFixed(2)}%`);
+  console.log(`  10-year government bonds: ${(annualizedBonds * 100).toFixed(2)}%`);
+  console.log(`  Treasury bills: ${(annualizedCash * 100).toFixed(2)}%`);
 }
 
 function main(): void {
-  console.log('Building historical market returns dataset...');
-  console.log('  Shiller:', SHILLER_PATH);
-  console.log('  French:', FRENCH_PATH);
-
-  const csv = buildUnifiedDataset();
-  sanityCheck(csv);
-
-  fs.writeFileSync(OUTPUT_PATH, csv, 'utf-8');
-  console.log('  Output:', OUTPUT_PATH);
-  console.log('  Rows:', csv.split('\n').length - 1);
-  console.log('Done.');
+  const manifest = readAndVerifySourceManifest();
+  const rows = buildUnifiedRows();
+  const metadata = buildMetadata(rows, manifest);
+  sanityCheck(rows);
+  fs.writeFileSync(OUTPUT_PATH, serializeRows(rows), 'utf8');
+  fs.writeFileSync(OUTPUT_METADATA_PATH, `${JSON.stringify(metadata, null, 2)}\n`, 'utf8');
+  console.log(`Wrote ${rows.length} months (${metadata.firstMonth} through ${metadata.lastMonth})`);
+  console.log(`International history: ${metadata.series.intl_equity.firstMonth} through ${metadata.series.intl_equity.lastMonth}`);
 }
 
-main();
+if (require.main === module) main();

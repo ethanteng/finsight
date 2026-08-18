@@ -45,6 +45,7 @@ function compactRetirementAnalysis(snapshot: FinancialContextSnapshot): unknown 
       assumptions: analysis.dataQuality.assumptions,
       missingData: analysis.dataQuality.missingData,
     },
+    historicalData: analysis.historicalData,
     disclaimers: analysis.disclaimers,
   };
 }

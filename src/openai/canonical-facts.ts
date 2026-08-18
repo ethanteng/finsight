@@ -525,8 +525,8 @@ export function buildCanonicalFactPack(
       'years',
       'retirementAnalysis.metrics.yearsToWithdrawalStart'
     );
-    addSnapshotFact('survival_rate_ratio', 'Historical survival rate source ratio', retirement.stressTest.survivalRate, 'ratio', 'retirementAnalysis.stressTest.survivalRate', false);
-    addCalculatedFact('survival_rate', 'Historical survival rate', retirement.stressTest.survivalRate * 100, 'percent', 'input * 100', ['survival_rate_ratio']);
+    addSnapshotFact('survival_rate_ratio', 'Historical rolling-window survival share source ratio', retirement.stressTest.survivalRate, 'ratio', 'retirementAnalysis.stressTest.survivalRate', false);
+    addCalculatedFact('survival_rate', 'Historical rolling-window survival share', retirement.stressTest.survivalRate * 100, 'percent', 'input * 100', ['survival_rate_ratio']);
     addSnapshotFact('historical_sequence_count', 'Historical sequence count', retirement.stressTest.totalSequences, 'count', 'retirementAnalysis.stressTest.totalSequences');
     for (const percentile of ['p10', 'p25', 'p50', 'p75', 'p90'] as const) {
       const withdrawalRate = retirement.metrics.historicalWithdrawalRates[percentile];

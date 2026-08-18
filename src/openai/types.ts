@@ -217,6 +217,18 @@ export interface FinancialContextSnapshot {
       assumptions: string[];
       missingData: string[];
     };
+    historicalData?: {
+      firstMonth: string;
+      lastMonth: string;
+      sourceRetrievedAt: string;
+      monthlyStartWindowsOverlap: true;
+      series: Record<string, {
+        source: string;
+        description: string;
+        firstMonth: string;
+        lastMonth: string;
+      }>;
+    };
     disclaimers: string[];
     _storedInputParams?: {
       currentAge?: number;
@@ -255,7 +267,7 @@ export interface FinancialContextSnapshot {
     /** When retirement analysis cannot run despite a retirement question (e.g. no holdings). */
     unavailableReason?: string;
     /** Machine-readable form of unavailableReason: only some causes are the user's to fix. */
-    unavailableCode?: 'no_holdings' | 'service_error';
+    unavailableCode?: 'no_holdings' | 'insufficient_history' | 'service_error';
   };
   /** Registry-keyed deterministic what-if results, scoped to this answer and its assumptions. */
   scenarioExecutions?: ScenarioExecutionRecord;
