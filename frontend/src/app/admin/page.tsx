@@ -113,6 +113,10 @@ export default function AdminPage() {
   const [qualityRefreshToken, setQualityRefreshToken] = useState(0);
   const [refreshingUsers, setRefreshingUsers] = useState(false);
   const [refreshingAllContexts, setRefreshingAllContexts] = useState(false);
+  const [marketRefreshNotice, setMarketRefreshNotice] = useState<{
+    ok: boolean;
+    message: string;
+  } | null>(null);
 
   // AI response tone state
   const [responseTone, setResponseTone] = useState<string>('');
@@ -421,6 +425,7 @@ export default function AdminPage() {
 
   const refreshAllMarketContexts = async () => {
     setRefreshingAllContexts(true);
+    setMarketRefreshNotice(null);
     console.log('Starting refresh of all market contexts...');
 
     try {
@@ -435,13 +440,21 @@ export default function AdminPage() {
       if (!response.ok) {
         const body = await response.json().catch(() => ({}));
         console.error('Failed to refresh market contexts:', response.status, body);
-        throw new Error(`Market context refresh failed with status ${response.status}`);
+        const message = response.status === 409
+          ? body.reason === 'active_lease'
+            ? 'A market context refresh is already in progress. Try again when it finishes.'
+            : 'Market contexts were refreshed recently, so no new refresh was started.'
+          : body.error || 'Failed to refresh market contexts.';
+        setMarketRefreshNotice({ ok: false, message });
+        return;
       }
 
       await loadMarketNewsContexts();
+      setMarketRefreshNotice({ ok: true, message: 'All market contexts refreshed.' });
       console.log('All market contexts refresh completed');
     } catch (err) {
       console.error('Error refreshing all market contexts:', err);
+      setMarketRefreshNotice({ ok: false, message: 'Failed to refresh market contexts.' });
     } finally {
       setRefreshingAllContexts(false);
     }
@@ -592,6 +605,7 @@ export default function AdminPage() {
 
   const refreshMarketContext = async (tier: string) => {
     setRefreshingContext(tier);
+    setMarketRefreshNotice(null);
     try {
       console.log(`Refreshing market context for tier: ${tier}`);
       const response = await fetch(`${API_URL}/admin/market-news/refresh/${tier}`, {
@@ -613,8 +627,16 @@ export default function AdminPage() {
             ...prev,
             [tier]: data
           }));
+          setMarketRefreshNotice({
+            ok: true,
+            message: `${tier[0].toUpperCase()}${tier.slice(1)} market context refreshed.`
+          });
         } else {
           console.error('Failed to reload context:', contextResponse.status, contextResponse.statusText);
+          setMarketRefreshNotice({
+            ok: false,
+            message: 'The refresh completed, but the updated market context could not be loaded.'
+          });
         }
       } else if (response.status === 401 || response.status === 403) {
         console.error('Authentication error:', response.status, response.statusText);
@@ -622,9 +644,19 @@ export default function AdminPage() {
       } else {
         const errorData = await response.json().catch(() => ({}));
         console.error('Refresh failed:', response.status, errorData);
+        const message = response.status === 409
+          ? errorData.reason === 'active_lease'
+            ? 'A market context refresh is already in progress. Try again when it finishes.'
+            : 'Market contexts were refreshed recently, so no new refresh was started.'
+          : errorData.error || `Failed to refresh the ${tier} market context.`;
+        setMarketRefreshNotice({ ok: false, message });
       }
     } catch (err) {
       console.error(`Error refreshing market context for ${tier}:`, err);
+      setMarketRefreshNotice({
+        ok: false,
+        message: `Failed to refresh the ${tier} market context.`
+      });
     } finally {
       setRefreshingContext(null);
     }
@@ -1353,6 +1385,19 @@ export default function AdminPage() {
             </button>
           </div>
         </div>
+
+        {marketRefreshNotice && (
+          <div
+            role={marketRefreshNotice.ok ? 'status' : 'alert'}
+            className={`rounded-xl border px-4 py-3 text-sm ${
+              marketRefreshNotice.ok
+                ? 'border-[#397052]/25 bg-[#e9f3eb] text-[#28563d]'
+                : 'border-[#b84a3d]/25 bg-[#f8e8e3] text-[#8a362d]'
+            }`}
+          >
+            {marketRefreshNotice.message}
+          </div>
+        )}
 
         <div className="grid grid-cols-1 gap-6">
           {tiers.map(tier => {
