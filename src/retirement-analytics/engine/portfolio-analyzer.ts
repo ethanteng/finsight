@@ -2,7 +2,7 @@
 // Phase 1: Portfolio Metrics & Mapping
 
 import { Holding, Security } from '../../services/financial-data-service';
-import { PortfolioCompositionMetrics } from '../types';
+import { PortfolioCompositionMetrics, SecurityMetadata } from '../types';
 import { DataProviderFactory } from '../data/data-provider-factory';
 import {
   hasBondNameSignal,
@@ -28,7 +28,12 @@ export async function analyzePortfolio(
       cashAllocation: 0,
       internationalAllocation: 0,
       concentrationRisk: 0,
-      expenseRatioWeighted: 0
+      expenseRatioWeighted: 0,
+      expenseRatioCoverage: 0,
+      countryAllocation: [],
+      sectorAllocation: [],
+      countryCoverage: 0,
+      sectorCoverage: 0,
     };
   }
 
@@ -46,7 +51,12 @@ export async function analyzePortfolio(
       cashAllocation: 0,
       internationalAllocation: 0,
       concentrationRisk: 0,
-      expenseRatioWeighted: 0
+      expenseRatioWeighted: 0,
+      expenseRatioCoverage: 0,
+      countryAllocation: [],
+      sectorAllocation: [],
+      countryCoverage: 0,
+      sectorCoverage: 0,
     };
   }
 
@@ -81,6 +91,10 @@ export async function analyzePortfolio(
   let internationalValue = 0;
   let totalExpenseRatio = 0;
   let totalExpenseRatioWeight = 0;
+  let countryCoverageValue = 0;
+  let sectorCoverageValue = 0;
+  const countryValues = new Map<string, number>();
+  const sectorValues = new Map<string, number>();
 
   // Calculate allocations and expense ratios
   for (const holding of holdings) {
@@ -89,7 +103,7 @@ export async function analyzePortfolio(
     const weight = holdingValue / totalValue;
 
     const ticker = security?.ticker_symbol?.toUpperCase() || holding.ticker_symbol?.toUpperCase() || '';
-    const fmpMetadata = ticker ? tickerToMetadata.get(ticker) : null;
+    const fmpMetadata = (ticker ? tickerToMetadata.get(ticker) : null) as SecurityMetadata | null;
 
     // Prefer FMP metadata if available, fallback to security metadata
     const assetType = fmpMetadata?.assetClass?.toLowerCase() || 
@@ -103,8 +117,13 @@ export async function analyzePortfolio(
         (!assetType && (securityName.includes('equity') || securityName.includes('stock')))) {
       equityValue += holdingValue;
       
-      // Check if international (use FMP geographic focus if available)
-      if (isGlobalEquity(geographicFocus, securityName)) {
+      // FMP Starter's country vector is preferable to fund domicile/name
+      // inference. Normalize within the supplied vector so small rounding
+      // differences do not distort the holding's allocation.
+      const countrySplit = countrySplitForMetadata(fmpMetadata);
+      if (countrySplit) {
+        internationalValue += holdingValue * countrySplit.international;
+      } else if (isGlobalEquity(geographicFocus, securityName)) {
         internationalValue += holdingValue * 0.3;
       } else if (isInternationalEquity(geographicFocus, securityName, ticker)) {
         internationalValue += holdingValue;
@@ -126,14 +145,24 @@ export async function analyzePortfolio(
       }
     }
 
+    const fundData = fmpMetadata?.fundData;
+    if (fundData?.countryCoverage === 'available') {
+      countryCoverageValue += holdingValue;
+      addExposureValues(countryValues, fundData.countryAllocations, holdingValue);
+    }
+    if (fundData?.sectorCoverage === 'available') {
+      sectorCoverageValue += holdingValue;
+      addExposureValues(sectorValues, fundData.sectorAllocations, holdingValue);
+    }
+
     // Expense ratio from FMP metadata (if available)
-    const expenseRatio = fmpMetadata?.expenseRatio || 0;
-    if (expenseRatio > 0) {
+    const expenseRatio = fmpMetadata?.expenseRatio;
+    if (expenseRatio !== undefined && expenseRatio >= 0) {
       totalExpenseRatio += expenseRatio * weight;
       totalExpenseRatioWeight += weight;
-    } else if (fmpMetadata && fmpMetadata.isETF && !expenseRatio) {
-      // ETF without expense ratio - might be missing from FMP, but we know it's an ETF
-      // Could add a default assumption here if needed
+    } else if (fmpMetadata?.fundData?.instrumentType === 'equity') {
+      // Direct securities have no fund-level expense ratio.
+      totalExpenseRatioWeight += weight;
     }
   }
 
@@ -151,9 +180,9 @@ export async function analyzePortfolio(
     : 0;
 
   // Calculate weighted expense ratio
-  const expenseRatioWeighted = totalExpenseRatioWeight > 0 
-    ? totalExpenseRatio / totalExpenseRatioWeight 
-    : 0;
+  // Express the known annual fee drag against the whole portfolio. Coverage is
+  // separate so missing fund fees are not silently presented as certainty.
+  const expenseRatioWeighted = totalExpenseRatio;
 
   // Guard against division by zero (defense-in-depth; totalValue === 0 already returns early above)
   return {
@@ -162,6 +191,40 @@ export async function analyzePortfolio(
     cashAllocation: totalValue > 0 ? (cashValue / totalValue) * 100 : 0,
     internationalAllocation: totalValue > 0 ? (internationalValue / totalValue) * 100 : 0,
     concentrationRisk,
-    expenseRatioWeighted
+    expenseRatioWeighted,
+    expenseRatioCoverage: totalExpenseRatioWeight,
+    countryAllocation: exposurePercentages(countryValues, totalValue),
+    sectorAllocation: exposurePercentages(sectorValues, totalValue),
+    countryCoverage: countryCoverageValue / totalValue,
+    sectorCoverage: sectorCoverageValue / totalValue,
   };
+}
+
+function countrySplitForMetadata(metadata: SecurityMetadata | null): { us: number; international: number } | null {
+  if (metadata?.fundData?.countryCoverage !== 'available') return null;
+  const allocations = metadata.fundData.countryAllocations;
+  const total = allocations.reduce((sum, allocation) => sum + allocation.weight, 0);
+  if (total <= 0) return null;
+  const us = allocations
+    .filter(allocation => ['united states', 'us', 'usa'].includes(allocation.name.trim().toLowerCase()))
+    .reduce((sum, allocation) => sum + allocation.weight, 0) / total;
+  return { us, international: Math.max(0, Math.min(1, 1 - us)) };
+}
+
+function addExposureValues(
+  target: Map<string, number>,
+  exposures: Array<{ name: string; weight: number }>,
+  holdingValue: number,
+): void {
+  for (const exposure of exposures) {
+    if (!Number.isFinite(exposure.weight) || exposure.weight <= 0) continue;
+    target.set(exposure.name, (target.get(exposure.name) ?? 0) + holdingValue * exposure.weight);
+  }
+}
+
+function exposurePercentages(values: Map<string, number>, totalValue: number) {
+  return [...values.entries()]
+    .map(([name, value]) => ({ name, percentage: (value / totalValue) * 100 }))
+    .filter(exposure => exposure.percentage >= 0.01)
+    .sort((left, right) => right.percentage - left.percentage);
 }

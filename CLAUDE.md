@@ -61,7 +61,7 @@ npx prisma studio                # Open Prisma Studio UI
 The main entry point is `src/index.ts`; user-facing Ask routes are isolated in `src/routes/ask.ts`. Key subdirectories:
 
 - **`auth/`** — JWT auth, middleware (`optionalAuth`, `requireAuth`, `adminAuth`), encrypted user service, Resend email, SnapTrade auth, manual accounts
-- **`data/`** — Data orchestration (`orchestrator.ts`), caching, persistence, and external data providers: FRED economic indicators (`providers/fred.ts`), Brave Search API for RAG (`providers/search.ts`), and the Massive API (`providers/massive.ts`) for Premium market context
+- **`data/`** — Data orchestration (`orchestrator.ts`), caching, persistence, and external data providers: FRED economic indicators (`providers/fred.ts`), Brave Search API for RAG (`providers/search.ts`), Massive macro data (`providers/massive.ts`), and Tiingo Power quotes/news/adjusted prices (`providers/tiingo.ts`)
 - **`openai/`** — Canonical AI pipeline: semantic context planning, primary-model data-pack tools, canonical facts, structured prompting, provider fallback, deterministic grounding, and lazy evidence
 - **`services/`** — Business logic split into financial ingestion, calculations, snapshot/source persistence, profile/market services, billing, and integrations
 - **`profile/`** — User profile orchestration, enrichment, and encryption
@@ -121,6 +121,8 @@ The platform supports OpenAI (GPT-4), Anthropic (Claude), and Google (Gemini) wi
 | SnapTrade | Investment portfolio data |
 | FRED | Economic indicators and published rate benchmarks |
 | Massive (formerly Polygon.io) | Delayed SPY daily movement, Treasury yield curve, and inflation expectations |
+| Financial Modeling Prep Starter | Fund metadata and normalized expense, country, and sector exposure data |
+| Tiingo Power | Adjusted price history, batched IEX quotes, and market news |
 | RentCast | Home valuation |
 | Brave Search | RAG for real-time financial info |
 | Stripe | Subscription billing |

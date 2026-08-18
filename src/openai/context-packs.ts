@@ -45,8 +45,8 @@ export const CONTEXT_PACKS: ContextPackMeta[] = [
   {
     id: 'investment_details',
     label: 'Investment details',
-    description: 'Individual holdings and security metadata. Portfolio value, holding count and asset allocation are already always available.',
-    cost: 'local',
+    description: 'Individual holdings plus current Tiingo quotes and FMP fund fees, country allocation and sector weighting when available. Portfolio value, holding count and asset allocation are already always available.',
+    cost: 'external',
     dependencies: ['account_details'],
   },
   {

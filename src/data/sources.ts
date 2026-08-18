@@ -6,7 +6,7 @@ export interface DataSourceConfig {
   description: string;
   tiers: UserTier[];
   category: 'account' | 'market' | 'external' | 'economic';
-  provider: 'plaid' | 'fred' | 'massive' | 'internal' | 'brave' | 'rentcast';
+  provider: 'plaid' | 'fred' | 'massive' | 'tiingo' | 'fmp' | 'internal' | 'brave' | 'rentcast';
   cacheDuration: number; // milliseconds
   rateLimit?: number; // requests per minute
   isLive: boolean;
@@ -66,6 +66,40 @@ export const dataSourceRegistry: Record<string, DataSourceConfig> = {
     provider: 'plaid',
     cacheDuration: 15 * 60 * 1000, // 15 minutes
     isLive: true
+  },
+
+  'fmp-fund-exposures': {
+    id: 'fmp-fund-exposures',
+    name: 'Fund Fees and Look-Through Exposures',
+    description: 'FMP Starter fund metadata, expense ratios, country allocations and sector weightings when covered',
+    tiers: [UserTier.STARTER, UserTier.STANDARD, UserTier.PREMIUM],
+    // This enriches the user's connected positions, so it follows the account
+    // data entitlement rather than the separate market-context tier gate.
+    category: 'account',
+    provider: 'fmp',
+    cacheDuration: 7 * 24 * 60 * 60 * 1000,
+    isLive: false,
+  },
+  'tiingo-investment-market-data': {
+    id: 'tiingo-investment-market-data',
+    name: 'Investment Market Data',
+    description: 'Tiingo Power adjusted price history and batched IEX quotes for connected positions',
+    tiers: [UserTier.STARTER, UserTier.STANDARD, UserTier.PREMIUM],
+    category: 'account',
+    provider: 'tiingo',
+    cacheDuration: 5 * 60 * 1000,
+    isLive: true,
+  },
+  'tiingo-market-context': {
+    id: 'tiingo-market-context',
+    name: 'Tiingo Market Context',
+    description: 'Broad-market IEX observations and ticker-linked financial news',
+    tiers: [UserTier.STANDARD, UserTier.PREMIUM],
+    category: 'external',
+    provider: 'tiingo',
+    cacheDuration: 5 * 60 * 1000,
+    isLive: true,
+    upgradeBenefit: 'Add live broad-market quotes and structured market news',
   },
 
   // Home Valuations (All tiers)

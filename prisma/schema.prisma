@@ -552,6 +552,7 @@ model AssetPriceHistory {
   low            Float
   close          Float
   adjustedClose  Float?   // Dividend/split adjusted (from Tiingo)
+  periodReturn   Float?   // Adjusted return ending on this cached period
   volume         BigInt
   provider       String   // 'polygon', 'tiingo'
   cachedAt       DateTime @default(now())
@@ -571,6 +572,8 @@ model SecurityMetadata {
   expenseRatio      Float?
   geographicFocus   String?  // 'US', 'International', 'Global'
   isETF             Boolean  @default(false)
+  fundData           Json?    // Normalized FMP fund details and country/sector vectors
+  metadataVersion    Int      @default(1)
   provider          String   // 'fmp', 'inferred'
   lastUpdated       DateTime @default(now())
 

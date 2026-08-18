@@ -4,39 +4,17 @@
 import { PriceTimeSeries } from '../../types';
 import { TimeSeriesCache } from '../time-series-cache';
 import { dbCache } from '../db-cache';
-
-interface TiingoDailyPrice {
-  date: string;
-  open: number;
-  high: number;
-  low: number;
-  close: number;
-  volume: number;
-  adjClose: number;
-  adjOpen: number;
-  adjHigh: number;
-  adjLow: number;
-  adjVolume: number;
-  divCash: number;
-  splitFactor: number;
-}
-
-interface TiingoResponse {
-  ticker: string;
-  queryCount: number;
-  resultsCount: number;
-  adjusted: boolean;
-  results: TiingoDailyPrice[];
-}
+import { TiingoEodPrice, TiingoProvider as TiingoClient } from '../../../data/providers/tiingo';
 
 export class TiingoProvider {
-  private baseUrl = 'https://api.tiingo.com/tiingo/daily';
   private apiKey: string;
   private cache: TimeSeriesCache;
+  private client: TiingoClient;
 
   constructor(apiKey: string) {
     this.apiKey = apiKey;
     this.cache = new TimeSeriesCache();
+    this.client = new TiingoClient(apiKey);
   }
 
   /**
@@ -75,71 +53,15 @@ export class TiingoProvider {
 
     try {
       console.log(`🌐 Tiingo: Fetching from API for ${ticker} (${startDate.toISOString().split('T')[0]} to ${endDate.toISOString().split('T')[0]})`);
-      const startStr = startDate.toISOString().split('T')[0];
+      // Fetch one prior month so the first requested month's adjusted return is
+      // calculable. Power supports server-side monthly resampling, which avoids
+      // downloading thousands of daily rows for long retirement histories.
+      const queryStartDate = new Date(startDate);
+      queryStartDate.setUTCMonth(queryStartDate.getUTCMonth() - 1);
+      const startStr = queryStartDate.toISOString().split('T')[0];
       const endStr = endDate.toISOString().split('T')[0];
-      const url = `${this.baseUrl}/${ticker}/prices?startDate=${startStr}&endDate=${endStr}&format=json&resampleFreq=daily`;
-
-      const response = await fetch(url, {
-        headers: {
-          'Authorization': `Token ${this.apiKey}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (!response.ok) {
-        const errorMsg = `Tiingo API error: ${response.status} ${response.statusText}`;
-        console.error(`❌ ${errorMsg} for ${ticker}`);
-        throw new Error(errorMsg);
-      }
-
-      const rawData = await response.json();
-      
-      // Tiingo API can return data in two formats:
-      // 1. Direct array: [{date: "...", close: ...}, ...]
-      // 2. Wrapped object: {ticker: "...", results: [{date: "...", close: ...}, ...]}
-      // Handle both formats
-      let data: TiingoResponse;
-      if (Array.isArray(rawData)) {
-        // Direct array format - wrap it
-        data = {
-          ticker: ticker,
-          queryCount: rawData.length,
-          resultsCount: rawData.length,
-          adjusted: true,
-          results: rawData as TiingoDailyPrice[]
-        };
-        console.log(`📊 Tiingo: Received direct array format for ${ticker} (${rawData.length} records)`);
-      } else if (rawData && typeof rawData === 'object' && Array.isArray((rawData as { results?: unknown }).results)) {
-        // Wrapped object format
-        const wrapped = rawData as TiingoResponse;
-        data = wrapped;
-        console.log(`📊 Tiingo: Received wrapped object format for ${ticker} (${wrapped.results.length} records)`);
-      } else {
-        // Unexpected format
-        console.error(`❌ Tiingo API returned unexpected format for ${ticker}:`, {
-          responseStatus: response.status,
-          responseStatusText: response.statusText,
-          dataType: typeof rawData,
-          isArray: Array.isArray(rawData),
-          dataKeys: rawData && typeof rawData === 'object' ? Object.keys(rawData) : 'N/A',
-          fullResponse: JSON.stringify(rawData).substring(0, 500)
-        });
-        throw new Error(`Tiingo API returned unexpected data format for ${ticker}`);
-      }
-      
-      // Log API response details for debugging empty responses
-      if (!data.results || data.results.length === 0) {
-        console.error(`❌ Tiingo API returned empty data for ${ticker}:`, {
-          responseStatus: response.status,
-          responseStatusText: response.statusText,
-          dataKeys: Object.keys(data),
-          dataLength: Array.isArray(data.results) ? data.results.length : 'not an array',
-          fullResponse: JSON.stringify(data).substring(0, 500) // First 500 chars for debugging
-        });
-      }
-      
-      // Convert daily prices to monthly returns
-      const timeSeries = this.convertToMonthlyReturns(data, ticker);
+      const data = await this.client.getEodPrices(ticker, startStr, endStr, 'monthly');
+      const timeSeries = this.convertToMonthlyReturns(data, ticker, startDate, endDate);
       
       console.log(`✅ Tiingo: Successfully fetched ${timeSeries.dates.length} data points for ${ticker}`);
       
@@ -163,46 +85,55 @@ export class TiingoProvider {
   /**
    * Convert Tiingo daily prices to monthly returns
    */
-  private convertToMonthlyReturns(data: TiingoResponse, ticker: string): PriceTimeSeries {
-    if (!data.results || data.results.length === 0) {
+  private convertToMonthlyReturns(
+    data: TiingoEodPrice[],
+    ticker: string,
+    startDate: Date,
+    endDate: Date,
+  ): PriceTimeSeries {
+    if (!data.length) {
       throw new Error(`No price data returned for ${ticker}`);
     }
 
-    // Group by month and take last price of each month
-    const monthlyPrices = new Map<string, number>();
+    const observations = data
+      .flatMap(price => {
+        const date = new Date(price.date);
+        const adjustedClose = price.adjClose ?? price.close;
+        return Number.isFinite(date.getTime()) && typeof adjustedClose === 'number' && adjustedClose > 0
+          ? [{ date, adjustedClose }]
+          : [];
+      })
+      // Tiingo labels an in-progress monthly bar with month-end. Exclude it
+      // when that label falls beyond the caller's requested as-of date.
+      .filter(observation => {
+        if (observation.date > endDate) return false;
+        const now = new Date();
+        const endIsCurrentMonth = endDate.getUTCFullYear() === now.getUTCFullYear()
+          && endDate.getUTCMonth() === now.getUTCMonth();
+        return !endIsCurrentMonth
+          || observation.date.getUTCFullYear() !== endDate.getUTCFullYear()
+          || observation.date.getUTCMonth() !== endDate.getUTCMonth();
+      })
+      .sort((left, right) => left.date.getTime() - right.date.getTime());
+    if (observations.length < 2) throw new Error(`Insufficient monthly price data returned for ${ticker}`);
+
     const dates: Date[] = [];
-
-    for (const price of data.results) {
-      const date = new Date(price.date);
-      const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-      
-      // Use adjusted close price (dividend/split adjusted)
-      monthlyPrices.set(monthKey, price.adjClose);
-      
-      // Track dates (only add first date of each month)
-      if (!dates.length || dates[dates.length - 1].getMonth() !== date.getMonth()) {
-        dates.push(date);
-      }
-    }
-
-    // Convert to arrays sorted by date
-    const sortedMonths = Array.from(monthlyPrices.entries()).sort((a, b) => a[0].localeCompare(b[0]));
-    const prices = sortedMonths.map(([, price]) => price);
-    
-    // Calculate monthly returns
+    const prices: number[] = [];
     const returns: number[] = [];
-    for (let i = 1; i < prices.length; i++) {
-      const returnValue = (prices[i] - prices[i - 1]) / prices[i - 1];
-      returns.push(returnValue);
+    for (let index = 1; index < observations.length; index++) {
+      const previous = observations[index - 1];
+      const current = observations[index];
+      if (current.date < startDate) continue;
+      dates.push(current.date);
+      prices.push(current.adjustedClose);
+      returns.push((current.adjustedClose - previous.adjustedClose) / previous.adjustedClose);
     }
-
-    // Adjust dates array to match returns (one less date)
-    const returnDates = dates.slice(1);
+    if (!dates.length) throw new Error(`No complete monthly price data returned for ${ticker}`);
 
     return {
       ticker,
-      dates: returnDates,
-      prices: prices.slice(1), // Prices aligned with returns
+      dates,
+      prices,
       returns,
       provider: 'tiingo'
     };

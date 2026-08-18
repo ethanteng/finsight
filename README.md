@@ -16,6 +16,8 @@ Ask Linc is a comprehensive financial analysis platform that combines AI-powered
   - SnapTrade (investment data)
   - FRED (latest published economic indicators and rate benchmarks)
   - Massive (formerly Polygon.io; delayed SPY daily bars, Treasury curve, and inflation expectations)
+  - Financial Modeling Prep Starter (fund fees, metadata, country allocations, and sector weightings)
+  - Tiingo Power (adjusted price history, IEX quotes, and market news)
   - RentCast (home valuations)
   - **Brave Search API** (real-time financial information)
 
@@ -43,7 +45,7 @@ Ask Linc is a comprehensive financial analysis platform that combines AI-powered
 
 ### **2. Enhanced Market Context System**
 - **Purpose**: Provides current economic and market context for informed financial advice
-- **Data Sources**: FRED (economic indicators), Brave Search (current public information), Massive (Premium market context)
+- **Data Sources**: FRED (economic indicators), Brave Search (current public information), Massive (Premium macro context), Tiingo (quotes/news/performance), and FMP (fund look-through metadata)
 - **Features**:
     - Proactive caching with scheduled updates
     - Tier-based data access
@@ -261,8 +263,8 @@ FINANCIAL_DATA_CACHE_TTL_MS="300000"    # Financial data cache in ms (default: 3
 PERSISTED_DATA_MAX_AGE_MINUTES="120"    # Max age for persisted snapshot (default: 120)
 
 # Retirement Analytics (optional)
-TIINGO_API_KEY="..."                    # For retirement analytics
-FMP_API_KEY="..."                      # For retirement analytics
+TIINGO_API_KEY="..."                    # Power: adjusted history, IEX quotes, and market news
+FMP_API_KEY="..."                       # Starter: fund fees, country allocations, and sector weights
 
 # Monitoring
 SENTRY_DSN="https://..."                # Optional: backend error tracking

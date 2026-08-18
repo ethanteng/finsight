@@ -92,7 +92,8 @@ export class MarketNewsSynthesizer {
       case UserTier.STANDARD:
         return data.filter(d => 
           d.source === 'fred' || 
-          d.source === 'brave_search'
+          d.source === 'brave_search' ||
+          d.source === 'tiingo'
         );
         
       case UserTier.PREMIUM: {
@@ -112,13 +113,25 @@ export class MarketNewsSynthesizer {
           const tenYear = yields['10_year'];
           return typeof tenYear === 'number' && Number.isFinite(tenYear);
         });
-        return hasMassiveTenYearYield
+        const filtered = hasMassiveTenYearYield
           ? data.filter(item => !(
             item.source === 'fred'
             && item.type === 'economic_indicator'
             && item.data?.series === 'DGS10'
           ))
           : data;
+        // Tiingo IEX is the fresher market observation. Keep Massive's unique
+        // macro datasets while avoiding two SPY price rows in the same prompt.
+        const hasTiingoSpy = filtered.some(item =>
+          item.source === 'tiingo' && item.type === 'market_data' && item.data?.symbol === 'SPY'
+        );
+        return hasTiingoSpy
+          ? filtered.filter(item => !(
+              item.source === 'massive'
+              && item.type === 'market_data'
+              && item.data?.symbol === 'SPY'
+            ))
+          : filtered;
       }
         
       default:
@@ -213,12 +226,14 @@ MARKET OUTLOOK:
         }
       } else if (item.type === 'market_data') {
         const price = d.closingPrice ?? d.currentPrice;
-        const parts = [`${d.symbol || 'Market'} adjusted daily close: $${price ?? 'N/A'}`];
+        const observationLabel = d.feedStatus === 'TIINGO_IEX' ? 'IEX last trade' : 'adjusted daily close';
+        const parts = [`${d.symbol || 'Market'} ${observationLabel}: $${price ?? 'N/A'}`];
         if (d.date) parts.push(`on ${d.date}`);
         if (d.changePercent != null && Number.isFinite(Number(d.changePercent))) {
           parts.push(`(${Number(d.changePercent).toFixed(2)}% vs. prior trading day)`);
         }
-        if (d.feedStatus) parts.push(`[Massive status: ${d.feedStatus}]`);
+        if (d.feedStatus === 'TIINGO_IEX') parts.push('[Tiingo IEX]');
+        else if (d.feedStatus) parts.push(`[Massive status: ${d.feedStatus}]`);
         lines.push(`- ${item.source} | ${parts.join(' ')}`);
       } else if (item.type === 'news_article') {
         lines.push(`- ${item.source} | News: "${d.title || 'Untitled'}" - ${String(d.description || '').slice(0, 150)}...`);
@@ -253,9 +268,9 @@ MARKET OUTLOOK:
       case UserTier.STARTER:
         return 'No market context available - focus on personal financial analysis';
       case UserTier.STANDARD:
-        return 'Basic economic indicators and general market trends from FRED and web search';
+        return 'Economic indicators and web context, plus Tiingo IEX broad-market quotes and market news';
       case UserTier.PREMIUM:
-        return 'Scheduled market context from FRED and Brave Search, plus Massive adjusted SPY daily bars, the U.S. Treasury yield curve, and inflation expectations';
+        return 'Scheduled context from FRED, Brave Search, and Tiingo IEX/news, plus Massive Treasury yield-curve and inflation-expectations data';
       default:
         return 'Standard market context';
     }

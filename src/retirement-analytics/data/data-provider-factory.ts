@@ -3,7 +3,7 @@
 
 import { PriceHistory, SecurityMetadata } from '../types';
 import { TiingoProvider } from './providers/tiingo-provider';
-import { FMPProvider } from './providers/fmp-provider';
+import { FMP_METADATA_VERSION, FMPProvider } from './providers/fmp-provider';
 import { dbCache } from './db-cache';
 
 export class DataProviderFactory {
@@ -68,7 +68,7 @@ export class DataProviderFactory {
 
     for (const ticker of tickers) {
       const hit = cached.get(ticker);
-      if (hit && hit.provider !== 'inferred') {
+      if (hit && hit.provider !== 'inferred' && hit.metadataVersion === FMP_METADATA_VERSION) {
         result.set(ticker, hit);
       } else {
         uncached.push(ticker);

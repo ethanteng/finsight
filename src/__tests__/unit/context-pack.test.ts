@@ -56,4 +56,54 @@ describe('buildQuestionContextPack', () => {
       retirement: { status: 'unavailable', reason: 'Missing baseline.' },
     });
   });
+
+  it('keeps aggregate exposure but only includes per-fund vectors for a named security', () => {
+    const investmentSnapshot = {
+      ...snapshot,
+      investments: {
+        totalValue: 100,
+        holdingCount: 1,
+        summaryLines: ['- SPY: $100.00'],
+        holdings: [],
+        securities: [],
+        externalData: {
+          asOf: '2026-08-18T15:00:00Z',
+          sources: ['fmp', 'tiingo'],
+          portfolioExposure: {
+            countryAllocations: [{ name: 'United States', percentage: 98 }],
+            sectorAllocations: [{ name: 'Technology', percentage: 35 }],
+            countryCoverage: 1,
+            sectorCoverage: 1,
+            expenseRatioWeighted: 0.0009,
+            expenseRatioCoverage: 1,
+          },
+          securities: [{
+            ticker: 'SPY',
+            countryAllocations: [{ name: 'United States', weight: 0.98 }],
+            sectorAllocations: [{ name: 'Technology', weight: 0.35 }],
+            quote: { price: 700, feed: 'tiingo_iex' },
+          }],
+        },
+      },
+    } as any;
+    const packForPortfolio = buildQuestionContextPack(
+      investmentSnapshot,
+      questionNeedsFromPacks(['investment_details'], false),
+      { version: 1, facts: [] },
+      'Review my portfolio',
+    );
+    const genericSecurity = (packForPortfolio.details.investments as any).externalData.securities[0];
+    expect(genericSecurity.countryAllocations).toBeUndefined();
+    expect(genericSecurity.sectorAllocations).toBeUndefined();
+    expect((packForPortfolio.details.investments as any).externalData.portfolioExposure).toBeDefined();
+
+    const packForSpy = buildQuestionContextPack(
+      investmentSnapshot,
+      questionNeedsFromPacks(['investment_details'], false),
+      { version: 1, facts: [] },
+      'What sectors are in SPY?',
+    );
+    expect((packForSpy.details.investments as any).externalData.securities[0].sectorAllocations)
+      .toEqual([{ name: 'Technology', weight: 0.35 }]);
+  });
 });
