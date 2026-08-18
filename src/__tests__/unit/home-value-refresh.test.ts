@@ -13,13 +13,18 @@ jest.mock('../../profile/manager', () => ({
 }));
 
 const mockProfileFindMany = jest.fn<any>();
+const mockDisconnect = jest.fn<any>();
 
 jest.mock('@prisma/client', () => ({
   PrismaClient: jest.fn(() => ({
     userProfile: { findMany: mockProfileFindMany },
-    $disconnect: jest.fn(),
+    $disconnect: mockDisconnect,
   })),
 }));
+
+const { PrismaClient: mockPrismaClient } = jest.requireMock('@prisma/client') as {
+  PrismaClient: jest.Mock;
+};
 
 import {
   HomeValueRefreshService,
@@ -46,6 +51,7 @@ describe('HomeValueRefreshService.refreshUserHomeValue', () => {
   it('refreshes an estimate that has aged past the minimum interval', async () => {
     await expect(service.refreshUserHomeValue('user-1')).resolves.toBe('refreshed');
     expect(mockUpdateHomeValue).toHaveBeenCalledWith('user-1', '1 Main St');
+    expect(mockPrismaClient).not.toHaveBeenCalled();
   });
 
   it('never overwrites a value the user entered by hand', async () => {
@@ -139,6 +145,11 @@ describe('HomeValueRefreshService.refreshAllHomeValues', () => {
     expect(results.total).toBe(3);
     expect(results.successful).toBe(3);
     expect(results.failed).toBe(0);
+    expect(mockProfileFindMany).toHaveBeenCalledWith({
+      where: { userId: { not: null }, isActive: true },
+      select: { userId: true },
+    });
+    expect(mockDisconnect).toHaveBeenCalledTimes(1);
   });
 
   it('does not report a user whose provider call failed', async () => {

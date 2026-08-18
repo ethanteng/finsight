@@ -21,12 +21,6 @@ export type HomeValueRefreshOutcome =
   | 'failed';
 
 export class HomeValueRefreshService {
-  private prisma: PrismaClient;
-
-  constructor() {
-    this.prisma = new PrismaClient();
-  }
-
   /**
    * Refresh home values for all users who have home data
    * This should be called periodically (e.g., monthly) via a cron job
@@ -45,6 +39,7 @@ export class HomeValueRefreshService {
     errors: Array<{ userId: string; error: string }>;
   }> {
     console.log('HomeValueRefresh: Starting home value refresh for all users');
+    const prisma = new PrismaClient();
     
     const results = {
       total: 0,
@@ -56,14 +51,12 @@ export class HomeValueRefreshService {
 
     try {
       // Get all user profiles that have home data
-      const profiles = await this.prisma.userProfile.findMany({
+      const profiles = await prisma.userProfile.findMany({
         where: {
           userId: { not: null },
           isActive: true
         },
-        include: {
-          encrypted_profile_data: true
-        }
+        select: { userId: true }
       });
 
       console.log(`HomeValueRefresh: Found ${profiles.length} user profiles to check`);
@@ -122,7 +115,7 @@ export class HomeValueRefreshService {
       console.error('HomeValueRefresh: Fatal error during refresh process:', error);
       throw error;
     } finally {
-      await this.prisma.$disconnect();
+      await prisma.$disconnect();
     }
   }
 
@@ -217,4 +210,3 @@ if (require.main === module) {
       process.exit(1);
     });
 }
-

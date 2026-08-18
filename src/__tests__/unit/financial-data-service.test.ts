@@ -211,6 +211,7 @@ describe('FinancialDataService investment persistence safeguards', () => {
 
     expect(result).toEqual({
       address: '123 Main St',
+      propertyId: null,
       valueLow: null,
       valueMid: null,
       valueHigh: null,
@@ -232,5 +233,20 @@ describe('FinancialDataService investment persistence safeguards', () => {
 
     expect(result.valueMid).toBe(500000);
     expect(result.lastUpdated).toBeNull();
+  });
+
+  it('retains the RentCast property ID from the encrypted profile data', async () => {
+    mockGetOriginalProfile.mockResolvedValue([
+      'HOME_ADDRESS: 123 Main St',
+      'HOME_RENTCAST_PROPERTY_ID: property-123',
+      'HOME_VALUE: 500000',
+      'HOME_VALUE_LOW: 475000',
+      'HOME_VALUE_HIGH: 525000',
+    ].join('\n'));
+    const service = new FinancialDataService();
+
+    const result = await (service as any).fetchHomeValue('user-123');
+
+    expect(result.propertyId).toBe('property-123');
   });
 });
