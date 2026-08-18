@@ -126,7 +126,7 @@ app.get('/health', (req: Request, res: Response) => {
 });
 
 // Cron job health check endpoint
-app.get('/health/cron', (req: Request, res: Response) => {
+app.get('/health/cron', async (req: Request, res: Response) => {
   console.log('Cron health check requested:', {
     timestamp: new Date().toISOString(),
     userAgent: req.headers['user-agent']
@@ -134,26 +134,66 @@ app.get('/health/cron', (req: Request, res: Response) => {
 
   // Check if cron jobs are running
   const cronJobs = cron.getTasks();
-  const syncJob = Array.from(cronJobs.values()).find((job: any) => job.name === 'daily-sync');
-  const marketContextJob = Array.from(cronJobs.values()).find((job: any) => job.name === 'market-context-refresh');
+  const marketNewsJob = Array.from(cronJobs.values()).find((job: any) => job.name === 'market-news-refresh');
   const mailerLiteJob = Array.from(cronJobs.values()).find((job: any) => job.name === 'mailerlite-sync');
+
+  let leaseMonitoringError: string | undefined;
+  let leaseByName = new Map<string, {
+    leaseUntil: Date;
+    lastStartedAt: Date | null;
+    lastCompletedAt: Date | null;
+    lastError: string | null;
+  }>();
+  try {
+    const leases = await getPrismaClient().scheduledJobLease.findMany({
+      where: { name: { in: ['financial-data-refresh', 'market-news-refresh'] } },
+      select: {
+        name: true,
+        leaseUntil: true,
+        lastStartedAt: true,
+        lastCompletedAt: true,
+        lastError: true,
+      },
+    });
+    leaseByName = new Map(leases.map(lease => [lease.name, lease]));
+  } catch (error) {
+    leaseMonitoringError = error instanceof Error ? error.message : String(error);
+    console.warn('Unable to read scheduled-job lease health:', error);
+  }
+
+  const now = new Date();
+  const leaseStatus = (name: string) => {
+    const lease = leaseByName.get(name);
+    return {
+      running: Boolean(lease && lease.leaseUntil > now),
+      lastStartedAt: lease?.lastStartedAt ?? null,
+      lastCompletedAt: lease?.lastCompletedAt ?? null,
+      lastError: lease?.lastError ?? null,
+    };
+  };
 
   res.json({
     status: 'OK',
     cronJobs: {
-      dailySync: {
-        running: !!syncJob,
-        name: 'daily-sync'
+      financialDataRefresh: {
+        name: 'financial-data-refresh',
+        execution: 'external',
+        command: 'node scripts/refresh-transactions.js',
+        ...leaseStatus('financial-data-refresh'),
       },
-      marketContextRefresh: {
-        running: !!marketContextJob,
-        name: 'market-context-refresh'
+      marketNewsRefresh: {
+        name: 'market-news-refresh',
+        execution: 'in-process',
+        scheduled: !!marketNewsJob,
+        ...leaseStatus('market-news-refresh'),
       },
       mailerLiteSync: {
         running: !!mailerLiteJob,
-        name: 'mailerlite-sync'
+        name: 'mailerlite-sync',
+        execution: 'in-process',
       }
     },
+    ...(leaseMonitoringError && { leaseMonitoringError }),
     timestamp: new Date().toISOString(),
     environment: process.env.NODE_ENV || 'development'
   });
@@ -2263,14 +2303,16 @@ app.get('/market-news/context/:tier', async (req: Request, res: Response) => {
     const tier = asString(req.params.tier);
     const { MarketNewsManager } = await import('./market-news/manager');
     const manager = new MarketNewsManager();
-    const contextText = await manager.getMarketContext(tier as UserTier);
-
     // Get the full context object from database
     const contextRecord = await manager.prisma.marketNewsContext.findFirst({
       where: {
-        availableTiers: { has: tier }
+        availableTiers: { has: tier },
+        isActive: true,
       },
-      orderBy: { lastUpdate: 'desc' }
+      orderBy: [
+        { manualOverride: 'desc' },
+        { lastUpdate: 'desc' },
+      ]
     });
 
     if (!contextRecord) {
@@ -2758,43 +2800,14 @@ if (require.main === module) {
   app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 
-    // Note: Removed daily sync cron job - keeping transactions real-time only for privacy
-    console.log('ℹ️  Daily sync job removed - transactions are now real-time only');
+    // Financial refresh runs as a separately monitored Render cron so a web
+    // process restart cannot silently cancel it.
+    console.log('ℹ️  Financial refresh is managed externally by scripts/refresh-transactions.js');
 
-    // Set up cron job to refresh market context every hour
-    cron.schedule('0 * * * *', async () => {
-      console.log('🔄 Starting hourly market context refresh...');
-      const startTime = Date.now();
-
-      try {
-        await dataOrchestrator.forceRefreshAllContext();
-        const duration = Date.now() - startTime;
-
-        console.log(`✅ Market context refresh completed successfully in ${duration}ms`);
-        console.log(`📊 Market Context Metrics: duration=${duration}ms`);
-
-        // Log cache stats for monitoring
-        const cacheStats = await dataOrchestrator.getCacheStats();
-        console.log(`📊 Cache Stats: marketContextCache.size=${cacheStats.marketContextCache.size}`);
-
-      } catch (error) {
-        const duration = Date.now() - startTime;
-        console.error(`❌ Error in market context refresh after ${duration}ms:`, error);
-        console.error(`📊 Market Context Error: duration=${duration}ms, error=${error}`);
-
-        // Capture error in Sentry
-        if (error instanceof Error) {
-          Sentry.captureException(error);
-        } else {
-          Sentry.captureMessage('Unknown error in market context refresh cron job', 'error');
-        }
-      }
-    }, {
-      timezone: 'America/New_York',
-      name: 'market-context-refresh'
-    });
-
-    // Set up cron job to refresh market news context every 4 hours (reduced from 2 hours)
+    // Refresh the durable market-news context every four hours. This is the
+    // canonical scheduled path for FRED, Tiingo, Brave, and Massive evidence;
+    // the old hourly process-local FRED cache warmer duplicated calls and was
+    // invisible to other application instances.
     cron.schedule('0 */4 * * *', async () => {
       console.log('🔄 Starting market news context refresh...');
 
@@ -2831,7 +2844,7 @@ if (require.main === module) {
       name: 'market-news-refresh'
     });
 
-    console.log('Cron jobs scheduled: market context (hourly), market news context (every 4 hours)');
+    console.log('Cron jobs scheduled: market news context (every 4 hours)');
 
     // Set up cron job to sync users to MailerLite daily at 3 AM EST
     cron.schedule('0 3 * * *', async () => {

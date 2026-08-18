@@ -53,9 +53,27 @@ export class MarketNewsManager {
   async updateMarketContexts(tiers: readonly UserTier[]): Promise<void> {
     try {
       const rawData = await this.aggregator.aggregateMarketData();
-      await Promise.all(Array.from(new Set(tiers)).map(async (tier) => {
+      const tierEvidence = Array.from(new Set(tiers)).map((tier) => {
         const tierRawData = this.synthesizer.filterDataForTier(rawData, tier);
+        // Validate provider coverage against the shared source batch. Premium's
+        // tier filter intentionally removes a duplicate FRED DGS10 row when
+        // Massive has the same maturity, which must not be mistaken for a FRED
+        // outage.
+        this.validateRefreshEvidence(tier, rawData);
+        return { tier, tierRawData };
+      });
+      const preparedContexts = await Promise.all(tierEvidence.map(async ({ tier, tierRawData }) => {
         const context = await this.synthesizer.synthesizeMarketContext(rawData, tier);
+        if (!context.contextText.trim()) {
+          throw new Error(`Refusing to save an empty ${tier} market context`);
+        }
+        return { tier, tierRawData, context };
+      }));
+
+      // Validate every requested tier before writing any of them. A provider
+      // outage must leave the last-known-good rows intact instead of replacing
+      // them with a plausible-looking empty or materially incomplete summary.
+      await Promise.all(preparedContexts.map(async ({ tier, tierRawData, context }) => {
         await this.saveMarketContext(context, tierRawData);
         console.log(`Market context updated for tier: ${tier}`);
       }));
@@ -104,7 +122,12 @@ export class MarketNewsManager {
         availableTiers: { has: tier },
         isActive: true
       },
-      orderBy: { lastUpdate: 'desc' }
+      // A manual override remains authoritative until explicitly changed,
+      // even if the automatic refresher writes a newer row.
+      orderBy: [
+        { manualOverride: 'desc' },
+        { lastUpdate: 'desc' },
+      ]
     });
     
     return context?.contextText || '';
@@ -139,7 +162,7 @@ export class MarketNewsManager {
     });
     
     // Log to history
-    await this.logContextChange(tier, newContext, 'manual_edit', adminUser);
+    await this.logContextChange(`manual-${tier}`, newContext, 'manual_edit', adminUser);
   }
   
   async getMarketContextHistory(tier: UserTier): Promise<any[]> {
@@ -181,21 +204,45 @@ export class MarketNewsManager {
     });
     
     // Log to history
-    await this.logContextChange(context.tier, context.contextText, 'auto_update');
+    await this.logContextChange(`auto-${context.tier}`, context.contextText, 'auto_update');
+  }
+
+  private validateRefreshEvidence(
+    tier: UserTier,
+    rawData: MarketNewsData[]
+  ): void {
+    // Starter intentionally has no market-news entitlement.
+    if (tier === UserTier.STARTER) return;
+
+    const sources = new Set(rawData.map(item => item.source));
+    const missing: string[] = [];
+    if (!sources.has('fred')) missing.push('fred');
+    if (!sources.has('tiingo') && !sources.has('brave_search')) {
+      missing.push('tiingo-or-brave_search');
+    }
+
+    const massiveConfigured = Boolean(
+      (process.env.MASSIVE_API_KEY || process.env.POLYGON_API_KEY || '').trim()
+    );
+    if (tier === UserTier.PREMIUM && massiveConfigured && !sources.has('massive')) {
+      missing.push('massive');
+    }
+
+    if (missing.length > 0) {
+      throw new Error(
+        `Refusing to replace ${tier} market context; missing required evidence: ${missing.join(', ')}`
+      );
+    }
   }
   
   private async logContextChange(
-    tier: UserTier,
+    contextId: string,
     contextText: string,
     changeType: string,
     changedBy?: string
   ): Promise<void> {
-    // Find the context record to get its ID
-    const context = await this.prisma.marketNewsContext.findFirst({
-      where: {
-        availableTiers: { has: tier }
-      },
-      orderBy: { lastUpdate: 'desc' }
+    const context = await this.prisma.marketNewsContext.findUnique({
+      where: { id: contextId }
     });
     
     if (context) {

@@ -321,6 +321,7 @@ describe('Market News System', () => {
     });
 
     test('should update market context automatically', async () => {
+      (manager as any).aggregator = mockAggregator;
       await expect(
         manager.updateMarketContext(UserTier.STANDARD)
       ).resolves.not.toThrow();

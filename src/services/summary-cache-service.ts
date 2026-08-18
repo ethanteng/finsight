@@ -4,7 +4,10 @@ import {
   buildAccountDisplayBalances,
 } from './finances-overview-service';
 import { getPrismaClient } from '../prisma-client';
-import { upsertFinancialSnapshot } from './financial-snapshot-persistence';
+import {
+  getLatestFinancialSnapshot,
+  upsertFinancialSnapshot,
+} from './financial-snapshot-persistence';
 import { ingestFinancialData } from './financial-ingestion';
 import { extractWindowedInvestmentActivities } from './financial-calculations';
 import {
@@ -115,6 +118,20 @@ export class SummaryCacheService {
       },
     };
 
+    // Do not replace a usable canonical snapshot with a revision that is known
+    // to be missing a connected provider. A transient Plaid/SnapTrade outage
+    // otherwise makes assets disappear from the finances page and LLM context.
+    // First-time users still receive the partial snapshot so the available
+    // sources are visible and its quality flags explain the limitation.
+    if (data.metadata?.partialData && (canonical.status === 'partial' || canonical.status === 'unavailable')) {
+      const previous = await getLatestFinancialSnapshot(userId, 'summary');
+      if (previous && (previous.status === 'current' || previous.status === 'stale')) {
+        throw new Error(
+          `Refusing to replace existing financial snapshot with ${canonical.status} provider data`
+        );
+      }
+    }
+
     await upsertFinancialSnapshot(userId, payload);
     
     // Save historical snapshot for trend tracking
@@ -182,6 +199,7 @@ export class SummaryCacheService {
     // Report which users were covered so callers that refreshed other inputs
     // can recompute anyone this pass did not reach.
     const processedUserIds: string[] = [];
+    const errors: Array<{ userId: string; error: string }> = [];
     for (const u of userIds) {
       try {
         // Cron: run full categorization for richer GPT context
@@ -189,9 +207,19 @@ export class SummaryCacheService {
         processedUserIds.push(u.id);
       } catch (err) {
         console.error(`SummaryCacheService: Failed to refresh snapshot for user ${u.id}`, err);
+        errors.push({
+          userId: u.id,
+          error: err instanceof Error ? err.message : String(err),
+        });
       }
     }
-    return { success: true, usersProcessed: processedUserIds.length, processedUserIds };
+    return {
+      success: errors.length === 0,
+      usersProcessed: processedUserIds.length,
+      usersFailed: errors.length,
+      processedUserIds,
+      errors,
+    };
   }
 
 }

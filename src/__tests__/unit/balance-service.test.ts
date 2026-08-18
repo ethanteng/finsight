@@ -142,4 +142,27 @@ describe('BalanceService connection scoping', () => {
     ).rejects.toThrow('unknown Plaid connection');
     expect(plaidClient.accountsBalanceGet).not.toHaveBeenCalled();
   });
+
+  it('reports connection-level failures to scheduled callers', async () => {
+    mockPrisma.accessToken.findMany.mockResolvedValue([
+      { id: 'token-record-a', token: 'access-token-a' },
+      { id: 'token-record-b', token: 'access-token-b' },
+    ]);
+    const refreshSpy = jest.spyOn(BalanceService, 'getAccountBalances')
+      .mockResolvedValueOnce([])
+      .mockRejectedValueOnce(new Error('Plaid unavailable'));
+
+    try {
+      await expect(
+        BalanceService.refreshAllUserBalances('user-1', plaidClient)
+      ).resolves.toEqual({
+        totalTokens: 2,
+        successful: 1,
+        failed: 1,
+        errors: [{ tokenId: 'token-record-b', error: 'Plaid unavailable' }],
+      });
+    } finally {
+      refreshSpy.mockRestore();
+    }
+  });
 });

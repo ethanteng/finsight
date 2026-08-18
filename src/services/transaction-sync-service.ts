@@ -40,6 +40,7 @@ export class TransactionSyncService {
       let currentCursor: string | null = cursor || null;
       let hasMore = true;
       let syncError: string | undefined;
+      let cursorResetAttempted = false;
 
       // Paginate through all changes
       while (hasMore) {
@@ -62,8 +63,18 @@ export class TransactionSyncService {
           // If cursor is invalid/expired, reset cursor and retry without cursor
           // This will fetch all transactions from the beginning
           if (errorCode === 'INVALID_CURSOR' || errorCode === 'CURSOR_EXPIRED') {
+            if (cursorResetAttempted || currentCursor === null) {
+              throw error;
+            }
             console.warn(`Cursor invalid/expired for token, resetting cursor and starting fresh: ${errorMessage}`);
             currentCursor = null;
+            cursorResetAttempted = true;
+            // Discard changes collected from the invalid cursor. The cursorless
+            // restart returns the authoritative stream from the beginning, and
+            // retaining the earlier pages would process the same changes twice.
+            added.length = 0;
+            modified.length = 0;
+            removed.length = 0;
             syncError = `Cursor was reset: ${errorMessage}`;
             // Continue loop - will retry without cursor on next iteration
             continue;
@@ -76,13 +87,14 @@ export class TransactionSyncService {
 
       // Process added transactions
       let addedCount = 0;
+      const processingErrors: string[] = [];
       for (const transaction of added) {
         try {
           await this.upsertTransaction(transaction, tokenRecord);
           addedCount++;
         } catch (error: any) {
           console.error(`Error processing added transaction ${transaction.transaction_id}:`, error.message);
-          // Continue with other transactions
+          processingErrors.push(`added ${transaction.transaction_id}: ${error.message}`);
         }
       }
 
@@ -94,7 +106,7 @@ export class TransactionSyncService {
           modifiedCount++;
         } catch (error: any) {
           console.error(`Error processing modified transaction ${transaction.transaction_id}:`, error.message);
-          // Continue with other transactions
+          processingErrors.push(`modified ${transaction.transaction_id}: ${error.message}`);
         }
       }
 
@@ -108,8 +120,18 @@ export class TransactionSyncService {
           removedCount++;
         } catch (error: any) {
           console.error(`Error removing transaction ${removedTx.transaction_id}:`, error.message);
-          // Continue with other transactions
+          processingErrors.push(`removed ${removedTx.transaction_id}: ${error.message}`);
         }
+      }
+
+      // A Plaid cursor is an acknowledgement boundary. If even one change was
+      // not durably applied, leave the stored cursor untouched so the entire
+      // page is replayed on the next run. Successful upserts/deletes are
+      // idempotent, whereas advancing here would permanently lose the failure.
+      if (processingErrors.length > 0) {
+        throw new Error(
+          `Failed to persist ${processingErrors.length} transaction change(s): ${processingErrors.slice(0, 3).join('; ')}`
+        );
       }
 
       // Update cursor and last sync timestamp in database
@@ -193,8 +215,9 @@ export class TransactionSyncService {
     });
 
     if (!account) {
-      console.warn(`Skipping transaction ${transaction.transaction_id} for unknown accountId: ${transaction.account_id}`);
-      return;
+      throw new Error(
+        `Unknown accountId ${transaction.account_id} for transaction ${transaction.transaction_id}`
+      );
     }
     if (account.accessTokenId === null) {
       await prisma.account.update({
