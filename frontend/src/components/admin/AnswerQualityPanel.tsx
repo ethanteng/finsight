@@ -245,7 +245,7 @@ export default function AnswerQualityPanel({
             <CountCard
               title="Planner sufficient"
               value={percent(report.planning.plannerAcceptedRate)}
-              detail={`${report.planning.primaryToolExpanded} expanded before answering · ${report.planning.lateExpanded} expanded after a miss · ${report.planning.primaryToolFailed} audit failures`}
+              detail={`${report.planning.primaryToolExpanded} expanded before answering · ${report.planning.lateExpanded} expanded after a miss · ${report.planning.primaryToolFailed} audit failures${report.planning.fallbackPlans > 0 ? ` · ${report.planning.fallbackPlans} planner fallback(s)` : ''}`}
             />
             <CountCard
               title="User rating"
@@ -270,7 +270,7 @@ export default function AnswerQualityPanel({
                 {Object.entries(scenarios.byCalculator ?? {}).map(([calculatorId, counts]) => (
                   <div
                     key={calculatorId}
-                    className="rounded-full border border-[#102319]/18 bg-[#e9eee5] px-3 py-1.5 text-xs font-semibold text-[#102319]"
+                    className="rounded-full border border-[#102319]/20 bg-[#e9eee5] px-3 py-1.5 text-xs font-semibold text-[#102319]"
                   >
                     <span>{calculatorLabel(calculatorId)}</span>
                     {' · '}{counts.completed} completed · {counts.unavailable} unavailable

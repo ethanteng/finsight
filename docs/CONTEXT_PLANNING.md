@@ -61,10 +61,12 @@ The Production tab's **Answer quality** report deliberately has no synthetic sco
 
 - clean, corrected, and failed delivery outcomes;
 - deterministic evidence verification;
-- planner sufficiency (acceptance rate, primary-tool expansions/failures, and late evidence recoveries);
+- planner sufficiency (acceptance rate, primary-tool expansions/failures, late evidence recoveries, and any preflight fallbacks);
 - user ratings;
 - requested, completed, unavailable, and unexpectedly unrun scenarios, plus calculator latency;
 - requested and completed public-search retrievals, planned-query volume, Brave provider calls, cache reuse, results, and unavailable evidence.
+
+Two admin-authenticated endpoints stay available for ops without a browser surface: `GET /admin/ai/context-packs` returns the allowlisted pack definitions and calculator manifests, and `POST /admin/ai/context-planner-preview` runs the production preflight planner against a supplied transcript. Both are intentionally API-only; no admin page calls them.
 
 The old editable routing vocabulary and browser-side keyword question categories were retired because neither represents the production decision path.
 

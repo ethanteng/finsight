@@ -10,7 +10,7 @@ const REPORT = {
   evidence: { verified: 4, salvaged: 1, replaced: 1, verifiedRate: 0.667 },
   planning: {
     semanticPlans: 6,
-    fallbackPlans: 0,
+    fallbackPlans: 2,
     plannerAccepted: 4,
     primaryToolExpanded: 1,
     primaryToolFailed: 0,
@@ -93,6 +93,7 @@ describe('AnswerQualityPanel', () => {
     expect(screen.getByText('Planner sufficient')).toBeInTheDocument();
     expect(screen.getByText('User rating')).toBeInTheDocument();
     expect(screen.getByText(/1 expanded before answering/)).toBeInTheDocument();
+    expect(screen.getByText(/2 planner fallback\(s\)/)).toBeInTheDocument();
   });
 
   it('does not expose the context-planning operations card', async () => {
