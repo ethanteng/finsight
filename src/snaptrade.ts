@@ -53,9 +53,38 @@ const snaptrade = new Snaptrade({
 });
 
 const SNAPTRADE_ACTIVITY_PAGE_SIZE = 1000;
+/** Cap concurrent getUserHoldings calls so a multi-account user does not burst SnapTrade. */
+const SNAPTRADE_HOLDINGS_CONCURRENCY = 5;
 
 function finiteNumber(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  concurrency: number,
+  mapper: (item: T, index: number) => Promise<R>,
+): Promise<PromiseSettledResult<R>[]> {
+  const results: PromiseSettledResult<R>[] = new Array(items.length);
+  let nextIndex = 0;
+
+  async function worker() {
+    while (nextIndex < items.length) {
+      const index = nextIndex++;
+      try {
+        results[index] = { status: 'fulfilled', value: await mapper(items[index], index) };
+      } catch (reason) {
+        results[index] = { status: 'rejected', reason };
+      }
+    }
+  }
+
+  const workers = Array.from(
+    { length: Math.min(Math.max(1, concurrency), Math.max(items.length, 1)) },
+    () => worker(),
+  );
+  await Promise.all(workers);
+  return results;
 }
 
 function connectionId(value: unknown): string | undefined {
@@ -411,24 +440,28 @@ export class SnapTradeService {
         return { success: false, error: accountsResult.error || 'Failed to get SnapTrade accounts' };
       }
 
-      const settled = await Promise.allSettled(accountsResult.data.accounts.map(async (account: any) => {
-        const response = await this.client.accountInformation.getUserHoldings({
-          accountId: account.id,
-          userId,
-          userSecret,
-        });
-        return {
-          ...response.data,
-          account: {
-            ...account,
-            id: account.id,
-            name: account.name,
-            number: account.accountNumber,
-            institution_name: account.institution,
-            sync_status: account.syncStatus,
-          },
-        };
-      }));
+      const settled = await mapWithConcurrency(
+        accountsResult.data.accounts,
+        SNAPTRADE_HOLDINGS_CONCURRENCY,
+        async (account: any) => {
+          const response = await this.client.accountInformation.getUserHoldings({
+            accountId: account.id,
+            userId,
+            userSecret,
+          });
+          return {
+            ...response.data,
+            account: {
+              ...account,
+              id: account.id,
+              name: account.name,
+              number: account.accountNumber,
+              institution_name: account.institution,
+              sync_status: account.syncStatus,
+            },
+          };
+        },
+      );
 
       const data: any[] = [];
       const errors: Array<{ accountId: string; error: string }> = [];
@@ -442,7 +475,13 @@ export class SnapTradeService {
       });
 
       if (data.length === 0 && errors.length > 0) {
-        return { success: false, error: 'Failed to fetch holdings for every SnapTrade account', errors };
+        // Prefer the first underlying provider message so credential sniffing
+        // (credentials|invalid|expired) still triggers the reconnect prompt.
+        return {
+          success: false,
+          error: errors[0]?.error || 'Failed to fetch holdings for every SnapTrade account',
+          errors,
+        };
       }
       console.log(`🔍 Holdings retrieved for ${data.length} SnapTrade account(s)`);
       return { success: true, data, errors };

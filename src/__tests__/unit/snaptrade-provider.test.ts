@@ -125,6 +125,37 @@ describe('SnapTrade provider retrieval', () => {
     expect(result.data[0].account.sync_status.holdings.last_successful_sync).toBe('2026-08-17');
   });
 
+  it('caps concurrent holdings requests and surfaces the first provider error', async () => {
+    const fake = client();
+    let inFlight = 0;
+    let peakInFlight = 0;
+    fake.accountInformation.getUserHoldings.mockImplementation(async () => {
+      inFlight += 1;
+      peakInFlight = Math.max(peakInFlight, inFlight);
+      await new Promise(resolve => setTimeout(resolve, 20));
+      inFlight -= 1;
+      throw Object.assign(new Error('SnapTrade credentials invalid or expired'), { status: 401 });
+    });
+    const accountsResult = {
+      success: true,
+      data: {
+        accounts: Array.from({ length: 8 }, (_, index) => ({
+          id: `account-${index}`,
+          name: `Account ${index}`,
+          accountNumber: String(index),
+        })),
+      },
+    };
+
+    const result = await new SnapTradeService(fake).getUserHoldings('user', 'secret', accountsResult);
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('credentials invalid or expired');
+    expect(result.errors).toHaveLength(8);
+    expect(peakInFlight).toBeLessThanOrEqual(5);
+    expect(fake.accountInformation.getUserHoldings).toHaveBeenCalledTimes(8);
+  });
+
   it('paginates all activity types without an exclusionary type filter', async () => {
     const fake = client();
     fake.accountInformation.getAccountActivities
