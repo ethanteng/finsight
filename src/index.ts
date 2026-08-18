@@ -146,7 +146,7 @@ app.get('/health/cron', async (req: Request, res: Response) => {
   }>();
   try {
     const leases = await getPrismaClient().scheduledJobLease.findMany({
-      where: { name: { in: ['financial-data-refresh', 'market-news-refresh'] } },
+      where: { name: { in: ['financial-data-refresh', 'balance-data-refresh', 'market-news-refresh'] } },
       select: {
         name: true,
         leaseUntil: true,
@@ -180,6 +180,12 @@ app.get('/health/cron', async (req: Request, res: Response) => {
         execution: 'external',
         command: 'node scripts/refresh-transactions.js',
         ...leaseStatus('financial-data-refresh'),
+      },
+      balanceDataRefresh: {
+        name: 'balance-data-refresh',
+        execution: 'external',
+        command: 'node scripts/run-balance-refresh-cron.js',
+        ...leaseStatus('balance-data-refresh'),
       },
       marketNewsRefresh: {
         name: 'market-news-refresh',

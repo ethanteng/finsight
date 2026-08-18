@@ -42,16 +42,19 @@ const configuration = new Configuration({
 });
 
 const plaidClient = new PlaidApi(configuration);
-const FINANCIAL_REFRESH_JOB = 'financial-data-refresh';
-const FINANCIAL_REFRESH_LEASE_MS = 6 * 60 * 60 * 1000;
+// Separate from financial-data-refresh (transaction + summary cron). Sharing that
+// lease caused overlapping Render crons to skip each other with exit 0, and made
+// /health/cron attribute balance-only completions to the transaction job.
+const BALANCE_REFRESH_JOB = 'balance-data-refresh';
+const BALANCE_REFRESH_LEASE_MS = 6 * 60 * 60 * 1000;
 
 async function runBalanceRefreshCron() {
   const timestamp = new Date().toISOString();
   console.log(`[${timestamp}] 🚀 Starting scheduled balance refresh...`);
   const lease = await acquireScheduledRefreshLease({
-    name: FINANCIAL_REFRESH_JOB,
+    name: BALANCE_REFRESH_JOB,
     minimumIntervalMs: 0,
-    leaseDurationMs: FINANCIAL_REFRESH_LEASE_MS,
+    leaseDurationMs: BALANCE_REFRESH_LEASE_MS,
     force: true,
   });
   if (!lease.acquired) {
@@ -118,11 +121,11 @@ async function runBalanceRefreshCron() {
       throw new Error(`Balance refresh failed for ${totalErrors}/${users.length} user(s)`);
     }
 
-    await completeScheduledRefreshLease(FINANCIAL_REFRESH_JOB, lease.ownerId);
+    await completeScheduledRefreshLease(BALANCE_REFRESH_JOB, lease.ownerId);
     return { skipped: false, totalRefreshed, totalErrors };
   } catch (error) {
     console.error(`[${timestamp}] 💥 Unexpected error in balance refresh cron:`, error);
-    await failScheduledRefreshLease(FINANCIAL_REFRESH_JOB, lease.ownerId, error).catch((leaseError) => {
+    await failScheduledRefreshLease(BALANCE_REFRESH_JOB, lease.ownerId, error).catch((leaseError) => {
       console.error('Failed to record balance refresh failure:', leaseError);
     });
     throw error;
