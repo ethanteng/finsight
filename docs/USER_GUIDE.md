@@ -664,7 +664,7 @@ Ask Linc offers three subscription tiers with differentiated access to features:
 | Basic Financial Analysis | ✅ | ✅ | ✅ |
 | Economic Indicators | ❌ | ✅ | ✅ |
 | RAG System (Real-Time Search) | ❌ | ✅ | ✅ |
-| Live Market Data | ❌ | ❌ | ✅ |
+| Advanced Market Context | ❌ | ❌ | ✅ |
 | Professional News | ❌ | ❌ | ✅ |
 | Advanced Analytics | ❌ | ❌ | ✅ |
 
