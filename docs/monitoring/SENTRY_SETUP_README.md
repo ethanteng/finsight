@@ -52,7 +52,7 @@ Sentry may still derive an IP address at ingestion time. In the Sentry project, 
 The backend wraps its outbound `fetch` implementation and the shared Axios client used by
 provider SDKs during Sentry startup. HTTP 4xx and 5xx responses, timeouts, and network failures
 from external providers are reported as grouped Sentry issues. This covers current integrations
-such as Brave Search, Polygon, FRED, Alpha Vantage, RentCast, Tiingo, FMP, MailerLite, Plaid,
+such as Brave Search, Polygon, FRED, RentCast, Tiingo, FMP, MailerLite, Plaid,
 SnapTrade, Stripe, and the live AI model catalogs, and it automatically covers future providers
 that use `fetch` or the shared Axios client.
 

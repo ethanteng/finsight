@@ -279,7 +279,7 @@ export function createTestApp() {
     res.json({
       contextText: `Mock market context for ${tier} tier`,
       tier: tier,
-      dataSources: ['FRED', 'Alpha Vantage', 'Search API'],
+      dataSources: ['FRED', 'Polygon', 'Search API'],
       keyEvents: [
         'Federal Reserve maintains current interest rates',
         'Inflation data shows moderate increase',

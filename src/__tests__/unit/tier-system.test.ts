@@ -10,26 +10,6 @@ jest.mock('../../data/providers/fred', () => ({
       fedRate: 5.5,
       mortgageRate: 7.1,
       creditCardAPR: 24.5
-    }),
-    getLiveMarketData: jest.fn().mockResolvedValue(null)
-  }))
-}));
-
-jest.mock('../../data/providers/alpha-vantage', () => ({
-  AlphaVantageProvider: jest.fn().mockImplementation(() => ({
-    getLiveMarketData: jest.fn().mockResolvedValue({
-      stocks: {
-        AAPL: { price: 150.25, change: 2.5 },
-        GOOGL: { price: 2800.50, change: -15.75 }
-      },
-      bonds: {
-        '10Y_TREASURY': { yield: 4.2 },
-        '30Y_TREASURY': { yield: 4.8 }
-      },
-      commodities: {
-        GOLD: { price: 1950.00, change: 5.25 },
-        OIL: { price: 75.50, change: -1.20 }
-      }
     })
   }))
 }));
@@ -60,13 +40,13 @@ describe('Tier System', () => {
       expect(accountSources.length).toBeGreaterThan(0);
       expect(economicSources.length).toBeGreaterThan(0);
 
-      // Should have brave-search (external) but not Alpha Vantage sources (Premium only)
+      // Brave search is available, while Polygon market context is Premium only.
       const externalSources = sources.filter(s => s.category === 'external');
       const braveSearchSources = externalSources.filter(s => s.provider === 'brave');
-      const alphaVantageSources = externalSources.filter(s => s.provider === 'alpha-vantage');
+      const polygonSources = externalSources.filter(s => s.provider === 'polygon');
 
       expect(braveSearchSources.length).toBeGreaterThan(0);
-      expect(alphaVantageSources.length).toBe(0);
+      expect(polygonSources.length).toBe(0);
     });
 
     test('should get correct sources for Premium tier', () => {
@@ -130,7 +110,7 @@ describe('Tier System', () => {
       expect(starterLimitations.some(l => l.includes('economic context'))).toBe(true);
 
       expect(standardLimitations.length).toBeGreaterThan(0);
-      expect(standardLimitations.some(l => l.includes('real-time'))).toBe(true);
+      expect(standardLimitations.some(l => l.includes('Polygon'))).toBe(true);
 
       expect(premiumLimitations.length).toBe(1);
       expect(premiumLimitations[0]).toContain('Full access');
@@ -199,7 +179,7 @@ describe('Tier System', () => {
         source.includes('CPI') || source.includes('Federal Reserve') || source.includes('Mortgage') || source.includes('Credit Card')
       );
       const hasExternalSources = context.tierInfo.availableSources.some(source =>
-        source.includes('CD') || source.includes('Treasury') || source.includes('Stock')
+        source.includes('Advanced Market Context')
       );
 
       expect(hasAccountSources).toBe(true);
@@ -284,10 +264,10 @@ describe('Tier System', () => {
         expect(source.tiers).toContain(UserTier.PREMIUM);
         // External sources should not be available for Starter
         expect(source.tiers).not.toContain(UserTier.STARTER);
-        // Brave search is available for Standard, Alpha Vantage is Premium only
+        // Brave search is available for Standard; Polygon context is Premium only.
         if (source.provider === 'brave') {
           expect(source.tiers).toContain(UserTier.STANDARD);
-        } else if (source.provider === 'alpha-vantage') {
+        } else if (source.provider === 'polygon') {
           expect(source.tiers).not.toContain(UserTier.STANDARD);
         }
       });
@@ -299,7 +279,7 @@ describe('Tier System', () => {
 
         // Live data should have reasonable cache durations
         if (source.isLive) {
-          // Brave search has 30-minute cache, Alpha Vantage has 1-5 minute cache
+          // Brave search is the only live external source in this registry.
           expect(source.cacheDuration).toBeLessThanOrEqual(30 * 60 * 1000); // 30 minutes max for live data
         } else {
           expect(source.cacheDuration).toBeGreaterThan(300000); // More than 5 minutes for non-live data
@@ -363,8 +343,8 @@ describe('Tier System', () => {
       expect(starterSuggestions.some(s => s.includes('economic indicators'))).toBe(true);
 
       // Standard suggestions should mention Premium features
-      expect(standardSuggestions.some(s => s.includes('real-time'))).toBe(true);
-      expect(standardSuggestions.some(s => s.includes('real-time market data'))).toBe(true);
+      expect(standardSuggestions.some(s => s.includes('advanced market context'))).toBe(true);
+      expect(standardSuggestions.some(s => s.includes('Advanced Market Context'))).toBe(true);
     });
   });
 });

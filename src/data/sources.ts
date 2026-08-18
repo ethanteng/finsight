@@ -6,7 +6,7 @@ export interface DataSourceConfig {
   description: string;
   tiers: UserTier[];
   category: 'account' | 'market' | 'external' | 'economic';
-  provider: 'plaid' | 'fred' | 'alpha-vantage' | 'internal' | 'brave' | 'rentcast';
+  provider: 'plaid' | 'fred' | 'polygon' | 'internal' | 'brave' | 'rentcast';
   cacheDuration: number; // milliseconds
   rateLimit?: number; // requests per minute
   isLive: boolean;
@@ -126,54 +126,19 @@ export const dataSourceRegistry: Record<string, DataSourceConfig> = {
     upgradeBenefit: 'Understand credit card costs and debt management'
   },
 
-  // Live Market Data (Premium only)
-  'alpha-vantage-cd-rates': {
-    id: 'alpha-vantage-cd-rates',
-    name: 'CD Rates',
-    description: 'Current certificate of deposit rates and APY',
+  // Premium market context is supplied by Polygon/Massive in the persisted
+  // market-news pipeline. It includes SPY daily bars, the Treasury yield curve,
+  // realized inflation, and inflation expectations.
+  'polygon-market-context': {
+    id: 'polygon-market-context',
+    name: 'Advanced Market Context',
+    description: 'Market movement, Treasury yield curve, and inflation context',
     tiers: [UserTier.PREMIUM],
     category: 'external',
-    provider: 'alpha-vantage',
-    cacheDuration: 5 * 60 * 1000, // 5 minutes
-    rateLimit: 5, // 5 requests per minute
-    isLive: true,
-    upgradeBenefit: 'Find the best CD rates to maximize your savings'
-  },
-  'alpha-vantage-treasury-yields': {
-    id: 'alpha-vantage-treasury-yields',
-    name: 'Treasury Yields',
-    description: 'Current Treasury bond yields across all maturities',
-    tiers: [UserTier.PREMIUM],
-    category: 'external',
-    provider: 'alpha-vantage',
-    cacheDuration: 5 * 60 * 1000, // 5 minutes
-    rateLimit: 5, // 5 requests per minute
-    isLive: true,
-    upgradeBenefit: 'Compare Treasury yields for safe investment options'
-  },
-  'alpha-vantage-mortgage-rates': {
-    id: 'alpha-vantage-mortgage-rates',
-    name: 'Live Mortgage Rates',
-    description: 'Real-time mortgage rates from multiple lenders',
-    tiers: [UserTier.PREMIUM],
-    category: 'external',
-    provider: 'alpha-vantage',
-    cacheDuration: 5 * 60 * 1000, // 5 minutes
-    rateLimit: 5, // 5 requests per minute
-    isLive: true,
-    upgradeBenefit: 'Get real-time mortgage rates for home buying decisions'
-  },
-  'alpha-vantage-stock-data': {
-    id: 'alpha-vantage-stock-data',
-    name: 'Stock Market Data',
-    description: 'Real-time stock prices and market data',
-    tiers: [UserTier.PREMIUM],
-    category: 'external',
-    provider: 'alpha-vantage',
-    cacheDuration: 1 * 60 * 1000, // 1 minute
-    rateLimit: 5, // 5 requests per minute
-    isLive: true,
-    upgradeBenefit: 'Track your investments with real-time market data'
+    provider: 'polygon',
+    cacheDuration: 4 * 60 * 60 * 1000,
+    isLive: false,
+    upgradeBenefit: 'Add market movement, yield-curve, and inflation context to financial analysis'
   },
 
   // Search Context (Standard+)
@@ -215,12 +180,12 @@ export class DataSourceManager {
       
       const premiumSources = unavailableSources.filter(s => s.tiers.includes(UserTier.PREMIUM));
       if (premiumSources.length > 0) {
-        suggestions.push(`Upgrade to Premium for live market data including ${premiumSources.map(s => s.name).join(', ')}`);
+        suggestions.push(`Upgrade to Premium for advanced market context including ${premiumSources.map(s => s.name).join(', ')}`);
       }
     } else if (tier === UserTier.STANDARD) {
       const premiumSources = unavailableSources.filter(s => s.tiers.includes(UserTier.PREMIUM));
       if (premiumSources.length > 0) {
-        suggestions.push(`Upgrade to Premium for real-time market data including ${premiumSources.map(s => s.name).join(', ')}`);
+        suggestions.push(`Upgrade to Premium for advanced market context including ${premiumSources.map(s => s.name).join(', ')}`);
       }
     }
 
@@ -251,9 +216,7 @@ export class DataSourceManager {
         limitations.push('No external market data feeds');
         break;
       case UserTier.STANDARD:
-        limitations.push('No live CD rates or Treasury yields');
-        limitations.push('No stock market tracking');
-        limitations.push('No real-time market data feeds');
+        limitations.push('No premium Polygon market and yield-curve context');
         break;
       case UserTier.PREMIUM:
         limitations.push('Full access to all data sources');
@@ -262,4 +225,4 @@ export class DataSourceManager {
 
     return limitations;
   }
-} 
+}

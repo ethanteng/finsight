@@ -236,13 +236,6 @@ export class MarketNewsAggregator {
       enabled: true
     });
     
-    // Fallback sources (if needed)
-    this.sources.set('alpha_vantage', {
-      id: 'alpha_vantage', 
-      name: 'Alpha Vantage Market Data',
-      priority: 4, // Fallback only
-      enabled: false // Disabled by default
-    });
   }
   
   private getPolygonApiKey(): string | undefined {
@@ -292,8 +285,6 @@ export class MarketNewsAggregator {
         return this.fetchBraveSearchData();
       case 'polygon':
         return this.fetchPolygonData(); // Premium tier only
-      case 'alpha_vantage':
-        return this.fetchAlphaVantageData(); // Fallback only
       default:
         return [];
     }
@@ -589,11 +580,6 @@ export class MarketNewsAggregator {
       console.error('Error fetching Polygon.io data:', error);
       return [];
     }
-  }
-  
-  private async fetchAlphaVantageData(): Promise<MarketNewsData[]> {
-    // This is a fallback source, not used for Starter/Standard tiers
-    return [];
   }
   
   private calculateEconomicRelevance(series: string, value: number): number {

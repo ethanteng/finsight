@@ -340,7 +340,7 @@ if (transaction.enriched_data) {
   - `plaid-investments` - Investment Holdings (All tiers - ✅ FIXED)
   - `plaid-investment-transactions` - Investment Transactions (All tiers - ✅ FIXED)
   - **CORRECTED**: Plaid data now available to ALL tiers as intended
-  - Only market context data (FRED, Alpha Vantage, etc.) are tier-restricted
+  - Only market context data (FRED, Polygon, etc.) are tier-restricted
   - Cache durations and live data flags configured
 
 ### **Tier Access Levels**
@@ -729,4 +729,4 @@ The Plaid Enhanced Integration is very close to production readiness, but the un
 
 ---
 
-**This comprehensive specification and implementation status report shows that the Plaid Enhanced Integration is now 95% complete with all major functionality implemented. The system is ready for production deployment with only privacy/security enhancements remaining. The new comprehensive investment endpoint, environment mode switching, and investment data GPT context integration provide significant value and improve the development experience.** 
+**This comprehensive specification and implementation status report shows that the Plaid Enhanced Integration is now 95% complete with all major functionality implemented. The system is ready for production deployment with only privacy/security enhancements remaining. The new comprehensive investment endpoint, environment mode switching, and investment data GPT context integration provide significant value and improve the development experience.**

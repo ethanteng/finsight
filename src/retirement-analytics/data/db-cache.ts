@@ -204,7 +204,7 @@ export class DatabaseCache {
         dates, // All dates in requested range (preserved)
         prices, // All prices in requested range (preserved)
         returns, // Returns for all periods (same length as dates/prices)
-        provider: provider as 'polygon' | 'tiingo' | 'alpha_vantage'
+        provider: provider as 'polygon' | 'tiingo'
       };
     } else {
       // No reference month - we're missing the first return
@@ -232,7 +232,7 @@ export class DatabaseCache {
         dates: slicedDates, // First month lost (unavoidable without reference)
         prices: slicedPrices, // First month lost (unavoidable without reference)
         returns, // Returns start from second month
-        provider: provider as 'polygon' | 'tiingo' | 'alpha_vantage'
+        provider: provider as 'polygon' | 'tiingo'
       };
     }
   }

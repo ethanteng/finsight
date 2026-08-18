@@ -79,10 +79,6 @@ export class FREDProvider implements DataProvider {
     return indicators;
   }
 
-  async getLiveMarketData(): Promise<any> {
-    throw new Error('FRED does not provide live market data');
-  }
-
   async getDataPoint(seriesId: string): Promise<MarketDataPoint> {
     const cacheKey = `fred_${seriesId}`;
     const cached = await cacheService.get<MarketDataPoint>(cacheKey);
@@ -226,4 +222,4 @@ export class FREDProvider implements DataProvider {
     }
     return observations;
   }
-} 
+}
