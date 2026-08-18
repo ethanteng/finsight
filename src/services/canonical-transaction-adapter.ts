@@ -68,17 +68,31 @@ function resolveProviderInvestmentType(transaction: any): CanonicalTransactionTy
   // reinvestment can be reported as type=buy, subtype=dividend.
   if (['buy', 'purchase', 'rei', 'reinvestment'].includes(rawType)) return 'buy';
   if (['sell', 'redemption', 'liquidation'].includes(rawType)) return 'sell';
-  if (['fee', 'commission'].includes(rawType)) return 'fee';
-  if (['dividend', 'interest', 'distribution'].includes(rawType)) return 'income';
+  if (['fee', 'commission', 'tax'].includes(rawType)) return 'fee';
+  if (['dividend', 'interest', 'distribution', 'stock_dividend'].includes(rawType)) {
+    return 'income';
+  }
   if (['contribution', 'deposit'].includes(rawType)) return 'deposit';
   if (['withdrawal'].includes(rawType)) return 'withdrawal';
+  // Non-cash corporate actions must stay off the AI path and out of cash-flow totals.
+  if (['split', 'stock_split', 'merger', 'spinoff', 'spin_off'].includes(rawType)) {
+    return 'adjustment';
+  }
+  if (rawType === 'transfer') {
+    const amount = typeof transaction?.amount === 'number' ? transaction.amount : undefined;
+    if (typeof amount === 'number' && Number.isFinite(amount)) {
+      return amount >= 0 ? 'transfer_in' : 'transfer_out';
+    }
+    return 'transfer_in';
+  }
 
   if (['dividend', 'interest', 'distribution'].some(value => rawSubtype.includes(value))) {
     return 'income';
   }
-  if (['fee', 'commission'].some(value => rawSubtype.includes(value))) return 'fee';
+  if (['fee', 'commission', 'tax'].some(value => rawSubtype.includes(value))) return 'fee';
   if (['contribution', 'deposit'].some(value => rawSubtype.includes(value))) return 'deposit';
   if (rawSubtype.includes('withdrawal')) return 'withdrawal';
+  if (['split', 'merger', 'spin'].some(value => rawSubtype.includes(value))) return 'adjustment';
 
   return null;
 }

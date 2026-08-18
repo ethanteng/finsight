@@ -62,6 +62,16 @@ describe('cash-flow type implied by a chosen category', () => {
   });
 });
 
+describe('SnapTrade activity types newly ingested without a type filter', () => {
+  it('maps transfers, taxes, splits, and stock dividends deterministically', () => {
+    expect(resolveCanonicalTransactionType({ type: 'TRANSFER', amount: 500 })).toBe('transfer_in');
+    expect(resolveCanonicalTransactionType({ type: 'TRANSFER', amount: -500 })).toBe('transfer_out');
+    expect(resolveCanonicalTransactionType({ type: 'TAX', amount: -12 })).toBe('fee');
+    expect(resolveCanonicalTransactionType({ type: 'SPLIT' })).toBe('adjustment');
+    expect(resolveCanonicalTransactionType({ type: 'STOCK_DIVIDEND', amount: 25 })).toBe('income');
+  });
+});
+
 describe('provider transaction id resolution', () => {
   it('mirrors the order the snapshot builder uses', () => {
     expect(resolveProviderTransactionId({ transaction_id: 'a', id: 'b' })).toBe('a');

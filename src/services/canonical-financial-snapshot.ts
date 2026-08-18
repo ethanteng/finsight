@@ -232,7 +232,17 @@ function buildSourceObservations(
     // A manual account has no provider to go stale against: its value changes
     // only when the user edits it, so holding it to the balance refresh window
     // would mark it stale a day after entry and leave no way to clear that.
-    const accountMaxAgeMs = account.source === 'manual' ? null : balanceMaxAgeMs;
+    //
+    // A brokerage account's balance is its holdings value, and its timestamp is
+    // the provider's last successful holdings sync, which advances at most daily
+    // and not at all over a weekend. Judging it by the cash-balance window would
+    // report a correctly-synced brokerage as stale most of the time, so it ages
+    // on the investment window instead.
+    const accountMaxAgeMs = account.source === 'manual'
+      ? null
+      : account.source === 'snaptrade'
+        ? Math.max(balanceMaxAgeMs, investmentMaxAgeMs)
+        : balanceMaxAgeMs;
     observations.push({
       id: `account:${id}`,
       required: true,

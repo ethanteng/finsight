@@ -363,4 +363,107 @@ describe('FinancialDataService investment persistence safeguards', () => {
       expect.objectContaining({ error: expect.stringContaining('connection is disabled') }),
     ]));
   });
+
+  it('scopes a synthesized activity ID to its account and keeps the legacy key', async () => {
+    (mockPrisma.snapTradeUser.findUnique as any).mockResolvedValue({ userSecret: 'secret' });
+    mockSnapTradeService.getUserAccounts.mockResolvedValue({
+      success: true,
+      data: { accounts: [{ id: 'brokerage-1', name: 'Brokerage', balance: 100 }] },
+    });
+    mockSnapTradeService.getUserHoldings.mockResolvedValue({ success: true, data: [] });
+    mockSnapTradeService.getUserActivities.mockResolvedValue({
+      success: true,
+      data: {
+        // No provider id: the synthesized key must not be shareable between users.
+        activities: [{
+          account_id: 'brokerage-1',
+          type: 'BUY',
+          amount: -250,
+          units: 2,
+          price: 125,
+          trade_date: '2026-08-15',
+          symbol: { id: 'security-2', symbol: 'XYZ', description: 'XYZ Fund' },
+        }],
+      },
+    });
+
+    const service = new FinancialDataService();
+    const result = await (service as any).fetchSnapTradeData('user-123', {
+      includeInvestments: true,
+      includeTransactions: true,
+    });
+
+    expect(result.transactions[0]).toMatchObject({
+      activityId: 'brokerage-1-2026-08-15-security-2-BUY-2',
+      id: 'snaptrade-brokerage-1-2026-08-15-security-2-BUY-2',
+      legacyActivityId: 'snaptrade-2026-08-15-security-2',
+    });
+  });
+
+  it('reports an empty brokerage account as zero rather than an unknown balance', async () => {
+    (mockPrisma.snapTradeUser.findUnique as any).mockResolvedValue({ userSecret: 'secret' });
+    mockSnapTradeService.getUserAccounts.mockResolvedValue({
+      success: true,
+      data: {
+        // SnapTrade omitted the rollup for this account.
+        accounts: [{ id: 'brokerage-1', name: 'Brokerage', balance: null }],
+        connectionStatusError: 'connections endpoint timed out',
+      },
+    });
+    mockSnapTradeService.getUserHoldings.mockResolvedValue({
+      success: true,
+      data: [{
+        account: { id: 'brokerage-1', name: 'Brokerage' },
+        balances: [{ cash: 0 }],
+        positions: [],
+      }],
+    });
+    mockSnapTradeService.getUserActivities.mockResolvedValue({
+      success: true,
+      data: { activities: [] },
+    });
+
+    const service = new FinancialDataService();
+    const result = await (service as any).fetchSnapTradeData('user-123', {
+      includeInvestments: true,
+      includeTransactions: true,
+    });
+
+    // A null balance marks the whole canonical snapshot partial; zero is the truth here.
+    expect(result.accounts[0].balance.current).toBe(0);
+    expect(result.errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({ error: expect.stringContaining('connection status unavailable') }),
+    ]));
+  });
+
+  it('flags a brokerage balance whose connection health could not be verified', async () => {
+    (mockPrisma.snapTradeUser.findUnique as any).mockResolvedValue({ userSecret: 'secret' });
+    mockSnapTradeService.getUserAccounts.mockResolvedValue({
+      success: true,
+      data: {
+        accounts: [{
+          id: 'brokerage-1',
+          name: 'Brokerage',
+          balance: 2500,
+          connectionDisabled: undefined,
+          connectionStatusUnavailable: true,
+        }],
+      },
+    });
+    mockSnapTradeService.getUserHoldings.mockResolvedValue({ success: true, data: [] });
+    mockSnapTradeService.getUserActivities.mockResolvedValue({
+      success: true,
+      data: { activities: [] },
+    });
+
+    const service = new FinancialDataService();
+    const result = await (service as any).fetchSnapTradeData('user-123', {
+      includeInvestments: true,
+      includeTransactions: true,
+    });
+
+    expect(result.errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({ error: expect.stringContaining('could not be verified') }),
+    ]));
+  });
 });

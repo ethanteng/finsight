@@ -177,6 +177,28 @@ export async function fetchAllPlaidTransactions(
   return transactions;
 }
 
+/**
+ * Liability terms are opt-in coverage, not a snapshot requirement, so these
+ * responses mean "no data here" rather than "the fetch failed":
+ * - PRODUCTS_NOT_SUPPORTED: the institution does not offer liability data.
+ * - NO_LIABILITY_ACCOUNTS: the item has no credit or loan accounts.
+ * - ADDITIONAL_CONSENT_REQUIRED / INVALID_PRODUCT: the item was linked before
+ *   Liabilities was consented, which is every item predating that Link change.
+ * - PRODUCT_NOT_READY: the item is still completing its initial pull.
+ */
+const OPTIONAL_LIABILITY_COVERAGE_ERRORS = new Set([
+  'PRODUCTS_NOT_SUPPORTED',
+  'NO_LIABILITY_ACCOUNTS',
+  'ADDITIONAL_CONSENT_REQUIRED',
+  'INVALID_PRODUCT',
+  'PRODUCT_NOT_READY',
+  'PRODUCTS_NOT_READY',
+]);
+
+export function isOptionalLiabilityCoverageError(errorCode: unknown): boolean {
+  return typeof errorCode === 'string' && OPTIONAL_LIABILITY_COVERAGE_ERRORS.has(errorCode);
+}
+
 /** Convert the three Plaid liability schemas into one compact account payload. */
 export function normalizePlaidLiabilities(
   liabilities: LiabilitiesObject | null | undefined,

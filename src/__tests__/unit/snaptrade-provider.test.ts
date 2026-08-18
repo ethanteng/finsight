@@ -54,6 +54,54 @@ describe('SnapTrade provider retrieval', () => {
     expect(fake.accountInformation.getAllUserHoldings).toBeUndefined();
   });
 
+  it('reports unknown connection health when the authorization lookup fails', async () => {
+    const fake = client();
+    fake.accountInformation.listUserAccounts.mockResolvedValue({
+      data: [{ id: 'account-1', brokerage_authorization: 'connection-1', name: 'Brokerage' }],
+    });
+    fake.connections.listBrokerageAuthorizations.mockRejectedValue(new Error('503 Service Unavailable'));
+
+    const result = await new SnapTradeService(fake).getUserAccounts('user', 'secret');
+
+    // Never claim a connection is enabled just because we could not read it.
+    expect(result.data.accounts[0].connectionDisabled).toBeUndefined();
+    expect(result.data.accounts[0].connectionStatusUnavailable).toBe(true);
+    expect(result.data.connectionStatusError).toContain('503 Service Unavailable');
+  });
+
+  it('treats a missing authorization record as unknown rather than enabled', async () => {
+    const fake = client();
+    fake.accountInformation.listUserAccounts.mockResolvedValue({
+      data: [{ id: 'account-1', brokerage_authorization: { id: 'connection-1' }, name: 'Brokerage' }],
+    });
+    fake.connections.listBrokerageAuthorizations.mockResolvedValue({ data: [{ id: 'other-connection' }] });
+
+    const result = await new SnapTradeService(fake).getUserAccounts('user', 'secret');
+
+    expect(result.data.accounts[0].connectionDisabled).toBeUndefined();
+    expect(result.data.accounts[0].connectionStatusUnavailable).toBe(true);
+    expect(result.data.connectionStatusError).toBeUndefined();
+  });
+
+  it('falls back to total_value when the account rollup is missing', async () => {
+    const fake = client();
+    fake.accountInformation.listUserAccounts.mockResolvedValue({
+      data: [
+        { id: 'no-rollup', name: 'Cash Only', total_value: { value: 4200, currency: { code: 'CAD' } } },
+        { id: 'no-balance-at-all', name: 'Unknown' },
+      ],
+    });
+
+    const result = await new SnapTradeService(fake).getUserAccounts('user', 'secret');
+
+    expect(result.data.accounts[0]).toEqual(expect.objectContaining({
+      balance: 4200,
+      balanceCurrency: 'CAD',
+    }));
+    // Genuinely absent stays null so holdings can supply the value instead.
+    expect(result.data.accounts[1].balance).toBeNull();
+  });
+
   it('fetches account-specific holdings using prefetched accounts', async () => {
     const fake = client();
     fake.accountInformation.getUserHoldings
@@ -75,6 +123,37 @@ describe('SnapTrade provider retrieval', () => {
     expect(fake.accountInformation.getUserHoldings.mock.calls.map(([request]: any[]) => request.accountId))
       .toEqual(['one', 'two']);
     expect(result.data[0].account.sync_status.holdings.last_successful_sync).toBe('2026-08-17');
+  });
+
+  it('caps concurrent holdings requests and surfaces the first provider error', async () => {
+    const fake = client();
+    let inFlight = 0;
+    let peakInFlight = 0;
+    fake.accountInformation.getUserHoldings.mockImplementation(async () => {
+      inFlight += 1;
+      peakInFlight = Math.max(peakInFlight, inFlight);
+      await new Promise(resolve => setTimeout(resolve, 20));
+      inFlight -= 1;
+      throw Object.assign(new Error('SnapTrade credentials invalid or expired'), { status: 401 });
+    });
+    const accountsResult = {
+      success: true,
+      data: {
+        accounts: Array.from({ length: 8 }, (_, index) => ({
+          id: `account-${index}`,
+          name: `Account ${index}`,
+          accountNumber: String(index),
+        })),
+      },
+    };
+
+    const result = await new SnapTradeService(fake).getUserHoldings('user', 'secret', accountsResult);
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('credentials invalid or expired');
+    expect(result.errors).toHaveLength(8);
+    expect(peakInFlight).toBeLessThanOrEqual(5);
+    expect(fake.accountInformation.getUserHoldings).toHaveBeenCalledTimes(8);
   });
 
   it('paginates all activity types without an exclusionary type filter', async () => {
