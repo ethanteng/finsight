@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import AnswerQualityPanel from '@/components/admin/AnswerQualityPanel';
 
 const REPORT = {
@@ -93,16 +93,15 @@ describe('AnswerQualityPanel', () => {
     expect(screen.getByText('Planner sufficient')).toBeInTheDocument();
     expect(screen.getByText('User rating')).toBeInTheDocument();
     expect(screen.getByText('4')).toBeInTheDocument();
-    expect(screen.getByText('accepted without additions')).toBeInTheDocument();
+    expect(screen.getByText(/1 expanded before answering/)).toBeInTheDocument();
   });
 
-  it('keeps per-pack counts behind a simple detail control', async () => {
+  it('does not expose the context-planning operations card', async () => {
     render(<AnswerQualityPanel apiUrl="https://api.test" getAuthHeaders={() => ({})} />);
-    await screen.findByText('How context planning is doing');
-    expect(screen.queryByText('Final answers')).not.toBeInTheDocument();
-    fireEvent.click(screen.getByText('Show per-pack detail'));
-    expect(screen.getByText('Final answers')).toBeInTheDocument();
-    expect(screen.getByText('Accounts')).toBeInTheDocument();
+    await screen.findByText('Delivered cleanly');
+    expect(screen.queryByText('How context planning is doing')).not.toBeInTheDocument();
+    expect(screen.queryByText('Show per-pack detail')).not.toBeInTheDocument();
+    expect(screen.queryByText('Context planner')).not.toBeInTheDocument();
   });
 
   it('shows scenario completion and calculation timing', async () => {

@@ -150,7 +150,6 @@ export default function AnswerQualityPanel({
   const [report, setReport] = useState<AnswerQualityReport | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [showPackDetail, setShowPackDetail] = useState(false);
   const authHeadersRef = useRef(getAuthHeaders);
   authHeadersRef.current = getAuthHeaders;
 
@@ -263,14 +262,17 @@ export default function AnswerQualityPanel({
               <div><div className="text-2xl font-semibold text-yellow-300">{scenarios.unavailable}</div><div className="text-xs text-gray-500">answers with no runnable scenario</div></div>
               <div><div className="text-2xl font-semibold text-white">{scenarios.averageMs === null ? '—' : `${Math.round(scenarios.averageMs)} ms`}</div><div className="text-xs text-gray-500">average calculation time</div></div>
             </div>
-            <div className="mt-3 text-xs text-gray-400">
+            <div className="mt-3 text-sm text-gray-300">
               {scenarios.completedCalculations ?? scenarios.completed} completed calculation(s) · {scenarios.unavailableCalculations ?? scenarios.unavailable} unavailable calculation(s)
             </div>
             {Object.keys(scenarios.byCalculator ?? {}).length > 0 && (
-              <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="mt-3 flex flex-wrap gap-2">
                 {Object.entries(scenarios.byCalculator ?? {}).map(([calculatorId, counts]) => (
-                  <div key={calculatorId} className="rounded border border-gray-700 bg-gray-950/40 px-3 py-2 text-xs text-gray-400">
-                    <span className="font-medium text-gray-200">{calculatorLabel(calculatorId)}</span>
+                  <div
+                    key={calculatorId}
+                    className="rounded-full border border-gray-600 bg-gray-600 px-3 py-1.5 text-xs font-medium text-gray-200"
+                  >
+                    <span>{calculatorLabel(calculatorId)}</span>
                     {' · '}{counts.completed} completed · {counts.unavailable} unavailable
                   </div>
                 ))}
@@ -297,44 +299,6 @@ export default function AnswerQualityPanel({
             </div>
           </div>
 
-          <div className="mt-6 rounded-lg border border-gray-700 bg-gray-900 p-4">
-            <h3 className="font-medium text-white">How context planning is doing</h3>
-            <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <div><div className="text-2xl font-semibold text-white">{report.planning.semanticPlans}</div><div className="text-xs text-gray-500">semantic plans</div></div>
-              <div><div className="text-2xl font-semibold text-green-300">{report.planning.plannerAccepted}</div><div className="text-xs text-gray-500">accepted without additions</div></div>
-              <div><div className="text-2xl font-semibold text-blue-300">{report.planning.primaryToolExpanded}</div><div className="text-xs text-gray-500">widened by primary tool</div></div>
-              <div><div className="text-2xl font-semibold text-yellow-300">{report.planning.lateExpanded}</div><div className="text-xs text-gray-500">late evidence recoveries</div></div>
-            </div>
-            <div className="mt-3 text-xs text-gray-500">
-              {report.planning.fallbackPlans} planner fallback(s) · {report.planning.primaryToolFailed} primary-tool audit failure(s) · average preflight {report.planning.averagePlannerMs === null ? '—' : `${Math.round(report.planning.averagePlannerMs)} ms`}
-            </div>
-
-            <button
-              type="button"
-              onClick={() => setShowPackDetail((shown) => !shown)}
-              className="mt-4 text-sm text-blue-400 hover:text-blue-300"
-            >
-              {showPackDetail ? 'Hide' : 'Show'} per-pack detail
-            </button>
-            {showPackDetail && (
-              <div className="mt-3 overflow-x-auto">
-                <table className="min-w-full text-sm">
-                  <thead><tr className="border-b border-gray-700 text-left text-gray-500"><th className="py-2 pr-5">Pack</th><th className="py-2 pr-5">Planner</th><th className="py-2 pr-5">Primary tool added</th><th className="py-2">Final answers</th></tr></thead>
-                  <tbody>
-                    {Object.entries(report.planning.byPack).map(([pack, counts]) => (
-                      <tr key={pack} className="border-b border-gray-800 text-gray-300">
-                        <td className="py-2 pr-5">{PACK_LABELS[pack] ?? pack}</td>
-                        <td className="py-2 pr-5">{counts.selectedInitially}</td>
-                        <td className="py-2 pr-5">{counts.addedByPrimaryTool}</td>
-                        <td className="py-2">{counts.presentFinally}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-
           <h3 className="mt-6 font-medium text-white">Recent answers</h3>
           <div className="mt-3 max-h-[32rem] space-y-2 overflow-y-auto">
             {report.recent.length === 0 && <div className="text-sm text-gray-500">No answers with evidence yet.</div>}
@@ -348,7 +312,7 @@ export default function AnswerQualityPanel({
                       <div>
                         <div className="text-sm text-gray-200">{answer.question}</div>
                         <div className="mt-1 text-xs leading-5 text-gray-500">{answer.statusReason}</div>
-                        <div className="mt-1 text-[11px] text-gray-600">
+                        <div className="mt-1 text-xs text-gray-500">
                           {answer.plannerSource === 'context_planner' ? 'semantic planner' : answer.plannerSource.replace('_', ' ')}
                           {answer.toolAddedPacks.length > 0 && ` · primary tool added ${answer.toolAddedPacks.map((pack) => PACK_LABELS[pack] ?? pack).join(', ')}`}
                           {answer.primaryToolOutcome === 'failed' && ' · primary tool audit failed'}

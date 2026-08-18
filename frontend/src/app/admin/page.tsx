@@ -4,7 +4,6 @@ import MarkdownRenderer from '../../components/MarkdownRenderer';
 import PageMeta from '../../components/PageMeta';
 import AuthenticatedPageHeader from '../../components/authenticated/AuthenticatedPageHeader';
 import AnswerQualityPanel from '../../components/admin/AnswerQualityPanel';
-import ContextPlannerPanel from '../../components/admin/ContextPlannerPanel';
 import ModelConfigPanel from '../../components/admin/ModelConfigPanel';
 
 interface ProductionUser {
@@ -811,7 +810,7 @@ export default function AdminPage() {
                       <div className="text-sm text-gray-500 mb-2">
                         Tier: {user.tier} • First question: {truncateText(user.firstQuestion)}
                       </div>
-                      <div className="text-xs text-gray-600">
+                      <div className="text-xs text-gray-500">
                         Created: {formatDate(user.createdAt)} • Last login: {user.lastLoginAt ? formatDate(user.lastLoginAt) : 'Never'}
                       </div>
                     </div>
@@ -1354,7 +1353,6 @@ export default function AdminPage() {
         </div>
 
         <ModelConfigPanel apiUrl={API_URL} getAuthHeaders={getAuthHeaders} />
-        <ContextPlannerPanel apiUrl={API_URL} getAuthHeaders={getAuthHeaders} />
       </div>
     );
   };

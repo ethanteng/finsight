@@ -55,11 +55,7 @@ The optional packs are accounts, transactions, investments, monthly cash flow, p
 
 ## Admin and measurement
 
-The `/admin` AI Settings tab contains:
-
-- **Models in use** — configures the `contextPlanner` preflight slot and the Primary analysis slot used for both the tool audit and final answer.
-- **Context planner** — runs the production preflight planner against a full Q&A transcript and explains direct versus dependency-added packs, planned public queries, purposes, and freshness windows.
-- **Calculator registry** — shows each registered calculator's version, required packs, supported overrides, defaults, and outputs.
+The `/admin` AI Settings tab contains **Models in use**, which configures the `contextPlanner` preflight slot and the Primary analysis slot used for both the tool audit and final answer.
 
 The Production tab's **Answer quality** report deliberately has no synthetic score. It separately reports:
 
@@ -67,7 +63,6 @@ The Production tab's **Answer quality** report deliberately has no synthetic sco
 - deterministic evidence verification;
 - semantic planner acceptance, primary-tool expansions and failures, late all-pack recoveries, and planner fallback usage;
 - user ratings;
-- initial, tool-added, and final usage for every pack;
 - requested, completed, unavailable, and unexpectedly unrun scenarios, plus calculator latency.
 - requested and completed public-search retrievals, planned-query volume, Brave provider calls, cache reuse, results, and unavailable evidence.
 
