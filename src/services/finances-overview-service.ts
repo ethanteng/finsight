@@ -99,8 +99,8 @@ export interface FinancesOverview {
     /**
      * Newest expiring source observation — when something in this snapshot last updated.
      * What the UI shows, because a user reading a timestamp under their totals is asking
-     * when the numbers last moved. Staleness still comes from `status`, which is bounded
-     * by `asOf`, so this must not be read as "everything here is this fresh".
+     * when the numbers last moved. It is bounded below by `asOf`, so this must not be read
+     * as "everything here is this fresh".
      */
     newestSourceAsOf: string | null;
     status: FinancesSnapshotStatus;
@@ -334,12 +334,19 @@ export function buildFinancesOverview(input: FinancesOverviewInput): FinancesOve
   const warnings: FinancesOverview['warnings'] = [];
   const status = normalizeStatus(snapshot.status);
   if (status === 'partial') warnings.push({ code: 'partial', message: 'Some connected sources were unavailable when this snapshot was created.' });
-  if (status === 'stale') warnings.push({ code: 'stale', message: 'Some connected-source data is older than its expected refresh window.' });
   if (status === 'unavailable') warnings.push({ code: 'unavailable', message: 'Connected-source data was unavailable for this snapshot.' });
+  // A 'stale' status deliberately produces no warning. It fires whenever a provider's own
+  // observation is older than our refresh window, which is routinely outside the user's
+  // control -- an institution that publishes investment balances daily, or a holding priced
+  // at the last market close over a weekend. Refreshing cannot clear it, so warning about it
+  // asks for an action that does not exist. Staleness stays on the snapshot for diagnostics
+  // and retention decisions; it is simply not something to put in front of the user.
 
   const quality = snapshot.quality && typeof snapshot.quality === 'object' ? snapshot.quality as any : {};
   const unavailableSources = Array.isArray(quality.unavailableSourceIds) ? quality.unavailableSourceIds.length : 0;
-  if (unavailableSources > 0 && status === 'current') {
+  // 'partial' and 'unavailable' already say a source is missing; anything else must not
+  // swallow this, or a stale snapshot would hide the only note explaining a missing value.
+  if (unavailableSources > 0 && status !== 'partial' && status !== 'unavailable') {
     warnings.push({ code: 'optional-sources-unavailable', message: `${unavailableSources} optional data source${unavailableSources === 1 ? ' was' : 's were'} unavailable.` });
   }
 

@@ -207,6 +207,56 @@ describe('finances overview contract', () => {
     ]);
   });
 
+  it('raises no warning for a stale revision, which the user cannot act on', () => {
+    const overview = buildFinancesOverview({
+      snapshot: {
+        ...snapshot,
+        status: 'stale',
+        quality: { staleSourceIds: ['account:brokerage'], unavailableSourceIds: [] },
+      },
+      manualAccounts: [{
+        id: 'manual-cash', name: 'Wallet', amount: 100, type: 'cash',
+        createdAt: '2026-08-01T00:00:00.000Z', updatedAt: '2026-08-01T00:00:00.000Z',
+      }],
+    });
+
+    expect(overview.warnings).toEqual([]);
+    // The status itself still ships, so the client keeps the provenance it needs.
+    expect(overview.revision.status).toBe('stale');
+  });
+
+  it('still reports unavailable optional sources on a stale revision', () => {
+    const overview = buildFinancesOverview({
+      snapshot: {
+        ...snapshot,
+        status: 'stale',
+        quality: { staleSourceIds: ['account:brokerage'], unavailableSourceIds: ['home-value'] },
+      },
+      manualAccounts: [{
+        id: 'manual-cash', name: 'Wallet', amount: 100, type: 'cash',
+        createdAt: '2026-08-01T00:00:00.000Z', updatedAt: '2026-08-01T00:00:00.000Z',
+      }],
+    });
+
+    expect(overview.warnings.map(warning => warning.code)).toEqual(['optional-sources-unavailable']);
+  });
+
+  it('does not double-report optional sources that a partial revision already covers', () => {
+    const overview = buildFinancesOverview({
+      snapshot: {
+        ...snapshot,
+        status: 'partial',
+        quality: { staleSourceIds: [], unavailableSourceIds: ['home-value'] },
+      },
+      manualAccounts: [{
+        id: 'manual-cash', name: 'Wallet', amount: 100, type: 'cash',
+        createdAt: '2026-08-01T00:00:00.000Z', updatedAt: '2026-08-01T00:00:00.000Z',
+      }],
+    });
+
+    expect(overview.warnings.map(warning => warning.code)).toEqual(['partial']);
+  });
+
   it('shows the current account name without waiting for the snapshot to be rebuilt', () => {
     const overview = buildFinancesOverview({
       snapshot,
