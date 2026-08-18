@@ -49,7 +49,7 @@ export function snapToHorizonBucket(withdrawalYears: number): TimelineBucket {
 export async function generateRollingSequences(
   analysisYears: number,
   mapping: PortfolioMapping,
-  _minHistoryYears: number = 50
+  minHistoryYears: number = 50
 ): Promise<{
   sequences: HistoricalSequence[];
   missingData: string[];
@@ -77,14 +77,14 @@ export async function generateRollingSequences(
     firstUsable < 0 ||
     usable.slice(firstUsable, lastUsable + 1).some(value => !value) ||
     availableMonths < horizonMonths ||
-    availableMonths < _minHistoryYears * 12
+    availableMonths < minHistoryYears * 12
   ) {
     throw new InsufficientHistoricalDataError(
       horizonMonths,
       availableMonths,
       firstMonth,
       lastMonth,
-      _minHistoryYears * 12
+      minHistoryYears * 12
     );
   }
 

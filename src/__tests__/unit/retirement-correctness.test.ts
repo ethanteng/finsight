@@ -1,5 +1,6 @@
 import { describe, expect, it } from '@jest/globals';
-import { mkdtempSync, rmSync, writeFileSync } from 'fs';
+import { createHash } from 'crypto';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import * as XLSX from 'xlsx';
@@ -11,7 +12,10 @@ import {
   generateRollingSequences,
   InsufficientHistoricalDataError,
 } from '../../retirement-analytics/engine/stress-tester';
-import { loadHistoricalReturns } from '../../retirement-analytics/engine/historical-data-loader';
+import {
+  getHistoricalDatasetVersion,
+  loadHistoricalReturns,
+} from '../../retirement-analytics/engine/historical-data-loader';
 import { computeHistoricalWithdrawalRates } from '../../retirement-analytics/engine/withdrawal-rate-solver';
 import { buildRetirementTimeline } from '../../retirement-analytics';
 import { calculateDataQuality } from '../../retirement-analytics/interpretation/uncertainty-quantifier';
@@ -309,6 +313,36 @@ describe('retirement correctness contracts', () => {
     await expect(generateRollingSequences(60, balancedMapping)).rejects.toBeInstanceOf(
       InsufficientHistoricalDataError
     );
+  });
+
+  it('fingerprints the generated dataset, not only the upstream source snapshots', () => {
+    const digest = (relativePath: string) =>
+      createHash('sha256').update(readFileSync(join(process.cwd(), relativePath))).digest('hex');
+    const version = getHistoricalDatasetVersion();
+
+    // A builder correction changes the generated returns without moving any
+    // source hash, so a version built from sources alone would leave stale
+    // analyses cached. Both generated files must be in the fingerprint.
+    expect(version).toContain(digest('data/historical_market_returns.csv'));
+    expect(version).toContain(digest('data/historical_market_returns.metadata.json'));
+  });
+
+  it('keeps the checked-in source snapshots in sync with their recorded provenance', () => {
+    const manifest = JSON.parse(
+      readFileSync(join(process.cwd(), 'src/datasets/source-manifest.json'), 'utf8')
+    ) as {
+      sources: Record<string, { file: string; sha256: string }>;
+    };
+    const metadataSources = loadHistoricalReturns().metadata?.sources ?? {};
+
+    expect(Object.keys(manifest.sources).sort()).toEqual(Object.keys(metadataSources).sort());
+    for (const [key, source] of Object.entries(manifest.sources)) {
+      const actual = createHash('sha256')
+        .update(readFileSync(join(process.cwd(), source.file)))
+        .digest('hex');
+      expect(actual).toBe(source.sha256);
+      expect(metadataSources[key].sha256).toBe(source.sha256);
+    }
   });
 
   it('rejects blank historical return cells instead of coercing them to zero', () => {

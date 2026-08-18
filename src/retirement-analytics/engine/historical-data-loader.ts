@@ -4,6 +4,7 @@
  * No API calls. Fully deterministic and offline.
  */
 
+import { createHash } from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -63,13 +64,31 @@ function loadMetadata(): HistoricalDatasetMetadata {
   return metadata;
 }
 
+let datasetVersionCache: string | null = null;
+
+function fileDigest(filePath: string): string {
+  return createHash('sha256').update(fs.readFileSync(path.resolve(filePath))).digest('hex');
+}
+
+/**
+ * Fingerprint of the returns actually used, for cache invalidation.
+ *
+ * Deliberately hashes the generated files rather than the upstream source
+ * snapshots: a builder correction or an edit to the checked-in dataset changes
+ * the returns without touching the three downloaded sources, and callers that
+ * key a stored analysis on this string must recompute in that case too. The
+ * metadata file carries the source hashes, so those remain covered.
+ */
 export function getHistoricalDatasetVersion(): string {
+  if (datasetVersionCache) return datasetVersionCache;
+  // Validates the dataset and its metadata before either is fingerprinted.
   const metadata = loadHistoricalReturns().metadata;
   if (!metadata) throw new Error('Historical dataset metadata is unavailable');
-  return Object.keys(metadata.sources)
-    .sort()
-    .map(key => `${key}:${metadata.sources[key].sha256}`)
-    .join('|');
+  datasetVersionCache =
+    `v${metadata.schemaVersion}` +
+    `|returns:${fileDigest(DEFAULT_CSV_PATH)}` +
+    `|metadata:${fileDigest(DEFAULT_METADATA_PATH)}`;
+  return datasetVersionCache;
 }
 
 /**
