@@ -117,8 +117,32 @@ export async function enrichInvestmentSnapshot(
   const sources: InvestmentExternalData['sources'] = [];
   if ([...metadata.values()].some(item => item.provider === 'fmp')) sources.push('fmp');
   if (quotes.length || historiesResult.status === 'fulfilled' && historiesResult.value.length) sources.push('tiingo');
+
+  // Prefer the newest contributing observation time over "now" so cached FMP
+  // rows and Tiingo quotes are not presented as freshly fetched.
+  const observationTimes = [
+    ...[...metadata.values()]
+      .map(item => item.lastUpdated?.getTime())
+      .filter((value): value is number => typeof value === 'number' && Number.isFinite(value)),
+    ...enriched.flatMap(security => {
+      const times: number[] = [];
+      if (security.quote?.timestamp) {
+        const quoteTime = Date.parse(security.quote.timestamp);
+        if (Number.isFinite(quoteTime)) times.push(quoteTime);
+      }
+      if (security.performanceThrough) {
+        const performanceTime = Date.parse(security.performanceThrough);
+        if (Number.isFinite(performanceTime)) times.push(performanceTime);
+      }
+      return times;
+    }),
+  ];
+  const asOf = observationTimes.length
+    ? new Date(Math.max(...observationTimes)).toISOString()
+    : new Date().toISOString();
+
   return {
-    asOf: new Date().toISOString(),
+    asOf,
     sources,
     portfolioExposure: buildPortfolioExposure([...positionByTicker.values()], metadata),
     securities: enriched,
