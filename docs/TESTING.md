@@ -299,11 +299,11 @@ if (isTestEnvironment) {
 
 **FRED Provider**:
 ```typescript
-// Deterministic provider data for test keys
+// Deterministic provider data for test keys / CI; still cached by series + units
 if (this.apiKey === 'test_fred_key' ||
     this.apiKey.startsWith('test_') ||
     process.env.GITHUB_ACTIONS) {
-  return this.getMockDataPoint(seriesId);
+  return this.buildMockDataPoint(seriesId, units);
 }
 ```
 
