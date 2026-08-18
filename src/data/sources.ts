@@ -173,19 +173,27 @@ export class DataSourceManager {
     const suggestions: string[] = [];
 
     if (tier === UserTier.STARTER) {
-      const standardSources = unavailableSources.filter(s => s.tiers.includes(UserTier.STANDARD));
+      // Sources unlocked at Standard (may also be available at Premium).
+      const standardSources = unavailableSources.filter(s =>
+        s.tiers.includes(UserTier.STANDARD)
+      );
       if (standardSources.length > 0) {
         suggestions.push(`Upgrade to Standard to access economic indicators like ${standardSources.map(s => s.name).join(', ')}`);
       }
-      
-      const premiumSources = unavailableSources.filter(s => s.tiers.includes(UserTier.PREMIUM));
-      if (premiumSources.length > 0) {
-        suggestions.push(`Upgrade to Premium for advanced market context including ${premiumSources.map(s => s.name).join(', ')}`);
+
+      // Premium-only sources (exclude anything already unlocked at Standard).
+      const premiumOnlySources = unavailableSources.filter(
+        s => s.tiers.includes(UserTier.PREMIUM) && !s.tiers.includes(UserTier.STANDARD)
+      );
+      if (premiumOnlySources.length > 0) {
+        suggestions.push(`Upgrade to Premium for advanced market context including ${premiumOnlySources.map(s => s.name).join(', ')}`);
       }
     } else if (tier === UserTier.STANDARD) {
-      const premiumSources = unavailableSources.filter(s => s.tiers.includes(UserTier.PREMIUM));
-      if (premiumSources.length > 0) {
-        suggestions.push(`Upgrade to Premium for advanced market context including ${premiumSources.map(s => s.name).join(', ')}`);
+      const premiumOnlySources = unavailableSources.filter(
+        s => s.tiers.includes(UserTier.PREMIUM) && !s.tiers.includes(UserTier.STANDARD)
+      );
+      if (premiumOnlySources.length > 0) {
+        suggestions.push(`Upgrade to Premium for advanced market context including ${premiumOnlySources.map(s => s.name).join(', ')}`);
       }
     }
 
