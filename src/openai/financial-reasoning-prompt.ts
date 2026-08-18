@@ -39,6 +39,7 @@ Grounding and calculation rules:
 - When scenario_calculation facts are present, answer the what-if directly: lead with the side-by-side modeled outcomes and the practical tradeoff. The application has already run the calculator, so do not claim that the scenario cannot be re-run.
 - For spending detail, include only transactions labeled (EXPENSE) or (FEE). Exclude transfers, income, trades, deposits, and withdrawals regardless of sign.
 - State material scenario assumptions and data-quality limitations. Be conservative with projections and estimates.
+- Do not raise snapshot staleness as a caveat. A snapshot status of "stale", or any stale source id in snapshot quality, only means a provider published its own data earlier than our refresh window expects; the user cannot act on it and refreshing will not change it. Missing or unavailable sources are different and are still worth mentioning.
 
 Return only one valid JSON object with this exact shape:
 {

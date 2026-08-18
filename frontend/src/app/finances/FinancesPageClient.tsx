@@ -347,9 +347,25 @@ export default function FinancesPageClient() {
       if (res.ok) {
         await loadOverview();
         setRevisionStalled(false);
-        setRefreshSummaryMessage(body.status === 'current'
-          ? { kind: 'success', text: 'Totals refreshed from your connected providers.' }
-          : { kind: 'warning', text: 'Refresh completed, but some connected-source data is stale or unavailable.' });
+        // A 'stale' result is still a successful refresh: it only means a provider's own
+        // data is older than our window, which another refresh cannot change. Only a
+        // missing source is worth reporting as a partial outcome.
+        //
+        // A retained revision has to be checked separately. When a provider fails, the
+        // server keeps the previous revision rather than publishing an incomplete one,
+        // and returns *its* status -- which can be 'current'. Reading status alone would
+        // report a refresh that never reached the providers as a success.
+        const sourceMissing = body.status === 'partial' || body.status === 'unavailable';
+        if (body.retainedPriorRevision) {
+          setRefreshSummaryMessage({
+            kind: 'warning',
+            text: 'Some accounts could not be reached, so your previous totals are still shown. Check Accounts & context if this keeps happening.',
+          });
+        } else {
+          setRefreshSummaryMessage(sourceMissing
+            ? { kind: 'warning', text: 'Refresh completed, but some connected-source data was unavailable.' }
+            : { kind: 'success', text: 'Totals refreshed from your connected providers.' });
+        }
       } else {
         console.error('Failed to refresh summary:', res.status, body);
         setRefreshSummaryMessage({
@@ -404,13 +420,14 @@ export default function FinancesPageClient() {
   }
 
   // While the background rebuild is being polled for, the out-of-sync notice would just be
-  // telling the user to do what the page is already doing.
-  const visibleWarnings = awaitingRevision
-    ? overview.warnings.filter(warning =>
-        warning.code !== 'manual-accounts-out-of-sync' &&
-        warning.code !== 'home-metadata-out-of-sync'
-      )
-    : overview.warnings;
+  // telling the user to do what the page is already doing. Also drop `stale` even if an
+  // older backend still emits it — that status is not actionable and must not resurface.
+  const visibleWarnings = overview.warnings.filter(warning => {
+    if (warning.code === 'stale') return false;
+    if (!awaitingRevision) return true;
+    return warning.code !== 'manual-accounts-out-of-sync'
+      && warning.code !== 'home-metadata-out-of-sync';
+  });
 
   // When the newest source time is missing entirely the server predates the field, so fall
   // back to the oldest one it does send rather than dropping the line mid-deploy.

@@ -92,7 +92,8 @@ export function collectMissingInputAsks(
 
   // 3. A connection that has stopped reporting, which quietly skews every total
   //    derived from it. Stale sources are deliberately not raised here — the
-  //    figures are still real, just older, and the dashboard already says so.
+  //    figures are still real, just older than our refresh window, and no user
+  //    action (including refresh) can clear that.
   const quality = snapshot.financialSummary?.quality;
   const unavailableSources = new Set([
     ...(quality?.requiredUnavailableSourceIds || []),

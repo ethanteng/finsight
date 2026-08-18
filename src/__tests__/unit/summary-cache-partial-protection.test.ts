@@ -71,6 +71,29 @@ describe('SummaryCacheService partial-provider protection', () => {
     expect(saveHistoricalSnapshot).not.toHaveBeenCalled();
   });
 
+  it('flags a retained snapshot so callers cannot read its status as a fresh refresh', async () => {
+    // The retained revision can be 'current' or 'stale'. Either way the status describes
+    // the run that produced it, not this one, so the fallback needs its own signal.
+    getLatestFinancialSnapshot.mockResolvedValue({
+      status: 'stale',
+      computedAt: new Date(Date.now() - 2 * 60 * 60 * 1000),
+      financialOverview: { netWorth: 1 },
+    });
+
+    await expect(SummaryCacheService.computeForUser('user-1')).resolves.toMatchObject({
+      status: 'stale',
+      retainedPriorRevision: true,
+    });
+  });
+
+  it('does not flag a revision it actually published', async () => {
+    getLatestFinancialSnapshot.mockResolvedValue(null);
+
+    const result = await SummaryCacheService.computeForUser('user-1');
+
+    expect((result as Record<string, unknown>).retainedPriorRevision).toBeUndefined();
+  });
+
   it('retains the full snapshot view so callers still receive account detail', async () => {
     getLatestFinancialSnapshot.mockResolvedValue({
       status: 'current',

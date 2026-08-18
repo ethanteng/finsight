@@ -43,10 +43,14 @@ export interface FinancesOverview {
     computedAt: string;
     /**
      * Newest expiring source observation — when something in this snapshot last updated.
-     * Absent on responses from a server that predates the field. Staleness comes from
-     * `status`, never from this timestamp.
+     * Absent on responses from a server that predates the field.
      */
     newestSourceAsOf?: string | null;
+    /**
+     * Snapshot provenance. `stale` is deliberately not rendered anywhere: it means a
+     * provider published its own data earlier than our refresh window expects, which no
+     * user action can change. Only `partial` and `unavailable` are shown.
+     */
     status: 'current' | 'stale' | 'partial' | 'unavailable';
     reportingCurrency: string;
     /** A newer revision is already scheduled, running, or queued on the server. */

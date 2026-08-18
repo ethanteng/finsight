@@ -72,6 +72,11 @@ export default function FinancialOverview({ tier: _tier }: FinancialOverviewProp
         ? finances.revision.newestSourceAsOf
         : finances.revision.asOf)
     : null;
+  // A 'stale' revision gets no badge. It means a provider's own data is older than our
+  // refresh window, which the user cannot act on -- only a genuinely missing source is
+  // worth flagging here.
+  const showsMissingDataBadge = finances?.revision.status === 'partial'
+    || finances?.revision.status === 'unavailable';
   const homeData = finances?.home;
   const investmentPortfolio = finances?.investmentPortfolio as {
     holdingCount?: number;
@@ -186,15 +191,14 @@ export default function FinancialOverview({ tier: _tier }: FinancialOverviewProp
             </button>
           )}
         </div>
-        {(sourceDataAsOf || (finances?.revision.status && finances.revision.status !== 'current')) && (
+        {(sourceDataAsOf || showsMissingDataBadge) && (
           <div className="mb-3 flex flex-wrap items-center gap-2 text-[11px] text-[#5e6b63]">
             {sourceDataAsOf && (
               <span>Data as of {new Date(sourceDataAsOf).toLocaleString()}</span>
             )}
-            {finances?.revision.status && finances.revision.status !== 'current' && (
+            {showsMissingDataBadge && (
               <span className="rounded-full bg-[#fff3ce] px-2 py-0.5 font-semibold text-[#76510f]">
-                {finances.revision.status === 'partial' ? 'Some data unavailable' :
-                  finances.revision.status === 'stale' ? 'Some data is stale' : 'Source data unavailable'}
+                {finances?.revision.status === 'partial' ? 'Some data unavailable' : 'Source data unavailable'}
               </span>
             )}
           </div>

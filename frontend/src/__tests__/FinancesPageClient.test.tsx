@@ -159,6 +159,109 @@ describe('FinancesPageClient', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Connected provider unavailable');
   });
 
+  it('does not call a retained refresh a success just because the kept revision reads current', async () => {
+    // A provider failure makes the server keep the previous revision rather than publish an
+    // incomplete one, and return that revision's status. Reading status alone would report a
+    // refresh that never reached the providers as a success.
+    const overview = {
+      userTimeZone: 'America/Los_Angeles',
+      revision: {
+        id: 'revision-1',
+        computedAt: '2026-08-14T12:00:00.000Z',
+        asOf: '2026-08-14T11:59:00.000Z',
+        status: 'current',
+        reportingCurrency: 'USD',
+        rebuildPending: false,
+      },
+      warnings: [],
+      financialOverview: { netWorth: 10_000, totalCash: 10_000, totalInvestments: 0, totalDebt: 0, homeValue: null },
+      investmentPortfolio: { holdingCount: 0, securityCount: 0, assetAllocation: [] },
+      accountGroups: {
+        cash: { accounts: [{ id: 'checking-1', name: 'Checking' }], totalBalance: 10_000, unavailableBalanceCount: 0 },
+        investments: { accounts: [], totalBalance: 0, unavailableBalanceCount: 0 },
+        debt: { accounts: [], totalBalance: 0, unavailableBalanceCount: 0 },
+        other: { accounts: [], totalBalance: 0, unavailableBalanceCount: 0 },
+      },
+      cashFlow: {},
+      home: null,
+      manualAccounts: [],
+    };
+
+    global.fetch = jest.fn().mockImplementation((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/api/finances/overview')) {
+        return Promise.resolve({ ok: true, status: 200, json: async () => overview });
+      }
+      if (url.includes('/api/financial-history')) {
+        return Promise.resolve({ ok: true, status: 200, json: async () => [] });
+      }
+      if (url.includes('/api/refresh-summary')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: async () => ({ status: 'current', retainedPriorRevision: true }),
+        });
+      }
+      return Promise.resolve({ ok: true, status: 200, json: async () => ({ success: true, data: [] }) });
+    }) as jest.Mock;
+
+    render(<FinancesPageClient />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Refresh totals' }));
+
+    expect(await screen.findByText(/Some accounts could not be reached/)).toBeInTheDocument();
+    expect(screen.queryByText('Totals refreshed from your connected providers.')).not.toBeInTheDocument();
+  });
+
+  it('reports a stale refresh as a success, since no user action can change it', async () => {
+    const overview = {
+      userTimeZone: 'America/Los_Angeles',
+      revision: {
+        id: 'revision-1',
+        computedAt: '2026-08-14T12:00:00.000Z',
+        asOf: '2026-08-14T11:59:00.000Z',
+        status: 'stale',
+        reportingCurrency: 'USD',
+        rebuildPending: false,
+      },
+      warnings: [],
+      financialOverview: { netWorth: 10_000, totalCash: 10_000, totalInvestments: 0, totalDebt: 0, homeValue: null },
+      investmentPortfolio: { holdingCount: 0, securityCount: 0, assetAllocation: [] },
+      accountGroups: {
+        cash: { accounts: [{ id: 'checking-1', name: 'Checking' }], totalBalance: 10_000, unavailableBalanceCount: 0 },
+        investments: { accounts: [], totalBalance: 0, unavailableBalanceCount: 0 },
+        debt: { accounts: [], totalBalance: 0, unavailableBalanceCount: 0 },
+        other: { accounts: [], totalBalance: 0, unavailableBalanceCount: 0 },
+      },
+      cashFlow: {},
+      home: null,
+      manualAccounts: [],
+    };
+
+    global.fetch = jest.fn().mockImplementation((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/api/finances/overview')) {
+        return Promise.resolve({ ok: true, status: 200, json: async () => overview });
+      }
+      if (url.includes('/api/financial-history')) {
+        return Promise.resolve({ ok: true, status: 200, json: async () => [] });
+      }
+      if (url.includes('/api/refresh-summary')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: async () => ({ status: 'stale', retainedPriorRevision: false }),
+        });
+      }
+      return Promise.resolve({ ok: true, status: 200, json: async () => ({ success: true, data: [] }) });
+    }) as jest.Mock;
+
+    render(<FinancesPageClient />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Refresh totals' }));
+
+    expect(await screen.findByText('Totals refreshed from your connected providers.')).toBeInTheDocument();
+    expect(screen.queryByText(/Some accounts could not be reached/)).not.toBeInTheDocument();
+  });
+
   it('keeps polling after a manual account is deleted until the rebuilt snapshot lands', async () => {
     // The delete endpoint returns as soon as the row is gone and rebuilds the snapshot in
     // the background, so the first reload still carries the pre-delete revision.
