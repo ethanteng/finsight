@@ -199,7 +199,7 @@ describe('Tier System', () => {
       expect(standardAccess.hasLiveData).toBe(false);
 
       expect(premiumAccess.hasEconomicContext).toBe(true);
-      expect(premiumAccess.hasLiveData).toBe(true);
+      expect(premiumAccess.hasLiveData).toBe(false);
     });
   });
 

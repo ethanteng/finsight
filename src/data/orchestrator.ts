@@ -121,7 +121,8 @@ export class DataOrchestrator {
         return {
           tier: UserTier.PREMIUM,
           hasEconomicContext: true,
-          hasLiveData: true,
+          // Polygon/Massive premium context is cached via market-news, not live feeds.
+          hasLiveData: false,
           hasScenarioPlanning: true,
           hasSearchContext: true
         };
