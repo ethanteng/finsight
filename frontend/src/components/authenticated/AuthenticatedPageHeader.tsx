@@ -64,15 +64,14 @@ export default function AuthenticatedPageHeader({
 
       {showNavLinks && (
         <div className="border-t border-[#102319]/10 lg:hidden">
-          <nav className="mx-auto grid max-w-[1200px] grid-cols-3 gap-1 px-4 py-2" aria-label="Workspace navigation">
-            {links.map(({ href, label, page, icon: Icon }) => (
+          <nav className="authenticated-mobile-nav mx-auto grid max-w-[1200px] grid-cols-3 gap-1 px-3 py-2 sm:px-4" aria-label="Workspace navigation">
+            {links.map(({ href, label, page }) => (
               <Link
                 key={href}
                 href={href}
                 aria-current={activePage === page ? 'page' : undefined}
                 className={`authenticated-nav-link ${activePage === page ? 'is-active' : ''}`}
               >
-                <Icon size={15} aria-hidden="true" />
                 {label}
               </Link>
             ))}

@@ -275,6 +275,11 @@
 
 .authenticated-nav-link:hover { background: rgb(255 255 255 / .5); color: var(--auth-ink); }
 .authenticated-nav-link.is-active { background: var(--auth-ink); color: white; }
+.authenticated-mobile-nav .authenticated-nav-link {
+  justify-content: center;
+  padding-inline: .45rem;
+  white-space: nowrap;
+}
 .authenticated-sign-out { padding-block: .45rem; border-bottom: 1px solid transparent; color: var(--auth-ink); font-size: .8rem; font-weight: 700; }
 .authenticated-sign-out:hover { border-color: currentColor; }
 .authenticated-eyebrow { color: #49725a; font-size: .68rem; font-weight: 850; letter-spacing: .15em; text-transform: uppercase; }
