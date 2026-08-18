@@ -336,8 +336,12 @@ HOME_VALUE_LAST_UPDATED: ${existingHomeData.lastUpdated?.toISOString() || new Da
         // conversational profile rewrite keeps the same home but omits the marker.
         const addressMarkerIndex = finalProfile.lastIndexOf('HOME_ADDRESS:');
         const addressLineEnd = finalProfile.indexOf('\n', addressMarkerIndex);
-        const insertAt = addressLineEnd === -1 ? finalProfile.length : addressLineEnd + 1;
-        finalProfile = `${finalProfile.slice(0, insertAt)}HOME_RENTCAST_PROPERTY_ID: ${existingHomeData.propertyId}\n${finalProfile.slice(insertAt)}`;
+        const marker = `HOME_RENTCAST_PROPERTY_ID: ${existingHomeData.propertyId}`;
+        // When HOME_ADDRESS is the final line it has no trailing newline, so the
+        // marker has to start one instead of running onto the address value.
+        finalProfile = addressLineEnd === -1
+          ? `${finalProfile}\n${marker}`
+          : `${finalProfile.slice(0, addressLineEnd + 1)}${marker}\n${finalProfile.slice(addressLineEnd + 1)}`;
       }
       
       await this.updateProfile(userId, finalProfile);

@@ -154,6 +154,39 @@ describe('RentCast canonical estimate bounds', () => {
     ]));
   });
 
+  it('stamps the midpoint with the home observation time, not the aggregate snapshot time', () => {
+    // The midpoint and its bounds describe one RentCast observation, so a
+    // home-value answer must not cite two different provenance timestamps.
+    const needs = { ...questionNeedsFromPacks([], false), needsHomeValue: true };
+    const factPack = buildCanonicalFactPack(
+      {
+        ...homeSnapshot,
+        financialSummary: { ...homeSnapshot.financialSummary, asOf: '2026-06-01T00:00:00.000Z' },
+      },
+      'What is my home worth?',
+      needs
+    );
+
+    const midpoint = factPack.facts.find((fact: any) => fact.id === 'home_value');
+    expect(midpoint?.provenance.asOf).toBe('2026-08-17T00:00:00.000Z');
+  });
+
+  it('keeps the aggregate snapshot time when the overview value is not the stored home value', () => {
+    const needs = { ...questionNeedsFromPacks([], false), needsHomeValue: true };
+    const factPack = buildCanonicalFactPack(
+      {
+        ...homeSnapshot,
+        financialSummary: { ...homeSnapshot.financialSummary, asOf: '2026-06-01T00:00:00.000Z' },
+        homeValueData: { ...homeSnapshot.homeValueData, valueMid: 640_000 },
+      },
+      'What is my home worth?',
+      needs
+    );
+
+    const midpoint = factPack.facts.find((fact: any) => fact.id === 'home_value');
+    expect(midpoint?.provenance.asOf).toBe('2026-06-01T00:00:00.000Z');
+  });
+
   it('does not expose bounds when home value is not selected or the value is manual', () => {
     const unselected = buildCanonicalFactPack(
       homeSnapshot,

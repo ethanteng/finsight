@@ -75,6 +75,19 @@ describe('RentCastService', () => {
     expect(mockFetch).toHaveBeenCalledTimes(3);
   });
 
+  it('caps a server-directed retry delay so a refresh cannot stall for hours', async () => {
+    // A refresh runs inside a user request and the batch job is sequential, so
+    // an outsized Retry-After must not be honoured verbatim.
+    mockFetch
+      .mockResolvedValueOnce(response({ message: 'slow down' }, 429, '3600'))
+      .mockResolvedValueOnce(response(validValue));
+
+    const started = Date.now();
+    await expect(new RentCastService().getHomeValue('1 Main St')).resolves.toMatchObject({ price: 750_000 });
+    expect(Date.now() - started).toBeLessThan(5_000);
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+  }, 10_000);
+
   it('does not retry an address that RentCast cannot find', async () => {
     mockFetch.mockResolvedValue(response({ message: 'not found' }, 404));
 

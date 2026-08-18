@@ -1063,8 +1063,12 @@ function buildHomeValueSummary(homeData: HomeData): string {
       })
     : undefined;
 
+  // The numeric snapshot path has no stored address for some users; an empty
+  // "Address:" line only adds a blank field to the model's context.
+  const address = homeData.address?.trim();
+
   const lines = [
-    `Address: ${homeData.address}`,
+    address ? `Address: ${address}` : undefined,
     `${homeData.isManualOverride ? 'User-provided value' : 'Estimated value'}: ${midValue}`,
     rangeLine,
     `Source: ${homeData.isManualOverride ? 'User-provided manual value' : 'RentCast automated valuation model'}`,

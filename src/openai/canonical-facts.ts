@@ -215,15 +215,22 @@ export function buildCanonicalFactPack(
   // model can cite a number it can already see. Two production bugs came from
   // guessing wrong, so these facts are no longer routed at all.
   const overview = snapshot.financialSummary?.financialOverview;
+  const home = snapshot.homeValueData;
+  // financialSummary.asOf is the oldest expiring source in the snapshot, so a
+  // home fact stamped with it can contradict its own range bounds. Use the home
+  // observation time whenever it describes the same value.
+  const homeObservedAt = isoString(home?.lastUpdated);
+  const homeMidpointAsOf = home && finite(home.valueMid) && home.valueMid === overview?.homeValue
+    ? homeObservedAt
+    : undefined;
   if (overview) {
     addSnapshotFact('net_worth', 'Net worth', overview.netWorth, 'usd', 'financialSummary.financialOverview.netWorth');
     addSnapshotFact('total_cash', 'Total cash', overview.totalCash, 'usd', 'financialSummary.financialOverview.totalCash');
     addSnapshotFact('total_investments', 'Total investments', overview.totalInvestments, 'usd', 'financialSummary.financialOverview.totalInvestments');
     addSnapshotFact('total_debt', 'Total debt', overview.totalDebt, 'usd', 'financialSummary.financialOverview.totalDebt');
-    addSnapshotFact('home_value', 'Home value', overview.homeValue, 'usd', 'financialSummary.financialOverview.homeValue');
+    addSnapshotFact('home_value', 'Home value', overview.homeValue, 'usd', 'financialSummary.financialOverview.homeValue', true, homeMidpointAsOf);
   }
 
-  const home = snapshot.homeValueData;
   if (
     needs.needsHomeValue &&
     home &&
@@ -232,7 +239,6 @@ export function buildCanonicalFactPack(
     finite(home.valueHigh) &&
     home.valueLow <= home.valueHigh
   ) {
-    const homeAsOf = isoString(home.lastUpdated);
     addSnapshotFact(
       'home_value_low',
       'Home value estimate 85% range lower bound',
@@ -240,7 +246,7 @@ export function buildCanonicalFactPack(
       'usd',
       'contextSnapshot.homeValueData.valueLow',
       true,
-      homeAsOf
+      homeObservedAt
     );
     addSnapshotFact(
       'home_value_high',
@@ -249,7 +255,7 @@ export function buildCanonicalFactPack(
       'usd',
       'contextSnapshot.homeValueData.valueHigh',
       true,
-      homeAsOf
+      homeObservedAt
     );
   }
 

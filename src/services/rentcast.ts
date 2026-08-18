@@ -32,6 +32,9 @@ export interface RentCastHomeValue {
 const REQUEST_TIMEOUT_MS = 10_000;
 const MAX_ATTEMPTS = 3;
 const RETRY_BASE_DELAY_MS = 250;
+// A refresh runs inside a user request and the batch job processes users
+// sequentially, so a server-directed delay must never outlast a bounded retry.
+const MAX_RETRY_DELAY_MS = 2_000;
 const RETRYABLE_STATUSES = new Set([429, 500, 502, 503, 504]);
 
 function finitePositive(value: unknown): value is number {
@@ -126,9 +129,11 @@ function retryDelayMs(response: Response | undefined, attempt: number): number {
   const retryAfter = response?.headers.get('retry-after');
   if (retryAfter) {
     const seconds = Number(retryAfter);
-    if (Number.isFinite(seconds) && seconds >= 0) return seconds * 1000;
+    if (Number.isFinite(seconds) && seconds >= 0) {
+      return Math.min(seconds * 1000, MAX_RETRY_DELAY_MS);
+    }
   }
-  return RETRY_BASE_DELAY_MS * 2 ** attempt;
+  return Math.min(RETRY_BASE_DELAY_MS * 2 ** attempt, MAX_RETRY_DELAY_MS);
 }
 
 function delay(ms: number): Promise<void> {

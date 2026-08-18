@@ -409,6 +409,12 @@ describe('buildHomeValueSummary', () => {
     const summary = buildHomeValueSummary({ address: '1 Main St', valueMid: 750000 });
     expect(summary.split('\n')).toHaveLength(3);
   });
+
+  it('omits the address line when the snapshot has no stored address', () => {
+    const summary = buildHomeValueSummary({ address: '', valueMid: 750000 });
+    expect(summary).not.toContain('Address:');
+    expect(summary).toContain('Estimated value: $750,000');
+  });
 });
 
 describe('deduplicateLiabilitySections', () => {
