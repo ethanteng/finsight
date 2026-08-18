@@ -638,7 +638,7 @@ export function buildCanonicalFactPack(
       'Market-context',
       'external_context',
       'marketContext',
-      isoString(snapshot.metadata.lastUpdated)
+      isoString(snapshot.marketContextMetadata?.lastUpdate)
     );
   }
   if (needs.needsSearchContext) {

@@ -256,6 +256,12 @@ describe('buildCanonicalFactPack', () => {
   it('promotes typed values from requested market context into traceable facts', () => {
     const data = snapshot();
     data.marketContext = 'The current average mortgage rate is 6.5%.';
+    data.marketContextMetadata = {
+      id: 'auto-standard',
+      tier: 'standard',
+      lastUpdate: '2026-08-18T09:30:00.000Z',
+      source: 'stored',
+    };
     const question = 'How do current mortgage rates affect me?';
     const questionNeeds = needs('market_context');
     const pack = buildCanonicalFactPack(data, question, questionNeeds);
@@ -263,7 +269,11 @@ describe('buildCanonicalFactPack', () => {
       id: 'market_context_percent_1',
       value: 6.5,
       unit: 'percent',
-      provenance: expect.objectContaining({ kind: 'external_context', source: 'marketContext' }),
+      provenance: expect.objectContaining({
+        kind: 'external_context',
+        source: 'marketContext',
+        asOf: '2026-08-18T09:30:00.000Z',
+      }),
     }));
   });
 

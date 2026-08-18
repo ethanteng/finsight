@@ -37,6 +37,13 @@ function coversAllMarketNewsTiers(tiers: readonly UserTier[]): boolean {
   return ALL_MARKET_NEWS_TIERS.every((tier) => unique.has(tier));
 }
 
+export interface MarketContextObservation {
+  id: string;
+  tier: UserTier;
+  contextText: string;
+  lastUpdate: Date;
+}
+
 export class MarketNewsManager {
   private aggregator: MarketNewsAggregator;
   private synthesizer: MarketNewsSynthesizer;
@@ -153,8 +160,18 @@ export class MarketNewsManager {
   }
 
   async getMarketContext(tier: UserTier): Promise<string> {
+    return (await this.getMarketContextObservation(tier))?.contextText || '';
+  }
+
+  async getMarketContextObservation(tier: UserTier): Promise<MarketContextObservation | null> {
     const context = await this.getActiveMarketContextRecord(tier);
-    return context?.contextText || '';
+    if (!context) return null;
+    return {
+      id: context.id,
+      tier,
+      contextText: context.contextText,
+      lastUpdate: context.lastUpdate,
+    };
   }
 
   /**

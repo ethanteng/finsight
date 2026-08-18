@@ -62,7 +62,13 @@ jest.mock('../../prisma-client', () => ({
   getPrismaClient: jest.fn(() => ({
     marketNewsContext: {
       upsert: jest.fn().mockResolvedValue({ id: 'auto-standard' }),
-      findFirst: jest.fn().mockResolvedValue({ id: 'auto-standard', dataSources: [], keyEvents: [] }),
+      findFirst: jest.fn().mockResolvedValue({
+        id: 'auto-standard',
+        contextText: 'standard context',
+        lastUpdate: new Date('2026-08-18T12:00:00.000Z'),
+        dataSources: [],
+        keyEvents: [],
+      }),
       findUnique: jest.fn().mockResolvedValue({ id: 'auto-standard', dataSources: [], keyEvents: [] }),
       updateMany: jest.fn().mockResolvedValue({ count: 1 }),
     },
@@ -214,5 +220,16 @@ describe('MarketNewsManager.refreshMarketContexts lease completion', () => {
         ],
       }),
     );
+  });
+
+  it('returns the exact record identity and update time with stored context', async () => {
+    const manager = new MarketNewsManager();
+
+    await expect(manager.getMarketContextObservation(UserTier.STANDARD)).resolves.toEqual({
+      id: 'auto-standard',
+      tier: UserTier.STANDARD,
+      contextText: 'standard context',
+      lastUpdate: new Date('2026-08-18T12:00:00.000Z'),
+    });
   });
 });

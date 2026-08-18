@@ -129,7 +129,9 @@ export class TiingoProvider {
   }
 
   private normalizeTicker(ticker: string): string {
-    const normalized = ticker.trim().toUpperCase();
+    // Plaid/SnapTrade commonly use dots for class shares (BRK.B), while
+    // Tiingo uses dashes (BRK-B) across EOD, IEX, and news endpoints.
+    const normalized = ticker.trim().toUpperCase().replace(/\./g, '-');
     if (!normalized) throw new Error('Tiingo ticker is required');
     return normalized;
   }

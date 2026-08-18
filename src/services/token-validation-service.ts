@@ -61,6 +61,26 @@ export interface SnapTradeTokenHealth {
   lastChecked: Date;
 }
 
+export function plaidTokenHealthFromError(
+  tokenId: string,
+  error: any,
+  lastChecked = new Date(),
+): PlaidTokenHealth {
+  const errorCode = error?.response?.data?.error_code;
+  if (errorCode === 'ITEM_LOGIN_REQUIRED') {
+    return { tokenId, status: TokenStatus.LOGIN_REQUIRED, error: 'Account requires re-authentication', lastChecked };
+  }
+  if (errorCode === 'PRODUCTS_NOT_SUPPORTED') {
+    return { tokenId, status: TokenStatus.PRODUCTS_NOT_SUPPORTED, error: 'Products not supported for this institution', lastChecked };
+  }
+  return {
+    tokenId,
+    status: TokenStatus.ERROR,
+    error: error?.response?.data?.error_message || error?.message || 'Unknown error',
+    lastChecked,
+  };
+}
+
 export class TokenValidationService {
   /**
    * Validate all Plaid tokens for a user
@@ -98,30 +118,7 @@ export class TokenValidationService {
         lastChecked: new Date()
       };
     } catch (error: any) {
-      const errorCode = error?.response?.data?.error_code;
-
-      if (errorCode === 'ITEM_LOGIN_REQUIRED') {
-        return {
-          tokenId,
-          status: TokenStatus.LOGIN_REQUIRED,
-          error: 'Account requires re-authentication',
-          lastChecked: new Date()
-        };
-      } else if (errorCode === 'PRODUCTS_NOT_SUPPORTED') {
-        return {
-          tokenId,
-          status: TokenStatus.PRODUCTS_NOT_SUPPORTED,
-          error: 'Products not supported for this institution',
-          lastChecked: new Date()
-        };
-      } else {
-        return {
-          tokenId,
-          status: TokenStatus.ERROR,
-          error: error?.response?.data?.error_message || error.message || 'Unknown error',
-          lastChecked: new Date()
-        };
-      }
+      return plaidTokenHealthFromError(tokenId, error);
     }
   }
 
@@ -194,6 +191,27 @@ export class TokenValidationService {
     return {
       plaid: plaidHealth,
       snaptrade: snapTradeHealth
+    };
+  }
+
+  /**
+   * Build health from the exact provider observations used for this snapshot.
+   * This avoids validating each credential with another accounts/holdings call
+   * and keeps health, balances, and holdings on one revision.
+   */
+  getTokenHealthFromObservations(
+    userId: string,
+    plaidObservation: { tokenHealth?: PlaidTokenHealth[] } | null | undefined,
+    snapTradeObservation: { tokenHealth?: SnapTradeTokenHealth } | null | undefined,
+  ): { plaid: PlaidTokenHealth[]; snaptrade: SnapTradeTokenHealth } {
+    return {
+      plaid: plaidObservation?.tokenHealth ?? [],
+      snaptrade: snapTradeObservation?.tokenHealth ?? {
+        userId,
+        status: TokenStatus.ERROR,
+        error: 'SnapTrade observation unavailable',
+        lastChecked: new Date(),
+      },
     };
   }
 }

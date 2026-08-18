@@ -2,7 +2,13 @@ import { PrismaClient } from '@prisma/client';
 import { Configuration, PlaidApi, PlaidEnvironments, CountryCode } from 'plaid';
 import { SnapTradeService } from '../snaptrade';
 import { BalanceService } from './balance-service';
-import { TokenValidationService, TokenStatus, PlaidTokenHealth, SnapTradeTokenHealth } from './token-validation-service';
+import {
+  TokenValidationService,
+  TokenStatus,
+  type PlaidTokenHealth,
+  type SnapTradeTokenHealth,
+  plaidTokenHealthFromError,
+} from './token-validation-service';
 import { TransactionNormalizationService } from './transaction-normalization-service';
 import { TransactionCategorizationService, CategorizationDetail, TransactionType } from './transaction-categorization-service';
 import { persistTransactionsToDb, persistSnapTradeActivitiesToDb } from '../data/persistence';
@@ -284,12 +290,11 @@ export class FinancialDataService {
     }
 
     // Fetch data from all sources in parallel
-    const [plaidResult, snapTradeResult, manualAccountsResult, homeValueResult, tokenHealth] = await Promise.allSettled([
+    const [plaidResult, snapTradeResult, manualAccountsResult, homeValueResult] = await Promise.allSettled([
       plaidPromise,
       this.fetchSnapTradeData(userId, opts),
       this.fetchManualAccounts(userId),
       opts.includeHomeValue ? this.fetchHomeValue(userId) : Promise.resolve(null),
-      this.tokenValidationService.getTokenHealth(userId)
     ]);
 
     // Process results
@@ -297,13 +302,17 @@ export class FinancialDataService {
     const snapTradeData = snapTradeResult.status === 'fulfilled' ? snapTradeResult.value : null;
     const manualAccountsData = manualAccountsResult.status === 'fulfilled' ? manualAccountsResult.value : null;
     const homeValue = homeValueResult.status === 'fulfilled' ? homeValueResult.value : null;
-    const tokens = tokenHealth.status === 'fulfilled' ? tokenHealth.value : { plaid: [], snaptrade: { userId, status: TokenStatus.ERROR, error: 'Unknown', lastChecked: new Date() } };
-
     if ((!plaidData || !plaidData.accounts?.length) && persistedPlaidSnapshot?.data) {
       usingPersistedPlaidData = true;
       plaidData = persistedPlaidSnapshot.data;
       console.warn('FinancialDataService: Falling back to persisted Plaid data after live fetch failure or empty accounts (e.g. all tokens inactive)');
     }
+
+    const tokens = this.tokenValidationService.getTokenHealthFromObservations(
+      userId,
+      plaidData,
+      snapTradeData,
+    );
 
     // Merge data
     const mergedData = mergeFinancialSources(plaidData, snapTradeData, manualAccountsData, homeValue);
@@ -921,6 +930,7 @@ export class FinancialDataService {
           holdings: [],
           securities: [],
           transactions: [],
+          tokenHealth: [],
           errors: [],
           performance: { duration: Date.now() - startTime }
         };
@@ -932,6 +942,7 @@ export class FinancialDataService {
       const securities: any[] = [];
       const transactions: any[] = [];
       const errors: ErrorDetail[] = [];
+      const tokenHealth: PlaidTokenHealth[] = [];
 
       // ✅ Merge with database accounts to get custom names for Plaid accounts
       // Fetch all accounts from database once (more efficient than querying per token)
@@ -1230,6 +1241,11 @@ export class FinancialDataService {
           if (asyncTasks.length > 0) {
             await Promise.all(asyncTasks);
           }
+          tokenHealth.push({
+            tokenId: tokenRecord.id,
+            status: TokenStatus.VALID,
+            lastChecked: new Date(requestTimestamp),
+          });
         } catch (error: any) {
           const errorCode = error?.response?.data?.error_code;
           console.error('Error fetching Plaid data for token:', errorCode);
@@ -1238,6 +1254,7 @@ export class FinancialDataService {
             error: error?.response?.data?.error_message || error.message,
             timestamp: new Date()
           });
+          tokenHealth.push(plaidTokenHealthFromError(tokenRecord.id, error));
         }
       }
 
@@ -1248,6 +1265,7 @@ export class FinancialDataService {
         holdings,
         securities,
         transactions,
+        tokenHealth,
         errors,
         performance: { duration }
       };
@@ -1259,6 +1277,7 @@ export class FinancialDataService {
         holdings: [],
         securities: [],
         transactions: [],
+        tokenHealth: [],
         errors: [{ error: error.message, timestamp: new Date() }],
         performance: { duration: Date.now() - startTime }
       };
@@ -1365,6 +1384,12 @@ export class FinancialDataService {
           holdings: [],
           securities: [],
           transactions: [],
+          tokenHealth: {
+            userId,
+            status: TokenStatus.ERROR,
+            error: 'SnapTrade user not found',
+            lastChecked: new Date(),
+          } satisfies SnapTradeTokenHealth,
           errors: [],
           performance: { duration: Date.now() - startTime }
         };
@@ -1376,6 +1401,12 @@ export class FinancialDataService {
       const holdings: any[] = [];
       const securities: any[] = [];
       const transactions: any[] = [];
+      let tokenHealth: SnapTradeTokenHealth = {
+        userId,
+        status: TokenStatus.ERROR,
+        error: 'SnapTrade accounts were not observed',
+        lastChecked: new Date(),
+      };
 
       // ✅ Get accounts once and reuse them for holdings and activities
       let accountsData: any = null;
@@ -1385,6 +1416,11 @@ export class FinancialDataService {
         accountsData = accountsResult; // Store for later reuse
         
         if (accountsResult.success && accountsResult.data?.accounts) {
+          tokenHealth = {
+            userId,
+            status: TokenStatus.VALID,
+            lastChecked: new Date(),
+          };
           // ✅ Merge with database accounts to get custom names
           const dbAccounts = await prisma.account.findMany({
             where: {
@@ -1478,11 +1514,23 @@ export class FinancialDataService {
               error: 'SnapTrade credentials invalid or expired. Please reconnect your SnapTrade account.',
               timestamp: new Date()
             });
+            tokenHealth = {
+              userId,
+              status: TokenStatus.LOGIN_REQUIRED,
+              error: 'SnapTrade credentials invalid or expired. Please reconnect your SnapTrade account.',
+              lastChecked: new Date(),
+            };
           } else {
             errors.push({
               error: accountsResult.error || 'Failed to fetch SnapTrade accounts',
               timestamp: new Date()
             });
+            tokenHealth = {
+              userId,
+              status: TokenStatus.ERROR,
+              error: accountsResult.error || 'Failed to fetch SnapTrade accounts',
+              lastChecked: new Date(),
+            };
           }
         }
       } catch (accountError: any) {
@@ -1494,12 +1542,24 @@ export class FinancialDataService {
             error: 'SnapTrade credentials invalid or expired. Please reconnect your SnapTrade account.',
             timestamp: new Date()
           });
+          tokenHealth = {
+            userId,
+            status: TokenStatus.LOGIN_REQUIRED,
+            error: 'SnapTrade credentials invalid or expired. Please reconnect your SnapTrade account.',
+            lastChecked: new Date(),
+          };
         } else {
           console.error('Error fetching SnapTrade accounts:', accountError);
           errors.push({
             error: accountError.message || 'Failed to fetch SnapTrade accounts',
             timestamp: new Date()
           });
+          tokenHealth = {
+            userId,
+            status: TokenStatus.ERROR,
+            error: accountError.message || 'Failed to fetch SnapTrade accounts',
+            lastChecked: new Date(),
+          };
         }
       }
 
@@ -1934,6 +1994,7 @@ export class FinancialDataService {
         holdings,
         securities,
         transactions,
+        tokenHealth,
         errors,
         performance: { duration }
       };
@@ -1944,6 +2005,12 @@ export class FinancialDataService {
         holdings: [],
         securities: [],
         transactions: [],
+        tokenHealth: {
+          userId,
+          status: TokenStatus.ERROR,
+          error: error.message || 'Failed to fetch SnapTrade data',
+          lastChecked: new Date(),
+        } satisfies SnapTradeTokenHealth,
         errors: [{ error: error.message, timestamp: new Date() }],
         performance: { duration: Date.now() - startTime }
       };

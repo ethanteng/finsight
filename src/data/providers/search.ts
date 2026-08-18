@@ -34,7 +34,10 @@ interface SearchProviderClientOptions {
   requestTimeoutMs?: number;
   maxAttempts?: number;
   maxRetryDelayMs?: number;
-  rateLimiter?: { waitForNextCall(): Promise<void> };
+  rateLimiter?: {
+    waitForNextCall(): Promise<void>;
+    observeResponse?(headers: Headers): void;
+  };
 }
 
 // Global rate limiter for Brave Search API calls
@@ -42,6 +45,8 @@ class BraveSearchRateLimiter {
   private static instance: BraveSearchRateLimiter;
   private lastCallTime: number = 0;
   private readonly MIN_INTERVAL = 1100; // 1.1 seconds between calls
+  private readonly MAX_SERVER_WAIT_MS = 2_000;
+  private serverBlockedUntil = 0;
 
   static getInstance(): BraveSearchRateLimiter {
     if (!BraveSearchRateLimiter.instance) {
@@ -52,15 +57,40 @@ class BraveSearchRateLimiter {
 
   async waitForNextCall(): Promise<void> {
     const now = Date.now();
-    const timeSinceLastCall = now - this.lastCallTime;
-    
-    if (timeSinceLastCall < this.MIN_INTERVAL) {
-      const waitTime = this.MIN_INTERVAL - timeSinceLastCall;
+    const intervalBlockedUntil = this.lastCallTime + this.MIN_INTERVAL;
+    const waitTime = Math.max(intervalBlockedUntil, this.serverBlockedUntil) - now;
+
+    if (waitTime > this.MAX_SERVER_WAIT_MS) {
+      throw new Error(`Brave Search quota is exhausted for another ${Math.ceil(waitTime / 1000)} seconds`);
+    }
+    if (waitTime > 0) {
       console.log(`BraveSearchRateLimiter: Waiting ${waitTime}ms before next API call`);
       await new Promise(resolve => setTimeout(resolve, waitTime));
     }
     
     this.lastCallTime = Date.now();
+  }
+
+  observeResponse(headers: Headers): void {
+    const remaining = this.headerNumbers(headers.get('x-ratelimit-remaining'));
+    const resets = this.headerNumbers(headers.get('x-ratelimit-reset'));
+    if (remaining.length === 0 || resets.length === 0) return;
+    const exhaustedResets = resets.filter((_, index) => remaining[index] !== undefined && remaining[index] < 1);
+    if (exhaustedResets.length === 0) return;
+    // Multiple windows can be exhausted at once. Respect the longest reset;
+    // waitForNextCall fails fast when that exceeds an interactive request budget.
+    this.serverBlockedUntil = Math.max(
+      this.serverBlockedUntil,
+      Date.now() + Math.max(...exhaustedResets) * 1_000,
+    );
+  }
+
+  private headerNumbers(value: string | null): number[] {
+    if (!value) return [];
+    return value.split(',').flatMap(part => {
+      const parsed = Number.parseFloat(part.trim());
+      return Number.isFinite(parsed) && parsed >= 0 ? [parsed] : [];
+    });
   }
 }
 
@@ -68,7 +98,10 @@ export class SearchProvider {
   private config: SearchProviderConfig;
   private readonly DEFAULT_TIMEOUT = 10000;
   private readonly DEFAULT_MAX_RESULTS = 10;
-  private rateLimiter: { waitForNextCall(): Promise<void> };
+  private rateLimiter: {
+    waitForNextCall(): Promise<void>;
+    observeResponse?(headers: Headers): void;
+  };
   private readonly clientOptions: SearchProviderClientOptions;
 
   constructor(
@@ -315,7 +348,7 @@ export class SearchProvider {
   }
 
   private async request(url: string, init: ProviderRequestInit = {}, rateLimited = false): Promise<Response> {
-    return fetchWithBoundedRetry(url, init, {
+    const response = await fetchWithBoundedRetry(url, init, {
       fetchImplementation: this.clientOptions.fetchImplementation,
       sleep: this.clientOptions.sleep,
       requestTimeoutMs: this.config.timeout,
@@ -323,6 +356,8 @@ export class SearchProvider {
       maxRetryDelayMs: this.clientOptions.maxRetryDelayMs,
       beforeAttempt: rateLimited ? () => this.rateLimiter.waitForNextCall() : undefined,
     });
+    if (rateLimited) this.rateLimiter.observeResponse?.(response.headers);
+    return response;
   }
 
   private formatResults(rawResults: any): SearchResult[] {
@@ -375,13 +410,40 @@ export class SearchProvider {
       return [];
     }
 
-    return results.web.results.map((item: any, index: number) => ({
-      title: item.title,
-      snippet: item.description,
-      url: item.url,
-      source: 'Brave',
-      relevance: 1 - (index * 0.1)
-    }));
+    return results.web.results.map((item: any, index: number) => {
+      const age = typeof item.age === 'string' && item.age.trim() ? item.age.trim() : undefined;
+      const publishedAt = this.parseBravePublicationTime(item.page_age, age);
+      return {
+        title: item.title,
+        snippet: item.description,
+        url: item.url,
+        source: 'Brave',
+        relevance: 1 - (index * 0.1),
+        ...(age && { age }),
+        ...(publishedAt && { publishedAt }),
+      };
+    });
+  }
+
+  private parseBravePublicationTime(pageAge: unknown, age: string | undefined): string | undefined {
+    for (const candidate of [pageAge, age]) {
+      if (typeof candidate !== 'string' || !candidate.trim()) continue;
+      const parsed = new Date(candidate);
+      if (!Number.isNaN(parsed.getTime())) return parsed.toISOString();
+    }
+
+    const relative = age?.match(/^(\d+)\s+(minute|hour|day|week|month|year)s?\s+ago$/i);
+    if (!relative) return undefined;
+    const amount = Number.parseInt(relative[1], 10);
+    const unitMs: Record<string, number> = {
+      minute: 60_000,
+      hour: 3_600_000,
+      day: 86_400_000,
+      week: 7 * 86_400_000,
+      month: 30 * 86_400_000,
+      year: 365 * 86_400_000,
+    };
+    return new Date(Date.now() - amount * unitMs[relative[2].toLowerCase()]).toISOString();
   }
 
   private formatSerpapiResults(results: any): SearchResult[] {

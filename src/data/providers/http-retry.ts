@@ -25,6 +25,34 @@ function retryableStatus(status: number): boolean {
   return status === 408 || status === 429 || status >= 500;
 }
 
+function numericHeaderValues(value: string | null): number[] {
+  if (!value) return [];
+  return value.split(',').flatMap(part => {
+    const parsed = Number.parseFloat(part.trim());
+    return Number.isFinite(parsed) && parsed >= 0 ? [parsed] : [];
+  });
+}
+
+function rateLimitResetDelayMs(response: Response): number | undefined {
+  const resets = numericHeaderValues(
+    response.headers?.get('x-ratelimit-reset')
+      || response.headers?.get('x-rate-limit-reset')
+  );
+  if (resets.length === 0) return undefined;
+  const remaining = numericHeaderValues(
+    response.headers?.get('x-ratelimit-remaining')
+      || response.headers?.get('x-rate-limit-remaining')
+  );
+  const exhaustedResets = resets.filter((_, index) => remaining[index] !== undefined && remaining[index] < 1);
+  // Every exhausted window must reset before another request is safe. When a
+  // provider omits Remaining on a 429, the shortest advertised reset is the
+  // most useful bounded retry signal.
+  const seconds = exhaustedResets.length > 0
+    ? Math.max(...exhaustedResets)
+    : Math.min(...resets);
+  return seconds * 1_000;
+}
+
 function retryDelayMs(response: Response, attempt: number): number {
   const retryAfter = response.headers?.get('retry-after');
   if (retryAfter) {
@@ -34,7 +62,9 @@ function retryDelayMs(response: Response, attempt: number): number {
     const retryAt = Date.parse(retryAfter);
     if (Number.isFinite(retryAt)) return Math.max(0, retryAt - Date.now());
   }
-  return DEFAULT_RETRY_DELAY_MS * attempt;
+  const resetDelay = rateLimitResetDelayMs(response);
+  if (resetDelay !== undefined) return resetDelay;
+  return DEFAULT_RETRY_DELAY_MS * (2 ** (attempt - 1));
 }
 
 /**
@@ -163,7 +193,7 @@ export async function fetchWithBoundedRetry(
     } catch (error) {
       clearTimeout(timeout);
       if (attempt === maxAttempts) throw error;
-      const delay = DEFAULT_RETRY_DELAY_MS * attempt;
+      const delay = DEFAULT_RETRY_DELAY_MS * (2 ** (attempt - 1));
       if (delay > maxRetryDelayMs) throw error;
       await sleep(delay);
       continue;

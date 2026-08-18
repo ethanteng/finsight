@@ -106,7 +106,19 @@ export class FMPProvider {
     const skipDatabaseLookup = options?.skipDatabaseLookup === true;
 
     const cacheKey = `fmp_metadata_${ticker}`;
-    const isTestKey = this.apiKey === 'test_fmp_key' || this.apiKey.startsWith('test_') || process.env.GITHUB_ACTIONS;
+    const isTestEnvironment = process.env.NODE_ENV === 'test' || Boolean(process.env.GITHUB_ACTIONS);
+    const isTestKey = this.apiKey === 'test_fmp_key' || this.apiKey.startsWith('test_');
+
+    // Never turn absent/misplaced production credentials into authoritative
+    // provider data. Test fixtures are allowed only under an explicit test/CI
+    // environment; every other unconfigured path is low-confidence inference.
+    if (!this.apiKey.trim() || (isTestKey && !isTestEnvironment)) {
+      const inferred = this.inferMetadata(ticker);
+      if (persistToDatabase) {
+        await dbCache.saveSecurityMetadata(ticker, inferred, 'inferred').catch(() => undefined);
+      }
+      return inferred;
+    }
     
     // Check in-memory cache first (fastest)
     const cached = await cacheService.get<SecurityMetadata>(cacheKey);
@@ -137,15 +149,10 @@ export class FMPProvider {
     }
 
     // Use mock data for test environment
-    if (this.apiKey === 'test_fmp_key' || this.apiKey.startsWith('test_') || process.env.GITHUB_ACTIONS) {
+    if (isTestEnvironment && isTestKey) {
       console.log(`⚠️ FMP Provider: Using inferred metadata for ${ticker} (test key or CI environment detected)`);
       const mockMetadata = this.generateMockMetadata(ticker);
-      // Still save mock metadata to database for consistency (but only in non-CI environments)
-      if (persistToDatabase && !process.env.GITHUB_ACTIONS) {
-        await dbCache.saveSecurityMetadata(ticker, mockMetadata, 'inferred').catch(() => {
-          // Ignore errors saving mock metadata
-        });
-      }
+      // Test fixtures must never escape into the persistent metadata cache.
       return mockMetadata;
     }
 

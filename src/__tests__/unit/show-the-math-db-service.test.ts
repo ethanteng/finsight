@@ -1,6 +1,7 @@
 import { getPrismaClient } from '../../prisma-client';
 import { fetchShowTheMathDBData, loadShowTheMathEvidence } from '../../openai/show-the-math-db-service';
 import type { EvidenceManifest } from '../../openai/show-the-math-types';
+import { createHash } from 'crypto';
 
 jest.mock('../../prisma-client', () => ({
   getPrismaClient: jest.fn(),
@@ -90,5 +91,42 @@ describe('fetchShowTheMathDBData', () => {
         lastUpdated: { lte: evidenceAt },
       },
     });
+  });
+
+  it('loads the exact tier-scoped market context referenced by the manifest', async () => {
+    const contextText = 'Fed funds 4.25% as of 2026-08-18';
+    const context = {
+      id: 'auto-standard',
+      contextText,
+      availableTiers: ['standard'],
+      isActive: false,
+      lastUpdate: new Date('2026-08-18T12:00:00.000Z'),
+    };
+    const findUnique = jest.fn().mockResolvedValue(context);
+    const findFirst = jest.fn();
+    const historyFindMany = jest.fn().mockResolvedValue([]);
+    mockedGetPrismaClient.mockReturnValue({
+      marketNewsContext: { findUnique, findFirst },
+      marketNewsHistory: { findMany: historyFindMany },
+    } as any);
+
+    const result = await fetchShowTheMathDBData(undefined, {
+      ...manifest,
+      evidenceRefs: {
+        ...manifest.evidenceRefs,
+        marketContext: true,
+        marketContextId: context.id,
+        marketContextTier: 'standard',
+        marketContextLastUpdate: context.lastUpdate.toISOString(),
+        marketContextDigest: createHash('sha256').update(contextText).digest('hex'),
+      },
+    });
+
+    expect(findUnique).toHaveBeenCalledWith({ where: { id: 'auto-standard' } });
+    expect(findFirst).not.toHaveBeenCalled();
+    expect(result.market_news_context).toEqual(expect.objectContaining({ id: 'auto-standard' }));
+    expect(historyFindMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { contextId: 'auto-standard' },
+    }));
   });
 });

@@ -2,6 +2,8 @@ import { FMPProvider, looksLikeMutualFundTicker } from '../../retirement-analyti
 import { analyzePortfolio } from '../../retirement-analytics/engine/portfolio-analyzer';
 import { mapPortfolioToAssetBasket } from '../../retirement-analytics/engine/portfolio-mapper';
 import type { SecurityMetadata } from '../../retirement-analytics/types';
+import { DataProviderFactory } from '../../retirement-analytics/data/data-provider-factory';
+import { dbCache } from '../../retirement-analytics/data/db-cache';
 
 describe('FMP Starter fund metadata', () => {
   const provider = new FMPProvider('test_key');
@@ -180,6 +182,53 @@ describe('FMP Starter fund metadata', () => {
       .resolves.toEqual([{ symbol: 'SPY' }]);
     expect(fetchImplementation).toHaveBeenCalledTimes(2);
     expect(sleep).toHaveBeenCalledWith(1000);
+  });
+
+  it('degrades missing production configuration to inferred metadata, never mock FMP data', async () => {
+    const unconfiguredProvider = new FMPProvider('');
+
+    const metadata = await unconfiguredProvider.getSecurityMetadata('VTI', {
+      persistToDatabase: false,
+      skipDatabaseLookup: true,
+    });
+
+    expect(metadata.provider).toBe('inferred');
+    expect(metadata.securityName).toBe('VTI');
+    expect(metadata.securityName).not.toContain('Mock');
+  });
+
+  it('bounds cold-cache FMP ticker enrichment concurrency', async () => {
+    const previousConcurrency = process.env.FMP_METADATA_CONCURRENCY;
+    process.env.FMP_METADATA_CONCURRENCY = '2';
+    const cacheRead = jest.spyOn(dbCache, 'getSecurityMetadataBatch').mockResolvedValue(new Map());
+    const cacheWrite = jest.spyOn(dbCache, 'saveSecurityMetadataBatch').mockResolvedValue(undefined);
+    const factory = new DataProviderFactory('test_tiingo_key', 'real-fmp-key');
+    let active = 0;
+    let maxActive = 0;
+    (factory as any).fmpProvider.getSecurityMetadata = jest.fn(async (ticker: string) => {
+      active += 1;
+      maxActive = Math.max(maxActive, active);
+      await new Promise(resolve => setImmediate(resolve));
+      active -= 1;
+      return {
+        tickerSymbol: ticker,
+        securityName: ticker,
+        isETF: false,
+        provider: 'fmp',
+        metadataVersion: 2,
+        lastUpdated: new Date(),
+      } satisfies SecurityMetadata;
+    });
+
+    try {
+      await factory.getSecurityMetadataBatch(['A', 'B', 'C', 'D', 'E']);
+      expect(maxActive).toBe(2);
+    } finally {
+      cacheRead.mockRestore();
+      cacheWrite.mockRestore();
+      if (previousConcurrency === undefined) delete process.env.FMP_METADATA_CONCURRENCY;
+      else process.env.FMP_METADATA_CONCURRENCY = previousConcurrency;
+    }
   });
 
   it('uses look-through countries in portfolio metrics and retirement mapping', async () => {

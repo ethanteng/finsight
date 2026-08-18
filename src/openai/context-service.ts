@@ -340,7 +340,7 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
     ? sortedTransactions.slice(0, MAX_PROMPT_TRANSACTIONS)
     : [];
 
-  const [tierContext, searchContextResult, marketContext, userOverrides, userProfile, investmentExternalData] = await Promise.all([
+  const [tierContext, searchContextResult, marketContextResult, userOverrides, userProfile, investmentExternalData] = await Promise.all([
     dataOrchestrator.buildTierAwareContext(
       tier,
       tierContextAccounts,
@@ -408,7 +408,8 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
         retrievedAt: searchContextResult.lastUpdate.toISOString(),
       },
     }),
-    marketContext,
+    marketContext: marketContextResult?.text,
+    marketContextMetadata: marketContextResult?.metadata,
     userProfile,
     homeValueSummary,
     homeValueData,
@@ -1127,7 +1128,10 @@ async function maybeFetchSearchContext(
 async function maybeFetchMarketContext(
   questionNeeds: QuestionNeeds,
   tier: UserTier
-): Promise<string | undefined> {
+): Promise<{
+  text: string;
+  metadata: NonNullable<FinancialContextSnapshot['marketContextMetadata']>;
+} | undefined> {
   if (!questionNeeds.needsMarketContext) {
     return undefined;
   }
@@ -1135,13 +1139,31 @@ async function maybeFetchMarketContext(
   try {
     const { MarketNewsManager } = await import('../market-news/manager');
     const marketNewsManager = new MarketNewsManager();
-    const storedContext = await marketNewsManager.getMarketContext(tier);
-    if (storedContext.trim()) return storedContext;
+    const observation = await marketNewsManager.getMarketContextObservation(tier);
+    if (observation?.contextText.trim()) {
+      return {
+        text: observation.contextText,
+        metadata: {
+          id: observation.id,
+          tier,
+          lastUpdate: observation.lastUpdate.toISOString(),
+          source: 'stored',
+        },
+      };
+    }
     throw new Error(`No stored market-news context is available for ${tier}`);
   } catch (primaryError) {
     console.warn('Market news context failed, attempting orchestrator fallback', primaryError);
     try {
-      return await dataOrchestrator.getMarketContextSummary(tier);
+      const text = await dataOrchestrator.getMarketContextSummary(tier);
+      return text.trim() ? {
+        text,
+        metadata: {
+          tier,
+          lastUpdate: new Date().toISOString(),
+          source: 'fallback',
+        },
+      } : undefined;
     } catch (fallbackError) {
       console.warn('Market context fallback failed', fallbackError);
       return undefined;
