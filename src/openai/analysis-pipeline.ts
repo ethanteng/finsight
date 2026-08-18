@@ -420,6 +420,13 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
     finalSearchQueries = evaluation.toolSearchQueries ?? finalSearchQueries;
   }
 
+  // The semantic planner and its constrained audit define what this question
+  // actually needs. Validation may later load every pack as an evidence-recovery
+  // measure, but that broader read is not permission to introduce an unrelated
+  // user-facing ask or disclosure. Keep the two meanings separate before the
+  // late recovery path can replace questionNeeds with its exhaustive selection.
+  const plannedQuestionNeeds = { ...questionNeeds };
+
   const scenarioExecutions = await scenarioCalculatorRegistry.executePlans(
     snapshot,
     scenarioPlans,
@@ -606,7 +613,31 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
           contextGatherMs += Date.now() - escalationStartedAt;
           selectedPacks = escalatedPacks;
           questionNeeds = escalatedNeeds;
-          promptInput = buildPromptInput(snapshot, escalatedNeeds);
+          // Recovery reads every pack so the retry can cite the evidence the
+          // first answer reached for. Two parts of the retirement pack are not
+          // that evidence, and both put the user's retirement inputs in front
+          // of a question that never asked for them:
+          //  - `retirementAnalysisNeedsInfo` is a standing instruction to ask
+          //    the user for those inputs, carrying the detected values with it.
+          //  - `_storedInputParams` becomes canonical facts for current age,
+          //    retirement age, spending, and withdrawal age, which is what
+          //    makes a stray "$120,000" survive grounding in the retry.
+          // Dropping both leaves the analysis itself — allocations, survival
+          // rate, depletion percentiles — so recovery still supplies the
+          // evidence it exists to supply.
+          const snapshotForPrompt = plannedQuestionNeeds.needsRetirement
+            ? snapshot
+            : {
+                ...snapshot,
+                retirementAnalysisNeedsInfo: undefined,
+                ...(snapshot.retirementAnalysis && {
+                  retirementAnalysis: {
+                    ...snapshot.retirementAnalysis,
+                    _storedInputParams: undefined,
+                  },
+                }),
+              };
+          promptInput = buildPromptInput(snapshotForPrompt, escalatedNeeds);
           factPack = promptInput.canonicalFacts!;
           contextEscalated = true;
         } catch (error) {
@@ -672,7 +703,7 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
   // When something the question needed is missing and the user is the one who
   // can supply it, ask for it. Appended after validation because it is
   // server-authored: these values come from persisted state, not the model.
-  const missingInputsAsk = describeMissingInputs(snapshot, questionNeeds);
+  const missingInputsAsk = describeMissingInputs(snapshot, plannedQuestionNeeds);
   if (missingInputsAsk) {
     structuredResponse = appendNotice(structuredResponse, missingInputsAsk);
   }
@@ -684,9 +715,10 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
   // A scenario disclosure already contains the inherited baseline plus every
   // changed/defaulted variant input. Appending the baseline sentence too would
   // repeat the same ages and spending immediately before it.
-  const retirementAssumptions = scenarioExecutions[RETIREMENT_CALCULATOR_ID]
-    ? null
-    : describeRetirementAssumptions(snapshot);
+  const retirementAssumptions =
+    plannedQuestionNeeds.needsRetirement && !scenarioExecutions[RETIREMENT_CALCULATOR_ID]
+      ? describeRetirementAssumptions(snapshot)
+      : null;
   if (retirementAssumptions) {
     structuredResponse = appendNotice(structuredResponse, retirementAssumptions);
   }

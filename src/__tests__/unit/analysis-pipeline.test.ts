@@ -75,6 +75,65 @@ function snapshot() {
   } as any;
 }
 
+function cachedRetirementAnalysis() {
+  return {
+    summary: {
+      characteristics: {
+        growthPotential: 'moderate',
+        drawdownResistance: 'moderate',
+        withdrawalFragility: 'moderate',
+        inflationProtection: 'moderate',
+      },
+      tradeoffs: { upside: 'Growth', downside: 'Volatility' },
+      primaryObservation: 'A cached projection exists.',
+      confidence: 'medium',
+      timelineBucket: '20',
+      timelineBucketNote: 'Twenty-year horizon.',
+    },
+    metrics: {
+      withdrawalRate: 0.04,
+      equityAllocation: 70,
+      yearsOfExpenses: 25,
+      historicalWithdrawalRates: {
+        p10: 0.03,
+        p25: 0.035,
+        p50: 0.04,
+        p75: 0.045,
+        p90: 0.05,
+      },
+    },
+    stressTest: {
+      survivalRate: 0.9,
+      totalSequences: 100,
+      depletionPercentiles: { p10: 12, p25: 18, p50: 25, p75: 30, p90: 35 },
+      worstSequences: { byDepletion: [], byDrawdown: [], byRecovery: [] },
+    },
+    historicalImplications: [],
+    dataQuality: {
+      completeness: 1,
+      priceHistoryCoverage: 1,
+      metadataConfidence: 'high',
+      portfolioMappingConfidence: 'high',
+      proxiedValuePercentage: 0,
+      proxyUsage: {
+        usEquityProxy: 'SPY',
+        internationalEquityProxy: 'VXUS',
+        bondsProxy: 'BND',
+        unmappedHoldings: [],
+        mappingMethod: 'direct',
+      },
+      assumptions: [],
+      missingData: [],
+    },
+    disclaimers: [],
+    _storedInputParams: {
+      annualWithdrawalAmount: 120_000,
+      retirementAge: 65,
+      currentAge: 45,
+    },
+  };
+}
+
 function contextPlan(packs: ContextPackId[] = [], secondary = false): ContextPlan {
   const selectedPacks = normalizeContextPacks(packs);
   return {
@@ -815,6 +874,210 @@ describe('runAskLincAnalysis validation routing', () => {
       needsRetirement: true,
     });
     expect(result.showTheMathData?.evidenceManifest.contextEscalated).toBe(true);
+  });
+
+  it('does not turn recovery-only retirement context into a retirement input ask', async () => {
+    mockedGatherContext
+      .mockResolvedValueOnce(snapshot())
+      .mockResolvedValueOnce({
+        ...snapshot(),
+        retirementAnalysisNeedsInfo: {
+          missingParams: ['annualWithdrawalAmount'],
+          detectedParams: { annualWithdrawalAmount: 120_000 },
+          confirmationRequiredParams: ['annualWithdrawalAmount'],
+        },
+      } as any);
+    mockedAskClaude
+      .mockResolvedValueOnce(JSON.stringify({
+        summary: 'Your largest holding is worth $250,000.',
+        insights: [],
+        suggested_actions: [],
+      }))
+      .mockResolvedValueOnce(JSON.stringify({
+        summary: 'Your net worth is $100.',
+        insights: [],
+        suggested_actions: [],
+      }));
+
+    const result = await runAskLincAnalysis({
+      question: 'Is my investment portfolio overexposed to technology?',
+      userId: 'user-1',
+    });
+
+    expect(mockedGatherContext.mock.calls[1][0].questionNeeds.needsRetirement).toBe(true);
+    expect(result.showTheMathData?.evidenceManifest.contextEscalated).toBe(true);
+    expect(result.structuredResponse.summary).toBe('Your net worth is $100.');
+    expect(result.displayText).not.toContain('retirement projection');
+    expect(result.displayText).not.toContain('$120,000');
+  });
+
+  it('does not disclose a recovery-only cached retirement projection', async () => {
+    mockedGatherContext
+      .mockResolvedValueOnce(snapshot())
+      .mockResolvedValueOnce({
+        ...snapshot(),
+        retirementAnalysis: cachedRetirementAnalysis(),
+      } as any);
+    mockedAskClaude
+      .mockResolvedValueOnce(JSON.stringify({
+        summary: 'Your largest holding is worth $250,000.',
+        insights: [],
+        suggested_actions: [],
+      }))
+      .mockResolvedValueOnce(JSON.stringify({
+        summary: 'Your net worth is $100.',
+        insights: [],
+        suggested_actions: [],
+      }));
+
+    const result = await runAskLincAnalysis({
+      question: 'What about domestic versus international exposure?',
+      userId: 'user-1',
+    });
+
+    expect(result.showTheMathData?.evidenceManifest.contextEscalated).toBe(true);
+    expect(result.structuredResponse.summary).toBe('Your net worth is $100.');
+    expect(result.displayText).not.toContain('This projection assumes');
+    expect(result.displayText).not.toContain('$120,000');
+  });
+
+  it('keeps the recovery prompt free of the retirement input directive', async () => {
+    // The needs-info block is written at the model: "ask the user to connect
+    // investment accounts". Prose is not checked against the fact pack, so an
+    // instruction the recovery read never asked for would reach the user.
+    mockedGatherContext
+      .mockResolvedValueOnce(snapshot())
+      .mockResolvedValueOnce({
+        ...snapshot(),
+        retirementAnalysisNeedsInfo: {
+          missingParams: [],
+          detectedParams: { annualWithdrawalAmount: 120_000 },
+          confirmationRequiredParams: ['annualWithdrawalAmount'],
+          unavailableReason:
+            'No linked investment holdings are available for retirement analysis. Ask the user to connect investment accounts.',
+          unavailableCode: 'no_holdings',
+        },
+      } as any);
+    mockedAskClaude
+      .mockResolvedValueOnce(JSON.stringify({
+        summary: 'Your largest holding is worth $250,000.',
+        insights: [],
+        suggested_actions: [],
+      }))
+      .mockResolvedValueOnce(JSON.stringify({
+        summary: 'Your net worth is $100.',
+        insights: [],
+        suggested_actions: [],
+      }));
+
+    const result = await runAskLincAnalysis({
+      question: 'Is my investment portfolio overexposed to technology?',
+      userId: 'user-1',
+    });
+
+    expect(result.showTheMathData?.evidenceManifest.contextEscalated).toBe(true);
+    const retryUserMessage = mockedAskClaude.mock.calls[1][1];
+    expect(retryUserMessage).not.toContain('retirementAnalysisNeedsInfo');
+    expect(retryUserMessage).not.toContain('Ask the user to connect investment accounts');
+    expect(retryUserMessage).not.toContain('120000');
+  });
+
+  it('keeps recovery-only retirement inputs out of the retry fact pack', async () => {
+    // The stored inputs become canonical facts, and a canonical fact is a
+    // licence to print the number: without this the retry could ground
+    // "$120,000" against a projection the question never asked about.
+    mockedGatherContext
+      .mockResolvedValueOnce(snapshot())
+      .mockResolvedValueOnce({
+        ...snapshot(),
+        retirementAnalysis: cachedRetirementAnalysis(),
+      } as any);
+    mockedAskClaude
+      .mockResolvedValueOnce(JSON.stringify({
+        summary: 'Your largest holding is worth $250,000.',
+        insights: [],
+        suggested_actions: [],
+      }))
+      .mockResolvedValueOnce(JSON.stringify({
+        summary: 'Your net worth is $100.',
+        insights: [],
+        suggested_actions: [],
+      }));
+
+    const result = await runAskLincAnalysis({
+      question: 'What about domestic versus international exposure?',
+      userId: 'user-1',
+    });
+
+    expect(result.showTheMathData?.evidenceManifest.contextEscalated).toBe(true);
+    const retryUserMessage = mockedAskClaude.mock.calls[1][1];
+    expect(retryUserMessage).not.toContain('annual_withdrawal_amount');
+    expect(retryUserMessage).not.toContain('retirement_current_age');
+    expect(retryUserMessage).not.toContain('120000');
+    // The analysis the recovery loaded is still there to answer from.
+    expect(retryUserMessage).toContain('equity_allocation');
+    const factIds = result.showTheMathData?.evidenceManifest.facts.map((fact) => fact.id) ?? [];
+    expect(factIds).toContain('equity_allocation');
+    expect(factIds).not.toContain('annual_withdrawal_amount');
+  });
+
+  it('still asks for a missing retirement input when the question planned for retirement', async () => {
+    // The gate is the planned scope, not the absence of escalation: a question
+    // that asked for the projection still gets the ask that unblocks it.
+    mockedGatherContext.mockResolvedValue({
+      ...snapshot(),
+      retirementAnalysisNeedsInfo: {
+        missingParams: ['annualWithdrawalAmount'],
+        detectedParams: {},
+      },
+    } as any);
+    mockedAskClaude
+      .mockResolvedValueOnce(JSON.stringify({
+        summary: 'Your largest holding is worth $250,000.',
+        insights: [],
+        suggested_actions: [],
+      }))
+      .mockResolvedValueOnce(JSON.stringify({
+        summary: 'Your net worth is $100.',
+        insights: [],
+        suggested_actions: [],
+      }));
+
+    const result = await runAskLincAnalysis({
+      question: 'Am I on track for retirement?',
+      userId: 'user-1',
+    });
+
+    expect(result.showTheMathData?.evidenceManifest.contextEscalated).toBe(true);
+    expect(result.displayText).toContain('how much you expect to spend per year once retired');
+    expect(mockedAskClaude.mock.calls[1][1]).toContain('retirementAnalysisNeedsInfo');
+  });
+
+  it('still discloses retirement assumptions when the question planned for retirement', async () => {
+    mockedGatherContext.mockResolvedValue({
+      ...snapshot(),
+      retirementAnalysis: cachedRetirementAnalysis(),
+    } as any);
+    mockedAskClaude
+      .mockResolvedValueOnce(JSON.stringify({
+        summary: 'Your largest holding is worth $250,000.',
+        insights: [],
+        suggested_actions: [],
+      }))
+      .mockResolvedValueOnce(JSON.stringify({
+        summary: 'Your net worth is $100.',
+        insights: [],
+        suggested_actions: [],
+      }));
+
+    const result = await runAskLincAnalysis({
+      question: 'Am I on track for retirement?',
+      userId: 'user-1',
+    });
+
+    expect(result.showTheMathData?.evidenceManifest.contextEscalated).toBe(true);
+    expect(result.displayText).toContain('This projection assumes');
+    expect(result.displayText).toContain('$120,000 a year');
   });
 
   it('makes every remaining pack available after an unsupported answer', async () => {
