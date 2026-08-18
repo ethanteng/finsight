@@ -133,6 +133,29 @@ export function buildCanonicalFactPack(
       provenance: { kind: 'snapshot', source, ...(asOf && { asOf }) },
     });
   };
+  const addExternalFact = (
+    id: string,
+    label: string,
+    value: unknown,
+    unit: CanonicalFactUnit,
+    source: string,
+    sourceAsOf?: string,
+    displayable = true,
+  ) => {
+    if (!finite(value)) return;
+    facts.set(id, {
+      id,
+      label,
+      value,
+      unit,
+      ...(!displayable && { displayable: false }),
+      provenance: {
+        kind: 'external_context',
+        source,
+        ...(isoString(sourceAsOf) && { asOf: isoString(sourceAsOf) }),
+      },
+    });
+  };
   const addCalculatedFact = (
     id: string,
     label: string,
@@ -356,6 +379,58 @@ export function buildCanonicalFactPack(
         `investments.holdings.${holding.id}.institution_value`
       );
     }
+
+    const external = snapshot.investments?.externalData;
+    const externalAsOf = external?.asOf;
+    const portfolioExposure = external?.portfolioExposure;
+    if (portfolioExposure) {
+      addExternalFact('external_country_coverage_source', 'FMP country-exposure coverage source', portfolioExposure.countryCoverage, 'ratio', 'investments.externalData.portfolioExposure.countryCoverage', externalAsOf, false);
+      addCalculatedFact('external_country_coverage', 'Portfolio coverage for FMP country exposure', portfolioExposure.countryCoverage * 100, 'percent', 'input * 100', ['external_country_coverage_source']);
+      addExternalFact('external_sector_coverage_source', 'FMP sector-exposure coverage source', portfolioExposure.sectorCoverage, 'ratio', 'investments.externalData.portfolioExposure.sectorCoverage', externalAsOf, false);
+      addCalculatedFact('external_sector_coverage', 'Portfolio coverage for FMP sector exposure', portfolioExposure.sectorCoverage * 100, 'percent', 'input * 100', ['external_sector_coverage_source']);
+      addExternalFact('external_expense_coverage_source', 'FMP expense-ratio coverage source', portfolioExposure.expenseRatioCoverage, 'ratio', 'investments.externalData.portfolioExposure.expenseRatioCoverage', externalAsOf, false);
+      addCalculatedFact('external_expense_coverage', 'Portfolio coverage for FMP expense ratios', portfolioExposure.expenseRatioCoverage * 100, 'percent', 'input * 100', ['external_expense_coverage_source']);
+      addExternalFact('external_portfolio_expense_ratio_source', 'FMP portfolio expense ratio source', portfolioExposure.expenseRatioWeighted, 'ratio', 'investments.externalData.portfolioExposure.expenseRatioWeighted', externalAsOf, false);
+      addCalculatedFact('external_portfolio_expense_ratio', 'FMP portfolio weighted expense ratio', portfolioExposure.expenseRatioWeighted * 100, 'percent', 'input * 100', ['external_portfolio_expense_ratio_source']);
+      for (const exposure of portfolioExposure.countryAllocations.slice(0, 15)) {
+        addExternalFact(`external_country_${safeFactId(exposure.name)}`, `${exposure.name} portfolio country exposure`, exposure.percentage, 'percent', `investments.externalData.portfolioExposure.countryAllocations.${safeFactId(exposure.name)}`, externalAsOf);
+      }
+      for (const exposure of portfolioExposure.sectorAllocations.slice(0, 15)) {
+        addExternalFact(`external_sector_${safeFactId(exposure.name)}`, `${exposure.name} portfolio sector exposure`, exposure.percentage, 'percent', `investments.externalData.portfolioExposure.sectorAllocations.${safeFactId(exposure.name)}`, externalAsOf);
+      }
+    }
+
+    const externalSecurities = external?.securities ?? [];
+    const matchedExternal = externalSecurities.filter(security =>
+      new RegExp(`\\b${security.ticker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(question)
+      || Boolean(security.name && question.toLowerCase().includes(security.name.toLowerCase()))
+    );
+    for (const security of externalSecurities) {
+      const id = safeFactId(security.ticker);
+      addExternalFact(`external_quote_${id}`, `${security.ticker} Tiingo IEX price`, security.quote?.price, 'usd', `investments.externalData.securities.${id}.quote.price`, security.quote?.timestamp || externalAsOf);
+      addExternalFact(`external_quote_change_${id}`, `${security.ticker} Tiingo IEX change`, security.quote?.changePercent, 'percent', `investments.externalData.securities.${id}.quote.changePercent`, security.quote?.timestamp || externalAsOf);
+      if (security.trailing12MonthReturn !== undefined) {
+        addExternalFact(`external_return_${id}_source`, `${security.ticker} adjusted trailing-12-month return source`, security.trailing12MonthReturn, 'ratio', `investments.externalData.securities.${id}.trailing12MonthReturn`, security.performanceThrough, false);
+        addCalculatedFact(`external_return_${id}`, `${security.ticker} adjusted trailing-12-month return`, security.trailing12MonthReturn * 100, 'percent', 'input * 100', [`external_return_${id}_source`]);
+      }
+      if (security.expenseRatio !== undefined) {
+        addExternalFact(`external_expense_${id}_source`, `${security.ticker} expense ratio source`, security.expenseRatio, 'ratio', `investments.externalData.securities.${id}.expenseRatio`, externalAsOf, false);
+        addCalculatedFact(`external_expense_${id}`, `${security.ticker} expense ratio`, security.expenseRatio * 100, 'percent', 'input * 100', [`external_expense_${id}_source`]);
+      }
+    }
+    for (const security of matchedExternal) {
+      const id = safeFactId(security.ticker);
+      for (const exposure of security.countryAllocations ?? []) {
+        const sourceId = `external_${id}_country_${safeFactId(exposure.name)}_source`;
+        addExternalFact(sourceId, `${security.ticker} ${exposure.name} country weight source`, exposure.weight, 'ratio', `investments.externalData.securities.${id}.countryAllocations.${safeFactId(exposure.name)}`, externalAsOf, false);
+        addCalculatedFact(`external_${id}_country_${safeFactId(exposure.name)}`, `${security.ticker} ${exposure.name} country weight`, exposure.weight * 100, 'percent', 'input * 100', [sourceId]);
+      }
+      for (const exposure of security.sectorAllocations ?? []) {
+        const sourceId = `external_${id}_sector_${safeFactId(exposure.name)}_source`;
+        addExternalFact(sourceId, `${security.ticker} ${exposure.name} sector weight source`, exposure.weight, 'ratio', `investments.externalData.securities.${id}.sectorAllocations.${safeFactId(exposure.name)}`, externalAsOf, false);
+        addCalculatedFact(`external_${id}_sector_${safeFactId(exposure.name)}`, `${security.ticker} ${exposure.name} sector weight`, exposure.weight * 100, 'percent', 'input * 100', [sourceId]);
+      }
+    }
   }
 
   const retirement = snapshot.retirementAnalysis;
@@ -363,6 +438,43 @@ export function buildCanonicalFactPack(
     addSnapshotFact('withdrawal_rate_ratio', 'Withdrawal rate source ratio', retirement.metrics.withdrawalRate, 'ratio', 'retirementAnalysis.metrics.withdrawalRate', false);
     addCalculatedFact('withdrawal_rate', 'Withdrawal rate', retirement.metrics.withdrawalRate * 100, 'percent', 'input * 100', ['withdrawal_rate_ratio']);
     addSnapshotFact('equity_allocation', 'Equity allocation', retirement.metrics.equityAllocation, 'percent', 'retirementAnalysis.metrics.equityAllocation');
+    addSnapshotFact('fixed_income_allocation', 'Fixed-income allocation', retirement.metrics.fixedIncomeAllocation, 'percent', 'retirementAnalysis.metrics.fixedIncomeAllocation');
+    addSnapshotFact('cash_allocation', 'Cash allocation', retirement.metrics.cashAllocation, 'percent', 'retirementAnalysis.metrics.cashAllocation');
+    addSnapshotFact('international_allocation', 'International equity allocation', retirement.metrics.internationalAllocation, 'percent', 'retirementAnalysis.metrics.internationalAllocation');
+    if (retirement.metrics.expenseRatioWeighted !== undefined) {
+      addSnapshotFact('portfolio_expense_ratio_source', 'Portfolio weighted expense ratio source', retirement.metrics.expenseRatioWeighted, 'ratio', 'retirementAnalysis.metrics.expenseRatioWeighted', false);
+      addCalculatedFact('portfolio_expense_ratio', 'Portfolio weighted expense ratio', retirement.metrics.expenseRatioWeighted * 100, 'percent', 'input * 100', ['portfolio_expense_ratio_source']);
+    }
+    if (retirement.metrics.expenseRatioCoverage !== undefined) {
+      addSnapshotFact('expense_ratio_coverage_source', 'Expense-ratio coverage source', retirement.metrics.expenseRatioCoverage, 'ratio', 'retirementAnalysis.metrics.expenseRatioCoverage', false);
+      addCalculatedFact('expense_ratio_coverage', 'Portfolio coverage for expense ratios', retirement.metrics.expenseRatioCoverage * 100, 'percent', 'input * 100', ['expense_ratio_coverage_source']);
+    }
+    if (retirement.metrics.countryCoverage !== undefined) {
+      addSnapshotFact('country_exposure_coverage_source', 'Country exposure coverage source', retirement.metrics.countryCoverage, 'ratio', 'retirementAnalysis.metrics.countryCoverage', false);
+      addCalculatedFact('country_exposure_coverage', 'Portfolio coverage for country exposure', retirement.metrics.countryCoverage * 100, 'percent', 'input * 100', ['country_exposure_coverage_source']);
+    }
+    if (retirement.metrics.sectorCoverage !== undefined) {
+      addSnapshotFact('sector_exposure_coverage_source', 'Sector exposure coverage source', retirement.metrics.sectorCoverage, 'ratio', 'retirementAnalysis.metrics.sectorCoverage', false);
+      addCalculatedFact('sector_exposure_coverage', 'Portfolio coverage for sector exposure', retirement.metrics.sectorCoverage * 100, 'percent', 'input * 100', ['sector_exposure_coverage_source']);
+    }
+    for (const exposure of (retirement.metrics.countryAllocation ?? []).slice(0, 15)) {
+      addSnapshotFact(
+        `country_exposure_${safeFactId(exposure.name)}`,
+        `${exposure.name} portfolio country exposure`,
+        exposure.percentage,
+        'percent',
+        `retirementAnalysis.metrics.countryAllocation.${safeFactId(exposure.name)}`
+      );
+    }
+    for (const exposure of (retirement.metrics.sectorAllocation ?? []).slice(0, 15)) {
+      addSnapshotFact(
+        `sector_exposure_${safeFactId(exposure.name)}`,
+        `${exposure.name} portfolio sector exposure`,
+        exposure.percentage,
+        'percent',
+        `retirementAnalysis.metrics.sectorAllocation.${safeFactId(exposure.name)}`
+      );
+    }
     addSnapshotFact('years_of_expenses', 'Years of expenses', retirement.metrics.yearsOfExpenses, 'years', 'retirementAnalysis.metrics.yearsOfExpenses');
     addSnapshotFact(
       'projected_portfolio_at_withdrawal_start',

@@ -6,6 +6,7 @@ import {
   MassiveProvider,
   MassiveTreasuryYield,
 } from '../data/providers/massive';
+import { TiingoIexQuote, TiingoNewsArticle, TiingoProvider } from '../data/providers/tiingo';
 
 export interface MarketNewsSource {
   id: string;
@@ -26,6 +27,7 @@ export class MarketNewsAggregator {
   private searchProvider: SearchProvider;
   private fredProvider: FREDProvider;
   private massiveProvider: MassiveProvider | null;
+  private tiingoProvider: TiingoProvider | null;
   
   constructor() {
     this.initializeSources();
@@ -36,6 +38,10 @@ export class MarketNewsAggregator {
     this.fredProvider = new FREDProvider(fredApiKey);
     const massiveApiKey = this.getMassiveApiKey();
     this.massiveProvider = massiveApiKey ? new MassiveProvider(massiveApiKey) : null;
+    const tiingoApiKey = process.env.TIINGO_API_KEY?.trim();
+    this.tiingoProvider = tiingoApiKey && !tiingoApiKey.startsWith('test_')
+      ? new TiingoProvider(tiingoApiKey)
+      : null;
   }
   
   private initializeSources() {
@@ -57,6 +63,12 @@ export class MarketNewsAggregator {
       id: 'brave_search',
       name: 'Brave Search Financial News',
       enabled: true
+    });
+
+    this.sources.set('tiingo', {
+      id: 'tiingo',
+      name: 'Tiingo Market Data and News',
+      enabled: Boolean(process.env.TIINGO_API_KEY?.trim() && !process.env.TIINGO_API_KEY?.startsWith('test_')),
     });
     
   }
@@ -102,9 +114,101 @@ export class MarketNewsAggregator {
         return this.fetchBraveSearchData();
       case 'massive':
         return this.fetchMassiveData(); // Premium tier only
+      case 'tiingo':
+        return this.fetchTiingoData();
       default:
         return [];
     }
+  }
+
+  private async fetchTiingoData(): Promise<MarketNewsData[]> {
+    if (!this.tiingoProvider) return [];
+    const endDate = new Date();
+    const startDate = new Date(endDate.getTime() - 3 * 24 * 60 * 60 * 1000);
+    const marketTickers = ['SPY', 'QQQ', 'DIA', 'IWM'];
+    const [quotesResult, newsResult] = await Promise.allSettled([
+      this.tiingoProvider.getIexQuotes(marketTickers),
+      this.tiingoProvider.getNews({
+        tickers: marketTickers,
+        limit: 12,
+        startDate: this.toDateString(startDate),
+        endDate: this.toDateString(endDate),
+      }),
+    ] as const);
+
+    const data: MarketNewsData[] = [];
+    if (quotesResult.status === 'fulfilled') {
+      data.push(...quotesResult.value.flatMap(quote => {
+        const point = this.normalizeTiingoQuote(quote);
+        return point ? [point] : [];
+      }));
+    } else {
+      console.error('Error fetching Tiingo IEX market quotes:', quotesResult.reason);
+    }
+
+    if (newsResult.status === 'fulfilled') {
+      const seenUrls = new Set<string>();
+      for (const article of newsResult.value) {
+        const point = this.normalizeTiingoNews(article);
+        const url = typeof point?.data.url === 'string' ? point.data.url : '';
+        if (!point || (url && seenUrls.has(url))) continue;
+        if (url) seenUrls.add(url);
+        data.push(point);
+      }
+    } else {
+      console.error('Error fetching Tiingo market news:', newsResult.reason);
+    }
+    return data;
+  }
+
+  private normalizeTiingoQuote(quote: TiingoIexQuote): MarketNewsData | null {
+    const price = [quote.last, quote.tngoLast, quote.mid]
+      .find(value => this.isFiniteNumber(value));
+    if (price === undefined) return null;
+    const previousClose = this.isFiniteNumber(quote.prevClose) ? quote.prevClose : undefined;
+    const change = previousClose === undefined ? undefined : price - previousClose;
+    const changePercent = previousClose && change !== undefined ? (change / previousClose) * 100 : undefined;
+    const timestampText = quote.lastSaleTimestamp || quote.quoteTimestamp || quote.timestamp;
+    const timestamp = timestampText ? new Date(timestampText) : new Date();
+    if (Number.isNaN(timestamp.getTime())) return null;
+    return {
+      source: 'tiingo',
+      timestamp,
+      data: {
+        symbol: quote.ticker.toUpperCase(),
+        priceType: 'IEX last trade',
+        currentPrice: price,
+        ...(previousClose !== undefined && { previousClose }),
+        ...(change !== undefined && { change }),
+        ...(changePercent !== undefined && { changePercent }),
+        ...(this.isFiniteNumber(quote.volume) && { volume: quote.volume }),
+        date: this.toDateString(timestamp),
+        feedStatus: 'TIINGO_IEX',
+      },
+      type: 'market_data',
+      relevance: changePercent === undefined ? 0.7 : this.calculateMarketRelevance(changePercent),
+    };
+  }
+
+  private normalizeTiingoNews(article: TiingoNewsArticle): MarketNewsData | null {
+    if (!article.title || !article.url) return null;
+    const timestampText = article.publishedDate || article.crawlDate;
+    const timestamp = timestampText ? new Date(timestampText) : new Date();
+    if (Number.isNaN(timestamp.getTime())) return null;
+    return {
+      source: 'tiingo',
+      timestamp,
+      data: {
+        title: article.title,
+        description: article.description || '',
+        url: article.url,
+        tickers: article.tickers || [],
+        tags: article.tags || [],
+        ...(article.source && { publisherSource: article.source }),
+      },
+      type: 'news_article',
+      relevance: this.calculateNewsRelevance(article.title, article.description || '', 'market'),
+    };
   }
   
   private async fetchFREDData(): Promise<MarketNewsData[]> {

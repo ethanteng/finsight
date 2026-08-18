@@ -45,6 +45,41 @@ export interface InvestmentSnapshot {
   summaryLines: string[];
   holdings?: Holding[];
   securities?: Security[];
+  externalData?: InvestmentExternalData;
+}
+
+export interface InvestmentExternalData {
+  asOf: string;
+  sources: Array<'fmp' | 'tiingo'>;
+  portfolioExposure?: {
+    countryAllocations: Array<{ name: string; percentage: number }>;
+    sectorAllocations: Array<{ name: string; percentage: number }>;
+    countryCoverage: number;
+    sectorCoverage: number;
+    expenseRatioWeighted: number;
+    expenseRatioCoverage: number;
+  };
+  securities: Array<{
+    ticker: string;
+    name?: string;
+    assetClass?: string;
+    geographicFocus?: string;
+    expenseRatio?: number;
+    instrumentType?: string;
+    countryAllocations?: Array<{ name: string; weight: number }>;
+    sectorAllocations?: Array<{ name: string; weight: number }>;
+    countryCoverage?: string;
+    sectorCoverage?: string;
+    quote?: {
+      price: number;
+      previousClose?: number;
+      changePercent?: number;
+      timestamp?: string;
+      feed: 'tiingo_iex';
+    };
+    trailing12MonthReturn?: number;
+    performanceThrough?: string;
+  }>;
 }
 
 export interface FinancialContextSnapshot {
@@ -108,6 +143,15 @@ export interface FinancialContextSnapshot {
     };
     metrics: {
       equityAllocation: number;
+      fixedIncomeAllocation?: number;
+      cashAllocation?: number;
+      internationalAllocation?: number;
+      expenseRatioWeighted?: number;
+      expenseRatioCoverage?: number;
+      countryAllocation?: Array<{ name: string; percentage: number }>;
+      sectorAllocation?: Array<{ name: string; percentage: number }>;
+      countryCoverage?: number;
+      sectorCoverage?: number;
       withdrawalRate: number;
       yearsOfExpenses: number;
       projectedPortfolioAtWithdrawalStart?: number;

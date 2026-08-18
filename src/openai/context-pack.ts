@@ -24,6 +24,18 @@ function compactRetirementAnalysis(snapshot: FinancialContextSnapshot): unknown 
       confidence: analysis.summary.confidence,
       timelineBucketNote: analysis.summary.timelineBucketNote,
     },
+    portfolioComposition: {
+      equityAllocation: analysis.metrics.equityAllocation,
+      fixedIncomeAllocation: analysis.metrics.fixedIncomeAllocation,
+      cashAllocation: analysis.metrics.cashAllocation,
+      internationalAllocation: analysis.metrics.internationalAllocation,
+      expenseRatioWeighted: analysis.metrics.expenseRatioWeighted,
+      expenseRatioCoverage: analysis.metrics.expenseRatioCoverage,
+      countryAllocation: analysis.metrics.countryAllocation?.slice(0, 12),
+      sectorAllocation: analysis.metrics.sectorAllocation?.slice(0, 12),
+      countryCoverage: analysis.metrics.countryCoverage,
+      sectorCoverage: analysis.metrics.sectorCoverage,
+    },
     historicalImplications: analysis.historicalImplications,
     dataQuality: {
       metadataConfidence: analysis.dataQuality.metadataConfidence,
@@ -52,6 +64,28 @@ export function buildQuestionContextPack(
     details.accounts = matchedAccounts.length > 0 ? matchedAccounts : snapshot.accounts;
   }
   if (needs.needsTransactionDetails) details.recentTransactions = snapshot.bankingTransactions;
+  if (needs.needsInvestments && snapshot.investments) {
+    const externalData = snapshot.investments.externalData;
+    const matchingExternalSecurities = externalData?.securities.filter(security =>
+      new RegExp(`\\b${security.ticker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(question)
+      || Boolean(security.name && question.toLowerCase().includes(security.name.toLowerCase()))
+    ) ?? [];
+    const compactExternalData = externalData ? {
+      ...externalData,
+      securities: matchingExternalSecurities.length > 0
+        ? matchingExternalSecurities
+        : externalData.securities.map(security => {
+            const compact = { ...security };
+            delete compact.countryAllocations;
+            delete compact.sectorAllocations;
+            return compact;
+          }),
+    } : undefined;
+    details.investments = {
+      summary: snapshot.investments.summaryLines,
+      externalData: compactExternalData,
+    };
+  }
   if (needs.needsMonthlyCashFlow) details.monthlyCashFlow = snapshot.transactionSummary?.byMonth;
   if (needs.needsRetirement) {
     details.retirementAnalysis = compactRetirementAnalysis(snapshot);

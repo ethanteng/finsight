@@ -327,7 +327,7 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
     ? sortedTransactions.slice(0, MAX_PROMPT_TRANSACTIONS)
     : [];
 
-  const [tierContext, searchContextResult, marketContext, userOverrides, userProfile] = await Promise.all([
+  const [tierContext, searchContextResult, marketContext, userOverrides, userProfile, investmentExternalData] = await Promise.all([
     dataOrchestrator.buildTierAwareContext(
       tier,
       tierContextAccounts,
@@ -339,8 +339,20 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
     fetchUserOverrides(),
     questionNeeds.needsUserProfile
       ? loadUserProfile(userId)
-      : Promise.resolve(undefined)
+      : Promise.resolve(undefined),
+    questionNeeds.needsInvestments && investmentsSnapshot?.holdings?.length
+      ? import('../investments/market-enrichment').then(({ enrichInvestmentSnapshot }) =>
+          enrichInvestmentSnapshot(investmentsSnapshot!.holdings || [], investmentsSnapshot!.securities || [])
+        ).catch(error => {
+          console.warn('Investment market enrichment failed:', error);
+          return undefined;
+        })
+      : Promise.resolve(undefined),
   ]);
+
+  if (investmentsSnapshot && investmentExternalData) {
+    investmentsSnapshot.externalData = investmentExternalData;
+  }
 
   const monthlyIncomeOverride = userOverrides.monthlyIncomeOverride;
   const monthlyExpenseOverride = userOverrides.monthlyExpenseOverride;

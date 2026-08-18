@@ -1,7 +1,7 @@
 // Financial Modeling Prep Provider
 // Phase 2: Historical Data Plumbing
 
-import { SecurityMetadata } from '../../types';
+import { FundExposure, FundExposureData, SecurityMetadata } from '../../types';
 import { cacheService } from '../../../data/cache';
 import { dbCache } from '../db-cache';
 
@@ -34,7 +34,31 @@ interface FMPETFInfo {
     exposure: number;
   }>;
   country?: string;
+  assetUnderManagement?: number;
+  aum?: number;
+  netAssetValue?: number;
+  nav?: number;
+  holdingsCount?: number;
+  inceptionDate?: string;
+  currency?: string;
 }
+
+interface FMPCountryWeighting {
+  country?: string;
+  weightPercentage?: string | number;
+  weight?: string | number;
+}
+
+interface FMPSectorWeighting {
+  sector?: string;
+  industry?: string;
+  weightPercentage?: string | number;
+  exposure?: string | number;
+  weight?: string | number;
+}
+
+export const FMP_METADATA_VERSION = 2;
+const FMP_REQUEST_TIMEOUT_MS = 10_000;
 
 export class FMPProvider {
   private baseUrl = 'https://financialmodelingprep.com/stable';
@@ -65,7 +89,7 @@ export class FMPProvider {
     const cached = await cacheService.get<SecurityMetadata>(cacheKey);
     if (cached) {
       // If we have a real API key and cached data is inferred, try API anyway
-      if (!isTestKey && cached.provider === 'inferred') {
+      if (!isTestKey && (cached.provider === 'inferred' || cached.metadataVersion !== FMP_METADATA_VERSION)) {
         console.log(`🔄 FMP: Cached data for ${ticker} is inferred, will try API with real key`);
       } else {
         console.log(`📦 FMP: Using in-memory cache for ${ticker}`);
@@ -78,7 +102,7 @@ export class FMPProvider {
       const dbCached = await dbCache.getSecurityMetadata(ticker);
       if (dbCached) {
         // If we have a real API key and cached data is inferred, try API anyway to get better data
-        if (!isTestKey && dbCached.provider === 'inferred') {
+        if (!isTestKey && (dbCached.provider === 'inferred' || dbCached.metadataVersion !== FMP_METADATA_VERSION)) {
           console.log(`🔄 FMP: Database cache for ${ticker} is inferred, will try API with real key`);
         } else {
           console.log(`💾 FMP: Using database cache for ${ticker}`);
@@ -106,14 +130,19 @@ export class FMPProvider {
       console.log(`🌐 FMP: Attempting to fetch metadata for ${ticker} from API`);
       // Try ETF info first (more detailed metadata including expense ratio)
       try {
-        const etfUrl = `${this.baseUrl}/etf/info?symbol=${ticker}&apikey=${this.apiKey}`;
         console.log(`🔗 FMP: Fetching ETF info for ${ticker}`);
-        const etfResponse = await fetch(etfUrl);
-        
-        if (etfResponse.ok) {
-          const etfData = (await etfResponse.json()) as FMPETFInfo[];
-          if (etfData && etfData.length > 0) {
-            const metadata = this.parseETFInfo(etfData[0], ticker);
+        const etfData = await this.fetchList<FMPETFInfo>('/etf/info', ticker);
+        if (etfData.length > 0) {
+            const [countryResult, sectorResult] = await Promise.allSettled([
+              this.fetchList<FMPCountryWeighting>('/etf/country-weightings', ticker),
+              this.fetchList<FMPSectorWeighting>('/etf/sector-weightings', ticker),
+            ]);
+            const metadata = this.parseETFInfo(
+              etfData[0],
+              ticker,
+              countryResult.status === 'fulfilled' ? countryResult.value : [],
+              sectorResult.status === 'fulfilled' ? sectorResult.value : [],
+            );
             console.log(`✅ FMP: Successfully fetched ETF metadata for ${ticker}`);
             // Cache in memory
             await cacheService.set(cacheKey, metadata, 7 * 24 * 60 * 60 * 1000); // 7 days
@@ -124,29 +153,35 @@ export class FMPProvider {
               });
             }
             return metadata;
-          } else {
-            console.log(`⚠️ FMP: ETF info returned empty data for ${ticker}`);
-          }
         } else {
-          const errorText = await etfResponse.text().catch(() => 'Unable to read error response');
-          console.log(`⚠️ FMP: ETF info request failed for ${ticker}: ${etfResponse.status} ${etfResponse.statusText} - ${errorText}`);
+          console.log(`⚠️ FMP: ETF info returned empty data for ${ticker}`);
+          // Some mutual funds have allocation coverage even when /etf/info is
+          // empty. Starter exposes those vectors, so preserve them and merge
+          // them with the regular profile rather than discarding the coverage.
+          if (this.looksLikeMutualFund(ticker)) {
+            const [profileResult, countryResult, sectorResult] = await Promise.allSettled([
+              this.fetchList<FMPProfileResponse>('/profile', ticker),
+              this.fetchList<FMPCountryWeighting>('/etf/country-weightings', ticker),
+              this.fetchList<FMPSectorWeighting>('/etf/sector-weightings', ticker),
+            ]);
+            const countryData = countryResult.status === 'fulfilled' ? countryResult.value : [];
+            const sectorData = sectorResult.status === 'fulfilled' ? sectorResult.value : [];
+            if (countryData.length || sectorData.length) {
+              const profile = profileResult.status === 'fulfilled' ? profileResult.value[0] : undefined;
+              const metadata = this.parseFundAllocationsWithoutInfo(profile, ticker, countryData, sectorData);
+              await cacheService.set(cacheKey, metadata, 7 * 24 * 60 * 60 * 1000);
+              if (persistToDatabase) await dbCache.saveSecurityMetadata(ticker, metadata, 'fmp');
+              return metadata;
+            }
+          }
         }
       } catch (etfError) {
         console.log(`⚠️ FMP: ETF info error for ${ticker}, trying regular profile:`, etfError instanceof Error ? etfError.message : String(etfError));
       }
 
       // Fallback to regular profile
-      const profileUrl = `${this.baseUrl}/profile?symbol=${ticker}&apikey=${this.apiKey}`;
       console.log(`🔗 FMP: Fetching regular profile for ${ticker}`);
-      const response = await fetch(profileUrl);
-
-      if (!response.ok) {
-        const errorText = await response.text().catch(() => 'Unable to read error response');
-        console.error(`❌ FMP API error for ${ticker}: ${response.status} ${response.statusText} - ${errorText}`);
-        throw new Error(`FMP API error: ${response.status} ${response.statusText}`);
-      }
-
-      const data = (await response.json()) as FMPProfileResponse[];
+      const data = await this.fetchList<FMPProfileResponse>('/profile', ticker);
       
       if (!data || data.length === 0) {
         console.warn(`⚠️ FMP: No metadata found in profile response for ${ticker}`);
@@ -184,44 +219,34 @@ export class FMPProvider {
   /**
    * Parse ETF info response (new /stable/etf/info endpoint)
    */
-  private parseETFInfo(data: FMPETFInfo, ticker: string): SecurityMetadata {
+  private parseETFInfo(
+    data: FMPETFInfo,
+    ticker: string,
+    countries: FMPCountryWeighting[],
+    sectors: FMPSectorWeighting[],
+  ): SecurityMetadata {
     // Asset class is directly provided in the new API
     const assetClass = data.assetClass || undefined;
 
-    // Determine geographic focus from domicile, name, or description
-    let geographicFocus: string | undefined;
-    const domicile = data.domicile?.toLowerCase() || '';
-    const name = data.name?.toLowerCase() || '';
-    const description = data.description?.toLowerCase() || '';
-    
-    if (domicile === 'us' || name.includes('us') || name.includes('united states') || description.includes('us index')) {
-      geographicFocus = 'US';
-    } else if (name.includes('international') || name.includes('ex-us') || description.includes('international')) {
-      geographicFocus = 'International';
-    } else if (name.includes('global') || description.includes('global')) {
-      geographicFocus = 'Global';
-    } else if (domicile && domicile !== 'us') {
-      geographicFocus = 'International';
-    }
-
-    // Determine fund category from sectors list if available
-    let fundCategory: string | undefined;
-    if (data.sectorsList && data.sectorsList.length > 0) {
-      // Use the sector with highest exposure
-      const topSector = data.sectorsList.reduce((max, sector) => 
-        sector.exposure > max.exposure ? sector : max
-      );
-      fundCategory = topSector.industry;
-    }
+    const fundData = this.buildFundData(data, ticker, countries, sectors);
+    const geographicFocus = this.deriveGeographicFocus(
+      fundData.countryCoverage === 'available' ? fundData.countryAllocations : [],
+      undefined,
+      data.name,
+      data.description,
+    );
 
     return {
       tickerSymbol: ticker,
       securityName: data.name || ticker,
       assetClass,
-      fundCategory,
-      expenseRatio: data.expenseRatio, // FMP API returns expenseRatio already in decimal form (e.g., 0.0075 = 0.75%)
+      fundCategory: undefined,
+      // FMP reports 0.09 for a 0.09% fee. Internal ratios use decimal form.
+      expenseRatio: this.normalizeExpenseRatio(data.expenseRatio),
       geographicFocus,
-      isETF: true, // This endpoint is specifically for ETFs
+      isETF: !this.looksLikeMutualFund(ticker),
+      fundData,
+      metadataVersion: FMP_METADATA_VERSION,
       provider: 'fmp',
       lastUpdated: new Date()
     };
@@ -241,18 +266,36 @@ export class FMPProvider {
         name.includes('bond') || name.includes('fixed income') || name.includes('treasury') ||
         name.includes('tips') || name.includes('aggregate') || name.includes('corporate bond')) {
       assetClass = 'Fixed Income';
-    } else if (sector.includes('equity') || industry.includes('equity') || data.isEtf) {
+    } else {
       assetClass = 'Equity';
     }
 
-    // Determine geographic focus
+    // Profile country/sector describe a single-name equity, not fund look-through
+    // weights. Treating ETF/mutual-fund domicile as coverage='available' would
+    // override name/ticker international heuristics (e.g. US-domiciled VXUS).
+    const isFund = Boolean(data.isEtf) || this.looksLikeMutualFund(ticker);
+
+    // Determine geographic focus. For funds, prefer name/description signals over
+    // legal domicile (US-domiciled international ETFs are common).
+    const nameForGeo = data.companyName || data.name || ticker;
     let geographicFocus: string | undefined;
-    const country = data.country?.toLowerCase() || '';
-    if (country.includes('united states') || country.includes('usa') || country === 'us') {
-      geographicFocus = 'US';
-    } else if (country && country !== 'united states' && country !== 'us') {
-      geographicFocus = 'International';
+    if (isFund) {
+      geographicFocus = this.deriveGeographicFocus([], data.country, nameForGeo, data.description);
+    } else {
+      const country = data.country?.toLowerCase() || '';
+      if (country.includes('united states') || country.includes('usa') || country === 'us') {
+        geographicFocus = 'US';
+      } else if (country && country !== 'united states' && country !== 'us') {
+        geographicFocus = 'International';
+      }
     }
+
+    const countryAllocations = !isFund && data.country
+      ? [{ name: data.country, weight: 1 }]
+      : [];
+    const sectorAllocations = !isFund && data.sector
+      ? [{ name: data.sector, weight: 1 }]
+      : [];
 
     return {
       tickerSymbol: ticker,
@@ -262,6 +305,19 @@ export class FMPProvider {
       expenseRatio: undefined, // Regular profile doesn't provide expense ratio
       geographicFocus,
       isETF: data.isEtf || false,
+      fundData: {
+        instrumentType: data.isEtf
+          ? 'etf'
+          : this.looksLikeMutualFund(ticker)
+            ? 'mutual_fund'
+            : 'equity',
+        currency: data.currency,
+        countryAllocations,
+        sectorAllocations,
+        countryCoverage: countryAllocations.length ? 'available' : 'unavailable',
+        sectorCoverage: sectorAllocations.length ? 'available' : 'unavailable',
+      },
+      metadataVersion: FMP_METADATA_VERSION,
       provider: 'fmp',
       lastUpdated: new Date()
     };
@@ -299,6 +355,7 @@ export class FMPProvider {
       assetClass,
       geographicFocus,
       isETF: tickerUpper.length <= 5 && /^[A-Z]+$/.test(tickerUpper), // Common ETF ticker pattern
+      metadataVersion: FMP_METADATA_VERSION,
       provider: 'inferred',
       lastUpdated: new Date()
     };
@@ -314,8 +371,180 @@ export class FMPProvider {
       assetClass: ticker.includes('BOND') ? 'Fixed Income' : 'Equity',
       geographicFocus: ticker.includes('VXUS') ? 'International' : 'US',
       isETF: true,
+      metadataVersion: FMP_METADATA_VERSION,
       provider: 'fmp',
       lastUpdated: new Date()
     };
+  }
+
+  private async fetchList<T>(path: string, ticker: string): Promise<T[]> {
+    const url = new URL(`${this.baseUrl}${path}`);
+    url.searchParams.set('symbol', ticker.trim().toUpperCase());
+    url.searchParams.set('apikey', this.apiKey);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), FMP_REQUEST_TIMEOUT_MS);
+    try {
+      const response = await fetch(url, { signal: controller.signal });
+      if (!response.ok) {
+        throw new Error(`FMP API error for ${path}: HTTP ${response.status}`);
+      }
+      const body = await response.json();
+      if (!Array.isArray(body)) throw new Error(`FMP API returned an unexpected response for ${path}`);
+      return body as T[];
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  private parseFundAllocationsWithoutInfo(
+    profile: FMPProfileResponse | undefined,
+    ticker: string,
+    countries: FMPCountryWeighting[],
+    sectors: FMPSectorWeighting[],
+  ): SecurityMetadata {
+    const fundData = this.buildFundData({}, ticker, countries, sectors);
+    const name = profile?.companyName || profile?.name || ticker;
+    const nameLower = name.toLowerCase();
+    const assetClass = nameLower.includes('bond') || nameLower.includes('fixed income')
+      ? 'Fixed Income'
+      : nameLower.includes('money market') || nameLower.includes('cash')
+        ? 'Cash'
+        : 'Equity';
+    return {
+      tickerSymbol: ticker,
+      securityName: name,
+      assetClass,
+      fundCategory: profile?.industry || profile?.sector,
+      geographicFocus: this.deriveGeographicFocus(
+        fundData.countryCoverage === 'available' ? fundData.countryAllocations : [],
+        profile?.country,
+        name,
+      ),
+      isETF: false,
+      fundData,
+      metadataVersion: FMP_METADATA_VERSION,
+      provider: 'fmp',
+      lastUpdated: new Date(),
+    };
+  }
+
+  private buildFundData(
+    info: Partial<FMPETFInfo>,
+    ticker: string,
+    countries: FMPCountryWeighting[],
+    sectors: FMPSectorWeighting[],
+  ): FundExposureData {
+    const countryAllocations = this.normalizeCountryExposures(countries);
+    const sectorAllocations = this.normalizeSectorExposures(sectors);
+    return {
+      instrumentType: this.looksLikeMutualFund(ticker) ? 'mutual_fund' : 'etf',
+      assetUnderManagement: info.assetUnderManagement ?? info.aum,
+      nav: info.netAssetValue ?? info.nav,
+      currency: info.currency,
+      holdingsCount: info.holdingsCount,
+      inceptionDate: info.inceptionDate,
+      countryAllocations,
+      sectorAllocations,
+      countryCoverage: this.exposureCoverage(countryAllocations, ['other']),
+      // FMP's sector vector for multi-asset/target-date funds describes an
+      // equity sleeve but Starter does not expose that sleeve's size. Preserve
+      // the vector, but do not present it as whole-fund sector exposure.
+      sectorCoverage: info.assetClass?.toLowerCase().includes('multi-asset')
+        ? 'degenerate'
+        : this.exposureCoverage(sectorAllocations, ['cash & others', 'other']),
+    };
+  }
+
+  private normalizeCountryExposures(rows: FMPCountryWeighting[]): FundExposure[] {
+    const combined = new Map<string, number>();
+    for (const row of rows) {
+      const name = row.country?.trim();
+      const weight = row.weightPercentage !== undefined && row.weightPercentage !== null
+        ? this.normalizeAllocationWeight(row.weightPercentage, true)
+        : this.normalizeAllocationWeight(row.weight, false);
+      if (!name || weight === undefined || weight < 0) continue;
+      combined.set(name, (combined.get(name) ?? 0) + weight);
+    }
+    return [...combined.entries()]
+      .map(([name, weight]) => ({ name, weight }))
+      .sort((left, right) => right.weight - left.weight);
+  }
+
+  private normalizeSectorExposures(rows: FMPSectorWeighting[]): FundExposure[] {
+    const combined = new Map<string, number>();
+    for (const row of rows) {
+      const name = (row.sector ?? row.industry)?.trim();
+      // Prefer explicit percentage fields; fall back to fractional exposure/weight.
+      const weight = row.weightPercentage !== undefined && row.weightPercentage !== null
+        ? this.normalizeAllocationWeight(row.weightPercentage, true)
+        : this.normalizeAllocationWeight(row.exposure ?? row.weight, false);
+      if (!name || weight === undefined || weight < 0) continue;
+      combined.set(name, (combined.get(name) ?? 0) + weight);
+    }
+    return [...combined.entries()]
+      .map(([name, weight]) => ({ name, weight }))
+      .sort((left, right) => right.weight - left.weight);
+  }
+
+  /**
+   * @param treatAsPercentage When true (FMP `weightPercentage` fields), values
+   *   like `0.5` mean 0.5% even without a `%` suffix. Fractional `weight` /
+   *   `exposure` fields stay as 0-1 unless they include `%` or exceed 1.
+   */
+  private normalizeAllocationWeight(
+    value: string | number | undefined,
+    treatAsPercentage = false,
+  ): number | undefined {
+    if (value === undefined || value === null) return undefined;
+    const text = String(value).trim();
+    const numeric = Number.parseFloat(text.replace('%', ''));
+    if (!Number.isFinite(numeric)) return undefined;
+    return text.includes('%') || treatAsPercentage || numeric > 1
+      ? numeric / 100
+      : numeric;
+  }
+
+  private normalizeExpenseRatio(value: number | undefined): number | undefined {
+    return typeof value === 'number' && Number.isFinite(value) ? value / 100 : undefined;
+  }
+
+  private exposureCoverage(
+    exposures: FundExposure[],
+    degenerateLabels: string[],
+  ): FundExposureData['countryCoverage'] {
+    if (!exposures.length) return 'unavailable';
+    if (
+      exposures.length === 1
+      && degenerateLabels.includes(exposures[0].name.trim().toLowerCase())
+      && exposures[0].weight >= 0.95
+    ) return 'degenerate';
+    return 'available';
+  }
+
+  private deriveGeographicFocus(
+    countries: FundExposure[],
+    fallbackCountry?: string,
+    name?: string,
+    description?: string,
+  ): string | undefined {
+    if (countries.length) {
+      const usWeight = countries
+        .filter(item => ['united states', 'us', 'usa'].includes(item.name.trim().toLowerCase()))
+        .reduce((sum, item) => sum + item.weight, 0);
+      if (usWeight >= 0.85) return 'US';
+      if (usWeight <= 0.35) return 'International';
+      return 'Global';
+    }
+
+    const fallback = fallbackCountry?.toLowerCase() || '';
+    const combined = `${name || ''} ${description || ''}`.toLowerCase();
+    if (combined.includes('international') || combined.includes('ex-us')) return 'International';
+    if (combined.includes('global') || combined.includes('world')) return 'Global';
+    if (fallback.includes('united states') || fallback === 'us' || fallback === 'usa') return 'US';
+    return fallback ? 'International' : undefined;
+  }
+
+  private looksLikeMutualFund(ticker: string): boolean {
+    return /^[A-Z]{4,5}X$/.test(ticker.trim().toUpperCase());
   }
 }

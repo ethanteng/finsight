@@ -280,7 +280,8 @@ function createEnhancedMockDatabase() {
       _mockStorage: new Map(),
 
       findMany: async () => [],
-      findUnique: async function(where?: any) {
+      findUnique: async function(args?: any) {
+        const where = args?.where ?? args;
         // Mock findUnique for market news context
         if (where?.id) {
           // Check if we have stored data for this ID
@@ -312,7 +313,8 @@ function createEnhancedMockDatabase() {
         return created;
       },
       update: async (data: any) => ({ id: 'mock-market-news-1', ...data.data }),
-      delete: async function(where?: any) {
+      delete: async function(args?: any) {
+        const where = args?.where ?? args;
         // Mock delete for market news context
         if (where?.id) {
           const stored = this._mockStorage.get(where.id);
@@ -331,7 +333,11 @@ function createEnhancedMockDatabase() {
         }
         return null;
       },
-      deleteMany: async () => ({ count: 0 })
+      deleteMany: async function() {
+        const count = this._mockStorage.size;
+        this._mockStorage.clear();
+        return { count };
+      }
     },
 
     marketNewsHistory: {

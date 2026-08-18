@@ -2,7 +2,7 @@
 // Phase 1: Portfolio Metrics & Mapping
 
 import { Holding, Security } from '../../services/financial-data-service';
-import { PortfolioMapping } from '../types';
+import { PortfolioMapping, SecurityMetadata } from '../types';
 import { DataProviderFactory } from '../data/data-provider-factory';
 import {
   hasBondNameSignal,
@@ -76,7 +76,7 @@ export async function mapPortfolioToAssetBasket(
     let mapped = false;
 
     const ticker = security?.ticker_symbol?.toUpperCase() || holding.ticker_symbol?.toUpperCase() || '';
-    const fmpMetadata = ticker ? tickerToMetadata.get(ticker) : null;
+    const fmpMetadata = (ticker ? tickerToMetadata.get(ticker) : null) as SecurityMetadata | null;
 
     if (security || fmpMetadata) {
       // Prefer FMP metadata if available, fallback to security metadata
@@ -89,8 +89,14 @@ export async function mapPortfolioToAssetBasket(
       if (assetType.includes('equity') || assetType.includes('stock') ||
           (!assetType && (securityName.includes('equity') || securityName.includes('stock')))) {
         
+        const countrySplit = getCountrySplit(fmpMetadata);
+        if (countrySplit) {
+          mapping.usEquityWeight += weight * countrySplit.us;
+          mapping.internationalEquityWeight += weight * countrySplit.international;
+          mappedValue += holdingValue;
+          mapped = true;
         // Use FMP geographic focus if available, otherwise use heuristics
-        if (isGlobalEquity(geographicFocus, securityName)) {
+        } else if (isGlobalEquity(geographicFocus, securityName)) {
           // A global fund contains both US and non-US exposure. Use the same
           // explicit broad-market split used for otherwise unclassified equity.
           mapping.usEquityWeight += weight * 0.7;
@@ -184,6 +190,17 @@ export async function mapPortfolioToAssetBasket(
   }
 
   return mapping;
+}
+
+function getCountrySplit(metadata: SecurityMetadata | null): { us: number; international: number } | null {
+  if (metadata?.fundData?.countryCoverage !== 'available') return null;
+  const allocations = metadata.fundData.countryAllocations;
+  const total = allocations.reduce((sum, allocation) => sum + allocation.weight, 0);
+  if (total <= 0) return null;
+  const us = allocations
+    .filter(allocation => ['united states', 'us', 'usa'].includes(allocation.name.trim().toLowerCase()))
+    .reduce((sum, allocation) => sum + allocation.weight, 0) / total;
+  return { us, international: Math.max(0, Math.min(1, 1 - us)) };
 }
 
 /**

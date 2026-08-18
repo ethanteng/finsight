@@ -55,6 +55,22 @@ export interface PortfolioCompositionMetrics {
   internationalAllocation: number; // percentage (non-US holdings)
   concentrationRisk: number; // Herfindahl-Hirschman Index (HHI) across top 10 holdings
   expenseRatioWeighted: number; // weighted average expense ratio
+  /** Portfolio weight with a known fund fee or a direct-security zero fee (0-1). */
+  expenseRatioCoverage: number;
+  /** Look-through country exposure for the portion of the portfolio covered by FMP. */
+  countryAllocation: PortfolioExposure[];
+  /** Look-through sector exposure for the portion of the portfolio covered by FMP. */
+  sectorAllocation: PortfolioExposure[];
+  /** Portfolio weight for which FMP supplied usable country allocations (0-1). */
+  countryCoverage: number;
+  /** Portfolio weight for which FMP supplied usable sector allocations (0-1). */
+  sectorCoverage: number;
+}
+
+export interface PortfolioExposure {
+  name: string;
+  /** Percentage of the whole portfolio, not merely of covered holdings. */
+  percentage: number;
 }
 
 export interface TimelineMetrics {
@@ -235,6 +251,15 @@ export interface RetirementAnalysisOutput {
   
   metrics: {
     equityAllocation: number;
+    fixedIncomeAllocation?: number;
+    cashAllocation?: number;
+    internationalAllocation?: number;
+    expenseRatioWeighted?: number;
+    expenseRatioCoverage?: number;
+    countryAllocation?: PortfolioExposure[];
+    sectorAllocation?: PortfolioExposure[];
+    countryCoverage?: number;
+    sectorCoverage?: number;
     withdrawalRate: number; // annual withdrawal / median real portfolio at withdrawal start
     yearsOfExpenses: number; // median real portfolio at withdrawal start / annual withdrawal
     projectedPortfolioAtWithdrawalStart: number;
@@ -302,8 +327,29 @@ export interface SecurityMetadata {
   expenseRatio?: number;
   geographicFocus?: string; // 'US', 'International', 'Global'
   isETF: boolean;
+  fundData?: FundExposureData;
+  metadataVersion?: number;
   provider: 'fmp' | 'inferred';
   lastUpdated: Date;
+}
+
+export interface FundExposure {
+  name: string;
+  /** Normalized fraction from 0 to 1. */
+  weight: number;
+}
+
+export interface FundExposureData {
+  instrumentType: 'etf' | 'mutual_fund' | 'equity' | 'unknown';
+  assetUnderManagement?: number;
+  nav?: number;
+  currency?: string;
+  holdingsCount?: number;
+  inceptionDate?: string;
+  countryAllocations: FundExposure[];
+  sectorAllocations: FundExposure[];
+  countryCoverage: 'available' | 'unavailable' | 'degenerate';
+  sectorCoverage: 'available' | 'unavailable' | 'degenerate';
 }
 
 export interface PriceHistory {

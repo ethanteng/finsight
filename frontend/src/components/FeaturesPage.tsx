@@ -356,7 +356,7 @@ const FeaturesPage = () => {
                         <div>
                           <h3 className="font-semibold text-foreground mb-1">Tiingo</h3>
                           <p className="text-[1rem] text-muted-foreground leading-relaxed">
-                            Historical price data with dividend and split adjustments. Powers <span className="text-primary/90">retirement stress testing</span> and portfolio Monte Carlo simulations with accurate long-horizon returns.
+                            Adjusted price history, batched IEX quotes, and ticker-linked market news. Powers <span className="text-primary/90">retirement stress testing</span>, holding-level performance, and Standard+ market context.
                           </p>
                         </div>
                       </div>
@@ -367,7 +367,7 @@ const FeaturesPage = () => {
                         <div>
                           <h3 className="font-semibold text-foreground mb-1">Financial Modeling Prep (FMP)</h3>
                           <p className="text-[1rem] text-muted-foreground leading-relaxed">
-                            ETF and fund metadata: expense ratios, asset class, geographic focus. Enables accurate <span className="text-primary/90">portfolio mapping</span> and asset allocation analysis for retirement projections.
+                            ETF and fund metadata: expense ratios, asset class, country allocations, and sector weightings. Enables accurate <span className="text-primary/90">portfolio mapping</span>, fee drag, and look-through exposure analysis.
                           </p>
                         </div>
                       </div>

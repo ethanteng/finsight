@@ -54,6 +54,51 @@ describe('buildCanonicalFactPack', () => {
     expect(ids.some((id) => id.startsWith('holding_value_'))).toBe(false);
   });
 
+  it('grounds FMP exposures and Tiingo quote/performance observations as external facts', () => {
+    const data = snapshot();
+    data.investments = {
+      totalValue: 100,
+      holdingCount: 1,
+      summaryLines: [],
+      holdings: [],
+      securities: [],
+      externalData: {
+        asOf: '2026-08-18T15:00:00Z',
+        sources: ['fmp', 'tiingo'],
+        portfolioExposure: {
+          countryAllocations: [{ name: 'United States', percentage: 98 }],
+          sectorAllocations: [{ name: 'Technology', percentage: 35 }],
+          countryCoverage: 1,
+          sectorCoverage: 0.9,
+          expenseRatioWeighted: 0.0009,
+          expenseRatioCoverage: 1,
+        },
+        securities: [{
+          ticker: 'SPY',
+          name: 'SPDR S&P 500 ETF',
+          expenseRatio: 0.0009,
+          trailing12MonthReturn: 0.12,
+          performanceThrough: '2026-07-31T00:00:00Z',
+          countryAllocations: [{ name: 'United States', weight: 0.98 }],
+          sectorAllocations: [{ name: 'Technology', weight: 0.35 }],
+          quote: { price: 700, changePercent: 1.2, timestamp: '2026-08-18T15:00:00Z', feed: 'tiingo_iex' },
+        }],
+      },
+    };
+    const pack = buildCanonicalFactPack(data, 'What are SPY fees and sectors?', needs('investment_details'));
+
+    expect(pack.facts.find(fact => fact.id === 'external_quote_spy')).toMatchObject({
+      value: 700,
+      unit: 'usd',
+      provenance: { kind: 'external_context' },
+    });
+    expect(pack.facts.find(fact => fact.id === 'external_return_spy')).toMatchObject({ value: 12, unit: 'percent' });
+    expect(pack.facts.find(fact => fact.id === 'external_expense_spy')).toMatchObject({ value: 0.09, unit: 'percent' });
+    expect(pack.facts.find(fact => fact.id === 'external_spy_sector_technology')).toMatchObject({ value: 35, unit: 'percent' });
+    expect(pack.facts.find(fact => fact.id === 'external_sector_technology')).toMatchObject({ value: 35, unit: 'percent' });
+    expect(validateCanonicalFactPack(pack)).toEqual([]);
+  });
+
   it('supplies the overview totals for a portfolio review that never names them', () => {
     // The reported failure: this question matched no balance-sheet keyword, so
     // net worth, cash, and debt were withheld while every account row was in

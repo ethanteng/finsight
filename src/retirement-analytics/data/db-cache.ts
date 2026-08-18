@@ -44,7 +44,7 @@ export class DatabaseCache {
       // The extra month before is only used for calculating the first return
       const requestedRecords = records.filter(r => r.date >= startDate && r.date <= endDate);
       
-      if (requestedRecords.length > 0) {
+      if (requestedRecords.length > 0 && this.coversLatestCompleteMonth(requestedRecords, endDate)) {
         // Pass all records (including reference month) to conversion function
         // It will use the reference month to calculate first return, then slice to match Tiingo format
         return this.convertRecordsToTimeSeries(records, ticker, startDate, endDate, provider);
@@ -72,10 +72,9 @@ export class DatabaseCache {
 
       if (broaderRecords.length > 0) {
         const earliestDate = broaderRecords[0].date;
-        const latestDate = broaderRecords[broaderRecords.length - 1].date;
         
         // If we have data that covers the requested range (with reference month), use it
-        if (earliestDate <= queryStartDate && latestDate >= endDate) {
+        if (earliestDate <= queryStartDate && this.coversLatestCompleteMonth(broaderRecords, endDate)) {
           const filteredRecords = broaderRecords.filter(r => r.date >= queryStartDate && r.date <= endDate);
           if (filteredRecords.length > 0) {
             return this.convertRecordsToTimeSeries(filteredRecords, ticker, startDate, endDate, provider);
@@ -88,6 +87,28 @@ export class DatabaseCache {
       console.error(`Error fetching price history from database for ${ticker}:`, error);
       return null;
     }
+  }
+
+  /** Historical monthly data is current through the last completed month. */
+  private coversLatestCompleteMonth(records: Array<{ date: Date }>, endDate: Date): boolean {
+    if (!records.length) return false;
+    const requestedMonth = new Date(Date.UTC(
+      endDate.getUTCFullYear(),
+      endDate.getUTCMonth(),
+      endDate.getUTCDate(),
+    ));
+    const followingDay = new Date(requestedMonth);
+    followingDay.setUTCDate(followingDay.getUTCDate() + 1);
+    const endsAtMonthEnd = followingDay.getUTCMonth() !== requestedMonth.getUTCMonth();
+    const now = new Date();
+    const isCurrentMonth = requestedMonth.getUTCFullYear() === now.getUTCFullYear()
+      && requestedMonth.getUTCMonth() === now.getUTCMonth();
+    if (!endsAtMonthEnd || isCurrentMonth) requestedMonth.setUTCMonth(requestedMonth.getUTCMonth() - 1);
+
+    const latest = records[records.length - 1].date;
+    const latestKey = latest.getUTCFullYear() * 12 + latest.getUTCMonth();
+    const requestedKey = requestedMonth.getUTCFullYear() * 12 + requestedMonth.getUTCMonth();
+    return latestKey >= requestedKey;
   }
 
   /**
@@ -125,7 +146,22 @@ export class DatabaseCache {
       throw new Error('No records in requested date range');
     }
 
-    // Check if we have a reference month (one month before startDate) for calculating first return
+    // New cache rows persist the provider-calculated adjusted period return,
+    // so they do not require a separate reference row.
+    const hasStoredReturns = requestedRecords.every(record =>
+      typeof record.periodReturn === 'number' && Number.isFinite(record.periodReturn)
+    );
+    if (hasStoredReturns) {
+      return {
+        ticker,
+        dates: requestedRecords.map(record => record.date),
+        prices: requestedRecords.map(record => record.adjustedClose || record.close),
+        returns: requestedRecords.map(record => record.periodReturn),
+        provider: provider as 'polygon' | 'tiingo',
+      };
+    }
+
+    // Legacy rows need a reference month (one month before startDate) for calculating first return
     // This must be checked BEFORE minimum record validation, as a reference record allows
     // valid output with just 1 requested record (dates=[1], prices=[1], returns=[1] from reference)
     const referenceRecord = records.find(r => {
@@ -274,6 +310,7 @@ export class DatabaseCache {
                 low: price,
                 close: price,
                 adjustedClose: price,
+                periodReturn: priceData.returns[globalIdx],
                 volume: BigInt(0),
                 cachedAt: new Date()
               },
@@ -285,6 +322,7 @@ export class DatabaseCache {
                 low: price,
                 close: price,
                 adjustedClose: price,
+                periodReturn: priceData.returns[globalIdx],
                 volume: BigInt(0),
                 provider: provider,
                 cachedAt: new Date()
@@ -325,9 +363,13 @@ export class DatabaseCache {
         securityName: record.securityName,
         assetClass: record.assetClass || undefined,
         fundCategory: record.fundCategory || undefined,
-        expenseRatio: record.expenseRatio || undefined,
+        expenseRatio: record.expenseRatio ?? undefined,
         geographicFocus: record.geographicFocus || undefined,
         isETF: record.isETF,
+        fundData: record.fundData
+          ? record.fundData as unknown as SecurityMetadata['fundData']
+          : undefined,
+        metadataVersion: record.metadataVersion,
         provider: record.provider as 'fmp' | 'inferred',
         lastUpdated: record.lastUpdated
       };
@@ -354,9 +396,11 @@ export class DatabaseCache {
           securityName: metadata.securityName,
           assetClass: metadata.assetClass || null,
           fundCategory: metadata.fundCategory || null,
-          expenseRatio: metadata.expenseRatio || null,
+          expenseRatio: metadata.expenseRatio ?? null,
           geographicFocus: metadata.geographicFocus || null,
           isETF: metadata.isETF,
+          fundData: metadata.fundData as any,
+          metadataVersion: metadata.metadataVersion ?? 1,
           provider: provider,
           lastUpdated: new Date()
         },
@@ -365,9 +409,11 @@ export class DatabaseCache {
           securityName: metadata.securityName,
           assetClass: metadata.assetClass || null,
           fundCategory: metadata.fundCategory || null,
-          expenseRatio: metadata.expenseRatio || null,
+          expenseRatio: metadata.expenseRatio ?? null,
           geographicFocus: metadata.geographicFocus || null,
           isETF: metadata.isETF,
+          fundData: metadata.fundData as any,
+          metadataVersion: metadata.metadataVersion ?? 1,
           provider: provider,
           lastUpdated: new Date()
         }
@@ -395,9 +441,13 @@ export class DatabaseCache {
           securityName: record.securityName,
           assetClass: record.assetClass || undefined,
           fundCategory: record.fundCategory || undefined,
-          expenseRatio: record.expenseRatio || undefined,
+          expenseRatio: record.expenseRatio ?? undefined,
           geographicFocus: record.geographicFocus || undefined,
           isETF: record.isETF,
+          fundData: record.fundData
+            ? record.fundData as unknown as SecurityMetadata['fundData']
+            : undefined,
+          metadataVersion: record.metadataVersion,
           provider: record.provider as 'fmp' | 'inferred',
           lastUpdated: record.lastUpdated
         });
@@ -425,9 +475,11 @@ export class DatabaseCache {
               securityName: metadata.securityName,
               assetClass: metadata.assetClass || null,
               fundCategory: metadata.fundCategory || null,
-              expenseRatio: metadata.expenseRatio || null,
+              expenseRatio: metadata.expenseRatio ?? null,
               geographicFocus: metadata.geographicFocus || null,
               isETF: metadata.isETF,
+              fundData: metadata.fundData as any,
+              metadataVersion: metadata.metadataVersion ?? 1,
               provider,
               lastUpdated: now
             },
@@ -436,9 +488,11 @@ export class DatabaseCache {
               securityName: metadata.securityName,
               assetClass: metadata.assetClass || null,
               fundCategory: metadata.fundCategory || null,
-              expenseRatio: metadata.expenseRatio || null,
+              expenseRatio: metadata.expenseRatio ?? null,
               geographicFocus: metadata.geographicFocus || null,
               isETF: metadata.isETF,
+              fundData: metadata.fundData as any,
+              metadataVersion: metadata.metadataVersion ?? 1,
               provider,
               lastUpdated: now
             }
