@@ -231,6 +231,15 @@ export async function runHomeValueRefresh(): Promise<void> {
     if (results.errors.length > 0) {
       console.log('Errors encountered:', results.errors);
     }
+
+    // Same rule the scheduled cron applies: an address RentCast cannot value is
+    // reported, an integration we could not reach fails the run. Without this a
+    // standalone invocation exits 0 through a total outage.
+    if (results.providerFailures > 0) {
+      throw new Error(
+        `Home value refresh could not reach RentCast for ${results.providerFailures}/${results.total} eligible user(s)`
+      );
+    }
   } catch (error) {
     console.error('Home value refresh failed:', error);
     throw error;
