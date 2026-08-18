@@ -1845,9 +1845,14 @@ export class FinancialDataService {
               const transactionId = rawActivityId.startsWith('snaptrade-')
                 ? rawActivityId
                 : `snaptrade-${rawActivityId}`;
-              // Key used before the id was scoped. Carried so persistence can migrate
-              // an existing row instead of writing a duplicate alongside it.
-              const legacyActivityId = providerActivityId ? undefined : `snaptrade-${date}-${securityId}`;
+              // Key used before the id was scoped, reproduced exactly as it was
+              // persisted: no `snaptrade-` prefix (that only ever went on `id`),
+              // and including the type and quantity. Carried so persistence can
+              // migrate an existing row instead of writing a duplicate alongside
+              // it — a key that does not match byte for byte migrates nothing.
+              const legacyActivityId = providerActivityId
+                ? undefined
+                : `${date}-${securityId}-${transactionType}-${quantity}`;
               transactions.push({
                 id: transactionId,
                 transaction_id: transactionId,
