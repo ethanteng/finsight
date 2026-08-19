@@ -110,9 +110,8 @@ export function buildFinancialReasoningPrompt(input: FinancialReasoningPromptInp
       userProfile
     );
   }
-  // Both blocks below are written by third parties — a news feed and whatever
-  // ranked in a web search. They are the two places where someone other than
-  // this user gets text in front of the model, so they travel fenced.
+  // Market/RAG blocks are written by third parties. Prior assistant answers
+  // (fenced further below) can carry that text forward across turns.
   if (marketSummary) {
     contextParts.push(
       '',
