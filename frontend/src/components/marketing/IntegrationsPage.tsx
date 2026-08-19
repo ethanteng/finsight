@@ -78,6 +78,116 @@ const outsideContext = [
   },
 ] as const;
 
+const integrationInventory = [
+  {
+    name: "Plaid",
+    category: "Accounts + cash flow",
+    data: [
+      "Connected account names and types",
+      "Balances, available cash, credit limits, and currency",
+      "Transactions, merchants, categories, dates, and pending status",
+      "Investment holdings and market values when supported",
+    ],
+    question: "How much is in checking versus savings, and why were our expenses higher last month?",
+  },
+  {
+    name: "SnapTrade",
+    category: "Brokerage connections",
+    data: [
+      "Brokerage and retirement account balances",
+      "Positions, quantities, prices, and market values",
+      "Cash held inside investment accounts",
+      "Security names, types, and ticker symbols",
+    ],
+    question: "What percentage of my portfolio is in NVDA, and how much cash is sitting uninvested?",
+  },
+  {
+    name: "Financial Modeling Prep",
+    category: "Fund details",
+    data: [
+      "Fund name, type, asset class, and geographic focus",
+      "Expense ratios",
+      "Country allocation weights",
+      "Sector allocation weights",
+    ],
+    question: "How exposed is my portfolio to technology or Japan, and what am I paying in fund fees?",
+  },
+  {
+    name: "Tiingo",
+    category: "Prices + market news",
+    data: [
+      "Current quotes and previous closes for connected holdings",
+      "Adjusted price history and recent returns",
+      "Broad-market quotes",
+      "Ticker-linked financial news",
+    ],
+    question: "How have my largest holdings performed recently, and what news could affect them?",
+  },
+  {
+    name: "FRED",
+    category: "Rates + the economy",
+    data: [
+      "Inflation, unemployment, and the federal funds rate",
+      "Mortgage and credit-card rate benchmarks",
+      "10-year Treasury yields",
+      "National 12-month CD rates",
+    ],
+    question: "Is my mortgage rate competitive, and how should today’s rate environment affect my cash plan?",
+  },
+  {
+    name: "Kenneth French Data Library",
+    category: "Long-run market history",
+    data: [
+      "Broad U.S. stock-market returns",
+      "Developed international stock-market returns",
+      "One-month U.S. Treasury-bill returns",
+      "Monthly histories used in retirement stress tests",
+    ],
+    question: "How would my retirement plan have held up across many past stock-market environments?",
+  },
+  {
+    name: "Robert Shiller",
+    category: "Bonds + inflation history",
+    data: [
+      "Historical 10-year U.S. government-bond returns",
+      "Monthly consumer-price inflation",
+      "Long-run bond and inflation history aligned with market returns",
+    ],
+    question: "What happens to my retirement plan when inflation is high and markets are under pressure?",
+  },
+  {
+    name: "Massive",
+    category: "Yield curve + expectations",
+    data: [
+      "U.S. Treasury yields across short- and long-term maturities",
+      "Market and model-based inflation expectations",
+      "Broad-market closing data when another quote is unavailable",
+    ],
+    question: "What does the shape of the yield curve imply, and what inflation is the market expecting?",
+  },
+  {
+    name: "Brave Search",
+    category: "Current public evidence",
+    data: [
+      "Question-specific public search results",
+      "Current financial rules, limits, rates, and news",
+      "Source links, publication dates, and relevant excerpts",
+    ],
+    question: "What is the current IRA contribution limit, and have any rules changed since last year?",
+  },
+  {
+    name: "RentCast",
+    category: "Home valuation",
+    data: [
+      "Estimated property value",
+      "An 85% low-to-high estimate range",
+      "A standardized address and validated property match",
+      "Comparable-home information used to produce the estimate",
+    ],
+    question: "What is my home worth, how uncertain is that estimate, and what does it mean for my net worth?",
+  },
+] as const;
+
 const decisionExamples = [
   {
     label: "HOME",
@@ -204,6 +314,45 @@ export default function IntegrationsPage() {
             <span className="brand-mark" aria-hidden="true">L</span>
             <p><small>CONTEXT WITH A PURPOSE</small><strong>Linc does not pile every available data point into every answer. It selects the facts that can materially change the recommendation.</strong></p>
           </div>
+        </div>
+      </section>
+
+      <section className="integration-inventory-section">
+        <div className="shell">
+          <div className="integration-section-heading">
+            <div>
+              <p className="section-kicker">THE COMPLETE SOURCE LIST</p>
+              <h2>Every integration, and the question it can help answer.</h2>
+            </div>
+            <p>These are the active sources that can contribute to your financial picture or add relevant outside context. Linc uses only the sources and details that matter for the question you ask.</p>
+          </div>
+
+          <div className="integration-table-wrap">
+            <table className="integration-table">
+              <caption className="sr-only">Ask Linc integrations, the financial data used from each source, and example questions</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Integration</th>
+                  <th scope="col">What Ask Linc uses</th>
+                  <th scope="col">Example question</th>
+                </tr>
+              </thead>
+              <tbody>
+                {integrationInventory.map((integration) => (
+                  <tr key={integration.name}>
+                    <td data-label="Integration">
+                      <span className="integration-table-source"><strong>{integration.name}</strong><small>{integration.category}</small></span>
+                    </td>
+                    <td data-label="What Ask Linc uses">
+                      <ul>{integration.data.map((item) => <li key={item}>{item}</li>)}</ul>
+                    </td>
+                    <td data-label="Example question"><blockquote>“{integration.question}”</blockquote></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="integration-table-note">Availability depends on what you connect, the information each institution supports, and what the question requires. Source dates and meaningful uncertainty stay attached to the answer.</p>
         </div>
       </section>
 

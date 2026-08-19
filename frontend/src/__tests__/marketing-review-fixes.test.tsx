@@ -132,6 +132,24 @@ describe("marketing review fixes", () => {
     expect(screen.getByText(/dated home-value estimate and 85% range/i)).toBeInTheDocument();
     expect(screen.getByText(/fund fees plus sector and country exposure/i)).toBeInTheDocument();
     expect(screen.getByText(/does not pile every available data point into every answer/i)).toBeInTheDocument();
+    const integrationsTable = screen.getByRole("table", {
+      name: /ask linc integrations, the financial data used from each source, and example questions/i,
+    });
+    expect(within(integrationsTable).getAllByRole("row")).toHaveLength(11);
+    [
+      "Plaid",
+      "SnapTrade",
+      "Financial Modeling Prep",
+      "Tiingo",
+      "FRED",
+      "Kenneth French Data Library",
+      "Robert Shiller",
+      "Massive",
+      "Brave Search",
+      "RentCast",
+    ].forEach((integration) => expect(within(integrationsTable).getByText(integration)).toBeInTheDocument());
+    expect(within(integrationsTable).getByText(/what is the current ira contribution limit/i)).toBeInTheDocument();
+    expect(within(integrationsTable).getByText(/what is my home worth, how uncertain is that estimate/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /see how your data is protected/i })).toHaveAttribute("href", "/how-we-protect-your-data");
   });
 
