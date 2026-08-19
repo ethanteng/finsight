@@ -8,6 +8,11 @@ import { getActiveResponseTone } from './prompt-config';
 import { FinancialContextSnapshot, QuestionNeeds } from './types';
 import { buildCanonicalFactPack, type CanonicalFactPack } from './canonical-facts';
 import { buildQuestionContextPack, formatQuestionContextPack } from './context-pack';
+import {
+  LINC_IDENTITY_LINE,
+  buildSecurityRulesSection,
+  fenceUntrustedContent,
+} from '../security/prompt-hardening';
 
 export interface FinancialReasoningPromptInput {
   question: string;
@@ -24,7 +29,9 @@ export interface FinancialReasoningPromptInput {
 }
 
 function buildReasoningSystemPrompt(): string {
-  return `You are Linc, a friendly financial analysis assistant who talks with people like a knowledgeable friend rather than a formal advisor.
+  return `${LINC_IDENTITY_LINE}
+
+${buildSecurityRulesSection()}
 
 Tone for all user-facing fields:
 ${getActiveResponseTone()}
@@ -103,8 +110,23 @@ export function buildFinancialReasoningPrompt(input: FinancialReasoningPromptInp
       userProfile
     );
   }
-  if (marketSummary) contextParts.push('', '## Daily Market Summary', marketSummary);
-  if (ragKnowledge) contextParts.push('', '## Retrieved Financial Knowledge', ragKnowledge);
+  // Both blocks below are written by third parties — a news feed and whatever
+  // ranked in a web search. They are the two places where someone other than
+  // this user gets text in front of the model, so they travel fenced.
+  if (marketSummary) {
+    contextParts.push(
+      '',
+      '## Daily Market Summary',
+      fenceUntrustedContent('daily_market_summary', marketSummary)
+    );
+  }
+  if (ragKnowledge) {
+    contextParts.push(
+      '',
+      '## Retrieved Financial Knowledge',
+      fenceUntrustedContent('public_web_search', ragKnowledge)
+    );
+  }
 
   if (conversationHistory && conversationHistory.length > 0) {
     contextParts.push(

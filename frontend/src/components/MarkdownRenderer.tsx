@@ -20,6 +20,25 @@ export default function MarkdownRenderer({ children, className = '' }: MarkdownR
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
+          // Everything rendered here is model-generated, and the model reads
+          // web snippets and transaction descriptions written by third
+          // parties. An image loads with no click, so a Markdown image is a
+          // way to send whatever sits in its URL to whoever chose the host.
+          // Nothing we render needs images, so none are rendered; the alt text
+          // survives, which is all a legitimate one would have carried.
+          img: ({ alt }) => (alt ? <span className="italic text-gray-400">{alt}</span> : null),
+          // Links stay, since they take a deliberate click, but they never
+          // hand the destination our page via window.opener or a referrer.
+          a: ({ children, href, ...props }) => (
+            <a
+              {...props}
+              href={href}
+              target="_blank"
+              rel="noopener noreferrer nofollow"
+            >
+              {children}
+            </a>
+          ),
           // Custom list rendering
           ul: ({ children, ...props }) => (
             <ul className="list-disc list-inside space-y-1 my-3" {...props}>
