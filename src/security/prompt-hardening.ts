@@ -63,12 +63,45 @@ export function buildSecurityRulesSection(): string {
   ].join('\n');
 }
 
-/** Control characters that carry no meaning in prompt text (newline and tab excepted). */
-// eslint-disable-next-line no-control-regex
-const CONTROL_CHARACTERS = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g;
+/** Control character, newline and tab excepted. Replaced with a space. */
+function isControlCharacter(codePoint: number): boolean {
+  if (codePoint === 0x09 || codePoint === 0x0a) return false;
+  return codePoint < 0x20 || codePoint === 0x7f;
+}
 
-/** Zero-width and bidirectional-override characters used to hide directives from human review. */
-const INVISIBLE_CHARACTERS = /[\u200b-\u200f\u202a-\u202e\u2060-\u2064\u2066-\u2069\ufeff]/g;
+/**
+ * Zero-width and bidirectional-override character. Dropped outright: unlike a
+ * control character it sits between letters, so replacing it with a space
+ * would break the word it was hiding inside.
+ */
+function isInvisibleCharacter(codePoint: number): boolean {
+  return (
+    (codePoint >= 0x200b && codePoint <= 0x200f) ||
+    (codePoint >= 0x202a && codePoint <= 0x202e) ||
+    (codePoint >= 0x2060 && codePoint <= 0x2064) ||
+    (codePoint >= 0x2066 && codePoint <= 0x2069) ||
+    codePoint === 0xfeff
+  );
+}
+
+/**
+ * Remove the characters a human reviewing a snippet would never see, which are
+ * a standard way to smuggle a directive past one.
+ *
+ * Written as a code-point scan rather than a regex on purpose: a character
+ * class containing control characters needs an `eslint-disable
+ * no-control-regex`, and the CI lint gate counts suppressed messages as
+ * errors.
+ */
+function stripHiddenCharacters(value: string): string {
+  let stripped = '';
+  for (const character of value) {
+    const codePoint = character.codePointAt(0) ?? 0;
+    if (isInvisibleCharacter(codePoint)) continue;
+    stripped += isControlCharacter(codePoint) ? ' ' : character;
+  }
+  return stripped;
+}
 
 /**
  * Strip anything that lets untrusted text escape its fence or smuggle in
@@ -78,9 +111,7 @@ const INVISIBLE_CHARACTERS = /[\u200b-\u200f\u202a-\u202e\u2060-\u2064\u2066-\u2
  * it, a snippet can simply close the fence and continue as if it were prompt.
  */
 export function fenceUntrustedContent(label: string, content: string): string {
-  const neutralized = content
-    .replace(CONTROL_CHARACTERS, ' ')
-    .replace(INVISIBLE_CHARACTERS, '')
+  const neutralized = stripHiddenCharacters(content)
     .split(UNTRUSTED_CONTENT_OPEN)
     .join('[removed]')
     .split(UNTRUSTED_CONTENT_CLOSE)
