@@ -50,15 +50,10 @@ const plaidError = (code: string, message = 'plaid said no') =>
   });
 
 describe('Plaid error classification', () => {
-  it('treats connections only the account holder can fix as user-action-required', () => {
-    for (const code of [
-      'ITEM_LOGIN_REQUIRED',
-      'ITEM_LOCKED',
-      'PENDING_EXPIRATION',
-      'PENDING_DISCONNECT',
-      'USER_PERMISSION_REVOKED',
-      'INVALID_ACCESS_TOKEN',
-    ]) {
+  it('suppresses only the codes the product can walk a user out of', () => {
+    // Both deactivate the token in GET /profile/tokens, and the profile page
+    // offers update-mode Link off lastError === 'ITEM_LOGIN_REQUIRED'.
+    for (const code of ['ITEM_LOGIN_REQUIRED', 'INVALID_ACCESS_TOKEN']) {
       expect(isUserActionRequiredPlaidError(code)).toBe(true);
     }
   });
@@ -69,6 +64,23 @@ describe('Plaid error classification', () => {
       'PLANNED_MAINTENANCE',
       'RATE_LIMIT_EXCEEDED',
       'INSTITUTION_DOWN',
+    ]) {
+      expect(isUserActionRequiredPlaidError(code)).toBe(false);
+    }
+  });
+
+  it('keeps user-fixable codes with no recovery path alerting', () => {
+    // These are user-fixable at Plaid, but nothing deactivates the token or
+    // offers a reconnect for them, so going quiet would leave the connection to
+    // rot unseen. They stay red until that path exists — see the module comment.
+    for (const code of [
+      'ITEM_LOCKED',
+      'PENDING_EXPIRATION',
+      'PENDING_DISCONNECT',
+      'USER_PERMISSION_REVOKED',
+      'USER_SETUP_REQUIRED',
+      'ITEM_NOT_SUPPORTED',
+      'INSUFFICIENT_CREDENTIALS',
     ]) {
       expect(isUserActionRequiredPlaidError(code)).toBe(false);
     }

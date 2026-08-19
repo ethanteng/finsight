@@ -191,7 +191,11 @@ async function refreshTransactions() {
     
     if (result.success) {
       const syncTimestamp = new Date().toISOString();
-      console.log(`[${syncTimestamp}] ✅ Transaction sync completed successfully`);
+      // "success" here means no failure a retry could clear -- connections
+      // waiting on their owner to re-link may still be counted under Failed.
+      console.log(
+        `[${syncTimestamp}] ✅ Transaction sync completed with no provider failures`
+      );
       console.log(`[${syncTimestamp}] 📊 Total tokens: ${result.totalTokens}`);
       console.log(`[${syncTimestamp}] ✅ Successful: ${result.successful}`);
       console.log(`[${syncTimestamp}] ❌ Failed: ${result.failed}`);
