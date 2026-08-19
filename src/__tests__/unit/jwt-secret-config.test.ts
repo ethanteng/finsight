@@ -54,6 +54,22 @@ describe('JWT secret configuration', () => {
       expect(() => verifyToken('any.token.value')).toThrow(/JWT_SECRET/);
     });
 
+    it('optionalAuth returns 500 instead of crashing when verification throws', () => {
+      // optionalAuth is mounted on every route. An uncaught throw from
+      // verifyToken would turn a missing JWT_SECRET into an unhandled crash
+      // for any request that merely presents a Bearer token.
+      delete process.env.JWT_SECRET;
+      const { optionalAuth } = require('../../auth/middleware');
+      const req = { headers: { authorization: 'Bearer any.token.value' } } as any;
+      const res = { status: jest.fn().mockReturnThis(), json: jest.fn() } as any;
+      const next = jest.fn();
+
+      expect(() => optionalAuth(req, res, next)).not.toThrow();
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Authentication error' });
+      expect(next).not.toHaveBeenCalled();
+    });
+
     it('accepts a configured secret and round-trips a token', () => {
       process.env.JWT_SECRET = 'a-real-production-secret-of-sufficient-length';
       expect(() => assertJwtSecretConfigured()).not.toThrow();
