@@ -136,6 +136,7 @@ const { TransactionSyncService } = require(path.join(distPath, 'services/transac
 const { SummaryCacheService } = require(path.join(distPath, 'services/summary-cache-service'));
 const { HomeValueRefreshService } = require(path.join(distPath, 'services/home-value-refresh'));
 const { FinancialRevisionService } = require(path.join(distPath, 'services/financial-revision-service'));
+const { isUserActionRequiredPlaidError } = require(path.join(distPath, 'services/plaid-error-classification'));
 const {
   acquireScheduledRefreshLease,
   completeScheduledRefreshLease,
@@ -144,6 +145,27 @@ const {
 require('dotenv').config({ path: '.env.local' });
 
 const FINANCIAL_REFRESH_JOB = 'financial-data-refresh';
+
+/**
+ * Name the connections stuck behind a re-link. These do not fail the run, so
+ * without this line they would vanish from the output entirely and nobody would
+ * know an account had gone stale.
+ */
+function logReauthConnections(result, timestamp) {
+  const stuck = result.results.filter(
+    (item) => !item.result.success && isUserActionRequiredPlaidError(item.result.errorCode)
+  );
+  if (stuck.length === 0) return;
+  console.warn(
+    `[${timestamp}] 🔑 ${stuck.length}/${result.totalTokens} connection(s) need the account holder to ` +
+    `re-authenticate via Plaid Link update mode. Not failing the run -- these cannot clear on retry:`
+  );
+  stuck.forEach((item) => {
+    console.warn(
+      `[${timestamp}]   - Token ${item.tokenId.substring(0, 8)}... user ${String(item.userId || 'unknown').substring(0, 8)}...: ${item.result.errorCode}`
+    );
+  });
+}
 const FINANCIAL_REFRESH_LEASE_MS = 6 * 60 * 60 * 1000;
 
 async function refreshTransactions() {
@@ -192,8 +214,12 @@ async function refreshTransactions() {
         result.results
           .filter((r) => !r.result.success)
           .forEach((r) => {
-            console.log(`[${syncTimestamp}]   - Token ${r.tokenId.substring(0, 8)}...: ${r.result.error}`);
+            const suffix = isUserActionRequiredPlaidError(r.result.errorCode)
+              ? ' (awaiting user re-authentication)'
+              : '';
+            console.log(`[${syncTimestamp}]   - Token ${r.tokenId.substring(0, 8)}...: ${r.result.error}${suffix}`);
           });
+        logReauthConnections(result, syncTimestamp);
       }
     } else {
       const syncTimestamp = new Date().toISOString();
@@ -204,9 +230,21 @@ async function refreshTransactions() {
       result.results
         .filter((item) => !item.result.success)
         .forEach((item) => {
-          console.error(`[${syncTimestamp}]   - Token ${item.tokenId.substring(0, 8)}...: ${item.result.error}`);
+          const suffix = isUserActionRequiredPlaidError(item.result.errorCode)
+            ? ' (awaiting user re-authentication)'
+            : '';
+          console.error(`[${syncTimestamp}]   - Token ${item.tokenId.substring(0, 8)}...: ${item.result.error}${suffix}`);
         });
-      phaseErrors.push(`Transaction sync failed for ${result.failed}/${result.totalTokens} Plaid connection(s)`);
+      logReauthConnections(result, syncTimestamp);
+      // Only failures a retry could clear fail the run. A connection waiting on
+      // its owner to re-link fails identically every night, and failing for it
+      // would leave this job permanently red -- the same reasoning the home
+      // value phase below applies to an address RentCast cannot value.
+      if (result.providerFailures > 0) {
+        phaseErrors.push(
+          `Transaction sync failed for ${result.providerFailures}/${result.totalTokens} Plaid connection(s)`
+        );
+      }
     }
 
     // Refresh home values before the summary rebuild below, so a new estimate
