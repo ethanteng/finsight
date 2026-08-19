@@ -18,7 +18,9 @@ interface ReconnectNoticeProps {
 /** "Chase" / "Chase and Amex" / "Chase and 2 others" — never an unbounded list. */
 function describeInstitutions(names: string[], total: number): string {
   if (names.length === 0) {
-    return total === 1 ? 'An account needs' : `${total} accounts need`;
+    // "connection", not "account": the count is of Plaid Items, and one broken
+    // Item can cover several accounts. The profile page uses the same word.
+    return total === 1 ? 'A connection needs' : `${total} connections need`;
   }
   if (names.length === 1 && total === 1) return `${names[0]} needs`;
   if (names.length === 2 && total === 2) return `${names[0]} and ${names[1]} need`;
@@ -55,6 +57,16 @@ export default function ReconnectNotice({
     router.push('/profile');
   };
 
+  // Keyboard needs its own guard, and for a different reason than the click.
+  // The dashboard card's own onKeyDown calls preventDefault() on Enter/Space,
+  // which suppresses this button's native activation -- so the click that `go`
+  // is attached to never fires, and the card navigates to /finances instead.
+  // Stopping the key event here lets the button activate normally. Space
+  // activates on keyup, so both phases have to be held back.
+  const containKeys = (event: React.KeyboardEvent) => {
+    if (event.key === 'Enter' || event.key === ' ') event.stopPropagation();
+  };
+
   const shared = 'text-left text-[#76510f] transition hover:bg-[#ffeab4] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d4a72c] focus-visible:ring-offset-1';
 
   if (variant === 'chip') {
@@ -62,6 +74,8 @@ export default function ReconnectNotice({
       <button
         type="button"
         onClick={go}
+        onKeyDown={containKeys}
+        onKeyUp={containKeys}
         title="Reconnect in Accounts & context"
         className={`inline-flex items-center gap-1.5 rounded-full bg-[#fff3ce] px-2 py-0.5 text-[11px] font-semibold ${shared} ${className}`}
       >
@@ -75,6 +89,8 @@ export default function ReconnectNotice({
     <button
       type="button"
       onClick={go}
+      onKeyDown={containKeys}
+      onKeyUp={containKeys}
       className={`flex w-full items-center gap-2 rounded-xl border border-[#d4a72c]/30 bg-[#fff3ce] px-4 py-3 text-sm font-medium ${shared} ${className}`}
     >
       <AlertCircle size={16} aria-hidden="true" className="shrink-0" />

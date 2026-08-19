@@ -63,7 +63,13 @@ describe('ReconnectNotice', () => {
 
   it('still reports a count when no institution name is known', () => {
     render(<ReconnectNotice connectionHealth={{ reauthRequiredCount: 2, reauthRequiredInstitutions: [] }} />);
-    expect(screen.getByRole('button')).toHaveTextContent('2 accounts need to be reconnected');
+    // Counts Plaid Items, not Account rows -- one broken Item can cover several.
+    expect(screen.getByRole('button')).toHaveTextContent('2 connections need to be reconnected');
+  });
+
+  it('uses the singular for one unnamed connection', () => {
+    render(<ReconnectNotice connectionHealth={{ reauthRequiredCount: 1, reauthRequiredInstitutions: [] }} />);
+    expect(screen.getByRole('button')).toHaveTextContent('A connection needs to be reconnected');
   });
 
   it('navigates to Accounts & context without triggering the card underneath', () => {
@@ -81,6 +87,46 @@ describe('ReconnectNotice', () => {
     expect(push).toHaveBeenCalledWith('/profile');
     // Both surfaces wrap this in a card that navigates elsewhere on click.
     expect(parentClick).not.toHaveBeenCalled();
+  });
+
+  it.each(['banner', 'chip'] as const)(
+    'keeps Enter and Space from reaching a card that would navigate elsewhere (%s)',
+    (variant) => {
+      // The dashboard card's own onKeyDown calls preventDefault() on Enter/Space,
+      // which would suppress this button's native activation and send keyboard
+      // users to /finances instead of /profile.
+      const parentKeyDown = jest.fn();
+      render(
+        <div onKeyDown={parentKeyDown}>
+          <ReconnectNotice
+            connectionHealth={{ reauthRequiredCount: 1, reauthRequiredInstitutions: ['Chase'] }}
+            variant={variant}
+          />
+        </div>
+      );
+
+      const control = screen.getByRole('button');
+      fireEvent.keyDown(control, { key: 'Enter' });
+      fireEvent.keyDown(control, { key: ' ' });
+      fireEvent.keyUp(control, { key: ' ' });
+
+      expect(parentKeyDown).not.toHaveBeenCalled();
+    }
+  );
+
+  it('lets unrelated keys through so the card keeps its own shortcuts', () => {
+    const parentKeyDown = jest.fn();
+    render(
+      <div onKeyDown={parentKeyDown}>
+        <ReconnectNotice
+          connectionHealth={{ reauthRequiredCount: 1, reauthRequiredInstitutions: ['Chase'] }}
+        />
+      </div>
+    );
+
+    fireEvent.keyDown(screen.getByRole('button'), { key: 'Escape' });
+
+    expect(parentKeyDown).toHaveBeenCalled();
   });
 
   it('renders the compact chip variant with the same message and target', () => {
