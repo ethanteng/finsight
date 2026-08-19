@@ -33,11 +33,13 @@ function mockFinancialOverviewFetch({
     assetAllocation: [],
   },
   summaryOk = true,
+  connectionHealth,
 }: {
   accounts: unknown[];
   financialOverview?: Record<string, unknown>;
   investmentPortfolio?: Record<string, unknown>;
   summaryOk?: boolean;
+  connectionHealth?: Record<string, unknown>;
 }) {
   (global.fetch as jest.Mock).mockImplementation((url: string) => {
     if (url.includes('/api/finances/overview')) {
@@ -56,6 +58,7 @@ function mockFinancialOverviewFetch({
             reportingCurrency: 'USD',
           },
           warnings: [],
+          connectionHealth,
           financialOverview,
           investmentPortfolio,
           accountGroups: {
@@ -428,5 +431,52 @@ describe('FinancialOverview', () => {
       const elementsWith75000 = screen.getAllByText('$75,000');
       expect(elementsWith75000).toHaveLength(2);
     }, { timeout: 3000 });
+  });
+});
+
+describe('FinancialOverview reconnect indicator', () => {
+  beforeEach(() => {
+    (global.fetch as jest.Mock).mockReset();
+    localStorageMock.getItem.mockImplementation((key) =>
+      key === 'auth_token' ? 'mock-auth-token' : null
+    );
+  });
+
+  const account = { account_id: 'cash', name: 'Checking', type: 'depository' };
+
+  it('surfaces a broken connection on the dashboard card', async () => {
+    mockFinancialOverviewFetch({
+      accounts: [account],
+      connectionHealth: {
+        reauthRequiredCount: 1,
+        reauthRequiredInstitutions: ['Bank of America'],
+      },
+    });
+
+    render(<FinancialOverview />);
+
+    // The whole point: visible without navigating to Accounts & context.
+    expect(await screen.findByText(/Bank of America needs to be reconnected/)).toBeInTheDocument();
+  });
+
+  it('stays quiet when every connection is healthy', async () => {
+    mockFinancialOverviewFetch({
+      accounts: [account],
+      connectionHealth: { reauthRequiredCount: 0, reauthRequiredInstitutions: [] },
+    });
+
+    render(<FinancialOverview />);
+
+    await waitFor(() => expect(global.fetch).toHaveBeenCalled());
+    expect(screen.queryByText(/needs? to be reconnected/)).not.toBeInTheDocument();
+  });
+
+  it('stays quiet against a server that does not send the field', async () => {
+    mockFinancialOverviewFetch({ accounts: [account] });
+
+    render(<FinancialOverview />);
+
+    await waitFor(() => expect(global.fetch).toHaveBeenCalled());
+    expect(screen.queryByText(/needs? to be reconnected/)).not.toBeInTheDocument();
   });
 });

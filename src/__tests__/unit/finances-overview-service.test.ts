@@ -349,3 +349,43 @@ describe('finances overview contract', () => {
     expect(overview.warnings.map(warning => warning.code)).not.toContain('manual-accounts-out-of-sync');
   });
 });
+
+describe('connection health', () => {
+  it('reports nothing when every connection is healthy', () => {
+    const overview = buildFinancesOverview({ snapshot: snapshot as any });
+    expect(overview.connectionHealth).toEqual({
+      reauthRequiredCount: 0,
+      reauthRequiredInstitutions: [],
+    });
+  });
+
+  it('counts every broken connection and names the institutions once', () => {
+    const overview = buildFinancesOverview({
+      snapshot: snapshot as any,
+      reauthRequiredConnections: [
+        { id: 'a', institutionName: 'Bank of America' },
+        { id: 'b', institutionName: 'American Express' },
+        // A second connection at the same institution is still a separate repair,
+        // but the copy should not say the name twice.
+        { id: 'c', institutionName: 'Bank of America' },
+      ],
+    });
+    expect(overview.connectionHealth).toEqual({
+      reauthRequiredCount: 3,
+      reauthRequiredInstitutions: ['Bank of America', 'American Express'],
+    });
+  });
+
+  it('still counts a connection whose institution name is unknown', () => {
+    const overview = buildFinancesOverview({
+      snapshot: snapshot as any,
+      reauthRequiredConnections: [
+        { id: 'a', institutionName: null },
+        { id: 'b', institutionName: '   ' },
+      ],
+    });
+    // The user needs to know something is broken even when we cannot name it.
+    expect(overview.connectionHealth.reauthRequiredCount).toBe(2);
+    expect(overview.connectionHealth.reauthRequiredInstitutions).toEqual([]);
+  });
+});

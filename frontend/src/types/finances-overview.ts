@@ -57,6 +57,15 @@ export interface FinancesOverview {
     rebuildPending?: boolean;
   };
   warnings: Array<{ code: string; message: string }>;
+  /**
+   * Connections the user must re-authenticate. Optional so a response from a
+   * server that predates the field renders as "nothing to flag" rather than
+   * throwing mid-deploy.
+   */
+  connectionHealth?: {
+    reauthRequiredCount: number;
+    reauthRequiredInstitutions: string[];
+  };
   financialOverview: {
     netWorth: number;
     totalCash: number;

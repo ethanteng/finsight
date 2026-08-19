@@ -9,6 +9,7 @@ import {
   buildFinancesOverview,
   type FinancesHomeData,
 } from '../services/finances-overview-service';
+import { isUserActionRequiredPlaidError } from '../services/plaid-error-classification';
 
 const router = express.Router();
 
@@ -34,7 +35,7 @@ router.get('/overview', requireAuth, async (req: AuthenticatedRequest, res) => {
   try {
     const userId = req.user!.id;
     const prisma = getPrismaClient();
-    const [snapshot, manualAccounts, connectedAccounts, user] = await Promise.all([
+    const [snapshot, manualAccounts, connectedAccounts, user, accessTokens] = await Promise.all([
       getLatestFinancialSnapshot(userId, 'finances'),
       prisma.manualAccount.findMany({ where: { userId }, orderBy: { createdAt: 'desc' } }),
       // Renaming an account writes here and only reaches the snapshot on the next rebuild,
@@ -43,6 +44,14 @@ router.get('/overview', requireAuth, async (req: AuthenticatedRequest, res) => {
       prisma.user.findUnique({
         where: { id: userId },
         select: { monthlyIncomeOverride: true, monthlyExpenseOverride: true, timeZone: true },
+      }),
+      // Connection health is not in the snapshot: the snapshot records what the
+      // providers returned, not whether the link to them still works. A superseded
+      // row is excluded -- it was already replaced by a re-link, so nagging about
+      // it would point at a connection the user has fixed.
+      prisma.accessToken.findMany({
+        where: { userId, supersededAt: null },
+        select: { id: true, lastError: true, institutionName: true },
       }),
     ]);
 
@@ -63,6 +72,13 @@ router.get('/overview', requireAuth, async (req: AuthenticatedRequest, res) => {
       ? null
       : await getCurrentHome(userId).catch(() => null);
 
+    // Matched on the stored Plaid error code, which both the token-status endpoint
+    // and the nightly refresh write. Only codes with a real repair path count, so
+    // this never points a user at a screen that cannot help them.
+    const reauthRequiredConnections = accessTokens
+      .filter(token => isUserActionRequiredPlaidError(token.lastError))
+      .map(token => ({ id: token.id, institutionName: token.institutionName }));
+
     return res.json(buildFinancesOverview({
       snapshot: snapshot as any,
       manualAccounts,
@@ -74,6 +90,7 @@ router.get('/overview', requireAuth, async (req: AuthenticatedRequest, res) => {
       userTimeZone: user.timeZone,
       rebuildPending: FinancialRevisionService.isPending(userId),
       accountNames,
+      reauthRequiredConnections,
     }));
   } catch (error) {
     console.error('Failed to build finances overview:', error);
