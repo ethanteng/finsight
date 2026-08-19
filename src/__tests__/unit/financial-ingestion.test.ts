@@ -101,6 +101,20 @@ describe('financial ingestion balance refresh semantics', () => {
     expect(getUserFinancialData).toHaveBeenCalledWith('user-1', expect.objectContaining({
       includeInvestments: true,
       includeLiabilities: true,
+      forceLiveProviders: true,
+    }));
+  });
+
+  it('forces live providers so snapshot recompute cannot reuse its own fresh holdings', async () => {
+    await ingestFinancialData('user-1', {
+      balanceMaxAgeHours: 24,
+      categorize: true,
+    });
+
+    expect(getUserFinancialData).toHaveBeenCalledWith('user-1', expect.objectContaining({
+      forceLiveProviders: true,
+      skipCategorization: false,
+      shouldPersistTransactions: true,
     }));
   });
 });

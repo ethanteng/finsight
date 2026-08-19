@@ -260,6 +260,7 @@ describe('FinancialDataService investment persistence safeguards', () => {
         holdings: [mockHolding],
         securities: [],
         transactions: [],
+        tokenHealth: [{ tokenId: 'token-1', status: 'valid', lastChecked: new Date() }],
         performance: { duration: 0 },
       });
 
@@ -268,6 +269,12 @@ describe('FinancialDataService investment persistence safeguards', () => {
       holdings: [],
       securities: [],
       transactions: [],
+      tokenHealth: {
+        userId: 'user-123',
+        status: 'error',
+        error: 'SnapTrade user not found',
+        lastChecked: new Date(),
+      },
       performance: { duration: 0 },
       errors: [],
     });
@@ -294,6 +301,94 @@ describe('FinancialDataService investment persistence safeguards', () => {
       expect.objectContaining({ holdings: [mockHolding] }),
       expect.objectContaining({ accounts: [] }),
     );
+  });
+
+  it('forces live Plaid when snapshot ingestion opts out of the fresh persisted short-circuit', async () => {
+    const observedAt = new Date();
+    (mockPrisma.account.findMany as any).mockResolvedValue([{
+      id: 'db-account-1',
+      plaidAccountId: 'plaid-account-1',
+      accessTokenId: 'token-1',
+      name: 'Brokerage',
+      type: 'investment',
+      subtype: 'brokerage',
+      currentBalance: 1000,
+      availableBalance: null,
+      limit: null,
+      currency: 'USD',
+      institution: 'Example Bank',
+      persistentAccountId: null,
+      balanceLastFetched: observedAt,
+      lastSynced: observedAt,
+      updatedAt: observedAt,
+      transactions: [],
+    }]);
+    (mockPrisma.accessToken.findMany as any).mockResolvedValue([{
+      id: 'token-1',
+      isActive: true,
+      lastError: null,
+      lastChecked: observedAt,
+      updatedAt: observedAt,
+      supersededAt: null,
+    }]);
+    (mockPrisma.financialSummarySnapshot.findUnique as any).mockResolvedValue({
+      computedAt: observedAt,
+      asOf: observedAt,
+      accounts: [{ id: 'plaid-account-1', account_id: 'plaid-account-1', source: 'plaid' }],
+      holdings: [{ account_id: 'plaid-account-1', security_id: 'security-1', institution_value: 1000 }],
+      securities: [{ security_id: 'security-1', name: 'Example Fund' }],
+      activities: [],
+    });
+
+    const service = new FinancialDataService();
+    const fetchPlaidSpy = jest
+      .spyOn(service as any, 'fetchPlaidData')
+      .mockResolvedValue({
+        accounts: [{
+          account_id: 'plaid-account-1',
+          id: 'plaid-account-1',
+          name: 'Brokerage',
+          type: 'investment',
+          subtype: 'brokerage',
+          balance: { current: 42, iso_currency_code: 'USD' },
+          source: 'plaid',
+        }],
+        balances: {},
+        holdings: [{ account_id: 'plaid-account-1', institution_value: 42 }],
+        securities: [],
+        transactions: [],
+        tokenHealth: [{ tokenId: 'token-1', status: 'valid', lastChecked: observedAt }],
+        errors: [],
+        performance: { duration: 0 },
+      });
+    jest.spyOn(service as any, 'fetchSnapTradeData').mockResolvedValue({
+      accounts: [],
+      holdings: [],
+      securities: [],
+      transactions: [],
+      tokenHealth: {
+        userId: 'user-123',
+        status: 'error',
+        error: 'SnapTrade user not found',
+        lastChecked: observedAt,
+      },
+      performance: { duration: 0 },
+      errors: [],
+    });
+    jest.spyOn(service as any, 'fetchHomeValue').mockResolvedValue(null);
+
+    const result = await service.getUserFinancialData('user-123', {
+      includeTransactions: false,
+      includeInvestments: true,
+      includeHomeValue: false,
+      skipCategorization: true,
+      forceLiveProviders: true,
+    });
+
+    expect(fetchPlaidSpy).toHaveBeenCalledTimes(1);
+    expect(result.investments.holdings).toEqual([
+      expect.objectContaining({ institution_value: 42 }),
+    ]);
   });
 
   it('keeps an address-only home value unavailable', async () => {

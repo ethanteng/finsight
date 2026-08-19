@@ -62,6 +62,10 @@ export async function ingestFinancialData(
     includeHomeValue: true,
     skipCategorization: !options.categorize,
     shouldPersistTransactions: options.categorize,
+    // Canonical snapshot writes must observe live Plaid/SnapTrade data. Reusing a
+    // fresh financialSummarySnapshot here would rewrite the same holdings and
+    // liability terms for the entire persisted-data freshness window.
+    forceLiveProviders: true,
   });
 
   // Provider payloads are re-read on every revision, so a category the user chose has to

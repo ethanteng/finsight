@@ -252,6 +252,12 @@ export class FinancialDataService {
     skipCategorization?: boolean; // ✅ NEW: Skip categorization for UI-only requests (performance optimization)
     collectCategorizationDetails?: boolean; // ✅ NEW: Collect detailed categorization results for logging/debugging
     shouldPersistTransactions?: boolean; // ✅ NEW: Only persist transactions when called from GPT prompts, not display-only views
+    /**
+     * Snapshot recomputes must hit live providers. Otherwise a fresh
+     * financialSummarySnapshot short-circuit feeds the prior revision back into
+     * itself and holdings/liabilities stop updating for the freshness window.
+     */
+    forceLiveProviders?: boolean;
   }): Promise<UnifiedFinancialData> {
     const startTime = Date.now();
     const opts = {
@@ -260,6 +266,7 @@ export class FinancialDataService {
       includeLiabilities: options?.includeLiabilities ?? false,
       includeHomeValue: options?.includeHomeValue ?? true
     };
+    const forceLiveProviders = options?.forceLiveProviders === true;
 
     const cacheKeyParts = [
       'financial-data',
@@ -270,7 +277,7 @@ export class FinancialDataService {
       opts.includeHomeValue ? 'home' : 'no-home'
     ];
     const cacheKey = cacheKeyParts.join(':');
-    const shouldUseCache = !options?.skipCategorization;
+    const shouldUseCache = !options?.skipCategorization && !forceLiveProviders;
     if (shouldUseCache) {
       const cachedData = await cacheService.get<UnifiedFinancialData>(cacheKey);
       if (cachedData) {
@@ -282,7 +289,7 @@ export class FinancialDataService {
     const persistedPlaidSnapshot = await loadPersistedPlaidData(userId, opts);
 
     let plaidPromise: Promise<any>;
-    if (persistedPlaidSnapshot?.isFresh) {
+    if (!forceLiveProviders && persistedPlaidSnapshot?.isFresh) {
       usingPersistedPlaidData = true;
       plaidPromise = Promise.resolve(persistedPlaidSnapshot.data);
     } else {
