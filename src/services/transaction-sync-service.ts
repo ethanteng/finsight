@@ -4,6 +4,7 @@ import { processTransactionData } from '../plaid';
 import { TransactionCategorizationService } from './transaction-categorization-service';
 import { TransactionNormalizationService } from './transaction-normalization-service';
 import { withTransientProviderRetry } from './provider-request-policy';
+import { extractPlaidErrorCode, isUserActionRequiredPlaidError } from './plaid-error-classification';
 
 const prisma = new PrismaClient();
 const categorizationService = new TransactionCategorizationService();
@@ -16,6 +17,12 @@ export interface TransactionSyncResult {
   removed: number;
   cursor: string | null;
   error?: string;
+  /**
+   * Plaid's error code for a failed sync, when it supplied one. Carried so
+   * callers can tell a connection the user must re-link from a provider
+   * failure a retry could clear, without matching on the message text.
+   */
+  errorCode?: string;
 }
 
 export class TransactionSyncService {
@@ -197,14 +204,17 @@ export class TransactionSyncService {
       };
     } catch (error: any) {
       const errorMessage = error?.response?.data?.error_message || error.message || 'Unknown error';
+      const errorCode = extractPlaidErrorCode(error);
       console.error(`Error syncing transactions for token:`, errorMessage);
 
-      // Update error in database
+      // Prefer the stable Plaid error_code. Profile UI and update-mode Link gate on
+      // lastError === 'ITEM_LOGIN_REQUIRED'; writing only the prose message would
+      // wipe that marker on every cron pass and hide the re-auth prompt.
       try {
         await prisma.accessToken.update({
           where: { token: accessToken },
           data: {
-            lastError: errorMessage,
+            lastError: errorCode || errorMessage,
           },
         });
       } catch (dbError) {
@@ -218,6 +228,7 @@ export class TransactionSyncService {
         removed: 0,
         cursor: null,
         error: errorMessage,
+        errorCode,
       };
     }
   }
@@ -441,10 +452,15 @@ export class TransactionSyncService {
    * Used by cron job to sync all users' transactions
    */
   static async syncAllActiveTokens(): Promise<{
+    /** False only when a failure a retry could plausibly clear occurred. */
     success: boolean;
     totalTokens: number;
     successful: number;
     failed: number;
+    /** Failures only the account holder can fix by re-linking through Plaid. */
+    needsReauth: number;
+    /** Failures worth alerting on: provider outages, rate limits, bugs. */
+    providerFailures: number;
     results: Array<{
       tokenId: string;
       userId: string | null;
@@ -503,18 +519,32 @@ export class TransactionSyncService {
             removed: 0,
             cursor: null,
             error: errorMessage,
+            errorCode: extractPlaidErrorCode(error),
           },
         });
       }
     }
 
-    console.log(`Transaction sync completed: ${successful} successful, ${failed} failed`);
+    // A connection whose credentials or MFA changed fails identically on every
+    // run until its owner re-links, so it is reported rather than counted as a
+    // failure. Only failures a retry could clear decide the overall result.
+    const needsReauth = results.filter(
+      (item) => !item.result.success && isUserActionRequiredPlaidError(item.result.errorCode)
+    ).length;
+    const providerFailures = failed - needsReauth;
+
+    console.log(
+      `Transaction sync completed: ${successful} successful, ${failed} failed ` +
+      `(${needsReauth} awaiting user re-authentication, ${providerFailures} provider failures)`
+    );
 
     return {
-      success: failed === 0,
+      success: providerFailures === 0,
       totalTokens: activeTokens.length,
       successful,
       failed,
+      needsReauth,
+      providerFailures,
       results,
     };
   }
