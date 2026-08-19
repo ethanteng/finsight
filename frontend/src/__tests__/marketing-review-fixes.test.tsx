@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { MarketingContactForm } from "@/components/marketing/MarketingContactForm";
 import MarketingHome from "@/components/marketing/MarketingHome";
 import MarketingSubpage from "@/components/marketing/MarketingSubpage";
+import IntegrationsPage from "@/components/marketing/IntegrationsPage";
 import { SiteHeader } from "@/components/marketing/SiteShell";
 import { USE_CASE_LINKS } from "@/lib/site-nav";
 
@@ -95,6 +96,7 @@ describe("marketing review fixes", () => {
     expect(screen.getByRole("heading", { name: "Rates, markets + history" })).toBeInTheDocument();
     expect(screen.getByText(/fund fees, sector and country exposure/i)).toBeInTheDocument();
     expect(screen.getByText(/does not throw the whole data stack at every answer/i)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /explore the data ecosystem/i })).toHaveAttribute("href", "/integrations");
     expect(screen.getByRole("heading", { name: /financial data is never used to train ai models/i })).toBeInTheDocument();
     expect(screen.getByText(/no toggle.*no opt-out.*financial data stays yours/i)).toBeInTheDocument();
   });
@@ -113,6 +115,24 @@ describe("marketing review fixes", () => {
     expect(screen.getByText(/up to 20 comparables/i)).toBeInTheDocument();
     expect(screen.getByText(/fund fees plus sector and country exposure/i)).toBeInTheDocument();
     expect(screen.getByText(/important numbers stay tied to facts/i)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /explore everything linc can connect and use/i })).toHaveAttribute("href", "/integrations");
+  });
+
+  it("presents integrations as a user-facing financial ecosystem", () => {
+    render(<IntegrationsPage />);
+
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
+      "Your finances live in many places. Your answer shouldn't.",
+    );
+    expect(screen.getByRole("heading", { name: "Cash flow, cards, and loans" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Your portfolio, looked through" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "The parts that do not live at a bank" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Rates and borrowing costs" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Long-run planning history" })).toBeInTheDocument();
+    expect(screen.getByText(/dated home-value estimate and 85% range/i)).toBeInTheDocument();
+    expect(screen.getByText(/fund fees plus sector and country exposure/i)).toBeInTheDocument();
+    expect(screen.getByText(/does not pile every available data point into every answer/i)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /see how your data is protected/i })).toHaveAttribute("href", "/how-we-protect-your-data");
   });
 
   it("submits the redesigned contact form through the existing API", async () => {
