@@ -9,6 +9,7 @@ import AccountGroupCard from '../../components/finances/AccountGroupCard';
 import FinancialMetricsChart, { HistoricalSnapshot } from '../../components/finances/FinancialMetricsChart';
 import IncomeExpenseOverrides from '../../components/finances/IncomeExpenseOverrides';
 import type { FinancesAccount, FinancesOverview } from '../../types/finances-overview';
+import ReconnectNotice from '../../components/ReconnectNotice';
 import { resetUserIdentity } from '../../lib/heycatch';
 import AuthenticatedPageHeader from '../../components/authenticated/AuthenticatedPageHeader';
 import { mergeCanonicalCurrentWithHistory } from '../../lib/canonical-financial-history';
@@ -483,6 +484,9 @@ export default function FinancesPageClient() {
             Your change was saved, but totals have not caught up yet. Use Refresh totals to try again.
           </div>
         )}
+        {/* Above the data warnings: a connection needing re-auth is the one thing
+            here the user can actually act on, and it explains the others. */}
+        <ReconnectNotice connectionHealth={overview.connectionHealth} />
         {visibleWarnings.length > 0 && (
           <div className="space-y-2" role="status" aria-label="Financial data warnings">
             {visibleWarnings.map(warning => (

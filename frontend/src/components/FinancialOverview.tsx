@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import type { FinancesOverview } from '../types/finances-overview';
+import ReconnectNotice from './ReconnectNotice';
 
 interface FinancialOverviewProps {
   tier?: string;
@@ -77,6 +78,7 @@ export default function FinancialOverview({ tier: _tier }: FinancialOverviewProp
   // worth flagging here.
   const showsMissingDataBadge = finances?.revision.status === 'partial'
     || finances?.revision.status === 'unavailable';
+  const needsReconnect = (finances?.connectionHealth?.reauthRequiredCount ?? 0) > 0;
   const homeData = finances?.home;
   const investmentPortfolio = finances?.investmentPortfolio as {
     holdingCount?: number;
@@ -191,7 +193,7 @@ export default function FinancialOverview({ tier: _tier }: FinancialOverviewProp
             </button>
           )}
         </div>
-        {(sourceDataAsOf || showsMissingDataBadge) && (
+        {(sourceDataAsOf || showsMissingDataBadge || needsReconnect) && (
           <div className="mb-3 flex flex-wrap items-center gap-2 text-[11px] text-[#5e6b63]">
             {sourceDataAsOf && (
               <span>Data as of {new Date(sourceDataAsOf).toLocaleString()}</span>
@@ -201,6 +203,9 @@ export default function FinancialOverview({ tier: _tier }: FinancialOverviewProp
                 {finances?.revision.status === 'partial' ? 'Some data unavailable' : 'Source data unavailable'}
               </span>
             )}
+            {/* Sits beside the freshness line rather than above the numbers: it
+                explains why a figure may be behind without displacing it. */}
+            <ReconnectNotice connectionHealth={finances?.connectionHealth} variant="chip" />
           </div>
         )}
 

@@ -81,6 +81,12 @@ export interface FinancesOverviewInput {
    * for the next snapshot. Balances and totals still come only from the snapshot.
    */
   accountNames?: ReadonlyMap<string, string>;
+  /**
+   * Connections the user must re-authenticate before they can sync again. Read
+   * live rather than from the snapshot: the snapshot records what the providers
+   * returned, not the health of the link to them.
+   */
+  reauthRequiredConnections?: ReadonlyArray<{ id: string; institutionName: string | null }>;
 }
 
 export interface FinancesAccountGroup {
@@ -112,6 +118,17 @@ export interface FinancesOverview {
     rebuildPending: boolean;
   };
   warnings: Array<{ code: string; message: string }>;
+  /**
+   * Broken connections the account holder can repair themselves. Surfaced on
+   * every financial surface, not just the accounts screen, because a connection
+   * nobody notices is one whose balances silently go stale.
+   */
+  connectionHealth: {
+    /** Connections awaiting re-authentication. Zero means nothing to show. */
+    reauthRequiredCount: number;
+    /** Institution names for the copy, deduplicated. Unnamed connections are omitted. */
+    reauthRequiredInstitutions: string[];
+  };
   financialOverview: {
     netWorth: number;
     totalCash: number;
@@ -314,6 +331,20 @@ function groupAccounts(snapshot: FinancesSnapshotLike, accountNames?: ReadonlyMa
   return groups;
 }
 
+function buildConnectionHealth(
+  connections: FinancesOverviewInput['reauthRequiredConnections']
+): FinancesOverview['connectionHealth'] {
+  const list = connections ?? [];
+  const institutions: string[] = [];
+  for (const connection of list) {
+    const name = connection.institutionName?.trim();
+    // An unnamed connection still counts toward the total -- the user needs to
+    // know something is broken even when we cannot say which institution.
+    if (name && !institutions.includes(name)) institutions.push(name);
+  }
+  return { reauthRequiredCount: list.length, reauthRequiredInstitutions: institutions };
+}
+
 export function buildFinancesOverview(input: FinancesOverviewInput): FinancesOverview {
   const { snapshot } = input;
   const computedAt = iso(snapshot.computedAt);
@@ -415,6 +446,7 @@ export function buildFinancesOverview(input: FinancesOverviewInput): FinancesOve
       rebuildPending: Boolean(input.rebuildPending),
     },
     warnings,
+    connectionHealth: buildConnectionHealth(input.reauthRequiredConnections),
     financialOverview: {
       netWorth,
       totalCash,
