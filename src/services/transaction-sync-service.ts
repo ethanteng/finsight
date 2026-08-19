@@ -207,12 +207,14 @@ export class TransactionSyncService {
       const errorCode = extractPlaidErrorCode(error);
       console.error(`Error syncing transactions for token:`, errorMessage);
 
-      // Update error in database
+      // Prefer the stable Plaid error_code. Profile UI and update-mode Link gate on
+      // lastError === 'ITEM_LOGIN_REQUIRED'; writing only the prose message would
+      // wipe that marker on every cron pass and hide the re-auth prompt.
       try {
         await prisma.accessToken.update({
           where: { token: accessToken },
           data: {
-            lastError: errorMessage,
+            lastError: errorCode || errorMessage,
           },
         });
       } catch (dbError) {

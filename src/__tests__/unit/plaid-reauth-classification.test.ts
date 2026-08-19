@@ -122,6 +122,11 @@ describe('syncAllActiveTokens failure accounting', () => {
     expect(result.providerFailures).toBe(0);
     expect(result.results.find((r) => r.tokenId === 'token-stale')?.result.errorCode)
       .toBe('ITEM_LOGIN_REQUIRED');
+    // Profile update-mode Link keys off lastError === 'ITEM_LOGIN_REQUIRED'.
+    expect(prisma.accessToken.update).toHaveBeenCalledWith({
+      where: { token: 'stale' },
+      data: { lastError: 'ITEM_LOGIN_REQUIRED' },
+    });
   });
 
   it('still fails when a provider failure is present', async () => {
