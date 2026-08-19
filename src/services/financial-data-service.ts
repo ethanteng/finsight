@@ -315,11 +315,31 @@ export class FinancialDataService {
       console.warn('FinancialDataService: Falling back to persisted Plaid data after live fetch failure or empty accounts (e.g. all tokens inactive)');
     }
 
-    const tokens = this.tokenValidationService.getTokenHealthFromObservations(
+    let tokens = this.tokenValidationService.getTokenHealthFromObservations(
       userId,
       plaidData,
       snapTradeData,
     );
+    // Observation-based health is empty when a provider call failed before returning
+    // per-token statuses (for example the outer fetchPlaidData catch). Fall back so
+    // reconnect states are not silently dropped on that failure path.
+    const plaidHealthFailedClosed = Array.isArray(plaidData?.tokenHealth)
+      && plaidData.tokenHealth.length === 0
+      && Array.isArray(plaidData?.errors)
+      && plaidData.errors.length > 0;
+    const needsPlaidHealthFallback = !plaidData || plaidHealthFailedClosed;
+    const needsSnapTradeHealthFallback = !snapTradeData?.tokenHealth;
+    if (needsPlaidHealthFallback || needsSnapTradeHealthFallback) {
+      try {
+        const validated = await this.tokenValidationService.getTokenHealth(userId);
+        tokens = {
+          plaid: needsPlaidHealthFallback ? validated.plaid : tokens.plaid,
+          snaptrade: needsSnapTradeHealthFallback ? validated.snaptrade : tokens.snaptrade,
+        };
+      } catch (error) {
+        console.warn('FinancialDataService: Token health fallback failed:', error);
+      }
+    }
 
     // Merge data
     const mergedData = mergeFinancialSources(plaidData, snapTradeData, manualAccountsData, homeValue);
