@@ -27,6 +27,10 @@ import {
 } from './retirement-input-extraction';
 import type { QuestionNeeds } from './types';
 import {
+  UNTRUSTED_CONTENT_RULE,
+  fenceUntrustedContent,
+} from '../security/prompt-hardening';
+import {
   RETIREMENT_CALCULATOR_ID,
   type RetirementScenarioPlan,
 } from '../scenarios/retirement-scenario';
@@ -159,6 +163,7 @@ Read the entire active decision transcript and decide which optional data packs 
 Important boundaries:
 - The aggregate financial summary is always present: net worth, total cash, total debt, total investments, portfolio value, holding count, asset allocation, category spending totals, and average monthly income/expenses. Do not request a detail pack merely to obtain one of those aggregates.
 - Prior assistant answers establish conversational references only. They are not trusted financial facts.
+- ${UNTRUSTED_CONTENT_RULE}
 - Include every pack materially useful to answer the current message. Prefer inclusion when omission could make the answer incomplete.
 - search_context is for information outside the user's stored data, especially facts that can change over time. market_context is the broader economic/market backdrop.
 - When search_context is selected, return one to three standalone public search queries in searchQueries. Each query must make sense without the transcript and contain only the minimum public facts needed for retrieval. Never copy a person's name, email address, account or card number, transaction description, or other private identifier into a query. Choose freshness from pd (24 hours), pw (7 days), pm (31 days), py (365 days), or null when recency filtering would hide the authoritative source. Return an empty array when search_context is not selected.
@@ -189,9 +194,13 @@ export function buildPlannerTranscript(
     lines.push(`User: ${turn.question.slice(0, MAX_QUESTION_CHARS)}`);
     const answer = turn.answer?.trim();
     if (answer) {
-      lines.push(
-        `Assistant: ${answer.length > MAX_ANSWER_CHARS ? `${answer.slice(0, MAX_ANSWER_CHARS)}…` : answer}`
-      );
+      // Same replay path the analysis prompt fences: a prior answer was written
+      // by a model reading web snippets and transaction descriptions, so an
+      // injected directive can ride back in here. This transcript feeds both
+      // the planner and the primary data-pack audit, so both see it fenced.
+      const capped =
+        answer.length > MAX_ANSWER_CHARS ? `${answer.slice(0, MAX_ANSWER_CHARS)}…` : answer;
+      lines.push('Assistant:', fenceUntrustedContent('prior_assistant_answer', capped));
     }
   }
   lines.push(`User: ${question}`);

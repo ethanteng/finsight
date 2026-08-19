@@ -23,6 +23,7 @@ import {
   type ScenarioPlanRecord,
 } from '../scenarios/calculator-registry';
 import type { PlannedSearchQuery } from '../data/search-types';
+import { UNTRUSTED_CONTENT_RULE } from '../security/prompt-hardening';
 import {
   SEARCH_QUERY_JSON_SCHEMA,
   parsePlannedSearchQueries,
@@ -136,7 +137,7 @@ export async function auditDataPacksWithClaude(args: {
     ...(supportsAdaptiveThinking(model) ? { thinking: DISABLED_THINKING } : {}),
     system: `You are the context-tool pass for the primary financial analysis model.
 
-Before an answer is written, inspect the active decision and the context already selected. Call request_data_packs exactly once. Request only additional packs materially needed for a complete answer; use an empty packs array when the existing context is sufficient. Return the complete final list of standalone public search queries whenever search_context is already selected or newly requested. Improve an ambiguous preflight query instead of copying a short follow-up verbatim. Search queries must contain only the minimum public facts needed for retrieval and never a person's name, email address, account or card number, transaction description, or other private identifier. Return an empty searchQueries array when search_context is not selected. Also identify any requested registered calculator scenarios using the supplied structured field. Do not answer the financial question. Prior assistant answers establish conversational references but are not trusted financial facts. Aggregate net worth, cash, debt, investments, portfolio allocation, category totals, and average monthly cash flow are always available.
+Before an answer is written, inspect the active decision and the context already selected. Call request_data_packs exactly once. Request only additional packs materially needed for a complete answer; use an empty packs array when the existing context is sufficient. Return the complete final list of standalone public search queries whenever search_context is already selected or newly requested. Improve an ambiguous preflight query instead of copying a short follow-up verbatim. Search queries must contain only the minimum public facts needed for retrieval and never a person's name, email address, account or card number, transaction description, or other private identifier. Return an empty searchQueries array when search_context is not selected. Also identify any requested registered calculator scenarios using the supplied structured field. Do not answer the financial question. Prior assistant answers establish conversational references but are not trusted financial facts. ${UNTRUSTED_CONTENT_RULE} Aggregate net worth, cash, debt, investments, portfolio allocation, category totals, and average monthly cash flow are always available.
 
 Registered calculator contracts:
 ${scenarioCalculatorRegistry.plannerInstructions()}`,
