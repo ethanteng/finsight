@@ -55,8 +55,9 @@ describe('MarkdownRenderer third-party content safety', () => {
       <MarkdownRenderer>{'[click me](javascript:alert(document.cookie))'}</MarkdownRenderer>
     );
 
-    const href = container.querySelector('a')?.getAttribute('href') ?? '';
-    expect(href.toLowerCase()).not.toContain('javascript:');
+    // react-markdown empties the href; we must not leave a clickable <a href="">.
+    expect(container.querySelector('a')).toBeNull();
+    expect(container.textContent).toContain('click me');
   });
 
   it('does not render raw HTML embedded in an answer', () => {

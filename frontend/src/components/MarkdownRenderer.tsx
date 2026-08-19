@@ -29,16 +29,24 @@ export default function MarkdownRenderer({ children, className = '' }: MarkdownR
           img: ({ alt }) => (alt ? <span className="italic text-gray-400">{alt}</span> : null),
           // Links stay, since they take a deliberate click, but they never
           // hand the destination our page via window.opener or a referrer.
-          a: ({ children, href, ...props }) => (
-            <a
-              {...props}
-              href={href}
-              target="_blank"
-              rel="noopener noreferrer nofollow"
-            >
-              {children}
-            </a>
-          ),
+          // react-markdown strips javascript:/data:/vbscript: to "" — render
+          // those as plain text rather than an empty <a href=""> that still
+          // navigates the current origin in a new tab.
+          a: ({ children, href, ...props }) => {
+            if (!href) {
+              return <span>{children}</span>;
+            }
+            return (
+              <a
+                {...props}
+                href={href}
+                target="_blank"
+                rel="noopener noreferrer nofollow"
+              >
+                {children}
+              </a>
+            );
+          },
           // Custom list rendering
           ul: ({ children, ...props }) => (
             <ul className="list-disc list-inside space-y-1 my-3" {...props}>
