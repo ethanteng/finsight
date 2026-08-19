@@ -135,10 +135,17 @@ export function buildFinancialReasoningPrompt(input: FinancialReasoningPromptInp
       'Use this only to understand what the user has been asking about. Do NOT use numbers or figures from prior answers as canonical data. The Financial Context above is the source of truth.',
       ''
     );
+    // The question is the user's own text and has already been through prompt
+    // validation, so it travels plain — fencing it would say "third party"
+    // about the person asking. A prior answer is different: it was written by
+    // a model that had web snippets and transaction descriptions in front of
+    // it, so anything injected there can ride back in on the next turn. That
+    // replay path is what the fence closes.
     for (const entry of conversationHistory.slice(-3)) {
       contextParts.push(
         `Q: ${entry.question.slice(0, 500)}`,
-        `A: ${entry.answer.slice(0, 1500)}`,
+        'A:',
+        fenceUntrustedContent('prior_assistant_answer', entry.answer.slice(0, 1500)),
         ''
       );
     }

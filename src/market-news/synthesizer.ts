@@ -1,7 +1,19 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { UserTier } from '../data/types';
 import { MarketNewsData } from './aggregator';
+import {
+  buildSynthesisSecurityRules,
+  fenceUntrustedContent,
+} from '../security/prompt-hardening';
 import crypto from 'crypto';
+
+/**
+ * The feed block must reach the model whole — the prompt below insists every
+ * data point be reported, so a silent cut would read as missing data rather
+ * than truncation. Generous enough that the cap should never bite; if it does,
+ * fenceUntrustedContent logs it.
+ */
+const MAX_SYNTHESIS_DATA_CHARACTERS = 60_000;
 
 const GEMINI_API_KEY = process.env.GOOGLE_AI_API_KEY || process.env.GEMINI_API_KEY || '';
 const DEFAULT_MODEL = process.env.GEMINI_MARKET_SYNTHESIS_MODEL || 'gemini-2.5-flash';
@@ -151,11 +163,25 @@ export class MarketNewsSynthesizer {
     }
   }
   
-  private buildSynthesisPrompt(data: MarketNewsData[], tier: UserTier): string {
+  /**
+   * Public so the security properties of the prompt can be asserted directly.
+   * It is a pure function of its arguments and reaches no network.
+   */
+  buildSynthesisPrompt(data: MarketNewsData[], tier: UserTier): string {
     const tierContext = this.getTierContext(tier);
-    const formattedData = this.formatDataForPrompt(data);
+    // Every line here came from outside: FRED and Treasury numbers, but also
+    // Brave and Tiingo headlines and descriptions, which are written by
+    // whoever published them. Fencing the whole block is right even for the
+    // numeric rows — the fence says "this is data", which is what they are.
+    const formattedData = fenceUntrustedContent(
+      'market_data_feeds',
+      this.formatDataForPrompt(data),
+      { maxCharacters: MAX_SYNTHESIS_DATA_CHARACTERS }
+    );
 
     return `You are a financial market analyst. Synthesize the following market data into a clear, actionable market context summary.
+
+${buildSynthesisSecurityRules()}
 
 TIER CONTEXT: ${tierContext}
 
