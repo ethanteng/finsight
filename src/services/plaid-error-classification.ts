@@ -16,6 +16,9 @@ const USER_ACTION_REQUIRED_PLAID_ERROR_CODES = new Set([
   'INVALID_CREDENTIALS',
   'INVALID_MFA',
   'INVALID_UPDATED_USERNAME',
+  // Same reconnect path as ITEM_LOGIN_REQUIRED in token status handling
+  // (src/index.ts). The access_token is dead until the user re-links.
+  'INVALID_ACCESS_TOKEN',
   'PENDING_DISCONNECT',
   'PENDING_EXPIRATION',
   'USER_PERMISSION_REVOKED',

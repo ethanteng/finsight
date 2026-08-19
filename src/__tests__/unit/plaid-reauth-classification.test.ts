@@ -57,6 +57,7 @@ describe('Plaid error classification', () => {
       'PENDING_EXPIRATION',
       'PENDING_DISCONNECT',
       'USER_PERMISSION_REVOKED',
+      'INVALID_ACCESS_TOKEN',
     ]) {
       expect(isUserActionRequiredPlaidError(code)).toBe(true);
     }
@@ -127,6 +128,17 @@ describe('syncAllActiveTokens failure accounting', () => {
       where: { token: 'stale' },
       data: { lastError: 'ITEM_LOGIN_REQUIRED' },
     });
+  });
+
+  it('does not fail the run for INVALID_ACCESS_TOKEN', async () => {
+    tokens('dead');
+    transactionsSync.mockRejectedValue(plaidError('INVALID_ACCESS_TOKEN', 'invalid token'));
+
+    const result = await TransactionSyncService.syncAllActiveTokens();
+
+    expect(result.success).toBe(true);
+    expect(result.needsReauth).toBe(1);
+    expect(result.providerFailures).toBe(0);
   });
 
   it('still fails when a provider failure is present', async () => {
