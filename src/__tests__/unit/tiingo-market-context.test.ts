@@ -72,4 +72,27 @@ describe('Tiingo Power market context', () => {
     expect(premium.some(item => item.source === 'massive' && item.type === 'market_data')).toBe(false);
     expect(premium.some(item => item.source === 'massive' && item.type === 'rate_information')).toBe(true);
   });
+
+  it('uses Brave publication time and labels retrieval-only fallbacks explicitly', async () => {
+    const aggregator = new MarketNewsAggregator();
+    (aggregator as any).searchProvider = {
+      search: jest.fn()
+        .mockResolvedValueOnce([{
+          title: 'Published update', snippet: 'A', url: 'https://example.com/a',
+          source: 'Brave', relevance: 1, publishedAt: '2026-08-18T14:00:00.000Z', age: '1 hour ago',
+        }])
+        .mockResolvedValue([]),
+    };
+
+    const data = await (aggregator as any).fetchBraveSearchData() as MarketNewsData[];
+
+    expect(data[0]).toMatchObject({
+      timestamp: new Date('2026-08-18T14:00:00.000Z'),
+      data: {
+        timestampBasis: 'published',
+        publishedAt: '2026-08-18T14:00:00.000Z',
+        providerAge: '1 hour ago',
+      },
+    });
+  });
 });

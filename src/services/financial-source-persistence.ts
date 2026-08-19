@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client';
 import { getPrismaClient } from '../prisma-client';
+import { TokenStatus, type PlaidTokenHealth } from './token-validation-service';
 
 const prisma = getPrismaClient();
 
@@ -14,13 +15,6 @@ export async function loadPersistedPlaidData(
     userId: string,
     options: { includeTransactions: boolean; includeInvestments: boolean; includeLiabilities?: boolean }
   ): Promise<{ data: any; lastSynced: Date | null; isFresh: boolean } | null> {
-    // Persisted snapshots currently store only account/core balance data. When
-    // investment holdings or liability terms are requested we must force a live
-    // Plaid fetch to keep portfolio analytics and debt terms accurate.
-    if (options.includeInvestments || options.includeLiabilities) {
-      return null;
-    }
-
     try {
       const historyDays = parseInt(process.env.TRANSACTION_HISTORY_DAYS || '90', 10);
       const startDate = new Date(Date.now() - historyDays * 24 * 60 * 60 * 1000);
@@ -50,11 +44,20 @@ export async function loadPersistedPlaidData(
       // Keyed on supersededAt, not lastError: token revalidation clears lastError on any successful
       // Plaid call, and a superseded Item usually still works at Plaid. Tokens that are merely
       // erroring (e.g. ITEM_LOGIN_REQUIRED) are untouched and still yield last known balances.
-      const supersededTokens = await prisma.accessToken.findMany({
-        where: { userId, supersededAt: { not: null } },
-        select: { id: true }
+      const tokenRecords = await prisma.accessToken.findMany({
+        where: { userId },
+        select: {
+          id: true,
+          isActive: true,
+          lastError: true,
+          lastChecked: true,
+          updatedAt: true,
+          supersededAt: true,
+        }
       });
-      const supersededTokenIds = new Set(supersededTokens.map(token => token.id));
+      const supersededTokenIds = new Set(
+        tokenRecords.filter(token => token.supersededAt).map(token => token.id)
+      );
 
       const accountRecords = accountRecordsRaw.filter(record => {
         if (!record.plaidAccountId) {
@@ -119,15 +122,62 @@ export async function loadPersistedPlaidData(
         .filter((value): value is Date => Boolean(value))
         .map(value => value.getTime());
 
-      const lastSynced =
+      const accountLastSynced =
         lastSyncedTimestamps.length > 0
           ? new Date(Math.max(...lastSyncedTimestamps))
           : null;
 
       const maxAgeMinutes = parseInt(process.env.PERSISTED_DATA_MAX_AGE_MINUTES || '120', 10);
-      const isFresh = lastSynced
-        ? Date.now() - lastSynced.getTime() <= maxAgeMinutes * 60 * 1000
+      const accountIsFresh = accountLastSynced
+        ? Date.now() - accountLastSynced.getTime() <= maxAgeMinutes * 60 * 1000
         : false;
+
+      const needsFullSnapshot = options.includeInvestments || options.includeLiabilities;
+      const fullSnapshot = needsFullSnapshot
+        ? await prisma.financialSummarySnapshot.findUnique({
+            where: { userId },
+            select: {
+              computedAt: true,
+              asOf: true,
+              status: true,
+              accounts: true,
+              holdings: true,
+              securities: true,
+              activities: true,
+            },
+          })
+        : null;
+      const fullSnapshotObservedAt = fullSnapshot?.computedAt ?? null;
+      const fullSnapshotIsFresh = fullSnapshotObservedAt
+        ? Date.now() - fullSnapshotObservedAt.getTime() <= maxAgeMinutes * 60 * 1000
+        : false;
+      // Freshness alone is not completeness. A revision written while a provider call
+      // failed is stored as 'partial'/'unavailable' with an empty holdings or liability
+      // set, and its computedAt is still current. Reusing it would republish a missing
+      // observation as a zero-value portfolio for the whole freshness window, and the
+      // caller sees no errors to say otherwise. Only a complete revision may stand in
+      // for a live fetch; anything else falls through to the provider, matching
+      // FinancialRevisionService.recomputeIfStale, which also reuses 'current' only.
+      const fullSnapshotIsReusable = fullSnapshotIsFresh && fullSnapshot?.status === 'current';
+      if (needsFullSnapshot && !fullSnapshotIsReusable) return null;
+
+      const persistedSnapshotAccounts = Array.isArray(fullSnapshot?.accounts)
+        ? fullSnapshot.accounts as Array<Record<string, any>>
+        : [];
+      const liabilityDetailsByAccountId = new Map<string, unknown>();
+      for (const account of persistedSnapshotAccounts) {
+        const accountId = String(account.account_id || account.plaidAccountId || account.id || '');
+        if (accountId && Array.isArray(account.liabilityDetails)) {
+          liabilityDetailsByAccountId.set(accountId, account.liabilityDetails);
+        }
+      }
+
+      const lastSyncedCandidates = [accountLastSynced, fullSnapshot?.asOf, fullSnapshotObservedAt]
+        .filter((value): value is Date => value instanceof Date && !Number.isNaN(value.getTime()));
+      const lastSynced = lastSyncedCandidates.length
+        ? new Date(Math.max(...lastSyncedCandidates.map(value => value.getTime())))
+        : null;
+      const isFresh = accountIsFresh && (!needsFullSnapshot || fullSnapshotIsReusable);
 
       // Infer institution for records missing it - ensures consistent getLogicalKey() deduplication
       // so persisted accounts match fresh API accounts with the same identity.
@@ -170,6 +220,9 @@ export async function loadPersistedPlaidData(
         source: 'plaid',
         sourceConnectionId: record.accessTokenId || undefined,
         persisted: true,
+        ...(liabilityDetailsByAccountId.has(record.plaidAccountId) && {
+          liabilityDetails: liabilityDetailsByAccountId.get(record.plaidAccountId),
+        }),
         // Pass through persistentAccountId only when it's the real Plaid value (TAN institutions).
         // When persistentAccountId === plaidAccountId it was likely our incorrect fallback. Omit it
         // so identity falls back to the source connection plus the provider account ID.
@@ -229,13 +282,56 @@ export async function loadPersistedPlaidData(
         });
       }
 
+      const plaidAccountIds = new Set(accounts.map(account => account.account_id));
+      const holdings = options.includeInvestments && Array.isArray(fullSnapshot?.holdings)
+        ? (fullSnapshot.holdings as Array<Record<string, any>>)
+            .filter(holding => plaidAccountIds.has(String(holding.account_id || '')))
+        : [];
+      const securityIds = new Set(holdings.map(holding => String(holding.security_id || '')).filter(Boolean));
+      const securities = options.includeInvestments && Array.isArray(fullSnapshot?.securities)
+        ? (fullSnapshot.securities as Array<Record<string, any>>)
+            .filter(security => securityIds.has(String(security.security_id || '')))
+        : [];
+
+      if (options.includeTransactions && options.includeInvestments && Array.isArray(fullSnapshot?.activities)) {
+        const seen = new Set(transactions.map(transaction => String(
+          transaction.transaction_id || transaction.investment_transaction_id || transaction.id || ''
+        )));
+        for (const activity of fullSnapshot.activities as Array<Record<string, any>>) {
+          if (!plaidAccountIds.has(String(activity.account_id || ''))) continue;
+          const id = String(activity.investment_transaction_id || activity.transaction_id || activity.id || '');
+          if (!id || seen.has(id)) continue;
+          seen.add(id);
+          transactions.push({ ...activity, isInvestmentTransaction: true, persisted: true });
+        }
+      }
+
+      const tokenHealth: PlaidTokenHealth[] = tokenRecords
+        .filter(token => !token.supersededAt)
+        .map(token => {
+          const error = token.lastError || undefined;
+          const normalizedError = error?.toUpperCase() || '';
+          const status = normalizedError.includes('ITEM_LOGIN_REQUIRED')
+            ? TokenStatus.LOGIN_REQUIRED
+            : !token.isActive || error
+              ? TokenStatus.ERROR
+              : TokenStatus.VALID;
+          return {
+            tokenId: token.id,
+            status,
+            ...(error && { error }),
+            lastChecked: token.lastChecked || token.updatedAt,
+          };
+        });
+
       return {
         data: {
           accounts,
           balances,
-          holdings: [],
-          securities: [],
+          holdings,
+          securities,
           transactions,
+          tokenHealth,
           errors: [],
           performance: {
             duration: 0,

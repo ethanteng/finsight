@@ -248,7 +248,14 @@ MARKET OUTLOOK:
         else if (d.feedStatus) parts.push(`[Massive status: ${d.feedStatus}]`);
         lines.push(`- ${item.source} | ${parts.join(' ')}`);
       } else if (item.type === 'news_article') {
-        lines.push(`- ${item.source} | News: "${d.title || 'Untitled'}" - ${String(d.description || '').slice(0, 150)}...`);
+        const timing = d.timestampBasis === 'published' && d.publishedAt
+          ? `published ${String(d.publishedAt).slice(0, 10)}`
+          : d.timestampBasis === 'crawled' && d.crawledAt
+            ? `publication time unavailable; crawled ${String(d.crawledAt).slice(0, 10)}`
+          : d.retrievedAt
+            ? `publication time unavailable; retrieved ${String(d.retrievedAt).slice(0, 10)}`
+            : 'publication time unavailable';
+        lines.push(`- ${item.source} | News (${timing}): "${d.title || 'Untitled'}" - ${String(d.description || '').slice(0, 150)}...`);
       } else {
         lines.push(`- ${item.source}: ${JSON.stringify(item.data)}`);
       }

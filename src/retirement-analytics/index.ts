@@ -48,11 +48,13 @@ export async function analyzeRetirementPortfolio(
 ): Promise<RetirementAnalysisOutput> {
   // Phase 2: Initialize data providers (needed for FMP metadata)
   const tiingoApiKey = process.env.TIINGO_API_KEY || 'test_tiingo_key';
-  const fmpApiKey = process.env.FMP_API_KEY || 'test_fmp_key';
+  // Missing production configuration is not a test fixture. Passing an empty
+  // key lets FMPProvider degrade to explicitly inferred metadata.
+  const fmpApiKey = process.env.FMP_API_KEY?.trim() || '';
   
   // Log FMP API key status (without exposing the actual key)
-  if (fmpApiKey === 'test_fmp_key' || fmpApiKey.startsWith('test_')) {
-    console.warn('⚠️ FMP_API_KEY not set or is test key - FMP metadata will use inference only');
+  if (!fmpApiKey) {
+    console.warn('⚠️ FMP_API_KEY not set - FMP metadata will use inference only');
   } else {
     console.log('✅ FMP_API_KEY is set - will attempt to fetch real metadata');
   }

@@ -96,29 +96,47 @@ export async function fetchShowTheMathDBData(
   // Market-news records are relevant only when market context was part of the prompt.
   if (manifest.evidenceRefs.marketContext) {
     try {
-      const activeContext = await prisma.marketNewsContext.findFirst({
-        where: { isActive: true }
-      });
-      const matchesActive = activeContext && (
+      const referencedContext = manifest.evidenceRefs.marketContextId
+        ? await prisma.marketNewsContext.findUnique({
+            where: { id: manifest.evidenceRefs.marketContextId },
+          })
+        : await prisma.marketNewsContext.findFirst({
+            where: {
+              isActive: true,
+              ...(manifest.evidenceRefs.marketContextTier && {
+                availableTiers: { has: manifest.evidenceRefs.marketContextTier },
+              }),
+            },
+            orderBy: [
+              { manualOverride: 'desc' },
+              { lastUpdate: 'desc' },
+            ],
+          });
+      const matchesReferenced = referencedContext && (
         !manifest.evidenceRefs.marketContextDigest ||
-        digest(activeContext.contextText) === manifest.evidenceRefs.marketContextDigest
+        digest(referencedContext.contextText) === manifest.evidenceRefs.marketContextDigest
       );
-      if (matchesActive && activeContext) {
-        result.market_news_context = JSON.parse(JSON.stringify(activeContext));
+      if (matchesReferenced && referencedContext) {
+        result.market_news_context = JSON.parse(JSON.stringify(referencedContext));
         const history = await prisma.marketNewsHistory.findMany({
-          where: { contextId: activeContext.id },
+          where: { contextId: referencedContext.id },
           orderBy: { createdAt: 'desc' },
           take: 10
         });
         result.market_news_history = history.map((h) => JSON.parse(JSON.stringify(h)));
-      } else if (activeContext && manifest.evidenceRefs.marketContextDigest) {
-        const history = await prisma.marketNewsHistory.findMany({
-          where: { contextId: activeContext.id },
-          orderBy: { createdAt: 'desc' },
-          take: 25,
-        });
-        const matchingHistory = history.find((record) => digest(record.contextText) === manifest.evidenceRefs.marketContextDigest);
-        if (matchingHistory) result.market_news_history = [JSON.parse(JSON.stringify(matchingHistory))];
+      } else if (manifest.evidenceRefs.marketContextDigest) {
+        // Without a context to scope history to there is nothing to search, but the
+        // remaining evidence collection must still run.
+        const contextId = manifest.evidenceRefs.marketContextId || referencedContext?.id;
+        if (contextId) {
+          const history = await prisma.marketNewsHistory.findMany({
+            where: { contextId },
+            orderBy: { createdAt: 'desc' },
+            take: 50,
+          });
+          const matchingHistory = history.find((record) => digest(record.contextText) === manifest.evidenceRefs.marketContextDigest);
+          if (matchingHistory) result.market_news_history = [JSON.parse(JSON.stringify(matchingHistory))];
+        }
       }
     } catch (err) {
       console.warn('Show the math: failed to fetch market news data:', err);

@@ -6,9 +6,37 @@ import { TiingoProvider } from './providers/tiingo-provider';
 import { FMP_METADATA_VERSION, FMPProvider } from './providers/fmp-provider';
 import { dbCache } from './db-cache';
 
+const DEFAULT_FMP_METADATA_CONCURRENCY = 3;
+
+function fmpMetadataConcurrency(): number {
+  const configured = Number.parseInt(process.env.FMP_METADATA_CONCURRENCY || '', 10);
+  return Number.isFinite(configured) && configured > 0
+    ? Math.min(configured, 10)
+    : DEFAULT_FMP_METADATA_CONCURRENCY;
+}
+
+async function mapWithConcurrency<T>(
+  items: readonly T[],
+  concurrency: number,
+  mapper: (item: T) => Promise<void>,
+): Promise<void> {
+  let nextIndex = 0;
+  const worker = async () => {
+    while (nextIndex < items.length) {
+      const item = items[nextIndex++];
+      await mapper(item);
+    }
+  };
+  await Promise.all(Array.from(
+    { length: Math.min(Math.max(1, concurrency), Math.max(1, items.length)) },
+    () => worker(),
+  ));
+}
+
 export class DataProviderFactory {
   private tiingoProvider: TiingoProvider;
   private fmpProvider: FMPProvider;
+  private readonly fmpConfigured: boolean;
 
   constructor(
     tiingoApiKey: string,
@@ -16,6 +44,7 @@ export class DataProviderFactory {
   ) {
     this.tiingoProvider = new TiingoProvider(tiingoApiKey);
     this.fmpProvider = new FMPProvider(fmpApiKey);
+    this.fmpConfigured = Boolean(fmpApiKey.trim() && !fmpApiKey.startsWith('test_'));
   }
 
   /**
@@ -68,7 +97,11 @@ export class DataProviderFactory {
 
     for (const ticker of tickers) {
       const hit = cached.get(ticker);
-      if (hit && hit.provider !== 'inferred' && hit.metadataVersion === FMP_METADATA_VERSION) {
+      if (
+        hit
+        && hit.metadataVersion === FMP_METADATA_VERSION
+        && (hit.provider !== 'inferred' || !this.fmpConfigured)
+      ) {
         result.set(ticker, hit);
       } else {
         uncached.push(ticker);
@@ -77,10 +110,13 @@ export class DataProviderFactory {
 
     if (uncached.length === 0) return result;
 
-    // Fetch uncached tickers from FMP in parallel (each call is one external HTTP request)
+    // Each ticker may fan out across multiple Starter endpoints. Bound ticker
+    // concurrency so a large portfolio cannot burst the provider after a cold cache.
     const fetched: Array<{ ticker: string; metadata: SecurityMetadata; provider: string }> = [];
-    await Promise.all(
-      uncached.map(async (ticker) => {
+    await mapWithConcurrency(
+      uncached,
+      fmpMetadataConcurrency(),
+      async (ticker) => {
         try {
           const metadata = await this.fmpProvider.getSecurityMetadata(ticker, {
             persistToDatabase: false,
@@ -94,7 +130,7 @@ export class DataProviderFactory {
           result.set(ticker, inferred);
           fetched.push({ ticker, metadata: inferred, provider: 'inferred' });
         }
-      })
+      },
     );
 
     // One batch INSERT/UPDATE for all newly-fetched records

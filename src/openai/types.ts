@@ -133,6 +133,12 @@ export interface FinancialContextSnapshot {
     retrievedAt: string;
   };
   marketContext?: string;
+  marketContextMetadata?: {
+    id?: string;
+    tier: string;
+    lastUpdate: string;
+    source: 'stored' | 'fallback';
+  };
   userProfile?: string;
   homeValueSummary?: string;
   /** Structured RentCast value data used for fact provenance and uncertainty bounds. */

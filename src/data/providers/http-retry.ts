@@ -25,6 +25,37 @@ function retryableStatus(status: number): boolean {
   return status === 408 || status === 429 || status >= 500;
 }
 
+function numericHeaderValues(value: string | null): number[] {
+  if (!value) return [];
+  return value.split(',').flatMap(part => {
+    const parsed = Number.parseFloat(part.trim());
+    return Number.isFinite(parsed) && parsed >= 0 ? [parsed] : [];
+  });
+}
+
+function rateLimitResetDelayMs(response: Response): number | undefined {
+  const resets = numericHeaderValues(
+    response.headers?.get('x-ratelimit-reset')
+      || response.headers?.get('x-rate-limit-reset')
+  );
+  if (resets.length === 0) return undefined;
+  const remaining = numericHeaderValues(
+    response.headers?.get('x-ratelimit-remaining')
+      || response.headers?.get('x-rate-limit-remaining')
+  );
+  const exhaustedResets = resets.filter((_, index) => remaining[index] !== undefined && remaining[index] < 1);
+  // Every exhausted window must reset before another request is safe.
+  if (exhaustedResets.length > 0) return Math.max(...exhaustedResets) * 1_000;
+  // No window reports itself exhausted, so these headers describe quota that is
+  // still available and say nothing about why this attempt failed. Honouring
+  // them anyway would replace the intended backoff for a transient 5xx with a
+  // full window reset, which usually exceeds maxRetryDelayMs and suppresses the
+  // retry entirely. Only a 429 whose Remaining the provider omitted is evidence
+  // of an exhausted window.
+  if (response.status === 429 && remaining.length === 0) return Math.min(...resets) * 1_000;
+  return undefined;
+}
+
 function retryDelayMs(response: Response, attempt: number): number {
   const retryAfter = response.headers?.get('retry-after');
   if (retryAfter) {
@@ -34,7 +65,9 @@ function retryDelayMs(response: Response, attempt: number): number {
     const retryAt = Date.parse(retryAfter);
     if (Number.isFinite(retryAt)) return Math.max(0, retryAt - Date.now());
   }
-  return DEFAULT_RETRY_DELAY_MS * attempt;
+  const resetDelay = rateLimitResetDelayMs(response);
+  if (resetDelay !== undefined) return resetDelay;
+  return DEFAULT_RETRY_DELAY_MS * (2 ** (attempt - 1));
 }
 
 /**
@@ -163,7 +196,7 @@ export async function fetchWithBoundedRetry(
     } catch (error) {
       clearTimeout(timeout);
       if (attempt === maxAttempts) throw error;
-      const delay = DEFAULT_RETRY_DELAY_MS * attempt;
+      const delay = DEFAULT_RETRY_DELAY_MS * (2 ** (attempt - 1));
       if (delay > maxRetryDelayMs) throw error;
       await sleep(delay);
       continue;

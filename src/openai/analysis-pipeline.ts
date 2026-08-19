@@ -799,6 +799,11 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
         }),
         marketContext: Boolean(snapshot.marketContext),
         ...(marketContextDigest && { marketContextDigest }),
+        ...(snapshot.marketContextMetadata?.id && { marketContextId: snapshot.marketContextMetadata.id }),
+        ...(snapshot.marketContextMetadata?.tier && { marketContextTier: snapshot.marketContextMetadata.tier }),
+        ...(snapshot.marketContextMetadata?.lastUpdate && {
+          marketContextLastUpdate: snapshot.marketContextMetadata.lastUpdate,
+        }),
         ...(searchContextDigest && { searchContextDigest }),
         ...(snapshot.searchContextMetadata && { search: snapshot.searchContextMetadata }),
       },

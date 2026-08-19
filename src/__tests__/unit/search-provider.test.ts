@@ -50,6 +50,35 @@ describe('Brave Search provider', () => {
     expect(results).toEqual([expect.objectContaining({ url: 'https://federalreserve.gov/rates' })]);
   });
 
+  it('preserves Brave result age and parses page_age as publication time', async () => {
+    (global.fetch as jest.Mock).mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        web: {
+          results: [{
+            title: 'Market update',
+            description: 'Stocks moved after the announcement.',
+            url: 'https://example.com/market-update',
+            age: '2 hours ago',
+            page_age: '2026-08-18T15:00:00Z',
+          }],
+        },
+      }),
+    });
+    const provider = new SearchProvider('real-brave-key', 'brave', {
+      rateLimiter: noWait,
+      sleep: noSleep,
+    });
+
+    await expect(provider.search('market update')).resolves.toEqual([
+      expect.objectContaining({
+        age: '2 hours ago',
+        publishedAt: '2026-08-18T15:00:00.000Z',
+      }),
+    ]);
+  });
+
   it('preserves provider failures instead of disguising them as zero results', async () => {
     (global.fetch as jest.Mock).mockResolvedValue({
       ok: false,
@@ -83,5 +112,29 @@ describe('Brave Search provider', () => {
     expect(global.fetch).toHaveBeenCalledTimes(2);
     expect(noWait.waitForNextCall).toHaveBeenCalledTimes(2);
     expect(noSleep).toHaveBeenCalledWith(1000);
+  });
+
+  it('uses Brave reset and remaining headers for a bounded 429 retry', async () => {
+    (global.fetch as jest.Mock)
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 429,
+        headers: new Headers({
+          'x-ratelimit-remaining': '0, 1000',
+          'x-ratelimit-reset': '0.25, 100000',
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ web: { results: [] } }),
+      });
+    const provider = new SearchProvider('real-brave-key', 'brave', {
+      rateLimiter: noWait,
+      sleep: noSleep,
+    });
+
+    await expect(provider.search('market update')).resolves.toEqual([]);
+    expect(noSleep).toHaveBeenCalledWith(250);
   });
 });

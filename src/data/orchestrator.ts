@@ -43,6 +43,10 @@ export interface SearchResult {
   url: string;
   source: string;
   relevance: number;
+  /** Provider publication age, preserved even when it cannot be parsed. */
+  age?: string;
+  /** Parsed provider publication/page age. Never the retrieval timestamp. */
+  publishedAt?: string;
 }
 
 export interface MarketContextSummary {

@@ -202,6 +202,9 @@ export class MarketNewsAggregator {
         title: article.title,
         description: article.description || '',
         url: article.url,
+        timestampBasis: article.publishedDate ? 'published' : 'crawled',
+        ...(article.publishedDate && { publishedAt: timestamp.toISOString() }),
+        ...(!article.publishedDate && article.crawlDate && { crawledAt: timestamp.toISOString() }),
         tickers: article.tickers || [],
         tags: article.tags || [],
         ...(article.source && { publisherSource: article.source }),
@@ -265,14 +268,21 @@ export class MarketNewsAggregator {
           });
           
           for (const result of results) {
+            const retrievedAt = new Date();
+            const publishedAt = result.publishedAt ? new Date(result.publishedAt) : null;
+            const hasPublishedAt = Boolean(publishedAt && !Number.isNaN(publishedAt.getTime()));
             searchData.push({
               source: 'brave_search',
-              timestamp: new Date(),
+              timestamp: hasPublishedAt ? publishedAt! : retrievedAt,
               data: {
                 title: result.title,
                 description: result.snippet,
                 url: result.url,
-                query: query
+                query,
+                retrievedAt: retrievedAt.toISOString(),
+                timestampBasis: hasPublishedAt ? 'published' : 'retrieved',
+                ...(hasPublishedAt && { publishedAt: publishedAt!.toISOString() }),
+                ...(result.age && { providerAge: result.age }),
               },
               type: 'news_article',
               relevance: this.calculateNewsRelevance(result.title, result.snippet, query)

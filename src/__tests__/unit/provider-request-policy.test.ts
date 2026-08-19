@@ -32,6 +32,73 @@ describe('provider request policy', () => {
     expect(sleep).not.toHaveBeenCalled();
   });
 
+  it('retries a transient 5xx on backoff when rate-limit headers still report quota', async () => {
+    // Providers send rate-limit headers on every response. A 5xx with quota to
+    // spare must not be delayed by a full window reset, which would exceed the
+    // bounded budget and drop the retry entirely.
+    const headers = new Map<string, string>([
+      ['x-ratelimit-remaining', '900, 1900'],
+      ['x-ratelimit-reset', '60, 2000'],
+    ]);
+    const fetchImplementation = jest.fn().mockResolvedValue({
+      ok: false,
+      status: 503,
+      headers: { get: (name: string) => headers.get(name) ?? null },
+    });
+    const sleep = jest.fn().mockResolvedValue(undefined);
+
+    const response = await fetchWithBoundedRetry('https://example.com', {}, {
+      fetchImplementation,
+      sleep,
+      maxRetryDelayMs: 2000,
+    });
+
+    expect(response.status).toBe(503);
+    expect(fetchImplementation).toHaveBeenCalledTimes(2);
+    expect(sleep).toHaveBeenCalledWith(1000);
+  });
+
+  it('waits for the longest exhausted rate-limit window before retrying', async () => {
+    const headers = new Map<string, string>([
+      ['x-ratelimit-remaining', '0, 0'],
+      ['x-ratelimit-reset', '1, 2'],
+    ]);
+    const fetchImplementation = jest.fn().mockResolvedValue({
+      ok: false,
+      status: 429,
+      headers: { get: (name: string) => headers.get(name) ?? null },
+    });
+    const sleep = jest.fn().mockResolvedValue(undefined);
+
+    await fetchWithBoundedRetry('https://example.com', {}, {
+      fetchImplementation,
+      sleep,
+      maxRetryDelayMs: 5000,
+    });
+
+    expect(sleep).toHaveBeenCalledWith(2000);
+  });
+
+  it('uses the shortest advertised reset on a 429 that omits Remaining', async () => {
+    const headers = new Map<string, string>([
+      ['x-ratelimit-reset', '2, 1800'],
+    ]);
+    const fetchImplementation = jest.fn().mockResolvedValue({
+      ok: false,
+      status: 429,
+      headers: { get: (name: string) => headers.get(name) ?? null },
+    });
+    const sleep = jest.fn().mockResolvedValue(undefined);
+
+    await fetchWithBoundedRetry('https://example.com', {}, {
+      fetchImplementation,
+      sleep,
+      maxRetryDelayMs: 5000,
+    });
+
+    expect(sleep).toHaveBeenCalledWith(2000);
+  });
+
   it('does not retry non-transient SDK failures', async () => {
     const operation = jest.fn().mockRejectedValue({ status: 400 });
     await expect(withTransientProviderRetry(operation, { sleep: jest.fn() }))

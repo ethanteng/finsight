@@ -30,6 +30,19 @@ describe('Tiingo Power client', () => {
     expect(String(fetchImplementation.mock.calls[0][0])).toContain('resampleFreq=monthly');
   });
 
+  it('normalizes class-share dots for every ticker-based endpoint', async () => {
+    const fetchImplementation = jest.fn().mockResolvedValue(response(200, []));
+    const provider = new TiingoProvider('power-key', { fetchImplementation, maxAttempts: 1 });
+
+    await provider.getEodPrices('brk.b', '2026-01-01', '2026-01-31');
+    await provider.getIexQuotes(['BRK.B']);
+    await provider.getNews({ tickers: ['brk.b'] });
+
+    expect(String(fetchImplementation.mock.calls[0][0])).toContain('/tiingo/daily/BRK-B/prices');
+    expect(String(fetchImplementation.mock.calls[1][0])).toContain('tickers=BRK-B');
+    expect(String(fetchImplementation.mock.calls[2][0])).toContain('tickers=BRK-B');
+  });
+
   it('retries rate limits using Retry-After', async () => {
     const fetchImplementation = jest.fn()
       .mockResolvedValueOnce(response(429, {}, { 'retry-after': '0' }))

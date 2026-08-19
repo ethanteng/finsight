@@ -150,6 +150,9 @@ export interface EvidenceManifest {
     retirementAnalysisId?: string;
     marketContext: boolean;
     marketContextDigest?: string;
+    marketContextId?: string;
+    marketContextTier?: string;
+    marketContextLastUpdate?: string;
     searchContextDigest?: string;
     search?: {
       queries: PlannedSearchQuery[];
