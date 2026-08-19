@@ -99,7 +99,18 @@ export function optionalAuth(
   console.log('OptionalAuth middleware - token:', token ? token.substring(0, 20) + '...' : 'none');
   
   if (token) {
-    const payload = verifyToken(token);
+    // verifyToken throws when JWT_SECRET is unset/public in production (resolved
+    // outside its jwt.verify catch). This middleware is mounted on every route, so
+    // an uncaught throw would turn a misconfiguration into an unhandled crash on
+    // any request that merely presents a Bearer token.
+    let payload: ReturnType<typeof verifyToken>;
+    try {
+      payload = verifyToken(token);
+    } catch (error) {
+      console.error('OptionalAuth middleware error:', error);
+      res.status(500).json({ error: 'Authentication error' });
+      return;
+    }
     console.log('OptionalAuth middleware - payload:', payload);
     if (payload) {
       (req as AuthenticatedRequest).user = {

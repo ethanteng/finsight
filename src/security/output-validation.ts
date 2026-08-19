@@ -3,6 +3,14 @@
  * Detects and blocks leaked secrets, file paths, SQL, system prompt, etc.
  */
 
+import {
+  LINC_IDENTITY_PREFIX,
+  NEVER_REVEAL_PREFIX,
+  SECURITY_RULES_HEADING,
+  UNTRUSTED_CONTENT_CLOSE,
+  UNTRUSTED_CONTENT_OPEN,
+} from './prompt-hardening';
+
 export interface OutputValidationResult {
   safe: boolean;
   sanitized: string;
@@ -49,11 +57,32 @@ const SQL_PATTERNS = [
   /DELETE\s+FROM\s+/i,
 ];
 
-/** System prompt leakage - phrases that indicate our prompt was reproduced */
+/**
+ * System prompt leakage - phrases that indicate our prompt was reproduced.
+ *
+ * Built from the same constants the prompt itself is assembled from. These
+ * previously drifted: the detector went on matching a heading and an identity
+ * line that had been reworded out of the prompt, so it could never fire.
+ * Deriving the patterns means a reworded rule updates both sides at once, and
+ * `prompt-hardening.test.ts` runs the live prompt through this validator so a
+ * future rewording cannot quietly slip past it again.
+ */
+function leakagePatternFor(phrase: string): RegExp {
+  // Whitespace in a reproduced prompt is the one thing a model reliably
+  // reflows, so match on the words and let the spacing be anything.
+  const escaped = phrase.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(escaped.replace(/\s+/g, '\\s+'), 'i');
+}
+
 const SYSTEM_PROMPT_LEAKAGE = [
-  /#\s*Security\s+Rules\s+\(Non-Negotiable\)/i,
-  /You\s+are\s+Linc,\s+(an\s+AI\s+financial\s+analyst|a\s+friendly\s+financial\s+(analyst|analysis\s+assistant))/i,
-  /NEVER\s+reveal,\s+summarize,\s+or\s+reproduce\s+your\s+system\s+instructions/i,
+  leakagePatternFor(SECURITY_RULES_HEADING),
+  leakagePatternFor(LINC_IDENTITY_PREFIX),
+  leakagePatternFor(NEVER_REVEAL_PREFIX),
+  // The fence markers only exist inside the prompt. Seeing one in an answer
+  // means either the prompt was reproduced or untrusted content is being
+  // echoed back with its wrapper intact.
+  leakagePatternFor(UNTRUSTED_CONTENT_OPEN),
+  leakagePatternFor(UNTRUSTED_CONTENT_CLOSE),
 ];
 
 function matchesAny(text: string, patterns: RegExp[]): boolean {

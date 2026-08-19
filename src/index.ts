@@ -15,6 +15,7 @@ import aiRoutes from './routes/ai';
 import aiPerformanceRoutes from './routes/ai-performance';
 import askRoutes from './routes/ask';
 import { optionalAuth, requireAuth, adminAuth } from './auth/middleware';
+import { assertJwtSecretConfigured } from './auth/utils';
 import { UserTier } from './data/types';
 import * as Sentry from '@sentry/node';
 
@@ -2822,6 +2823,11 @@ const PORT = process.env.PORT || 3000;
 
 // Only start the server if this file is run directly
 if (require.main === module) {
+  // Before anything can accept a request. A production deploy missing
+  // JWT_SECRET would otherwise serve normally while signing sessions with a
+  // value published in this repository.
+  assertJwtSecretConfigured();
+
   app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 

@@ -8,6 +8,11 @@ import { getActiveResponseTone } from './prompt-config';
 import { FinancialContextSnapshot, QuestionNeeds } from './types';
 import { buildCanonicalFactPack, type CanonicalFactPack } from './canonical-facts';
 import { buildQuestionContextPack, formatQuestionContextPack } from './context-pack';
+import {
+  LINC_IDENTITY_LINE,
+  buildSecurityRulesSection,
+  fenceUntrustedContent,
+} from '../security/prompt-hardening';
 
 export interface FinancialReasoningPromptInput {
   question: string;
@@ -24,7 +29,9 @@ export interface FinancialReasoningPromptInput {
 }
 
 function buildReasoningSystemPrompt(): string {
-  return `You are Linc, a friendly financial analysis assistant who talks with people like a knowledgeable friend rather than a formal advisor.
+  return `${LINC_IDENTITY_LINE}
+
+${buildSecurityRulesSection()}
 
 Tone for all user-facing fields:
 ${getActiveResponseTone()}
@@ -103,8 +110,22 @@ export function buildFinancialReasoningPrompt(input: FinancialReasoningPromptInp
       userProfile
     );
   }
-  if (marketSummary) contextParts.push('', '## Daily Market Summary', marketSummary);
-  if (ragKnowledge) contextParts.push('', '## Retrieved Financial Knowledge', ragKnowledge);
+  // Market/RAG blocks are written by third parties. Prior assistant answers
+  // (fenced further below) can carry that text forward across turns.
+  if (marketSummary) {
+    contextParts.push(
+      '',
+      '## Daily Market Summary',
+      fenceUntrustedContent('daily_market_summary', marketSummary)
+    );
+  }
+  if (ragKnowledge) {
+    contextParts.push(
+      '',
+      '## Retrieved Financial Knowledge',
+      fenceUntrustedContent('public_web_search', ragKnowledge)
+    );
+  }
 
   if (conversationHistory && conversationHistory.length > 0) {
     contextParts.push(
@@ -113,10 +134,17 @@ export function buildFinancialReasoningPrompt(input: FinancialReasoningPromptInp
       'Use this only to understand what the user has been asking about. Do NOT use numbers or figures from prior answers as canonical data. The Financial Context above is the source of truth.',
       ''
     );
+    // The question is the user's own text and has already been through prompt
+    // validation, so it travels plain — fencing it would say "third party"
+    // about the person asking. A prior answer is different: it was written by
+    // a model that had web snippets and transaction descriptions in front of
+    // it, so anything injected there can ride back in on the next turn. That
+    // replay path is what the fence closes.
     for (const entry of conversationHistory.slice(-3)) {
       contextParts.push(
         `Q: ${entry.question.slice(0, 500)}`,
-        `A: ${entry.answer.slice(0, 1500)}`,
+        'A:',
+        fenceUntrustedContent('prior_assistant_answer', entry.answer.slice(0, 1500)),
         ''
       );
     }
