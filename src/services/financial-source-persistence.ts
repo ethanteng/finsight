@@ -139,6 +139,7 @@ export async function loadPersistedPlaidData(
             select: {
               computedAt: true,
               asOf: true,
+              status: true,
               accounts: true,
               holdings: true,
               securities: true,
@@ -150,7 +151,15 @@ export async function loadPersistedPlaidData(
       const fullSnapshotIsFresh = fullSnapshotObservedAt
         ? Date.now() - fullSnapshotObservedAt.getTime() <= maxAgeMinutes * 60 * 1000
         : false;
-      if (needsFullSnapshot && !fullSnapshotIsFresh) return null;
+      // Freshness alone is not completeness. A revision written while a provider call
+      // failed is stored as 'partial'/'unavailable' with an empty holdings or liability
+      // set, and its computedAt is still current. Reusing it would republish a missing
+      // observation as a zero-value portfolio for the whole freshness window, and the
+      // caller sees no errors to say otherwise. Only a complete revision may stand in
+      // for a live fetch; anything else falls through to the provider, matching
+      // FinancialRevisionService.recomputeIfStale, which also reuses 'current' only.
+      const fullSnapshotIsReusable = fullSnapshotIsFresh && fullSnapshot?.status === 'current';
+      if (needsFullSnapshot && !fullSnapshotIsReusable) return null;
 
       const persistedSnapshotAccounts = Array.isArray(fullSnapshot?.accounts)
         ? fullSnapshot.accounts as Array<Record<string, any>>
@@ -168,7 +177,7 @@ export async function loadPersistedPlaidData(
       const lastSynced = lastSyncedCandidates.length
         ? new Date(Math.max(...lastSyncedCandidates.map(value => value.getTime())))
         : null;
-      const isFresh = accountIsFresh && (!needsFullSnapshot || fullSnapshotIsFresh);
+      const isFresh = accountIsFresh && (!needsFullSnapshot || fullSnapshotIsReusable);
 
       // Infer institution for records missing it - ensures consistent getLogicalKey() deduplication
       // so persisted accounts match fresh API accounts with the same identity.

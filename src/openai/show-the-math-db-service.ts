@@ -125,15 +125,18 @@ export async function fetchShowTheMathDBData(
         });
         result.market_news_history = history.map((h) => JSON.parse(JSON.stringify(h)));
       } else if (manifest.evidenceRefs.marketContextDigest) {
+        // Without a context to scope history to there is nothing to search, but the
+        // remaining evidence collection must still run.
         const contextId = manifest.evidenceRefs.marketContextId || referencedContext?.id;
-        if (!contextId) return result;
-        const history = await prisma.marketNewsHistory.findMany({
-          where: { contextId },
-          orderBy: { createdAt: 'desc' },
-          take: 50,
-        });
-        const matchingHistory = history.find((record) => digest(record.contextText) === manifest.evidenceRefs.marketContextDigest);
-        if (matchingHistory) result.market_news_history = [JSON.parse(JSON.stringify(matchingHistory))];
+        if (contextId) {
+          const history = await prisma.marketNewsHistory.findMany({
+            where: { contextId },
+            orderBy: { createdAt: 'desc' },
+            take: 50,
+          });
+          const matchingHistory = history.find((record) => digest(record.contextText) === manifest.evidenceRefs.marketContextDigest);
+          if (matchingHistory) result.market_news_history = [JSON.parse(JSON.stringify(matchingHistory))];
+        }
       }
     } catch (err) {
       console.warn('Show the math: failed to fetch market news data:', err);

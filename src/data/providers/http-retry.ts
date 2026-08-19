@@ -44,13 +44,16 @@ function rateLimitResetDelayMs(response: Response): number | undefined {
       || response.headers?.get('x-rate-limit-remaining')
   );
   const exhaustedResets = resets.filter((_, index) => remaining[index] !== undefined && remaining[index] < 1);
-  // Every exhausted window must reset before another request is safe. When a
-  // provider omits Remaining on a 429, the shortest advertised reset is the
-  // most useful bounded retry signal.
-  const seconds = exhaustedResets.length > 0
-    ? Math.max(...exhaustedResets)
-    : Math.min(...resets);
-  return seconds * 1_000;
+  // Every exhausted window must reset before another request is safe.
+  if (exhaustedResets.length > 0) return Math.max(...exhaustedResets) * 1_000;
+  // No window reports itself exhausted, so these headers describe quota that is
+  // still available and say nothing about why this attempt failed. Honouring
+  // them anyway would replace the intended backoff for a transient 5xx with a
+  // full window reset, which usually exceeds maxRetryDelayMs and suppresses the
+  // retry entirely. Only a 429 whose Remaining the provider omitted is evidence
+  // of an exhausted window.
+  if (response.status === 429 && remaining.length === 0) return Math.min(...resets) * 1_000;
+  return undefined;
 }
 
 function retryDelayMs(response: Response, attempt: number): number {

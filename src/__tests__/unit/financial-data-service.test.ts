@@ -202,6 +202,7 @@ describe('FinancialDataService investment persistence safeguards', () => {
     (mockPrisma.financialSummarySnapshot.findUnique as any).mockResolvedValue({
       computedAt: observedAt,
       asOf: observedAt,
+      status: 'current',
       accounts: [{
         id: 'plaid-account-1',
         account_id: 'plaid-account-1',
@@ -234,6 +235,54 @@ describe('FinancialDataService investment persistence safeguards', () => {
     expect(result?.data.tokenHealth).toEqual([
       expect.objectContaining({ tokenId: 'token-1', status: 'valid' }),
     ]);
+  });
+
+  it('refuses to reuse a fresh but partial snapshot for holdings', async () => {
+    const observedAt = new Date();
+    (mockPrisma.account.findMany as any).mockResolvedValue([{
+      id: 'db-account-1',
+      plaidAccountId: 'plaid-account-1',
+      accessTokenId: 'token-1',
+      name: 'Brokerage',
+      type: 'investment',
+      subtype: 'brokerage',
+      currentBalance: 1000,
+      availableBalance: null,
+      limit: null,
+      currency: 'USD',
+      institution: 'Example Bank',
+      persistentAccountId: null,
+      balanceLastFetched: observedAt,
+      lastSynced: observedAt,
+      updatedAt: observedAt,
+      transactions: [],
+    }]);
+    (mockPrisma.accessToken.findMany as any).mockResolvedValue([{
+      id: 'token-1',
+      isActive: true,
+      lastError: null,
+      lastChecked: observedAt,
+      updatedAt: observedAt,
+      supersededAt: null,
+    }]);
+    // A holdings call that failed leaves a fresh revision whose empty holdings mean
+    // "not observed", not "portfolio is empty".
+    (mockPrisma.financialSummarySnapshot.findUnique as any).mockResolvedValue({
+      computedAt: observedAt,
+      asOf: observedAt,
+      status: 'partial',
+      accounts: [{ id: 'plaid-account-1', account_id: 'plaid-account-1', source: 'plaid' }],
+      holdings: [],
+      securities: [],
+      activities: [],
+    });
+
+    const result = await loadPersistedPlaidData('user-123', {
+      includeTransactions: false,
+      includeInvestments: true,
+    });
+
+    expect(result).toBeNull();
   });
 
   it('forces live Plaid holdings when includeInvestments is true', async () => {
