@@ -110,6 +110,13 @@ resemble a stock symbol. Geography is read from the name too, so a fund called "
 Fund" is not placed 70% in the US. Only holdings whose name carries no geography take the 70/30
 historical-average split, and only their presence may claim that assumption.
 
+A provider type that names the wrapper rather than the exposure -- "ETF", "Mutual Fund", a collective
+trust -- carries no asset class and must not be read as one. Such a holding is classified from its
+name while still inside the provider-metadata path, so the provider's own country split and
+geographic focus are applied where they exist, and it is not recorded as a heuristic guess. A
+directly held security whose provider type does name a class keeps its existing domestic default; a
+fund recognized only by name does not, since a fund genuinely could be either.
+
 Amounts remain unrounded during calculation; formatting and rounding are presentation concerns. Metrics in API and LLM responses must carry an explicit unit/currency rather than infer one from a label.
 
 ## 4. Snapshot time and completeness

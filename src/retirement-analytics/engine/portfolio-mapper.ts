@@ -9,6 +9,7 @@ import {
   hasCashNameSignal,
   hasEquityNameSignal,
   inferEquityGeography,
+  isContainerAssetType,
   isGlobalEquity,
   isInternationalEquity,
   isKnownBondTicker,
@@ -127,14 +128,30 @@ export async function mapPortfolioToAssetBasket(
 
     if (security || fmpMetadata) {
       // Prefer FMP metadata if available, fallback to security metadata
-      const assetType = fmpMetadata?.assetClass?.toLowerCase() || 
+      const providerAssetClass = fmpMetadata?.assetClass?.toLowerCase() ||
                        security?.type?.toLowerCase() || '';
-      const securityName = security?.name?.toLowerCase() || '';
+      // A container type names the wrapper, not the exposure, so it is treated
+      // as no class at all and the name decides -- here, where the provider's
+      // country split and geographic focus are still in reach.
+      const assetType = isContainerAssetType(providerAssetClass) ? '' : providerAssetClass;
+      const securityName = security?.name?.toLowerCase() || holding.security_name?.toLowerCase() || '';
       const geographicFocus = fmpMetadata?.geographicFocus?.toLowerCase() || '';
 
-      // Map based on asset class (FMP metadata takes precedence)
-      if (assetType.includes('equity') || assetType.includes('stock') ||
-          (!assetType && (securityName.includes('equity') || securityName.includes('stock')))) {
+      // Cash before bonds before equity, matching the inference order below: a
+      // Treasury money market must not be caught by the "treasury" bond signal,
+      // and a bond fund must not be caught by an index-family word.
+      if (assetType.includes('cash') || assetType.includes('money market') ||
+          (!assetType && hasCashNameSignal(securityName))) {
+        mapping.cashWeight += weight;
+        mappedValue += holdingValue;
+        mapped = true;
+      } else if (assetType.includes('bond') || assetType.includes('fixed income') ||
+          (!assetType && hasBondNameSignal(securityName))) {
+        mapping.nominalBondsWeight += weight;
+        mappedValue += holdingValue;
+        mapped = true;
+      } else if (assetType.includes('equity') || assetType.includes('stock') ||
+          (!assetType && hasEquityNameSignal(securityName))) {
         
         const countrySplit = getCountrySplit(fmpMetadata);
         if (countrySplit) {
@@ -154,30 +171,35 @@ export async function mapPortfolioToAssetBasket(
           mapping.internationalEquityWeight += weight;
           mappedValue += holdingValue;
           mapped = true;
-        } else if (geographicFocus === 'us' || !geographicFocus) {
-          // Default to US equity
+        } else if (geographicFocus === 'us') {
           mapping.usEquityWeight += weight;
           mappedValue += holdingValue;
           mapped = true;
         } else {
-          // Global or unknown - split between US and international
-          mapping.usEquityWeight += weight * 0.7;
-          mapping.internationalEquityWeight += weight * 0.3;
+          // No provider geography. Read it from the name first.
+          const inferredGeography = inferEquityGeography(securityName, ticker);
+          if (inferredGeography === 'international') {
+            mapping.internationalEquityWeight += weight;
+          } else if (inferredGeography === 'us') {
+            mapping.usEquityWeight += weight;
+          } else if (assetType) {
+            // The provider named a specific asset class, so this is a security
+            // rather than a fund inferred from its name -- a directly held
+            // stock, which stays domestic by default as it always has. Widening
+            // this to 70/30 would have split single US names like "Wells Fargo
+            // & Co." across two continents.
+            mapping.usEquityWeight += weight;
+          } else {
+            // Equity recognized only from a fund's name, with nothing saying
+            // where it invests. A fund genuinely could be either, so it takes
+            // the documented historical-average split.
+            mapping.usEquityWeight += weight * 0.7;
+            mapping.internationalEquityWeight += weight * 0.3;
+            unclassifiedEquityCount++;
+          }
           mappedValue += holdingValue;
           mapped = true;
         }
-      } else if (assetType.includes('bond') || assetType.includes('fixed income') ||
-                 (!assetType && (security?.type?.toLowerCase().includes('bond') || 
-                                 security?.type?.toLowerCase().includes('fixed income')))) {
-        mapping.nominalBondsWeight += weight;
-        mappedValue += holdingValue;
-        mapped = true;
-      } else if (assetType.includes('cash') || assetType.includes('money market') ||
-                 (!assetType && (security?.type?.toLowerCase().includes('cash') || 
-                                 security?.type?.toLowerCase().includes('money market')))) {
-        mapping.cashWeight += weight;
-        mappedValue += holdingValue;
-        mapped = true;
       }
     }
 

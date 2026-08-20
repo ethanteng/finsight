@@ -69,7 +69,9 @@ function clamp(value: number, min: number, max: number): number {
  * `20xx` at or after the earliest signal match, so "Target Ret 2040 SL SF CL III"
  * still resolves through share-class noise, while a trailing inception or series
  * year ("Target Date 2035 Fund Series 2020") cannot override the target. A year
- * that only appears before the signal (e.g. an establishment date) is ignored.
+ * that only appears before the signal is used only when none follows it, so a
+ * label like "2040 Retirement Fund" still resolves without letting a trailing
+ * series year win over a real target.
  */
 export function targetDateFundYear(...labels: Array<unknown>): number | null {
   const text = labels
@@ -87,7 +89,12 @@ export function targetDateFundYear(...labels: Array<unknown>): number | null {
   }
   if (signalIndex < 0) return null;
 
-  const years = text.slice(signalIndex).match(/\b(20\d{2})\b/g);
+  // Prefer the first year at or after the signal, which is where every provider
+  // convention puts it. Fall back to a year earlier in the label rather than
+  // giving up: preferring the later position is what stops a trailing series
+  // year from winning, and nothing about that requires refusing the other order.
+  const following = text.slice(signalIndex).match(/\b(20\d{2})\b/g);
+  const years = following && following.length > 0 ? following : text.match(/\b(20\d{2})\b/g);
   if (!years || years.length === 0) return null;
   const year = Number(years[0]);
   if (!Number.isFinite(year) || year < MIN_TARGET_YEAR || year > MAX_TARGET_YEAR) return null;

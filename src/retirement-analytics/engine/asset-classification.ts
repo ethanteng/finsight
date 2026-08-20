@@ -116,3 +116,37 @@ export function inferEquityGeography(securityName: string, ticker: string): Equi
   if (US_MARKET_SIGNALS.some(signal => name.includes(signal))) return 'us';
   return 'unknown';
 }
+
+/**
+ * Provider types that name the wrapper rather than the exposure.
+ *
+ * "ETF" and "Mutual Fund" say how a holding is packaged, not what it holds: a
+ * bond ETF and a small-cap ETF share the type. Treating them as an asset class
+ * pushed every such holding past the metadata branch and into the crude
+ * inference path, where the FMP country split and geographic focus are not
+ * consulted at all -- so a fund with good provider data was still placed by a
+ * ticker-shape guess. Recognizing them as carrying no class lets the name and
+ * the provider's own geography decide inside the metadata branch.
+ *
+ * Matched exactly rather than by substring: "fixed income fund" ends in "fund"
+ * and does name its exposure.
+ */
+const CONTAINER_ASSET_TYPES = new Set([
+  'etf',
+  'etfs',
+  'exchange traded fund',
+  'exchange-traded fund',
+  'mutual fund',
+  'mutual funds',
+  'fund',
+  'index fund',
+  'collective trust',
+  'collective investment trust',
+  'commingled fund',
+  'pooled fund',
+  'separate account',
+]);
+
+export function isContainerAssetType(assetType: string): boolean {
+  return CONTAINER_ASSET_TYPES.has(assetType.trim().toLowerCase());
+}

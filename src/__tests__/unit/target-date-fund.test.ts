@@ -21,6 +21,14 @@ describe('target-date fund recognition', () => {
     expect(targetDateFundYear('Fidelity Freedom 2045 Fund')).toBe(2045);
   });
 
+  it('prefers the target year over a trailing series or inception year', () => {
+    expect(targetDateFundYear('Target Date 2035 Fund Series 2020')).toBe(2035);
+  });
+
+  it('still resolves a label that puts the year before the signal', () => {
+    expect(targetDateFundYear('2040 Target Retirement Fund')).toBe(2040);
+  });
+
   it('never reads a maturity date as a glidepath', () => {
     // A dated bond is the sharp case: treating "UST 3.875% 04/30/2030" as a
     // 2030 target-date fund would model a Treasury as 58% equity.
@@ -235,5 +243,65 @@ describe('institutional and employer-plan funds', () => {
     const mapping = await map('Vanguard Treasury Money Market Fund', 'VUSXX', 'Mutual Fund');
     expect(mapping.cashWeight).toBeCloseTo(1, 6);
     expect(mapping.nominalBondsWeight).toBeCloseTo(0, 6);
+  });
+});
+
+describe('container provider types', () => {
+  const map = (name: string, ticker: string | null, type: string | null) =>
+    mapPortfolioToAssetBasket(
+      [{ security_id: 's', ticker_symbol: ticker, security_name: name, institution_value: 1000 }] as any[],
+      [{ security_id: 's', name, ticker_symbol: ticker, type }] as any[],
+      1000,
+      undefined,
+      new Map(),
+      2026
+    );
+
+  it('does not treat a wrapper type as an asset class', async () => {
+    // "ETF" and "Mutual Fund" describe packaging. Treating them as a class sent
+    // every such holding past the metadata branch into crude inference, so the
+    // provider's own country split and geographic focus were never consulted.
+    for (const type of ['etf', 'ETF', 'mutual fund', 'Collective Trust', 'separate account']) {
+      const mapping = await map('Vanguard Total Stock Market Index', 'VTI', type);
+      expect(mapping.usEquityWeight).toBeCloseTo(1, 6);
+      expect(mapping.unmappedHoldings).toEqual([]);
+      // Placed from provider metadata plus the name, not guessed.
+      expect(mapping.mappingMethod).toBe('direct');
+    }
+  });
+
+  it('still reads a type that does name its exposure', async () => {
+    // "fixed income fund" ends in "fund" but is not a container type.
+    const mapping = await map('Some Plan Bond Option', 'XBONDX', 'fixed income fund');
+    expect(mapping.nominalBondsWeight).toBeCloseTo(1, 6);
+  });
+
+  it('keeps a directly held stock domestic rather than splitting it 70/30', async () => {
+    // The provider named a real asset class, so this is a security and not a
+    // fund inferred from its name. Widening it would put "Wells Fargo & Co."
+    // across two continents.
+    const mapping = await map('Wells Fargo & Co.', 'WFC', 'equity');
+    expect(mapping.usEquityWeight).toBeCloseTo(1, 6);
+    expect(mapping.unclassifiedEquityCount).toBe(0);
+  });
+
+  it('gives a wrapper-typed fund with no geography the documented split', async () => {
+    const mapping = await map('Small Cap Fund', 'SPUSA061004C00000000', 'mutual fund');
+    expect(mapping.usEquityWeight).toBeCloseTo(0.7, 6);
+    expect(mapping.internationalEquityWeight).toBeCloseTo(0.3, 6);
+    expect(mapping.unclassifiedEquityCount).toBe(1);
+  });
+
+  it('routes a bond ETF to bonds through the metadata branch', async () => {
+    const mapping = await map('iShares Core U.S. Aggregate Bond ETF', 'AGG', 'etf');
+    expect(mapping.nominalBondsWeight).toBeCloseTo(1, 6);
+    expect(mapping.mappingMethod).toBe('direct');
+  });
+
+  it('leaves a bond ETF whose name hides it to the ticker list', async () => {
+    // "JPMorgan Ultra-Short Income ETF" names no bond signal, so the metadata
+    // branch declines it and inference catches it by known bond ticker.
+    const mapping = await map('JPMorgan Ultra-Short Income ETF', 'JPST', 'etf');
+    expect(mapping.nominalBondsWeight).toBeCloseTo(1, 6);
   });
 });
