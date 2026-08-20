@@ -58,41 +58,62 @@ function accountIdsMissingFrom(previous: unknown, freshAccounts: unknown): strin
   return Array.from(missing);
 }
 
-/** Stable identity for a holding across price/quantity updates. */
-function holdingIdentity(holding: unknown): string | null {
+/** The account a holding belongs to, when it names one. */
+function holdingAccountId(holding: unknown): string | null {
   if (!holding || typeof holding !== 'object') return null;
-  const record = holding as Record<string, unknown>;
-  const accountId = typeof record.account_id === 'string' ? record.account_id : null;
-  const securityId = typeof record.security_id === 'string' ? record.security_id : null;
-  if (accountId && securityId) return `${accountId}:${securityId}`;
-  const id = typeof record.id === 'string' ? record.id : null;
-  return id && id.length > 0 ? id : null;
+  const accountId = (holding as Record<string, unknown>).account_id;
+  return typeof accountId === 'string' && accountId.length > 0 ? accountId : null;
 }
 
 /**
- * Holdings the previous revision had that this one does not.
+ * Accounts that held positions in the previous revision and hold none now,
+ * while the account itself is still present.
  *
- * Account coverage alone is not enough: SnapTrade/Plaid can return every
- * account (and even last-known balances) while a holdings fetch fails, which
- * would publish an empty portfolio and wipe allocation detail. Identity is
- * account+security so a normal price refresh is not treated as a loss.
+ * Account coverage alone is not enough to protect a portfolio: a provider can
+ * return every account, and even last known balances, while its holdings fetch
+ * fails -- publishing that would wipe allocation detail without dropping a
+ * single account.
  *
- * Returns an empty list when the previous revision recorded no holdings.
+ * Deliberately "emptied", not "any holding missing". A user who sells one
+ * position out of several has legitimately lost a holding, and treating that as
+ * a regression would freeze their snapshot for the rest of the retention window
+ * over a trade they made on purpose. A holdings fetch that fails takes the whole
+ * account's positions with it, so emptiness is the signature worth protecting
+ * against. Selling the only position in an account during an already-partial
+ * refresh is the one case still misread, and it costs a delayed update rather
+ * than a wrong figure.
+ *
+ * An account missing entirely is not reported here -- accountIdsMissingFrom
+ * already covers it, and counting it twice would say nothing new.
  */
-function holdingIdentitiesMissingFrom(previous: unknown, freshHoldings: unknown): string[] {
+function accountsWithEmptiedHoldings(
+  previous: unknown,
+  freshHoldings: unknown,
+  freshAccounts: unknown
+): string[] {
   const previousHoldings = (previous as { holdings?: unknown })?.holdings;
   if (!Array.isArray(previousHoldings) || previousHoldings.length === 0) return [];
-  const fresh = new Set(
-    (Array.isArray(freshHoldings) ? freshHoldings : [])
-      .map(holdingIdentity)
+
+  const accountsStillPresent = new Set(
+    (Array.isArray(freshAccounts) ? freshAccounts : [])
+      .map(snapshotAccountId)
       .filter((id): id is string => id !== null)
   );
-  const missing = new Set<string>();
+  const accountsHoldingSomethingNow = new Set(
+    (Array.isArray(freshHoldings) ? freshHoldings : [])
+      .map(holdingAccountId)
+      .filter((id): id is string => id !== null)
+  );
+
+  const emptied = new Set<string>();
   for (const holding of previousHoldings) {
-    const id = holdingIdentity(holding);
-    if (id && !fresh.has(id)) missing.add(id);
+    const accountId = holdingAccountId(holding);
+    if (!accountId) continue;
+    if (!accountsStillPresent.has(accountId)) continue;
+    if (accountsHoldingSomethingNow.has(accountId)) continue;
+    emptied.add(accountId);
   }
-  return Array.from(missing);
+  return Array.from(emptied);
 }
 
 export interface SummaryComputeOptions {
@@ -273,8 +294,12 @@ export class SummaryCacheService {
       // healthy source, which is what held real users on a stale revision for
       // days while every one of their connections was syncing normally.
       const droppedAccountIds = accountIdsMissingFrom(previous, payload.accounts);
-      const droppedHoldingIds = holdingIdentitiesMissingFrom(previous, payload.holdings);
-      const lostCoverage = droppedAccountIds.length > 0 || droppedHoldingIds.length > 0;
+      const emptiedHoldingAccountIds = accountsWithEmptiedHoldings(
+        previous,
+        payload.holdings,
+        payload.accounts
+      );
+      const lostCoverage = droppedAccountIds.length > 0 || emptiedHoldingAccountIds.length > 0;
       if (retainable && !lostCoverage) {
         console.log(
           `SummaryCacheService: provider data for user ${userId} is ${canonical.status} but still covers ` +
@@ -287,9 +312,10 @@ export class SummaryCacheService {
             `SummaryCacheService: ${droppedAccountIds.length} account(s) missing from this revision for user ${userId}`
           );
         }
-        if (droppedHoldingIds.length > 0) {
+        if (emptiedHoldingAccountIds.length > 0) {
           console.warn(
-            `SummaryCacheService: ${droppedHoldingIds.length} holding(s) missing from this revision for user ${userId}`
+            `SummaryCacheService: ${emptiedHoldingAccountIds.length} account(s) lost every holding in this revision ` +
+            `for user ${userId}; treating as a failed holdings fetch`
           );
         }
         console.warn(
