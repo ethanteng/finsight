@@ -743,6 +743,11 @@ async function fetchOrCreateRetirementAnalysis(args: {
     };
   }
 
+  // Resolve once so cache matching and the stored input use the same year the
+  // engine would. Glidepath equity share depends on asOfYear; a 7-day cache hit
+  // that ignores it would reuse a Dec analysis on Jan 1 with the wrong split.
+  const effectiveAsOfYear = asOfYear ?? new Date().getUTCFullYear();
+
   // If recent analysis exists and parameters match, use it
   if (recentAnalysis) {
     const storedPortfolio = recentAnalysis.portfolioSnapshot as any;
@@ -752,6 +757,13 @@ async function fetchOrCreateRetirementAnalysis(args: {
         storedPortfolio.holdings,
         storedPortfolio.securities
       );
+    const storedAsOfYear =
+      typeof storedAnalysisInput.asOfYear === 'number' &&
+      Number.isFinite(storedAnalysisInput.asOfYear)
+        ? (storedAnalysisInput.asOfYear as number)
+        // Legacy rows predate asOfYear; the row's computedAt year is the closest
+        // proxy for the clock the mapper used when the analysis was built.
+        : recentAnalysis.computedAt.getUTCFullYear();
     if (
       portfolioMatches &&
       storedInput.currentAge === currentAge &&
@@ -759,7 +771,8 @@ async function fetchOrCreateRetirementAnalysis(args: {
       storedInput.annualWithdrawalAmount === annualWithdrawalAmount &&
       storedInput.withdrawalStartAge === withdrawalStartAge &&
       (storedInput.lifeExpectancy ?? 95) === lifeExpectancy &&
-      storedAnalysisInput.historicalDatasetVersion === historicalDatasetVersion
+      storedAnalysisInput.historicalDatasetVersion === historicalDatasetVersion &&
+      storedAsOfYear === effectiveAsOfYear
     ) {
       console.log('📦 Using cached retirement analysis from database');
       const cachedAnalysis = recentAnalysis.historicalImplications as any;
@@ -836,7 +849,9 @@ async function fetchOrCreateRetirementAnalysis(args: {
       holdings,
       securities,
       unmodeledInvestments,
-      asOfYear,
+      // Always persist the resolved year so a later cache lookup can match it
+      // even when the caller left asOfYear undefined (clock default).
+      asOfYear: effectiveAsOfYear,
       currentAge,
       retirementAge,
       lifeExpectancy,

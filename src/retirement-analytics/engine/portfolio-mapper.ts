@@ -37,7 +37,7 @@ export async function mapPortfolioToAssetBasket(
    * Year the glidepath is evaluated against. Passed rather than read from the
    * clock so a snapshot, a test, and a replay resolve the same split.
    */
-  asOfYear: number = new Date().getFullYear()
+  asOfYear: number = new Date().getUTCFullYear()
 ): Promise<PortfolioMapping> {
   const mapping: PortfolioMapping = {
     usEquityWeight: 0,
