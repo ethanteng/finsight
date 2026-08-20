@@ -115,8 +115,31 @@ export default function InvestmentPortfolio({ portfolio, holdings, transactions 
     }).format(amount);
   };
 
+  /**
+   * One line of explanation for buckets whose names cannot carry their own
+   * meaning. "Not itemized" and "Unrecognized holdings" describe opposite
+   * problems -- value with no securities, and securities with no category --
+   * and a reader cannot tell them apart from the labels alone. The self-evident
+   * buckets (ETF, Equity) get nothing, so the list stays scannable.
+   */
+  const getAssetTypeNote = (type: string): string | null => {
+    switch (type) {
+      case 'Not itemized':
+        return 'Balance your provider reports without position detail';
+      case 'Unrecognized holdings':
+        return 'Positions we hold but could not classify';
+      case 'Target Date Fund':
+        return 'Blended funds that shift from stocks to bonds over time';
+      default:
+        return null;
+    }
+  };
+
   const getAssetTypeIcon = (type: string) => {
     const typeLower = type.toLowerCase();
+    if (typeLower.includes('target date')) return '🎯';
+    if (typeLower.includes('not itemized')) return '🔒';
+    if (typeLower.includes('unrecognized')) return '❓';
     if (typeLower.includes('equity') || typeLower.includes('stock')) return '📈';
     if (typeLower.includes('bond') || typeLower.includes('fixed')) return '📊';
     if (typeLower.includes('mutual') || typeLower.includes('fund')) return '🏦';
@@ -280,6 +303,11 @@ export default function InvestmentPortfolio({ portfolio, holdings, transactions 
                       <span className="text-white">{allocation.type}</span>
                       <span className="text-gray-400">{formatCurrency(allocation.value)}</span>
                     </div>
+                    {getAssetTypeNote(allocation.type) && (
+                      <div className="mt-0.5 text-xs text-gray-500">
+                        {getAssetTypeNote(allocation.type)}
+                      </div>
+                    )}
                     <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-[#dfe4da]">
                       <div
                         className="h-2 rounded-full bg-[#397052] transition-all duration-300"

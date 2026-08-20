@@ -73,7 +73,7 @@ twice.
 
 The reported balance is authoritative for what an account is worth; holdings are authoritative for
 how that value is composed. Value the balance carries and no holding explains is included in
-`totalInvestments` and attributed to an `Unclassified` asset class, so allocation always reconciles
+`totalInvestments` and attributed to a `Not itemized` asset class, so allocation always reconciles
 to the total. Where that residual exceeds the greater of 1 unit of the reporting currency or 0.5% of
 the balance, the snapshot records an `account:<id>:holdings-coverage` observation. That observation
 is not `required`: nothing is missing from net worth, only from the allocation's detail.
@@ -95,6 +95,27 @@ sustainable withdrawal rates carry no caveat: withdrawal survival is scale-invar
 percentages do not move with the excluded value. The modeled basis is measured the way the consuming
 engine sums holdings, not the way the canonical portfolio does, so a stated basis always matches what
 was actually simulated.
+
+Two allocation buckets describe missing information and must not be merged, because they describe
+opposite problems with different remedies. `Not itemized` is value an account reports that no holding
+explains -- money with no security behind it, resolvable only by the provider. `Unrecognized holdings`
+is a security we do hold whose asset class we could not resolve -- resolvable by better metadata.
+A target-date fund is neither: it is a declared blend, recognized from its own label rather than from
+a provider type, and modeled on an approximate industry glidepath. That approximation is stated as an
+assumption naming each fund and its split, because it is not the fund's own published curve.
+
+Employer-plan and institutional share classes are placed the same way: by reading the mandate their
+names state, since their provider type says only "Mutual Fund" and their tickers are too long to
+resemble a stock symbol. Geography is read from the name too, so a fund called "International Equity
+Fund" is not placed 70% in the US. Only holdings whose name carries no geography take the 70/30
+historical-average split, and only their presence may claim that assumption.
+
+A provider type that names the wrapper rather than the exposure -- "ETF", "Mutual Fund", a collective
+trust -- carries no asset class and must not be read as one. Such a holding is classified from its
+name while still inside the provider-metadata path, so the provider's own country split and
+geographic focus are applied where they exist, and it is not recorded as a heuristic guess. A
+directly held security whose provider type does name a class keeps its existing domestic default; a
+fund recognized only by name does not, since a fund genuinely could be either.
 
 Amounts remain unrounded during calculation; formatting and rounding are presentation concerns. Metrics in API and LLM responses must carry an explicit unit/currency rather than infer one from a label.
 

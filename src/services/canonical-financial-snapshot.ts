@@ -7,6 +7,7 @@ import {
 } from '../domain/financial-truth';
 import { classifyAccount, type AccountLike } from './account-classifier';
 import { normalizeAssetType } from './asset-class';
+import { isTargetDateFund, TARGET_DATE_ASSET_TYPE } from './target-date-fund';
 
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
@@ -34,11 +35,16 @@ interface SnapshotHolding {
   snapshotTimestamp?: string | Date | null;
   iso_currency_code?: string | null;
   security_type?: string | null;
+  /** Denormalized from the linked security when the holdings feed carries it. */
+  security_name?: string | null;
+  ticker_symbol?: string | null;
 }
 
 interface SnapshotSecurity {
   security_id?: string;
   type?: string | null;
+  name?: string | null;
+  ticker_symbol?: string | null;
 }
 
 interface SnapshotError {
@@ -157,8 +163,15 @@ function holdingId(holding: SnapshotHolding, index: number): string {
 
 /**
  * Allocation bucket for value an account reports but no holding itemizes.
+ *
+ * "Not itemized" rather than "Unclassified": the previous label read as a
+ * synonym of the `Unrecognized holdings` bucket while meaning close to its
+ * opposite. This is value with no security behind it at all; that one is a
+ * security whose category we could not resolve. Only the account's provider
+ * can fix this one, so the label says what is missing rather than how we feel
+ * about it.
  */
-const UNCLASSIFIED_ASSET_TYPE = 'Unclassified';
+const UNCLASSIFIED_ASSET_TYPE = 'Not itemized';
 
 /** Below this, a coverage gap is rounding or pricing skew rather than missing positions. */
 const COVERAGE_GAP_MIN = 1;
@@ -275,6 +288,11 @@ export function buildCanonicalInvestmentPortfolio(
       .filter(security => Boolean(security.security_id))
       .map(security => [String(security.security_id), security.type || null])
   );
+  const securityRecords = new Map(
+    securities
+      .filter(security => Boolean(security.security_id))
+      .map(security => [String(security.security_id), security])
+  );
   const allocation = new Map<string, number>();
   const includedSecurityIds = new Set<string>();
   const currencyMismatchIds: string[] = [];
@@ -302,11 +320,23 @@ export function buildCanonicalInvestmentPortfolio(
       countedHoldings.push({ accountId: holding.account_id, value });
     }
     if (holding.security_id) includedSecurityIds.add(String(holding.security_id));
-    // Normalize so the same asset class from different providers (Plaid's "etf"
-    // vs SnapTrade's "ETF") lands in one bucket instead of several.
-    const assetType = normalizeAssetType(
-      securityTypes.get(String(holding.security_id || '')) || holding.security_type
-    );
+    // A target-date fund is a blend that no provider type describes: the ones
+    // that arrive typed say "Mutual Fund", and the institutional share classes
+    // arrive with no type at all. Recognize it from its own label before
+    // falling back to what the provider said.
+    const security = securityRecords.get(String(holding.security_id || ''));
+    const assetType = isTargetDateFund(
+      security?.name,
+      holding.security_name,
+      security?.ticker_symbol,
+      holding.ticker_symbol
+    )
+      ? TARGET_DATE_ASSET_TYPE
+      // Normalize so the same asset class from different providers (Plaid's "etf"
+      // vs SnapTrade's "ETF") lands in one bucket instead of several.
+      : normalizeAssetType(
+          securityTypes.get(String(holding.security_id || '')) || holding.security_type
+        );
     allocation.set(assetType, (allocation.get(assetType) || 0) + value);
   });
 

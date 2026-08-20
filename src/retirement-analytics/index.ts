@@ -90,7 +90,14 @@ export async function analyzeRetirementPortfolio(
   // Phase 1: Portfolio metrics & mapping (now with FMP metadata support)
   const portfolioMetrics = await analyzePortfolio(input.holdings, input.securities, dataProviderFactory, tickerToMetadata);
   const totalValue = input.holdings.reduce((sum, h) => sum + (h.institution_value || 0), 0);
-  const portfolioMapping = await mapPortfolioToAssetBasket(input.holdings, input.securities, totalValue, dataProviderFactory, tickerToMetadata);
+  // Passed explicitly rather than left to the mapper's clock default. The
+  // glidepath split depends on the year, and a cached analysis compared or
+  // replayed across a year boundary must resolve the same split it was built
+  // with -- a parameter that only the tests supply is not determinism.
+  // UTC to match snapshotYear() / scenario baselineYear — local getFullYear()
+  // would disagree near a year boundary on a non-UTC host.
+  const asOfYear = input.asOfYear ?? new Date().getUTCFullYear();
+  const portfolioMapping = await mapPortfolioToAssetBasket(input.holdings, input.securities, totalValue, dataProviderFactory, tickerToMetadata, asOfYear);
   const assumptions = populateAssumptions(portfolioMapping, input.holdings, input.securities);
   const withdrawalPolicy = input.withdrawalPolicy ?? { type: 'historical_cpi' as const };
   const annualContributionAmount = input.annualContributionAmount ?? 0;

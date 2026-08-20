@@ -6,10 +6,22 @@ import { PortfolioMapping, SecurityMetadata } from '../types';
 import { DataProviderFactory } from '../data/data-provider-factory';
 import {
   hasBondNameSignal,
+  hasCashNameSignal,
+  hasEquityNameSignal,
+  inferEquityGeography,
+  isContainerAssetType,
+  isDeclaredFixedIncomeType,
   isGlobalEquity,
   isInternationalEquity,
   isKnownBondTicker,
 } from './asset-classification';
+import { resolveTargetDateFund } from '../../services/target-date-fund';
+
+/**
+ * Equity inside a target-date fund is global, so it is split the same way the
+ * mapper splits any equity it cannot place by geography.
+ */
+const TARGET_DATE_US_EQUITY_SHARE = 0.7;
 
 /**
  * Map portfolio holdings to asset basket (US equity, international equity, bonds, cash)
@@ -21,7 +33,12 @@ export async function mapPortfolioToAssetBasket(
   securities: Security[],
   totalValue: number,
   dataProviderFactory?: DataProviderFactory,
-  preFetchedMetadata?: Map<string, any>
+  preFetchedMetadata?: Map<string, any>,
+  /**
+   * Year the glidepath is evaluated against. Passed rather than read from the
+   * clock so a snapshot, a test, and a replay resolve the same split.
+   */
+  asOfYear: number = new Date().getUTCFullYear()
 ): Promise<PortfolioMapping> {
   const mapping: PortfolioMapping = {
     usEquityWeight: 0,
@@ -30,7 +47,9 @@ export async function mapPortfolioToAssetBasket(
     cashWeight: 0,
     mappingConfidence: 'high',
     unmappedHoldings: [],
-    mappingMethod: 'direct'
+    mappingMethod: 'direct',
+    targetDateFunds: [],
+    unclassifiedEquityCount: 0
   };
 
   if (totalValue === 0 || holdings.length === 0) {
@@ -40,6 +59,7 @@ export async function mapPortfolioToAssetBasket(
   const securityMap = new Map(securities.map(sec => [sec.security_id, sec]));
   let mappedValue = 0;
   let inferredCount = 0;
+  let unclassifiedEquityCount = 0;
   let unmappedCount = 0;
 
   // Use pre-fetched metadata if provided, otherwise fetch (for backward compatibility)
@@ -76,18 +96,70 @@ export async function mapPortfolioToAssetBasket(
     let mapped = false;
 
     const ticker = security?.ticker_symbol?.toUpperCase() || holding.ticker_symbol?.toUpperCase() || '';
+
+    // Resolved before the target-date branch because the provider's declared
+    // type can veto it. FMP metadata is preferred over the security's own type.
     const fmpMetadata = (ticker ? tickerToMetadata.get(ticker) : null) as SecurityMetadata | null;
+    const providerAssetClass = fmpMetadata?.assetClass?.toLowerCase() ||
+      security?.type?.toLowerCase() || '';
+
+    // Before anything else. A target-date fund is a declared blend, and its own
+    // label states the target year -- better evidence than a provider type that
+    // says "Mutual Fund", and far better than the ticker-shaped-like-a-stock
+    // heuristic further down, which was modeling a de-risking 2040 fund as 100%
+    // equity purely because its ticker is four letters.
+    //
+    // A declared fixed-income type outranks the name, though: bonds carry years
+    // for their maturities, and a signal word near one must not turn a bond into
+    // mostly equity. Real target-date funds are never typed this way.
+    const targetDate = isDeclaredFixedIncomeType(providerAssetClass)
+      ? null
+      : resolveTargetDateFund(
+          [security?.name, holding.security_name, security?.ticker_symbol, holding.ticker_symbol],
+          asOfYear
+        );
+    if (targetDate) {
+      mapping.usEquityWeight += weight * targetDate.equityShare * TARGET_DATE_US_EQUITY_SHARE;
+      mapping.internationalEquityWeight +=
+        weight * targetDate.equityShare * (1 - TARGET_DATE_US_EQUITY_SHARE);
+      mapping.nominalBondsWeight += weight * targetDate.bondShare;
+      mapping.targetDateFunds.push({
+        label: security?.name || holding.security_name || ticker || 'Target-date fund',
+        targetYear: targetDate.targetYear,
+        equityShare: targetDate.equityShare,
+      });
+      // The glidepath is an approximation of a curve we do not hold, so this is
+      // inference, not provider metadata -- and it must be stated as such.
+      mapping.mappingMethod = 'inferred';
+      mapping.mappingConfidence = 'medium';
+      inferredCount++;
+      mappedValue += holdingValue;
+      continue;
+    }
 
     if (security || fmpMetadata) {
-      // Prefer FMP metadata if available, fallback to security metadata
-      const assetType = fmpMetadata?.assetClass?.toLowerCase() || 
-                       security?.type?.toLowerCase() || '';
-      const securityName = security?.name?.toLowerCase() || '';
+      // A container type names the wrapper, not the exposure, so it is treated
+      // as no class at all and the name decides -- here, where the provider's
+      // country split and geographic focus are still in reach.
+      const assetType = isContainerAssetType(providerAssetClass) ? '' : providerAssetClass;
+      const securityName = security?.name?.toLowerCase() || holding.security_name?.toLowerCase() || '';
       const geographicFocus = fmpMetadata?.geographicFocus?.toLowerCase() || '';
 
-      // Map based on asset class (FMP metadata takes precedence)
-      if (assetType.includes('equity') || assetType.includes('stock') ||
-          (!assetType && (securityName.includes('equity') || securityName.includes('stock')))) {
+      // Cash before bonds before equity, matching the inference order below: a
+      // Treasury money market must not be caught by the "treasury" bond signal,
+      // and a bond fund must not be caught by an index-family word.
+      if (assetType.includes('cash') || assetType.includes('money market') ||
+          (!assetType && hasCashNameSignal(securityName))) {
+        mapping.cashWeight += weight;
+        mappedValue += holdingValue;
+        mapped = true;
+      } else if (assetType.includes('bond') || assetType.includes('fixed income') ||
+          (!assetType && hasBondNameSignal(securityName))) {
+        mapping.nominalBondsWeight += weight;
+        mappedValue += holdingValue;
+        mapped = true;
+      } else if (assetType.includes('equity') || assetType.includes('stock') ||
+          (!assetType && hasEquityNameSignal(securityName))) {
         
         const countrySplit = getCountrySplit(fmpMetadata);
         if (countrySplit) {
@@ -107,30 +179,35 @@ export async function mapPortfolioToAssetBasket(
           mapping.internationalEquityWeight += weight;
           mappedValue += holdingValue;
           mapped = true;
-        } else if (geographicFocus === 'us' || !geographicFocus) {
-          // Default to US equity
+        } else if (geographicFocus === 'us') {
           mapping.usEquityWeight += weight;
           mappedValue += holdingValue;
           mapped = true;
         } else {
-          // Global or unknown - split between US and international
-          mapping.usEquityWeight += weight * 0.7;
-          mapping.internationalEquityWeight += weight * 0.3;
+          // No provider geography. Read it from the name first.
+          const inferredGeography = inferEquityGeography(securityName, ticker);
+          if (inferredGeography === 'international') {
+            mapping.internationalEquityWeight += weight;
+          } else if (inferredGeography === 'us') {
+            mapping.usEquityWeight += weight;
+          } else if (assetType) {
+            // The provider named a specific asset class, so this is a security
+            // rather than a fund inferred from its name -- a directly held
+            // stock, which stays domestic by default as it always has. Widening
+            // this to 70/30 would have split single US names like "Wells Fargo
+            // & Co." across two continents.
+            mapping.usEquityWeight += weight;
+          } else {
+            // Equity recognized only from a fund's name, with nothing saying
+            // where it invests. A fund genuinely could be either, so it takes
+            // the documented historical-average split.
+            mapping.usEquityWeight += weight * 0.7;
+            mapping.internationalEquityWeight += weight * 0.3;
+            unclassifiedEquityCount++;
+          }
           mappedValue += holdingValue;
           mapped = true;
         }
-      } else if (assetType.includes('bond') || assetType.includes('fixed income') ||
-                 (!assetType && (security?.type?.toLowerCase().includes('bond') || 
-                                 security?.type?.toLowerCase().includes('fixed income')))) {
-        mapping.nominalBondsWeight += weight;
-        mappedValue += holdingValue;
-        mapped = true;
-      } else if (assetType.includes('cash') || assetType.includes('money market') ||
-                 (!assetType && (security?.type?.toLowerCase().includes('cash') || 
-                                 security?.type?.toLowerCase().includes('money market')))) {
-        mapping.cashWeight += weight;
-        mappedValue += holdingValue;
-        mapped = true;
       }
     }
 
@@ -140,8 +217,21 @@ export async function mapPortfolioToAssetBasket(
       const ticker = security?.ticker_symbol?.toUpperCase() || holding.ticker_symbol?.toUpperCase() || '';
       const holdingType = holding.security_type?.toLowerCase() || '';
 
-      // Inference heuristics
-      if (holdingType.includes('bond') || holdingType.includes('fixed income') ||
+      // Inference heuristics, most specific evidence first.
+      //
+      // Cash precedes bonds so a Treasury money-market fund is not caught by
+      // the "treasury" bond signal, and both precede equity so a bond or cash
+      // fund is never swept up by the ticker-shaped-like-a-stock fallback --
+      // which had been classifying a government cash reserve as stocks purely
+      // because its ticker is five letters.
+      if (hasCashNameSignal(securityName)) {
+        mapping.cashWeight += weight;
+        mapping.mappingMethod = 'inferred';
+        mapping.mappingConfidence = 'medium';
+        inferredCount++;
+        mappedValue += holdingValue;
+        mapped = true;
+      } else if (holdingType.includes('bond') || holdingType.includes('fixed income') ||
           hasBondNameSignal(securityName) || isKnownBondTicker(ticker)) {
         mapping.nominalBondsWeight += weight;
         mapping.mappingMethod = 'inferred';
@@ -150,11 +240,28 @@ export async function mapPortfolioToAssetBasket(
         mappedValue += holdingValue;
         mapped = true;
       } else if (holdingType.includes('equity') || holdingType.includes('stock') ||
-          securityName.includes('equity') || securityName.includes('stock') ||
+          // Employer-plan and institutional share classes state their mandate
+          // in the name and nowhere else: "Large Cap Growth Fund", "S&P 500
+          // Indx SL Sr Fd Cl X". Without this they fell out of the basket
+          // entirely, and their value was then spread across whatever the rest
+          // of the portfolio happened to hold.
+          hasEquityNameSignal(securityName) ||
           ticker.match(/^[A-Z]{1,5}$/)) { // Common stock ticker pattern
-        // Infer equity - assume 70% US, 30% international (will be documented in assumptions)
-        mapping.usEquityWeight += weight * 0.7;
-        mapping.internationalEquityWeight += weight * 0.3;
+        // Place it by geography when the name says, rather than defaulting a
+        // fund called "International Equity Fund" to 70% US.
+        const geography = inferEquityGeography(securityName, ticker);
+        if (geography === 'international') {
+          mapping.internationalEquityWeight += weight;
+        } else if (geography === 'us') {
+          mapping.usEquityWeight += weight;
+        } else {
+          // 'global', and names that carry no geography at all, take the
+          // documented historical-average split. Only this branch is
+          // "unclassified equity", and only it may claim that assumption.
+          mapping.usEquityWeight += weight * 0.7;
+          mapping.internationalEquityWeight += weight * 0.3;
+          unclassifiedEquityCount++;
+        }
         mapping.mappingMethod = 'inferred';
         mapping.mappingConfidence = 'medium';
         inferredCount++;
@@ -181,6 +288,8 @@ export async function mapPortfolioToAssetBasket(
     mapping.nominalBondsWeight /= totalMappedWeight;
     mapping.cashWeight /= totalMappedWeight;
   }
+
+  mapping.unclassifiedEquityCount = unclassifiedEquityCount;
 
   // Adjust confidence based on mapping quality
   if (unmappedCount > 0 || inferredCount > holdings.length * 0.3) {
@@ -250,8 +359,34 @@ export function populateAssumptions(
 ): string[] {
   const assumptions: string[] = [];
 
-  if (mapping.mappingMethod === 'inferred') {
+  // Gated on the split actually being used, not on inference having happened at
+  // all. A portfolio whose only inference was a recognized target-date fund has
+  // no unclassified equity, and claiming otherwise gave it a caveat describing
+  // a split it never received.
+  if (mapping.unclassifiedEquityCount > 0) {
     assumptions.push('Unclassified equity holdings split 70% US / 30% international based on historical averages');
+  }
+
+  if (mapping.targetDateFunds.length > 0) {
+    // Grouped by target year rather than listed by name. The split is a
+    // function of the year alone, so naming each fund adds nothing to what a
+    // reader needs to judge the model -- and it would put holding labels into
+    // the analysis context even for questions that never asked for investment
+    // detail. Grouping also keeps this readable for a portfolio holding many.
+    const byYear = new Map<number, { count: number; equityShare: number }>();
+    for (const fund of mapping.targetDateFunds) {
+      const existing = byYear.get(fund.targetYear);
+      if (existing) existing.count += 1;
+      else byYear.set(fund.targetYear, { count: 1, equityShare: fund.equityShare });
+    }
+    const described = Array.from(byYear.entries())
+      .sort(([left], [right]) => left - right)
+      .map(([year, { count, equityShare }]) =>
+        `${count} targeting ${year} at ${Math.round(equityShare * 100)}% equity`)
+      .join('; ');
+    assumptions.push(
+      `Target-date funds modeled on an approximate industry glidepath rather than each fund's own published curve: ${described}`
+    );
   }
 
   if (mapping.unmappedHoldings.length > 0) {

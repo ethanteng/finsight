@@ -51,6 +51,8 @@ const balancedMapping: PortfolioMapping = {
   mappingConfidence: 'high',
   unmappedHoldings: [],
   mappingMethod: 'direct',
+  targetDateFunds: [],
+  unclassifiedEquityCount: 0,
 };
 
 function flatSequence(months: number): HistoricalSequence {

@@ -47,6 +47,13 @@ export interface RetirementAnalysisInput {
    */
   unmodeledInvestments?: UnmodeledInvestmentValue | null;
 
+  /**
+   * Year the target-date glidepath is evaluated against. Defaults to the
+   * current year; supply the snapshot's year when a result must reproduce
+   * across a year boundary.
+   */
+  asOfYear?: number;
+
   // Optional overrides
   inflationAssumption?: number; // override FRED data
   riskTolerance?: 'conservative' | 'moderate' | 'aggressive'; // user preference
@@ -136,6 +143,18 @@ export interface PortfolioMapping {
   mappingConfidence: 'high' | 'medium' | 'low'; // based on how well holdings map
   unmappedHoldings: string[]; // tickers that couldn't be mapped
   mappingMethod: 'direct' | 'inferred' | 'proxy'; // how mapping was determined
+  /**
+   * Target-date funds mapped by their declared target year rather than by a
+   * provider asset type. Recorded so the split can be stated as an assumption:
+   * the glidepath is an approximation of a curve we do not hold.
+   */
+  targetDateFunds: Array<{ label: string; targetYear: number; equityShare: number }>;
+  /**
+   * Holdings placed on the 70/30 historical-average split because their name
+   * carried no geography. Counted separately from inference in general so the
+   * assumption describing that split is only claimed when it was applied.
+   */
+  unclassifiedEquityCount: number;
 }
 
 // ============================================================================

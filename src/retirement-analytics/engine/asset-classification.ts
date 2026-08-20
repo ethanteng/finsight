@@ -43,3 +43,131 @@ export function isInternationalEquity(
   return name.includes('international') || name.includes('ex-us') ||
     isInternationalEquityTicker(ticker);
 }
+
+/**
+ * Equity signals in a fund's name.
+ *
+ * Institutional and employer-plan share classes rarely carry a usable provider
+ * type -- they arrive as "Mutual Fund" or with no type at all -- and their
+ * tickers are often too long to look like a stock symbol. Their names, however,
+ * state their mandate plainly: "Large Cap Growth Fund", "S&P 500 Indx SL Sr Fd
+ * Cl X". Reading the name is the only evidence available for these.
+ *
+ * Checked after bond and cash signals so a bond index fund or a government cash
+ * reserve is never pulled into equity by an index-family word in its name.
+ */
+const EQUITY_NAME_SIGNALS = [
+  'equity', 'stock',
+  'large cap', 'large-cap', 'largecap',
+  'mid cap', 'mid-cap', 'midcap',
+  'small cap', 'small-cap', 'smallcap',
+  'micro cap', 'micro-cap',
+  's&p', 'russell', 'nasdaq', 'dow jones', 'wilshire', 'msci', 'ftse',
+  'total market', 'total stock',
+  'growth fund', 'value fund', 'growth index', 'value index',
+  'emerging markets', 'developed markets', 'eafe',
+];
+
+/**
+ * Cash signals. Checked before bonds so a Treasury money-market fund lands in
+ * cash rather than being caught by the "treasury" bond signal, and before
+ * equity so a fund like "Government Cash Reserves" is not swept up by the
+ * ticker-shaped-like-a-stock fallback.
+ */
+const CASH_NAME_SIGNALS = ['money market', 'cash reserve', 'cash management', 'liquid reserve'];
+
+const US_MARKET_SIGNALS = [
+  's&p', 'russell', 'nasdaq', 'dow jones', 'wilshire',
+  'total market', 'total stock market', 'domestic', 'u.s.', 'us equity',
+];
+
+const INTERNATIONAL_MARKET_SIGNALS = [
+  'international', 'ex-us', 'ex us', 'emerging markets', 'developed markets', 'eafe',
+];
+
+export function hasEquityNameSignal(name: string): boolean {
+  const normalized = name.toLowerCase();
+  return EQUITY_NAME_SIGNALS.some(signal => normalized.includes(signal));
+}
+
+export function hasCashNameSignal(name: string): boolean {
+  const normalized = name.toLowerCase();
+  return CASH_NAME_SIGNALS.some(signal => normalized.includes(signal));
+}
+
+export type EquityGeography = 'us' | 'international' | 'global' | 'unknown';
+
+/**
+ * Where a fund invests, read from its name when no provider metadata says.
+ *
+ * Returns 'unknown' rather than guessing when the name carries no geography.
+ * A fund called "Small Cap Fund" is probably domestic in a US plan, but
+ * probably is not evidence -- unknown routes it to the documented default
+ * split, which is stated as an assumption, instead of asserting a country.
+ *
+ * International is tested first: "Total International Stock Index" contains a
+ * US market word ("total ... stock") and is emphatically not US.
+ */
+export function inferEquityGeography(securityName: string, ticker: string): EquityGeography {
+  const name = securityName.toLowerCase();
+  if (INTERNATIONAL_MARKET_SIGNALS.some(signal => name.includes(signal))) return 'international';
+  if (isInternationalEquityTicker(ticker)) return 'international';
+  if (isGlobalEquity('', securityName)) return 'global';
+  if (US_MARKET_SIGNALS.some(signal => name.includes(signal))) return 'us';
+  return 'unknown';
+}
+
+/**
+ * Provider types that name the wrapper rather than the exposure.
+ *
+ * "ETF" and "Mutual Fund" say how a holding is packaged, not what it holds: a
+ * bond ETF and a small-cap ETF share the type. Treating them as an asset class
+ * pushed every such holding past the metadata branch and into the crude
+ * inference path, where the FMP country split and geographic focus are not
+ * consulted at all -- so a fund with good provider data was still placed by a
+ * ticker-shape guess. Recognizing them as carrying no class lets the name and
+ * the provider's own geography decide inside the metadata branch.
+ *
+ * Matched exactly rather than by substring: "fixed income fund" ends in "fund"
+ * and does name its exposure.
+ */
+const CONTAINER_ASSET_TYPES = new Set([
+  'etf',
+  'etfs',
+  'exchange traded fund',
+  'exchange-traded fund',
+  'mutual fund',
+  'mutual funds',
+  'fund',
+  'index fund',
+  'collective trust',
+  'collective investment trust',
+  'commingled fund',
+  'pooled fund',
+  'separate account',
+]);
+
+export function isContainerAssetType(assetType: string): boolean {
+  return CONTAINER_ASSET_TYPES.has(assetType.trim().toLowerCase());
+}
+
+/**
+ * True when the provider has explicitly typed a security as fixed income.
+ *
+ * Target-date recognition reads a fund's own name, which is the only evidence
+ * those funds carry -- but names are weaker evidence than a declared type, and
+ * a bond's name routinely contains a year for its maturity. A signal word near
+ * such a year ("Pathway Capital 2030 Notes") would otherwise model a bond as
+ * mostly equity, which is the same failure the Treasury case exists to prevent,
+ * reached through a different door.
+ *
+ * Container types are excluded, so this only fires when the provider named an
+ * actual exposure. Real target-date funds arrive typed as a container
+ * ("Mutual Fund") or with no type at all, so nothing is lost by deferring to a
+ * declared fixed-income type over a name.
+ */
+export function isDeclaredFixedIncomeType(assetType: string): boolean {
+  const normalized = assetType.trim().toLowerCase();
+  if (!normalized || isContainerAssetType(normalized)) return false;
+  return hasBondNameSignal(normalized);
+}
