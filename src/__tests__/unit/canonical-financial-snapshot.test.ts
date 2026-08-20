@@ -320,6 +320,88 @@ describe('canonical financial snapshot', () => {
     expect(portfolio.totalValue).toBe(1_000);
   });
 
+  it('does not treat available funds as an investment account balance', () => {
+    // Brokerage `available` can be buying power / withdrawable cash, not market value.
+    const portfolio = buildCanonicalInvestmentPortfolio(
+      [
+        { id: 'h', account_id: 'brokerage', security_id: 'sec', institution_value: 10_000, iso_currency_code: 'USD' },
+      ],
+      [{ security_id: 'sec', type: 'equity' }],
+      [{
+        account_id: 'brokerage',
+        source: 'plaid',
+        type: 'investment',
+        subtype: 'brokerage',
+        balance: { current: null, available: 50_000, iso_currency_code: 'USD' },
+      }],
+      'USD'
+    );
+
+    expect(portfolio.totalValue).toBe(10_000);
+    expect(portfolio.unclassifiedValue).toBe(0);
+    expect(portfolio.holdingsCoverageGaps).toEqual([]);
+  });
+
+  it('keeps Plaid and SnapTrade accounts distinct when their ids share a suffix', () => {
+    const portfolio = buildCanonicalInvestmentPortfolio(
+      [
+        { id: 'plaid-h', account_id: 'abc', security_id: 'sec-a', institution_value: 100_000, iso_currency_code: 'USD' },
+        { id: 'snap-h', account_id: 'snaptrade-abc', security_id: 'sec-b', institution_value: 50_000, iso_currency_code: 'USD' },
+      ],
+      [
+        { security_id: 'sec-a', type: 'equity' },
+        { security_id: 'sec-b', type: 'etf' },
+      ],
+      [
+        {
+          account_id: 'abc',
+          source: 'plaid',
+          type: 'investment',
+          subtype: 'brokerage',
+          balance: { current: 200_000, iso_currency_code: 'USD' },
+        },
+        {
+          account_id: 'snaptrade-abc',
+          source: 'snaptrade',
+          type: 'investment',
+          subtype: 'brokerage',
+          balance: { current: 50_000, iso_currency_code: 'USD' },
+        },
+      ],
+      'USD'
+    );
+
+    // Plaid residual (100k) must still be counted; SnapTrade must not steal the match key.
+    expect(portfolio.totalValue).toBe(250_000);
+    expect(portfolio.unclassifiedValue).toBe(100_000);
+    expect(portfolio.holdingsCoverageGaps).toEqual([{
+      accountId: 'abc',
+      reportedBalance: 200_000,
+      holdingsValue: 100_000,
+      unexplainedValue: 100_000,
+    }]);
+  });
+
+  it('still matches SnapTrade holdings when only one side carries the snaptrade- prefix', () => {
+    const portfolio = buildCanonicalInvestmentPortfolio(
+      [
+        { id: 'h', account_id: 'abc', security_id: 'sec', institution_value: 40_000, iso_currency_code: 'USD' },
+      ],
+      [{ security_id: 'sec', type: 'equity' }],
+      [{
+        account_id: 'snaptrade-abc',
+        source: 'snaptrade',
+        type: 'investment',
+        subtype: 'brokerage',
+        balance: { current: 55_000, iso_currency_code: 'USD' },
+      }],
+      'USD'
+    );
+
+    expect(portfolio.totalValue).toBe(55_000);
+    expect(portfolio.unclassifiedValue).toBe(15_000);
+  });
+
   it('records a coverage gap as an optional observation, not a partial snapshot', () => {
     const snapshot = buildCanonicalSnapshotCore(
       {

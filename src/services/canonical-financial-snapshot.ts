@@ -162,11 +162,54 @@ function coverageGapThreshold(reportedBalance: number): number {
 }
 
 /**
- * Account identity as holdings and accounts each spell it. SnapTrade accounts
- * carry a `snaptrade-` prefix that not every payload applies to both sides.
+ * Institution-reported investment market value. `available` is ignored: on
+ * brokerages it can mean buying power or withdrawable cash, not the account's
+ * total, and must not inflate investments when `current` is missing.
  */
-function accountMatchKey(value: unknown): string {
-  return typeof value === 'string' ? value.replace(/^snaptrade-/, '') : '';
+function knownReportedInvestmentBalance(account: SnapshotAccount): number | null {
+  const balance = account.balance;
+  if (typeof balance === 'number') return finiteNumber(balance);
+  if (!balance || typeof balance !== 'object') return null;
+  return finiteNumber(balance.current);
+}
+
+/**
+ * SnapTrade payloads sometimes omit the `snaptrade-` prefix on one side of the
+ * feed. Strip it only when matching within SnapTrade — never equate a bare
+ * Plaid account id with a SnapTrade-prefixed id that happens to share a suffix.
+ */
+export function holdingBelongsToInvestmentAccount(
+  holdingAccountId: unknown,
+  account: Pick<SnapshotAccount, 'account_id' | 'id' | 'source'>
+): boolean {
+  if (typeof holdingAccountId !== 'string' || !holdingAccountId) return false;
+  const accountKey = account.account_id || account.id;
+  if (typeof accountKey !== 'string' || !accountKey) return false;
+  if (holdingAccountId === accountKey) return true;
+
+  const isSnapTradeAccount =
+    account.source === 'snaptrade' || accountKey.startsWith('snaptrade-');
+  const isSnapTradeHolding = holdingAccountId.startsWith('snaptrade-');
+  if (account.source === 'plaid' || (!isSnapTradeAccount && !isSnapTradeHolding)) {
+    return false;
+  }
+  return (
+    holdingAccountId.replace(/^snaptrade-/, '') ===
+    accountKey.replace(/^snaptrade-/, '')
+  );
+}
+
+/**
+ * Dedup key for reconciling an account at most once. SnapTrade prefix variants
+ * of the same account collapse; a Plaid id never collapses into SnapTrade.
+ */
+function accountReconciliationKey(account: SnapshotAccount): string | null {
+  const id = account.account_id || account.id;
+  if (typeof id !== 'string' || !id) return null;
+  if (account.source === 'snaptrade' || id.startsWith('snaptrade-')) {
+    return `snaptrade:${id.replace(/^snaptrade-/, '')}`;
+  }
+  return `${account.source || 'unknown'}:${id}`;
 }
 
 /**
@@ -194,7 +237,8 @@ export function resolveInvestmentAccountValue(
   const currency = normalizedCurrency(reportingCurrency);
   // A balance in another currency is not comparable to a reporting-currency
   // holdings total, so it cannot stand in for one.
-  const balance = accountCurrency(account) === currency ? knownAccountBalance(account) : null;
+  const balance =
+    accountCurrency(account) === currency ? knownReportedInvestmentBalance(account) : null;
   if (balance === null) return holdingsValue;
   if (holdingsValue === null) return balance;
   return Math.max(balance, holdingsValue);
@@ -229,7 +273,7 @@ export function buildCanonicalInvestmentPortfolio(
   const currencyMismatchIds: string[] = [];
   const unavailableValueIds: string[] = [];
   const holdingsCoverageGaps: InvestmentHoldingsCoverage[] = [];
-  const holdingsValueByAccount = new Map<string, number>();
+  const countedHoldings: Array<{ accountId: string; value: number }> = [];
   let totalValue = 0;
   let holdingCount = 0;
   let unclassifiedValue = 0;
@@ -247,12 +291,8 @@ export function buildCanonicalInvestmentPortfolio(
     }
     totalValue += value;
     holdingCount += 1;
-    const holdingAccountKey = accountMatchKey(holding.account_id);
-    if (holdingAccountKey) {
-      holdingsValueByAccount.set(
-        holdingAccountKey,
-        (holdingsValueByAccount.get(holdingAccountKey) || 0) + value
-      );
+    if (typeof holding.account_id === 'string' && holding.account_id) {
+      countedHoldings.push({ accountId: holding.account_id, value });
     }
     if (holding.security_id) includedSecurityIds.add(String(holding.security_id));
     // Normalize so the same asset class from different providers (Plaid's "etf"
@@ -289,11 +329,13 @@ export function buildCanonicalInvestmentPortfolio(
 
     // Without a provider account id there is no way to tell which holdings
     // belong to this account, so its balance cannot be reconciled against them.
-    const matchKey = accountMatchKey(account.account_id || account.id);
+    const matchKey = accountReconciliationKey(account);
     if (!matchKey || reconciledAccountKeys.has(matchKey)) return;
     reconciledAccountKeys.add(matchKey);
 
-    const holdingsValue = holdingsValueByAccount.get(matchKey) || 0;
+    const holdingsValue = countedHoldings
+      .filter(holding => holdingBelongsToInvestmentAccount(holding.accountId, account))
+      .reduce((sum, holding) => sum + holding.value, 0);
     const resolved = resolveInvestmentAccountValue(account, holdingsValue, currency);
     if (resolved === null) return;
     const unexplained = resolved - holdingsValue;
