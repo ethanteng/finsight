@@ -15,6 +15,7 @@ import { persistTransactionsToDb, persistSnapTradeActivitiesToDb } from '../data
 import { cacheService } from '../data/cache';
 import { resolveCanonicalTransactionType } from './canonical-transaction-adapter';
 import { mergeFinancialSources } from './financial-calculations';
+import type { CanonicalInvestmentPortfolio } from './canonical-financial-snapshot';
 import { loadPersistedPlaidData } from './financial-source-persistence';
 import { normalizeAssetType, resolveAssetTypeWithHeuristics } from './asset-class';
 import {
@@ -144,19 +145,12 @@ export interface Transaction {
   [key: string]: any;
 }
 
-export interface PortfolioAnalysis {
-  reportingCurrency: string;
-  totalValue: number;
-  assetAllocation: Array<{
-    type: string;
-    value: number;
-    percentage: number;
-  }>;
-  holdingCount: number;
-  securityCount: number;
-  currencyMismatchIds: string[];
-  unavailableValueIds: string[];
-}
+/**
+ * Portfolio analysis is produced by the canonical builder, so this is that
+ * contract rather than a second copy of it -- the two drifted before, and a
+ * field added to one but not the other silently changed what callers saw.
+ */
+export type PortfolioAnalysis = CanonicalInvestmentPortfolio;
 
 export interface HomeData {
   address: string;

@@ -56,13 +56,27 @@ Cached transaction summaries use the canonical classification and cash-flow adap
 All asset and liability inputs are non-negative magnitudes in the snapshot's reporting currency.
 
 - `totalCash`: cash accounts only; an overdraft is debt, not negative cash.
-- `totalInvestments`: current market value of deduplicated holdings plus manual investment assets. Do not also add the investment account's balance.
+- `totalInvestments`: for each provider-held investment account, the greater of the balance its institution reports and the market value of its deduplicated holdings, plus manual investment assets. Never the sum of both -- adding an account balance to the holdings it already contains double-counts the account.
 - `homeValue`: the active user override or provider midpoint. `null` means unknown. A low/high range bound is not a substitute for the point estimate.
 - `totalAssets = totalCash + totalInvestments + known homeValue + otherAssets`.
 - `totalDebt`: positive outstanding principal, including credit, loans, mortgages, and overdrafts.
 - `totalLiabilities = totalDebt + otherLiabilities`.
 - `netWorth = totalAssets - totalLiabilities`.
 - `operatingCashFlow = incomeTotal - expenseTotal`.
+
+An account balance and its holdings are two views of one account, and they disagree in both
+directions. Some plans -- employer 401(k)s especially -- itemize only part of the account, so a
+holdings-only total silently drops whatever the feed does not list. Conversely a holdings sum
+slightly above the balance is pricing skew between two feeds read at different moments, not extra
+value. Taking the greater of the two keeps the account's full value without ever counting anything
+twice.
+
+The reported balance is authoritative for what an account is worth; holdings are authoritative for
+how that value is composed. Value the balance carries and no holding explains is included in
+`totalInvestments` and attributed to an `Unclassified` asset class, so allocation always reconciles
+to the total. Where that residual exceeds the greater of 1 unit of the reporting currency or 0.5% of
+the balance, the snapshot records an `account:<id>:holdings-coverage` observation. That observation
+is not `required`: nothing is missing from net worth, only from the allocation's detail.
 
 Amounts remain unrounded during calculation; formatting and rounding are presentation concerns. Metrics in API and LLM responses must carry an explicit unit/currency rather than infer one from a label.
 

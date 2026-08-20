@@ -188,6 +188,173 @@ describe('canonical financial snapshot', () => {
     expect(portfolio.unavailableValueIds).toEqual(['holding:missing']);
   });
 
+  it('keeps value a partial holdings feed omits, attributed to Unclassified', () => {
+    // An employer 401(k) that itemizes only part of the plan: deriving the total
+    // from holdings alone dropped the rest of the account from net worth.
+    const portfolio = buildCanonicalInvestmentPortfolio(
+      [
+        { id: 'fund', account_id: '401k', security_id: 'fund', institution_value: 800_000, iso_currency_code: 'USD' },
+      ],
+      [{ security_id: 'fund', type: 'mutual fund' }],
+      [{
+        account_id: '401k',
+        source: 'plaid',
+        type: 'investment',
+        subtype: '401k',
+        balance: { current: 1_190_000, iso_currency_code: 'USD' },
+      }],
+      'USD'
+    );
+
+    expect(portfolio.totalValue).toBe(1_190_000);
+    expect(portfolio.unclassifiedValue).toBe(390_000);
+    expect(portfolio.assetAllocation).toEqual([
+      { type: 'Mutual Fund', value: 800_000, percentage: (800_000 / 1_190_000) * 100 },
+      { type: 'Unclassified', value: 390_000, percentage: (390_000 / 1_190_000) * 100 },
+    ]);
+    expect(portfolio.holdingsCoverageGaps).toEqual([{
+      accountId: '401k',
+      reportedBalance: 1_190_000,
+      holdingsValue: 800_000,
+      unexplainedValue: 390_000,
+    }]);
+  });
+
+  it('counts an investment account the provider itemized no holdings for', () => {
+    const portfolio = buildCanonicalInvestmentPortfolio(
+      [],
+      [],
+      [{
+        account_id: 'pension',
+        source: 'plaid',
+        type: 'investment',
+        subtype: 'pension',
+        balance: { current: 45_000, iso_currency_code: 'USD' },
+      }],
+      'USD'
+    );
+
+    expect(portfolio.totalValue).toBe(45_000);
+    expect(portfolio.holdingCount).toBe(0);
+  });
+
+  it('keeps the holdings total when pricing skew puts it above the reported balance', () => {
+    // Two feeds observed at different moments. The excess is skew, not value,
+    // and a negative residual is not something an allocation bucket can hold.
+    const portfolio = buildCanonicalInvestmentPortfolio(
+      [
+        { id: 'treasury', account_id: 'snaptrade-abc', security_id: 'bill', institution_value: 52_462.31, iso_currency_code: 'USD' },
+      ],
+      [{ security_id: 'bill', type: 'fixed income' }],
+      [{
+        account_id: 'snaptrade-abc',
+        source: 'snaptrade',
+        type: 'investment',
+        subtype: 'brokerage',
+        balance: { current: 52_439.08, iso_currency_code: 'USD' },
+      }],
+      'USD'
+    );
+
+    expect(portfolio.totalValue).toBe(52_462.31);
+    expect(portfolio.unclassifiedValue).toBe(0);
+    expect(portfolio.holdingsCoverageGaps).toEqual([]);
+  });
+
+  it('treats a sub-threshold residual as rounding rather than a coverage gap', () => {
+    const portfolio = buildCanonicalInvestmentPortfolio(
+      [
+        { id: 'h', account_id: 'ira', security_id: 'sec', institution_value: 56_280.92, iso_currency_code: 'USD' },
+      ],
+      [{ security_id: 'sec', type: 'equity' }],
+      [{
+        account_id: 'ira',
+        source: 'plaid',
+        type: 'investment',
+        subtype: 'ira',
+        balance: { current: 56_280.94, iso_currency_code: 'USD' },
+      }],
+      'USD'
+    );
+
+    expect(portfolio.totalValue).toBeCloseTo(56_280.94, 6);
+    expect(portfolio.holdingsCoverageGaps).toEqual([]);
+  });
+
+  it('never adds an investment account balance on top of the holdings it contains', () => {
+    const portfolio = buildCanonicalInvestmentPortfolio(
+      [
+        { id: 'a', account_id: 'brokerage', security_id: 'sec-a', institution_value: 60_000, iso_currency_code: 'USD' },
+        { id: 'b', account_id: 'brokerage', security_id: 'sec-b', institution_value: 40_000, iso_currency_code: 'USD' },
+      ],
+      [{ security_id: 'sec-a', type: 'equity' }, { security_id: 'sec-b', type: 'etf' }],
+      [{
+        account_id: 'brokerage',
+        source: 'plaid',
+        type: 'investment',
+        subtype: 'brokerage',
+        balance: { current: 100_000, iso_currency_code: 'USD' },
+      }],
+      'USD'
+    );
+
+    expect(portfolio.totalValue).toBe(100_000);
+  });
+
+  it('leaves a balance in another currency out rather than converting it', () => {
+    const portfolio = buildCanonicalInvestmentPortfolio(
+      [
+        { id: 'h', account_id: 'eur-brokerage', security_id: 'sec', institution_value: 1_000, iso_currency_code: 'USD' },
+      ],
+      [{ security_id: 'sec', type: 'equity' }],
+      [{
+        account_id: 'eur-brokerage',
+        source: 'plaid',
+        type: 'investment',
+        subtype: 'brokerage',
+        balance: { current: 9_999_999, iso_currency_code: 'EUR' },
+      }],
+      'USD'
+    );
+
+    expect(portfolio.totalValue).toBe(1_000);
+  });
+
+  it('records a coverage gap as an optional observation, not a partial snapshot', () => {
+    const snapshot = buildCanonicalSnapshotCore(
+      {
+        accounts: [{
+          account_id: '401k',
+          source: 'plaid',
+          type: 'investment',
+          subtype: '401k',
+          snapshotTimestamp: '2026-08-14T11:00:00.000Z',
+          balance: { current: 1_190_000, iso_currency_code: 'USD' },
+        }],
+        investments: {
+          holdings: [{
+            id: 'fund',
+            account_id: '401k',
+            security_id: 'fund',
+            institution_value: 800_000,
+            iso_currency_code: 'USD',
+            institution_price_as_of: '2026-08-14T11:00:00.000Z',
+          }],
+          securities: [{ security_id: 'fund', type: 'mutual fund' }],
+        },
+        homeValue: null,
+      },
+      { computedAt }
+    );
+
+    expect(snapshot.financialOverview.totalInvestments).toBe(1_190_000);
+    expect(snapshot.financialOverview.netWorth).toBe(1_190_000);
+    // Nothing is missing from net worth, so the snapshot is not degraded.
+    expect(snapshot.status).toBe('current');
+    expect(snapshot.quality.requiredUnavailableSourceIds).not.toContain('account:401k:holdings-coverage');
+    expect(snapshot.quality.unavailableSourceIds).toContain('account:401k:holdings-coverage');
+  });
+
   it('groups one asset class into a single bucket regardless of provider casing', () => {
     const portfolio = buildCanonicalInvestmentPortfolio(
       [
