@@ -4,6 +4,7 @@ export { averageCanonicalTransactionSummary } from './transaction-summary-servic
 import { classifyAccount } from './account-classifier';
 import {
   buildCanonicalInvestmentPortfolio,
+  holdingBelongsToInvestmentAccount,
   resolveInvestmentAccountValue,
 } from './canonical-financial-snapshot';
 
@@ -217,13 +218,19 @@ function unavailableBalanceCount(accounts: readonly FinancesAccount[]): number {
 export function buildAccountDisplayBalances(
   accountsInput: unknown,
   holdingsInput: unknown,
-  reportingCurrencyInput: unknown
+  reportingCurrencyInput: unknown,
+  options: { reconcileReportedBalance?: boolean } = {}
 ): Record<string, number | null> {
   const accounts = Array.isArray(accountsInput) ? accountsInput as FinancesAccount[] : [];
   const holdings = Array.isArray(holdingsInput) ? holdingsInput as any[] : [];
   const reportingCurrency = typeof reportingCurrencyInput === 'string'
     ? reportingCurrencyInput.toUpperCase()
     : 'USD';
+  // Fresh snapshot writes reconcile rows to the reported balance. Legacy
+  // backfills must not: their financialOverview was holdings-sum based, and
+  // raising only the rows would reopen the row-vs-group discrepancy this fix
+  // closes until the next full recompute.
+  const reconcileReportedBalance = options.reconcileReportedBalance !== false;
   const balances: Record<string, number | null> = {};
 
   for (const account of accounts) {
@@ -233,16 +240,20 @@ export function buildAccountDisplayBalances(
     const rawBalance = accountBalance(account);
     if (classified.isInvestment && account.source !== 'manual') {
       const values = holdings
-        .filter(holding => accountIdMatches(holding?.account_id, id))
+        .filter(holding => holdingBelongsToInvestmentAccount(holding?.account_id, account))
         .filter(holding => String(holding?.iso_currency_code || '').toUpperCase() === reportingCurrency)
         .map(holding => finite(holding?.institution_value))
         .filter((value): value is number => value !== null);
       const holdingsValue = values.length > 0
         ? values.reduce((total, value) => total + value, 0)
         : null;
-      // Resolved the same way the canonical total is, so a row and the group
-      // total above it can never tell the user two different numbers.
-      balances[id] = resolveInvestmentAccountValue(account, holdingsValue, reportingCurrency);
+      if (!reconcileReportedBalance) {
+        balances[id] = holdingsValue;
+      } else {
+        // Resolved the same way the canonical total is, so a row and the group
+        // total above it can never tell the user two different numbers.
+        balances[id] = resolveInvestmentAccountValue(account, holdingsValue, reportingCurrency);
+      }
     } else if ((classified.isDebt || classified.balance < 0) && rawBalance !== null) {
       balances[id] = Math.abs(rawBalance);
     } else {
@@ -268,7 +279,8 @@ export function withAccountDisplayBalances<T extends FinancesSnapshotLike>(snaps
       accountDisplayBalances: buildAccountDisplayBalances(
         snapshot.accounts,
         snapshot.holdings,
-        snapshot.reportingCurrency
+        snapshot.reportingCurrency,
+        { reconcileReportedBalance: false }
       ),
     },
   };
@@ -516,7 +528,7 @@ export function buildFinancesAccountDetails(
   if (!account) return null;
 
   const resolvedId = accountId(account);
-  const forAccount = (entry: any) => accountIdMatches(entry?.account_id, resolvedId);
+  const forAccount = (entry: any) => holdingBelongsToInvestmentAccount(entry?.account_id, account);
   const transactions = (Array.isArray(snapshot.transactions) ? snapshot.transactions : [])
     .filter(forAccount)
     .sort((left: any, right: any) => Date.parse(right?.date || '') - Date.parse(left?.date || ''));

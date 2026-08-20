@@ -161,6 +161,48 @@ describe('finances overview contract', () => {
       .toMatchObject({ account_id: 'brokerage', displayBalance: 100000 });
   });
 
+  it('does not raise legacy backfilled rows above a holdings-sum overview', () => {
+    // Legacy snapshots store holdings-sum totals. Backfilling with the new
+    // max(balance, holdings) rule would make rows disagree with the group total.
+    const legacySnapshot = {
+      ...snapshot,
+      financialOverview: {
+        ...snapshot.financialOverview,
+        totalInvestments: 800_000,
+        netWorth: 800_000 + 5000 - 28000 + 400000,
+      },
+      accounts: [{
+        account_id: '401k',
+        name: '401k',
+        type: 'investment',
+        subtype: '401k',
+        source: 'plaid',
+        balance: { current: 1_190_000, iso_currency_code: 'USD' },
+      }],
+      holdings: [
+        { id: 'holding', account_id: '401k', security_id: 'security', institution_value: 800_000, iso_currency_code: 'USD' },
+      ],
+      meta: { version: '2.0' },
+    };
+
+    const upgraded = withAccountDisplayBalances(legacySnapshot);
+    expect((upgraded.meta as any).accountDisplayBalances['401k']).toBe(800_000);
+  });
+
+  it('ignores available-only investment balances when resolving display rows', () => {
+    expect(buildAccountDisplayBalances(
+      [{
+        account_id: 'brokerage',
+        type: 'investment',
+        subtype: 'brokerage',
+        source: 'plaid',
+        balance: { current: null, available: 50_000, iso_currency_code: 'USD' },
+      }],
+      [{ account_id: 'brokerage', institution_value: 10_000, iso_currency_code: 'USD' }],
+      'USD'
+    )).toEqual({ brokerage: 10_000 });
+  });
+
   it('uses canonical totals, groupings, and monthly aggregates without inventing a manual-home range', () => {
     const overview = buildFinancesOverview({
       snapshot,
