@@ -106,8 +106,10 @@ export async function requireAuth(
  * Authenticate without rejecting a lapsed subscriber.
  *
  * Mount this only on routes a canceled user must reach to resubscribe —
- * reading their own subscription status, starting checkout, opening the billing
- * portal. Everything the subscription actually pays for keeps using requireAuth.
+ * reading their own subscription status and opening the billing portal.
+ * Checkout stays on optionalAuth so anonymous marketing checkouts keep
+ * working; a Bearer token there is enough to reuse their Stripe customer.
+ * Everything the subscription actually pays for keeps using requireAuth.
  */
 export async function requireAuthAllowLapsedSubscription(
   req: AuthenticatedRequest,
