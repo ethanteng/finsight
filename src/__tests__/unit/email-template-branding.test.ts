@@ -50,6 +50,34 @@ describe('email template branding URLs', () => {
       process.env.FRONTEND_URL = 'https://staging.asklinc.com';
       expect(getEmailAssetBaseUrl()).toBe('https://staging.asklinc.com');
     });
+
+    it.each([
+      ['private IPv4', 'http://192.168.1.20:3001'],
+      ['private IPv4 (10/8)', 'http://10.0.0.5:3001'],
+      ['private IPv4 (172.16/12)', 'http://172.20.1.1:3001'],
+      ['link-local IPv4', 'http://169.254.10.10:3001'],
+      ['carrier-grade NAT IPv4', 'http://100.80.0.1:3001'],
+      ['docker host alias', 'http://host.docker.internal:3001'],
+      ['mDNS hostname', 'http://ethans-macbook.local:3001'],
+      ['IPv6 loopback', 'http://[::1]:3001'],
+      ['IPv6 unique-local', 'http://[fd00::1]:3001'],
+      ['scheme-less hostname', 'asklinc.com'],
+      ['bare path', '/assets'],
+      ['non-http scheme', 'file:///tmp/assets'],
+    ])('rejects a %s and falls back to the public site', (_label, value) => {
+      process.env.EMAIL_ASSET_BASE_URL = value;
+      expect(getEmailAssetBaseUrl()).toBe('https://asklinc.com');
+    });
+
+    it('accepts a public host that merely looks private-ish', () => {
+      process.env.EMAIL_ASSET_BASE_URL = 'https://172.15.0.1';
+      expect(getEmailAssetBaseUrl()).toBe('https://172.15.0.1');
+    });
+
+    it('keeps a path prefix on the asset host', () => {
+      process.env.EMAIL_ASSET_BASE_URL = 'https://cdn.asklinc.com/email/';
+      expect(getEmailAssetBaseUrl()).toBe('https://cdn.asklinc.com/email');
+    });
   });
 
   describe('createEmailHtml', () => {

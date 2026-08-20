@@ -3,15 +3,72 @@
  * Uses the same cream, deep green, and lime palette as the marketing site.
  */
 
-/** Public marketing site, used when no non-local base URL is configured. */
+/** Public marketing site, used when no publicly reachable base URL is configured. */
 const PUBLIC_SITE_URL = 'https://asklinc.com';
 
-function normalizeBaseUrl(url: string): string {
-  return url.trim().replace(/\/+$/, '');
+function stripTrailingSlashes(url: string): string {
+  return url.replace(/\/+$/, '');
 }
 
-function isLocal(url: string): boolean {
-  return /localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\]/i.test(url);
+/**
+ * True for hosts a mail client outside our network can never reach: loopback,
+ * private, link-local, carrier-grade NAT, and development-only hostnames.
+ */
+function isNonPublicHost(hostname: string): boolean {
+  const host = hostname.toLowerCase().replace(/^\[|\]$/g, '');
+
+  if (
+    host === 'localhost' ||
+    host.endsWith('.localhost') ||
+    host.endsWith('.local') ||
+    host.endsWith('.internal') ||
+    host === 'host.docker.internal'
+  ) {
+    return true;
+  }
+
+  // IPv6 literal: loopback, unspecified, link-local (fe80::/10), unique-local (fc00::/7).
+  if (host.includes(':')) {
+    return host === '::1' || host === '::' || /^fe[89ab]/.test(host) || /^f[cd]/.test(host);
+  }
+
+  const ipv4 = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (ipv4) {
+    const [a, b] = ipv4.slice(1, 3).map(Number);
+    return (
+      a === 0 ||                          // unspecified / "this network"
+      a === 10 ||                         // private
+      a === 127 ||                        // loopback
+      (a === 169 && b === 254) ||         // link-local
+      (a === 172 && b >= 16 && b <= 31) ||// private
+      (a === 192 && b === 168) ||         // private
+      (a === 100 && b >= 64 && b <= 127)  // carrier-grade NAT
+    );
+  }
+
+  return false;
+}
+
+/**
+ * Normalizes a configured base URL, or returns null when it is unusable in an
+ * email: not an absolute http(s) URL (a bare hostname or path would render as
+ * a relative, unresolvable src), or pointing at a host only reachable from the
+ * sending machine's network.
+ */
+function toPublicBaseUrl(candidate: string | undefined): string | null {
+  if (!candidate?.trim()) return null;
+
+  let parsed: URL;
+  try {
+    parsed = new URL(candidate.trim());
+  } catch {
+    return null;
+  }
+
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
+  if (isNonPublicHost(parsed.hostname)) return null;
+
+  return stripTrailingSlashes(parsed.toString());
 }
 
 /**
@@ -29,19 +86,20 @@ export function getBaseUrl(): string {
 
 /**
  * Base URL for assets and marketing links embedded in emails (header banner,
- * footer links). Emails are always rendered outside this process, so a
- * localhost URL can never resolve for the recipient — the header banner just
- * renders as broken alt text. Always resolves to an absolute public URL, even
- * when an email is sent from a developer machine.
+ * footer links). Emails are always rendered outside this process, so a URL that
+ * only resolves on the sending machine can never be fetched by the recipient —
+ * the header banner just renders as broken alt text. Always resolves to an
+ * absolute, publicly reachable URL, even when an email is sent from a developer
+ * machine.
  *
  * Order: EMAIL_ASSET_BASE_URL, then FRONTEND_URL, then the public site.
- * Local values are ignored at every step.
+ * Candidates that are not absolute http(s) URLs, or that point at a
+ * loopback/private/link-local host, are skipped.
  */
 export function getEmailAssetBaseUrl(): string {
   for (const candidate of [process.env.EMAIL_ASSET_BASE_URL, process.env.FRONTEND_URL]) {
-    if (!candidate) continue;
-    const normalized = normalizeBaseUrl(candidate);
-    if (normalized && !isLocal(normalized)) return normalized;
+    const publicUrl = toPublicBaseUrl(candidate);
+    if (publicUrl) return publicUrl;
   }
   return PUBLIC_SITE_URL;
 }
