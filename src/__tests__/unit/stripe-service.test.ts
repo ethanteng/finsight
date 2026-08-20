@@ -571,6 +571,88 @@ describe('StripeService', () => {
     });
   });
 
+  describe('supersession on other webhook events', () => {
+    it('should keep the account current when an update event downgrades a superseded subscription', async () => {
+      const mockStripe = require('../../config/stripe');
+
+      mockPrisma.subscription.findUnique.mockResolvedValue({
+        id: 'sub_rec_old',
+        tier: 'premium',
+        cancelAtPeriodEnd: false,
+        user: { id: 'user_123', email: 'returning@example.com', tier: 'premium' }
+      });
+      mockPrisma.subscription.update.mockResolvedValue({ id: 'sub_rec_old' });
+      mockStripe.stripe.client.subscriptions.retrieve.mockResolvedValue({
+        status: 'canceled',
+        items: { data: [{ price: { id: 'price_test_123' } }] },
+        metadata: { tier: 'premium' }
+      });
+      mockStripe.getTierFromPriceId.mockReturnValue('premium');
+      // The replacement checkout already created a working subscription
+      mockPrisma.subscription.findFirst.mockResolvedValue({
+        id: 'sub_rec_new',
+        stripeSubscriptionId: 'sub_new_456',
+        status: 'trialing',
+        tier: 'premium'
+      });
+      mockPrisma.user.update.mockResolvedValue({ id: 'user_123' });
+
+      await stripeService.processWebhookEvent('customer.subscription.updated', {
+        object: {
+          id: 'sub_old_123',
+          customer: 'cus_old_1',
+          status: 'canceled',
+          current_period_start: Math.floor(Date.now() / 1000),
+          current_period_end: Math.floor(Date.now() / 1000) + 86400,
+          cancel_at_period_end: false,
+          metadata: { tier: 'premium' }
+        }
+      });
+
+      expect(mockPrisma.user.update).toHaveBeenCalledWith({
+        where: { id: 'user_123' },
+        data: { subscriptionStatus: 'trialing', tier: 'premium' }
+      });
+      expect(mockPrisma.user.update).not.toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ subscriptionStatus: 'canceled' })
+        })
+      );
+    });
+
+    it('should keep the account current when a late invoice settles on a superseded subscription', async () => {
+      const mockStripe = require('../../config/stripe');
+
+      mockStripe.stripe.client.subscriptions.retrieve.mockResolvedValue({
+        status: 'canceled',
+        items: { data: [{ price: { id: 'price_test_123' } }] }
+      });
+      mockStripe.getTierFromPriceId.mockReturnValue('premium');
+      mockPrisma.subscription.findUnique.mockResolvedValue({
+        id: 'sub_rec_old',
+        tier: 'premium',
+        user: { id: 'user_123', email: 'returning@example.com', tier: 'premium' }
+      });
+      mockPrisma.subscription.update.mockResolvedValue({ id: 'sub_rec_old' });
+      mockPrisma.subscription.findFirst.mockResolvedValue({
+        id: 'sub_rec_new',
+        stripeSubscriptionId: 'sub_new_456',
+        status: 'active',
+        tier: 'premium'
+      });
+      mockPrisma.user.update.mockResolvedValue({ id: 'user_123' });
+
+      await stripeService.processWebhookEvent('invoice.payment_succeeded', {
+        object: { subscription: 'sub_old_123' }
+      });
+
+      expect(mockPrisma.user.update).toHaveBeenCalledWith({
+        where: { id: 'user_123' },
+        data: { subscriptionStatus: 'active', tier: 'premium' }
+      });
+    });
+  });
+
   describe('linkCheckoutSessionToUser', () => {
     const completedSession = (email: string) => ({
       status: 'complete',
@@ -781,6 +863,25 @@ describe('StripeService', () => {
       expect(result.message).toContain('Admin-created starter user');
     });
   });
+
+    it('should report the working subscription when a newer one is incomplete', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({
+        id: 'user_123',
+        tier: 'premium',
+        subscriptionStatus: 'active',
+        subscriptions: [
+          { status: 'incomplete', tier: 'premium', currentPeriodEnd: new Date() },
+          { status: 'active', tier: 'premium', currentPeriodEnd: new Date() }
+        ]
+      });
+
+      const result = await stripeService.getUserSubscriptionStatus('user_123');
+
+      // Reading the newest row alone would report 'incomplete' and deny access,
+      // contradicting the authentication check
+      expect(result.status).toBe('active');
+      expect(result.accessLevel).toBe('full');
+    });
 
   describe('canAccessFeature', () => {
     it('should allow access for sufficient tier and active subscription', async () => {

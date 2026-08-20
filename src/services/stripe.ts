@@ -597,7 +597,7 @@ export class StripeService {
           }
         });
         console.log(`✅ Updated user ${subscriptionRecord.user.email} tier to ${finalTier} (subscription cancelled)`);
-      } else {
+      } else if (subscription.status === 'active' || subscription.status === 'trialing') {
         // For non-cancelled subscriptions, update both tier and status
         await prisma.user.update({
           where: { id: subscriptionRecord.user.id },
@@ -607,6 +607,16 @@ export class StripeService {
           }
         });
         console.log(`✅ Updated user ${subscriptionRecord.user.email} tier to ${finalTier} and status to ${subscription.status}`);
+      } else {
+        // A downgrade arriving on an update event has the same hazard as one
+        // arriving on a delete: after a resubscribe it may belong to the old
+        // subscription, and must not overwrite the working replacement.
+        await this.applyUserSubscriptionStatusIfNoWorkingReplacement(
+          subscriptionRecord.user.id,
+          subscription.status,
+          finalTier
+        );
+        console.log(`✅ Applied ${subscription.status} for user ${subscriptionRecord.user.email} (tier ${finalTier})`);
       }
       
       console.log(`🔍 Cancellation check for subscription ${subscriptionId}:`);
@@ -693,7 +703,8 @@ export class StripeService {
    */
   private async applyUserSubscriptionStatusIfNoWorkingReplacement(
     userId: string,
-    proposedStatus: string
+    proposedStatus: string,
+    proposedTier?: string
   ): Promise<{ applied: boolean; workingStatus?: string }> {
     const prisma = getPrismaClient();
     const workingSubscription = await prisma.subscription.findFirst({
@@ -722,6 +733,7 @@ export class StripeService {
       where: { id: userId },
       data: {
         subscriptionStatus: proposedStatus,
+        ...(proposedTier ? { tier: proposedTier } : {}),
       },
     });
     return { applied: true };
@@ -881,12 +893,21 @@ export class StripeService {
       });
 
       if (subscriptionRecord?.user) {
-        await prisma.user.update({
-          where: { id: subscriptionRecord.user.id },
-          data: {
-            subscriptionStatus,
-          }
-        });
+        if (subscriptionStatus === 'active' || subscriptionStatus === 'trialing') {
+          await prisma.user.update({
+            where: { id: subscriptionRecord.user.id },
+            data: {
+              subscriptionStatus,
+            }
+          });
+        } else {
+          // A late invoice can settle on a subscription that has since been
+          // superseded, and Stripe then reports that subscription's status.
+          await this.applyUserSubscriptionStatusIfNoWorkingReplacement(
+            subscriptionRecord.user.id,
+            subscriptionStatus
+          );
+        }
 
         const plan = subscriptionRecord.tier || subscriptionRecord.user.tier || 'unknown';
         await analytics.setIdentity(subscriptionRecord.user.id, {
@@ -1077,7 +1098,7 @@ export class StripeService {
           subscriptionStatus: true,
           subscriptions: {
             orderBy: { createdAt: 'desc' },
-            take: 1
+            take: 5
           }
         }
       });
@@ -1107,7 +1128,16 @@ export class StripeService {
       let actualSubscriptionStatus = subscriptionStatus;
       let expiresAt: Date | undefined;
       if (user.subscriptions.length > 0) {
-        const latestSubscription = user.subscriptions[0];
+        // An account can hold more than one subscription after a resubscribe, and
+        // the newest row is not always the working one (a replacement checkout can
+        // land incomplete while the previous subscription still runs). Read the
+        // status off the subscription that actually carries access, so this never
+        // contradicts what authentication sees.
+        const latestSubscription =
+          user.subscriptions.find(
+            (subscription: { status: string }) =>
+              subscription.status === 'active' || subscription.status === 'trialing'
+          ) || user.subscriptions[0];
         actualSubscriptionStatus = latestSubscription.status;
         if (actualSubscriptionStatus === 'trialing') {
           expiresAt = latestSubscription.currentPeriodEnd;
