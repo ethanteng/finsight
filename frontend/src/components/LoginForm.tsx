@@ -25,6 +25,10 @@ function LoginFormContent() {
   const [error, setError] = useState('');
   const [subscriptionContext, setSubscriptionContext] = useState<SubscriptionContext | null>(null);
   const [subscriptionExpired, setSubscriptionExpired] = useState(false);
+  // Kept in memory (never in localStorage) purely so a lapsed subscriber can
+  // start checkout as themselves: the backend reuses their existing Stripe
+  // customer instead of creating a second one for the same person.
+  const [lapsedToken, setLapsedToken] = useState<string | null>(null);
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -47,11 +51,12 @@ function LoginFormContent() {
         email: emailParam,
         sessionId: sessionIdParam
       });
-      
-      // Pre-fill email if provided
-      if (emailParam) {
-        setEmail(emailParam);
-      }
+    }
+
+    // Prefill from any payment-success redirect, including the
+    // ACCOUNT_ALREADY_SUBSCRIBED path that only carries email + message.
+    if (emailParam) {
+      setEmail(emailParam);
     }
 
     // Show subscription access denied message if present
@@ -113,7 +118,7 @@ function LoginFormContent() {
     return paymentKeywords.some(keyword => lowerError.includes(keyword));
   };
 
-  const handleBuyClick = async (planId: string) => {
+  const handleBuyClick = async (planId: string, authToken?: string | null) => {
     pushBeginCheckout();
     setIsCheckoutLoading(true);
     
@@ -124,7 +129,8 @@ function LoginFormContent() {
       const response = await fetch(`${API_URL}/api/stripe/create-checkout-session`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          ...(authToken ? { Authorization: `Bearer ${authToken}` } : {})
         },
         body: JSON.stringify({
           tier: planId,
@@ -177,6 +183,7 @@ function LoginFormContent() {
           const errorData = await statusRes.json().catch(() => ({}));
           const errorMessage = errorData.error || '';
           if (errorMessage.toLowerCase().includes('subscription') && errorMessage.toLowerCase().includes('expired')) {
+            setLapsedToken(data.token);
             setSubscriptionExpired(true);
             setError('');
             return;
@@ -189,6 +196,7 @@ function LoginFormContent() {
           const statusData = await statusRes.json();
           // Only show subscription expired for canceled subscriptions, not inactive (e.g. admin-created accounts)
           if (statusData.status === 'canceled' && statusData.accessLevel !== 'full') {
+            setLapsedToken(data.token);
             setSubscriptionExpired(true);
             setError('');
             return;
@@ -252,7 +260,8 @@ function LoginFormContent() {
               {subscriptionExpired ? (
                 <div className="rounded-3xl border border-[#d49c3b]/30 bg-[#fff8e8] p-6">
                   <div className="flex gap-3"><CircleAlert className="mt-0.5 shrink-0 text-[#a96d0f]" /><div><h2 className="font-semibold text-[#764c0d]">Subscription expired</h2><p className="mt-2 text-sm leading-6 text-[#765c32]">Renew your subscription to continue using your Ask Linc workspace.</p></div></div>
-                  <a href={process.env.NEXT_PUBLIC_STRIPE_CUSTOMER_PORTAL_URL || '#'} target="_blank" rel="noopener noreferrer" className="mt-6 inline-flex w-full items-center justify-center rounded-full bg-[#123c2f] px-5 py-3 text-sm font-semibold text-white hover:bg-[#1a5140]">Manage subscription</a>
+                  <button type="button" onClick={() => handleBuyClick('premium', lapsedToken)} disabled={isCheckoutLoading} className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-full bg-[#123c2f] px-5 py-3 text-sm font-semibold text-white hover:bg-[#1a5140] disabled:cursor-not-allowed disabled:opacity-60">{isCheckoutLoading ? <><LoaderCircle className="animate-spin" size={17} />Opening checkout…</> : <>Start a new subscription <ArrowRight size={17} /></>}</button>
+                  <a href={process.env.NEXT_PUBLIC_STRIPE_CUSTOMER_PORTAL_URL || '#'} target="_blank" rel="noopener noreferrer" className="mt-3 inline-flex w-full items-center justify-center rounded-full border border-[#123c2f]/20 px-5 py-3 text-sm font-semibold text-[#123c2f] hover:bg-[#123c2f]/5">Manage billing</a>
                   <p className="mt-4 text-center text-sm text-[#765c32]">Need help? <Link href="/contact" className="font-semibold underline">Contact us</Link>.</p>
                 </div>
               ) : (

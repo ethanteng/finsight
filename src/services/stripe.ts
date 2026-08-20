@@ -13,6 +13,10 @@ import { getPrismaClient } from '../prisma-client';
 import { sendWelcomeEmail, sendTierChangeEmail, sendCancellationEmail } from './stripe-email';
 import { analytics } from '../analytics/heycatch';
 
+// How many of an account's newest subscriptions getUserSubscriptionStatus reads
+// before it has to ask for a working one explicitly.
+const RECENT_SUBSCRIPTION_WINDOW = 5;
+
 function isUniqueConstraintError(error: unknown): error is { code: string } {
   return typeof error === 'object' && error !== null && 'code' in error && error.code === 'P2002';
 }
@@ -58,6 +62,19 @@ export class StripeService {
         throw new Error(`Invalid price ID: ${request.priceId}`);
       }
 
+      // Checkout rejects customer and customer_email together, and a stale
+      // customer ID fails the whole session, so verify before reusing one.
+      const reusableCustomerId = request.customerId
+        ? await this.getReusableCustomerId(request.customerId)
+        : undefined;
+
+      // A returning subscriber already consumed the introductory trial. Handing
+      // out another one on every resubscribe makes cancelling and re-checking-out
+      // a way to stay free forever.
+      const trialPeriodDays = request.skipTrial
+        ? undefined
+        : STRIPE_CONFIG.subscriptionSettings.trialPeriodDays;
+
       // Create checkout session
       const session = await stripe.client.checkout.sessions.create({
         mode: 'subscription',
@@ -70,13 +87,15 @@ export class StripeService {
         ],
         success_url: request.successUrl, // Use the URL from the request
         cancel_url: request.cancelUrl,   // Use the URL from the request
-        customer_email: request.customerEmail,
+        ...(reusableCustomerId
+          ? { customer: reusableCustomerId }
+          : { customer_email: request.customerEmail }),
         metadata: {
           tier: tier,
           source: 'web_checkout'
         },
         subscription_data: {
-          trial_period_days: STRIPE_CONFIG.subscriptionSettings.trialPeriodDays,
+          ...(trialPeriodDays === undefined ? {} : { trial_period_days: trialPeriodDays }),
           metadata: {
             tier: tier,
             source: 'web_checkout'
@@ -116,6 +135,304 @@ export class StripeService {
       console.error('Error creating portal session:', error);
       throw new Error(`Failed to create portal session: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
+  }
+
+  /**
+   * Return the customer ID only if Stripe still has a usable customer for it.
+   * A deleted or unknown customer would otherwise fail the whole checkout.
+   */
+  private async getReusableCustomerId(customerId: string): Promise<string | undefined> {
+    try {
+      const customer = await stripe.client.customers.retrieve(customerId);
+      if ((customer as { deleted?: boolean }).deleted) {
+        console.warn(`Stripe customer ${customerId} is deleted; letting Checkout create a new one`);
+        return undefined;
+      }
+      return customer.id;
+    } catch (error) {
+      console.warn(`Could not reuse Stripe customer ${customerId}:`, error);
+      return undefined;
+    }
+  }
+
+  /**
+   * Resolve the account a Stripe customer belongs to.
+   *
+   * Checkout mints a brand-new Customer whenever a session starts without one,
+   * so a returning subscriber arrives under a customer ID no user row points at.
+   * Matching on the customer's email recovers the account and adopts the new ID,
+   * without which the resubscription never links to the person who paid for it.
+   */
+  private async resolveUserForCustomer(customerId: string) {
+    const prisma = getPrismaClient();
+
+    const userByCustomerId = await prisma.user.findFirst({
+      where: { stripeCustomerId: customerId }
+    });
+
+    if (userByCustomerId) {
+      return userByCustomerId;
+    }
+
+    let customerEmail: string | undefined;
+    try {
+      const customer = await stripe.client.customers.retrieve(customerId);
+      if (!(customer as { deleted?: boolean }).deleted) {
+        customerEmail = (customer as { email?: string | null }).email?.toLowerCase() || undefined;
+      }
+    } catch (error) {
+      console.error(`Could not retrieve Stripe customer ${customerId}:`, error);
+      return null;
+    }
+
+    if (!customerEmail) {
+      return null;
+    }
+
+    const userByEmail = await prisma.user.findUnique({
+      where: { email: customerEmail }
+    });
+
+    if (!userByEmail) {
+      return null;
+    }
+
+    // Only adopt a customer for an account that is not currently subscribed.
+    // Anyone can start a checkout with somebody else's email, and repointing a
+    // paying subscriber at that customer would hand a stranger control of their
+    // billing - cancelling it would lock the real subscriber out.
+    const workingSubscription = await prisma.subscription.findFirst({
+      where: {
+        userId: userByEmail.id,
+        status: { in: ['active', 'trialing'] }
+      }
+    });
+
+    if (workingSubscription) {
+      console.warn(
+        `Not adopting Stripe customer ${customerId} for ${userByEmail.email}: the account already has a working subscription`
+      );
+      return null;
+    }
+
+    // Point the account at the customer that now carries its billing, so later
+    // events on this subscription resolve on the first lookup.
+    await prisma.user.update({
+      where: { id: userByEmail.id },
+      data: { stripeCustomerId: customerId }
+    });
+
+    // Concurrent payment-success / another webhook can activate a different
+    // customer between the working-sub check and this write. If a working
+    // subscription already points at another customer, put theirs back and
+    // refuse — otherwise a planted checkout steals billing control.
+    const conflictingWorking = await prisma.subscription.findFirst({
+      where: {
+        userId: userByEmail.id,
+        status: { in: ['active', 'trialing'] },
+        stripeCustomerId: { not: customerId }
+      }
+    });
+    if (conflictingWorking) {
+      await prisma.user.update({
+        where: { id: userByEmail.id },
+        data: { stripeCustomerId: conflictingWorking.stripeCustomerId }
+      });
+      console.warn(
+        `Not adopting Stripe customer ${customerId} for ${userByEmail.email}: a working subscription on ${conflictingWorking.stripeCustomerId} landed concurrently`
+      );
+      return null;
+    }
+
+    console.log(`Adopted Stripe customer ${customerId} for returning user ${userByEmail.email}`);
+
+    return { ...userByEmail, stripeCustomerId: customerId };
+  }
+
+  /**
+   * Attach a completed Checkout session to an existing account.
+   *
+   * Used by registration (brand-new account) and by the payment-success callback
+   * (returning subscriber who already has one), so both paths link a paid
+   * checkout the same way instead of drifting apart.
+   *
+   * Throws when the session is not a completed checkout for this account.
+   */
+  async linkCheckoutSessionToUser(params: {
+    userId: string;
+    email: string;
+    checkoutSessionId: string;
+    tier?: SubscriptionTier;
+  }): Promise<{
+    linked: boolean;
+    isNewSubscription: boolean;
+    status?: string;
+    skippedForExistingSubscription?: boolean;
+  }> {
+    const { userId, email, checkoutSessionId } = params;
+
+    const session = await stripe.client.checkout.sessions.retrieve(checkoutSessionId, {
+      expand: ['subscription']
+    });
+
+    const checkoutIsComplete = session.status === 'complete' &&
+      (session.payment_status === 'paid' || session.payment_status === 'no_payment_required');
+    if (!checkoutIsComplete) {
+      throw new Error('Stripe Checkout session is not complete');
+    }
+
+    const checkoutEmail = session.customer_details?.email?.toLowerCase();
+    if (checkoutEmail && checkoutEmail !== email.toLowerCase()) {
+      throw new Error('Stripe Checkout email does not match the registered account');
+    }
+
+    if (!session.subscription || !session.customer) {
+      return { linked: false, isNewSubscription: false };
+    }
+
+    const customerId = typeof session.customer === 'string'
+      ? session.customer
+      : session.customer.id;
+
+    const subscription: any = typeof session.subscription === 'string'
+      ? await stripe.client.subscriptions.retrieve(session.subscription)
+      : session.subscription;
+
+    if (!subscription) {
+      return { linked: false, isNewSubscription: false };
+    }
+
+    const prisma = getPrismaClient();
+
+    // Re-check inside the linker itself. payment-success already refuses when a
+    // working subscription exists, but a concurrent webhook (or a second
+    // checkout) can activate between that check and this write — and overwriting
+    // stripeCustomerId / subscriptionStatus would undo the supersession guards.
+    const otherWorkingSubscription = await prisma.subscription.findFirst({
+      where: {
+        userId,
+        status: { in: ['active', 'trialing'] },
+        stripeSubscriptionId: { not: subscription.id }
+      }
+    });
+    if (otherWorkingSubscription) {
+      console.warn(
+        `Not linking checkout ${checkoutSessionId} to user ${userId}: another working subscription exists (${otherWorkingSubscription.stripeSubscriptionId})`
+      );
+      return {
+        linked: false,
+        isNewSubscription: false,
+        status: subscription.status || 'incomplete',
+        skippedForExistingSubscription: true
+      };
+    }
+
+    const tier = params.tier
+      || (getTierFromPriceId(subscription.items?.data?.[0]?.price?.id) as SubscriptionTier | null)
+      || 'premium';
+    const status = subscription.status || 'incomplete';
+    const currentPeriodStart = subscription.current_period_start
+      ? new Date(subscription.current_period_start * 1000)
+      : new Date();
+    const currentPeriodEnd = subscription.current_period_end
+      ? new Date(subscription.current_period_end * 1000)
+      : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+
+    const subscriptionData = {
+      userId,
+      stripeCustomerId: customerId,
+      tier,
+      status,
+      currentPeriodStart,
+      currentPeriodEnd,
+      cancelAtPeriodEnd: subscription.cancel_at_period_end || false,
+    };
+
+    // Claim first delivery with an atomic insert so a concurrent webhook, a
+    // retried registration, or a reloaded success page cannot repeat the
+    // welcome email and start analytics.
+    let isNewSubscription = false;
+    try {
+      await prisma.subscription.create({
+        data: {
+          ...subscriptionData,
+          stripeSubscriptionId: subscription.id,
+        },
+      });
+      isNewSubscription = true;
+    } catch (error) {
+      if (!isUniqueConstraintError(error)) {
+        throw error;
+      }
+
+      await prisma.subscription.update({
+        where: { stripeSubscriptionId: subscription.id },
+        data: subscriptionData,
+      });
+    }
+
+    // Persist the subscription before exposing the Stripe customer ID. The
+    // webhook cannot find this user until the record it would update already
+    // exists, preventing both paths from claiming first delivery.
+    // Re-check after create: a concurrent activation can land between the
+    // pre-create check and this user write. That covers both incomplete and
+    // active/trialing linkers — writing stripeCustomerId for either would
+    // steal billing from the working replacement.
+    const competingWorking = await prisma.subscription.findFirst({
+      where: {
+        userId,
+        status: { in: ['active', 'trialing'] },
+        stripeSubscriptionId: { not: subscription.id }
+      }
+    });
+    if (competingWorking) {
+      // Heal user.subscriptionStatus onto the working row if it drifted, but
+      // never adopt this checkout's customer id.
+      await this.applyUserSubscriptionStatusIfNoWorkingReplacement(
+        userId,
+        status,
+        tier
+      );
+      console.warn(
+        `Not linking checkout ${checkoutSessionId} to user ${userId}: another working subscription exists (${competingWorking.stripeSubscriptionId})`
+      );
+      return {
+        linked: false,
+        isNewSubscription: false,
+        status,
+        skippedForExistingSubscription: true,
+      };
+    }
+
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        stripeCustomerId: customerId,
+        subscriptionStatus: status,
+        tier,
+      }
+    });
+
+    console.log(`Linked user ${email} to Stripe customer ${customerId} and subscription ${subscription.id}`);
+
+    if (isNewSubscription) {
+      try {
+        await sendWelcomeEmail(email, tier);
+        console.log(`Welcome email sent to ${email} for ${tier} plan`);
+      } catch (emailError) {
+        console.error(`Failed to send welcome email to ${email}:`, emailError);
+        // Don't fail the caller if email fails
+      }
+
+      try {
+        await analytics.setIdentity(userId, { email, plan: tier });
+        await analytics.trackEvent('subscription_started', { plan: tier }, { userId });
+      } catch (analyticsError) {
+        console.error(`Failed to record subscription_started for ${email}:`, analyticsError);
+      }
+    }
+
+    return { linked: true, isNewSubscription, status };
   }
 
   /**
@@ -176,11 +493,9 @@ export class StripeService {
     // Auto-sync tier based on current price if metadata tier doesn't match
     await this.autoSyncSubscriptionTier(subscriptionId, tier);
 
-    // Find user by Stripe customer ID
+    // Find the account this customer belongs to
     const prisma = getPrismaClient();
-    const user = await prisma.user.findFirst({
-      where: { stripeCustomerId: customerId }
-    });
+    const user = await this.resolveUserForCustomer(customerId);
 
     if (!user) {
       console.warn(`User not found for Stripe customer: ${customerId}`);
@@ -229,14 +544,25 @@ export class StripeService {
       });
     }
 
-    // Update user subscription status
-    await prisma.user.update({
-      where: { id: user.id },
-      data: {
-        subscriptionStatus: subscription.status,
-        tier: tier,
-      }
-    });
+    // A replacement checkout can create an incomplete subscription while the
+    // previous one is still active (cancel-at-period-end + renew, or a failed
+    // payment retry). Only promote the account for a working status; otherwise
+    // keep whatever still carries access — same hazard as a late update/invoice.
+    if (subscription.status === 'active' || subscription.status === 'trialing') {
+      await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          subscriptionStatus: subscription.status,
+          tier: tier,
+        }
+      });
+    } else {
+      await this.applyUserSubscriptionStatusIfNoWorkingReplacement(
+        user.id,
+        subscription.status,
+        tier
+      );
+    }
 
     if (isNewSubscription) {
       try {
@@ -288,10 +614,8 @@ export class StripeService {
     if (!subscriptionRecord) {
       console.log(`Subscription ${subscriptionId} not found, creating new record`);
       
-      // Find user by Stripe customer ID
-      const user = await prisma.user.findFirst({
-        where: { stripeCustomerId: customerId }
-      });
+      // Find the account this customer belongs to
+      const user = await this.resolveUserForCustomer(customerId);
 
       if (!user) {
         console.warn(`User not found for Stripe customer: ${customerId}`);
@@ -369,7 +693,7 @@ export class StripeService {
           }
         });
         console.log(`✅ Updated user ${subscriptionRecord.user.email} tier to ${finalTier} (subscription cancelled)`);
-      } else {
+      } else if (subscription.status === 'active' || subscription.status === 'trialing') {
         // For non-cancelled subscriptions, update both tier and status
         await prisma.user.update({
           where: { id: subscriptionRecord.user.id },
@@ -379,6 +703,16 @@ export class StripeService {
           }
         });
         console.log(`✅ Updated user ${subscriptionRecord.user.email} tier to ${finalTier} and status to ${subscription.status}`);
+      } else {
+        // A downgrade arriving on an update event has the same hazard as one
+        // arriving on a delete: after a resubscribe it may belong to the old
+        // subscription, and must not overwrite the working replacement.
+        await this.applyUserSubscriptionStatusIfNoWorkingReplacement(
+          subscriptionRecord.user.id,
+          subscription.status,
+          finalTier
+        );
+        console.log(`✅ Applied ${subscription.status} for user ${subscriptionRecord.user.email} (tier ${finalTier})`);
       }
       
       console.log(`🔍 Cancellation check for subscription ${subscriptionId}:`);
@@ -455,6 +789,53 @@ export class StripeService {
   }
 
   /**
+   * After a subscription is canceled/paused/past_due/incomplete, only mirror that
+   * onto the user row when they have no other working subscription.
+   *
+   * Resubscribe leaves the old canceled row in place. A delayed or replayed
+   * webhook for that old subscription must not overwrite a fresh active/trialing
+   * replacement — authenticateUser gates on user.subscriptionStatus, so doing so
+   * would lock a paying subscriber out again.
+   */
+  private async applyUserSubscriptionStatusIfNoWorkingReplacement(
+    userId: string,
+    proposedStatus: string,
+    proposedTier?: string
+  ): Promise<{ applied: boolean; workingStatus?: string }> {
+    const prisma = getPrismaClient();
+    const workingSubscription = await prisma.subscription.findFirst({
+      where: {
+        userId,
+        status: { in: ['active', 'trialing'] },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (workingSubscription) {
+      await prisma.user.update({
+        where: { id: userId },
+        data: {
+          subscriptionStatus: workingSubscription.status,
+          tier: workingSubscription.tier,
+        },
+      });
+      console.log(
+        `Preserved user ${userId} at ${workingSubscription.status}: another working subscription exists (${workingSubscription.stripeSubscriptionId})`
+      );
+      return { applied: false, workingStatus: workingSubscription.status };
+    }
+
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        subscriptionStatus: proposedStatus,
+        ...(proposedTier ? { tier: proposedTier } : {}),
+      },
+    });
+    return { applied: true };
+  }
+
+  /**
    * Handle subscription deleted event
    */
   private async handleSubscriptionDeleted(eventData: any): Promise<void> {
@@ -484,13 +865,18 @@ export class StripeService {
 
       // Update user subscription status
       if (subscriptionRecord.user) {
-        await prisma.user.update({
-          where: { id: subscriptionRecord.user.id },
-          data: {
-            subscriptionStatus: 'canceled',
-            // Keep the user's tier - they paid for it and should retain access
-          }
-        });
+        const { applied } = await this.applyUserSubscriptionStatusIfNoWorkingReplacement(
+          subscriptionRecord.user.id,
+          'canceled'
+        );
+
+        if (!applied) {
+          console.log(
+            `✅ Subscription ${subscriptionId} canceled but user ${subscriptionRecord.user.email} kept access via a replacement subscription`
+          );
+          console.log(`Subscription ${subscriptionId} deactivated successfully`);
+          return;
+        }
 
         console.log(`✅ Updated user ${subscriptionRecord.user.email} subscription status to 'canceled' (tier remains: ${subscriptionRecord.user.tier})`);
 
@@ -549,12 +935,10 @@ export class StripeService {
     });
 
     if (subscriptionRecord?.user) {
-      await prisma.user.update({
-        where: { id: subscriptionRecord.user.id },
-        data: {
-          subscriptionStatus: 'paused',
-        }
-      });
+      await this.applyUserSubscriptionStatusIfNoWorkingReplacement(
+        subscriptionRecord.user.id,
+        'paused'
+      );
     }
 
     console.log(`Subscription ${subscriptionId} paused successfully`);
@@ -605,12 +989,21 @@ export class StripeService {
       });
 
       if (subscriptionRecord?.user) {
-        await prisma.user.update({
-          where: { id: subscriptionRecord.user.id },
-          data: {
-            subscriptionStatus,
-          }
-        });
+        if (subscriptionStatus === 'active' || subscriptionStatus === 'trialing') {
+          await prisma.user.update({
+            where: { id: subscriptionRecord.user.id },
+            data: {
+              subscriptionStatus,
+            }
+          });
+        } else {
+          // A late invoice can settle on a subscription that has since been
+          // superseded, and Stripe then reports that subscription's status.
+          await this.applyUserSubscriptionStatusIfNoWorkingReplacement(
+            subscriptionRecord.user.id,
+            subscriptionStatus
+          );
+        }
 
         const plan = subscriptionRecord.tier || subscriptionRecord.user.tier || 'unknown';
         await analytics.setIdentity(subscriptionRecord.user.id, {
@@ -656,17 +1049,16 @@ export class StripeService {
         const now = new Date();
         const gracePeriodDays = 7; // Default grace period
         const gracePeriodEnd = new Date(now.getTime() + (gracePeriodDays * 24 * 60 * 60 * 1000));
-        
-        await prisma.user.update({
-          where: { id: subscriptionRecord.user.id },
-          data: {
-            subscriptionStatus: 'past_due',
-            // Grace period handled by Stripe status
-          }
-        });
 
-        console.log(`User ${subscriptionRecord.user.id} entered grace period until ${gracePeriodEnd.toISOString()}`);
-        
+        const { applied } = await this.applyUserSubscriptionStatusIfNoWorkingReplacement(
+          subscriptionRecord.user.id,
+          'past_due'
+        );
+
+        if (applied) {
+          console.log(`User ${subscriptionRecord.user.id} entered grace period until ${gracePeriodEnd.toISOString()}`);
+        }
+
         // TODO: Send notification to user about payment failure
         // This could be an email notification or in-app alert
       }
@@ -699,15 +1091,15 @@ export class StripeService {
       });
 
       if (subscriptionRecord?.user) {
-        await prisma.user.update({
-          where: { id: subscriptionRecord.user.id },
-          data: {
-            subscriptionStatus: 'incomplete',
-          }
-        });
+        const { applied } = await this.applyUserSubscriptionStatusIfNoWorkingReplacement(
+          subscriptionRecord.user.id,
+          'incomplete'
+        );
 
-        console.log(`User ${subscriptionRecord.user.id} requires payment action`);
-        
+        if (applied) {
+          console.log(`User ${subscriptionRecord.user.id} requires payment action`);
+        }
+
         // TODO: Send notification to user about required payment action
         // This could be an email notification or in-app alert
       }
@@ -802,7 +1194,7 @@ export class StripeService {
           subscriptionStatus: true,
           subscriptions: {
             orderBy: { createdAt: 'desc' },
-            take: 1
+            take: RECENT_SUBSCRIPTION_WINDOW
           }
         }
       });
@@ -832,7 +1224,30 @@ export class StripeService {
       let actualSubscriptionStatus = subscriptionStatus;
       let expiresAt: Date | undefined;
       if (user.subscriptions.length > 0) {
-        const latestSubscription = user.subscriptions[0];
+        // An account can hold more than one subscription after a resubscribe, and
+        // the newest row is not always the working one (a replacement checkout can
+        // land incomplete while the previous subscription still runs). Read the
+        // status off the subscription that actually carries access, so this never
+        // contradicts what authentication sees.
+        const isWorking = (subscription: { status: string }) =>
+          subscription.status === 'active' || subscription.status === 'trialing';
+
+        let latestSubscription = user.subscriptions.find(isWorking);
+
+        if (!latestSubscription && user.subscriptions.length === RECENT_SUBSCRIPTION_WINDOW) {
+          // The window is full, so a run of failed checkout retries could be
+          // hiding a subscription that still works. Ask for it directly rather
+          // than denying access to someone who is paying.
+          latestSubscription = await prisma.subscription.findFirst({
+            where: {
+              userId: user.id,
+              status: { in: ['active', 'trialing'] }
+            },
+            orderBy: { createdAt: 'desc' }
+          }) || undefined;
+        }
+
+        latestSubscription = latestSubscription || user.subscriptions[0];
         actualSubscriptionStatus = latestSubscription.status;
         if (actualSubscriptionStatus === 'trialing') {
           expiresAt = latestSubscription.currentPeriodEnd;

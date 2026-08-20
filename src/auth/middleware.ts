@@ -12,10 +12,26 @@ export interface AuthenticatedRequest extends Request {
   body: any;
 }
 
+interface AuthenticateOptions {
+  // Billing and renewal endpoints have to stay reachable after a subscription
+  // lapses: a locked-out user cannot pay to come back if every authenticated
+  // route rejects them first.
+  allowLapsedSubscription?: boolean;
+}
+
 export async function authenticateUser(
   req: AuthenticatedRequest,
   res: Response,
   next: NextFunction
+): Promise<void> {
+  await authenticate(req, res, next, {});
+}
+
+async function authenticate(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+  options: AuthenticateOptions
 ): Promise<void> {
   try {
     console.log('🔐 authenticateUser called');
@@ -54,7 +70,7 @@ export async function authenticateUser(
     }
 
     // Check if subscription has expired (same treatment as failed payments)
-    if (user.subscriptionStatus === 'canceled') {
+    if (user.subscriptionStatus === 'canceled' && !options.allowLapsedSubscription) {
       console.log('🔐 User subscription expired - blocking access');
       res.status(401).json({ error: 'Subscription expired. Please renew to continue.' });
       return;
@@ -84,6 +100,24 @@ export async function requireAuth(
   console.log('🔒 requireAuth called');
   // authenticateUser is async, so we need to await it
   await authenticateUser(req, res, next);
+}
+
+/**
+ * Authenticate without rejecting a lapsed subscriber.
+ *
+ * Mount this only on routes a canceled user must reach to resubscribe —
+ * reading their own subscription status and opening the billing portal.
+ * Checkout stays on optionalAuth so anonymous marketing checkouts keep
+ * working; a Bearer token there is enough to reuse their Stripe customer.
+ * Everything the subscription actually pays for keeps using requireAuth.
+ */
+export async function requireAuthAllowLapsedSubscription(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  console.log('🔒 requireAuthAllowLapsedSubscription called');
+  await authenticate(req, res, next, { allowLapsedSubscription: true });
 }
 
 export function optionalAuth(
