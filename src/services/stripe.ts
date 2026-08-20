@@ -353,7 +353,10 @@ export class StripeService {
     // webhook cannot find this user until the record it would update already
     // exists, preventing both paths from claiming first delivery.
     // Non-working statuses must not clobber a replacement that landed between
-    // the create above and this user write (same family as webhook guards).
+    // the create above and this user write (same family as webhook guards) —
+    // including stripeCustomerId: writing it before the replacement check would
+    // repoint billing at an orphaned incomplete checkout while access stays on
+    // the working subscription.
     if (status === 'active' || status === 'trialing') {
       await prisma.user.update({
         where: { id: userId },
@@ -364,11 +367,26 @@ export class StripeService {
         }
       });
     } else {
+      const { applied } = await this.applyUserSubscriptionStatusIfNoWorkingReplacement(
+        userId,
+        status,
+        tier
+      );
+      if (!applied) {
+        console.warn(
+          `Not linking checkout ${checkoutSessionId} to user ${userId}: another working subscription exists`
+        );
+        return {
+          linked: false,
+          isNewSubscription: false,
+          status,
+          skippedForExistingSubscription: true,
+        };
+      }
       await prisma.user.update({
         where: { id: userId },
         data: { stripeCustomerId: customerId }
       });
-      await this.applyUserSubscriptionStatusIfNoWorkingReplacement(userId, status, tier);
     }
 
     console.log(`Linked user ${email} to Stripe customer ${customerId} and subscription ${subscription.id}`);

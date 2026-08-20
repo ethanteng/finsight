@@ -804,6 +804,67 @@ describe('StripeService', () => {
       });
     });
 
+    it('should not repoint stripeCustomerId when a working sub appears after create', async () => {
+      const mockStripe = require('../../config/stripe');
+      const { sendWelcomeEmail } = require('../../services/stripe-email');
+
+      // Concurrent race: early check is clear, but another checkout activates
+      // between subscription create and the user-row write.
+      mockStripe.stripe.client.checkout.sessions.retrieve.mockResolvedValue({
+        status: 'complete',
+        payment_status: 'paid',
+        customer_details: { email: 'returning@example.com' },
+        customer: 'cus_incomplete_orphan',
+        subscription: {
+          id: 'sub_incomplete_race',
+          status: 'incomplete',
+          current_period_start: Math.floor(Date.now() / 1000),
+          current_period_end: Math.floor(Date.now() / 1000) + 86400,
+          cancel_at_period_end: false,
+          items: { data: [{ price: { id: 'price_test_123' } }] }
+        }
+      });
+      mockStripe.getTierFromPriceId.mockReturnValue('premium');
+      mockPrisma.subscription.findFirst
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce({
+          id: 'sub_existing',
+          stripeSubscriptionId: 'sub_active_other',
+          status: 'active',
+          tier: 'premium'
+        });
+      mockPrisma.subscription.create.mockResolvedValue({ id: 'sub_rec_incomplete' });
+      mockPrisma.user.update.mockResolvedValue({ id: 'user_123' });
+
+      const result = await stripeService.linkCheckoutSessionToUser({
+        userId: 'user_123',
+        email: 'returning@example.com',
+        checkoutSessionId: 'cs_test_race'
+      });
+
+      expect(result).toEqual({
+        linked: false,
+        isNewSubscription: false,
+        status: 'incomplete',
+        skippedForExistingSubscription: true
+      });
+      // Replacement helper may preserve working status/tier, but must never
+      // adopt the orphaned checkout's customer id.
+      expect(mockPrisma.user.update).toHaveBeenCalledWith({
+        where: { id: 'user_123' },
+        data: {
+          subscriptionStatus: 'active',
+          tier: 'premium'
+        }
+      });
+      expect(mockPrisma.user.update).not.toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ stripeCustomerId: 'cus_incomplete_orphan' })
+        })
+      );
+      expect(sendWelcomeEmail).not.toHaveBeenCalled();
+    });
+
     it('should refuse a checkout that belongs to a different email', async () => {
       const mockStripe = require('../../config/stripe');
 
