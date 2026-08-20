@@ -21,6 +21,7 @@ function PaymentSuccessContentInner() {
   const [error, setError] = useState<string | null>(null);
   const [redirectUrl, setRedirectUrl] = useState<string | null>(null);
   const [isTrialing, setIsTrialing] = useState(false);
+  const [alreadySubscribed, setAlreadySubscribed] = useState(false);
   const searchParams = useSearchParams();
 
   useEffect(() => {
@@ -45,12 +46,17 @@ function PaymentSuccessContentInner() {
         if (response.ok) {
           // Parse the JSON response to get the redirect URL
           const data = await response.json();
-          setIsTrialing(Boolean(data.trialing));
+          const skippedExisting = data.code === 'ACCOUNT_ALREADY_SUBSCRIBED';
+          setIsTrialing(Boolean(data.trialing) && !skippedExisting);
+          setAlreadySubscribed(skippedExisting);
           
           // A free trial is not a purchase. Keep this conversion paid-only;
           // trial-start tracking requires a separately configured analytics event.
+          // Also skip when checkout was deliberately not attached to the account —
+          // that payment is an orphaned duplicate, not a successful subscription.
           if (
             data.paid &&
+            !skippedExisting &&
             !sessionStorage.getItem('purchase_event_fired')
           ) {
             window.dataLayer = window.dataLayer || [];
@@ -146,18 +152,24 @@ function PaymentSuccessContentInner() {
         <div className="sm:mx-auto sm:w-full sm:max-w-md">
           <div className="bg-white py-8 px-4 shadow sm:rounded-lg sm:px-10">
             <div className="text-center">
-              <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-green-100">
-                <svg className="h-6 w-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              <div className={`mx-auto flex items-center justify-center h-12 w-12 rounded-full ${alreadySubscribed ? 'bg-amber-100' : 'bg-green-100'}`}>
+                <svg className={`h-6 w-6 ${alreadySubscribed ? 'text-amber-600' : 'text-green-600'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={alreadySubscribed ? 'M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z' : 'M5 13l4 4L19 7'} />
                 </svg>
               </div>
               <h3 className="mt-2 text-sm font-medium text-gray-900">
-                {isTrialing ? 'Free trial started!' : 'Payment successful!'}
+                {alreadySubscribed
+                  ? 'Checkout not applied'
+                  : isTrialing
+                    ? 'Free trial started!'
+                    : 'Payment successful!'}
               </h3>
               <p className="mt-1 text-sm text-gray-500">
-                {isTrialing
-                  ? 'Your first charge will be due after the trial. Redirecting you to finish setup...'
-                  : 'Redirecting you to complete your account setup...'}
+                {alreadySubscribed
+                  ? 'This account already has an active subscription. Redirecting so you can contact support about a refund...'
+                  : isTrialing
+                    ? 'Your first charge will be due after the trial. Redirecting you to finish setup...'
+                    : 'Redirecting you to complete your account setup...'}
               </p>
               <div className="mt-6">
                 <Link

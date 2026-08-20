@@ -51,11 +51,12 @@ function LoginFormContent() {
         email: emailParam,
         sessionId: sessionIdParam
       });
-      
-      // Pre-fill email if provided
-      if (emailParam) {
-        setEmail(emailParam);
-      }
+    }
+
+    // Prefill from any payment-success redirect, including the
+    // ACCOUNT_ALREADY_SUBSCRIBED path that only carries email + message.
+    if (emailParam) {
+      setEmail(emailParam);
     }
 
     // Show subscription access denied message if present
