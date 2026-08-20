@@ -27,6 +27,38 @@ export interface SummaryComputeOptions {
   forceBalanceRefresh?: boolean;
 }
 
+/**
+ * The users a scheduled refresh is expected to rebuild, as a Prisma `where`.
+ *
+ * Exported so health reporting can ask exactly the question the cron asks. A
+ * frozen-snapshot count taken over every snapshot instead would permanently
+ * include the users this predicate deliberately excludes: `recomputeIfStale`
+ * writes a snapshot on every login, so someone who signed up and never linked a
+ * source has one that nothing will ever rebuild. Counting those never returns
+ * to zero, and a signal that cannot reach zero cannot indicate a problem.
+ *
+ * Returns a fresh object per call so no caller can mutate a shared literal.
+ */
+export function refreshEligibleUserWhere() {
+  return {
+    OR: [
+      { accessTokens: { some: { isActive: true } } },
+      { snapTradeUser: { is: { activities: { some: {} } } } },
+      { manualAccounts: { some: {} } },
+      {
+        financialSummarySnapshot: {
+          is: {
+            OR: [
+              { investmentPortfolio: { path: ['holdingCount'], gt: 0 } },
+              { financialOverview: { path: ['homeValue'], gt: 0 } },
+            ],
+          },
+        },
+      },
+    ],
+  };
+}
+
 export class SummaryCacheService {
   static getEnvWindows() {
     const txDays = Number(process.env.TRANSACTION_HISTORY_DAYS || 365);
@@ -213,23 +245,7 @@ export class SummaryCacheService {
     // covers home data, which lives in the (often encrypted) profile text and cannot be
     // filtered in SQL. Snapshot existence alone means nothing -- every login writes one.
     const userIds = await prisma.user.findMany({
-      where: {
-        OR: [
-          { accessTokens: { some: { isActive: true } } },
-          { snapTradeUser: { is: { activities: { some: {} } } } },
-          { manualAccounts: { some: {} } },
-          {
-            financialSummarySnapshot: {
-              is: {
-                OR: [
-                  { investmentPortfolio: { path: ['holdingCount'], gt: 0 } },
-                  { financialOverview: { path: ['homeValue'], gt: 0 } },
-                ],
-              },
-            },
-          },
-        ],
-      },
+      where: refreshEligibleUserWhere(),
       select: { id: true },
     });
 

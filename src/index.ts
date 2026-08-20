@@ -169,12 +169,28 @@ app.get('/health/cron', async (req: Request, res: Response) => {
   // sees week-old figures. Counted here because nothing else surfaces it.
   //
   // Deliberately a count and not a list: this endpoint is unauthenticated.
+  //
+  // Scoped to refresh-eligible users, not to every snapshot. recomputeIfStale
+  // writes a snapshot on login, so a user who never linked a source has one
+  // that no scheduled run will ever rebuild; counting those would hold this
+  // number permanently above zero and stop it meaning anything. Sharing the
+  // predicate with refreshAllUsers keeps the two from drifting apart.
   const STALE_SNAPSHOT_THRESHOLD_MS = 26 * 60 * 60 * 1000;
   let frozenSnapshotCount: number | null = null;
   let frozenSnapshotError: string | undefined;
   try {
-    frozenSnapshotCount = await getPrismaClient().financialSummarySnapshot.count({
-      where: { computedAt: { lt: new Date(Date.now() - STALE_SNAPSHOT_THRESHOLD_MS) } },
+    const { refreshEligibleUserWhere } = await import('./services/summary-cache-service');
+    frozenSnapshotCount = await getPrismaClient().user.count({
+      where: {
+        AND: [
+          refreshEligibleUserWhere(),
+          {
+            financialSummarySnapshot: {
+              is: { computedAt: { lt: new Date(Date.now() - STALE_SNAPSHOT_THRESHOLD_MS) } },
+            },
+          },
+        ],
+      },
     });
   } catch (error) {
     frozenSnapshotError = error instanceof Error ? error.message : String(error);
