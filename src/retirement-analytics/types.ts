@@ -136,6 +136,12 @@ export interface PortfolioMapping {
   mappingConfidence: 'high' | 'medium' | 'low'; // based on how well holdings map
   unmappedHoldings: string[]; // tickers that couldn't be mapped
   mappingMethod: 'direct' | 'inferred' | 'proxy'; // how mapping was determined
+  /**
+   * Target-date funds mapped by their declared target year rather than by a
+   * provider asset type. Recorded so the split can be stated as an assumption:
+   * the glidepath is an approximation of a curve we do not hold.
+   */
+  targetDateFunds: Array<{ label: string; targetYear: number; equityShare: number }>;
 }
 
 // ============================================================================

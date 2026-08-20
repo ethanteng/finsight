@@ -20,8 +20,8 @@ describe('normalizeAssetType (frontend)', () => {
     expect(normalizeAssetType('mutual fund')).toBe('Mutual Fund');
     expect(normalizeAssetType('Mutual Fund')).toBe('Mutual Fund');
     expect(normalizeAssetType('Common Stock')).toBe('Equity');
-    expect(normalizeAssetType('Security type is not defined')).toBe('Unknown');
-    expect(normalizeAssetType(undefined)).toBe('Unknown');
+    expect(normalizeAssetType('Security type is not defined')).toBe('Unrecognized holdings');
+    expect(normalizeAssetType(undefined)).toBe('Unrecognized holdings');
   });
 });
 

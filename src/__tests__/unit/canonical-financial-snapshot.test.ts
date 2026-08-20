@@ -188,7 +188,7 @@ describe('canonical financial snapshot', () => {
     expect(portfolio.unavailableValueIds).toEqual(['holding:missing']);
   });
 
-  it('keeps value a partial holdings feed omits, attributed to Unclassified', () => {
+  it('keeps value a partial holdings feed omits, attributed to Not itemized', () => {
     // An employer 401(k) that itemizes only part of the plan: deriving the total
     // from holdings alone dropped the rest of the account from net worth.
     const portfolio = buildCanonicalInvestmentPortfolio(
@@ -210,7 +210,7 @@ describe('canonical financial snapshot', () => {
     expect(portfolio.unclassifiedValue).toBe(390_000);
     expect(portfolio.assetAllocation).toEqual([
       { type: 'Mutual Fund', value: 800_000, percentage: (800_000 / 1_190_000) * 100 },
-      { type: 'Unclassified', value: 390_000, percentage: (390_000 / 1_190_000) * 100 },
+      { type: 'Not itemized', value: 390_000, percentage: (390_000 / 1_190_000) * 100 },
     ]);
     expect(portfolio.holdingsCoverageGaps).toEqual([{
       accountId: '401k',
@@ -460,7 +460,7 @@ describe('canonical financial snapshot', () => {
     expect(portfolio.assetAllocation).toEqual([
       { type: 'ETF', value: 400, percentage: 40 },
       { type: 'Mutual Fund', value: 400, percentage: 40 },
-      { type: 'Unknown', value: 200, percentage: 20 },
+      { type: 'Unrecognized holdings', value: 200, percentage: 20 },
     ]);
   });
 

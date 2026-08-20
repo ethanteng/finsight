@@ -360,9 +360,9 @@ describe('analyzePortfolio', () => {
     expect(assetAllocation[0].type).toBe('ETF');
   });
 
-  it('labels a holding Unknown when neither source gives a type', () => {
+  it('labels a holding as unrecognized when neither source gives a type', () => {
     const holdings = [{ security_id: 'missing', institution_value: 500 }];
-    expect(analyzePortfolio(holdings, []).assetAllocation[0].type).toBe('Unknown');
+    expect(analyzePortfolio(holdings, []).assetAllocation[0].type).toBe('Unrecognized holdings');
   });
 
   it('treats a missing institution_value as zero rather than producing NaN', () => {

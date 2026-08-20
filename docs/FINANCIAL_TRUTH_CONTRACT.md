@@ -96,6 +96,14 @@ percentages do not move with the excluded value. The modeled basis is measured t
 engine sums holdings, not the way the canonical portfolio does, so a stated basis always matches what
 was actually simulated.
 
+Two allocation buckets describe missing information and must not be merged, because they describe
+opposite problems with different remedies. `Not itemized` is value an account reports that no holding
+explains -- money with no security behind it, resolvable only by the provider. `Unrecognized holdings`
+is a security we do hold whose asset class we could not resolve -- resolvable by better metadata.
+A target-date fund is neither: it is a declared blend, recognized from its own label rather than from
+a provider type, and modeled on an approximate industry glidepath. That approximation is stated as an
+assumption naming each fund and its split, because it is not the fund's own published curve.
+
 Amounts remain unrounded during calculation; formatting and rounding are presentation concerns. Metrics in API and LLM responses must carry an explicit unit/currency rather than infer one from a label.
 
 ## 4. Snapshot time and completeness

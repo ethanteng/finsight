@@ -10,6 +10,13 @@ import {
   isInternationalEquity,
   isKnownBondTicker,
 } from './asset-classification';
+import { resolveTargetDateFund } from '../../services/target-date-fund';
+
+/**
+ * Equity inside a target-date fund is global, so it is split the same way the
+ * mapper splits any equity it cannot place by geography.
+ */
+const TARGET_DATE_US_EQUITY_SHARE = 0.7;
 
 /**
  * Map portfolio holdings to asset basket (US equity, international equity, bonds, cash)
@@ -21,7 +28,12 @@ export async function mapPortfolioToAssetBasket(
   securities: Security[],
   totalValue: number,
   dataProviderFactory?: DataProviderFactory,
-  preFetchedMetadata?: Map<string, any>
+  preFetchedMetadata?: Map<string, any>,
+  /**
+   * Year the glidepath is evaluated against. Passed rather than read from the
+   * clock so a snapshot, a test, and a replay resolve the same split.
+   */
+  asOfYear: number = new Date().getFullYear()
 ): Promise<PortfolioMapping> {
   const mapping: PortfolioMapping = {
     usEquityWeight: 0,
@@ -30,7 +42,8 @@ export async function mapPortfolioToAssetBasket(
     cashWeight: 0,
     mappingConfidence: 'high',
     unmappedHoldings: [],
-    mappingMethod: 'direct'
+    mappingMethod: 'direct',
+    targetDateFunds: []
   };
 
   if (totalValue === 0 || holdings.length === 0) {
@@ -76,6 +89,35 @@ export async function mapPortfolioToAssetBasket(
     let mapped = false;
 
     const ticker = security?.ticker_symbol?.toUpperCase() || holding.ticker_symbol?.toUpperCase() || '';
+
+    // Before anything else. A target-date fund is a declared blend, and its own
+    // label states the target year -- better evidence than a provider type that
+    // says "Mutual Fund", and far better than the ticker-shaped-like-a-stock
+    // heuristic further down, which was modeling a de-risking 2040 fund as 100%
+    // equity purely because its ticker is four letters.
+    const targetDate = resolveTargetDateFund(
+      [security?.name, holding.security_name, security?.ticker_symbol, holding.ticker_symbol],
+      asOfYear
+    );
+    if (targetDate) {
+      mapping.usEquityWeight += weight * targetDate.equityShare * TARGET_DATE_US_EQUITY_SHARE;
+      mapping.internationalEquityWeight +=
+        weight * targetDate.equityShare * (1 - TARGET_DATE_US_EQUITY_SHARE);
+      mapping.nominalBondsWeight += weight * targetDate.bondShare;
+      mapping.targetDateFunds.push({
+        label: security?.name || holding.security_name || ticker || 'Target-date fund',
+        targetYear: targetDate.targetYear,
+        equityShare: targetDate.equityShare,
+      });
+      // The glidepath is an approximation of a curve we do not hold, so this is
+      // inference, not provider metadata -- and it must be stated as such.
+      mapping.mappingMethod = 'inferred';
+      mapping.mappingConfidence = 'medium';
+      inferredCount++;
+      mappedValue += holdingValue;
+      continue;
+    }
+
     const fmpMetadata = (ticker ? tickerToMetadata.get(ticker) : null) as SecurityMetadata | null;
 
     if (security || fmpMetadata) {
@@ -252,6 +294,17 @@ export function populateAssumptions(
 
   if (mapping.mappingMethod === 'inferred') {
     assumptions.push('Unclassified equity holdings split 70% US / 30% international based on historical averages');
+  }
+
+  if (mapping.targetDateFunds.length > 0) {
+    // Name the funds and their splits. A reader who disagrees with the
+    // glidepath can then see exactly which holdings it moved and by how much.
+    const described = mapping.targetDateFunds
+      .map(fund => `${fund.label} (${fund.targetYear}, ${Math.round(fund.equityShare * 100)}% equity)`)
+      .join('; ');
+    assumptions.push(
+      `Target-date funds modeled on an approximate industry glidepath rather than each fund's own published curve: ${described}`
+    );
   }
 
   if (mapping.unmappedHoldings.length > 0) {

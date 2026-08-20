@@ -26,15 +26,15 @@ describe('normalizeAssetType', () => {
     expect(normalizeAssetType('Crypto')).toBe('Cryptocurrency');
   });
 
-  it('treats missing and undefined types as a single Unknown bucket', () => {
-    expect(normalizeAssetType(undefined)).toBe('Unknown');
-    expect(normalizeAssetType(null)).toBe('Unknown');
-    expect(normalizeAssetType('   ')).toBe('Unknown');
-    expect(normalizeAssetType('Unknown')).toBe('Unknown');
-    expect(normalizeAssetType('Security type is not defined')).toBe('Unknown');
+  it('treats missing and undefined types as a single unrecognized bucket', () => {
+    expect(normalizeAssetType(undefined)).toBe('Unrecognized holdings');
+    expect(normalizeAssetType(null)).toBe('Unrecognized holdings');
+    expect(normalizeAssetType('   ')).toBe('Unrecognized holdings');
+    expect(normalizeAssetType('Unrecognized holdings')).toBe('Unrecognized holdings');
+    expect(normalizeAssetType('Security type is not defined')).toBe('Unrecognized holdings');
     // A separator-only placeholder must not become its own blank bucket.
-    expect(normalizeAssetType('-')).toBe('Unknown');
-    expect(normalizeAssetType('__')).toBe('Unknown');
+    expect(normalizeAssetType('-')).toBe('Unrecognized holdings');
+    expect(normalizeAssetType('__')).toBe('Unrecognized holdings');
   });
 
   it('matches the alias table through snake_case and hyphenated spellings', () => {
