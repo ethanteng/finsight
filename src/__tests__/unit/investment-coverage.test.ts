@@ -118,16 +118,20 @@ describe('unmodeled investment value', () => {
     expect(summary!.reasons).toEqual([]);
   });
 
-  it('excludes holdings priced in another currency from what it counts as modeled', () => {
+  it('counts every holding the engine sums, including one priced in another currency', () => {
+    // The retirement engine applies no currency rule to institution_value, so a
+    // modeled basis that filtered by currency would describe the projection as
+    // running on a figure it never used.
     const summary = summarizeUnmodeledInvestmentValue({
-      totalInvestments: 100_000,
+      totalInvestments: 150_000,
       holdings: [
-        { ...holding('brokerage', 100_000), iso_currency_code: 'EUR' },
+        holding('brokerage', 100_000),
+        { ...holding('eu', 50_000), iso_currency_code: 'EUR' },
       ],
     });
 
-    expect(summary!.modeledValue).toBe(0);
-    expect(summary!.unmodeledValue).toBe(100_000);
+    // Both holdings are in the basis, so nothing is left unexplained.
+    expect(summary).toBeNull();
   });
 });
 
@@ -229,6 +233,18 @@ describe('retirement data quality with excluded value', () => {
       unmodeledValue: 386_603.06,
       modeledValue: 804_827.9,
     })).toBe('medium');
+  });
+
+  it('never promotes a stored low confidence, because a ceiling only caps', () => {
+    // calculateConfidenceCeiling returns only high or medium, so applying it
+    // outright to a cached analysis would raise a stored "low" to "medium".
+    const quality = calculateDataQuality(holdings, securities, mapping, 1, []);
+    const ceiling = calculateConfidenceCeiling(quality);
+    const rank: Record<string, number> = { low: 0, medium: 1, high: 2 };
+    const capped = (stored: string) => (rank[stored] < rank[ceiling] ? stored : ceiling);
+
+    expect(capped('low')).toBe('low');
+    expect(capped('high')).toBe(ceiling);
   });
 
   it('still allows high confidence when the whole portfolio is modeled', () => {

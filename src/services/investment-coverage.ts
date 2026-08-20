@@ -66,17 +66,24 @@ function finite(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
 
+/**
+ * Sum holdings exactly as the consumer being described sums them.
+ *
+ * No currency filter, deliberately. The canonical portfolio drops holdings
+ * priced outside the reporting currency, but the retirement engine adds every
+ * `institution_value` it receives (`retirement-analytics/index.ts`). Measuring
+ * the modeled basis by the canonical rule instead of the engine's would report
+ * a projection as running on one figure while it simulated another -- the one
+ * thing a statement about the basis must not get wrong. Where the two rules
+ * disagree the difference can exceed the residual, driving `unmodeledValue`
+ * negative and the summary to null: saying nothing beats saying something false.
+ */
 function holdingsValueByAccount(
-  holdings: readonly any[],
-  reportingCurrency: string
+  holdings: readonly any[]
 ): { total: number; byAccount: Map<string, number> } {
   const byAccount = new Map<string, number>();
   let total = 0;
   for (const holding of holdings) {
-    // Match the canonical portfolio's own currency rule: a holding priced in
-    // another currency is not part of a reporting-currency total.
-    const currency = String(holding?.iso_currency_code || '').toUpperCase();
-    if (currency !== reportingCurrency) continue;
     const value = finite(holding?.institution_value);
     if (value === null) continue;
     total += value;
@@ -98,16 +105,17 @@ export function summarizeUnmodeledInvestmentValue(input: {
   accounts?: readonly CoverageAccount[];
   /** Per-account residuals recorded by the canonical portfolio builder. */
   coverageGaps?: readonly CoverageGap[];
+  /**
+   * Accepted so callers need not know whether it matters, and deliberately
+   * unused: the modeled basis mirrors the consuming engine's own summation,
+   * which applies no currency rule. See `holdingsValueByAccount`.
+   */
   reportingCurrency?: string;
 }): UnmodeledInvestmentValue | null {
   const totalInvestments = finite(input.totalInvestments);
   if (totalInvestments === null || totalInvestments <= 0) return null;
 
-  const reportingCurrency = (input.reportingCurrency || 'USD').toUpperCase();
-  const { total: modeledValue, byAccount } = holdingsValueByAccount(
-    input.holdings || [],
-    reportingCurrency
-  );
+  const { total: modeledValue, byAccount } = holdingsValueByAccount(input.holdings || []);
   const unmodeledValue = totalInvestments - modeledValue;
   if (unmodeledValue < MATERIAL_UNMODELED_VALUE) return null;
 

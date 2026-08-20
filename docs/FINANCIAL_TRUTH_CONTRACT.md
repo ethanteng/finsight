@@ -86,8 +86,14 @@ modeled (`modeledValue`), what it left out (`unmodeledValue`), and the dollar-we
 covered (`valueCoverage`) -- distinct from holdings-count completeness, which stays high while a
 fifth of the money is absent. Coverage below 95% caps the analysis's confidence, and every figure
 computed on the modeled subset carries the exclusion as a caveat on its canonical fact, so a
-qualified number cannot be quoted unqualified. Support metrics (portfolio value, years of expenses,
-survival, depletion) are floors; withdrawal rates are overstated relative to the full portfolio.
+qualified number cannot be quoted unqualified, with the caveat naming the direction of the error.
+Support metrics (portfolio value, years of expenses, survival, depletion) are floors. The requested
+withdrawal rate is overstated, because the excluded value sits in its denominator. Asset-allocation
+shares describe the modeled holdings only, since the excluded value's mix is unknown. Solved
+sustainable withdrawal rates carry no caveat: withdrawal survival is scale-invariant, so those
+percentages do not move with the excluded value. The modeled basis is measured the way the consuming
+engine sums holdings, not the way the canonical portfolio does, so a stated basis always matches what
+was actually simulated.
 
 Amounts remain unrounded during calculation; formatting and rounding are presentation concerns. Metrics in API and LLM responses must carry an explicit unit/currency rather than infer one from a label.
 

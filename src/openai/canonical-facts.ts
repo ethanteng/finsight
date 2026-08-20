@@ -677,13 +677,25 @@ export function buildCanonicalFactPack(
         'survival_rate',
         ...['p10', 'p25', 'p50', 'p75', 'p90'].map(percentile => `depletion_years_${percentile}`),
       ];
-      const withdrawalRateFactIds = [
-        'withdrawal_rate_ratio',
-        'withdrawal_rate',
-        ...['p10', 'p25', 'p50', 'p75', 'p90'].flatMap(percentile => [
-          `historical_withdrawal_rate_${percentile}_ratio`,
-          `historical_withdrawal_rate_${percentile}`,
-        ]),
+      // Only the user's own withdrawal rate. `historical_withdrawal_rate_*` are
+      // solved sustainable rates, and withdrawal survival is scale-invariant --
+      // `evaluateSurvival` scales the withdrawal with the portfolio, so the
+      // solved percentage does not move with the excluded value. Calling those
+      // overstated would tell a user their sustainable rate is lower than it is.
+      const withdrawalRateFactIds = ['withdrawal_rate_ratio', 'withdrawal_rate'];
+      // Allocation is a property of the positions we can see. With value
+      // excluded, these describe the modeled subset, not the whole portfolio,
+      // and an allocation recommendation drawn from them would be reasoning
+      // about a mix that omits a material balance.
+      const partialMixCaveat =
+        `${exclusionBasis}This is the mix of the modeled holdings only; the excluded value's ` +
+        'asset mix is unknown, so it may not be the mix of the full portfolio. ' +
+        'State the exclusion whenever you state this number.';
+      const partialMixFactIds = [
+        'equity_allocation',
+        'fixed_income_allocation',
+        'cash_allocation',
+        'international_allocation',
       ];
       for (const factId of supportFloorFactIds) {
         const fact = facts.get(factId);
@@ -692,6 +704,10 @@ export function buildCanonicalFactPack(
       for (const factId of withdrawalRateFactIds) {
         const fact = facts.get(factId);
         if (fact) facts.set(factId, { ...fact, caveat: withdrawalRateCaveat });
+      }
+      for (const factId of partialMixFactIds) {
+        const fact = facts.get(factId);
+        if (fact) facts.set(factId, { ...fact, caveat: partialMixCaveat });
       }
     }
   }

@@ -335,6 +335,9 @@ describe('buildCanonicalFactPack', () => {
       metrics: {
         withdrawalRate: 0.049,
         equityAllocation: 70,
+        fixedIncomeAllocation: 20,
+        cashAllocation: 5,
+        internationalAllocation: 5,
         yearsOfExpenses: 20,
         projectedPortfolioAtWithdrawalStart: 1_868_490,
         historicalWithdrawalRates: { p10: 0.03, p25: 0.035, p50: 0.04, p75: 0.045, p90: 0.05 },
@@ -364,12 +367,23 @@ describe('buildCanonicalFactPack', () => {
     for (const id of ['withdrawal_rate', 'years_of_expenses', 'survival_rate', 'projected_portfolio_at_withdrawal_start', 'depletion_years_p50']) {
       expect(pack.facts.find((fact) => fact.id === id)?.caveat).toContain('$432,498');
     }
-    // Support metrics are floors; withdrawal rates are overstated ceilings.
+    // Support metrics are floors; the user's withdrawal rate is an overstated ceiling.
     expect(pack.facts.find((fact) => fact.id === 'years_of_expenses')?.caveat).toContain('floor');
     expect(pack.facts.find((fact) => fact.id === 'withdrawal_rate')?.caveat).toContain('overstated');
     expect(pack.facts.find((fact) => fact.id === 'withdrawal_rate')?.caveat).not.toContain('floor');
+
+    // Allocation describes the modeled holdings, not the whole portfolio, so it
+    // must not be quoted as the portfolio's mix or drive a rebalancing answer.
+    for (const id of ['equity_allocation', 'fixed_income_allocation', 'cash_allocation', 'international_allocation']) {
+      expect(pack.facts.find((fact) => fact.id === id)?.caveat).toContain('mix of the modeled holdings only');
+    }
+
+    // Solved sustainable rates are scale-invariant (withdrawal scales with the
+    // portfolio), so the exclusion does not move them and they carry no caveat.
+    for (const id of ['historical_withdrawal_rate_p50', 'historical_withdrawal_rate_p10_ratio']) {
+      expect(pack.facts.find((fact) => fact.id === id)?.caveat).toBeUndefined();
+    }
     // Figures the exclusion does not distort stay uncaveated.
-    expect(pack.facts.find((fact) => fact.id === 'equity_allocation')?.caveat).toBeUndefined();
     expect(pack.facts.find((fact) => fact.id === 'retirement_current_age')?.caveat).toBeUndefined();
     expect(validateCanonicalFactPack(pack)).toEqual([]);
   });

@@ -640,8 +640,13 @@ async function fetchOrCreateRetirementAnalysis(args: {
       })),
     };
     // Coverage is restated on cache hits too; re-apply the ceiling so a stored
-    // "high" cannot outlive a valueCoverage that now forbids it.
-    const confidence = calculateConfidenceCeiling(dataQuality as DataQualityReport);
+    // "high" cannot outlive a valueCoverage that now forbids it. A ceiling only
+    // caps: calculateConfidenceCeiling never returns "low", so taking it
+    // outright would promote a stored "low" analysis to "medium".
+    const ceiling = calculateConfidenceCeiling(dataQuality as DataQualityReport);
+    const rank: Record<string, number> = { low: 0, medium: 1, high: 2 };
+    const stored = analysis.summary?.confidence;
+    const confidence = stored && rank[stored] < rank[ceiling] ? stored : ceiling;
     return {
       ...analysis,
       summary: {
