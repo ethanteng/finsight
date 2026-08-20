@@ -39,6 +39,10 @@ function analysis(survivalRate = 0.8): RetirementAnalysisOutput {
     dataQuality: {
       completeness: 1,
       priceHistoryCoverage: 1,
+      modeledValue: 100000,
+      unmodeledValue: 0,
+      valueCoverage: 1,
+      unmodeledReasons: [],
       metadataConfidence: 'high',
       portfolioMappingConfidence: 'high',
       proxiedValuePercentage: 0,

@@ -4,6 +4,7 @@ import type { RetirementScenarioExecution } from '../scenarios/retirement-scenar
 import type { ScenarioExecutionRecord } from '../scenarios/calculator-registry';
 import type { PlannedSearchQuery } from '../data/search-types';
 import type { PlaidLiabilityDetails } from '../services/plaid-liabilities';
+import type { UnmodeledInvestmentValue } from '../services/investment-coverage';
 
 export interface QuestionNeeds {
   needsMarketContext: boolean;
@@ -48,6 +49,11 @@ export interface InvestmentSnapshot {
   holdings?: Holding[];
   securities?: Security[];
   externalData?: InvestmentExternalData;
+  /**
+   * Investment value no position-level model can represent, measured against
+   * the canonical total. Present only when something is actually excluded.
+   */
+  unmodeledInvestments?: UnmodeledInvestmentValue | null;
 }
 
 export interface InvestmentExternalData {
@@ -212,6 +218,10 @@ export interface FinancialContextSnapshot {
     dataQuality: {
       completeness: number;
       priceHistoryCoverage: number;
+      modeledValue?: number;
+      unmodeledValue?: number;
+      valueCoverage?: number;
+      unmodeledReasons?: Array<{ label: string; amount: number; kind: string }>;
       metadataConfidence: 'high' | 'medium' | 'low';
       portfolioMappingConfidence: 'high' | 'medium' | 'low';
       proxiedValuePercentage: number;

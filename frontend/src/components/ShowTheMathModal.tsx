@@ -7,6 +7,8 @@ export interface CanonicalFact {
   value: number;
   unit: 'usd' | 'percent' | 'months' | 'years' | 'age' | 'count' | 'ratio';
   displayable?: boolean;
+  /** Present when the value is exact but its basis is narrower than the label implies. */
+  caveat?: string;
   provenance: {
     kind: 'snapshot' | 'calculation' | 'user_input' | 'external_context' | 'scenario_input' | 'scenario_calculation';
     source: string;

@@ -206,7 +206,11 @@ export async function analyzeRetirementPortfolio(
     portfolioMapping,
     priceHistoryCoverage,
     assumptions,
-    stressTestMissingData
+    stressTestMissingData,
+    // Value the caller measured as unmodellable. The engine never simulates
+    // it -- it reports it, so the results read as a floor rather than an
+    // estimate. See docs/FINANCIAL_TRUTH_CONTRACT.md.
+    input.unmodeledInvestments
   );
 
   const withdrawalMetrics = {

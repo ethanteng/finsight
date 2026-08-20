@@ -25,6 +25,14 @@ export interface CanonicalFact {
   unit: CanonicalFactUnit;
   /** False for calculation inputs that remain traceable but must not be displayed directly. */
   displayable?: boolean;
+  /**
+   * A limitation that changes how this number should be read, and that must be
+   * stated wherever the number is. Present when the value is exact but its
+   * basis is narrower than its label implies -- a projection computed on part
+   * of a portfolio, say. A caveat travels with its fact so the qualification
+   * cannot be separated from the figure it qualifies.
+   */
+  caveat?: string;
   provenance: CanonicalFactProvenance;
 }
 
@@ -43,6 +51,10 @@ function isoString(value: Date | string | null | undefined): string | undefined 
 
 function finite(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value);
+}
+
+function formatUsd(value: unknown): string {
+  return finite(value) ? `$${Math.round(value).toLocaleString('en-US')}` : 'an unknown amount';
 }
 
 function safeFactId(value: string): string {
@@ -617,6 +629,36 @@ export function buildCanonicalFactPack(
     addSnapshotFact('retirement_age', 'Retirement age', retirement._storedInputParams?.retirementAge, 'age', 'retirementAnalysis.inputs.retirementAge');
     addSnapshotFact('annual_withdrawal_amount', 'Annual withdrawal amount', retirement._storedInputParams?.annualWithdrawalAmount, 'usd', 'retirementAnalysis.inputs.annualWithdrawalAmount');
     addSnapshotFact('withdrawal_start_age', 'Withdrawal start age', retirement._storedInputParams?.withdrawalStartAge, 'age', 'retirementAnalysis.inputs.withdrawalStartAge');
+
+    // Investment value deliberately excluded from the projection because its
+    // asset mix is unknown. Published as facts because the answer cannot state
+    // the exclusion without them: every dollar figure in prose must come from
+    // a fact, so an unciteable caveat is a caveat the model has to leave out.
+    // Caveats are stamped after scenario facts are added below -- variants run
+    // on the same modeled basis, and a what-if answer quotes those facts.
+    const coverage = retirement.dataQuality;
+    const unmodeledValue = coverage?.unmodeledValue;
+    if (finite(unmodeledValue) && unmodeledValue > 0) {
+      addSnapshotFact(
+        'retirement_modeled_portfolio_value',
+        'Portfolio value this projection modeled',
+        coverage?.modeledValue,
+        'usd',
+        'retirementAnalysis.dataQuality.modeledValue'
+      );
+      addSnapshotFact(
+        'retirement_unmodeled_portfolio_value',
+        'Investment value excluded from this projection',
+        unmodeledValue,
+        'usd',
+        'retirementAnalysis.dataQuality.unmodeledValue'
+      );
+      const coverageRatio = coverage?.valueCoverage;
+      if (finite(coverageRatio)) {
+        addSnapshotFact('retirement_value_coverage_ratio', 'Share of investments modeled source ratio', coverageRatio, 'ratio', 'retirementAnalysis.dataQuality.valueCoverage', false);
+        addCalculatedFact('retirement_value_coverage', 'Share of investments this projection modeled', coverageRatio * 100, 'percent', 'input * 100', ['retirement_value_coverage_ratio']);
+      }
+    }
   }
 
   const scenarioExecutions = snapshot.scenarioExecutions
@@ -625,6 +667,85 @@ export function buildCanonicalFactPack(
       : undefined);
   for (const fact of scenarioCalculatorRegistry.canonicalFacts(scenarioExecutions)) {
     facts.set(fact.id, fact);
+  }
+
+  // Stamp the exclusion onto every figure it distorts -- baseline and scenario
+  // variants alike. Support metrics understate what the full portfolio would
+  // support; the requested withdrawal rate is overstated (excluded value sits
+  // in its denominator); allocation describes the modeled holdings only.
+  const retirementCoverage = snapshot.retirementAnalysis?.dataQuality;
+  const excludedValue = retirementCoverage?.unmodeledValue;
+  if (finite(excludedValue) && excludedValue > 0) {
+    const exclusionBasis =
+      `Computed on the ${formatUsd(retirementCoverage?.modeledValue)} this projection modeled, not the full portfolio: ` +
+      `${formatUsd(excludedValue)} of investments is excluded because its asset mix is unknown. `;
+    const supportFloorCaveat =
+      `${exclusionBasis}Read this as a floor, and state the exclusion whenever you state this number.`;
+    const withdrawalRateCaveat =
+      `${exclusionBasis}This rate is overstated relative to the full portfolio (read it as a ceiling on the true rate), ` +
+      'and state the exclusion whenever you state this number.';
+    const partialMixCaveat =
+      `${exclusionBasis}This is the mix of the modeled holdings only; the excluded value's ` +
+      'asset mix is unknown, so it may not be the mix of the full portfolio. ' +
+      'State the exclusion whenever you state this number.';
+    // Exposure and fee metrics are aggregated over the same itemized positions,
+    // so they describe the modeled holdings rather than the portfolio. Their
+    // labels do not say so -- "fee drag across the whole portfolio" is exactly
+    // the claim the exclusion undermines -- so the caveat has to.
+    const modeledHoldingsCaveat =
+      `${exclusionBasis}This is measured across the modeled holdings only; the excluded ` +
+      'value has no itemized positions, so it is not represented in this figure. ' +
+      'State the exclusion whenever you state this number.';
+    // Match baseline ids and scenario-prefixed ids (`retirement_scenario_*_…`).
+    // Exact or `_${metric}` so `historical_withdrawal_rate_*` (scale-invariant)
+    // are not swept in with the requested `withdrawal_rate`.
+    const matchesMetric = (factId: string, metric: string) =>
+      factId === metric || factId.endsWith(`_${metric}`);
+    const supportFloorMetrics = [
+      'years_of_expenses',
+      'projected_portfolio_at_withdrawal_start',
+      'survival_rate_ratio',
+      'survival_rate',
+      ...['p10', 'p25', 'p50', 'p75', 'p90'].map(percentile => `depletion_years_${percentile}`),
+    ];
+    const withdrawalRateMetrics = ['withdrawal_rate_ratio', 'withdrawal_rate'];
+    const partialMixMetrics = [
+      'equity_allocation',
+      'fixed_income_allocation',
+      'cash_allocation',
+      'international_allocation',
+    ];
+    // Exact ids, not suffixes: `external_portfolio_expense_ratio` is FMP's own
+    // aggregate over enriched holdings, a different population with its own
+    // coverage fact, and must not inherit the retirement exclusion's caveat.
+    const modeledHoldingsFactIds = new Set([
+      'portfolio_expense_ratio_source',
+      'portfolio_expense_ratio',
+      'expense_ratio_coverage_source',
+      'expense_ratio_coverage',
+      'country_exposure_coverage_source',
+      'country_exposure_coverage',
+      'sector_exposure_coverage_source',
+      'sector_exposure_coverage',
+    ]);
+    // Per-country and per-sector weights are generated one fact per name.
+    const modeledHoldingsPrefixes = ['country_exposure_', 'sector_exposure_'];
+    for (const [factId, fact] of facts) {
+      let caveat: string | undefined;
+      if (supportFloorMetrics.some(metric => matchesMetric(factId, metric))) {
+        caveat = supportFloorCaveat;
+      } else if (withdrawalRateMetrics.some(metric => matchesMetric(factId, metric))) {
+        caveat = withdrawalRateCaveat;
+      } else if (partialMixMetrics.some(metric => matchesMetric(factId, metric))) {
+        caveat = partialMixCaveat;
+      } else if (
+        modeledHoldingsFactIds.has(factId) ||
+        modeledHoldingsPrefixes.some(prefix => factId.startsWith(prefix))
+      ) {
+        caveat = modeledHoldingsCaveat;
+      }
+      if (caveat) facts.set(factId, { ...fact, caveat });
+    }
   }
 
   // Scenario premises and explicitly requested external context are canonical inputs too.

@@ -78,6 +78,24 @@ to the total. Where that residual exceeds the greater of 1 unit of the reporting
 the balance, the snapshot records an `account:<id>:holdings-coverage` observation. That observation
 is not `required`: nothing is missing from net worth, only from the allocation's detail.
 
+Consumers that model a portfolio position by position -- retirement analysis above all -- see only
+the itemized holdings, never the residual or a manual account's balance. That value is real but has
+no known asset class, and modeling it would mean assuming a return it may not earn, so the same rule
+applies: it is excluded and reported rather than guessed. Such an analysis must publish what it
+modeled (`modeledValue`), what it left out (`unmodeledValue`), and the dollar-weighted share it
+covered (`valueCoverage`) -- distinct from holdings-count completeness, which stays high while a
+fifth of the money is absent. Coverage below 95% caps the analysis's confidence, and every figure
+computed on the modeled subset carries the exclusion as a caveat on its canonical fact, so a
+qualified number cannot be quoted unqualified, with the caveat naming the direction of the error.
+Support metrics (portfolio value, years of expenses, survival, depletion) are floors. The requested
+withdrawal rate is overstated, because the excluded value sits in its denominator. Asset-allocation
+shares, country and sector exposure, and portfolio fee drag describe the modeled holdings only,
+since the excluded value has no itemized positions -- their labels do not say so, so the caveat must. Solved
+sustainable withdrawal rates carry no caveat: withdrawal survival is scale-invariant, so those
+percentages do not move with the excluded value. The modeled basis is measured the way the consuming
+engine sums holdings, not the way the canonical portfolio does, so a stated basis always matches what
+was actually simulated.
+
 Amounts remain unrounded during calculation; formatting and rounding are presentation concerns. Metrics in API and LLM responses must carry an explicit unit/currency rather than infer one from a label.
 
 ## 4. Snapshot time and completeness

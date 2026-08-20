@@ -329,8 +329,124 @@ describe('buildCanonicalFactPack', () => {
     expect(validateCanonicalFactPack(pack)).toEqual([]);
   });
 
+  it('publishes excluded investment value and stamps every figure it distorts', () => {
+    const data = snapshot();
+    data.retirementAnalysis = {
+      metrics: {
+        withdrawalRate: 0.049,
+        equityAllocation: 70,
+        fixedIncomeAllocation: 20,
+        cashAllocation: 5,
+        internationalAllocation: 5,
+        yearsOfExpenses: 20,
+        projectedPortfolioAtWithdrawalStart: 1_868_490,
+        expenseRatioWeighted: 0.004,
+        expenseRatioCoverage: 0.9,
+        countryCoverage: 0.85,
+        sectorCoverage: 0.85,
+        countryAllocation: [{ name: 'United States', percentage: 80 }],
+        sectorAllocation: [{ name: 'Technology', percentage: 30 }],
+        historicalWithdrawalRates: { p10: 0.03, p25: 0.035, p50: 0.04, p75: 0.045, p90: 0.05 },
+      },
+      stressTest: {
+        survivalRate: 0.62,
+        totalSequences: 100,
+        depletionPercentiles: { p10: 12, p25: 18, p50: 25, p75: 30, p90: 35 },
+      },
+      dataQuality: {
+        modeledValue: 1_868_490.56,
+        unmodeledValue: 432_498.11,
+        valueCoverage: 0.812,
+        unmodeledReasons: [{ label: '401(k)', amount: 386_603.06, kind: 'partial-holdings' }],
+      },
+      _storedInputParams: { currentAge: 50, retirementAge: 65, annualWithdrawalAmount: 90_000, withdrawalStartAge: 65 },
+    };
+    const pack = buildCanonicalFactPack(data, 'Am I on track for retirement?', needs('retirement_analysis'));
+
+    // The answer cannot state the exclusion unless the amounts are citeable.
+    expect(pack.facts.find((fact) => fact.id === 'retirement_unmodeled_portfolio_value'))
+      .toMatchObject({ value: 432_498.11, unit: 'usd' });
+    expect(pack.facts.find((fact) => fact.id === 'retirement_modeled_portfolio_value'))
+      .toMatchObject({ value: 1_868_490.56, unit: 'usd' });
+
+    // The caveat travels with each distorted figure, not just in a footnote.
+    for (const id of ['withdrawal_rate', 'years_of_expenses', 'survival_rate', 'projected_portfolio_at_withdrawal_start', 'depletion_years_p50']) {
+      expect(pack.facts.find((fact) => fact.id === id)?.caveat).toContain('$432,498');
+    }
+    // Support metrics are floors; the user's withdrawal rate is an overstated ceiling.
+    expect(pack.facts.find((fact) => fact.id === 'years_of_expenses')?.caveat).toContain('floor');
+    expect(pack.facts.find((fact) => fact.id === 'withdrawal_rate')?.caveat).toContain('overstated');
+    expect(pack.facts.find((fact) => fact.id === 'withdrawal_rate')?.caveat).not.toContain('floor');
+
+    // Allocation describes the modeled holdings, not the whole portfolio, so it
+    // must not be quoted as the portfolio's mix or drive a rebalancing answer.
+    for (const id of ['equity_allocation', 'fixed_income_allocation', 'cash_allocation', 'international_allocation']) {
+      expect(pack.facts.find((fact) => fact.id === id)?.caveat).toContain('mix of the modeled holdings only');
+    }
+
+    // Solved sustainable rates are scale-invariant (withdrawal scales with the
+    // portfolio), so the exclusion does not move them and they carry no caveat.
+    for (const id of ['historical_withdrawal_rate_p50', 'historical_withdrawal_rate_p10_ratio']) {
+      expect(pack.facts.find((fact) => fact.id === id)?.caveat).toBeUndefined();
+    }
+
+    // Exposure and fee metrics aggregate the same itemized positions, so they
+    // describe the modeled holdings however confidently their labels read.
+    for (const id of ['portfolio_expense_ratio', 'expense_ratio_coverage', 'country_exposure_united_states', 'sector_exposure_technology']) {
+      expect(pack.facts.find((fact) => fact.id === id)?.caveat).toContain('modeled holdings only');
+    }
+    // Figures the exclusion does not distort stay uncaveated.
+    expect(pack.facts.find((fact) => fact.id === 'retirement_current_age')?.caveat).toBeUndefined();
+    expect(validateCanonicalFactPack(pack)).toEqual([]);
+  });
+
+  it('leaves retirement facts uncaveated when the whole portfolio was modeled', () => {
+    const data = snapshot();
+    data.retirementAnalysis = {
+      metrics: {
+        withdrawalRate: 0.04,
+        equityAllocation: 70,
+        yearsOfExpenses: 25,
+        historicalWithdrawalRates: { p10: 0.03, p25: 0.035, p50: 0.04, p75: 0.045, p90: 0.05 },
+      },
+      stressTest: {
+        survivalRate: 0.91,
+        totalSequences: 100,
+        depletionPercentiles: { p10: 12, p25: 18, p50: 25, p75: 30, p90: 35 },
+      },
+      dataQuality: { modeledValue: 1_000_000, unmodeledValue: 0, valueCoverage: 1, unmodeledReasons: [] },
+      _storedInputParams: { currentAge: 50, retirementAge: 65, annualWithdrawalAmount: 40_000, withdrawalStartAge: 65 },
+    };
+    const pack = buildCanonicalFactPack(data, 'Am I on track for retirement?', needs('retirement_analysis'));
+
+    expect(pack.facts.find((fact) => fact.id === 'withdrawal_rate')?.caveat).toBeUndefined();
+    expect(pack.facts.some((fact) => fact.id === 'retirement_unmodeled_portfolio_value')).toBe(false);
+  });
+
   it('grounds multiple modeled outcomes as scenario-scoped facts', () => {
     const data = snapshot();
+    data.retirementAnalysis = {
+      metrics: {
+        withdrawalRate: 0.049,
+        yearsOfExpenses: 20,
+        projectedPortfolioAtWithdrawalStart: 1_868_490,
+        historicalWithdrawalRates: { p10: 0.03, p25: 0.035, p50: 0.04, p75: 0.045, p90: 0.05 },
+      },
+      stressTest: {
+        survivalRate: 0.62,
+        totalSequences: 100,
+        depletionPercentiles: { p10: 12, p25: 18, p50: 25, p75: 30, p90: 35 },
+      },
+      // Variants inherit the same exclusion; their facts must carry the caveat
+      // or a what-if answer can quote them unqualified.
+      dataQuality: {
+        modeledValue: 1_868_490.56,
+        unmodeledValue: 432_498.11,
+        valueCoverage: 0.812,
+        unmodeledReasons: [],
+      },
+      _storedInputParams: { currentAge: 50, retirementAge: 65, annualWithdrawalAmount: 90_000, withdrawalStartAge: 65 },
+    };
     const scenario = (id: string, label: string, survivalRate: number, policy: any) => ({
       id,
       label,
@@ -369,19 +485,30 @@ describe('buildCanonicalFactPack', () => {
     } };
 
     const pack = buildCanonicalFactPack(data, 'Compare the scenarios.', needs('retirement_analysis'));
-    const survivalFacts = pack.facts.filter((fact) => fact.id.endsWith('_survival_rate'));
+    const survivalFacts = pack.facts.filter((fact) =>
+      fact.id.endsWith('_survival_rate') && fact.provenance?.kind === 'scenario_calculation'
+    );
     expect(survivalFacts).toEqual([
       expect.objectContaining({
         value: 75,
         unit: 'percent',
         provenance: expect.objectContaining({ kind: 'scenario_calculation', calculatorId: 'retirement', scenarioId: 'fixed' }),
+        caveat: expect.stringContaining('floor'),
       }),
       expect.objectContaining({
         value: 95,
         unit: 'percent',
         provenance: expect.objectContaining({ kind: 'scenario_calculation', scenarioId: 'flat' }),
+        caveat: expect.stringContaining('floor'),
       }),
     ]);
+    expect(pack.facts.find((fact) => fact.id === 'retirement_scenario_fixed_withdrawal_rate')?.caveat)
+      .toContain('overstated');
+    expect(pack.facts.find((fact) => fact.id === 'retirement_scenario_fixed_years_of_expenses')?.caveat)
+      .toContain('floor');
+    // Scenario inputs and growth-rate assumptions are not distorted by the exclusion.
+    expect(pack.facts.find((fact) => fact.id === 'retirement_scenario_fixed_assumption_annual_growth_rate')?.caveat)
+      .toBeUndefined();
     expect(pack.facts).toContainEqual(expect.objectContaining({
       id: 'retirement_scenario_fixed_assumption_annual_growth_rate',
       value: 0.03,
