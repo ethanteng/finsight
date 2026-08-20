@@ -42,6 +42,13 @@ describe('target-date fund recognition', () => {
     expect(targetDateFundYear('')).toBeNull();
   });
 
+  it('keeps the target year when a later series or inception year also appears', () => {
+    // Last-in-string would pick 2020 / 2015 and model the wrong glidepath.
+    expect(targetDateFundYear('Target Date 2035 Fund Series 2020')).toBe(2035);
+    expect(targetDateFundYear('State St Target Ret 2040 Trust (est. 2015)')).toBe(2040);
+    expect(targetDateFundYear('2010 Vanguard Target Retirement 2050 Trust')).toBe(2050);
+  });
+
   it('de-risks as the target year approaches and levels at both ends', () => {
     expect(targetDateGlidepath(2050, 2026).equityShare).toBeCloseTo(0.9, 6); // clamped
     expect(targetDateGlidepath(2040, 2026).equityShare).toBeCloseTo(0.78, 6);

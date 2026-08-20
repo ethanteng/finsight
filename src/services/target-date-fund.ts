@@ -65,21 +65,31 @@ function clamp(value: number, min: number, max: number): number {
 /**
  * The target year a fund names, or null when it is not a target-date fund.
  *
- * Both a signal phrase and a plausible year are required, and the year is read
- * from the whole label so "Target Ret 2040 SL SF CL III" resolves even with
- * share-class noise after it. When several years appear, the last one wins:
- * provider labels put the target year before the share class, never after.
+ * Both a signal phrase and a plausible year are required. The year is the first
+ * `20xx` at or after the earliest signal match, so "Target Ret 2040 SL SF CL III"
+ * still resolves through share-class noise, while a trailing inception or series
+ * year ("Target Date 2035 Fund Series 2020") cannot override the target. A year
+ * that only appears before the signal (e.g. an establishment date) is ignored.
  */
 export function targetDateFundYear(...labels: Array<unknown>): number | null {
   const text = labels
     .filter((label): label is string => typeof label === 'string' && label.trim().length > 0)
     .join(' ');
   if (!text) return null;
-  if (!TARGET_DATE_SIGNALS.some(signal => signal.test(text))) return null;
 
-  const years = text.match(/\b(20\d{2})\b/g);
+  let signalIndex = -1;
+  for (const signal of TARGET_DATE_SIGNALS) {
+    const match = text.match(signal);
+    if (match?.index === undefined) continue;
+    if (signalIndex === -1 || match.index < signalIndex) {
+      signalIndex = match.index;
+    }
+  }
+  if (signalIndex < 0) return null;
+
+  const years = text.slice(signalIndex).match(/\b(20\d{2})\b/g);
   if (!years || years.length === 0) return null;
-  const year = Number(years[years.length - 1]);
+  const year = Number(years[0]);
   if (!Number.isFinite(year) || year < MIN_TARGET_YEAR || year > MAX_TARGET_YEAR) return null;
   return year;
 }
