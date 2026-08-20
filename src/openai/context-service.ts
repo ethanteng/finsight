@@ -12,7 +12,8 @@ import {
 } from '../services/investment-coverage';
 import { buildCanonicalCashFlowAnalyses } from './cash-flow-context';
 import { resolveRetirementInputs, retirementPortfolioFingerprint } from './retirement-inputs';
-import { generateDisclaimers } from '../retirement-analytics/interpretation/uncertainty-quantifier';
+import { generateDisclaimers, calculateConfidenceCeiling } from '../retirement-analytics/interpretation/uncertainty-quantifier';
+import type { DataQualityReport } from '../retirement-analytics/types';
 import type { ExtractedRetirementInputs } from './retirement-input-extraction';
 import type { PlannedSearchQuery } from '../data/search-types';
 
@@ -627,19 +628,27 @@ async function fetchOrCreateRetirementAnalysis(args: {
     const note = describeUnmodeledInvestmentValue(unmodeledInvestments);
     const carried = (analysis.disclaimers || [])
       .filter(disclaimer => !disclaimer.startsWith(UNMODELED_VALUE_NOTE_PREFIX));
+    const dataQuality = {
+      ...analysis.dataQuality,
+      modeledValue: unmodeledInvestments?.modeledValue ?? analysis.dataQuality?.modeledValue,
+      unmodeledValue: unmodeledInvestments?.unmodeledValue ?? 0,
+      valueCoverage: unmodeledInvestments?.valueCoverage ?? 1,
+      unmodeledReasons: (unmodeledInvestments?.reasons ?? []).map(reason => ({
+        label: reason.label,
+        amount: reason.amount,
+        kind: reason.kind,
+      })),
+    };
+    // Coverage is restated on cache hits too; re-apply the ceiling so a stored
+    // "high" cannot outlive a valueCoverage that now forbids it.
+    const confidence = calculateConfidenceCeiling(dataQuality as DataQualityReport);
     return {
       ...analysis,
-      dataQuality: {
-        ...analysis.dataQuality,
-        modeledValue: unmodeledInvestments?.modeledValue ?? analysis.dataQuality?.modeledValue,
-        unmodeledValue: unmodeledInvestments?.unmodeledValue ?? 0,
-        valueCoverage: unmodeledInvestments?.valueCoverage ?? 1,
-        unmodeledReasons: (unmodeledInvestments?.reasons ?? []).map(reason => ({
-          label: reason.label,
-          amount: reason.amount,
-          kind: reason.kind,
-        })),
+      summary: {
+        ...analysis.summary,
+        confidence,
       },
+      dataQuality,
       disclaimers: note ? [note, ...carried] : carried,
     };
   };

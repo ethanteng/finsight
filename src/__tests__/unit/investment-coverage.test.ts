@@ -218,6 +218,19 @@ describe('retirement data quality with excluded value', () => {
     expect(calculateConfidenceCeiling(quality)).toBe('medium');
   });
 
+  it('still caps confidence when only valueCoverage is restated onto otherwise-high data quality', () => {
+    // Cache hits restate coverage onto a stored analysis without re-running the
+    // engine; the ceiling must still see the restated valueCoverage.
+    const quality = calculateDataQuality(holdings, securities, mapping, 1, []);
+    expect(calculateConfidenceCeiling(quality)).toBe('high');
+    expect(calculateConfidenceCeiling({
+      ...quality,
+      valueCoverage: 0.812,
+      unmodeledValue: 386_603.06,
+      modeledValue: 804_827.9,
+    })).toBe('medium');
+  });
+
   it('still allows high confidence when the whole portfolio is modeled', () => {
     expect(calculateConfidenceCeiling(calculateDataQuality(holdings, securities, mapping, 1, [])))
       .toBe('high');
