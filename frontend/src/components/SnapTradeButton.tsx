@@ -235,12 +235,12 @@ export default function SnapTradeButton({ onAccountsUpdated, snapTradeStatus: sn
   };
 
   /**
-   * `reconnectAuthorizationId` repairs an existing brokerage authorization
-   * rather than adding another connection to the same brokerage, which is what
-   * the plain connect flow would do when a user is trying to fix a disabled
-   * connection.
+   * Opens the SnapTrade portal. When `authorizationToReconnect` is set, repairs
+   * that brokerage authorization rather than adding another connection to the
+   * same brokerage, which is what the plain connect flow would do when a user
+   * is trying to fix a disabled connection.
    */
-  const connectSnapTrade = async (reconnectAuthorizationId?: string) => {
+  const connectSnapTrade = async (authorizationToReconnect?: string) => {
     try {
       // Check if other financial services are active
       if (financialServiceCoordinator.hasActiveServices()) {
@@ -268,7 +268,7 @@ export default function SnapTradeButton({ onAccountsUpdated, snapTradeStatus: sn
           'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify(
-          reconnectAuthorizationId ? { reconnect: reconnectAuthorizationId } : {}
+          authorizationToReconnect ? { reconnect: authorizationToReconnect } : {}
         )
       });
 
@@ -329,7 +329,12 @@ export default function SnapTradeButton({ onAccountsUpdated, snapTradeStatus: sn
     }
   };
 
+  const needsReconnect = Boolean(reconnectAuthorizationId);
+
   const getButtonText = () => {
+    if (needsReconnect && (status === 'registered' || status === 'connected')) {
+      return isInitializing ? 'Reconnecting...' : 'Reconnect Account';
+    }
     switch (status) {
       case 'loading':
         return 'Loading...';
@@ -351,6 +356,9 @@ export default function SnapTradeButton({ onAccountsUpdated, snapTradeStatus: sn
   };
 
   const getButtonColor = () => {
+    if (needsReconnect && (status === 'registered' || status === 'connected')) {
+      return 'bg-amber-600 hover:bg-amber-700 text-white';
+    }
     switch (status) {
       case 'registered':
       case 'connected':
@@ -372,7 +380,12 @@ export default function SnapTradeButton({ onAccountsUpdated, snapTradeStatus: sn
   const handleClick = () => {
     if (status === 'error') {
       initializeSnapTrade();
-    } else if (status === 'registered') {
+    } else if (needsReconnect || status === 'registered') {
+      // Reconnect must work even when the registration row already says
+      // "connected"/"registered": that status only means SnapTrade knows the
+      // user, not that every brokerage authorization is healthy. Without this
+      // branch a disabled connection shows ✗ marks and error text but the
+      // button is a no-op when status is not exactly "registered".
       connectSnapTrade(reconnectAuthorizationId);
     } else if (status === 'disconnected') {
       initializeSnapTrade();
