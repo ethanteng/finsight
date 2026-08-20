@@ -73,7 +73,7 @@ twice.
 
 The reported balance is authoritative for what an account is worth; holdings are authoritative for
 how that value is composed. Value the balance carries and no holding explains is included in
-`totalInvestments` and attributed to an `Unclassified` asset class, so allocation always reconciles
+`totalInvestments` and attributed to a `Not itemized` asset class, so allocation always reconciles
 to the total. Where that residual exceeds the greater of 1 unit of the reporting currency or 0.5% of
 the balance, the snapshot records an `account:<id>:holdings-coverage` observation. That observation
 is not `required`: nothing is missing from net worth, only from the allocation's detail.
