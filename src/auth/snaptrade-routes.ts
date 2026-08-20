@@ -152,20 +152,30 @@ router.post('/login', requireAuth, async (req, res) => {
     // fail upstream, but "almost certainly" is not a control: this turns a
     // caller-supplied id into a checked one and returns a clear 400 instead of
     // a provider error. Only the reconnect path pays for the extra lookup.
+    //
+    // Fail open when the accounts lookup itself fails: a transient SnapTrade
+    // outage must not block reconnect with a false "unknown connection", which
+    // is exactly when the user needs the portal. Provider scoping still applies.
     if (reconnectAuthorizationId) {
       const accountsResult = await snapTradeService.getUserAccounts(userId, user.userSecret);
-      const owned = Array.isArray(accountsResult.data?.accounts)
-        && accountsResult.data.accounts.some(
+      if (accountsResult.success && Array.isArray(accountsResult.data?.accounts)) {
+        const owned = accountsResult.data.accounts.some(
           (account: any) => account?.brokerageAuthorizationId === reconnectAuthorizationId
         );
-      if (!owned) {
+        if (!owned) {
+          console.warn(
+            `SnapTrade login: refusing reconnect for an authorization not belonging to user ${userId}`
+          );
+          return res.status(400).json({
+            success: false,
+            error: 'Unknown brokerage connection for this user.'
+          });
+        }
+      } else {
         console.warn(
-          `SnapTrade login: refusing reconnect for an authorization not belonging to user ${userId}`
+          `SnapTrade login: could not verify reconnect ownership for user ${userId}` +
+          `${accountsResult.error ? ` (${accountsResult.error})` : ''}; proceeding with provider-scoped credentials`
         );
-        return res.status(400).json({
-          success: false,
-          error: 'Unknown brokerage connection for this user.'
-        });
       }
     }
 
