@@ -97,7 +97,7 @@ export default function MarketNewsModal({ isOpen, onClose, tier }: MarketNewsMod
           </div>
           <button
             onClick={onClose}
-            className="grid h-10 w-10 place-items-center rounded-full border border-[#102319]/12 text-[#66736b] transition hover:bg-[#f3f2e9] hover:text-[#102319]"
+            className="grid h-11 w-11 shrink-0 place-items-center rounded-full border border-[#102319]/12 text-[#66736b] transition hover:bg-[#f3f2e9] hover:text-[#102319]"
             aria-label="Close modal"
           >
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -176,7 +176,7 @@ export default function MarketNewsModal({ isOpen, onClose, tier }: MarketNewsMod
         <div className="flex justify-end border-t border-[#102319]/12 bg-[#fffdf5] px-5 py-4 sm:px-6">
           <button
             onClick={onClose}
-            className="rounded-full bg-[#102319] px-6 py-2.5 text-sm font-semibold text-white transition hover:bg-[#173c2c] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#102319] focus-visible:ring-offset-2"
+            className="min-h-11 w-full rounded-full bg-[#102319] px-6 py-2.5 text-sm font-semibold text-white transition hover:bg-[#173c2c] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#102319] focus-visible:ring-offset-2 sm:w-auto"
           >
             Close
           </button>

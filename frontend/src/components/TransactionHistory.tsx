@@ -233,15 +233,15 @@ export default forwardRef<{ refresh: () => void }, object>(function TransactionH
 
   return (
     <div className="bg-gray-800 rounded-lg p-6">
-      <div className="flex items-center justify-between mb-6">
+      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h2 className="text-xl font-semibold text-white">Transaction History</h2>
 
         {/* Controls */}
-        <div className="flex items-center space-x-4">
+        <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 sm:flex">
           <select
             value={dateRange}
             onChange={(e) => setDateRange(e.target.value)}
-            className="rounded-lg border border-[#102319]/15 bg-[#fffdf5] px-3 py-2 text-sm text-[#102319] focus:border-[#397052] focus:outline-none"
+            className="min-w-0 rounded-lg border border-[#102319]/15 bg-[#fffdf5] px-3 py-2 text-sm text-[#102319] focus:border-[#397052] focus:outline-none"
           >
             <option value="7">Last 7 days</option>
             <option value="30">Last 30 days</option>
@@ -341,7 +341,7 @@ export default forwardRef<{ refresh: () => void }, object>(function TransactionH
                         )}
                         <span className="truncate text-sm font-medium text-white">{displayName}</span>
                         {hasEnrichedData && (
-                          <span className="flex flex-shrink-0 items-center gap-1 text-[11px] font-medium text-[#397052]">
+                          <span className="hidden flex-shrink-0 items-center gap-1 text-[11px] font-medium text-[#397052] sm:flex">
                             <span className="h-1.5 w-1.5 rounded-full bg-[#397052]" />
                             Enhanced Data Available
                           </span>

@@ -39,9 +39,9 @@ export default function TransactionsPage() {
 
   return (
     <div className="min-h-screen bg-gray-900">
-      <div className="w-full max-w-[98vw] xl:max-w-[1800px] mx-auto py-8 px-4">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-white mb-2">Transaction Type Correction</h1>
+      <div className="mx-auto w-full max-w-[98vw] px-4 py-6 sm:py-8 xl:max-w-[1800px]">
+        <div className="mb-6 sm:mb-8">
+          <h1 className="mb-2 text-2xl font-bold text-white sm:text-3xl">Transaction Type Correction</h1>
           <p className="text-gray-400">
             Review and manually correct transaction categorizations (income, expense, transfers, etc.). Your corrections improve GPT responses and persist across all prompts.
           </p>
@@ -52,4 +52,3 @@ export default function TransactionsPage() {
     </div>
   );
 }
-

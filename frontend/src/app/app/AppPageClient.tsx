@@ -52,6 +52,13 @@ export default function AppPageClient() {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const router = useRouter();
 
+  useEffect(() => {
+    if (!mobileNavOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = previousOverflow; };
+  }, [mobileNavOpen]);
+
   const expireSession = useCallback(() => {
     localStorage.removeItem('auth_token');
     resetUserIdentity();
@@ -177,12 +184,12 @@ export default function AppPageClient() {
   return (
     <div className="app-workspace min-h-screen bg-[#f3f2e9] text-[#102319]">
       <header className="sticky top-0 z-40 flex h-16 items-center border-b border-[#102319]/10 bg-[#f3f2e9]/95 px-4 backdrop-blur lg:hidden">
-        <button onClick={() => setMobileNavOpen(!mobileNavOpen)} className="rounded-full p-2 hover:bg-[#102319]/5" aria-label="Toggle navigation">{mobileNavOpen ? <X /> : <Menu />}</button>
+        <button onClick={() => setMobileNavOpen(!mobileNavOpen)} className="grid h-11 w-11 place-items-center rounded-full hover:bg-[#102319]/5" aria-label="Toggle navigation" aria-expanded={mobileNavOpen}>{mobileNavOpen ? <X /> : <Menu />}</button>
         <span className="ml-3 flex items-center gap-2 text-lg font-extrabold tracking-[-.04em]"><span className="grid h-8 w-8 place-items-center rounded-[9px_9px_9px_2px] bg-[#102319] text-sm font-extrabold text-[#d9ff6f]">L</span>Ask Linc</span>
-        <button onClick={() => { setSelectedPrompt(null); setNewDecisionNonce(nonce => nonce + 1); }} className="ml-auto rounded-full bg-[#d9ff6f] p-2 text-[#102319]" aria-label="Start a new decision"><Plus /></button>
+        <button onClick={() => { setSelectedPrompt(null); setNewDecisionNonce(nonce => nonce + 1); }} className="ml-auto grid h-11 w-11 place-items-center rounded-full bg-[#d9ff6f] text-[#102319]" aria-label="Start a new decision"><Plus /></button>
       </header>
 
-      <aside className={`${mobileNavOpen ? 'flex' : 'hidden'} fixed inset-y-16 left-0 z-30 w-full flex-col bg-[#102319] text-[#f8f4e9] lg:inset-y-0 lg:flex lg:w-72`}>
+      <aside className={`${mobileNavOpen ? 'flex' : 'hidden'} fixed inset-y-16 left-0 z-30 w-full flex-col overscroll-contain bg-[#102319] text-[#f8f4e9] lg:inset-y-0 lg:flex lg:w-72`}>
         <div className="hidden h-20 items-center border-b border-white/10 px-6 lg:flex"><span className="grid h-8 w-8 place-items-center rounded-[9px_9px_9px_2px] bg-[#d9ff6f] text-sm font-extrabold text-[#102319]">L</span><span className="ml-2 text-xl font-extrabold tracking-[-.04em]">Ask Linc</span><span className="ml-2 rounded-full border border-white/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white/65">{subscriptionStatus?.tier || 'member'}</span></div>
         <nav className="space-y-1 px-4 py-5" aria-label="Primary navigation">
           <button onClick={() => { setSelectedPrompt(null); setNewDecisionNonce(nonce => nonce + 1); setMobileNavOpen(false); }} className="flex w-full items-center gap-3 rounded-xl bg-[#d9ff6f] px-4 py-3 font-semibold text-[#102319]"><Plus size={18} />New decision</button>
@@ -252,13 +259,13 @@ export default function AppPageClient() {
         <div className="mx-auto max-w-[1440px] px-4 py-6 sm:px-6 lg:px-10 lg:py-9">
           <div className="mb-7 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
             <div><p className="mb-2 text-xs font-bold uppercase tracking-[0.18em] text-[#49725a]">Decision workspace</p><h1 className="max-w-3xl text-3xl font-semibold tracking-[-0.035em] text-[#102319] sm:text-4xl">Make the next financial decision with context.</h1></div>
-            <Link href="/finances" className="inline-flex items-center gap-2 text-sm font-semibold text-[#102319] hover:underline">Review connected data <ChevronRight size={16} /></Link>
+            <Link href="/finances" className="inline-flex min-h-11 items-center gap-2 text-sm font-semibold text-[#102319] hover:underline">Review connected data <ChevronRight size={16} /></Link>
           </div>
           <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
             <FinanceQA onNewAnswer={loadConversationHistory} selectedPrompt={selectedPrompt} newDecisionNonce={newDecisionNonce} />
             <aside className="space-y-5 xl:sticky xl:top-8" aria-label="Financial context">
               <FinancialOverview tier={subscriptionStatus?.tier} />
-              <div className="rounded-2xl border border-[#102319]/10 bg-white/60 p-5"><div className="mb-2 flex items-center gap-2 text-[#102319]"><Landmark size={18} /><h2 className="font-semibold">Data confidence</h2></div><p className="text-sm leading-6 text-[#48675e]">Answers use your connected financial data and available market context. Review accounts when balances are missing.</p><button onClick={() => router.push('/profile')} className="mt-4 text-sm font-semibold text-[#397052] hover:underline">Inspect connected accounts</button></div>
+              <div className="rounded-2xl border border-[#102319]/10 bg-white/60 p-5"><div className="mb-2 flex items-center gap-2 text-[#102319]"><Landmark size={18} /><h2 className="font-semibold">Data confidence</h2></div><p className="text-sm leading-6 text-[#48675e]">Answers use your connected financial data and available market context. Review accounts when balances are missing.</p><button onClick={() => router.push('/profile')} className="mt-4 inline-flex min-h-11 items-center text-sm font-semibold text-[#397052] hover:underline">Inspect connected accounts</button></div>
             </aside>
           </div>
         </div>

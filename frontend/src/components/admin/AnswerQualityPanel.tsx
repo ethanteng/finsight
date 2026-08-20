@@ -306,7 +306,7 @@ export default function AnswerQualityPanel({
               const scenarioSummary = scenarioRunSummary(answer);
               return (
                 <div key={answer.id} className="rounded-lg border border-gray-700 bg-gray-900 p-3">
-                  <div className="flex items-start justify-between gap-4">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
                     <div className="flex min-w-0 items-start gap-3">
                       <span className={`mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full ${STATUS[answer.deliveryStatus].dot}`} />
                       <div>
@@ -323,7 +323,7 @@ export default function AnswerQualityPanel({
                         </div>
                       </div>
                     </div>
-                    <div className={`shrink-0 text-xs font-medium ${STATUS[answer.deliveryStatus].text}`}>
+                    <div className={`shrink-0 pl-5 text-xs font-medium sm:pl-0 ${STATUS[answer.deliveryStatus].text}`}>
                       {STATUS[answer.deliveryStatus].label}
                     </div>
                   </div>

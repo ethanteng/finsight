@@ -173,8 +173,8 @@ export default function FinancialOverview({ tier: _tier }: FinancialOverviewProp
           }
         }}
       >
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center space-x-2">
+        <div className="mb-3 flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex min-w-0 items-center space-x-2">
             <div className="h-2 w-2 animate-pulse rounded-full bg-[#49725a]"></div>
             <h3 className="text-base font-semibold text-[#102319]">Your Financial Overview</h3>
           </div>
@@ -186,7 +186,7 @@ export default function FinancialOverview({ tier: _tier }: FinancialOverviewProp
                 e.stopPropagation();
                 handleAddAccounts();
               }}
-              className="rounded-full border border-[#102319]/20 bg-transparent px-4 py-2 text-sm font-semibold text-[#102319] transition-colors hover:bg-[#f3f2e9] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#102319] focus-visible:ring-offset-2"
+              className="w-full rounded-full border border-[#102319]/20 bg-transparent px-4 py-2 text-sm font-semibold text-[#102319] transition-colors hover:bg-[#f3f2e9] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#102319] focus-visible:ring-offset-2 sm:w-auto"
               title="Add more accounts"
             >
               Add More Accounts

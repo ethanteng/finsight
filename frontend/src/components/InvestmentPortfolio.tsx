@@ -232,10 +232,10 @@ export default function InvestmentPortfolio({ portfolio, holdings, transactions 
       </div>
 
       {/* Navigation Tabs */}
-      <div className="mb-6 flex space-x-1 rounded-xl border border-[#102319]/10 bg-[#f3f2e9] p-1">
+      <div className="mb-6 grid grid-cols-3 gap-1 rounded-xl border border-[#102319]/10 bg-[#f3f2e9] p-1">
         <button
           onClick={() => setActiveTab('overview')}
-          className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
+          className={`min-w-0 whitespace-normal rounded-md px-2 py-2.5 text-sm font-medium leading-tight transition-colors sm:px-4 ${
             activeTab === 'overview'
               ? 'bg-[#102319] text-white shadow-sm'
               : 'text-[#5e6b63] hover:bg-white/60 hover:text-[#102319]'
@@ -245,7 +245,7 @@ export default function InvestmentPortfolio({ portfolio, holdings, transactions 
         </button>
         <button
           onClick={() => setActiveTab('holdings')}
-          className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
+          className={`min-w-0 whitespace-normal rounded-md px-2 py-2.5 text-sm font-medium leading-tight transition-colors sm:px-4 ${
             activeTab === 'holdings'
               ? 'bg-[#102319] text-white shadow-sm'
               : 'text-[#5e6b63] hover:bg-white/60 hover:text-[#102319]'
@@ -255,7 +255,7 @@ export default function InvestmentPortfolio({ portfolio, holdings, transactions 
         </button>
         <button
           onClick={() => setActiveTab('transactions')}
-          className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
+          className={`min-w-0 whitespace-normal rounded-md px-2 py-2.5 text-sm font-medium leading-tight transition-colors sm:px-4 ${
             activeTab === 'transactions'
               ? 'bg-[#102319] text-white shadow-sm'
               : 'text-[#5e6b63] hover:bg-white/60 hover:text-[#102319]'

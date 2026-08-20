@@ -205,6 +205,36 @@ export const CategoryComparison: React.FC = () => {
     }
   };
 
+  const beginEditing = (transaction: Transaction) => {
+    const typeToUse = transaction.transaction_type || transaction.aiCategory;
+    if (typeToUse) {
+      const normalized = String(typeToUse).toLowerCase().trim();
+      if (TRANSACTION_TYPES.includes(normalized as TransactionType)) {
+        setLocalTransactionTypes(prev => {
+          const updated = new Map(prev);
+          updated.set(transaction.id, normalized as TransactionType);
+          return updated;
+        });
+      }
+    }
+    setEditingTransactionId(transaction.id);
+  };
+
+  const cancelEditing = (transaction: Transaction) => {
+    setEditingTransactionId(null);
+    const originalType = transaction.transaction_type || transaction.aiCategory;
+    setLocalTransactionTypes(prev => {
+      const updated = new Map(prev);
+      const normalized = originalType ? String(originalType).toLowerCase().trim() : '';
+      if (TRANSACTION_TYPES.includes(normalized as TransactionType)) {
+        updated.set(transaction.id, normalized as TransactionType);
+      } else {
+        updated.delete(transaction.id);
+      }
+      return updated;
+    });
+  };
+
   const formatTransactionType = (type: string): string => {
     return type
       .split('_')
@@ -221,13 +251,13 @@ export const CategoryComparison: React.FC = () => {
   });
 
   return (
-    <div className="p-6">
+    <div className="p-0 sm:p-6">
       {/* Filters */}
-      <div className="mb-6 flex items-center gap-4 flex-wrap">
-        <div className="flex gap-2 flex-wrap">
+      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-center">
+        <div className="mobile-scroll-strip flex gap-2 overflow-x-auto pb-2 sm:flex-wrap sm:overflow-visible sm:pb-0">
           <button
             onClick={() => setFilter('all')}
-            className={`px-4 py-2 rounded-md text-sm font-medium ${
+            className={`min-h-11 shrink-0 rounded-md px-4 py-2 text-sm font-medium ${
               filter === 'all'
                 ? 'bg-blue-600 text-white'
                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
@@ -239,7 +269,7 @@ export const CategoryComparison: React.FC = () => {
             <button
               key={type}
               onClick={() => setFilter(type)}
-              className={`px-4 py-2 rounded-md text-sm font-medium ${
+              className={`min-h-11 shrink-0 rounded-md px-4 py-2 text-sm font-medium ${
                 filter === type
                   ? 'bg-blue-600 text-white'
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
@@ -250,13 +280,13 @@ export const CategoryComparison: React.FC = () => {
           ))}
         </div>
         
-        <div className="flex gap-2 items-center">
+        <div className="flex min-h-11 items-center gap-2">
           <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
             <input
               type="checkbox"
               checked={showPending}
               onChange={(e) => setShowPending(e.target.checked)}
-              className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 cursor-pointer"
+              className="h-5 w-5 cursor-pointer rounded border-gray-300 text-blue-600 focus:ring-blue-500"
             />
             <span>Show Pending</span>
           </label>
@@ -267,7 +297,7 @@ export const CategoryComparison: React.FC = () => {
         <button
           onClick={() => fetchTransactions()}
           disabled={loading}
-          className="px-4 py-2 bg-gray-600 text-white rounded-md text-sm font-medium hover:bg-gray-700 disabled:opacity-50"
+          className="min-h-11 rounded-md bg-gray-600 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700 disabled:opacity-50"
         >
           Refresh
         </button>
@@ -286,11 +316,108 @@ export const CategoryComparison: React.FC = () => {
           No transactions found for this filter.
         </div>
       ) : (
+        <>
+        <div className="max-h-[calc(100dvh-220px)] space-y-3 overflow-y-auto md:hidden">
+          {filteredTransactions.map(transaction => {
+            const isEditing = editingTransactionId === transaction.id;
+            const isSaving = savingTransactionId === transaction.id;
+            const rawType = localTransactionTypes.get(transaction.id) || transaction.transaction_type || transaction.aiCategory;
+            const normalizedRawType = rawType ? String(rawType).toLowerCase().trim() : null;
+            const currentType = normalizedRawType && TRANSACTION_TYPES.includes(normalizedRawType as TransactionType)
+              ? normalizedRawType as TransactionType
+              : undefined;
+
+            return (
+              <article
+                key={transaction.id}
+                data-transaction-id={transaction.id}
+                className="rounded-xl border border-gray-700 bg-white p-4 text-gray-900 shadow-sm"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <h2 className="break-words text-sm font-semibold">
+                      {transaction.merchantName || transaction.name}
+                    </h2>
+                    <p className="mt-1 break-words text-xs text-gray-500">
+                      {transaction.account.name}
+                      {transaction.account.institution && ` • ${transaction.account.institution}`}
+                    </p>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <div className="font-semibold">${Math.abs(transaction.amount).toFixed(2)}</div>
+                    <div className="mt-1 text-xs text-gray-500">{new Date(transaction.date).toLocaleDateString()}</div>
+                  </div>
+                </div>
+
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <span className={`inline-flex rounded-full px-2 py-1 text-xs font-medium ${transaction.pending ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'}`}>
+                    {transaction.pending ? 'Pending' : 'Settled'}
+                  </span>
+                  {currentType ? (
+                    <span className="inline-flex rounded-full bg-blue-100 px-2 py-1 text-xs font-medium text-blue-800">
+                      {formatTransactionType(currentType)}
+                    </span>
+                  ) : (
+                    <span className="text-xs text-gray-500">Not categorized</span>
+                  )}
+                </div>
+
+                <div className="mt-3 rounded-lg bg-gray-50 p-3">
+                  <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Plaid category</div>
+                  <div className="mt-1 break-words text-sm">{transaction.originalCategory || 'N/A'}</div>
+                  {transaction.aiCategoryReason && (
+                    <div className="mt-2 break-words text-xs text-gray-500">{transaction.aiCategoryReason}</div>
+                  )}
+                </div>
+
+                {isEditing ? (
+                  <div className="mt-3 space-y-3">
+                    <label className="block text-xs font-medium text-gray-700">
+                      Transaction type
+                      <select
+                        value={currentType || ''}
+                        onChange={(event) => handleTransactionTypeChange(transaction.id, event.target.value as TransactionType)}
+                        className="mt-1 min-h-11 w-full rounded-md border border-blue-500 bg-white px-3 py-2 text-base text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        disabled={isSaving}
+                      >
+                        <option value="">Select type...</option>
+                        {TRANSACTION_TYPES.map(type => <option key={type} value={type}>{formatTransactionType(type)}</option>)}
+                      </select>
+                    </label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        onClick={() => void handleSaveTransactionType(transaction.id)}
+                        disabled={isSaving || !currentType}
+                        className="min-h-11 rounded-md bg-green-600 px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
+                      >
+                        {isSaving ? 'Saving...' : 'Save'}
+                      </button>
+                      <button
+                        onClick={() => cancelEditing(transaction)}
+                        disabled={isSaving}
+                        className="min-h-11 rounded-md bg-gray-600 px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => beginEditing(transaction)}
+                    className="mt-3 min-h-11 w-full rounded-md bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700"
+                  >
+                    Edit transaction type
+                  </button>
+                )}
+              </article>
+            );
+          })}
+        </div>
         <div 
           ref={tableContainerRef}
-          className="bg-white rounded-lg shadow max-h-[calc(100vh-250px)] overflow-y-auto"
+          className="hidden max-h-[calc(100vh-250px)] overflow-auto rounded-lg bg-white shadow md:block"
         >
-          <table className="w-full divide-y divide-gray-200" style={{ tableLayout: 'fixed', width: '100%' }}>
+          <table className="min-w-[1100px] divide-y divide-gray-200" style={{ tableLayout: 'fixed', width: '100%' }}>
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-[25%]">
@@ -428,33 +555,7 @@ export const CategoryComparison: React.FC = () => {
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              setEditingTransactionId(null);
-                              // Reset to original value from transaction data
-                              const originalType = transaction.transaction_type || transaction.aiCategory;
-                              if (originalType) {
-                                const normalized = String(originalType).toLowerCase().trim();
-                                if (TRANSACTION_TYPES.includes(normalized as TransactionType)) {
-                                  setLocalTransactionTypes(prev => {
-                                    const updated = new Map(prev);
-                                    updated.set(transaction.id, normalized as TransactionType);
-                                    return updated;
-                                  });
-                                } else {
-                                  // Invalid type, remove from local state
-                                  setLocalTransactionTypes(prev => {
-                                    const updated = new Map(prev);
-                                    updated.delete(transaction.id);
-                                    return updated;
-                                  });
-                                }
-                              } else {
-                                // No original type, remove from local state
-                                setLocalTransactionTypes(prev => {
-                                  const updated = new Map(prev);
-                                  updated.delete(transaction.id);
-                                  return updated;
-                                });
-                              }
+                              cancelEditing(transaction);
                             }}
                             disabled={isSaving}
                             className="px-3 py-1 text-xs bg-gray-600 text-white rounded hover:bg-gray-700 disabled:opacity-50"
@@ -466,19 +567,7 @@ export const CategoryComparison: React.FC = () => {
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            // Ensure the current transaction type is loaded into local state when entering edit mode
-                            const typeToUse = transaction.transaction_type || transaction.aiCategory;
-                            if (typeToUse) {
-                              const normalized = String(typeToUse).toLowerCase().trim();
-                              if (TRANSACTION_TYPES.includes(normalized as TransactionType)) {
-                                setLocalTransactionTypes(prev => {
-                                  const updated = new Map(prev);
-                                  updated.set(transaction.id, normalized as TransactionType);
-                                  return updated;
-                                });
-                              }
-                            }
-                            setEditingTransactionId(transaction.id);
+                            beginEditing(transaction);
                           }}
                           className="px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700"
                         >
@@ -492,6 +581,7 @@ export const CategoryComparison: React.FC = () => {
             </tbody>
           </table>
         </div>
+        </>
       )}
     </div>
   );

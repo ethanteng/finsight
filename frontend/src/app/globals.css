@@ -113,6 +113,14 @@
 }
 
 @layer components {
+  .mobile-scroll-strip {
+    scrollbar-width: none;
+  }
+
+  .mobile-scroll-strip::-webkit-scrollbar {
+    display: none;
+  }
+
   /* Gradient text utility */
   .gradient-text {
     background: var(--gradient-primary);
@@ -428,6 +436,60 @@
 .authenticated-site .admin-button-danger:hover { background: #76271f; }
 .authenticated-site .admin-button-danger-subtle { border: 1px solid rgb(139 48 39 / .25); background: #f8e8e3; color: #8b3027; }
 .authenticated-site .admin-button-danger-subtle:hover { background: #f3d9d2; }
+
+@media (max-width: 639px) {
+  /* On compact screens the full header consumes too much of the viewport when
+     it remains pinned. Keep the workspace chrome available at the top of the
+     page without covering the content during long account/admin workflows. */
+  .authenticated-header { position: static; }
+
+  .authenticated-mobile-nav .authenticated-nav-link {
+    min-width: 0;
+    min-height: 48px;
+    padding: .55rem .3rem;
+    text-align: center;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    font-size: .75rem;
+    line-height: 1.15;
+  }
+
+  .authenticated-page-title,
+  .authenticated-intro h2 { overflow-wrap: anywhere; }
+
+  .authenticated-intro h2 {
+    font-size: clamp(2rem, 10vw, 2.55rem);
+    line-height: 1.04;
+  }
+
+  /* Legacy product cards were composed at desktop density. A consistent
+     16px inset leaves useful room for their content at 375px without changing
+     their desktop rhythm. */
+  .authenticated-site .p-6 { padding: 1rem; }
+
+  .authenticated-site :is(button, [role="button"]) { min-height: 44px; }
+  .authenticated-site :is(input:not([type="checkbox"]):not([type="radio"]), select) {
+    min-height: 44px;
+    font-size: 16px;
+  }
+  .authenticated-site textarea { font-size: 16px; }
+  .authenticated-site :is(input[type="checkbox"], input[type="radio"]) {
+    min-width: 20px;
+    min-height: 20px;
+  }
+
+  .authenticated-site :is(.admin-button-primary, .admin-button-secondary, .admin-button-danger, .admin-button-danger-subtle) {
+    min-height: 44px;
+    padding: .65rem 1rem;
+  }
+
+  .authenticated-site .ui-dialog-panel,
+  .app-workspace .ui-dialog-panel {
+    max-height: calc(100dvh - 2rem);
+    overflow-y: auto;
+    padding: 1rem;
+  }
+}
 
 /* Shared confirm/message dialogs render inline in the React tree, so the product
    shell restyles them here instead of the component carrying two palettes. */

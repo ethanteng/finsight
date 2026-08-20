@@ -1253,10 +1253,10 @@ export default function ProfilePage() {
                         key={account.id}
                         className={`bg-gray-700 rounded-lg p-4 border border-gray-600${isClosed ? ' opacity-60' : ''}`}
                       >
-                        <div className="flex justify-between items-start">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2">
-                              <div className="font-medium text-white">{account.name}</div>
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0 flex-1">
+                            <div className="flex min-w-0 flex-wrap items-center gap-2">
+                              <div className="min-w-0 break-words font-medium text-white">{account.name}</div>
                               {isClosed && (
                                 <span
                                   className="px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-900/20 text-yellow-300 border border-yellow-700"
@@ -1298,7 +1298,7 @@ export default function ProfilePage() {
                               </div>
                             )}
                           </div>
-                          <div className="text-right">
+                          <div className="shrink-0 text-right">
                             <div className="font-semibold text-white">
                               {/* Same rule as the Finances page: current is authoritative,
                                   available is only a fallback. Preferring available for
@@ -1332,10 +1332,10 @@ export default function ProfilePage() {
                         key={token.id}
                         className="bg-gray-800/50 rounded-lg p-4 border-2 border-red-500/30"
                       >
-                        <div className="flex justify-between items-start">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2">
-                              <div className="font-medium text-white">{token.institutionName || 'Unknown Institution'}</div>
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0 flex-1">
+                            <div className="flex min-w-0 flex-wrap items-center gap-2">
+                              <div className="min-w-0 break-words font-medium text-white">{token.institutionName || 'Unknown Institution'}</div>
                               <span className="text-red-400" title={`Connection issue: ${token.lastError || 'Unknown error'}`}>
                                 ✗
                               </span>
@@ -1397,10 +1397,10 @@ export default function ProfilePage() {
                           key={index}
                           className="bg-gray-700 rounded-lg p-4 border border-gray-600"
                         >
-                          <div className="flex justify-between items-start">
-                            <div className="flex-1">
-                              <div className="flex items-center gap-2">
-                                <div className="font-medium text-white">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0 flex-1">
+                              <div className="flex min-w-0 flex-wrap items-center gap-2">
+                                <div className="min-w-0 break-words font-medium text-white">
                                   {account.name as string || 'Investment Account'}
                                 </div>
                                 {/* Status Indicator based on SnapTrade connection health */}
@@ -1434,9 +1434,9 @@ export default function ProfilePage() {
               ) : snapTradeStatus?.connected && snapTradeStatus?.status !== 'VALID' && snapTradeStatus?.status !== 'valid' ? (
                 /* Display orphaned SnapTrade connection (connected but no accounts or unhealthy) */
                 <div className="bg-gray-800/50 rounded-lg p-4 border-2 border-red-500/30 mb-6">
-                  <div className="flex justify-between items-start">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex min-w-0 flex-wrap items-center gap-2">
                         <div className="font-medium text-white">SnapTrade Connection</div>
                         <span className="text-red-400" title={`Connection issue: ${snapTradeStatus.error || 'Unknown error'}`}>
                           ✗
@@ -1534,18 +1534,18 @@ export default function ProfilePage() {
                   </div>
                 )}
                 <div className="space-y-4">
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                     <div>
                       <h3 className="font-medium text-white mb-2">Current Plan</h3>
                       <p className="text-gray-400 text-sm">
                         Manage your subscription, update payment methods, and view billing history
                       </p>
                     </div>
-                    <div className="text-right">
+                    <div className="text-left sm:text-right">
                       <button
                         onClick={handleManageSubscription}
                         disabled={isManagingSubscription}
-                        className="px-4 py-2 rounded text-sm transition-colors text-white bg-blue-600 hover:bg-blue-700 disabled:bg-blue-800"
+                        className="w-full rounded bg-blue-600 px-4 py-2 text-sm text-white transition-colors hover:bg-blue-700 disabled:bg-blue-800 sm:w-auto"
                         title="Open Stripe customer portal"
                       >
                         {isManagingSubscription ? 'Opening...' : 'Manage Subscription'}
@@ -1660,8 +1660,8 @@ export default function ProfilePage() {
 
             {/* Delete Confirmation Modal */}
             {showDeleteConfirm && (
-              <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-                <div className="bg-gray-800 border border-gray-600 rounded-lg p-6 max-w-md mx-4">
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+                <div className="max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto rounded-lg border border-gray-600 bg-gray-800 p-6">
                   <div className="flex items-center gap-3 mb-4">
                     <div className="h-6 w-6 text-red-400">⚠️</div>
                     <h3 className="text-lg font-semibold">Confirm Data Deletion</h3>
@@ -1680,7 +1680,7 @@ export default function ProfilePage() {
                   <p className="text-sm text-red-400 mb-4 font-medium">
                     This action cannot be undone.
                   </p>
-                  <div className="flex gap-3">
+                  <div className="flex flex-col-reverse gap-3 sm:flex-row">
                     <button
                       onClick={handleDeleteAllData}
                       disabled={isDeleting}

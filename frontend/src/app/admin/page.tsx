@@ -709,7 +709,7 @@ export default function AdminPage() {
     return (
       <div>
         {/* Header with refresh button */}
-        <div className="flex justify-between items-center mb-6">
+        <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <h2 className="text-xl font-semibold text-white">Production Activity</h2>
           <button
             onClick={refreshProductionData}
@@ -802,8 +802,8 @@ export default function AdminPage() {
                   className="bg-gray-700 rounded-lg p-4 cursor-pointer hover:bg-gray-600 transition-colors"
                   onClick={() => setSelectedSession(selectedSession === user.userId ? null : user.userId)}
                 >
-                  <div className="flex justify-between items-start">
-                    <div className="flex-1">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="min-w-0 flex-1">
                       <div className="font-medium text-white mb-2">
                         {user.email}
                       </div>
@@ -817,7 +817,7 @@ export default function AdminPage() {
                         Created: {formatDate(user.createdAt)} • Last login: {user.lastLoginAt ? formatDate(user.lastLoginAt) : 'Never'}
                       </div>
                     </div>
-                    <div className="text-right">
+                    <div className="text-left sm:text-right">
                       <div className="text-sm text-gray-400">
                         {user.conversationCount} Q&A
                       </div>
@@ -958,7 +958,7 @@ export default function AdminPage() {
                 .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
                 .map((conv) => (
                   <div key={conv.id} className="bg-gray-700 rounded-lg p-4">
-                    <div className="flex justify-between items-start mb-3">
+                    <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
                       <div className="text-sm text-gray-400">
                         User: {conv.user.email} ({conv.user.tier})
                       </div>
@@ -1146,9 +1146,9 @@ export default function AdminPage() {
                       </div>
                     )}
                   </div>
-                  <div className="flex flex-col gap-2.5 lg:min-w-[220px] lg:items-end">
+                  <div className="flex w-full flex-col gap-2.5 lg:w-auto lg:min-w-[220px] lg:items-end">
                     {/* Tier Management */}
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center justify-between gap-2 lg:justify-start">
                       <span className="text-sm text-gray-400">Tier:</span>
                       <select
                         value={user.tier}
@@ -1171,7 +1171,7 @@ export default function AdminPage() {
                         type="button"
                         onClick={() => refreshUserAskLincSnapshot(user.id)}
                         disabled={refreshingUserSnapshot === user.id}
-                        className="admin-button-secondary text-xs disabled:cursor-not-allowed disabled:opacity-55"
+                        className="admin-button-secondary w-full text-xs disabled:cursor-not-allowed disabled:opacity-55 lg:w-auto"
                         title="Recompute FinancialSummarySnapshot and finances summary so Ask Linc matches linked accounts (e.g. after SnapTrade)."
                       >
                         {refreshingUserSnapshot === user.id ? 'Rebuilding…' : 'Rebuild Ask Linc cache'}
@@ -1188,12 +1188,12 @@ export default function AdminPage() {
                     </div>
 
                     {/* Access Management */}
-                    <div className="flex items-center gap-2">
+                    <div className="flex w-full items-center gap-2 lg:w-auto">
                       {user.isActive ? (
                         <button
                           onClick={() => revokeUserAccess(user.id)}
                           disabled={revokingAccess === user.id}
-                          className="admin-button-danger-subtle text-xs disabled:cursor-not-allowed disabled:opacity-55"
+                          className="admin-button-danger-subtle w-full text-xs disabled:cursor-not-allowed disabled:opacity-55 lg:w-auto"
                           title="Revoke user access (prevent login)"
                         >
                           {revokingAccess === user.id ? 'Revoking...' : 'Revoke Access'}
@@ -1202,7 +1202,7 @@ export default function AdminPage() {
                         <button
                           onClick={() => restoreUserAccess(user.id)}
                           disabled={revokingAccess === user.id}
-                          className="admin-button-primary text-xs disabled:cursor-not-allowed disabled:opacity-55"
+                          className="admin-button-primary w-full text-xs disabled:cursor-not-allowed disabled:opacity-55 lg:w-auto"
                           title="Restore user access (allow login)"
                         >
                           {revokingAccess === user.id ? 'Restoring...' : 'Restore Access'}
@@ -1214,7 +1214,7 @@ export default function AdminPage() {
                     <button
                       onClick={() => setShowDeleteConfirm(user.id)}
                       disabled={deletingAccount === user.id}
-                      className="admin-button-danger text-xs disabled:cursor-not-allowed disabled:opacity-55"
+                      className="admin-button-danger w-full text-xs disabled:cursor-not-allowed disabled:opacity-55 lg:w-auto"
                       title="Delete user account completely (including login/email)"
                     >
                       {deletingAccount === user.id ? 'Deleting...' : 'Delete Account'}
@@ -1237,7 +1237,7 @@ export default function AdminPage() {
                     <div className="text-red-200 text-sm mb-4">
                       <strong>This action cannot be undone.</strong> The user will need to create a new account to use the service again.
                     </div>
-                    <div className="flex space-x-3">
+                    <div className="flex flex-col-reverse gap-3 sm:flex-row">
                       <button
                         onClick={() => deleteUserAccount(user.id)}
                         disabled={deletingAccount === user.id}
@@ -1268,12 +1268,12 @@ export default function AdminPage() {
 
     return (
       <div className="space-y-6">
-        <div className="flex justify-between items-center">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <h2 className="text-xl font-semibold text-white">AI Response Tone</h2>
           {!editingTone && (
             <button
               onClick={editResponseTone}
-              className="px-3 py-1 rounded text-sm bg-yellow-600 text-white hover:bg-yellow-700"
+              className="self-start rounded bg-yellow-600 px-3 py-1 text-sm text-white hover:bg-yellow-700 sm:self-auto"
             >
               Edit
             </button>
@@ -1308,7 +1308,7 @@ export default function AdminPage() {
                 className="w-full h-72 p-3 bg-gray-700 text-white rounded border border-gray-600 focus:border-blue-500 focus:outline-none font-mono text-sm"
                 placeholder="Enter tone & voice guidance as bullet points..."
               />
-              <div className="mt-3 flex space-x-2">
+              <div className="mt-3 flex flex-wrap gap-2">
                 <button
                   onClick={saveResponseTone}
                   disabled={savingTone}
@@ -1336,16 +1336,16 @@ export default function AdminPage() {
             </div>
           ) : (
             <div>
-              <div className="text-sm text-gray-400 mb-3">
+              <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-400">
                 Status:{' '}
                 <span className={isCustomized ? 'text-yellow-400' : 'text-gray-300'}>
                   {isCustomized ? 'Custom' : 'Default'}
                 </span>
                 {toneMeta.lastEditedBy && (
-                  <span className="ml-4">Last edited by: {toneMeta.lastEditedBy}</span>
+                  <span>Last edited by: {toneMeta.lastEditedBy}</span>
                 )}
                 {toneMeta.updatedAt && (
-                  <span className="ml-4">Updated: {formatDate(toneMeta.updatedAt)}</span>
+                  <span>Updated: {formatDate(toneMeta.updatedAt)}</span>
                 )}
               </div>
               <pre className="text-gray-300 whitespace-pre-wrap text-sm max-h-96 overflow-y-auto bg-gray-700 p-4 rounded font-mono">
@@ -1575,10 +1575,10 @@ export default function AdminPage() {
         </div>
 
         {/* Tab Navigation */}
-        <div className="mb-8 flex gap-1 overflow-x-auto rounded-xl border border-[#102319]/10 bg-[#e9eee5] p-1">
+        <div className="mb-8 grid grid-cols-2 gap-1 rounded-xl border border-[#102319]/10 bg-[#e9eee5] p-1 sm:flex sm:overflow-x-auto">
           <button
             onClick={() => setActiveTab('production')}
-            className={`flex-1 px-4 py-2 rounded text-sm font-medium transition-colors ${
+            className={`min-h-12 min-w-0 rounded px-3 py-2 text-sm font-medium leading-tight transition-colors sm:flex-1 sm:px-4 ${
               activeTab === 'production'
                 ? 'bg-[#102319] text-white shadow-sm'
                 : 'text-[#5e6b63] hover:bg-white/65 hover:text-[#102319]'
@@ -1588,7 +1588,7 @@ export default function AdminPage() {
           </button>
           <button
             onClick={() => setActiveTab('users')}
-            className={`flex-1 px-4 py-2 rounded text-sm font-medium transition-colors ${
+            className={`min-h-12 min-w-0 rounded px-3 py-2 text-sm font-medium leading-tight transition-colors sm:flex-1 sm:px-4 ${
               activeTab === 'users'
                 ? 'bg-[#102319] text-white shadow-sm'
                 : 'text-[#5e6b63] hover:bg-white/65 hover:text-[#102319]'
@@ -1598,7 +1598,7 @@ export default function AdminPage() {
           </button>
           <button
             onClick={() => setActiveTab('market-news')}
-            className={`flex-1 px-4 py-2 rounded text-sm font-medium transition-colors ${
+            className={`min-h-12 min-w-0 rounded px-3 py-2 text-sm font-medium leading-tight transition-colors sm:flex-1 sm:px-4 ${
               activeTab === 'market-news'
                 ? 'bg-[#102319] text-white shadow-sm'
                 : 'text-[#5e6b63] hover:bg-white/65 hover:text-[#102319]'
@@ -1608,7 +1608,7 @@ export default function AdminPage() {
           </button>
           <button
             onClick={() => setActiveTab('ai-settings')}
-            className={`flex-1 px-4 py-2 rounded text-sm font-medium transition-colors ${
+            className={`min-h-12 min-w-0 rounded px-3 py-2 text-sm font-medium leading-tight transition-colors sm:flex-1 sm:px-4 ${
               activeTab === 'ai-settings'
                 ? 'bg-[#102319] text-white shadow-sm'
                 : 'text-[#5e6b63] hover:bg-white/65 hover:text-[#102319]'

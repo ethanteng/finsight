@@ -64,7 +64,7 @@ export default function AuthenticatedPageHeader({
 
       {showNavLinks && (
         <div className="border-t border-[#102319]/10 lg:hidden">
-          <nav className="authenticated-mobile-nav mx-auto grid max-w-[1200px] grid-cols-3 gap-1 px-3 py-2 sm:px-4" aria-label="Workspace navigation">
+          <nav className="authenticated-mobile-nav mx-auto grid max-w-[1200px] grid-cols-[repeat(3,minmax(0,1fr))] gap-1 px-3 py-2 sm:px-4" aria-label="Workspace navigation">
             {links.map(({ href, label, page }) => (
               <Link
                 key={href}

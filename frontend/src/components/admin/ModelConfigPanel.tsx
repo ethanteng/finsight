@@ -289,12 +289,12 @@ export default function ModelConfigPanel({
 
   return (
     <div className="bg-gray-800 rounded-lg p-6 mb-6">
-      <div className="flex items-center justify-between mb-2">
+      <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <h2 className="text-xl font-semibold text-white">Models in use</h2>
         <button
           onClick={refreshCatalogs}
           disabled={refreshing}
-          className="text-xs text-gray-400 hover:text-gray-200"
+          className="self-start text-xs text-gray-400 hover:text-gray-200 sm:self-auto"
         >
           {refreshing ? 'Refreshing…' : 'Refresh model lists'}
         </button>

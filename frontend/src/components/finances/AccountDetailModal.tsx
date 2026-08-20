@@ -118,12 +118,12 @@ export default function AccountDetailModal({
   const balance = finiteBalance(account);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="flex max-h-[90vh] w-full max-w-6xl flex-col overflow-hidden rounded-lg bg-gray-800">
-        <div className="flex items-center justify-between border-b border-gray-700 p-6">
-          <div className="flex-1">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-2 sm:p-4">
+      <div className="flex max-h-[calc(100dvh-1rem)] w-full max-w-6xl flex-col overflow-hidden rounded-lg bg-gray-800 sm:max-h-[90vh]">
+        <div className="flex items-start justify-between gap-3 border-b border-gray-700 p-4 sm:p-6">
+          <div className="min-w-0 flex-1">
             {isEditingName ? (
-              <div className="flex items-center gap-2">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                 <input
                   value={editName}
                   onChange={event => setEditName(event.target.value)}
@@ -131,7 +131,7 @@ export default function AccountDetailModal({
                     if (event.key === 'Enter') void handleSaveName();
                     if (event.key === 'Escape') setIsEditingName(false);
                   }}
-                  className="rounded border border-gray-600 bg-gray-700 px-2 py-1 text-2xl font-bold text-white"
+                  className="min-w-0 rounded border border-gray-600 bg-gray-700 px-3 py-2 text-lg font-bold text-white sm:flex-1 sm:text-2xl"
                   disabled={isSavingName}
                   autoFocus
                 />
@@ -141,8 +141,8 @@ export default function AccountDetailModal({
                 <button onClick={() => setIsEditingName(false)} className="rounded bg-gray-600 px-3 py-1 text-sm text-white">Cancel</button>
               </div>
             ) : (
-              <div className="flex items-center gap-2">
-                <h2 className="text-2xl font-bold text-white">{displayName}</h2>
+              <div className="flex min-w-0 items-start gap-2">
+                <h2 className="min-w-0 break-words text-xl font-bold text-white sm:text-2xl">{displayName}</h2>
                 {account.source !== 'manual' && (
                   <button onClick={() => setIsEditingName(true)} className="text-gray-400 hover:text-white" title="Rename account">✏️</button>
                 )}
@@ -157,10 +157,10 @@ export default function AccountDetailModal({
               </div>
             )}
           </div>
-          <button onClick={onClose} className="text-2xl text-gray-400 hover:text-white" aria-label="Close account details">×</button>
+          <button onClick={onClose} className="grid h-11 w-11 shrink-0 place-items-center rounded-full text-2xl text-gray-400 hover:bg-gray-700 hover:text-white" aria-label="Close account details">×</button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-6">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6">
           {loading && <div className="py-10 text-center text-gray-400">Loading account details...</div>}
           {loadError && <div className="rounded border border-red-700/50 bg-red-900/30 p-4 text-red-300">{loadError}</div>}
           {!loading && !loadError && details && details.revisionId !== revisionId && (
@@ -187,12 +187,12 @@ export default function AccountDetailModal({
                       ? transaction.amount
                       : null;
                     return (
-                      <div key={transactionId(transaction, index)} className="flex items-center justify-between rounded-lg border border-gray-600 bg-gray-700 p-4">
-                        <div className="min-w-0 pr-4">
+                      <div key={transactionId(transaction, index)} className="flex items-center justify-between gap-3 rounded-lg border border-gray-600 bg-gray-700 p-4">
+                        <div className="min-w-0">
                           <div className="truncate font-medium text-white">{String(transaction.name || transaction.merchant_name || 'Transaction')}</div>
                           <div className="text-sm text-gray-400">{formatDate(transaction.date)} • {transactionCategory(transaction)}</div>
                         </div>
-                        <div className="font-semibold text-white">{amount === null ? 'Unavailable' : formatCurrency(amount)}</div>
+                        <div className="shrink-0 font-semibold text-white">{amount === null ? 'Unavailable' : formatCurrency(amount)}</div>
                       </div>
                     );
                   })}

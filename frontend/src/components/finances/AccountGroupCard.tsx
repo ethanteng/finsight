@@ -123,19 +123,19 @@ export default function AccountGroupCard({
     <div className="bg-gray-800 rounded-lg border border-gray-700">
       <button
         onClick={onToggle}
-        className="w-full p-4 flex items-center justify-between hover:bg-gray-750 transition-colors rounded-lg"
+        className="flex w-full items-center justify-between gap-3 rounded-lg p-4 transition-colors hover:bg-gray-750"
       >
-        <div className="flex items-center space-x-4">
+        <div className="flex min-w-0 items-center space-x-3 sm:space-x-4">
           <div className="text-lg">{isExpanded ? '▼' : '▶'}</div>
-          <div className="text-left">
-            <h3 className="text-lg font-semibold text-white">{title}</h3>
+          <div className="min-w-0 text-left">
+            <h3 className="break-words text-base font-semibold text-white sm:text-lg">{title}</h3>
             <div className="text-sm text-gray-400">
               {accounts.length} {accounts.length === 1 ? 'account' : 'accounts'}
             </div>
           </div>
         </div>
-        <div className="text-right">
-          <div className="text-white font-semibold text-xl">
+        <div className="shrink-0 text-right">
+          <div className="text-lg font-semibold text-white sm:text-xl">
             {totalBalance === null ? 'Unavailable' : formatCurrency(totalBalance)}
           </div>
           {unavailableBalanceCount > 0 && (
@@ -162,10 +162,10 @@ export default function AccountGroupCard({
                 onClick={() => !isEditing && onAccountClick(accountId)}
                 className="bg-gray-700 rounded-lg p-4 cursor-pointer hover:bg-gray-600 transition-colors group"
               >
-                <div className="flex items-center justify-between">
-                  <div className="flex-1">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0 flex-1">
                     {isEditing ? (
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                         <input
                           type="text"
                           value={editName}
@@ -178,7 +178,7 @@ export default function AccountGroupCard({
                             }
                           }}
                           onClick={(e) => e.stopPropagation()}
-                          className="flex-1 px-2 py-1 bg-gray-800 text-white border border-gray-600 rounded focus:outline-none focus:border-blue-500"
+                          className="min-w-0 flex-1 rounded border border-gray-600 bg-gray-800 px-3 py-2 text-white focus:border-blue-500 focus:outline-none"
                           autoFocus
                           disabled={isSaving}
                         />
@@ -198,8 +198,8 @@ export default function AccountGroupCard({
                         </button>
                       </div>
                     ) : (
-                      <div className="flex items-center gap-2">
-                        <div className="font-medium text-white">{name}</div>
+                      <div className="flex min-w-0 items-center gap-2">
+                        <div className="min-w-0 break-words font-medium text-white">{name}</div>
                         {account.source !== 'manual' && (
                           <button
                             onClick={(e) => handleStartEdit(account, e)}
@@ -216,7 +216,7 @@ export default function AccountGroupCard({
                     )}
                   </div>
                   {!isEditing && (
-                    <div className="text-right">
+                    <div className="shrink-0 text-right">
                       <div className="font-semibold text-white">
                         {balance === null ? 'Unavailable' : formatCurrency(balance)}
                       </div>
