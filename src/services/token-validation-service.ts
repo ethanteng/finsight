@@ -71,6 +71,14 @@ export interface SnapTradeTokenHealth {
    * repeating the action walks through them without needing its own UI.
    */
   reconnectAuthorizationIds?: string[];
+  /**
+   * The disabled connections themselves, so a caller can attribute a failure to
+   * the brokerage it belongs to instead of applying one status to every account.
+   * SnapTrade health is per brokerage authorization; this type describes a
+   * SnapTrade *user*, and collapsing the two is what let one disabled brokerage
+   * mark every other account broken.
+   */
+  disabledConnections?: Array<{ authorizationId: string; institutionName: string | null }>;
 }
 
 export function plaidTokenHealthFromError(
@@ -176,20 +184,38 @@ export class TokenValidationService {
         const accounts: any[] = Array.isArray(result.data?.accounts) ? result.data.accounts : [];
         const disabled = accounts.filter(account => account?.connectionDisabled === true);
         if (disabled.length > 0) {
-          const institutions = Array.from(
-            new Set(disabled.map(account => account.institution).filter(Boolean))
+          // Per connection, keyed by the brokerage it belongs to. A caller that
+          // renders health against an account can then say something true about
+          // *that* account. The summary `error` below deliberately names no
+          // institution: it is a single string describing the whole SnapTrade
+          // user, and any UI that shows it beside an account would otherwise
+          // report a healthy Fidelity 401k as "disabled for Public".
+          const disabledConnections = Array.from(
+            new Map(
+              disabled
+                .filter(account => typeof account.brokerageAuthorizationId === 'string'
+                  && account.brokerageAuthorizationId.length > 0)
+                .map(account => [
+                  account.brokerageAuthorizationId as string,
+                  {
+                    authorizationId: account.brokerageAuthorizationId as string,
+                    institutionName: typeof account.institution === 'string' && account.institution
+                      ? account.institution
+                      : null,
+                  },
+                ])
+            ).values()
           );
-          const subject = institutions.length > 0 ? institutions.join(', ') : 'brokerage connection';
-          const reconnectAuthorizationIds = Array.from(new Set(
-            disabled
-              .map(account => account.brokerageAuthorizationId)
-              .filter((id: unknown): id is string => typeof id === 'string' && id.length > 0)
-          ));
+          const reconnectAuthorizationIds = disabledConnections.map(connection => connection.authorizationId);
+          const count = disabledConnections.length || disabled.length;
           return {
             userId,
             status: TokenStatus.LOGIN_REQUIRED,
-            error: `SnapTrade connection disabled for ${subject}. Reconnect to resume updates.`,
+            error: count === 1
+              ? 'A SnapTrade brokerage connection is disabled. Reconnect to resume updates.'
+              : `${count} SnapTrade brokerage connections are disabled. Reconnect to resume updates.`,
             lastChecked: new Date(),
+            ...(disabledConnections.length > 0 ? { disabledConnections } : {}),
             ...(reconnectAuthorizationIds.length > 0 ? { reconnectAuthorizationIds } : {}),
           };
         }

@@ -46,8 +46,15 @@ describe('SnapTrade connection health', () => {
     const health = await service.validateSnapTradeToken('user-1');
 
     expect(health.status).toBe(TokenStatus.LOGIN_REQUIRED);
-    expect(health.error).toContain('Public');
+    expect(health.error).toContain('Reconnect to resume updates');
     expect(health.reconnectAuthorizationIds).toEqual(['auth-1']);
+    expect(health.disabledConnections).toEqual([
+      { authorizationId: 'auth-1', institutionName: 'Public' },
+    ]);
+    // The summary string must stay institution-agnostic: it describes the whole
+    // SnapTrade user, and a UI showing it beside an account would otherwise name
+    // the wrong brokerage.
+    expect(health.error).not.toContain('Public');
   });
 
   // Unknown health is not actionable: there is nothing the user can do about a
@@ -64,7 +71,7 @@ describe('SnapTrade connection health', () => {
     });
   });
 
-  it('names every disabled institution and omits a reconnect id when none is known', async () => {
+  it('keeps the summary institution-agnostic and omits a reconnect id when none is known', async () => {
     getUserAccounts.mockResolvedValue({
       success: true,
       data: {
@@ -77,8 +84,8 @@ describe('SnapTrade connection health', () => {
 
     const health = await service.validateSnapTradeToken('user-1');
 
-    expect(health.error).toContain('Public');
-    expect(health.error).toContain('Fidelity');
+    expect(health.error).not.toContain('Public');
+    expect(health.error).not.toContain('Fidelity');
     expect(health.reconnectAuthorizationIds).toBeUndefined();
   });
 
@@ -101,6 +108,12 @@ describe('SnapTrade connection health', () => {
     const health = await service.validateSnapTradeToken('user-1');
 
     expect(health.reconnectAuthorizationIds).toEqual(['auth-1', 'auth-2']);
+    // Attribution is per brokerage, so a caller can mark only the accounts
+    // behind a disabled connection rather than every account on the user.
+    expect(health.disabledConnections).toEqual([
+      { authorizationId: 'auth-1', institutionName: 'Public' },
+      { authorizationId: 'auth-2', institutionName: 'Public' },
+    ]);
   });
 
   it('still reports an outright failure as an error', async () => {
