@@ -27,9 +27,30 @@ function isNonPublicHost(hostname: string): boolean {
     return true;
   }
 
-  // IPv6 literal: loopback, unspecified, link-local (fe80::/10), unique-local (fc00::/7).
+  // IPv6 literal: loopback, unspecified, link-local (fe80::/10), unique-local (fc00::/7),
+  // and IPv4-mapped addresses (::ffff:a.b.c.d / ::ffff:x:x) that wrap a non-public IPv4.
   if (host.includes(':')) {
-    return host === '::1' || host === '::' || /^fe[89ab]/.test(host) || /^f[cd]/.test(host);
+    if (host === '::1' || host === '::' || /^fe[89ab]/.test(host) || /^f[cd]/.test(host)) {
+      return true;
+    }
+
+    const dottedMapped = host.match(
+      /^::ffff:(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/i
+    );
+    if (dottedMapped) {
+      return isNonPublicHost(dottedMapped.slice(1).join('.'));
+    }
+
+    const hexMapped = host.match(/^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/i);
+    if (hexMapped) {
+      const hi = parseInt(hexMapped[1], 16);
+      const lo = parseInt(hexMapped[2], 16);
+      return isNonPublicHost(
+        [(hi >> 8) & 0xff, hi & 0xff, (lo >> 8) & 0xff, lo & 0xff].join('.')
+      );
+    }
+
+    return false;
   }
 
   const ipv4 = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
@@ -68,7 +89,12 @@ function toPublicBaseUrl(candidate: string | undefined): string | null {
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
   if (isNonPublicHost(parsed.hostname)) return null;
 
-  return stripTrailingSlashes(parsed.toString());
+  // Rebuild from origin + path so userinfo, query, and hash never land in email HTML.
+  const path =
+    !parsed.pathname || parsed.pathname === '/'
+      ? ''
+      : stripTrailingSlashes(parsed.pathname);
+  return `${parsed.origin}${path}`;
 }
 
 /**

@@ -61,6 +61,8 @@ describe('email template branding URLs', () => {
       ['mDNS hostname', 'http://ethans-macbook.local:3001'],
       ['IPv6 loopback', 'http://[::1]:3001'],
       ['IPv6 unique-local', 'http://[fd00::1]:3001'],
+      ['IPv4-mapped loopback', 'http://[::ffff:127.0.0.1]:3001'],
+      ['IPv4-mapped private', 'http://[::ffff:192.168.1.1]:3001'],
       ['scheme-less hostname', 'asklinc.com'],
       ['bare path', '/assets'],
       ['non-http scheme', 'file:///tmp/assets'],
@@ -76,6 +78,11 @@ describe('email template branding URLs', () => {
 
     it('keeps a path prefix on the asset host', () => {
       process.env.EMAIL_ASSET_BASE_URL = 'https://cdn.asklinc.com/email/';
+      expect(getEmailAssetBaseUrl()).toBe('https://cdn.asklinc.com/email');
+    });
+
+    it('strips userinfo, query, and hash from the asset base URL', () => {
+      process.env.EMAIL_ASSET_BASE_URL = 'https://user:secret@cdn.asklinc.com/email/?x=1#frag';
       expect(getEmailAssetBaseUrl()).toBe('https://cdn.asklinc.com/email');
     });
   });
