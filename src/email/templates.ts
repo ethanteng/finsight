@@ -3,12 +3,47 @@
  * Uses the same cream, deep green, and lime palette as the marketing site.
  */
 
+/** Public marketing site, used when no non-local base URL is configured. */
+const PUBLIC_SITE_URL = 'https://asklinc.com';
+
+function normalizeBaseUrl(url: string): string {
+  return url.trim().replace(/\/+$/, '');
+}
+
+function isLocal(url: string): boolean {
+  return /localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\]/i.test(url);
+}
+
+/**
+ * Base URL for environment-specific action links (verify, reset password,
+ * admin dashboard). Stays on localhost in development so locally sent emails
+ * link back to the local frontend.
+ */
 export function getBaseUrl(): string {
   const isDevelopment =
     !process.env.NODE_ENV ||
     process.env.NODE_ENV === 'development' ||
     process.env.FRONTEND_URL?.includes('localhost');
   return isDevelopment ? 'http://localhost:3001' : (process.env.FRONTEND_URL || 'http://localhost:3001');
+}
+
+/**
+ * Base URL for assets and marketing links embedded in emails (header banner,
+ * footer links). Emails are always rendered outside this process, so a
+ * localhost URL can never resolve for the recipient — the header banner just
+ * renders as broken alt text. Always resolves to an absolute public URL, even
+ * when an email is sent from a developer machine.
+ *
+ * Order: EMAIL_ASSET_BASE_URL, then FRONTEND_URL, then the public site.
+ * Local values are ignored at every step.
+ */
+export function getEmailAssetBaseUrl(): string {
+  for (const candidate of [process.env.EMAIL_ASSET_BASE_URL, process.env.FRONTEND_URL]) {
+    if (!candidate) continue;
+    const normalized = normalizeBaseUrl(candidate);
+    if (normalized && !isLocal(normalized)) return normalized;
+  }
+  return PUBLIC_SITE_URL;
 }
 
 export interface CreateEmailHtmlOptions {
@@ -24,7 +59,7 @@ export interface CreateEmailHtmlOptions {
  * strip or only partially support embedded CSS.
  */
 export function createEmailHtml(content: string, options: CreateEmailHtmlOptions = {}): string {
-  const baseUrl = getBaseUrl();
+  const assetBaseUrl = getEmailAssetBaseUrl();
   const { title = 'Ask Linc', footerNote } = options;
 
   return `
@@ -182,8 +217,8 @@ export function createEmailHtml(content: string, options: CreateEmailHtmlOptions
         <div class="container" style="width: 100%; max-width: 600px; margin: 0 auto; overflow: hidden; border: 1px solid #d8d2c5; border-radius: 18px; background-color: #fffdf7;">
           <div class="accent-bar" style="height: 6px; background-color: #cfff68; font-size: 0; line-height: 0;">&nbsp;</div>
           <div class="header" style="padding: 25px 32px 23px; border-bottom: 1px solid #e2ddd2; background-color: #fffdf7; text-align: left;">
-            <a href="${baseUrl}" aria-label="Ask Linc home" style="display: inline-block; text-decoration: none;">
-              <img class="brand-logo" src="${baseUrl}/ask-linc-logo.png" alt="Ask Linc" width="180" style="display: block; width: 180px; max-width: 100%; height: auto; border: 0;" />
+            <a href="${assetBaseUrl}" aria-label="Ask Linc home" style="display: inline-block; text-decoration: none;">
+              <img class="brand-logo" src="${assetBaseUrl}/ask-linc-logo.png" alt="Ask Linc" width="180" style="display: block; width: 180px; max-width: 100%; height: auto; border: 0;" />
             </a>
           </div>
 
@@ -193,10 +228,10 @@ export function createEmailHtml(content: string, options: CreateEmailHtmlOptions
 
           <div class="footer" style="padding: 28px 32px; background-color: #123c2f; color: #d7e1dc; text-align: center;">
             <div class="footer-links" style="margin: 0 0 18px;">
-              <a class="footer-link" href="${baseUrl}" style="margin: 0 9px; color: #cfff68; font-size: 12px; font-weight: 600; text-decoration: none;">Home</a>
-              <a class="footer-link" href="${baseUrl}/features" style="margin: 0 9px; color: #cfff68; font-size: 12px; font-weight: 600; text-decoration: none;">Features</a>
-              <a class="footer-link" href="${baseUrl}/how-we-protect-your-data" style="margin: 0 9px; color: #cfff68; font-size: 12px; font-weight: 600; text-decoration: none;">Privacy &amp; Security</a>
-              <a class="footer-link" href="${baseUrl}/contact" style="margin: 0 9px; color: #cfff68; font-size: 12px; font-weight: 600; text-decoration: none;">Contact</a>
+              <a class="footer-link" href="${assetBaseUrl}" style="margin: 0 9px; color: #cfff68; font-size: 12px; font-weight: 600; text-decoration: none;">Home</a>
+              <a class="footer-link" href="${assetBaseUrl}/features" style="margin: 0 9px; color: #cfff68; font-size: 12px; font-weight: 600; text-decoration: none;">Features</a>
+              <a class="footer-link" href="${assetBaseUrl}/how-we-protect-your-data" style="margin: 0 9px; color: #cfff68; font-size: 12px; font-weight: 600; text-decoration: none;">Privacy &amp; Security</a>
+              <a class="footer-link" href="${assetBaseUrl}/contact" style="margin: 0 9px; color: #cfff68; font-size: 12px; font-weight: 600; text-decoration: none;">Contact</a>
             </div>
             <p style="margin: 0; color: #d7e1dc; font-size: 12px; line-height: 1.6;">© ${new Date().getFullYear()} Ethan Teng Consulting LLC</p>
             ${footerNote ? `<p style="margin: 5px 0 0; color: #aebeb6; font-size: 11px; line-height: 1.5;">${footerNote}</p>` : ''}

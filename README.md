@@ -246,6 +246,8 @@ ADMIN_EMAILS="admin@example.com,other@example.com"  # Comma-separated for admin 
 
 # URLs
 FRONTEND_URL="http://localhost:3001"    # Base URL for frontend (default: http://localhost:3001)
+EMAIL_ASSET_BASE_URL="https://asklinc.com"  # Optional: public base URL for email images/marketing links
+                                        # (never localhost - falls back to FRONTEND_URL, then https://asklinc.com)
 PORT="3000"                             # Backend port (default: 3000)
 
 # Transaction & Context Persistence (optional, for debugging)
