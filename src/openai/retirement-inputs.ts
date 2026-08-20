@@ -137,3 +137,31 @@ export function resolveRetirementInputs(args: {
       : [],
   };
 }
+
+/**
+ * Year a stored retirement analysis was actually built for.
+ *
+ * The glidepath equity share of a target-date fund depends on `asOfYear`, so
+ * two analyses of identical holdings and identical parameters are still
+ * different answers if they were computed for different years. That makes the
+ * year part of the cache key, not merely part of the payload.
+ *
+ * Rows written before `asOfYear` was persisted -- and rows whose stored year
+ * is unusable, which is how a non-finite year reaches us, since JSON turns it
+ * into null on the way to the database -- fall back to the year the row was
+ * computed in. That is the clock the mapper would have read at the time, so it
+ * is the best available account of the year the row was built for.
+ *
+ * When even that is unavailable the result is NaN, which never equals a
+ * candidate year, so the analysis is recomputed rather than trusted. A cache
+ * miss costs one recomputation; a false hit silently serves last year's mix.
+ */
+export function resolveStoredAsOfYear(
+  storedAnalysisInput: Record<string, unknown> | null | undefined,
+  computedAt: Date | null | undefined
+): number {
+  const stored = storedAnalysisInput?.asOfYear;
+  if (typeof stored === 'number' && Number.isFinite(stored)) return stored;
+  if (!(computedAt instanceof Date) || Number.isNaN(computedAt.getTime())) return NaN;
+  return computedAt.getUTCFullYear();
+}

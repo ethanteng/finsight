@@ -11,7 +11,7 @@ import {
   type UnmodeledInvestmentValue,
 } from '../services/investment-coverage';
 import { buildCanonicalCashFlowAnalyses } from './cash-flow-context';
-import { resolveRetirementInputs, retirementPortfolioFingerprint } from './retirement-inputs';
+import { resolveRetirementInputs, retirementPortfolioFingerprint, resolveStoredAsOfYear } from './retirement-inputs';
 import { generateDisclaimers, calculateConfidenceCeiling } from '../retirement-analytics/interpretation/uncertainty-quantifier';
 import type { DataQualityReport } from '../retirement-analytics/types';
 import type { ExtractedRetirementInputs } from './retirement-input-extraction';
@@ -757,13 +757,7 @@ async function fetchOrCreateRetirementAnalysis(args: {
         storedPortfolio.holdings,
         storedPortfolio.securities
       );
-    const storedAsOfYear =
-      typeof storedAnalysisInput.asOfYear === 'number' &&
-      Number.isFinite(storedAnalysisInput.asOfYear)
-        ? (storedAnalysisInput.asOfYear as number)
-        // Legacy rows predate asOfYear; the row's computedAt year is the closest
-        // proxy for the clock the mapper used when the analysis was built.
-        : recentAnalysis.computedAt.getUTCFullYear();
+    const storedAsOfYear = resolveStoredAsOfYear(storedAnalysisInput, recentAnalysis.computedAt);
     if (
       portfolioMatches &&
       storedInput.currentAge === currentAge &&

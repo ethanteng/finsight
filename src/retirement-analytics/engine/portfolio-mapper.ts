@@ -10,6 +10,7 @@ import {
   hasEquityNameSignal,
   inferEquityGeography,
   isContainerAssetType,
+  isDeclaredFixedIncomeType,
   isGlobalEquity,
   isInternationalEquity,
   isKnownBondTicker,
@@ -96,15 +97,27 @@ export async function mapPortfolioToAssetBasket(
 
     const ticker = security?.ticker_symbol?.toUpperCase() || holding.ticker_symbol?.toUpperCase() || '';
 
+    // Resolved before the target-date branch because the provider's declared
+    // type can veto it. FMP metadata is preferred over the security's own type.
+    const fmpMetadata = (ticker ? tickerToMetadata.get(ticker) : null) as SecurityMetadata | null;
+    const providerAssetClass = fmpMetadata?.assetClass?.toLowerCase() ||
+      security?.type?.toLowerCase() || '';
+
     // Before anything else. A target-date fund is a declared blend, and its own
     // label states the target year -- better evidence than a provider type that
     // says "Mutual Fund", and far better than the ticker-shaped-like-a-stock
     // heuristic further down, which was modeling a de-risking 2040 fund as 100%
     // equity purely because its ticker is four letters.
-    const targetDate = resolveTargetDateFund(
-      [security?.name, holding.security_name, security?.ticker_symbol, holding.ticker_symbol],
-      asOfYear
-    );
+    //
+    // A declared fixed-income type outranks the name, though: bonds carry years
+    // for their maturities, and a signal word near one must not turn a bond into
+    // mostly equity. Real target-date funds are never typed this way.
+    const targetDate = isDeclaredFixedIncomeType(providerAssetClass)
+      ? null
+      : resolveTargetDateFund(
+          [security?.name, holding.security_name, security?.ticker_symbol, holding.ticker_symbol],
+          asOfYear
+        );
     if (targetDate) {
       mapping.usEquityWeight += weight * targetDate.equityShare * TARGET_DATE_US_EQUITY_SHARE;
       mapping.internationalEquityWeight +=
@@ -124,12 +137,7 @@ export async function mapPortfolioToAssetBasket(
       continue;
     }
 
-    const fmpMetadata = (ticker ? tickerToMetadata.get(ticker) : null) as SecurityMetadata | null;
-
     if (security || fmpMetadata) {
-      // Prefer FMP metadata if available, fallback to security metadata
-      const providerAssetClass = fmpMetadata?.assetClass?.toLowerCase() ||
-                       security?.type?.toLowerCase() || '';
       // A container type names the wrapper, not the exposure, so it is treated
       // as no class at all and the name decides -- here, where the provider's
       // country split and geographic focus are still in reach.

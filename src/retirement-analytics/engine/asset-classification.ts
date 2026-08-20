@@ -150,3 +150,24 @@ const CONTAINER_ASSET_TYPES = new Set([
 export function isContainerAssetType(assetType: string): boolean {
   return CONTAINER_ASSET_TYPES.has(assetType.trim().toLowerCase());
 }
+
+/**
+ * True when the provider has explicitly typed a security as fixed income.
+ *
+ * Target-date recognition reads a fund's own name, which is the only evidence
+ * those funds carry -- but names are weaker evidence than a declared type, and
+ * a bond's name routinely contains a year for its maturity. A signal word near
+ * such a year ("Pathway Capital 2030 Notes") would otherwise model a bond as
+ * mostly equity, which is the same failure the Treasury case exists to prevent,
+ * reached through a different door.
+ *
+ * Container types are excluded, so this only fires when the provider named an
+ * actual exposure. Real target-date funds arrive typed as a container
+ * ("Mutual Fund") or with no type at all, so nothing is lost by deferring to a
+ * declared fixed-income type over a name.
+ */
+export function isDeclaredFixedIncomeType(assetType: string): boolean {
+  const normalized = assetType.trim().toLowerCase();
+  if (!normalized || isContainerAssetType(normalized)) return false;
+  return hasBondNameSignal(normalized);
+}

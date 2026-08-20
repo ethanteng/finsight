@@ -309,6 +309,36 @@ describe('container provider types', () => {
     expect(mapping.nominalBondsWeight).toBeCloseTo(1, 6);
   });
 
+  it('lets a declared fixed-income type outrank a target-date name signal', async () => {
+    // A bond's name carries a year for its maturity, so a signal word next to
+    // one would model it as mostly equity -- the same failure the Treasury case
+    // prevents, reached through the name instead of the year. The provider said
+    // fixed income; that outranks a word in the name.
+    for (const [name, type] of [
+      ['Pathway Capital 2030 Senior Notes', 'Fixed Income'],
+      ['Freedom 2032 Municipal Bond Series', 'fixed income'],
+      ['Retirement 2035 Income Note', 'bond'],
+    ] as const) {
+      const mapping = await map(name, 'XBND1', type);
+      expect(mapping.nominalBondsWeight).toBeCloseTo(1, 6);
+      expect(mapping.usEquityWeight).toBeCloseTo(0, 6);
+      expect(mapping.targetDateFunds).toEqual([]);
+    }
+  });
+
+  it('still recognizes target-date funds under the types they actually arrive with', async () => {
+    // The guard must cost real funds nothing. Every target-date fund in the
+    // verified portfolio arrives typed as a container or with no type at all --
+    // none is typed fixed income -- so none of these may be suppressed.
+    for (const type of ['mutual fund', 'Mutual Fund', 'Unknown', null, '']) {
+      const mapping = await map('State St Target Ret 2040 SL SF CL III', 'O7PE', type);
+      expect(mapping.targetDateFunds).toHaveLength(1);
+      expect(mapping.targetDateFunds[0].targetYear).toBe(2040);
+      // 2040 is 14 years out at asOfYear 2026: 0.5 + 0.02*14 = 0.78 equity.
+      expect(mapping.nominalBondsWeight).toBeCloseTo(0.22, 6);
+    }
+  });
+
   it('keeps a directly held stock domestic rather than splitting it 70/30', async () => {
     // The provider named a real asset class, so this is a security and not a
     // fund inferred from its name. Widening it would put "Wells Fargo & Co."
