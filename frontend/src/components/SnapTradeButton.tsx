@@ -400,24 +400,24 @@ export default function SnapTradeButton({ onAccountsUpdated, snapTradeStatus: sn
 
               return (
                 <div key={account.id} className="bg-gray-700 border border-gray-600 rounded-lg p-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <div className="font-semibold text-white text-base">{account.name}</div>
-                        {/* Status Indicator based on SnapTrade connection health */}
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="break-words text-base font-semibold text-white">{account.name}</div>
+                      <div className="mt-1 flex min-w-0 items-start gap-2 text-sm text-gray-400">
+                        {/* Keep connection health in the same stable column as the other account cards. */}
                         {isHealthy ? (
-                          <span className="text-green-400" title="Connection active">
+                          <span className="w-4 shrink-0 text-center text-green-400" title="Connection active">
                             ✓
                           </span>
                         ) : (
-                          <span className="text-red-400" title={`Connection issue: ${snapTradeTokenStatus?.error || 'Unknown error'}`}>
+                          <span className="w-4 shrink-0 text-center text-red-400" title={`Connection issue: ${snapTradeTokenStatus?.error || 'Unknown error'}`}>
                             ✗
                           </span>
                         )}
-                      </div>
-                      <div className="text-gray-400 text-sm">
-                        {account.institution && `${account.institution} • `}{account.type}
-                        {account.subtype && ` • ${account.subtype}`}
+                        <div className="min-w-0 break-words">
+                          {account.institution && `${account.institution} • `}{account.type}
+                          {account.subtype && ` • ${account.subtype}`}
+                        </div>
                       </div>
                       {/* Show error message if connection is unhealthy */}
                       {!isHealthy && snapTradeTokenStatus?.error && (
@@ -427,7 +427,7 @@ export default function SnapTradeButton({ onAccountsUpdated, snapTradeStatus: sn
                       )}
                     </div>
                     {typeof account.balance === 'number' && (
-                      <div className="text-right">
+                      <div className="shrink-0 text-right">
                         <div className="font-semibold text-white text-base">
                           {formatCurrency(account.balance)}
                         </div>
