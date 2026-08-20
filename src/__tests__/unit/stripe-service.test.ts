@@ -386,6 +386,61 @@ describe('StripeService', () => {
       expect(mockPrisma.subscription.create).not.toHaveBeenCalled();
     });
 
+    it('should revert email-adoption when a working sub on another customer lands concurrently', async () => {
+      const mockStripe = require('../../config/stripe');
+
+      mockPrisma.user.findFirst.mockResolvedValue(null);
+      mockStripe.stripe.client.customers.retrieve.mockResolvedValue({
+        id: 'cus_planted_1',
+        email: 'subscriber@example.com'
+      });
+      mockStripe.stripe.client.subscriptions.retrieve.mockResolvedValue({
+        status: 'trialing',
+        items: { data: [{ price: { id: 'price_test_123' } }] },
+        metadata: { tier: 'premium' }
+      });
+      mockStripe.getTierFromPriceId.mockReturnValue('premium');
+      mockPrisma.user.findUnique.mockResolvedValue({
+        id: 'user_123',
+        email: 'subscriber@example.com',
+        tier: 'premium'
+      });
+      // Pre-adopt check is clear; post-adopt check finds a concurrent activation
+      // billed to a different Stripe customer (e.g. payment-success linked first).
+      mockPrisma.subscription.findFirst
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce({
+          id: 'sub_rec_legit',
+          stripeSubscriptionId: 'sub_legit_1',
+          stripeCustomerId: 'cus_legit_1',
+          status: 'active',
+          tier: 'premium'
+        });
+      mockPrisma.user.update.mockResolvedValue({ id: 'user_123' });
+
+      await stripeService.processWebhookEvent('customer.subscription.created', {
+        object: {
+          id: 'sub_planted_1',
+          customer: 'cus_planted_1',
+          status: 'trialing',
+          current_period_start: Math.floor(Date.now() / 1000),
+          current_period_end: Math.floor(Date.now() / 1000) + 86400,
+          cancel_at_period_end: false,
+          metadata: { tier: 'premium' }
+        }
+      });
+
+      expect(mockPrisma.user.update).toHaveBeenNthCalledWith(1, {
+        where: { id: 'user_123' },
+        data: { stripeCustomerId: 'cus_planted_1' }
+      });
+      expect(mockPrisma.user.update).toHaveBeenNthCalledWith(2, {
+        where: { id: 'user_123' },
+        data: { stripeCustomerId: 'cus_legit_1' }
+      });
+      expect(mockPrisma.subscription.create).not.toHaveBeenCalled();
+    });
+
     it('should not overwrite an active account when a new incomplete subscription is created', async () => {
       // Customer reuse after cancel-at-period-end (or a failed renew retry) can
       // mint an incomplete subscription while the previous one still runs.
@@ -827,7 +882,7 @@ describe('StripeService', () => {
       mockStripe.getTierFromPriceId.mockReturnValue('premium');
       mockPrisma.subscription.findFirst
         .mockResolvedValueOnce(null)
-        .mockResolvedValueOnce({
+        .mockResolvedValue({
           id: 'sub_existing',
           stripeSubscriptionId: 'sub_active_other',
           status: 'active',
@@ -860,6 +915,45 @@ describe('StripeService', () => {
       expect(mockPrisma.user.update).not.toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({ stripeCustomerId: 'cus_incomplete_orphan' })
+        })
+      );
+      expect(sendWelcomeEmail).not.toHaveBeenCalled();
+    });
+
+    it('should not steal stripeCustomerId when a trialing link races another working sub', async () => {
+      const mockStripe = require('../../config/stripe');
+      const { sendWelcomeEmail } = require('../../services/stripe-email');
+
+      mockStripe.stripe.client.checkout.sessions.retrieve.mockResolvedValue(
+        completedSession('returning@example.com')
+      );
+      mockStripe.getTierFromPriceId.mockReturnValue('premium');
+      mockPrisma.subscription.findFirst
+        .mockResolvedValueOnce(null)
+        .mockResolvedValue({
+          id: 'sub_existing',
+          stripeSubscriptionId: 'sub_active_other',
+          status: 'active',
+          tier: 'premium'
+        });
+      mockPrisma.subscription.create.mockResolvedValue({ id: 'sub_rec_trial' });
+      mockPrisma.user.update.mockResolvedValue({ id: 'user_123' });
+
+      const result = await stripeService.linkCheckoutSessionToUser({
+        userId: 'user_123',
+        email: 'returning@example.com',
+        checkoutSessionId: 'cs_test_trial_race'
+      });
+
+      expect(result).toEqual({
+        linked: false,
+        isNewSubscription: false,
+        status: 'trialing',
+        skippedForExistingSubscription: true
+      });
+      expect(mockPrisma.user.update).not.toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ stripeCustomerId: 'cus_new_456' })
         })
       );
       expect(sendWelcomeEmail).not.toHaveBeenCalled();

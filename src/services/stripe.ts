@@ -222,6 +222,28 @@ export class StripeService {
       data: { stripeCustomerId: customerId }
     });
 
+    // Concurrent payment-success / another webhook can activate a different
+    // customer between the working-sub check and this write. If a working
+    // subscription already points at another customer, put theirs back and
+    // refuse — otherwise a planted checkout steals billing control.
+    const conflictingWorking = await prisma.subscription.findFirst({
+      where: {
+        userId: userByEmail.id,
+        status: { in: ['active', 'trialing'] },
+        stripeCustomerId: { not: customerId }
+      }
+    });
+    if (conflictingWorking) {
+      await prisma.user.update({
+        where: { id: userByEmail.id },
+        data: { stripeCustomerId: conflictingWorking.stripeCustomerId }
+      });
+      console.warn(
+        `Not adopting Stripe customer ${customerId} for ${userByEmail.email}: a working subscription on ${conflictingWorking.stripeCustomerId} landed concurrently`
+      );
+      return null;
+    }
+
     console.log(`Adopted Stripe customer ${customerId} for returning user ${userByEmail.email}`);
 
     return { ...userByEmail, stripeCustomerId: customerId };
@@ -352,42 +374,44 @@ export class StripeService {
     // Persist the subscription before exposing the Stripe customer ID. The
     // webhook cannot find this user until the record it would update already
     // exists, preventing both paths from claiming first delivery.
-    // Non-working statuses must not clobber a replacement that landed between
-    // the create above and this user write (same family as webhook guards) —
-    // including stripeCustomerId: writing it before the replacement check would
-    // repoint billing at an orphaned incomplete checkout while access stays on
-    // the working subscription.
-    if (status === 'active' || status === 'trialing') {
-      await prisma.user.update({
-        where: { id: userId },
-        data: {
-          stripeCustomerId: customerId,
-          subscriptionStatus: status,
-          tier,
-        }
-      });
-    } else {
-      const { applied } = await this.applyUserSubscriptionStatusIfNoWorkingReplacement(
+    // Re-check after create: a concurrent activation can land between the
+    // pre-create check and this user write. That covers both incomplete and
+    // active/trialing linkers — writing stripeCustomerId for either would
+    // steal billing from the working replacement.
+    const competingWorking = await prisma.subscription.findFirst({
+      where: {
+        userId,
+        status: { in: ['active', 'trialing'] },
+        stripeSubscriptionId: { not: subscription.id }
+      }
+    });
+    if (competingWorking) {
+      // Heal user.subscriptionStatus onto the working row if it drifted, but
+      // never adopt this checkout's customer id.
+      await this.applyUserSubscriptionStatusIfNoWorkingReplacement(
         userId,
         status,
         tier
       );
-      if (!applied) {
-        console.warn(
-          `Not linking checkout ${checkoutSessionId} to user ${userId}: another working subscription exists`
-        );
-        return {
-          linked: false,
-          isNewSubscription: false,
-          status,
-          skippedForExistingSubscription: true,
-        };
-      }
-      await prisma.user.update({
-        where: { id: userId },
-        data: { stripeCustomerId: customerId }
-      });
+      console.warn(
+        `Not linking checkout ${checkoutSessionId} to user ${userId}: another working subscription exists (${competingWorking.stripeSubscriptionId})`
+      );
+      return {
+        linked: false,
+        isNewSubscription: false,
+        status,
+        skippedForExistingSubscription: true,
+      };
     }
+
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        stripeCustomerId: customerId,
+        subscriptionStatus: status,
+        tier,
+      }
+    });
 
     console.log(`Linked user ${email} to Stripe customer ${customerId} and subscription ${subscription.id}`);
 
