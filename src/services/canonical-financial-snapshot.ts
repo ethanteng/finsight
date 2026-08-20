@@ -162,11 +162,33 @@ function coverageGapThreshold(reportedBalance: number): number {
 }
 
 /**
- * Account identity as holdings and accounts each spell it. SnapTrade accounts
- * carry a `snaptrade-` prefix that not every payload applies to both sides.
+ * Key an account and its holdings are matched on.
+ *
+ * Provider account ids are used exactly as the provider spells them. Both sides
+ * of a SnapTrade pairing already carry the `snaptrade-` prefix, so stripping it
+ * would buy nothing and would fold two id namespaces into one -- a Plaid account
+ * `abc` and a SnapTrade account `snaptrade-abc` would share a key, pooling their
+ * holdings and dropping one account's residual.
  */
 function accountMatchKey(value: unknown): string {
-  return typeof value === 'string' ? value.replace(/^snaptrade-/, '') : '';
+  return typeof value === 'string' ? value : '';
+}
+
+/**
+ * The balance an institution reports as an investment account's value.
+ *
+ * Only `current` counts. On a brokerage, `available` is withdrawable cash or
+ * buying power rather than market value, and on a margin account it can exceed
+ * what the account actually holds -- taking it as the account's worth would
+ * inflate the total and book the difference as unclassified value that does not
+ * exist. Where `current` is missing, itemized holdings remain the better answer.
+ */
+function reportedInvestmentBalance(account: SnapshotAccount): number | null {
+  const balance = account.balance;
+  // A bare number carries no available/current ambiguity to resolve.
+  if (typeof balance === 'number') return finiteNumber(balance);
+  if (!balance || typeof balance !== 'object') return null;
+  return finiteNumber(balance.current);
 }
 
 /**
@@ -194,7 +216,7 @@ export function resolveInvestmentAccountValue(
   const currency = normalizedCurrency(reportingCurrency);
   // A balance in another currency is not comparable to a reporting-currency
   // holdings total, so it cannot stand in for one.
-  const balance = accountCurrency(account) === currency ? knownAccountBalance(account) : null;
+  const balance = accountCurrency(account) === currency ? reportedInvestmentBalance(account) : null;
   if (balance === null) return holdingsValue;
   if (holdingsValue === null) return balance;
   return Math.max(balance, holdingsValue);

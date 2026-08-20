@@ -320,6 +320,61 @@ describe('canonical financial snapshot', () => {
     expect(portfolio.totalValue).toBe(1_000);
   });
 
+  it('does not treat available funds as an investment account balance', () => {
+    // `available` on a brokerage is withdrawable cash or buying power, which on a
+    // margin account can exceed what the account holds. Holdings answer instead.
+    const portfolio = buildCanonicalInvestmentPortfolio(
+      [
+        { id: 'h', account_id: 'margin', security_id: 'sec', institution_value: 10_000, iso_currency_code: 'USD' },
+      ],
+      [{ security_id: 'sec', type: 'equity' }],
+      [{
+        account_id: 'margin',
+        source: 'plaid',
+        type: 'investment',
+        subtype: 'brokerage',
+        balance: { current: null, available: 20_000, iso_currency_code: 'USD' },
+      }],
+      'USD'
+    );
+
+    expect(portfolio.totalValue).toBe(10_000);
+    expect(portfolio.unclassifiedValue).toBe(0);
+    expect(portfolio.holdingsCoverageGaps).toEqual([]);
+  });
+
+  it('keeps two providers\' accounts apart when their ids differ only by prefix', () => {
+    const portfolio = buildCanonicalInvestmentPortfolio(
+      [
+        { id: 'p', account_id: 'abc', security_id: 'sec-p', institution_value: 1_000, iso_currency_code: 'USD' },
+        { id: 's', account_id: 'snaptrade-abc', security_id: 'sec-s', institution_value: 2_000, iso_currency_code: 'USD' },
+      ],
+      [{ security_id: 'sec-p', type: 'equity' }, { security_id: 'sec-s', type: 'equity' }],
+      [
+        {
+          account_id: 'abc',
+          source: 'plaid',
+          type: 'investment',
+          subtype: 'brokerage',
+          balance: { current: 5_000, iso_currency_code: 'USD' },
+        },
+        {
+          account_id: 'snaptrade-abc',
+          source: 'snaptrade',
+          type: 'investment',
+          subtype: 'brokerage',
+          balance: { current: 9_000, iso_currency_code: 'USD' },
+        },
+      ],
+      'USD'
+    );
+
+    // Neither account's holdings or residual may be pooled into the other's.
+    expect(portfolio.totalValue).toBe(14_000);
+    expect(portfolio.holdingsCoverageGaps.map(gap => gap.accountId).sort())
+      .toEqual(['abc', 'snaptrade-abc']);
+  });
+
   it('records a coverage gap as an optional observation, not a partial snapshot', () => {
     const snapshot = buildCanonicalSnapshotCore(
       {
