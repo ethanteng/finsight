@@ -32,11 +32,11 @@ function snapshotAccountId(account: unknown): string | null {
 /**
  * Accounts the previous revision had that this one does not.
  *
- * This is the question retention actually needs answered. A snapshot can be
- * 'partial' while still describing every account -- an erroring Plaid token
- * keeps yielding its last known balances through financial-source-persistence,
- * and an advisory about a connection's health costs no data at all. Only a
- * revision that has genuinely lost accounts is worse than the one it replaces.
+ * A snapshot can be 'partial' while still describing every account -- an
+ * erroring Plaid token keeps yielding its last known balances through
+ * financial-source-persistence, and an advisory about a connection's health
+ * costs no data at all. Account loss is one form of coverage regression;
+ * holdings loss is checked separately.
  *
  * Returns an empty list when the previous revision recorded no accounts, so a
  * first snapshot or an older revision without the field is never read as a
@@ -53,6 +53,43 @@ function accountIdsMissingFrom(previous: unknown, freshAccounts: unknown): strin
   const missing = new Set<string>();
   for (const account of previousAccounts) {
     const id = snapshotAccountId(account);
+    if (id && !fresh.has(id)) missing.add(id);
+  }
+  return Array.from(missing);
+}
+
+/** Stable identity for a holding across price/quantity updates. */
+function holdingIdentity(holding: unknown): string | null {
+  if (!holding || typeof holding !== 'object') return null;
+  const record = holding as Record<string, unknown>;
+  const accountId = typeof record.account_id === 'string' ? record.account_id : null;
+  const securityId = typeof record.security_id === 'string' ? record.security_id : null;
+  if (accountId && securityId) return `${accountId}:${securityId}`;
+  const id = typeof record.id === 'string' ? record.id : null;
+  return id && id.length > 0 ? id : null;
+}
+
+/**
+ * Holdings the previous revision had that this one does not.
+ *
+ * Account coverage alone is not enough: SnapTrade/Plaid can return every
+ * account (and even last-known balances) while a holdings fetch fails, which
+ * would publish an empty portfolio and wipe allocation detail. Identity is
+ * account+security so a normal price refresh is not treated as a loss.
+ *
+ * Returns an empty list when the previous revision recorded no holdings.
+ */
+function holdingIdentitiesMissingFrom(previous: unknown, freshHoldings: unknown): string[] {
+  const previousHoldings = (previous as { holdings?: unknown })?.holdings;
+  if (!Array.isArray(previousHoldings) || previousHoldings.length === 0) return [];
+  const fresh = new Set(
+    (Array.isArray(freshHoldings) ? freshHoldings : [])
+      .map(holdingIdentity)
+      .filter((id): id is string => id !== null)
+  );
+  const missing = new Set<string>();
+  for (const holding of previousHoldings) {
+    const id = holdingIdentity(holding);
     if (id && !fresh.has(id)) missing.add(id);
   }
   return Array.from(missing);
@@ -221,11 +258,11 @@ export class SummaryCacheService {
 
       // Retention exists to stop a provider outage from blanking assets off the
       // page. It is only the right trade when this revision would actually lose
-      // ground -- when the partial fetch dropped accounts the previous revision
-      // had. That is not the common case: financial-source-persistence keeps
-      // yielding last known balances for an erroring token, so a partial run
-      // usually still covers every account, just with something unverified
-      // attached.
+      // ground -- accounts or holdings the previous revision had. That is not
+      // the common case: financial-source-persistence keeps yielding last known
+      // balances (and reusable current holdings) for an erroring token, so a
+      // partial run usually still covers every account and position, just with
+      // something unverified attached.
       //
       // When coverage holds, writing is strictly better than freezing. The user
       // sees today's figures instead of a revision that stops moving, and the
@@ -236,16 +273,25 @@ export class SummaryCacheService {
       // healthy source, which is what held real users on a stale revision for
       // days while every one of their connections was syncing normally.
       const droppedAccountIds = accountIdsMissingFrom(previous, payload.accounts);
-      if (retainable && droppedAccountIds.length === 0) {
+      const droppedHoldingIds = holdingIdentitiesMissingFrom(previous, payload.holdings);
+      const lostCoverage = droppedAccountIds.length > 0 || droppedHoldingIds.length > 0;
+      if (retainable && !lostCoverage) {
         console.log(
           `SummaryCacheService: provider data for user ${userId} is ${canonical.status} but still covers ` +
-          `every account in the prior revision; persisting it rather than retaining`
+          `every account and holding in the prior revision; persisting it rather than retaining`
         );
       }
-      if (retainable && droppedAccountIds.length > 0) {
-        console.warn(
-          `SummaryCacheService: ${droppedAccountIds.length} account(s) missing from this revision for user ${userId}`
-        );
+      if (retainable && lostCoverage) {
+        if (droppedAccountIds.length > 0) {
+          console.warn(
+            `SummaryCacheService: ${droppedAccountIds.length} account(s) missing from this revision for user ${userId}`
+          );
+        }
+        if (droppedHoldingIds.length > 0) {
+          console.warn(
+            `SummaryCacheService: ${droppedHoldingIds.length} holding(s) missing from this revision for user ${userId}`
+          );
+        }
         console.warn(
           `SummaryCacheService: retaining ${previous!.status} snapshot for user ${userId}; ` +
           `refusing to replace with ${canonical.status} provider data`

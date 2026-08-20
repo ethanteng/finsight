@@ -156,6 +156,30 @@ describe('SummaryCacheService partial-provider protection', () => {
     expect((result as Record<string, unknown>).retainedPriorRevision).toBeUndefined();
   });
 
+  // Accounts alone are not enough: a holdings fetch can fail while every
+  // account row still arrives. Publishing would blank the portfolio.
+  it('retains when prior holdings disappear from an otherwise complete account list', async () => {
+    getLatestFinancialSnapshot.mockResolvedValue({
+      status: 'current',
+      computedAt: new Date(Date.now() - 2 * 60 * 60 * 1000),
+      financialOverview: { netWorth: 1 },
+      accounts: [{ account_id: 'checking-1' }],
+      holdings: [{
+        id: 'checking-1_sec-1_1_100',
+        account_id: 'checking-1',
+        security_id: 'sec-1',
+        institution_value: 100,
+      }],
+    });
+
+    await expect(SummaryCacheService.computeForUser('user-1')).resolves.toMatchObject({
+      status: 'current',
+      retainedPriorRevision: true,
+    });
+
+    expect(upsertFinancialSnapshot).not.toHaveBeenCalled();
+  });
+
   it('keeps the provider error attached to a published partial revision', async () => {
     // Invariant 5 of the financial truth contract: a successful cache write
     // never erases provider errors. Publishing instead of retaining must not

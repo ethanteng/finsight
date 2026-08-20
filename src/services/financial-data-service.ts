@@ -1508,10 +1508,9 @@ export class FinancialDataService {
           const fetchedAt = new Date().toISOString();
 
           if (accountsResult.data.connectionStatusError) {
-            // Logged, not just recorded: a connection-status error alone sets
-            // partialData, which can freeze this user's snapshot for the whole
-            // retention window. Without a line naming the user, a scheduled run
-            // reports success and nothing says which account stopped updating.
+            // Logged, not just recorded: without a line naming the user, a
+            // scheduled run reports success and nothing says which account's
+            // health lookup failed. Severity is advisory — accounts arrived.
             console.warn(
               `⚠️ FinancialDataService: SnapTrade connection status unavailable for user ${userId}: ${accountsResult.data.connectionStatusError}`
             );
@@ -1566,11 +1565,9 @@ export class FinancialDataService {
               dataFreshnessMode: account.dataFreshnessMode,
             });
 
-            // Both branches below set partialData, which is enough on its own to
-            // make the canonical status 'partial' and stop a scheduled refresh
-            // from persisting this user's snapshot at all. Holdings and activities
-            // still arrive normally, so nothing else in the run looks wrong --
-            // these lines are the only signal that a connection needs attention.
+            // Both branches below are advisories: holdings and activities still
+            // arrive normally, so nothing else in the run looks wrong -- these
+            // lines are the only signal that a connection needs attention.
             if (account.connectionDisabled) {
               console.warn(
                 `⚠️ FinancialDataService: SnapTrade connection disabled for user ${userId}, account ${accountId}` +
