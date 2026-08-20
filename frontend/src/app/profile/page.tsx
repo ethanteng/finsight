@@ -1380,8 +1380,12 @@ export default function ProfilePage() {
                 // next becomes first.
                 reconnectAuthorizationId={snapTradeStatus?.reconnectAuthorizationIds?.[0]}
                 onAccountsUpdated={() => {
-                  // Refresh investment data when SnapTrade accounts are updated
+                  // Refresh investment data when SnapTrade accounts are updated.
+                  // Also re-read token health so reconnectAuthorizationIds drops
+                  // the authorization just repaired (or advances to the next
+                  // disabled one) instead of leaving the button stuck on a stale id.
                   loadInvestmentData();
+                  void loadSnapTradeStatus();
                 }}
               />
             </div>
