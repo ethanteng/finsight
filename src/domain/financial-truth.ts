@@ -350,7 +350,7 @@ export function computeFinancialOverview(input: FinancialOverviewInput): Canonic
 
 export const CORE_METRIC_DEFINITIONS = {
   totalCash: 'Sum of cash-account balances; overdrafts are liabilities, not negative cash.',
-  totalInvestments: 'Market value of deduplicated holdings plus manual investment assets.',
+  totalInvestments: 'Per provider-held investment account, the greater of its reported balance and the market value of its deduplicated holdings, plus manual investment assets.',
   homeValue: 'Current user override or provider midpoint; null means unknown and is not replaced by a range bound.',
   totalAssets: 'totalCash + totalInvestments + known homeValue + otherAssets.',
   totalDebt: 'Positive outstanding principal for debt accounts, including overdrafts.',

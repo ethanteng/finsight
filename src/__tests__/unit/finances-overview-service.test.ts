@@ -76,6 +76,74 @@ describe('finances overview contract', () => {
     )).toEqual({ investment: 9000, debt: 400 });
   });
 
+  it('shows the reported balance when holdings itemize only part of an account', () => {
+    // The row a user reads must not be smaller than the account actually is.
+    expect(buildAccountDisplayBalances(
+      [{
+        account_id: '401k',
+        type: 'investment',
+        subtype: '401k',
+        source: 'plaid',
+        balance: { current: 1_190_000, iso_currency_code: 'USD' },
+      }],
+      [{ account_id: '401k', institution_value: 800_000, iso_currency_code: 'USD' }],
+      'USD'
+    )).toEqual({ '401k': 1_190_000 });
+  });
+
+  it('shows the reported balance for an investment account with no itemized holdings', () => {
+    expect(buildAccountDisplayBalances(
+      [{
+        account_id: 'pension',
+        type: 'investment',
+        subtype: 'pension',
+        source: 'plaid',
+        balance: { current: 45_000, iso_currency_code: 'USD' },
+      }],
+      [],
+      'USD'
+    )).toEqual({ pension: 45_000 });
+  });
+
+  it('keeps the holdings total when it sits just above the reported balance', () => {
+    expect(buildAccountDisplayBalances(
+      [{
+        account_id: 'snaptrade-abc',
+        type: 'investment',
+        subtype: 'brokerage',
+        source: 'snaptrade',
+        balance: { current: 52_439.08, iso_currency_code: 'USD' },
+      }],
+      [{ account_id: 'snaptrade-abc', institution_value: 52_462.31, iso_currency_code: 'USD' }],
+      'USD'
+    )).toEqual({ 'snaptrade-abc': 52_462.31 });
+  });
+
+  it('explains a holdings coverage gap without calling data unavailable', () => {
+    const overview = buildFinancesOverview({
+      snapshot: {
+        ...snapshot,
+        quality: { unavailableSourceIds: ['account:401k:holdings-coverage'] },
+      },
+    });
+
+    const codes = overview.warnings.map(warning => warning.code);
+    expect(codes).toContain('incomplete-holdings-coverage');
+    expect(codes).not.toContain('optional-sources-unavailable');
+  });
+
+  it('still counts genuinely unavailable sources alongside a coverage gap', () => {
+    const overview = buildFinancesOverview({
+      snapshot: {
+        ...snapshot,
+        quality: { unavailableSourceIds: ['account:401k:holdings-coverage', 'home-value'] },
+      },
+    });
+
+    expect(overview.warnings.find(warning => warning.code === 'optional-sources-unavailable')?.message)
+      .toContain('1 optional data source');
+  });
+
   it('backfills display balances from holdings for a legacy snapshot', () => {
     const legacySnapshot = {
       ...snapshot,
@@ -91,6 +159,48 @@ describe('finances overview contract', () => {
     expect((upgraded.meta as any).accountDisplayBalances.brokerage).toBe(100000);
     expect(buildFinancesOverview({ snapshot: upgraded }).accountGroups.investments.accounts[0])
       .toMatchObject({ account_id: 'brokerage', displayBalance: 100000 });
+  });
+
+  it('does not raise legacy backfilled rows above a holdings-sum overview', () => {
+    // Legacy snapshots store holdings-sum totals. Backfilling with the new
+    // max(balance, holdings) rule would make rows disagree with the group total.
+    const legacySnapshot = {
+      ...snapshot,
+      financialOverview: {
+        ...snapshot.financialOverview,
+        totalInvestments: 800_000,
+        netWorth: 800_000 + 5000 - 28000 + 400000,
+      },
+      accounts: [{
+        account_id: '401k',
+        name: '401k',
+        type: 'investment',
+        subtype: '401k',
+        source: 'plaid',
+        balance: { current: 1_190_000, iso_currency_code: 'USD' },
+      }],
+      holdings: [
+        { id: 'holding', account_id: '401k', security_id: 'security', institution_value: 800_000, iso_currency_code: 'USD' },
+      ],
+      meta: { version: '2.0' },
+    };
+
+    const upgraded = withAccountDisplayBalances(legacySnapshot);
+    expect((upgraded.meta as any).accountDisplayBalances['401k']).toBe(800_000);
+  });
+
+  it('ignores available-only investment balances when resolving display rows', () => {
+    expect(buildAccountDisplayBalances(
+      [{
+        account_id: 'brokerage',
+        type: 'investment',
+        subtype: 'brokerage',
+        source: 'plaid',
+        balance: { current: null, available: 50_000, iso_currency_code: 'USD' },
+      }],
+      [{ account_id: 'brokerage', institution_value: 10_000, iso_currency_code: 'USD' }],
+      'USD'
+    )).toEqual({ brokerage: 10_000 });
   });
 
   it('uses canonical totals, groupings, and monthly aggregates without inventing a manual-home range', () => {

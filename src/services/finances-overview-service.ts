@@ -2,7 +2,11 @@ import { newestExpiringSourceAsOf, type SnapshotQuality } from '../domain/financ
 import { averageCanonicalTransactionSummary } from './transaction-summary-service';
 export { averageCanonicalTransactionSummary } from './transaction-summary-service';
 import { classifyAccount } from './account-classifier';
-import { buildCanonicalInvestmentPortfolio } from './canonical-financial-snapshot';
+import {
+  buildCanonicalInvestmentPortfolio,
+  holdingBelongsToInvestmentAccount,
+  resolveInvestmentAccountValue,
+} from './canonical-financial-snapshot';
 
 export type FinancesSnapshotStatus = SnapshotQuality['status'];
 
@@ -214,13 +218,19 @@ function unavailableBalanceCount(accounts: readonly FinancesAccount[]): number {
 export function buildAccountDisplayBalances(
   accountsInput: unknown,
   holdingsInput: unknown,
-  reportingCurrencyInput: unknown
+  reportingCurrencyInput: unknown,
+  options: { reconcileReportedBalance?: boolean } = {}
 ): Record<string, number | null> {
   const accounts = Array.isArray(accountsInput) ? accountsInput as FinancesAccount[] : [];
   const holdings = Array.isArray(holdingsInput) ? holdingsInput as any[] : [];
   const reportingCurrency = typeof reportingCurrencyInput === 'string'
     ? reportingCurrencyInput.toUpperCase()
     : 'USD';
+  // Fresh snapshot writes reconcile rows to the reported balance. Legacy
+  // backfills must not: their financialOverview was holdings-sum based, and
+  // raising only the rows would reopen the row-vs-group discrepancy this fix
+  // closes until the next full recompute.
+  const reconcileReportedBalance = options.reconcileReportedBalance !== false;
   const balances: Record<string, number | null> = {};
 
   for (const account of accounts) {
@@ -230,11 +240,20 @@ export function buildAccountDisplayBalances(
     const rawBalance = accountBalance(account);
     if (classified.isInvestment && account.source !== 'manual') {
       const values = holdings
-        .filter(holding => accountIdMatches(holding?.account_id, id))
+        .filter(holding => holdingBelongsToInvestmentAccount(holding?.account_id, account))
         .filter(holding => String(holding?.iso_currency_code || '').toUpperCase() === reportingCurrency)
         .map(holding => finite(holding?.institution_value))
         .filter((value): value is number => value !== null);
-      balances[id] = values.length > 0 ? values.reduce((total, value) => total + value, 0) : null;
+      const holdingsValue = values.length > 0
+        ? values.reduce((total, value) => total + value, 0)
+        : null;
+      if (!reconcileReportedBalance) {
+        balances[id] = holdingsValue;
+      } else {
+        // Resolved the same way the canonical total is, so a row and the group
+        // total above it can never tell the user two different numbers.
+        balances[id] = resolveInvestmentAccountValue(account, holdingsValue, reportingCurrency);
+      }
     } else if ((classified.isDebt || classified.balance < 0) && rawBalance !== null) {
       balances[id] = Math.abs(rawBalance);
     } else {
@@ -260,7 +279,8 @@ export function withAccountDisplayBalances<T extends FinancesSnapshotLike>(snaps
       accountDisplayBalances: buildAccountDisplayBalances(
         snapshot.accounts,
         snapshot.holdings,
-        snapshot.reportingCurrency
+        snapshot.reportingCurrency,
+        { reconcileReportedBalance: false }
       ),
     },
   };
@@ -374,11 +394,25 @@ export function buildFinancesOverview(input: FinancesOverviewInput): FinancesOve
   // and retention decisions; it is simply not something to put in front of the user.
 
   const quality = snapshot.quality && typeof snapshot.quality === 'object' ? snapshot.quality as any : {};
-  const unavailableSources = Array.isArray(quality.unavailableSourceIds) ? quality.unavailableSourceIds.length : 0;
+  const unavailableSourceIds: string[] = Array.isArray(quality.unavailableSourceIds)
+    ? quality.unavailableSourceIds.filter((id: unknown): id is string => typeof id === 'string')
+    : [];
+  // A holdings-coverage gap is not a missing source: the account's reported balance is in
+  // the totals either way. It changes what the allocation can say, not what anything is
+  // worth, so it gets its own note instead of being counted as unavailable data.
+  const coverageGapCount = unavailableSourceIds
+    .filter(id => id.endsWith(':holdings-coverage')).length;
+  const unavailableSources = unavailableSourceIds.length - coverageGapCount;
   // 'partial' and 'unavailable' already say a source is missing; anything else must not
   // swallow this, or a stale snapshot would hide the only note explaining a missing value.
   if (unavailableSources > 0 && status !== 'partial' && status !== 'unavailable') {
     warnings.push({ code: 'optional-sources-unavailable', message: `${unavailableSources} optional data source${unavailableSources === 1 ? ' was' : 's were'} unavailable.` });
+  }
+  if (coverageGapCount > 0) {
+    warnings.push({
+      code: 'incomplete-holdings-coverage',
+      message: `${coverageGapCount} investment account${coverageGapCount === 1 ? '' : 's'} report${coverageGapCount === 1 ? 's' : ''} a balance its listed holdings do not fully account for. Totals use the balance the institution reports; the remainder appears as Unclassified in your allocation.`,
+    });
   }
 
   const transactionSummary = snapshot.transactionsSummary && typeof snapshot.transactionsSummary === 'object'
@@ -494,7 +528,7 @@ export function buildFinancesAccountDetails(
   if (!account) return null;
 
   const resolvedId = accountId(account);
-  const forAccount = (entry: any) => accountIdMatches(entry?.account_id, resolvedId);
+  const forAccount = (entry: any) => holdingBelongsToInvestmentAccount(entry?.account_id, account);
   const transactions = (Array.isArray(snapshot.transactions) ? snapshot.transactions : [])
     .filter(forAccount)
     .sort((left: any, right: any) => Date.parse(right?.date || '') - Date.parse(left?.date || ''));

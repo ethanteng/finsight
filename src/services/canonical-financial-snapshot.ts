@@ -47,6 +47,17 @@ interface SnapshotError {
   error: string;
 }
 
+/** An investment account whose itemized holdings do not explain its reported balance. */
+export interface InvestmentHoldingsCoverage {
+  accountId: string;
+  /** Balance the institution reports for the account, in the reporting currency. */
+  reportedBalance: number;
+  /** Market value of the holdings the provider itemized for it. */
+  holdingsValue: number;
+  /** reportedBalance - holdingsValue: value carried by the balance and no holding. */
+  unexplainedValue: number;
+}
+
 export interface CanonicalInvestmentPortfolio {
   reportingCurrency: string;
   totalValue: number;
@@ -55,6 +66,10 @@ export interface CanonicalInvestmentPortfolio {
   assetAllocation: Array<{ type: string; value: number; percentage: number }>;
   currencyMismatchIds: string[];
   unavailableValueIds: string[];
+  /** Total value included from account balances that no itemized holding explains. */
+  unclassifiedValue: number;
+  /** Accounts whose holdings feed materially under-covers the balance they report. */
+  holdingsCoverageGaps: InvestmentHoldingsCoverage[];
 }
 
 export interface CanonicalSnapshotCore {
@@ -133,6 +148,102 @@ function holdingId(holding: SnapshotHolding, index: number): string {
   );
 }
 
+/**
+ * Allocation bucket for value an account reports but no holding itemizes.
+ */
+const UNCLASSIFIED_ASSET_TYPE = 'Unclassified';
+
+/** Below this, a coverage gap is rounding or pricing skew rather than missing positions. */
+const COVERAGE_GAP_MIN = 1;
+const COVERAGE_GAP_RATIO = 0.005;
+
+function coverageGapThreshold(reportedBalance: number): number {
+  return Math.max(COVERAGE_GAP_MIN, Math.abs(reportedBalance) * COVERAGE_GAP_RATIO);
+}
+
+/**
+ * Institution-reported investment market value. `available` is ignored: on
+ * brokerages it can mean buying power or withdrawable cash, not the account's
+ * total, and must not inflate investments when `current` is missing.
+ */
+function knownReportedInvestmentBalance(account: SnapshotAccount): number | null {
+  const balance = account.balance;
+  if (typeof balance === 'number') return finiteNumber(balance);
+  if (!balance || typeof balance !== 'object') return null;
+  return finiteNumber(balance.current);
+}
+
+/**
+ * SnapTrade payloads sometimes omit the `snaptrade-` prefix on one side of the
+ * feed. Strip it only when matching within SnapTrade — never equate a bare
+ * Plaid account id with a SnapTrade-prefixed id that happens to share a suffix.
+ */
+export function holdingBelongsToInvestmentAccount(
+  holdingAccountId: unknown,
+  account: Pick<SnapshotAccount, 'account_id' | 'id' | 'source'>
+): boolean {
+  if (typeof holdingAccountId !== 'string' || !holdingAccountId) return false;
+  const accountKey = account.account_id || account.id;
+  if (typeof accountKey !== 'string' || !accountKey) return false;
+  if (holdingAccountId === accountKey) return true;
+
+  const isSnapTradeAccount =
+    account.source === 'snaptrade' || accountKey.startsWith('snaptrade-');
+  const isSnapTradeHolding = holdingAccountId.startsWith('snaptrade-');
+  if (account.source === 'plaid' || (!isSnapTradeAccount && !isSnapTradeHolding)) {
+    return false;
+  }
+  return (
+    holdingAccountId.replace(/^snaptrade-/, '') ===
+    accountKey.replace(/^snaptrade-/, '')
+  );
+}
+
+/**
+ * Dedup key for reconciling an account at most once. SnapTrade prefix variants
+ * of the same account collapse; a Plaid id never collapses into SnapTrade.
+ */
+function accountReconciliationKey(account: SnapshotAccount): string | null {
+  const id = account.account_id || account.id;
+  if (typeof id !== 'string' || !id) return null;
+  if (account.source === 'snaptrade' || id.startsWith('snaptrade-')) {
+    return `snaptrade:${id.replace(/^snaptrade-/, '')}`;
+  }
+  return `${account.source || 'unknown'}:${id}`;
+}
+
+/**
+ * What a provider-held investment account is worth.
+ *
+ * The institution's reported balance is the authority on the account's total;
+ * itemized holdings describe how that total is composed. Some plans -- employer
+ * 401(k)s in particular -- itemize only part of the account, so deriving the
+ * total from holdings alone silently drops whatever the feed does not list.
+ * Preferring the balance keeps that value in net worth, and holdings still
+ * stand in when no balance is reported.
+ *
+ * A holdings sum slightly above the balance is pricing skew between two feeds
+ * observed at different moments, not extra value. Keeping the larger figure
+ * there avoids manufacturing a negative residual that no allocation bucket
+ * could represent.
+ *
+ * Returns null only when neither figure is usable.
+ */
+export function resolveInvestmentAccountValue(
+  account: SnapshotAccount,
+  holdingsValue: number | null,
+  reportingCurrency = 'USD'
+): number | null {
+  const currency = normalizedCurrency(reportingCurrency);
+  // A balance in another currency is not comparable to a reporting-currency
+  // holdings total, so it cannot stand in for one.
+  const balance =
+    accountCurrency(account) === currency ? knownReportedInvestmentBalance(account) : null;
+  if (balance === null) return holdingsValue;
+  if (holdingsValue === null) return balance;
+  return Math.max(balance, holdingsValue);
+}
+
 function validObservationDate(value: unknown): string | Date | null {
   if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
   if (typeof value !== 'string' || !value.trim()) return null;
@@ -140,7 +251,11 @@ function validObservationDate(value: unknown): string | Date | null {
   return Number.isNaN(parsed.getTime()) ? null : value;
 }
 
-/** Build the investment total once, excluding values that are unknown or unconverted. */
+/**
+ * Build the investment total once, excluding values that are unknown or
+ * unconverted, and reconciling each provider-held account against the balance
+ * its institution reports.
+ */
 export function buildCanonicalInvestmentPortfolio(
   holdings: readonly SnapshotHolding[] = [],
   securities: readonly SnapshotSecurity[] = [],
@@ -157,8 +272,11 @@ export function buildCanonicalInvestmentPortfolio(
   const includedSecurityIds = new Set<string>();
   const currencyMismatchIds: string[] = [];
   const unavailableValueIds: string[] = [];
+  const holdingsCoverageGaps: InvestmentHoldingsCoverage[] = [];
+  const countedHoldings: Array<{ accountId: string; value: number }> = [];
   let totalValue = 0;
   let holdingCount = 0;
+  let unclassifiedValue = 0;
 
   holdings.forEach((holding, index) => {
     const id = holdingId(holding, index);
@@ -173,6 +291,9 @@ export function buildCanonicalInvestmentPortfolio(
     }
     totalValue += value;
     holdingCount += 1;
+    if (typeof holding.account_id === 'string' && holding.account_id) {
+      countedHoldings.push({ accountId: holding.account_id, value });
+    }
     if (holding.security_id) includedSecurityIds.add(String(holding.security_id));
     // Normalize so the same asset class from different providers (Plaid's "etf"
     // vs SnapTrade's "ETF") lands in one bucket instead of several.
@@ -182,21 +303,63 @@ export function buildCanonicalInvestmentPortfolio(
     allocation.set(assetType, (allocation.get(assetType) || 0) + value);
   });
 
+  // An account may legitimately appear once per source pass; reconcile each one
+  // exactly once so a repeated entry cannot add its residual twice.
+  const reconciledAccountKeys = new Set<string>();
+
   accounts.forEach((account, index) => {
-    if (account.source !== 'manual' || !classifyAccount(account).isInvestment) return;
+    if (!classifyAccount(account).isInvestment) return;
     const id = accountId(account, index);
-    if (accountCurrency(account) !== currency) {
-      currencyMismatchIds.push(`account:${id}`);
+
+    if (account.source === 'manual') {
+      if (accountCurrency(account) !== currency) {
+        currencyMismatchIds.push(`account:${id}`);
+        return;
+      }
+      const value = knownAccountBalance(account);
+      if (value === null) {
+        unavailableValueIds.push(`account:${id}`);
+        return;
+      }
+      const assetValue = Math.max(0, value);
+      totalValue += assetValue;
+      allocation.set('Manual Investments', (allocation.get('Manual Investments') || 0) + assetValue);
       return;
     }
-    const value = knownAccountBalance(account);
-    if (value === null) {
-      unavailableValueIds.push(`account:${id}`);
-      return;
+
+    // Without a provider account id there is no way to tell which holdings
+    // belong to this account, so its balance cannot be reconciled against them.
+    const matchKey = accountReconciliationKey(account);
+    if (!matchKey || reconciledAccountKeys.has(matchKey)) return;
+    reconciledAccountKeys.add(matchKey);
+
+    const holdingsValue = countedHoldings
+      .filter(holding => holdingBelongsToInvestmentAccount(holding.accountId, account))
+      .reduce((sum, holding) => sum + holding.value, 0);
+    const resolved = resolveInvestmentAccountValue(account, holdingsValue, currency);
+    if (resolved === null) return;
+    const unexplained = resolved - holdingsValue;
+    if (unexplained <= 0) return;
+
+    // The balance is authoritative for the total, so this value belongs in it.
+    // It has no security behind it, so it cannot be attributed to an asset class.
+    totalValue += unexplained;
+    unclassifiedValue += unexplained;
+    allocation.set(
+      UNCLASSIFIED_ASSET_TYPE,
+      (allocation.get(UNCLASSIFIED_ASSET_TYPE) || 0) + unexplained
+    );
+
+    // A positive residual means the balance won the resolution above, so the
+    // resolved figure is exactly the balance the institution reported.
+    if (unexplained > coverageGapThreshold(resolved)) {
+      holdingsCoverageGaps.push({
+        accountId: id,
+        reportedBalance: resolved,
+        holdingsValue,
+        unexplainedValue: unexplained,
+      });
     }
-    const assetValue = Math.max(0, value);
-    totalValue += assetValue;
-    allocation.set('Manual Investments', (allocation.get('Manual Investments') || 0) + assetValue);
   });
 
   return {
@@ -211,6 +374,8 @@ export function buildCanonicalInvestmentPortfolio(
     })),
     currencyMismatchIds,
     unavailableValueIds,
+    unclassifiedValue,
+    holdingsCoverageGaps,
   };
 }
 
@@ -299,6 +464,24 @@ function buildSourceObservations(
       error: asOf ? null : 'Holding price timestamp is unavailable',
     });
   });
+
+  for (const gap of portfolio.holdingsCoverageGaps || []) {
+    observations.push({
+      id: `account:${gap.accountId}:holdings-coverage`,
+      // Not required: the institution's reported balance is authoritative and is
+      // already in the total, so nothing is missing from net worth. What this
+      // records is that the itemized positions explain only part of the account,
+      // which asset allocation and retirement analytics read.
+      required: false,
+      status: 'unavailable',
+      asOf: null,
+      maxAgeMs: investmentMaxAgeMs,
+      error:
+        `Itemized holdings cover ${gap.holdingsValue.toFixed(2)} of the ` +
+        `${gap.reportedBalance.toFixed(2)} ${reportingCurrency} balance this account reports; ` +
+        `${gap.unexplainedValue.toFixed(2)} is counted but unclassified`,
+    });
+  }
 
   for (const id of [...portfolio.currencyMismatchIds, ...portfolio.unavailableValueIds]) {
     observations.push({
