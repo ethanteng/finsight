@@ -19,6 +19,9 @@ interface SnapTradeAccount {
   subtype?: string;
   institution?: string;
   balance?: number;
+  /** True when this account's brokerage authorization is disabled. */
+  connectionDisabled?: boolean;
+  brokerageAuthorizationId?: string;
 }
 
 interface SnapTradeTokenStatus {
@@ -26,6 +29,8 @@ interface SnapTradeTokenStatus {
   status: string;
   error?: string;
   lastChecked?: string;
+  /** Per-brokerage detail when status is LOGIN_REQUIRED. */
+  disabledConnections?: Array<{ authorizationId: string; institutionName: string | null }>;
 }
 
 interface SnapTradeButtonProps {
@@ -421,10 +426,30 @@ export default function SnapTradeButton({ onAccountsUpdated, snapTradeStatus: sn
         <div className="mt-4">
           <div className="space-y-3">
             {connectedAccounts.map((account) => {
-              // Determine if SnapTrade connection is healthy
-              const isHealthy = snapTradeTokenStatus?.connected &&
-                               (snapTradeTokenStatus?.status === 'VALID' ||
-                                snapTradeTokenStatus?.status === 'valid');
+              // Health is per brokerage authorization. Reading LOGIN_REQUIRED off
+              // the SnapTrade *user* status marked every account broken the moment
+              // any one connection was disabled -- including healthy Fidelity
+              // accounts when only Public needed reconnecting.
+              const connectionDisabled = account.connectionDisabled === true
+                || Boolean(
+                  account.brokerageAuthorizationId
+                  && snapTradeTokenStatus?.disabledConnections?.some(
+                    connection => connection.authorizationId === account.brokerageAuthorizationId
+                  )
+                );
+              // Whole-user failure still applies across the board. LOGIN_REQUIRED
+              // does not: it means some authorization is disabled, and which ones
+              // is what connectionDisabled answers.
+              const connectionUnusable = !snapTradeTokenStatus?.connected
+                || snapTradeTokenStatus?.status === 'error'
+                || snapTradeTokenStatus?.status === 'ERROR';
+              const isHealthy = !connectionDisabled && !connectionUnusable;
+              const institutionName = account.institution || 'this brokerage';
+              const accountIssue = connectionDisabled
+                ? `SnapTrade connection disabled for ${institutionName}. Reconnect to resume updates.`
+                : connectionUnusable
+                  ? (snapTradeTokenStatus?.error || 'Connection issue')
+                  : null;
 
               return (
                 <div key={account.id} className="bg-gray-700 border border-gray-600 rounded-lg p-4">
@@ -438,7 +463,7 @@ export default function SnapTradeButton({ onAccountsUpdated, snapTradeStatus: sn
                             ✓
                           </span>
                         ) : (
-                          <span className="w-4 shrink-0 text-center text-red-400" title={`Connection issue: ${snapTradeTokenStatus?.error || 'Unknown error'}`}>
+                          <span className="w-4 shrink-0 text-center text-red-400" title={`Connection issue: ${accountIssue || 'Unknown error'}`}>
                             ✗
                           </span>
                         )}
@@ -447,10 +472,9 @@ export default function SnapTradeButton({ onAccountsUpdated, snapTradeStatus: sn
                           {account.subtype && ` • ${account.subtype}`}
                         </div>
                       </div>
-                      {/* Show error message if connection is unhealthy */}
-                      {!isHealthy && snapTradeTokenStatus?.error && (
+                      {accountIssue && (
                         <div className="text-xs text-red-400 mt-1">
-                          {snapTradeTokenStatus.error}
+                          {accountIssue}
                         </div>
                       )}
                     </div>
