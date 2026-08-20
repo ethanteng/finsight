@@ -8,6 +8,7 @@ import { matchAccountsAcrossConnections, toConnectionAccount } from './services/
 import { normalizeAssetType } from './services/asset-class';
 import { normalizeLabel } from './services/label-normalization';
 import { getProviderRequestTimeoutMs } from './services/provider-request-policy';
+import { isTargetDateFund, TARGET_DATE_ASSET_TYPE } from './services/target-date-fund';
 
 // Initialize Prisma client lazily to avoid import issues during ts-node startup
 let prisma: PrismaClient | null = null;
@@ -259,7 +260,16 @@ const analyzePortfolio = (holdings: any[], securities: any[]) => {
 
   const assetAllocation = holdings.reduce((allocation, holding) => {
     const security = securityMap.get(holding.security_id);
-    const assetType = normalizeAssetType(security?.type || holding.security_type);
+    // Same recognition as the canonical snapshot: provider type says "mutual
+    // fund" (or nothing) for a blend that only the label describes.
+    const assetType = isTargetDateFund(
+      security?.name,
+      holding.security_name,
+      security?.ticker_symbol,
+      holding.ticker_symbol
+    )
+      ? TARGET_DATE_ASSET_TYPE
+      : normalizeAssetType(security?.type || holding.security_type);
 
     if (!allocation[assetType]) {
       allocation[assetType] = 0;

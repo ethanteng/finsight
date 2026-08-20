@@ -35,6 +35,9 @@ interface SnapshotHolding {
   snapshotTimestamp?: string | Date | null;
   iso_currency_code?: string | null;
   security_type?: string | null;
+  /** Denormalized from the linked security when the holdings feed carries it. */
+  security_name?: string | null;
+  ticker_symbol?: string | null;
 }
 
 interface SnapshotSecurity {
@@ -317,9 +320,9 @@ export function buildCanonicalInvestmentPortfolio(
     const security = securityRecords.get(String(holding.security_id || ''));
     const assetType = isTargetDateFund(
       security?.name,
-      (holding as SnapshotHolding & { security_name?: string }).security_name,
+      holding.security_name,
       security?.ticker_symbol,
-      (holding as SnapshotHolding & { ticker_symbol?: string }).ticker_symbol
+      holding.ticker_symbol
     )
       ? TARGET_DATE_ASSET_TYPE
       // Normalize so the same asset class from different providers (Plaid's "etf"

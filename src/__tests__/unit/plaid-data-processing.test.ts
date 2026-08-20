@@ -365,6 +365,18 @@ describe('analyzePortfolio', () => {
     expect(analyzePortfolio(holdings, []).assetAllocation[0].type).toBe('Unrecognized holdings');
   });
 
+  it('buckets a target-date fund by its label rather than the provider type', () => {
+    const holdings = [
+      { security_id: 'td', institution_value: 10_000, security_name: 'State St Target Ret 2040 SL SF CL III' },
+    ];
+    const tdSecurities = [
+      { security_id: 'td', type: 'mutual fund', name: 'State St Target Ret 2040 SL SF CL III' },
+    ];
+    expect(analyzePortfolio(holdings, tdSecurities).assetAllocation).toEqual([
+      { type: 'Target Date Fund', value: 10_000, percentage: 100 },
+    ]);
+  });
+
   it('treats a missing institution_value as zero rather than producing NaN', () => {
     const holdings = [{ security_id: 'sec-1', institution_value: 1000 }, { security_id: 'sec-2' }];
     const result = analyzePortfolio(holdings, securities);
