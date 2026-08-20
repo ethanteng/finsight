@@ -162,6 +162,25 @@ app.get('/health/cron', async (req: Request, res: Response) => {
     console.warn('Unable to read scheduled-job lease health:', error);
   }
 
+  // A snapshot older than a full refresh cycle means the daily job ran without
+  // moving that user's revision -- the retention guard in SummaryCacheService
+  // returns the prior snapshot on partial provider data, and it does so as a
+  // *success*, so lease status and exit code both stay green while the user
+  // sees week-old figures. Counted here because nothing else surfaces it.
+  //
+  // Deliberately a count and not a list: this endpoint is unauthenticated.
+  const STALE_SNAPSHOT_THRESHOLD_MS = 26 * 60 * 60 * 1000;
+  let frozenSnapshotCount: number | null = null;
+  let frozenSnapshotError: string | undefined;
+  try {
+    frozenSnapshotCount = await getPrismaClient().financialSummarySnapshot.count({
+      where: { computedAt: { lt: new Date(Date.now() - STALE_SNAPSHOT_THRESHOLD_MS) } },
+    });
+  } catch (error) {
+    frozenSnapshotError = error instanceof Error ? error.message : String(error);
+    console.warn('Unable to count frozen financial snapshots:', error);
+  }
+
   const now = new Date();
   const leaseStatus = (name: string) => {
     const lease = leaseByName.get(name);
@@ -181,6 +200,12 @@ app.get('/health/cron', async (req: Request, res: Response) => {
         execution: 'external',
         command: 'node scripts/refresh-transactions.js',
         ...leaseStatus('financial-data-refresh'),
+        // Non-zero means the job completed but left that many snapshots
+        // untouched. A green lease with a non-zero count here is the signature
+        // of the retention guard holding users on a prior revision.
+        frozenSnapshots: frozenSnapshotCount,
+        frozenSnapshotThresholdHours: STALE_SNAPSHOT_THRESHOLD_MS / (60 * 60 * 1000),
+        ...(frozenSnapshotError ? { frozenSnapshotError } : {}),
       },
       balanceDataRefresh: {
         name: 'balance-data-refresh',

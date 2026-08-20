@@ -1467,6 +1467,13 @@ export class FinancialDataService {
           const fetchedAt = new Date().toISOString();
 
           if (accountsResult.data.connectionStatusError) {
+            // Logged, not just recorded: a connection-status error alone sets
+            // partialData, which can freeze this user's snapshot for the whole
+            // retention window. Without a line naming the user, a scheduled run
+            // reports success and nothing says which account stopped updating.
+            console.warn(
+              `⚠️ FinancialDataService: SnapTrade connection status unavailable for user ${userId}: ${accountsResult.data.connectionStatusError}`
+            );
             errors.push({
               error: `SnapTrade connection status unavailable: ${accountsResult.data.connectionStatusError}`,
               timestamp: new Date(),
@@ -1512,13 +1519,26 @@ export class FinancialDataService {
               dataFreshnessMode: account.dataFreshnessMode,
             });
 
+            // Both branches below set partialData, which is enough on its own to
+            // make the canonical status 'partial' and stop a scheduled refresh
+            // from persisting this user's snapshot at all. Holdings and activities
+            // still arrive normally, so nothing else in the run looks wrong --
+            // these lines are the only signal that a connection needs attention.
             if (account.connectionDisabled) {
+              console.warn(
+                `⚠️ FinancialDataService: SnapTrade connection disabled for user ${userId}, account ${accountId}` +
+                `${account.connectionDisabledAt ? ` (since ${account.connectionDisabledAt})` : ''}; using last cached brokerage state`
+              );
               errors.push({
                 accountId,
                 error: 'SnapTrade connection is disabled; showing the last cached brokerage state.',
                 timestamp: new Date(),
               });
             } else if (account.connectionStatusUnavailable) {
+              console.warn(
+                `⚠️ FinancialDataService: SnapTrade connection health unverifiable for user ${userId}, account ${accountId}; ` +
+                'the brokerage authorization this account references was not returned by SnapTrade'
+              );
               errors.push({
                 accountId,
                 error: 'SnapTrade connection health could not be verified; this balance may come from a disabled connection.',
@@ -1596,6 +1616,10 @@ export class FinancialDataService {
           if (holdingsResult.success && holdingsResult.data) {
             console.log(`📊 SnapTrade: Received ${holdingsResult.data.length} account holdings from API`);
             for (const holdingError of holdingsResult.errors || []) {
+              console.warn(
+                `⚠️ FinancialDataService: SnapTrade holdings incomplete for user ${userId}, ` +
+                `account snaptrade-${holdingError.accountId}: ${holdingError.error}`
+              );
               errors.push({
                 accountId: `snaptrade-${holdingError.accountId}`,
                 error: `SnapTrade holdings incomplete: ${holdingError.error}`,
@@ -1841,6 +1865,10 @@ export class FinancialDataService {
           if (activitiesResult.success && activitiesResult.data?.activities) {
             for (const activityError of activitiesResult.data.errors || []) {
               const rawErrorAccountId = String(activityError.accountId || 'unknown');
+              console.warn(
+                `⚠️ FinancialDataService: SnapTrade activities incomplete for user ${userId}, ` +
+                `account ${rawErrorAccountId}: ${activityError.error}`
+              );
               errors.push({
                 accountId: rawErrorAccountId.startsWith('snaptrade-')
                   ? rawErrorAccountId

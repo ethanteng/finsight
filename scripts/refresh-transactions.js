@@ -166,6 +166,27 @@ function logReauthConnections(result, timestamp) {
     );
   });
 }
+
+/**
+ * Name the users whose snapshot was deliberately left alone this run. Retention
+ * is a successful outcome, so these users are counted under Processed and the
+ * run stays green -- which means without this line a frozen snapshot is
+ * indistinguishable in the logs from a refreshed one. The same reasoning as
+ * logReauthConnections above: a non-failing outcome still has to be visible.
+ */
+function logRetainedSnapshots(result, timestamp) {
+  const retained = result.retainedUserIds || [];
+  if (retained.length === 0) return;
+  console.warn(
+    `[${timestamp}] 🧊 ${retained.length}/${result.usersProcessed} user snapshot(s) were retained, not refreshed: ` +
+    'a connected provider returned partial data and the prior revision is still within the retention window. ' +
+    'These users see no new figures until the provider recovers or the window expires:'
+  );
+  retained.forEach((userId) => {
+    console.warn(`[${timestamp}]   - User ${userId}`);
+  });
+}
+
 const FINANCIAL_REFRESH_LEASE_MS = 6 * 60 * 60 * 1000;
 
 async function refreshTransactions() {
@@ -293,7 +314,8 @@ async function refreshTransactions() {
       console.log(`[${summaryTimestamp}] 🧮 Refreshing cached financial summaries for all users...`);
       const result = await SummaryCacheService.refreshAllUsers();
       const summaryEndTimestamp = new Date().toISOString();
-      console.log(`[${summaryEndTimestamp}] ${result.success ? '✅' : '⚠️'} Summary cache refresh completed. Users processed: ${result.usersProcessed}, failed: ${result.usersFailed}`);
+      console.log(`[${summaryEndTimestamp}] ${result.success ? '✅' : '⚠️'} Summary cache refresh completed. Users processed: ${result.usersProcessed}, failed: ${result.usersFailed}, retained: ${result.usersRetained || 0}`);
+      logRetainedSnapshots(result, summaryEndTimestamp);
       if (!result.success) {
         console.error(`[${summaryEndTimestamp}] ⚠️ Summary refresh errors:`, result.errors);
         phaseErrors.push(`Summary refresh failed for ${result.usersFailed} user(s)`);

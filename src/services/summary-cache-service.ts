@@ -236,12 +236,21 @@ export class SummaryCacheService {
     // Report which users were covered so callers that refreshed other inputs
     // can recompute anyone this pass did not reach.
     const processedUserIds: string[] = [];
+    // Users whose snapshot was deliberately left untouched by the retention
+    // guard in computeForUser. They are processed successfully -- retention is
+    // the intended outcome -- but their stored revision did not move, so a
+    // caller reading usersProcessed alone would report a refresh that did not
+    // happen. Tracked separately so the run can say so out loud.
+    const retainedUserIds: string[] = [];
     const errors: Array<{ userId: string; error: string }> = [];
     for (const u of userIds) {
       try {
         // Cron: run full categorization for richer GPT context
-        await this.computeForUser(u.id, { categorize: true });
+        const result = await this.computeForUser(u.id, { categorize: true });
         processedUserIds.push(u.id);
+        if ((result as any)?.retainedPriorRevision) {
+          retainedUserIds.push(u.id);
+        }
       } catch (err) {
         console.error(`SummaryCacheService: Failed to refresh snapshot for user ${u.id}`, err);
         errors.push({
@@ -254,7 +263,9 @@ export class SummaryCacheService {
       success: errors.length === 0,
       usersProcessed: processedUserIds.length,
       usersFailed: errors.length,
+      usersRetained: retainedUserIds.length,
       processedUserIds,
+      retainedUserIds,
       errors,
     };
   }
