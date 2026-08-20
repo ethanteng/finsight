@@ -683,6 +683,51 @@ export class StripeService {
   }
 
   /**
+   * After a subscription is canceled/paused/past_due/incomplete, only mirror that
+   * onto the user row when they have no other working subscription.
+   *
+   * Resubscribe leaves the old canceled row in place. A delayed or replayed
+   * webhook for that old subscription must not overwrite a fresh active/trialing
+   * replacement — authenticateUser gates on user.subscriptionStatus, so doing so
+   * would lock a paying subscriber out again.
+   */
+  private async applyUserSubscriptionStatusIfNoWorkingReplacement(
+    userId: string,
+    proposedStatus: string
+  ): Promise<{ applied: boolean; workingStatus?: string }> {
+    const prisma = getPrismaClient();
+    const workingSubscription = await prisma.subscription.findFirst({
+      where: {
+        userId,
+        status: { in: ['active', 'trialing'] },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (workingSubscription) {
+      await prisma.user.update({
+        where: { id: userId },
+        data: {
+          subscriptionStatus: workingSubscription.status,
+          tier: workingSubscription.tier,
+        },
+      });
+      console.log(
+        `Preserved user ${userId} at ${workingSubscription.status}: another working subscription exists (${workingSubscription.stripeSubscriptionId})`
+      );
+      return { applied: false, workingStatus: workingSubscription.status };
+    }
+
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        subscriptionStatus: proposedStatus,
+      },
+    });
+    return { applied: true };
+  }
+
+  /**
    * Handle subscription deleted event
    */
   private async handleSubscriptionDeleted(eventData: any): Promise<void> {
@@ -712,13 +757,18 @@ export class StripeService {
 
       // Update user subscription status
       if (subscriptionRecord.user) {
-        await prisma.user.update({
-          where: { id: subscriptionRecord.user.id },
-          data: {
-            subscriptionStatus: 'canceled',
-            // Keep the user's tier - they paid for it and should retain access
-          }
-        });
+        const { applied } = await this.applyUserSubscriptionStatusIfNoWorkingReplacement(
+          subscriptionRecord.user.id,
+          'canceled'
+        );
+
+        if (!applied) {
+          console.log(
+            `✅ Subscription ${subscriptionId} canceled but user ${subscriptionRecord.user.email} kept access via a replacement subscription`
+          );
+          console.log(`Subscription ${subscriptionId} deactivated successfully`);
+          return;
+        }
 
         console.log(`✅ Updated user ${subscriptionRecord.user.email} subscription status to 'canceled' (tier remains: ${subscriptionRecord.user.tier})`);
 
@@ -777,12 +827,10 @@ export class StripeService {
     });
 
     if (subscriptionRecord?.user) {
-      await prisma.user.update({
-        where: { id: subscriptionRecord.user.id },
-        data: {
-          subscriptionStatus: 'paused',
-        }
-      });
+      await this.applyUserSubscriptionStatusIfNoWorkingReplacement(
+        subscriptionRecord.user.id,
+        'paused'
+      );
     }
 
     console.log(`Subscription ${subscriptionId} paused successfully`);
@@ -884,17 +932,16 @@ export class StripeService {
         const now = new Date();
         const gracePeriodDays = 7; // Default grace period
         const gracePeriodEnd = new Date(now.getTime() + (gracePeriodDays * 24 * 60 * 60 * 1000));
-        
-        await prisma.user.update({
-          where: { id: subscriptionRecord.user.id },
-          data: {
-            subscriptionStatus: 'past_due',
-            // Grace period handled by Stripe status
-          }
-        });
 
-        console.log(`User ${subscriptionRecord.user.id} entered grace period until ${gracePeriodEnd.toISOString()}`);
-        
+        const { applied } = await this.applyUserSubscriptionStatusIfNoWorkingReplacement(
+          subscriptionRecord.user.id,
+          'past_due'
+        );
+
+        if (applied) {
+          console.log(`User ${subscriptionRecord.user.id} entered grace period until ${gracePeriodEnd.toISOString()}`);
+        }
+
         // TODO: Send notification to user about payment failure
         // This could be an email notification or in-app alert
       }
@@ -927,15 +974,15 @@ export class StripeService {
       });
 
       if (subscriptionRecord?.user) {
-        await prisma.user.update({
-          where: { id: subscriptionRecord.user.id },
-          data: {
-            subscriptionStatus: 'incomplete',
-          }
-        });
+        const { applied } = await this.applyUserSubscriptionStatusIfNoWorkingReplacement(
+          subscriptionRecord.user.id,
+          'incomplete'
+        );
 
-        console.log(`User ${subscriptionRecord.user.id} requires payment action`);
-        
+        if (applied) {
+          console.log(`User ${subscriptionRecord.user.id} requires payment action`);
+        }
+
         // TODO: Send notification to user about required payment action
         // This could be an email notification or in-app alert
       }

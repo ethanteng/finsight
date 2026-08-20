@@ -503,11 +503,13 @@ describe('StripeService', () => {
     it('should handle subscription deleted event', async () => {
       const mockSubscription = {
         id: 'sub_123',
-        user: { id: 'user_123' }
+        tier: 'premium',
+        user: { id: 'user_123', email: 'user@example.com', tier: 'premium' }
       };
       
       mockPrisma.subscription.findUnique.mockResolvedValue(mockSubscription);
       mockPrisma.subscription.update.mockResolvedValue({ id: 'sub_123' });
+      mockPrisma.subscription.findFirst.mockResolvedValue(null);
       mockPrisma.user.update.mockResolvedValue({ id: 'user_123' });
 
       const eventData = {
@@ -528,6 +530,44 @@ describe('StripeService', () => {
           subscriptionStatus: 'canceled'
         }
       });
+    });
+
+    it('should not lock out a resubscribed user when an old subscription deleted event arrives', async () => {
+      const mockSubscription = {
+        id: 'sub_old',
+        tier: 'premium',
+        user: { id: 'user_123', email: 'returning@example.com', tier: 'premium' }
+      };
+
+      mockPrisma.subscription.findUnique.mockResolvedValue(mockSubscription);
+      mockPrisma.subscription.update.mockResolvedValue({ id: 'sub_old' });
+      // Replacement checkout already created a working subscription
+      mockPrisma.subscription.findFirst.mockResolvedValue({
+        id: 'sub_new',
+        stripeSubscriptionId: 'sub_new_456',
+        status: 'trialing',
+        tier: 'premium',
+      });
+      mockPrisma.user.update.mockResolvedValue({ id: 'user_123' });
+
+      await stripeService.processWebhookEvent('customer.subscription.deleted', {
+        object: { id: 'sub_old_123' }
+      });
+
+      expect(mockPrisma.subscription.update).toHaveBeenCalledWith({
+        where: { stripeSubscriptionId: 'sub_old_123' },
+        data: { status: 'canceled' }
+      });
+      // Account stays on the replacement subscription, not the stale cancel
+      expect(mockPrisma.user.update).toHaveBeenCalledWith({
+        where: { id: 'user_123' },
+        data: {
+          subscriptionStatus: 'trialing',
+          tier: 'premium',
+        }
+      });
+      const { sendCancellationEmail } = require('../../services/stripe-email');
+      expect(sendCancellationEmail).not.toHaveBeenCalled();
     });
   });
 
