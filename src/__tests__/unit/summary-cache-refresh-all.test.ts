@@ -6,7 +6,7 @@ jest.mock('../../prisma-client', () => ({
   getPrismaClient: () => ({ user: { findMany } }),
 }));
 
-import { SummaryCacheService } from '../../services/summary-cache-service';
+import { SummaryCacheService, refreshEligibleUserWhere } from '../../services/summary-cache-service';
 
 describe('SummaryCacheService.refreshAllUsers', () => {
   let computeForUser: jest.SpiedFunction<typeof SummaryCacheService.computeForUser>;
@@ -48,6 +48,41 @@ describe('SummaryCacheService.refreshAllUsers', () => {
     });
   });
 
+  // /health/cron counts frozen snapshots using this same predicate. If the two
+  // diverge, that count starts including users no scheduled run rebuilds -- a
+  // login-only user's snapshot is never refreshed -- and can no longer fall
+  // back to zero.
+  it('selects using the shared refresh-eligibility predicate', async () => {
+    await SummaryCacheService.refreshAllUsers();
+
+    expect(findMany).toHaveBeenCalledWith({
+      where: refreshEligibleUserWhere(),
+      select: { id: true },
+    });
+  });
+
+  it('returns a fresh predicate object per call so callers cannot mutate a shared one', () => {
+    const first = refreshEligibleUserWhere();
+    const second = refreshEligibleUserWhere();
+
+    expect(first).not.toBe(second);
+    expect(first).toEqual(second);
+  });
+
+  // Snapshot existence alone must never make a user eligible: recomputeIfStale
+  // writes one on every login, so gating on it would pull in users with nothing
+  // connected. Only a snapshot carrying holdings or a home value counts.
+  it('does not treat a bare snapshot as evidence of a refreshable source', () => {
+    const snapshotClause = refreshEligibleUserWhere().OR.find(
+      (clause: any) => clause.financialSummarySnapshot
+    ) as any;
+
+    expect(snapshotClause.financialSummarySnapshot.is.OR).toEqual([
+      { investmentPortfolio: { path: ['holdingCount'], gt: 0 } },
+      { financialOverview: { path: ['homeValue'], gt: 0 } },
+    ]);
+  });
+
   it('proves a SnapTrade connection with data this cron does not itself write', async () => {
     await SummaryCacheService.refreshAllUsers();
 
@@ -80,7 +115,9 @@ describe('SummaryCacheService.refreshAllUsers', () => {
       success: true,
       usersProcessed: 3,
       usersFailed: 0,
+      usersRetained: 0,
       processedUserIds: ['snaptrade-holdings-user', 'manual-only-user', 'home-only-user'],
+      retainedUserIds: [],
       errors: [],
     });
     expect(computeForUser).toHaveBeenCalledWith('snaptrade-holdings-user', { categorize: true });
@@ -97,10 +134,45 @@ describe('SummaryCacheService.refreshAllUsers', () => {
       success: false,
       usersProcessed: 1,
       usersFailed: 1,
+      usersRetained: 0,
       processedUserIds: ['b'],
+      retainedUserIds: [],
       errors: [{ userId: 'a', error: 'provider down' }],
     });
     expect(computeForUser).toHaveBeenCalledTimes(2);
     consoleError.mockRestore();
+  });
+
+  // A retained user is processed successfully and leaves the run green, so
+  // usersProcessed alone reports a refresh that never touched the stored
+  // revision. Reporting retention separately is the only way a reader of the
+  // cron output can tell a frozen snapshot from a refreshed one.
+  it('reports users whose snapshot was retained rather than rewritten', async () => {
+    findMany.mockResolvedValue([{ id: 'refreshed' }, { id: 'frozen' }]);
+    computeForUser.mockResolvedValueOnce({} as any);
+    computeForUser.mockResolvedValueOnce({ retainedPriorRevision: true } as any);
+
+    await expect(SummaryCacheService.refreshAllUsers()).resolves.toEqual({
+      success: true,
+      usersProcessed: 2,
+      usersFailed: 0,
+      usersRetained: 1,
+      processedUserIds: ['refreshed', 'frozen'],
+      retainedUserIds: ['frozen'],
+      errors: [],
+    });
+  });
+
+  it('counts a retained user as processed, not failed', async () => {
+    findMany.mockResolvedValue([{ id: 'frozen' }]);
+    computeForUser.mockResolvedValue({ retainedPriorRevision: true } as any);
+
+    const result = await SummaryCacheService.refreshAllUsers();
+
+    // Retention is a protective success: it must not turn the cron red, or a
+    // provider that stays partial for days leaves the job permanently failing.
+    expect(result.success).toBe(true);
+    expect(result.usersFailed).toBe(0);
+    expect(result.usersRetained).toBe(1);
   });
 });

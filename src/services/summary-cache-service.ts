@@ -21,10 +21,137 @@ import {
 // connection needing user action cannot freeze the snapshot indefinitely.
 const RETAINED_SNAPSHOT_MAX_AGE_MS = 48 * 60 * 60 * 1000;
 
+/** Canonical id for an account in a snapshot's `accounts` array. */
+function snapshotAccountId(account: unknown): string | null {
+  if (!account || typeof account !== 'object') return null;
+  const record = account as Record<string, unknown>;
+  const id = record.account_id ?? record.id;
+  return typeof id === 'string' && id.length > 0 ? id : null;
+}
+
+/**
+ * Accounts the previous revision had that this one does not.
+ *
+ * A snapshot can be 'partial' while still describing every account -- an
+ * erroring Plaid token keeps yielding its last known balances through
+ * financial-source-persistence, and an advisory about a connection's health
+ * costs no data at all. Account loss is one form of coverage regression;
+ * holdings loss is checked separately.
+ *
+ * Returns an empty list when the previous revision recorded no accounts, so a
+ * first snapshot or an older revision without the field is never read as a
+ * regression.
+ */
+function accountIdsMissingFrom(previous: unknown, freshAccounts: unknown): string[] {
+  const previousAccounts = (previous as { accounts?: unknown })?.accounts;
+  if (!Array.isArray(previousAccounts) || previousAccounts.length === 0) return [];
+  const fresh = new Set(
+    (Array.isArray(freshAccounts) ? freshAccounts : [])
+      .map(snapshotAccountId)
+      .filter((id): id is string => id !== null)
+  );
+  const missing = new Set<string>();
+  for (const account of previousAccounts) {
+    const id = snapshotAccountId(account);
+    if (id && !fresh.has(id)) missing.add(id);
+  }
+  return Array.from(missing);
+}
+
+/** The account a holding belongs to, when it names one. */
+function holdingAccountId(holding: unknown): string | null {
+  if (!holding || typeof holding !== 'object') return null;
+  const accountId = (holding as Record<string, unknown>).account_id;
+  return typeof accountId === 'string' && accountId.length > 0 ? accountId : null;
+}
+
+/**
+ * Accounts that held positions in the previous revision and hold none now,
+ * while the account itself is still present.
+ *
+ * Account coverage alone is not enough to protect a portfolio: a provider can
+ * return every account, and even last known balances, while its holdings fetch
+ * fails -- publishing that would wipe allocation detail without dropping a
+ * single account.
+ *
+ * Deliberately "emptied", not "any holding missing". A user who sells one
+ * position out of several has legitimately lost a holding, and treating that as
+ * a regression would freeze their snapshot for the rest of the retention window
+ * over a trade they made on purpose. A holdings fetch that fails takes the whole
+ * account's positions with it, so emptiness is the signature worth protecting
+ * against. Selling the only position in an account during an already-partial
+ * refresh is the one case still misread, and it costs a delayed update rather
+ * than a wrong figure.
+ *
+ * An account missing entirely is not reported here -- accountIdsMissingFrom
+ * already covers it, and counting it twice would say nothing new.
+ */
+function accountsWithEmptiedHoldings(
+  previous: unknown,
+  freshHoldings: unknown,
+  freshAccounts: unknown
+): string[] {
+  const previousHoldings = (previous as { holdings?: unknown })?.holdings;
+  if (!Array.isArray(previousHoldings) || previousHoldings.length === 0) return [];
+
+  const accountsStillPresent = new Set(
+    (Array.isArray(freshAccounts) ? freshAccounts : [])
+      .map(snapshotAccountId)
+      .filter((id): id is string => id !== null)
+  );
+  const accountsHoldingSomethingNow = new Set(
+    (Array.isArray(freshHoldings) ? freshHoldings : [])
+      .map(holdingAccountId)
+      .filter((id): id is string => id !== null)
+  );
+
+  const emptied = new Set<string>();
+  for (const holding of previousHoldings) {
+    const accountId = holdingAccountId(holding);
+    if (!accountId) continue;
+    if (!accountsStillPresent.has(accountId)) continue;
+    if (accountsHoldingSomethingNow.has(accountId)) continue;
+    emptied.add(accountId);
+  }
+  return Array.from(emptied);
+}
+
 export interface SummaryComputeOptions {
   categorize?: boolean;
   history?: HistoryWriteIntent;
   forceBalanceRefresh?: boolean;
+}
+
+/**
+ * The users a scheduled refresh is expected to rebuild, as a Prisma `where`.
+ *
+ * Exported so health reporting can ask exactly the question the cron asks. A
+ * frozen-snapshot count taken over every snapshot instead would permanently
+ * include the users this predicate deliberately excludes: `recomputeIfStale`
+ * writes a snapshot on every login, so someone who signed up and never linked a
+ * source has one that nothing will ever rebuild. Counting those never returns
+ * to zero, and a signal that cannot reach zero cannot indicate a problem.
+ *
+ * Returns a fresh object per call so no caller can mutate a shared literal.
+ */
+export function refreshEligibleUserWhere() {
+  return {
+    OR: [
+      { accessTokens: { some: { isActive: true } } },
+      { snapTradeUser: { is: { activities: { some: {} } } } },
+      { manualAccounts: { some: {} } },
+      {
+        financialSummarySnapshot: {
+          is: {
+            OR: [
+              { investmentPortfolio: { path: ['holdingCount'], gt: 0 } },
+              { financialOverview: { path: ['homeValue'], gt: 0 } },
+            ],
+          },
+        },
+      },
+    ],
+  };
 }
 
 export class SummaryCacheService {
@@ -150,7 +277,47 @@ export class SummaryCacheService {
         && previousAgeMs !== null
         && previousAgeMs <= RETAINED_SNAPSHOT_MAX_AGE_MS;
 
-      if (retainable) {
+      // Retention exists to stop a provider outage from blanking assets off the
+      // page. It is only the right trade when this revision would actually lose
+      // ground -- accounts or holdings the previous revision had. That is not
+      // the common case: financial-source-persistence keeps yielding last known
+      // balances (and reusable current holdings) for an erroring token, so a
+      // partial run usually still covers every account and position, just with
+      // something unverified attached.
+      //
+      // When coverage holds, writing is strictly better than freezing. The user
+      // sees today's figures instead of a revision that stops moving, and the
+      // provider errors ride along in quality.errors and the source
+      // observations, which invariant 5 of the financial truth contract
+      // requires be preserved through a successful write either way. Freezing
+      // in that situation discards a completely successful refresh of every
+      // healthy source, which is what held real users on a stale revision for
+      // days while every one of their connections was syncing normally.
+      const droppedAccountIds = accountIdsMissingFrom(previous, payload.accounts);
+      const emptiedHoldingAccountIds = accountsWithEmptiedHoldings(
+        previous,
+        payload.holdings,
+        payload.accounts
+      );
+      const lostCoverage = droppedAccountIds.length > 0 || emptiedHoldingAccountIds.length > 0;
+      if (retainable && !lostCoverage) {
+        console.log(
+          `SummaryCacheService: provider data for user ${userId} is ${canonical.status} but still covers ` +
+          `every account and holding in the prior revision; persisting it rather than retaining`
+        );
+      }
+      if (retainable && lostCoverage) {
+        if (droppedAccountIds.length > 0) {
+          console.warn(
+            `SummaryCacheService: ${droppedAccountIds.length} account(s) missing from this revision for user ${userId}`
+          );
+        }
+        if (emptiedHoldingAccountIds.length > 0) {
+          console.warn(
+            `SummaryCacheService: ${emptiedHoldingAccountIds.length} account(s) lost every holding in this revision ` +
+            `for user ${userId}; treating as a failed holdings fetch`
+          );
+        }
         console.warn(
           `SummaryCacheService: retaining ${previous!.status} snapshot for user ${userId}; ` +
           `refusing to replace with ${canonical.status} provider data`
@@ -213,35 +380,28 @@ export class SummaryCacheService {
     // covers home data, which lives in the (often encrypted) profile text and cannot be
     // filtered in SQL. Snapshot existence alone means nothing -- every login writes one.
     const userIds = await prisma.user.findMany({
-      where: {
-        OR: [
-          { accessTokens: { some: { isActive: true } } },
-          { snapTradeUser: { is: { activities: { some: {} } } } },
-          { manualAccounts: { some: {} } },
-          {
-            financialSummarySnapshot: {
-              is: {
-                OR: [
-                  { investmentPortfolio: { path: ['holdingCount'], gt: 0 } },
-                  { financialOverview: { path: ['homeValue'], gt: 0 } },
-                ],
-              },
-            },
-          },
-        ],
-      },
+      where: refreshEligibleUserWhere(),
       select: { id: true },
     });
 
     // Report which users were covered so callers that refreshed other inputs
     // can recompute anyone this pass did not reach.
     const processedUserIds: string[] = [];
+    // Users whose snapshot was deliberately left untouched by the retention
+    // guard in computeForUser. They are processed successfully -- retention is
+    // the intended outcome -- but their stored revision did not move, so a
+    // caller reading usersProcessed alone would report a refresh that did not
+    // happen. Tracked separately so the run can say so out loud.
+    const retainedUserIds: string[] = [];
     const errors: Array<{ userId: string; error: string }> = [];
     for (const u of userIds) {
       try {
         // Cron: run full categorization for richer GPT context
-        await this.computeForUser(u.id, { categorize: true });
+        const result = await this.computeForUser(u.id, { categorize: true });
         processedUserIds.push(u.id);
+        if ((result as any)?.retainedPriorRevision) {
+          retainedUserIds.push(u.id);
+        }
       } catch (err) {
         console.error(`SummaryCacheService: Failed to refresh snapshot for user ${u.id}`, err);
         errors.push({
@@ -254,7 +414,9 @@ export class SummaryCacheService {
       success: errors.length === 0,
       usersProcessed: processedUserIds.length,
       usersFailed: errors.length,
+      usersRetained: retainedUserIds.length,
       processedUserIds,
+      retainedUserIds,
       errors,
     };
   }

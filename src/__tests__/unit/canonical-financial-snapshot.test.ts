@@ -643,3 +643,70 @@ describe('canonical financial snapshot', () => {
     );
   });
 });
+
+describe('provider error severity', () => {
+  function snapshotWithSnapTradeError(severity?: 'data-missing' | 'advisory') {
+    return buildCanonicalSnapshotCore(
+      {
+        accounts: [
+          {
+            account_id: 'brokerage',
+            source: 'snaptrade',
+            type: 'investment',
+            subtype: 'brokerage',
+            snapshotTimestamp: '2026-08-14T11:00:00.000Z',
+            balance: { current: 50_000, iso_currency_code: 'USD' },
+          },
+        ],
+        metadata: {
+          // Mirrors what FinancialDataService now produces: an advisory does not
+          // cost data, so it does not make the fetch partial.
+          partialData: severity !== 'advisory',
+          errors: {
+            plaid: [],
+            snaptrade: [{
+              accountId: 'brokerage',
+              error: 'SnapTrade connection health could not be verified',
+              ...(severity ? { severity } : {}),
+            }],
+            homeValue: null,
+          },
+        },
+      } as any,
+      { computedAt, reportingCurrency: 'USD' }
+    );
+  }
+
+  // The account's balance is present and correct; only the connection behind it
+  // could not be vouched for. Calling that 'partial' told every consumer the
+  // figures were incomplete when they were not, and froze the stored revision.
+  it('does not make a snapshot partial for an advisory error', () => {
+    const snapshot = snapshotWithSnapTradeError('advisory');
+
+    expect(snapshot.status).not.toBe('partial');
+    expect(snapshot.quality.requiredUnavailableSourceIds).toEqual([]);
+  });
+
+  it('still reports the advisory so the user is told', () => {
+    const snapshot = snapshotWithSnapTradeError('advisory');
+
+    expect(snapshot.quality.unavailableSourceIds).toContain('snaptrade:advisory:brokerage');
+    expect(JSON.stringify(snapshot.quality.errors)).toContain('could not be verified');
+  });
+
+  it('still makes a snapshot partial when data is genuinely missing', () => {
+    const snapshot = snapshotWithSnapTradeError('data-missing');
+
+    expect(snapshot.status).toBe('partial');
+    expect(snapshot.quality.requiredUnavailableSourceIds).toContain('snaptrade:error:brokerage');
+  });
+
+  // Every provider error predating the severity field must keep its original
+  // weight, or this change would quietly downgrade real outages.
+  it('treats an untagged error as data-missing', () => {
+    const snapshot = snapshotWithSnapTradeError();
+
+    expect(snapshot.status).toBe('partial');
+    expect(snapshot.quality.requiredUnavailableSourceIds).toContain('snaptrade:error:brokerage');
+  });
+});

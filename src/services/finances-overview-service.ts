@@ -90,7 +90,12 @@ export interface FinancesOverviewInput {
    * live rather than from the snapshot: the snapshot records what the providers
    * returned, not the health of the link to them.
    */
-  reauthRequiredConnections?: ReadonlyArray<{ id: string; institutionName: string | null }>;
+  reauthRequiredConnections?: ReadonlyArray<{
+    id: string;
+    institutionName: string | null;
+    /** Which integration owns the repair flow. Absent on older callers means Plaid. */
+    provider?: 'plaid' | 'snaptrade';
+  }>;
 }
 
 export interface FinancesAccountGroup {

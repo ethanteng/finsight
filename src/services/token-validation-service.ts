@@ -59,6 +59,18 @@ export interface SnapTradeTokenHealth {
   status: TokenStatus;
   error?: string;
   lastChecked: Date;
+  /**
+   * Brokerage authorizations to repair when status is LOGIN_REQUIRED. Passing
+   * one to the SnapTrade portal fixes that existing connection; without it the
+   * portal adds a second connection to the same brokerage and leaves the broken
+   * one in place.
+   *
+   * A list because a user can have several brokerages disabled at once, and one
+   * trip through the portal repairs exactly one authorization. The caller
+   * repairs the first; the next status read returns a shorter list, so
+   * repeating the action walks through them without needing its own UI.
+   */
+  reconnectAuthorizationIds?: string[];
 }
 
 export function plaidTokenHealthFromError(
@@ -149,6 +161,39 @@ export class TokenValidationService {
       const result = await snapTradeService.getUserAccounts(userId, snapTradeUser.userSecret);
 
       if (result.success) {
+        // getUserAccounts succeeding only means SnapTrade answered for this
+        // user. It computes per-connection health on the way through, and
+        // reading only `success` threw that away -- a brokerage authorization
+        // marked disabled still lists its accounts and their last cached
+        // balances, so the connection reported healthy while its figures
+        // quietly aged.
+        //
+        // Only `disabled` is surfaced. It is the one state with a repair path
+        // the product can offer (reconnect through the SnapTrade portal), and
+        // this codebase's rule is that a connection is only flagged once a user
+        // can act on it. `connectionStatusUnavailable` means health is unknown,
+        // often a transient lookup failure, with nothing for the user to do.
+        const accounts: any[] = Array.isArray(result.data?.accounts) ? result.data.accounts : [];
+        const disabled = accounts.filter(account => account?.connectionDisabled === true);
+        if (disabled.length > 0) {
+          const institutions = Array.from(
+            new Set(disabled.map(account => account.institution).filter(Boolean))
+          );
+          const subject = institutions.length > 0 ? institutions.join(', ') : 'brokerage connection';
+          const reconnectAuthorizationIds = Array.from(new Set(
+            disabled
+              .map(account => account.brokerageAuthorizationId)
+              .filter((id: unknown): id is string => typeof id === 'string' && id.length > 0)
+          ));
+          return {
+            userId,
+            status: TokenStatus.LOGIN_REQUIRED,
+            error: `SnapTrade connection disabled for ${subject}. Reconnect to resume updates.`,
+            lastChecked: new Date(),
+            ...(reconnectAuthorizationIds.length > 0 ? { reconnectAuthorizationIds } : {}),
+          };
+        }
+
         return {
           userId,
           status: TokenStatus.VALID,

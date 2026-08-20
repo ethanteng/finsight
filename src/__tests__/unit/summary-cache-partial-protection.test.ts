@@ -56,10 +56,14 @@ describe('SummaryCacheService partial-provider protection', () => {
   });
 
   it('retains a usable prior snapshot instead of publishing disappearing assets', async () => {
+    // The brokerage account is in the prior revision and absent from this
+    // partial fetch: publishing would take it off the page and out of net
+    // worth. Coverage loss is what retention is for.
     getLatestFinancialSnapshot.mockResolvedValue({
       status: 'current',
       computedAt: new Date(Date.now() - 2 * 60 * 60 * 1000),
       financialOverview: { netWorth: 1 },
+      accounts: [{ account_id: 'checking-1' }, { account_id: 'brokerage-1' }],
     });
 
     await expect(SummaryCacheService.computeForUser('user-1')).resolves.toMatchObject({
@@ -78,6 +82,7 @@ describe('SummaryCacheService partial-provider protection', () => {
       status: 'stale',
       computedAt: new Date(Date.now() - 2 * 60 * 60 * 1000),
       financialOverview: { netWorth: 1 },
+      accounts: [{ account_id: 'checking-1' }, { account_id: 'brokerage-1' }],
     });
 
     await expect(SummaryCacheService.computeForUser('user-1')).resolves.toMatchObject({
@@ -131,5 +136,111 @@ describe('SummaryCacheService partial-provider protection', () => {
     });
 
     expect(upsertFinancialSnapshot).toHaveBeenCalledTimes(1);
+  });
+
+  // Retention costs the user a whole refresh cycle, so it has to be earned by
+  // an actual regression. A partial run that still describes every account --
+  // the usual shape, because an erroring token keeps yielding last known
+  // balances -- is strictly newer than the revision it replaces.
+  it('publishes a partial revision that still covers every prior account', async () => {
+    getLatestFinancialSnapshot.mockResolvedValue({
+      status: 'current',
+      computedAt: new Date(Date.now() - 2 * 60 * 60 * 1000),
+      financialOverview: { netWorth: 1 },
+      accounts: [{ account_id: 'checking-1' }],
+    });
+
+    const result = await SummaryCacheService.computeForUser('user-1');
+
+    expect(upsertFinancialSnapshot).toHaveBeenCalledTimes(1);
+    expect((result as Record<string, unknown>).retainedPriorRevision).toBeUndefined();
+  });
+
+  // Accounts alone are not enough: a holdings fetch can fail while every
+  // account row still arrives. Publishing would blank the portfolio.
+  it('retains when prior holdings disappear from an otherwise complete account list', async () => {
+    getLatestFinancialSnapshot.mockResolvedValue({
+      status: 'current',
+      computedAt: new Date(Date.now() - 2 * 60 * 60 * 1000),
+      financialOverview: { netWorth: 1 },
+      accounts: [{ account_id: 'checking-1' }],
+      holdings: [{
+        id: 'checking-1_sec-1_1_100',
+        account_id: 'checking-1',
+        security_id: 'sec-1',
+        institution_value: 100,
+      }],
+    });
+
+    await expect(SummaryCacheService.computeForUser('user-1')).resolves.toMatchObject({
+      status: 'current',
+      retainedPriorRevision: true,
+    });
+
+    expect(upsertFinancialSnapshot).not.toHaveBeenCalled();
+  });
+
+  // A sale is not a fetch failure. Freezing the snapshot because a user closed
+  // one position out of several would hold every other figure hostage for the
+  // rest of the retention window over a trade they made on purpose.
+  it('publishes when a position was sold but the account still holds others', async () => {
+    ingestFinancialData.mockResolvedValue({
+      ...partialProviderData(),
+      investments: {
+        holdings: [{ account_id: 'checking-1', security_id: 'sec-1' }],
+        securities: [],
+        transactions: [],
+      },
+    });
+    getLatestFinancialSnapshot.mockResolvedValue({
+      status: 'current',
+      computedAt: new Date(Date.now() - 2 * 60 * 60 * 1000),
+      financialOverview: { netWorth: 1 },
+      accounts: [{ account_id: 'checking-1' }],
+      holdings: [
+        { account_id: 'checking-1', security_id: 'sec-1' },
+        { account_id: 'checking-1', security_id: 'sec-2' },
+      ],
+    });
+
+    const result = await SummaryCacheService.computeForUser('user-1');
+
+    expect(upsertFinancialSnapshot).toHaveBeenCalledTimes(1);
+    expect((result as Record<string, unknown>).retainedPriorRevision).toBeUndefined();
+  });
+
+  // An account that vanishes entirely is already a regression on account
+  // coverage; the holdings check must not need to fire for it as well.
+  it('retains when the account holding a position disappears outright', async () => {
+    getLatestFinancialSnapshot.mockResolvedValue({
+      status: 'current',
+      computedAt: new Date(Date.now() - 2 * 60 * 60 * 1000),
+      financialOverview: { netWorth: 1 },
+      accounts: [{ account_id: 'checking-1' }, { account_id: 'brokerage-1' }],
+      holdings: [{ account_id: 'brokerage-1', security_id: 'sec-1' }],
+    });
+
+    await expect(SummaryCacheService.computeForUser('user-1')).resolves.toMatchObject({
+      retainedPriorRevision: true,
+    });
+
+    expect(upsertFinancialSnapshot).not.toHaveBeenCalled();
+  });
+
+  it('keeps the provider error attached to a published partial revision', async () => {
+    // Invariant 5 of the financial truth contract: a successful cache write
+    // never erases provider errors. Publishing instead of retaining must not
+    // quietly drop the reason the revision was partial.
+    getLatestFinancialSnapshot.mockResolvedValue({
+      status: 'current',
+      computedAt: new Date(Date.now() - 2 * 60 * 60 * 1000),
+      accounts: [{ account_id: 'checking-1' }],
+    });
+
+    await SummaryCacheService.computeForUser('user-1');
+
+    const written = upsertFinancialSnapshot.mock.calls[0][1] as any;
+    expect(written.status).toBe('partial');
+    expect(JSON.stringify(written.sourceObservations)).toContain('Plaid unavailable');
   });
 });

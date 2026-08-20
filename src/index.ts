@@ -162,6 +162,41 @@ app.get('/health/cron', async (req: Request, res: Response) => {
     console.warn('Unable to read scheduled-job lease health:', error);
   }
 
+  // A snapshot older than a full refresh cycle means the daily job ran without
+  // moving that user's revision -- the retention guard in SummaryCacheService
+  // returns the prior snapshot on partial provider data, and it does so as a
+  // *success*, so lease status and exit code both stay green while the user
+  // sees week-old figures. Counted here because nothing else surfaces it.
+  //
+  // Deliberately a count and not a list: this endpoint is unauthenticated.
+  //
+  // Scoped to refresh-eligible users, not to every snapshot. recomputeIfStale
+  // writes a snapshot on login, so a user who never linked a source has one
+  // that no scheduled run will ever rebuild; counting those would hold this
+  // number permanently above zero and stop it meaning anything. Sharing the
+  // predicate with refreshAllUsers keeps the two from drifting apart.
+  const STALE_SNAPSHOT_THRESHOLD_MS = 26 * 60 * 60 * 1000;
+  let frozenSnapshotCount: number | null = null;
+  let frozenSnapshotError: string | undefined;
+  try {
+    const { refreshEligibleUserWhere } = await import('./services/summary-cache-service');
+    frozenSnapshotCount = await getPrismaClient().user.count({
+      where: {
+        AND: [
+          refreshEligibleUserWhere(),
+          {
+            financialSummarySnapshot: {
+              is: { computedAt: { lt: new Date(Date.now() - STALE_SNAPSHOT_THRESHOLD_MS) } },
+            },
+          },
+        ],
+      },
+    });
+  } catch (error) {
+    frozenSnapshotError = error instanceof Error ? error.message : String(error);
+    console.warn('Unable to count frozen financial snapshots:', error);
+  }
+
   const now = new Date();
   const leaseStatus = (name: string) => {
     const lease = leaseByName.get(name);
@@ -181,6 +216,15 @@ app.get('/health/cron', async (req: Request, res: Response) => {
         execution: 'external',
         command: 'node scripts/refresh-transactions.js',
         ...leaseStatus('financial-data-refresh'),
+        // Snapshots a scheduled run was expected to rebuild and did not. Read it
+        // against lastCompletedAt in this same object, which separates the two
+        // causes: a recent lastCompletedAt with a non-zero count is the retention
+        // guard holding users on a prior revision, whereas a lastCompletedAt older
+        // than the threshold just means the run never happened. Non-zero alone
+        // does not distinguish them.
+        frozenSnapshots: frozenSnapshotCount,
+        frozenSnapshotThresholdHours: STALE_SNAPSHOT_THRESHOLD_MS / (60 * 60 * 1000),
+        ...(frozenSnapshotError ? { frozenSnapshotError } : {}),
       },
       balanceDataRefresh: {
         name: 'balance-data-refresh',
@@ -2273,6 +2317,11 @@ app.get('/profile/snaptrade-status', requireAuth, async (req: Request, res: Resp
       status: tokenHealth.status,
       error: tokenHealth.error,
       lastChecked: tokenHealth.lastChecked,
+      // Present when connections are disabled, so the reconnect affordance can
+      // repair those authorizations instead of starting duplicate connections.
+      // One portal trip repairs one authorization; the list shortens as each is
+      // fixed, so the caller can repeat the action until it is empty.
+      reconnectAuthorizationIds: tokenHealth.reconnectAuthorizationIds,
       snapTradeUserId: snapTradeUser.snapTradeUserId,
       createdAt: snapTradeUser.createdAt,
       updatedAt: snapTradeUser.updatedAt
@@ -2944,12 +2993,24 @@ app.post('/admin/refresh-user-snapshot/:userId', adminAuth, async (req: Request,
     const { FinancialRevisionService } = await import('./services/financial-revision-service');
     const payload = await FinancialRevisionService.recompute(userId, { categorize: false });
 
+    const retainedPriorRevision = Boolean((payload as any)?.retainedPriorRevision);
+    if (retainedPriorRevision) {
+      console.warn(
+        `Admin: snapshot refresh for user ${userId} retained the prior revision; ` +
+        'a connected provider returned partial data, so nothing was rewritten'
+      );
+    }
+
     res.json({
       success: true,
       userId: user.id,
       email: user.email,
       computedAt: payload?.computedAt,
       accountCount: Array.isArray(payload?.accounts) ? payload.accounts.length : 0,
+      // Same contract as the user-facing refresh above. Without it an operator
+      // forcing a refresh to clear a stale snapshot gets success and an
+      // unchanged computedAt, with nothing saying the write was skipped.
+      retainedPriorRevision,
     });
   } catch (error) {
     console.error('Admin: Failed to refresh user financial snapshot:', error);

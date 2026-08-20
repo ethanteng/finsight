@@ -99,6 +99,8 @@ export default function AdminPage() {
   const [snapshotRefreshNotice, setSnapshotRefreshNotice] = useState<{
     userId: string;
     ok: boolean;
+    /** True when the API kept the prior revision instead of rewriting the cache. */
+    retained?: boolean;
     message: string;
   } | null>(null);
 
@@ -579,11 +581,24 @@ export default function AdminPage() {
       const data = await response.json().catch(() => ({}));
       if (response.ok) {
         const n = typeof data.accountCount === 'number' ? data.accountCount : '—';
-        setSnapshotRefreshNotice({
-          userId,
-          ok: true,
-          message: `Snapshot rebuilt (${n} accounts in cache).`,
-        });
+        // Backend can hit the same retention guard as a scheduled refresh and
+        // rewrite nothing. Saying "rebuilt" in that case is the same invisibility
+        // this observability work removes elsewhere.
+        if (data.retainedPriorRevision) {
+          setSnapshotRefreshNotice({
+            userId,
+            ok: true,
+            retained: true,
+            message:
+              'Prior revision retained — a connected provider returned partial data, so the cache was not rewritten.',
+          });
+        } else {
+          setSnapshotRefreshNotice({
+            userId,
+            ok: true,
+            message: `Snapshot rebuilt (${n} accounts in cache).`,
+          });
+        }
       } else if (response.status === 401 || response.status === 403) {
         setError('Authentication required for admin access');
       } else {
@@ -1179,7 +1194,11 @@ export default function AdminPage() {
                       {snapshotRefreshNotice?.userId === user.id && (
                         <div
                           className={`text-xs max-w-[220px] text-right ${
-                            snapshotRefreshNotice.ok ? 'text-green-400' : 'text-red-400'
+                            !snapshotRefreshNotice.ok
+                              ? 'text-red-400'
+                              : snapshotRefreshNotice.retained
+                                ? 'text-amber-300'
+                                : 'text-green-400'
                           }`}
                         >
                           {snapshotRefreshNotice.message}

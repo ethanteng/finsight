@@ -323,14 +323,27 @@ export class SnapTradeService {
     }
   }
 
-  // Get login redirect URI
-  async getLoginRedirect(userId: string, userSecret: string): Promise<{ success: boolean; data?: any; error?: string }> {
+  /**
+   * Get login redirect URI.
+   *
+   * `reconnectAuthorizationId` repairs an existing brokerage authorization
+   * instead of adding another one. Without it the portal opens the ordinary
+   * connect flow, so a user sent here to fix a disabled connection ends up with
+   * two connections to the same brokerage -- the original still disabled, and a
+   * new one whose accounts duplicate its holdings.
+   */
+  async getLoginRedirect(
+    userId: string,
+    userSecret: string,
+    reconnectAuthorizationId?: string
+  ): Promise<{ success: boolean; data?: any; error?: string }> {
     try {
-      console.log('🔍 Getting login redirect for user:', userId);
-      
+      console.log('🔍 Getting login redirect for user:', userId, reconnectAuthorizationId ? '(reconnect)' : '(new connection)');
+
       const loginData = await this.client.authentication.loginSnapTradeUser({
-        userId, 
-        userSecret 
+        userId,
+        userSecret,
+        ...(reconnectAuthorizationId ? { reconnect: reconnectAuthorizationId } : {}),
       });
       
       if (!('redirectURI' in loginData.data)) {

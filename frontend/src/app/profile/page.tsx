@@ -164,6 +164,8 @@ interface SnapTradeStatus {
   snapTradeUserId?: string;
   createdAt?: string;
   updatedAt?: string;
+  /** Brokerage connections that are disabled and can be repaired in place. */
+  reconnectAuthorizationIds?: string[];
 }
 
 export default function ProfilePage() {
@@ -1370,9 +1372,20 @@ export default function ProfilePage() {
             <div className="mb-6">
               <SnapTradeButton
                 snapTradeStatus={snapTradeStatus}
+                // Repairs a disabled authorization rather than adding a second
+                // connection to the same brokerage. Undefined when nothing is
+                // broken, which leaves the ordinary connect flow untouched.
+                // One portal trip repairs one authorization, so this offers the
+                // first; refreshing status after it shortens the list and the
+                // next becomes first.
+                reconnectAuthorizationId={snapTradeStatus?.reconnectAuthorizationIds?.[0]}
                 onAccountsUpdated={() => {
-                  // Refresh investment data when SnapTrade accounts are updated
+                  // Refresh investment data when SnapTrade accounts are updated.
+                  // Also re-read token health so reconnectAuthorizationIds drops
+                  // the authorization just repaired (or advances to the next
+                  // disabled one) instead of leaving the button stuck on a stale id.
                   loadInvestmentData();
+                  void loadSnapTradeStatus();
                 }}
               />
             </div>

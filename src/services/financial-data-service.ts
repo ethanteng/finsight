@@ -162,11 +162,52 @@ export interface HomeData {
   isManualOverride: boolean;
 }
 
+/**
+ * How much a provider error costs the snapshot.
+ *
+ * 'data-missing' — something the snapshot needs did not arrive. The figures are
+ * incomplete, so the snapshot cannot claim to be a full picture.
+ *
+ * 'advisory' — the data arrived, but something about the connection behind it
+ * could not be vouched for. Worth telling the user about; not a reason to call
+ * the snapshot incomplete, and never a reason to discard a successful refresh
+ * of every other source.
+ *
+ * The distinction exists because conflating the two froze real users: a
+ * brokerage authorization SnapTrade could not confirm made an otherwise
+ * complete snapshot 'partial', which the retention guard then refused to write
+ * for up to 48 hours, discarding fresh Plaid data that had arrived perfectly.
+ */
+export type ErrorSeverity = 'data-missing' | 'advisory';
+
 export interface ErrorDetail {
   tokenId?: string;
   accountId?: string;
   error: string;
   timestamp: Date;
+  /** Defaults to 'data-missing' when absent, so an untagged error stays as strict as before. */
+  severity?: ErrorSeverity;
+}
+
+/**
+ * Whether a fetch left the picture incomplete.
+ *
+ * Only errors that cost data count. An advisory says a connection could not be
+ * vouched for, not that anything is missing, and treating it as partial is what
+ * stopped complete snapshots from being written at all -- the canonical status
+ * became 'partial' and the retention guard then refused to persist the
+ * revision. An untagged error counts as data-missing, so every provider failure
+ * written before this distinction existed keeps its original weight.
+ */
+export function isPartialData(errors: {
+  plaid: ErrorDetail[];
+  snaptrade: ErrorDetail[];
+  homeValue: unknown;
+}): boolean {
+  const costsData = (error: ErrorDetail) => (error.severity ?? 'data-missing') === 'data-missing';
+  return errors.plaid.some(costsData)
+    || errors.snaptrade.some(costsData)
+    || errors.homeValue !== null;
 }
 
 export interface UnifiedFinancialData {
@@ -900,7 +941,7 @@ export class FinancialDataService {
       } : null
     };
 
-    const partialData = errors.plaid.length > 0 || errors.snaptrade.length > 0 || errors.homeValue !== null;
+    const partialData = isPartialData(errors);
 
     const result: UnifiedFinancialData = {
       ...mergedData,
@@ -1467,9 +1508,17 @@ export class FinancialDataService {
           const fetchedAt = new Date().toISOString();
 
           if (accountsResult.data.connectionStatusError) {
+            // Logged, not just recorded: without a line naming the user, a
+            // scheduled run reports success and nothing says which account's
+            // health lookup failed. Severity is advisory — accounts arrived.
+            console.warn(
+              `⚠️ FinancialDataService: SnapTrade connection status unavailable for user ${userId}: ${accountsResult.data.connectionStatusError}`
+            );
             errors.push({
               error: `SnapTrade connection status unavailable: ${accountsResult.data.connectionStatusError}`,
               timestamp: new Date(),
+              // The accounts themselves arrived; only their health lookup did not.
+              severity: 'advisory',
             });
           }
 
@@ -1506,23 +1555,42 @@ export class FinancialDataService {
                 || account.lastSuccessfulTransactionsSync
                 || undefined,
               syncStatus: account.syncStatus,
+              // Carried into the snapshot so a reconnect prompt can repair this
+              // exact authorization rather than starting a second connection to
+              // the same brokerage. Several accounts share one authorization.
+              brokerageAuthorizationId: account.brokerageAuthorizationId,
               connectionDisabled: account.connectionDisabled,
               connectionStatusUnavailable: account.connectionStatusUnavailable,
               connectionDisabledAt: account.connectionDisabledAt || undefined,
               dataFreshnessMode: account.dataFreshnessMode,
             });
 
+            // Both branches below are advisories: holdings and activities still
+            // arrive normally, so nothing else in the run looks wrong -- these
+            // lines are the only signal that a connection needs attention.
             if (account.connectionDisabled) {
+              console.warn(
+                `⚠️ FinancialDataService: SnapTrade connection disabled for user ${userId}, account ${accountId}` +
+                `${account.connectionDisabledAt ? ` (since ${account.connectionDisabledAt})` : ''}; using last cached brokerage state`
+              );
               errors.push({
                 accountId,
                 error: 'SnapTrade connection is disabled; showing the last cached brokerage state.',
                 timestamp: new Date(),
+                // Cached state is still state. This drives the reconnect prompt
+                // rather than blanking the account out of the snapshot.
+                severity: 'advisory',
               });
             } else if (account.connectionStatusUnavailable) {
+              console.warn(
+                `⚠️ FinancialDataService: SnapTrade connection health unverifiable for user ${userId}, account ${accountId}; ` +
+                'the brokerage authorization this account references was not returned by SnapTrade'
+              );
               errors.push({
                 accountId,
                 error: 'SnapTrade connection health could not be verified; this balance may come from a disabled connection.',
                 timestamp: new Date(),
+                severity: 'advisory',
               });
             }
           }
@@ -1596,6 +1664,10 @@ export class FinancialDataService {
           if (holdingsResult.success && holdingsResult.data) {
             console.log(`📊 SnapTrade: Received ${holdingsResult.data.length} account holdings from API`);
             for (const holdingError of holdingsResult.errors || []) {
+              console.warn(
+                `⚠️ FinancialDataService: SnapTrade holdings incomplete for user ${userId}, ` +
+                `account snaptrade-${holdingError.accountId}: ${holdingError.error}`
+              );
               errors.push({
                 accountId: `snaptrade-${holdingError.accountId}`,
                 error: `SnapTrade holdings incomplete: ${holdingError.error}`,
@@ -1841,6 +1913,10 @@ export class FinancialDataService {
           if (activitiesResult.success && activitiesResult.data?.activities) {
             for (const activityError of activitiesResult.data.errors || []) {
               const rawErrorAccountId = String(activityError.accountId || 'unknown');
+              console.warn(
+                `⚠️ FinancialDataService: SnapTrade activities incomplete for user ${userId}, ` +
+                `account ${rawErrorAccountId}: ${activityError.error}`
+              );
               errors.push({
                 accountId: rawErrorAccountId.startsWith('snaptrade-')
                   ? rawErrorAccountId
