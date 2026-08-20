@@ -216,9 +216,12 @@ app.get('/health/cron', async (req: Request, res: Response) => {
         execution: 'external',
         command: 'node scripts/refresh-transactions.js',
         ...leaseStatus('financial-data-refresh'),
-        // Non-zero means the job completed but left that many snapshots
-        // untouched. A green lease with a non-zero count here is the signature
-        // of the retention guard holding users on a prior revision.
+        // Snapshots a scheduled run was expected to rebuild and did not. Read it
+        // against lastCompletedAt in this same object, which separates the two
+        // causes: a recent lastCompletedAt with a non-zero count is the retention
+        // guard holding users on a prior revision, whereas a lastCompletedAt older
+        // than the threshold just means the run never happened. Non-zero alone
+        // does not distinguish them.
         frozenSnapshots: frozenSnapshotCount,
         frozenSnapshotThresholdHours: STALE_SNAPSHOT_THRESHOLD_MS / (60 * 60 * 1000),
         ...(frozenSnapshotError ? { frozenSnapshotError } : {}),
@@ -2985,12 +2988,24 @@ app.post('/admin/refresh-user-snapshot/:userId', adminAuth, async (req: Request,
     const { FinancialRevisionService } = await import('./services/financial-revision-service');
     const payload = await FinancialRevisionService.recompute(userId, { categorize: false });
 
+    const retainedPriorRevision = Boolean((payload as any)?.retainedPriorRevision);
+    if (retainedPriorRevision) {
+      console.warn(
+        `Admin: snapshot refresh for user ${userId} retained the prior revision; ` +
+        'a connected provider returned partial data, so nothing was rewritten'
+      );
+    }
+
     res.json({
       success: true,
       userId: user.id,
       email: user.email,
       computedAt: payload?.computedAt,
       accountCount: Array.isArray(payload?.accounts) ? payload.accounts.length : 0,
+      // Same contract as the user-facing refresh above. Without it an operator
+      // forcing a refresh to clear a stale snapshot gets success and an
+      // unchanged computedAt, with nothing saying the write was skipped.
+      retainedPriorRevision,
     });
   } catch (error) {
     console.error('Admin: Failed to refresh user financial snapshot:', error);
