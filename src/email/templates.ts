@@ -72,9 +72,10 @@ function isNonPublicHost(hostname: string): boolean {
 
 /**
  * Normalizes a configured base URL, or returns null when it is unusable in an
- * email: not an absolute http(s) URL (a bare hostname or path would render as
- * a relative, unresolvable src), or pointing at a host only reachable from the
- * sending machine's network.
+ * email: not an absolute https URL (a bare hostname or path would render as a
+ * relative, unresolvable src; cleartext http should not be fetched by mail
+ * clients), or pointing at a host only reachable from the sending machine's
+ * network.
  */
 function toPublicBaseUrl(candidate: string | undefined): string | null {
   if (!candidate?.trim()) return null;
@@ -86,7 +87,9 @@ function toPublicBaseUrl(candidate: string | undefined): string | null {
     return null;
   }
 
-  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
+  // https only: email clients and image proxies should never fetch a cleartext
+  // asset URL, and every public Ask Linc host serves https.
+  if (parsed.protocol !== 'https:') return null;
   if (isNonPublicHost(parsed.hostname)) return null;
 
   // Rebuild from origin + path so userinfo, query, and hash never land in email HTML.
@@ -119,7 +122,7 @@ export function getBaseUrl(): string {
  * machine.
  *
  * Order: EMAIL_ASSET_BASE_URL, then FRONTEND_URL, then the public site.
- * Candidates that are not absolute http(s) URLs, or that point at a
+ * Candidates that are not absolute https URLs, or that point at a
  * loopback/private/link-local host, are skipped.
  */
 export function getEmailAssetBaseUrl(): string {

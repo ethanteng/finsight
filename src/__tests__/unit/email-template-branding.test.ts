@@ -66,6 +66,7 @@ describe('email template branding URLs', () => {
       ['scheme-less hostname', 'asklinc.com'],
       ['bare path', '/assets'],
       ['non-http scheme', 'file:///tmp/assets'],
+      ['cleartext http host', 'http://cdn.asklinc.com'],
     ])('rejects a %s and falls back to the public site', (_label, value) => {
       process.env.EMAIL_ASSET_BASE_URL = value;
       expect(getEmailAssetBaseUrl()).toBe('https://asklinc.com');
