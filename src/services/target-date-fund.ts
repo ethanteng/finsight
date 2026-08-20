@@ -65,13 +65,16 @@ function clamp(value: number, min: number, max: number): number {
 /**
  * The target year a fund names, or null when it is not a target-date fund.
  *
- * Both a signal phrase and a plausible year are required. The year is the first
- * `20xx` at or after the earliest signal match, so "Target Ret 2040 SL SF CL III"
- * still resolves through share-class noise, while a trailing inception or series
- * year ("Target Date 2035 Fund Series 2020") cannot override the target. A year
- * that only appears before the signal is used only when none follows it, so a
- * label like "2040 Retirement Fund" still resolves without letting a trailing
- * series year win over a real target.
+ * Both a signal phrase and a plausible year are required. The year closest to
+ * the earliest signal match wins, so the common provider orders all resolve:
+ * - year after signal: "Target Ret 2040 SL SF CL III"
+ * - year before signal: "American Funds 2040 Target Date Retirement Fund"
+ * - year inside signal: "Fidelity Freedom 2045 Fund"
+ *
+ * Closeness is what keeps a trailing inception or series year from stealing the
+ * target when the real year sits on the other side of the signal
+ * ("…2040 Target Date… Inception 2015", "2040 Target Retirement Fund Series 2020"),
+ * and what stops "Target Date 2035 Fund Series 2020" from picking 2020.
  */
 export function targetDateFundYear(...labels: Array<unknown>): number | null {
   const text = labels
@@ -80,25 +83,53 @@ export function targetDateFundYear(...labels: Array<unknown>): number | null {
   if (!text) return null;
 
   let signalIndex = -1;
+  let signalLength = 0;
   for (const signal of TARGET_DATE_SIGNALS) {
     const match = text.match(signal);
     if (match?.index === undefined) continue;
     if (signalIndex === -1 || match.index < signalIndex) {
       signalIndex = match.index;
+      signalLength = match[0].length;
     }
   }
   if (signalIndex < 0) return null;
 
-  // Prefer the first year at or after the signal, which is where every provider
-  // convention puts it. Fall back to a year earlier in the label rather than
-  // giving up: preferring the later position is what stops a trailing series
-  // year from winning, and nothing about that requires refusing the other order.
-  const following = text.slice(signalIndex).match(/\b(20\d{2})\b/g);
-  const years = following && following.length > 0 ? following : text.match(/\b(20\d{2})\b/g);
-  if (!years || years.length === 0) return null;
-  const year = Number(years[0]);
-  if (!Number.isFinite(year) || year < MIN_TARGET_YEAR || year > MAX_TARGET_YEAR) return null;
-  return year;
+  const signalEnd = signalIndex + signalLength;
+  const yearPattern = /\b(20\d{2})\b/g;
+  let best: { year: number; distance: number; after: boolean } | null = null;
+  let match: RegExpExecArray | null;
+  while ((match = yearPattern.exec(text)) !== null) {
+    const year = Number(match[1]);
+    if (!Number.isFinite(year) || year < MIN_TARGET_YEAR || year > MAX_TARGET_YEAR) continue;
+
+    const yearIndex = match.index;
+    const yearEnd = yearIndex + match[0].length;
+    let distance: number;
+    let after: boolean;
+    if (yearIndex >= signalIndex && yearIndex < signalEnd) {
+      // Year is inside the signal match itself (e.g. "Freedom 2045").
+      distance = 0;
+      after = true;
+    } else if (yearIndex >= signalEnd) {
+      distance = yearIndex - signalEnd;
+      after = true;
+    } else {
+      distance = signalIndex - yearEnd;
+      after = false;
+    }
+
+    // Closer to the signal wins. On a tie, prefer the year after the signal --
+    // that is the dominant provider convention when both sides carry a 20xx.
+    if (
+      !best ||
+      distance < best.distance ||
+      (distance === best.distance && after && !best.after)
+    ) {
+      best = { year, distance, after };
+    }
+  }
+
+  return best?.year ?? null;
 }
 
 /** True when any of the supplied labels identify a target-date fund. */

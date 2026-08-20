@@ -27,6 +27,14 @@ describe('target-date fund recognition', () => {
 
   it('still resolves a label that puts the year before the signal', () => {
     expect(targetDateFundYear('2040 Target Retirement Fund')).toBe(2040);
+    // Largest US TDF family puts the year before "Target Date". A trailing
+    // inception / share-class year after the signal must not steal it -- the
+    // previous "first year after signal" rule returned 2015 / 2020 here.
+    expect(targetDateFundYear('American Funds 2040 Target Date Retirement Fund')).toBe(2040);
+    expect(
+      targetDateFundYear('American Funds 2040 Target Date Retirement Fund Inception 2015')
+    ).toBe(2040);
+    expect(targetDateFundYear('2040 Target Retirement Fund Series 2020')).toBe(2040);
   });
 
   it('never reads a maturity date as a glidepath', () => {
