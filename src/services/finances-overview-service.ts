@@ -411,7 +411,7 @@ export function buildFinancesOverview(input: FinancesOverviewInput): FinancesOve
   if (coverageGapCount > 0) {
     warnings.push({
       code: 'incomplete-holdings-coverage',
-      message: `${coverageGapCount} investment account${coverageGapCount === 1 ? '' : 's'} report${coverageGapCount === 1 ? 's' : ''} a balance its listed holdings do not fully account for. Totals use the balance the institution reports; the remainder appears as Unclassified in your allocation.`,
+      message: `${coverageGapCount} investment account${coverageGapCount === 1 ? '' : 's'} report${coverageGapCount === 1 ? 's' : ''} a balance its listed holdings do not fully account for. Totals use the balance the institution reports; the remainder appears as Not itemized in your allocation.`,
     });
   }
 

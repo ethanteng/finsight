@@ -28,6 +28,7 @@ const mapping = {
   unmappedHoldings: [],
   mappingMethod: 'direct' as const,
   targetDateFunds: [],
+  unclassifiedEquityCount: 0,
 };
 
 describe('unmodeled investment value', () => {

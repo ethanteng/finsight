@@ -104,6 +104,12 @@ A target-date fund is neither: it is a declared blend, recognized from its own l
 a provider type, and modeled on an approximate industry glidepath. That approximation is stated as an
 assumption naming each fund and its split, because it is not the fund's own published curve.
 
+Employer-plan and institutional share classes are placed the same way: by reading the mandate their
+names state, since their provider type says only "Mutual Fund" and their tickers are too long to
+resemble a stock symbol. Geography is read from the name too, so a fund called "International Equity
+Fund" is not placed 70% in the US. Only holdings whose name carries no geography take the 70/30
+historical-average split, and only their presence may claim that assumption.
+
 Amounts remain unrounded during calculation; formatting and rounding are presentation concerns. Metrics in API and LLM responses must carry an explicit unit/currency rather than infer one from a label.
 
 ## 4. Snapshot time and completeness

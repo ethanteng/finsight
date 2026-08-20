@@ -142,6 +142,12 @@ export interface PortfolioMapping {
    * the glidepath is an approximation of a curve we do not hold.
    */
   targetDateFunds: Array<{ label: string; targetYear: number; equityShare: number }>;
+  /**
+   * Holdings placed on the 70/30 historical-average split because their name
+   * carried no geography. Counted separately from inference in general so the
+   * assumption describing that split is only claimed when it was applied.
+   */
+  unclassifiedEquityCount: number;
 }
 
 // ============================================================================

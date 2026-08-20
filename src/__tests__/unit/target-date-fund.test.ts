@@ -7,7 +7,7 @@ import {
   TARGET_DATE_ASSET_TYPE,
 } from '../../services/target-date-fund';
 import { buildCanonicalInvestmentPortfolio } from '../../services/canonical-financial-snapshot';
-import { mapPortfolioToAssetBasket } from '../../retirement-analytics/engine/portfolio-mapper';
+import { mapPortfolioToAssetBasket, populateAssumptions } from '../../retirement-analytics/engine/portfolio-mapper';
 
 describe('target-date fund recognition', () => {
   it('reads the target year through provider share-class noise', () => {
@@ -151,5 +151,82 @@ describe('target-date funds in retirement mapping', () => {
 
     expect(mapping.nominalBondsWeight).toBeCloseTo(1, 6);
     expect(mapping.targetDateFunds).toEqual([]);
+  });
+});
+
+describe('institutional and employer-plan funds', () => {
+  const map = (name: string, ticker: string | null, type: string | null, value = 100_000) =>
+    mapPortfolioToAssetBasket(
+      [{ security_id: 's', ticker_symbol: ticker, security_name: name, institution_value: value }] as any[],
+      [{ security_id: 's', name, ticker_symbol: ticker, type }] as any[],
+      value,
+      undefined,
+      new Map(),
+      2026
+    );
+
+  it('places plan funds that state their mandate only in the name', async () => {
+    // These fell out of the basket entirely: typed "Mutual Fund", tickers too
+    // long to look like a stock symbol, names never checked.
+    for (const [name, ticker] of [
+      ['Large Cap Growth Fund', 'WLLCGR'],
+      ['Large Cap Value Fund', 'WLLCVL'],
+      ['Small Cap Fund', 'SPUSA061004C00000000'],
+      ['State St S&P Midcap Indx SL Cl XIV', 'SSPMCI'],
+      ['State Street S&P 500 Indx SL Sr Fd Cl X', 'SSISLX'],
+    ] as const) {
+      const mapping = await map(name, ticker, 'mutual fund');
+      expect(mapping.unmappedHoldings).toEqual([]);
+      expect(mapping.usEquityWeight + mapping.internationalEquityWeight).toBeCloseTo(1, 6);
+    }
+  });
+
+  it('reads geography from the name instead of defaulting a US index fund abroad', async () => {
+    const sp500 = await map('State Street S&P 500 Indx SL Sr Fd Cl X', 'SSISLX', 'mutual fund');
+    expect(sp500.usEquityWeight).toBeCloseTo(1, 6);
+    expect(sp500.internationalEquityWeight).toBeCloseTo(0, 6);
+  });
+
+  it('reads geography from the name instead of putting an international fund 70% in the US', async () => {
+    const intl = await map('International Equity Fund', 'WLINEQ', 'mutual fund');
+    expect(intl.internationalEquityWeight).toBeCloseTo(1, 6);
+    expect(intl.usEquityWeight).toBeCloseTo(0, 6);
+  });
+
+  it('keeps the historical-average split when the name carries no geography', async () => {
+    const mapping = await map('Small Cap Fund', 'SPUSA061004C00000000', 'mutual fund');
+    expect(mapping.usEquityWeight).toBeCloseTo(0.7, 6);
+    expect(mapping.internationalEquityWeight).toBeCloseTo(0.3, 6);
+    expect(mapping.unclassifiedEquityCount).toBe(1);
+    expect(populateAssumptions(mapping, [], [])).toContain(
+      'Unclassified equity holdings split 70% US / 30% international based on historical averages'
+    );
+  });
+
+  it('does not claim the 70/30 assumption when nothing took that split', async () => {
+    // Codex review: a portfolio whose only inference was a recognized
+    // target-date fund has no unclassified equity to describe.
+    const mapping = await map('State St Target Ret 2040 SL SF CL III', null, 'mutual fund');
+    expect(mapping.unclassifiedEquityCount).toBe(0);
+    expect(populateAssumptions(mapping, [], []).join(' ')).not.toContain('Unclassified equity holdings split');
+  });
+
+  it('leaves a bond index fund in bonds despite its index-family name', async () => {
+    const mapping = await map('Fidelity U.S. Bond Index Fund', 'FXNAX', 'Mutual Fund');
+    expect(mapping.nominalBondsWeight).toBeCloseTo(1, 6);
+  });
+
+  it('places a government cash reserve in cash, not equity', async () => {
+    // FDRXX is five letters, so the stock-ticker fallback had been modeling a
+    // money-market fund as stocks.
+    const mapping = await map('Fidelity Phillips Street Trust - Fidelity Government Cash Reserves', 'FDRXX', 'Mutual Fund');
+    expect(mapping.cashWeight).toBeCloseTo(1, 6);
+    expect(mapping.usEquityWeight).toBeCloseTo(0, 6);
+  });
+
+  it('keeps a Treasury money market in cash rather than bonds', async () => {
+    const mapping = await map('Vanguard Treasury Money Market Fund', 'VUSXX', 'Mutual Fund');
+    expect(mapping.cashWeight).toBeCloseTo(1, 6);
+    expect(mapping.nominalBondsWeight).toBeCloseTo(0, 6);
   });
 });

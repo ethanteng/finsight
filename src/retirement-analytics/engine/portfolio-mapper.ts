@@ -6,6 +6,9 @@ import { PortfolioMapping, SecurityMetadata } from '../types';
 import { DataProviderFactory } from '../data/data-provider-factory';
 import {
   hasBondNameSignal,
+  hasCashNameSignal,
+  hasEquityNameSignal,
+  inferEquityGeography,
   isGlobalEquity,
   isInternationalEquity,
   isKnownBondTicker,
@@ -43,7 +46,8 @@ export async function mapPortfolioToAssetBasket(
     mappingConfidence: 'high',
     unmappedHoldings: [],
     mappingMethod: 'direct',
-    targetDateFunds: []
+    targetDateFunds: [],
+    unclassifiedEquityCount: 0
   };
 
   if (totalValue === 0 || holdings.length === 0) {
@@ -53,6 +57,7 @@ export async function mapPortfolioToAssetBasket(
   const securityMap = new Map(securities.map(sec => [sec.security_id, sec]));
   let mappedValue = 0;
   let inferredCount = 0;
+  let unclassifiedEquityCount = 0;
   let unmappedCount = 0;
 
   // Use pre-fetched metadata if provided, otherwise fetch (for backward compatibility)
@@ -182,8 +187,21 @@ export async function mapPortfolioToAssetBasket(
       const ticker = security?.ticker_symbol?.toUpperCase() || holding.ticker_symbol?.toUpperCase() || '';
       const holdingType = holding.security_type?.toLowerCase() || '';
 
-      // Inference heuristics
-      if (holdingType.includes('bond') || holdingType.includes('fixed income') ||
+      // Inference heuristics, most specific evidence first.
+      //
+      // Cash precedes bonds so a Treasury money-market fund is not caught by
+      // the "treasury" bond signal, and both precede equity so a bond or cash
+      // fund is never swept up by the ticker-shaped-like-a-stock fallback --
+      // which had been classifying a government cash reserve as stocks purely
+      // because its ticker is five letters.
+      if (hasCashNameSignal(securityName)) {
+        mapping.cashWeight += weight;
+        mapping.mappingMethod = 'inferred';
+        mapping.mappingConfidence = 'medium';
+        inferredCount++;
+        mappedValue += holdingValue;
+        mapped = true;
+      } else if (holdingType.includes('bond') || holdingType.includes('fixed income') ||
           hasBondNameSignal(securityName) || isKnownBondTicker(ticker)) {
         mapping.nominalBondsWeight += weight;
         mapping.mappingMethod = 'inferred';
@@ -192,11 +210,28 @@ export async function mapPortfolioToAssetBasket(
         mappedValue += holdingValue;
         mapped = true;
       } else if (holdingType.includes('equity') || holdingType.includes('stock') ||
-          securityName.includes('equity') || securityName.includes('stock') ||
+          // Employer-plan and institutional share classes state their mandate
+          // in the name and nowhere else: "Large Cap Growth Fund", "S&P 500
+          // Indx SL Sr Fd Cl X". Without this they fell out of the basket
+          // entirely, and their value was then spread across whatever the rest
+          // of the portfolio happened to hold.
+          hasEquityNameSignal(securityName) ||
           ticker.match(/^[A-Z]{1,5}$/)) { // Common stock ticker pattern
-        // Infer equity - assume 70% US, 30% international (will be documented in assumptions)
-        mapping.usEquityWeight += weight * 0.7;
-        mapping.internationalEquityWeight += weight * 0.3;
+        // Place it by geography when the name says, rather than defaulting a
+        // fund called "International Equity Fund" to 70% US.
+        const geography = inferEquityGeography(securityName, ticker);
+        if (geography === 'international') {
+          mapping.internationalEquityWeight += weight;
+        } else if (geography === 'us') {
+          mapping.usEquityWeight += weight;
+        } else {
+          // 'global', and names that carry no geography at all, take the
+          // documented historical-average split. Only this branch is
+          // "unclassified equity", and only it may claim that assumption.
+          mapping.usEquityWeight += weight * 0.7;
+          mapping.internationalEquityWeight += weight * 0.3;
+          unclassifiedEquityCount++;
+        }
         mapping.mappingMethod = 'inferred';
         mapping.mappingConfidence = 'medium';
         inferredCount++;
@@ -223,6 +258,8 @@ export async function mapPortfolioToAssetBasket(
     mapping.nominalBondsWeight /= totalMappedWeight;
     mapping.cashWeight /= totalMappedWeight;
   }
+
+  mapping.unclassifiedEquityCount = unclassifiedEquityCount;
 
   // Adjust confidence based on mapping quality
   if (unmappedCount > 0 || inferredCount > holdings.length * 0.3) {
@@ -292,7 +329,11 @@ export function populateAssumptions(
 ): string[] {
   const assumptions: string[] = [];
 
-  if (mapping.mappingMethod === 'inferred') {
+  // Gated on the split actually being used, not on inference having happened at
+  // all. A portfolio whose only inference was a recognized target-date fund has
+  // no unclassified equity, and claiming otherwise gave it a caveat describing
+  // a split it never received.
+  if (mapping.unclassifiedEquityCount > 0) {
     assumptions.push('Unclassified equity holdings split 70% US / 30% international based on historical averages');
   }
 
