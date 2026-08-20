@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from 'react';
+import ManualIndicator from './ui/ManualIndicator';
 
 interface UserProfileProps {
   userId?: string;
@@ -576,9 +577,7 @@ export default function UserProfile({ userId }: UserProfileProps) {
                     <div className="flex items-center gap-2 mb-1">
                       <span className="text-gray-400 text-sm">Home Value:</span>
                       {homeData.isManualOverride && (
-                        <span className="px-2 py-1 bg-blue-900/30 text-blue-300 text-xs rounded border border-blue-700/50">
-                          Manual
-                        </span>
+                        <ManualIndicator />
                       )}
                     </div>
                     {isEditingValue ? (

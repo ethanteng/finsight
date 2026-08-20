@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from 'react';
+import ManualIndicator from '../ui/ManualIndicator';
 
 interface HomeData {
   address: string;
@@ -156,9 +157,7 @@ export default function HomeValueCard({
             <div className="flex items-center gap-2">
               <h3 className="text-lg font-semibold text-white">Home Value</h3>
               {homeData.isManualOverride && (
-                <span className="px-2 py-1 bg-blue-900/30 text-blue-300 text-xs rounded border border-blue-700/50">
-                  Manual
-                </span>
+                <ManualIndicator />
               )}
             </div>
             <div className="text-sm text-gray-400">

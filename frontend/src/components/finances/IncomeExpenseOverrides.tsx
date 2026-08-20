@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from 'react';
+import ManualIndicator from '../ui/ManualIndicator';
 
 interface IncomeExpenseOverridesProps {
   calculatedIncome: number | null;
@@ -206,9 +207,7 @@ export default function IncomeExpenseOverrides({
           <div className="flex items-center justify-between mb-2">
             <label className="text-gray-300 font-medium">Monthly Income</label>
             {monthlyIncome !== null && (
-              <span className="px-2 py-1 bg-blue-900/30 text-blue-300 text-xs rounded border border-blue-700/50">
-                Manual Override
-              </span>
+              <ManualIndicator label="Manual override" />
             )}
           </div>
           
@@ -292,9 +291,7 @@ export default function IncomeExpenseOverrides({
           <div className="flex items-center justify-between mb-2">
             <label className="text-gray-300 font-medium">Monthly Expenses</label>
             {monthlyExpense !== null && (
-              <span className="px-2 py-1 bg-blue-900/30 text-blue-300 text-xs rounded border border-blue-700/50">
-                Manual Override
-              </span>
+              <ManualIndicator label="Manual override" />
             )}
           </div>
           

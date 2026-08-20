@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import ManualIndicator from '../ui/ManualIndicator';
 
 const TRANSACTION_TYPES = [
   'income',
@@ -518,9 +519,7 @@ export const CategoryComparison: React.FC = () => {
                                   {formatTransactionType(currentType)}
                                 </span>
                                 {transaction.isManualCorrection ? (
-                                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
-                                    Manual
-                                  </span>
+                                  <ManualIndicator />
                                 ) : transaction.aiCategoryReason ? (
                                   <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
                                     AI
