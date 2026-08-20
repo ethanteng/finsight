@@ -63,8 +63,13 @@ router.get('/payment-success', async (req, res) => {
         });
       }
 
-      // Get customer email from the session
-      const customerEmail = session.customer_details?.email || (customer_email as string);
+      // Get customer email from the session. Accounts store emails lowercased
+      // (see /auth/register); Stripe may return mixed case, so normalize before
+      // lookup or a returning subscriber is treated as brand-new and never linked.
+      const customerEmailRaw = session.customer_details?.email || (customer_email as string);
+      const customerEmail = typeof customerEmailRaw === 'string'
+        ? customerEmailRaw.toLowerCase()
+        : undefined;
       console.log('Customer email from session:', customerEmail);
 
       // Determine tier and value for Google Ads tracking
