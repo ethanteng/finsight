@@ -360,10 +360,21 @@ export function populateAssumptions(
   }
 
   if (mapping.targetDateFunds.length > 0) {
-    // Name the funds and their splits. A reader who disagrees with the
-    // glidepath can then see exactly which holdings it moved and by how much.
-    const described = mapping.targetDateFunds
-      .map(fund => `${fund.label} (${fund.targetYear}, ${Math.round(fund.equityShare * 100)}% equity)`)
+    // Grouped by target year rather than listed by name. The split is a
+    // function of the year alone, so naming each fund adds nothing to what a
+    // reader needs to judge the model -- and it would put holding labels into
+    // the analysis context even for questions that never asked for investment
+    // detail. Grouping also keeps this readable for a portfolio holding many.
+    const byYear = new Map<number, { count: number; equityShare: number }>();
+    for (const fund of mapping.targetDateFunds) {
+      const existing = byYear.get(fund.targetYear);
+      if (existing) existing.count += 1;
+      else byYear.set(fund.targetYear, { count: 1, equityShare: fund.equityShare });
+    }
+    const described = Array.from(byYear.entries())
+      .sort(([left], [right]) => left - right)
+      .map(([year, { count, equityShare }]) =>
+        `${count} targeting ${year} at ${Math.round(equityShare * 100)}% equity`)
       .join('; ');
     assumptions.push(
       `Target-date funds modeled on an approximate industry glidepath rather than each fund's own published curve: ${described}`

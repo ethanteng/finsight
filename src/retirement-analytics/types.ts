@@ -47,6 +47,13 @@ export interface RetirementAnalysisInput {
    */
   unmodeledInvestments?: UnmodeledInvestmentValue | null;
 
+  /**
+   * Year the target-date glidepath is evaluated against. Defaults to the
+   * current year; supply the snapshot's year when a result must reproduce
+   * across a year boundary.
+   */
+  asOfYear?: number;
+
   // Optional overrides
   inflationAssumption?: number; // override FRED data
   riskTolerance?: 'conservative' | 'moderate' | 'aggressive'; // user preference

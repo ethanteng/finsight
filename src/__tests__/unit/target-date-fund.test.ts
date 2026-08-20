@@ -218,6 +218,31 @@ describe('institutional and employer-plan funds', () => {
     );
   });
 
+  it('describes target-date funds by year and split, not by holding name', async () => {
+    // The split is a function of the year alone, so naming the funds adds
+    // nothing a reader needs -- and would put holding labels into the analysis
+    // context for questions that never asked for investment detail.
+    const mapping = await mapPortfolioToAssetBasket(
+      [
+        { security_id: 'a', security_name: 'State St Target Ret 2040 SL SF CL III', institution_value: 1000 },
+        { security_id: 'b', security_name: 'BTC LPATH IDX 2040 N', ticker_symbol: 'O7PE', institution_value: 1000 },
+        { security_id: 'c', security_name: 'State St Target Ret 2035 SL SF CL III', institution_value: 1000 },
+      ] as any[],
+      [] as any[],
+      3000,
+      undefined,
+      new Map(),
+      2026
+    );
+    const assumption = populateAssumptions(mapping, [], [])
+      .find(text => text.startsWith('Target-date funds modeled'))!;
+
+    expect(assumption).toContain('2 targeting 2040 at 78% equity');
+    expect(assumption).toContain('1 targeting 2035 at 68% equity');
+    expect(assumption).not.toContain('State St');
+    expect(assumption).not.toContain('LPATH');
+  });
+
   it('does not claim the 70/30 assumption when nothing took that split', async () => {
     // Codex review: a portfolio whose only inference was a recognized
     // target-date fund has no unclassified equity to describe.
