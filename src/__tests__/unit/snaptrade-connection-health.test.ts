@@ -47,7 +47,7 @@ describe('SnapTrade connection health', () => {
 
     expect(health.status).toBe(TokenStatus.LOGIN_REQUIRED);
     expect(health.error).toContain('Public');
-    expect(health.reconnectAuthorizationId).toBe('auth-1');
+    expect(health.reconnectAuthorizationIds).toEqual(['auth-1']);
   });
 
   // Unknown health is not actionable: there is nothing the user can do about a
@@ -79,7 +79,28 @@ describe('SnapTrade connection health', () => {
 
     expect(health.error).toContain('Public');
     expect(health.error).toContain('Fidelity');
-    expect(health.reconnectAuthorizationId).toBeUndefined();
+    expect(health.reconnectAuthorizationIds).toBeUndefined();
+  });
+
+  // One trip through the portal repairs one authorization, so every disabled
+  // id has to be reachable -- returning only the first left a user who named
+  // two broken brokerages able to fix just one of them.
+  it('returns every distinct disabled authorization', async () => {
+    getUserAccounts.mockResolvedValue({
+      success: true,
+      data: {
+        accounts: [
+          account({ connectionDisabled: true, brokerageAuthorizationId: 'auth-1' }),
+          account({ id: 'acct-2', connectionDisabled: true, brokerageAuthorizationId: 'auth-2' }),
+          // Same authorization backing a second account must not be listed twice.
+          account({ id: 'acct-3', connectionDisabled: true, brokerageAuthorizationId: 'auth-1' }),
+        ],
+      },
+    });
+
+    const health = await service.validateSnapTradeToken('user-1');
+
+    expect(health.reconnectAuthorizationIds).toEqual(['auth-1', 'auth-2']);
   });
 
   it('still reports an outright failure as an error', async () => {

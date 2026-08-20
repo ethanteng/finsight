@@ -147,6 +147,28 @@ router.post('/login', requireAuth, async (req, res) => {
       ? req.body.reconnect.trim()
       : undefined;
 
+    // Confirm the authorization is actually this user's before handing it to
+    // SnapTrade. The userId/userSecret pair almost certainly makes a foreign id
+    // fail upstream, but "almost certainly" is not a control: this turns a
+    // caller-supplied id into a checked one and returns a clear 400 instead of
+    // a provider error. Only the reconnect path pays for the extra lookup.
+    if (reconnectAuthorizationId) {
+      const accountsResult = await snapTradeService.getUserAccounts(userId, user.userSecret);
+      const owned = Array.isArray(accountsResult.data?.accounts)
+        && accountsResult.data.accounts.some(
+          (account: any) => account?.brokerageAuthorizationId === reconnectAuthorizationId
+        );
+      if (!owned) {
+        console.warn(
+          `SnapTrade login: refusing reconnect for an authorization not belonging to user ${userId}`
+        );
+        return res.status(400).json({
+          success: false,
+          error: 'Unknown brokerage connection for this user.'
+        });
+      }
+    }
+
     const result = await snapTradeService.getLoginRedirect(
       userId,
       user.userSecret,

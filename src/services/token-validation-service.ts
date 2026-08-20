@@ -60,12 +60,17 @@ export interface SnapTradeTokenHealth {
   error?: string;
   lastChecked: Date;
   /**
-   * Brokerage authorization to repair when status is LOGIN_REQUIRED. Passing it
-   * to the SnapTrade portal fixes the existing connection; without it the
-   * portal adds a second connection to the same brokerage and leaves the
-   * broken one in place.
+   * Brokerage authorizations to repair when status is LOGIN_REQUIRED. Passing
+   * one to the SnapTrade portal fixes that existing connection; without it the
+   * portal adds a second connection to the same brokerage and leaves the broken
+   * one in place.
+   *
+   * A list because a user can have several brokerages disabled at once, and one
+   * trip through the portal repairs exactly one authorization. The caller
+   * repairs the first; the next status read returns a shorter list, so
+   * repeating the action walks through them without needing its own UI.
    */
-  reconnectAuthorizationId?: string;
+  reconnectAuthorizationIds?: string[];
 }
 
 export function plaidTokenHealthFromError(
@@ -175,15 +180,17 @@ export class TokenValidationService {
             new Set(disabled.map(account => account.institution).filter(Boolean))
           );
           const subject = institutions.length > 0 ? institutions.join(', ') : 'brokerage connection';
-          const reconnectAuthorizationId = disabled
-            .map(account => account.brokerageAuthorizationId)
-            .find((id: unknown): id is string => typeof id === 'string' && id.length > 0);
+          const reconnectAuthorizationIds = Array.from(new Set(
+            disabled
+              .map(account => account.brokerageAuthorizationId)
+              .filter((id: unknown): id is string => typeof id === 'string' && id.length > 0)
+          ));
           return {
             userId,
             status: TokenStatus.LOGIN_REQUIRED,
             error: `SnapTrade connection disabled for ${subject}. Reconnect to resume updates.`,
             lastChecked: new Date(),
-            ...(reconnectAuthorizationId ? { reconnectAuthorizationId } : {}),
+            ...(reconnectAuthorizationIds.length > 0 ? { reconnectAuthorizationIds } : {}),
           };
         }
 
