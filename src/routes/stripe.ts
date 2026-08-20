@@ -126,6 +126,11 @@ router.get('/payment-success', async (req, res) => {
               checkoutSessionId: session_id as string
             });
             linked = linkResult.linked;
+            // Linker re-checks for a concurrent activation; treat that the same
+            // as the pre-check so we never claim success for an orphaned checkout.
+            if (linkResult.skippedForExistingSubscription) {
+              skippedForExistingSubscription = true;
+            }
           } catch (linkError) {
             console.error('Failed to link checkout session to existing user:', linkError);
           }

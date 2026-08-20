@@ -241,7 +241,12 @@ export class StripeService {
     email: string;
     checkoutSessionId: string;
     tier?: SubscriptionTier;
-  }): Promise<{ linked: boolean; isNewSubscription: boolean; status?: string }> {
+  }): Promise<{
+    linked: boolean;
+    isNewSubscription: boolean;
+    status?: string;
+    skippedForExistingSubscription?: boolean;
+  }> {
     const { userId, email, checkoutSessionId } = params;
 
     const session = await stripe.client.checkout.sessions.retrieve(checkoutSessionId, {
@@ -275,6 +280,31 @@ export class StripeService {
       return { linked: false, isNewSubscription: false };
     }
 
+    const prisma = getPrismaClient();
+
+    // Re-check inside the linker itself. payment-success already refuses when a
+    // working subscription exists, but a concurrent webhook (or a second
+    // checkout) can activate between that check and this write — and overwriting
+    // stripeCustomerId / subscriptionStatus would undo the supersession guards.
+    const otherWorkingSubscription = await prisma.subscription.findFirst({
+      where: {
+        userId,
+        status: { in: ['active', 'trialing'] },
+        stripeSubscriptionId: { not: subscription.id }
+      }
+    });
+    if (otherWorkingSubscription) {
+      console.warn(
+        `Not linking checkout ${checkoutSessionId} to user ${userId}: another working subscription exists (${otherWorkingSubscription.stripeSubscriptionId})`
+      );
+      return {
+        linked: false,
+        isNewSubscription: false,
+        status: subscription.status || 'incomplete',
+        skippedForExistingSubscription: true
+      };
+    }
+
     const tier = params.tier
       || (getTierFromPriceId(subscription.items?.data?.[0]?.price?.id) as SubscriptionTier | null)
       || 'premium';
@@ -299,7 +329,6 @@ export class StripeService {
     // Claim first delivery with an atomic insert so a concurrent webhook, a
     // retried registration, or a reloaded success page cannot repeat the
     // welcome email and start analytics.
-    const prisma = getPrismaClient();
     let isNewSubscription = false;
     try {
       await prisma.subscription.create({
@@ -323,14 +352,24 @@ export class StripeService {
     // Persist the subscription before exposing the Stripe customer ID. The
     // webhook cannot find this user until the record it would update already
     // exists, preventing both paths from claiming first delivery.
-    await prisma.user.update({
-      where: { id: userId },
-      data: {
-        stripeCustomerId: customerId,
-        subscriptionStatus: status,
-        tier,
-      }
-    });
+    // Non-working statuses must not clobber a replacement that landed between
+    // the create above and this user write (same family as webhook guards).
+    if (status === 'active' || status === 'trialing') {
+      await prisma.user.update({
+        where: { id: userId },
+        data: {
+          stripeCustomerId: customerId,
+          subscriptionStatus: status,
+          tier,
+        }
+      });
+    } else {
+      await prisma.user.update({
+        where: { id: userId },
+        data: { stripeCustomerId: customerId }
+      });
+      await this.applyUserSubscriptionStatusIfNoWorkingReplacement(userId, status, tier);
+    }
 
     console.log(`Linked user ${email} to Stripe customer ${customerId} and subscription ${subscription.id}`);
 

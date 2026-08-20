@@ -767,6 +767,43 @@ describe('StripeService', () => {
       expect(sendWelcomeEmail).not.toHaveBeenCalled();
     });
 
+    it('should not overwrite an account that already has a working subscription', async () => {
+      const mockStripe = require('../../config/stripe');
+      const { sendWelcomeEmail } = require('../../services/stripe-email');
+
+      mockStripe.stripe.client.checkout.sessions.retrieve.mockResolvedValue(
+        completedSession('returning@example.com')
+      );
+      mockPrisma.subscription.findFirst.mockResolvedValue({
+        id: 'sub_existing',
+        stripeSubscriptionId: 'sub_active_other',
+        status: 'active'
+      });
+
+      const result = await stripeService.linkCheckoutSessionToUser({
+        userId: 'user_123',
+        email: 'returning@example.com',
+        checkoutSessionId: 'cs_test_789'
+      });
+
+      expect(result).toEqual({
+        linked: false,
+        isNewSubscription: false,
+        status: 'trialing',
+        skippedForExistingSubscription: true
+      });
+      expect(mockPrisma.subscription.create).not.toHaveBeenCalled();
+      expect(mockPrisma.user.update).not.toHaveBeenCalled();
+      expect(sendWelcomeEmail).not.toHaveBeenCalled();
+      expect(mockPrisma.subscription.findFirst).toHaveBeenCalledWith({
+        where: {
+          userId: 'user_123',
+          status: { in: ['active', 'trialing'] },
+          stripeSubscriptionId: { not: 'sub_new_456' }
+        }
+      });
+    });
+
     it('should refuse a checkout that belongs to a different email', async () => {
       const mockStripe = require('../../config/stripe');
 
