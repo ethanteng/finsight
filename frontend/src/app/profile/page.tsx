@@ -1265,23 +1265,23 @@ export default function ProfilePage() {
                                   Closed
                                 </span>
                               )}
-                              {/* Token Status Indicator - a closed account says nothing about the connection */}
-                              {tokenStatus && !isClosed && (
-                                <div className="flex items-center gap-1">
-                                  {tokenStatus.isActive ? (
-                                    <span className="text-green-400" title="Connection active">
-                                      ✓
-                                    </span>
-                                  ) : (
-                                    <span className="text-red-400" title={`Connection issue: ${tokenStatus.lastError || 'Unknown error'}`}>
-                                      ✗
-                                    </span>
-                                  )}
-                                </div>
-                              )}
                             </div>
-                            <div className="text-sm text-gray-400">
-                              {account.institution && `${account.institution} • `}{account.type} • {account.subtype}
+                            <div className="mt-1 flex min-w-0 items-start gap-2 text-sm text-gray-400">
+                              {/* Keep connection health in a stable column instead of letting it wrap with the account name. */}
+                              {tokenStatus && !isClosed && (
+                                tokenStatus.isActive ? (
+                                  <span className="w-4 shrink-0 text-center text-green-400" title="Connection active">
+                                    ✓
+                                  </span>
+                                ) : (
+                                  <span className="w-4 shrink-0 text-center text-red-400" title={`Connection issue: ${tokenStatus.lastError || 'Unknown error'}`}>
+                                    ✗
+                                  </span>
+                                )
+                              )}
+                              <div className="min-w-0 break-words">
+                                {account.institution && `${account.institution} • `}{account.type} • {account.subtype}
+                              </div>
                             </div>
                             {isClosed && (
                               <div className="text-xs text-yellow-300 mt-1">
@@ -1399,24 +1399,24 @@ export default function ProfilePage() {
                         >
                           <div className="flex items-start justify-between gap-3">
                             <div className="min-w-0 flex-1">
-                              <div className="flex min-w-0 flex-wrap items-center gap-2">
-                                <div className="min-w-0 break-words font-medium text-white">
-                                  {account.name as string || 'Investment Account'}
-                                </div>
-                                {/* Status Indicator based on SnapTrade connection health */}
+                              <div className="min-w-0 break-words font-medium text-white">
+                                {account.name as string || 'Investment Account'}
+                              </div>
+                              <div className="mt-1 flex min-w-0 items-start gap-2 text-sm text-gray-400">
+                                {/* Keep connection health aligned with the account metadata on every card. */}
                                 {isHealthy ? (
-                                  <span className="text-green-400" title="Connection active">
+                                  <span className="w-4 shrink-0 text-center text-green-400" title="Connection active">
                                     ✓
                                   </span>
                                 ) : (
-                                  <span className="text-red-400" title={`Connection issue: ${snapTradeStatus?.error || 'Unknown error'}`}>
+                                  <span className="w-4 shrink-0 text-center text-red-400" title={`Connection issue: ${snapTradeStatus?.error || 'Unknown error'}`}>
                                     ✗
                                   </span>
                                 )}
-                              </div>
-                              <div className="text-sm text-gray-400">
-                                {(account.institution_name as string) || 'Investment Account'}
-                                {typeof account.number === 'string' && ` • ${account.number}`}
+                                <div className="min-w-0 break-words">
+                                  {(account.institution_name as string) || 'Investment Account'}
+                                  {typeof account.number === 'string' && ` • ${account.number}`}
+                                </div>
                               </div>
                               {/* Show error message if connection is unhealthy */}
                               {!isHealthy && snapTradeStatus?.error && (
