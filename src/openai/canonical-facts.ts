@@ -634,6 +634,8 @@ export function buildCanonicalFactPack(
     // asset mix is unknown. Published as facts because the answer cannot state
     // the exclusion without them: every dollar figure in prose must come from
     // a fact, so an unciteable caveat is a caveat the model has to leave out.
+    // Caveats are stamped after scenario facts are added below -- variants run
+    // on the same modeled basis, and a what-if answer quotes those facts.
     const coverage = retirement.dataQuality;
     const unmodeledValue = coverage?.unmodeledValue;
     if (finite(unmodeledValue) && unmodeledValue > 0) {
@@ -656,59 +658,6 @@ export function buildCanonicalFactPack(
         addSnapshotFact('retirement_value_coverage_ratio', 'Share of investments modeled source ratio', coverageRatio, 'ratio', 'retirementAnalysis.dataQuality.valueCoverage', false);
         addCalculatedFact('retirement_value_coverage', 'Share of investments this projection modeled', coverageRatio * 100, 'percent', 'input * 100', ['retirement_value_coverage_ratio']);
       }
-
-      // Stamp the exclusion onto every figure it distorts. Support metrics
-      // (portfolio value, years of expenses, survival, depletion) understate
-      // what the full portfolio would support. Withdrawal rates move the other
-      // way: the excluded amount sits in their denominator, so the reported
-      // rate is overstated relative to the full portfolio.
-      const exclusionBasis =
-        `Computed on the ${formatUsd(coverage?.modeledValue)} this projection modeled, not the full portfolio: ` +
-        `${formatUsd(unmodeledValue)} of investments is excluded because its asset mix is unknown. `;
-      const supportFloorCaveat =
-        `${exclusionBasis}Read this as a floor, and state the exclusion whenever you state this number.`;
-      const withdrawalRateCaveat =
-        `${exclusionBasis}This rate is overstated relative to the full portfolio (read it as a ceiling on the true rate), ` +
-        'and state the exclusion whenever you state this number.';
-      const supportFloorFactIds = [
-        'years_of_expenses',
-        'projected_portfolio_at_withdrawal_start',
-        'survival_rate_ratio',
-        'survival_rate',
-        ...['p10', 'p25', 'p50', 'p75', 'p90'].map(percentile => `depletion_years_${percentile}`),
-      ];
-      // Only the user's own withdrawal rate. `historical_withdrawal_rate_*` are
-      // solved sustainable rates, and withdrawal survival is scale-invariant --
-      // `evaluateSurvival` scales the withdrawal with the portfolio, so the
-      // solved percentage does not move with the excluded value. Calling those
-      // overstated would tell a user their sustainable rate is lower than it is.
-      const withdrawalRateFactIds = ['withdrawal_rate_ratio', 'withdrawal_rate'];
-      // Allocation is a property of the positions we can see. With value
-      // excluded, these describe the modeled subset, not the whole portfolio,
-      // and an allocation recommendation drawn from them would be reasoning
-      // about a mix that omits a material balance.
-      const partialMixCaveat =
-        `${exclusionBasis}This is the mix of the modeled holdings only; the excluded value's ` +
-        'asset mix is unknown, so it may not be the mix of the full portfolio. ' +
-        'State the exclusion whenever you state this number.';
-      const partialMixFactIds = [
-        'equity_allocation',
-        'fixed_income_allocation',
-        'cash_allocation',
-        'international_allocation',
-      ];
-      for (const factId of supportFloorFactIds) {
-        const fact = facts.get(factId);
-        if (fact) facts.set(factId, { ...fact, caveat: supportFloorCaveat });
-      }
-      for (const factId of withdrawalRateFactIds) {
-        const fact = facts.get(factId);
-        if (fact) facts.set(factId, { ...fact, caveat: withdrawalRateCaveat });
-      }
-      for (const factId of partialMixFactIds) {
-        const fact = facts.get(factId);
-        if (fact) facts.set(factId, { ...fact, caveat: partialMixCaveat });
-      }
     }
   }
 
@@ -718,6 +667,57 @@ export function buildCanonicalFactPack(
       : undefined);
   for (const fact of scenarioCalculatorRegistry.canonicalFacts(scenarioExecutions)) {
     facts.set(fact.id, fact);
+  }
+
+  // Stamp the exclusion onto every figure it distorts -- baseline and scenario
+  // variants alike. Support metrics understate what the full portfolio would
+  // support; the requested withdrawal rate is overstated (excluded value sits
+  // in its denominator); allocation describes the modeled holdings only.
+  const retirementCoverage = snapshot.retirementAnalysis?.dataQuality;
+  const excludedValue = retirementCoverage?.unmodeledValue;
+  if (finite(excludedValue) && excludedValue > 0) {
+    const exclusionBasis =
+      `Computed on the ${formatUsd(retirementCoverage?.modeledValue)} this projection modeled, not the full portfolio: ` +
+      `${formatUsd(excludedValue)} of investments is excluded because its asset mix is unknown. `;
+    const supportFloorCaveat =
+      `${exclusionBasis}Read this as a floor, and state the exclusion whenever you state this number.`;
+    const withdrawalRateCaveat =
+      `${exclusionBasis}This rate is overstated relative to the full portfolio (read it as a ceiling on the true rate), ` +
+      'and state the exclusion whenever you state this number.';
+    const partialMixCaveat =
+      `${exclusionBasis}This is the mix of the modeled holdings only; the excluded value's ` +
+      'asset mix is unknown, so it may not be the mix of the full portfolio. ' +
+      'State the exclusion whenever you state this number.';
+    // Match baseline ids and scenario-prefixed ids (`retirement_scenario_*_…`).
+    // Exact or `_${metric}` so `historical_withdrawal_rate_*` (scale-invariant)
+    // are not swept in with the requested `withdrawal_rate`.
+    const matchesMetric = (factId: string, metric: string) =>
+      factId === metric || factId.endsWith(`_${metric}`);
+    const supportFloorMetrics = [
+      'years_of_expenses',
+      'projected_portfolio_at_withdrawal_start',
+      'survival_rate_ratio',
+      'survival_rate',
+      ...['p10', 'p25', 'p50', 'p75', 'p90'].map(percentile => `depletion_years_${percentile}`),
+    ];
+    const withdrawalRateMetrics = ['withdrawal_rate_ratio', 'withdrawal_rate'];
+    const partialMixMetrics = [
+      'equity_allocation',
+      'fixed_income_allocation',
+      'cash_allocation',
+      'international_allocation',
+    ];
+    for (const [factId, fact] of facts) {
+      let caveat: string | undefined;
+      if (supportFloorMetrics.some(metric => matchesMetric(factId, metric))) {
+        caveat = supportFloorCaveat;
+      } else if (withdrawalRateMetrics.some(metric => matchesMetric(factId, metric))) {
+        caveat = withdrawalRateCaveat;
+      } else if (partialMixMetrics.some(metric => matchesMetric(factId, metric))) {
+        caveat = partialMixCaveat;
+      }
+      if (caveat) facts.set(factId, { ...fact, caveat });
+    }
   }
 
   // Scenario premises and explicitly requested external context are canonical inputs too.

@@ -413,6 +413,28 @@ describe('buildCanonicalFactPack', () => {
 
   it('grounds multiple modeled outcomes as scenario-scoped facts', () => {
     const data = snapshot();
+    data.retirementAnalysis = {
+      metrics: {
+        withdrawalRate: 0.049,
+        yearsOfExpenses: 20,
+        projectedPortfolioAtWithdrawalStart: 1_868_490,
+        historicalWithdrawalRates: { p10: 0.03, p25: 0.035, p50: 0.04, p75: 0.045, p90: 0.05 },
+      },
+      stressTest: {
+        survivalRate: 0.62,
+        totalSequences: 100,
+        depletionPercentiles: { p10: 12, p25: 18, p50: 25, p75: 30, p90: 35 },
+      },
+      // Variants inherit the same exclusion; their facts must carry the caveat
+      // or a what-if answer can quote them unqualified.
+      dataQuality: {
+        modeledValue: 1_868_490.56,
+        unmodeledValue: 432_498.11,
+        valueCoverage: 0.812,
+        unmodeledReasons: [],
+      },
+      _storedInputParams: { currentAge: 50, retirementAge: 65, annualWithdrawalAmount: 90_000, withdrawalStartAge: 65 },
+    };
     const scenario = (id: string, label: string, survivalRate: number, policy: any) => ({
       id,
       label,
@@ -451,19 +473,30 @@ describe('buildCanonicalFactPack', () => {
     } };
 
     const pack = buildCanonicalFactPack(data, 'Compare the scenarios.', needs('retirement_analysis'));
-    const survivalFacts = pack.facts.filter((fact) => fact.id.endsWith('_survival_rate'));
+    const survivalFacts = pack.facts.filter((fact) =>
+      fact.id.endsWith('_survival_rate') && fact.provenance?.kind === 'scenario_calculation'
+    );
     expect(survivalFacts).toEqual([
       expect.objectContaining({
         value: 75,
         unit: 'percent',
         provenance: expect.objectContaining({ kind: 'scenario_calculation', calculatorId: 'retirement', scenarioId: 'fixed' }),
+        caveat: expect.stringContaining('floor'),
       }),
       expect.objectContaining({
         value: 95,
         unit: 'percent',
         provenance: expect.objectContaining({ kind: 'scenario_calculation', scenarioId: 'flat' }),
+        caveat: expect.stringContaining('floor'),
       }),
     ]);
+    expect(pack.facts.find((fact) => fact.id === 'retirement_scenario_fixed_withdrawal_rate')?.caveat)
+      .toContain('overstated');
+    expect(pack.facts.find((fact) => fact.id === 'retirement_scenario_fixed_years_of_expenses')?.caveat)
+      .toContain('floor');
+    // Scenario inputs and growth-rate assumptions are not distorted by the exclusion.
+    expect(pack.facts.find((fact) => fact.id === 'retirement_scenario_fixed_assumption_annual_growth_rate')?.caveat)
+      .toBeUndefined();
     expect(pack.facts).toContainEqual(expect.objectContaining({
       id: 'retirement_scenario_fixed_assumption_annual_growth_rate',
       value: 0.03,
