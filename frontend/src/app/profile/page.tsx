@@ -1249,16 +1249,11 @@ export default function ProfilePage() {
                     const tokenStatus = tokenStatuses.find(t =>
                       t.institutionName === account.institution
                     );
-                    // SnapTrade-backed accounts have no Plaid AccessToken, so the
-                    // lookup above never matches them and they carried no health
-                    // marker at all. Match them to the disabled brokerage instead --
-                    // per connection, so a disabled Public connection says nothing
-                    // about a working Fidelity one.
-                    const snapTradeDisabled = account.institution
-                      ? snapTradeStatus?.disabledConnections?.find(
-                          connection => connection.institutionName === account.institution
-                        )
-                      : undefined;
+                    // This list is Plaid-only (`/plaid/all-accounts` filters out
+                    // SnapTrade). Do not match SnapTrade `disabledConnections` by
+                    // institution name here -- a disabled SnapTrade Fidelity link
+                    // would otherwise paint a healthy Plaid Fidelity Item as broken.
+                    // SnapTrade attribution lives on SnapTradeButton's account cards.
                     const isClosed = Boolean(account.isClosed);
                     const lastSeen = formatLastSeen(account.lastSeenAt);
 
@@ -1282,14 +1277,7 @@ export default function ProfilePage() {
                             </div>
                             <div className="mt-1 flex min-w-0 items-start gap-2 text-sm text-gray-400">
                               {/* Keep connection health in a stable column instead of letting it wrap with the account name. */}
-                              {snapTradeDisabled && !isClosed ? (
-                                <span
-                                  className="w-4 shrink-0 text-center text-red-400"
-                                  title={`Connection issue: SnapTrade connection disabled for ${account.institution}`}
-                                >
-                                  ✗
-                                </span>
-                              ) : tokenStatus && !isClosed && (
+                              {tokenStatus && !isClosed && (
                                 tokenStatus.isActive ? (
                                   <span className="w-4 shrink-0 text-center text-green-400" title="Connection active">
                                     ✓
@@ -1308,12 +1296,6 @@ export default function ProfilePage() {
                               <div className="text-xs text-yellow-300 mt-1">
                                 Closed — not included in your Finances totals
                                 {lastSeen ? ` • Last reported ${lastSeen}` : ''}
-                              </div>
-                            )}
-                            {/* Names this account's own brokerage, never another's. */}
-                            {snapTradeDisabled && !isClosed && (
-                              <div className="text-xs text-red-400 mt-1">
-                                {`SnapTrade connection disabled for ${account.institution}. Reconnect to resume updates.`}
                               </div>
                             )}
                             {/* Show error message if token is inactive */}
@@ -1442,6 +1424,7 @@ export default function ProfilePage() {
                       // it means some authorization is disabled, and which ones is what
                       // the per-account flag above answers.
                       const connectionUnusable = !snapTradeStatus?.connected
+                        || snapTradeStatus?.status === 'error'
                         || snapTradeStatus?.status === 'ERROR';
                       const isHealthy = !connectionDisabled && !connectionUnusable;
                       const institutionName = (account.institution_name as string) || 'this brokerage';
@@ -1491,8 +1474,11 @@ export default function ProfilePage() {
                     })}
                   </div>
                 </>
-              ) : snapTradeStatus?.connected && snapTradeStatus?.status !== 'VALID' && snapTradeStatus?.status !== 'valid' ? (
-                /* Display orphaned SnapTrade connection (connected but no accounts or unhealthy) */
+              ) : snapTradeStatus?.connected
+                && (snapTradeStatus?.status === 'error' || snapTradeStatus?.status === 'ERROR') ? (
+                /* Whole-user SnapTrade failure with no per-account cards to show it on.
+                   LOGIN_REQUIRED is not orphaned: accounts still render in SnapTradeButton
+                   with per-authorization attribution, and the reconnect control above. */
                 <div className="bg-gray-800/50 rounded-lg p-4 border-2 border-red-500/30 mb-6">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0 flex-1">
