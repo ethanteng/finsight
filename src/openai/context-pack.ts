@@ -44,6 +44,11 @@ function compactRetirementAnalysis(snapshot: FinancialContextSnapshot): unknown 
       mappingMethod: analysis.dataQuality.proxyUsage.mappingMethod,
       assumptions: analysis.dataQuality.assumptions,
       missingData: analysis.dataQuality.missingData,
+      // What the projection was computed on, and what it left out on purpose.
+      modeledValue: analysis.dataQuality.modeledValue,
+      unmodeledValue: analysis.dataQuality.unmodeledValue,
+      valueCoverage: analysis.dataQuality.valueCoverage,
+      unmodeledReasons: analysis.dataQuality.unmodeledReasons,
     },
     historicalData: analysis.historicalData,
     disclaimers: analysis.disclaimers,

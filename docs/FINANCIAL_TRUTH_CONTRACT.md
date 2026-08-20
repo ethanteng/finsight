@@ -78,6 +78,16 @@ to the total. Where that residual exceeds the greater of 1 unit of the reporting
 the balance, the snapshot records an `account:<id>:holdings-coverage` observation. That observation
 is not `required`: nothing is missing from net worth, only from the allocation's detail.
 
+Consumers that model a portfolio position by position -- retirement analysis above all -- see only
+the itemized holdings, never the residual or a manual account's balance. That value is real but has
+no known asset class, and modeling it would mean assuming a return it may not earn, so the same rule
+applies: it is excluded and reported rather than guessed. Such an analysis must publish what it
+modeled (`modeledValue`), what it left out (`unmodeledValue`), and the dollar-weighted share it
+covered (`valueCoverage`) -- distinct from holdings-count completeness, which stays high while a
+fifth of the money is absent. Coverage below 95% caps the analysis's confidence, and every figure
+computed on the modeled subset carries the exclusion as a caveat on its canonical fact, so a
+qualified number cannot be quoted unqualified. Results so produced are floors, not estimates.
+
 Amounts remain unrounded during calculation; formatting and rounding are presentation concerns. Metrics in API and LLM responses must carry an explicit unit/currency rather than infer one from a label.
 
 ## 4. Snapshot time and completeness

@@ -4,8 +4,15 @@ import { Account, Transaction, UnifiedFinancialData, HomeData } from '../service
 import { TokenStatus } from '../services/token-validation-service';
 import { QuestionNeeds, FinancialContextSnapshot, TransactionSummaryItem, InvestmentSnapshot } from './types';
 import { buildAccountSummaries } from './account-summary';
+import {
+  describeUnmodeledInvestmentValue,
+  summarizeUnmodeledInvestmentValue,
+  UNMODELED_VALUE_NOTE_PREFIX,
+  type UnmodeledInvestmentValue,
+} from '../services/investment-coverage';
 import { buildCanonicalCashFlowAnalyses } from './cash-flow-context';
 import { resolveRetirementInputs, retirementPortfolioFingerprint } from './retirement-inputs';
+import { generateDisclaimers } from '../retirement-analytics/interpretation/uncertainty-quantifier';
 import type { ExtractedRetirementInputs } from './retirement-input-extraction';
 import type { PlannedSearchQuery } from '../data/search-types';
 
@@ -86,6 +93,8 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
   let accounts: Account[] = [];
   let bankingTransactions: Transaction[] = [];
   let investmentsSnapshot: InvestmentSnapshot | undefined;
+  /** Per-account holdings residuals from the canonical portfolio, for coverage. */
+  let investmentCoverageGaps: Array<{ accountId?: string | null; unexplainedValue?: number | null }> | undefined;
   let homeValueSummary: string | undefined;
   let homeValueData: HomeData | undefined;
   let metadata: UnifiedFinancialData['metadata'] = { ...DEFAULT_METADATA };
@@ -181,6 +190,9 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
           });
         }
 
+        // Coverage is measured once account display balances are resolved,
+        // below, because an account with no holdings at all is only visible there.
+        investmentCoverageGaps = (snapshot.investmentPortfolio as any).holdingsCoverageGaps;
         investmentsSnapshot = {
           totalValue: (snapshot.investmentPortfolio as any).totalValue || 0,
           holdingCount: (snapshot.investmentPortfolio as any).holdingCount || 0,
@@ -296,6 +308,22 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
   const accountSummaries = buildAccountSummaries(accounts, accountDisplayBalances);
+  if (investmentsSnapshot) {
+    // A position-level consumer sees only the itemized holdings. Measure what
+    // that leaves out of the canonical total so the exclusion can be stated as
+    // a quantified choice rather than silently understating a projection.
+    const measured = investmentsSnapshot;
+    investmentsSnapshot = {
+      ...measured,
+      unmodeledInvestments: summarizeUnmodeledInvestmentValue({
+        totalInvestments: measured.totalValue,
+        holdings: measured.holdings || [],
+        accounts: accountSummaries,
+        coverageGaps: investmentCoverageGaps,
+        reportingCurrency: financialSummary?.reportingCurrency,
+      }),
+    };
+  }
   const accountMap = new Map<string, Account>();
   accounts.forEach(account => {
     const accountId = account.account_id || (account as any).plaidAccountId || account.persistentAccountId || account.id;
@@ -497,6 +525,7 @@ export async function completeRetirementAnalysis(
       userProfile: snapshot.userProfile || '',
       holdings,
       securities,
+      unmodeledInvestments: snapshot.investments?.unmodeledInvestments,
     });
     return {
       ...snapshot,
@@ -530,6 +559,7 @@ async function fetchOrCreateRetirementAnalysis(args: {
   userProfile: string;
   holdings: any[];
   securities: any[];
+  unmodeledInvestments?: UnmodeledInvestmentValue | null;
 }): Promise<RetirementAnalysisResolution> {
   const {
     userId,
@@ -540,6 +570,7 @@ async function fetchOrCreateRetirementAnalysis(args: {
     userProfile,
     holdings,
     securities,
+    unmodeledInvestments,
   } = args;
 
   // Parse retirement parameters from the question and the turns that set it up.
@@ -582,8 +613,40 @@ async function fetchOrCreateRetirementAnalysis(args: {
   const inputSources = extracted?.sources && Object.keys(extracted.sources).length > 0
     ? extracted.sources
     : undefined;
-  const withSources = (analysis: RetirementAnalysis): RetirementAnalysisResolution =>
-    inputSources ? { analysis: { ...analysis, _inputSources: inputSources } } : { analysis };
+  /**
+   * Re-state what this projection excludes, on every path that returns one.
+   *
+   * The excluded value is a property of the portfolio as it stands now, not of
+   * the analysis that was computed from it: a cached or reconstructed result
+   * can be reused while balances and holdings coverage have moved. Recomputing
+   * it here keeps the caveat present and current even when the numbers beside
+   * it came out of the database -- a reused analysis that dropped its caveat
+   * while keeping its understated figures is the worst of both.
+   */
+  const withCoverage = (analysis: RetirementAnalysis): RetirementAnalysis => {
+    const note = describeUnmodeledInvestmentValue(unmodeledInvestments);
+    const carried = (analysis.disclaimers || [])
+      .filter(disclaimer => !disclaimer.startsWith(UNMODELED_VALUE_NOTE_PREFIX));
+    return {
+      ...analysis,
+      dataQuality: {
+        ...analysis.dataQuality,
+        modeledValue: unmodeledInvestments?.modeledValue ?? analysis.dataQuality?.modeledValue,
+        unmodeledValue: unmodeledInvestments?.unmodeledValue ?? 0,
+        valueCoverage: unmodeledInvestments?.valueCoverage ?? 1,
+        unmodeledReasons: (unmodeledInvestments?.reasons ?? []).map(reason => ({
+          label: reason.label,
+          amount: reason.amount,
+          kind: reason.kind,
+        })),
+      },
+      disclaimers: note ? [note, ...carried] : carried,
+    };
+  };
+  const withSources = (analysis: RetirementAnalysis): RetirementAnalysisResolution => {
+    const covered = withCoverage(analysis);
+    return inputSources ? { analysis: { ...covered, _inputSources: inputSources } } : { analysis: covered };
+  };
 
   // Extract age from profile if not in question
   const { extractAgeFromProfile, extractRetirementAgeFromProfile } = await import('../retirement-analytics/profile-age-extractor');
@@ -676,6 +739,32 @@ async function fetchOrCreateRetirementAnalysis(args: {
           },
         });
       }
+      const reconstructedDataQuality = {
+        completeness: recentAnalysis.dataQualityScore,
+        // Legacy rows predate measured proxy coverage. Report it as unknown
+        // rather than preserving the former hardcoded 80% claim.
+        priceHistoryCoverage: 0,
+        modeledValue: unmodeledInvestments?.modeledValue ?? 0,
+        unmodeledValue: unmodeledInvestments?.unmodeledValue ?? 0,
+        valueCoverage: unmodeledInvestments?.valueCoverage ?? 1,
+        unmodeledReasons: (unmodeledInvestments?.reasons ?? []).map(reason => ({
+          label: reason.label,
+          amount: reason.amount,
+          kind: reason.kind,
+        })),
+        metadataConfidence: 'medium' as const,
+        portfolioMappingConfidence: 'medium' as const,
+        proxiedValuePercentage: 0,
+        proxyUsage: {
+          usEquityProxy: 'VTI',
+          internationalEquityProxy: 'VXUS',
+          bondsProxy: 'AGG',
+          unmappedHoldings: [],
+          mappingMethod: 'direct',
+        },
+        assumptions: [],
+        missingData: ['Historical proxy coverage was not recorded for this legacy analysis'],
+      };
       const reconstructed: RetirementAnalysis = {
         summary: {
           characteristics: recentAnalysis.characteristics as any,
@@ -688,25 +777,13 @@ async function fetchOrCreateRetirementAnalysis(args: {
         metrics: recentAnalysis.portfolioMetrics as any,
         stressTest: recentAnalysis.stressTestResults as any,
         historicalImplications: Array.isArray(cachedAnalysis?.historicalImplications) ? cachedAnalysis.historicalImplications : [],
-        dataQuality: {
-          completeness: recentAnalysis.dataQualityScore,
-          // Legacy rows predate measured proxy coverage. Report it as unknown
-          // rather than preserving the former hardcoded 80% claim.
-          priceHistoryCoverage: 0,
-          metadataConfidence: 'medium' as const,
-          portfolioMappingConfidence: 'medium' as const,
-          proxiedValuePercentage: 0,
-          proxyUsage: {
-            usEquityProxy: 'VTI',
-            internationalEquityProxy: 'VXUS',
-            bondsProxy: 'AGG',
-            unmappedHoldings: [],
-            mappingMethod: 'direct'
-          },
-          assumptions: [],
-          missingData: ['Historical proxy coverage was not recorded for this legacy analysis']
-        },
-        disclaimers: [],
+        dataQuality: reconstructedDataQuality,
+        // Regenerated rather than left empty. A legacy row stored no disclaimer
+        // text, but the standing limitations of this analysis -- proxies, no
+        // taxes or fees, not advice -- hold for a reconstructed result exactly
+        // as they do for a fresh one, and dropping them silently presents the
+        // numbers as better supported than they are.
+        disclaimers: generateDisclaimers(reconstructedDataQuality),
         _storedInputParams: storedInput,
         _evidence: {
           recordId: recentAnalysis.id,
@@ -724,6 +801,7 @@ async function fetchOrCreateRetirementAnalysis(args: {
     const analysisInput = {
       holdings,
       securities,
+      unmodeledInvestments,
       currentAge,
       retirementAge,
       lifeExpectancy,

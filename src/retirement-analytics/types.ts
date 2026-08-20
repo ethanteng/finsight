@@ -2,6 +2,7 @@
 // Phase 0: Scaffolding & Contracts
 
 import { Holding, Security } from '../services/financial-data-service';
+import type { UnmodeledInvestmentValue } from '../services/investment-coverage';
 
 /**
  * How retirement spending changes after withdrawals begin.
@@ -39,6 +40,13 @@ export interface RetirementAnalysisInput {
   /** Annual pre-withdrawal contribution in today's dollars; defaults to zero. */
   annualContributionAmount?: number;
   
+  /**
+   * Investment value deliberately left out of this projection because its
+   * asset mix is unknown. Measured by the caller from the canonical snapshot;
+   * the engine reports it and never models it.
+   */
+  unmodeledInvestments?: UnmodeledInvestmentValue | null;
+
   // Optional overrides
   inflationAssumption?: number; // override FRED data
   riskTolerance?: 'conservative' | 'moderate' | 'aggressive'; // user preference
@@ -232,6 +240,23 @@ export interface DataQualityReport {
     unmappedHoldings: string[];
     mappingMethod: string;
   };
+  /**
+   * Portfolio value this analysis actually modeled, and the investment value
+   * excluded from it. Excluded value is real -- it is in net worth -- but has
+   * no known asset class, so every metric below is computed on `modeledValue`
+   * alone and understates what the full portfolio would support.
+   */
+  modeledValue: number;
+  unmodeledValue: number;
+  /**
+   * Dollar-weighted share of canonical investments this analysis modeled, 0-1.
+   * Distinct from `completeness`, which counts holdings: a portfolio can have
+   * metadata for every position it received while a fifth of the money is
+   * missing entirely.
+   */
+  valueCoverage: number;
+  /** Accounts contributing excluded value, largest first. */
+  unmodeledReasons: Array<{ label: string; amount: number; kind: string }>;
   assumptions: string[]; // Explicit assumptions made during mapping/analysis
   // Examples:
   // "Unclassified equity holdings split 70% US / 30% international based on historical averages"

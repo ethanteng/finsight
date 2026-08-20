@@ -527,6 +527,9 @@ export async function runRetirementScenario(
     annualWithdrawalAmount: stored.annualWithdrawalAmount,
     withdrawalStartAge: stored.withdrawalStartAge,
     annualContributionAmount: 0,
+    // Variants must exclude exactly what the baseline excluded, or a scenario
+    // comparison would attribute a coverage difference to the change modeled.
+    unmodeledInvestments: snapshot.investments?.unmodeledInvestments ?? null,
   };
   const baselinePolicy: WithdrawalPolicy = { type: 'historical_cpi' };
   const baselineScenarioId = scenarioId(baseInput, baselinePolicy, baseline as RetirementAnalysisOutput);

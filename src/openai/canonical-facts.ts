@@ -25,6 +25,14 @@ export interface CanonicalFact {
   unit: CanonicalFactUnit;
   /** False for calculation inputs that remain traceable but must not be displayed directly. */
   displayable?: boolean;
+  /**
+   * A limitation that changes how this number should be read, and that must be
+   * stated wherever the number is. Present when the value is exact but its
+   * basis is narrower than its label implies -- a projection computed on part
+   * of a portfolio, say. A caveat travels with its fact so the qualification
+   * cannot be separated from the figure it qualifies.
+   */
+  caveat?: string;
   provenance: CanonicalFactProvenance;
 }
 
@@ -43,6 +51,10 @@ function isoString(value: Date | string | null | undefined): string | undefined 
 
 function finite(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value);
+}
+
+function formatUsd(value: unknown): string {
+  return finite(value) ? `$${Math.round(value).toLocaleString('en-US')}` : 'an unknown amount';
 }
 
 function safeFactId(value: string): string {
@@ -617,6 +629,60 @@ export function buildCanonicalFactPack(
     addSnapshotFact('retirement_age', 'Retirement age', retirement._storedInputParams?.retirementAge, 'age', 'retirementAnalysis.inputs.retirementAge');
     addSnapshotFact('annual_withdrawal_amount', 'Annual withdrawal amount', retirement._storedInputParams?.annualWithdrawalAmount, 'usd', 'retirementAnalysis.inputs.annualWithdrawalAmount');
     addSnapshotFact('withdrawal_start_age', 'Withdrawal start age', retirement._storedInputParams?.withdrawalStartAge, 'age', 'retirementAnalysis.inputs.withdrawalStartAge');
+
+    // Investment value deliberately excluded from the projection because its
+    // asset mix is unknown. Published as facts because the answer cannot state
+    // the exclusion without them: every dollar figure in prose must come from
+    // a fact, so an unciteable caveat is a caveat the model has to leave out.
+    const coverage = retirement.dataQuality;
+    const unmodeledValue = coverage?.unmodeledValue;
+    if (finite(unmodeledValue) && unmodeledValue > 0) {
+      addSnapshotFact(
+        'retirement_modeled_portfolio_value',
+        'Portfolio value this projection modeled',
+        coverage?.modeledValue,
+        'usd',
+        'retirementAnalysis.dataQuality.modeledValue'
+      );
+      addSnapshotFact(
+        'retirement_unmodeled_portfolio_value',
+        'Investment value excluded from this projection',
+        unmodeledValue,
+        'usd',
+        'retirementAnalysis.dataQuality.unmodeledValue'
+      );
+      const coverageRatio = coverage?.valueCoverage;
+      if (finite(coverageRatio)) {
+        addSnapshotFact('retirement_value_coverage_ratio', 'Share of investments modeled source ratio', coverageRatio, 'ratio', 'retirementAnalysis.dataQuality.valueCoverage', false);
+        addCalculatedFact('retirement_value_coverage', 'Share of investments this projection modeled', coverageRatio * 100, 'percent', 'input * 100', ['retirement_value_coverage_ratio']);
+      }
+
+      // Stamp the exclusion onto every figure it distorts. These are computed
+      // on the modeled portfolio alone, so each one understates what the whole
+      // portfolio supports -- and the ratios distort more than the value does,
+      // because the excluded amount sits in their denominator.
+      const caveat =
+        `Computed on the ${formatUsd(coverage?.modeledValue)} this projection modeled, not the full portfolio: ` +
+        `${formatUsd(unmodeledValue)} of investments is excluded because its asset mix is unknown. ` +
+        'Read this as a floor, and state the exclusion whenever you state this number.';
+      const distortedFactIds = [
+        'withdrawal_rate_ratio',
+        'withdrawal_rate',
+        'years_of_expenses',
+        'projected_portfolio_at_withdrawal_start',
+        'survival_rate_ratio',
+        'survival_rate',
+        ...['p10', 'p25', 'p50', 'p75', 'p90'].flatMap(percentile => [
+          `historical_withdrawal_rate_${percentile}_ratio`,
+          `historical_withdrawal_rate_${percentile}`,
+          `depletion_years_${percentile}`,
+        ]),
+      ];
+      for (const factId of distortedFactIds) {
+        const fact = facts.get(factId);
+        if (fact) facts.set(factId, { ...fact, caveat });
+      }
+    }
   }
 
   const scenarioExecutions = snapshot.scenarioExecutions

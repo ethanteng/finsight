@@ -3,6 +3,10 @@
 
 import { DataQualityReport, ConfidenceLevel, PortfolioMapping } from '../types';
 import { Holding, Security } from '../../services/financial-data-service';
+import {
+  describeUnmodeledInvestmentValue,
+  type UnmodeledInvestmentValue,
+} from '../../services/investment-coverage';
 
 /**
  * Calculate data quality metrics
@@ -13,7 +17,8 @@ export function calculateDataQuality(
   portfolioMapping: PortfolioMapping,
   priceHistoryCoverage: number,
   assumptions: string[],
-  stressTestMissingData: string[] = []
+  stressTestMissingData: string[] = [],
+  unmodeledInvestments?: UnmodeledInvestmentValue | null
 ): DataQualityReport {
   // Calculate completeness (percentage of holdings with full metadata)
   const securityMap = new Map(securities.map(s => [s.security_id, s]));
@@ -52,9 +57,23 @@ export function calculateDataQuality(
 
   const missingData = [...portfolioMapping.unmappedHoldings, ...stressTestMissingData];
 
+  // With nothing excluded, the modeled portfolio is the whole portfolio and
+  // coverage is complete. Reporting 0 here would read as "nothing modeled".
+  const modeledValue = unmodeledInvestments?.modeledValue ?? totalValue;
+  const unmodeledValue = unmodeledInvestments?.unmodeledValue ?? 0;
+  const valueCoverage = unmodeledInvestments?.valueCoverage ?? 1;
+
   return {
     completeness,
     priceHistoryCoverage,
+    modeledValue,
+    unmodeledValue,
+    valueCoverage,
+    unmodeledReasons: (unmodeledInvestments?.reasons ?? []).map(reason => ({
+      label: reason.label,
+      amount: reason.amount,
+      kind: reason.kind,
+    })),
     metadataConfidence,
     portfolioMappingConfidence: portfolioMapping.mappingConfidence,
     proxiedValuePercentage,
@@ -76,6 +95,7 @@ export function calculateDataQuality(
  * - portfolioMappingConfidence !== 'high'
  * - priceHistoryCoverage < 0.8
  * - proxiedValuePercentage >= 0.4
+ * - valueCoverage < 0.95
  */
 export function calculateConfidenceCeiling(
   dataQuality: DataQualityReport
@@ -90,6 +110,13 @@ export function calculateConfidenceCeiling(
   if (dataQuality.proxiedValuePercentage >= 0.4) {
     return 'medium';
   }
+  // A projection that does not model every invested dollar cannot be highly
+  // confident about what the portfolio supports, however well the dollars it
+  // did receive are described. Five percent of a retirement portfolio moves a
+  // withdrawal rate and a survival share by more than a rounding note.
+  if (dataQuality.valueCoverage < 0.95) {
+    return 'medium';
+  }
   // If all conditions met, allow high confidence
   return 'high';
 }
@@ -102,6 +129,23 @@ export function generateDisclaimers(
   timelineBucketNote?: string
 ): string[] {
   const disclaimers: string[] = [];
+
+  // First, ahead of the standing disclaimers. This one is specific to this
+  // portfolio and changes how every number below should be read, so it must
+  // not sit seventh in a list a reader skims.
+  const unmodeledNote = describeUnmodeledInvestmentValue({
+    totalInvestments: dataQuality.modeledValue + dataQuality.unmodeledValue,
+    modeledValue: dataQuality.modeledValue,
+    unmodeledValue: dataQuality.unmodeledValue,
+    valueCoverage: dataQuality.valueCoverage,
+    reasons: (dataQuality.unmodeledReasons || []).map(reason => ({
+      accountId: '',
+      label: reason.label,
+      amount: reason.amount,
+      kind: reason.kind === 'no-holdings' ? 'no-holdings' : 'partial-holdings',
+    })),
+  });
+  if (unmodeledNote) disclaimers.push(unmodeledNote);
 
   disclaimers.push('Past performance does not predict future results. Historical analysis shows what happened in the past but cannot guarantee future outcomes.');
   disclaimers.push('Monthly rolling historical windows overlap; their survival share is descriptive and is not an estimate based on independent observations.');
