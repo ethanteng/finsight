@@ -4,7 +4,7 @@ import { constructWebhookEvent } from '../config/stripe';
 import { CreateCheckoutSessionRequest, CreatePortalSessionRequest, SubscriptionTier } from '../types/stripe';
 import { getPrismaClient } from '../prisma-client';
 import { stripe } from '../config/stripe'; // Added for payment success endpoint
-import { requireAuth } from '../auth/middleware';
+import { requireAuth, requireAuthAllowLapsedSubscription } from '../auth/middleware';
 
 const router = express.Router();
 
@@ -93,14 +93,57 @@ router.get('/payment-success', async (req, res) => {
       };
 
       if (existingUser) {
-        // User exists - redirect to dashboard or profile
-        console.log('User already exists, redirecting to dashboard');
+        // Returning subscriber. Checkout created a fresh Stripe customer, so the
+        // webhook alone may not reach this account - link the session here too,
+        // or they pay and stay locked out of the account they paid for.
+        console.log('User already exists, linking checkout session to their account');
+
+        // Anyone can run a checkout with someone else's email, so never let one
+        // repoint an account that is already subscribed: cancelling the planted
+        // subscription would lock the real subscriber out.
+        const workingSubscription = await prisma.subscription.findFirst({
+          where: {
+            userId: existingUser.id,
+            status: { in: ['active', 'trialing'] }
+          }
+        });
+
+        let linked = false;
+        if (workingSubscription) {
+          console.warn(`User ${existingUser.id} already has a working subscription; not relinking from checkout`);
+          linked = true;
+        } else {
+          try {
+            const linkResult = await stripeService.linkCheckoutSessionToUser({
+              userId: existingUser.id,
+              email: existingUser.email,
+              checkoutSessionId: session_id as string
+            });
+            linked = linkResult.linked;
+          } catch (linkError) {
+            console.error('Failed to link checkout session to existing user:', linkError);
+          }
+        }
+
         const baseUrl = process.env.FRONTEND_URL || 'http://localhost:3001';
-        const subscriptionState = isTrial ? 'trialing' : 'active';
-        const redirectUrl = `${baseUrl}/profile?subscription=${subscriptionState}&tier=${tierName}`;
+        // Send them to sign in rather than to /profile: they are not
+        // authenticated here, and every page behind /app needs a session.
+        const loginParams = new URLSearchParams({
+          subscription: 'success',
+          tier: tierName,
+          email: existingUser.email
+        });
+        if (!linked) {
+          loginParams.set(
+            'message',
+            'Your payment went through. If you still cannot sign in a few minutes from now, please contact support.'
+          );
+        }
+        const redirectUrl = `${baseUrl}/login?${loginParams.toString()}`;
+        responseData.linked = linked;
         responseData.redirectUrl = redirectUrl;
         responseData.redirect = redirectUrl;
-        responseData.message = 'User already exists, redirecting to profile';
+        responseData.message = 'Existing user, redirecting to sign in';
         return res.json(responseData);
       } else {
         // New user - redirect to register with subscription context
@@ -177,12 +220,40 @@ router.post('/create-checkout-session', async (req, res) => {
     }
 
     // Create checkout session request
-    const checkoutRequest = {
+    const checkoutRequest: CreateCheckoutSessionRequest = {
       priceId,
       successUrl,
       cancelUrl,
       customerEmail
     };
+
+    // A signed-in user (including a lapsed one renewing) already has a Stripe
+    // customer. Reusing it keeps their billing history on one customer instead
+    // of scattering it across a new one per checkout. The identity comes from
+    // the session, never from the request body - an email in the body would let
+    // a caller attach their checkout to somebody else's customer.
+    const authenticatedUserId = req.user?.id;
+    if (authenticatedUserId) {
+      const prisma = getPrismaClient();
+      const user = await prisma.user.findUnique({
+        where: { id: authenticatedUserId },
+        select: { id: true, email: true, stripeCustomerId: true }
+      });
+
+      if (user) {
+        checkoutRequest.customerEmail = user.email;
+        if (user.stripeCustomerId) {
+          checkoutRequest.customerId = user.stripeCustomerId;
+        }
+
+        // Anyone who has held a subscription before has already used the
+        // introductory trial.
+        const priorSubscriptions = await prisma.subscription.count({
+          where: { userId: user.id }
+        });
+        checkoutRequest.skipTrial = priorSubscriptions > 0;
+      }
+    }
 
     // Create checkout session
     const response = await stripeService.createCheckoutSession(checkoutRequest);
@@ -313,21 +384,36 @@ router.post('/webhooks', async (req, res) => {
  * POST /api/stripe/create-portal-session
  * Create a Customer Portal session for subscription management
  */
-router.post('/create-portal-session', async (req, res) => {
+router.post('/create-portal-session', requireAuthAllowLapsedSubscription, async (req, res) => {
   try {
     const request: CreatePortalSessionRequest = req.body;
-    const { customerId } = req.body;
-    
+
     // Validate required fields
-    if (!request.returnUrl || !customerId) {
+    if (!request.returnUrl) {
       return res.status(400).json({
-        error: 'Missing required fields: returnUrl, customerId'
+        error: 'Missing required fields: returnUrl'
+      });
+    }
+
+    // 🔒 SECURITY: the customer comes from the session, never from the request.
+    // A caller-supplied customer ID would hand anyone the billing portal for
+    // any account.
+    const prisma = getPrismaClient();
+    const user = await prisma.user.findUnique({
+      where: { id: req.user!.id },
+      select: { stripeCustomerId: true }
+    });
+
+    if (!user?.stripeCustomerId) {
+      return res.status(404).json({
+        error: 'No billing account found for this user',
+        code: 'NO_STRIPE_CUSTOMER'
       });
     }
 
     // Create portal session
-    const response = await stripeService.createPortalSession(request, customerId);
-    
+    const response = await stripeService.createPortalSession(request, user.stripeCustomerId);
+
     res.json(response);
   } catch (error) {
     console.error('Error creating portal session:', error);
@@ -367,7 +453,7 @@ router.get('/plans', async (req, res) => {
  * GET /api/stripe/subscription-status
  * Get current user's subscription status and access level
  */
-router.get('/subscription-status', requireAuth, async (req, res) => {
+router.get('/subscription-status', requireAuthAllowLapsedSubscription, async (req, res) => {
   try {
     // Get user ID from auth middleware
     const userId = req.user?.id;

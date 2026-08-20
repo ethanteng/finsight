@@ -47,4 +47,32 @@ describe('LoginForm', () => {
     expect(localStorage.getItem(USER_TIME_ZONE_KEY)).toBe('America/New_York');
     expect(global.fetch).toHaveBeenCalledTimes(2);
   });
+
+  it('offers a lapsed subscriber a renew checkout that identifies their account', async () => {
+    global.fetch = jest.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ token: 'lapsed-token', user: { email: 'lapsed@example.com' } }),
+      })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ status: 'canceled', accessLevel: 'none' }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ url: 'https://checkout.stripe.com/renew' }) });
+
+    render(<LoginForm />);
+    fireEvent.change(screen.getByLabelText('Email address'), { target: { value: 'lapsed@example.com' } });
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'correct-password' } });
+    fireEvent.click(screen.getByRole('button', { name: /Sign in to your workspace/i }));
+
+    await waitFor(() => expect(screen.getByText('Subscription expired')).toBeInTheDocument());
+    // A lapsed subscriber is not signed in to the workspace
+    expect(localStorage.getItem('auth_token')).toBeNull();
+    expect(push).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: /Start a new subscription/i }));
+
+    await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(3));
+    const [checkoutUrl, checkoutInit] = (global.fetch as jest.Mock).mock.calls[2];
+    expect(checkoutUrl).toContain('/api/stripe/create-checkout-session');
+    // Without this the backend cannot reuse their existing Stripe customer
+    expect(checkoutInit.headers.Authorization).toBe('Bearer lapsed-token');
+  });
 });

@@ -25,8 +25,12 @@ jest.mock('../../config/stripe', () => ({
     client: {
       checkout: {
         sessions: {
-          create: jest.fn()
+          create: jest.fn(),
+          retrieve: jest.fn()
         }
+      },
+      customers: {
+        retrieve: jest.fn()
       },
       billingPortal: {
         sessions: {
@@ -68,7 +72,8 @@ describe('StripeService', () => {
         create: jest.fn(),
         upsert: jest.fn(),
         update: jest.fn(),
-        findUnique: jest.fn()
+        findUnique: jest.fn(),
+        findFirst: jest.fn().mockResolvedValue(null)
       },
       subscriptionEvent: {
         create: jest.fn()
@@ -115,6 +120,56 @@ describe('StripeService', () => {
           })
         })
       );
+    });
+
+    it('should reuse a known Stripe customer and withhold a repeat trial', async () => {
+      const mockStripe = require('../../config/stripe');
+
+      mockStripe.stripe.client.customers.retrieve.mockResolvedValue({ id: 'cus_existing_1' });
+      mockStripe.stripe.client.checkout.sessions.create.mockResolvedValue({
+        id: 'cs_test_456',
+        url: 'https://checkout.stripe.com/test'
+      });
+      mockStripe.getTierFromPriceId.mockReturnValue('premium');
+
+      await stripeService.createCheckoutSession({
+        priceId: 'price_test_123',
+        successUrl: 'https://example.com/success',
+        cancelUrl: 'https://example.com/cancel',
+        customerEmail: 'returning@example.com',
+        customerId: 'cus_existing_1',
+        skipTrial: true
+      });
+
+      const createArgs = mockStripe.stripe.client.checkout.sessions.create.mock.calls[0][0];
+      expect(createArgs.customer).toBe('cus_existing_1');
+      // Stripe rejects customer and customer_email together
+      expect(createArgs.customer_email).toBeUndefined();
+      expect(createArgs.subscription_data.trial_period_days).toBeUndefined();
+    });
+
+    it('should fall back to the email prefill when the stored customer is unusable', async () => {
+      const mockStripe = require('../../config/stripe');
+
+      mockStripe.stripe.client.customers.retrieve.mockRejectedValue(new Error('No such customer'));
+      mockStripe.stripe.client.checkout.sessions.create.mockResolvedValue({
+        id: 'cs_test_789',
+        url: 'https://checkout.stripe.com/test'
+      });
+      mockStripe.getTierFromPriceId.mockReturnValue('premium');
+
+      await stripeService.createCheckoutSession({
+        priceId: 'price_test_123',
+        successUrl: 'https://example.com/success',
+        cancelUrl: 'https://example.com/cancel',
+        customerEmail: 'returning@example.com',
+        customerId: 'cus_deleted_1'
+      });
+
+      const createArgs = mockStripe.stripe.client.checkout.sessions.create.mock.calls[0][0];
+      expect(createArgs.customer).toBeUndefined();
+      expect(createArgs.customer_email).toBe('returning@example.com');
+      expect(createArgs.subscription_data.trial_period_days).toBe(30);
     });
 
     it('should throw error for invalid price ID', async () => {
@@ -229,6 +284,106 @@ describe('StripeService', () => {
         { plan: 'standard' },
         { userId: 'user_123' }
       );
+    });
+
+    it('should link a returning subscriber whose checkout created a new Stripe customer', async () => {
+      const mockStripe = require('../../config/stripe');
+
+      // No user row points at the customer Checkout just created
+      mockPrisma.user.findFirst.mockResolvedValue(null);
+      mockStripe.stripe.client.customers.retrieve.mockResolvedValue({
+        id: 'cus_new_456',
+        email: 'Returning@Example.com'
+      });
+      mockStripe.stripe.client.subscriptions.retrieve.mockResolvedValue({
+        status: 'trialing',
+        items: { data: [{ price: { id: 'price_test_123' } }] },
+        metadata: { tier: 'premium' }
+      });
+      mockStripe.getTierFromPriceId.mockReturnValue('premium');
+      mockPrisma.user.findUnique.mockResolvedValue({
+        id: 'user_123',
+        email: 'returning@example.com',
+        tier: 'premium'
+      });
+      mockPrisma.subscription.create.mockResolvedValue({ id: 'sub_123' });
+      mockPrisma.user.update.mockResolvedValue({ id: 'user_123' });
+
+      await stripeService.processWebhookEvent('customer.subscription.created', {
+        object: {
+          id: 'sub_new_456',
+          customer: 'cus_new_456',
+          status: 'trialing',
+          current_period_start: Math.floor(Date.now() / 1000),
+          current_period_end: Math.floor(Date.now() / 1000) + 86400,
+          cancel_at_period_end: false,
+          metadata: { tier: 'premium' }
+        }
+      });
+
+      expect(mockPrisma.user.findUnique).toHaveBeenCalledWith({
+        where: { email: 'returning@example.com' }
+      });
+      // The account adopts the new customer so later events resolve directly
+      expect(mockPrisma.user.update).toHaveBeenCalledWith({
+        where: { id: 'user_123' },
+        data: { stripeCustomerId: 'cus_new_456' }
+      });
+      expect(mockPrisma.subscription.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            userId: 'user_123',
+            stripeSubscriptionId: 'sub_new_456',
+            stripeCustomerId: 'cus_new_456'
+          })
+        })
+      );
+      // Access is restored, not left canceled
+      expect(mockPrisma.user.update).toHaveBeenCalledWith({
+        where: { id: 'user_123' },
+        data: { subscriptionStatus: 'trialing', tier: 'premium' }
+      });
+    });
+
+    it('should not repoint an account that already has a working subscription', async () => {
+      const mockStripe = require('../../config/stripe');
+
+      mockPrisma.user.findFirst.mockResolvedValue(null);
+      mockStripe.stripe.client.customers.retrieve.mockResolvedValue({
+        id: 'cus_attacker_1',
+        email: 'subscriber@example.com'
+      });
+      mockStripe.stripe.client.subscriptions.retrieve.mockResolvedValue({
+        status: 'trialing',
+        items: { data: [{ price: { id: 'price_test_123' } }] },
+        metadata: { tier: 'premium' }
+      });
+      mockStripe.getTierFromPriceId.mockReturnValue('premium');
+      mockPrisma.user.findUnique.mockResolvedValue({
+        id: 'user_123',
+        email: 'subscriber@example.com',
+        tier: 'premium'
+      });
+      // Anyone can start a checkout with someone else's email
+      mockPrisma.subscription.findFirst.mockResolvedValue({
+        id: 'sub_rec_existing',
+        status: 'active'
+      });
+
+      await stripeService.processWebhookEvent('customer.subscription.created', {
+        object: {
+          id: 'sub_attacker_1',
+          customer: 'cus_attacker_1',
+          status: 'trialing',
+          current_period_start: Math.floor(Date.now() / 1000),
+          current_period_end: Math.floor(Date.now() / 1000) + 86400,
+          cancel_at_period_end: false,
+          metadata: { tier: 'premium' }
+        }
+      });
+
+      expect(mockPrisma.user.update).not.toHaveBeenCalled();
+      expect(mockPrisma.subscription.create).not.toHaveBeenCalled();
     });
 
     it('should skip one-time side effects when a subscription created event is replayed', async () => {
@@ -373,6 +528,118 @@ describe('StripeService', () => {
           subscriptionStatus: 'canceled'
         }
       });
+    });
+  });
+
+  describe('linkCheckoutSessionToUser', () => {
+    const completedSession = (email: string) => ({
+      status: 'complete',
+      payment_status: 'no_payment_required',
+      customer_details: { email },
+      customer: 'cus_new_456',
+      subscription: {
+        id: 'sub_new_456',
+        status: 'trialing',
+        current_period_start: Math.floor(Date.now() / 1000),
+        current_period_end: Math.floor(Date.now() / 1000) + 86400,
+        cancel_at_period_end: false,
+        items: { data: [{ price: { id: 'price_test_123' } }] }
+      }
+    });
+
+    it('should attach a completed checkout to an existing account', async () => {
+      const mockStripe = require('../../config/stripe');
+      const { sendWelcomeEmail } = require('../../services/stripe-email');
+
+      mockStripe.stripe.client.checkout.sessions.retrieve.mockResolvedValue(
+        completedSession('Returning@Example.com')
+      );
+      mockStripe.getTierFromPriceId.mockReturnValue('premium');
+      mockPrisma.subscription.create.mockResolvedValue({ id: 'sub_rec_1' });
+      mockPrisma.user.update.mockResolvedValue({ id: 'user_123' });
+
+      const result = await stripeService.linkCheckoutSessionToUser({
+        userId: 'user_123',
+        email: 'returning@example.com',
+        checkoutSessionId: 'cs_test_789'
+      });
+
+      expect(result).toEqual({ linked: true, isNewSubscription: true, status: 'trialing' });
+      expect(mockPrisma.user.update).toHaveBeenCalledWith({
+        where: { id: 'user_123' },
+        data: {
+          stripeCustomerId: 'cus_new_456',
+          subscriptionStatus: 'trialing',
+          tier: 'premium'
+        }
+      });
+      expect(sendWelcomeEmail).toHaveBeenCalledWith('returning@example.com', 'premium');
+    });
+
+    it('should not repeat one-time side effects when the webhook linked it first', async () => {
+      const mockStripe = require('../../config/stripe');
+      const { sendWelcomeEmail } = require('../../services/stripe-email');
+
+      mockStripe.stripe.client.checkout.sessions.retrieve.mockResolvedValue(
+        completedSession('returning@example.com')
+      );
+      mockStripe.getTierFromPriceId.mockReturnValue('premium');
+      mockPrisma.subscription.create.mockRejectedValue({ code: 'P2002' });
+      mockPrisma.subscription.update.mockResolvedValue({ id: 'sub_rec_1' });
+      mockPrisma.user.update.mockResolvedValue({ id: 'user_123' });
+
+      const result = await stripeService.linkCheckoutSessionToUser({
+        userId: 'user_123',
+        email: 'returning@example.com',
+        checkoutSessionId: 'cs_test_789'
+      });
+
+      expect(result.linked).toBe(true);
+      expect(result.isNewSubscription).toBe(false);
+      expect(mockPrisma.subscription.update).toHaveBeenCalledWith({
+        where: { stripeSubscriptionId: 'sub_new_456' },
+        data: expect.objectContaining({ userId: 'user_123', status: 'trialing' })
+      });
+      expect(sendWelcomeEmail).not.toHaveBeenCalled();
+    });
+
+    it('should refuse a checkout that belongs to a different email', async () => {
+      const mockStripe = require('../../config/stripe');
+
+      mockStripe.stripe.client.checkout.sessions.retrieve.mockResolvedValue(
+        completedSession('someone-else@example.com')
+      );
+
+      await expect(
+        stripeService.linkCheckoutSessionToUser({
+          userId: 'user_123',
+          email: 'returning@example.com',
+          checkoutSessionId: 'cs_test_789'
+        })
+      ).rejects.toThrow('Stripe Checkout email does not match the registered account');
+
+      expect(mockPrisma.subscription.create).not.toHaveBeenCalled();
+      expect(mockPrisma.user.update).not.toHaveBeenCalled();
+    });
+
+    it('should refuse a checkout that never completed', async () => {
+      const mockStripe = require('../../config/stripe');
+
+      mockStripe.stripe.client.checkout.sessions.retrieve.mockResolvedValue({
+        ...completedSession('returning@example.com'),
+        status: 'open',
+        payment_status: 'unpaid'
+      });
+
+      await expect(
+        stripeService.linkCheckoutSessionToUser({
+          userId: 'user_123',
+          email: 'returning@example.com',
+          checkoutSessionId: 'cs_test_789'
+        })
+      ).rejects.toThrow('Stripe Checkout session is not complete');
+
+      expect(mockPrisma.subscription.create).not.toHaveBeenCalled();
     });
   });
 

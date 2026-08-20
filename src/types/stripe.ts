@@ -86,6 +86,11 @@ export interface CreateCheckoutSessionRequest {
   successUrl: string;
   cancelUrl: string;
   customerEmail?: string;
+  // Reuse the Stripe customer we already know about instead of letting Checkout
+  // mint a second one for the same person.
+  customerId?: string;
+  // A returning subscriber has already used the introductory trial.
+  skipTrial?: boolean;
 }
 
 export interface CreateCheckoutSessionResponse {

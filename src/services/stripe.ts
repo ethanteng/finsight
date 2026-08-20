@@ -58,6 +58,19 @@ export class StripeService {
         throw new Error(`Invalid price ID: ${request.priceId}`);
       }
 
+      // Checkout rejects customer and customer_email together, and a stale
+      // customer ID fails the whole session, so verify before reusing one.
+      const reusableCustomerId = request.customerId
+        ? await this.getReusableCustomerId(request.customerId)
+        : undefined;
+
+      // A returning subscriber already consumed the introductory trial. Handing
+      // out another one on every resubscribe makes cancelling and re-checking-out
+      // a way to stay free forever.
+      const trialPeriodDays = request.skipTrial
+        ? undefined
+        : STRIPE_CONFIG.subscriptionSettings.trialPeriodDays;
+
       // Create checkout session
       const session = await stripe.client.checkout.sessions.create({
         mode: 'subscription',
@@ -70,13 +83,15 @@ export class StripeService {
         ],
         success_url: request.successUrl, // Use the URL from the request
         cancel_url: request.cancelUrl,   // Use the URL from the request
-        customer_email: request.customerEmail,
+        ...(reusableCustomerId
+          ? { customer: reusableCustomerId }
+          : { customer_email: request.customerEmail }),
         metadata: {
           tier: tier,
           source: 'web_checkout'
         },
         subscription_data: {
-          trial_period_days: STRIPE_CONFIG.subscriptionSettings.trialPeriodDays,
+          ...(trialPeriodDays === undefined ? {} : { trial_period_days: trialPeriodDays }),
           metadata: {
             tier: tier,
             source: 'web_checkout'
@@ -116,6 +131,223 @@ export class StripeService {
       console.error('Error creating portal session:', error);
       throw new Error(`Failed to create portal session: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
+  }
+
+  /**
+   * Return the customer ID only if Stripe still has a usable customer for it.
+   * A deleted or unknown customer would otherwise fail the whole checkout.
+   */
+  private async getReusableCustomerId(customerId: string): Promise<string | undefined> {
+    try {
+      const customer = await stripe.client.customers.retrieve(customerId);
+      if ((customer as { deleted?: boolean }).deleted) {
+        console.warn(`Stripe customer ${customerId} is deleted; letting Checkout create a new one`);
+        return undefined;
+      }
+      return customer.id;
+    } catch (error) {
+      console.warn(`Could not reuse Stripe customer ${customerId}:`, error);
+      return undefined;
+    }
+  }
+
+  /**
+   * Resolve the account a Stripe customer belongs to.
+   *
+   * Checkout mints a brand-new Customer whenever a session starts without one,
+   * so a returning subscriber arrives under a customer ID no user row points at.
+   * Matching on the customer's email recovers the account and adopts the new ID,
+   * without which the resubscription never links to the person who paid for it.
+   */
+  private async resolveUserForCustomer(customerId: string) {
+    const prisma = getPrismaClient();
+
+    const userByCustomerId = await prisma.user.findFirst({
+      where: { stripeCustomerId: customerId }
+    });
+
+    if (userByCustomerId) {
+      return userByCustomerId;
+    }
+
+    let customerEmail: string | undefined;
+    try {
+      const customer = await stripe.client.customers.retrieve(customerId);
+      if (!(customer as { deleted?: boolean }).deleted) {
+        customerEmail = (customer as { email?: string | null }).email?.toLowerCase() || undefined;
+      }
+    } catch (error) {
+      console.error(`Could not retrieve Stripe customer ${customerId}:`, error);
+      return null;
+    }
+
+    if (!customerEmail) {
+      return null;
+    }
+
+    const userByEmail = await prisma.user.findUnique({
+      where: { email: customerEmail }
+    });
+
+    if (!userByEmail) {
+      return null;
+    }
+
+    // Only adopt a customer for an account that is not currently subscribed.
+    // Anyone can start a checkout with somebody else's email, and repointing a
+    // paying subscriber at that customer would hand a stranger control of their
+    // billing - cancelling it would lock the real subscriber out.
+    const workingSubscription = await prisma.subscription.findFirst({
+      where: {
+        userId: userByEmail.id,
+        status: { in: ['active', 'trialing'] }
+      }
+    });
+
+    if (workingSubscription) {
+      console.warn(
+        `Not adopting Stripe customer ${customerId} for ${userByEmail.email}: the account already has a working subscription`
+      );
+      return null;
+    }
+
+    // Point the account at the customer that now carries its billing, so later
+    // events on this subscription resolve on the first lookup.
+    await prisma.user.update({
+      where: { id: userByEmail.id },
+      data: { stripeCustomerId: customerId }
+    });
+
+    console.log(`Adopted Stripe customer ${customerId} for returning user ${userByEmail.email}`);
+
+    return { ...userByEmail, stripeCustomerId: customerId };
+  }
+
+  /**
+   * Attach a completed Checkout session to an existing account.
+   *
+   * Used by registration (brand-new account) and by the payment-success callback
+   * (returning subscriber who already has one), so both paths link a paid
+   * checkout the same way instead of drifting apart.
+   *
+   * Throws when the session is not a completed checkout for this account.
+   */
+  async linkCheckoutSessionToUser(params: {
+    userId: string;
+    email: string;
+    checkoutSessionId: string;
+    tier?: SubscriptionTier;
+  }): Promise<{ linked: boolean; isNewSubscription: boolean; status?: string }> {
+    const { userId, email, checkoutSessionId } = params;
+
+    const session = await stripe.client.checkout.sessions.retrieve(checkoutSessionId, {
+      expand: ['subscription']
+    });
+
+    const checkoutIsComplete = session.status === 'complete' &&
+      (session.payment_status === 'paid' || session.payment_status === 'no_payment_required');
+    if (!checkoutIsComplete) {
+      throw new Error('Stripe Checkout session is not complete');
+    }
+
+    const checkoutEmail = session.customer_details?.email?.toLowerCase();
+    if (checkoutEmail && checkoutEmail !== email.toLowerCase()) {
+      throw new Error('Stripe Checkout email does not match the registered account');
+    }
+
+    if (!session.subscription || !session.customer) {
+      return { linked: false, isNewSubscription: false };
+    }
+
+    const customerId = typeof session.customer === 'string'
+      ? session.customer
+      : session.customer.id;
+
+    const subscription: any = typeof session.subscription === 'string'
+      ? await stripe.client.subscriptions.retrieve(session.subscription)
+      : session.subscription;
+
+    if (!subscription) {
+      return { linked: false, isNewSubscription: false };
+    }
+
+    const tier = params.tier
+      || (getTierFromPriceId(subscription.items?.data?.[0]?.price?.id) as SubscriptionTier | null)
+      || 'premium';
+    const status = subscription.status || 'incomplete';
+    const currentPeriodStart = subscription.current_period_start
+      ? new Date(subscription.current_period_start * 1000)
+      : new Date();
+    const currentPeriodEnd = subscription.current_period_end
+      ? new Date(subscription.current_period_end * 1000)
+      : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+
+    const subscriptionData = {
+      userId,
+      stripeCustomerId: customerId,
+      tier,
+      status,
+      currentPeriodStart,
+      currentPeriodEnd,
+      cancelAtPeriodEnd: subscription.cancel_at_period_end || false,
+    };
+
+    // Claim first delivery with an atomic insert so a concurrent webhook, a
+    // retried registration, or a reloaded success page cannot repeat the
+    // welcome email and start analytics.
+    const prisma = getPrismaClient();
+    let isNewSubscription = false;
+    try {
+      await prisma.subscription.create({
+        data: {
+          ...subscriptionData,
+          stripeSubscriptionId: subscription.id,
+        },
+      });
+      isNewSubscription = true;
+    } catch (error) {
+      if (!isUniqueConstraintError(error)) {
+        throw error;
+      }
+
+      await prisma.subscription.update({
+        where: { stripeSubscriptionId: subscription.id },
+        data: subscriptionData,
+      });
+    }
+
+    // Persist the subscription before exposing the Stripe customer ID. The
+    // webhook cannot find this user until the record it would update already
+    // exists, preventing both paths from claiming first delivery.
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        stripeCustomerId: customerId,
+        subscriptionStatus: status,
+        tier,
+      }
+    });
+
+    console.log(`Linked user ${email} to Stripe customer ${customerId} and subscription ${subscription.id}`);
+
+    if (isNewSubscription) {
+      try {
+        await sendWelcomeEmail(email, tier);
+        console.log(`Welcome email sent to ${email} for ${tier} plan`);
+      } catch (emailError) {
+        console.error(`Failed to send welcome email to ${email}:`, emailError);
+        // Don't fail the caller if email fails
+      }
+
+      try {
+        await analytics.setIdentity(userId, { email, plan: tier });
+        await analytics.trackEvent('subscription_started', { plan: tier }, { userId });
+      } catch (analyticsError) {
+        console.error(`Failed to record subscription_started for ${email}:`, analyticsError);
+      }
+    }
+
+    return { linked: true, isNewSubscription, status };
   }
 
   /**
@@ -176,11 +408,9 @@ export class StripeService {
     // Auto-sync tier based on current price if metadata tier doesn't match
     await this.autoSyncSubscriptionTier(subscriptionId, tier);
 
-    // Find user by Stripe customer ID
+    // Find the account this customer belongs to
     const prisma = getPrismaClient();
-    const user = await prisma.user.findFirst({
-      where: { stripeCustomerId: customerId }
-    });
+    const user = await this.resolveUserForCustomer(customerId);
 
     if (!user) {
       console.warn(`User not found for Stripe customer: ${customerId}`);
@@ -288,10 +518,8 @@ export class StripeService {
     if (!subscriptionRecord) {
       console.log(`Subscription ${subscriptionId} not found, creating new record`);
       
-      // Find user by Stripe customer ID
-      const user = await prisma.user.findFirst({
-        where: { stripeCustomerId: customerId }
-      });
+      // Find the account this customer belongs to
+      const user = await this.resolveUserForCustomer(customerId);
 
       if (!user) {
         console.warn(`User not found for Stripe customer: ${customerId}`);
