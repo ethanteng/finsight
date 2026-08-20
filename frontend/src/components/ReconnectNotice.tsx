@@ -18,8 +18,10 @@ interface ReconnectNoticeProps {
 /** "Chase" / "Chase and Amex" / "Chase and 2 others" — never an unbounded list. */
 function describeInstitutions(names: string[], total: number): string {
   if (names.length === 0) {
-    // "connection", not "account": the count is of Plaid Items, and one broken
-    // Item can cover several accounts. The profile page uses the same word.
+    // "connection", not "account": the count is of provider connections --
+    // Plaid Items and SnapTrade brokerage authorizations alike -- and one
+    // broken connection can cover several accounts. The profile page uses the
+    // same word.
     return total === 1 ? 'A connection needs' : `${total} connections need`;
   }
   if (names.length === 1 && total === 1) return `${names[0]} needs`;

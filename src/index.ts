@@ -2317,6 +2317,9 @@ app.get('/profile/snaptrade-status', requireAuth, async (req: Request, res: Resp
       status: tokenHealth.status,
       error: tokenHealth.error,
       lastChecked: tokenHealth.lastChecked,
+      // Present when a connection is disabled, so the reconnect affordance can
+      // repair that authorization instead of starting a duplicate connection.
+      reconnectAuthorizationId: tokenHealth.reconnectAuthorizationId,
       snapTradeUserId: snapTradeUser.snapTradeUserId,
       createdAt: snapTradeUser.createdAt,
       updatedAt: snapTradeUser.updatedAt

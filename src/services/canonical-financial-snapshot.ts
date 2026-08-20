@@ -45,6 +45,13 @@ interface SnapshotError {
   tokenId?: string;
   accountId?: string;
   error: string;
+  /**
+   * 'advisory' means the data arrived but its connection could not be vouched
+   * for. Such an error is reported without marking the source required, so it
+   * cannot by itself make an otherwise complete snapshot 'partial'. Absent or
+   * 'data-missing' keeps the original strict treatment.
+   */
+  severity?: 'data-missing' | 'advisory';
 }
 
 /** An investment account whose itemized holdings do not explain its reported balance. */
@@ -517,9 +524,14 @@ function buildSourceObservations(
   ];
   providerErrors.forEach(([provider, error], index) => {
     const suffix = error.tokenId || error.accountId || index;
+    // A required unavailable source makes the whole snapshot 'partial'. Reserve
+    // that for data that genuinely did not arrive; an advisory still surfaces
+    // through quality.errors and unavailableSourceIds, so the user is told,
+    // but a complete set of figures is not relabelled incomplete.
+    const isAdvisory = error.severity === 'advisory';
     observations.push({
-      id: `${provider}:error:${suffix}`,
-      required: true,
+      id: `${provider}:${isAdvisory ? 'advisory' : 'error'}:${suffix}`,
+      required: !isAdvisory,
       status: 'unavailable',
       asOf: null,
       maxAgeMs: balanceMaxAgeMs,
@@ -527,7 +539,8 @@ function buildSourceObservations(
     });
   });
 
-  if (data.metadata?.partialData && providerErrors.length === 0) {
+  const requiredProviderErrors = providerErrors.filter(([, error]) => error.severity !== 'advisory');
+  if (data.metadata?.partialData && requiredProviderErrors.length === 0) {
     observations.push({
       id: 'financial-data:partial',
       required: true,

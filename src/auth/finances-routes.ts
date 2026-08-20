@@ -77,7 +77,39 @@ router.get('/overview', requireAuth, async (req: AuthenticatedRequest, res) => {
     // this never points a user at a screen that cannot help them.
     const reauthRequiredConnections = accessTokens
       .filter(token => isUserActionRequiredPlaidError(token.lastError))
-      .map(token => ({ id: token.id, institutionName: token.institutionName }));
+      .map(token => ({
+        id: token.id,
+        institutionName: token.institutionName,
+        provider: 'plaid' as const,
+      }));
+
+    // SnapTrade connection health does come from the snapshot, unlike Plaid's:
+    // it is recorded per account when the brokerage authorizations are read, so
+    // reading it here costs no extra provider call and describes the same
+    // revision the page is about to render.
+    //
+    // Only `disabled` counts. `connectionStatusUnavailable` means health could
+    // not be determined -- often a transient lookup failure -- and there is
+    // nothing for the user to do about it, so prompting would be noise. Same
+    // rule the Plaid filter above follows.
+    //
+    // Deduplicated by authorization because one brokerage connection backs
+    // several accounts, and the notice counts connections, not accounts.
+    const snapshotAccounts: any[] = Array.isArray((snapshot as any).accounts)
+      ? (snapshot as any).accounts
+      : [];
+    const disabledSnapTradeConnections = new Map<string, { id: string; institutionName: string | null; provider: 'snaptrade' }>();
+    for (const account of snapshotAccounts) {
+      if (account?.source !== 'snaptrade' || account?.connectionDisabled !== true) continue;
+      const connectionId = account.brokerageAuthorizationId || account.account_id;
+      if (!connectionId || disabledSnapTradeConnections.has(connectionId)) continue;
+      disabledSnapTradeConnections.set(connectionId, {
+        id: connectionId,
+        institutionName: account.institution || null,
+        provider: 'snaptrade',
+      });
+    }
+    reauthRequiredConnections.push(...(disabledSnapTradeConnections.values() as any));
 
     return res.json(buildFinancesOverview({
       snapshot: snapshot as any,

@@ -21,6 +21,43 @@ import {
 // connection needing user action cannot freeze the snapshot indefinitely.
 const RETAINED_SNAPSHOT_MAX_AGE_MS = 48 * 60 * 60 * 1000;
 
+/** Canonical id for an account in a snapshot's `accounts` array. */
+function snapshotAccountId(account: unknown): string | null {
+  if (!account || typeof account !== 'object') return null;
+  const record = account as Record<string, unknown>;
+  const id = record.account_id ?? record.id;
+  return typeof id === 'string' && id.length > 0 ? id : null;
+}
+
+/**
+ * Accounts the previous revision had that this one does not.
+ *
+ * This is the question retention actually needs answered. A snapshot can be
+ * 'partial' while still describing every account -- an erroring Plaid token
+ * keeps yielding its last known balances through financial-source-persistence,
+ * and an advisory about a connection's health costs no data at all. Only a
+ * revision that has genuinely lost accounts is worse than the one it replaces.
+ *
+ * Returns an empty list when the previous revision recorded no accounts, so a
+ * first snapshot or an older revision without the field is never read as a
+ * regression.
+ */
+function accountIdsMissingFrom(previous: unknown, freshAccounts: unknown): string[] {
+  const previousAccounts = (previous as { accounts?: unknown })?.accounts;
+  if (!Array.isArray(previousAccounts) || previousAccounts.length === 0) return [];
+  const fresh = new Set(
+    (Array.isArray(freshAccounts) ? freshAccounts : [])
+      .map(snapshotAccountId)
+      .filter((id): id is string => id !== null)
+  );
+  const missing = new Set<string>();
+  for (const account of previousAccounts) {
+    const id = snapshotAccountId(account);
+    if (id && !fresh.has(id)) missing.add(id);
+  }
+  return Array.from(missing);
+}
+
 export interface SummaryComputeOptions {
   categorize?: boolean;
   history?: HistoryWriteIntent;
@@ -182,7 +219,33 @@ export class SummaryCacheService {
         && previousAgeMs !== null
         && previousAgeMs <= RETAINED_SNAPSHOT_MAX_AGE_MS;
 
-      if (retainable) {
+      // Retention exists to stop a provider outage from blanking assets off the
+      // page. It is only the right trade when this revision would actually lose
+      // ground -- when the partial fetch dropped accounts the previous revision
+      // had. That is not the common case: financial-source-persistence keeps
+      // yielding last known balances for an erroring token, so a partial run
+      // usually still covers every account, just with something unverified
+      // attached.
+      //
+      // When coverage holds, writing is strictly better than freezing. The user
+      // sees today's figures instead of a revision that stops moving, and the
+      // provider errors ride along in quality.errors and the source
+      // observations, which invariant 5 of the financial truth contract
+      // requires be preserved through a successful write either way. Freezing
+      // in that situation discards a completely successful refresh of every
+      // healthy source, which is what held real users on a stale revision for
+      // days while every one of their connections was syncing normally.
+      const droppedAccountIds = accountIdsMissingFrom(previous, payload.accounts);
+      if (retainable && droppedAccountIds.length === 0) {
+        console.log(
+          `SummaryCacheService: provider data for user ${userId} is ${canonical.status} but still covers ` +
+          `every account in the prior revision; persisting it rather than retaining`
+        );
+      }
+      if (retainable && droppedAccountIds.length > 0) {
+        console.warn(
+          `SummaryCacheService: ${droppedAccountIds.length} account(s) missing from this revision for user ${userId}`
+        );
         console.warn(
           `SummaryCacheService: retaining ${previous!.status} snapshot for user ${userId}; ` +
           `refusing to replace with ${canonical.status} provider data`

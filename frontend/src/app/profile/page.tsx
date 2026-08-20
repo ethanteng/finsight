@@ -164,6 +164,8 @@ interface SnapTradeStatus {
   snapTradeUserId?: string;
   createdAt?: string;
   updatedAt?: string;
+  /** Set when a brokerage connection is disabled and can be repaired in place. */
+  reconnectAuthorizationId?: string;
 }
 
 export default function ProfilePage() {
@@ -1370,6 +1372,10 @@ export default function ProfilePage() {
             <div className="mb-6">
               <SnapTradeButton
                 snapTradeStatus={snapTradeStatus}
+                // Repairs the disabled authorization rather than adding a second
+                // connection to the same brokerage. Undefined when nothing is
+                // broken, which leaves the ordinary connect flow untouched.
+                reconnectAuthorizationId={snapTradeStatus?.reconnectAuthorizationId}
                 onAccountsUpdated={() => {
                   // Refresh investment data when SnapTrade accounts are updated
                   loadInvestmentData();

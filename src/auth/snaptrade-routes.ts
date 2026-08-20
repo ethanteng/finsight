@@ -139,7 +139,19 @@ router.post('/login', requireAuth, async (req, res) => {
       });
     }
 
-    const result = await snapTradeService.getLoginRedirect(userId, user.userSecret);
+    // Reconnecting repairs the named authorization instead of adding a second
+    // connection to the same brokerage. Read from the body so the reconnect
+    // affordance can pass the authorization it is offering to fix; absent, this
+    // stays the ordinary "connect an account" flow.
+    const reconnectAuthorizationId = typeof req.body?.reconnect === 'string' && req.body.reconnect.trim()
+      ? req.body.reconnect.trim()
+      : undefined;
+
+    const result = await snapTradeService.getLoginRedirect(
+      userId,
+      user.userSecret,
+      reconnectAuthorizationId
+    );
     
     if (result.success) {
       res.json({

@@ -31,6 +31,12 @@ interface SnapTradeTokenStatus {
 interface SnapTradeButtonProps {
   onAccountsUpdated?: () => void;
   snapTradeStatus?: SnapTradeTokenStatus | null;
+  /**
+   * Brokerage authorization to repair when the user opens the portal. Set when
+   * the profile page is offering to fix a connection SnapTrade reports as
+   * disabled; leave unset for an ordinary new connection.
+   */
+  reconnectAuthorizationId?: string;
 }
 
 // Balances are money: always two decimals. Number.toLocaleString() defaults to
@@ -43,7 +49,7 @@ const formatCurrency = (amount: number) =>
     maximumFractionDigits: 2,
   }).format(amount);
 
-export default function SnapTradeButton({ onAccountsUpdated, snapTradeStatus: snapTradeTokenStatus }: SnapTradeButtonProps) {
+export default function SnapTradeButton({ onAccountsUpdated, snapTradeStatus: snapTradeTokenStatus, reconnectAuthorizationId }: SnapTradeButtonProps) {
   const [status, setStatus] = useState<string>('loading');
   const [snapTradeStatus, setSnapTradeStatus] = useState<SnapTradeStatus | null>(null);
   const [connectedAccounts, setConnectedAccounts] = useState<SnapTradeAccount[]>([]);
@@ -228,7 +234,13 @@ export default function SnapTradeButton({ onAccountsUpdated, snapTradeStatus: sn
     }
   };
 
-  const connectSnapTrade = async () => {
+  /**
+   * `reconnectAuthorizationId` repairs an existing brokerage authorization
+   * rather than adding another connection to the same brokerage, which is what
+   * the plain connect flow would do when a user is trying to fix a disabled
+   * connection.
+   */
+  const connectSnapTrade = async (reconnectAuthorizationId?: string) => {
     try {
       // Check if other financial services are active
       if (financialServiceCoordinator.hasActiveServices()) {
@@ -254,7 +266,10 @@ export default function SnapTradeButton({ onAccountsUpdated, snapTradeStatus: sn
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
-        }
+        },
+        body: JSON.stringify(
+          reconnectAuthorizationId ? { reconnect: reconnectAuthorizationId } : {}
+        )
       });
 
       if (response.ok) {
@@ -358,7 +373,7 @@ export default function SnapTradeButton({ onAccountsUpdated, snapTradeStatus: sn
     if (status === 'error') {
       initializeSnapTrade();
     } else if (status === 'registered') {
-      connectSnapTrade();
+      connectSnapTrade(reconnectAuthorizationId);
     } else if (status === 'disconnected') {
       initializeSnapTrade();
     }
