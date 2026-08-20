@@ -527,6 +527,11 @@ export async function completeRetirementAnalysis(
       holdings,
       securities,
       unmodeledInvestments: snapshot.investments?.unmodeledInvestments,
+      // The glidepath split depends on the year, so take it from the snapshot
+      // the analysis is built on rather than the wall clock. That keeps a
+      // recomputation and a cached result agreeing across a year boundary, and
+      // makes the analysis a function of its inputs like everything else here.
+      asOfYear: snapshotYear(snapshot),
     });
     return {
       ...snapshot,
@@ -550,6 +555,19 @@ export async function completeRetirementAnalysis(
   }
 }
 
+/**
+ * Year of the snapshot an analysis is built from, when it is known.
+ *
+ * Undefined leaves the engine on its current-year default, which is right for
+ * a context with no snapshot behind it.
+ */
+function snapshotYear(snapshot: FinancialContextSnapshot): number | undefined {
+  const computedAt = snapshot.financialSummary?.computedAt;
+  if (!computedAt) return undefined;
+  const parsed = computedAt instanceof Date ? computedAt : new Date(computedAt);
+  return Number.isNaN(parsed.getTime()) ? undefined : parsed.getUTCFullYear();
+}
+
 /** Fetch a matching retirement analysis or create one from explicit, persisted inputs. */
 async function fetchOrCreateRetirementAnalysis(args: {
   userId: string;
@@ -561,6 +579,7 @@ async function fetchOrCreateRetirementAnalysis(args: {
   holdings: any[];
   securities: any[];
   unmodeledInvestments?: UnmodeledInvestmentValue | null;
+  asOfYear?: number;
 }): Promise<RetirementAnalysisResolution> {
   const {
     userId,
@@ -572,6 +591,7 @@ async function fetchOrCreateRetirementAnalysis(args: {
     holdings,
     securities,
     unmodeledInvestments,
+    asOfYear,
   } = args;
 
   // Parse retirement parameters from the question and the turns that set it up.
@@ -816,6 +836,7 @@ async function fetchOrCreateRetirementAnalysis(args: {
       holdings,
       securities,
       unmodeledInvestments,
+      asOfYear,
       currentAge,
       retirementAge,
       lifeExpectancy,

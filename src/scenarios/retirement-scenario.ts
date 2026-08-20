@@ -499,6 +499,13 @@ export async function runRetirementScenario(
   analyze: RetirementAnalyzer = analyzeRetirementPortfolio
 ): Promise<RetirementScenarioExecution> {
   const startedAt = Date.now();
+  const computedAt = snapshot.financialSummary?.computedAt;
+  const parsedComputedAt = computedAt
+    ? (computedAt instanceof Date ? computedAt : new Date(computedAt))
+    : null;
+  const baselineYear = parsedComputedAt && !Number.isNaN(parsedComputedAt.getTime())
+    ? parsedComputedAt.getUTCFullYear()
+    : undefined;
   const baseline = snapshot.retirementAnalysis;
   const stored = baseline?._storedInputParams;
   const holdings = snapshot.investments?.holdings;
@@ -530,6 +537,10 @@ export async function runRetirementScenario(
     // Variants must exclude exactly what the baseline excluded, or a scenario
     // comparison would attribute a coverage difference to the change modeled.
     unmodeledInvestments: snapshot.investments?.unmodeledInvestments ?? null,
+    // Same reason: a variant computed on the other side of a year boundary from
+    // its baseline would carry a different glidepath, and the comparison would
+    // read that difference as an effect of the change being modeled.
+    asOfYear: baselineYear,
   };
   const baselinePolicy: WithdrawalPolicy = { type: 'historical_cpi' };
   const baselineScenarioId = scenarioId(baseInput, baselinePolicy, baseline as RetirementAnalysisOutput);
