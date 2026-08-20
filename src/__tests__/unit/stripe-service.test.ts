@@ -386,6 +386,48 @@ describe('StripeService', () => {
       expect(mockPrisma.subscription.create).not.toHaveBeenCalled();
     });
 
+    it('should not overwrite an active account when a new incomplete subscription is created', async () => {
+      // Customer reuse after cancel-at-period-end (or a failed renew retry) can
+      // mint an incomplete subscription while the previous one still runs.
+      mockPrisma.user.findFirst.mockResolvedValue({
+        id: 'user_123',
+        email: 'returning@example.com',
+        stripeCustomerId: 'cus_same_1',
+        tier: 'premium'
+      });
+      mockPrisma.subscription.create.mockResolvedValue({ id: 'sub_rec_incomplete' });
+      mockPrisma.subscription.findFirst.mockResolvedValue({
+        id: 'sub_rec_active',
+        stripeSubscriptionId: 'sub_active_1',
+        status: 'active',
+        tier: 'premium'
+      });
+      mockPrisma.user.update.mockResolvedValue({ id: 'user_123' });
+
+      await stripeService.processWebhookEvent('customer.subscription.created', {
+        object: {
+          id: 'sub_incomplete_1',
+          customer: 'cus_same_1',
+          status: 'incomplete',
+          current_period_start: Math.floor(Date.now() / 1000),
+          current_period_end: Math.floor(Date.now() / 1000) + 86400,
+          cancel_at_period_end: false,
+          metadata: { tier: 'premium' }
+        }
+      });
+
+      expect(mockPrisma.subscription.create).toHaveBeenCalled();
+      expect(mockPrisma.user.update).toHaveBeenCalledWith({
+        where: { id: 'user_123' },
+        data: { subscriptionStatus: 'active', tier: 'premium' }
+      });
+      expect(mockPrisma.user.update).not.toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ subscriptionStatus: 'incomplete' })
+        })
+      );
+    });
+
     it('should skip one-time side effects when a subscription created event is replayed', async () => {
       const { sendWelcomeEmail } = require('../../services/stripe-email');
       const { analytics } = require('../../analytics/heycatch');
@@ -862,7 +904,6 @@ describe('StripeService', () => {
       expect(result.upgradeRequired).toBe(false);
       expect(result.message).toContain('Admin-created starter user');
     });
-  });
 
     it('should report the working subscription when a newer one is incomplete', async () => {
       mockPrisma.user.findUnique.mockResolvedValue({
@@ -882,6 +923,7 @@ describe('StripeService', () => {
       expect(result.status).toBe('active');
       expect(result.accessLevel).toBe('full');
     });
+  });
 
   describe('canAccessFeature', () => {
     it('should allow access for sufficient tier and active subscription', async () => {

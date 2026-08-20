@@ -459,14 +459,25 @@ export class StripeService {
       });
     }
 
-    // Update user subscription status
-    await prisma.user.update({
-      where: { id: user.id },
-      data: {
-        subscriptionStatus: subscription.status,
-        tier: tier,
-      }
-    });
+    // A replacement checkout can create an incomplete subscription while the
+    // previous one is still active (cancel-at-period-end + renew, or a failed
+    // payment retry). Only promote the account for a working status; otherwise
+    // keep whatever still carries access — same hazard as a late update/invoice.
+    if (subscription.status === 'active' || subscription.status === 'trialing') {
+      await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          subscriptionStatus: subscription.status,
+          tier: tier,
+        }
+      });
+    } else {
+      await this.applyUserSubscriptionStatusIfNoWorkingReplacement(
+        user.id,
+        subscription.status,
+        tier
+      );
+    }
 
     if (isNewSubscription) {
       try {
