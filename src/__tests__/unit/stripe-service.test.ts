@@ -925,6 +925,50 @@ describe('StripeService', () => {
     });
   });
 
+    it('should find a working subscription hidden behind a run of failed retries', async () => {
+      const incompleteRetry = { status: 'incomplete', tier: 'premium', currentPeriodEnd: new Date() };
+      mockPrisma.user.findUnique.mockResolvedValue({
+        id: 'user_123',
+        tier: 'premium',
+        subscriptionStatus: 'active',
+        // The whole window is failed checkout retries
+        subscriptions: [
+          incompleteRetry,
+          incompleteRetry,
+          incompleteRetry,
+          incompleteRetry,
+          incompleteRetry
+        ]
+      });
+      mockPrisma.subscription.findFirst.mockResolvedValue({
+        status: 'active',
+        tier: 'premium',
+        currentPeriodEnd: new Date()
+      });
+
+      const result = await stripeService.getUserSubscriptionStatus('user_123');
+
+      expect(mockPrisma.subscription.findFirst).toHaveBeenCalledWith({
+        where: { userId: 'user_123', status: { in: ['active', 'trialing'] } },
+        orderBy: { createdAt: 'desc' }
+      });
+      expect(result.status).toBe('active');
+      expect(result.accessLevel).toBe('full');
+    });
+
+    it('should not query past the window when it already holds a working subscription', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({
+        id: 'user_123',
+        tier: 'premium',
+        subscriptionStatus: 'active',
+        subscriptions: [{ status: 'active', tier: 'premium', currentPeriodEnd: new Date() }]
+      });
+
+      await stripeService.getUserSubscriptionStatus('user_123');
+
+      expect(mockPrisma.subscription.findFirst).not.toHaveBeenCalled();
+    });
+
   describe('canAccessFeature', () => {
     it('should allow access for sufficient tier and active subscription', async () => {
       mockPrisma.user.findUnique.mockResolvedValue({

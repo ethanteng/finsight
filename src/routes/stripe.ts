@@ -114,9 +114,10 @@ router.get('/payment-success', async (req, res) => {
         });
 
         let linked = false;
+        let skippedForExistingSubscription = false;
         if (workingSubscription) {
           console.warn(`User ${existingUser.id} already has a working subscription; not relinking from checkout`);
-          linked = true;
+          skippedForExistingSubscription = true;
         } else {
           try {
             const linkResult = await stripeService.linkCheckoutSessionToUser({
@@ -133,19 +134,32 @@ router.get('/payment-success', async (req, res) => {
         const baseUrl = process.env.FRONTEND_URL || 'http://localhost:3001';
         // Send them to sign in rather than to /profile: they are not
         // authenticated here, and every page behind /app needs a session.
-        const loginParams = new URLSearchParams({
-          subscription: 'success',
-          tier: tierName,
-          email: existingUser.email
-        });
-        if (!linked) {
+        const loginParams = new URLSearchParams({ email: existingUser.email });
+
+        if (skippedForExistingSubscription) {
+          // This checkout was deliberately not attached, so it is now an
+          // orphaned Stripe subscription that somebody is paying for. Say so
+          // instead of showing the "your subscription is ready" banner over a
+          // payment that never landed on this account.
           loginParams.set(
             'message',
-            'Your payment went through. If you still cannot sign in a few minutes from now, please contact support.'
+            'This account already has an active subscription, so this checkout was not applied to it. Please contact support so the duplicate can be refunded.'
           );
+        } else {
+          loginParams.set('subscription', 'success');
+          loginParams.set('tier', tierName);
+          if (!linked) {
+            loginParams.set(
+              'message',
+              'Your payment went through. If you still cannot sign in a few minutes from now, please contact support.'
+            );
+          }
         }
         const redirectUrl = `${baseUrl}/login?${loginParams.toString()}`;
         responseData.linked = linked;
+        if (skippedForExistingSubscription) {
+          responseData.code = 'ACCOUNT_ALREADY_SUBSCRIBED';
+        }
         responseData.redirectUrl = redirectUrl;
         responseData.redirect = redirectUrl;
         responseData.message = 'Existing user, redirecting to sign in';

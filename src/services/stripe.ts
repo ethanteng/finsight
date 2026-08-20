@@ -13,6 +13,10 @@ import { getPrismaClient } from '../prisma-client';
 import { sendWelcomeEmail, sendTierChangeEmail, sendCancellationEmail } from './stripe-email';
 import { analytics } from '../analytics/heycatch';
 
+// How many of an account's newest subscriptions getUserSubscriptionStatus reads
+// before it has to ask for a working one explicitly.
+const RECENT_SUBSCRIPTION_WINDOW = 5;
+
 function isUniqueConstraintError(error: unknown): error is { code: string } {
   return typeof error === 'object' && error !== null && 'code' in error && error.code === 'P2002';
 }
@@ -1109,7 +1113,7 @@ export class StripeService {
           subscriptionStatus: true,
           subscriptions: {
             orderBy: { createdAt: 'desc' },
-            take: 5
+            take: RECENT_SUBSCRIPTION_WINDOW
           }
         }
       });
@@ -1144,11 +1148,25 @@ export class StripeService {
         // land incomplete while the previous subscription still runs). Read the
         // status off the subscription that actually carries access, so this never
         // contradicts what authentication sees.
-        const latestSubscription =
-          user.subscriptions.find(
-            (subscription: { status: string }) =>
-              subscription.status === 'active' || subscription.status === 'trialing'
-          ) || user.subscriptions[0];
+        const isWorking = (subscription: { status: string }) =>
+          subscription.status === 'active' || subscription.status === 'trialing';
+
+        let latestSubscription = user.subscriptions.find(isWorking);
+
+        if (!latestSubscription && user.subscriptions.length === RECENT_SUBSCRIPTION_WINDOW) {
+          // The window is full, so a run of failed checkout retries could be
+          // hiding a subscription that still works. Ask for it directly rather
+          // than denying access to someone who is paying.
+          latestSubscription = await prisma.subscription.findFirst({
+            where: {
+              userId: user.id,
+              status: { in: ['active', 'trialing'] }
+            },
+            orderBy: { createdAt: 'desc' }
+          }) || undefined;
+        }
+
+        latestSubscription = latestSubscription || user.subscriptions[0];
         actualSubscriptionStatus = latestSubscription.status;
         if (actualSubscriptionStatus === 'trialing') {
           expiresAt = latestSubscription.currentPeriodEnd;
