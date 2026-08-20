@@ -86,7 +86,8 @@ modeled (`modeledValue`), what it left out (`unmodeledValue`), and the dollar-we
 covered (`valueCoverage`) -- distinct from holdings-count completeness, which stays high while a
 fifth of the money is absent. Coverage below 95% caps the analysis's confidence, and every figure
 computed on the modeled subset carries the exclusion as a caveat on its canonical fact, so a
-qualified number cannot be quoted unqualified. Results so produced are floors, not estimates.
+qualified number cannot be quoted unqualified. Support metrics (portfolio value, years of expenses,
+survival, depletion) are floors; withdrawal rates are overstated relative to the full portfolio.
 
 Amounts remain unrounded during calculation; formatting and rounding are presentation concerns. Metrics in API and LLM responses must carry an explicit unit/currency rather than infer one from a label.
 

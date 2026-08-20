@@ -657,30 +657,41 @@ export function buildCanonicalFactPack(
         addCalculatedFact('retirement_value_coverage', 'Share of investments this projection modeled', coverageRatio * 100, 'percent', 'input * 100', ['retirement_value_coverage_ratio']);
       }
 
-      // Stamp the exclusion onto every figure it distorts. These are computed
-      // on the modeled portfolio alone, so each one understates what the whole
-      // portfolio supports -- and the ratios distort more than the value does,
-      // because the excluded amount sits in their denominator.
-      const caveat =
+      // Stamp the exclusion onto every figure it distorts. Support metrics
+      // (portfolio value, years of expenses, survival, depletion) understate
+      // what the full portfolio would support. Withdrawal rates move the other
+      // way: the excluded amount sits in their denominator, so the reported
+      // rate is overstated relative to the full portfolio.
+      const exclusionBasis =
         `Computed on the ${formatUsd(coverage?.modeledValue)} this projection modeled, not the full portfolio: ` +
-        `${formatUsd(unmodeledValue)} of investments is excluded because its asset mix is unknown. ` +
-        'Read this as a floor, and state the exclusion whenever you state this number.';
-      const distortedFactIds = [
-        'withdrawal_rate_ratio',
-        'withdrawal_rate',
+        `${formatUsd(unmodeledValue)} of investments is excluded because its asset mix is unknown. `;
+      const supportFloorCaveat =
+        `${exclusionBasis}Read this as a floor, and state the exclusion whenever you state this number.`;
+      const withdrawalRateCaveat =
+        `${exclusionBasis}This rate is overstated relative to the full portfolio (read it as a ceiling on the true rate), ` +
+        'and state the exclusion whenever you state this number.';
+      const supportFloorFactIds = [
         'years_of_expenses',
         'projected_portfolio_at_withdrawal_start',
         'survival_rate_ratio',
         'survival_rate',
+        ...['p10', 'p25', 'p50', 'p75', 'p90'].map(percentile => `depletion_years_${percentile}`),
+      ];
+      const withdrawalRateFactIds = [
+        'withdrawal_rate_ratio',
+        'withdrawal_rate',
         ...['p10', 'p25', 'p50', 'p75', 'p90'].flatMap(percentile => [
           `historical_withdrawal_rate_${percentile}_ratio`,
           `historical_withdrawal_rate_${percentile}`,
-          `depletion_years_${percentile}`,
         ]),
       ];
-      for (const factId of distortedFactIds) {
+      for (const factId of supportFloorFactIds) {
         const fact = facts.get(factId);
-        if (fact) facts.set(factId, { ...fact, caveat });
+        if (fact) facts.set(factId, { ...fact, caveat: supportFloorCaveat });
+      }
+      for (const factId of withdrawalRateFactIds) {
+        const fact = facts.get(factId);
+        if (fact) facts.set(factId, { ...fact, caveat: withdrawalRateCaveat });
       }
     }
   }

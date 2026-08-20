@@ -150,6 +150,8 @@ describe('unmodeled value note', () => {
     expect(note).toContain('19%');
     expect(note).toContain('$1,868,491');
     expect(note).toContain('floor');
+    expect(note).toContain('overstated');
+    expect(note).toContain('ceilings on the true rate');
     expect(note!.startsWith(UNMODELED_VALUE_NOTE_PREFIX)).toBe(true);
   });
 

@@ -364,6 +364,10 @@ describe('buildCanonicalFactPack', () => {
     for (const id of ['withdrawal_rate', 'years_of_expenses', 'survival_rate', 'projected_portfolio_at_withdrawal_start', 'depletion_years_p50']) {
       expect(pack.facts.find((fact) => fact.id === id)?.caveat).toContain('$432,498');
     }
+    // Support metrics are floors; withdrawal rates are overstated ceilings.
+    expect(pack.facts.find((fact) => fact.id === 'years_of_expenses')?.caveat).toContain('floor');
+    expect(pack.facts.find((fact) => fact.id === 'withdrawal_rate')?.caveat).toContain('overstated');
+    expect(pack.facts.find((fact) => fact.id === 'withdrawal_rate')?.caveat).not.toContain('floor');
     // Figures the exclusion does not distort stay uncaveated.
     expect(pack.facts.find((fact) => fact.id === 'equity_allocation')?.caveat).toBeUndefined();
     expect(pack.facts.find((fact) => fact.id === 'retirement_current_age')?.caveat).toBeUndefined();

@@ -204,8 +204,8 @@ export function describeUnmodeledInvestmentValue(
     `${attribution}${remainder}, about ${share}% of the total. ` +
     'Their asset mix is unknown, and modeling them would mean assuming a return they may not earn, ' +
     `so the projection runs on the ${money(summary.modeledValue)} that can be modeled position by position. ` +
-    'Every result below is therefore a floor rather than an estimate: the portfolio value, the ' +
-    'withdrawal rate, the years of expenses, and the historical survival share all understate ' +
-    'what the full portfolio would support.'
+    'Portfolio value, years of expenses, depletion horizon, and historical survival share are therefore ' +
+    'floors — they understate what the full portfolio would support. Withdrawal rates move the other way: ' +
+    'they are overstated relative to the full portfolio, so read them as ceilings on the true rate.'
   );
 }
