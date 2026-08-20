@@ -166,6 +166,8 @@ interface SnapTradeStatus {
   updatedAt?: string;
   /** Brokerage connections that are disabled and can be repaired in place. */
   reconnectAuthorizationIds?: string[];
+  /** Disabled connections, per brokerage, so health can be attributed correctly. */
+  disabledConnections?: Array<{ authorizationId: string; institutionName: string | null }>;
 }
 
 export default function ProfilePage() {
@@ -1247,6 +1249,16 @@ export default function ProfilePage() {
                     const tokenStatus = tokenStatuses.find(t =>
                       t.institutionName === account.institution
                     );
+                    // SnapTrade-backed accounts have no Plaid AccessToken, so the
+                    // lookup above never matches them and they carried no health
+                    // marker at all. Match them to the disabled brokerage instead --
+                    // per connection, so a disabled Public connection says nothing
+                    // about a working Fidelity one.
+                    const snapTradeDisabled = account.institution
+                      ? snapTradeStatus?.disabledConnections?.find(
+                          connection => connection.institutionName === account.institution
+                        )
+                      : undefined;
                     const isClosed = Boolean(account.isClosed);
                     const lastSeen = formatLastSeen(account.lastSeenAt);
 
@@ -1270,7 +1282,14 @@ export default function ProfilePage() {
                             </div>
                             <div className="mt-1 flex min-w-0 items-start gap-2 text-sm text-gray-400">
                               {/* Keep connection health in a stable column instead of letting it wrap with the account name. */}
-                              {tokenStatus && !isClosed && (
+                              {snapTradeDisabled && !isClosed ? (
+                                <span
+                                  className="w-4 shrink-0 text-center text-red-400"
+                                  title={`Connection issue: SnapTrade connection disabled for ${account.institution}`}
+                                >
+                                  ✗
+                                </span>
+                              ) : tokenStatus && !isClosed && (
                                 tokenStatus.isActive ? (
                                   <span className="w-4 shrink-0 text-center text-green-400" title="Connection active">
                                     ✓
@@ -1289,6 +1308,12 @@ export default function ProfilePage() {
                               <div className="text-xs text-yellow-300 mt-1">
                                 Closed — not included in your Finances totals
                                 {lastSeen ? ` • Last reported ${lastSeen}` : ''}
+                              </div>
+                            )}
+                            {/* Names this account's own brokerage, never another's. */}
+                            {snapTradeDisabled && !isClosed && (
+                              <div className="text-xs text-red-400 mt-1">
+                                {`SnapTrade connection disabled for ${account.institution}. Reconnect to resume updates.`}
                               </div>
                             )}
                             {/* Show error message if token is inactive */}
@@ -1400,10 +1425,31 @@ export default function ProfilePage() {
                       const account = holding.account as Record<string, unknown> | undefined;
                       if (!account) return null;
 
-                      // Determine if SnapTrade connection is healthy
-                      const isHealthy = snapTradeStatus?.connected &&
-                                       (snapTradeStatus?.status === 'VALID' ||
-                                        snapTradeStatus?.status === 'valid');
+                      // Connection health belongs to a brokerage authorization, not
+                      // to the SnapTrade user. Reading it off the global status marked
+                      // every account broken -- and named the wrong institution -- the
+                      // moment any one connection was disabled, so a user with Public
+                      // disabled saw their healthy Fidelity accounts reported as
+                      // "disabled for Public".
+                      //
+                      // `undefined` means SnapTrade could not confirm this
+                      // authorization's health, which is not the same as knowing it is
+                      // broken, so only an explicit true counts against the account.
+                      const connectionDisabled = account.connectionDisabled === true;
+                      // A whole-connection failure -- credentials gone, SnapTrade
+                      // unreachable -- genuinely does affect every account, so it still
+                      // applies across the board. LOGIN_REQUIRED deliberately does not:
+                      // it means some authorization is disabled, and which ones is what
+                      // the per-account flag above answers.
+                      const connectionUnusable = !snapTradeStatus?.connected
+                        || snapTradeStatus?.status === 'ERROR';
+                      const isHealthy = !connectionDisabled && !connectionUnusable;
+                      const institutionName = (account.institution_name as string) || 'this brokerage';
+                      const accountIssue = connectionDisabled
+                        ? `SnapTrade connection disabled for ${institutionName}. Reconnect to resume updates.`
+                        : connectionUnusable
+                          ? (snapTradeStatus?.error || 'Connection issue')
+                          : null;
 
                       return (
                         <div
@@ -1422,7 +1468,7 @@ export default function ProfilePage() {
                                     ✓
                                   </span>
                                 ) : (
-                                  <span className="w-4 shrink-0 text-center text-red-400" title={`Connection issue: ${snapTradeStatus?.error || 'Unknown error'}`}>
+                                  <span className="w-4 shrink-0 text-center text-red-400" title={`Connection issue: ${accountIssue || 'Unknown error'}`}>
                                     ✗
                                   </span>
                                 )}
@@ -1431,10 +1477,11 @@ export default function ProfilePage() {
                                   {typeof account.number === 'string' && ` • ${account.number}`}
                                 </div>
                               </div>
-                              {/* Show error message if connection is unhealthy */}
-                              {!isHealthy && snapTradeStatus?.error && (
+                              {/* Name the brokerage this account actually belongs to,
+                                  not every brokerage with a disabled connection. */}
+                              {accountIssue && (
                                 <div className="text-xs text-red-400 mt-1">
-                                  {snapTradeStatus.error}
+                                  {accountIssue}
                                 </div>
                               )}
                             </div>

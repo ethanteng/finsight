@@ -2322,6 +2322,9 @@ app.get('/profile/snaptrade-status', requireAuth, async (req: Request, res: Resp
       // One portal trip repairs one authorization; the list shortens as each is
       // fixed, so the caller can repeat the action until it is empty.
       reconnectAuthorizationIds: tokenHealth.reconnectAuthorizationIds,
+      // Per-brokerage detail. `status`/`error` describe the SnapTrade user as a
+      // whole, so a caller rendering health per account must use this instead.
+      disabledConnections: tokenHealth.disabledConnections,
       snapTradeUserId: snapTradeUser.snapTradeUserId,
       createdAt: snapTradeUser.createdAt,
       updatedAt: snapTradeUser.updatedAt
