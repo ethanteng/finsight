@@ -89,7 +89,8 @@ computed on the modeled subset carries the exclusion as a caveat on its canonica
 qualified number cannot be quoted unqualified, with the caveat naming the direction of the error.
 Support metrics (portfolio value, years of expenses, survival, depletion) are floors. The requested
 withdrawal rate is overstated, because the excluded value sits in its denominator. Asset-allocation
-shares describe the modeled holdings only, since the excluded value's mix is unknown. Solved
+shares, country and sector exposure, and portfolio fee drag describe the modeled holdings only,
+since the excluded value has no itemized positions -- their labels do not say so, so the caveat must. Solved
 sustainable withdrawal rates carry no caveat: withdrawal survival is scale-invariant, so those
 percentages do not move with the excluded value. The modeled basis is measured the way the consuming
 engine sums holdings, not the way the canonical portfolio does, so a stated basis always matches what

@@ -688,6 +688,14 @@ export function buildCanonicalFactPack(
       `${exclusionBasis}This is the mix of the modeled holdings only; the excluded value's ` +
       'asset mix is unknown, so it may not be the mix of the full portfolio. ' +
       'State the exclusion whenever you state this number.';
+    // Exposure and fee metrics are aggregated over the same itemized positions,
+    // so they describe the modeled holdings rather than the portfolio. Their
+    // labels do not say so -- "fee drag across the whole portfolio" is exactly
+    // the claim the exclusion undermines -- so the caveat has to.
+    const modeledHoldingsCaveat =
+      `${exclusionBasis}This is measured across the modeled holdings only; the excluded ` +
+      'value has no itemized positions, so it is not represented in this figure. ' +
+      'State the exclusion whenever you state this number.';
     // Match baseline ids and scenario-prefixed ids (`retirement_scenario_*_…`).
     // Exact or `_${metric}` so `historical_withdrawal_rate_*` (scale-invariant)
     // are not swept in with the requested `withdrawal_rate`.
@@ -707,6 +715,21 @@ export function buildCanonicalFactPack(
       'cash_allocation',
       'international_allocation',
     ];
+    // Exact ids, not suffixes: `external_portfolio_expense_ratio` is FMP's own
+    // aggregate over enriched holdings, a different population with its own
+    // coverage fact, and must not inherit the retirement exclusion's caveat.
+    const modeledHoldingsFactIds = new Set([
+      'portfolio_expense_ratio_source',
+      'portfolio_expense_ratio',
+      'expense_ratio_coverage_source',
+      'expense_ratio_coverage',
+      'country_exposure_coverage_source',
+      'country_exposure_coverage',
+      'sector_exposure_coverage_source',
+      'sector_exposure_coverage',
+    ]);
+    // Per-country and per-sector weights are generated one fact per name.
+    const modeledHoldingsPrefixes = ['country_exposure_', 'sector_exposure_'];
     for (const [factId, fact] of facts) {
       let caveat: string | undefined;
       if (supportFloorMetrics.some(metric => matchesMetric(factId, metric))) {
@@ -715,6 +738,11 @@ export function buildCanonicalFactPack(
         caveat = withdrawalRateCaveat;
       } else if (partialMixMetrics.some(metric => matchesMetric(factId, metric))) {
         caveat = partialMixCaveat;
+      } else if (
+        modeledHoldingsFactIds.has(factId) ||
+        modeledHoldingsPrefixes.some(prefix => factId.startsWith(prefix))
+      ) {
+        caveat = modeledHoldingsCaveat;
       }
       if (caveat) facts.set(factId, { ...fact, caveat });
     }

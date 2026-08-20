@@ -340,6 +340,12 @@ describe('buildCanonicalFactPack', () => {
         internationalAllocation: 5,
         yearsOfExpenses: 20,
         projectedPortfolioAtWithdrawalStart: 1_868_490,
+        expenseRatioWeighted: 0.004,
+        expenseRatioCoverage: 0.9,
+        countryCoverage: 0.85,
+        sectorCoverage: 0.85,
+        countryAllocation: [{ name: 'United States', percentage: 80 }],
+        sectorAllocation: [{ name: 'Technology', percentage: 30 }],
         historicalWithdrawalRates: { p10: 0.03, p25: 0.035, p50: 0.04, p75: 0.045, p90: 0.05 },
       },
       stressTest: {
@@ -382,6 +388,12 @@ describe('buildCanonicalFactPack', () => {
     // portfolio), so the exclusion does not move them and they carry no caveat.
     for (const id of ['historical_withdrawal_rate_p50', 'historical_withdrawal_rate_p10_ratio']) {
       expect(pack.facts.find((fact) => fact.id === id)?.caveat).toBeUndefined();
+    }
+
+    // Exposure and fee metrics aggregate the same itemized positions, so they
+    // describe the modeled holdings however confidently their labels read.
+    for (const id of ['portfolio_expense_ratio', 'expense_ratio_coverage', 'country_exposure_united_states', 'sector_exposure_technology']) {
+      expect(pack.facts.find((fact) => fact.id === id)?.caveat).toContain('modeled holdings only');
     }
     // Figures the exclusion does not distort stay uncaveated.
     expect(pack.facts.find((fact) => fact.id === 'retirement_current_age')?.caveat).toBeUndefined();
