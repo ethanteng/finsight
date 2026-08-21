@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import PlaidLinkButton, { PlaidLinkButtonRef, resetPlaidLinkInitialization } from '../../components/PlaidLinkButton';
 import SnapTradeConnections from '../../components/SnapTradeConnections';
+import PlaidConnections from '../../components/PlaidConnections';
 import TransactionHistory from '../../components/TransactionHistory';
 import UserProfile from '../../components/UserProfile';
 import InvestmentPortfolio from '../../components/InvestmentPortfolio';
@@ -179,6 +180,7 @@ export default function ProfilePage() {
   const [error, setError] = useState('');
   const [tokenStatuses, setTokenStatuses] = useState<TokenStatus[]>([]);
   const [snapTradeConnectionsKey, setSnapTradeConnectionsKey] = useState(0);
+  const [plaidConnectionsKey, setPlaidConnectionsKey] = useState(0);
   const [snapTradeStatus, setSnapTradeStatus] = useState<SnapTradeStatus | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteMessage, setDeleteMessage] = useState<string>('');
@@ -823,6 +825,10 @@ export default function ProfilePage() {
           loadSnapTradeStatus()
         ]);
 
+        // A new or re-linked bank changes the institution list, so re-read it
+        // rather than leaving a row that no longer matches.
+        setPlaidConnectionsKey(key => key + 1);
+
         // Try to refresh transaction history
         if (transactionHistoryRef.current?.refresh) {
           try {
@@ -1373,6 +1379,22 @@ export default function ProfilePage() {
                 </div>
               )}
             </div>
+
+            {/* One row per bank connection, so a single bad link can be removed
+                without taking every other institution down with it. */}
+            <PlaidConnections
+              refreshKey={plaidConnectionsKey}
+              onConnectionRemoved={async () => {
+                // The disconnect already revoked the Item, removed the rows and
+                // queued a rebuild; these re-reads are what make the page stop
+                // showing the institution.
+                await Promise.all([
+                  loadConnectedAccounts(),
+                  loadTokenStatuses(),
+                  loadInvestmentData(),
+                ]);
+              }}
+            />
           </div>
 
           {/* Investment Accounts (SnapTrade) Section */}
