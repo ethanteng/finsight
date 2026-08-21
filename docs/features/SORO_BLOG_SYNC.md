@@ -90,6 +90,12 @@ itself — `MarketingArticlePage` uses a decorative block — so this affects so
 previews and structured data only. A failed upload falls back to the Soro URL
 and does not fail the import.
 
+## Social copy
+
+Publishing a post triggers a separate job that emails ready-to-post copy for
+LinkedIn, Facebook, X/Twitter and Bluesky. See
+[SOCIAL_POST_DRAFTS.md](./SOCIAL_POST_DRAFTS.md).
+
 ## Editorial note
 
 These posts are model-generated at a daily cadence on a financial site, which is

@@ -56,6 +56,7 @@
     "fix:duplicate-accounts": "npx ts-node scripts/fix-duplicate-accounts.ts",
     "build:market-dataset": "npx ts-node scripts/build-market-dataset.ts",
     "sync:soro": "npx ts-node scripts/sync-soro-to-ghost.ts",
+    "social": "npx ts-node scripts/generate-social-posts.ts",
     "refresh:market-datasets": "npx ts-node scripts/fetch-market-datasets.ts && npm run build:market-dataset",
     "eval:llm": "npx ts-node src/evals/ask-linc-eval.ts",
     "test:security:all": "npm run test:security && npm run test:real-security"
