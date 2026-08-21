@@ -46,6 +46,7 @@ describe('GET /plaid/connections', () => {
         isActive: true,
         lastError: null,
         lastRefreshed: LINKED_IN_2025,
+        lastTransactionSync: null,
         accounts: [
           { id: 'acct-1', name: 'Checking', mask: '4321', balanceLastFetched: FETCHED_TODAY, lastSynced: LINKED_IN_2025 },
         ],
@@ -95,6 +96,7 @@ describe('GET /plaid/connections', () => {
         institutionName: 'Freshly Linked Bank',
         isActive: true,
         lastError: null,
+        lastTransactionSync: null,
         accounts: [{ id: 'acct-1', name: 'Checking', mask: '9999', balanceLastFetched: null, lastSynced: null }],
       },
     ]);
@@ -102,6 +104,30 @@ describe('GET /plaid/connections', () => {
     const response = await request(app).get('/plaid/connections').expect(200);
 
     expect(response.body.data.connections[0].lastUpdated).toBeNull();
+  });
+
+  // Transaction sync records success on AccessToken.lastTransactionSync and
+  // does not refresh Account.lastSynced on existing rows — so a link-era
+  // account timestamp must not win over a successful sync.
+  it('prefers the token transaction-sync time over a stale account lastSynced', async () => {
+    const syncedToday = new Date('2026-08-21T06:00:00.000Z');
+    accessTokenFindMany.mockResolvedValue([
+      {
+        id: 'token-legacy',
+        itemId: 'item-legacy',
+        institutionName: 'Legacy Balance Bank',
+        isActive: true,
+        lastError: null,
+        lastTransactionSync: syncedToday,
+        accounts: [
+          { id: 'acct-1', name: 'Checking', mask: '4444', balanceLastFetched: null, lastSynced: LINKED_IN_2025 },
+        ],
+      },
+    ]);
+
+    const response = await request(app).get('/plaid/connections').expect(200);
+
+    expect(new Date(response.body.data.connections[0].lastUpdated)).toEqual(syncedToday);
   });
 
   it('excludes connections a re-link already replaced', async () => {

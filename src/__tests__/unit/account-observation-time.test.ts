@@ -2,6 +2,7 @@ import { accountObservedAt, latestObservedAt } from '../../services/account-obse
 
 const earlier = new Date('2026-08-19T10:00:00.000Z');
 const later = new Date('2026-08-21T03:05:00.000Z');
+const syncOnly = new Date('2026-08-21T05:00:00.000Z');
 
 describe('account observation time', () => {
   it('prefers the balance fetch over the transaction sync', () => {
@@ -32,5 +33,22 @@ describe('account observation time', () => {
 
   it('ignores accounts that were never observed rather than treating them as oldest', () => {
     expect(latestObservedAt([{ balanceLastFetched: null }, { lastSynced: earlier }])).toEqual(earlier);
+  });
+
+  // Live transaction sync writes AccessToken.lastTransactionSync and leaves
+  // existing Account.lastSynced untouched, so the token timestamp must count.
+  it('folds in connection-level sync timestamps', () => {
+    expect(latestObservedAt(
+      [{ balanceLastFetched: null, lastSynced: null }],
+      syncOnly,
+    )).toEqual(syncOnly);
+    expect(latestObservedAt(
+      [{ balanceLastFetched: later }],
+      syncOnly,
+    )).toEqual(syncOnly);
+    expect(latestObservedAt(
+      [{ balanceLastFetched: syncOnly }],
+      later,
+    )).toEqual(syncOnly);
   });
 });

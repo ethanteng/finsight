@@ -1491,6 +1491,8 @@ export const setupPlaidRoutes = (app: any) => {
           institutionName: true,
           isActive: true,
           lastError: true,
+          // Successful transaction syncs land here, not on Account.lastSynced.
+          lastTransactionSync: true,
           createdAt: true,
           accounts: {
             select: { id: true, name: true, mask: true, balanceLastFetched: true, lastSynced: true },
@@ -1508,7 +1510,7 @@ export const setupPlaidRoutes = (app: any) => {
             institution: token.institutionName || 'Unknown institution',
             isActive: token.isActive,
             lastError: token.lastError,
-            lastUpdated: latestObservedAt(token.accounts),
+            lastUpdated: latestObservedAt(token.accounts, token.lastTransactionSync),
             accounts: token.accounts.map(account => ({
               id: account.id,
               name: account.name,
