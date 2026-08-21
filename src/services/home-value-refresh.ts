@@ -5,6 +5,7 @@
 
 import { PrismaClient } from '@prisma/client';
 import { ProfileManager } from '../profile/manager';
+import { refreshEligibleSubscriptionWhere } from './subscription-refresh-eligibility';
 
 /**
  * RentCast re-estimates slowly, so a value younger than this is not worth
@@ -68,11 +69,15 @@ export class HomeValueRefreshService {
     };
 
     try {
-      // Get all user profiles that have home data
+      // Get all user profiles that have home data, for users still entitled to
+      // a refresh. A canceled subscriber keeps their profile and its home
+      // address, so without the subscription clause this would keep paying
+      // RentCast to re-value the home of someone who can no longer sign in.
       const profiles = await prisma.userProfile.findMany({
         where: {
           userId: { not: null },
-          isActive: true
+          isActive: true,
+          user: { is: refreshEligibleSubscriptionWhere() }
         },
         select: { userId: true }
       });

@@ -31,6 +31,7 @@ import {
   HOME_VALUE_MIN_REFRESH_AGE_MS,
   runHomeValueRefresh,
 } from '../../services/home-value-refresh';
+import { REFRESH_ELIGIBLE_SUBSCRIPTION_STATUSES } from '../../services/subscription-refresh-eligibility';
 
 const daysAgo = (days: number) => new Date(Date.now() - days * 24 * 60 * 60 * 1000);
 
@@ -175,7 +176,14 @@ describe('HomeValueRefreshService.refreshAllHomeValues', () => {
     expect(results.successful).toBe(3);
     expect(results.failed).toBe(0);
     expect(mockProfileFindMany).toHaveBeenCalledWith({
-      where: { userId: { not: null }, isActive: true },
+      // The subscription clause keeps a canceled subscriber's address from
+      // going back to RentCast every night; profile isActive alone never
+      // changes when billing does.
+      where: {
+        userId: { not: null },
+        isActive: true,
+        user: { is: { subscriptionStatus: { in: [...REFRESH_ELIGIBLE_SUBSCRIPTION_STATUSES] } } },
+      },
       select: { userId: true },
     });
     expect(mockDisconnect).toHaveBeenCalledTimes(1);

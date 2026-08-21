@@ -10,6 +10,7 @@ import {
 } from './financial-snapshot-persistence';
 import { ingestFinancialData } from './financial-ingestion';
 import { extractWindowedInvestmentActivities } from './financial-calculations';
+import { refreshEligibleSubscriptionWhere } from './subscription-refresh-eligibility';
 import {
   FinancialHistoryService,
   type CanonicalHistoryInput,
@@ -132,10 +133,19 @@ export interface SummaryComputeOptions {
  * source has one that nothing will ever rebuild. Counting those never returns
  * to zero, and a signal that cannot reach zero cannot indicate a problem.
  *
+ * Two independent conditions, ANDed by Prisma across the top-level keys: the
+ * user must still be a customer (`subscriptionStatus`) *and* have a source
+ * worth rebuilding (`OR`). Having a linked account is not on its own a reason
+ * to spend a provider call -- a canceled subscriber keeps every AccessToken,
+ * manual account and snapshot they had, because cancellation only rewrites
+ * subscription status (services/stripe.ts handleSubscriptionDeleted). Without
+ * the status clause they stay eligible here forever.
+ *
  * Returns a fresh object per call so no caller can mutate a shared literal.
  */
 export function refreshEligibleUserWhere() {
   return {
+    ...refreshEligibleSubscriptionWhere(),
     OR: [
       { accessTokens: { some: { isActive: true } } },
       { snapTradeUser: { is: { activities: { some: {} } } } },
