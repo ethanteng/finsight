@@ -870,9 +870,6 @@ app.get('/sync/status', async (req: Request, res: Response) => {
         const revokedTokenIds = revocation.results
           .filter(result => result.removed)
           .map(result => result.tokenId);
-        await prisma.accessToken.deleteMany({
-          where: { userId, id: { in: revokedTokenIds } },
-        });
 
         // Keep accounts (and their transactions) for any Item that would not
         // revoke — deleting them while the grant is still live loses history the
@@ -884,6 +881,13 @@ app.get('/sync/status', async (req: Request, res: Response) => {
         // tokens by negation would silently spare them too, and a user who asked
         // to disconnect everything would keep them because an unrelated bank
         // errored.
+        //
+        // Accounts and transactions before AccessToken rows: `Account.accessTokenId`
+        // is `onDelete: SetNull`, so deleting tokens first would null those FKs and
+        // make the revoked-id filters below match nothing — and any interruption
+        // would leave bank accounts looking like hand-entered ones. Same order as
+        // `/plaid/disconnect_accounts`. Transactions before accounts because
+        // `Transaction.account` has no cascade.
         await prisma.transaction.deleteMany({
           where: { account: { userId, accessTokenId: { in: revokedTokenIds } } },
         });
@@ -895,6 +899,9 @@ app.get('/sync/status', async (req: Request, res: Response) => {
         });
         await prisma.account.deleteMany({
           where: { userId, accessTokenId: null },
+        });
+        await prisma.accessToken.deleteMany({
+          where: { userId, id: { in: revokedTokenIds } },
         });
         await prisma.syncStatus.deleteMany({
           where: { userId }

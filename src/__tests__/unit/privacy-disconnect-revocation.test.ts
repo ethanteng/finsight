@@ -47,11 +47,13 @@ async function disconnectAccounts(userId: string) {
   const revocation = await removePlaidItems(tokens, plaidClient as any);
   const revokedTokenIds = revocation.results.filter(result => result.removed).map(result => result.tokenId);
 
-  await prisma.accessToken.deleteMany({ where: { userId, id: { in: revokedTokenIds } } });
+  // Accounts/transactions before tokens: AccessToken delete SetNulls accessTokenId,
+  // which would make the revoked-id filters miss and risk orphan bank accounts.
   await prisma.transaction.deleteMany({ where: { account: { userId, accessTokenId: { in: revokedTokenIds } } } });
   await prisma.account.deleteMany({ where: { userId, accessTokenId: { in: revokedTokenIds } } });
   await prisma.transaction.deleteMany({ where: { account: { userId, accessTokenId: null } } });
   await prisma.account.deleteMany({ where: { userId, accessTokenId: null } });
+  await prisma.accessToken.deleteMany({ where: { userId, id: { in: revokedTokenIds } } });
   await prisma.syncStatus.deleteMany({ where: { userId } });
   await prisma.snapTradeUser.deleteMany({ where: { userId } });
 
@@ -88,6 +90,26 @@ describe('privacy disconnect keeps what Plaid would not revoke', () => {
       where: { userId: 'user-1', id: { in: ['token-boa', 'token-chase'] } },
     });
     expect(response.body.success).toBe(true);
+  });
+
+  // `Account.accessTokenId` is onDelete: SetNull. Deleting tokens first would
+  // null the FK so the revoked-id account filter matches nothing, and a failure
+  // mid-cleanup would leave bank accounts looking like hand-entered ones.
+  it('deletes accounts before access tokens so SetNull cannot orphan them', async () => {
+    const order: string[] = [];
+    accountDeleteMany.mockImplementation(async () => {
+      order.push('accounts');
+      return { count: 0 };
+    });
+    accessTokenDeleteMany.mockImplementation(async () => {
+      order.push('tokens');
+      return { count: 0 };
+    });
+
+    await request(app).post('/privacy/disconnect-accounts').expect(200);
+
+    expect(order.indexOf('accounts')).toBeGreaterThanOrEqual(0);
+    expect(order.indexOf('tokens')).toBeGreaterThan(order.indexOf('accounts'));
   });
 
   // The reported defect: a transient failure used to delete every token anyway,
