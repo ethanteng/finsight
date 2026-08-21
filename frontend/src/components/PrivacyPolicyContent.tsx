@@ -181,7 +181,7 @@ export default function PrivacyPolicyContent() {
 
                 <h4 className="text-lg font-medium mb-3">Hosting and Analytics</h4>
                 <p className="text-gray-300 mb-4">
-                  We use Render and Vercel for hosting, and Plausible for privacy-focused analytics. These services follow industry-standard security protocols.
+                  We use Render and Vercel for hosting. These services follow industry-standard security protocols.
                 </p>
               </section>
 

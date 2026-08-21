@@ -227,7 +227,7 @@ export default function PrivacyContent() {
                   </div>
                   <div className="flex items-start gap-3">
                     <div className="w-1.5 h-1.5 rounded-full bg-primary mt-2 flex-shrink-0"></div>
-                    <p className="text-muted-foreground"><strong className="text-foreground">Hosting and analytics services</strong> (Render, Vercel, Plausible) that follow industry-standard security protocols</p>
+                    <p className="text-muted-foreground"><strong className="text-foreground">Hosting providers</strong> (Render, Vercel) that follow industry-standard security protocols</p>
                   </div>
                 </div>
               </CardContent>

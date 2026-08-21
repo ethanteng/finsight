@@ -74,14 +74,7 @@ export default function RootLayout({
           }}
         />
         {/* End Google Tag Manager */}
-        
-        {/* Plausible Analytics - Privacy-focused analytics */}
-        <script 
-          defer 
-          data-domain="asklinc.com" 
-          src="https://plausible.io/js/script.js"
-        />
-        
+
         {/* Google Analytics 4 (Alternative) */}
         {/* 
         <script
