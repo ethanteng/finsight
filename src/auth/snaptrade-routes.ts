@@ -387,9 +387,10 @@ const lastRefreshRequest = new Map<string, number>();
 
 // Remember account ids after the provider confirms a remove, so a failed local
 // cleanup can be retried even though SnapTrade no longer lists those accounts.
-// Process-local like the refresh cooldown: an immediate retry on this instance
-// recovers; a multi-instance hop or process restart still cannot, and the user
-// would need Disconnect-all (or a durable pending row) to finish cleanup.
+// Process-local like the refresh cooldown: exact for an immediate retry on this
+// instance. A multi-instance hop or process restart falls through to
+// snapshotAccountsForAuthorization below, which finishes the same cleanup from
+// the persisted snapshot when the provider has already forgotten the connection.
 type PendingDisconnect = {
   accountIds: string[];
   institution: string;
