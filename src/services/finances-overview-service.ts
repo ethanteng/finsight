@@ -366,9 +366,11 @@ function accountIdFromSourceId(sourceId: string): string | null {
  * nothing. A row that says "Updated today" about data the provider never confirmed is
  * the exact false-freshness claim this line exists to remove.
  *
- * `lastSyncedAt` is set only from a real provider sync timestamp and is absent
- * otherwise, so an unconfirmed account goes undated instead. Plaid and manual
- * accounts set it to the same value as `snapshotTimestamp`, so they are unaffected.
+ * `lastSyncedAt` is set only from a sync that confirms the displayed value -- for
+ * SnapTrade the holdings sync specifically, since a brokerage account's balance is
+ * its holdings value -- and is absent otherwise, so an unconfirmed account goes
+ * undated instead. Plaid and manual accounts set it to the same value as
+ * `snapshotTimestamp`, so they are unaffected.
  */
 function providerObservedAt(account: FinancesAccount): string | null {
   return iso((account as FinancesAccount & { lastSyncedAt?: string }).lastSyncedAt);

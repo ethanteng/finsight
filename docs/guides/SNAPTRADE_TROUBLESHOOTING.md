@@ -252,9 +252,10 @@ WHERE s."userId" = '<user id>' AND a->>'source' = 'snaptrade';
 The snapshot already records the same conclusion: `quality.staleSourceIds`
 lists every `account:{id}` whose observation is past its max age. The Finances
 page marks those rows stale from that list, and dates each row from the
-account's confirmed provider sync (`lastSyncedAt`) — never from our own fetch
-time, which can look "today" even when SnapTrade has not completed a holdings
-sync.
+account's confirmed provider sync (`lastSyncedAt`) — for SnapTrade the holdings
+sync specifically, since a brokerage balance is its holdings value. It is never
+dated from our own fetch time, nor from a transactions sync, either of which can
+look recent while holdings have not synced at all.
 
 ### **Fix**
 

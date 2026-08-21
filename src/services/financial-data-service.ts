@@ -1551,9 +1551,14 @@ export class FinancialDataService {
               persistentAccountId: accountId, // ✅ Set for SnapTrade accounts
               // ✅ Do NOT set plaidAccountId - SnapTrade accounts don't have one
               snapshotTimestamp: account.lastSuccessfulHoldingsSync || fetchedAt,
-              lastSyncedAt: account.lastSuccessfulHoldingsSync
-                || account.lastSuccessfulTransactionsSync
-                || undefined,
+              // Holdings only, never the transactions sync. A SnapTrade account's
+              // balance is its holdings value, so a recent transactions sync
+              // confirms nothing about the number on screen -- an account whose
+              // holdings have never synced would otherwise be dated from activity
+              // that says nothing about what it is worth. `lastSyncedAt` is what
+              // the account row's as-of line reads, and across every source it
+              // means "when the value we display was last confirmed".
+              lastSyncedAt: account.lastSuccessfulHoldingsSync || undefined,
               syncStatus: account.syncStatus,
               // Carried into the snapshot so a reconnect prompt can repair this
               // exact authorization rather than starting a second connection to
