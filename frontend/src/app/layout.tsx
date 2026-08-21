@@ -3,6 +3,7 @@ import './globals.css'
 import '../components/marketing/marketing.css'
 import StructuredData from '../components/StructuredData'
 import type { Metadata } from 'next'
+import { SpeedInsights } from '@vercel/speed-insights/next'
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -108,6 +109,7 @@ export default function RootLayout({
         </noscript>
         {/* End Google Tag Manager (noscript) */}
         {children}
+        <SpeedInsights />
       </body>
     </html>
   )
