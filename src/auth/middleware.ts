@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { verifyToken, extractTokenFromHeader } from './utils';
 import { getPrismaClient } from '../prisma-client';
+import { blocksProductAccess } from '../services/subscription-refresh-eligibility';
 
 export interface AuthenticatedRequest extends Request {
   user?: {
@@ -69,8 +70,13 @@ async function authenticate(
       return;
     }
 
-    // Check if subscription has expired (same treatment as failed payments)
-    if (user.subscriptionStatus === 'canceled' && !options.allowLapsedSubscription) {
+    // Check if subscription has expired (same treatment as failed payments).
+    // Shared with the scheduled refresh gate, which is defined as the exact
+    // complement of this set: a status blocked here but still refreshed only
+    // wastes provider calls, whereas one admitted here but not refreshed shows
+    // the user silently frozen figures. Keeping both off one list makes the
+    // second case unrepresentable.
+    if (blocksProductAccess(user.subscriptionStatus) && !options.allowLapsedSubscription) {
       console.log('🔐 User subscription expired - blocking access');
       res.status(401).json({ error: 'Subscription expired. Please renew to continue.' });
       return;

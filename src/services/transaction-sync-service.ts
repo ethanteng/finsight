@@ -5,6 +5,7 @@ import { TransactionCategorizationService } from './transaction-categorization-s
 import { TransactionNormalizationService } from './transaction-normalization-service';
 import { withTransientProviderRetry } from './provider-request-policy';
 import { extractPlaidErrorCode, isUserActionRequiredPlaidError } from './plaid-error-classification';
+import { refreshEligibleSubscriptionWhere } from './subscription-refresh-eligibility';
 
 const prisma = new PrismaClient();
 const categorizationService = new TransactionCategorizationService();
@@ -467,8 +468,25 @@ export class TransactionSyncService {
       result: TransactionSyncResult;
     }>;
   }> {
+    // Cancellation leaves AccessToken rows untouched -- it only rewrites
+    // subscription status -- so an active, non-superseded token is not by
+    // itself evidence that syncing it is worth a Plaid call. Gate on the
+    // owner's subscription, or a canceled customer keeps being synced nightly
+    // for data authenticateUser will not let them log in to see.
+    //
+    // Tokens with no owner (userId is nullable) are left in deliberately:
+    // they belong to nobody, so there is no subscription to judge them by, and
+    // excluding them here would be an unrelated behavior change smuggled into
+    // a billing gate.
     const activeTokens = await prisma.accessToken.findMany({
-      where: { isActive: true, supersededAt: null },
+      where: {
+        isActive: true,
+        supersededAt: null,
+        OR: [
+          { userId: null },
+          { user: { is: refreshEligibleSubscriptionWhere() } },
+        ],
+      },
       select: {
         id: true,
         token: true,

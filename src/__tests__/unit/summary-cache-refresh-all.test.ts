@@ -7,6 +7,7 @@ jest.mock('../../prisma-client', () => ({
 }));
 
 import { SummaryCacheService, refreshEligibleUserWhere } from '../../services/summary-cache-service';
+import { ACCESS_BLOCKING_SUBSCRIPTION_STATUSES } from '../../services/subscription-refresh-eligibility';
 
 describe('SummaryCacheService.refreshAllUsers', () => {
   let computeForUser: jest.SpiedFunction<typeof SummaryCacheService.computeForUser>;
@@ -28,6 +29,7 @@ describe('SummaryCacheService.refreshAllUsers', () => {
 
     expect(findMany).toHaveBeenCalledWith({
       where: {
+        subscriptionStatus: { notIn: [...ACCESS_BLOCKING_SUBSCRIPTION_STATUSES] },
         OR: [
           { accessTokens: { some: { isActive: true } } },
           { snapTradeUser: { is: { activities: { some: {} } } } },
@@ -67,6 +69,37 @@ describe('SummaryCacheService.refreshAllUsers', () => {
 
     expect(first).not.toBe(second);
     expect(first).toEqual(second);
+  });
+
+  // Cancellation rewrites subscription status and nothing else: the user keeps
+  // every AccessToken, manual account and snapshot they had. So a source clause
+  // alone never stops matching them, and this cron would keep spending provider
+  // calls on someone authenticateUser refuses to log in.
+  it('excludes a canceled subscriber', () => {
+    expect(refreshEligibleUserWhere().subscriptionStatus.notIn).toContain('canceled');
+  });
+
+  // 'inactive' is the status every user is created with, so it is what an
+  // admin-created account that never goes through Stripe checkout keeps
+  // permanently. Excluding it would silently freeze those users' data.
+  it('keeps admin-created and grace-period users eligible', () => {
+    const excluded = refreshEligibleUserWhere().subscriptionStatus.notIn;
+
+    expect(excluded).not.toContain('inactive');
+    expect(excluded).not.toContain('active');
+    expect(excluded).not.toContain('trialing');
+    expect(excluded).not.toContain('past_due');
+  });
+
+  // The status and source conditions are separate top-level keys, which Prisma
+  // ANDs. Folding the status into the OR would make any one source enough to
+  // qualify a canceled user and quietly undo the gate.
+  it('requires both an eligible subscription and a refreshable source', () => {
+    const where = refreshEligibleUserWhere();
+
+    expect(where.subscriptionStatus).toBeDefined();
+    expect(where.OR.length).toBeGreaterThan(0);
+    expect(JSON.stringify(where.OR)).not.toContain('subscriptionStatus');
   });
 
   // Snapshot existence alone must never make a user eligible: recomputeIfStale

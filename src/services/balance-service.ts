@@ -2,6 +2,7 @@ import { PrismaClient } from '@prisma/client';
 import { withTransientProviderRetry } from './provider-request-policy';
 import { PlaidApi } from 'plaid';
 import { cacheService } from '../data/cache';
+import { refreshEligibleSubscriptionWhere } from './subscription-refresh-eligibility';
 
 // Initialize Prisma client lazily to avoid import issues during ts-node startup
 let prisma: PrismaClient | null = null;
@@ -114,6 +115,32 @@ export class BalanceService {
     const hoursSinceLastFetch = (now.getTime() - lastFetched.getTime()) / (1000 * 60 * 60);
 
     return hoursSinceLastFetch < 24;
+  }
+
+  /**
+   * The users the scheduled balance refresh is expected to cover, as a Prisma
+   * `where`.
+   *
+   * Exported for the same reason `refreshEligibleUserWhere` is: the query lives
+   * in scripts/run-balance-refresh-cron.js, which requires this from dist and
+   * so cannot be unit tested directly. Keeping the predicate here is what makes
+   * the subscription gate pinnable, rather than a line in a script that a
+   * revert would remove silently.
+   *
+   * `isActive` is the account flag, flipped only by the admin revoke endpoint;
+   * billing never touches it. Cancellation rewrites subscription status alone,
+   * so the two clauses are not interchangeable and both must stay.
+   *
+   * Returns a fresh object per call so no caller can mutate a shared literal.
+   */
+  static balanceRefreshEligibleUserWhere() {
+    return {
+      accessTokens: {
+        some: { isActive: true, supersededAt: null }
+      },
+      isActive: true,
+      ...refreshEligibleSubscriptionWhere()
+    };
   }
 
   /**

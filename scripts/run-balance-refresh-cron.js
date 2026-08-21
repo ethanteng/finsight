@@ -73,13 +73,12 @@ async function runBalanceRefreshCron() {
     const { PrismaClient } = require('@prisma/client');
     prisma = new PrismaClient();
     
+    // Selection lives in BalanceService so it can be unit tested; this script
+    // requires from dist and no test can load it. See
+    // balanceRefreshEligibleUserWhere for why the subscription clause and the
+    // isActive account flag are both required.
     const users = await prisma.user.findMany({
-      where: {
-        accessTokens: {
-          some: { isActive: true, supersededAt: null }
-        },
-        isActive: true
-      },
+      where: BalanceService.balanceRefreshEligibleUserWhere(),
       select: {
         id: true,
         email: true,
