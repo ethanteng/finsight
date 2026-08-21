@@ -9,6 +9,8 @@ import { normalizeAssetType } from './services/asset-class';
 import { normalizeLabel } from './services/label-normalization';
 import { getProviderRequestTimeoutMs } from './services/provider-request-policy';
 import { isTargetDateFund, TARGET_DATE_ASSET_TYPE } from './services/target-date-fund';
+import { removePlaidItem, removePlaidItems } from './services/plaid-item-removal';
+import { deleteTransactionsWithOverrides } from './services/transaction-cleanup';
 
 // Initialize Prisma client lazily to avoid import issues during ts-node startup
 let prisma: PrismaClient | null = null;
@@ -1395,11 +1397,208 @@ export const setupPlaidRoutes = (app: any) => {
   app.delete('/plaid/disconnect_accounts', async (req: any, res: any) => {
     try {
       if (!req.user?.id) return res.status(401).json({ error: 'Authentication required' });
-      await getPrismaClient().accessToken.deleteMany({ where: { userId: req.user.id } });
+      const prisma = getPrismaClient();
+      const userId = req.user.id;
 
-      res.json({ success: true, message: 'All accounts disconnected' });
+      // Revoke at Plaid before dropping the rows. The access token is the only
+      // thing that can revoke the Item, so deleting it first leaves every
+      // connection live at Plaid -- consented, refreshing and billable -- with
+      // nothing left to end it. "Disconnected" has to mean disconnected there too.
+      const tokens = await prisma.accessToken.findMany({
+        where: { userId },
+        select: { id: true, token: true },
+      });
+      const revocation = await removePlaidItems(tokens, plaidClient);
+      if (revocation.failed > 0) {
+        console.warn(
+          `⚠️ Plaid disconnect_accounts: ${revocation.failed} item(s) could not be revoked for user ${userId}; ` +
+          'keeping their tokens so the revocation can be retried'
+        );
+      }
+
+      // Only forget the connections Plaid confirmed are gone. Deleting a token
+      // whose Item is still live would strand it there permanently, which is the
+      // exact failure this change exists to fix.
+      const revokedTokenIds = revocation.results.filter(result => result.removed).map(result => result.tokenId);
+
+      // The accounts have to go with the token. `Account.accessTokenId` is
+      // `onDelete: SetNull`, so deleting the token alone leaves its accounts
+      // behind with a null connection -- and a null `accessTokenId` is how
+      // manual and SnapTrade accounts are identified, so orphaned bank accounts
+      // would quietly start passing for hand-entered ones. Transactions first:
+      // `Transaction.account` has no cascade.
+      await deleteTransactionsWithOverrides(prisma, userId, {
+        account: { userId, accessTokenId: { in: revokedTokenIds } },
+      });
+      await prisma.account.deleteMany({
+        where: { userId, accessTokenId: { in: revokedTokenIds } },
+      });
+      await prisma.accessToken.deleteMany({ where: { userId, id: { in: revokedTokenIds } } });
+
+      // Ask Linc answers from the snapshot, so without a rebuild it keeps serving
+      // the disconnected banks' balances until the next scheduled run.
+      if (revokedTokenIds.length > 0) {
+        try {
+          const { FinancialRevisionService } = await import('./services/financial-revision-service');
+          FinancialRevisionService.schedule(userId, {
+            categorize: false,
+            history: { kind: 'material', reason: 'plaid-connection-disconnected' },
+          }, 'Plaid disconnect all');
+        } catch {
+          // Non-fatal: the rows are gone, and the next scheduled rebuild reconciles
+          // the snapshot even if this one could not be queued.
+        }
+      }
+
+      res.json({
+        success: revocation.allRevoked,
+        message: revocation.allRevoked
+          ? 'All accounts disconnected'
+          : 'Some connections could not be revoked at Plaid and were kept so you can try again.',
+        disconnected: revokedTokenIds.length,
+        failed: revocation.failed,
+      });
     } catch (error) {
       const errorInfo = handlePlaidError(error, 'disconnecting accounts');
+      res.status(500).json(errorInfo);
+    }
+  });
+
+  // GET /plaid/connections - one row per bank connection (Plaid Item)
+  //
+  // Deliberately a database-only read. `/profile/tokens` answers a similar
+  // question but revalidates every token against Plaid, which is far too heavy
+  // for a list whose only job is to let someone pick a connection to remove.
+  app.get('/plaid/connections', async (req: any, res: any) => {
+    try {
+      if (!req.user?.id) return res.status(401).json({ error: 'Authentication required' });
+      const prisma = getPrismaClient();
+
+      // Superseded connections are excluded: a re-link already replaced them, so
+      // offering one for disconnect would point the user at a connection they
+      // have effectively already dealt with.
+      const tokens = await prisma.accessToken.findMany({
+        where: { userId: req.user.id, supersededAt: null },
+        select: {
+          id: true,
+          itemId: true,
+          institutionName: true,
+          isActive: true,
+          lastError: true,
+          lastRefreshed: true,
+          createdAt: true,
+          accounts: { select: { id: true, name: true, mask: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      res.json({
+        success: true,
+        data: {
+          connections: tokens.map(token => ({
+            id: token.id,
+            itemId: token.itemId,
+            institution: token.institutionName || 'Unknown institution',
+            isActive: token.isActive,
+            lastError: token.lastError,
+            lastRefreshed: token.lastRefreshed,
+            accounts: token.accounts.map(account => ({
+              id: account.id,
+              name: account.name,
+              mask: account.mask,
+            })),
+          })),
+        },
+      });
+    } catch (error) {
+      const errorInfo = handlePlaidError(error, 'listing connections');
+      res.status(500).json(errorInfo);
+    }
+  });
+
+  // DELETE /plaid/connections/:accessTokenId - disconnect one bank
+  //
+  // Mirrors the SnapTrade per-institution disconnect: revoke upstream first,
+  // then remove only this connection's local data, then rebuild the snapshot.
+  app.delete('/plaid/connections/:accessTokenId', async (req: any, res: any) => {
+    try {
+      if (!req.user?.id) return res.status(401).json({ error: 'Authentication required' });
+      const userId = req.user.id;
+      const accessTokenId = String(req.params.accessTokenId || '').trim();
+      if (!accessTokenId) {
+        return res.status(400).json({ error: 'A connection id is required.' });
+      }
+
+      const prisma = getPrismaClient();
+      // Scoped to this user, so someone else's token id is a 404 before anything
+      // is touched rather than an authorization question asked later.
+      const token = await prisma.accessToken.findFirst({
+        where: { id: accessTokenId, userId },
+        select: { id: true, token: true, institutionName: true },
+      });
+      if (!token) {
+        return res.status(404).json({ error: 'Unknown connection for this user.' });
+      }
+      const institution = token.institutionName || 'this institution';
+
+      const revocation = await removePlaidItem(token, plaidClient);
+      if (!revocation.removed) {
+        // Local rows are kept. Deleting a user's history against a connection
+        // that is still live at Plaid would both lose the data and leave the
+        // Item running, with nothing left to revoke it.
+        return res.status(502).json({ error: revocation.error || 'Could not disconnect this institution.' });
+      }
+
+      const removed = await prisma.$transaction(async tx => {
+        const accounts = await tx.account.findMany({
+          where: { userId, accessTokenId },
+          select: { id: true },
+        });
+        const accountIds = accounts.map(account => account.id);
+        // Transactions -- and the category overrides keyed to them -- before the
+        // accounts: `Transaction.account` has no onDelete cascade, so an account
+        // still referenced cannot be deleted and the whole cleanup would roll back.
+        const cleared = await deleteTransactionsWithOverrides(tx, userId, {
+          accountId: { in: accountIds },
+        });
+        const deletedAccounts = await tx.account.deleteMany({
+          where: { userId, accessTokenId },
+        });
+        await tx.accessToken.deleteMany({ where: { id: accessTokenId, userId } });
+        return {
+          accounts: deletedAccounts.count,
+          transactions: cleared.transactions,
+          categoryOverrides: cleared.categoryOverrides,
+        };
+      });
+
+      console.log(
+        `🔌 Plaid: disconnected ${institution} for user ${userId} ` +
+        `(${removed.accounts} accounts, ${removed.transactions} transactions, ` +
+        `${removed.categoryOverrides} category overrides removed)`
+      );
+
+      // The snapshot still holds this institution's accounts and balances, and
+      // Ask Linc answers from it, so rebuilding is what actually takes the
+      // institution out of the user's totals and out of the model's view.
+      try {
+        const { FinancialRevisionService } = await import('./services/financial-revision-service');
+        FinancialRevisionService.schedule(userId, {
+          categorize: false,
+          history: { kind: 'material', reason: 'plaid-connection-disconnected' },
+        }, 'Plaid disconnect');
+      } catch {
+        // Non-fatal: the rows are gone, and the next scheduled rebuild reconciles
+        // the snapshot even if this one could not be queued.
+      }
+
+      res.json({
+        success: true,
+        message: `${institution} disconnected. Its accounts and history have been removed.`,
+        data: { institution, removed, alreadyRemovedAtProvider: revocation.alreadyRemoved },
+      });
+    } catch (error) {
+      const errorInfo = handlePlaidError(error, 'disconnecting an institution');
       res.status(500).json(errorInfo);
     }
   });

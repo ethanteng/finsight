@@ -31,6 +31,12 @@ export type MaterialHistoryReason =
   /// registration: the user's other institutions survive, so the net-worth move
   /// this records is a partial removal rather than the loss of every brokerage.
   | 'snaptrade-connection-disconnected'
+  /// One Plaid Item revoked, as opposed to every connection: the user's other
+  /// banks survive, so this records a partial removal rather than a full wipe.
+  | 'plaid-connection-disconnected'
+  /// Every connection removed at once, across both providers, without the user's
+  /// account being deleted -- a different net-worth event from losing one link.
+  | 'all-connections-disconnected'
   | 'home-value-updated'
   | 'home-value-removed'
   | 'home-value-refreshed'

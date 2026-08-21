@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import PlaidLinkButton, { PlaidLinkButtonRef, resetPlaidLinkInitialization } from '../../components/PlaidLinkButton';
 import SnapTradeConnections from '../../components/SnapTradeConnections';
+import PlaidConnections from '../../components/PlaidConnections';
 import TransactionHistory from '../../components/TransactionHistory';
 import UserProfile from '../../components/UserProfile';
 import InvestmentPortfolio from '../../components/InvestmentPortfolio';
@@ -179,6 +180,7 @@ export default function ProfilePage() {
   const [error, setError] = useState('');
   const [tokenStatuses, setTokenStatuses] = useState<TokenStatus[]>([]);
   const [snapTradeConnectionsKey, setSnapTradeConnectionsKey] = useState(0);
+  const [plaidConnectionsKey, setPlaidConnectionsKey] = useState(0);
   const [snapTradeStatus, setSnapTradeStatus] = useState<SnapTradeStatus | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteMessage, setDeleteMessage] = useState<string>('');
@@ -823,6 +825,10 @@ export default function ProfilePage() {
           loadSnapTradeStatus()
         ]);
 
+        // A new or re-linked bank changes the institution list, so re-read it
+        // rather than leaving a row that no longer matches.
+        setPlaidConnectionsKey(key => key + 1);
+
         // Try to refresh transaction history
         if (transactionHistoryRef.current?.refresh) {
           try {
@@ -1077,6 +1083,7 @@ export default function ProfilePage() {
         method: 'POST',
         headers,
       });
+      const plaidData = await plaidResponse.json().catch(() => ({}));
 
       // Disconnect SnapTrade accounts
       const snapTradeResponse = await fetch(`${API_URL}/snaptrade/delete`, {
@@ -1085,16 +1092,29 @@ export default function ProfilePage() {
       });
 
       if (plaidResponse.ok && snapTradeResponse.ok) {
-        setDeleteMessage('All your accounts (Plaid and SnapTrade) have been successfully disconnected.');
+        // Privacy disconnect returns success:false when some Items refused to
+        // revoke and were kept for retry — HTTP 200 alone would claim a full wipe.
+        setDeleteMessage(
+          plaidData.success === false
+            ? (plaidData.message || 'Some bank connections could not be revoked at Plaid and were kept so you can try again. Other accounts were disconnected.')
+            : 'All your accounts (Plaid and SnapTrade) have been successfully disconnected.'
+        );
       } else if (plaidResponse.ok) {
-        setDeleteMessage('All your financial accounts have been disconnected.');
+        setDeleteMessage(
+          plaidData.success === false
+            ? (plaidData.message || 'Some bank connections could not be revoked at Plaid and were kept so you can try again.')
+            : 'All your financial accounts have been disconnected.'
+        );
       } else if (snapTradeResponse.ok) {
         setDeleteMessage('Your SnapTrade accounts have been disconnected. Some Plaid accounts may still be connected.');
       } else {
-        setDeleteMessage('Failed to disconnect some accounts. Please try again.');
+        setDeleteMessage(plaidData.error || 'Failed to disconnect some accounts. Please try again.');
       }
 
-      // Reload accounts to show they're disconnected
+      // Per-institution lists are independent of loadConnectedAccounts; bump both
+      // so a partial disconnect does not leave stale rows on the page.
+      setPlaidConnectionsKey(key => key + 1);
+      setSnapTradeConnectionsKey(key => key + 1);
       loadConnectedAccounts();
     } catch (_error) {
       setDeleteMessage('An error occurred while disconnecting your accounts. Please try again.');
@@ -1373,6 +1393,22 @@ export default function ProfilePage() {
                 </div>
               )}
             </div>
+
+            {/* One row per bank connection, so a single bad link can be removed
+                without taking every other institution down with it. */}
+            <PlaidConnections
+              refreshKey={plaidConnectionsKey}
+              onConnectionRemoved={async () => {
+                // The disconnect already revoked the Item, removed the rows and
+                // queued a rebuild; these re-reads are what make the page stop
+                // showing the institution.
+                await Promise.all([
+                  loadConnectedAccounts(),
+                  loadTokenStatuses(),
+                  loadInvestmentData(),
+                ]);
+              }}
+            />
           </div>
 
           {/* Investment Accounts (SnapTrade) Section */}
