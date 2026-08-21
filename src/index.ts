@@ -82,7 +82,7 @@ async function revokePlaidItemsForUser(
       select: { id: true, token: true },
     });
     if (tokens.length === 0) {
-      return { results: [], removed: 0, alreadyRemoved: 0, failed: 0, allRevoked: true };
+      return { results: [], removed: 0, alreadyRemoved: 0, failed: 0, unconfirmed: 0, allRevoked: true };
     }
     const { plaidClient } = await import('./plaid');
     const summary = await removePlaidItems(tokens, plaidClient);
@@ -870,10 +870,6 @@ app.get('/sync/status', async (req: Request, res: Response) => {
         const revokedTokenIds = revocation.results
           .filter(result => result.removed)
           .map(result => result.tokenId);
-        const failedTokenIds = revocation.results
-          .filter(result => !result.removed)
-          .map(result => result.tokenId);
-
         await prisma.accessToken.deleteMany({
           where: { userId, id: { in: revokedTokenIds } },
         });
@@ -881,16 +877,24 @@ app.get('/sync/status', async (req: Request, res: Response) => {
         // Keep accounts (and their transactions) for any Item that would not
         // revoke — deleting them while the grant is still live loses history the
         // user may still need and leaves nothing coherent to retry against.
-        const accountWhere =
-          failedTokenIds.length === 0
-            ? { userId }
-            : { userId, NOT: { accessTokenId: { in: failedTokenIds } } };
-
+        //
+        // Written as two positive filters rather than one `NOT { in }`, because
+        // Prisma's negated filters do not match NULL columns: manual and
+        // SnapTrade accounts carry no `accessTokenId`, so excluding the failed
+        // tokens by negation would silently spare them too, and a user who asked
+        // to disconnect everything would keep them because an unrelated bank
+        // errored.
         await prisma.transaction.deleteMany({
-          where: { account: accountWhere },
+          where: { account: { userId, accessTokenId: { in: revokedTokenIds } } },
         });
         await prisma.account.deleteMany({
-          where: accountWhere,
+          where: { userId, accessTokenId: { in: revokedTokenIds } },
+        });
+        await prisma.transaction.deleteMany({
+          where: { account: { userId, accessTokenId: null } },
+        });
+        await prisma.account.deleteMany({
+          where: { userId, accessTokenId: null },
         });
         await prisma.syncStatus.deleteMany({
           where: { userId }

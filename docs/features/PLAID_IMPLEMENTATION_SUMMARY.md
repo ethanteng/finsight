@@ -88,9 +88,21 @@ and `POST /privacy/disconnect-accounts`), so the revocation can be retried rathe
 than the connection being stranded. Account-deletion sweeps
 (`DELETE /privacy/delete-all-data`, `DELETE /admin/delete-user-account/:userId`)
 still drop every token after attempting revoke — blocking deletion on one bank
-error is worse; any survivor is loud in the log. An Item Plaid reports as
-`ITEM_NOT_FOUND` or `INVALID_ACCESS_TOKEN` counts as revoked: the goal is that
-it is not live, and one that cannot be addressed satisfies that.
+error is worse; any survivor is loud in the log.
+
+Only `ITEM_NOT_FOUND` counts as revoked. `INVALID_ACCESS_TOKEN` deliberately
+does **not**: the codebase pairs the two elsewhere, but that pairing answers
+"must the user re-link", while the question here is "is the Item gone". A
+rejected credential — malformed, corrupted, or from another environment — says
+nothing about that, and counting it as revoked would delete the only credential
+that could ever revoke the Item. It is reported as *unconfirmed*, kept rather
+than deleted, and logged loudly, since no retry resolves it and the Item may
+still be live.
+
+Deletions on the disconnect paths are written as positive `accessTokenId` filters
+rather than one negated `NOT { in }`, because Prisma's negated filters do not
+match NULL columns — manual and SnapTrade accounts carry no `accessTokenId`, so a
+negation would silently spare them whenever an unrelated bank failed to revoke.
 
 ### Per-institution disconnect
 
