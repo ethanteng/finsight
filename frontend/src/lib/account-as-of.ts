@@ -10,8 +10,8 @@
  * evaluation judged.
  *
  * Returns null when there is nothing honest to say — an older server that does
- * not send the field, or an account the snapshot has no observation for. A row
- * with no line is better than a row dated to a read that never happened.
+ * not send the field, or an account no provider confirmed a sync for. A row with
+ * no line is better than a row dated to a read that learned nothing.
  */
 
 export interface AccountAsOfShape {

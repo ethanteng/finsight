@@ -281,16 +281,15 @@ describe('finances overview contract', () => {
   // A page-level "as of" built from the newest source reads as though every account
   // is that fresh. One connection syncing this morning was enough to hide another
   // whose provider had not observed it in months, which is the whole point of
-  // dating each row from its own observation.
-  it('dates every account from its own source observation', () => {
-    const oneDay = 24 * 60 * 60 * 1000;
+  // dating each row separately.
+  it('dates every account from the time its own provider reported observing it', () => {
     const overview = buildFinancesOverview({
       snapshot: {
         ...snapshot,
         status: 'stale',
-        sourceObservations: [
-          { id: 'account:cash', required: true, status: 'available', asOf: '2026-08-14T10:00:00.000Z', maxAgeMs: oneDay },
-          { id: 'account:brokerage', required: true, status: 'available', asOf: '2025-11-23T23:58:28.598Z', maxAgeMs: oneDay },
+        accounts: [
+          { ...(snapshot.accounts[0] as any), lastSyncedAt: '2026-08-14T10:00:00.000Z' },
+          { ...(snapshot.accounts[3] as any), lastSyncedAt: '2025-11-23T23:58:28.598Z' },
         ],
         quality: { staleSourceIds: ['account:brokerage'] },
       },
@@ -305,16 +304,42 @@ describe('finances overview contract', () => {
     expect(brokerage?.isDataStale).toBe(true);
   });
 
-  // Staleness has one definition, in the snapshot's quality evaluation. Recomputing
-  // it per row against a second rule would let the row and the snapshot disagree.
-  it('reads staleness from the snapshot rather than recomputing an account age', () => {
-    const oneDay = 24 * 60 * 60 * 1000;
+  // `snapshotTimestamp` falls back to our own fetch time when the provider reported
+  // no sync, and the source observation carries that forward. Reading the row's date
+  // from the observation would tell the user the brokerage reported this account
+  // today because *we* read its cache today -- the false-freshness claim the line
+  // exists to remove. A SnapTrade account whose initial holdings sync has not
+  // completed is exactly this case.
+  it('does not date an account from our fetch time when no provider reported a sync', () => {
     const overview = buildFinancesOverview({
       snapshot: {
         ...snapshot,
-        sourceObservations: [
-          { id: 'account:cash', required: true, status: 'available', asOf: '2020-01-01T00:00:00.000Z', maxAgeMs: oneDay },
+        accounts: [
+          {
+            ...(snapshot.accounts[3] as any),
+            source: 'snaptrade',
+            snapshotTimestamp: '2026-08-14T12:00:00.000Z',
+            lastSyncedAt: undefined,
+          },
         ],
+        sourceObservations: [
+          { id: 'account:brokerage', required: true, status: 'available', asOf: '2026-08-14T12:00:00.000Z', maxAgeMs: 86_400_000 },
+        ],
+        quality: { staleSourceIds: [] },
+      },
+    });
+
+    const brokerage = overview.accountGroups.investments.accounts.find(account => account.account_id === 'brokerage');
+    expect(brokerage?.dataAsOf).toBeNull();
+  });
+
+  // Staleness has one definition, in the snapshot's quality evaluation. Recomputing
+  // it per row against a second rule would let the row and the snapshot disagree.
+  it('reads staleness from the snapshot rather than recomputing an account age', () => {
+    const overview = buildFinancesOverview({
+      snapshot: {
+        ...snapshot,
+        accounts: [{ ...(snapshot.accounts[0] as any), lastSyncedAt: '2020-01-01T00:00:00.000Z' }],
         quality: { staleSourceIds: [] },
       },
     });
@@ -324,59 +349,29 @@ describe('finances overview contract', () => {
     expect(cash?.isDataStale).toBe(false);
   });
 
-  it('leaves an account undated when the snapshot has no observation for it', () => {
-    const overview = buildFinancesOverview({
-      snapshot: {
-        ...snapshot,
-        sourceObservations: [
-          { id: 'account:cash', required: true, status: 'available', asOf: '2026-08-14T10:00:00.000Z', maxAgeMs: 86_400_000 },
-        ],
-      },
-    });
+  it('leaves an account undated when the snapshot never recorded a sync time for it', () => {
+    const overview = buildFinancesOverview({ snapshot });
 
     const brokerage = overview.accountGroups.investments.accounts.find(account => account.account_id === 'brokerage');
     expect(brokerage?.dataAsOf).toBeNull();
   });
 
-  // An unavailable source has no observation time. Dating the row to a read that
-  // failed would present the failure as a successful sync.
-  it('leaves an account undated when its only observation was unavailable', () => {
-    const overview = buildFinancesOverview({
-      snapshot: {
-        ...snapshot,
-        sourceObservations: [
-          { id: 'account:cash', required: true, status: 'unavailable', asOf: '2026-08-14T10:00:00.000Z', maxAgeMs: 86_400_000 },
-        ],
-      },
-    });
-
-    const cash = overview.accountGroups.cash.accounts.find(account => account.account_id === 'cash');
-    expect(cash?.dataAsOf).toBeNull();
-  });
-
   // Compound observation ids (`account:{id}:holdings-coverage`) are separate
   // signals. A naive `account:` prefix strip would invent a non-existent account
-  // id and never match the real row — or worse, collide if ids ever nested.
-  it('ignores compound account observation ids when dating and marking stale', () => {
-    const oneDay = 24 * 60 * 60 * 1000;
+  // id and never match the real row — or worse, collide if ids ever nested. The
+  // account is given a real sync time so "dated, but not stale" is what proves
+  // the compound id was ignored rather than merely absent.
+  it('ignores compound account observation ids when marking an account stale', () => {
     const overview = buildFinancesOverview({
       snapshot: {
         ...snapshot,
-        sourceObservations: [
-          {
-            id: 'account:cash:holdings-coverage',
-            required: false,
-            status: 'available',
-            asOf: '2025-01-01T00:00:00.000Z',
-            maxAgeMs: oneDay,
-          },
-        ],
+        accounts: [{ ...(snapshot.accounts[0] as any), lastSyncedAt: '2026-08-14T10:00:00.000Z' }],
         quality: { staleSourceIds: ['account:cash:holdings-coverage'] },
       },
     });
 
     const cash = overview.accountGroups.cash.accounts.find(account => account.account_id === 'cash');
-    expect(cash?.dataAsOf).toBeNull();
+    expect(cash?.dataAsOf).toBe('2026-08-14T10:00:00.000Z');
     expect(cash?.isDataStale).toBe(false);
   });
 

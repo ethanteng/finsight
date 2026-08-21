@@ -10,8 +10,9 @@ export interface FinancesAccount {
   source?: 'plaid' | 'snaptrade' | 'manual' | string;
   displayBalance?: number | null;
   /**
-   * When the provider last observed this account. Absent on responses from a server
-   * that predates the field, and null when the snapshot has no observation for it.
+   * When the provider last reported observing this account. Absent on responses from
+   * a server that predates the field, and null when no provider confirmed a sync --
+   * the server never substitutes its own fetch time for one.
    */
   dataAsOf?: string | null;
   /** The snapshot judged this account's observation older than its own max age. */

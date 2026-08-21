@@ -23,10 +23,9 @@ export interface FinancesAccount {
   source?: 'plaid' | 'snaptrade' | 'manual' | string;
   displayBalance?: number | null;
   /**
-   * When the provider last observed this account, taken from the snapshot's own
-   * source observation rather than from the account payload, so it is the same
-   * time the quality evaluation judged. Null when the snapshot predates source
-   * observations or the account has no observation of its own.
+   * When the provider last reported observing this account. Null when none did --
+   * see `providerObservedAt`, which never substitutes our own fetch time for a
+   * sync the provider did not confirm.
    */
   dataAsOf?: string | null;
   /**
@@ -348,21 +347,25 @@ function accountIdFromSourceId(sourceId: string): string | null {
   return accountId;
 }
 
-/** `account:{id}` -> provider observation time, from the snapshot's own source observations. */
-function accountObservationTimes(snapshot: FinancesSnapshotLike): Map<string, string> {
-  const observations = Array.isArray(snapshot.sourceObservations) ? snapshot.sourceObservations : [];
-  const times = new Map<string, string>();
-  for (const observation of observations) {
-    if (!observation || typeof observation !== 'object') continue;
-    const accountId = accountIdFromSourceId(String((observation as any).id || ''));
-    if (!accountId) continue;
-    // An unavailable source has no observation to report. Leaving it out means the
-    // row says nothing rather than dating the account to a read that failed.
-    if ((observation as any).status === 'unavailable') continue;
-    const asOf = iso((observation as any).asOf);
-    if (asOf) times.set(accountId, asOf);
-  }
-  return times;
+/**
+ * When a provider actually reported observing this account, or null when none did.
+ *
+ * Deliberately not the snapshot's `account:{id}` observation time, even though that
+ * is what the quality evaluation judged. That observation resolves
+ * `snapshotTimestamp || lastSyncedAt`, and `snapshotTimestamp` falls back to our own
+ * fetch time when the provider reported no sync of its own. SnapTrade serves cached
+ * brokerage state, so its fetch time is when we read the cache, not when the
+ * brokerage was observed -- an account whose initial holdings sync has not completed
+ * would be dated today, and left unstale, on the strength of a read that learned
+ * nothing. A row that says "Updated today" about data the provider never confirmed is
+ * the exact false-freshness claim this line exists to remove.
+ *
+ * `lastSyncedAt` is set only from a real provider sync timestamp and is absent
+ * otherwise, so an unconfirmed account goes undated instead. Plaid and manual
+ * accounts set it to the same value as `snapshotTimestamp`, so they are unaffected.
+ */
+function providerObservedAt(account: FinancesAccount): string | null {
+  return iso((account as FinancesAccount & { lastSyncedAt?: string }).lastSyncedAt);
 }
 
 /** Account ids the snapshot's quality evaluation already judged stale. */
@@ -390,7 +393,6 @@ function groupAccounts(snapshot: FinancesSnapshotLike, accountNames?: ReadonlyMa
   const storedDisplayBalances = meta.accountDisplayBalances && typeof meta.accountDisplayBalances === 'object'
     ? meta.accountDisplayBalances as Record<string, unknown>
     : {};
-  const observationTimes = accountObservationTimes(snapshot);
   const staleAccounts = staleAccountIds(snapshot);
 
   for (const account of accounts) {
@@ -408,7 +410,7 @@ function groupAccounts(snapshot: FinancesSnapshotLike, accountNames?: ReadonlyMa
       ...account,
       ...(currentName ? { name: currentName } : {}),
       displayBalance,
-      dataAsOf: observationTimes.get(id) ?? null,
+      dataAsOf: providerObservedAt(account),
       isDataStale: staleAccounts.has(id),
     };
     // Canonical truth treats an overdraft as debt, not negative cash.
