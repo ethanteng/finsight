@@ -408,6 +408,47 @@ function prunePendingDisconnects(now = Date.now()): void {
   }
 }
 
+/**
+ * Account ids the persisted snapshot recorded against this authorization.
+ *
+ * The durable half of the split-state recovery above. The pending map is exact
+ * but process-local, and the database outage it exists to survive is also the
+ * kind of incident that restarts a process -- so on its own it would strand the
+ * rows it was meant to save. The snapshot carries `brokerageAuthorizationId` per
+ * account and outlives both restarts and instance hops, which is enough to
+ * finish a cleanup once the provider has stopped reporting the accounts.
+ *
+ * Snapshot rows and local Account rows are written by the same revision, so an
+ * account with rows to clean up has a snapshot entry to find it by.
+ */
+async function snapshotAccountsForAuthorization(
+  db: any,
+  userId: string,
+  authorizationId: string,
+): Promise<{ accountIds: string[]; institution: string | null }> {
+  try {
+    const snapshot = await db.financialSummarySnapshot.findUnique({
+      where: { userId },
+      select: { accounts: true },
+    });
+    const accounts = Array.isArray(snapshot?.accounts) ? snapshot.accounts as any[] : [];
+    const owned = accounts.filter(
+      account => account?.source === 'snaptrade' && account?.brokerageAuthorizationId === authorizationId
+    );
+    return {
+      accountIds: owned
+        .map(account => String(account.account_id || account.id || ''))
+        .filter(id => id.startsWith('snaptrade-')),
+      institution: owned.find(account => account?.institution)?.institution || null,
+    };
+  } catch (error) {
+    // Recovery is best-effort: failing to read the snapshot must not turn a
+    // disconnect into an error, it just leaves the caller with the other paths.
+    console.warn('SnapTrade disconnect: snapshot lookup for stranded accounts failed:', error);
+    return { accountIds: [], institution: null };
+  }
+}
+
 router.post('/connections/:authorizationId/refresh', requireAuth, async (req, res) => {
   try {
     const userId = req.user!.id;
@@ -686,6 +727,15 @@ router.delete('/connections/:authorizationId', requireAuth, async (req, res) => 
     );
     const authorization = authorizations.find((entry: any) => entry?.id === authorizationId);
 
+    // Only consulted when the provider reports neither accounts nor the
+    // authorization itself -- that is, when it has already forgotten this
+    // connection. An id that was never this user's has nothing here either, so
+    // the ownership check stays closed.
+    const needsStrandedLookup = ownedAccounts.length === 0 && !pending && !authorization;
+    const stranded = needsStrandedLookup
+      ? await snapshotAccountsForAuthorization(db, userId, authorizationId)
+      : { accountIds: [] as string[], institution: null };
+
     let institution: string;
     let accountIds: string[];
     if (ownedAccounts.length > 0) {
@@ -698,6 +748,12 @@ router.delete('/connections/:authorizationId', requireAuth, async (req, res) => 
       // the local delete with the ids captured then.
       institution = pending.institution;
       accountIds = pending.accountIds;
+    } else if (stranded.accountIds.length > 0) {
+      // Same split state as `pending`, but after the process that recorded it
+      // restarted or the retry landed on another instance. The snapshot outlives
+      // both, so the cleanup still completes instead of stranding the rows.
+      institution = stranded.institution || 'this institution';
+      accountIds = stranded.accountIds;
     } else if (authorization) {
       // Linked brokerage with no accounts yet (pending/incomplete). Still
       // removable — there is nothing local to clear beyond the provider auth.

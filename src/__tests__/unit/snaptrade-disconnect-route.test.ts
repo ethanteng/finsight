@@ -31,6 +31,7 @@ const getUserAccounts = snapTradeService.getUserAccounts as jest.Mock;
 const removeConnection = snapTradeService.removeConnection as jest.Mock;
 
 const snapTradeUserFindUnique = jest.fn();
+const snapshotFindUnique = jest.fn();
 const accountFindMany = jest.fn();
 const accountDeleteMany = jest.fn();
 const transactionDeleteMany = jest.fn();
@@ -54,6 +55,7 @@ describe('SnapTrade per-institution disconnect', () => {
     jest.clearAllMocks();
     (getPrismaClient as jest.Mock).mockReturnValue({
       snapTradeUser: { findUnique: snapTradeUserFindUnique },
+      financialSummarySnapshot: { findUnique: snapshotFindUnique },
       account: { findMany: accountFindMany, deleteMany: accountDeleteMany },
       transaction: { deleteMany: transactionDeleteMany },
       snapTradeActivity: { deleteMany: activityDeleteMany },
@@ -64,6 +66,7 @@ describe('SnapTrade per-institution disconnect', () => {
       }),
     });
     snapTradeUserFindUnique.mockResolvedValue({ userId: 'user-1', userSecret: 'secret' });
+    snapshotFindUnique.mockResolvedValue({ accounts: [] });
     getUserAccounts.mockResolvedValue({
       success: true,
       data: {
@@ -255,10 +258,58 @@ describe('SnapTrade per-institution disconnect', () => {
     // Provider remove succeeded but local cleanup failed: SnapTrade no longer
     // lists the accounts, so a naive retry would 404. The pending targets from
     // the first attempt let the second request finish the delete.
+    // The pending map is exact but process-local, and the database outage it
+    // exists to survive is the same kind of incident that restarts a process --
+    // so on its own it strands the rows it was meant to save. A fresh process
+    // has no memory of the earlier attempt; the persisted snapshot still records
+    // which accounts the authorization owned, which is enough to finish.
+    it('completes a stranded cleanup with no memory of the earlier attempt', async () => {
+      // Provider has already forgotten this authorization, and nothing is pending.
+      getUserAccounts.mockResolvedValue({
+        success: true,
+        data: {
+          accounts: [...fidelityAccounts],
+          authorizations: [{ id: 'auth-fidelity', institution: 'Fidelity', disabled: false, disabledAt: null }],
+        },
+      });
+      snapshotFindUnique.mockResolvedValue({
+        accounts: [
+          { account_id: 'snaptrade-acct-public-1', source: 'snaptrade', institution: 'Public', brokerageAuthorizationId: 'auth-public' },
+          { account_id: 'snaptrade-acct-public-2', source: 'snaptrade', institution: 'Public', brokerageAuthorizationId: 'auth-public' },
+          { account_id: 'snaptrade-acct-fidelity-1', source: 'snaptrade', institution: 'Fidelity', brokerageAuthorizationId: 'auth-fidelity' },
+        ],
+      });
+
+      const response = await request(app)
+        .delete('/snaptrade/connections/auth-public')
+        .expect(200);
+
+      const deletedIds = accountDeleteMany.mock.calls[0][0].where.plaidAccountId.in;
+      expect(deletedIds).toEqual(['snaptrade-acct-public-1', 'snaptrade-acct-public-2']);
+      expect(deletedIds).not.toContain('snaptrade-acct-fidelity-1');
+      expect(response.body.data.institution).toBe('Public');
+    });
+
+    // The recovery path must not become a way to delete rows for an id that was
+    // never this user's: an unknown authorization has nothing in the snapshot.
+    it('still refuses an unknown authorization with nothing in the snapshot', async () => {
+      snapshotFindUnique.mockResolvedValue({
+        accounts: [
+          { account_id: 'snaptrade-acct-public-1', source: 'snaptrade', brokerageAuthorizationId: 'auth-public' },
+        ],
+      });
+
+      await request(app).delete('/snaptrade/connections/auth-someone-else').expect(404);
+
+      expect(removeConnection).not.toHaveBeenCalled();
+      expect(accountDeleteMany).not.toHaveBeenCalled();
+    });
+
     it('retries local cleanup after a prior provider-success / local-failure split', async () => {
       let attempts = 0;
       (getPrismaClient as jest.Mock).mockReturnValue({
         snapTradeUser: { findUnique: snapTradeUserFindUnique },
+        financialSummarySnapshot: { findUnique: snapshotFindUnique },
         account: { findMany: accountFindMany, deleteMany: accountDeleteMany },
         transaction: { deleteMany: transactionDeleteMany },
         snapTradeActivity: { deleteMany: activityDeleteMany },
