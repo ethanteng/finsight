@@ -7,13 +7,6 @@ jest.mock('../../services/stripe-email', () => ({
   sendCancellationEmail: jest.fn().mockResolvedValue(true)
 }));
 
-jest.mock('../../analytics/heycatch', () => ({
-  analytics: {
-    setIdentity: jest.fn().mockResolvedValue(undefined),
-    trackEvent: jest.fn().mockResolvedValue(undefined)
-  }
-}));
-
 // Mock Stripe
 jest.mock('../../config/stripe', () => ({
   STRIPE_CONFIG: {
@@ -249,7 +242,6 @@ describe('StripeService', () => {
   describe('processWebhookEvent', () => {
     it('should handle subscription created event', async () => {
       const { sendWelcomeEmail } = require('../../services/stripe-email');
-      const { analytics } = require('../../analytics/heycatch');
       const mockUser = {
         id: 'user_123',
         email: 'test@example.com'
@@ -279,11 +271,6 @@ describe('StripeService', () => {
       expect(mockPrisma.subscription.create).toHaveBeenCalled();
       expect(mockPrisma.user.update).toHaveBeenCalled();
       expect(sendWelcomeEmail).toHaveBeenCalledWith('test@example.com', 'standard');
-      expect(analytics.trackEvent).toHaveBeenCalledWith(
-        'subscription_started',
-        { plan: 'standard' },
-        { userId: 'user_123' }
-      );
     });
 
     it('should link a returning subscriber whose checkout created a new Stripe customer', async () => {
@@ -485,7 +472,6 @@ describe('StripeService', () => {
 
     it('should skip one-time side effects when a subscription created event is replayed', async () => {
       const { sendWelcomeEmail } = require('../../services/stripe-email');
-      const { analytics } = require('../../analytics/heycatch');
 
       mockPrisma.user.findFirst.mockResolvedValue({
         id: 'user_123',
@@ -516,8 +502,6 @@ describe('StripeService', () => {
       });
       expect(mockPrisma.user.update).toHaveBeenCalled();
       expect(sendWelcomeEmail).not.toHaveBeenCalled();
-      expect(analytics.setIdentity).not.toHaveBeenCalled();
-      expect(analytics.trackEvent).not.toHaveBeenCalled();
     });
 
     it('should skip payment succeeded updates when the subscription record is not linked yet', async () => {

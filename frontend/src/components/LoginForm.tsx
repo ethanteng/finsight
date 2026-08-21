@@ -1,7 +1,6 @@
 "use client";
 import { useState, useEffect, Suspense } from 'react';
 import { pushBeginCheckout } from '@/lib/dataLayer';
-import { identifyUser } from '@/lib/heycatch';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowRight, Brain, Check, CircleAlert, LoaderCircle, LockKeyhole, ShieldCheck } from 'lucide-react';
@@ -208,7 +207,6 @@ function LoginFormContent() {
           if (data.user.timeZone) {
             setStoredUserTimeZone(data.user.timeZone);
           }
-          identifyUser(data.user);
         }
         router.push('/app');
       } else {

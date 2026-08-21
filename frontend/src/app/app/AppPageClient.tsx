@@ -8,7 +8,6 @@ import FinanceQA from '../../components/FinanceQA';
 import FinancialOverview from '../../components/FinancialOverview';
 import MarketNewsModal from '../../components/MarketNewsModal';
 import { resetPlaidLinkInitialization } from '../../components/PlaidLinkButton';
-import { identifyUser, resetUserIdentity } from '../../lib/heycatch';
 import { syncStoredUserTimeZoneFromAuthUser } from '../../lib/browser-time-zone';
 import { groupTurnsIntoDecisions } from '../../lib/decision-threads';
 import { relativeTurnTime } from '../../lib/relative-time';
@@ -61,7 +60,6 @@ export default function AppPageClient() {
 
   const expireSession = useCallback(() => {
     localStorage.removeItem('auth_token');
-    resetUserIdentity();
     router.push('/login?message=' + encodeURIComponent('Your session has expired. Please log in again.'));
   }, [router]);
 
@@ -152,7 +150,6 @@ export default function AppPageClient() {
         setIsAuthenticated(true);
         setUserEmail(data.user.email);
         syncStoredUserTimeZoneFromAuthUser(data.user);
-        identifyUser(data.user);
         await checkSubscriptionStatus(token);
       } catch (error) {
         console.error('Auth check failed:', error);
@@ -169,7 +166,6 @@ export default function AppPageClient() {
   const handleLogout = () => {
     resetPlaidLinkInitialization();
     localStorage.removeItem('auth_token');
-    resetUserIdentity();
     router.push('/login');
   };
   const hasMarketNewsAccess = subscriptionStatus?.tier === 'standard' || subscriptionStatus?.tier === 'premium';

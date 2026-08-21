@@ -5,15 +5,6 @@ const { withSentryConfig } = require("@sentry/nextjs");
 
 const nextConfig: NextConfig = {
   outputFileTracingRoot: require("path").join(__dirname),
-  async redirects() {
-    return [
-      {
-        source: '/:l([a-z0-9])',
-        destination: '/?utm_source=heycatch&utm_campaign=:l',
-        permanent: false,
-      },
-    ];
-  },
   async headers() {
     return [
       {
@@ -34,7 +25,7 @@ const nextConfig: NextConfig = {
               // and analytics pixels.
               "img-src 'self' data: blob: https://logo.clearbit.com https://*.plaid.com https://images.ghost.io https://static.ghost.org https://blog.asklinc.com https://*.ghost.io https://images.unsplash.com https://www.google-analytics.com https://www.googletagmanager.com https://googleads.g.doubleclick.net https://plausible.io https://*.contentsquare.net",
               "font-src 'self' data: https://fonts.gstatic.com",
-              "connect-src 'self' http://localhost:3000 http://localhost:3001 https://in.heycatch.ai https://*.sentry.io https://www.google-analytics.com https://www.google.com https://www.googletagmanager.com https://plausible.io https://*.asklinc.com wss://*.asklinc.com https://*.onrender.com https://production.plaid.com https://cdn.plaid.com https://*.contentsquare.net https://*.ghost.io https://blog.asklinc.com https://images.ghost.io https://static.ghost.org",
+              "connect-src 'self' http://localhost:3000 http://localhost:3001 https://*.sentry.io https://www.google-analytics.com https://www.google.com https://www.googletagmanager.com https://plausible.io https://*.asklinc.com wss://*.asklinc.com https://*.onrender.com https://production.plaid.com https://cdn.plaid.com https://*.contentsquare.net https://*.ghost.io https://blog.asklinc.com https://images.ghost.io https://static.ghost.org",
               "frame-src 'self' https://*.plaid.com https://cdn.plaid.com https://www.googletagmanager.com https://app.snaptrade.com https://*.snaptrade.com",
               "worker-src 'self' blob:",
               "object-src 'none'",

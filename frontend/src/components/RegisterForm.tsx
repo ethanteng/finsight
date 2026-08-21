@@ -1,6 +1,5 @@
 "use client";
 import { useState, useEffect, Suspense } from 'react';
-import { identifyUser } from '@/lib/heycatch';
 import { getBrowserTimeZone, setStoredUserTimeZone } from '@/lib/browser-time-zone';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
@@ -125,7 +124,6 @@ function RegisterFormContent() {
           if (data.user.timeZone) {
             setStoredUserTimeZone(data.user.timeZone);
           }
-          identifyUser(data.user);
         }
 
         // Always go through email verification for security

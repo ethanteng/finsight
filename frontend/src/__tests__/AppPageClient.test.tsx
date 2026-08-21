@@ -21,7 +21,6 @@ jest.mock('@/components/FinancialOverview', () => ({
 }));
 jest.mock('@/components/MarketNewsModal', () => ({ __esModule: true, default: () => null }));
 jest.mock('@/components/PlaidLinkButton', () => ({ resetPlaidLinkInitialization: jest.fn() }));
-jest.mock('@/lib/heycatch', () => ({ identifyUser: jest.fn(), resetUserIdentity: jest.fn() }));
 jest.mock('@/lib/browser-time-zone', () => ({ syncStoredUserTimeZoneFromAuthUser: jest.fn() }));
 
 const turn = (id: string, threadId: string | null, question: string, timestamp: number) => ({

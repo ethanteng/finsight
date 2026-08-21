@@ -9,7 +9,6 @@ jest.mock('next/navigation', () => ({
   useSearchParams: () => new URLSearchParams(),
 }));
 jest.mock('@/lib/dataLayer', () => ({ pushBeginCheckout: jest.fn() }));
-jest.mock('@/lib/heycatch', () => ({ identifyUser: jest.fn() }));
 
 describe('LoginForm', () => {
   beforeEach(() => {

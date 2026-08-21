@@ -10,7 +10,6 @@ import FinancialMetricsChart, { HistoricalSnapshot } from '../../components/fina
 import IncomeExpenseOverrides from '../../components/finances/IncomeExpenseOverrides';
 import type { FinancesAccount, FinancesOverview } from '../../types/finances-overview';
 import ReconnectNotice from '../../components/ReconnectNotice';
-import { resetUserIdentity } from '../../lib/heycatch';
 import AuthenticatedPageHeader from '../../components/authenticated/AuthenticatedPageHeader';
 import { mergeCanonicalCurrentWithHistory } from '../../lib/canonical-financial-history';
 import {
@@ -385,7 +384,6 @@ export default function FinancesPageClient() {
   const handleLogout = () => {
     localStorage.removeItem('auth_token');
     clearStoredUserTimeZone();
-    resetUserIdentity();
     router.push('/login');
   };
 
