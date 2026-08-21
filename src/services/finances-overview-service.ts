@@ -10,6 +10,9 @@ import {
 
 export type FinancesSnapshotStatus = SnapshotQuality['status'];
 
+/** Source-observation id prefix for a single account, as written by the snapshot builder. */
+const ACCOUNT_SOURCE_PREFIX = 'account:';
+
 export interface FinancesAccount {
   id?: string;
   account_id?: string;
@@ -19,6 +22,24 @@ export interface FinancesAccount {
   institution?: string;
   source?: 'plaid' | 'snaptrade' | 'manual' | string;
   displayBalance?: number | null;
+  /**
+   * When the provider last reported observing this account. Null when none did --
+   * see `providerObservedAt`, which never substitutes our own fetch time for a
+   * sync the provider did not confirm.
+   */
+  dataAsOf?: string | null;
+  /**
+   * This account's observation is older than its own max age. Read from the
+   * snapshot's `staleSourceIds`, never recomputed here: one definition of stale
+   * for the whole product.
+   */
+  isDataStale?: boolean;
+  /**
+   * SnapTrade brokerage authorization backing this account, carried through from
+   * the snapshot. One authorization backs several accounts, and it is what both
+   * the reconnect prompt and the manual-refresh endpoint take.
+   */
+  brokerageAuthorizationId?: string;
   balance?:
     | number
     | null
@@ -320,6 +341,54 @@ function snapshotHome(snapshot: FinancesSnapshotLike, currentHome?: FinancesHome
   };
 }
 
+/**
+ * Top-level account observation ids are `account:{id}`. Compound ids such as
+ * `account:{id}:holdings-coverage` or `account:{id}:balance` are separate
+ * signals and must not be treated as the account's own observation.
+ */
+function accountIdFromSourceId(sourceId: string): string | null {
+  if (!sourceId.startsWith(ACCOUNT_SOURCE_PREFIX)) return null;
+  const accountId = sourceId.slice(ACCOUNT_SOURCE_PREFIX.length);
+  if (!accountId || accountId.includes(':')) return null;
+  return accountId;
+}
+
+/**
+ * When a provider actually reported observing this account, or null when none did.
+ *
+ * Deliberately not the snapshot's `account:{id}` observation time, even though that
+ * is what the quality evaluation judged. That observation resolves
+ * `snapshotTimestamp || lastSyncedAt`, and `snapshotTimestamp` falls back to our own
+ * fetch time when the provider reported no sync of its own. SnapTrade serves cached
+ * brokerage state, so its fetch time is when we read the cache, not when the
+ * brokerage was observed -- an account whose initial holdings sync has not completed
+ * would be dated today, and left unstale, on the strength of a read that learned
+ * nothing. A row that says "Updated today" about data the provider never confirmed is
+ * the exact false-freshness claim this line exists to remove.
+ *
+ * `lastSyncedAt` is set only from a sync that confirms the displayed value -- for
+ * SnapTrade the holdings sync specifically, since a brokerage account's balance is
+ * its holdings value -- and is absent otherwise, so an unconfirmed account goes
+ * undated instead. Plaid and manual accounts set it to the same value as
+ * `snapshotTimestamp`, so they are unaffected.
+ */
+function providerObservedAt(account: FinancesAccount): string | null {
+  return iso((account as FinancesAccount & { lastSyncedAt?: string }).lastSyncedAt);
+}
+
+/** Account ids the snapshot's quality evaluation already judged stale. */
+function staleAccountIds(snapshot: FinancesSnapshotLike): Set<string> {
+  const quality = snapshot.quality && typeof snapshot.quality === 'object' ? snapshot.quality as any : {};
+  const ids = Array.isArray(quality.staleSourceIds) ? quality.staleSourceIds : [];
+  const stale = new Set<string>();
+  for (const id of ids) {
+    if (typeof id !== 'string') continue;
+    const accountId = accountIdFromSourceId(id);
+    if (accountId) stale.add(accountId);
+  }
+  return stale;
+}
+
 function groupAccounts(snapshot: FinancesSnapshotLike, accountNames?: ReadonlyMap<string, string>) {
   const groups = {
     cash: [] as FinancesAccount[],
@@ -332,6 +401,7 @@ function groupAccounts(snapshot: FinancesSnapshotLike, accountNames?: ReadonlyMa
   const storedDisplayBalances = meta.accountDisplayBalances && typeof meta.accountDisplayBalances === 'object'
     ? meta.accountDisplayBalances as Record<string, unknown>
     : {};
+  const staleAccounts = staleAccountIds(snapshot);
 
   for (const account of accounts) {
     const classified = classifyAccount(account);
@@ -341,10 +411,15 @@ function groupAccounts(snapshot: FinancesSnapshotLike, accountNames?: ReadonlyMa
       : accountBalance(account);
     if (classified.isDebt && displayBalance !== null) displayBalance = Math.abs(displayBalance);
     const currentName = accountNames?.get(id);
+    // Every account carries its own observation time, so a page-level "as of" built
+    // from the newest source can never imply that an account nobody has synced in
+    // months is as current as the one that synced this morning.
     const displayAccount = {
       ...account,
       ...(currentName ? { name: currentName } : {}),
       displayBalance,
+      dataAsOf: providerObservedAt(account),
+      isDataStale: staleAccounts.has(id),
     };
     // Canonical truth treats an overdraft as debt, not negative cash.
     if (classified.isCash && classified.balance < 0) groups.debt.push({ ...displayAccount, displayBalance: Math.abs(classified.balance) });

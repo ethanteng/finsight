@@ -374,6 +374,124 @@ router.get('/holdings', requireAuth, async (req, res) => {
   }
 });
 
+// POST /snaptrade/connections/:authorizationId/refresh - Ask SnapTrade to re-sync a
+// brokerage connection now, instead of waiting for its own cache schedule.
+//
+// Cooldown is process-local, so a multi-instance deployment can let a second
+// request through. That is deliberate: the authoritative limit is SnapTrade's
+// own (425/429), which the service surfaces as its own message. This map exists
+// to stop an impatient user from spending their refresh allowance on repeat
+// clicks, not to be the limit.
+const refreshCooldownMs = 5 * 60 * 1000;
+const lastRefreshRequest = new Map<string, number>();
+
+router.post('/connections/:authorizationId/refresh', requireAuth, async (req, res) => {
+  try {
+    const userId = req.user!.id;
+    const authorizationId = String(req.params.authorizationId || '').trim();
+    if (!authorizationId) {
+      return res.status(400).json({ success: false, error: 'A brokerage connection id is required.' });
+    }
+
+    const db = getPrismaClient();
+    const user = await db.snapTradeUser.findUnique({ where: { userId } });
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        error: 'SnapTrade user not found. Please initialize first.'
+      });
+    }
+
+    // Confirm the authorization is this user's before spending a refresh on it.
+    // Unlike the reconnect flow this fails closed: reconnect fails open because a
+    // user locked out of the portal has no other repair path, while a refresh
+    // that cannot be attributed is simply not worth a metered provider write.
+    const accountsResult = await snapTradeService.getUserAccounts(userId, user.userSecret);
+    if (!accountsResult.success || !Array.isArray(accountsResult.data?.accounts)) {
+      console.warn(
+        `SnapTrade refresh: could not verify ownership for user ${userId}` +
+        `${accountsResult.error ? ` (${accountsResult.error})` : ''}`
+      );
+      // Expired credentials are not a transient outage. Surfacing them as 503
+      // would send the user to "try again" when the real fix is reconnect.
+      const credentialsInvalid = /credential|expired|unauthorized|reconnect/i.test(
+        accountsResult.error || ''
+      );
+      if (credentialsInvalid) {
+        return res.status(401).json({
+          success: false,
+          error: 'SnapTrade credentials invalid or expired. Please reconnect your SnapTrade account.',
+        });
+      }
+      return res.status(503).json({
+        success: false,
+        error: 'Could not reach SnapTrade to verify this connection. Please try again.'
+      });
+    }
+    const owned = accountsResult.data.accounts.some(
+      (account: any) => account?.brokerageAuthorizationId === authorizationId
+    );
+    if (!owned) {
+      console.warn(`SnapTrade refresh: refusing an authorization not belonging to user ${userId}`);
+      return res.status(400).json({ success: false, error: 'Unknown brokerage connection for this user.' });
+    }
+
+    // Entries older than the cooldown can never reject anything, so dropping them
+    // keeps the map bounded by concurrent use rather than by lifetime users.
+    const expiredBefore = Date.now() - refreshCooldownMs;
+    for (const [key, requestedAt] of lastRefreshRequest) {
+      if (requestedAt < expiredBefore) lastRefreshRequest.delete(key);
+    }
+
+    const cooldownKey = `${userId}:${authorizationId}`;
+    const lastRequestedAt = lastRefreshRequest.get(cooldownKey);
+    if (lastRequestedAt !== undefined && Date.now() - lastRequestedAt < refreshCooldownMs) {
+      const retryAfterSeconds = Math.ceil((refreshCooldownMs - (Date.now() - lastRequestedAt)) / 1000);
+      res.setHeader('Retry-After', String(retryAfterSeconds));
+      return res.status(429).json({
+        success: false,
+        error: 'This connection was refreshed a moment ago. Please try again later.',
+        retryAfterSeconds,
+      });
+    }
+
+    const result = await snapTradeService.refreshConnection(userId, user.userSecret, authorizationId);
+    if (!result.success) {
+      const rateLimited = result.status === 425 || result.status === 429;
+      // A rate limit is the provider saying "too soon", so start the cooldown on
+      // it too: without that, repeat clicks keep reaching SnapTrade's metered
+      // limit to be told the same thing, and the local guard only ever helps the
+      // user who did not need it. It strands nobody -- the provider is already
+      // refusing. Every other failure consumed nothing, so it must not lock the
+      // user out of retrying once the cause clears.
+      if (rateLimited) lastRefreshRequest.set(cooldownKey, Date.now());
+      const status = rateLimited
+        ? 429
+        : result.status === 401
+          ? 401
+          : 502;
+      return res.status(status).json({
+        success: false,
+        error: result.error,
+      });
+    }
+    lastRefreshRequest.set(cooldownKey, Date.now());
+
+    // No snapshot rebuild here. SnapTrade schedules the syncs and returns before
+    // they finish, so rebuilding now would re-read the same cached holdings and
+    // write a revision identical to the one the user is already looking at. The
+    // next scheduled rebuild picks the new data up.
+    return res.json({
+      success: true,
+      message: 'Refresh requested. Updated balances usually arrive within a few minutes.',
+      data: result.data,
+    });
+  } catch (error) {
+    console.error('SnapTrade connection refresh failed:', error);
+    return res.status(500).json({ success: false, error: 'Failed to request a refresh' });
+  }
+});
+
 // DELETE /snaptrade/delete - Delete SnapTrade user
 router.delete('/delete', requireAuth, async (req, res) => {
   try {

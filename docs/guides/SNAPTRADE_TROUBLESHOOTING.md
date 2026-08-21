@@ -220,6 +220,60 @@ curl -X POST "https://api.snaptrade.com/api/v1/snapTrade/listUserAccount" \
    curl https://finsight-backend-hrel.onrender.com/snaptrade/status
    ```
 
+## 🕰️ **Account balances frozen at an old date**
+
+### **Symptom**
+
+One or more SnapTrade accounts show a balance that no longer matches the
+brokerage, while other accounts on the *same* connection are current. The
+connection is not disabled, so nothing prompts a reconnect, and activities for
+the frozen accounts keep arriving normally.
+
+### **Root cause**
+
+Without real-time data access, SnapTrade serves cached brokerage state and
+refreshes it on its own schedule; how long it caches varies by brokerage. When
+that schedule stops advancing for an account, every read returns the same
+holdings indefinitely. `sync_status.holdings.last_successful_sync` is the
+authoritative signal, and it is per account — not per connection — so one
+account can freeze while its siblings keep syncing.
+
+### **Diagnosis**
+
+Read the persisted snapshot rather than re-querying the provider:
+
+```sql
+SELECT a->>'name'  AS account,
+       a->'syncStatus'->'holdings'->>'last_successful_sync' AS holdings_synced
+FROM financial_summary_snapshots s, jsonb_array_elements(s.accounts::jsonb) a
+WHERE s."userId" = '<user id>' AND a->>'source' = 'snaptrade';
+```
+
+The snapshot already records the same conclusion: `quality.staleSourceIds`
+lists every `account:{id}` whose observation is past its max age. The Finances
+page marks those rows stale from that list, and dates each row from the
+account's confirmed provider sync (`lastSyncedAt`) — for SnapTrade the holdings
+sync specifically, since a brokerage balance is its holdings value. It is never
+dated from our own fetch time, nor from a transactions sync, either of which can
+look recent while holdings have not synced at all.
+
+### **Fix**
+
+Ask SnapTrade to re-sync the brokerage authorization:
+
+```
+POST /snaptrade/connections/:authorizationId/refresh
+```
+
+The Finances account detail modal exposes this as **Refresh from institution**.
+SnapTrade schedules the syncs and returns before they finish, so new balances
+appear on the next snapshot rebuild, not immediately. The endpoint is metered:
+a per-connection cooldown guards repeat clicks, and SnapTrade's own 425/429
+responses are surfaced as "refreshed recently".
+
+If refreshing does not advance `last_successful_sync`, the connection itself
+needs to be removed and re-linked.
+
 ## 📞 **Getting Help**
 
 If the issue persists:

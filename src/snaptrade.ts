@@ -364,6 +364,73 @@ export class SnapTradeService {
     }
   }
 
+  /**
+   * Ask SnapTrade to re-sync one brokerage authorization now.
+   *
+   * Without real-time data access SnapTrade serves cached brokerage state and
+   * refreshes it on its own schedule, and how long it caches varies by
+   * brokerage. When that schedule quietly stops advancing for an account, every
+   * read we make keeps returning the same frozen holdings -- correct as of
+   * whenever the provider last observed them, and wrong today. This is the only
+   * endpoint that makes the provider go look again.
+   *
+   * Deliberately not wrapped in `this.read()`: that retry policy is documented
+   * for idempotent reads, and this is a metered mutation. Retrying it on a 429
+   * would spend the user's refresh allowance to answer a rate limit.
+   *
+   * The provider schedules the syncs and returns before they finish, so a
+   * success here means "asked", never "the numbers moved".
+   */
+  async refreshConnection(
+    userId: string,
+    userSecret: string,
+    authorizationId: string,
+  ): Promise<{ success: boolean; data?: any; error?: string; status?: number }> {
+    try {
+      console.log('🔄 Requesting SnapTrade refresh for authorization:', authorizationId);
+      const response = await this.client.connections.refreshBrokerageAuthorization({
+        authorizationId,
+        userId,
+        userSecret,
+      });
+      return {
+        success: true,
+        data: { detail: (response.data as any)?.detail || 'Refresh scheduled' },
+      };
+    } catch (error: any) {
+      const status = typeof error?.status === 'number'
+        ? error.status
+        : typeof error?.response?.status === 'number' ? error.response.status : undefined;
+      // 425 Too Early is SnapTrade's "you just refreshed this"; 429 is the plan
+      // allowance. Both are ordinary outcomes of a button a user can press, not
+      // faults, so they carry their own message instead of a generic failure.
+      if (status === 425 || status === 429) {
+        console.warn(`⚠️ SnapTrade refresh rate-limited for authorization ${authorizationId} (status ${status})`);
+        return {
+          success: false,
+          status,
+          error: 'This connection was refreshed recently. Please try again later.',
+        };
+      }
+      if (status === 401) {
+        console.warn(`⚠️ SnapTrade refresh: 401 Unauthorized for user ${userId}`);
+        return {
+          success: false,
+          status,
+          error: 'SnapTrade credentials invalid or expired. Please reconnect your SnapTrade account.',
+        };
+      }
+      // The provider's own message can name internal endpoints and ids, and it
+      // reaches the user verbatim from here. The detail stays in the log.
+      console.error('SnapTrade refresh failed:', error);
+      return {
+        success: false,
+        status,
+        error: 'Could not request a refresh from the brokerage. Please try again later.',
+      };
+    }
+  }
+
   // Get user accounts
   async getUserAccounts(userId: string, userSecret: string): Promise<{ success: boolean; data?: any; error?: string }> {
     try {

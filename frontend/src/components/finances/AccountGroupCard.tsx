@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import type { FinancesAccount } from '../../types/finances-overview';
 import { resolveAccountBalance } from '../../lib/account-balance';
+import { formatAccountAsOf } from '../../lib/account-as-of';
 import { useDialog } from '../ui/dialog';
 
 export type Account = FinancesAccount;
@@ -153,6 +154,7 @@ export default function AccountGroupCard({
             const balance = getAccountBalance(account);
             const name = getAccountName(account);
             const institution = getAccountInstitution(account);
+            const asOf = formatAccountAsOf(account);
 
             const isEditing = editingAccountId === accountId;
 
@@ -213,6 +215,14 @@ export default function AccountGroupCard({
                     )}
                     {institution && !isEditing && (
                       <div className="text-sm text-gray-400">{institution}</div>
+                    )}
+                    {asOf && !isEditing && (
+                      <div
+                        className={`text-xs ${asOf.isStale ? 'text-amber-300' : 'text-gray-500'}`}
+                        title={asOf.title}
+                      >
+                        {asOf.label}
+                      </div>
                     )}
                   </div>
                   {!isEditing && (

@@ -487,6 +487,35 @@ describe('FinancialDataService investment persistence safeguards', () => {
     expect(result.propertyId).toBe('property-123');
   });
 
+  // A brokerage account's balance is its holdings value, so a transactions sync
+  // confirms nothing about the number on screen. Dating the account row from it
+  // would show a recent as-of for a balance holdings never confirmed -- the same
+  // false-freshness the per-account line exists to remove.
+  it('does not date a SnapTrade account from a transactions sync alone', async () => {
+    (mockPrisma.snapTradeUser.findUnique as any).mockResolvedValue({ userSecret: 'secret' });
+    mockSnapTradeService.getUserAccounts.mockResolvedValue({
+      success: true,
+      data: {
+        accounts: [{
+          id: 'brokerage-1',
+          name: 'Brokerage',
+          type: 'investment',
+          subtype: 'brokerage',
+          institution: 'Broker',
+          balance: 2500,
+          balanceCurrency: 'USD',
+          lastSuccessfulHoldingsSync: null,
+          lastSuccessfulTransactionsSync: '2026-08-17T21:00:00Z',
+        }],
+      },
+    });
+
+    const service = new FinancialDataService();
+    const result = await (service as any).fetchSnapTradeData('user-123', {});
+
+    expect(result.accounts[0].lastSyncedAt).toBeUndefined();
+  });
+
   it('preserves SnapTrade provider timestamps and stable activity IDs', async () => {
     (mockPrisma.snapTradeUser.findUnique as any).mockResolvedValue({ userSecret: 'secret' });
     mockSnapTradeService.getUserAccounts.mockResolvedValue({
