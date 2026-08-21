@@ -10,6 +10,7 @@ import { normalizeLabel } from './services/label-normalization';
 import { getProviderRequestTimeoutMs } from './services/provider-request-policy';
 import { isTargetDateFund, TARGET_DATE_ASSET_TYPE } from './services/target-date-fund';
 import { removePlaidItem, removePlaidItems } from './services/plaid-item-removal';
+import { latestObservedAt } from './services/account-observation-time';
 import { deleteTransactionsWithOverrides } from './services/transaction-cleanup';
 
 // Initialize Prisma client lazily to avoid import issues during ts-node startup
@@ -1469,6 +1470,11 @@ export const setupPlaidRoutes = (app: any) => {
   // Deliberately a database-only read. `/profile/tokens` answers a similar
   // question but revalidates every token against Plaid, which is far too heavy
   // for a list whose only job is to let someone pick a connection to remove.
+  //
+  // `lastUpdated` comes from the accounts, not from `AccessToken.lastRefreshed`.
+  // That column is only ever written when an Item is linked or re-linked, so it
+  // reported connections linked in 2025 as last refreshed in 2025 while their
+  // balances were in fact hours old.
   app.get('/plaid/connections', async (req: any, res: any) => {
     try {
       if (!req.user?.id) return res.status(401).json({ error: 'Authentication required' });
@@ -1485,9 +1491,10 @@ export const setupPlaidRoutes = (app: any) => {
           institutionName: true,
           isActive: true,
           lastError: true,
-          lastRefreshed: true,
           createdAt: true,
-          accounts: { select: { id: true, name: true, mask: true } },
+          accounts: {
+            select: { id: true, name: true, mask: true, balanceLastFetched: true, lastSynced: true },
+          },
         },
         orderBy: { createdAt: 'desc' },
       });
@@ -1501,7 +1508,7 @@ export const setupPlaidRoutes = (app: any) => {
             institution: token.institutionName || 'Unknown institution',
             isActive: token.isActive,
             lastError: token.lastError,
-            lastRefreshed: token.lastRefreshed,
+            lastUpdated: latestObservedAt(token.accounts),
             accounts: token.accounts.map(account => ({
               id: account.id,
               name: account.name,
