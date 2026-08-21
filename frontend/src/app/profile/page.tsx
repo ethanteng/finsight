@@ -1551,7 +1551,7 @@ export default function ProfilePage() {
                 <div>• And many more...</div>
               </div>
               <p className="text-xs text-gray-500 mt-2">
-                View the complete list of <a href="https://snaptrade.notion.site/brokerages" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300 underline">supported brokerages</a>
+                View the complete list of <a href="https://snaptrade.com/brokerage-integrations" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300 underline">supported brokerages</a>
               </p>
             </div>
           </div>
