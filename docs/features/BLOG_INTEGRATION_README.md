@@ -2,6 +2,9 @@
 
 This project integrates with Ghost.io to display blog posts on the `/blog` route.
 
+> Automated daily imports from Soro into Ghost are documented separately in
+> [SORO_BLOG_SYNC.md](./SORO_BLOG_SYNC.md).
+
 ## Setup
 
 ### 1. Environment Variables

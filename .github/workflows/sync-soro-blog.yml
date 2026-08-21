@@ -1,0 +1,43 @@
+name: Sync Soro Blog Posts
+
+# Soro publishes a new article each day. This pulls anything new into Ghost as a
+# draft, from where the existing /blog pipeline picks it up once it is published
+# by hand. Deduplication is by feed guid, so an extra run imports nothing twice.
+on:
+  schedule:
+    # 21:00 UTC, after Soro's daily publish window.
+    - cron: '0 21 * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Parse the feed and report without writing to Ghost'
+        type: boolean
+        default: false
+
+concurrency:
+  # Two concurrent runs would both see the same post as new.
+  group: sync-soro-blog
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Sync Soro posts into Ghost
+        env:
+          SORO_RSS_URL: ${{ secrets.SORO_RSS_URL }}
+          GHOST_ADMIN_API_URL: ${{ secrets.GHOST_ADMIN_API_URL }}
+          GHOST_ADMIN_API_KEY: ${{ secrets.GHOST_ADMIN_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: npm run sync:soro -- ${{ inputs.dry_run && '--dry-run' || '' }}
