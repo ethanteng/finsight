@@ -1,17 +1,19 @@
 /**
  * When we last actually observed an account at the provider.
  *
- * `balanceLastFetched` is written every time a balance is pulled; `lastSynced`
- * is written when an account row is created (or by older sync paths). Balance is
- * the better per-account signal — it is refreshed for every account type,
- * including investment accounts that may go long stretches without a
- * transaction — so it wins, with `lastSynced` as the fallback for a record that
- * predates balance tracking.
+ * `balanceLastFetched` is written every time a balance is pulled. `lastSynced`
+ * is written when an account row is created, and refreshed on an existing row
+ * only by `GET /profile/tokens` — a user-triggered revalidation, not a
+ * background sync. Balance is the better per-account signal: it is refreshed for
+ * every account type, including investment accounts that may go long stretches
+ * without a transaction. So balance wins, with `lastSynced` as the fallback for
+ * a record that predates balance tracking.
  *
- * Connection-level callers should also pass `AccessToken.lastTransactionSync`:
- * the live transaction-sync path records success there and does not refresh
- * `Account.lastSynced` on existing rows, so omitting it can report a connection
- * as never/long-ago updated after a successful sync.
+ * Connection-level callers should also pass `AccessToken.lastTransactionSync`.
+ * The scheduled transaction sync records success there, and upserts account rows
+ * with `update: {}` — so it never refreshes an existing row's `lastSynced`.
+ * Omitting the token's timestamp would report a connection as never or long-ago
+ * updated while its transactions arrived on schedule.
  *
  * This is the same per-account rule already applied in
  * `plaid-connection-supersede.ts`, `financial-source-persistence.ts` and
