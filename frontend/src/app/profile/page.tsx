@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect, useCallback, useRef } from 'react';
 import PlaidLinkButton, { PlaidLinkButtonRef, resetPlaidLinkInitialization } from '../../components/PlaidLinkButton';
+import SnapTradeConnections from '../../components/SnapTradeConnections';
 import TransactionHistory from '../../components/TransactionHistory';
 import UserProfile from '../../components/UserProfile';
 import InvestmentPortfolio from '../../components/InvestmentPortfolio';
@@ -177,6 +178,7 @@ export default function ProfilePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [tokenStatuses, setTokenStatuses] = useState<TokenStatus[]>([]);
+  const [snapTradeConnectionsKey, setSnapTradeConnectionsKey] = useState(0);
   const [snapTradeStatus, setSnapTradeStatus] = useState<SnapTradeStatus | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteMessage, setDeleteMessage] = useState<string>('');
@@ -1393,9 +1395,27 @@ export default function ProfilePage() {
                   // disabled one) instead of leaving the button stuck on a stale id.
                   loadInvestmentData();
                   void loadSnapTradeStatus();
+                  // A new or repaired connection changes the institution list, so
+                  // re-read it rather than leaving a row that no longer matches.
+                  setSnapTradeConnectionsKey(key => key + 1);
                 }}
               />
             </div>
+
+            {/* One row per institution, so a single bad brokerage can be removed
+                without taking every other connection down with it. */}
+            <SnapTradeConnections
+              refreshKey={snapTradeConnectionsKey}
+              onConnectionRemoved={async () => {
+                // The disconnect already removed the rows and queued a rebuild;
+                // these re-reads are what make the page stop showing them.
+                await Promise.all([
+                  loadConnectedAccounts(),
+                  loadInvestmentData(),
+                  loadSnapTradeStatus(),
+                ]);
+              }}
+            />
 
             {/* Connected SnapTrade Accounts List */}
             <div className="mb-6">

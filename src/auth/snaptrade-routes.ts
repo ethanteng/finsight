@@ -492,6 +492,202 @@ router.post('/connections/:authorizationId/refresh', requireAuth, async (req, re
   }
 });
 
+// Accounts grouped by the brokerage authorization that backs them. One
+// authorization covers every account at one institution, and it is the unit the
+// user connects, reconnects, refreshes, and now disconnects -- so it is the unit
+// the UI lists, rather than making someone infer the grouping from account names.
+function groupAccountsByConnection(accounts: any[]) {
+  const connections = new Map<string, any>();
+  for (const account of accounts) {
+    // An account SnapTrade returns without an authorization cannot be
+    // disconnected on its own, so it is left out rather than listed under a
+    // button that could not work.
+    const id = account?.brokerageAuthorizationId;
+    if (!id) continue;
+    let connection = connections.get(id);
+    if (!connection) {
+      connection = {
+        id,
+        institution: account.institution || 'Unknown',
+        disabled: account.connectionDisabled,
+        disabledAt: account.connectionDisabledAt || null,
+        statusUnavailable: Boolean(account.connectionStatusUnavailable),
+        lastHoldingsSync: null as string | null,
+        accounts: [] as Array<{ id: string; name: string; lastHoldingsSync: string | null }>,
+      };
+      connections.set(id, connection);
+    }
+    const accountId = String(account.id || '').startsWith('snaptrade-')
+      ? String(account.id)
+      : `snaptrade-${account.id}`;
+    const lastHoldingsSync = account.lastSuccessfulHoldingsSync || null;
+    connection.accounts.push({ id: accountId, name: account.name, lastHoldingsSync });
+    // The newest sync across the connection's accounts. Shown so a user deciding
+    // whether to disconnect can see how long this link has actually been useful,
+    // which is the question that brings anyone to this screen.
+    if (lastHoldingsSync && (!connection.lastHoldingsSync || lastHoldingsSync > connection.lastHoldingsSync)) {
+      connection.lastHoldingsSync = lastHoldingsSync;
+    }
+  }
+  return [...connections.values()];
+}
+
+// GET /snaptrade/connections - List brokerage connections, one row per institution
+router.get('/connections', requireAuth, async (req, res) => {
+  try {
+    const userId = req.user!.id;
+    const db = getPrismaClient();
+    const user = await db.snapTradeUser.findUnique({ where: { userId } });
+    // Not an error: a user who never connected a brokerage has no connections,
+    // and the list should render empty rather than as a failure.
+    if (!user) return res.json({ success: true, data: { connections: [] } });
+
+    const accountsResult = await snapTradeService.getUserAccounts(userId, user.userSecret);
+    if (!accountsResult.success || !Array.isArray(accountsResult.data?.accounts)) {
+      return res.status(502).json({
+        success: false,
+        error: accountsResult.error || 'Failed to load SnapTrade connections',
+      });
+    }
+
+    // Custom names, so the list matches what the user renamed accounts to
+    // everywhere else rather than showing the brokerage's raw labels.
+    const dbAccounts = await db.account.findMany({
+      where: { userId },
+      select: { plaidAccountId: true, name: true },
+    });
+    const customNames = new Map(
+      dbAccounts
+        .filter(account => account.plaidAccountId?.startsWith('snaptrade-'))
+        .map(account => [account.plaidAccountId, account.name] as const)
+    );
+
+    const connections = groupAccountsByConnection(accountsResult.data.accounts).map(connection => ({
+      ...connection,
+      accounts: connection.accounts.map((account: any) => ({
+        ...account,
+        name: customNames.get(account.id) || account.name,
+      })),
+    }));
+
+    return res.json({ success: true, data: { connections } });
+  } catch (error) {
+    console.error('SnapTrade list connections failed:', error);
+    return res.status(500).json({ success: false, error: 'Failed to load SnapTrade connections' });
+  }
+});
+
+// DELETE /snaptrade/connections/:authorizationId - Disconnect one institution
+router.delete('/connections/:authorizationId', requireAuth, async (req, res) => {
+  try {
+    const userId = req.user!.id;
+    const authorizationId = String(req.params.authorizationId || '').trim();
+    if (!authorizationId) {
+      return res.status(400).json({ success: false, error: 'A brokerage connection id is required.' });
+    }
+
+    const db = getPrismaClient();
+    const user = await db.snapTradeUser.findUnique({ where: { userId } });
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        error: 'SnapTrade user not found. Please initialize first.'
+      });
+    }
+
+    // The account list has to be read BEFORE the removal: afterwards SnapTrade no
+    // longer reports these accounts, and there would be nothing left to identify
+    // the rows this institution owns. Everything the cleanup needs is captured now.
+    const accountsResult = await snapTradeService.getUserAccounts(userId, user.userSecret);
+    if (!accountsResult.success || !Array.isArray(accountsResult.data?.accounts)) {
+      console.warn(
+        `SnapTrade disconnect: could not read accounts for user ${userId}` +
+        `${accountsResult.error ? ` (${accountsResult.error})` : ''}`
+      );
+      // Fails closed. Removing the authorization while blind to its accounts
+      // would strand their rows in the snapshot with no connection left to
+      // identify or repair them.
+      return res.status(503).json({
+        success: false,
+        error: 'Could not reach SnapTrade to confirm which accounts belong to this institution. Please try again.'
+      });
+    }
+
+    const ownedAccounts = accountsResult.data.accounts.filter(
+      (account: any) => account?.brokerageAuthorizationId === authorizationId
+    );
+    if (ownedAccounts.length === 0) {
+      console.warn(`SnapTrade disconnect: refusing an authorization not belonging to user ${userId}`);
+      return res.status(404).json({ success: false, error: 'Unknown brokerage connection for this user.' });
+    }
+    const institution = ownedAccounts[0]?.institution || 'this institution';
+    const accountIds: string[] = ownedAccounts.map((account: any) =>
+      String(account.id).startsWith('snaptrade-') ? String(account.id) : `snaptrade-${account.id}`
+    );
+
+    const removal = await snapTradeService.removeConnection(userId, user.userSecret, authorizationId);
+    if (!removal.success) {
+      return res.status(removal.status === 401 ? 401 : 502).json({
+        success: false,
+        error: removal.error,
+      });
+    }
+
+    // Local cleanup runs only after the provider confirms the connection is gone,
+    // so a failed removal never leaves the user with deleted history and a live
+    // connection that would re-import it on the next sync.
+    const removedRows = await db.$transaction(async tx => {
+      const accounts = await tx.account.findMany({
+        where: { userId, plaidAccountId: { in: accountIds } },
+        select: { id: true },
+      });
+      const accountRowIds = accounts.map(account => account.id);
+      const transactions = await tx.transaction.deleteMany({
+        where: { accountId: { in: accountRowIds } },
+      });
+      const activities = await tx.snapTradeActivity.deleteMany({
+        where: { snapTradeUser: { userId }, accountId: { in: accountIds } },
+      });
+      const deletedAccounts = await tx.account.deleteMany({
+        where: { userId, plaidAccountId: { in: accountIds } },
+      });
+      return {
+        accounts: deletedAccounts.count,
+        transactions: transactions.count,
+        activities: activities.count,
+      };
+    });
+
+    console.log(
+      `🔌 SnapTrade: disconnected ${institution} for user ${userId} ` +
+      `(${removedRows.accounts} accounts, ${removedRows.transactions} transactions, ${removedRows.activities} activities removed)`
+    );
+
+    // The snapshot still holds this institution's accounts and balances, and
+    // Ask Linc answers from it. Rebuilding is what actually removes the
+    // institution from the user's totals and from anything the model can see.
+    try {
+      const { FinancialRevisionService } = await import('../services/financial-revision-service');
+      FinancialRevisionService.schedule(userId, {
+        categorize: false,
+        history: { kind: 'material', reason: 'snaptrade-connection-disconnected' },
+      }, 'SnapTrade disconnect');
+    } catch {
+      // Non-fatal: the rows are already gone, and the next scheduled rebuild
+      // reconciles the snapshot even if this one could not be queued.
+    }
+
+    return res.json({
+      success: true,
+      message: `${institution} disconnected. Its accounts and history have been removed.`,
+      data: { institution, removed: removedRows, alreadyRemovedAtProvider: Boolean(removal.alreadyRemoved) },
+    });
+  } catch (error) {
+    console.error('SnapTrade disconnect connection failed:', error);
+    return res.status(500).json({ success: false, error: 'Failed to disconnect this institution' });
+  }
+});
+
 // DELETE /snaptrade/delete - Delete SnapTrade user
 router.delete('/delete', requireAuth, async (req, res) => {
   try {

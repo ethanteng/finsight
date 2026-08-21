@@ -27,6 +27,10 @@ export type MaterialHistoryReason =
   | 'manual-account-updated'
   | 'manual-account-deleted'
   | 'snaptrade-account-deleted'
+  /// One brokerage authorization removed, as opposed to the whole SnapTrade
+  /// registration: the user's other institutions survive, so the net-worth move
+  /// this records is a partial removal rather than the loss of every brokerage.
+  | 'snaptrade-connection-disconnected'
   | 'home-value-updated'
   | 'home-value-removed'
   | 'home-value-refreshed'

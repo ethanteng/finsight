@@ -272,7 +272,26 @@ a per-connection cooldown guards repeat clicks, and SnapTrade's own 425/429
 responses are surfaced as "refreshed recently".
 
 If refreshing does not advance `last_successful_sync`, the connection itself
-needs to be removed and re-linked.
+needs to be removed and re-linked:
+
+```
+DELETE /snaptrade/connections/:authorizationId
+```
+
+**Accounts & context → Connected institutions** exposes this as a per-institution
+**Disconnect**. It removes one brokerage authorization and only that
+institution's accounts, holdings, and activity history; every other connection,
+and the user's SnapTrade registration, is left intact — so reconnecting costs a
+portal trip rather than a re-registration.
+
+The account list is read before the removal, because afterwards SnapTrade no
+longer reports those accounts and there is nothing left to identify the rows
+they own. If that read fails, nothing is removed. Local rows are deleted only
+after the provider confirms the authorization is gone, so a failed removal never
+leaves a user with deleted history and a live connection that would re-import it.
+
+Reconnecting re-imports from the brokerage under new SnapTrade account ids, so
+custom account names do not survive a disconnect.
 
 ## 📞 **Getting Help**
 
