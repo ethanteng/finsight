@@ -149,7 +149,8 @@ const PLATFORMS: PlatformSpec[] = [
     label: 'X / Twitter',
     limit: 280,
     guidance:
-      'At most 280 characters INCLUDING the link, which always counts as 23 characters however long it is. ' +
+      'At most 280 characters INCLUDING the link, which always counts as 23 characters however long it is. '
+      + 'Keep the text itself under 240 characters to leave room. ' +
       'Lead with the single most interesting claim or number in the post — no throat-clearing, no "thread below". ' +
       'One hashtag at most; often none reads better. The link goes last.',
   },
@@ -158,7 +159,8 @@ const PLATFORMS: PlatformSpec[] = [
     label: 'Bluesky',
     limit: 280,
     guidance:
-      'At most 280 characters INCLUDING the full link, which counts every character (Bluesky does not shorten links). ' +
+      'At most 280 characters INCLUDING the full link, which counts every character (Bluesky does not shorten links). '
+      + 'The link runs to about 50 characters, so keep the text itself under 210. ' +
       'Punchy and direct, leading with the sharpest insight. One or two hashtags at most.',
   },
 ];
@@ -250,7 +252,7 @@ function postBrief(post: GhostPostRecord, url: string): string {
   ].join('\n');
 }
 
-function readCopy(response: Anthropic.Message): SocialCopy {
+function readCopy(response: Anthropic.Message): { copy: SocialCopy; toolUseId: string } {
   const call = response.content.find((block) => block.type === 'tool_use');
   if (!call || call.type !== 'tool_use') throw new Error('model returned no social copy');
 
@@ -263,7 +265,7 @@ function readCopy(response: Anthropic.Message): SocialCopy {
     }
     copy[spec.key] = text.trim();
   }
-  return copy;
+  return { copy, toolUseId: call.id };
 }
 
 /**
@@ -283,7 +285,7 @@ async function draftCopy(client: Anthropic, post: GhostPostRecord, url: string):
   });
 
   const first = await request([{ role: 'user', content: postBrief(post, url) }]);
-  const copy = readCopy(first);
+  const { copy, toolUseId } = readCopy(first);
 
   const problems = findProblems(copy, url);
   if (problems.tooLong.length === 0 && problems.linkless.length === 0) return copy;
@@ -294,20 +296,29 @@ async function draftCopy(client: Anthropic, post: GhostPostRecord, url: string):
   ].filter(Boolean).join('; ');
   console.log(`    revising: ${summary}`);
 
-  const repaired = readCopy(await request([
+  // The correction is returned as a `tool_result`, not as plain text. An
+  // assistant turn containing `tool_use` must be answered by a message whose
+  // first block is a matching `tool_result`; anything else is rejected by the
+  // API with a 400 before the model ever sees it.
+  const { copy: repaired } = readCopy(await request([
     { role: 'user', content: postBrief(post, url) },
     { role: 'assistant', content: first.content },
     {
       role: 'user',
-      content: [
-        'Some of these need fixing. Rewrite every platform, returning the same copy for the ones already correct:',
-        ...problems.tooLong.map((spec) =>
-          `- ${spec.label}: ${measure(spec.key, copy[spec.key])} characters, limit ${spec.limit}` +
-          (spec.key === 'x' ? ' (the link counts as 23 characters)' : ''),
-        ),
-        ...problems.linkless.map((spec) => `- ${spec.label}: must contain the URL exactly as given`),
-        `The URL is ${url} — include it verbatim. Cut words, never the link.`,
-      ].join('\n'),
+      content: [{
+        type: 'tool_result' as const,
+        tool_use_id: toolUseId,
+        is_error: true,
+        content: [
+          'Rejected. Call the tool again with every platform filled in, repeating the copy that is already correct:',
+          ...problems.tooLong.map((spec) =>
+            `- ${spec.label}: ${measure(spec.key, copy[spec.key])} characters, limit ${spec.limit}` +
+            (spec.key === 'x' ? ' (the link counts as 23 characters)' : ''),
+          ),
+          ...problems.linkless.map((spec) => `- ${spec.label}: must contain the URL exactly as given`),
+          `The URL is ${url} — include it verbatim. Cut words, never the link.`,
+        ].join('\n'),
+      }],
     },
   ]));
 

@@ -84,7 +84,11 @@ costs 1 there rather than the 2 that `String.length` reports.
 After the first draft, every platform is checked for two failures:
 
 - **Over its limit.** The model gets one chance to shorten it, with the measured
-  count and the limit quoted back. Anything still over is delivered flagged
+  count and the limit quoted back. The correction is delivered as a
+  `tool_result` answering the original call, not as a plain-text follow-up: an
+  assistant turn containing `tool_use` must be answered by a matching
+  `tool_result`, and anything else is rejected with a 400 before the model sees
+  it. Anything still over is delivered flagged
   `OVER LIMIT` rather than quietly sent — a draft you can see is unpostable
   beats one you discover in the composer, and trimming it is quick.
 - **Missing the article link.** The prompt asks for the URL verbatim, but that
