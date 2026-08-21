@@ -8,6 +8,7 @@ import type {
   FinancesAccountDetails,
 } from '../../types/finances-overview';
 import { resolveAccountBalance } from '../../lib/account-balance';
+import { formatAccountAsOf } from '../../lib/account-as-of';
 
 interface AccountDetailModalProps {
   account: FinancesAccount;
@@ -48,10 +49,19 @@ export default function AccountDetailModal({
   const [displayName, setDisplayName] = useState(account.name || 'Unknown Account');
   const [editName, setEditName] = useState(account.name || '');
   const [isSavingName, setIsSavingName] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [refreshNotice, setRefreshNotice] = useState<string | null>(null);
   const { showError, dialog } = useDialog();
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
   const isInvestment = account.type?.toLowerCase() === 'investment';
+  const asOf = formatAccountAsOf(account);
+  // Only SnapTrade exposes a manual re-sync, and only through the brokerage
+  // authorization -- an account whose snapshot predates that field has nothing
+  // to send, so it gets no button rather than one that cannot work.
+  const refreshableConnectionId = account.source === 'snaptrade' && account.brokerageAuthorizationId
+    ? account.brokerageAuthorizationId
+    : null;
 
   useEffect(() => {
     let cancelled = false;
@@ -115,6 +125,29 @@ export default function AccountDetailModal({
     }
   };
 
+  const handleRefreshConnection = async () => {
+    if (!refreshableConnectionId) return;
+    setIsRefreshing(true);
+    setRefreshNotice(null);
+    try {
+      const token = localStorage.getItem('auth_token');
+      const response = await fetch(
+        `${API_URL}/snaptrade/connections/${encodeURIComponent(refreshableConnectionId)}/refresh`,
+        { method: 'POST', headers: { Authorization: `Bearer ${token}` } }
+      );
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || 'Failed to request a refresh');
+      // The provider only schedules the syncs, so this never claims the numbers
+      // on screen just changed -- saying so would send the user off to compare
+      // against a balance that has not moved yet.
+      setRefreshNotice(data.message || 'Refresh requested.');
+    } catch (error) {
+      void showError(error instanceof Error ? error.message : 'Failed to request a refresh');
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
   const balance = finiteBalance(account);
 
   return (
@@ -151,6 +184,27 @@ export default function AccountDetailModal({
             <div className="mt-1 text-sm text-gray-400">
               {[account.institution, account.type, account.subtype].filter(Boolean).join(' • ')}
             </div>
+            {(asOf || refreshableConnectionId) && (
+              <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
+                {asOf && (
+                  <span className={`text-xs ${asOf.isStale ? 'text-amber-300' : 'text-gray-500'}`} title={asOf.title}>
+                    {asOf.label}
+                  </span>
+                )}
+                {refreshableConnectionId && (
+                  <button
+                    onClick={() => void handleRefreshConnection()}
+                    disabled={isRefreshing}
+                    className="text-xs text-blue-400 underline underline-offset-2 hover:text-blue-300 disabled:opacity-50"
+                  >
+                    {isRefreshing ? 'Requesting refresh...' : 'Refresh from institution'}
+                  </button>
+                )}
+              </div>
+            )}
+            {refreshNotice && (
+              <div className="mt-2 text-xs text-gray-400">{refreshNotice}</div>
+            )}
             {!isInvestment && (
               <div className="mt-2 text-lg font-semibold text-white">
                 Balance: {balance === null ? 'Unavailable' : formatCurrency(balance)}

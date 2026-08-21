@@ -278,6 +278,82 @@ describe('finances overview contract', () => {
     expect(overview.revision.newestSourceAsOf).toBe('2026-08-14T10:00:00.000Z');
   });
 
+  // A page-level "as of" built from the newest source reads as though every account
+  // is that fresh. One connection syncing this morning was enough to hide another
+  // whose provider had not observed it in months, which is the whole point of
+  // dating each row from its own observation.
+  it('dates every account from its own source observation', () => {
+    const oneDay = 24 * 60 * 60 * 1000;
+    const overview = buildFinancesOverview({
+      snapshot: {
+        ...snapshot,
+        status: 'stale',
+        sourceObservations: [
+          { id: 'account:cash', required: true, status: 'available', asOf: '2026-08-14T10:00:00.000Z', maxAgeMs: oneDay },
+          { id: 'account:brokerage', required: true, status: 'available', asOf: '2025-11-23T23:58:28.598Z', maxAgeMs: oneDay },
+        ],
+        quality: { staleSourceIds: ['account:brokerage'] },
+      },
+    });
+
+    const cash = overview.accountGroups.cash.accounts.find(account => account.account_id === 'cash');
+    const brokerage = overview.accountGroups.investments.accounts.find(account => account.account_id === 'brokerage');
+
+    expect(cash?.dataAsOf).toBe('2026-08-14T10:00:00.000Z');
+    expect(cash?.isDataStale).toBe(false);
+    expect(brokerage?.dataAsOf).toBe('2025-11-23T23:58:28.598Z');
+    expect(brokerage?.isDataStale).toBe(true);
+  });
+
+  // Staleness has one definition, in the snapshot's quality evaluation. Recomputing
+  // it per row against a second rule would let the row and the snapshot disagree.
+  it('reads staleness from the snapshot rather than recomputing an account age', () => {
+    const oneDay = 24 * 60 * 60 * 1000;
+    const overview = buildFinancesOverview({
+      snapshot: {
+        ...snapshot,
+        sourceObservations: [
+          { id: 'account:cash', required: true, status: 'available', asOf: '2020-01-01T00:00:00.000Z', maxAgeMs: oneDay },
+        ],
+        quality: { staleSourceIds: [] },
+      },
+    });
+
+    const cash = overview.accountGroups.cash.accounts.find(account => account.account_id === 'cash');
+    expect(cash?.dataAsOf).toBe('2020-01-01T00:00:00.000Z');
+    expect(cash?.isDataStale).toBe(false);
+  });
+
+  it('leaves an account undated when the snapshot has no observation for it', () => {
+    const overview = buildFinancesOverview({
+      snapshot: {
+        ...snapshot,
+        sourceObservations: [
+          { id: 'account:cash', required: true, status: 'available', asOf: '2026-08-14T10:00:00.000Z', maxAgeMs: 86_400_000 },
+        ],
+      },
+    });
+
+    const brokerage = overview.accountGroups.investments.accounts.find(account => account.account_id === 'brokerage');
+    expect(brokerage?.dataAsOf).toBeNull();
+  });
+
+  // An unavailable source has no observation time. Dating the row to a read that
+  // failed would present the failure as a successful sync.
+  it('leaves an account undated when its only observation was unavailable', () => {
+    const overview = buildFinancesOverview({
+      snapshot: {
+        ...snapshot,
+        sourceObservations: [
+          { id: 'account:cash', required: true, status: 'unavailable', asOf: '2026-08-14T10:00:00.000Z', maxAgeMs: 86_400_000 },
+        ],
+      },
+    });
+
+    const cash = overview.accountGroups.cash.accounts.find(account => account.account_id === 'cash');
+    expect(cash?.dataAsOf).toBeNull();
+  });
+
   it('filters heavy account details and calculates the investment portfolio on demand', () => {
     const details = buildFinancesAccountDetails(snapshot, 'brokerage');
 

@@ -10,6 +10,9 @@ import {
 
 export type FinancesSnapshotStatus = SnapshotQuality['status'];
 
+/** Source-observation id prefix for a single account, as written by the snapshot builder. */
+const ACCOUNT_SOURCE_PREFIX = 'account:';
+
 export interface FinancesAccount {
   id?: string;
   account_id?: string;
@@ -19,6 +22,19 @@ export interface FinancesAccount {
   institution?: string;
   source?: 'plaid' | 'snaptrade' | 'manual' | string;
   displayBalance?: number | null;
+  /**
+   * When the provider last observed this account, taken from the snapshot's own
+   * source observation rather than from the account payload, so it is the same
+   * time the quality evaluation judged. Null when the snapshot predates source
+   * observations or the account has no observation of its own.
+   */
+  dataAsOf?: string | null;
+  /**
+   * This account's observation is older than its own max age. Read from the
+   * snapshot's `staleSourceIds`, never recomputed here: one definition of stale
+   * for the whole product.
+   */
+  isDataStale?: boolean;
   balance?:
     | number
     | null
@@ -320,6 +336,36 @@ function snapshotHome(snapshot: FinancesSnapshotLike, currentHome?: FinancesHome
   };
 }
 
+/** `account:{id}` -> provider observation time, from the snapshot's own source observations. */
+function accountObservationTimes(snapshot: FinancesSnapshotLike): Map<string, string> {
+  const observations = Array.isArray(snapshot.sourceObservations) ? snapshot.sourceObservations : [];
+  const times = new Map<string, string>();
+  for (const observation of observations) {
+    if (!observation || typeof observation !== 'object') continue;
+    const id = String((observation as any).id || '');
+    if (!id.startsWith(ACCOUNT_SOURCE_PREFIX)) continue;
+    // An unavailable source has no observation to report. Leaving it out means the
+    // row says nothing rather than dating the account to a read that failed.
+    if ((observation as any).status === 'unavailable') continue;
+    const asOf = iso((observation as any).asOf);
+    if (asOf) times.set(id.slice(ACCOUNT_SOURCE_PREFIX.length), asOf);
+  }
+  return times;
+}
+
+/** Account ids the snapshot's quality evaluation already judged stale. */
+function staleAccountIds(snapshot: FinancesSnapshotLike): Set<string> {
+  const quality = snapshot.quality && typeof snapshot.quality === 'object' ? snapshot.quality as any : {};
+  const ids = Array.isArray(quality.staleSourceIds) ? quality.staleSourceIds : [];
+  const stale = new Set<string>();
+  for (const id of ids) {
+    if (typeof id === 'string' && id.startsWith(ACCOUNT_SOURCE_PREFIX)) {
+      stale.add(id.slice(ACCOUNT_SOURCE_PREFIX.length));
+    }
+  }
+  return stale;
+}
+
 function groupAccounts(snapshot: FinancesSnapshotLike, accountNames?: ReadonlyMap<string, string>) {
   const groups = {
     cash: [] as FinancesAccount[],
@@ -332,6 +378,8 @@ function groupAccounts(snapshot: FinancesSnapshotLike, accountNames?: ReadonlyMa
   const storedDisplayBalances = meta.accountDisplayBalances && typeof meta.accountDisplayBalances === 'object'
     ? meta.accountDisplayBalances as Record<string, unknown>
     : {};
+  const observationTimes = accountObservationTimes(snapshot);
+  const staleAccounts = staleAccountIds(snapshot);
 
   for (const account of accounts) {
     const classified = classifyAccount(account);
@@ -341,10 +389,15 @@ function groupAccounts(snapshot: FinancesSnapshotLike, accountNames?: ReadonlyMa
       : accountBalance(account);
     if (classified.isDebt && displayBalance !== null) displayBalance = Math.abs(displayBalance);
     const currentName = accountNames?.get(id);
+    // Every account carries its own observation time, so a page-level "as of" built
+    // from the newest source can never imply that an account nobody has synced in
+    // months is as current as the one that synced this morning.
     const displayAccount = {
       ...account,
       ...(currentName ? { name: currentName } : {}),
       displayBalance,
+      dataAsOf: observationTimes.get(id) ?? null,
+      isDataStale: staleAccounts.has(id),
     };
     // Canonical truth treats an overdraft as debt, not negative cash.
     if (classified.isCash && classified.balance < 0) groups.debt.push({ ...displayAccount, displayBalance: Math.abs(classified.balance) });

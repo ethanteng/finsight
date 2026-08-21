@@ -9,6 +9,18 @@ export interface FinancesAccount {
   institution?: string;
   source?: 'plaid' | 'snaptrade' | 'manual' | string;
   displayBalance?: number | null;
+  /**
+   * When the provider last observed this account. Absent on responses from a server
+   * that predates the field, and null when the snapshot has no observation for it.
+   */
+  dataAsOf?: string | null;
+  /** The snapshot judged this account's observation older than its own max age. */
+  isDataStale?: boolean;
+  /**
+   * SnapTrade brokerage authorization backing this account. One authorization backs
+   * several accounts, and it is what the manual-refresh endpoint takes.
+   */
+  brokerageAuthorizationId?: string;
   balance?: number | null | {
     current?: number | null;
     available?: number | null;
