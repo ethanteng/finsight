@@ -82,10 +82,15 @@ The paths that revoke:
 | `DELETE /privacy/delete-all-data` | Everything |
 | `DELETE /admin/delete-user-account/:userId` | Everything, admin-initiated |
 
-A token whose Item Plaid would *not* revoke is deliberately kept, so the
-revocation can be retried rather than the connection being stranded. An Item
-Plaid reports as `ITEM_NOT_FOUND` or `INVALID_ACCESS_TOKEN` counts as revoked:
-the goal is that it is not live, and one that cannot be addressed satisfies that.
+A token whose Item Plaid would *not* revoke is deliberately kept on the
+**disconnect** paths (`DELETE /plaid/connections/:id`, `DELETE /plaid/disconnect_accounts`,
+and `POST /privacy/disconnect-accounts`), so the revocation can be retried rather
+than the connection being stranded. Account-deletion sweeps
+(`DELETE /privacy/delete-all-data`, `DELETE /admin/delete-user-account/:userId`)
+still drop every token after attempting revoke — blocking deletion on one bank
+error is worse; any survivor is loud in the log. An Item Plaid reports as
+`ITEM_NOT_FOUND` or `INVALID_ACCESS_TOKEN` counts as revoked: the goal is that
+it is not live, and one that cannot be addressed satisfies that.
 
 ### Per-institution disconnect
 

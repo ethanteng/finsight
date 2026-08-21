@@ -57,7 +57,7 @@ import './snaptrade';
 import { setupSnapTradeRoutes } from './auth/snaptrade-routes';
 
 import { getPrismaClient } from './prisma-client';
-import { removePlaidItems } from './services/plaid-item-removal';
+import { removePlaidItems, type PlaidItemRemovalSummary } from './services/plaid-item-removal';
 
 /**
  * Revoke every Plaid Item this user has before their access tokens are deleted.
@@ -66,22 +66,24 @@ import { removePlaidItems } from './services/plaid-item-removal';
  * can revoke the Item -- delete it first and the Item is live at Plaid forever
  * with nothing left to address it.
  *
- * Never throws. These callers are deleting a user's data, and refusing to
- * proceed because one bank errored would leave the user unable to delete
- * anything. A failure is loud in the log and the sweep continues, which is the
- * least-bad outcome: some Items may survive, but the user's data still goes.
+ * Never throws. Returns null only when the sweep itself could not run (so a
+ * disconnect caller can leave local tokens alone rather than guessing). Account-
+ * deletion callers still drop every token afterward: refusing to delete a user
+ * because one bank errored is worse than leaving a survivor loud in the log.
  */
 async function revokePlaidItemsForUser(
   prisma: PrismaClient,
   userId: string,
   context: string,
-): Promise<void> {
+): Promise<PlaidItemRemovalSummary | null> {
   try {
     const tokens = await prisma.accessToken.findMany({
       where: { userId },
       select: { id: true, token: true },
     });
-    if (tokens.length === 0) return;
+    if (tokens.length === 0) {
+      return { results: [], removed: 0, alreadyRemoved: 0, failed: 0, allRevoked: true };
+    }
     const { plaidClient } = await import('./plaid');
     const summary = await removePlaidItems(tokens, plaidClient);
     console.log(
@@ -89,8 +91,10 @@ async function revokePlaidItemsForUser(
       `${summary.alreadyRemoved ? `, ${summary.alreadyRemoved} already gone` : ''}` +
       `${summary.failed ? `, ${summary.failed} FAILED and may still be live at Plaid` : ''}`
     );
+    return summary;
   } catch (error) {
     console.error(`Plaid (${context}): item revocation sweep failed for user ${userId}:`, error);
+    return null;
   }
 }
 
@@ -741,8 +745,9 @@ app.get('/sync/status', async (req: Request, res: Response) => {
         // Deleting the rows alone only makes us forget the connections: the Items
         // stay live at Plaid, the consent stands, and they keep being billable.
         // A "delete all my data" that leaves the bank grant in place has not done
-        // what it says. Revoking first means a failure here is visible rather than
-        // silently leaving a live Item with no local record that it exists.
+        // what it says. Unlike disconnect, this path still drops every token even
+        // when a revoke fails — blocking account deletion on one bank error is
+        // worse; survivors stay loud in the log for follow-up.
         await revokePlaidItemsForUser(prisma, userId, 'delete-all-data');
         await prisma.accessToken.deleteMany({
           where: { userId }
@@ -852,18 +857,40 @@ app.get('/sync/status', async (req: Request, res: Response) => {
         // Revoke at Plaid before forgetting the tokens. Without this the user is
         // told their accounts are disconnected while every Item stays live at
         // Plaid -- still consented, still refreshing, still billable -- and we no
-        // longer hold the token needed to revoke it.
-        await revokePlaidItemsForUser(prisma, userId, 'disconnect-accounts');
+        // longer hold the token needed to revoke it. Same rule as
+        // `/plaid/disconnect_accounts`: only drop tokens Plaid confirmed are gone,
+        // so a refused revoke can be retried instead of stranding the Item.
+        const revocation = await revokePlaidItemsForUser(prisma, userId, 'disconnect-accounts');
+        if (!revocation) {
+          return res.status(502).json({
+            error: 'Could not revoke bank connections at Plaid. No local bank data was removed.',
+          });
+        }
+
+        const revokedTokenIds = revocation.results
+          .filter(result => result.removed)
+          .map(result => result.tokenId);
+        const failedTokenIds = revocation.results
+          .filter(result => !result.removed)
+          .map(result => result.tokenId);
+
         await prisma.accessToken.deleteMany({
-          where: { userId }
+          where: { userId, id: { in: revokedTokenIds } },
         });
 
-        // Clear only the authenticated user's account and transaction data
+        // Keep accounts (and their transactions) for any Item that would not
+        // revoke — deleting them while the grant is still live loses history the
+        // user may still need and leaves nothing coherent to retry against.
+        const accountWhere =
+          failedTokenIds.length === 0
+            ? { userId }
+            : { userId, NOT: { accessTokenId: { in: failedTokenIds } } };
+
         await prisma.transaction.deleteMany({
-          where: { account: { userId } }
+          where: { account: accountWhere },
         });
         await prisma.account.deleteMany({
-          where: { userId }
+          where: accountWhere,
         });
         await prisma.syncStatus.deleteMany({
           where: { userId }
@@ -874,7 +901,14 @@ app.get('/sync/status', async (req: Request, res: Response) => {
           where: { userId }
         });
 
-        res.json({ success: true, message: 'All accounts disconnected and data cleared' });
+        res.json({
+          success: revocation.allRevoked,
+          message: revocation.allRevoked
+            ? 'All accounts disconnected and data cleared'
+            : 'Some bank connections could not be revoked at Plaid and were kept so you can try again. Other accounts were disconnected.',
+          disconnected: revokedTokenIds.length,
+          failed: revocation.failed,
+        });
       } catch (err) {
         // Capture error in Sentry
         if (err instanceof Error) {
@@ -3226,7 +3260,8 @@ app.delete('/admin/delete-user-account/:userId', adminAuth, async (req: Request,
 
     // 4. Revoke the Plaid Items, then delete the access tokens. Same reason as
     // the self-serve deletion path: dropping the rows leaves the Items live and
-    // billable at Plaid with nothing left to revoke them with.
+    // billable at Plaid with nothing left to revoke them with. Tokens are still
+    // dropped after a failed revoke so admin deletion is not blocked by one bank.
     await revokePlaidItemsForUser(prisma, userId, 'admin-delete-user');
     await prisma.accessToken.deleteMany({
       where: { userId }
