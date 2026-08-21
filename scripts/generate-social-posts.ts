@@ -50,6 +50,28 @@ const SENT_TAG = '#social-sent';
 /** X wraps every link in t.co, so a URL always costs this many characters. */
 const X_URL_COST = 23;
 
+/**
+ * Code point ranges X counts as one unit. Everything outside them — emoji and
+ * most non-Latin scripts — counts as two under X's weighted-length algorithm,
+ * so a draft full of emoji is longer to X than its code point count suggests.
+ * These are the ranges from X's own default configuration.
+ */
+const X_SINGLE_WEIGHT_RANGES: ReadonlyArray<readonly [number, number]> = [
+  [0, 4351],
+  [8192, 8205],
+  [8208, 8223],
+  [8242, 8247],
+];
+
+function xWeightedLength(text: string): number {
+  let total = 0;
+  for (const character of text) {
+    const point = character.codePointAt(0) as number;
+    total += X_SINGLE_WEIGHT_RANGES.some(([start, end]) => point >= start && point <= end) ? 1 : 2;
+  }
+  return total;
+}
+
 type Platform = 'linkedin' | 'facebook' | 'x' | 'bluesky';
 
 interface PlatformSpec {
@@ -112,12 +134,37 @@ interface CliOptions {
  * code points so emoji are not double-counted the way `String.length` does.
  */
 function measure(platform: Platform, text: string): number {
-  const counted = platform === 'x' ? text.replace(/https?:\/\/\S+/g, 'x'.repeat(X_URL_COST)) : text;
-  return [...counted].length;
+  if (platform === 'x') {
+    // Links are substituted with their fixed t.co cost as single-weight
+    // characters, so the weighting below prices them at exactly 23.
+    return xWeightedLength(text.replace(/https?:\/\/\S+/g, 'x'.repeat(X_URL_COST)));
+  }
+  return [...text].length;
 }
 
 function overLimit(spec: PlatformSpec, text: string): boolean {
   return measure(spec.key, text) > spec.limit;
+}
+
+/**
+ * Copy without the article link is not promotional copy, it is just text. The
+ * prompt asks for the URL verbatim, but that is an instruction rather than a
+ * guarantee, so it is checked rather than assumed.
+ */
+function missingUrl(text: string, url: string): boolean {
+  return !text.includes(url);
+}
+
+interface CopyProblems {
+  tooLong: PlatformSpec[];
+  linkless: PlatformSpec[];
+}
+
+function findProblems(copy: SocialCopy, url: string): CopyProblems {
+  return {
+    tooLong: PLATFORMS.filter((spec) => overLimit(spec, copy[spec.key])),
+    linkless: PLATFORMS.filter((spec) => missingUrl(copy[spec.key], url)),
+  };
 }
 
 const COPY_TOOL = {
@@ -195,28 +242,41 @@ async function draftCopy(client: Anthropic, post: GhostPostRecord, url: string):
   const first = await request([{ role: 'user', content: postBrief(post, url) }]);
   const copy = readCopy(first);
 
-  const tooLong = PLATFORMS.filter((spec) => overLimit(spec, copy[spec.key]));
-  if (tooLong.length === 0) return copy;
+  const problems = findProblems(copy, url);
+  if (problems.tooLong.length === 0 && problems.linkless.length === 0) return copy;
 
-  console.log(`    revising: ${tooLong.map((s) => s.label).join(', ')} over limit`);
+  const summary = [
+    problems.tooLong.length ? `${problems.tooLong.map((s) => s.label).join(', ')} over limit` : '',
+    problems.linkless.length ? `${problems.linkless.map((s) => s.label).join(', ')} missing the link` : '',
+  ].filter(Boolean).join('; ');
+  console.log(`    revising: ${summary}`);
 
-  const repair = await request([
+  const repaired = readCopy(await request([
     { role: 'user', content: postBrief(post, url) },
     { role: 'assistant', content: first.content },
     {
       role: 'user',
       content: [
-        'These are over their character limits. Rewrite every platform, returning the same copy for the ones already within limits:',
-        ...tooLong.map((spec) =>
+        'Some of these need fixing. Rewrite every platform, returning the same copy for the ones already correct:',
+        ...problems.tooLong.map((spec) =>
           `- ${spec.label}: ${measure(spec.key, copy[spec.key])} characters, limit ${spec.limit}` +
           (spec.key === 'x' ? ' (the link counts as 23 characters)' : ''),
         ),
-        'Cut words, do not cut the link.',
+        ...problems.linkless.map((spec) => `- ${spec.label}: must contain the URL exactly as given`),
+        `The URL is ${url} — include it verbatim. Cut words, never the link.`,
       ].join('\n'),
     },
-  ]);
+  ]));
 
-  return readCopy(repair);
+  // Length is left to the recipient to trim, flagged in the email. A missing
+  // link cannot be trimmed into existence, so it fails the post instead: it
+  // stays untagged and is retried on the next run.
+  const stillLinkless = PLATFORMS.filter((spec) => missingUrl(repaired[spec.key], url));
+  if (stillLinkless.length > 0) {
+    throw new Error(`copy omitted the post URL for ${stillLinkless.map((s) => s.label).join(', ')}`);
+  }
+
+  return repaired;
 }
 
 function escapeHtml(text: string): string {
@@ -346,6 +406,12 @@ async function main(): Promise<void> {
         to: recipient as string,
         subject: `Social copy: ${post.title}`,
         html: emailHtml(post, url, copy),
+      }, {
+        // If the email is accepted but the Ghost tag write below fails, the
+        // post stays untagged and the next run retries it. A key stable per
+        // post makes Resend return the original send instead of delivering a
+        // second copy.
+        idempotencyKey: `social-${post.id}`,
       });
       if (error) throw new Error(`Resend rejected the email: ${error.message}`);
 
@@ -375,4 +441,4 @@ if (require.main === module) {
   });
 }
 
-export { measure, overLimit, PLATFORMS, readCopy, emailHtml, parseArgs, SENT_TAG };
+export { measure, overLimit, missingUrl, findProblems, PLATFORMS, readCopy, emailHtml, parseArgs, SENT_TAG };

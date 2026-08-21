@@ -49,6 +49,11 @@ that fails is retried on the next run rather than being silently dropped. Like
 the sync's dedupe tag it is internal, so it never appears publicly or as a
 category on the blog.
 
+That ordering leaves a narrow window: the email is accepted, then the tag write
+fails, and the next run tries the same post again. Sends therefore carry a
+Resend idempotency key stable per post, so the retry returns the original send
+instead of delivering a second copy of the same email.
+
 ## Character limits are measured, not trusted
 
 Each platform is measured the way that platform measures, because an
@@ -58,16 +63,28 @@ over-length X or Bluesky post simply cannot be published:
 |---|---|---|
 | LinkedIn | 3000 | literal characters |
 | Facebook | 2000 | literal characters |
-| X / Twitter | 280 | **every link counts as 23 characters** (t.co wrapping), however long it is |
+| X / Twitter | 280 | **weighted**: every link costs 23 (t.co wrapping) however long it is, and emoji and non-Latin characters cost 2 |
 | Bluesky | 280 | the **entire** URL counts; Bluesky does not shorten links |
 
-Counting uses code points, so an emoji costs 1 rather than the 2 that
-`String.length` reports.
+X does not count characters, it weights them: only the code point ranges in its
+published default configuration cost 1, and everything outside them — emoji,
+CJK, most non-Latin scripts — costs 2. Counting code points instead would
+under-report an emoji-heavy draft by nearly half and wave through a post X
+rejects. Bluesky counts code points, so an emoji costs 1 there rather than the 2
+that `String.length` reports.
 
-When something comes back over its limit, the model gets one chance to shorten
-it, with the measured count and the limit quoted back. Anything still over is
-delivered flagged `OVER LIMIT` in the email rather than quietly sent — an
-unpostable draft you can see beats one you discover in the composer.
+## Drafts are checked before they are sent
+
+After the first draft, every platform is checked for two failures:
+
+- **Over its limit.** The model gets one chance to shorten it, with the measured
+  count and the limit quoted back. Anything still over is delivered flagged
+  `OVER LIMIT` rather than quietly sent — a draft you can see is unpostable
+  beats one you discover in the composer, and trimming it is quick.
+- **Missing the article link.** The prompt asks for the URL verbatim, but that
+  is an instruction, not a guarantee. Copy without the link cannot be trimmed
+  into usefulness, so after one repair attempt the post *fails* instead: it is
+  left untagged and picked up again on the next run.
 
 ## Notes
 

@@ -49,4 +49,10 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
           SOCIAL_EMAIL_TO: ${{ secrets.SOCIAL_EMAIL_TO }}
-        run: npm run social -- --since-days=${{ inputs.since_days || '7' }} ${{ inputs.dry_run && '--dry-run' || '' }}
+          # Dispatch inputs are read through the environment and quoted rather
+          # than interpolated into the command. `since_days` is free text, and
+          # an expression pasted straight into `run:` would let anyone able to
+          # dispatch this workflow run shell commands beside the secrets above.
+          SINCE_DAYS: ${{ inputs.since_days || '7' }}
+          DRY_RUN: ${{ inputs.dry_run && '--dry-run' || '' }}
+        run: npm run social -- "--since-days=$SINCE_DAYS" $DRY_RUN
