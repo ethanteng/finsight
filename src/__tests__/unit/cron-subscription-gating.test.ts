@@ -40,6 +40,7 @@ jest.mock('../../profile/manager', () => ({
 }));
 
 import { TransactionSyncService } from '../../services/transaction-sync-service';
+import { BalanceService } from '../../services/balance-service';
 import { HomeValueRefreshService } from '../../services/home-value-refresh';
 import { ACCESS_BLOCKING_SUBSCRIPTION_STATUSES } from '../../services/subscription-refresh-eligibility';
 
@@ -116,5 +117,36 @@ describe('HomeValueRefreshService.refreshAllHomeValues subscription gating', () 
 
     const where = prisma.userProfile.findMany.mock.calls[0][0].where;
     expect(where.user).toEqual({ is: ELIGIBLE });
+  });
+});
+
+describe('balance refresh cron subscription gating', () => {
+  // scripts/run-balance-refresh-cron.js requires this module from dist, so no
+  // test can load the script itself. Pinning the predicate here is what stops
+  // the gate from being reverted in that script unnoticed.
+  it('selects only users who still have an eligible subscription', () => {
+    expect(BalanceService.balanceRefreshEligibleUserWhere()).toEqual({
+      accessTokens: { some: { isActive: true, supersededAt: null } },
+      isActive: true,
+      ...ELIGIBLE,
+    });
+  });
+
+  // User.isActive is flipped only by the admin revoke endpoint; billing never
+  // writes it. Dropping either clause in favour of the other would let a
+  // canceled customer's connections back into the nightly Plaid run.
+  it('keeps the account flag and the subscription clause as separate conditions', () => {
+    const where = BalanceService.balanceRefreshEligibleUserWhere() as any;
+
+    expect(where.isActive).toBe(true);
+    expect(where.subscriptionStatus).toEqual(ELIGIBLE.subscriptionStatus);
+  });
+
+  it('returns a fresh predicate object per call', () => {
+    const first = BalanceService.balanceRefreshEligibleUserWhere();
+    const second = BalanceService.balanceRefreshEligibleUserWhere();
+
+    expect(first).not.toBe(second);
+    expect(first).toEqual(second);
   });
 });

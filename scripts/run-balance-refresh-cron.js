@@ -7,7 +7,6 @@ const {
   completeScheduledRefreshLease,
   failScheduledRefreshLease,
 } = require('../dist/market-news/refresh-lease');
-const { refreshEligibleSubscriptionWhere } = require('../dist/services/subscription-refresh-eligibility');
 const { Configuration, PlaidApi, PlaidEnvironments } = require('plaid');
 require('dotenv').config({ path: '.env.local' });
 
@@ -74,18 +73,12 @@ async function runBalanceRefreshCron() {
     const { PrismaClient } = require('@prisma/client');
     prisma = new PrismaClient();
     
-    // `isActive` here is the account flag, flipped only by the admin revoke
-    // endpoint -- billing never touches it. Cancellation rewrites subscription
-    // status alone, so the subscription clause is what keeps this cron off a
-    // canceled customer's Plaid connections; the two are not interchangeable.
+    // Selection lives in BalanceService so it can be unit tested; this script
+    // requires from dist and no test can load it. See
+    // balanceRefreshEligibleUserWhere for why the subscription clause and the
+    // isActive account flag are both required.
     const users = await prisma.user.findMany({
-      where: {
-        accessTokens: {
-          some: { isActive: true, supersededAt: null }
-        },
-        isActive: true,
-        ...refreshEligibleSubscriptionWhere()
-      },
+      where: BalanceService.balanceRefreshEligibleUserWhere(),
       select: {
         id: true,
         email: true,
