@@ -412,6 +412,17 @@ router.post('/connections/:authorizationId/refresh', requireAuth, async (req, re
         `SnapTrade refresh: could not verify ownership for user ${userId}` +
         `${accountsResult.error ? ` (${accountsResult.error})` : ''}`
       );
+      // Expired credentials are not a transient outage. Surfacing them as 503
+      // would send the user to "try again" when the real fix is reconnect.
+      const credentialsInvalid = /credential|expired|unauthorized|reconnect/i.test(
+        accountsResult.error || ''
+      );
+      if (credentialsInvalid) {
+        return res.status(401).json({
+          success: false,
+          error: 'SnapTrade credentials invalid or expired. Please reconnect your SnapTrade account.',
+        });
+      }
       return res.status(503).json({
         success: false,
         error: 'Could not reach SnapTrade to verify this connection. Please try again.'
@@ -449,7 +460,12 @@ router.post('/connections/:authorizationId/refresh', requireAuth, async (req, re
       // Only a request the provider actually accepted starts the cooldown. A
       // failed attempt did not consume anything, so it must not lock the user
       // out of retrying once the cause clears.
-      return res.status(result.status === 425 || result.status === 429 ? 429 : 502).json({
+      const status = result.status === 425 || result.status === 429
+        ? 429
+        : result.status === 401
+          ? 401
+          : 502;
+      return res.status(status).json({
         success: false,
         error: result.error,
       });

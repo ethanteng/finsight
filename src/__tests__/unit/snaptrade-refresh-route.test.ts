@@ -92,6 +92,20 @@ describe('SnapTrade connection refresh route', () => {
     expect(refreshConnection).not.toHaveBeenCalled();
   });
 
+  // Expired credentials on the ownership preflight must not look like a
+  // transient outage -- the user needs to reconnect, not retry.
+  it('reports expired credentials from the ownership check as a reconnect', async () => {
+    getUserAccounts.mockResolvedValue({
+      success: false,
+      error: 'SnapTrade credentials invalid or expired. Please reconnect your SnapTrade account.',
+    });
+
+    const response = await refresh(freshAuthorization()).expect(401);
+
+    expect(response.body.error).toMatch(/reconnect/i);
+    expect(refreshConnection).not.toHaveBeenCalled();
+  });
+
   it('rejects a second click inside the cooldown instead of spending another refresh', async () => {
     const authorizationId = freshAuthorization();
     await refresh(authorizationId).expect(200);
@@ -125,5 +139,17 @@ describe('SnapTrade connection refresh route', () => {
     const response = await refresh(freshAuthorization()).expect(429);
 
     expect(response.body.error).toContain('refreshed recently');
+  });
+
+  it('passes expired credentials from the provider through as unauthorized', async () => {
+    refreshConnection.mockResolvedValue({
+      success: false,
+      status: 401,
+      error: 'SnapTrade credentials invalid or expired. Please reconnect your SnapTrade account.',
+    });
+
+    const response = await refresh(freshAuthorization()).expect(401);
+
+    expect(response.body.error).toMatch(/reconnect/i);
   });
 });
