@@ -354,6 +354,32 @@ describe('finances overview contract', () => {
     expect(cash?.dataAsOf).toBeNull();
   });
 
+  // Compound observation ids (`account:{id}:holdings-coverage`) are separate
+  // signals. A naive `account:` prefix strip would invent a non-existent account
+  // id and never match the real row — or worse, collide if ids ever nested.
+  it('ignores compound account observation ids when dating and marking stale', () => {
+    const oneDay = 24 * 60 * 60 * 1000;
+    const overview = buildFinancesOverview({
+      snapshot: {
+        ...snapshot,
+        sourceObservations: [
+          {
+            id: 'account:cash:holdings-coverage',
+            required: false,
+            status: 'available',
+            asOf: '2025-01-01T00:00:00.000Z',
+            maxAgeMs: oneDay,
+          },
+        ],
+        quality: { staleSourceIds: ['account:cash:holdings-coverage'] },
+      },
+    });
+
+    const cash = overview.accountGroups.cash.accounts.find(account => account.account_id === 'cash');
+    expect(cash?.dataAsOf).toBeNull();
+    expect(cash?.isDataStale).toBe(false);
+  });
+
   it('filters heavy account details and calculates the investment portfolio on demand', () => {
     const details = buildFinancesAccountDetails(snapshot, 'brokerage');
 

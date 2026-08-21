@@ -336,19 +336,31 @@ function snapshotHome(snapshot: FinancesSnapshotLike, currentHome?: FinancesHome
   };
 }
 
+/**
+ * Top-level account observation ids are `account:{id}`. Compound ids such as
+ * `account:{id}:holdings-coverage` or `account:{id}:balance` are separate
+ * signals and must not be treated as the account's own observation.
+ */
+function accountIdFromSourceId(sourceId: string): string | null {
+  if (!sourceId.startsWith(ACCOUNT_SOURCE_PREFIX)) return null;
+  const accountId = sourceId.slice(ACCOUNT_SOURCE_PREFIX.length);
+  if (!accountId || accountId.includes(':')) return null;
+  return accountId;
+}
+
 /** `account:{id}` -> provider observation time, from the snapshot's own source observations. */
 function accountObservationTimes(snapshot: FinancesSnapshotLike): Map<string, string> {
   const observations = Array.isArray(snapshot.sourceObservations) ? snapshot.sourceObservations : [];
   const times = new Map<string, string>();
   for (const observation of observations) {
     if (!observation || typeof observation !== 'object') continue;
-    const id = String((observation as any).id || '');
-    if (!id.startsWith(ACCOUNT_SOURCE_PREFIX)) continue;
+    const accountId = accountIdFromSourceId(String((observation as any).id || ''));
+    if (!accountId) continue;
     // An unavailable source has no observation to report. Leaving it out means the
     // row says nothing rather than dating the account to a read that failed.
     if ((observation as any).status === 'unavailable') continue;
     const asOf = iso((observation as any).asOf);
-    if (asOf) times.set(id.slice(ACCOUNT_SOURCE_PREFIX.length), asOf);
+    if (asOf) times.set(accountId, asOf);
   }
   return times;
 }
@@ -359,9 +371,9 @@ function staleAccountIds(snapshot: FinancesSnapshotLike): Set<string> {
   const ids = Array.isArray(quality.staleSourceIds) ? quality.staleSourceIds : [];
   const stale = new Set<string>();
   for (const id of ids) {
-    if (typeof id === 'string' && id.startsWith(ACCOUNT_SOURCE_PREFIX)) {
-      stale.add(id.slice(ACCOUNT_SOURCE_PREFIX.length));
-    }
+    if (typeof id !== 'string') continue;
+    const accountId = accountIdFromSourceId(id);
+    if (accountId) stale.add(accountId);
   }
   return stale;
 }
