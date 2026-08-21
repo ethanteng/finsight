@@ -34,6 +34,12 @@ export interface FinancesAccount {
    * for the whole product.
    */
   isDataStale?: boolean;
+  /**
+   * SnapTrade brokerage authorization backing this account, carried through from
+   * the snapshot. One authorization backs several accounts, and it is what both
+   * the reconnect prompt and the manual-refresh endpoint take.
+   */
+  brokerageAuthorizationId?: string;
   balance?:
     | number
     | null

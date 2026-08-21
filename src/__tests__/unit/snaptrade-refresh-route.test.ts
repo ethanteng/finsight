@@ -141,6 +141,40 @@ describe('SnapTrade connection refresh route', () => {
     expect(response.body.error).toContain('refreshed recently');
   });
 
+  // A rate limit is the provider saying "too soon". Without a local cooldown on
+  // it, repeat clicks keep reaching SnapTrade's metered limit to be told the same
+  // thing, and the guard only ever helps the user who did not need it.
+  it.each([425, 429])('starts the cooldown on a provider rate limit (status %i)', async status => {
+    const authorizationId = freshAuthorization();
+    refreshConnection.mockResolvedValue({
+      success: false,
+      status,
+      error: 'This connection was refreshed recently. Please try again later.',
+    });
+
+    await refresh(authorizationId).expect(429);
+    const response = await refresh(authorizationId).expect(429);
+
+    expect(response.body.retryAfterSeconds).toBeGreaterThan(0);
+    expect(refreshConnection).toHaveBeenCalledTimes(1);
+  });
+
+  // A credential failure clears by reconnecting, not by waiting, so it must not
+  // put the user behind a cooldown on top of the reconnect they already need.
+  it('does not start the cooldown when the provider rejected the credentials', async () => {
+    const authorizationId = freshAuthorization();
+    refreshConnection.mockResolvedValueOnce({
+      success: false,
+      status: 401,
+      error: 'SnapTrade credentials invalid or expired. Please reconnect your SnapTrade account.',
+    });
+
+    await refresh(authorizationId).expect(401);
+    await refresh(authorizationId).expect(200);
+
+    expect(refreshConnection).toHaveBeenCalledTimes(2);
+  });
+
   it('passes expired credentials from the provider through as unauthorized', async () => {
     refreshConnection.mockResolvedValue({
       success: false,

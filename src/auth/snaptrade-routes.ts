@@ -457,10 +457,15 @@ router.post('/connections/:authorizationId/refresh', requireAuth, async (req, re
 
     const result = await snapTradeService.refreshConnection(userId, user.userSecret, authorizationId);
     if (!result.success) {
-      // Only a request the provider actually accepted starts the cooldown. A
-      // failed attempt did not consume anything, so it must not lock the user
-      // out of retrying once the cause clears.
-      const status = result.status === 425 || result.status === 429
+      const rateLimited = result.status === 425 || result.status === 429;
+      // A rate limit is the provider saying "too soon", so start the cooldown on
+      // it too: without that, repeat clicks keep reaching SnapTrade's metered
+      // limit to be told the same thing, and the local guard only ever helps the
+      // user who did not need it. It strands nobody -- the provider is already
+      // refusing. Every other failure consumed nothing, so it must not lock the
+      // user out of retrying once the cause clears.
+      if (rateLimited) lastRefreshRequest.set(cooldownKey, Date.now());
+      const status = rateLimited
         ? 429
         : result.status === 401
           ? 401
