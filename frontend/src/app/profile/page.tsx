@@ -1083,6 +1083,7 @@ export default function ProfilePage() {
         method: 'POST',
         headers,
       });
+      const plaidData = await plaidResponse.json().catch(() => ({}));
 
       // Disconnect SnapTrade accounts
       const snapTradeResponse = await fetch(`${API_URL}/snaptrade/delete`, {
@@ -1091,16 +1092,29 @@ export default function ProfilePage() {
       });
 
       if (plaidResponse.ok && snapTradeResponse.ok) {
-        setDeleteMessage('All your accounts (Plaid and SnapTrade) have been successfully disconnected.');
+        // Privacy disconnect returns success:false when some Items refused to
+        // revoke and were kept for retry — HTTP 200 alone would claim a full wipe.
+        setDeleteMessage(
+          plaidData.success === false
+            ? (plaidData.message || 'Some bank connections could not be revoked at Plaid and were kept so you can try again. Other accounts were disconnected.')
+            : 'All your accounts (Plaid and SnapTrade) have been successfully disconnected.'
+        );
       } else if (plaidResponse.ok) {
-        setDeleteMessage('All your financial accounts have been disconnected.');
+        setDeleteMessage(
+          plaidData.success === false
+            ? (plaidData.message || 'Some bank connections could not be revoked at Plaid and were kept so you can try again.')
+            : 'All your financial accounts have been disconnected.'
+        );
       } else if (snapTradeResponse.ok) {
         setDeleteMessage('Your SnapTrade accounts have been disconnected. Some Plaid accounts may still be connected.');
       } else {
-        setDeleteMessage('Failed to disconnect some accounts. Please try again.');
+        setDeleteMessage(plaidData.error || 'Failed to disconnect some accounts. Please try again.');
       }
 
-      // Reload accounts to show they're disconnected
+      // Per-institution lists are independent of loadConnectedAccounts; bump both
+      // so a partial disconnect does not leave stale rows on the page.
+      setPlaidConnectionsKey(key => key + 1);
+      setSnapTradeConnectionsKey(key => key + 1);
       loadConnectedAccounts();
     } catch (_error) {
       setDeleteMessage('An error occurred while disconnecting your accounts. Please try again.');
