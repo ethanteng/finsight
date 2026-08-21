@@ -385,6 +385,29 @@ router.get('/holdings', requireAuth, async (req, res) => {
 const refreshCooldownMs = 5 * 60 * 1000;
 const lastRefreshRequest = new Map<string, number>();
 
+// Remember account ids after the provider confirms a remove, so a failed local
+// cleanup can be retried even though SnapTrade no longer lists those accounts.
+// Process-local like the refresh cooldown: an immediate retry on this instance
+// recovers; a multi-instance hop or process restart still cannot, and the user
+// would need Disconnect-all (or a durable pending row) to finish cleanup.
+type PendingDisconnect = {
+  accountIds: string[];
+  institution: string;
+  createdAt: number;
+};
+const pendingDisconnectTtlMs = 24 * 60 * 60 * 1000;
+const pendingDisconnects = new Map<string, PendingDisconnect>();
+
+function pendingDisconnectKey(userId: string, authorizationId: string): string {
+  return `${userId}:${authorizationId}`;
+}
+
+function prunePendingDisconnects(now = Date.now()): void {
+  for (const [key, pending] of pendingDisconnects) {
+    if (pending.createdAt < now - pendingDisconnectTtlMs) pendingDisconnects.delete(key);
+  }
+}
+
 router.post('/connections/:authorizationId/refresh', requireAuth, async (req, res) => {
   try {
     const userId = req.user!.id;
@@ -496,8 +519,25 @@ router.post('/connections/:authorizationId/refresh', requireAuth, async (req, re
 // authorization covers every account at one institution, and it is the unit the
 // user connects, reconnects, refreshes, and now disconnects -- so it is the unit
 // the UI lists, rather than making someone infer the grouping from account names.
-function groupAccountsByConnection(accounts: any[]) {
+//
+// Authorizations are seeded first so a pending or empty connection (no accounts
+// returned yet) still appears and can be disconnected, instead of being omitted
+// because nothing account-derived pointed at it.
+function groupAccountsByConnection(accounts: any[], authorizations: any[] = []) {
   const connections = new Map<string, any>();
+  for (const authorization of authorizations) {
+    const id = authorization?.id;
+    if (!id) continue;
+    connections.set(id, {
+      id,
+      institution: authorization.institution || 'Unknown',
+      disabled: Boolean(authorization.disabled),
+      disabledAt: authorization.disabledAt || null,
+      statusUnavailable: false,
+      lastHoldingsSync: null as string | null,
+      accounts: [] as Array<{ id: string; name: string; lastHoldingsSync: string | null }>,
+    });
+  }
   for (const account of accounts) {
     // An account SnapTrade returns without an authorization cannot be
     // disconnected on its own, so it is left out rather than listed under a
@@ -509,13 +549,24 @@ function groupAccountsByConnection(accounts: any[]) {
       connection = {
         id,
         institution: account.institution || 'Unknown',
-        disabled: account.connectionDisabled,
+        disabled: Boolean(account.connectionDisabled),
         disabledAt: account.connectionDisabledAt || null,
         statusUnavailable: Boolean(account.connectionStatusUnavailable),
         lastHoldingsSync: null as string | null,
         accounts: [] as Array<{ id: string; name: string; lastHoldingsSync: string | null }>,
       };
       connections.set(id, connection);
+    } else {
+      // Health is per authorization; OR flags so a later disabled account cannot
+      // be masked by an earlier healthy sibling under the same connection.
+      if (account.connectionDisabled) connection.disabled = true;
+      if (account.connectionStatusUnavailable) connection.statusUnavailable = true;
+      if (account.connectionDisabledAt && (!connection.disabledAt || account.connectionDisabledAt < connection.disabledAt)) {
+        connection.disabledAt = account.connectionDisabledAt;
+      }
+      if (!connection.institution || connection.institution === 'Unknown') {
+        connection.institution = account.institution || connection.institution;
+      }
     }
     const accountId = String(account.id || '').startsWith('snaptrade-')
       ? String(account.id)
@@ -562,7 +613,10 @@ router.get('/connections', requireAuth, async (req, res) => {
         .map(account => [account.plaidAccountId, account.name] as const)
     );
 
-    const connections = groupAccountsByConnection(accountsResult.data.accounts).map(connection => ({
+    const authorizations = Array.isArray(accountsResult.data.authorizations)
+      ? accountsResult.data.authorizations
+      : [];
+    const connections = groupAccountsByConnection(accountsResult.data.accounts, authorizations).map(connection => ({
       ...connection,
       accounts: connection.accounts.map((account: any) => ({
         ...account,
@@ -595,35 +649,64 @@ router.delete('/connections/:authorizationId', requireAuth, async (req, res) => 
       });
     }
 
+    prunePendingDisconnects();
+    const pendingKey = pendingDisconnectKey(userId, authorizationId);
+    const pending = pendingDisconnects.get(pendingKey);
+
     // The account list has to be read BEFORE the removal: afterwards SnapTrade no
     // longer reports these accounts, and there would be nothing left to identify
     // the rows this institution owns. Everything the cleanup needs is captured now.
+    // A prior attempt that already removed the provider auth may leave a pending
+    // entry so this retry can finish local cleanup without that list.
     const accountsResult = await snapTradeService.getUserAccounts(userId, user.userSecret);
     if (!accountsResult.success || !Array.isArray(accountsResult.data?.accounts)) {
-      console.warn(
-        `SnapTrade disconnect: could not read accounts for user ${userId}` +
-        `${accountsResult.error ? ` (${accountsResult.error})` : ''}`
-      );
-      // Fails closed. Removing the authorization while blind to its accounts
-      // would strand their rows in the snapshot with no connection left to
-      // identify or repair them.
-      return res.status(503).json({
-        success: false,
-        error: 'Could not reach SnapTrade to confirm which accounts belong to this institution. Please try again.'
-      });
+      // Pending recovery does not need a fresh account list — the ids were
+      // captured before the provider remove on the earlier attempt.
+      if (!pending) {
+        console.warn(
+          `SnapTrade disconnect: could not read accounts for user ${userId}` +
+          `${accountsResult.error ? ` (${accountsResult.error})` : ''}`
+        );
+        // Fails closed. Removing the authorization while blind to its accounts
+        // would strand their rows in the snapshot with no connection left to
+        // identify or repair them.
+        return res.status(503).json({
+          success: false,
+          error: 'Could not reach SnapTrade to confirm which accounts belong to this institution. Please try again.'
+        });
+      }
     }
 
-    const ownedAccounts = accountsResult.data.accounts.filter(
+    const liveAccounts = Array.isArray(accountsResult.data?.accounts) ? accountsResult.data.accounts : [];
+    const authorizations = Array.isArray(accountsResult.data?.authorizations)
+      ? accountsResult.data.authorizations
+      : [];
+    const ownedAccounts = liveAccounts.filter(
       (account: any) => account?.brokerageAuthorizationId === authorizationId
     );
-    if (ownedAccounts.length === 0) {
+    const authorization = authorizations.find((entry: any) => entry?.id === authorizationId);
+
+    let institution: string;
+    let accountIds: string[];
+    if (ownedAccounts.length > 0) {
+      institution = ownedAccounts[0]?.institution || authorization?.institution || 'this institution';
+      accountIds = ownedAccounts.map((account: any) =>
+        String(account.id).startsWith('snaptrade-') ? String(account.id) : `snaptrade-${account.id}`
+      );
+    } else if (pending) {
+      // Provider already dropped this authorization on a prior attempt; finish
+      // the local delete with the ids captured then.
+      institution = pending.institution;
+      accountIds = pending.accountIds;
+    } else if (authorization) {
+      // Linked brokerage with no accounts yet (pending/incomplete). Still
+      // removable — there is nothing local to clear beyond the provider auth.
+      institution = authorization.institution || 'this institution';
+      accountIds = [];
+    } else {
       console.warn(`SnapTrade disconnect: refusing an authorization not belonging to user ${userId}`);
       return res.status(404).json({ success: false, error: 'Unknown brokerage connection for this user.' });
     }
-    const institution = ownedAccounts[0]?.institution || 'this institution';
-    const accountIds: string[] = ownedAccounts.map((account: any) =>
-      String(account.id).startsWith('snaptrade-') ? String(account.id) : `snaptrade-${account.id}`
-    );
 
     const removal = await snapTradeService.removeConnection(userId, user.userSecret, authorizationId);
     if (!removal.success) {
@@ -632,6 +715,14 @@ router.delete('/connections/:authorizationId', requireAuth, async (req, res) => 
         error: removal.error,
       });
     }
+
+    // Record cleanup targets only after the provider confirms the auth is gone,
+    // so a failed removal never leaves a pending entry that could delete live data.
+    pendingDisconnects.set(pendingKey, {
+      accountIds,
+      institution,
+      createdAt: Date.now(),
+    });
 
     // Local cleanup runs only after the provider confirms the connection is gone,
     // so a failed removal never leaves the user with deleted history and a live
@@ -657,6 +748,8 @@ router.delete('/connections/:authorizationId', requireAuth, async (req, res) => 
         activities: activities.count,
       };
     });
+
+    pendingDisconnects.delete(pendingKey);
 
     console.log(
       `🔌 SnapTrade: disconnected ${institution} for user ${userId} ` +

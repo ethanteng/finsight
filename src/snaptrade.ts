@@ -553,10 +553,27 @@ export class SnapTradeService {
         }];
       });
       
+      // Authorizations are the connect/disconnect unit. Returning them alongside
+      // accounts lets callers list and remove a brokerage that has no accounts
+      // yet (pending or incomplete link) instead of inferring connections only
+      // from accounts and silently omitting those rows.
+      const authorizations = connectionsResult.ok
+        ? [...connections.values()].map((authorization: any) => ({
+            id: authorization.id,
+            institution: authorization?.brokerage?.display_name
+              || authorization?.brokerage?.name
+              || authorization?.name
+              || 'Unknown',
+            disabled: Boolean(authorization?.disabled),
+            disabledAt: authorization?.disabled_date || null,
+          }))
+        : [];
+
       return { 
         success: true, 
         data: {
           accounts,
+          authorizations,
           connectionStatusError,
         }
       };

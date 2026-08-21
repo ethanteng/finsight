@@ -284,11 +284,15 @@ institution's accounts, holdings, and activity history; every other connection,
 and the user's SnapTrade registration, is left intact — so reconnecting costs a
 portal trip rather than a re-registration.
 
-The account list is read before the removal, because afterwards SnapTrade no
-longer reports those accounts and there is nothing left to identify the rows
-they own. If that read fails, nothing is removed. Local rows are deleted only
-after the provider confirms the authorization is gone, so a failed removal never
-leaves a user with deleted history and a live connection that would re-import it.
+The account list (and brokerage authorization list) is read before the removal,
+because afterwards SnapTrade no longer reports those accounts and there is
+nothing left to identify the rows they own. Authorizations with no accounts yet
+are still listed and removable. If that read fails, nothing is removed — unless a
+prior attempt already removed the provider auth and left a process-local pending
+cleanup, in which case a retry finishes the local delete. Local rows are deleted
+only after the provider confirms the authorization is gone, so a failed removal
+never leaves a user with deleted history and a live connection that would
+re-import it.
 
 Reconnecting re-imports from the brokerage under new SnapTrade account ids, so
 custom account names do not survive a disconnect.

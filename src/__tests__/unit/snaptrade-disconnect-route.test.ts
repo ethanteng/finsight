@@ -66,7 +66,13 @@ describe('SnapTrade per-institution disconnect', () => {
     snapTradeUserFindUnique.mockResolvedValue({ userId: 'user-1', userSecret: 'secret' });
     getUserAccounts.mockResolvedValue({
       success: true,
-      data: { accounts: [...publicAccounts, ...fidelityAccounts] },
+      data: {
+        accounts: [...publicAccounts, ...fidelityAccounts],
+        authorizations: [
+          { id: 'auth-public', institution: 'Public', disabled: false, disabledAt: null },
+          { id: 'auth-fidelity', institution: 'Fidelity', disabled: false, disabledAt: null },
+        ],
+      },
     });
     removeConnection.mockResolvedValue({ success: true });
     accountFindMany.mockResolvedValue([{ id: 'db-1' }, { id: 'db-2' }]);
@@ -105,12 +111,38 @@ describe('SnapTrade per-institution disconnect', () => {
     it('omits accounts with no brokerage authorization', async () => {
       getUserAccounts.mockResolvedValue({
         success: true,
-        data: { accounts: [...publicAccounts, { id: 'orphan', name: 'Orphan', institution: 'Nowhere' }] },
+        data: {
+          accounts: [...publicAccounts, { id: 'orphan', name: 'Orphan', institution: 'Nowhere' }],
+          authorizations: [{ id: 'auth-public', institution: 'Public', disabled: false, disabledAt: null }],
+        },
       });
 
       const response = await request(app).get('/snaptrade/connections').expect(200);
 
       expect(response.body.data.connections).toHaveLength(1);
+    });
+
+    // A brokerage can be linked before any accounts appear. Listing only from
+    // accounts would hide it and leave no way to disconnect the dead link.
+    it('lists an authorization that currently has no accounts', async () => {
+      getUserAccounts.mockResolvedValue({
+        success: true,
+        data: {
+          accounts: [],
+          authorizations: [{ id: 'auth-pending', institution: 'Public', disabled: true, disabledAt: '2026-08-20T00:00:00.000Z' }],
+        },
+      });
+
+      const response = await request(app).get('/snaptrade/connections').expect(200);
+
+      expect(response.body.data.connections).toEqual([
+        expect.objectContaining({
+          id: 'auth-pending',
+          institution: 'Public',
+          disabled: true,
+          accounts: [],
+        }),
+      ]);
     });
   });
 
@@ -218,6 +250,71 @@ describe('SnapTrade per-institution disconnect', () => {
 
       expect(accountDeleteMany).toHaveBeenCalled();
       expect(response.body.data.alreadyRemovedAtProvider).toBe(true);
+    });
+
+    // Provider remove succeeded but local cleanup failed: SnapTrade no longer
+    // lists the accounts, so a naive retry would 404. The pending targets from
+    // the first attempt let the second request finish the delete.
+    it('retries local cleanup after a prior provider-success / local-failure split', async () => {
+      let attempts = 0;
+      (getPrismaClient as jest.Mock).mockReturnValue({
+        snapTradeUser: { findUnique: snapTradeUserFindUnique },
+        account: { findMany: accountFindMany, deleteMany: accountDeleteMany },
+        transaction: { deleteMany: transactionDeleteMany },
+        snapTradeActivity: { deleteMany: activityDeleteMany },
+        $transaction: async (callback: any) => {
+          attempts += 1;
+          if (attempts === 1) throw new Error('database unavailable');
+          return callback({
+            account: { findMany: accountFindMany, deleteMany: accountDeleteMany },
+            transaction: { deleteMany: transactionDeleteMany },
+            snapTradeActivity: { deleteMany: activityDeleteMany },
+          });
+        },
+      });
+
+      await request(app).delete('/snaptrade/connections/auth-public').expect(500);
+      expect(accountDeleteMany).not.toHaveBeenCalled();
+
+      // Provider auth is gone; only the sibling institution remains visible.
+      getUserAccounts.mockResolvedValue({
+        success: true,
+        data: {
+          accounts: [...fidelityAccounts],
+          authorizations: [{ id: 'auth-fidelity', institution: 'Fidelity', disabled: false, disabledAt: null }],
+        },
+      });
+      removeConnection.mockResolvedValue({ success: true, alreadyRemoved: true });
+
+      const response = await request(app)
+        .delete('/snaptrade/connections/auth-public')
+        .expect(200);
+
+      const deletedIds = accountDeleteMany.mock.calls[0][0].where.plaidAccountId.in;
+      expect(deletedIds).toEqual(['snaptrade-acct-public-1', 'snaptrade-acct-public-2']);
+      expect(response.body.data.alreadyRemovedAtProvider).toBe(true);
+      expect(schedule).toHaveBeenCalled();
+    });
+
+    it('removes an authorization that has no accounts yet', async () => {
+      getUserAccounts.mockResolvedValue({
+        success: true,
+        data: {
+          accounts: [],
+          authorizations: [{ id: 'auth-pending', institution: 'Public', disabled: true, disabledAt: null }],
+        },
+      });
+      accountFindMany.mockResolvedValue([]);
+      accountDeleteMany.mockResolvedValue({ count: 0 });
+      transactionDeleteMany.mockResolvedValue({ count: 0 });
+      activityDeleteMany.mockResolvedValue({ count: 0 });
+
+      const response = await request(app)
+        .delete('/snaptrade/connections/auth-pending')
+        .expect(200);
+
+      expect(removeConnection).toHaveBeenCalledWith('user-1', 'secret', 'auth-pending');
+      expect(response.body.data.removed).toEqual({ accounts: 0, transactions: 0, activities: 0 });
     });
   });
 });
