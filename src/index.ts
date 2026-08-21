@@ -905,6 +905,20 @@ app.get('/sync/status', async (req: Request, res: Response) => {
           where: { userId }
         });
 
+        // Ask Linc answers from the snapshot, so without a rebuild it keeps
+        // serving the disconnected accounts' balances until the next scheduled
+        // run -- the per-institution paths already queue one.
+        try {
+          const { FinancialRevisionService } = await import('./services/financial-revision-service');
+          FinancialRevisionService.schedule(userId, {
+            categorize: false,
+            history: { kind: 'material', reason: 'all-connections-disconnected' },
+          }, 'Privacy disconnect accounts');
+        } catch {
+          // Non-fatal: the rows are gone, and the next scheduled rebuild
+          // reconciles the snapshot even if this one could not be queued.
+        }
+
         res.json({
           success: revocation.allRevoked,
           message: revocation.allRevoked

@@ -104,6 +104,14 @@ rather than one negated `NOT { in }`, because Prisma's negated filters do not
 match NULL columns — manual and SnapTrade accounts carry no `accessTokenId`, so a
 negation would silently spare them whenever an unrelated bank failed to revoke.
 
+Every disconnect path also deletes the accounts and transactions belonging to
+the connections it revoked, and queues a snapshot rebuild. `Account.accessTokenId`
+is `onDelete: SetNull`, so deleting a token alone would leave its accounts behind
+with a null connection — and a null `accessTokenId` is how manual and SnapTrade
+accounts are identified, so orphaned bank accounts would quietly start passing
+for hand-entered ones. Without the rebuild, Ask Linc keeps answering from a
+snapshot that still contains the disconnected banks.
+
 ### Per-institution disconnect
 
 `GET /plaid/connections` lists one row per Item (a database-only read —

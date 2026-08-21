@@ -1419,7 +1419,35 @@ export const setupPlaidRoutes = (app: any) => {
       // whose Item is still live would strand it there permanently, which is the
       // exact failure this change exists to fix.
       const revokedTokenIds = revocation.results.filter(result => result.removed).map(result => result.tokenId);
+
+      // The accounts have to go with the token. `Account.accessTokenId` is
+      // `onDelete: SetNull`, so deleting the token alone leaves its accounts
+      // behind with a null connection -- and a null `accessTokenId` is how
+      // manual and SnapTrade accounts are identified, so orphaned bank accounts
+      // would quietly start passing for hand-entered ones. Transactions first:
+      // `Transaction.account` has no cascade.
+      await prisma.transaction.deleteMany({
+        where: { account: { userId, accessTokenId: { in: revokedTokenIds } } },
+      });
+      await prisma.account.deleteMany({
+        where: { userId, accessTokenId: { in: revokedTokenIds } },
+      });
       await prisma.accessToken.deleteMany({ where: { userId, id: { in: revokedTokenIds } } });
+
+      // Ask Linc answers from the snapshot, so without a rebuild it keeps serving
+      // the disconnected banks' balances until the next scheduled run.
+      if (revokedTokenIds.length > 0) {
+        try {
+          const { FinancialRevisionService } = await import('./services/financial-revision-service');
+          FinancialRevisionService.schedule(userId, {
+            categorize: false,
+            history: { kind: 'material', reason: 'plaid-connection-disconnected' },
+          }, 'Plaid disconnect all');
+        } catch {
+          // Non-fatal: the rows are gone, and the next scheduled rebuild reconciles
+          // the snapshot even if this one could not be queued.
+        }
+      }
 
       res.json({
         success: revocation.allRevoked,

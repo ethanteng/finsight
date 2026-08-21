@@ -188,6 +188,8 @@ describe('Plaid disconnect-all', () => {
       { id: 'token-chase', token: 'access-chase' },
     ]);
     accessTokenDeleteMany.mockResolvedValue({ count: 2 });
+    accountDeleteMany.mockResolvedValue({ count: 3 });
+    transactionDeleteMany.mockResolvedValue({ count: 4 });
     itemRemove.mockResolvedValue({ data: {} });
   });
 
@@ -198,6 +200,45 @@ describe('Plaid disconnect-all', () => {
     expect(accessTokenDeleteMany).toHaveBeenCalledWith({
       where: { userId: 'user-1', id: { in: ['token-boa', 'token-chase'] } },
     });
+  });
+
+  // `Account.accessTokenId` is onDelete: SetNull, so deleting the token alone
+  // leaves its accounts behind with a null connection -- and a null
+  // `accessTokenId` is how manual and SnapTrade accounts are identified, so
+  // orphaned bank accounts would quietly start passing for hand-entered ones.
+  it('removes the accounts belonging to each revoked connection', async () => {
+    const order: string[] = [];
+    transactionDeleteMany.mockImplementation(async () => { order.push('transactions'); return { count: 4 }; });
+    accountDeleteMany.mockImplementation(async () => { order.push('accounts'); return { count: 3 }; });
+
+    await request(app).delete('/plaid/disconnect_accounts').expect(200);
+
+    expect(accountDeleteMany).toHaveBeenCalledWith({
+      where: { userId: 'user-1', accessTokenId: { in: ['token-boa', 'token-chase'] } },
+    });
+    expect(order).toEqual(['transactions', 'accounts']);
+  });
+
+  // Ask Linc answers from the snapshot, so without a rebuild it keeps serving
+  // the disconnected banks' balances.
+  it('queues a snapshot rebuild after a successful disconnect', async () => {
+    await request(app).delete('/plaid/disconnect_accounts').expect(200);
+
+    expect(schedule).toHaveBeenCalledWith(
+      'user-1',
+      expect.objectContaining({
+        history: { kind: 'material', reason: 'plaid-connection-disconnected' },
+      }),
+      expect.any(String),
+    );
+  });
+
+  it('does not queue a rebuild when nothing could be revoked', async () => {
+    itemRemove.mockRejectedValue(plaidError('INTERNAL_SERVER_ERROR'));
+
+    await request(app).delete('/plaid/disconnect_accounts').expect(200);
+
+    expect(schedule).not.toHaveBeenCalled();
   });
 
   // Deleting a token whose Item is still live strands it at Plaid permanently,
