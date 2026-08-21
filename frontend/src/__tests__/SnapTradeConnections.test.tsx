@@ -112,6 +112,9 @@ describe('SnapTradeConnections', () => {
     expect(await screen.findByText('Disconnect Public?')).toBeInTheDocument();
     expect(screen.getByText(/transaction history/i)).toBeInTheDocument();
     expect(screen.getByText(/other connected institutions are not affected/i)).toBeInTheDocument();
+    // Everything the disconnect destroys and reconnecting does not restore has to
+    // be named here, or the dialog quietly under-reports what the user is agreeing to.
+    expect(screen.getByText(/renames or category overrides will be lost/i)).toBeInTheDocument();
   });
 
   it('tells the user when the disconnect failed', async () => {

@@ -98,7 +98,8 @@ export default function SnapTradeConnections({
         `This removes ${accountCount} ${accountCount === 1 ? 'account' : 'accounts'} from ${connection.institution}, `
         + 'along with their imported holdings and transaction history, and takes them out of your totals. '
         + 'Your other connected institutions are not affected. '
-        + 'You can reconnect later, but the history will be re-imported fresh and any renames will be lost.',
+        + 'You can reconnect later, but the history will be re-imported fresh and any renames or '
+        + 'category overrides will be lost.',
       confirmLabel: 'Disconnect',
     });
     if (!confirmed) return;

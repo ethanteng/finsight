@@ -301,7 +301,7 @@ carry `brokerageAuthorizationId`, which identifies the rows once the provider ha
 stopped reporting them.
 
 Reconnecting re-imports from the brokerage under new SnapTrade account ids, so
-custom account names do not survive a disconnect.
+neither custom account names nor category overrides survive a disconnect.
 
 ## 📞 **Getting Help**
 
