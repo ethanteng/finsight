@@ -179,7 +179,7 @@ export default function PrivacyPolicyContent() {
                   We use Stripe for secure payment processing. Stripe is PCI-compliant and we do not store your full payment card details.
                 </p>
 
-                <h4 className="text-lg font-medium mb-3">Hosting and Analytics</h4>
+                <h4 className="text-lg font-medium mb-3">Hosting</h4>
                 <p className="text-gray-300 mb-4">
                   We use Render and Vercel for hosting. These services follow industry-standard security protocols.
                 </p>
