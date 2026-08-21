@@ -287,12 +287,17 @@ portal trip rather than a re-registration.
 The account list (and brokerage authorization list) is read before the removal,
 because afterwards SnapTrade no longer reports those accounts and there is
 nothing left to identify the rows they own. Authorizations with no accounts yet
-are still listed and removable. If that read fails, nothing is removed — unless a
-prior attempt already removed the provider auth and left a process-local pending
-cleanup, in which case a retry finishes the local delete. Local rows are deleted
-only after the provider confirms the authorization is gone, so a failed removal
-never leaves a user with deleted history and a live connection that would
-re-import it.
+are still listed and removable. If that read fails, nothing is removed. Local
+rows are deleted only after the provider confirms the authorization is gone, so a
+failed removal never leaves a user with deleted history and a live connection
+that would re-import it.
+
+If the removal succeeded but the local cleanup did not — a database blip, say —
+retrying the same request completes it. The route remembers the captured account
+ids process-locally, and falls back to the persisted snapshot when that memory is
+gone (a restart, or a retry that lands on another instance): snapshot accounts
+carry `brokerageAuthorizationId`, which identifies the rows once the provider has
+stopped reporting them.
 
 Reconnecting re-imports from the brokerage under new SnapTrade account ids, so
 custom account names do not survive a disconnect.
