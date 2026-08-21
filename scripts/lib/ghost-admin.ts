@@ -125,13 +125,22 @@ export class GhostAdmin {
 
   /**
    * Published posts with their tags and plaintext body, newest first.
+   *
+   * `since` is applied by Ghost rather than by the caller: the bodies are large,
+   * and filtering afterwards would mean paginating the whole catalogue on every
+   * run to keep the handful of posts published this week.
    */
-  async publishedPosts(): Promise<GhostPostRecord[]> {
+  async publishedPosts(since?: Date): Promise<GhostPostRecord[]> {
+    const filter = since
+      ? `status:published+published_at:>='${since.toISOString()}'`
+      : 'status:published';
+
     const collected: GhostPostRecord[] = [];
     for (let page = 1; ; page++) {
       const res = await this.request<{ posts: GhostPostRecord[]; meta?: { pagination?: { pages: number } } }>(
         'GET',
-        `/posts/?limit=100&page=${page}&filter=status:published&include=tags&formats=plaintext&order=published_at%20DESC`,
+        `/posts/?limit=100&page=${page}&filter=${encodeURIComponent(filter)}` +
+        '&include=tags&formats=plaintext&order=published_at%20DESC',
       );
       collected.push(...(res.posts || []));
       if (page >= (res.meta?.pagination?.pages ?? 1)) return collected;

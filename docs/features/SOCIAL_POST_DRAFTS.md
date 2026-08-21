@@ -38,7 +38,8 @@ triggered manually with a dry-run toggle and a custom window.
 
 A post qualifies when it is published, was published inside the recency window
 (7 days by default), and does not already carry the Ghost internal tag
-`#social-sent`.
+`#social-sent`. The window is applied by Ghost rather than after fetching, so
+the job stays the same size as the blog grows.
 
 The recency window matters on the first run: without it, every post in the back
 catalogue would qualify at once and generate an inbox full of email. Widen it
@@ -73,8 +74,10 @@ X does not count characters, it weights them: only the code point ranges in its
 published default configuration cost 1, and everything outside them — emoji,
 CJK, most non-Latin scripts — costs 2. Counting code points instead would
 under-report an emoji-heavy draft by nearly half and wave through a post X
-rejects. Bluesky counts code points, so an emoji costs 1 there rather than the 2
-that `String.length` reports.
+rejects. An emoji built from several joined code points — a family, a flag, a
+skin tone — is one grapheme and costs 2 in total rather than 2 apiece, so the
+text is segmented before weighting. Bluesky counts code points, so an emoji
+costs 1 there rather than the 2 that `String.length` reports.
 
 ## Drafts are checked before they are sent
 

@@ -63,11 +63,54 @@ const X_SINGLE_WEIGHT_RANGES: ReadonlyArray<readonly [number, number]> = [
   [8242, 8247],
 ];
 
+/**
+ * `Intl.Segmenter` ships in every Node version this repo runs on, but its types
+ * arrive with ES2022 and the project compiles against ES2020. Declared locally
+ * rather than widening `lib` for the whole codebase.
+ */
+interface GraphemeSegmenter {
+  segment(input: string): Iterable<{ segment: string }>;
+}
+declare const Intl: {
+  Segmenter: new (locale: string, options: { granularity: 'grapheme' }) => GraphemeSegmenter;
+};
+
+const GRAPHEME_SEGMENTER = new Intl.Segmenter('en', { granularity: 'grapheme' });
+
+function isSingleWeight(point: number): boolean {
+  return X_SINGLE_WEIGHT_RANGES.some(([start, end]) => point >= start && point <= end);
+}
+
+/**
+ * True for a grapheme that is an emoji rather than, say, a letter with a
+ * combining accent. Only emoji are collapsed below, so accented text keeps its
+ * per-code-point weighting.
+ */
+function isEmojiCluster(points: string[]): boolean {
+  return points.some((character) => {
+    const point = character.codePointAt(0) as number;
+    return point >= 0x1f000                          // pictographs and beyond
+      || point === 0x200d                            // zero-width joiner
+      || point === 0xfe0f                            // emoji presentation selector
+      || (point >= 0x1f1e6 && point <= 0x1f1ff);     // regional indicators (flags)
+  });
+}
+
 function xWeightedLength(text: string): number {
   let total = 0;
-  for (const character of text) {
-    const point = character.codePointAt(0) as number;
-    total += X_SINGLE_WEIGHT_RANGES.some(([start, end]) => point >= start && point <= end) ? 1 : 2;
+  for (const { segment } of GRAPHEME_SEGMENTER.segment(text)) {
+    const points = [...segment];
+
+    // X prices a whole emoji sequence as one double-weight unit, so a family or
+    // flag built from several joined code points costs 2 rather than 2 apiece.
+    if (points.length > 1 && isEmojiCluster(points)) {
+      total += 2;
+      continue;
+    }
+
+    for (const character of points) {
+      total += isSingleWeight(character.codePointAt(0) as number) ? 1 : 2;
+    }
   }
   return total;
 }
@@ -364,18 +407,16 @@ async function main(): Promise<void> {
   const ghost = new GhostAdmin(GHOST_ADMIN_API_URL.replace(/\/$/, ''), GHOST_ADMIN_API_KEY);
   await ghost.calibrateClock();
 
-  const cutoff = Date.now() - options.sinceDays * 24 * 60 * 60 * 1000;
-  const published = await ghost.publishedPosts();
-  const pending = published.filter((post) => {
-    if (hasTag(post, SENT_TAG)) return false;
-    // Posts older than the window are treated as already handled. Without this
-    // a first run would email the whole back catalogue.
-    return post.published_at ? new Date(post.published_at).getTime() >= cutoff : false;
-  });
+  // Posts older than the window are treated as already handled; without it a
+  // first run would email the whole back catalogue. Ghost applies the bound so
+  // the job stays the same size as the blog grows.
+  const cutoff = new Date(Date.now() - options.sinceDays * 24 * 60 * 60 * 1000);
+  const recent = await ghost.publishedPosts(cutoff);
+  const pending = recent.filter((post) => !hasTag(post, SENT_TAG));
 
   console.log(
-    `${published.length} published post(s); ${pending.length} awaiting social copy ` +
-    `(published in the last ${options.sinceDays} day(s), not yet sent)\n`,
+    `${recent.length} post(s) published in the last ${options.sinceDays} day(s); ` +
+    `${pending.length} awaiting social copy\n`,
   );
   if (pending.length === 0) return;
 
@@ -429,7 +470,19 @@ async function main(): Promise<void> {
 
       // Tagged only after the email is away, so a send failure is retried on
       // the next run rather than being silently dropped.
-      await ghost.addTags(post, [SENT_TAG]);
+      try {
+        await ghost.addTags(post, [SENT_TAG]);
+      } catch (error) {
+        // The email has already gone out. Resend's idempotency key covers the
+        // retry for 24 hours; past that a genuine duplicate is possible, so say
+        // plainly what to do rather than leaving it to be rediscovered.
+        throw new Error(
+          `email sent but tagging failed: ${(error as Error).message}\n` +
+          `    Add the tag "${SENT_TAG}" to this post in Ghost within 24 hours, ` +
+          'or the next run may email it a second time.',
+        );
+      }
+
       sent++;
       console.log(`  + emailed and marked: ${post.title}`);
     } catch (error) {
