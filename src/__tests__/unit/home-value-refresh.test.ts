@@ -31,7 +31,7 @@ import {
   HOME_VALUE_MIN_REFRESH_AGE_MS,
   runHomeValueRefresh,
 } from '../../services/home-value-refresh';
-import { REFRESH_ELIGIBLE_SUBSCRIPTION_STATUSES } from '../../services/subscription-refresh-eligibility';
+import { ACCESS_BLOCKING_SUBSCRIPTION_STATUSES } from '../../services/subscription-refresh-eligibility';
 
 const daysAgo = (days: number) => new Date(Date.now() - days * 24 * 60 * 60 * 1000);
 
@@ -182,7 +182,7 @@ describe('HomeValueRefreshService.refreshAllHomeValues', () => {
       where: {
         userId: { not: null },
         isActive: true,
-        user: { is: { subscriptionStatus: { in: [...REFRESH_ELIGIBLE_SUBSCRIPTION_STATUSES] } } },
+        user: { is: { subscriptionStatus: { notIn: [...ACCESS_BLOCKING_SUBSCRIPTION_STATUSES] } } },
       },
       select: { userId: true },
     });

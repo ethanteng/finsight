@@ -1,6 +1,7 @@
 import { describe, expect, it } from '@jest/globals';
 import {
-  REFRESH_ELIGIBLE_SUBSCRIPTION_STATUSES,
+  ACCESS_BLOCKING_SUBSCRIPTION_STATUSES,
+  blocksProductAccess,
   isRefreshEligibleSubscriptionStatus,
   refreshEligibleSubscriptionWhere,
 } from '../../services/subscription-refresh-eligibility';
@@ -17,8 +18,8 @@ describe('scheduled refresh subscription eligibility', () => {
   it('keeps paying, trialing and grace-period subscribers eligible', () => {
     expect(isRefreshEligibleSubscriptionStatus('active')).toBe(true);
     expect(isRefreshEligibleSubscriptionStatus('trialing')).toBe(true);
-    // subscriptionAuthMiddleware still grants past_due users limited access,
-    // so they can sign in and must not be shown frozen figures.
+    // past_due users can still sign in, so they must not be shown frozen
+    // figures while Stripe retries their payment.
     expect(isRefreshEligibleSubscriptionStatus('past_due')).toBe(true);
   });
 
@@ -29,26 +30,44 @@ describe('scheduled refresh subscription eligibility', () => {
     expect(isRefreshEligibleSubscriptionStatus('inactive')).toBe(true);
   });
 
-  // An allowlist, not a `!== 'canceled'` denylist: a subscription that never
-  // started paying or has stopped is not owed nightly provider spend either.
-  it('excludes subscriptions that never started paying or have stopped', () => {
-    expect(isRefreshEligibleSubscriptionStatus('unpaid')).toBe(false);
-    expect(isRefreshEligibleSubscriptionStatus('incomplete')).toBe(false);
-    expect(isRefreshEligibleSubscriptionStatus('incomplete_expired')).toBe(false);
-    expect(isRefreshEligibleSubscriptionStatus('paused')).toBe(false);
+  // These are not paying, but authenticateUser still admits them, so they can
+  // sign in. Excluding them from the refresh would leave a logged-in user
+  // reading transactions, balances and a home value that silently stopped
+  // updating -- strictly worse than spending the provider call.
+  it('keeps every status that authentication still admits', () => {
+    expect(isRefreshEligibleSubscriptionStatus('unpaid')).toBe(true);
+    expect(isRefreshEligibleSubscriptionStatus('incomplete')).toBe(true);
+    expect(isRefreshEligibleSubscriptionStatus('incomplete_expired')).toBe(true);
+    expect(isRefreshEligibleSubscriptionStatus('paused')).toBe(true);
   });
 
-  // A user row read without selecting subscriptionStatus, or a status Stripe
-  // adds later, must not fall through as eligible.
-  it('treats an unknown or missing status as ineligible', () => {
-    expect(isRefreshEligibleSubscriptionStatus(null)).toBe(false);
-    expect(isRefreshEligibleSubscriptionStatus(undefined)).toBe(false);
-    expect(isRefreshEligibleSubscriptionStatus('something_new')).toBe(false);
+  // The invariant the whole module exists to hold: nobody may be admitted to
+  // the product and denied a refresh. Anything blocked must be ineligible and
+  // anything ineligible must be blocked.
+  it('is the exact complement of what blocks product access', () => {
+    const statuses = [
+      'active', 'trialing', 'past_due', 'inactive', 'canceled',
+      'unpaid', 'incomplete', 'incomplete_expired', 'paused', 'something_new',
+    ];
+
+    for (const status of statuses) {
+      expect(isRefreshEligibleSubscriptionStatus(status)).toBe(!blocksProductAccess(status));
+    }
   });
 
-  it('exposes the same statuses as a Prisma where fragment', () => {
+  // A status Stripe adds later defaults to "still a customer" on both sides at
+  // once, so it keeps refreshing *and* keeps its access. Failing open here is
+  // only safe because it fails open there too.
+  it('treats an unknown or missing status as still eligible', () => {
+    expect(isRefreshEligibleSubscriptionStatus(null)).toBe(true);
+    expect(isRefreshEligibleSubscriptionStatus(undefined)).toBe(true);
+    expect(isRefreshEligibleSubscriptionStatus('something_new')).toBe(true);
+    expect(blocksProductAccess('something_new')).toBe(false);
+  });
+
+  it('excludes exactly the access-blocking statuses as a Prisma where fragment', () => {
     expect(refreshEligibleSubscriptionWhere()).toEqual({
-      subscriptionStatus: { in: [...REFRESH_ELIGIBLE_SUBSCRIPTION_STATUSES] },
+      subscriptionStatus: { notIn: [...ACCESS_BLOCKING_SUBSCRIPTION_STATUSES] },
     });
   });
 
@@ -60,6 +79,6 @@ describe('scheduled refresh subscription eligibility', () => {
     expect(first).toEqual(second);
     // Spread into a larger `where` by several callers; a shared array would let
     // one caller's mutation silently change every other cron's population.
-    expect(first.subscriptionStatus.in).not.toBe(second.subscriptionStatus.in);
+    expect(first.subscriptionStatus.notIn).not.toBe(second.subscriptionStatus.notIn);
   });
 });

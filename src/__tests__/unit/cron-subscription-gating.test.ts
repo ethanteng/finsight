@@ -41,9 +41,9 @@ jest.mock('../../profile/manager', () => ({
 
 import { TransactionSyncService } from '../../services/transaction-sync-service';
 import { HomeValueRefreshService } from '../../services/home-value-refresh';
-import { REFRESH_ELIGIBLE_SUBSCRIPTION_STATUSES } from '../../services/subscription-refresh-eligibility';
+import { ACCESS_BLOCKING_SUBSCRIPTION_STATUSES } from '../../services/subscription-refresh-eligibility';
 
-const ELIGIBLE = { subscriptionStatus: { in: [...REFRESH_ELIGIBLE_SUBSCRIPTION_STATUSES] } };
+const ELIGIBLE = { subscriptionStatus: { notIn: [...ACCESS_BLOCKING_SUBSCRIPTION_STATUSES] } };
 
 describe('TransactionSyncService.syncAllActiveTokens subscription gating', () => {
   beforeEach(() => {
@@ -75,8 +75,8 @@ describe('TransactionSyncService.syncAllActiveTokens subscription gating', () =>
     await TransactionSyncService.syncAllActiveTokens();
 
     const where = prisma.accessToken.findMany.mock.calls[0][0].where;
-    expect(JSON.stringify(where)).toContain('subscriptionStatus');
-    expect(JSON.stringify(where)).not.toContain('canceled');
+    expect(where.OR).toContainEqual({ user: { is: ELIGIBLE } });
+    expect(ELIGIBLE.subscriptionStatus.notIn).toContain('canceled');
   });
 
   // A token with no owner has no subscription to judge it by. It was synced
