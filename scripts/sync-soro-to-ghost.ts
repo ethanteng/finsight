@@ -40,7 +40,10 @@ import Anthropic from '@anthropic-ai/sdk';
 import * as jwt from 'jsonwebtoken';
 import * as dotenv from 'dotenv';
 
-dotenv.config();
+// The backend reads `.env.local` at the repo root rather than `.env`; values
+// already in the environment (as in CI) are left untouched by both calls.
+dotenv.config({ path: '.env.local', quiet: true });
+dotenv.config({ quiet: true });
 
 const GHOST_API_VERSION = 'v5.0';
 const TAGGING_MODEL = process.env.SORO_TAGGING_MODEL || 'claude-sonnet-5';
@@ -216,10 +219,14 @@ class GhostAdmin {
       throw new Error('GHOST_ADMIN_API_KEY must be in `id:secret` form (copy it from the Ghost integration page)');
     }
     const now = Math.floor(Date.now() / 1000) + this.skewSeconds;
+    // `noTimestamp` must not be set here: jsonwebtoken implements it by
+    // deleting `iat` from the payload even when the claim was supplied
+    // explicitly, which would drop the skew-corrected timestamp Ghost requires
+    // and make every authenticated request fail.
     return jwt.sign(
       { iat: now, exp: now + 300, aud: '/admin/' },
       Buffer.from(secret, 'hex'),
-      { algorithm: 'HS256', keyid: id, noTimestamp: true },
+      { algorithm: 'HS256', keyid: id },
     );
   }
 
@@ -266,6 +273,23 @@ class GhostAdmin {
     return (res.tags || [])
       .filter((tag) => tag.name && tag.visibility !== 'internal' && !tag.name.startsWith('#'))
       .map((tag) => tag.name as string);
+  }
+
+  /**
+   * Remove a post that could not be completed, so its feed item is retried on
+   * the next run rather than being skipped forever by its dedupe tag.
+   */
+  async deletePost(id: string, slug: string): Promise<void> {
+    try {
+      await this.request('DELETE', `/posts/${id}/`);
+    } catch (error) {
+      // Surfaced rather than swallowed: the post is now both broken and
+      // permanently skipped, which needs a person.
+      console.error(
+        `  ! could not roll back partial post "${slug}" (${id}): ${(error as Error).message}\n` +
+        '    Delete it in Ghost by hand, or the next run will skip this item.',
+      );
+    }
   }
 
   /**
@@ -471,16 +495,18 @@ async function importItem(
   const canonicalUrl = `${CANONICAL_ORIGIN}/blog/${item.slug}`;
   const featureImage = item.imageUrl ? (await ghost.uploadImage(item.imageUrl, item.slug) ?? item.imageUrl) : null;
 
-  // Create the post with its metadata. `canonical_url` must be set here: the
-  // same Ghost content is served from blog.asklinc.com and asklinc.com/blog,
-  // and without it Ghost self-canonicalises to the wrong domain and splits the
-  // ranking signal between the two.
+  // Always created as a draft, whatever the requested status. The body is not
+  // usable until the HTML conversion below runs, so publishing here would put a
+  // post with no content on the live site for the width of two requests.
+  // `canonical_url` must be set at creation: the same Ghost content is served
+  // from blog.asklinc.com and asklinc.com/blog, and without it Ghost
+  // self-canonicalises to the wrong domain and splits the ranking signal.
   const created = await ghost.request<{ posts: GhostPostRecord[] }>('POST', '/posts/', {
     posts: [{
       title: item.title,
       slug: item.slug,
       html: item.html,
-      status,
+      status: 'draft',
       meta_title: item.title,
       meta_description: item.description?.slice(0, META_DESCRIPTION_MAX) || undefined,
       custom_excerpt: item.description?.slice(0, META_DESCRIPTION_MAX) || undefined,
@@ -496,27 +522,46 @@ async function importItem(
 
   const post = created.posts[0];
 
-  // Ghost 5.x stores Lexical internally and only converts an `html` field when
-  // the source is declared explicitly. Sending `canonical_url` alongside
-  // `?source=html` is rejected, so it stays on the POST above and survives —
-  // Ghost applies partial updates.
-  await ghost.request('PUT', `/posts/${post.id}/?source=html`, {
-    posts: [{ title: item.title, html: item.html, updated_at: post.updated_at }],
-  });
+  // From here the post exists in Ghost carrying its dedupe tag, so a failure
+  // that left it in place would be skipped by every later run and never
+  // repaired. Roll it back instead, which makes the item eligible again next
+  // time.
+  try {
+    // Ghost 5.x stores Lexical internally and only converts an `html` field
+    // when the source is declared explicitly. Sending `canonical_url` alongside
+    // `?source=html` is rejected, so it stays on the POST above and survives —
+    // Ghost applies partial updates.
+    const converted = await ghost.request<{ posts: GhostPostRecord[] }>('PUT', `/posts/${post.id}/?source=html`, {
+      posts: [{ title: item.title, html: item.html, updated_at: post.updated_at }],
+    });
 
-  // The PUT response can report an empty `html` even on success, so confirm the
-  // stored Lexical is non-empty rather than trusting the write.
-  const stored = await ghost.request<{ posts: GhostPostRecord & { lexical?: string; canonical_url?: string }[] }>(
-    'GET',
-    `/posts/${post.id}/?formats=html,lexical`,
-  );
-  const verified = (stored.posts as unknown as Array<{ lexical?: string; canonical_url?: string }>)[0];
+    // The PUT response can report an empty `html` even on success, so confirm
+    // the stored Lexical is non-empty rather than trusting the write.
+    const stored = await ghost.request<{ posts: Array<{ lexical?: string; canonical_url?: string; updated_at?: string }> }>(
+      'GET',
+      `/posts/${post.id}/?formats=html,lexical`,
+    );
+    const verified = stored.posts[0];
 
-  if (!verified?.lexical || verified.lexical.length === 0) {
-    throw new Error(`post ${item.slug} saved with empty body — check the HTML source conversion`);
-  }
-  if (verified.canonical_url !== canonicalUrl) {
-    throw new Error(`post ${item.slug} has canonical_url "${verified.canonical_url}", expected "${canonicalUrl}"`);
+    if (!verified?.lexical || verified.lexical.length === 0) {
+      throw new Error('saved with an empty body — check the HTML source conversion');
+    }
+    if (verified.canonical_url !== canonicalUrl) {
+      throw new Error(`canonical_url is "${verified.canonical_url}", expected "${canonicalUrl}"`);
+    }
+
+    // Only now, with the body confirmed, is the post allowed to go live.
+    if (status === 'published') {
+      await ghost.request('PUT', `/posts/${post.id}/`, {
+        posts: [{
+          status: 'published',
+          updated_at: verified.updated_at ?? converted.posts?.[0]?.updated_at ?? post.updated_at,
+        }],
+      });
+    }
+  } catch (error) {
+    await ghost.deletePost(post.id, item.slug);
+    throw new Error(`post ${item.slug} ${(error as Error).message}`);
   }
 
   return post.id;
