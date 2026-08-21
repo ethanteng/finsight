@@ -51,8 +51,11 @@ category on the blog.
 
 That ordering leaves a narrow window: the email is accepted, then the tag write
 fails, and the next run tries the same post again. Sends therefore carry a
-Resend idempotency key stable per post, so the retry returns the original send
-instead of delivering a second copy of the same email.
+Resend idempotency key stable per post. A retry with the same body returns the
+original send; a retry with a regenerated draft (the model is non-deterministic)
+returns `invalid_idempotent_request`, which this script treats as already
+delivered so the `#social-sent` tag can still be applied. Either way the inbox
+does not get a second copy.
 
 ## Character limits are measured, not trusted
 

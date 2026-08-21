@@ -312,7 +312,7 @@ function emailHtml(post: GhostPostRecord, url: string, copy: SocialCopy): string
       Social copy ready
     </p>
     <h1 style="font:600 22px/1.3 system-ui,sans-serif;color:#111;margin:8px 0 4px">${escapeHtml(post.title || 'Untitled')}</h1>
-    <p style="font:400 14px system-ui,sans-serif;margin:0"><a href="${url}" style="color:#0a58ca">${url}</a></p>
+    <p style="font:400 14px system-ui,sans-serif;margin:0"><a href="${escapeHtml(url)}" style="color:#0a58ca">${escapeHtml(url)}</a></p>
     ${blocks}
     <p style="font:400 12px system-ui,sans-serif;color:#888;margin:32px 0 0;border-top:1px solid #e3e5e9;padding-top:16px">
       Generated for a newly published Ask Linc post. Character counts are measured the way each platform measures them —
@@ -398,6 +398,9 @@ async function main(): Promise<void> {
 
       if (options.dryRun || !resend) {
         printCopy(post, url, copy);
+        // Count toward --limit the same way a real send does; otherwise
+        // dry-run would draft every pending post regardless of --limit.
+        sent++;
         continue;
       }
 
@@ -410,10 +413,19 @@ async function main(): Promise<void> {
         // If the email is accepted but the Ghost tag write below fails, the
         // post stays untagged and the next run retries it. A key stable per
         // post makes Resend return the original send instead of delivering a
-        // second copy.
+        // second copy — but only when the body matches. A regenerated draft
+        // yields `invalid_idempotent_request` instead; that still means the
+        // first email went out, so we treat it as delivered and tag below.
         idempotencyKey: `social-${post.id}`,
       });
-      if (error) throw new Error(`Resend rejected the email: ${error.message}`);
+      if (error) {
+        if (error.name !== 'invalid_idempotent_request') {
+          throw new Error(`Resend rejected the email: ${error.message}`);
+        }
+        console.log(
+          `  ! Resend already accepted this post (idempotency key reuse with a new draft); tagging without re-sending`,
+        );
+      }
 
       // Tagged only after the email is away, so a send failure is retried on
       // the next run rather than being silently dropped.
