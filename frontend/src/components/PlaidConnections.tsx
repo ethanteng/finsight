@@ -25,7 +25,7 @@ interface PlaidConnection {
   institution: string;
   isActive?: boolean;
   lastError?: string | null;
-  lastRefreshed?: string | null;
+  lastUpdated?: string | null;
   accounts: PlaidConnectionAccount[];
 }
 
@@ -36,12 +36,18 @@ interface PlaidConnectionsProps {
   refreshKey?: number;
 }
 
-function formatRefreshed(value: string | null | undefined): string {
-  if (!value) return 'never refreshed';
+/**
+ * "updated", not "refreshed": this is when we last pulled data through the
+ * connection, which is not something the user did. "Refresh" reads as the
+ * manual action the SnapTrade connections offer, and conflating the two is how
+ * this line came to show a link date dressed up as a data date.
+ */
+function formatUpdated(value: string | null | undefined): string {
+  if (!value) return 'never updated';
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return 'never refreshed';
+  if (Number.isNaN(date.getTime())) return 'never updated';
   const sameYear = date.getFullYear() === new Date().getFullYear();
-  return `last refreshed ${date.toLocaleDateString('en-US', {
+  return `last updated ${date.toLocaleDateString('en-US', {
     month: 'short',
     day: 'numeric',
     ...(sameYear ? {} : { year: 'numeric' }),
@@ -155,7 +161,7 @@ export default function PlaidConnections({ onConnectionRemoved, refreshKey }: Pl
                     )}
                   </div>
                   <div className="mt-1 text-sm text-gray-400">
-                    {accountCount} {accountCount === 1 ? 'account' : 'accounts'} · {formatRefreshed(connection.lastRefreshed)}
+                    {accountCount} {accountCount === 1 ? 'account' : 'accounts'} · {formatUpdated(connection.lastUpdated)}
                   </div>
                   <div className="mt-1 break-words text-xs text-gray-500">
                     {connection.accounts

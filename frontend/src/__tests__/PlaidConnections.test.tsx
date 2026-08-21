@@ -9,7 +9,7 @@ const connections = [
     institution: 'Bank of America',
     isActive: true,
     lastError: null,
-    lastRefreshed: '2026-08-20T23:31:04.694Z',
+    lastUpdated: '2026-08-20T23:31:04.694Z',
     accounts: [
       { id: 'acct-1', name: 'Checking', mask: '4321' },
       { id: 'acct-2', name: 'Credit Card', mask: '9876' },
@@ -21,7 +21,7 @@ const connections = [
     institution: 'UFB Direct',
     isActive: false,
     lastError: 'ITEM_LOGIN_REQUIRED',
-    lastRefreshed: '2026-08-19T10:00:00.000Z',
+    lastUpdated: '2026-08-19T10:00:00.000Z',
     accounts: [{ id: 'acct-3', name: 'High APY Savings', mask: null }],
   },
 ];
@@ -61,6 +61,29 @@ describe('PlaidConnections', () => {
     expect(screen.getByText('UFB Direct')).toBeInTheDocument();
     expect(screen.getByText(/2 accounts/)).toBeInTheDocument();
     expect(screen.getByText(/1 account ·/)).toBeInTheDocument();
+  });
+
+  // "refreshed" is the manual action SnapTrade connections offer; this line is
+  // when data was last pulled, which the user did not ask for.
+  it('describes the timestamp as an update rather than a refresh', async () => {
+    render(<PlaidConnections />);
+
+    expect(await screen.findByText(/last updated Aug 20/)).toBeInTheDocument();
+    expect(screen.queryByText(/last refreshed/)).toBeNull();
+  });
+
+  it('says so plainly when a connection has never been updated', async () => {
+    global.fetch = jest.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        success: true,
+        data: { connections: [{ ...connections[0], lastUpdated: null }] },
+      }),
+    })) as unknown as typeof fetch;
+
+    render(<PlaidConnections />);
+
+    expect(await screen.findByText(/never updated/)).toBeInTheDocument();
   });
 
   it('flags a connection that has gone bad', async () => {
