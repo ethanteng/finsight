@@ -36,6 +36,8 @@ const accountFindMany = jest.fn();
 const accountDeleteMany = jest.fn();
 const transactionDeleteMany = jest.fn();
 const activityDeleteMany = jest.fn();
+const activityFindMany = jest.fn();
+const overrideDeleteMany = jest.fn();
 
 const app = express();
 app.use(express.json());
@@ -58,11 +60,13 @@ describe('SnapTrade per-institution disconnect', () => {
       financialSummarySnapshot: { findUnique: snapshotFindUnique },
       account: { findMany: accountFindMany, deleteMany: accountDeleteMany },
       transaction: { deleteMany: transactionDeleteMany },
-      snapTradeActivity: { deleteMany: activityDeleteMany },
+      snapTradeActivity: { deleteMany: activityDeleteMany, findMany: activityFindMany },
+      transactionCategoryOverride: { deleteMany: overrideDeleteMany },
       $transaction: async (callback: any) => callback({
         account: { findMany: accountFindMany, deleteMany: accountDeleteMany },
         transaction: { deleteMany: transactionDeleteMany },
-        snapTradeActivity: { deleteMany: activityDeleteMany },
+        snapTradeActivity: { deleteMany: activityDeleteMany, findMany: activityFindMany },
+        transactionCategoryOverride: { deleteMany: overrideDeleteMany },
       }),
     });
     snapTradeUserFindUnique.mockResolvedValue({ userId: 'user-1', userSecret: 'secret' });
@@ -82,6 +86,8 @@ describe('SnapTrade per-institution disconnect', () => {
     accountDeleteMany.mockResolvedValue({ count: 2 });
     transactionDeleteMany.mockResolvedValue({ count: 37 });
     activityDeleteMany.mockResolvedValue({ count: 411 });
+    activityFindMany.mockResolvedValue([{ activityId: 'act-1' }, { activityId: 'act-2' }]);
+    overrideDeleteMany.mockResolvedValue({ count: 1 });
   });
 
   describe('listing', () => {
@@ -160,7 +166,7 @@ describe('SnapTrade per-institution disconnect', () => {
       const deletedIds = accountDeleteMany.mock.calls[0][0].where.plaidAccountId.in;
       expect(deletedIds).toEqual(['snaptrade-acct-public-1', 'snaptrade-acct-public-2']);
       expect(deletedIds).not.toContain('snaptrade-acct-fidelity-1');
-      expect(response.body.data.removed).toEqual({ accounts: 2, transactions: 37, activities: 411 });
+      expect(response.body.data.removed).toEqual({ accounts: 2, transactions: 37, activities: 411, categoryOverrides: 1 });
     });
 
     // `Transaction.account` has no onDelete cascade, so an account still
@@ -184,6 +190,21 @@ describe('SnapTrade per-institution disconnect', () => {
         where: {
           snapTradeUser: { userId: 'user-1' },
           accountId: { in: ['snaptrade-acct-public-1', 'snaptrade-acct-public-2'] },
+        },
+      });
+    });
+
+    // SnapTrade activities reach `snapshot.transactions` as `snaptrade-{activityId}`
+    // and the override route gates only on snapshot membership, so one of these
+    // can already carry a user category. Leaving it behind would keep data for an
+    // institution the user asked to have removed.
+    it('clears category overrides for the disconnected institution transactions', async () => {
+      await request(app).delete('/snaptrade/connections/auth-public').expect(200);
+
+      expect(overrideDeleteMany).toHaveBeenCalledWith({
+        where: {
+          userId: 'user-1',
+          transactionId: { in: ['snaptrade-act-1', 'snaptrade-act-2'] },
         },
       });
     });
@@ -312,14 +333,16 @@ describe('SnapTrade per-institution disconnect', () => {
         financialSummarySnapshot: { findUnique: snapshotFindUnique },
         account: { findMany: accountFindMany, deleteMany: accountDeleteMany },
         transaction: { deleteMany: transactionDeleteMany },
-        snapTradeActivity: { deleteMany: activityDeleteMany },
+        snapTradeActivity: { deleteMany: activityDeleteMany, findMany: activityFindMany },
+        transactionCategoryOverride: { deleteMany: overrideDeleteMany },
         $transaction: async (callback: any) => {
           attempts += 1;
           if (attempts === 1) throw new Error('database unavailable');
           return callback({
             account: { findMany: accountFindMany, deleteMany: accountDeleteMany },
             transaction: { deleteMany: transactionDeleteMany },
-            snapTradeActivity: { deleteMany: activityDeleteMany },
+            snapTradeActivity: { deleteMany: activityDeleteMany, findMany: activityFindMany },
+        transactionCategoryOverride: { deleteMany: overrideDeleteMany },
           });
         },
       });
@@ -359,13 +382,15 @@ describe('SnapTrade per-institution disconnect', () => {
       accountDeleteMany.mockResolvedValue({ count: 0 });
       transactionDeleteMany.mockResolvedValue({ count: 0 });
       activityDeleteMany.mockResolvedValue({ count: 0 });
+      activityFindMany.mockResolvedValue([]);
+      overrideDeleteMany.mockResolvedValue({ count: 0 });
 
       const response = await request(app)
         .delete('/snaptrade/connections/auth-pending')
         .expect(200);
 
       expect(removeConnection).toHaveBeenCalledWith('user-1', 'secret', 'auth-pending');
-      expect(response.body.data.removed).toEqual({ accounts: 0, transactions: 0, activities: 0 });
+      expect(response.body.data.removed).toEqual({ accounts: 0, transactions: 0, activities: 0, categoryOverrides: 0 });
     });
   });
 });

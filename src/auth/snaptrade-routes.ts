@@ -792,6 +792,23 @@ router.delete('/connections/:authorizationId', requireAuth, async (req, res) => 
       const transactions = await tx.transaction.deleteMany({
         where: { accountId: { in: accountRowIds } },
       });
+      // Category overrides are keyed by provider transaction id, not by account,
+      // so they have to be resolved through the activities before those are
+      // deleted. SnapTrade activities do reach `snapshot.transactions` as
+      // `snaptrade-{activityId}`, and the override route gates only on snapshot
+      // membership -- so a user can already have overridden one of these, and
+      // leaving the row behind would keep data for an institution they asked to
+      // have removed.
+      const doomedActivities = await tx.snapTradeActivity.findMany({
+        where: { snapTradeUser: { userId }, accountId: { in: accountIds } },
+        select: { activityId: true },
+      });
+      const overrides = await tx.transactionCategoryOverride.deleteMany({
+        where: {
+          userId,
+          transactionId: { in: doomedActivities.map(activity => `snaptrade-${activity.activityId}`) },
+        },
+      });
       const activities = await tx.snapTradeActivity.deleteMany({
         where: { snapTradeUser: { userId }, accountId: { in: accountIds } },
       });
@@ -802,6 +819,7 @@ router.delete('/connections/:authorizationId', requireAuth, async (req, res) => 
         accounts: deletedAccounts.count,
         transactions: transactions.count,
         activities: activities.count,
+        categoryOverrides: overrides.count,
       };
     });
 
@@ -809,7 +827,8 @@ router.delete('/connections/:authorizationId', requireAuth, async (req, res) => 
 
     console.log(
       `🔌 SnapTrade: disconnected ${institution} for user ${userId} ` +
-      `(${removedRows.accounts} accounts, ${removedRows.transactions} transactions, ${removedRows.activities} activities removed)`
+      `(${removedRows.accounts} accounts, ${removedRows.transactions} transactions, ` +
+      `${removedRows.activities} activities, ${removedRows.categoryOverrides} category overrides removed)`
     );
 
     // The snapshot still holds this institution's accounts and balances, and

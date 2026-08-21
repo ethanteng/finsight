@@ -280,7 +280,8 @@ DELETE /snaptrade/connections/:authorizationId
 
 **Accounts & context → Connected institutions** exposes this as a per-institution
 **Disconnect**. It removes one brokerage authorization and only that
-institution's accounts, holdings, and activity history; every other connection,
+institution's accounts, holdings, activity history, and any category overrides
+the user set on its transactions; every other connection,
 and the user's SnapTrade registration, is left intact — so reconnecting costs a
 portal trip rather than a re-registration.
 
