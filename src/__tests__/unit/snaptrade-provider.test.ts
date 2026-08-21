@@ -51,6 +51,11 @@ describe('SnapTrade provider retrieval', () => {
       connectionDisabled: true,
       dataFreshnessMode: 'delayed',
     })]);
+    expect(result.data.authorizations).toEqual([expect.objectContaining({
+      id: 'connection-1',
+      disabled: true,
+      disabledAt: '2026-08-18T00:00:00Z',
+    })]);
     expect(fake.accountInformation.getAllUserHoldings).toBeUndefined();
   });
 
@@ -67,6 +72,7 @@ describe('SnapTrade provider retrieval', () => {
     expect(result.data.accounts[0].connectionDisabled).toBeUndefined();
     expect(result.data.accounts[0].connectionStatusUnavailable).toBe(true);
     expect(result.data.connectionStatusError).toContain('503 Service Unavailable');
+    expect(result.data.authorizations).toEqual([]);
   });
 
   it('treats a missing authorization record as unknown rather than enabled', async () => {

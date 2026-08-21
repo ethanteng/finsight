@@ -431,6 +431,60 @@ export class SnapTradeService {
     }
   }
 
+  /**
+   * Remove one brokerage authorization, leaving the user's other connections and
+   * their SnapTrade registration intact.
+   *
+   * The registration is deliberately kept: it is the identity every other
+   * connection hangs off, and keeping it means reconnecting this brokerage later
+   * costs a portal trip rather than a re-registration.
+   *
+   * Not wrapped in `this.read()` -- that retry policy is for idempotent reads,
+   * and this destroys a connection. A 404 is reported as success: the caller's
+   * goal is that the authorization no longer exists, and one already gone
+   * satisfies it. That also keeps a half-finished removal recoverable, since the
+   * local cleanup can be retried without the provider call blocking it.
+   */
+  async removeConnection(
+    userId: string,
+    userSecret: string,
+    authorizationId: string,
+  ): Promise<{ success: boolean; error?: string; status?: number; alreadyRemoved?: boolean }> {
+    try {
+      console.log('🔌 Removing SnapTrade brokerage authorization:', authorizationId);
+      await this.client.connections.removeBrokerageAuthorization({
+        authorizationId,
+        userId,
+        userSecret,
+      });
+      return { success: true };
+    } catch (error: any) {
+      const status = typeof error?.status === 'number'
+        ? error.status
+        : typeof error?.response?.status === 'number' ? error.response.status : undefined;
+      if (status === 404) {
+        console.warn(`⚠️ SnapTrade authorization ${authorizationId} was already gone; continuing with local cleanup`);
+        return { success: true, alreadyRemoved: true };
+      }
+      if (status === 401) {
+        console.warn(`⚠️ SnapTrade disconnect: 401 Unauthorized for user ${userId}`);
+        return {
+          success: false,
+          status,
+          error: 'SnapTrade credentials invalid or expired. Please reconnect your SnapTrade account.',
+        };
+      }
+      // The provider's message can name internal endpoints and ids and would
+      // reach the user verbatim. The detail stays in the log.
+      console.error('SnapTrade remove connection failed:', error);
+      return {
+        success: false,
+        status,
+        error: 'Could not disconnect this institution. Please try again later.',
+      };
+    }
+  }
+
   // Get user accounts
   async getUserAccounts(userId: string, userSecret: string): Promise<{ success: boolean; data?: any; error?: string }> {
     try {
@@ -499,10 +553,27 @@ export class SnapTradeService {
         }];
       });
       
+      // Authorizations are the connect/disconnect unit. Returning them alongside
+      // accounts lets callers list and remove a brokerage that has no accounts
+      // yet (pending or incomplete link) instead of inferring connections only
+      // from accounts and silently omitting those rows.
+      const authorizations = connectionsResult.ok
+        ? [...connections.values()].map((authorization: any) => ({
+            id: authorization.id,
+            institution: authorization?.brokerage?.display_name
+              || authorization?.brokerage?.name
+              || authorization?.name
+              || 'Unknown',
+            disabled: Boolean(authorization?.disabled),
+            disabledAt: authorization?.disabled_date || null,
+          }))
+        : [];
+
       return { 
         success: true, 
         data: {
           accounts,
+          authorizations,
           connectionStatusError,
         }
       };
