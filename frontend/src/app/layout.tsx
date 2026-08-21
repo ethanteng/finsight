@@ -2,7 +2,6 @@ import { Inter } from 'next/font/google'
 import './globals.css'
 import '../components/marketing/marketing.css'
 import StructuredData from '../components/StructuredData'
-import HeyCatchRouteGuard from '../components/HeyCatchRouteGuard'
 import type { Metadata } from 'next'
 
 const inter = Inter({ subsets: ['latin'] })
@@ -75,14 +74,7 @@ export default function RootLayout({
           }}
         />
         {/* End Google Tag Manager */}
-        
-        {/* Plausible Analytics - Privacy-focused analytics */}
-        <script 
-          defer 
-          data-domain="asklinc.com" 
-          src="https://plausible.io/js/script.js"
-        />
-        
+
         {/* Google Analytics 4 (Alternative) */}
         {/* 
         <script
@@ -115,7 +107,6 @@ export default function RootLayout({
           />
         </noscript>
         {/* End Google Tag Manager (noscript) */}
-        <HeyCatchRouteGuard />
         {children}
       </body>
     </html>

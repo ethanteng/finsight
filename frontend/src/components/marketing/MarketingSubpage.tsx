@@ -410,7 +410,7 @@ function LegalPage({ type }: { type: "privacy" | "terms" }) {
     ["3. Your privacy rights", "Depending on where you live, including California and the European Union, you may have rights to access, correct, export, or delete personal information and to limit certain processing. Contact hello@asklinc.com or use the in-app controls."],
     ["4. Storage and transfers", "Data is stored securely in the United States. When information is transferred internationally, Ask Linc applies appropriate safeguards."],
     ["5. Deletion and control", "You can disconnect accounts and request deletion at any time. Deleted data is permanently removed within 30 days, except for minimal records retained when required for security, fraud prevention, or legal compliance."],
-    ["6. Service providers", "Ask Linc uses service providers for account connections, AI analysis, payments, hosting, and privacy-conscious analytics. These include Plaid, SnapTrade, Anthropic, Google, Stripe, Render, Vercel, and Plausible."],
+    ["6. Service providers", "Ask Linc uses service providers for account connections, AI analysis, payments, and hosting. These include Plaid, SnapTrade, Anthropic, Google, Stripe, Render, and Vercel."],
     ["7. Contact", "For privacy questions or requests, email hello@asklinc.com."],
   ] : [
     ["1. What Ask Linc does", "Ask Linc connects to your accounts and helps you reason about your finances using your information and current market context."],

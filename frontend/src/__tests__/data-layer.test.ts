@@ -2,7 +2,6 @@ import { pushBeginCheckout } from "@/lib/dataLayer";
 
 type AnalyticsWindow = Window & typeof globalThis & {
   dataLayer?: Array<Record<string, unknown> | unknown[]>;
-  plausible?: jest.Mock;
   gtag?: jest.Mock;
 };
 
@@ -12,12 +11,10 @@ describe("begin_checkout analytics", () => {
   beforeEach(() => {
     window.history.replaceState({}, "", "/can-i-retire-with-2-million");
     analyticsWindow.dataLayer = [];
-    analyticsWindow.plausible = jest.fn();
     analyticsWindow.gtag = jest.fn();
   });
 
   afterEach(() => {
-    delete analyticsWindow.plausible;
     delete analyticsWindow.gtag;
   });
 
@@ -31,13 +28,6 @@ describe("begin_checkout analytics", () => {
       content_type: "retirement_answer",
     };
     expect(analyticsWindow.dataLayer).toContainEqual(event);
-    expect(analyticsWindow.plausible).toHaveBeenCalledWith("begin_checkout", {
-      props: {
-        page: "/can-i-retire-with-2-million",
-        cta_location: "answer_product_bridge",
-        content_type: "retirement_answer",
-      },
-    });
     expect(analyticsWindow.gtag).toHaveBeenCalledWith("event", "begin_checkout", event);
   });
 

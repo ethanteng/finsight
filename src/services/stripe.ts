@@ -11,7 +11,6 @@ import {
 } from '../types/stripe';
 import { getPrismaClient } from '../prisma-client';
 import { sendWelcomeEmail, sendTierChangeEmail, sendCancellationEmail } from './stripe-email';
-import { analytics } from '../analytics/heycatch';
 
 // How many of an account's newest subscriptions getUserSubscriptionStatus reads
 // before it has to ask for a working one explicitly.
@@ -350,7 +349,7 @@ export class StripeService {
 
     // Claim first delivery with an atomic insert so a concurrent webhook, a
     // retried registration, or a reloaded success page cannot repeat the
-    // welcome email and start analytics.
+    // welcome email.
     let isNewSubscription = false;
     try {
       await prisma.subscription.create({
@@ -422,13 +421,6 @@ export class StripeService {
       } catch (emailError) {
         console.error(`Failed to send welcome email to ${email}:`, emailError);
         // Don't fail the caller if email fails
-      }
-
-      try {
-        await analytics.setIdentity(userId, { email, plan: tier });
-        await analytics.trackEvent('subscription_started', { plan: tier }, { userId });
-      } catch (analyticsError) {
-        console.error(`Failed to record subscription_started for ${email}:`, analyticsError);
       }
     }
 
@@ -537,7 +529,7 @@ export class StripeService {
       }
 
       // Registration or another delivery created the record first. Continue
-      // syncing current Stripe state, but do not repeat welcome/analytics.
+      // syncing current Stripe state, but do not repeat the welcome email.
       await prisma.subscription.update({
         where: { stripeSubscriptionId: subscriptionId },
         data: subscriptionData
@@ -572,15 +564,8 @@ export class StripeService {
         console.error(`Failed to send welcome email to ${user.email}:`, emailError);
         // Don't fail the webhook if email fails
       }
-
-      await analytics.setIdentity(user.id, { email: user.email, plan: tier });
-      await analytics.trackEvent(
-        'subscription_started',
-        { plan: tier },
-        { userId: user.id },
-      );
     } else {
-      console.log(`Subscription ${subscriptionId} already exists; skipped welcome and start analytics`);
+      console.log(`Subscription ${subscriptionId} already exists; skipped welcome email`);
     }
 
     console.log(`Subscription ${subscriptionId} activated for user ${user.id}`);
@@ -761,28 +746,6 @@ export class StripeService {
       } else {
         console.log(`Skipping tier change email - no tier change detected`);
       }
-
-      if (wasJustCancelled) {
-        await analytics.setIdentity(subscriptionRecord.user.id, {
-          email: subscriptionRecord.user.email,
-          plan: finalTier,
-        });
-        await analytics.trackEvent(
-          'subscription_cancelled',
-          { plan: finalTier },
-          { userId: subscriptionRecord.user.id },
-        );
-      } else if (originalTier !== finalTier) {
-        await analytics.setIdentity(subscriptionRecord.user.id, {
-          email: subscriptionRecord.user.email,
-          plan: finalTier,
-        });
-        await analytics.trackEvent(
-          'subscription_updated',
-          { plan: finalTier, previous_plan: originalTier },
-          { userId: subscriptionRecord.user.id },
-        );
-      }
     }
 
     console.log(`Subscription ${subscriptionId} updated successfully`);
@@ -891,16 +854,6 @@ export class StripeService {
           console.error(`Failed to send cancellation email to ${subscriptionRecord.user.email}:`, emailError);
           // Don't fail the webhook if email fails
         }
-
-        await analytics.setIdentity(subscriptionRecord.user.id, {
-          email: subscriptionRecord.user.email,
-          plan: oldTier,
-        });
-        await analytics.trackEvent(
-          'subscription_cancelled',
-          { plan: oldTier },
-          { userId: subscriptionRecord.user.id },
-        );
       }
     }
 
@@ -1004,17 +957,6 @@ export class StripeService {
             subscriptionStatus
           );
         }
-
-        const plan = subscriptionRecord.tier || subscriptionRecord.user.tier || 'unknown';
-        await analytics.setIdentity(subscriptionRecord.user.id, {
-          email: subscriptionRecord.user.email,
-          plan,
-        });
-        await analytics.trackEvent(
-          'payment_succeeded',
-          { plan },
-          { userId: subscriptionRecord.user.id },
-        );
       }
     }
   }

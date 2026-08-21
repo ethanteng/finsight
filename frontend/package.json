@@ -13,7 +13,6 @@
     "test:coverage": "jest --coverage"
   },
   "dependencies": {
-    "@heycatch/sdk": "^0.7.0",
     "@radix-ui/react-slot": "^1.2.3",
     "@sentry/nextjs": "^10.70.0",
     "@tailwindcss/typography": "^0.5.16",

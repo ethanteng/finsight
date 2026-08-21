@@ -3,13 +3,8 @@
 import { useEffect } from 'react';
 
 interface AnalyticsProps {
-  type: 'plausible' | 'google-analytics';
-  domain?: string;
+  type: 'google-analytics';
   gaId?: string;
-}
-
-interface PlausibleEvent {
-  (eventName: string, options?: { props?: Record<string, unknown> }): void;
 }
 
 interface GtagEvent {
@@ -18,17 +13,13 @@ interface GtagEvent {
 
 declare global {
   interface Window {
-    plausible?: PlausibleEvent;
     gtag?: GtagEvent;
   }
 }
 
-export default function Analytics({ type, domain = 'asklinc.com', gaId }: AnalyticsProps) {
+export default function Analytics({ type, gaId }: AnalyticsProps) {
   useEffect(() => {
-    if (type === 'plausible') {
-      // Plausible Analytics is loaded via script tag in layout
-      console.log('Plausible Analytics enabled for domain:', domain);
-    } else if (type === 'google-analytics' && gaId) {
+    if (type === 'google-analytics' && gaId) {
       // Google Analytics 4
       const script1 = document.createElement('script');
       script1.async = true;
@@ -47,7 +38,7 @@ export default function Analytics({ type, domain = 'asklinc.com', gaId }: Analyt
       `;
       document.head.appendChild(script2);
     }
-  }, [type, domain, gaId]);
+  }, [type, gaId]);
 
   return null;
 }
@@ -55,14 +46,6 @@ export default function Analytics({ type, domain = 'asklinc.com', gaId }: Analyt
 // Custom hook for tracking events
 export const useAnalytics = () => {
   const trackEvent = (eventName: string, properties?: Record<string, unknown>) => {
-    // Track with Plausible (props must be Record<string, string>)
-    if (typeof window !== 'undefined' && window.plausible) {
-      const props = properties
-        ? Object.fromEntries(Object.entries(properties).map(([k, v]) => [k, String(v ?? '')]))
-        : undefined;
-      window.plausible(eventName, props ? { props } : undefined);
-    }
-    
     // Track with Google Analytics
     if (typeof window !== 'undefined' && window.gtag) {
       window.gtag('event', eventName, properties);
@@ -70,7 +53,6 @@ export const useAnalytics = () => {
   };
 
   const trackPageView = (url: string) => {
-    // Plausible tracks pageviews automatically
     // Google Analytics 4 tracks pageviews automatically
     console.log('Page view tracked:', url);
   };

@@ -1,7 +1,4 @@
 import * as Sentry from '@sentry/nextjs';
-import { analytics } from '@heycatch/sdk';
-import { HEYCATCH_INIT_CONFIG } from './src/lib/heycatch-config';
-import { isHeyCatchEnabledPath } from './src/lib/heycatch-paths';
 import {
   scrubSentryBreadcrumb,
   scrubSentryEvent,
@@ -41,9 +38,5 @@ Sentry.init({
   beforeSendTransaction: scrubSentryEvent,
   beforeSendSpan: scrubSentrySpan,
 });
-
-if (isHeyCatchEnabledPath(globalThis.location.pathname)) {
-  analytics.init(HEYCATCH_INIT_CONFIG);
-}
 
 export const onRouterTransitionStart = Sentry.captureRouterTransitionStart;
