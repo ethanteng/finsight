@@ -58,6 +58,7 @@ import { setupSnapTradeRoutes } from './auth/snaptrade-routes';
 
 import { getPrismaClient } from './prisma-client';
 import { removePlaidItems, type PlaidItemRemovalSummary } from './services/plaid-item-removal';
+import { deleteTransactionsWithOverrides } from './services/transaction-cleanup';
 
 /**
  * Revoke every Plaid Item this user has before their access tokens are deleted.
@@ -888,14 +889,19 @@ app.get('/sync/status', async (req: Request, res: Response) => {
         // would leave bank accounts looking like hand-entered ones. Same order as
         // `/plaid/disconnect_accounts`. Transactions before accounts because
         // `Transaction.account` has no cascade.
-        await prisma.transaction.deleteMany({
-          where: { account: { userId, accessTokenId: { in: revokedTokenIds } } },
+        //
+        // Category overrides go with the transactions they annotate. They are
+        // keyed by provider transaction id with no foreign key, and this route
+        // keeps the user, so anything left behind survives for the life of the
+        // account pointing at transactions that no longer exist.
+        await deleteTransactionsWithOverrides(prisma, userId, {
+          account: { userId, accessTokenId: { in: revokedTokenIds } },
         });
         await prisma.account.deleteMany({
           where: { userId, accessTokenId: { in: revokedTokenIds } },
         });
-        await prisma.transaction.deleteMany({
-          where: { account: { userId, accessTokenId: null } },
+        await deleteTransactionsWithOverrides(prisma, userId, {
+          account: { userId, accessTokenId: null },
         });
         await prisma.account.deleteMany({
           where: { userId, accessTokenId: null },

@@ -14,14 +14,17 @@ jest.mock('../../plaid', () => ({ plaidClient: { itemRemove } }));
 const accessTokenFindMany = jest.fn();
 const accessTokenDeleteMany = jest.fn();
 const accountDeleteMany = jest.fn();
+const transactionFindMany = jest.fn();
 const transactionDeleteMany = jest.fn();
+const overrideDeleteMany = jest.fn();
 const syncStatusDeleteMany = jest.fn();
 const snapTradeUserDeleteMany = jest.fn();
 
 const prisma = {
   accessToken: { findMany: accessTokenFindMany, deleteMany: accessTokenDeleteMany },
   account: { deleteMany: accountDeleteMany },
-  transaction: { deleteMany: transactionDeleteMany },
+  transaction: { findMany: transactionFindMany, deleteMany: transactionDeleteMany },
+  transactionCategoryOverride: { deleteMany: overrideDeleteMany },
   syncStatus: { deleteMany: syncStatusDeleteMany },
   snapTradeUser: { deleteMany: snapTradeUserDeleteMany },
 };
@@ -29,6 +32,7 @@ const prisma = {
 jest.mock('../../prisma-client', () => ({ getPrismaClient: () => prisma }));
 
 import { removePlaidItems } from '../../services/plaid-item-removal';
+import { deleteTransactionsWithOverrides } from '../../services/transaction-cleanup';
 
 function plaidError(errorCode: string) {
   return Object.assign(new Error(errorCode), { response: { data: { error_code: errorCode } } });
@@ -49,9 +53,9 @@ async function disconnectAccounts(userId: string) {
 
   // Accounts/transactions before tokens: AccessToken delete SetNulls accessTokenId,
   // which would make the revoked-id filters miss and risk orphan bank accounts.
-  await prisma.transaction.deleteMany({ where: { account: { userId, accessTokenId: { in: revokedTokenIds } } } });
+  await deleteTransactionsWithOverrides(prisma as any, userId, { account: { userId, accessTokenId: { in: revokedTokenIds } } });
   await prisma.account.deleteMany({ where: { userId, accessTokenId: { in: revokedTokenIds } } });
-  await prisma.transaction.deleteMany({ where: { account: { userId, accessTokenId: null } } });
+  await deleteTransactionsWithOverrides(prisma as any, userId, { account: { userId, accessTokenId: null } });
   await prisma.account.deleteMany({ where: { userId, accessTokenId: null } });
   await prisma.accessToken.deleteMany({ where: { userId, id: { in: revokedTokenIds } } });
   await prisma.syncStatus.deleteMany({ where: { userId } });
@@ -77,7 +81,11 @@ describe('privacy disconnect keeps what Plaid would not revoke', () => {
       { id: 'token-boa', token: 'access-boa' },
       { id: 'token-chase', token: 'access-chase' },
     ]);
-    [accessTokenDeleteMany, accountDeleteMany, transactionDeleteMany, syncStatusDeleteMany, snapTradeUserDeleteMany]
+    transactionFindMany.mockResolvedValue([
+      { plaidTransactionId: 'tx-1' },
+      { plaidTransactionId: 'tx-2' },
+    ]);
+    [accessTokenDeleteMany, accountDeleteMany, transactionDeleteMany, overrideDeleteMany, syncStatusDeleteMany, snapTradeUserDeleteMany]
       .forEach(mock => mock.mockResolvedValue({ count: 0 }));
     itemRemove.mockResolvedValue({ data: {} });
   });
@@ -144,6 +152,17 @@ describe('privacy disconnect keeps what Plaid would not revoke', () => {
       where: { userId: 'user-1', id: { in: ['token-boa'] } },
     });
     expect(response.body.success).toBe(false);
+  });
+
+  // This route keeps the user, so a category override left pointing at a deleted
+  // transaction survives for the life of the account. Its only cascade is from
+  // `User`, and there is no foreign key to clean it up.
+  it('clears category overrides for the transactions it removes', async () => {
+    await request(app).post('/privacy/disconnect-accounts').expect(200);
+
+    expect(overrideDeleteMany).toHaveBeenCalledWith({
+      where: { userId: 'user-1', transactionId: { in: ['tx-1', 'tx-2'] } },
+    });
   });
 
   // Manual and SnapTrade accounts carry no `accessTokenId`. Prisma's negated

@@ -10,6 +10,7 @@ import { normalizeLabel } from './services/label-normalization';
 import { getProviderRequestTimeoutMs } from './services/provider-request-policy';
 import { isTargetDateFund, TARGET_DATE_ASSET_TYPE } from './services/target-date-fund';
 import { removePlaidItem, removePlaidItems } from './services/plaid-item-removal';
+import { deleteTransactionsWithOverrides } from './services/transaction-cleanup';
 
 // Initialize Prisma client lazily to avoid import issues during ts-node startup
 let prisma: PrismaClient | null = null;
@@ -1426,8 +1427,8 @@ export const setupPlaidRoutes = (app: any) => {
       // manual and SnapTrade accounts are identified, so orphaned bank accounts
       // would quietly start passing for hand-entered ones. Transactions first:
       // `Transaction.account` has no cascade.
-      await prisma.transaction.deleteMany({
-        where: { account: { userId, accessTokenId: { in: revokedTokenIds } } },
+      await deleteTransactionsWithOverrides(prisma, userId, {
+        account: { userId, accessTokenId: { in: revokedTokenIds } },
       });
       await prisma.account.deleteMany({
         where: { userId, accessTokenId: { in: revokedTokenIds } },
@@ -1554,24 +1555,11 @@ export const setupPlaidRoutes = (app: any) => {
           select: { id: true },
         });
         const accountIds = accounts.map(account => account.id);
-        // Category overrides are keyed by provider transaction id rather than by
-        // account, so they have to be resolved through the transactions before
-        // those are deleted.
-        const doomedTransactions = await tx.transaction.findMany({
-          where: { accountId: { in: accountIds } },
-          select: { plaidTransactionId: true },
-        });
-        const categoryOverrides = await tx.transactionCategoryOverride.deleteMany({
-          where: {
-            userId,
-            transactionId: { in: doomedTransactions.map(transaction => transaction.plaidTransactionId) },
-          },
-        });
-        // Transactions before accounts: `Transaction.account` has no onDelete
-        // cascade, so an account still referenced cannot be deleted and the whole
-        // cleanup would roll back.
-        const transactions = await tx.transaction.deleteMany({
-          where: { accountId: { in: accountIds } },
+        // Transactions -- and the category overrides keyed to them -- before the
+        // accounts: `Transaction.account` has no onDelete cascade, so an account
+        // still referenced cannot be deleted and the whole cleanup would roll back.
+        const cleared = await deleteTransactionsWithOverrides(tx, userId, {
+          accountId: { in: accountIds },
         });
         const deletedAccounts = await tx.account.deleteMany({
           where: { userId, accessTokenId },
@@ -1579,8 +1567,8 @@ export const setupPlaidRoutes = (app: any) => {
         await tx.accessToken.deleteMany({ where: { id: accessTokenId, userId } });
         return {
           accounts: deletedAccounts.count,
-          transactions: transactions.count,
-          categoryOverrides: categoryOverrides.count,
+          transactions: cleared.transactions,
+          categoryOverrides: cleared.categoryOverrides,
         };
       });
 

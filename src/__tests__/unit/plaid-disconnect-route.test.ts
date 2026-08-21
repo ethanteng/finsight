@@ -189,7 +189,12 @@ describe('Plaid disconnect-all', () => {
     ]);
     accessTokenDeleteMany.mockResolvedValue({ count: 2 });
     accountDeleteMany.mockResolvedValue({ count: 3 });
+    transactionFindMany.mockResolvedValue([
+      { plaidTransactionId: 'tx-1' },
+      { plaidTransactionId: 'tx-2' },
+    ]);
     transactionDeleteMany.mockResolvedValue({ count: 4 });
+    overrideDeleteMany.mockResolvedValue({ count: 1 });
     itemRemove.mockResolvedValue({ data: {} });
   });
 
@@ -217,6 +222,17 @@ describe('Plaid disconnect-all', () => {
       where: { userId: 'user-1', accessTokenId: { in: ['token-boa', 'token-chase'] } },
     });
     expect(order).toEqual(['transactions', 'accounts']);
+  });
+
+  // Overrides are keyed by provider transaction id with no foreign key, and this
+  // route keeps the user, so anything left behind outlives the transactions it
+  // annotates. The per-institution path already cleared them; this one did not.
+  it('clears category overrides for the transactions it removes', async () => {
+    await request(app).delete('/plaid/disconnect_accounts').expect(200);
+
+    expect(overrideDeleteMany).toHaveBeenCalledWith({
+      where: { userId: 'user-1', transactionId: { in: ['tx-1', 'tx-2'] } },
+    });
   });
 
   // Ask Linc answers from the snapshot, so without a rebuild it keeps serving
