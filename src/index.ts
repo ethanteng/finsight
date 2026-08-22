@@ -1155,18 +1155,33 @@ app.get('/sync/status', async (req: Request, res: Response) => {
         // Symbols a market-data provider answered 404 for. A different signal
         // from the classifier gaps above — those are securities we could not
         // place, these are securities no provider will price — but the same
-        // operator question, so they load with the same report.
-        const { dbCache } = await import('./retirement-analytics/data/db-cache');
-        const coverageGaps = (await dbCache.listCoverageGaps()).map(gap => ({
-          ticker: gap.tickerSymbol,
-          provider: gap.provider,
-          statusCode: gap.statusCode,
-          endpoint: gap.endpoint,
-          observations: gap.observations,
-          firstSeenAt: gap.firstSeenAt.toISOString(),
-          lastSeenAt: gap.lastSeenAt.toISOString(),
-          recheckAfter: gap.recheckAfter.toISOString(),
-        }));
+        // operator question, so they load with the same report. Fail soft so a
+        // missing migration cannot 500 the classifier half of this report.
+        let coverageGaps: Array<{
+          ticker: string;
+          provider: string;
+          statusCode: number;
+          endpoint: string;
+          observations: number;
+          firstSeenAt: string;
+          lastSeenAt: string;
+          recheckAfter: string;
+        }> = [];
+        try {
+          const { dbCache } = await import('./retirement-analytics/data/db-cache');
+          coverageGaps = (await dbCache.listCoverageGaps()).map(gap => ({
+            ticker: gap.tickerSymbol,
+            provider: gap.provider,
+            statusCode: gap.statusCode,
+            endpoint: gap.endpoint,
+            observations: gap.observations,
+            firstSeenAt: gap.firstSeenAt.toISOString(),
+            lastSeenAt: gap.lastSeenAt.toISOString(),
+            recheckAfter: gap.recheckAfter.toISOString(),
+          }));
+        } catch (coverageError) {
+          console.error('Admin: provider coverage gaps unavailable:', coverageError);
+        }
 
         console.log(`Admin: data gaps — ${report.securities.length} securities across ${report.usersConsidered} users, ${coverageGaps.length} provider coverage gaps`);
         res.json({ ...report, providerCoverageGaps: coverageGaps });

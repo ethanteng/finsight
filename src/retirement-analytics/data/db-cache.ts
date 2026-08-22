@@ -598,6 +598,24 @@ export class DatabaseCache {
     }
   }
 
+  /**
+   * Drop a coverage gap once the provider returns usable data again.
+   *
+   * Without this, a symbol that Tiingo later covers stays in the admin list
+   * forever even though `isCoverageGap` already treats the expired row as a
+   * miss — operators would keep sourcing a gap that no longer exists.
+   */
+  async clearCoverageGap(ticker: string, provider: string): Promise<void> {
+    try {
+      await this.prisma.providerCoverageGap.deleteMany({
+        where: { tickerSymbol: coverageGapKey(ticker), provider },
+      });
+    } catch (error) {
+      console.error(`Error clearing coverage gap for ${ticker}:`, error);
+      // Don't throw - cache failures shouldn't break the analysis
+    }
+  }
+
   /** Every recorded coverage gap, worst (most re-observed) first. */
   async listCoverageGaps(): Promise<Array<{
     tickerSymbol: string;
@@ -609,19 +627,26 @@ export class DatabaseCache {
     observations: number;
     recheckAfter: Date;
   }>> {
-    return this.prisma.providerCoverageGap.findMany({
-      orderBy: [{ observations: 'desc' }, { lastSeenAt: 'desc' }],
-      select: {
-        tickerSymbol: true,
-        provider: true,
-        statusCode: true,
-        endpoint: true,
-        firstSeenAt: true,
-        lastSeenAt: true,
-        observations: true,
-        recheckAfter: true,
-      },
-    });
+    try {
+      return await this.prisma.providerCoverageGap.findMany({
+        orderBy: [{ observations: 'desc' }, { lastSeenAt: 'desc' }],
+        select: {
+          tickerSymbol: true,
+          provider: true,
+          statusCode: true,
+          endpoint: true,
+          firstSeenAt: true,
+          lastSeenAt: true,
+          observations: true,
+          recheckAfter: true,
+        },
+      });
+    } catch (error) {
+      // The classifier half of /admin/data-gaps must still load when this table
+      // is missing (migration not applied yet) or the read otherwise fails.
+      console.error('Error listing coverage gaps:', error);
+      return [];
+    }
   }
 }
 

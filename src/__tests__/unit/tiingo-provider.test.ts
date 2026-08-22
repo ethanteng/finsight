@@ -183,4 +183,24 @@ describe('Tiingo coverage gaps', () => {
     // A 500 is transient; caching it would blind us to a symbol we do cover.
     expect(record).not.toHaveBeenCalled();
   });
+
+  it('clears a stale coverage gap once Tiingo returns usable prices', async () => {
+    jest.spyOn(dbCache, 'isCoverageGap').mockResolvedValue(false);
+    const clear = jest.spyOn(dbCache, 'clearCoverageGap').mockResolvedValue(undefined);
+    const fetchImplementation = jest.fn().mockResolvedValue(response(200, [
+      { date: '2025-06-30T00:00:00Z', adjClose: 100 },
+      { date: '2025-07-31T00:00:00Z', adjClose: 105 },
+      { date: '2025-08-31T00:00:00Z', adjClose: 110 },
+    ]));
+
+    await expect(
+      liveProvider(fetchImplementation).getPriceHistory(
+        'SPY',
+        new Date('2025-07-01T00:00:00Z'),
+        new Date('2025-08-15T00:00:00Z'),
+      ),
+    ).resolves.toMatchObject({ ticker: 'SPY', provider: 'tiingo' });
+
+    expect(clear).toHaveBeenCalledWith('SPY', 'tiingo');
+  });
 });

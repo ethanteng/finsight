@@ -82,6 +82,10 @@ export class TiingoProvider {
       const timeSeries = this.convertToMonthlyReturns(data, ticker, startDate, endDate);
       
       console.log(`✅ Tiingo: Successfully fetched ${timeSeries.dates.length} data points for ${ticker}`);
+
+      // A prior 404 may still be sitting in the gaps table with an expired
+      // recheckAfter. Remove it so admin no longer lists a gap we just filled.
+      await dbCache.clearCoverageGap(ticker, 'tiingo');
       
       // Cache in memory for 24 hours (historical data changes infrequently)
       await this.cache.set(ticker, startDate, endDate, timeSeries, 24 * 60 * 60 * 1000);
