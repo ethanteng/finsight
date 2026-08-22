@@ -138,6 +138,25 @@ export default function AdminPage() {
   const [selectedSession, setSelectedSession] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'sessions' | 'conversations'>('sessions');
 
+  // Securities the classifier could not place (aggregated; no per-user positions).
+  const [dataGaps, setDataGaps] = useState<{
+    usersConsidered: number;
+    usersWithAnyGap: number;
+    securities: Array<{
+      label: string;
+      category: 'unmapped' | 'unsupported' | 'us-listing-fallback';
+      userCount: number;
+      lastSeenAt: string;
+    }>;
+    coverage: {
+      totalUnmodeledValue: number;
+      worstValueCoverage: number | null;
+      medianValueCoverage: number | null;
+    };
+  } | null>(null);
+  const [dataGapsLoading, setDataGapsLoading] = useState(false);
+  const [dataGapsError, setDataGapsError] = useState<string | null>(null);
+
   const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
   // Helper function to get auth headers
@@ -720,29 +739,6 @@ export default function AdminPage() {
     return text.length > maxLength ? text.substring(0, maxLength) + '...' : text;
   };
 
-  // Securities the classifier could not place, aggregated across users so the
-  // panel shows what provider data to go and find without exposing anyone's
-  // individual positions.
-  type DataGapSecurity = {
-    label: string;
-    category: 'unmapped' | 'unsupported' | 'us-listing-fallback';
-    userCount: number;
-    lastSeenAt: string;
-  };
-  type DataGapReport = {
-    usersConsidered: number;
-    usersWithAnyGap: number;
-    securities: DataGapSecurity[];
-    coverage: {
-      totalUnmodeledValue: number;
-      worstValueCoverage: number | null;
-      medianValueCoverage: number | null;
-    };
-  };
-  const [dataGaps, setDataGaps] = useState<DataGapReport | null>(null);
-  const [dataGapsLoading, setDataGapsLoading] = useState(false);
-  const [dataGapsError, setDataGapsError] = useState<string | null>(null);
-
   const loadDataGaps = async () => {
     setDataGapsLoading(true);
     setDataGapsError(null);
@@ -757,7 +753,7 @@ export default function AdminPage() {
     }
   };
 
-  const CATEGORY_LABEL: Record<DataGapSecurity['category'], string> = {
+  const CATEGORY_LABEL: Record<'unmapped' | 'unsupported' | 'us-listing-fallback', string> = {
     unmapped: 'No asset class resolved',
     unsupported: 'Recognized, no return series',
     'us-listing-fallback': 'US-listed fallback used',
