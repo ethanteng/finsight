@@ -45,6 +45,10 @@ interface GenerationSettingInfo {
   defaultValue: string;
   value: string;
   isOverridden: boolean;
+  /** Request parameter this setting becomes for the slot's active model. */
+  wireParameter?: string;
+  /** True when the active model refuses the parameter, so nothing is sent. */
+  droppedByModel?: boolean;
 }
 
 interface SlotGenerationSettings {
@@ -200,6 +204,11 @@ export default function ModelConfigPanel({
   const providerFor = (id: string) => data?.providers.find((provider) => provider.id === id);
   const settingsFor = (slotId: string) =>
     data?.generationSettings?.find((entry) => entry.slotId === slotId)?.settings ?? [];
+  /**
+   * The model the settings below were resolved against — the saved one, not the
+   * unsaved dropdown selection, since that is what requests use until a save.
+   */
+  const modelFor = (slotId: string) => data?.slots.find((slot) => slot.id === slotId)?.model;
 
   const setSetting = (slotId: string, settingId: string, value: string) =>
     setSettingsDraft((current) => ({
@@ -273,15 +282,35 @@ export default function ModelConfigPanel({
 
         <p className="text-[11px] text-gray-500 mt-1">{setting.description}</p>
         <p className="text-[11px] text-gray-500">
+          {/* What the request actually carries, not just what is stored: the
+              active model can rename this parameter or refuse it outright. */}
           Sending{' '}
           <code className="text-gray-300">
-            {setting.value === OMIT_SETTING ? 'nothing' : setting.value}
+            {setting.value === OMIT_SETTING || setting.droppedByModel ? 'nothing' : setting.value}
           </code>
-          {setting.isOverridden
-            ? ' (set here)'
-            : setting.envVar
-              ? ` (from ${setting.envVar} or shipped default)`
-              : ' (shipped default)'}
+          {setting.value !== OMIT_SETTING && !setting.droppedByModel && setting.wireParameter && (
+            <>
+              {' as '}
+              <code className="text-gray-300">{setting.wireParameter}</code>
+            </>
+          )}
+          {/* Where the stored value came from, only when it is the value in
+              play — naming its source right after "Sending nothing" reads as
+              if the default were being sent. */}
+          {(!setting.droppedByModel || setting.value === OMIT_SETTING) &&
+            (setting.isOverridden
+              ? ' (set here)'
+              : setting.envVar
+                ? ` (from ${setting.envVar} or shipped default)`
+                : ' (shipped default)')}
+          {setting.droppedByModel && setting.value !== OMIT_SETTING && (
+            <span className="text-amber-500">
+              {' — '}
+              {`${modelFor(slotId) || 'the selected model'} does not accept this parameter, so the stored `}
+              <code className="text-gray-300">{setting.value}</code>
+              {' is not sent'}
+            </span>
+          )}
         </p>
       </div>
     );

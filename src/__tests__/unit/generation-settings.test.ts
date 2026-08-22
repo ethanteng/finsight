@@ -115,6 +115,42 @@ describe('generation settings', () => {
     });
   });
 
+  describe('what the admin panel reports as the wire form', () => {
+    // The stored value is not always what the request carries. Saying
+    // "Sending 0" while the model refuses temperature is how a slot 400s on
+    // every call with the panel looking correctly configured.
+    const settingsFor = (slotId: string) =>
+      getActiveGenerationSettings().find(entry => entry.slotId === slotId)!.settings;
+    const setting = (slotId: string, settingId: string) =>
+      settingsFor(slotId).find(entry => entry.id === settingId)!;
+
+    it('names the renamed ceiling and flags the refused temperature', () => {
+      setActiveModelOverrides({ contextPlanner: 'gpt-5.6-sol' });
+      expect(setting('contextPlanner', 'maxOutputTokens')).toMatchObject({
+        wireParameter: 'max_completion_tokens',
+      });
+      expect(setting('contextPlanner', 'temperature')).toMatchObject({ droppedByModel: true });
+      expect(setting('contextPlanner', 'temperature').wireParameter).toBeUndefined();
+    });
+
+    it('reports the older names for a model that still takes them', () => {
+      setActiveModelOverrides({ contextPlanner: 'gpt-4o' });
+      expect(setting('contextPlanner', 'maxOutputTokens')).toMatchObject({
+        wireParameter: 'max_tokens',
+      });
+      expect(setting('contextPlanner', 'temperature')).toMatchObject({ wireParameter: 'temperature' });
+      expect(setting('contextPlanner', 'temperature').droppedByModel).toBeUndefined();
+    });
+
+    it('says nothing about the wire for providers that need no adaptation', () => {
+      // Anthropic and Gemini are not adapted, so the panel reads as before
+      // rather than asserting a parameter name this code does not own.
+      expect(setting('analysis', 'maxOutputTokens').wireParameter).toBeUndefined();
+      expect(setting('validation', 'temperature').wireParameter).toBeUndefined();
+      expect(setting('validation', 'temperature').droppedByModel).toBeUndefined();
+    });
+  });
+
   describe('omission', () => {
     it('drops a parameter set to off rather than sending a default', () => {
       setActiveGenerationSettings({ contextPlanner: { temperature: OMIT_SETTING, maxOutputTokens: OMIT_SETTING } });

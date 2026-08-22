@@ -348,6 +348,53 @@ export function isPlausibleModelId(value: string): boolean {
   return MODEL_ID_PATTERN.test(value.trim());
 }
 
+/**
+ * OpenAI model families that renamed the output ceiling to
+ * `max_completion_tokens` and accept only their own sampling temperature.
+ *
+ * Sending the older names to one of these is a 400, not a warning, so the slot
+ * fails every call until someone reads the logs: pointing the context planner
+ * at gpt-5 silently turned every plan into "include every context pack" until
+ * the request started adapting. GPT-5 and later are matched as a family rather
+ * than listed, so the next model an admin selects does not repeat it.
+ *
+ * Admin model ids may carry fine-tune or provider prefixes (`ft:gpt-5:…`,
+ * `openai/gpt-5`). The family check runs on the bare model segment so those
+ * spellings follow the same wire shape as an unprefixed id.
+ */
+function bareOpenAIModelId(model: string): string {
+  const normalized = model.trim().toLowerCase();
+  if (!normalized) return normalized;
+  if (normalized.includes('/')) {
+    return normalized.slice(normalized.lastIndexOf('/') + 1);
+  }
+  // Fine-tune ids look like ft:<base>:<org>:… — use the first gpt-/o-segment.
+  if (normalized.includes(':')) {
+    const segment = normalized
+      .split(':')
+      .find(part => /^(?:o\d|gpt-)/.test(part));
+    if (segment) return segment;
+  }
+  return normalized;
+}
+
+/**
+ * The request shape one OpenAI model accepts. Lives here rather than beside the
+ * request builder because the admin panel reports it too: an admin who selects
+ * a model should be able to read what that choice does to the parameters
+ * without inferring it from a model id.
+ */
+export function openAIWireParameters(model: string): {
+  maxOutputTokensParameter: 'max_tokens' | 'max_completion_tokens';
+  acceptsTemperature: boolean;
+} {
+  const renamedCeiling = /^(?:o\d|gpt-(?:[5-9]|\d{2,}))/.test(bareOpenAIModelId(model));
+  return {
+    maxOutputTokensParameter: renamedCeiling ? 'max_completion_tokens' : 'max_tokens',
+    acceptsTemperature: !renamedCeiling,
+  };
+}
+
 /** The value used when an admin has set no override for this slot. */
 export function slotDefault(slot: ModelSlotMeta): string {
   const fromEnv = slot.envVar ? (process.env[slot.envVar] ?? '').trim() : '';
@@ -490,10 +537,38 @@ export function getActiveNumericGenerationSetting(
 }
 
 /** Every slot's settings with their resolved values, for the admin panel. */
+/**
+ * What a stored setting becomes in a request to the slot's active model.
+ *
+ * The stored value is not always what goes on the wire: an OpenAI reasoning
+ * model renames the ceiling and refuses a temperature. Reporting only the
+ * stored value would let the panel say it is sending a parameter the model
+ * never receives, so each setting carries the resolved form alongside it.
+ * Slots whose provider needs no adaptation carry nothing and read as before.
+ */
+function wireShapeForSetting(
+  slot: ModelSlotMeta,
+  settingId: GenerationSettingId,
+): { wireParameter?: string; droppedByModel?: boolean } {
+  if (slot.provider !== 'openai') return {};
+  const wire = openAIWireParameters(getActiveModel(slot.id));
+  if (settingId === 'maxOutputTokens') return { wireParameter: wire.maxOutputTokensParameter };
+  if (settingId === 'temperature') {
+    return wire.acceptsTemperature ? { wireParameter: 'temperature' } : { droppedByModel: true };
+  }
+  return {};
+}
+
 export function getActiveGenerationSettings(): Array<{
   slotId: ModelSlotId;
   settings: Array<
-    GenerationSettingMeta & { value: string; isOverridden: boolean; defaultValue: string }
+    GenerationSettingMeta & {
+      value: string;
+      isOverridden: boolean;
+      defaultValue: string;
+      wireParameter?: string;
+      droppedByModel?: boolean;
+    }
   >;
 }> {
   return MODEL_SLOTS.map(slot => ({
@@ -506,6 +581,7 @@ export function getActiveGenerationSettings(): Array<{
         defaultValue,
         value: override ?? defaultValue,
         isOverridden: override !== undefined,
+        ...wireShapeForSetting(slot, setting.id),
       };
     }),
   }));
