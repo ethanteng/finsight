@@ -1,6 +1,7 @@
 import type { FinancialContextSnapshot, QuestionNeeds } from './types';
 import { mergeAssetAllocation } from '../services/asset-class';
 import { mergeLabelKeyedTotals } from '../services/label-normalization';
+import { isProviderIdentifierLabel } from '../services/holding-label';
 import { scenarioCalculatorRegistry } from '../scenarios/calculator-registry';
 import { RETIREMENT_CALCULATOR_ID } from '../scenarios/retirement-scenario';
 import { questionMentionsSecurity } from './security-question-match';
@@ -488,9 +489,17 @@ export function buildCanonicalFactPack(
     );
     for (const holding of matchedHoldings.length > 0 ? matchedHoldings : holdings) {
       const holdingId = safeFactId(holding.id || `${holding.account_id}_${holding.security_id}`);
+      // Never fall back to security_id here: that string is an opaque provider
+      // handle, and this label is what the client shows as "Source:". Prefer a
+      // ticker or name; if the feed gave neither (or only echoed the id), say
+      // so rather than printing hex under a dollar figure.
+      const readable =
+        [holding.ticker_symbol, holding.security_name]
+          .map(value => (typeof value === 'string' ? value.trim() : ''))
+          .find(value => value.length > 0 && !isProviderIdentifierLabel(value));
       addSnapshotFact(
         `holding_value_${holdingId}`,
-        `${holding.ticker_symbol || holding.security_name || holding.security_id} holding value`,
+        `${readable || 'Unidentified'} holding value`,
         holding.institution_value,
         'usd',
         `investments.holdings.${holding.id}.institution_value`

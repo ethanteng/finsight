@@ -12,6 +12,16 @@ export interface ResponseKeyNumber {
   unit: CanonicalFactUnit;
   /** Canonical fact ID. The server verifies and normalizes this before display. */
   provenance: string;
+  /**
+   * The fact's human label, for display in place of its id.
+   *
+   * Fact ids are built to be unique and stable, not read: a per-holding id
+   * embeds the account and security identifiers, so de-underscoring it yields
+   * `Holding Value Qq9wmog6pvh1xrv4dpaqc11orpeexyfzzodop 96d5ao5g...`. The
+   * label for that same fact is "WFC holding value". Server-set only -- a
+   * model-authored value is discarded with the rest of the metadata.
+   */
+  provenanceLabel?: string;
 }
 
 export interface AskLincResponse {

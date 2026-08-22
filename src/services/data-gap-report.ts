@@ -1,3 +1,5 @@
+import { isProviderIdentifierLabel } from './holding-label';
+
 /**
  * Which securities the classifier cannot place, aggregated across users.
  *
@@ -27,7 +29,18 @@ export type DataGapCategory =
   | 'us-listing-fallback';
 
 export interface DataGapSecurity {
+  /** What to show: a provider name where one exists, else the raw identifier. */
   label: string;
+  /**
+   * The provider identifier, when the label had to be resolved from one.
+   *
+   * Kept alongside rather than discarded: the name is what makes the row
+   * recognizable, but the identifier is what an operator pastes into a
+   * provider console when going to find the missing data.
+   */
+  identifier?: string;
+  /** True when no human-readable name could be found for this security. */
+  unnamed?: boolean;
   category: DataGapCategory;
   /** Distinct users whose most recent analysis reported this security. */
   userCount: number;
@@ -39,6 +52,16 @@ export interface DataGapReport {
   /** Distinct users contributing an analysis to this report. */
   usersConsidered: number;
   usersWithAnyGap: number;
+  /**
+   * Analyses computed before the current data-quality contract.
+   *
+   * Retirement analyses are cached, so the report reads whatever each user last
+   * computed -- which can be from an engine that predates the target-date
+   * registry and the canonical snapshot. Their gaps may already be fixed and
+   * simply not recomputed yet. Counting them separately stops an operator
+   * sourcing data for a security the engine can already place.
+   */
+  staleAnalyses: number;
   securities: DataGapSecurity[];
   coverage: {
     /** Sum of unmodeled value across the analyses considered. */
@@ -54,6 +77,17 @@ export interface AnalysisRow {
   userId: string;
   computedAt: Date | string;
   historicalImplications: unknown;
+  /**
+   * Provider identifier -> human-readable name, taken from the same row's
+   * stored portfolio snapshot.
+   *
+   * The mapper labels a holding by name, falling back to ticker and finally to
+   * the provider's opaque security id. That last fallback is what reaches this
+   * report, and a 37-character vendor id tells an operator nothing about which
+   * fund to go and source. Resolving it here rather than at write time also
+   * repairs analyses that were already stored.
+   */
+  securityNames?: Record<string, string>;
 }
 
 function asDate(value: Date | string): Date | null {
@@ -85,6 +119,38 @@ function normalizeLabel(label: string): string {
   return label.replace(/\s+/g, ' ').trim().toLowerCase();
 }
 
+/**
+ * Pick the better public name when two snapshots disagree for the same id.
+ *
+ * SQL already ranks field quality within a user. Across users the index used
+ * to be first-wins, so a ticker from an earlier `userId` could lock out a full
+ * fund name from a later one. Prefer spaced names (real titles) over bare
+ * tokens, and length when both are the same kind.
+ *
+ * Identifier shape outranks both. Some feeds echo the security id into
+ * `security_name` when they have nothing else, and an echoed id is longer than
+ * a real ticker while being just as unspaced -- so length alone would pick
+ * `M654JE4yQdCRMKroO17KuZJ3Lo34kKHkV08Je` over `VTI`, reinstating the hex this
+ * whole change removes.
+ *
+ * Spelling settles an exact tie. It is an arbitrary rule, but it makes the
+ * comparison a total order, so the report does not depend on the order rows
+ * came back in -- and `DISTINCT ON` guarantees nothing about ordering between
+ * users.
+ */
+function preferSecurityName(current: string | undefined, candidate: string): string {
+  const next = candidate.trim();
+  if (!next) return current ?? '';
+  if (!current) return next;
+  const rank = (value: string) =>
+    (isProviderIdentifierLabel(value) ? 0 : 2) + (/\s/.test(value) ? 1 : 0);
+  const nextRank = rank(next);
+  const currentRank = rank(current);
+  if (nextRank !== currentRank) return nextRank > currentRank ? next : current;
+  if (next.length !== current.length) return next.length > current.length ? next : current;
+  return next < current ? next : current;
+}
+
 function median(values: number[]): number | null {
   if (values.length === 0) return null;
   const sorted = [...values].sort((left, right) => left - right);
@@ -112,10 +178,32 @@ export function aggregateDataGaps(rows: readonly AnalysisRow[]): DataGapReport {
     if (!existing || at > existing.at) latestByUser.set(row.userId, { at, row });
   }
 
+  // One index across every row read, built before grouping.
+  //
+  // Resolving per row splits a security that only some users' snapshots can
+  // name: the users whose feed carried the name group under it, the rest stay
+  // keyed by the id, and the report shows two rows that each undercount --
+  // exactly inverting the ranking it exists to provide. A security's name is
+  // public metadata about a fund, not anything particular to whoever holds it,
+  // so a name found on any row is good for all of them.
+  const namesByIdentifier = new Map<string, string>();
+  for (const { row } of latestByUser.values()) {
+    for (const [identifier, name] of Object.entries(row.securityNames ?? {})) {
+      if (typeof name !== 'string') continue;
+      const trimmed = name.trim();
+      if (!trimmed) continue;
+      namesByIdentifier.set(
+        identifier,
+        preferSecurityName(namesByIdentifier.get(identifier), trimmed)
+      );
+    }
+  }
+
   const byKey = new Map<string, DataGapSecurity>();
   const coverages: number[] = [];
   let totalUnmodeledValue = 0;
   let usersWithAnyGap = 0;
+  let staleAnalyses = 0;
 
   for (const { at, row } of latestByUser.values()) {
     const quality = (row.historicalImplications as any)?.dataQuality;
@@ -128,20 +216,46 @@ export function aggregateDataGaps(rows: readonly AnalysisRow[]): DataGapReport {
       ['us-listing-fallback', labelsOf(proxyUsage.usListingFallbackHoldings)],
     ];
 
+    // Resolve before grouping, not after: the same fund can arrive named from
+    // one user's feed and as a bare id from another's, and grouping on the raw
+    // label would split those into two rows that each look like one holder.
+    const resolve = (label: string) => {
+      const name = namesByIdentifier.get(label);
+      if (name && normalizeLabel(name) !== normalizeLabel(label)) {
+        return { display: name, identifier: label };
+      }
+      return { display: label, identifier: undefined as string | undefined };
+    };
+
     let sawGap = false;
     for (const [category, labels] of buckets) {
+      const resolved = labels.map(resolve);
       // A label repeated within one analysis is still one user.
-      for (const label of new Set(labels.map(normalizeLabel))) {
+      const seenKeys = new Set<string>();
+      for (const entry of resolved) {
+        const normalized = normalizeLabel(entry.display);
+        if (seenKeys.has(normalized)) continue;
+        seenKeys.add(normalized);
         sawGap = true;
-        const display = labels.find(entry => normalizeLabel(entry) === label) ?? label;
-        const key = `${category}::${label}`;
+        const key = `${category}::${normalized}`;
         const existing = byKey.get(key);
         const seenAt = at.toISOString().slice(0, 10);
         if (existing) {
           existing.userCount += 1;
           if (seenAt > existing.lastSeenAt) existing.lastSeenAt = seenAt;
+          if (!existing.identifier && entry.identifier) existing.identifier = entry.identifier;
         } else {
-          byKey.set(key, { label: display, category, userCount: 1, lastSeenAt: seenAt });
+          byKey.set(key, {
+            label: entry.display,
+            category,
+            userCount: 1,
+            lastSeenAt: seenAt,
+            ...(entry.identifier ? { identifier: entry.identifier } : {}),
+            // Said plainly rather than left for the reader to infer from a
+            // wall of hex: an unnamed security is itself the finding, since it
+            // means the provider sent no name for it either.
+            ...(isProviderIdentifierLabel(entry.display) ? { unnamed: true } : {}),
+          });
         }
       }
     }
@@ -151,6 +265,10 @@ export function aggregateDataGaps(rows: readonly AnalysisRow[]): DataGapReport {
     if (unmodeled !== null && unmodeled > 0) totalUnmodeledValue += unmodeled;
     const coverage = finite(quality.valueCoverage);
     if (coverage !== null) coverages.push(coverage);
+    // `valueCoverage` is the marker for the current contract: every analysis the
+    // present engine writes reports it. Its absence dates the row rather than
+    // describing the portfolio.
+    else staleAnalyses += 1;
   }
 
   const securities = [...byKey.values()].sort((left, right) =>
@@ -160,6 +278,7 @@ export function aggregateDataGaps(rows: readonly AnalysisRow[]): DataGapReport {
   return {
     usersConsidered: latestByUser.size,
     usersWithAnyGap,
+    staleAnalyses,
     securities,
     coverage: {
       totalUnmodeledValue,
