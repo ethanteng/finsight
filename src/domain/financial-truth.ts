@@ -8,7 +8,7 @@
 
 export const FINANCIAL_TRUTH_VERSION = '1.0' as const;
 
-export type AccountSource = 'plaid' | 'snaptrade' | 'manual';
+export type AccountSource = 'plaid' | 'snaptrade' | 'manual' | 'public';
 
 /**
  * Stable identity is provider identity scoped to both its owner and connection.

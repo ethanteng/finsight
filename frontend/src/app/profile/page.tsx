@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import PlaidLinkButton, { PlaidLinkButtonRef, resetPlaidLinkInitialization } from '../../components/PlaidLinkButton';
 import SnapTradeConnections from '../../components/SnapTradeConnections';
 import PlaidConnections from '../../components/PlaidConnections';
+import PublicDirectConnection from '../../components/PublicDirectConnection';
 import TransactionHistory from '../../components/TransactionHistory';
 import UserProfile from '../../components/UserProfile';
 import InvestmentPortfolio from '../../components/InvestmentPortfolio';
@@ -180,6 +181,7 @@ export default function ProfilePage() {
   const [tokenStatuses, setTokenStatuses] = useState<TokenStatus[]>([]);
   const [snapTradeConnectionsKey, setSnapTradeConnectionsKey] = useState(0);
   const [plaidConnectionsKey, setPlaidConnectionsKey] = useState(0);
+  const [publicDirectKey, setPublicDirectKey] = useState(0);
   const [snapTradeStatus, setSnapTradeStatus] = useState<SnapTradeStatus | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteMessage, setDeleteMessage] = useState<string>('');
@@ -1446,6 +1448,22 @@ export default function ProfilePage() {
                   loadConnectedAccounts(),
                   loadInvestmentData(),
                   loadSnapTradeStatus(),
+                ]);
+                // Removing the Public brokerage link changes whether the direct
+                // connection is on offer at all.
+                setPublicDirectKey(key => key + 1);
+              }}
+            />
+
+            {/* Renders nothing unless the user already has Public via SnapTrade.
+                A stopgap for Public's managed-yield accounts, which SnapTrade
+                cannot sync. */}
+            <PublicDirectConnection
+              refreshKey={publicDirectKey}
+              onChanged={async () => {
+                await Promise.all([
+                  loadConnectedAccounts(),
+                  loadInvestmentData(),
                 ]);
               }}
             />

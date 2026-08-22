@@ -37,6 +37,13 @@ export type MaterialHistoryReason =
   /// Every connection removed at once, across both providers, without the user's
   /// account being deleted -- a different net-worth event from losing one link.
   | 'all-connections-disconnected'
+  /// A direct Public.com API secret was supplied, so Public balances now come
+  /// from Public rather than SnapTrade. The accounts SnapTrade could not sync
+  /// appear for the first time, which moves net worth.
+  | 'public-direct-connected'
+  /// The direct Public secret was removed, handing those accounts back to
+  /// SnapTrade -- and with them, whatever SnapTrade can or cannot sync.
+  | 'public-direct-disconnected'
   | 'home-value-updated'
   | 'home-value-removed'
   | 'home-value-refreshed'
