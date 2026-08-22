@@ -26,9 +26,37 @@ describe('canonical response facts', () => {
   it('replaces matching legacy model values with server-authored unit and provenance', () => {
     const response = canonicalizeResponseNumbers({ summary: 'Your net worth is -$5,000.', key_numbers: { net_worth: -5000 } }, pack);
     expect(response.key_numbers).toEqual({
-      net_worth: { value: -5000, unit: 'usd', provenance: 'net_worth' },
+      net_worth: { value: -5000, unit: 'usd', provenance: 'net_worth', provenanceLabel: 'Net worth' },
     });
     expect(validateResponseFacts(response, pack)).toMatchObject({ valid: true });
+  });
+
+  it('carries the fact label so the client never renders a raw fact id', () => {
+    // Fact ids are unique, not readable. A per-holding id embeds the account
+    // and security identifiers, and the client had only the id to work from --
+    // so a source line read "Holding Value Qq9wmog6pvh1xrv4dpaqc11orpeexyfzzodop
+    // 96d5ao5gljc9eowv7zy1tb1ydryymnfajrrjp 2893".
+    const response = canonicalizeResponseNumbers(
+      { summary: 'Your net worth is -$5,000.', key_numbers: { net_worth: -5000 } },
+      pack
+    );
+    const metric = response.key_numbers!.net_worth as { provenanceLabel?: string };
+    expect(metric.provenanceLabel).toBe('Net worth');
+  });
+
+  it('discards a model-authored label, like the rest of the metadata', () => {
+    // This function exists to replace model-written provenance with the server
+    // contract. A label is metadata too, and an unverified one would be shown
+    // to the user as though the server had vouched for it.
+    const response = canonicalizeResponseNumbers({
+      summary: 'Result.',
+      key_numbers: {
+        net_worth: { value: -1, unit: 'usd', provenance: 'net_worth', provenanceLabel: 'Totally Legit Source' } as any,
+      },
+    }, pack);
+
+    const metric = response.key_numbers!.net_worth as { provenanceLabel?: string };
+    expect(metric.provenanceLabel).toBeUndefined();
   });
 
   it('rejects an unsupported structured value or provenance', () => {
@@ -260,6 +288,7 @@ describe('rounded canonical values', () => {
         value: 995.5699999999997,
         unit: 'usd',
         provenance: 'average_monthly_operating_cash_flow',
+        provenanceLabel: 'Average monthly operating cash flow',
       },
     });
     expect(validateResponseFacts(response, pack)).toMatchObject({ valid: true });

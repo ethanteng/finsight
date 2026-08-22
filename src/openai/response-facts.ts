@@ -95,10 +95,15 @@ export function canonicalizeResponseNumbers(
     const cites = fact && fact.displayable !== false &&
       matchesAtWrittenPrecision(value, fact.value, displayStep(String(value), 1));
     keyNumbers[key] = cites
-      ? { value: fact!.value, unit: fact!.unit, provenance: fact!.id }
+      // The label travels with the id rather than being looked up again at
+      // render time: the fact pack is server-side, and the client has only
+      // what this contract hands it.
+      ? { value: fact!.value, unit: fact!.unit, provenance: fact!.id, provenanceLabel: fact!.label }
       : typeof metric === 'number'
         ? { value: metric, unit: fact?.unit || 'usd', provenance }
-        : metric;
+        // Drop any model-authored label: unverified metadata is exactly what
+        // this function exists to replace.
+        : { ...metric, provenanceLabel: undefined };
   }
   return { ...response, key_numbers: keyNumbers };
 }

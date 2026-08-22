@@ -749,7 +749,7 @@ describe('runAskLincAnalysis validation routing', () => {
     expect(mockedAskClaude).toHaveBeenCalledTimes(2);
     expect(mockedValidateWithGemini).not.toHaveBeenCalled();
     expect(result.structuredResponse.key_numbers).toEqual({
-      net_worth: { value: 100, unit: 'usd', provenance: 'net_worth' },
+      net_worth: { value: 100, unit: 'usd', provenance: 'net_worth', provenanceLabel: 'Net worth' },
     });
   });
 
