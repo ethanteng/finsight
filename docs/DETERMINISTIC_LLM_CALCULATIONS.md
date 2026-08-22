@@ -179,7 +179,9 @@ evidence floor. Known credit, international-bond, and real-asset holdings are
 also excluded until corresponding checked-in total-return series are available.
 Provider-typed single equities with exchange-style U.S. tickers may use a
 medium-confidence U.S.-listing fallback when country metadata is unavailable;
-the fallback is disclosed and never applies to funds.
+the fallback is disclosed and never applies to funds or depositary receipts.
+ADR/ADS/GDR and spelled-out depositary-share/receipt signals map to
+international equity, with name-only evidence counted as name inference.
 
 ### Withdrawal Simulation (Phase 4)
 

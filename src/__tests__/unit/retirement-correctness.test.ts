@@ -196,9 +196,16 @@ describe('retirement correctness contracts', () => {
     expect(mapping.holdingExposures[0].usedUsListingFallback).toBeUndefined();
   });
 
-  it('maps ADR / depositary receipts to international instead of the US listing fallback', async () => {
+  it.each([
+    'adr',
+    'ADRs',
+    'ADS',
+    'GDRs',
+    'American Depositary Share',
+    'Depository Receipts',
+  ])('maps provider type %s to international instead of the US listing fallback', async type => {
     const holdings = [holding('adr', 'TSM')];
-    const securities = [security('adr', 'TSM', 'Taiwan Semiconductor Manufacturing', 'adr')];
+    const securities = [security('adr', 'TSM', 'Taiwan Semiconductor Manufacturing', type)];
 
     const mapping = await mapPortfolioToAssetBasket(holdings, securities, 100);
 
@@ -213,13 +220,26 @@ describe('retirement correctness contracts', () => {
     expect(mapping.holdingExposures[0].usedUsListingFallback).toBeUndefined();
   });
 
-  it('does not treat an equity-typed ADR name as US-listed domestic exposure', async () => {
+  it.each([
+    'Alibaba Group Holding Ltd ADR',
+    'Alibaba Group Holding Ltd ADRs',
+    'Alibaba ADS',
+    'Alibaba GDR',
+    'Alibaba American Depositary Shares',
+    'Alibaba Depository Receipt',
+  ])('treats equity-typed name %s as inferred international exposure', async name => {
     const holdings = [holding('stock', 'BABA')];
-    const securities = [security('stock', 'BABA', 'Alibaba Group Holding Ltd ADR', 'equity')];
+    const securities = [security('stock', 'BABA', name, 'equity')];
 
     const mapping = await mapPortfolioToAssetBasket(holdings, securities, 100);
 
     expect(mapping.internationalEquityWeight).toBe(1);
+    expect(mapping.proxiedValue).toBe(100);
+    expect(mapping.mappingMethod).toBe('inferred');
+    expect(mapping.holdingExposures[0]).toMatchObject({
+      method: 'name-inference',
+      confidence: 'medium',
+    });
     expect(mapping.holdingExposures[0].usedUsListingFallback).toBeUndefined();
   });
 

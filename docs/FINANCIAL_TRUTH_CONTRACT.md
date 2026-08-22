@@ -154,7 +154,9 @@ without sourced country data or an explicit geographic name remains unavailable.
 single equity with an exchange-style U.S. ticker may use a disclosed, medium-confidence U.S.-listing
 fallback when country metadata is unavailable; a wrapper alone cannot activate it, and fund-shaped
 labels, mutual-fund ticker conventions, or authoritative fund metadata veto it. A ticker or U.S.
-account alone never supplies fund geography.
+account alone never supplies fund geography. ADR/ADS/GDR or depositary-share/receipt provider types
+map to international equity directly; the same evidence found only in a security name is recorded as
+name inference, so proxy usage and mapping provenance retain the distinction.
 
 Amounts remain unrounded during calculation; formatting and rounding are presentation concerns. Metrics in API and LLM responses must carry an explicit unit/currency rather than infer one from a label.
 

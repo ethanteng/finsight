@@ -106,7 +106,7 @@ const DIRECT_EQUITY_TYPES = new Set([
 ]);
 
 const FUND_LABEL_SIGNAL = /\b(?:collective|etf|fund|index|pooled|portfolio)\b/i;
-const ADR_TYPE_SIGNAL = /\b(?:adr|ads|depositary receipts?)\b/i;
+const ADR_TYPE_SIGNAL = /\b(?:adrs?|ads|gdrs?|depos(?:itary|itory) (?:receipts?|shares?))\b/i;
 
 function declaredHoldingTypes(
   holding: Holding,
@@ -143,7 +143,9 @@ function hasUsListingFallbackEvidence(
   const selectedDeclaredType = selectDeclaredAssetType(declaredTypes).toLowerCase();
   if (!DIRECT_EQUITY_TYPES.has(selectedDeclaredType)) return false;
   // A US listing of a foreign issuer is not domestic equity exposure.
-  if (hasAdrDeclaredType(holding, security) || ADR_TYPE_SIGNAL.test(securityName)) {
+  const hasDeclaredAdrType = hasAdrDeclaredType(holding, security);
+  const hasAdrNameSignal = ADR_TYPE_SIGNAL.test(securityName);
+  if (hasDeclaredAdrType || hasAdrNameSignal) {
     return false;
   }
   if (!/^[A-Z]{1,5}(?:[.-][A-Z])?$/.test(ticker)) return false;
@@ -248,7 +250,9 @@ function resolveHoldingExposure(
   }
   // Provider ADR / depositary types are foreign-issuer evidence on their own —
   // do not wait for an Equity wrapper class or invent US geography from the listing.
-  if (hasAdrDeclaredType(holding, security) || ADR_TYPE_SIGNAL.test(securityName)) {
+  const hasDeclaredAdrType = hasAdrDeclaredType(holding, security);
+  const hasAdrNameSignal = ADR_TYPE_SIGNAL.test(securityName);
+  if (hasDeclaredAdrType || hasAdrNameSignal) {
     if (
       !specificAssetType ||
       specificAssetType.includes('equity') ||
@@ -257,7 +261,7 @@ function resolveHoldingExposure(
     ) {
       return {
         weights: { ...EMPTY_WEIGHTS, internationalEquity: 1 },
-        method: 'provider',
+        method: hasDeclaredAdrType ? 'provider' : 'name-inference',
         confidence: 'medium',
       };
     }
