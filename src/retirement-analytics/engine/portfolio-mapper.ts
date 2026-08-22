@@ -233,7 +233,13 @@ export function summarizeHoldingExposures(
   const valueCoverage = totalValue > 0 ? mappedValue / totalValue : 1;
   const proxiedValuePercentage = totalValue > 0 ? proxiedValue / totalValue : 0;
   const materialExposures = holdingExposures.filter(exposure => Math.abs(exposure.value) > 0.005);
-  const hasInference = materialExposures.some(exposure => exposure.method === 'name-inference');
+  // Only successfully mapped name-inference results describe how the modeled
+  // portfolio was built. Unmapped holdings still use method `name-inference`
+  // (the classifier path that failed), but they must not relabel a mostly
+  // provider-mapped book as "inferred".
+  const hasInference = materialExposures.some(
+    exposure => exposure.status === 'mapped' && exposure.method === 'name-inference',
+  );
   const hasRegistry = materialExposures.some(exposure => exposure.method === 'fund-registry');
   const hasStaleRegistry = materialExposures.some(exposure => exposure.staleAllocation === true);
   const hasTipsProxy = materialExposures.some(exposure => (exposure.weights?.tips ?? 0) > 0);
@@ -572,14 +578,20 @@ export function populateAssumptions(
     assumptions.push('International equity exposure uses the Kenneth French EAFE-plus-Canada market return in US dollars; emerging markets are not modeled separately');
   }
 
-  if (resolvedMapping.nominalBondsWeight !== 0) {
-    assumptions.push('Bond exposure uses the Shiller synthetic 10-year US government-bond total-return history');
-  }
-
   const tipsValue = resolvedMapping.holdingExposures.reduce(
     (sum, exposure) => sum + Math.abs(exposure.value * (exposure.weights?.tips ?? 0)),
     0,
   );
+  const nonTipsBondValue = resolvedMapping.holdingExposures.reduce(
+    (sum, exposure) => sum + Math.abs(exposure.value * (exposure.weights?.nominalBonds ?? 0)),
+    0,
+  );
+  // Keep the generic bond series note for true nominal-bond sleeves only. Pure
+  // TIPS portfolios are covered by the dedicated proxy disclosure below.
+  if (nonTipsBondValue > 0.005) {
+    assumptions.push('Bond exposure uses the Shiller synthetic 10-year US government-bond total-return history');
+  }
+
   if (tipsValue > 0.005) {
     assumptions.push(
       `$${Math.round(tipsValue).toLocaleString('en-US')} of TIPS exposure uses the nominal ` +

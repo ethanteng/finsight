@@ -130,6 +130,7 @@ describe('retirement correctness contracts', () => {
     const securities = [security('tips', 'TIP', 'iShares TIPS Bond ETF', 'fixed income')];
 
     const mapping = await mapPortfolioToAssetBasket(holdings, securities, 100_000);
+    const assumptions = populateAssumptions(mapping, holdings, securities).join(' ');
 
     expect(mapping.holdingExposures[0]).toMatchObject({
       status: 'mapped',
@@ -139,12 +140,36 @@ describe('retirement correctness contracts', () => {
     expect(mapping.nominalBondsWeight).toBe(1);
     expect(mapping.proxiedValuePercentage).toBe(1);
     expect(mapping.mappingConfidence).toBe('medium');
-    expect(populateAssumptions(mapping, holdings, securities).join(' ')).toContain(
+    expect(assumptions).toContain(
       '$100,000 of TIPS exposure uses the nominal 10-year US government-bond history',
     );
-    expect(populateAssumptions(mapping, holdings, securities).join(' ')).toContain(
+    expect(assumptions).toContain(
       'understates the portfolio\'s inflation protection, especially for CPI-linked withdrawals',
     );
+    expect(assumptions).not.toContain(
+      'Bond exposure uses the Shiller synthetic 10-year US government-bond total-return history',
+    );
+  });
+
+  it('keeps provider mappingMethod when unrecognized holdings sit beside direct holdings', async () => {
+    const holdings = [
+      holding('stock', 'WFC', 90_000),
+      holding('mystery', 'X123', 10_000),
+    ];
+    holdings[1].security_name = 'Unidentified Plan Holding';
+    holdings[1].security_type = 'Unknown';
+    const securities = [
+      security('stock', 'WFC', 'Wells Fargo & Co.', 'equity'),
+      security('mystery', 'X123', 'Unidentified Plan Holding', 'Unknown'),
+    ];
+
+    const mapping = await mapPortfolioToAssetBasket(holdings, securities, 100_000);
+
+    expect(mapping.holdingExposures.map(exposure => exposure.method)).toEqual([
+      'provider',
+      'name-inference',
+    ]);
+    expect(mapping.mappingMethod).toBe('direct');
   });
 
   it('derives excluded-holding descriptions and missing data from exposure records', () => {
