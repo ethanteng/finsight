@@ -908,6 +908,7 @@ export default function AdminPage() {
               {(() => {
                 const diverged = registrySources.sources.filter(s => s.status === 'drifted');
                 const errored = registrySources.sources.filter(s => s.status === 'error');
+                const baselined = registrySources.sources.filter(s => s.status === 'baseline');
                 if (diverged.length > 0) {
                   return (
                     <p className="mt-4 rounded bg-amber-50 p-3 text-sm text-amber-900">
@@ -923,6 +924,14 @@ export default function AdminPage() {
                     <p className="mt-4 rounded bg-amber-50 p-3 text-sm text-amber-900">
                       {errored.length} source{errored.length === 1 ? '' : 's'} could not be read. That is
                       an availability problem, not evidence that anything diverged.
+                    </p>
+                  );
+                }
+                if (baselined.length > 0) {
+                  return (
+                    <p className="mt-4 rounded bg-amber-50 p-3 text-sm text-amber-900">
+                      {baselined.length} source{baselined.length === 1 ? '' : 's'} have no stored
+                      fingerprint yet, so this check cannot confirm they still match a transcription.
                     </p>
                   );
                 }
@@ -946,16 +955,21 @@ export default function AdminPage() {
                   </thead>
                   <tbody className="text-[#102319]">
                     {registrySources.sources.map(source => (
-                      <tr key={source.key} className="border-t border-black/5">
+                      <tr key={source.key} className="border-t border-black/5 align-top">
                         <td className="py-2 pr-4 font-medium">
                           <a href={source.sourceUrl} target="_blank" rel="noopener noreferrer" className="underline">
                             {source.key}
                           </a>
+                          {source.status !== 'unchanged' && source.detail && (
+                            <p className="mt-1 whitespace-pre-wrap font-normal text-xs text-[#5e6b63]">
+                              {source.detail}
+                            </p>
+                          )}
                         </td>
                         <td className="py-2 pr-4">
                           <span className={
                             source.status === 'drifted' ? 'text-amber-700 font-medium'
-                              : source.status === 'error' ? 'text-red-700'
+                              : source.status === 'error' || source.status === 'baseline' ? 'text-red-700'
                               : 'text-emerald-700'
                           }>
                             {source.status === 'unchanged' ? 'unchanged'
