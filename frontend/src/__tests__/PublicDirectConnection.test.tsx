@@ -101,6 +101,21 @@ describe('PublicDirectConnection', () => {
     expect(puts).toHaveLength(0);
   });
 
+  // The badge is the part a user scans first, so a green "Connected" beside a
+  // rejected key contradicts the error and the replace form directly below it.
+  it('flags a rejected key in the badge rather than showing Connected', async () => {
+    global.fetch = mockFetch({
+      eligible: true,
+      configured: true,
+      lastError: 'Public rejected the stored API secret.',
+    });
+
+    render(<PublicDirectConnection />);
+
+    expect(await screen.findByText('Needs attention')).toBeInTheDocument();
+    expect(screen.queryByText('Connected')).toBeNull();
+  });
+
   it('shows a connected state without ever displaying the key', async () => {
     global.fetch = mockFetch({
       eligible: true,

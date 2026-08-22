@@ -147,10 +147,20 @@ export default function PublicDirectConnection({ onChanged, refreshKey }: Public
             restores them.
           </p>
         </div>
+        {/* A green "Connected" beside a rejected key contradicts the error and the
+            replace form directly below it, and the badge is the part a user scans
+            first -- so it has to carry the failure, not sit next to it. Matches
+            the "Needs attention" wording the Plaid connection rows already use. */}
         {status.configured && (
-          <span className="shrink-0 rounded-full bg-green-50 px-2 py-1 text-xs text-green-700">
-            Connected
-          </span>
+          status.lastError ? (
+            <span className="shrink-0 rounded-full bg-amber-50 px-2 py-1 text-xs text-amber-800">
+              Needs attention
+            </span>
+          ) : (
+            <span className="shrink-0 rounded-full bg-green-50 px-2 py-1 text-xs text-green-700">
+              Connected
+            </span>
+          )
         )}
       </div>
 
