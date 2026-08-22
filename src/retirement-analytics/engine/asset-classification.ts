@@ -6,6 +6,9 @@ const BOND_TICKERS = new Set([
 
 const INTERNATIONAL_EQUITY_TICKERS = new Set(['EFA', 'IXUS', 'VEA', 'VWO', 'VXUS']);
 const TIPS_TICKERS = new Set(['SCHP', 'STIP', 'TIP', 'VTIP']);
+const CREDIT_TICKERS = new Set(['HYG', 'JCPB', 'JPST', 'LQD', 'MUB', 'VCIT', 'VCSH']);
+const INTERNATIONAL_BOND_TICKERS = new Set(['BNDX', 'EAGG', 'EMB', 'VWOB']);
+const REAL_ASSET_TICKERS = new Set(['DBC', 'GLD', 'GSG', 'IAU', 'PDBC', 'VNQ', 'VNQI']);
 
 export {
   isContainerAssetType,
@@ -21,6 +24,18 @@ export function isKnownTipsTicker(ticker: string): boolean {
   return TIPS_TICKERS.has(ticker.trim().toUpperCase());
 }
 
+export function isKnownCreditTicker(ticker: string): boolean {
+  return CREDIT_TICKERS.has(ticker.trim().toUpperCase());
+}
+
+export function isKnownInternationalBondTicker(ticker: string): boolean {
+  return INTERNATIONAL_BOND_TICKERS.has(ticker.trim().toUpperCase());
+}
+
+export function isKnownRealAssetTicker(ticker: string): boolean {
+  return REAL_ASSET_TICKERS.has(ticker.trim().toUpperCase());
+}
+
 export function hasBondNameSignal(name: string): boolean {
   const normalized = name.toLowerCase();
   return ['bond', 'fixed income', 'treasury', 'tips', 'aggregate', 'corporate credit']
@@ -30,6 +45,27 @@ export function hasBondNameSignal(name: string): boolean {
 export function hasTipsNameSignal(name: string): boolean {
   const normalized = name.toLowerCase();
   return ['tips', 'inflation protected', 'inflation-protected']
+    .some(signal => normalized.includes(signal));
+}
+
+export function hasCreditNameSignal(name: string): boolean {
+  const normalized = name.toLowerCase();
+  return ['corporate credit', 'corporate bond', 'high yield bond', 'municipal bond', 'muni bond']
+    .some(signal => normalized.includes(signal));
+}
+
+export function hasInternationalBondNameSignal(name: string): boolean {
+  const normalized = name.toLowerCase();
+  return [
+    'international bond', 'global bond', 'global aggregate bond', 'world bond',
+    'ex-us bond', 'ex us bond', 'emerging market bond', 'emerging markets bond',
+  ]
+    .some(signal => normalized.includes(signal));
+}
+
+export function hasRealAssetNameSignal(name: string): boolean {
+  const normalized = name.toLowerCase();
+  return ['real estate', 'reit', 'commodit', 'infrastructure', 'natural resources', 'precious metal']
     .some(signal => normalized.includes(signal));
 }
 

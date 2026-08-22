@@ -25,14 +25,23 @@ const mapping = {
   nominalBondsWeight: 0,
   cashWeight: 0,
   totalValue: 804_827.9,
+  usEquityValue: 804_827.9,
+  internationalEquityValue: 0,
+  nominalBondsValue: 0,
+  tipsValue: 0,
+  unsupportedFixedIncomeValue: 0,
+  cashValue: 0,
   mappedValue: 804_827.9,
   unmappedValue: 0,
+  unsupportedValue: 0,
+  unrecognizedValue: 0,
   valueCoverage: 1,
   proxiedValue: 0,
   proxiedValuePercentage: 0,
   holdingExposures: [],
   mappingConfidence: 'high' as const,
   unmappedHoldings: [],
+  unsupportedHoldings: [],
   partiallyMappedHoldings: [],
   mappingMethod: 'direct' as const,
   targetDateFunds: [],
@@ -185,6 +194,24 @@ describe('unmodeled value note', () => {
     expect(note).not.toContain('()');
   });
 
+  it('distinguishes a known unsupported asset class from missing holdings', () => {
+    const note = describeUnmodeledInvestmentValue({
+      totalInvestments: 100_000,
+      modeledValue: 80_000,
+      unmodeledValue: 20_000,
+      valueCoverage: 0.8,
+      reasons: [{
+        accountId: '',
+        label: 'Known asset classes without a supported historical return series',
+        amount: 20_000,
+        kind: 'unsupported-asset-class',
+      }],
+    });
+
+    expect(note).toContain('has no sufficiently long historical return series');
+    expect(note).not.toContain('not itemized by the provider');
+  });
+
   it('says nothing when nothing is excluded', () => {
     expect(describeUnmodeledInvestmentValue(null)).toBeNull();
   });
@@ -214,6 +241,7 @@ describe('retirement data quality with excluded value', () => {
       ...mapping,
       mappedValue: 704_827.9,
       unmappedValue: 100_000,
+      unrecognizedValue: 100_000,
       valueCoverage: 704_827.9 / 804_827.9,
       mappingConfidence: 'low' as const,
       unmappedHoldings: ['Unknown Plan Fund'],
@@ -231,10 +259,10 @@ describe('retirement data quality with excluded value', () => {
     expect(quality.valueCoverage).toBeCloseTo(704_827.9 / 1_191_430.96, 8);
     expect(quality.unmodeledReasons).toEqual([
       { label: '401(k)', amount: 386_603.06, kind: 'partial-holdings' },
-      { label: 'Unrecognized or unsupported holdings', amount: 100_000, kind: 'unrecognized-holdings' },
+      { label: 'Unrecognized holdings or unresolved equity geography', amount: 100_000, kind: 'unrecognized-holdings' },
     ]);
     expect(generateDisclaimers(quality)[0]).toContain(
-      '$100,000 in Unrecognized or unsupported holdings has no supported asset-class mapping',
+      '$100,000 in Unrecognized holdings or unresolved equity geography has no supported asset-class mapping',
     );
   });
 
@@ -243,6 +271,7 @@ describe('retirement data quality with excluded value', () => {
       ...mapping,
       mappedValue: 780_000,
       unmappedValue: 24_827.9,
+      unrecognizedValue: 24_827.9,
       valueCoverage: 780_000 / 804_827.9,
       mappingConfidence: 'medium' as const,
       partiallyMappedHoldings: ['Target Retirement 2040 Fund'],
@@ -253,7 +282,7 @@ describe('retirement data quality with excluded value', () => {
     expect(quality.missingData).not.toContain('Target Retirement 2040 Fund');
     expect(quality.proxyUsage.unmappedHoldings).toEqual([]);
     expect(quality.unmodeledReasons).toContainEqual({
-      label: 'Unrecognized or unsupported holdings',
+      label: 'Unrecognized holdings or unresolved equity geography',
       amount: 24_827.9,
       kind: 'unrecognized-holdings',
     });

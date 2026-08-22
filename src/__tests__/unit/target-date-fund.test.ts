@@ -267,8 +267,10 @@ describe('target-date funds in retirement mapping', () => {
     expect(mapping.unmappedHoldings).toEqual([]);
     expect(mapping.partiallyMappedHoldings).toEqual(['State St Target Ret 2030 SL SF CL III']);
     expect(mapping.holdingExposures[0].weights?.tips).toBeCloseTo(0.1207, 6);
-    expect(mapping.nominalBondsWeight).toBeCloseTo((0.311 + 0.1207) / 0.9577, 6);
-    expect(mapping.valueCoverage).toBeCloseTo(0.9577, 6);
+    expect(mapping.nominalBondsWeight).toBeCloseTo(0.311 / 0.837, 6);
+    expect(mapping.tipsValue).toBeCloseTo(24_079.23 * 0.1207, 2);
+    expect(mapping.unsupportedValue).toBeCloseTo(24_079.23 * 0.163, 2);
+    expect(mapping.valueCoverage).toBeCloseTo(0.837, 6);
   });
 
   it.each([
@@ -303,9 +305,10 @@ describe('target-date funds in retirement mapping', () => {
     );
 
     expect(mapping.holdingExposures[0].weights?.tips).toBeCloseTo(0.0293, 6);
-    expect(mapping.mappedValue).toBeCloseTo(99_270, 2);
-    expect(mapping.unmappedValue).toBeCloseTo(730, 2);
-    expect(mapping.cashWeight).toBeCloseTo(0.0019 / 0.9927, 8);
+    expect(mapping.mappedValue).toBeCloseTo(96_340, 2);
+    expect(mapping.unmappedValue).toBeCloseTo(3_660, 2);
+    expect(mapping.unsupportedValue).toBeCloseTo(3_660, 2);
+    expect(mapping.cashWeight).toBeCloseTo(0.0019 / 0.9634, 8);
   });
 
   it('leaves a dated Treasury in bonds rather than on a glidepath', async () => {
@@ -613,7 +616,6 @@ describe('container provider types', () => {
     // fixed income; that outranks a word in the name.
     for (const [name, type] of [
       ['Pathway Capital 2030 Senior Notes', 'Fixed Income'],
-      ['Freedom 2032 Municipal Bond Series', 'fixed income'],
       ['Retirement 2035 Income Note', 'bond'],
     ] as const) {
       const mapping = await map(name, 'XBND1', type);
@@ -621,6 +623,17 @@ describe('container provider types', () => {
       expect(mapping.usEquityWeight).toBeCloseTo(0, 6);
       expect(mapping.targetDateFunds).toEqual([]);
     }
+  });
+
+  it('does not collapse a municipal-bond fund into nominal Treasuries', async () => {
+    const mapping = await map('Freedom 2032 Municipal Bond Series', 'XMUNI', 'fixed income');
+    expect(mapping.holdingExposures[0]).toMatchObject({
+      status: 'mapped',
+      unsupportedAssetClass: 'credit',
+    });
+    expect(mapping.nominalBondsWeight).toBe(0);
+    expect(mapping.unsupportedValue).toBe(1000);
+    expect(mapping.targetDateFunds).toEqual([]);
   });
 
   it('applies a holding-level fixed-income veto when the security type is only a wrapper', async () => {
@@ -663,11 +676,23 @@ describe('container provider types', () => {
     }
   });
 
-  it('keeps a directly held stock domestic rather than splitting it 70/30', async () => {
-    // The provider named a real asset class, so this is a security and not a
-    // fund inferred from its name. Widening it would put "Wells Fargo & Co."
-    // across two continents.
+  it('leaves a directly held stock unmodeled when no source establishes geography', async () => {
     const mapping = await map('Wells Fargo & Co.', 'WFC', 'equity');
+    expect(mapping.usEquityWeight).toBe(0);
+    expect(mapping.mappedValue).toBe(0);
+    expect(mapping.unrecognizedValue).toBe(1000);
+  });
+
+  it('maps a directly held stock when provider metadata establishes US geography', async () => {
+    const name = 'Wells Fargo & Co.';
+    const mapping = await mapPortfolioToAssetBasket(
+      [{ security_id: 's', ticker_symbol: 'WFC', security_name: name, institution_value: 1000 }] as any[],
+      [{ security_id: 's', name, ticker_symbol: 'WFC', type: 'equity' }] as any[],
+      1000,
+      undefined,
+      new Map([['WFC', { assetClass: 'equity', geographicFocus: 'US' }]]),
+      2026,
+    );
     expect(mapping.usEquityWeight).toBeCloseTo(1, 6);
   });
 
@@ -683,10 +708,10 @@ describe('container provider types', () => {
     expect(mapping.mappingMethod).toBe('inferred');
   });
 
-  it('leaves a bond ETF whose name hides it to the ticker list', async () => {
-    // "JPMorgan Ultra-Short Income ETF" names no bond signal, so the metadata
-    // branch declines it and inference catches it by known bond ticker.
+  it('recognizes credit by ticker without collapsing it into nominal bonds', async () => {
     const mapping = await map('JPMorgan Ultra-Short Income ETF', 'JPST', 'etf');
-    expect(mapping.nominalBondsWeight).toBeCloseTo(1, 6);
+    expect(mapping.nominalBondsWeight).toBe(0);
+    expect(mapping.holdingExposures[0].unsupportedAssetClass).toBe('credit');
+    expect(mapping.unsupportedValue).toBe(1000);
   });
 });

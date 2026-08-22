@@ -88,9 +88,10 @@ fifth of the money is absent. Coverage below 95% caps the analysis's confidence,
 computed on the modeled subset carries the exclusion as a caveat on its canonical fact, so a
 qualified number cannot be quoted unqualified, with the caveat naming the direction of the error.
 Support metrics (portfolio value, years of expenses, survival, depletion) are floors. The requested
-withdrawal rate is overstated, because the excluded value sits in its denominator. Asset-allocation
-shares, country and sector exposure, and portfolio fee drag describe the modeled holdings only,
-since the excluded value has no itemized positions -- their labels do not say so, so the caveat must. Solved
+withdrawal rate is overstated, because the excluded value sits in its denominator. Country and sector
+exposure and portfolio fee drag describe the itemized holdings only, since the excluded value has no
+positions -- their labels do not say so, so the caveat must. Retirement asset-allocation shares use the
+same itemized-value denominator and leave unresolved classes absent rather than renormalizing them.
 sustainable withdrawal rates carry no caveat: withdrawal survival is scale-invariant, so those
 percentages do not move with the excluded value. The modeled basis is measured the way the consuming
 engine sums holdings, not the way the canonical portfolio does, so a stated basis always matches what
@@ -99,12 +100,20 @@ was actually simulated.
 Retirement classification produces exactly one `ResolvedHoldingExposure` per itemized holding.
 Portfolio weights, published composition metrics, simulation inputs, mapping confidence, coverage,
 provenance assumptions, and missing-data labels are projections of that collection; none may run a
-second classifier or retain an independently authored allocation. TIPS remain distinct in the
-holding record and currently use the nominal 10-year government-bond return series as an explicit,
-confidence-lowering proxy. That substitution understates the portfolio's inflation protection,
-especially when withdrawals rise with CPI. Target-date recognition considers every declared provider
+second classifier or retain an independently authored allocation. TIPS remain distinct in both the
+holding record and published composition. They are excluded from historical simulation rather than
+assigned nominal-bond returns: [the United States first issued TIPS in 1997](https://www.treasurydirect.gov/research-center/history-of-marketable-securities/tips/),
+so observed TIPS market history cannot meet the engine's 50-year evidence floor. Target-date recognition considers every declared provider
 type, and any specific fixed-income declaration vetoes a target-like name consistently in Plaid views,
 canonical snapshots, and retirement analytics.
+
+Known credit, international-bond, and real-asset holdings are likewise excluded rather than passed
+through the nominal Treasury series. Recognizing one of those classes does not add it to the simulated
+taxonomy; a new sleeve requires a checked-in historical total-return series that can support the
+engine's evidence and horizon requirements. Qualitative characteristics that interpret historical
+outcomes use the normalized mix of the value actually simulated; published composition percentages
+retain the full itemized-value denominator. Those are different named bases, not independently
+classified portfolios.
 
 Two allocation buckets describe missing information and must not be merged, because they describe
 opposite problems with different remedies. `Not itemized` is value an account reports that no holding
@@ -140,9 +149,9 @@ no geography, remains unmodeled; the engine does not manufacture a US/internatio
 A provider type that names the wrapper rather than the exposure -- "ETF", "Mutual Fund", a collective
 trust -- carries no asset class and must not be read as one. Such a holding is classified from its
 name while still inside the provider-metadata path, so the provider's own country split and
-geographic focus are applied where they exist, and it is not recorded as a heuristic guess. A
-directly held security whose provider type does name a class keeps its existing domestic default; a
-fund recognized only by name does not, since a fund genuinely could be either.
+geographic focus are applied where they exist, and it is not recorded as a heuristic guess. An equity
+type without sourced country data or an explicit geographic name remains unavailable, including a
+direct security; a U.S. ticker and a U.S. account are not proof of issuer geography.
 
 Amounts remain unrounded during calculation; formatting and rounding are presentation concerns. Metrics in API and LLM responses must carry an explicit unit/currency rather than infer one from a label.
 

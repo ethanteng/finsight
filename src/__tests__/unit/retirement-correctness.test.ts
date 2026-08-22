@@ -47,20 +47,36 @@ function security(id: string, ticker: string, name: string, type = 'etf'): Secur
   return { security_id: id, ticker_symbol: ticker, name, type, iso_currency_code: 'USD' };
 }
 
+function usEquityMetadata(...tickers: string[]): Map<string, any> {
+  return new Map(tickers.map(ticker => [ticker, {
+    assetClass: 'equity',
+    geographicFocus: 'US',
+  }]));
+}
+
 const balancedMapping: PortfolioMapping = {
   usEquityWeight: 0.6,
   internationalEquityWeight: 0.2,
   nominalBondsWeight: 0.2,
   cashWeight: 0,
   totalValue: 1,
+  usEquityValue: 0.6,
+  internationalEquityValue: 0.2,
+  nominalBondsValue: 0.2,
+  tipsValue: 0,
+  unsupportedFixedIncomeValue: 0,
+  cashValue: 0,
   mappedValue: 1,
   unmappedValue: 0,
+  unsupportedValue: 0,
+  unrecognizedValue: 0,
   valueCoverage: 1,
   proxiedValue: 0,
   proxiedValuePercentage: 0,
   holdingExposures: [],
   mappingConfidence: 'high',
   unmappedHoldings: [],
+  unsupportedHoldings: [],
   partiallyMappedHoldings: [],
   mappingMethod: 'direct',
   targetDateFunds: [],
@@ -100,6 +116,36 @@ describe('retirement correctness contracts', () => {
     expect(metrics.internationalAllocation).toBe(0);
   });
 
+  it('keeps equity geography unavailable when the provider supplies no country evidence', async () => {
+    const holdings = [holding('stock', 'WFC')];
+    const securities = [security('stock', 'WFC', 'Wells Fargo & Co.', 'equity')];
+
+    const mapping = await mapPortfolioToAssetBasket(holdings, securities, 100);
+
+    expect(mapping.mappedValue).toBe(0);
+    expect(mapping.unrecognizedValue).toBe(100);
+    expect(mapping.holdingExposures[0]).toMatchObject({
+      status: 'unmapped',
+      method: 'provider',
+      confidence: 'low',
+    });
+  });
+
+  it('uses an explicit US market label without treating every equity as domestic', async () => {
+    const holdings = [holding('index', 'PLAN500')];
+    const securities = [security('index', 'PLAN500', 'S&P 500 Index Fund', 'equity')];
+
+    const mapping = await mapPortfolioToAssetBasket(holdings, securities, 100);
+
+    expect(mapping.usEquityWeight).toBe(1);
+    expect(mapping.unrecognizedValue).toBe(0);
+    expect(mapping.holdingExposures[0]).toMatchObject({
+      status: 'mapped',
+      method: 'name-inference',
+      confidence: 'medium',
+    });
+  });
+
   it('honors explicit international geography over a generic global name', async () => {
     const holdings = [holding('global-ex-us', 'GXUS')];
     const securities = [security('global-ex-us', 'GXUS', 'Global ex-US Equity Fund', 'equity')];
@@ -111,6 +157,9 @@ describe('retirement correctness contracts', () => {
     expect(mapping.usEquityWeight).toBeCloseTo(0);
     expect(mapping.internationalEquityWeight).toBeCloseTo(1);
     expect(metrics.internationalAllocation).toBeCloseTo(100);
+    expect(populateAssumptions(mapping, holdings, securities)).not.toContain(
+      'US equity exposure uses the Kenneth French broad US market total-return history (Mkt-RF plus RF)',
+    );
   });
 
   it.each(['BND', 'AGG', 'SHY'])('classifies %s as bonds when metadata is generic', async ticker => {
@@ -125,11 +174,59 @@ describe('retirement correctness contracts', () => {
     expect(metrics.fixedIncomeAllocation).toBeCloseTo(100);
   });
 
-  it('preserves TIPS as a distinct holding exposure and discloses its return proxy', async () => {
+  it.each([
+    ['HYG', 'iShares High Yield Corporate Bond ETF', 'etf', 'credit'],
+    ['BNDX', 'Vanguard Total International Bond ETF', 'fixed income', 'international-bonds'],
+    ['VNQ', 'Vanguard Real Estate ETF', 'equity', 'real-assets'],
+  ])(
+    'recognizes but does not simulate unsupported %s exposure',
+    async (ticker, name, type, unsupportedAssetClass) => {
+      const holdings = [holding(ticker, ticker, 100_000)];
+      const securities = [security(ticker, ticker, name, type)];
+
+      const mapping = await mapPortfolioToAssetBasket(holdings, securities, 100_000);
+      const metrics = await analyzePortfolio(
+        holdings,
+        securities,
+        undefined,
+        new Map(),
+        mapping.holdingExposures,
+      );
+      const assumptions = populateAssumptions(mapping, holdings, securities).join(' ');
+
+      expect(mapping.holdingExposures[0]).toMatchObject({
+        status: 'mapped',
+        unsupportedAssetClass,
+      });
+      expect(mapping.nominalBondsWeight).toBe(0);
+      expect(mapping.mappedValue).toBe(0);
+      expect(mapping.unsupportedValue).toBe(100_000);
+      expect(mapping.unrecognizedValue).toBe(0);
+      expect(mapping.unsupportedHoldings).toEqual([name]);
+      expect(metrics.fixedIncomeAllocation).toBe(
+        unsupportedAssetClass === 'real-assets' ? 0 : 100,
+      );
+      expect(assumptions).toContain(
+        '$100,000 in other known asset sleeves was excluded because the engine has no corresponding historical return series',
+      );
+      expect(assumptions).not.toContain(
+        'Bond exposure uses the Shiller synthetic 10-year US government-bond total-return history',
+      );
+    },
+  );
+
+  it('preserves TIPS as a distinct exposure and excludes it without a return proxy', async () => {
     const holdings = [holding('tips', 'TIP', 100_000)];
     const securities = [security('tips', 'TIP', 'iShares TIPS Bond ETF', 'fixed income')];
 
     const mapping = await mapPortfolioToAssetBasket(holdings, securities, 100_000);
+    const metrics = await analyzePortfolio(
+      holdings,
+      securities,
+      undefined,
+      new Map(),
+      mapping.holdingExposures,
+    );
     const assumptions = populateAssumptions(mapping, holdings, securities).join(' ');
 
     expect(mapping.holdingExposures[0]).toMatchObject({
@@ -137,14 +234,18 @@ describe('retirement correctness contracts', () => {
       method: 'provider',
       weights: { nominalBonds: 0, tips: 1 },
     });
-    expect(mapping.nominalBondsWeight).toBe(1);
-    expect(mapping.proxiedValuePercentage).toBe(1);
-    expect(mapping.mappingConfidence).toBe('medium');
+    expect(mapping.nominalBondsWeight).toBe(0);
+    expect(mapping.mappedValue).toBe(0);
+    expect(mapping.unsupportedValue).toBe(100_000);
+    expect(mapping.proxiedValuePercentage).toBe(0);
+    expect(mapping.mappingConfidence).toBe('low');
+    expect(metrics.fixedIncomeAllocation).toBe(100);
+    expect(metrics.tipsAllocation).toBe(100);
     expect(assumptions).toContain(
-      '$100,000 of TIPS exposure uses the nominal 10-year US government-bond history',
+      '$100,000 of TIPS exposure was excluded from the historical simulation',
     );
     expect(assumptions).toContain(
-      'understates the portfolio\'s inflation protection, especially for CPI-linked withdrawals',
+      'observed market history cannot satisfy the engine\'s 50-year evidence floor',
     );
     expect(assumptions).not.toContain(
       'Bond exposure uses the Shiller synthetic 10-year US government-bond total-return history',
@@ -176,7 +277,13 @@ describe('retirement correctness contracts', () => {
       security('mystery', 'X123', 'Unidentified Plan Holding', 'Unknown'),
     ];
 
-    const mapping = await mapPortfolioToAssetBasket(holdings, securities, 100_000);
+    const mapping = await mapPortfolioToAssetBasket(
+      holdings,
+      securities,
+      100_000,
+      undefined,
+      usEquityMetadata('WFC'),
+    );
 
     expect(mapping.holdingExposures.map(exposure => exposure.method)).toEqual([
       'provider',
@@ -228,8 +335,12 @@ describe('retirement correctness contracts', () => {
       },
     ]);
 
-    expect(populateAssumptions(mapping, [], []).join(' ')).toContain(
-      '$150 was excluded from analysis: 1 holding was fully unmodeled and 1 holding was partially modeled',
+    const assumptions = populateAssumptions(mapping, [], []).join(' ');
+    expect(assumptions).toContain(
+      '$100 was excluded because its asset class or equity geography could not be resolved',
+    );
+    expect(assumptions).toContain(
+      '$50 in other known asset sleeves was excluded because the engine has no corresponding historical return series',
     );
     const quality = calculateDataQuality([], [], mapping, 1, []);
     expect(quality.missingData).toEqual([
@@ -250,7 +361,14 @@ describe('retirement correctness contracts', () => {
       security('mystery', 'X123', 'Unidentified Plan Holding', 'Unknown'),
     ];
 
-    const mapping = await mapPortfolioToAssetBasket(holdings, securities, 100_000, undefined, new Map(), 2026);
+    const mapping = await mapPortfolioToAssetBasket(
+      holdings,
+      securities,
+      100_000,
+      undefined,
+      usEquityMetadata('WFC'),
+      2026,
+    );
 
     expect(mapping.usEquityWeight).toBe(1);
     expect(mapping.mappedValue).toBe(90_000);
@@ -274,7 +392,7 @@ describe('retirement correctness contracts', () => {
       securities,
       80_000,
       undefined,
-      new Map(),
+      usEquityMetadata('WFC', 'Z'),
       '2026-08-21',
     );
     const outcome = simulateWithdrawals(mapping, mapping.mappedValue, flatSequence(12), 0);
@@ -307,12 +425,12 @@ describe('retirement correctness contracts', () => {
       securities,
       80_000,
       undefined,
-      new Map(),
+      usEquityMetadata('WFC'),
       '2026-08-21',
     )).rejects.toThrow(/negative holding.*no complete supported asset-class mapping/i);
   });
 
-  it('publishes the same target-date allocation that the simulator consumes', async () => {
+  it('publishes sourced target-date composition while simulation uses supported sleeves', async () => {
     const holdings = [holding('lifepath', 'O7PE', 100_000)];
     holdings[0].security_name = 'BTC LPATH IDX 2040 N';
     holdings[0].security_type = 'Unknown';
@@ -327,11 +445,10 @@ describe('retirement correctness contracts', () => {
       2026,
     );
 
-    expect(metrics.equityAllocation).toBeCloseTo(
-      (mapping.usEquityWeight + mapping.internationalEquityWeight) * 100,
-      8,
-    );
-    expect(metrics.fixedIncomeAllocation).toBeCloseTo(mapping.nominalBondsWeight * 100, 8);
+    expect(metrics.equityAllocation).toBeCloseTo(74.71, 8);
+    expect(metrics.fixedIncomeAllocation).toBeCloseTo(22.76, 8);
+    expect(metrics.tipsAllocation).toBe(0);
+    expect(mapping.usEquityWeight + mapping.internationalEquityWeight).toBeGreaterThan(0.74);
     expect(metrics.equityAllocation).toBeLessThan(100);
   });
 
@@ -349,7 +466,7 @@ describe('retirement correctness contracts', () => {
       securities,
       100,
       undefined,
-      new Map(),
+      usEquityMetadata('WFC'),
       '2026-08-21',
     );
     const contradictory: PortfolioMapping = {
@@ -400,7 +517,13 @@ describe('retirement correctness contracts', () => {
       security('zero', 'X123', 'Unidentified Plan Holding', 'Unknown'),
     ];
 
-    const mapping = await mapPortfolioToAssetBasket(holdings, securities, 100);
+    const mapping = await mapPortfolioToAssetBasket(
+      holdings,
+      securities,
+      100,
+      undefined,
+      usEquityMetadata('WFC'),
+    );
 
     expect(mapping.holdingExposures).toHaveLength(holdings.length);
     expect(mapping.holdingExposures.map(exposure => exposure.status)).toEqual(['mapped', 'unmapped']);
@@ -418,7 +541,14 @@ describe('retirement correctness contracts', () => {
       security('plan-fund', 'LONGTICKER', 'S&P 500 Index Fund', 'mutual fund'),
     ];
 
-    const mapping = await mapPortfolioToAssetBasket(holdings, securities, 100_000, undefined, new Map(), 2026);
+    const mapping = await mapPortfolioToAssetBasket(
+      holdings,
+      securities,
+      100_000,
+      undefined,
+      usEquityMetadata('WFC'),
+      2026,
+    );
 
     expect(mapping.proxiedValue).toBe(10_000);
     expect(mapping.proxiedValuePercentage).toBe(0.1);

@@ -161,13 +161,22 @@ expenses = (averageMonthlyExpense ?? 0) * 12
 ```
 totalValue = Σ holding.institution_value
 // Guard: totalValue > 0 to avoid NaN
-equityAllocation = totalValue > 0 ? (equityValue / totalValue) * 100 : 0
-fixedIncomeAllocation = totalValue > 0 ? (fixedIncomeValue / totalValue) * 100 : 0
+equityAllocation = totalValue > 0 ? ((usEquityValue + internationalEquityValue) / totalValue) * 100 : 0
+fixedIncomeAllocation = totalValue > 0 ? ((nominalBondValue + tipsValue + unsupportedFixedIncomeValue) / totalValue) * 100 : 0
+tipsAllocation = totalValue > 0 ? (tipsValue / totalValue) * 100 : 0
 cashAllocation = totalValue > 0 ? (cashValue / totalValue) * 100 : 0
 internationalAllocation = totalValue > 0 ? (internationalValue / totalValue) * 100 : 0
 concentrationRisk (HHI) = totalValue > 0 ? Σ (weight²) : 0  for top 10 holdings, weight = holdingValue / totalValue
 expenseRatioWeighted = Σ(expenseRatio * weight) / Σ(weight)  for holdings with expense ratio
 ```
+
+These composition percentages use the full itemized-value denominator. Unknown
+equity geography and unsupported sourced sleeves are not redistributed, so the
+reported buckets may sum to less than 100%. Historical simulation uses only the
+supported value. TIPS are shown in composition but excluded from simulation;
+observed U.S. TIPS history begins in 1997 and cannot meet the engine's 50-year
+evidence floor. Known credit, international-bond, and real-asset holdings are
+also excluded until corresponding checked-in total-return series are available.
 
 ### Withdrawal Simulation (Phase 4)
 

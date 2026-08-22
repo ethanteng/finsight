@@ -51,6 +51,7 @@ function analysis(survivalRate = 0.8): RetirementAnalysisOutput {
         internationalEquityProxy: 'US equity history',
         bondsProxy: 'AGG',
         unmappedHoldings: [],
+        unsupportedHoldings: [],
         mappingMethod: 'direct',
       },
       assumptions: [],

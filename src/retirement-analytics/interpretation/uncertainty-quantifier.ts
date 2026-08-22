@@ -74,13 +74,20 @@ export function calculateDataQuality(
   const modeledValue = resolvedMapping.mappedValue;
   const unmodeledValue = Math.max(0, canonicalTotalValue - modeledValue);
   const valueCoverage = canonicalTotalValue > 0 ? modeledValue / canonicalTotalValue : 1;
-  const mappingReason = resolvedMapping.unmappedValue > 0.005
-    ? [{
-        label: 'Unrecognized or unsupported holdings',
-        amount: resolvedMapping.unmappedValue,
-        kind: 'unrecognized-holdings',
-      }]
-    : [];
+  const unrecognizedValue = resolvedMapping.unrecognizedValue ?? resolvedMapping.unmappedValue;
+  const unsupportedValue = resolvedMapping.unsupportedValue ?? 0;
+  const mappingReasons = [
+    ...(unrecognizedValue > 0.005 ? [{
+      label: 'Unrecognized holdings or unresolved equity geography',
+      amount: unrecognizedValue,
+      kind: 'unrecognized-holdings',
+    }] : []),
+    ...(unsupportedValue > 0.005 ? [{
+      label: 'Known asset classes without a supported historical return series',
+      amount: unsupportedValue,
+      kind: 'unsupported-asset-class',
+    }] : []),
+  ];
 
   return {
     completeness,
@@ -94,7 +101,7 @@ export function calculateDataQuality(
         amount: reason.amount,
         kind: reason.kind,
       })),
-      ...mappingReason,
+      ...mappingReasons,
     ],
     metadataConfidence,
     portfolioMappingConfidence: resolvedMapping.mappingConfidence,
@@ -104,6 +111,7 @@ export function calculateDataQuality(
       internationalEquityProxy: 'Kenneth French EAFE-plus-Canada market return history',
       bondsProxy: 'Shiller synthetic 10-year US government-bond total-return history',
       unmappedHoldings: resolvedMapping.unmappedHoldings,
+      unsupportedHoldings: resolvedMapping.unsupportedHoldings ?? [],
       mappingMethod: resolvedMapping.mappingMethod
     },
     assumptions,
@@ -173,7 +181,9 @@ export function generateDisclaimers(
         ? 'no-holdings'
         : reason.kind === 'unrecognized-holdings'
           ? 'unrecognized-holdings'
-          : 'partial-holdings',
+          : reason.kind === 'unsupported-asset-class'
+            ? 'unsupported-asset-class'
+            : 'partial-holdings',
     })),
   });
   if (unmodeledNote) disclaimers.push(unmodeledNote);

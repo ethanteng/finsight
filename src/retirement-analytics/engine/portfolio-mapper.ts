@@ -8,17 +8,24 @@ import {
   PortfolioMapping,
   ResolvedHoldingExposure,
   SecurityMetadata,
+  UnsupportedAssetClass,
 } from '../types';
 import { DataProviderFactory } from '../data/data-provider-factory';
 import {
   hasBondNameSignal,
   hasCashNameSignal,
+  hasCreditNameSignal,
   hasEquityNameSignal,
+  hasInternationalBondNameSignal,
+  hasRealAssetNameSignal,
   hasTipsNameSignal,
   inferEquityGeography,
   isContainerAssetType,
   isDeclaredFixedIncomeType,
   isKnownBondTicker,
+  isKnownCreditTicker,
+  isKnownInternationalBondTicker,
+  isKnownRealAssetTicker,
   isKnownTipsTicker,
   selectDeclaredAssetType,
 } from './asset-classification';
@@ -51,12 +58,17 @@ interface HoldingResolutionDraft {
   weights: HoldingExposureWeights;
   method: HoldingMappingMethod;
   confidence: 'high' | 'medium' | 'low';
+  unsupportedAssetClass?: UnsupportedAssetClass;
   targetDateIdentity?: TargetDateFundIdentity;
   targetAllocation?: TargetDateFundAllocation;
 }
 
 function weightTotal(weights: HoldingExposureWeights): number {
   return weights.usEquity + weights.internationalEquity + weights.nominalBonds + weights.tips + weights.cash;
+}
+
+function modeledWeightTotal(weights: HoldingExposureWeights): number {
+  return weights.usEquity + weights.internationalEquity + weights.nominalBonds + weights.cash;
 }
 
 function copyWeights(weights: HoldingExposureWeights): HoldingExposureWeights {
@@ -115,8 +127,43 @@ function resolveHoldingExposure(
   ) {
     return { weights: { ...EMPTY_WEIGHTS, tips: 1 }, method: 'provider', confidence: 'high' };
   }
+  if (
+    isDeclaredFixedIncomeType(specificAssetType) &&
+    (hasInternationalBondNameSignal(specificAssetType) || hasInternationalBondNameSignal(securityName) ||
+      isKnownInternationalBondTicker(ticker) ||
+      ['international', 'ex-us', 'global', 'world'].includes(geographicFocus))
+  ) {
+    return {
+      weights: copyWeights(EMPTY_WEIGHTS),
+      method: 'provider',
+      confidence: 'high',
+      unsupportedAssetClass: 'international-bonds',
+    };
+  }
+  if (
+    isDeclaredFixedIncomeType(specificAssetType) &&
+    (hasCreditNameSignal(specificAssetType) || hasCreditNameSignal(securityName) || isKnownCreditTicker(ticker))
+  ) {
+    return {
+      weights: copyWeights(EMPTY_WEIGHTS),
+      method: 'provider',
+      confidence: 'high',
+      unsupportedAssetClass: 'credit',
+    };
+  }
   if (isDeclaredFixedIncomeType(specificAssetType)) {
     return { weights: { ...EMPTY_WEIGHTS, nominalBonds: 1 }, method: 'provider', confidence: 'high' };
+  }
+  if (
+    hasRealAssetNameSignal(specificAssetType) || hasRealAssetNameSignal(securityName) ||
+    isKnownRealAssetTicker(ticker)
+  ) {
+    return {
+      weights: copyWeights(EMPTY_WEIGHTS),
+      method: 'provider',
+      confidence: 'high',
+      unsupportedAssetClass: 'real-assets',
+    };
   }
   if (specificAssetType.includes('equity') || specificAssetType.includes('stock')) {
     const countrySplit = getCountrySplit(fmpMetadata);
@@ -145,6 +192,9 @@ function resolveHoldingExposure(
     if (inferredGeography === 'international') {
       return { weights: { ...EMPTY_WEIGHTS, internationalEquity: 1 }, method: 'name-inference', confidence: 'medium' };
     }
+    if (inferredGeography === 'us') {
+      return { weights: { ...EMPTY_WEIGHTS, usEquity: 1 }, method: 'name-inference', confidence: 'medium' };
+    }
     if (inferredGeography === 'global') {
       return {
         weights: copyWeights(EMPTY_WEIGHTS),
@@ -152,9 +202,10 @@ function resolveHoldingExposure(
         confidence: 'low',
       };
     }
-    // Preserve the existing directly-held-security default when the provider
-    // names an equity exposure but supplies no country data.
-    return { weights: { ...EMPTY_WEIGHTS, usEquity: 1 }, method: 'provider', confidence: 'medium' };
+    // An equity declaration is not evidence of geography. Direct securities
+    // normally receive a country from FMP's profile; if that source is absent,
+    // keep the exposure unavailable instead of defaulting it to the US.
+    return { weights: copyWeights(EMPTY_WEIGHTS), method: 'provider', confidence: 'low' };
   }
 
   // No provider exposure: infer from the label, in specificity order.
@@ -164,8 +215,32 @@ function resolveHoldingExposure(
   if (hasTipsNameSignal(securityName) || isKnownTipsTicker(ticker)) {
     return { weights: { ...EMPTY_WEIGHTS, tips: 1 }, method: 'name-inference', confidence: 'medium' };
   }
+  if (hasInternationalBondNameSignal(securityName) || isKnownInternationalBondTicker(ticker)) {
+    return {
+      weights: copyWeights(EMPTY_WEIGHTS),
+      method: 'name-inference',
+      confidence: 'medium',
+      unsupportedAssetClass: 'international-bonds',
+    };
+  }
+  if (hasCreditNameSignal(securityName) || isKnownCreditTicker(ticker)) {
+    return {
+      weights: copyWeights(EMPTY_WEIGHTS),
+      method: 'name-inference',
+      confidence: 'medium',
+      unsupportedAssetClass: 'credit',
+    };
+  }
   if (hasBondNameSignal(securityName) || isKnownBondTicker(ticker)) {
     return { weights: { ...EMPTY_WEIGHTS, nominalBonds: 1 }, method: 'name-inference', confidence: 'medium' };
+  }
+  if (hasRealAssetNameSignal(securityName) || isKnownRealAssetTicker(ticker)) {
+    return {
+      weights: copyWeights(EMPTY_WEIGHTS),
+      method: 'name-inference',
+      confidence: 'medium',
+      unsupportedAssetClass: 'real-assets',
+    };
   }
   if (hasEquityNameSignal(securityName) || /^[A-Z]{1,5}$/.test(ticker)) {
     const geography = inferEquityGeography(securityName, ticker);
@@ -202,26 +277,49 @@ export function summarizeHoldingExposures(
   let usEquityValue = 0;
   let internationalEquityValue = 0;
   let nominalBondsValue = 0;
+  let tipsValue = 0;
+  let unsupportedFixedIncomeValue = 0;
   let cashValue = 0;
+  let unsupportedValue = 0;
+  let unrecognizedValue = 0;
   const unmappedHoldings: string[] = [];
+  const unsupportedHoldings: string[] = [];
   const partiallyMappedHoldings: string[] = [];
 
   for (const exposure of holdingExposures) {
     const weights = exposure.status === 'mapped' ? exposure.weights : undefined;
     const mappedFraction = weights
-      ? Math.max(0, Math.min(1, weightTotal(weights)))
+      ? Math.max(0, Math.min(1, modeledWeightTotal(weights)))
       : 0;
+    const tipsFraction = weights
+      ? Math.max(0, Math.min(1 - mappedFraction, weights.tips))
+      : 0;
+    // Registry residuals are sourced sleeves the historical engine does not
+    // support (for example commodities), not failures to recognize the fund.
+    const unsupportedResidual = exposure.unsupportedAssetClass || exposure.method === 'fund-registry'
+      ? Math.max(0, 1 - mappedFraction - tipsFraction)
+      : 0;
+    const unsupportedFraction = tipsFraction + unsupportedResidual;
+    const unrecognizedFraction = Math.max(0, 1 - mappedFraction - unsupportedFraction);
     const exposureMappedValue = exposure.value * mappedFraction;
-    const exposureUnmappedValue = exposure.value - exposureMappedValue;
+    const exposureUnsupportedValue = exposure.value * unsupportedFraction;
+    const exposureUnrecognizedValue = exposure.value * unrecognizedFraction;
+    const exposureUnmodeledValue = exposureUnsupportedValue + exposureUnrecognizedValue;
 
     mappedValue += exposureMappedValue;
+    unsupportedValue += exposureUnsupportedValue;
+    unrecognizedValue += exposureUnrecognizedValue;
+    if (
+      exposure.unsupportedAssetClass === 'credit' ||
+      exposure.unsupportedAssetClass === 'international-bonds'
+    ) {
+      unsupportedFixedIncomeValue += exposure.value;
+    }
     if (weights) {
       usEquityValue += exposure.value * weights.usEquity;
       internationalEquityValue += exposure.value * weights.internationalEquity;
-      // Until a dedicated TIPS history is added, preserve the resolved TIPS
-      // sleeve and deliberately feed it through the nominal government-bond
-      // return series. Assumptions and confidence disclose this proxy.
-      nominalBondsValue += exposure.value * (weights.nominalBonds + weights.tips);
+      nominalBondsValue += exposure.value * weights.nominalBonds;
+      tipsValue += exposure.value * weights.tips;
       cashValue += exposure.value * weights.cash;
     }
 
@@ -230,12 +328,15 @@ export function summarizeHoldingExposures(
       (exposure.method === 'fund-registry' && exposure.exactAllocation === false)
     ) {
       proxiedValue += Math.abs(exposureMappedValue);
-    } else if (weights && weights.tips > 0) {
-      proxiedValue += Math.abs(exposure.value * weights.tips);
     }
-    if (exposureUnmappedValue > 0.005) {
+    if (exposureUnsupportedValue > 0.005) {
+      unsupportedHoldings.push(exposure.label);
+    }
+    if (exposureUnrecognizedValue > 0.005 && exposureMappedValue <= 0.005) {
+      unmappedHoldings.push(exposure.label);
+    }
+    if (exposureUnmodeledValue > 0.005) {
       if (exposureMappedValue > 0.005) partiallyMappedHoldings.push(exposure.label);
-      else unmappedHoldings.push(exposure.label);
     }
   }
 
@@ -252,11 +353,13 @@ export function summarizeHoldingExposures(
   // (the classifier path that failed), but they must not relabel a mostly
   // provider-mapped book as "inferred".
   const hasInference = materialExposures.some(
-    exposure => exposure.status === 'mapped' && exposure.method === 'name-inference',
+    exposure => exposure.status === 'mapped' &&
+      exposure.method === 'name-inference' &&
+      exposure.weights !== undefined &&
+      modeledWeightTotal(exposure.weights) > 0,
   );
   const hasRegistry = materialExposures.some(exposure => exposure.method === 'fund-registry');
   const hasStaleRegistry = materialExposures.some(exposure => exposure.staleAllocation === true);
-  const hasTipsProxy = materialExposures.some(exposure => (exposure.weights?.tips ?? 0) > 0);
   const hasLowConfidence = materialExposures.some(exposure => exposure.confidence === 'low');
   const hasMediumConfidence = materialExposures.some(exposure => exposure.confidence === 'medium');
   const lowConfidenceValue = materialExposures
@@ -267,7 +370,7 @@ export function summarizeHoldingExposures(
   if (valueCoverage < 0.95 || hasStaleRegistry || lowConfidenceShare >= 0.05) {
     mappingConfidence = 'low';
   } else if (
-    valueCoverage < 1 || hasInference || hasRegistry || hasTipsProxy ||
+    valueCoverage < 1 || hasInference || hasRegistry ||
     hasLowConfidence || hasMediumConfidence
   ) {
     mappingConfidence = 'medium';
@@ -310,14 +413,23 @@ export function summarizeHoldingExposures(
     nominalBondsWeight: mappedValue > 0 ? nominalBondsValue / mappedValue : 0,
     cashWeight: mappedValue > 0 ? cashValue / mappedValue : 0,
     totalValue,
+    usEquityValue,
+    internationalEquityValue,
+    nominalBondsValue,
+    tipsValue,
+    unsupportedFixedIncomeValue,
+    cashValue,
     mappedValue,
     unmappedValue,
+    unsupportedValue: Math.max(0, unsupportedValue),
+    unrecognizedValue: Math.max(0, unrecognizedValue),
     valueCoverage,
     proxiedValue,
     proxiedValuePercentage,
     holdingExposures,
     mappingConfidence,
     unmappedHoldings,
+    unsupportedHoldings,
     partiallyMappedHoldings,
     mappingMethod: hasInference ? 'inferred' : hasRegistry ? 'proxy' : 'direct',
     targetDateFunds,
@@ -393,9 +505,13 @@ export async function mapPortfolioToAssetBasket(
     const ticker = security?.ticker_symbol?.toUpperCase() || holding.ticker_symbol?.toUpperCase() || '';
     const fmpMetadata = (ticker ? tickerToMetadata.get(ticker) : null) as SecurityMetadata | null;
     const draft = resolveHoldingExposure(holding, security, fmpMetadata, asOfDate);
-    const mappedFraction = Math.max(0, Math.min(1, weightTotal(draft.weights)));
+    const resolvedWeightFraction = Math.max(0, Math.min(1, weightTotal(draft.weights)));
+    const classifiedFraction = draft.unsupportedAssetClass
+      ? 1
+      : resolvedWeightFraction;
+    const modeledFraction = Math.max(0, Math.min(1, modeledWeightTotal(draft.weights)));
     const label = security?.name || holding.security_name || ticker || holding.security_id;
-    if (holdingValue < 0 && mappedFraction < 0.999999) {
+    if (holdingValue < 0 && modeledFraction < 0.999999) {
       throw new Error(
         `Negative holding "${label}" has no complete supported asset-class mapping; ` +
         'retirement analysis stopped rather than discarding its liability or guessing its return',
@@ -405,8 +521,9 @@ export async function mapPortfolioToAssetBasket(
       holdingId: holding.id || `${holding.security_id}:${holdingIndex}`,
       label,
       value: holdingValue,
-      status: mappedFraction > 0 ? 'mapped' : 'unmapped',
-      weights: mappedFraction > 0 ? copyWeights(draft.weights) : undefined,
+      status: classifiedFraction > 0 ? 'mapped' : 'unmapped',
+      weights: resolvedWeightFraction > 0 ? copyWeights(draft.weights) : undefined,
+      unsupportedAssetClass: draft.unsupportedAssetClass,
       method: draft.method,
       confidence: draft.confidence,
       allocationAsOf: draft.targetAllocation?.allocationAsOf,
@@ -567,36 +684,15 @@ export function populateAssumptions(
     );
   }
 
-  if (resolvedMapping.unmappedValue > 0.005) {
-    const materiallyExcluded = resolvedMapping.holdingExposures.filter(exposure => {
-      const mappedFraction = exposure.status === 'mapped' && exposure.weights
-        ? Math.max(0, Math.min(1, weightTotal(exposure.weights)))
-        : 0;
-      return exposure.value * (1 - mappedFraction) > 0.005;
-    });
-    const fullyUnmodeledCount = resolvedMapping.holdingExposures.length > 0
-      ? materiallyExcluded.filter(exposure => exposure.status === 'unmapped').length
-      : resolvedMapping.unmappedHoldings.length;
-    const partiallyModeledCount = resolvedMapping.holdingExposures.length > 0
-      ? materiallyExcluded.length - fullyUnmodeledCount
-      : resolvedMapping.partiallyMappedHoldings.length;
-    const countDescription = [
-      fullyUnmodeledCount > 0
-        ? `${fullyUnmodeledCount} holding${fullyUnmodeledCount === 1 ? '' : 's'} ` +
-          `${fullyUnmodeledCount === 1 ? 'was' : 'were'} fully unmodeled`
-        : '',
-      partiallyModeledCount > 0
-        ? `${partiallyModeledCount} holding${partiallyModeledCount === 1 ? '' : 's'} ` +
-          `${partiallyModeledCount === 1 ? 'was' : 'were'} partially modeled`
-        : '',
-    ].filter(Boolean).join(' and ');
+  const unrecognizedValue = resolvedMapping.unrecognizedValue ?? resolvedMapping.unmappedValue;
+  if (unrecognizedValue > 0.005) {
     assumptions.push(
-      `$${Math.round(resolvedMapping.unmappedValue).toLocaleString('en-US')} was excluded from analysis: ` +
-      countDescription
+      `$${Math.round(unrecognizedValue).toLocaleString('en-US')} was excluded because ` +
+      'its asset class or equity geography could not be resolved'
     );
   }
 
-  if (resolvedMapping.usEquityWeight !== 0 || resolvedMapping.internationalEquityWeight !== 0) {
+  if (resolvedMapping.usEquityWeight !== 0) {
     assumptions.push('US equity exposure uses the Kenneth French broad US market total-return history (Mkt-RF plus RF)');
   }
 
@@ -604,25 +700,29 @@ export function populateAssumptions(
     assumptions.push('International equity exposure uses the Kenneth French EAFE-plus-Canada market return in US dollars; emerging markets are not modeled separately');
   }
 
-  const tipsValue = resolvedMapping.holdingExposures.reduce(
-    (sum, exposure) => sum + Math.abs(exposure.value * (exposure.weights?.tips ?? 0)),
-    0,
-  );
+  const tipsValue = Math.abs(resolvedMapping.tipsValue ?? 0);
   const nonTipsBondValue = resolvedMapping.holdingExposures.reduce(
     (sum, exposure) => sum + Math.abs(exposure.value * (exposure.weights?.nominalBonds ?? 0)),
     0,
   );
-  // Keep the generic bond series note for true nominal-bond sleeves only. Pure
-  // TIPS portfolios are covered by the dedicated proxy disclosure below.
+  // Keep the generic bond series note for true nominal-bond sleeves only.
   if (nonTipsBondValue > 0.005) {
     assumptions.push('Bond exposure uses the Shiller synthetic 10-year US government-bond total-return history');
   }
 
   if (tipsValue > 0.005) {
     assumptions.push(
-      `$${Math.round(tipsValue).toLocaleString('en-US')} of TIPS exposure uses the nominal ` +
-      '10-year US government-bond history because the engine has no dedicated TIPS return series; ' +
-      'this understates the portfolio\'s inflation protection, especially for CPI-linked withdrawals'
+      `$${Math.round(tipsValue).toLocaleString('en-US')} of TIPS exposure was excluded from the ` +
+      'historical simulation rather than reassigned to nominal bonds: TIPS began in 1997, so ' +
+      'observed market history cannot satisfy the engine\'s 50-year evidence floor'
+    );
+  }
+
+  const otherUnsupportedValue = Math.max(0, (resolvedMapping.unsupportedValue ?? 0) - tipsValue);
+  if (otherUnsupportedValue > 0.005) {
+    assumptions.push(
+      `$${Math.round(otherUnsupportedValue).toLocaleString('en-US')} in other known asset sleeves ` +
+      'was excluded because the engine has no corresponding historical return series'
     );
   }
 

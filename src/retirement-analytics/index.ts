@@ -189,10 +189,12 @@ export async function analyzeRetirementPortfolio(
     sequences.length,
     historicalWithdrawalRates
   );
+  const modeledEquityAllocation =
+    (portfolioMapping.usEquityWeight + portfolioMapping.internationalEquityWeight) * 100;
   const assessment = assessPortfolioCharacteristics(
     outcomes,
     stressTestResults,
-    portfolioMetrics.equityAllocation,
+    modeledEquityAllocation,
     timelineBucket
   );
 
@@ -254,9 +256,11 @@ export async function analyzeRetirementPortfolio(
     withdrawalMetrics,
     dataQuality,
     timelineBucketNote,
-    historicalData
+    historicalData,
+    modeledEquityAllocation,
   );
 }
 
 // Re-export types for convenience
 export * from './types';
+export { RETIREMENT_ANALYSIS_VERSION } from './version';

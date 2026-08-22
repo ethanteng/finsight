@@ -14,6 +14,7 @@ import { buildCanonicalCashFlowAnalyses } from './cash-flow-context';
 import { resolveRetirementInputs, retirementPortfolioFingerprint, resolveStoredAsOfDate } from './retirement-inputs';
 import { generateDisclaimers, calculateConfidenceCeiling } from '../retirement-analytics/interpretation/uncertainty-quantifier';
 import type { DataQualityReport } from '../retirement-analytics/types';
+import { RETIREMENT_ANALYSIS_VERSION } from '../retirement-analytics/version';
 import type { ExtractedRetirementInputs } from './retirement-input-extraction';
 import type { PlannedSearchQuery } from '../data/search-types';
 
@@ -646,7 +647,10 @@ async function fetchOrCreateRetirementAnalysis(args: {
     const carried = (analysis.disclaimers || [])
       .filter(disclaimer => !disclaimer.startsWith(UNMODELED_VALUE_NOTE_PREFIX));
     const internalReasons = (analysis.dataQuality?.unmodeledReasons || [])
-      .filter(reason => reason.kind === 'unrecognized-holdings');
+      .filter(reason =>
+        reason.kind === 'unrecognized-holdings' ||
+        reason.kind === 'unsupported-asset-class'
+      );
     const internallyUnmodeledValue = internalReasons
       .reduce((sum, reason) => sum + (Number.isFinite(reason.amount) ? reason.amount : 0), 0);
     const itemizedValue = unmodeledInvestments?.modeledValue ??
@@ -682,7 +686,9 @@ async function fetchOrCreateRetirementAnalysis(args: {
           ? 'no-holdings'
           : reason.kind === 'unrecognized-holdings'
             ? 'unrecognized-holdings'
-            : 'partial-holdings',
+            : reason.kind === 'unsupported-asset-class'
+              ? 'unsupported-asset-class'
+              : 'partial-holdings',
       })),
     });
     // Coverage is restated on cache hits too; re-apply the ceiling so a stored
@@ -791,6 +797,7 @@ async function fetchOrCreateRetirementAnalysis(args: {
       storedInput.annualWithdrawalAmount === annualWithdrawalAmount &&
       storedInput.withdrawalStartAge === withdrawalStartAge &&
       (storedInput.lifeExpectancy ?? 95) === lifeExpectancy &&
+      storedAnalysisInput.analysisVersion === RETIREMENT_ANALYSIS_VERSION &&
       storedAnalysisInput.historicalDatasetVersion === historicalDatasetVersion &&
       storedAsOfDate === effectiveAsOfDate
     ) {
@@ -827,6 +834,7 @@ async function fetchOrCreateRetirementAnalysis(args: {
           internationalEquityProxy: 'VXUS',
           bondsProxy: 'AGG',
           unmappedHoldings: [],
+          unsupportedHoldings: [],
           mappingMethod: 'direct',
         },
         assumptions: [],
@@ -877,6 +885,7 @@ async function fetchOrCreateRetirementAnalysis(args: {
       lifeExpectancy,
       annualWithdrawalAmount,
       withdrawalStartAge,
+      analysisVersion: RETIREMENT_ANALYSIS_VERSION,
       historicalDatasetVersion,
     };
 
@@ -901,6 +910,7 @@ async function fetchOrCreateRetirementAnalysis(args: {
         portfolioSnapshot: { holdings, securities } as any,
         portfolioMetrics: {
           equityAllocation: analysisResult.metrics.equityAllocation,
+          tipsAllocation: analysisResult.metrics.tipsAllocation,
           withdrawalRate: analysisResult.metrics.withdrawalRate,
           yearsOfExpenses: analysisResult.metrics.yearsOfExpenses,
           historicalWithdrawalRates: analysisResult.metrics.historicalWithdrawalRates

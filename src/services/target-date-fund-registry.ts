@@ -34,7 +34,8 @@ const STALE_ALLOCATION_DAYS = 366;
 /**
  * Versioned, reviewable allocations for target-date products observed in the
  * live portfolio. Reported TIPS sleeves remain distinct in `weights` so the
- * retirement engine can apply and disclose its nominal-bond return proxy.
+ * retirement engine can exclude and disclose them instead of silently
+ * reassigning them to nominal bonds.
  * Other unsupported sleeves, such as commodities and global infrastructure,
  * are omitted; callers report and exclude that fraction instead of
  * redistributing it.

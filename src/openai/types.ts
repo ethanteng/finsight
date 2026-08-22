@@ -169,6 +169,7 @@ export interface FinancialContextSnapshot {
     metrics: {
       equityAllocation: number;
       fixedIncomeAllocation?: number;
+      tipsAllocation?: number;
       cashAllocation?: number;
       internationalAllocation?: number;
       expenseRatioWeighted?: number;
@@ -230,6 +231,7 @@ export interface FinancialContextSnapshot {
         internationalEquityProxy: string;
         bondsProxy: string;
         unmappedHoldings: string[];
+        unsupportedHoldings?: string[];
         mappingMethod: string;
       };
       assumptions: string[];

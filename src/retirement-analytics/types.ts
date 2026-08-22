@@ -67,10 +67,11 @@ export interface RetirementAnalysisInput {
 // ============================================================================
 
 export interface PortfolioCompositionMetrics {
-  equityAllocation: number; // percentage of mapped value (US + international equity)
-  fixedIncomeAllocation: number; // percentage of mapped value represented by nominal bonds
-  cashAllocation: number; // percentage of mapped value
-  internationalAllocation: number; // percentage of mapped value represented by non-US equity
+  equityAllocation: number; // percentage of itemized value classified as US + international equity
+  fixedIncomeAllocation: number; // percentage of itemized value classified as nominal bonds, TIPS, credit, or international bonds
+  tipsAllocation: number; // percentage of itemized value classified as TIPS
+  cashAllocation: number; // percentage of itemized value classified as cash
+  internationalAllocation: number; // percentage of itemized value classified as non-US equity
   concentrationRisk: number; // Herfindahl-Hirschman Index (HHI) across top 10 holdings
   /**
    * Annual fee drag over the WHOLE portfolio: sum of (holding weight x fund fee)
@@ -143,7 +144,7 @@ export interface HoldingExposureWeights {
   usEquity: number;
   internationalEquity: number;
   nominalBonds: number;
-  /** Reserved separately from nominal bonds even when no TIPS return series is available. */
+  /** Classified separately and excluded from simulation until a sufficient return series exists. */
   tips: number;
   cash: number;
 }
@@ -152,6 +153,11 @@ export type HoldingMappingMethod =
   | 'provider'
   | 'fund-registry'
   | 'name-inference';
+
+export type UnsupportedAssetClass =
+  | 'credit'
+  | 'international-bonds'
+  | 'real-assets';
 
 /**
  * The auditable classification result for one holding. Exposure weights may
@@ -164,8 +170,10 @@ export interface ResolvedHoldingExposure {
   label: string;
   value: number;
   status: 'mapped' | 'unmapped';
-  /** Absent when no supported exposure could be resolved. */
+  /** Absent when no modeled exposure was resolved; TIPS remains in weights for composition reporting. */
   weights?: HoldingExposureWeights;
+  /** Known exposure deliberately withheld until the engine has a corresponding historical series. */
+  unsupportedAssetClass?: UnsupportedAssetClass;
   method: HoldingMappingMethod;
   confidence: 'high' | 'medium' | 'low';
   allocationAsOf?: string;
@@ -185,15 +193,27 @@ export interface PortfolioMapping {
   /** Signed net exposure weights; shorts can make a sleeve negative or another exceed one. */
   usEquityWeight: number;
   internationalEquityWeight: number;
-  /** Weight fed to the nominal-bond return series, including disclosed TIPS proxies. */
+  /** Weight fed only to the nominal government-bond return series. */
   nominalBondsWeight: number;
   cashWeight: number;
   /** Signed net sum of itemized holding values presented to the mapper. */
   totalValue: number;
+  /** Signed classified dollars on the itemized-portfolio composition basis. */
+  usEquityValue: number;
+  internationalEquityValue: number;
+  nominalBondsValue: number;
+  tipsValue: number;
+  /** Known credit/international-bond dollars excluded from simulation but retained in fixed-income composition. */
+  unsupportedFixedIncomeValue: number;
+  cashValue: number;
   /** Signed net dollars represented by the four supported historical return series. */
   mappedValue: number;
-  /** Itemized dollars deliberately excluded because no supported exposure was resolved. */
+  /** Itemized dollars deliberately excluded from the historical simulation. */
   unmappedValue: number;
+  /** Excluded dollars whose asset class is known but lacks a supported return series. */
+  unsupportedValue: number;
+  /** Excluded dollars whose asset class or equity geography could not be resolved. */
+  unrecognizedValue: number;
   /** mappedValue / totalValue, or 1 for an empty portfolio. */
   valueCoverage: number;
   /** Dollars resolved by name inference or a documented sibling-share-class proxy. */
@@ -202,7 +222,8 @@ export interface PortfolioMapping {
   proxiedValuePercentage: number;
   holdingExposures: ResolvedHoldingExposure[];
   mappingConfidence: 'high' | 'medium' | 'low'; // based on how well holdings map
-  unmappedHoldings: string[]; // labels with no supported exposure at all
+  unmappedHoldings: string[]; // labels whose asset class or equity geography could not be resolved
+  unsupportedHoldings: string[]; // labels with a known sleeve but no supported return series
   partiallyMappedHoldings: string[]; // labels with both supported and unsupported sleeves
   mappingMethod: 'direct' | 'inferred' | 'proxy'; // how mapping was determined
   /**
@@ -326,13 +347,15 @@ export interface DataQualityReport {
     internationalEquityProxy: string; // exact historical series/proxy used
     bondsProxy: string; // e.g., "AGG"
     unmappedHoldings: string[];
+    unsupportedHoldings: string[];
     mappingMethod: string;
   };
   /**
    * Portfolio value this analysis actually modeled, and the investment value
-   * excluded from it. Excluded value is real -- it is in net worth -- but has
-   * no known asset class, so every metric below is computed on `modeledValue`
-   * alone and understates what the full portfolio would support.
+   * excluded from it. Excluded value is real -- it is in net worth -- but
+   * either lacks a resolved exposure or has no supported historical series,
+   * so simulation support metrics use `modeledValue` alone and understate what
+   * the full portfolio would support.
    */
   modeledValue: number;
   unmodeledValue: number;
@@ -383,6 +406,7 @@ export interface RetirementAnalysisOutput {
   metrics: {
     equityAllocation: number;
     fixedIncomeAllocation?: number;
+    tipsAllocation?: number;
     cashAllocation?: number;
     internationalAllocation?: number;
     expenseRatioWeighted?: number;

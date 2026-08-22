@@ -336,6 +336,7 @@ describe('buildCanonicalFactPack', () => {
         withdrawalRate: 0.049,
         equityAllocation: 70,
         fixedIncomeAllocation: 20,
+        tipsAllocation: 7,
         cashAllocation: 5,
         internationalAllocation: 5,
         yearsOfExpenses: 20,
@@ -378,10 +379,12 @@ describe('buildCanonicalFactPack', () => {
     expect(pack.facts.find((fact) => fact.id === 'withdrawal_rate')?.caveat).toContain('overstated');
     expect(pack.facts.find((fact) => fact.id === 'withdrawal_rate')?.caveat).not.toContain('floor');
 
-    // Allocation describes the modeled holdings, not the whole portfolio, so it
-    // must not be quoted as the portfolio's mix or drive a rebalancing answer.
-    for (const id of ['equity_allocation', 'fixed_income_allocation', 'cash_allocation', 'international_allocation']) {
-      expect(pack.facts.find((fact) => fact.id === id)?.caveat).toContain('mix of the modeled holdings only');
+    // Allocation must retain the itemized denominator rather than silently redistributing
+    // value into whichever buckets were resolved.
+    for (const id of ['equity_allocation', 'fixed_income_allocation', 'tips_allocation', 'cash_allocation', 'international_allocation']) {
+      expect(pack.facts.find((fact) => fact.id === id)?.caveat).toContain(
+        'does not renormalize unresolved or unsupported classes',
+      );
     }
 
     // Solved sustainable rates are scale-invariant (withdrawal scales with the
@@ -391,9 +394,9 @@ describe('buildCanonicalFactPack', () => {
     }
 
     // Exposure and fee metrics aggregate the same itemized positions, so they
-    // describe the modeled holdings however confidently their labels read.
+    // describe only itemized holdings however confidently their labels read.
     for (const id of ['portfolio_expense_ratio', 'expense_ratio_coverage', 'country_exposure_united_states', 'sector_exposure_technology']) {
-      expect(pack.facts.find((fact) => fact.id === id)?.caveat).toContain('modeled holdings only');
+      expect(pack.facts.find((fact) => fact.id === id)?.caveat).toContain('itemized holdings only');
     }
     // Figures the exclusion does not distort stay uncaveated.
     expect(pack.facts.find((fact) => fact.id === 'retirement_current_age')?.caveat).toBeUndefined();
@@ -421,6 +424,46 @@ describe('buildCanonicalFactPack', () => {
 
     expect(pack.facts.find((fact) => fact.id === 'withdrawal_rate')?.caveat).toBeUndefined();
     expect(pack.facts.some((fact) => fact.id === 'retirement_unmodeled_portfolio_value')).toBe(false);
+  });
+
+  it('does not apply simulation exclusions to itemized exposure and fee facts', () => {
+    const data = snapshot();
+    data.retirementAnalysis = {
+      metrics: {
+        withdrawalRate: 0.04,
+        equityAllocation: 60,
+        fixedIncomeAllocation: 40,
+        expenseRatioWeighted: 0.004,
+        expenseRatioCoverage: 1,
+        countryCoverage: 1,
+        sectorCoverage: 1,
+        yearsOfExpenses: 25,
+        historicalWithdrawalRates: { p10: 0.03, p25: 0.035, p50: 0.04, p75: 0.045, p90: 0.05 },
+      },
+      stressTest: {
+        survivalRate: 0.91,
+        totalSequences: 100,
+        depletionPercentiles: { p10: 12, p25: 18, p50: 25, p75: 30, p90: 35 },
+      },
+      dataQuality: {
+        modeledValue: 600_000,
+        unmodeledValue: 400_000,
+        valueCoverage: 0.6,
+        unmodeledReasons: [{
+          label: 'Known asset classes without a supported historical return series',
+          amount: 400_000,
+          kind: 'unsupported-asset-class',
+        }],
+      },
+      _storedInputParams: { currentAge: 50, retirementAge: 65, annualWithdrawalAmount: 40_000, withdrawalStartAge: 65 },
+    };
+    const pack = buildCanonicalFactPack(data, 'Am I on track for retirement?', needs('retirement_analysis'));
+
+    expect(pack.facts.find(fact => fact.id === 'fixed_income_allocation')?.caveat)
+      .toContain('excluded from historical simulation');
+    for (const id of ['portfolio_expense_ratio', 'expense_ratio_coverage', 'country_exposure_coverage', 'sector_exposure_coverage']) {
+      expect(pack.facts.find(fact => fact.id === id)?.caveat).toBeUndefined();
+    }
   });
 
   it('grounds multiple modeled outcomes as scenario-scoped facts', () => {
