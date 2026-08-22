@@ -1131,17 +1131,61 @@ app.get('/sync/status', async (req: Request, res: Response) => {
         // drop quieter users when power users fill the window, undercounting
         // widely-held gaps. Project only dataQuality — historicalImplications
         // stores the full analysis result (stress tests included).
+        // `securityNames` resolves the mapper's last-resort labels. A holding is
+        // labelled by name, then ticker, then the provider's opaque security id
+        // -- and it is exactly the securities that fail classification that tend
+        // to arrive without a name, so the ids are what land in this report.
+        //
+        // Both arrays are read because they carry the name in different places:
+        // `securities[].name` is the provider's own record, while
+        // `holdings[].security_name` is what ingestion resolved for the position
+        // and survives some cases where the security record is bare. Ticker is
+        // the last resort -- unlovely, but a person recognizes VTI.
+        //
+        // Built in SQL so only the id/name pairs cross the wire; the snapshots
+        // themselves hold full positions and have no business in this report.
         const rows = await prisma.$queryRaw<Array<{
           userId: string;
           computedAt: Date;
           dataQuality: unknown;
+          securityNames: Record<string, string> | null;
         }>>`
-          SELECT DISTINCT ON ("userId")
-            "userId",
-            "computedAt",
-            "historicalImplications"->'dataQuality' AS "dataQuality"
-          FROM retirement_analyses
-          ORDER BY "userId", "computedAt" DESC
+          SELECT DISTINCT ON (r."userId")
+            r."userId",
+            r."computedAt",
+            r."historicalImplications"->'dataQuality' AS "dataQuality",
+            (
+              SELECT jsonb_object_agg(entry.id, entry.name)
+              FROM (
+                SELECT
+                  item->>'security_id' AS id,
+                  COALESCE(
+                    NULLIF(btrim(item->>'name'), ''),
+                    NULLIF(btrim(item->>'security_name'), ''),
+                    NULLIF(btrim(item->>'ticker_symbol'), '')
+                  ) AS name
+                FROM jsonb_array_elements(
+                  CASE WHEN jsonb_typeof(r."portfolioSnapshot"->'securities') = 'array'
+                       THEN r."portfolioSnapshot"->'securities' ELSE '[]'::jsonb END
+                  ||
+                  CASE WHEN jsonb_typeof(r."portfolioSnapshot"->'holdings') = 'array'
+                       THEN r."portfolioSnapshot"->'holdings' ELSE '[]'::jsonb END
+                  ||
+                  CASE WHEN jsonb_typeof(snap.securities) = 'array'
+                       THEN snap.securities ELSE '[]'::jsonb END
+                  ||
+                  CASE WHEN jsonb_typeof(snap.holdings) = 'array'
+                       THEN snap.holdings ELSE '[]'::jsonb END
+                ) AS item
+              ) AS entry
+              WHERE entry.id IS NOT NULL AND entry.name IS NOT NULL
+            ) AS "securityNames"
+          FROM retirement_analyses r
+          -- The analysis snapshot is frozen at compute time. A later re-sync can
+          -- carry a name the provider was not returning back then, so the live
+          -- snapshot is consulted too; aggregated last, it wins ties.
+          LEFT JOIN financial_summary_snapshots snap ON snap."userId" = r."userId"
+          ORDER BY r."userId", r."computedAt" DESC
         `;
 
         const report = aggregateDataGaps(
@@ -1149,6 +1193,7 @@ app.get('/sync/status', async (req: Request, res: Response) => {
             userId: row.userId,
             computedAt: row.computedAt,
             historicalImplications: { dataQuality: row.dataQuality },
+            securityNames: row.securityNames ?? undefined,
           }))
         );
         console.log(`Admin: data gaps — ${report.securities.length} securities across ${report.usersConsidered} users`);

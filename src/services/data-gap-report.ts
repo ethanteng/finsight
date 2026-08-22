@@ -27,7 +27,18 @@ export type DataGapCategory =
   | 'us-listing-fallback';
 
 export interface DataGapSecurity {
+  /** What to show: a provider name where one exists, else the raw identifier. */
   label: string;
+  /**
+   * The provider identifier, when the label had to be resolved from one.
+   *
+   * Kept alongside rather than discarded: the name is what makes the row
+   * recognizable, but the identifier is what an operator pastes into a
+   * provider console when going to find the missing data.
+   */
+  identifier?: string;
+  /** True when no human-readable name could be found for this security. */
+  unnamed?: boolean;
   category: DataGapCategory;
   /** Distinct users whose most recent analysis reported this security. */
   userCount: number;
@@ -54,6 +65,17 @@ export interface AnalysisRow {
   userId: string;
   computedAt: Date | string;
   historicalImplications: unknown;
+  /**
+   * Provider identifier -> human-readable name, taken from the same row's
+   * stored portfolio snapshot.
+   *
+   * The mapper labels a holding by name, falling back to ticker and finally to
+   * the provider's opaque security id. That last fallback is what reaches this
+   * report, and a 37-character vendor id tells an operator nothing about which
+   * fund to go and source. Resolving it here rather than at write time also
+   * repairs analyses that were already stored.
+   */
+  securityNames?: Record<string, string>;
 }
 
 function asDate(value: Date | string): Date | null {
@@ -71,6 +93,20 @@ function labelsOf(value: unknown): string[] {
 
 function finite(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+/**
+ * Does this label look like a provider identifier rather than a name?
+ *
+ * Deliberately shape-based rather than a lookup: the point is to decide whether
+ * a *resolved* label is still unreadable, including ids no snapshot could name.
+ * Plaid security ids are long mixed-case alphanumeric strings; SnapTrade and
+ * institutional feeds use forms like `SPUSA061004C00000000`. What they share is
+ * the absence of anything a person reads as a name -- no spaces, and long.
+ */
+function looksLikeIdentifier(label: string): boolean {
+  if (label.includes(' ')) return false;
+  return label.length >= 12 && /^[A-Za-z0-9._:-]+$/.test(label);
 }
 
 /**
@@ -128,20 +164,47 @@ export function aggregateDataGaps(rows: readonly AnalysisRow[]): DataGapReport {
       ['us-listing-fallback', labelsOf(proxyUsage.usListingFallbackHoldings)],
     ];
 
+    const names = row.securityNames ?? {};
+    // Resolve before grouping, not after: the same fund can arrive named from
+    // one user's feed and as a bare id from another's, and grouping on the raw
+    // label would split those into two rows that each look like one holder.
+    const resolve = (label: string) => {
+      const name = names[label];
+      if (name && name.trim() && normalizeLabel(name) !== normalizeLabel(label)) {
+        return { display: name.trim(), identifier: label };
+      }
+      return { display: label, identifier: undefined as string | undefined };
+    };
+
     let sawGap = false;
     for (const [category, labels] of buckets) {
+      const resolved = labels.map(resolve);
       // A label repeated within one analysis is still one user.
-      for (const label of new Set(labels.map(normalizeLabel))) {
+      const seenKeys = new Set<string>();
+      for (const entry of resolved) {
+        const normalized = normalizeLabel(entry.display);
+        if (seenKeys.has(normalized)) continue;
+        seenKeys.add(normalized);
         sawGap = true;
-        const display = labels.find(entry => normalizeLabel(entry) === label) ?? label;
-        const key = `${category}::${label}`;
+        const key = `${category}::${normalized}`;
         const existing = byKey.get(key);
         const seenAt = at.toISOString().slice(0, 10);
         if (existing) {
           existing.userCount += 1;
           if (seenAt > existing.lastSeenAt) existing.lastSeenAt = seenAt;
+          if (!existing.identifier && entry.identifier) existing.identifier = entry.identifier;
         } else {
-          byKey.set(key, { label: display, category, userCount: 1, lastSeenAt: seenAt });
+          byKey.set(key, {
+            label: entry.display,
+            category,
+            userCount: 1,
+            lastSeenAt: seenAt,
+            ...(entry.identifier ? { identifier: entry.identifier } : {}),
+            // Said plainly rather than left for the reader to infer from a
+            // wall of hex: an unnamed security is itself the finding, since it
+            // means the provider sent no name for it either.
+            ...(looksLikeIdentifier(entry.display) ? { unnamed: true } : {}),
+          });
         }
       }
     }

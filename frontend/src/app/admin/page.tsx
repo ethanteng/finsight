@@ -144,6 +144,10 @@ export default function AdminPage() {
     usersWithAnyGap: number;
     securities: Array<{
       label: string;
+      /** Provider id the label was resolved from, when it was resolved. */
+      identifier?: string;
+      /** No source could name this security; the label is its raw identifier. */
+      unnamed?: boolean;
       category: 'unmapped' | 'unsupported' | 'us-listing-fallback';
       userCount: number;
       lastSeenAt: string;
@@ -862,7 +866,25 @@ export default function AdminPage() {
                     <tbody className="text-[#102319]">
                       {dataGaps.securities.map(security => (
                         <tr key={`${security.category}-${security.label}`} className="border-t border-black/5">
-                          <td className="py-2 pr-4 font-medium">{security.label}</td>
+                          <td className="py-2 pr-4 font-medium">
+                            {security.unnamed ? (
+                              <>
+                                <span className="text-[#5e6b63] italic">Unnamed security</span>
+                                <div className="mt-0.5 font-mono text-xs font-normal break-all text-[#5e6b63]">
+                                  {security.label}
+                                </div>
+                              </>
+                            ) : (
+                              <>
+                                {security.label}
+                                {security.identifier && (
+                                  <div className="mt-0.5 font-mono text-xs font-normal break-all text-[#5e6b63]">
+                                    {security.identifier}
+                                  </div>
+                                )}
+                              </>
+                            )}
+                          </td>
                           <td className="py-2 pr-4 text-[#5e6b63]">{CATEGORY_LABEL[security.category]}</td>
                           <td className="py-2 pr-4 text-right tabular-nums">{security.userCount}</td>
                           <td className="py-2 text-right tabular-nums text-[#5e6b63]">{security.lastSeenAt}</td>
@@ -875,6 +897,9 @@ export default function AdminPage() {
 
               <p className="mt-4 text-xs text-[#5e6b63]">
                 Built from stored retirement analyses, so users who have never run one do not appear.
+                Names are resolved from each analysis&apos;s own portfolio snapshot; a row marked
+                &ldquo;Unnamed security&rdquo; is one the provider sent with no name, ticker or
+                description, so its identifier is the only handle on it.
               </p>
             </>
           )}
