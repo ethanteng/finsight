@@ -86,9 +86,10 @@ export class PersonalContextExtractor {
     existing: PersonalContextFacts
   ): Promise<PersonalContextFacts> {
     if (!conversation.question.trim()) return existing;
+    const model = getActiveModel('profile');
     try {
       const response = await openaiClient.chat.completions.create({
-        model: getActiveModel('profile'),
+        model,
         messages: [
           { role: 'system', content: SYSTEM_PROMPT },
           {
@@ -107,7 +108,7 @@ export class PersonalContextExtractor {
             schema: PERSONAL_CONTEXT_OPERATION_SCHEMA,
           },
         },
-        ...openAIGenerationParams('profile'),
+        ...openAIGenerationParams('profile', model),
       });
       const operations = parseOperations(response.choices[0]?.message?.content);
       return applyPersonalContextOperations(existing, operations, {

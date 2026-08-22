@@ -21,6 +21,7 @@ import {
   hasTipsNameSignal,
   inferEquityGeography,
   isContainerAssetType,
+  isDeclaredCashType,
   isDeclaredFixedIncomeType,
   isKnownBondTicker,
   isKnownCreditTicker,
@@ -63,6 +64,26 @@ export class NoSupportedSimulationValueError extends Error {
       `none of the $${Math.round(totalValue).toLocaleString('en-US')} itemized portfolio could be modeled`
     );
     this.name = 'NoSupportedSimulationValueError';
+  }
+}
+
+/**
+ * Thrown when a holding with a negative value carries no complete supported
+ * asset-class mapping. A negative line is ordinary — a margin loan, an
+ * unsettled debit — and mapped ones simulate fine; what cannot be done is
+ * publishing a projection that either drops the liability, which overstates
+ * the portfolio, or invents a return series for it.
+ *
+ * Typed because it is a data condition about one identifiable holding, not a
+ * service failure: retrying reproduces it exactly.
+ */
+export class UnmappedNegativeHoldingError extends Error {
+  constructor(public readonly label: string) {
+    super(
+      `Negative holding "${label}" has no complete supported asset-class mapping; ` +
+      'retirement analysis stopped rather than discarding its liability or guessing its return',
+    );
+    this.name = 'UnmappedNegativeHoldingError';
   }
 }
 
@@ -212,7 +233,17 @@ function resolveHoldingExposure(
     ? selectedAssetType
     : '';
 
-  if (specificAssetType.includes('cash') || specificAssetType.includes('money market')) {
+  // Use the same whole-word / non-negated matcher as selectDeclaredAssetType —
+  // includes('cash') would still treat a type like `non-cash` as cash and undo
+  // the hardening on isDeclaredCashType once that string is the selected type.
+  if (isDeclaredCashType(specificAssetType)) {
+    return { weights: { ...EMPTY_WEIGHTS, cash: 1 }, method: 'provider', confidence: 'high' };
+  }
+  // Plaid ships currency balances as CUR:USD (and CUR:EUR, …). Those tickers
+  // are the balance itself — not a fund FMP can classify — so when the
+  // custodian type is missing we still must not send them down the equity
+  // path. A negative CUR: line is an ordinary margin/settlement debit.
+  if (/^CUR:[A-Z]{3}$/.test(ticker)) {
     return { weights: { ...EMPTY_WEIGHTS, cash: 1 }, method: 'provider', confidence: 'high' };
   }
   if (
@@ -376,6 +407,34 @@ function resolveHoldingExposure(
 }
 
 /**
+ * Cover a negative sleeve from the positive ones, pro rata, leaving the total
+ * modeled value unchanged. Scaling rather than zeroing keeps the surviving
+ * allocation's shape intact: covering a debit sells across the portfolio, it
+ * does not change what the portfolio is invested in.
+ */
+function settleNegativeSleeves(sleeves: {
+  usEquity: number;
+  internationalEquity: number;
+  nominalBonds: number;
+  cash: number;
+}): { usEquity: number; internationalEquity: number; nominalBonds: number; cash: number } {
+  const values = Object.values(sleeves);
+  const shortfall = values.reduce((sum, value) => sum + Math.min(0, value), 0);
+  const positive = values.reduce((sum, value) => sum + Math.max(0, value), 0);
+  if (shortfall === 0 || positive <= 0) return sleeves;
+  // The caller has already rejected a book with no positive modeled value, so
+  // this stays above zero; clamp anyway rather than emit a negative weight.
+  const scale = Math.max(0, (positive + shortfall) / positive);
+  const settle = (value: number) => (value > 0 ? value * scale : 0);
+  return {
+    usEquity: settle(sleeves.usEquity),
+    internationalEquity: settle(sleeves.internationalEquity),
+    nominalBonds: settle(sleeves.nominalBonds),
+    cash: settle(sleeves.cash),
+  };
+}
+
+/**
  * Project every portfolio aggregate from the auditable per-holding results.
  * Callers must not independently rebuild weights, confidence, provenance, or
  * coverage: this is the one reduction used by simulations and reporting.
@@ -462,6 +521,26 @@ export function summarizeHoldingExposures(
   if (holdingExposures.some(exposure => exposure.value < 0) && mappedValue <= 0) {
     throw new Error('Negative holdings leave no positive modeled value for retirement analysis');
   }
+
+  // A sleeve that nets negative is borrowing, and the engine models no
+  // borrowing: it would hand the simulator a weight above 1 in one sleeve and
+  // below 0 in another, then restore that leverage at every annual rebalance
+  // and credit the debt with Treasury-bill returns. Margin accrues at the
+  // broker's rate, not the risk-free one, so that overstates a decades-long
+  // projection. Settle the shortfall against the positive sleeves instead —
+  // the modeled portfolio is what remains after covering the debit today.
+  // Negative positions that offset inside their own sleeve, such as a short
+  // against a long in the same asset class, never reach this.
+  const settledSleeves = settleNegativeSleeves({
+    usEquity: usEquityValue,
+    internationalEquity: internationalEquityValue,
+    nominalBonds: nominalBondsValue,
+    cash: cashValue,
+  });
+  usEquityValue = settledSleeves.usEquity;
+  internationalEquityValue = settledSleeves.internationalEquity;
+  nominalBondsValue = settledSleeves.nominalBonds;
+  cashValue = settledSleeves.cash;
 
   const unmappedValue = Math.max(0, totalValue - mappedValue);
   const valueCoverage = totalValue > 0 ? mappedValue / totalValue : 1;
@@ -639,10 +718,7 @@ export async function mapPortfolioToAssetBasket(
     const modeledFraction = Math.max(0, Math.min(1, modeledWeightTotal(draft.weights)));
     const label = security?.name || holding.security_name || ticker || holding.security_id;
     if (holdingValue < 0 && modeledFraction < 0.999999) {
-      throw new Error(
-        `Negative holding "${label}" has no complete supported asset-class mapping; ` +
-        'retirement analysis stopped rather than discarding its liability or guessing its return',
-      );
+      throw new UnmappedNegativeHoldingError(label);
     }
     const resolution: ResolvedHoldingExposure = {
       holdingId: holding.id || `${holding.security_id}:${holdingIndex}`,
@@ -724,7 +800,9 @@ export function populateAssumptions(
     assumptions.push(
       `$${Math.round(grossNegativeValue).toLocaleString('en-US')} across ` +
       `${negativeExposures.length} negative-valued position${negativeExposures.length === 1 ? '' : 's'} ` +
-      'is modeled as signed exposure and reduces the net simulation basis',
+      'is modeled as signed exposure and reduces the net simulation basis; a balance that leaves its ' +
+      'asset class net negative is covered from the remaining holdings rather than simulated as ' +
+      'borrowing, because no borrowing cost is modeled',
     );
   }
 

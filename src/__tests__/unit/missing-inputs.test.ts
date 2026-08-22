@@ -59,6 +59,25 @@ describe('missing input asks', () => {
     expect(asks[0].message).toContain('supported historical return series');
   });
 
+  it('names the negative holding that blocked the run, and rules out a retry', () => {
+    const asks = collectMissingInputAsks(
+      {
+        retirementAnalysisNeedsInfo: {
+          missingParams: [],
+          detectedParams: {},
+          unavailableReason: 'Negative holding "U S Dollar" has no complete supported asset-class mapping.',
+          unavailableCode: 'unmapped_negative_holding',
+          blockingHoldingLabel: 'U S Dollar',
+        },
+      } as any,
+      { needsRetirement: true, needsHomeValue: false }
+    );
+
+    expect(asks[0]).toMatchObject({ id: 'retirement_unmapped_negative_holding' });
+    expect(asks[0].message).toContain('U S Dollar');
+    expect(asks[0].message).toContain('asking again');
+  });
+
   it('stays quiet about failures the user cannot do anything about', () => {
     // A pricing service outage is ours to fix; telling the user is an apology,
     // not an ask.

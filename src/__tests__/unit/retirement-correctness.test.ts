@@ -570,6 +570,142 @@ describe('retirement correctness contracts', () => {
     )).rejects.toThrow(/negative holding.*no complete supported asset-class mapping/i);
   });
 
+  it('models a negative cash balance instead of stopping on it', async () => {
+    // Plaid reports US dollars as the CUR:USD security, which FMP has no
+    // record of. An inferred "Equity" class on that line used to outrank the
+    // custodian's own `cash` type, leaving a perfectly ordinary margin debit
+    // unmapped and stopping the whole analysis.
+    const holdings = [
+      holding('long', 'WFC', 100_000),
+      holding('cash', 'CUR:USD', -20_000),
+    ];
+    holdings[1].security_name = 'U S Dollar';
+    holdings[1].security_type = 'cash';
+    const securities = [
+      security('long', 'WFC', 'Wells Fargo & Co.', 'equity'),
+      security('cash', 'CUR:USD', 'U S Dollar', 'cash'),
+    ];
+    const metadata = usEquityMetadata('WFC');
+    metadata.set('CUR:USD', { assetClass: 'Equity', geographicFocus: undefined });
+
+    const mapping = await mapPortfolioToAssetBasket(
+      holdings,
+      securities,
+      80_000,
+      undefined,
+      metadata,
+      '2026-08-21',
+    );
+
+    expect(mapping.totalValue).toBe(80_000);
+    expect(mapping.mappedValue).toBe(80_000);
+    // The debit is covered from the equity that remains, not run as a short
+    // cash sleeve: no weight above 1, nothing below 0.
+    expect(mapping.cashValue).toBe(0);
+    expect(mapping.usEquityValue).toBe(80_000);
+    expect(mapping.usEquityWeight).toBe(1);
+    expect(mapping.holdingExposures.map(exposure => exposure.status)).toEqual(['mapped', 'mapped']);
+  });
+
+  it('maps a CUR: currency ticker as cash even without a custodian cash type', async () => {
+    // "U S Dollar" is not in the cash name-signal list, so a missing type used
+    // to leave CUR:USD unmapped and stop the run on a negative balance.
+    const holdings = [
+      holding('long', 'WFC', 100_000),
+      holding('cash', 'CUR:USD', -5_000),
+    ];
+    holdings[1].security_name = 'U S Dollar';
+    holdings[1].security_type = 'Unknown';
+    const securities = [
+      security('long', 'WFC', 'Wells Fargo & Co.', 'equity'),
+      security('cash', 'CUR:USD', 'U S Dollar', 'Unknown'),
+    ];
+
+    const mapping = await mapPortfolioToAssetBasket(
+      holdings,
+      securities,
+      95_000,
+      undefined,
+      usEquityMetadata('WFC'),
+      '2026-08-21',
+    );
+
+    expect(mapping.totalValue).toBe(95_000);
+    expect(mapping.mappedValue).toBe(95_000);
+    expect(mapping.cashValue).toBe(0);
+    expect(mapping.usEquityWeight).toBe(1);
+    expect(mapping.holdingExposures.map(exposure => exposure.status)).toEqual(['mapped', 'mapped']);
+  });
+
+  it('never hands the simulator a leveraged allocation to rebalance back to', async () => {
+    // A negative sleeve would make the simulator hold >100% equity funded by
+    // negative cash, restore that leverage at every annual rebalance, and pay
+    // for it at the Treasury-bill rate. Margin does not cost the risk-free rate.
+    const holdings = [
+      holding('long', 'WFC', 100_000),
+      holding('cash', 'CUR:USD', -20_000),
+    ];
+    holdings[1].security_name = 'U S Dollar';
+    holdings[1].security_type = 'cash';
+    const securities = [
+      security('long', 'WFC', 'Wells Fargo & Co.', 'equity'),
+      security('cash', 'CUR:USD', 'U S Dollar', 'cash'),
+    ];
+
+    const mapping = await mapPortfolioToAssetBasket(
+      holdings,
+      securities,
+      80_000,
+      undefined,
+      usEquityMetadata('WFC'),
+      '2026-08-21',
+    );
+
+    for (const weight of [
+      mapping.usEquityWeight,
+      mapping.internationalEquityWeight,
+      mapping.nominalBondsWeight,
+      mapping.cashWeight,
+    ]) {
+      expect(weight).toBeGreaterThanOrEqual(0);
+      expect(weight).toBeLessThanOrEqual(1);
+    }
+
+    // A flat sequence returns exactly the basis it was given; leverage would
+    // have compounded the equity sleeve past it.
+    const outcome = simulateWithdrawals(mapping, mapping.mappedValue, flatSequence(12), 0);
+    expect(outcome.finalValue).toBe(80_000);
+
+    expect(populateAssumptions(mapping, holdings, securities).join(' ')).toContain(
+      'covered from the remaining holdings rather than simulated as borrowing',
+    );
+  });
+
+  it('names the holding that blocked the run so the ask is not a retry', async () => {
+    const holdings = [
+      holding('long', 'WFC', 100_000),
+      holding('short', 'X123', -20_000),
+    ];
+    holdings[1].security_name = 'Unidentified Short Position';
+    holdings[1].security_type = 'Unknown';
+    const securities = [
+      security('long', 'WFC', 'Wells Fargo & Co.', 'equity'),
+      security('short', 'X123', 'Unidentified Short Position', 'Unknown'),
+    ];
+
+    await expect(mapPortfolioToAssetBasket(
+      holdings,
+      securities,
+      80_000,
+      undefined,
+      usEquityMetadata('WFC'),
+      '2026-08-21',
+    )).rejects.toMatchObject({
+      name: 'UnmappedNegativeHoldingError',
+      label: 'Unidentified Short Position',
+    });
+  });
+
   it('publishes sourced target-date composition while simulation uses supported sleeves', async () => {
     const holdings = [holding('lifepath', 'O7PE', 100_000)];
     holdings[0].security_name = 'BTC LPATH IDX 2040 N';

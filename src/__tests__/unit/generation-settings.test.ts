@@ -41,9 +41,9 @@ describe('generation settings', () => {
     });
 
     it('keeps each OpenAI call on the temperature it was hardcoded with', () => {
-      expect(openAIGenerationParams('fallback')).toEqual({ temperature: 0.2, max_tokens: 16_000 });
-      expect(openAIGenerationParams('profile')).toEqual({ temperature: 0.1 });
-      expect(openAIGenerationParams('contextPlanner')).toEqual({ temperature: 0, max_tokens: 1500 });
+      expect(openAIGenerationParams('fallback', 'gpt-4o')).toEqual({ temperature: 0.2, max_tokens: 16_000 });
+      expect(openAIGenerationParams('profile', 'gpt-4o')).toEqual({ temperature: 0.1 });
+      expect(openAIGenerationParams('contextPlanner', 'gpt-4o')).toEqual({ temperature: 0, max_tokens: 1500 });
     });
 
     it('sends Gemini nothing, as the validator did before these settings existed', () => {
@@ -78,15 +78,88 @@ describe('generation settings', () => {
     });
   });
 
+  describe('parameter names the selected model accepts', () => {
+    // A slot pointed at gpt-5 used to 400 on every call, which turned context
+    // planning into "include every pack" until someone read the logs.
+    it('renames the ceiling for models that only take max_completion_tokens', () => {
+      expect(openAIGenerationParams('contextPlanner', 'gpt-5.6-sol'))
+        .toEqual({ max_completion_tokens: 1500 });
+      expect(openAIGenerationParams('fallback', 'o3-mini'))
+        .toEqual({ max_completion_tokens: 16_000 });
+    });
+
+    it('adapts prefixed and fine-tuned ids the same way as a bare family id', () => {
+      // Model ids accept `:` and `/` (see MODEL_ID_PATTERN). A prefixed GPT-5
+      // id used to keep sending max_tokens and 400 every call.
+      expect(openAIGenerationParams('contextPlanner', 'ft:gpt-5-mini:org:label:abc123'))
+        .toEqual({ max_completion_tokens: 1500 });
+      expect(openAIGenerationParams('fallback', 'openai/o3-mini'))
+        .toEqual({ max_completion_tokens: 16_000 });
+      expect(openAIGenerationParams('contextPlanner', 'openai/gpt-4.1'))
+        .toEqual({ temperature: 0, max_tokens: 1500 });
+    });
+
+    it('drops a temperature those models cannot honour instead of failing the call', () => {
+      expect(openAIGenerationParams('contextPlanner', 'gpt-5.6-sol')).not.toHaveProperty('temperature');
+      expect(openAIGenerationParams('profile', 'gpt-5-mini')).toEqual({});
+    });
+
+    it('leaves the older models on the names they take', () => {
+      expect(openAIGenerationParams('contextPlanner', 'gpt-4.1'))
+        .toEqual({ temperature: 0, max_tokens: 1500 });
+    });
+
+    it('still omits a ceiling set to off on a renamed model', () => {
+      setActiveGenerationSettings({ contextPlanner: { maxOutputTokens: OMIT_SETTING } });
+      expect(openAIGenerationParams('contextPlanner', 'gpt-5.6-sol')).toEqual({});
+    });
+  });
+
+  describe('what the admin panel reports as the wire form', () => {
+    // The stored value is not always what the request carries. Saying
+    // "Sending 0" while the model refuses temperature is how a slot 400s on
+    // every call with the panel looking correctly configured.
+    const settingsFor = (slotId: string) =>
+      getActiveGenerationSettings().find(entry => entry.slotId === slotId)!.settings;
+    const setting = (slotId: string, settingId: string) =>
+      settingsFor(slotId).find(entry => entry.id === settingId)!;
+
+    it('names the renamed ceiling and flags the refused temperature', () => {
+      setActiveModelOverrides({ contextPlanner: 'gpt-5.6-sol' });
+      expect(setting('contextPlanner', 'maxOutputTokens')).toMatchObject({
+        wireParameter: 'max_completion_tokens',
+      });
+      expect(setting('contextPlanner', 'temperature')).toMatchObject({ droppedByModel: true });
+      expect(setting('contextPlanner', 'temperature').wireParameter).toBeUndefined();
+    });
+
+    it('reports the older names for a model that still takes them', () => {
+      setActiveModelOverrides({ contextPlanner: 'gpt-4o' });
+      expect(setting('contextPlanner', 'maxOutputTokens')).toMatchObject({
+        wireParameter: 'max_tokens',
+      });
+      expect(setting('contextPlanner', 'temperature')).toMatchObject({ wireParameter: 'temperature' });
+      expect(setting('contextPlanner', 'temperature').droppedByModel).toBeUndefined();
+    });
+
+    it('says nothing about the wire for providers that need no adaptation', () => {
+      // Anthropic and Gemini are not adapted, so the panel reads as before
+      // rather than asserting a parameter name this code does not own.
+      expect(setting('analysis', 'maxOutputTokens').wireParameter).toBeUndefined();
+      expect(setting('validation', 'temperature').wireParameter).toBeUndefined();
+      expect(setting('validation', 'temperature').droppedByModel).toBeUndefined();
+    });
+  });
+
   describe('omission', () => {
     it('drops a parameter set to off rather than sending a default', () => {
       setActiveGenerationSettings({ contextPlanner: { temperature: OMIT_SETTING, maxOutputTokens: OMIT_SETTING } });
-      expect(openAIGenerationParams('contextPlanner')).toEqual({});
+      expect(openAIGenerationParams('contextPlanner', 'gpt-4o')).toEqual({});
     });
 
     it('adds a parameter that ships omitted once a value is set', () => {
       setActiveGenerationSettings({ profile: { maxOutputTokens: '2048' } });
-      expect(openAIGenerationParams('profile')).toEqual({ temperature: 0.1, max_tokens: 2048 });
+      expect(openAIGenerationParams('profile', 'gpt-4o')).toEqual({ temperature: 0.1, max_tokens: 2048 });
     });
 
     it('refuses to omit a parameter the provider requires', () => {

@@ -307,7 +307,7 @@ export async function planContext(args: PlanContextArgs): Promise<ContextPlan> {
   try {
     const response = await getClient().chat.completions.create({
       model,
-      ...openAIGenerationParams('contextPlanner'),
+      ...openAIGenerationParams('contextPlanner', model),
       response_format: {
         type: 'json_schema',
         json_schema: {

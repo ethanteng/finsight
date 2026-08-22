@@ -23,7 +23,7 @@ export async function askOpenAIWithPreparedPrompt(
   const model = getActiveModel('fallback');
   const response = await getClient().chat.completions.create({
     model,
-    ...openAIGenerationParams('fallback'),
+    ...openAIGenerationParams('fallback', model),
     response_format: {
       type: 'json_schema',
       json_schema: {
@@ -41,7 +41,7 @@ export async function askOpenAIWithPreparedPrompt(
   // answer that still reads like a whole one, and this path only runs when the
   // primary provider is already down.
   if (response.choices[0]?.finish_reason === 'length') {
-    const warning = `Ask Linc: OpenAI fallback response truncated at max_tokens (model=${model}). Raise ASK_LINC_MAX_OUTPUT_TOKENS.`;
+    const warning = `Ask Linc: OpenAI fallback response truncated at its output ceiling (model=${model}). Raise ASK_LINC_MAX_OUTPUT_TOKENS.`;
     console.warn(warning);
     Sentry.captureMessage(warning, 'warning');
   }

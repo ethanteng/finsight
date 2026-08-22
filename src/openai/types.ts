@@ -289,7 +289,14 @@ export interface FinancialContextSnapshot {
     /** When retirement analysis cannot run despite a retirement question (e.g. no holdings). */
     unavailableReason?: string;
     /** Machine-readable form of unavailableReason: only some causes are the user's to fix. */
-    unavailableCode?: 'no_holdings' | 'insufficient_history' | 'no_supported_simulation' | 'service_error';
+    unavailableCode?: 'no_holdings' | 'insufficient_history' | 'no_supported_simulation'
+      | 'unmapped_negative_holding' | 'service_error';
+    /**
+     * The holding that blocked the run, when a single one did. Present only
+     * with unavailableCode 'unmapped_negative_holding', so the ask can name
+     * what to fix instead of describing the failure in the abstract.
+     */
+    blockingHoldingLabel?: string;
     /**
      * What the history actually allows, when its length is what blocked the run.
      * Present only with unavailableCode 'insufficient_history', so the ask can

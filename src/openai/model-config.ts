@@ -179,6 +179,8 @@ function maxOutputTokensSetting(options: {
   omittable: boolean;
   envVar?: string;
   description: string;
+  /** Overrides the panel label where the wire parameter is not `max_tokens`. */
+  label?: string;
 }): GenerationSettingMeta {
   return {
     id: 'maxOutputTokens',
@@ -189,6 +191,21 @@ function maxOutputTokensSetting(options: {
     ...options,
   };
 }
+
+/**
+ * What the OpenAI slots send this ceiling as. The o-series and GPT-5 models
+ * renamed it and reject the old spelling outright, so the request adapts to
+ * the selected model and the panel says so rather than naming one parameter
+ * that is only sometimes the one on the wire.
+ */
+const OPENAI_CEILING_LABEL = 'Max completion tokens';
+const OPENAI_CEILING_NOTE =
+  ' Sent as `max_completion_tokens` on the o-series and GPT-5 models, which renamed the parameter, ' +
+  'and as `max_tokens` on the models that still take that name.';
+
+/** The same note for temperature, which those models accept only at their own default. */
+const OPENAI_TEMPERATURE_NOTE =
+  ' Not sent at all on the o-series and GPT-5 models, which accept only their own default.';
 
 function temperatureSetting(shippedDefault: string, description: string): GenerationSettingMeta {
   return {
@@ -221,14 +238,16 @@ export const SLOT_GENERATION_SETTINGS: Record<ModelSlotId, GenerationSettingMeta
   fallback: [
     temperatureSetting(
       '0.2',
-      'How much the wording varies between identical questions. Set to off if the model rejects the parameter — several newer OpenAI models accept only their own default.'
+      'How much the wording varies between identical questions.' + OPENAI_TEMPERATURE_NOTE
     ),
     maxOutputTokensSetting({
       shippedDefault: '16000',
       omittable: true,
       envVar: 'ASK_LINC_MAX_OUTPUT_TOKENS',
+      label: OPENAI_CEILING_LABEL,
       description:
-        'Ceiling on a single answer from the fallback provider. Truncation is reported to Sentry when it happens.',
+        'Ceiling on a single answer from the fallback provider. Truncation is reported to Sentry when it happens.'
+        + OPENAI_CEILING_NOTE,
     }),
   ],
   validation: [
@@ -246,25 +265,31 @@ export const SLOT_GENERATION_SETTINGS: Record<ModelSlotId, GenerationSettingMeta
   profile: [
     temperatureSetting(
       '0.1',
-      'How much the structured personal-context patch varies between identical user messages. Low values keep unchanged details stable.'
+      'How much the structured personal-context patch varies between identical user messages. '
+        + 'Low values keep unchanged details stable.' + OPENAI_TEMPERATURE_NOTE
     ),
     maxOutputTokensSetting({
       shippedDefault: OMIT_SETTING,
       omittable: true,
+      label: OPENAI_CEILING_LABEL,
       description:
-        'Ceiling on the small structured personal-context patch. The application rejects malformed or incomplete output instead of storing it.',
+        'Ceiling on the small structured personal-context patch. The application rejects malformed '
+        + 'or incomplete output instead of storing it.' + OPENAI_CEILING_NOTE,
     }),
   ],
   contextPlanner: [
     temperatureSetting(
       '0',
-      'How much routing varies between identical decisions. Zero is deliberate: context selection and extracted inputs should be stable.'
+      'How much routing varies between identical decisions. Zero is deliberate: context selection '
+        + 'and extracted inputs should be stable.' + OPENAI_TEMPERATURE_NOTE
     ),
     maxOutputTokensSetting({
       shippedDefault: '1500',
       omittable: true,
+      label: OPENAI_CEILING_LABEL,
       description:
-        'Ceiling on the structured context plan. The response is a small fixed JSON object.',
+        'Ceiling on the structured context plan. The response is a small fixed JSON object.'
+        + OPENAI_CEILING_NOTE,
     }),
   ],
 };
@@ -321,6 +346,53 @@ const MODEL_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:@-]{1,127}$/;
 
 export function isPlausibleModelId(value: string): boolean {
   return MODEL_ID_PATTERN.test(value.trim());
+}
+
+/**
+ * OpenAI model families that renamed the output ceiling to
+ * `max_completion_tokens` and accept only their own sampling temperature.
+ *
+ * Sending the older names to one of these is a 400, not a warning, so the slot
+ * fails every call until someone reads the logs: pointing the context planner
+ * at gpt-5 silently turned every plan into "include every context pack" until
+ * the request started adapting. GPT-5 and later are matched as a family rather
+ * than listed, so the next model an admin selects does not repeat it.
+ *
+ * Admin model ids may carry fine-tune or provider prefixes (`ft:gpt-5:…`,
+ * `openai/gpt-5`). The family check runs on the bare model segment so those
+ * spellings follow the same wire shape as an unprefixed id.
+ */
+function bareOpenAIModelId(model: string): string {
+  const normalized = model.trim().toLowerCase();
+  if (!normalized) return normalized;
+  if (normalized.includes('/')) {
+    return normalized.slice(normalized.lastIndexOf('/') + 1);
+  }
+  // Fine-tune ids look like ft:<base>:<org>:… — use the first gpt-/o-segment.
+  if (normalized.includes(':')) {
+    const segment = normalized
+      .split(':')
+      .find(part => /^(?:o\d|gpt-)/.test(part));
+    if (segment) return segment;
+  }
+  return normalized;
+}
+
+/**
+ * The request shape one OpenAI model accepts. Lives here rather than beside the
+ * request builder because the admin panel reports it too: an admin who selects
+ * a model should be able to read what that choice does to the parameters
+ * without inferring it from a model id.
+ */
+export function openAIWireParameters(model: string): {
+  maxOutputTokensParameter: 'max_tokens' | 'max_completion_tokens';
+  acceptsTemperature: boolean;
+} {
+  const renamedCeiling = /^(?:o\d|gpt-(?:[5-9]|\d{2,}))/.test(bareOpenAIModelId(model));
+  return {
+    maxOutputTokensParameter: renamedCeiling ? 'max_completion_tokens' : 'max_tokens',
+    acceptsTemperature: !renamedCeiling,
+  };
 }
 
 /** The value used when an admin has set no override for this slot. */
@@ -465,10 +537,38 @@ export function getActiveNumericGenerationSetting(
 }
 
 /** Every slot's settings with their resolved values, for the admin panel. */
+/**
+ * What a stored setting becomes in a request to the slot's active model.
+ *
+ * The stored value is not always what goes on the wire: an OpenAI reasoning
+ * model renames the ceiling and refuses a temperature. Reporting only the
+ * stored value would let the panel say it is sending a parameter the model
+ * never receives, so each setting carries the resolved form alongside it.
+ * Slots whose provider needs no adaptation carry nothing and read as before.
+ */
+function wireShapeForSetting(
+  slot: ModelSlotMeta,
+  settingId: GenerationSettingId,
+): { wireParameter?: string; droppedByModel?: boolean } {
+  if (slot.provider !== 'openai') return {};
+  const wire = openAIWireParameters(getActiveModel(slot.id));
+  if (settingId === 'maxOutputTokens') return { wireParameter: wire.maxOutputTokensParameter };
+  if (settingId === 'temperature') {
+    return wire.acceptsTemperature ? { wireParameter: 'temperature' } : { droppedByModel: true };
+  }
+  return {};
+}
+
 export function getActiveGenerationSettings(): Array<{
   slotId: ModelSlotId;
   settings: Array<
-    GenerationSettingMeta & { value: string; isOverridden: boolean; defaultValue: string }
+    GenerationSettingMeta & {
+      value: string;
+      isOverridden: boolean;
+      defaultValue: string;
+      wireParameter?: string;
+      droppedByModel?: boolean;
+    }
   >;
 }> {
   return MODEL_SLOTS.map(slot => ({
@@ -481,6 +581,7 @@ export function getActiveGenerationSettings(): Array<{
         defaultValue,
         value: override ?? defaultValue,
         isOverridden: override !== undefined,
+        ...wireShapeForSetting(slot, setting.id),
       };
     }),
   }));
