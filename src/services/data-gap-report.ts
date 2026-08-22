@@ -1,3 +1,5 @@
+import { isProviderIdentifierLabel } from './holding-label';
+
 /**
  * Which securities the classifier cannot place, aggregated across users.
  *
@@ -106,20 +108,6 @@ function finite(value: unknown): number | null {
 }
 
 /**
- * Does this label look like a provider identifier rather than a name?
- *
- * Deliberately shape-based rather than a lookup: the point is to decide whether
- * a *resolved* label is still unreadable, including ids no snapshot could name.
- * Plaid security ids are long mixed-case alphanumeric strings; SnapTrade and
- * institutional feeds use forms like `SPUSA061004C00000000`. What they share is
- * the absence of anything a person reads as a name -- no spaces, and long.
- */
-function looksLikeIdentifier(label: string): boolean {
-  if (label.includes(' ')) return false;
-  return label.length >= 12 && /^[A-Za-z0-9._:-]+$/.test(label);
-}
-
-/**
  * Collapse label variants that differ only in spacing or case.
  *
  * Provider labels arrive inconsistently punctuated across feeds, and counting
@@ -214,7 +202,7 @@ export function aggregateDataGaps(rows: readonly AnalysisRow[]): DataGapReport {
             // Said plainly rather than left for the reader to infer from a
             // wall of hex: an unnamed security is itself the finding, since it
             // means the provider sent no name for it either.
-            ...(looksLikeIdentifier(entry.display) ? { unnamed: true } : {}),
+            ...(isProviderIdentifierLabel(entry.display) ? { unnamed: true } : {}),
           });
         }
       }

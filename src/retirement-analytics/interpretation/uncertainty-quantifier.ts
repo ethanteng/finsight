@@ -8,6 +8,7 @@ import {
   describeUnmodeledInvestmentValue,
   type UnmodeledInvestmentValue,
 } from '../../services/investment-coverage';
+import { describeHoldingForProse } from '../../services/holding-label';
 
 /**
  * Calculate data quality metrics
@@ -60,11 +61,17 @@ export function calculateDataQuality(
           if (exposure.status !== 'unmapped') continue;
           labelCounts.set(exposure.label, (labelCounts.get(exposure.label) ?? 0) + 1);
         }
-        return Array.from(labelCounts, ([label, count]) =>
-          count === 1 ? label : `${label} (${count} holdings)`
-        );
+        return Array.from(labelCounts, ([label, count]) => {
+          // `missingData` is prose: it reaches the model's context pack and from
+          // there an explanation someone reads. A label that is really a
+          // provider id has to say so, or it gets presented as a fund name.
+          // The machine-readable copies in `proxyUsage` keep the bare id, since
+          // that is what the admin report resolves names against.
+          const described = describeHoldingForProse(label);
+          return count === 1 ? described : `${described} (${count} holdings)`;
+        });
       })()
-    : Array.from(new Set(resolvedMapping.unmappedHoldings));
+    : Array.from(new Set(resolvedMapping.unmappedHoldings)).map(describeHoldingForProse);
   const missingData = [...fullyUnmappedHoldingLabels, ...stressTestMissingData];
 
   // Combine provider-level value with no holdings detail and itemized holdings

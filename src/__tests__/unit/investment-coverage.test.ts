@@ -370,3 +370,64 @@ describe('retirement data quality with excluded value', () => {
     expect(disclaimers.some(text => text.startsWith(UNMODELED_VALUE_NOTE_PREFIX))).toBe(false);
   });
 });
+
+describe('holding labels reaching the model', () => {
+  // `missingData` is copied verbatim into the context pack (openai/context-pack.ts)
+  // and from there into an explanation someone reads. The mapper's label chain
+  // ends at the provider's security id, so a security the provider named with
+  // nothing at all arrives here as raw hex.
+  const securities = [{ security_id: 's', type: 'equity', ticker_symbol: 'X' }] as any[];
+  const holdings = [holding('401k', 1_000)] as any[];
+
+  const withUnmapped = (labels: string[]) => ({
+    ...mapping,
+    unmappedValue: 1_000,
+    unrecognizedValue: 1_000,
+    mappedValue: 0,
+    unmappedHoldings: labels,
+    holdingExposures: labels.map((label, index) => ({
+      holdingId: `h${index}`,
+      label,
+      value: 1_000,
+      status: 'unmapped' as const,
+      method: 'none',
+      confidence: 'low' as const,
+    })),
+  }) as any;
+
+  it('never hands a bare provider id to the model as if it were a fund', () => {
+    const quality = calculateDataQuality(
+      holdings, securities, withUnmapped(['SPUSA061004C00000000']), 1, []
+    );
+
+    expect(quality.missingData).toContain('Unidentified holding (SPUSA061004C00000000)');
+    expect(quality.missingData).not.toContain('SPUSA061004C00000000');
+  });
+
+  it('keeps the identifier legible in the machine-readable copy', () => {
+    // The admin data-gap report resolves names against this, so decorating it
+    // would break the lookup. The two copies serve different readers.
+    const quality = calculateDataQuality(
+      holdings, securities, withUnmapped(['SPUSA061004C00000000']), 1, []
+    );
+
+    expect(quality.proxyUsage.unmappedHoldings).toEqual(['SPUSA061004C00000000']);
+  });
+
+  it('leaves a real fund name exactly as the provider wrote it', () => {
+    const quality = calculateDataQuality(
+      holdings, securities, withUnmapped(['State St Target Ret 2040 SL SF CL III']), 1, []
+    );
+
+    expect(quality.missingData).toContain('State St Target Ret 2040 SL SF CL III');
+    expect(quality.missingData.join(' ')).not.toContain('Unidentified');
+  });
+
+  it('still reports how many holdings share an unnamed identifier', () => {
+    const quality = calculateDataQuality(
+      holdings, securities, withUnmapped(['SPUSA061004C00000000', 'SPUSA061004C00000000']), 1, []
+    );
+
+    expect(quality.missingData).toContain('Unidentified holding (SPUSA061004C00000000) (2 holdings)');
+  });
+});
