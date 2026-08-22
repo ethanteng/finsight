@@ -744,6 +744,11 @@ export default function AdminPage() {
     setDataGapsError(null);
     try {
       const response = await fetch(`${API_URL}/admin/data-gaps`, { headers: getAuthHeaders() });
+      // Match the other admin loaders: an expired admin session is a specific,
+      // actionable message, not a bare status code.
+      if (response.status === 401 || response.status === 403) {
+        throw new Error('Authentication required for admin access');
+      }
       if (!response.ok) throw new Error(`Request failed (${response.status})`);
       setDataGaps(await response.json());
     } catch (error) {
