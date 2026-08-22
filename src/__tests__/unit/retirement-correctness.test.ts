@@ -603,6 +603,33 @@ describe('retirement correctness contracts', () => {
     expect(mapping.holdingExposures.map(exposure => exposure.status)).toEqual(['mapped', 'mapped']);
   });
 
+  it('maps a CUR: currency ticker as cash even without a custodian cash type', async () => {
+    // "U S Dollar" is not in the cash name-signal list, so a missing type used
+    // to leave CUR:USD unmapped and stop the run on a negative balance.
+    const holdings = [
+      holding('long', 'WFC', 100_000),
+      holding('cash', 'CUR:USD', -5_000),
+    ];
+    holdings[1].security_name = 'U S Dollar';
+    holdings[1].security_type = 'Unknown';
+    const securities = [
+      security('long', 'WFC', 'Wells Fargo & Co.', 'equity'),
+      security('cash', 'CUR:USD', 'U S Dollar', 'Unknown'),
+    ];
+
+    const mapping = await mapPortfolioToAssetBasket(
+      holdings,
+      securities,
+      95_000,
+      undefined,
+      usEquityMetadata('WFC'),
+      '2026-08-21',
+    );
+
+    expect(mapping.cashValue).toBe(-5_000);
+    expect(mapping.holdingExposures.map(exposure => exposure.status)).toEqual(['mapped', 'mapped']);
+  });
+
   it('names the holding that blocked the run so the ask is not a retry', async () => {
     const holdings = [
       holding('long', 'WFC', 100_000),

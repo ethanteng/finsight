@@ -235,6 +235,13 @@ function resolveHoldingExposure(
   if (specificAssetType.includes('cash') || specificAssetType.includes('money market')) {
     return { weights: { ...EMPTY_WEIGHTS, cash: 1 }, method: 'provider', confidence: 'high' };
   }
+  // Plaid ships currency balances as CUR:USD (and CUR:EUR, …). Those tickers
+  // are the balance itself — not a fund FMP can classify — so when the
+  // custodian type is missing we still must not send them down the equity
+  // path. A negative CUR: line is an ordinary margin/settlement debit.
+  if (/^CUR:[A-Z]{3}$/.test(ticker)) {
+    return { weights: { ...EMPTY_WEIGHTS, cash: 1 }, method: 'provider', confidence: 'high' };
+  }
   if (
     isDeclaredFixedIncomeType(specificAssetType) &&
     (hasTipsNameSignal(specificAssetType) || hasTipsNameSignal(securityName) || isKnownTipsTicker(ticker))
