@@ -176,6 +176,16 @@ function toObservation(conversation: AnswerQualityConversation): AnswerQualityOb
   const searchEvidence = manifest.evidenceRefs?.search;
   const searchRequested = finalPacks.includes('search_context') && finalSearchQueries.length > 0;
   const removals = deterministic?.removals;
+  // A plan whose every query failed has no search evidence block, so routing
+  // counts have to come from the standalone outcome list instead of looking
+  // like the provider was never called.
+  const searchQueryOutcomes = searchEvidence?.queryOutcomes
+    ?? manifest.evidenceRefs?.searchQueryOutcomes
+    ?? [];
+  const searchProviderCalls = searchEvidence?.providerCalls
+    ?? searchQueryOutcomes.filter((outcome) => outcome.source === 'provider').length;
+  const searchCacheHits = searchEvidence?.cacheHits
+    ?? searchQueryOutcomes.filter((outcome) => outcome.source === 'cache').length;
   return {
     id: conversation.id,
     createdAt: new Date(conversation.createdAt).toISOString(),
@@ -195,8 +205,8 @@ function toObservation(conversation: AnswerQualityConversation): AnswerQualityOb
     searchRequested,
     searchQueryCount: finalSearchQueries.length,
     searchRetrieved: Boolean(searchEvidence),
-    searchProviderCalls: searchEvidence?.providerCalls ?? 0,
-    searchCacheHits: searchEvidence?.cacheHits ?? 0,
+    searchProviderCalls,
+    searchCacheHits,
     searchResultCount: searchEvidence?.resultCount ?? 0,
     details: {
       groundingIssues: deterministic?.issues ?? [],
@@ -207,11 +217,7 @@ function toObservation(conversation: AnswerQualityConversation): AnswerQualityOb
       removedKeyNumbers: removals?.keyNumbers ?? [],
       ...(removals?.replacedSummary && { replacedSummary: removals.replacedSummary }),
       plannedSearchQueries: finalSearchQueries,
-      // A plan whose every query failed has no search evidence to hang the
-      // record on, so the manifest keeps those attempts alongside it.
-      searchQueryOutcomes: searchEvidence?.queryOutcomes
-        ?? manifest.evidenceRefs?.searchQueryOutcomes
-        ?? [],
+      searchQueryOutcomes,
     },
     ...deliveryStatus({ outcome, rating, lateExpansion }),
   };

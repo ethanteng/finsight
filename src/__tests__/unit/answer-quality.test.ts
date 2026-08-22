@@ -391,7 +391,13 @@ describe('answer quality report', () => {
       }),
     ]);
 
-    expect(report.search).toMatchObject({ requested: 1, retrieved: 0, failedQueries: 1 });
+    expect(report.search).toMatchObject({
+      requested: 1,
+      retrieved: 0,
+      failedQueries: 1,
+      providerCalls: 1,
+    });
+    expect(report.recent[0].searchProviderCalls).toBe(1);
     expect(report.recent[0].details.searchQueryOutcomes[0].error).toContain('quota is exhausted');
   });
 
