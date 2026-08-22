@@ -1111,6 +1111,92 @@ app.get('/sync/status', async (req: Request, res: Response) => {
       }
     });
 
+    /**
+     * Securities the classifier could not place, aggregated across users.
+     *
+     * Reads analyses already persisted rather than adding a write to the
+     * classification path, so it needs no migration. The tradeoff is coverage:
+     * a user who has never run a retirement analysis does not appear.
+     *
+     * Aggregated by security and never by user — the counts decide which
+     * provider data to source, and individual positions are not needed for that.
+     */
+    app.get('/admin/data-gaps', adminAuth, async (req: Request, res: Response) => {
+      try {
+        const { getPrismaClient } = await import('./prisma-client');
+        const { aggregateDataGaps } = await import('./services/data-gap-report');
+        const prisma = getPrismaClient();
+
+        // One latest analysis per user. A global `take` of newest rows would
+        // drop quieter users when power users fill the window, undercounting
+        // widely-held gaps. Project only dataQuality — historicalImplications
+        // stores the full analysis result (stress tests included).
+        const rows = await prisma.$queryRaw<Array<{
+          userId: string;
+          computedAt: Date;
+          dataQuality: unknown;
+        }>>`
+          SELECT DISTINCT ON ("userId")
+            "userId",
+            "computedAt",
+            "historicalImplications"->'dataQuality' AS "dataQuality"
+          FROM retirement_analyses
+          ORDER BY "userId", "computedAt" DESC
+        `;
+
+        const report = aggregateDataGaps(
+          rows.map(row => ({
+            userId: row.userId,
+            computedAt: row.computedAt,
+            historicalImplications: { dataQuality: row.dataQuality },
+          }))
+        );
+        console.log(`Admin: data gaps — ${report.securities.length} securities across ${report.usersConsidered} users`);
+        res.json(report);
+      } catch (error) {
+        console.error('Error building data gap report:', error);
+        res.status(500).json({ error: 'Failed to build data gap report' });
+      }
+    });
+
+    /**
+     * Whether each target-date registry source still publishes what its entry
+     * records. Answers the question the runtime staleness flag cannot.
+     *
+     * `staleAllocation` in the engine is age-based, because divergence can only
+     * be established by fetching the provider and provider fetches do not belong
+     * in a request that computes someone's projection. State Street republishes
+     * monthly, so an entry stays under the 366-day threshold for a year while a
+     * dozen newer publications ship. This is where an operator sees that.
+     *
+     * On demand rather than on page load: six outbound fetches, and nobody
+     * needs them every time the admin panel opens.
+     */
+    app.get('/admin/registry-sources', adminAuth, async (req: Request, res: Response) => {
+      try {
+        const { checkRegistrySources } = await import('./services/registry-source-check');
+        const results = await checkRegistrySources();
+        const diverged = results.filter(result => result.status === 'drifted').length;
+        console.log(`Admin: registry sources — ${results.length} checked, ${diverged} diverged`);
+        res.json({
+          checkedAt: new Date().toISOString(),
+          sources: results.map(result => ({
+            key: result.key,
+            status: result.status,
+            detail: result.detail,
+            sourceUrl: result.sourceUrl,
+            allocationAsOf: result.allocationAsOf,
+            allocationAgeDays: result.allocationAgeDays,
+            staleByAge: result.staleByAge,
+            observedSourceAsOf: result.observedSourceAsOf,
+          })),
+        });
+      } catch (error) {
+        console.error('Error checking registry sources:', error);
+        res.status(500).json({ error: 'Failed to check registry sources' });
+      }
+    });
+
     // Admin endpoint to get all production users
     app.get('/admin/production-users', adminAuth, async (req: Request, res: Response) => {
       try {

@@ -81,7 +81,7 @@ interface MarketNewsContext {
 }
 
 export default function AdminPage() {
-  const [activeTab, setActiveTab] = useState<'production' | 'users' | 'market-news' | 'ai-settings'>('production');
+  const [activeTab, setActiveTab] = useState<'production' | 'users' | 'market-news' | 'ai-settings' | 'data-gaps'>('production');
 
   // Production data state
   const [productionUsers, setProductionUsers] = useState<ProductionUser[]>([]);
@@ -137,6 +137,43 @@ export default function AdminPage() {
   const [error, setError] = useState('');
   const [selectedSession, setSelectedSession] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'sessions' | 'conversations'>('sessions');
+
+  // Securities the classifier could not place (aggregated; no per-user positions).
+  const [dataGaps, setDataGaps] = useState<{
+    usersConsidered: number;
+    usersWithAnyGap: number;
+    securities: Array<{
+      label: string;
+      category: 'unmapped' | 'unsupported' | 'us-listing-fallback';
+      userCount: number;
+      lastSeenAt: string;
+    }>;
+    coverage: {
+      totalUnmodeledValue: number;
+      worstValueCoverage: number | null;
+      medianValueCoverage: number | null;
+    };
+  } | null>(null);
+  const [dataGapsLoading, setDataGapsLoading] = useState(false);
+  const [dataGapsError, setDataGapsError] = useState<string | null>(null);
+  // Whether each registry source still publishes what its entry records. The
+  // engine's staleness flag is age-based; this is the divergence signal it
+  // cannot give, because only a provider fetch establishes divergence.
+  const [registrySources, setRegistrySources] = useState<{
+    checkedAt: string;
+    sources: Array<{
+      key: string;
+      status: 'unchanged' | 'drifted' | 'baseline' | 'error';
+      detail: string;
+      sourceUrl: string;
+      allocationAsOf: string;
+      allocationAgeDays: number;
+      staleByAge: boolean;
+      observedSourceAsOf?: string;
+    }>;
+  } | null>(null);
+  const [registryLoading, setRegistryLoading] = useState(false);
+  const [registryError, setRegistryError] = useState<string | null>(null);
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
@@ -718,6 +755,254 @@ export default function AdminPage() {
 
   const truncateText = (text: string, maxLength: number = 100) => {
     return text.length > maxLength ? text.substring(0, maxLength) + '...' : text;
+  };
+
+  const loadDataGaps = async () => {
+    setDataGapsLoading(true);
+    setDataGapsError(null);
+    try {
+      const response = await fetch(`${API_URL}/admin/data-gaps`, { headers: getAuthHeaders() });
+      // Match the other admin loaders: an expired admin session is a specific,
+      // actionable message, not a bare status code.
+      if (response.status === 401 || response.status === 403) {
+        throw new Error('Authentication required for admin access');
+      }
+      if (!response.ok) throw new Error(`Request failed (${response.status})`);
+      setDataGaps(await response.json());
+    } catch (error) {
+      setDataGapsError(error instanceof Error ? error.message : 'Failed to load data gaps');
+    } finally {
+      setDataGapsLoading(false);
+    }
+  };
+
+  const loadRegistrySources = async () => {
+    setRegistryLoading(true);
+    setRegistryError(null);
+    try {
+      const response = await fetch(`${API_URL}/admin/registry-sources`, { headers: getAuthHeaders() });
+      if (response.status === 401 || response.status === 403) {
+        throw new Error('Authentication required for admin access');
+      }
+      if (!response.ok) throw new Error(`Request failed (${response.status})`);
+      setRegistrySources(await response.json());
+    } catch (error) {
+      setRegistryError(error instanceof Error ? error.message : 'Failed to check registry sources');
+    } finally {
+      setRegistryLoading(false);
+    }
+  };
+
+  const CATEGORY_LABEL: Record<'unmapped' | 'unsupported' | 'us-listing-fallback', string> = {
+    unmapped: 'No asset class resolved',
+    unsupported: 'Recognized, no return series',
+    'us-listing-fallback': 'US-listed fallback used',
+  };
+
+  const renderDataGapsTab = () => {
+    const pct = (value: number | null) => (value === null ? '—' : `${(value * 100).toFixed(1)}%`);
+    return (
+      <div className="space-y-6">
+        <div className="rounded-lg bg-white/70 p-6">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-xl font-semibold text-[#102319]">Data gaps</h2>
+              <p className="mt-1 text-sm text-[#5e6b63]">
+                Securities the classifier could not place, ranked by how many users hold them.
+                Aggregated by security — no individual positions are shown.
+              </p>
+            </div>
+            <button
+              onClick={loadDataGaps}
+              disabled={dataGapsLoading}
+              className="min-h-10 rounded bg-[#102319] px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+            >
+              {dataGapsLoading ? 'Loading…' : dataGaps ? 'Refresh' : 'Load report'}
+            </button>
+          </div>
+
+          {dataGapsError && (
+            <p className="mt-4 rounded bg-red-50 p-3 text-sm text-red-700">{dataGapsError}</p>
+          )}
+
+          {dataGaps && (
+            <>
+              <div className="mt-5 grid grid-cols-2 gap-4 sm:grid-cols-4">
+                {[
+                  ['Users considered', String(dataGaps.usersConsidered)],
+                  ['Users with a gap', String(dataGaps.usersWithAnyGap)],
+                  ['Median coverage', pct(dataGaps.coverage.medianValueCoverage)],
+                  ['Worst coverage', pct(dataGaps.coverage.worstValueCoverage)],
+                ].map(([label, value]) => (
+                  <div key={label} className="rounded bg-white/80 p-3">
+                    <div className="text-xs uppercase tracking-wide text-[#5e6b63]">{label}</div>
+                    <div className="mt-1 text-lg font-semibold text-[#102319]">{value}</div>
+                  </div>
+                ))}
+              </div>
+              <p className="mt-3 text-sm text-[#5e6b63]">
+                {`$${Math.round(dataGaps.coverage.totalUnmodeledValue).toLocaleString()} excluded from simulation across these analyses.`}
+              </p>
+
+              {dataGaps.securities.length === 0 ? (
+                <p className="mt-5 text-sm text-[#5e6b63]">
+                  No unclassifiable securities reported. Every holding in the analyses read reached the simulation.
+                </p>
+              ) : (
+                <div className="mt-5 overflow-x-auto">
+                  <table className="w-full min-w-[640px] text-left text-sm">
+                    <thead className="text-xs uppercase tracking-wide text-[#5e6b63]">
+                      <tr>
+                        <th className="py-2 pr-4">Security</th>
+                        <th className="py-2 pr-4">Why</th>
+                        <th className="py-2 pr-4 text-right">Users</th>
+                        <th className="py-2 text-right">Last seen</th>
+                      </tr>
+                    </thead>
+                    <tbody className="text-[#102319]">
+                      {dataGaps.securities.map(security => (
+                        <tr key={`${security.category}-${security.label}`} className="border-t border-black/5">
+                          <td className="py-2 pr-4 font-medium">{security.label}</td>
+                          <td className="py-2 pr-4 text-[#5e6b63]">{CATEGORY_LABEL[security.category]}</td>
+                          <td className="py-2 pr-4 text-right tabular-nums">{security.userCount}</td>
+                          <td className="py-2 text-right tabular-nums text-[#5e6b63]">{security.lastSeenAt}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              <p className="mt-4 text-xs text-[#5e6b63]">
+                Built from stored retirement analyses, so users who have never run one do not appear.
+              </p>
+            </>
+          )}
+        </div>
+
+        <div className="rounded-lg bg-white/70 p-6">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-xl font-semibold text-[#102319]">Registry sources</h2>
+              <p className="mt-1 text-sm text-[#5e6b63]">
+                Whether each target-date source still publishes what its entry records. The
+                engine&apos;s own staleness flag is age-based and will not notice a provider
+                republishing inside its window.
+              </p>
+            </div>
+            <button
+              onClick={loadRegistrySources}
+              disabled={registryLoading}
+              className="min-h-10 rounded bg-[#102319] px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+            >
+              {registryLoading ? 'Checking…' : registrySources ? 'Re-check' : 'Check sources'}
+            </button>
+          </div>
+
+          {registryError && (
+            <p className="mt-4 rounded bg-red-50 p-3 text-sm text-red-700">{registryError}</p>
+          )}
+
+          {registrySources && (
+            <>
+              {(() => {
+                const diverged = registrySources.sources.filter(s => s.status === 'drifted');
+                const errored = registrySources.sources.filter(s => s.status === 'error');
+                const baselined = registrySources.sources.filter(s => s.status === 'baseline');
+                if (diverged.length > 0) {
+                  return (
+                    <p className="mt-4 rounded bg-amber-50 p-3 text-sm text-amber-900">
+                      <strong>{diverged.length} source{diverged.length === 1 ? '' : 's'} moved since transcription.</strong>{' '}
+                      The stored weights are not wrong, but they no longer match what the provider
+                      publishes. Re-transcribe from the current publication when you are ready — this
+                      panel never edits the registry.
+                    </p>
+                  );
+                }
+                if (errored.length > 0) {
+                  return (
+                    <p className="mt-4 rounded bg-amber-50 p-3 text-sm text-amber-900">
+                      {errored.length} source{errored.length === 1 ? '' : 's'} could not be read. That is
+                      an availability problem, not evidence that anything diverged.
+                    </p>
+                  );
+                }
+                if (baselined.length > 0) {
+                  return (
+                    <p className="mt-4 rounded bg-amber-50 p-3 text-sm text-amber-900">
+                      {baselined.length} source{baselined.length === 1 ? '' : 's'} have no stored
+                      fingerprint yet, so this check cannot confirm they still match a transcription.
+                    </p>
+                  );
+                }
+                return (
+                  <p className="mt-4 rounded bg-emerald-50 p-3 text-sm text-emerald-900">
+                    All {registrySources.sources.length} sources still publish what their entries record.
+                  </p>
+                );
+              })()}
+
+              <div className="mt-5 overflow-x-auto">
+                <table className="w-full min-w-[720px] text-left text-sm">
+                  <thead className="text-xs uppercase tracking-wide text-[#5e6b63]">
+                    <tr>
+                      <th className="py-2 pr-4">Entry</th>
+                      <th className="py-2 pr-4">Source</th>
+                      <th className="py-2 pr-4">Transcribed from</th>
+                      <th className="py-2 pr-4">Source now says</th>
+                      <th className="py-2 text-right">Age</th>
+                    </tr>
+                  </thead>
+                  <tbody className="text-[#102319]">
+                    {registrySources.sources.map(source => (
+                      <tr key={source.key} className="border-t border-black/5 align-top">
+                        <td className="py-2 pr-4 font-medium">
+                          <a href={source.sourceUrl} target="_blank" rel="noopener noreferrer" className="underline">
+                            {source.key}
+                          </a>
+                          {source.status !== 'unchanged' && source.detail && (
+                            <p className="mt-1 whitespace-pre-wrap font-normal text-xs text-[#5e6b63]">
+                              {source.detail}
+                            </p>
+                          )}
+                        </td>
+                        <td className="py-2 pr-4">
+                          <span className={
+                            source.status === 'drifted' ? 'text-amber-700 font-medium'
+                              : source.status === 'error' || source.status === 'baseline' ? 'text-red-700'
+                              : 'text-emerald-700'
+                          }>
+                            {source.status === 'unchanged' ? 'unchanged'
+                              : source.status === 'drifted' ? 'moved'
+                              : source.status === 'error' ? 'unreadable'
+                              : 'no baseline'}
+                          </span>
+                        </td>
+                        <td className="py-2 pr-4 tabular-nums text-[#5e6b63]">{source.allocationAsOf}</td>
+                        <td className="py-2 pr-4 tabular-nums text-[#5e6b63]">
+                          {source.observedSourceAsOf && source.observedSourceAsOf !== 'see-document'
+                            ? source.observedSourceAsOf
+                            : '—'}
+                        </td>
+                        <td className="py-2 text-right tabular-nums text-[#5e6b63]">
+                          {source.allocationAgeDays}d{source.staleByAge ? ' · stale' : ''}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <p className="mt-4 text-xs text-[#5e6b63]">
+                Checked {new Date(registrySources.checkedAt).toLocaleString()}. Age drives the
+                engine&apos;s confidence today; divergence does not, because establishing it needs a
+                provider fetch that does not belong in a user&apos;s projection request.
+              </p>
+            </>
+          )}
+        </div>
+      </div>
+    );
   };
 
   const renderProductionTab = () => {
@@ -1635,6 +1920,16 @@ export default function AdminPage() {
           >
             AI Settings
           </button>
+          <button
+            onClick={() => setActiveTab('data-gaps')}
+            className={`min-h-12 min-w-0 rounded px-3 py-2 text-sm font-medium leading-tight transition-colors sm:flex-1 sm:px-4 ${
+              activeTab === 'data-gaps'
+                ? 'bg-[#102319] text-white shadow-sm'
+                : 'text-[#5e6b63] hover:bg-white/65 hover:text-[#102319]'
+            }`}
+          >
+            Data Gaps
+          </button>
         </div>
 
         {/* Tab Content */}
@@ -1642,6 +1937,7 @@ export default function AdminPage() {
         {activeTab === 'users' && renderUsersTab()}
         {activeTab === 'market-news' && renderMarketNewsTab()}
         {activeTab === 'ai-settings' && renderAiSettingsTab()}
+        {activeTab === 'data-gaps' && renderDataGapsTab()}
         </div>
       </div>
     </>
