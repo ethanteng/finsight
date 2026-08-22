@@ -218,4 +218,19 @@ describe('Tiingo coverage gaps', () => {
     // The healthy path must not pay for the gap bookkeeping.
     expect(clear).not.toHaveBeenCalled();
   });
+
+  it('keys a class-share gap the same way however the broker spells it', async () => {
+    jest.spyOn(dbCache, 'getCoverageGap').mockResolvedValue(null);
+    const record = jest.spyOn(dbCache, 'recordCoverageGap').mockResolvedValue(undefined);
+    const fetchImplementation = jest.fn().mockResolvedValue(response(404, {}));
+
+    await expect(
+      liveProvider(fetchImplementation).getPriceHistory('BRK.B', HISTORY_START, HISTORY_END),
+    ).rejects.toBeInstanceOf(TiingoHttpError);
+
+    // Recorded under the dotted form the broker sent; the key normalizer is
+    // what collapses it onto the same row as a BRK-B caller.
+    expect(record).toHaveBeenCalledWith(expect.objectContaining({ ticker: 'BRK.B' }));
+    expect(String(fetchImplementation.mock.calls[0][0])).toContain('/tiingo/daily/BRK-B/prices');
+  });
 });

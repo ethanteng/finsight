@@ -15,11 +15,15 @@ export const SECURITY_METADATA_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 // fund, a delisted symbol is backfilled — so this is a pause, not a blocklist.
 export const PROVIDER_COVERAGE_GAP_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
-// Callers reach this from several paths that differ in casing and whitespace.
-// One symbol must be one row, or a gap recorded by one caller is invisible to
-// the next and nothing is actually skipped.
+// Callers reach this from several paths that differ in casing, whitespace, and
+// class-share punctuation. One symbol must be one row, or a gap recorded by one
+// caller is invisible to the next and nothing is actually skipped.
+//
+// Dots collapse to dashes to match how the providers themselves spell class
+// shares over HTTP (Tiingo's normalizeTicker does the same): brokers send
+// BRK.B, the request goes out as BRK-B, and both must land on one row.
 function coverageGapKey(ticker: string): string {
-  return ticker.trim().toUpperCase();
+  return ticker.trim().toUpperCase().replace(/\./g, '-');
 }
 
 export class DatabaseCache {
