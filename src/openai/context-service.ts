@@ -11,7 +11,7 @@ import {
   type UnmodeledInvestmentValue,
 } from '../services/investment-coverage';
 import { buildCanonicalCashFlowAnalyses } from './cash-flow-context';
-import { resolveRetirementInputs, retirementPortfolioFingerprint, resolveStoredAsOfYear } from './retirement-inputs';
+import { resolveRetirementInputs, retirementPortfolioFingerprint, resolveStoredAsOfDate } from './retirement-inputs';
 import { generateDisclaimers, calculateConfidenceCeiling } from '../retirement-analytics/interpretation/uncertainty-quantifier';
 import type { DataQualityReport } from '../retirement-analytics/types';
 import type { ExtractedRetirementInputs } from './retirement-input-extraction';
@@ -527,11 +527,9 @@ export async function completeRetirementAnalysis(
       holdings,
       securities,
       unmodeledInvestments: snapshot.investments?.unmodeledInvestments,
-      // The target-date allocation registry is dated, so take its year from
-      // the snapshot rather than the wall clock. That keeps a
-      // recomputation and a cached result agreeing across a year boundary, and
-      // makes the analysis a function of its inputs like everything else here.
-      asOfYear: snapshotYear(snapshot),
+      // The registry is dated, so take the full UTC date from the snapshot.
+      // This prevents look-ahead and keeps replays deterministic.
+      asOfDate: snapshotDate(snapshot),
     });
     return {
       ...snapshot,
@@ -556,16 +554,16 @@ export async function completeRetirementAnalysis(
 }
 
 /**
- * Year of the snapshot an analysis is built from, when it is known.
+ * UTC date of the snapshot an analysis is built from, when it is known.
  *
- * Undefined leaves the engine on its current-year default, which is right for
+ * Undefined leaves the engine on its current-date default, which is right for
  * a context with no snapshot behind it.
  */
-function snapshotYear(snapshot: FinancialContextSnapshot): number | undefined {
+function snapshotDate(snapshot: FinancialContextSnapshot): string | undefined {
   const computedAt = snapshot.financialSummary?.computedAt;
   if (!computedAt) return undefined;
   const parsed = computedAt instanceof Date ? computedAt : new Date(computedAt);
-  return Number.isNaN(parsed.getTime()) ? undefined : parsed.getUTCFullYear();
+  return Number.isNaN(parsed.getTime()) ? undefined : parsed.toISOString().slice(0, 10);
 }
 
 /** Fetch a matching retirement analysis or create one from explicit, persisted inputs. */
@@ -579,7 +577,7 @@ async function fetchOrCreateRetirementAnalysis(args: {
   holdings: any[];
   securities: any[];
   unmodeledInvestments?: UnmodeledInvestmentValue | null;
-  asOfYear?: number;
+  asOfDate?: string;
 }): Promise<RetirementAnalysisResolution> {
   const {
     userId,
@@ -591,7 +589,7 @@ async function fetchOrCreateRetirementAnalysis(args: {
     holdings,
     securities,
     unmodeledInvestments,
-    asOfYear,
+    asOfDate,
   } = args;
 
   // Parse retirement parameters from the question and the turns that set it up.
@@ -771,10 +769,10 @@ async function fetchOrCreateRetirementAnalysis(args: {
     };
   }
 
-  // Resolve once so cache matching and the stored input use the same year the
-  // engine would. Glidepath equity share depends on asOfYear; a 7-day cache hit
-  // that ignores it would reuse a Dec analysis on Jan 1 with the wrong split.
-  const effectiveAsOfYear = asOfYear ?? new Date().getUTCFullYear();
+  // Resolve once so cache matching and the stored input use the same evidence
+  // boundary as the engine. A full date prevents a January snapshot from
+  // selecting an allocation that was not published until June.
+  const effectiveAsOfDate = asOfDate ?? new Date().toISOString().slice(0, 10);
 
   // If recent analysis exists and parameters match, use it
   if (recentAnalysis) {
@@ -785,7 +783,7 @@ async function fetchOrCreateRetirementAnalysis(args: {
         storedPortfolio.holdings,
         storedPortfolio.securities
       );
-    const storedAsOfYear = resolveStoredAsOfYear(storedAnalysisInput, recentAnalysis.computedAt);
+    const storedAsOfDate = resolveStoredAsOfDate(storedAnalysisInput, recentAnalysis.computedAt);
     if (
       portfolioMatches &&
       storedInput.currentAge === currentAge &&
@@ -794,7 +792,7 @@ async function fetchOrCreateRetirementAnalysis(args: {
       storedInput.withdrawalStartAge === withdrawalStartAge &&
       (storedInput.lifeExpectancy ?? 95) === lifeExpectancy &&
       storedAnalysisInput.historicalDatasetVersion === historicalDatasetVersion &&
-      storedAsOfYear === effectiveAsOfYear
+      storedAsOfDate === effectiveAsOfDate
     ) {
       console.log('📦 Using cached retirement analysis from database');
       const cachedAnalysis = recentAnalysis.historicalImplications as any;
@@ -871,9 +869,9 @@ async function fetchOrCreateRetirementAnalysis(args: {
       holdings,
       securities,
       unmodeledInvestments,
-      // Always persist the resolved year so a later cache lookup can match it
-      // even when the caller left asOfYear undefined (clock default).
-      asOfYear: effectiveAsOfYear,
+      // Persist the full evidence boundary used by the registry so a later
+      // cache lookup cannot substitute a different allocation.
+      asOfDate: effectiveAsOfDate,
       currentAge,
       retirementAge,
       lifeExpectancy,

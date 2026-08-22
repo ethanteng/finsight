@@ -257,8 +257,9 @@ yearsOfExpenses = totalValue / annualWithdrawalAmount
 ```
 completeness = holdingsWithMetadata / holdings.length
   (holding has metadata if security.type && holding.ticker_symbol)
-proxiedValuePercentage = proxiedValue / totalValue
-  (proxied = holdings in unmappedHoldings or mappingMethod === 'inferred')
+proxiedValuePercentage = abs(value mapped by name inference or a documented share-class proxy)
+                         / signed net itemized portfolio value
+  (may exceed 1.0 for a leveraged portfolio with negative positions)
 metadataConfidence = completeness < 0.5 ? 'low' : completeness < 0.8 ? 'medium' : 'high'
 ```
 

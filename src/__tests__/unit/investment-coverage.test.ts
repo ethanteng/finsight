@@ -33,6 +33,7 @@ const mapping = {
   holdingExposures: [],
   mappingConfidence: 'high' as const,
   unmappedHoldings: [],
+  partiallyMappedHoldings: [],
   mappingMethod: 'direct' as const,
   targetDateFunds: [],
 };
@@ -235,6 +236,27 @@ describe('retirement data quality with excluded value', () => {
     expect(generateDisclaimers(quality)[0]).toContain(
       '$100,000 in Unrecognized or unsupported holdings has no supported asset-class mapping',
     );
+  });
+
+  it('does not report a partially supported fund as wholly missing', () => {
+    const partialFund = {
+      ...mapping,
+      mappedValue: 780_000,
+      unmappedValue: 24_827.9,
+      valueCoverage: 780_000 / 804_827.9,
+      mappingConfidence: 'medium' as const,
+      partiallyMappedHoldings: ['Target Retirement 2040 Fund'],
+    };
+
+    const quality = calculateDataQuality(holdings, securities, partialFund, 1, []);
+
+    expect(quality.missingData).not.toContain('Target Retirement 2040 Fund');
+    expect(quality.proxyUsage.unmappedHoldings).toEqual([]);
+    expect(quality.unmodeledReasons).toContainEqual({
+      label: 'Unrecognized or unsupported holdings',
+      amount: 24_827.9,
+      kind: 'unrecognized-holdings',
+    });
   });
 
   it('treats a fully explained portfolio as complete rather than unmodeled', () => {

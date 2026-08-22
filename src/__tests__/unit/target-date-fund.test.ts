@@ -146,7 +146,7 @@ describe('target-date funds in retirement mapping', () => {
     { security_id: 'lp', ticker_symbol: 'O7PE', security_name: 'BTC LPATH IDX 2040 N', institution_value: 100_000 },
   ] as any[];
 
-  it('maps the exact BlackRock share class from versioned published holdings', () => {
+  it('maps the same BlackRock share class with its plan-sponsor source context', () => {
     // O7PE contains a digit and did not match the old letters-only stock regex;
     // the sourced registry is what makes this previously unmapped holding usable.
     return mapPortfolioToAssetBasket(holdings, securities, 100_000, undefined, new Map(), 2026)
@@ -156,17 +156,20 @@ describe('target-date funds in retirement mapping', () => {
         expect(mapping.internationalEquityWeight).toBeCloseTo(0.2698 / 0.9747, 6);
         expect(mapping.mappedValue).toBeCloseTo(97_470, 2);
         expect(mapping.unmappedValue).toBeCloseTo(2_530, 2);
-        expect(mapping.unmappedHoldings).toEqual(['BTC LPATH IDX 2040 N']);
-        expect(mapping.targetDateFunds).toEqual([
-          {
-            label: 'BTC LPATH IDX 2040 N',
-            targetYear: 2040,
-            equityShare: 0.7471,
-            allocationAsOf: '2026-06-30',
-            sourceUrl: 'https://assets.mersofmich.com/forms/MERS_LifePath_2040.pdf',
-            exactAllocation: true,
-          },
-        ]);
+        expect(mapping.unmappedHoldings).toEqual([]);
+        expect(mapping.partiallyMappedHoldings).toEqual(['BTC LPATH IDX 2040 N']);
+        expect(mapping.targetDateFunds).toHaveLength(1);
+        expect(mapping.targetDateFunds[0]).toMatchObject({
+          label: 'BTC LPATH IDX 2040 N',
+          targetYear: 2040,
+          equityShare: 0.7471,
+          allocationAsOf: '2026-06-30',
+          allocationAgeDays: 184,
+          staleAllocation: false,
+          sourceUrl: 'https://assets.mersofmich.com/forms/MERS_LifePath_2040.pdf',
+          sourceContext: 'MERS plan-sponsor fact sheet for the BlackRock LifePath Fund N share class',
+          exactAllocation: true,
+        });
       });
   });
 
@@ -180,7 +183,8 @@ describe('target-date funds in retirement mapping', () => {
       2026
     );
 
-    expect(mapping.unmappedHoldings).toEqual(['State St Target Ret 2030 SL SF CL III']);
+    expect(mapping.unmappedHoldings).toEqual([]);
+    expect(mapping.partiallyMappedHoldings).toEqual(['State St Target Ret 2030 SL SF CL III']);
     expect(mapping.nominalBondsWeight).toBeCloseTo(0.311 / 0.837, 6);
     expect(mapping.valueCoverage).toBeCloseTo(0.837, 6);
   });
@@ -232,6 +236,25 @@ describe('target-date funds in retirement mapping', () => {
     expect(mapping.valueCoverage).toBe(0);
   });
 
+  it('does not borrow a reviewed provider allocation for another fund family', async () => {
+    const mapping = await mapPortfolioToAssetBasket(
+      [{ security_id: 'fidelity', security_name: 'Fidelity Freedom 2040 Fund', institution_value: 25_000 }] as any[],
+      [{ security_id: 'fidelity', name: 'Fidelity Freedom 2040 Fund', type: 'mutual fund' }] as any[],
+      25_000,
+      undefined,
+      new Map(),
+      '2026-12-31',
+    );
+
+    expect(mapping.holdingExposures[0]).toMatchObject({
+      targetYear: 2040,
+      method: 'unmapped',
+      mappedValue: 0,
+    });
+    expect(mapping.targetDateFunds).toEqual([]);
+    expect(mapping.unmappedHoldings).toEqual(['Fidelity Freedom 2040 Fund']);
+  });
+
   it('does not reuse a registry allocation for a different analysis year', async () => {
     const mapping = await mapPortfolioToAssetBasket(
       holdings,
@@ -248,6 +271,53 @@ describe('target-date funds in retirement mapping', () => {
       method: 'unmapped',
       targetYear: 2040,
     });
+  });
+
+  it('does not let a January snapshot see a June allocation', async () => {
+    const mapping = await mapPortfolioToAssetBasket(
+      holdings,
+      securities,
+      100_000,
+      undefined,
+      new Map(),
+      '2026-01-15',
+    );
+
+    expect(mapping.mappedValue).toBe(0);
+    expect(mapping.targetDateFunds).toEqual([]);
+  });
+
+  it('carries the newest eligible allocation into the following year', async () => {
+    const mapping = await mapPortfolioToAssetBasket(
+      holdings,
+      securities,
+      100_000,
+      undefined,
+      new Map(),
+      '2027-01-15',
+    );
+
+    expect(mapping.mappedValue).toBeCloseTo(97_470, 2);
+    expect(mapping.targetDateFunds[0]).toMatchObject({
+      allocationAsOf: '2026-06-30',
+      allocationAgeDays: 199,
+      staleAllocation: false,
+    });
+  });
+
+  it('discloses and lowers confidence for an allocation older than one year', async () => {
+    const mapping = await mapPortfolioToAssetBasket(
+      holdings,
+      securities,
+      100_000,
+      undefined,
+      new Map(),
+      '2027-07-02',
+    );
+
+    expect(mapping.targetDateFunds[0].staleAllocation).toBe(true);
+    expect(mapping.mappingConfidence).toBe('low');
+    expect(populateAssumptions(mapping, [], []).join(' ')).toContain('stale by 12 months');
   });
 });
 
@@ -306,7 +376,7 @@ describe('institutional and employer-plan funds', () => {
     expect(populateAssumptions(mapping, [], []).join(' ')).not.toContain('70%');
   });
 
-  it('describes target-date funds by year and split, not by holding name', async () => {
+  it('describes target-date funds by year, split, and source—not by holding name', async () => {
     // The source metadata is enough to audit the split without putting holding
     // labels into analysis context for questions that never asked for detail.
     const mapping = await mapPortfolioToAssetBasket(
@@ -327,8 +397,10 @@ describe('institutional and employer-plan funds', () => {
     expect(assumption).toContain('targeting 2040 at 75% equity');
     expect(assumption).toContain('1 targeting 2035 at 67% equity');
     expect(assumption).toContain('as of 2026-06-30');
-    expect(assumption).not.toContain('State St');
-    expect(assumption).not.toContain('LPATH');
+    expect(assumption).toContain('State Street public mutual-fund share class');
+    expect(assumption).toContain('BlackRock LifePath Fund N share class');
+    expect(assumption).not.toContain('State St Target Ret');
+    expect(assumption).not.toContain('BTC LPATH IDX');
   });
 
   it('does not claim a fabricated geography assumption for target-date funds', async () => {

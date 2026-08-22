@@ -4,7 +4,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import * as XLSX from 'xlsx';
-import { mapPortfolioToAssetBasket } from '../../retirement-analytics/engine/portfolio-mapper';
+import { mapPortfolioToAssetBasket, populateAssumptions } from '../../retirement-analytics/engine/portfolio-mapper';
 import { analyzePortfolio } from '../../retirement-analytics/engine/portfolio-analyzer';
 import { simulateWithdrawals } from '../../retirement-analytics/engine/withdrawal-simulator';
 import {
@@ -57,6 +57,7 @@ const balancedMapping: PortfolioMapping = {
   holdingExposures: [],
   mappingConfidence: 'high',
   unmappedHoldings: [],
+  partiallyMappedHoldings: [],
   mappingMethod: 'direct',
   targetDateFunds: [],
 };
@@ -136,6 +137,59 @@ describe('retirement correctness contracts', () => {
     expect(mapping.unmappedValue).toBe(10_000);
     expect(mapping.valueCoverage).toBe(0.9);
     expect(mapping.holdingExposures.map(exposure => exposure.mappedValue)).toEqual([90_000, 0]);
+  });
+
+  it('keeps a supported short position in the net simulation basis', async () => {
+    const holdings = [
+      holding('long', 'WFC', 100_000),
+      holding('short', 'Z', -20_000),
+    ];
+    const securities = [
+      security('long', 'WFC', 'Wells Fargo & Co.', 'equity'),
+      security('short', 'Z', 'Short Equity Position', 'equity'),
+    ];
+
+    const mapping = await mapPortfolioToAssetBasket(
+      holdings,
+      securities,
+      80_000,
+      undefined,
+      new Map(),
+      '2026-08-21',
+    );
+    const outcome = simulateWithdrawals(mapping, mapping.mappedValue, flatSequence(12), 0);
+
+    expect(mapping.totalValue).toBe(80_000);
+    expect(mapping.mappedValue).toBe(80_000);
+    expect(mapping.valueCoverage).toBe(1);
+    expect(mapping.usEquityWeight).toBe(1);
+    expect(mapping.holdingExposures.map(exposure => exposure.mappedValue)).toEqual([100_000, -20_000]);
+    expect(outcome.finalValue).toBe(80_000);
+    expect(populateAssumptions(mapping, holdings, securities).join(' ')).toContain(
+      '$20,000 across 1 negative-valued position',
+    );
+  });
+
+  it('stops rather than discarding an unsupported negative holding', async () => {
+    const holdings = [
+      holding('long', 'WFC', 100_000),
+      holding('short', 'X123', -20_000),
+    ];
+    holdings[1].security_name = 'Unidentified Short Position';
+    holdings[1].security_type = 'Unknown';
+    const securities = [
+      security('long', 'WFC', 'Wells Fargo & Co.', 'equity'),
+      security('short', 'X123', 'Unidentified Short Position', 'Unknown'),
+    ];
+
+    await expect(mapPortfolioToAssetBasket(
+      holdings,
+      securities,
+      80_000,
+      undefined,
+      new Map(),
+      '2026-08-21',
+    )).rejects.toThrow(/negative holding.*no complete supported asset-class mapping/i);
   });
 
   it('publishes the same target-date allocation that the simulator consumes', async () => {

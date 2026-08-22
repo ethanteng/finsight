@@ -16,7 +16,7 @@ export async function analyzePortfolio(
   dataProviderFactory?: DataProviderFactory,
   preFetchedMetadata?: Map<string, any>,
   portfolioMapping?: PortfolioMapping,
-  asOfYear: number = new Date().getUTCFullYear(),
+  asOfDate: string | number = new Date().toISOString().slice(0, 10),
 ): Promise<PortfolioCompositionMetrics> {
   if (holdings.length === 0) {
     return {
@@ -89,7 +89,7 @@ export async function analyzePortfolio(
     totalValue,
     dataProviderFactory,
     tickerToMetadata,
-    asOfYear,
+    asOfDate,
   );
 
   let totalExpenseRatio = 0;

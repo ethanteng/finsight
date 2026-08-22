@@ -78,7 +78,7 @@ export async function generateRollingSequences(
     throw new Error('Historical analysis horizon must be positive');
   }
 
-  const internationalRequired = mapping.internationalEquityWeight > 0;
+  const internationalRequired = Math.abs(mapping.internationalEquityWeight) > 1e-12;
   const usable = dates.map((_, index) =>
     !internationalRequired || intlEquityReturns[index] !== null
   );
@@ -182,15 +182,15 @@ export function calculateHistoricalPriceCoverage(
     [mapping.nominalBondsWeight, data.bondReturns],
     [mapping.cashWeight, data.cashReturns],
   ];
-  const activeWeight = sleeves.reduce((total, [weight]) => total + weight, 0);
+  const activeWeight = sleeves.reduce((total, [weight]) => total + Math.abs(weight), 0);
   if (activeWeight <= 0) return 0;
 
   const weightedCoverage = sleeves.reduce((total, [weight, observations]) => {
-    if (weight <= 0) return total;
+    if (Math.abs(weight) <= 1e-12) return total;
     const usable = observations.filter(
       (value): value is number => typeof value === 'number' && Number.isFinite(value)
     ).length;
-    return total + weight * Math.min(1, usable / minimumMonths);
+    return total + Math.abs(weight) * Math.min(1, usable / minimumMonths);
   }, 0);
   return weightedCoverage / activeWeight;
 }

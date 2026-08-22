@@ -52,7 +52,7 @@ function resolveHoldingExposure(
   holding: Holding,
   security: Security | undefined,
   fmpMetadata: SecurityMetadata | null,
-  asOfYear: number,
+  asOfDate: string | number,
 ): HoldingResolutionDraft {
   const ticker = security?.ticker_symbol?.toUpperCase() || holding.ticker_symbol?.toUpperCase() || '';
   const securityName = security?.name?.toLowerCase() || holding.security_name?.toLowerCase() || '';
@@ -68,7 +68,7 @@ function resolveHoldingExposure(
   const targetYear = targetDateFundYear(...labels);
 
   if (targetYear !== null && !declaredFixedIncome) {
-    const allocation = lookupTargetDateFundAllocation(labels, asOfYear);
+    const allocation = lookupTargetDateFundAllocation(labels, asOfDate);
     if (!allocation) {
       return {
         weights: copyWeights(EMPTY_WEIGHTS),
@@ -168,14 +168,14 @@ export async function mapPortfolioToAssetBasket(
   dataProviderFactory?: DataProviderFactory,
   preFetchedMetadata?: Map<string, any>,
   /**
-   * Registry year used to select a dated, sourced target-date allocation.
-   * Passed rather than read from the clock so a snapshot, test, and replay use
-   * the same registry version.
+   * Snapshot date used to select the newest allocation that was already
+   * published. Numeric years remain accepted for legacy direct callers and
+   * are interpreted as year-end by the registry.
    */
-  asOfYear: number = new Date().getUTCFullYear()
+  asOfDate: string | number = new Date().toISOString().slice(0, 10)
 ): Promise<PortfolioMapping> {
   const portfolioValue = holdings.reduce(
-    (sum, holding) => sum + Math.max(0, holding.institution_value || 0),
+    (sum, holding) => sum + (Number.isFinite(holding.institution_value) ? holding.institution_value! : 0),
     0,
   );
   const mapping: PortfolioMapping = {
@@ -192,12 +192,16 @@ export async function mapPortfolioToAssetBasket(
     holdingExposures: [],
     mappingConfidence: 'high',
     unmappedHoldings: [],
+    partiallyMappedHoldings: [],
     mappingMethod: 'direct',
     targetDateFunds: [],
   };
 
-  if (portfolioValue === 0 || holdings.length === 0) {
+  if (holdings.length === 0) {
     return mapping;
+  }
+  if (portfolioValue <= 0) {
+    throw new Error('Retirement analysis requires a positive net value after negative holdings');
   }
 
   const securityMap = new Map(securities.map(sec => [sec.security_id, sec]));
@@ -227,17 +231,23 @@ export async function mapPortfolioToAssetBasket(
 
   for (const holding of holdings) {
     const security = securityMap.get(holding.security_id);
-    const holdingValue = holding.institution_value || 0;
+    const holdingValue = Number.isFinite(holding.institution_value) ? holding.institution_value! : 0;
     
-    if (holdingValue <= 0) continue;
+    if (holdingValue === 0) continue;
 
     const ticker = security?.ticker_symbol?.toUpperCase() || holding.ticker_symbol?.toUpperCase() || '';
     const fmpMetadata = (ticker ? tickerToMetadata.get(ticker) : null) as SecurityMetadata | null;
-    const draft = resolveHoldingExposure(holding, security, fmpMetadata, asOfYear);
+    const draft = resolveHoldingExposure(holding, security, fmpMetadata, asOfDate);
     const mappedFraction = Math.max(0, Math.min(1, weightTotal(draft.weights)));
+    const label = security?.name || holding.security_name || ticker || holding.security_id;
+    if (holdingValue < 0 && mappedFraction < 0.999999) {
+      throw new Error(
+        `Negative holding "${label}" has no complete supported asset-class mapping; ` +
+        'retirement analysis stopped rather than discarding its liability or guessing its return',
+      );
+    }
     const holdingMappedValue = holdingValue * mappedFraction;
     const holdingUnmappedValue = holdingValue - holdingMappedValue;
-    const label = security?.name || holding.security_name || ticker || holding.security_id;
     const resolution: ResolvedHoldingExposure = {
       holdingId: holding.id || holding.security_id,
       label,
@@ -248,7 +258,10 @@ export async function mapPortfolioToAssetBasket(
       method: draft.method,
       confidence: draft.confidence,
       allocationAsOf: draft.targetAllocation?.allocationAsOf,
+      allocationAgeDays: draft.targetAllocation?.allocationAgeDays,
+      staleAllocation: draft.targetAllocation?.staleAllocation,
       sourceUrl: draft.targetAllocation?.sourceUrl,
+      sourceContext: draft.targetAllocation?.sourceContext,
       exactAllocation: draft.targetAllocation?.exactAllocation,
       targetYear: draft.targetYear,
     };
@@ -262,9 +275,12 @@ export async function mapPortfolioToAssetBasket(
 
     if (draft.method === 'name-inference' ||
         (draft.method === 'fund-registry' && draft.targetAllocation?.exactAllocation === false)) {
-      mapping.proxiedValue += holdingMappedValue;
+      mapping.proxiedValue += Math.abs(holdingMappedValue);
     }
-    if (holdingUnmappedValue > 0.005) mapping.unmappedHoldings.push(label);
+    if (holdingUnmappedValue > 0.005) {
+      if (holdingMappedValue > 0.005) mapping.partiallyMappedHoldings.push(label);
+      else mapping.unmappedHoldings.push(label);
+    }
 
     if (draft.targetAllocation && draft.targetYear !== undefined) {
       mapping.targetDateFunds.push({
@@ -272,7 +288,10 @@ export async function mapPortfolioToAssetBasket(
         targetYear: draft.targetYear,
         equityShare: draft.weights.usEquity + draft.weights.internationalEquity,
         allocationAsOf: draft.targetAllocation.allocationAsOf,
+        allocationAgeDays: draft.targetAllocation.allocationAgeDays,
+        staleAllocation: draft.targetAllocation.staleAllocation,
         sourceUrl: draft.targetAllocation.sourceUrl,
+        sourceContext: draft.targetAllocation.sourceContext,
         exactAllocation: draft.targetAllocation.exactAllocation,
       });
     }
@@ -288,12 +307,17 @@ export async function mapPortfolioToAssetBasket(
     mapping.cashWeight /= mapping.mappedValue;
   }
 
+  if (mapping.holdingExposures.some(exposure => exposure.value < 0) && mapping.mappedValue <= 0) {
+    throw new Error('Negative holdings leave no positive modeled value for retirement analysis');
+  }
+
   mapping.unmappedValue = Math.max(0, mapping.totalValue - mapping.mappedValue);
   mapping.valueCoverage = mapping.totalValue > 0 ? mapping.mappedValue / mapping.totalValue : 1;
   mapping.proxiedValuePercentage = mapping.totalValue > 0 ? mapping.proxiedValue / mapping.totalValue : 0;
   const hasInference = mapping.holdingExposures.some(exposure => exposure.method === 'name-inference');
   const hasRegistry = mapping.holdingExposures.some(exposure => exposure.method === 'fund-registry');
-  if (mapping.valueCoverage < 0.95) {
+  const hasStaleRegistry = mapping.targetDateFunds.some(fund => fund.staleAllocation);
+  if (mapping.valueCoverage < 0.95 || hasStaleRegistry) {
     mapping.mappingConfidence = 'low';
   } else if (mapping.valueCoverage < 1 || hasInference || hasRegistry) {
     mapping.mappingConfidence = 'medium';
@@ -347,6 +371,16 @@ export function populateAssumptions(
 ): string[] {
   const assumptions: string[] = [];
 
+  const negativeExposures = mapping.holdingExposures.filter(exposure => exposure.value < 0);
+  if (negativeExposures.length > 0) {
+    const grossNegativeValue = negativeExposures.reduce((sum, exposure) => sum + Math.abs(exposure.value), 0);
+    assumptions.push(
+      `$${Math.round(grossNegativeValue).toLocaleString('en-US')} across ` +
+      `${negativeExposures.length} negative-valued position${negativeExposures.length === 1 ? '' : 's'} ` +
+      'is modeled as signed exposure and reduces the net simulation basis',
+    );
+  }
+
   if (mapping.targetDateFunds.length > 0) {
     // Group identical sourced allocations without putting holding labels into
     // the analysis context for questions that did not ask for investment detail.
@@ -355,10 +389,19 @@ export function populateAssumptions(
       targetYear: number;
       equityShare: number;
       allocationAsOf: string;
+      allocationAgeDays: number;
+      staleAllocation: boolean;
+      sourceContext: string;
       exactAllocation: boolean;
     }>();
     for (const fund of mapping.targetDateFunds) {
-      const key = [fund.targetYear, fund.equityShare, fund.allocationAsOf, fund.exactAllocation].join(':');
+      const key = [
+        fund.targetYear,
+        fund.equityShare,
+        fund.allocationAsOf,
+        fund.sourceContext,
+        fund.exactAllocation,
+      ].join(':');
       const existing = groups.get(key);
       if (existing) existing.count += 1;
       else groups.set(key, {
@@ -366,14 +409,28 @@ export function populateAssumptions(
         targetYear: fund.targetYear,
         equityShare: fund.equityShare,
         allocationAsOf: fund.allocationAsOf,
+        allocationAgeDays: fund.allocationAgeDays,
+        staleAllocation: fund.staleAllocation,
+        sourceContext: fund.sourceContext,
         exactAllocation: fund.exactAllocation,
       });
     }
     const described = Array.from(groups.values())
       .sort((left, right) => left.targetYear - right.targetYear)
-      .map(({ count, targetYear, equityShare, allocationAsOf, exactAllocation }) =>
+      .map(({
+        count,
+        targetYear,
+        equityShare,
+        allocationAsOf,
+        allocationAgeDays,
+        staleAllocation,
+        sourceContext,
+        exactAllocation,
+      }) =>
         `${count} targeting ${targetYear} at ${Math.round(equityShare * 100)}% equity ` +
-        `(${exactAllocation ? 'exact share class' : 'public share-class proxy'}, as of ${allocationAsOf})`)
+        `(${exactAllocation ? 'same share class' : 'public share-class proxy'}, ` +
+        `${sourceContext}, as of ${allocationAsOf}` +
+        `${staleAllocation ? `; stale by ${Math.floor(allocationAgeDays / 30)} months` : ''})`)
       .join('; ');
     assumptions.push(
       `Target-date funds use versioned published holdings rather than an industry glidepath: ${described}`
@@ -383,24 +440,25 @@ export function populateAssumptions(
   if (mapping.unmappedValue > 0.005) {
     assumptions.push(
       `$${Math.round(mapping.unmappedValue).toLocaleString('en-US')} across ` +
-      `${mapping.unmappedHoldings.length} holding${mapping.unmappedHoldings.length === 1 ? '' : 's'} ` +
+      `${mapping.unmappedHoldings.length + mapping.partiallyMappedHoldings.length} ` +
+      `holding${mapping.unmappedHoldings.length + mapping.partiallyMappedHoldings.length === 1 ? '' : 's'} ` +
       'could not be represented by supported asset classes and was excluded from analysis'
     );
   }
 
-  if (mapping.usEquityWeight > 0 || mapping.internationalEquityWeight > 0) {
+  if (mapping.usEquityWeight !== 0 || mapping.internationalEquityWeight !== 0) {
     assumptions.push('US equity exposure uses the Kenneth French broad US market total-return history (Mkt-RF plus RF)');
   }
 
-  if (mapping.internationalEquityWeight > 0) {
+  if (mapping.internationalEquityWeight !== 0) {
     assumptions.push('International equity exposure uses the Kenneth French EAFE-plus-Canada market return in US dollars; emerging markets are not modeled separately');
   }
 
-  if (mapping.nominalBondsWeight > 0) {
+  if (mapping.nominalBondsWeight !== 0) {
     assumptions.push('Bond exposure uses the Shiller synthetic 10-year US government-bond total-return history');
   }
 
-  if (mapping.cashWeight > 0) {
+  if (mapping.cashWeight !== 0) {
     assumptions.push('Cash holdings use the Kenneth French one-month US Treasury-bill return (RF)');
   }
 

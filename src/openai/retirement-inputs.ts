@@ -139,29 +139,32 @@ export function resolveRetirementInputs(args: {
 }
 
 /**
- * Year a stored retirement analysis was actually built for.
+ * Snapshot date a stored retirement analysis was actually built for.
  *
- * Target-date-fund registry entries are dated and selected by `asOfYear`, so
- * two analyses of identical holdings and identical parameters may still use
- * different published allocations in different years. That makes the year
- * part of the cache key, not merely part of the payload.
+ * Target-date-fund entries are selected only when `allocationAsOf <= asOfDate`,
+ * so two otherwise identical analyses can use different evidence on adjacent
+ * dates. The full UTC date therefore belongs in the cache key; a year cannot
+ * prevent a January snapshot from seeing a June allocation.
  *
- * Rows written before `asOfYear` was persisted -- and rows whose stored year
- * is unusable, which is how a non-finite year reaches us, since JSON turns it
- * into null on the way to the database -- fall back to the year the row was
- * computed in. That is the clock the mapper would have read at the time, so it
- * is the best available account of the year the row was built for.
+ * Rows written before `asOfDate` was persisted, or with an invalid stored date,
+ * fall back to the row's UTC computation date. That may cause a safe cache miss
+ * when the original snapshot was older, but it cannot introduce future data.
  *
- * When even that is unavailable the result is NaN, which never equals a
- * candidate year, so the analysis is recomputed rather than trusted. A cache
- * miss costs one recomputation; a false hit silently serves last year's mix.
+ * Null never equals a candidate date, so a row with no trustworthy date is
+ * recomputed rather than trusted.
  */
-export function resolveStoredAsOfYear(
+export function resolveStoredAsOfDate(
   storedAnalysisInput: Record<string, unknown> | null | undefined,
   computedAt: Date | null | undefined
-): number {
-  const stored = storedAnalysisInput?.asOfYear;
-  if (typeof stored === 'number' && Number.isFinite(stored)) return stored;
-  if (!(computedAt instanceof Date) || Number.isNaN(computedAt.getTime())) return NaN;
-  return computedAt.getUTCFullYear();
+): string | null {
+  const stored = storedAnalysisInput?.asOfDate;
+  if (typeof stored === 'string' && isUtcCalendarDate(stored)) return stored;
+  if (!(computedAt instanceof Date) || Number.isNaN(computedAt.getTime())) return null;
+  return computedAt.toISOString().slice(0, 10);
+}
+
+function isUtcCalendarDate(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
 }

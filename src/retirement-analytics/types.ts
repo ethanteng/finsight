@@ -48,10 +48,12 @@ export interface RetirementAnalysisInput {
   unmodeledInvestments?: UnmodeledInvestmentValue | null;
 
   /**
-   * Year used to select a dated, sourced target-date-fund registry entry.
-   * Defaults to the current year; supply the snapshot's year when a result
-   * must reproduce across a year boundary.
+   * UTC calendar date used to select the newest target-date allocation that
+   * was already published. Defaults to today; supply the snapshot date for a
+   * reproducible replay without look-ahead bias.
    */
+  asOfDate?: string;
+  /** Legacy direct-caller fallback. Production callers should use asOfDate. */
   asOfYear?: number;
 
   // Optional overrides
@@ -165,20 +167,24 @@ export interface ResolvedHoldingExposure {
   method: HoldingMappingMethod;
   confidence: 'high' | 'medium' | 'low';
   allocationAsOf?: string;
+  allocationAgeDays?: number;
+  staleAllocation?: boolean;
   sourceUrl?: string;
+  sourceContext?: string;
   /** False when a public sibling share class is used as a documented proxy. */
   exactAllocation?: boolean;
   targetYear?: number;
 }
 
 export interface PortfolioMapping {
-  usEquityWeight: number; // 0-1
-  internationalEquityWeight: number; // 0-1
-  nominalBondsWeight: number; // 0-1
-  cashWeight: number; // 0-1
-  /** Sum of positive itemized holding values presented to the mapper. */
+  /** Signed net exposure weights; shorts can make a sleeve negative or another exceed one. */
+  usEquityWeight: number;
+  internationalEquityWeight: number;
+  nominalBondsWeight: number;
+  cashWeight: number;
+  /** Signed net sum of itemized holding values presented to the mapper. */
   totalValue: number;
-  /** Dollars represented by the four supported historical return series. */
+  /** Signed net dollars represented by the four supported historical return series. */
   mappedValue: number;
   /** Itemized dollars deliberately excluded because no supported exposure was resolved. */
   unmappedValue: number;
@@ -190,7 +196,8 @@ export interface PortfolioMapping {
   proxiedValuePercentage: number;
   holdingExposures: ResolvedHoldingExposure[];
   mappingConfidence: 'high' | 'medium' | 'low'; // based on how well holdings map
-  unmappedHoldings: string[]; // labels of fully or partially unsupported holdings
+  unmappedHoldings: string[]; // labels with no supported exposure at all
+  partiallyMappedHoldings: string[]; // labels with both supported and unsupported sleeves
   mappingMethod: 'direct' | 'inferred' | 'proxy'; // how mapping was determined
   /**
    * Target-date funds mapped from a dated registry of published holdings.
@@ -202,7 +209,10 @@ export interface PortfolioMapping {
     targetYear: number;
     equityShare: number;
     allocationAsOf: string;
+    allocationAgeDays: number;
+    staleAllocation: boolean;
     sourceUrl: string;
+    sourceContext: string;
     exactAllocation: boolean;
   }>;
 }
@@ -301,7 +311,8 @@ export interface DataQualityReport {
   priceHistoryCoverage: number; // 0-1 (percentage with 10+ years of data)
   metadataConfidence: 'high' | 'medium' | 'low'; // based on provider source
   portfolioMappingConfidence: 'high' | 'medium' | 'low';
-  proxiedValuePercentage: number; // 0-1 (percentage of portfolio value mapped via proxies/inference)
+  /** Gross proxied exposure / signed net value; can exceed 1 with negative positions. */
+  proxiedValuePercentage: number;
   proxyUsage: {
     usEquityProxy: string; // e.g., "VTI"
     internationalEquityProxy: string; // exact historical series/proxy used

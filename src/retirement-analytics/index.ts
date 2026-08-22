@@ -91,13 +91,12 @@ export async function analyzeRetirementPortfolio(
   // published composition metrics from that same auditable mapping.
   const totalValue = input.holdings.reduce((sum, h) => sum + (h.institution_value || 0), 0);
   // Passed explicitly rather than left to the mapper's clock default. The
-  // target-date allocation registry depends on the year. A cached analysis
-  // compared or replayed across a year boundary must resolve the same split it
-  // was built with -- a parameter that only the tests supply is not determinism.
-  // UTC to match snapshotYear() / scenario baselineYear — local getFullYear()
-  // would disagree near a year boundary on a non-UTC host.
-  const asOfYear = input.asOfYear ?? new Date().getUTCFullYear();
-  const portfolioMapping = await mapPortfolioToAssetBasket(input.holdings, input.securities, totalValue, dataProviderFactory, tickerToMetadata, asOfYear);
+  // registry must not use an allocation published after the snapshot, and a
+  // replay must select the same newest-eligible entry. Legacy year-only callers
+  // are interpreted at year-end; production supplies the full UTC date.
+  const asOfDate = input.asOfDate
+    ?? (input.asOfYear != null ? input.asOfYear : new Date().toISOString().slice(0, 10));
+  const portfolioMapping = await mapPortfolioToAssetBasket(input.holdings, input.securities, totalValue, dataProviderFactory, tickerToMetadata, asOfDate);
   const modeledValue = portfolioMapping.mappedValue;
   const portfolioMetrics = await analyzePortfolio(
     input.holdings,
@@ -105,7 +104,7 @@ export async function analyzeRetirementPortfolio(
     dataProviderFactory,
     tickerToMetadata,
     portfolioMapping,
-    asOfYear,
+    asOfDate,
   );
   const assumptions = populateAssumptions(portfolioMapping, input.holdings, input.securities);
   const withdrawalPolicy = input.withdrawalPolicy ?? { type: 'historical_cpi' as const };
