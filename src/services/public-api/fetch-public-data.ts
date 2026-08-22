@@ -33,9 +33,10 @@ export interface PublicFetchResult {
   /** True when the stored secret was rejected and the user must supply a new one. */
   credentialRejected: boolean;
   /**
-   * True only after Public accepted the secret and returned an account list
-   * (possibly empty). Auth or list failures leave this false so callers do not
-   * suppress SnapTrade's still-working Public brokerage balances.
+   * True only after Public accepted the secret, returned an account list
+   * (possibly empty), and at least one portfolio read succeeded (or the list
+   * was empty). Auth, list, or total portfolio failures leave this false so
+   * callers do not suppress SnapTrade's still-working Public brokerage balances.
    */
   observed: boolean;
 }
@@ -156,8 +157,26 @@ export async function fetchPublicData(userId: string): Promise<PublicFetchResult
     }
   });
 
-  // A pass that reached Public at all proves the secret works, even if an
-  // individual account errored.
+  // Listing succeeded but every portfolio read failed. Claiming observation
+  // here would suppress SnapTrade's still-working Public brokerage and leave
+  // only null-balance stubs — the same wipe the auth-failure gate exists to
+  // prevent. Leave SnapTrade in place and retry on the next pass.
+  if (summaries.length > 0 && errors.length === summaries.length) {
+    console.warn(
+      `Public API: every portfolio read failed for user ${userId}; ` +
+        'leaving SnapTrade Public accounts in place',
+    );
+    return {
+      accounts: [],
+      holdings: [],
+      errors: [],
+      credentialRejected: false,
+      observed: false,
+    };
+  }
+
+  // A pass that returned at least one portfolio proves the secret works, even
+  // if an individual account errored.
   await recordSuccess(userId);
   if (errors.length > 0) {
     console.warn(`Public API: ${errors.length} account(s) failed for user ${userId}`);

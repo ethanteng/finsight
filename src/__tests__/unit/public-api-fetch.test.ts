@@ -119,4 +119,27 @@ describe('fetchPublicData observation gating', () => {
       }),
     ]));
   });
+
+  // Same class of failure as auth/list: suppressing on a total portfolio outage
+  // would wipe SnapTrade's working Public brokerage for a brief Public blip.
+  it('marks observed:false when every portfolio read fails', async () => {
+    listAccountsMock.mockResolvedValue([
+      { accountId: 'a', accountType: 'BROKERAGE' },
+      { accountId: 'b', accountType: 'TREASURY' },
+    ]);
+    getPortfolioMock.mockRejectedValue(new PublicApiError('portfolio failed', 500));
+
+    const result = await fetchPublicData('user-1');
+
+    expect(result).toMatchObject({
+      observed: false,
+      accounts: [],
+      holdings: [],
+      errors: [],
+      credentialRejected: false,
+    });
+    expect(recordSuccessMock).not.toHaveBeenCalled();
+    expect(recordFailureMock).not.toHaveBeenCalled();
+  });
+
 });
