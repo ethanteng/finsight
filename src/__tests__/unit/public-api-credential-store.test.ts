@@ -114,4 +114,25 @@ describe('Public API credential store', () => {
     await expect(storeSecret('user-1', '   ')).rejects.toThrow();
     expect(upsert).not.toHaveBeenCalled();
   });
+
+  it('accepts DATA_ENCRYPTION_KEY when ENCRYPTION_KEY is unset', async () => {
+    __setEncryptionServiceForTests(null);
+    const previousEncryption = process.env.ENCRYPTION_KEY;
+    const previousData = process.env.DATA_ENCRYPTION_KEY;
+    delete process.env.ENCRYPTION_KEY;
+    process.env.DATA_ENCRYPTION_KEY = KEY;
+
+    try {
+      await storeSecret('user-1', 'SECRET-FROM-DATA-KEY');
+      const written = upsert.mock.calls[0][0].create;
+      expect(written.encryptedSecret).toBeTruthy();
+      expect(JSON.stringify(written)).not.toContain('SECRET-FROM-DATA-KEY');
+    } finally {
+      if (previousEncryption === undefined) delete process.env.ENCRYPTION_KEY;
+      else process.env.ENCRYPTION_KEY = previousEncryption;
+      if (previousData === undefined) delete process.env.DATA_ENCRYPTION_KEY;
+      else process.env.DATA_ENCRYPTION_KEY = previousData;
+      __setEncryptionServiceForTests(encryption);
+    }
+  });
 });

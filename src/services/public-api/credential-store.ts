@@ -14,12 +14,18 @@ let encryptionService: DataEncryptionService | null = null;
 
 function getEncryptionService(): DataEncryptionService {
   if (encryptionService) return encryptionService;
-  const key = process.env.ENCRYPTION_KEY;
+  // Prefer ENCRYPTION_KEY when set; fall back to DATA_ENCRYPTION_KEY, the env
+  // name already used by DataEncryptionService / EncryptedUserService docs, so
+  // a deploy that already holds PII encryption does not need a second secret
+  // just to store a Public API credential.
+  const key = process.env.ENCRYPTION_KEY || process.env.DATA_ENCRYPTION_KEY;
   if (!key) {
     // Failing closed matters more here than anywhere else in the codebase: a
     // fallback that stored the secret in plaintext would put a tradeable
     // credential in the database.
-    throw new Error('ENCRYPTION_KEY is not configured; refusing to handle a Public API secret');
+    throw new Error(
+      'ENCRYPTION_KEY (or DATA_ENCRYPTION_KEY) is not configured; refusing to handle a Public API secret',
+    );
   }
   encryptionService = new DataEncryptionService(key);
   return encryptionService;
