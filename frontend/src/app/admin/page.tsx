@@ -907,9 +907,10 @@ export default function AdminPage() {
 
               <p className="mt-4 text-xs text-[#5e6b63]">
                 Built from stored retirement analyses, so users who have never run one do not appear.
-                Names are resolved from each analysis&apos;s own portfolio snapshot; a row marked
-                &ldquo;Unnamed security&rdquo; is one the provider sent with no name, ticker or
-                description, so its identifier is the only handle on it.
+                Names are resolved from each analysis&apos;s portfolio snapshot and the user&apos;s
+                live financial snapshot; a row marked &ldquo;Unnamed security&rdquo; is one the
+                provider sent with no name, ticker or description, so its identifier is the only
+                handle on it.
               </p>
             </>
           )}
