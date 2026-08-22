@@ -55,6 +55,7 @@ import { getLatestFinancialSnapshot } from './services/financial-snapshot-persis
 // Import SnapTrade configuration
 import './snaptrade';
 import { setupSnapTradeRoutes } from './auth/snaptrade-routes';
+import { setupPublicApiRoutes } from './auth/public-api-routes';
 
 import { getPrismaClient } from './prisma-client';
 import { removePlaidItems, type PlaidItemRemovalSummary } from './services/plaid-item-removal';
@@ -304,6 +305,7 @@ console.log('✅ setupPlaidRoutes completed successfully');
 
 console.log('🔧 Calling setupSnapTradeRoutes...');
 setupSnapTradeRoutes(app);
+setupPublicApiRoutes(app);
 console.log('✅ setupSnapTradeRoutes completed successfully');
 	// Test-only: list registered routes to diagnose 404s
 	if (process.env.NODE_ENV === 'test') {
@@ -915,6 +917,13 @@ app.get('/sync/status', async (req: Request, res: Response) => {
 
         // Clear SnapTrade user data
         await prisma.snapTradeUser.deleteMany({
+          where: { userId }
+        });
+
+        // The Public API secret is a connection too, and a tradeable credential
+        // at that. A user who asked to disconnect everything must not be left
+        // with us still holding one.
+        await prisma.publicApiCredential.deleteMany({
           where: { userId }
         });
 

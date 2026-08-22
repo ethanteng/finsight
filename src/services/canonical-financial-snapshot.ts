@@ -115,6 +115,7 @@ export interface CanonicalSnapshotData {
     errors?: {
       plaid?: SnapshotError[];
       snaptrade?: SnapshotError[];
+      public?: SnapshotError[];
       homeValue?: SnapshotError | null;
     };
   };
@@ -446,7 +447,7 @@ function buildSourceObservations(
     // on the investment window instead.
     const accountMaxAgeMs = account.source === 'manual'
       ? null
-      : account.source === 'snaptrade'
+      : account.source === 'snaptrade' || account.source === 'public'
         ? Math.max(balanceMaxAgeMs, investmentMaxAgeMs)
         : balanceMaxAgeMs;
     observations.push({
@@ -555,6 +556,7 @@ function buildSourceObservations(
   const providerErrors: Array<[string, SnapshotError]> = [
     ...(data.metadata?.errors?.plaid || []).map(error => ['plaid', error] as [string, SnapshotError]),
     ...(data.metadata?.errors?.snaptrade || []).map(error => ['snaptrade', error] as [string, SnapshotError]),
+    ...(data.metadata?.errors?.public || []).map(error => ['public', error] as [string, SnapshotError]),
   ];
   providerErrors.forEach(([provider, error], index) => {
     const suffix = error.tokenId || error.accountId || index;

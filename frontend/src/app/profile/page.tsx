@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import PlaidLinkButton, { PlaidLinkButtonRef, resetPlaidLinkInitialization } from '../../components/PlaidLinkButton';
 import SnapTradeConnections from '../../components/SnapTradeConnections';
 import PlaidConnections from '../../components/PlaidConnections';
+import PublicDirectConnection from '../../components/PublicDirectConnection';
 import TransactionHistory from '../../components/TransactionHistory';
 import UserProfile from '../../components/UserProfile';
 import InvestmentPortfolio from '../../components/InvestmentPortfolio';
@@ -180,6 +181,7 @@ export default function ProfilePage() {
   const [tokenStatuses, setTokenStatuses] = useState<TokenStatus[]>([]);
   const [snapTradeConnectionsKey, setSnapTradeConnectionsKey] = useState(0);
   const [plaidConnectionsKey, setPlaidConnectionsKey] = useState(0);
+  const [publicDirectKey, setPublicDirectKey] = useState(0);
   const [snapTradeStatus, setSnapTradeStatus] = useState<SnapTradeStatus | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteMessage, setDeleteMessage] = useState<string>('');
@@ -1111,9 +1113,12 @@ export default function ProfilePage() {
       }
 
       // Per-institution lists are independent of loadConnectedAccounts; bump both
-      // so a partial disconnect does not leave stale rows on the page.
+      // so a partial disconnect does not leave stale rows on the page. The Public
+      // direct panel must refresh too: disconnect-accounts destroys the stored
+      // secret, and leaving it on "Connected" would lie about a tradeable key.
       setPlaidConnectionsKey(key => key + 1);
       setSnapTradeConnectionsKey(key => key + 1);
+      setPublicDirectKey(key => key + 1);
       loadConnectedAccounts();
     } catch (_error) {
       setDeleteMessage('An error occurred while disconnecting your accounts. Please try again.');
@@ -1431,6 +1436,9 @@ export default function ProfilePage() {
                   // A new or repaired connection changes the institution list, so
                   // re-read it rather than leaving a row that no longer matches.
                   setSnapTradeConnectionsKey(key => key + 1);
+                  // Linking Public (or repairing it) can flip direct-connection
+                  // eligibility once the snapshot catches up; re-check the panel.
+                  setPublicDirectKey(key => key + 1);
                 }}
               />
             </div>
@@ -1446,6 +1454,22 @@ export default function ProfilePage() {
                   loadConnectedAccounts(),
                   loadInvestmentData(),
                   loadSnapTradeStatus(),
+                ]);
+                // Removing the Public brokerage link changes whether the direct
+                // connection is on offer at all.
+                setPublicDirectKey(key => key + 1);
+              }}
+            />
+
+            {/* Renders nothing unless the user already has Public via SnapTrade.
+                A stopgap for Public's managed-yield accounts, which SnapTrade
+                cannot sync. */}
+            <PublicDirectConnection
+              refreshKey={publicDirectKey}
+              onChanged={async () => {
+                await Promise.all([
+                  loadConnectedAccounts(),
+                  loadInvestmentData(),
                 ]);
               }}
             />

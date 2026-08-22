@@ -35,12 +35,19 @@ export function mergeFinancialSources(
   plaidData: FinancialSourceData | null,
   snapTradeData: FinancialSourceData | null,
   manualAccountsData: Pick<FinancialSourceData, 'accounts'> | null,
-  homeValue: HomeData | null
+  homeValue: HomeData | null,
+  // Appended rather than slotted next to the other providers so existing
+  // positional callers keep working. A direct read of Public.com's own API, used
+  // where SnapTrade cannot complete an initial holdings sync; the caller has
+  // already dropped SnapTrade's copies of these accounts, so nothing here needs
+  // to reconcile the two.
+  publicData: Pick<FinancialSourceData, 'accounts' | 'holdings'> | null = null,
 ): Omit<UnifiedFinancialData, 'metadata'> {
   const rawAccounts = [
     ...(plaidData?.accounts || []),
     ...(snapTradeData?.accounts || []),
     ...(manualAccountsData?.accounts || []),
+    ...(publicData?.accounts || []),
   ];
   const accountMap = new Map<string, Account>();
 
@@ -62,7 +69,11 @@ export function mergeFinancialSources(
     if (accountId && logicalKey) accountIdToLogicalKey.set(accountId, logicalKey);
   }
 
-  const rawHoldings = [...(plaidData?.holdings || []), ...(snapTradeData?.holdings || [])];
+  const rawHoldings = [
+    ...(plaidData?.holdings || []),
+    ...(snapTradeData?.holdings || []),
+    ...(publicData?.holdings || []),
+  ];
   const holdingMap = new Map<string, Holding>();
   for (const holding of rawHoldings) {
     const accountKey = accountIdToLogicalKey.get(holding.account_id) ?? `id:${holding.account_id}`;

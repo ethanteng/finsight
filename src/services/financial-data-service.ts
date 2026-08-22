@@ -15,6 +15,8 @@ import { persistTransactionsToDb, persistSnapTradeActivitiesToDb } from '../data
 import { cacheService } from '../data/cache';
 import { resolveCanonicalTransactionType } from './canonical-transaction-adapter';
 import { mergeFinancialSources } from './financial-calculations';
+import { fetchPublicData } from './public-api/fetch-public-data';
+import { supersedeSnapTradePublicAccounts } from './public-api/supersede-snaptrade';
 import type { CanonicalInvestmentPortfolio } from './canonical-financial-snapshot';
 import { loadPersistedPlaidData } from './financial-source-persistence';
 import { normalizeAssetType, resolveAssetTypeWithHeuristics } from './asset-class';
@@ -81,7 +83,9 @@ export interface Account {
   institution_id?: string;
   institution_logo?: string;
   institution_url?: string;
-  source: 'plaid' | 'snaptrade';
+  // 'public' is a direct read of Public.com's own API, used as a stopgap where
+  // SnapTrade cannot complete an initial holdings sync. See services/public-api/.
+  source: 'plaid' | 'snaptrade' | 'public';
   transactions?: Array<any>;
   plaidAccountId?: string;
   plaidOriginalName?: string;
@@ -203,10 +207,12 @@ export function isPartialData(errors: {
   plaid: ErrorDetail[];
   snaptrade: ErrorDetail[];
   homeValue: unknown;
+  public?: ErrorDetail[];
 }): boolean {
   const costsData = (error: ErrorDetail) => (error.severity ?? 'data-missing') === 'data-missing';
   return errors.plaid.some(costsData)
     || errors.snaptrade.some(costsData)
+    || (errors.public?.some(costsData) ?? false)
     || errors.homeValue !== null;
 }
 
@@ -239,6 +245,7 @@ export interface UnifiedFinancialData {
     errors: {
       plaid: ErrorDetail[];
       snaptrade: ErrorDetail[];
+      public?: ErrorDetail[];
       homeValue: ErrorDetail | null;
     };
     partialData: boolean;
@@ -332,18 +339,23 @@ export class FinancialDataService {
     }
 
     // Fetch data from all sources in parallel
-    const [plaidResult, snapTradeResult, manualAccountsResult, homeValueResult] = await Promise.allSettled([
-      plaidPromise,
-      this.fetchSnapTradeData(userId, opts),
-      this.fetchManualAccounts(userId),
-      opts.includeHomeValue ? this.fetchHomeValue(userId) : Promise.resolve(null),
-    ]);
+    const [plaidResult, snapTradeResult, manualAccountsResult, homeValueResult, publicResult] =
+      await Promise.allSettled([
+        plaidPromise,
+        this.fetchSnapTradeData(userId, opts),
+        this.fetchManualAccounts(userId),
+        opts.includeHomeValue ? this.fetchHomeValue(userId) : Promise.resolve(null),
+        // Resolves null for the many users with no Public secret, so this costs
+        // one database read rather than a provider request.
+        fetchPublicData(userId),
+      ]);
 
     // Process results
     let plaidData = plaidResult.status === 'fulfilled' ? plaidResult.value : null;
     const snapTradeData = snapTradeResult.status === 'fulfilled' ? snapTradeResult.value : null;
     const manualAccountsData = manualAccountsResult.status === 'fulfilled' ? manualAccountsResult.value : null;
     const homeValue = homeValueResult.status === 'fulfilled' ? homeValueResult.value : null;
+    const publicData = publicResult.status === 'fulfilled' ? publicResult.value : null;
     if ((!plaidData || !plaidData.accounts?.length) && persistedPlaidSnapshot?.data) {
       usingPersistedPlaidData = true;
       plaidData = persistedPlaidSnapshot.data;
@@ -376,8 +388,35 @@ export class FinancialDataService {
       }
     }
 
+    // Drop SnapTrade's copies of the Public accounts before merging. A user who
+    // configures a direct Public secret while still connected to Public through
+    // SnapTrade would otherwise have every Public account counted twice -- a far
+    // worse failure than the missing balances the direct read exists to fix.
+    //
+    // Only suppress after Public accepted the secret and returned an account
+    // list. An auth/list failure returns observed:false with empty accounts; if
+    // we still suppressed, the working SnapTrade brokerage balance ($348k in
+    // the motivating case) would vanish for a bad or briefly unreachable secret.
+    const hasDirectPublicData = publicData?.observed === true;
+    const { data: dedupedSnapTradeData, supersededAccountIds } = supersedeSnapTradePublicAccounts(
+      snapTradeData,
+      hasDirectPublicData,
+    );
+    if (supersededAccountIds.length > 0) {
+      console.log(
+        `FinancialDataService: direct Public data supersedes ${supersededAccountIds.length} ` +
+        `SnapTrade account(s) for user ${userId}`
+      );
+    }
+
     // Merge data
-    const mergedData = mergeFinancialSources(plaidData, snapTradeData, manualAccountsData, homeValue);
+    const mergedData = mergeFinancialSources(
+      plaidData,
+      dedupedSnapTradeData,
+      manualAccountsData,
+      homeValue,
+      hasDirectPublicData ? publicData : null,
+    );
 
     // ✅ STEP 1: Categorize transactions BEFORE normalization (skip for UI-only requests)
     // This ensures we have transaction_type available for normalization and filtering
@@ -931,10 +970,19 @@ export class FinancialDataService {
     const plaidDuration = plaidData?.performance?.duration || 0;
     const snaptradeDuration = snapTradeData?.performance?.duration || 0;
 
-    // Build error details
+    // Build error details. Portfolio-level Public failures cost data after
+    // SnapTrade's Public rows were suppressed; auth/list failures do not
+    // suppress, so they stay on the credential status rather than here.
+    const publicErrors: ErrorDetail[] = (publicData?.errors || []).map(error => ({
+      accountId: error.accountId,
+      error: error.error,
+      timestamp: new Date(),
+      severity: 'data-missing' as const,
+    }));
     const errors = {
       plaid: this.extractPlaidErrors(plaidData, plaidResult),
       snaptrade: this.extractSnapTradeErrors(snapTradeData, snapTradeResult),
+      public: publicErrors,
       homeValue: homeValueResult.status === 'rejected' ? {
         error: homeValueResult.reason?.message || 'Failed to fetch home value',
         timestamp: new Date()
