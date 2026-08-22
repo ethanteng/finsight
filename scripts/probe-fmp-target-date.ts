@@ -20,6 +20,22 @@ const BASE = 'https://financialmodelingprep.com/stable';
 // The five public mutual-fund share classes named in target-date-fund-registry.ts.
 const REGISTRY_TICKERS = ['SSAHX', 'SSAJX', 'SSAZX', 'SSCNX', 'SSDJX'];
 
+/**
+ * Controls. Without these an empty result is uninterpretable: it could mean
+ * "FMP does not cover this instrument" or "FMP is returning nothing to us at
+ * all". These separate the two, and the second case is a live production
+ * problem rather than a registry question -- the retirement mapper leans on
+ * FMP country data to classify funds, and falls back to a medium-confidence
+ * US-listing rule for direct equities when it is missing.
+ */
+const CONTROLS: Array<{ ticker: string; expect: string }> = [
+  { ticker: 'SPY',   expect: 'ETF, most-traded US instrument — empty here means FMP is not answering us' },
+  { ticker: 'VTI',   expect: 'ETF held in kind by this portfolio type — drives country allocations today' },
+  { ticker: 'AGG',   expect: 'bond ETF — exercises the fixed-income classification path' },
+  { ticker: 'WFC',   expect: 'common stock — the #161 listing-fallback assumption depends on this' },
+  { ticker: 'VFIAX', expect: 'mainstream mutual fund — isolates "no mutual-fund coverage" from "no coverage"' },
+];
+
 // Endpoints already wired into fmp-provider.ts, plus the ones that would be
 // needed to derive an equity/bond split rather than only geography.
 const ENDPOINTS = [
@@ -65,10 +81,13 @@ async function probe(path: string, ticker: string) {
 }
 
 (async () => {
-  const tickers = [...REGISTRY_TICKERS, ...process.argv.slice(2).map(t => t.toUpperCase())];
+  const extra = process.argv.slice(2).map(t => t.toUpperCase());
+  const tickers = [...REGISTRY_TICKERS, ...CONTROLS.map(c => c.ticker), ...extra];
+  const expectations = new Map(CONTROLS.map(c => [c.ticker, c.expect]));
   console.log(`Probing ${tickers.length} tickers x ${ENDPOINTS.length} endpoints\n`);
   for (const ticker of tickers) {
-    console.log(`=== ${ticker} ===`);
+    const expect = expectations.get(ticker);
+    console.log(`=== ${ticker} ===${expect ? `   [control: ${expect}]` : ''}`);
     for (const { path, note } of ENDPOINTS) {
       const r = await probe(path, ticker);
       console.log(`  ${path.padEnd(24)} ${r.status.padEnd(14)} ${r.shape}`);
@@ -80,7 +99,11 @@ async function probe(path: string, ticker: string) {
     console.log('');
   }
   console.log('Decision rule:');
-  console.log('  /etf/holdings or /etf/asset-exposure returns data  -> registry can self-refresh in full');
-  console.log('  only country-weightings returns data               -> geography automatable, equity/bond split stays manual');
-  console.log('  403/402 on holdings                                -> Starter tier gap; price out the upgrade vs manual upkeep');
+  console.log('  controls return data, registry tickers empty  -> FMP does not cover these share classes;');
+  console.log('                                                   the registry cannot be automated from FMP at any tier');
+  console.log('  controls ALSO empty                           -> FMP is not answering this key/plan at all.');
+  console.log('                                                   That is a production classification problem, not a');
+  console.log('                                                   registry one: fund country data is silently absent and');
+  console.log('                                                   direct equities are riding the US-listing fallback.');
+  console.log('  402 on holdings only                          -> paid add-on; only worth pricing for covered instruments');
 })();
