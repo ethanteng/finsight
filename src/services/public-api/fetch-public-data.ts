@@ -149,7 +149,12 @@ export async function fetchPublicData(userId: string): Promise<PublicFetchResult
     if (result.status === 'fulfilled') {
       const portfolio: PublicPortfolio = result.value;
       accounts.push(mapPublicAccount(portfolio, observedAt));
-      holdings.push(...mapPublicHoldings(portfolio, observedAt));
+      // Cash products are valued from the account balance. Mapping their
+      // positions into the investment portfolio would double-count the same
+      // dollars in totalCash and totalInvestments.
+      if (publicAccountKind(summary.accountType) !== 'depository') {
+        holdings.push(...mapPublicHoldings(portfolio, observedAt));
+      }
     } else {
       const message = errorMessage(result.reason);
       errors.push({ accountId: summary.accountId, error: message });

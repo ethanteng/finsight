@@ -142,4 +142,33 @@ describe('fetchPublicData observation gating', () => {
     expect(recordFailureMock).not.toHaveBeenCalled();
   });
 
+  // High Yield Cash is valued from the account balance. Emitting its positions
+  // as investment holdings would double-count the same dollars.
+  it('does not emit holdings for High Yield Cash accounts', async () => {
+    listAccountsMock.mockResolvedValue([{ accountId: 'hy', accountType: 'HIGH_YIELD' }]);
+    getPortfolioMock.mockResolvedValue({
+      accountId: 'hy',
+      accountType: 'HIGH_YIELD',
+      totalAccountValue: 50_000,
+      cash: 50_000,
+      positions: [
+        {
+          symbol: 'CASH',
+          name: 'High Yield Cash',
+          instrumentType: 'CASH',
+          quantity: 50_000,
+          currentValue: 50_000,
+          lastPrice: 1,
+        },
+      ],
+    });
+
+    const result = await fetchPublicData('user-1');
+
+    expect(result?.observed).toBe(true);
+    expect(result?.accounts).toEqual([
+      expect.objectContaining({ account_id: 'public-hy', type: 'depository', balance: expect.objectContaining({ current: 50_000 }) }),
+    ]);
+    expect(result?.holdings).toEqual([]);
+  });
 });
