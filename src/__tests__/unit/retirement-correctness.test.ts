@@ -599,7 +599,11 @@ describe('retirement correctness contracts', () => {
 
     expect(mapping.totalValue).toBe(80_000);
     expect(mapping.mappedValue).toBe(80_000);
-    expect(mapping.cashValue).toBe(-20_000);
+    // The debit is covered from the equity that remains, not run as a short
+    // cash sleeve: no weight above 1, nothing below 0.
+    expect(mapping.cashValue).toBe(0);
+    expect(mapping.usEquityValue).toBe(80_000);
+    expect(mapping.usEquityWeight).toBe(1);
     expect(mapping.holdingExposures.map(exposure => exposure.status)).toEqual(['mapped', 'mapped']);
   });
 
@@ -626,8 +630,55 @@ describe('retirement correctness contracts', () => {
       '2026-08-21',
     );
 
-    expect(mapping.cashValue).toBe(-5_000);
+    expect(mapping.totalValue).toBe(95_000);
+    expect(mapping.mappedValue).toBe(95_000);
+    expect(mapping.cashValue).toBe(0);
+    expect(mapping.usEquityWeight).toBe(1);
     expect(mapping.holdingExposures.map(exposure => exposure.status)).toEqual(['mapped', 'mapped']);
+  });
+
+  it('never hands the simulator a leveraged allocation to rebalance back to', async () => {
+    // A negative sleeve would make the simulator hold >100% equity funded by
+    // negative cash, restore that leverage at every annual rebalance, and pay
+    // for it at the Treasury-bill rate. Margin does not cost the risk-free rate.
+    const holdings = [
+      holding('long', 'WFC', 100_000),
+      holding('cash', 'CUR:USD', -20_000),
+    ];
+    holdings[1].security_name = 'U S Dollar';
+    holdings[1].security_type = 'cash';
+    const securities = [
+      security('long', 'WFC', 'Wells Fargo & Co.', 'equity'),
+      security('cash', 'CUR:USD', 'U S Dollar', 'cash'),
+    ];
+
+    const mapping = await mapPortfolioToAssetBasket(
+      holdings,
+      securities,
+      80_000,
+      undefined,
+      usEquityMetadata('WFC'),
+      '2026-08-21',
+    );
+
+    for (const weight of [
+      mapping.usEquityWeight,
+      mapping.internationalEquityWeight,
+      mapping.nominalBondsWeight,
+      mapping.cashWeight,
+    ]) {
+      expect(weight).toBeGreaterThanOrEqual(0);
+      expect(weight).toBeLessThanOrEqual(1);
+    }
+
+    // A flat sequence returns exactly the basis it was given; leverage would
+    // have compounded the equity sleeve past it.
+    const outcome = simulateWithdrawals(mapping, mapping.mappedValue, flatSequence(12), 0);
+    expect(outcome.finalValue).toBe(80_000);
+
+    expect(populateAssumptions(mapping, holdings, securities).join(' ')).toContain(
+      'covered from the remaining holdings rather than simulated as borrowing',
+    );
   });
 
   it('names the holding that blocked the run so the ask is not a retry', async () => {

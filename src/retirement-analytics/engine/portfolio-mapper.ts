@@ -403,6 +403,34 @@ function resolveHoldingExposure(
 }
 
 /**
+ * Cover a negative sleeve from the positive ones, pro rata, leaving the total
+ * modeled value unchanged. Scaling rather than zeroing keeps the surviving
+ * allocation's shape intact: covering a debit sells across the portfolio, it
+ * does not change what the portfolio is invested in.
+ */
+function settleNegativeSleeves(sleeves: {
+  usEquity: number;
+  internationalEquity: number;
+  nominalBonds: number;
+  cash: number;
+}): { usEquity: number; internationalEquity: number; nominalBonds: number; cash: number } {
+  const values = Object.values(sleeves);
+  const shortfall = values.reduce((sum, value) => sum + Math.min(0, value), 0);
+  const positive = values.reduce((sum, value) => sum + Math.max(0, value), 0);
+  if (shortfall === 0 || positive <= 0) return sleeves;
+  // The caller has already rejected a book with no positive modeled value, so
+  // this stays above zero; clamp anyway rather than emit a negative weight.
+  const scale = Math.max(0, (positive + shortfall) / positive);
+  const settle = (value: number) => (value > 0 ? value * scale : 0);
+  return {
+    usEquity: settle(sleeves.usEquity),
+    internationalEquity: settle(sleeves.internationalEquity),
+    nominalBonds: settle(sleeves.nominalBonds),
+    cash: settle(sleeves.cash),
+  };
+}
+
+/**
  * Project every portfolio aggregate from the auditable per-holding results.
  * Callers must not independently rebuild weights, confidence, provenance, or
  * coverage: this is the one reduction used by simulations and reporting.
@@ -489,6 +517,26 @@ export function summarizeHoldingExposures(
   if (holdingExposures.some(exposure => exposure.value < 0) && mappedValue <= 0) {
     throw new Error('Negative holdings leave no positive modeled value for retirement analysis');
   }
+
+  // A sleeve that nets negative is borrowing, and the engine models no
+  // borrowing: it would hand the simulator a weight above 1 in one sleeve and
+  // below 0 in another, then restore that leverage at every annual rebalance
+  // and credit the debt with Treasury-bill returns. Margin accrues at the
+  // broker's rate, not the risk-free one, so that overstates a decades-long
+  // projection. Settle the shortfall against the positive sleeves instead —
+  // the modeled portfolio is what remains after covering the debit today.
+  // Negative positions that offset inside their own sleeve, such as a short
+  // against a long in the same asset class, never reach this.
+  const settledSleeves = settleNegativeSleeves({
+    usEquity: usEquityValue,
+    internationalEquity: internationalEquityValue,
+    nominalBonds: nominalBondsValue,
+    cash: cashValue,
+  });
+  usEquityValue = settledSleeves.usEquity;
+  internationalEquityValue = settledSleeves.internationalEquity;
+  nominalBondsValue = settledSleeves.nominalBonds;
+  cashValue = settledSleeves.cash;
 
   const unmappedValue = Math.max(0, totalValue - mappedValue);
   const valueCoverage = totalValue > 0 ? mappedValue / totalValue : 1;
@@ -748,7 +796,9 @@ export function populateAssumptions(
     assumptions.push(
       `$${Math.round(grossNegativeValue).toLocaleString('en-US')} across ` +
       `${negativeExposures.length} negative-valued position${negativeExposures.length === 1 ? '' : 's'} ` +
-      'is modeled as signed exposure and reduces the net simulation basis',
+      'is modeled as signed exposure and reduces the net simulation basis; a balance that leaves its ' +
+      'asset class net negative is covered from the remaining holdings rather than simulated as ' +
+      'borrowing, because no borrowing cost is modeled',
     );
   }
 

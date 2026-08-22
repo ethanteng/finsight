@@ -22,8 +22,13 @@ const CONTAINER_ASSET_TYPES = new Set([
  * Phrases a provider uses to declare cash or a cash-equivalent sweep. Cash is
  * the one exposure a custodian reports without ambiguity — it is the balance
  * itself, not a fund whose mandate has to be read.
+ *
+ * Matched as a whole word, and not when negated: `cashflow` is not cash, and
+ * `non-cash` is a declaration that it is not. A hyphenated `cash-equivalent`
+ * still reads as cash, so the guard names the negation rather than refusing
+ * every adjacent hyphen.
  */
-const CASH_TYPE_SIGNALS = ['cash', 'money market'];
+const CASH_TYPE_PATTERNS: RegExp[] = [/(?<!non[\s-])\bcash\b/, /\bmoney market\b/];
 
 const FIXED_INCOME_TYPE_SIGNALS = [
   'bond',
@@ -59,7 +64,7 @@ export function isDeclaredCashType(assetType: unknown): boolean {
   if (typeof assetType !== 'string') return false;
   const normalized = assetType.trim().toLowerCase();
   if (!normalized || isContainerAssetType(normalized)) return false;
-  return CASH_TYPE_SIGNALS.some(signal => normalized.includes(signal));
+  return CASH_TYPE_PATTERNS.some(pattern => pattern.test(normalized));
 }
 
 /**

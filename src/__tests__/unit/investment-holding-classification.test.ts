@@ -10,6 +10,11 @@ describe('declared asset types', () => {
     expect(isDeclaredCashType('money market')).toBe(true);
     expect(isDeclaredCashType('equity')).toBe(false);
     expect(isDeclaredCashType(undefined)).toBe(false);
+    // A type that merely contains the word is not a declaration of cash.
+    expect(isDeclaredCashType('non-cash')).toBe(false);
+    expect(isDeclaredCashType('cashflow note')).toBe(false);
+    // A hyphen next to the word is not itself a negation.
+    expect(isDeclaredCashType('cash-equivalent')).toBe(true);
   });
 
   it('keeps a declared cash line cash when a metadata provider guessed equity', () => {
