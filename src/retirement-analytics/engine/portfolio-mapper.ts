@@ -21,6 +21,7 @@ import {
   hasTipsNameSignal,
   inferEquityGeography,
   isContainerAssetType,
+  isDeclaredCashType,
   isDeclaredFixedIncomeType,
   isKnownBondTicker,
   isKnownCreditTicker,
@@ -232,7 +233,10 @@ function resolveHoldingExposure(
     ? selectedAssetType
     : '';
 
-  if (specificAssetType.includes('cash') || specificAssetType.includes('money market')) {
+  // Use the same whole-word / non-negated matcher as selectDeclaredAssetType —
+  // includes('cash') would still treat a type like `non-cash` as cash and undo
+  // the hardening on isDeclaredCashType once that string is the selected type.
+  if (isDeclaredCashType(specificAssetType)) {
     return { weights: { ...EMPTY_WEIGHTS, cash: 1 }, method: 'provider', confidence: 'high' };
   }
   // Plaid ships currency balances as CUR:USD (and CUR:EUR, …). Those tickers

@@ -14,6 +14,7 @@ const REAL_ASSET_TICKERS = new Set(['DBC', 'GLD', 'GSG', 'IAU', 'PDBC', 'VNQ', '
 
 export {
   isContainerAssetType,
+  isDeclaredCashType,
   isDeclaredFixedIncomeType,
   selectDeclaredAssetType,
 } from '../../services/investment-holding-classification';

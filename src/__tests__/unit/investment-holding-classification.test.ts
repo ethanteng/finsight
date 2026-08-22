@@ -12,9 +12,18 @@ describe('declared asset types', () => {
     expect(isDeclaredCashType(undefined)).toBe(false);
     // A type that merely contains the word is not a declaration of cash.
     expect(isDeclaredCashType('non-cash')).toBe(false);
+    expect(isDeclaredCashType('non cash')).toBe(false);
     expect(isDeclaredCashType('cashflow note')).toBe(false);
     // A hyphen next to the word is not itself a negation.
     expect(isDeclaredCashType('cash-equivalent')).toBe(true);
+  });
+
+  it('does not let a non-cash type become cash after selectDeclaredAssetType', () => {
+    // selectDeclaredAssetType returns `non-cash` as the first specific type.
+    // The mapper must use isDeclaredCashType on that result — includes('cash')
+    // would still map it onto the cash sleeve.
+    expect(selectDeclaredAssetType(['non-cash'])).toBe('non-cash');
+    expect(isDeclaredCashType(selectDeclaredAssetType(['non-cash']))).toBe(false);
   });
 
   it('keeps a declared cash line cash when a metadata provider guessed equity', () => {
