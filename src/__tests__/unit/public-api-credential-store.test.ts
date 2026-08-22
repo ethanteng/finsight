@@ -82,6 +82,23 @@ describe('Public API credential store', () => {
     await expect(readSecret('user-1')).resolves.toBeNull();
   });
 
+  // The row still exists, so `configured` stays true. Left silent, the panel
+  // would show "Connected" while the feed had quietly fallen back to the
+  // SnapTrade path that cannot sync these accounts.
+  it('flags the credential when the stored value cannot be decrypted', async () => {
+    findUnique.mockResolvedValue({
+      encryptedSecret: 'not-real-ciphertext',
+      iv: 'AAAA', tag: 'BBBB', keyVersion: 1, algorithm: 'aes-256-gcm',
+    });
+
+    await readSecret('user-1');
+
+    expect(updateMany).toHaveBeenCalledWith({
+      where: { userId: 'user-1' },
+      data: { lastError: expect.stringContaining('Re-enter your Public secret key') },
+    });
+  });
+
   it('reports status without decrypting anything', async () => {
     findUnique.mockResolvedValue({ lastVerifiedAt: new Date('2026-08-22'), lastError: null });
 

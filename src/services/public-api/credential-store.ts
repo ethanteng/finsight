@@ -87,8 +87,17 @@ export async function readSecret(userId: string): Promise<string | null> {
     });
   } catch {
     // A key rotation or a corrupted row. Report it as absent rather than throwing
-    // into an ingestion pass that has other sources to gather.
+    // into an ingestion pass that has other sources to gather -- but say so on the
+    // credential, because the row still exists and `configured` stays true. Left
+    // silent, the panel would show "Connected" while the direct feed had quietly
+    // fallen back to the SnapTrade path that cannot sync these accounts, and the
+    // user would have no way to know the balances they were missing were fixable
+    // by re-entering their key.
     console.error(`Public API: could not decrypt the stored secret for user ${userId}`);
+    await recordFailure(
+      userId,
+      'This connection could not be read. Re-enter your Public secret key to restore it.',
+    ).catch(() => undefined);
     return null;
   }
 }

@@ -97,6 +97,27 @@ function mapFailedPublicAccount(
   };
 }
 
+/**
+ * Record a failure against the credential only when the credential is the
+ * problem.
+ *
+ * `lastError` is what makes the profile panel offer to replace the key. A brief
+ * Public outage or a timeout says nothing about the stored secret, and inviting
+ * a user to rotate a still-valid credential after one is worse than saying
+ * nothing: they would revoke a working key to fix a problem it did not cause.
+ * Transient failures are logged and left to the next pass; the missing balances
+ * already surface through the snapshot's own unavailable-source reporting.
+ */
+async function noteFailure(userId: string, error: unknown, context: string): Promise<boolean> {
+  const rejected = error instanceof PublicApiError && error.credentialRejected;
+  if (rejected) {
+    await recordFailure(userId, errorMessage(error));
+  } else {
+    console.warn(`Public API: transient failure while ${context} for user ${userId}`);
+  }
+  return rejected;
+}
+
 export async function fetchPublicData(userId: string): Promise<PublicFetchResult | null> {
   const secret = await readSecret(userId);
   if (!secret) return null;
@@ -105,13 +126,11 @@ export async function fetchPublicData(userId: string): Promise<PublicFetchResult
   try {
     accessToken = await mintAccessToken(secret);
   } catch (error) {
-    const message = errorMessage(error);
-    await recordFailure(userId, message);
     return {
       accounts: [],
       holdings: [],
       errors: [],
-      credentialRejected: error instanceof PublicApiError ? error.credentialRejected : false,
+      credentialRejected: await noteFailure(userId, error, 'authenticating'),
       observed: false,
     };
   }
@@ -120,13 +139,11 @@ export async function fetchPublicData(userId: string): Promise<PublicFetchResult
   try {
     summaries = await listAccounts(accessToken);
   } catch (error) {
-    const message = errorMessage(error);
-    await recordFailure(userId, message);
     return {
       accounts: [],
       holdings: [],
       errors: [],
-      credentialRejected: error instanceof PublicApiError ? error.credentialRejected : false,
+      credentialRejected: await noteFailure(userId, error, 'listing accounts'),
       observed: false,
     };
   }
