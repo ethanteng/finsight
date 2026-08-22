@@ -4,6 +4,32 @@ type RegisteredTargetDateFundIdentity =
   | { provider: 'state-street'; series: 'target-retirement'; vintage: number }
   | { provider: 'blackrock'; series: 'lifepath-index'; vintage: number };
 
+/**
+ * A recorded observation of a cited source at a point in time.
+ *
+ * Two kinds, because the sources differ in nature:
+ * - `document-sha256` for immutable-ish binaries (a PDF fact sheet), where the
+ *   bytes are the evidence.
+ * - `published-values` for rendered HTML fund pages, where hashing the document
+ *   is useless -- unrelated markup churn would report drift on every check --
+ *   so the fingerprint covers the figures actually read off the page.
+ *
+ * `sourceAsOf` is the holdings date the source itself advertised when observed.
+ * When it differs from an entry's `allocationAsOf`, the provider has published
+ * newer data than the stored weights represent.
+ */
+export interface SourceFingerprint {
+  kind: 'document-sha256' | 'published-values';
+  /** sha256 of the document bytes, or of the canonicalized published values. */
+  value: string;
+  /** Date this observation was made (YYYY-MM-DD). */
+  observedAt: string;
+  /** Holdings date the source advertised at that observation (YYYY-MM-DD). */
+  sourceAsOf: string;
+  /** Human-readable note on what was read, for auditors without the tooling. */
+  observed: string;
+}
+
 export interface TargetDateFundAllocation {
   identity: RegisteredTargetDateFundIdentity;
   allocationAsOf: string;
@@ -16,6 +42,16 @@ export interface TargetDateFundAllocation {
   exactAllocation: boolean;
   /** `lower-bound` means the source does not separately publish embedded TIPS. */
   tipsAllocationStatus: 'exact' | 'lower-bound';
+  /**
+   * Fingerprint of the cited source, so a later audit can tell whether the
+   * document behind `sourceUrl` still says what these weights were taken from.
+   *
+   * Provider pages are mutable and are republished on the provider's own
+   * cadence -- State Street monthly -- so a URL alone does not reproduce the
+   * figure it supports. Absent for entries transcribed before fingerprinting
+   * existed, where the original publication is no longer retrievable.
+   */
+  sourceFingerprint?: SourceFingerprint;
   /** Fractions of the whole fund supported by the historical engine. */
   weights: {
     usEquity: number;
@@ -67,6 +103,13 @@ const REGISTRY: RegistryEntry[] = [
     sourceContext: 'Plan CIT has no public holdings; a State Street public mutual-fund share class supplies the proxy allocation',
     exactAllocation: false,
     tipsAllocationStatus: 'exact',
+    sourceFingerprint: {
+      kind: 'published-values',
+      value: '835f999070c8691f4973258bfde99620fbd9a060498f3c38689b3cc2b7db7d74',
+      observedAt: '2026-08-22',
+      sourceAsOf: '2026-07-31',
+      observed: '2026-07-31|alternatives=5.17|equity=35.23|fixed income=55.83|unassigned=3.77',
+    },
     weights: { usEquity: 0.2201, internationalEquity: 0.1368, nominalBonds: 0.3783, tips: 0.1793, cash: 0.0014 },
   },
   {
@@ -77,6 +120,13 @@ const REGISTRY: RegistryEntry[] = [
     sourceContext: 'Plan CIT has no public holdings; a State Street public mutual-fund share class supplies the proxy allocation',
     exactAllocation: false,
     tipsAllocationStatus: 'exact',
+    sourceFingerprint: {
+      kind: 'published-values',
+      value: 'c4ad286501c827a555f6b7fff474fa7430675367747f4155bf9f2850d305b531',
+      observedAt: '2026-08-22',
+      sourceAsOf: '2026-07-31',
+      observed: '2026-07-31|alternatives=3.37|equity=52.13|fixed income=43.35|unassigned=1.14',
+    },
     weights: { usEquity: 0.3145, internationalEquity: 0.2101, nominalBonds: 0.3110, tips: 0.1207, cash: 0.0014 },
   },
   {
@@ -87,6 +137,13 @@ const REGISTRY: RegistryEntry[] = [
     sourceContext: 'Plan CIT has no public holdings; a State Street public mutual-fund share class supplies the proxy allocation',
     exactAllocation: false,
     tipsAllocationStatus: 'exact',
+    sourceFingerprint: {
+      kind: 'published-values',
+      value: '499eb2aaa939c9290e1f687091ef8633da12bae46fcbe6db7fd452b7f06bc24c',
+      observedAt: '2026-08-22',
+      sourceAsOf: '2026-07-31',
+      observed: '2026-07-31|alternatives=0.78|equity=66.93|fixed income=32.28',
+    },
     weights: { usEquity: 0.3898, internationalEquity: 0.2797, nominalBonds: 0.2920, tips: 0.0293, cash: 0.0019 },
   },
   {
@@ -97,6 +154,13 @@ const REGISTRY: RegistryEntry[] = [
     sourceContext: 'Plan CIT has no public holdings; a State Street public mutual-fund share class supplies the proxy allocation',
     exactAllocation: false,
     tipsAllocationStatus: 'exact',
+    sourceFingerprint: {
+      kind: 'published-values',
+      value: '852a45e10cf2baf8d8ffe45f8b5ef93af2492a09fd15c973e43a43569c68a5ec',
+      observedAt: '2026-08-22',
+      sourceAsOf: '2026-07-31',
+      observed: '2026-07-31|equity=75.27|fixed income=24.73',
+    },
     weights: { usEquity: 0.4341, internationalEquity: 0.3176, nominalBonds: 0.2467, tips: 0, cash: 0.0016 },
   },
   {
@@ -107,6 +171,13 @@ const REGISTRY: RegistryEntry[] = [
     sourceContext: 'Plan CIT has no public holdings; a State Street public mutual-fund share class supplies the proxy allocation',
     exactAllocation: false,
     tipsAllocationStatus: 'exact',
+    sourceFingerprint: {
+      kind: 'published-values',
+      value: '847f02a37edb8771d1468846bff5aa12b08246d104031b2d97779c7c1720c3e9',
+      observedAt: '2026-08-22',
+      sourceAsOf: '2026-07-31',
+      observed: '2026-07-31|equity=87.00|fixed income=13.00',
+    },
     weights: { usEquity: 0.5011, internationalEquity: 0.3668, nominalBonds: 0.1304, tips: 0, cash: 0.0017 },
   },
   {
@@ -122,6 +193,13 @@ const REGISTRY: RegistryEntry[] = [
     // The fact sheet names a TIPS index only among possible custom-benchmark
     // components, not as a separately weighted reported holding. Leave the
     // unreported residual unsupported instead of inventing a TIPS allocation.
+    sourceFingerprint: {
+      kind: 'document-sha256',
+      value: '668628f829cf2c1c00f1ed65f993073db68aaf780e60b4a2721b3e8588a82e04',
+      observedAt: '2026-08-22',
+      sourceAsOf: 'see-document',
+      observed: '185553 bytes',
+    },
     weights: { usEquity: 0.4773, internationalEquity: 0.2698, nominalBonds: 0.2276, tips: 0, cash: 0 },
   },
 ];
@@ -131,6 +209,22 @@ const REGISTRY: RegistryEntry[] = [
  * deliberately performs no label parsing: recognition can be heuristic while
  * allocation requires an exact provider/series/vintage registry key.
  */
+/**
+ * The registry's entries, for auditing tools. Returns copies so a caller cannot
+ * mutate the table that the retirement engine reads.
+ *
+ * Deliberately not used by the lookup path: allocation resolution still
+ * requires an exact identity key, and nothing here widens that.
+ */
+export function listRegistryEntries(): RegistryEntry[] {
+  return REGISTRY.map(entry => ({
+    ...entry,
+    identity: { ...entry.identity },
+    weights: { ...entry.weights },
+    sourceFingerprint: entry.sourceFingerprint ? { ...entry.sourceFingerprint } : undefined,
+  }));
+}
+
 export function lookupTargetDateAllocation(
   identity: TargetDateFundIdentity,
   asOfDate: string | number,
