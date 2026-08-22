@@ -62,15 +62,15 @@ async function fetchBodyLimited(url: string): Promise<Uint8Array> {
     const reader = response.body.getReader();
     const chunks: Uint8Array[] = [];
     let total = 0;
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      total += value.byteLength;
+    let chunk = await reader.read();
+    while (!chunk.done) {
+      total += chunk.value.byteLength;
       if (total > MAX_RESPONSE_BYTES) {
         await reader.cancel().catch(() => undefined);
         throw new Error(`response too large (>${MAX_RESPONSE_BYTES} bytes)`);
       }
-      chunks.push(value);
+      chunks.push(chunk.value);
+      chunk = await reader.read();
     }
 
     const bytes = new Uint8Array(total);
