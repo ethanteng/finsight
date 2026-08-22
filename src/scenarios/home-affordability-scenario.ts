@@ -632,7 +632,7 @@ function resolveVariant(
   if (retirementContributionMonthly !== undefined) {
     addAssumption(
       'retirement_contribution_monthly',
-      'Monthly retirement contribution to preserve',
+      'Monthly take-home-funded retirement contribution to preserve',
       retirementContributionMonthly,
       'usd',
       'user',
@@ -877,12 +877,17 @@ function factId(value: string): string {
 }
 
 /**
- * Connected deposits are already net of payroll-deducted contributions, so the
- * funding assumption has to travel with the number rather than be inferred.
+ * Operating expenses exclude transfers and investment trades, so a retirement
+ * contribution funded from take-home cash has to be added back as an explicit
+ * claim on surplus. Payroll deductions are already reflected in net deposits
+ * and must never enter this override.
  */
 const RETIREMENT_CONTRIBUTION_CAVEAT =
-  'This assumes the stated retirement contribution is funded out of post-purchase surplus. '
-  + 'A payroll-deducted contribution is already absent from connected deposits and must not be subtracted twice.';
+  'This subtracts the stated take-home-funded retirement contribution once because transfers and investment trades are excluded from operating expenses. '
+  + 'Payroll-deducted contributions are already reflected in connected net deposits and must not be entered here.';
+const RETIREMENT_BASELINE_NOTICE =
+  'Payroll-deducted retirement contributions remain reflected in connected net deposits. '
+  + 'A separate take-home-funded retirement contribution is tested only when the user supplies it explicitly.';
 
 function joinCaveats(...parts: Array<string | undefined>): string | undefined {
   const kept = parts.filter((part): part is string => Boolean(part));
@@ -965,17 +970,19 @@ export function homeAffordabilityScenarioCanonicalFacts(
     for (const assumption of scenario.assumptions) {
       const id = `${prefix}_assumption_${factId(assumption.key)}`;
       assumptionIds.set(assumption.key, id);
-      const excludedMissingCost =
+      const excludedInput =
         (assumption.key === 'property_tax_annual' && scenario.missingInputs.includes('property taxes')) ||
         (assumption.key === 'homeowners_insurance_annual' && scenario.missingInputs.includes('homeowners insurance')) ||
-        (assumption.key === 'mortgage_insurance_monthly' && scenario.missingInputs.includes('mortgage insurance'));
+        (assumption.key === 'mortgage_insurance_monthly' && scenario.missingInputs.includes('mortgage insurance')) ||
+        (scenario.metrics.loanAmount === 0 &&
+          ['mortgage_rate_percent', 'loan_term_years'].includes(assumption.key));
       addInput(
         id,
         `${scenario.label} ${assumption.label.toLowerCase()}`,
         assumption.value,
         assumption.unit,
         scenario.id,
-        !excludedMissingCost
+        !excludedInput
       );
     }
 
@@ -1163,7 +1170,7 @@ export function homeAffordabilityScenarioCanonicalFacts(
     if (retirementContributionId && scenario.metrics.surplusAfterRetirementContribution !== undefined) {
       addCalculation(
         `${prefix}_surplus_after_retirement_contribution`,
-        `${scenario.label} monthly surplus after preserving the stated retirement contribution`,
+        `${scenario.label} monthly surplus after preserving the stated take-home-funded retirement contribution`,
         scenario.metrics.surplusAfterRetirementContribution,
         'usd',
         scenario.id,
@@ -1253,7 +1260,7 @@ export function homeAffordabilityScenarioCanonicalFacts(
 const BINDING_CONSTRAINT_LABELS: Record<HomeAffordabilityBindingConstraint, string> = {
   upfront_cash: 'upfront cash',
   monthly_cash_flow: 'monthly cash flow',
-  retirement_contribution: 'the retirement contribution being preserved',
+  retirement_contribution: 'the take-home-funded retirement contribution being preserved',
   reserve_floor: 'the emergency-fund floor',
   none: 'no modeled constraint',
 };
@@ -1305,11 +1312,14 @@ export function describeHomeAffordabilityScenarioExecution(
     (scenario) => scenario.metrics.surplusAfterRetirementContribution !== undefined
   )
     ? ` ${RETIREMENT_CONTRIBUTION_CAVEAT}`
-    : '';
+    : ` ${RETIREMENT_BASELINE_NOTICE}`;
   const comparisonNotice = execution.comparisonUnavailableReason
     ? ` I could not run the requested comparison case: ${execution.comparisonUnavailableReason}`
     : '';
-  return `Home-affordability assumptions: ${execution.scenarios.map((scenario) => scenario.label).join(' compared with ')}. Defaults are a ${DEFAULT_LOAN_TERM_YEARS}-year loan, ${DEFAULT_CLOSING_COST_PERCENT}% closing costs, ${DEFAULT_MAINTENANCE_PERCENT}% annual maintenance, and a ${DEFAULT_EMERGENCY_FUND_MONTHS}-month emergency-fund target when the user did not supply those values.${lowerBoundNotice}${incompleteNotice}${bindingNotice}${retirementNotice}${comparisonNotice} This evaluates household cash flow, not mortgage qualification or loan approval. Change any assumption and I will re-run it.`;
+  const loanDefault = execution.scenarios.some((scenario) => scenario.metrics.loanAmount > 0)
+    ? `a ${DEFAULT_LOAN_TERM_YEARS}-year loan, `
+    : '';
+  return `Home-affordability assumptions: ${execution.scenarios.map((scenario) => scenario.label).join(' compared with ')}. Defaults are ${loanDefault}${DEFAULT_CLOSING_COST_PERCENT}% closing costs, ${DEFAULT_MAINTENANCE_PERCENT}% annual maintenance, and a ${DEFAULT_EMERGENCY_FUND_MONTHS}-month emergency-fund target when the user did not supply those values.${lowerBoundNotice}${incompleteNotice}${bindingNotice}${retirementNotice}${comparisonNotice} This evaluates household cash flow, not mortgage qualification or loan approval. Change any assumption and I will re-run it.`;
 }
 
 export const homeAffordabilityScenarioCalculator: ScenarioCalculatorDefinition<
@@ -1338,7 +1348,7 @@ export const homeAffordabilityScenarioCalculator: ScenarioCalculatorDefinition<
     { id: 'maintenance_annual', label: 'Annual maintenance reserve', description: 'Annual reserve for maintenance and repairs.', valueType: 'currency', minimum: 0, maximum: 10_000_000 },
     { id: 'moving_and_initial_costs', label: 'Moving and initial costs', description: 'Moving, furnishing, and immediate repair costs paid at purchase.', valueType: 'currency', minimum: 0, maximum: 20_000_000 },
     { id: 'current_housing_cost_monthly', label: 'Current monthly housing cost', description: 'Current rent or ownership cost that the purchase replaces.', valueType: 'currency', minimum: 0, maximum: 1_000_000 },
-    { id: 'retirement_contribution_monthly', label: 'Monthly retirement contribution to preserve', description: 'Monthly retirement contribution the household wants to keep making after the purchase.', valueType: 'currency', minimum: 0, maximum: 1_000_000 },
+    { id: 'retirement_contribution_monthly', label: 'Monthly take-home-funded retirement contribution to preserve', description: 'Monthly IRA or other retirement contribution funded from take-home cash and excluded from the operating-expense baseline.', valueType: 'currency', minimum: 0, maximum: 1_000_000 },
     { id: 'emergency_fund_months', label: 'Emergency-fund target', description: 'Months of post-purchase expenses to retain in cash.', valueType: 'months', minimum: 0, maximum: 60 },
   ],
   defaults: [
@@ -1360,13 +1370,13 @@ export const homeAffordabilityScenarioCalculator: ScenarioCalculatorDefinition<
     { id: 'post_purchase_monthly_surplus', label: 'Post-purchase monthly operating surplus', unit: 'usd', scope: 'variant', description: 'Average connected-account income less modeled post-purchase expenses.' },
     { id: 'reserve_months', label: 'Cash runway after purchase', unit: 'months', scope: 'variant', description: 'Cash remaining divided by post-purchase expenses, or current spending when replacement housing cost is missing.' },
     { id: 'reserve_gap', label: 'Emergency-fund gap', unit: 'usd', scope: 'variant', description: 'Cash remaining above or below the selected emergency-fund target.' },
-    { id: 'surplus_after_retirement_contribution', label: 'Monthly surplus after preserving retirement contributions', unit: 'usd', scope: 'variant', description: 'Post-purchase operating surplus less the retirement contribution the household wants to keep making.' },
+    { id: 'surplus_after_retirement_contribution', label: 'Monthly surplus after preserving take-home retirement contributions', unit: 'usd', scope: 'variant', description: 'Post-purchase operating surplus less the stated take-home-funded retirement contribution excluded from operating expenses.' },
     { id: 'monthly_cost_gap', label: 'Monthly cost gap', unit: 'usd', scope: 'comparison', description: 'Absolute monthly ownership-cost difference between two variants.' },
     { id: 'upfront_cash_gap', label: 'Upfront cash gap', unit: 'usd', scope: 'comparison', description: 'Absolute upfront-cash difference between two variants.' },
   ],
   planner: {
     jsonSchema: HOME_AFFORDABILITY_SCENARIO_PLAN_JSON_SCHEMA,
-    instructions: `When the user asks whether a specific home purchase works, or asks to compare two home-price, down-payment, rate, term, or ownership-cost cases, set requested=true. Extract only numbers the user actually stated and put the matching short wording in overrides.sources. Percentage fields use percentage points: 6.5% is 6.5, not 0.065. The primary variant holds the first case. The comparison variant contains only values that differ from the primary; it inherits all other primary values. The application may use connected total cash, average income and expenses, the current FRED 30-year mortgage benchmark, and disclosed planning defaults for absent values. Do not infer property tax, insurance, HOA, PMI, current housing cost, available cash, or the retirement contribution from prose that does not state them. Set retirementContributionMonthly only when the user states a monthly retirement contribution they want to keep making; convert a stated per-paycheck or annual amount only when the user also states the frequency. The overrides object and every field and source are always present; use null for every absent value and source. When no target-home scenario is requested, set requested=false and return null for every override and source in both variants. This calculator evaluates household cash flow, not lender qualification, and does not calculate a maximum qualifying loan.`,
+    instructions: `When the user asks whether a specific home purchase works, or asks to compare two home-price, down-payment, rate, term, or ownership-cost cases, set requested=true. Extract only numbers the user actually stated and put the matching short wording in overrides.sources. Percentage fields use percentage points: 6.5% is 6.5, not 0.065. The primary variant holds the first case. The comparison variant contains only values that differ from the primary; it inherits all other primary values. The application may use connected total cash, average income and expenses, the current FRED 30-year mortgage benchmark, and disclosed planning defaults for absent values. Do not infer property tax, insurance, HOA, PMI, current housing cost, available cash, or the retirement contribution from prose that does not state them. Set retirementContributionMonthly only when the user states a retirement contribution funded from take-home cash, such as a checking-to-IRA transfer, that they want to preserve; transfers and investment trades are excluded from operating expenses, so this value is subtracted once. Do not set it for payroll-deducted 401(k), 403(b), or similar contributions because connected deposits are already net of those deductions. Convert a stated per-paycheck or annual take-home-funded amount only when the user also states the frequency. The overrides object and every field and source are always present; use null for every absent value and source. When no target-home scenario is requested, set requested=false and return null for every override and source in both variants. This calculator evaluates household cash flow, not lender qualification, and does not calculate a maximum qualifying loan.`,
     parsePlan: parseHomeAffordabilityScenarioPlan,
   },
   execution: {

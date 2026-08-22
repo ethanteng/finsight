@@ -65,6 +65,7 @@ describe('home affordability scenario runner', () => {
           mortgageRatePercent: 6.5,
           loanTermYears: 30,
           propertyTaxAnnual: 8_400,
+          retirementContributionMonthly: 1_000,
           emergencyFundMonths: 120,
         },
         {
@@ -74,6 +75,7 @@ describe('home affordability scenario runner', () => {
           mortgageRatePercent: null,
           loanTermYears: '30-year loan',
           propertyTaxAnnual: '$8,400 taxes',
+          retirementContributionMonthly: '$1,000 monthly checking-to-IRA transfer',
           emergencyFundMonths: '120 months',
         }
       ),
@@ -88,11 +90,13 @@ describe('home affordability scenario runner', () => {
           downPaymentPercent: 15,
           loanTermYears: 30,
           propertyTaxAnnual: 8_400,
+          retirementContributionMonthly: 1_000,
           sources: {
             homePrice: '$700,000 home',
             downPaymentPercent: '15% down',
             loanTermYears: '30-year loan',
             propertyTaxAnnual: '$8,400 taxes',
+            retirementContributionMonthly: '$1,000 monthly checking-to-IRA transfer',
           },
         },
       },
@@ -152,6 +156,9 @@ describe('home affordability scenario runner', () => {
       emergencyReserveCovered: true,
       monthlyCashFlowNonnegative: true,
     });
+    expect(describeHomeAffordabilityScenarioExecution(execution)).toContain(
+      'A separate take-home-funded retirement contribution is tested only when the user supplies it explicitly.'
+    );
   });
 
   it('uses named defaults but marks omitted taxes and insurance as a lower bound', async () => {
@@ -329,7 +336,7 @@ describe('home affordability scenario runner', () => {
     expect(noRate).toMatchObject({ status: 'unavailable', reason: expect.stringMatching(/mortgage rate/i) });
   });
 
-  it('reports whether a stated retirement contribution still fits after the purchase', async () => {
+  it('reports whether a stated take-home-funded retirement contribution still fits after the purchase', async () => {
     const execution: any = await runHomeAffordabilityScenario(snapshot(), {
       requested: true,
       primary: variant(
@@ -351,7 +358,7 @@ describe('home affordability scenario runner', () => {
           homeownersInsuranceAnnual: '$2,400 insurance',
           hoaMonthly: 'no HOA',
           currentHousingCostMonthly: '$2,500 rent',
-          retirementContributionMonthly: '$2,000 a month into retirement',
+          retirementContributionMonthly: '$2,000 a month from checking into an IRA',
         }
       ),
     } as any);
@@ -366,7 +373,7 @@ describe('home affordability scenario runner', () => {
     expect(scenario.bindingConstraint).toBe('none');
     expect(describeHomeAffordabilityScenarioExecution(execution)).toContain(
       'No modeled constraint binds: upfront cash, monthly cash flow, '
-      + 'the retirement contribution being preserved, the emergency-fund floor all clear.'
+      + 'the take-home-funded retirement contribution being preserved, the emergency-fund floor all clear.'
     );
 
     const facts = homeAffordabilityScenarioCanonicalFacts(execution);
@@ -374,11 +381,12 @@ describe('home affordability scenario runner', () => {
       fact.id.endsWith('_surplus_after_retirement_contribution')
     );
     expect(surplusFact).toBeDefined();
-    expect(surplusFact?.caveat).toContain('must not be subtracted twice');
+    expect(surplusFact?.caveat).toContain('excluded from operating expenses');
+    expect(surplusFact?.caveat).toContain('must not be entered here');
     expect(validateCanonicalFactPack({ version: 1, facts })).toEqual([]);
   });
 
-  it('names the retirement contribution as the binding constraint when it no longer fits', async () => {
+  it('names the take-home-funded retirement contribution as the binding constraint when it no longer fits', async () => {
     const execution: any = await runHomeAffordabilityScenario(
       snapshot({ averageMonthlyIncome: 11_000 }),
       {
@@ -402,7 +410,7 @@ describe('home affordability scenario runner', () => {
             homeownersInsuranceAnnual: '$2,400 insurance',
             hoaMonthly: 'no HOA',
             currentHousingCostMonthly: '$2,500 rent',
-            retirementContributionMonthly: '$3,000 a month into retirement',
+            retirementContributionMonthly: '$3,000 a month from checking into an IRA',
           }
         ),
       } as any
@@ -414,7 +422,7 @@ describe('home affordability scenario runner', () => {
     expect(scenario.assessment).toBe('not_supported');
     expect(scenario.bindingConstraint).toBe('retirement_contribution');
     expect(describeHomeAffordabilityScenarioExecution(execution)).toContain(
-      'limited by the retirement contribution being preserved'
+      'limited by the take-home-funded retirement contribution being preserved'
     );
   });
 
@@ -531,10 +539,22 @@ describe('home affordability scenario runner', () => {
       origin: 'default',
       source: 'No mortgage required for an all-cash purchase',
     });
+    const facts = homeAffordabilityScenarioCanonicalFacts(execution);
+    expect(facts).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: expect.stringMatching(/assumption_mortgage_rate_percent$/),
+        displayable: false,
+      }),
+      expect.objectContaining({
+        id: expect.stringMatching(/assumption_loan_term_years$/),
+        displayable: false,
+      }),
+    ]));
     expect(validateCanonicalFactPack({
       version: 1,
-      facts: homeAffordabilityScenarioCanonicalFacts(execution),
+      facts,
     })).toEqual([]);
+    expect(describeHomeAffordabilityScenarioExecution(execution)).not.toContain('30-year loan');
   });
 
   it('refuses a non-positive benchmark rate instead of pricing an interest-free mortgage', async () => {

@@ -134,6 +134,7 @@ describe('gatherContextSnapshot home value context', () => {
         needsSecondaryValidation: true,
       },
       tier: 'premium' as any,
+      includeStructuredMarketContext: true,
       deferRetirementAnalysis: true,
     });
 
@@ -144,5 +145,33 @@ describe('gatherContextSnapshot home value context', () => {
       { includeMarketContext: true }
     );
     expect(result.tierContext.marketContext.economicIndicators?.mortgageRate?.value).toBe(6.5);
+  });
+
+  it('does not load every typed economic series for narrative-only market context', async () => {
+    await gatherContextSnapshot({
+      userId: 'user-1',
+      question: 'What is happening in markets?',
+      questionNeeds: {
+        needsMarketContext: true,
+        needsSearchContext: false,
+        needsHomeValue: false,
+        needsInvestments: false,
+        needsRetirement: false,
+        needsAccountDetails: false,
+        needsTransactionDetails: false,
+        needsMonthlyCashFlow: false,
+        needsUserProfile: false,
+        needsSecondaryValidation: true,
+      },
+      tier: 'premium' as any,
+      deferRetirementAnalysis: true,
+    });
+
+    expect(mockBuildTierContext).toHaveBeenCalledWith(
+      'premium',
+      [],
+      [],
+      { includeMarketContext: false }
+    );
   });
 });

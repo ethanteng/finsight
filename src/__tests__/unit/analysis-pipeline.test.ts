@@ -256,6 +256,68 @@ describe('runAskLincAnalysis validation routing', () => {
     expect(result.showTheMathData?.evidenceManifest.timings.contextToolMs).toBe(7);
   });
 
+  it('reloads typed market context when the audit discovers a home calculator', async () => {
+    const preflight = contextPlan(['market_context']);
+    mockedPlanContext.mockResolvedValue(preflight);
+    mockedAuditPacks.mockResolvedValue({
+      packs: [],
+      searchQueries: [],
+      scenarioPlans: {
+        home_affordability: {
+          requested: true,
+          primary: {
+            overrides: {
+              homePrice: 700_000,
+              sources: { homePrice: '$700,000 home' },
+            },
+          },
+        },
+      },
+      reason: 'The question asks for a target-home scenario.',
+      model: 'claude-test',
+      durationMs: 2,
+    });
+    mockedGatherContext
+      .mockResolvedValueOnce(snapshot())
+      .mockResolvedValueOnce({
+        ...snapshot(),
+        tierContext: {
+          ...snapshot().tierContext,
+          marketContext: {
+            economicIndicators: {
+              mortgageRate: {
+                value: 6.5,
+                date: '2026-08-20',
+                source: 'FRED',
+                lastUpdated: '2026-08-20T00:00:00.000Z',
+              },
+            },
+          },
+        },
+      } as any);
+    mockedExecuteScenario.mockResolvedValueOnce({
+      version: 1,
+      calculator: 'home_affordability',
+      status: 'unavailable',
+      computedAt: '2026-08-20T00:00:00.000Z',
+      durationMs: 1,
+      reason: 'Test execution is not part of context routing.',
+    });
+    mockedAskClaude.mockResolvedValue(JSON.stringify({ summary: 'I checked the target-home scenario.' }));
+
+    await runAskLincAnalysis({
+      question: 'Would that home work?',
+      userId: 'user-1',
+    });
+
+    expect(mockedGatherContext).toHaveBeenCalledTimes(2);
+    expect(mockedGatherContext.mock.calls[0][0].includeStructuredMarketContext).toBe(false);
+    expect(mockedGatherContext.mock.calls[1][0]).toMatchObject({
+      includeStructuredMarketContext: true,
+      questionNeeds: expect.objectContaining({ needsMarketContext: true }),
+    });
+  });
+
   it('keeps preflight scenario overrides out of the baseline gather and focused completion', async () => {
     const plan = contextPlan(['retirement_analysis'], true);
     plan.retirementInputs = {
