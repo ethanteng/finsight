@@ -75,7 +75,33 @@ describe('target-date registry provenance', () => {
     for (const entry of entries) {
       if (entry.sourceFingerprint?.kind !== 'published-values') continue;
       expect(entry.sourceFingerprint.observed).toMatch(/^\d{4}-\d{2}-\d{2}\|/);
-      expect(entry.sourceFingerprint.observed).toContain('equity=');
+      expect(entry.sourceFingerprint.observed).toMatch(/=\d{1,2}\.\d{2}(\||$)/);
+    }
+  });
+
+  it('attests to the same publication the weights were taken from', () => {
+    // The earlier version of this fingerprint covered a fund page's aggregate
+    // "Asset Allocation" table, which is republished monthly and is NOT what the
+    // weights derive from. A fingerprint whose sourceAsOf differs from
+    // allocationAsOf proves nothing about the stored numbers: it would baseline
+    // a later publication and report `unchanged` while the transcribed values
+    // went unverified. Where the source states its own date, the two must agree.
+    for (const entry of entries) {
+      const sourceAsOf = entry.sourceFingerprint?.sourceAsOf;
+      if (!sourceAsOf || sourceAsOf === 'see-document') continue;
+      expect(sourceAsOf).toBe(entry.allocationAsOf);
+    }
+  });
+
+  it('covers the component holdings, not an aggregate that can hide a shift', () => {
+    // Equity/Fixed Income totals are unchanged when a provider moves weight
+    // between US and international, so an aggregate fingerprint would report
+    // `unchanged` while the simulation's inputs had drifted.
+    for (const entry of entries) {
+      const observed = entry.sourceFingerprint?.observed;
+      if (entry.sourceFingerprint?.kind !== 'published-values' || !observed) continue;
+      expect(observed).not.toMatch(/\|equity=\d/);
+      expect(observed.split('|').length).toBeGreaterThan(3);
     }
   });
 

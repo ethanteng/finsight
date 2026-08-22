@@ -12,8 +12,8 @@
  * published weights should replace transcribed ones is a human judgment, and
  * an auto-updating registry would defeat the point of citing evidence.
  *
- *   npx tsx scripts/verify-registry-sources.ts
- *   npx tsx scripts/verify-registry-sources.ts --emit   # print TS to paste back
+ *   npx ts-node scripts/verify-registry-sources.ts
+ *   npx ts-node scripts/verify-registry-sources.ts --emit   # print TS to paste back
  *
  * Read-only over the network and the repo. Exits non-zero when any source has
  * drifted, so it can be wired to a schedule later.
@@ -55,12 +55,25 @@ function normalizeDate(raw: string): string {
 }
 
 /**
- * State Street publishes allocation on a server-rendered fund page.
+ * State Street publishes on a server-rendered fund page carrying two different
+ * tables, and the distinction matters.
  *
- * Hashing the document would be useless -- the markup carries build ids and
- * timestamps that change without the figures changing -- so the fingerprint
- * covers the values actually read: the advertised holdings date and each
- * allocation line, canonicalized and sorted.
+ * "Fund Asset Allocation" gives aggregate Equity/Fixed Income for the latest
+ * month-end. The registry is NOT derived from it: an equity total is unchanged
+ * when the provider shifts weight between US and international, so hashing it
+ * would report `unchanged` while the values feeding the simulation had moved.
+ *
+ * "Fund Top Holdings" lists the component portfolios and their weights, and
+ * that is where every stored weight comes from. For the 2040 entry:
+ *   usEquity      0.4341 = Equity 500 35.90 + Small/Mid Cap 7.51
+ *   international 0.3176 = Global Equity ex-U.S. 31.76
+ *   nominalBonds  0.2467 = Aggregate Bond 12.22 + Long Term Treasury 9.61
+ *                          + High Yield 2.84
+ *   cash          0.0016 = money market 0.17, less the documented rounding
+ *
+ * So the fingerprint covers the holdings lines and their own as-of date, which
+ * is the publication the transcription was taken from rather than whatever the
+ * page happens to summarize today.
  */
 async function observeStateStreet(url: string): Promise<SourceFingerprint> {
   const response = await fetchWithTimeout(url);
@@ -74,25 +87,21 @@ async function observeStateStreet(url: string): Promise<SourceFingerprint> {
     .replace(/&amp;/g, '&')
     .replace(/\s+/g, ' ');
 
-  const lines = [...text.matchAll(/(Equity|Fixed Income|Alternatives|Unassigned|Cash)\s+(\d{1,3}\.\d{1,2})\s*%/gi)]
-    .map(match => `${match[1].toLowerCase()}=${match[2]}`);
-  const unique = [...new Set(lines)].sort();
-  if (unique.length === 0) throw new Error('no allocation lines found — page structure may have changed');
+  const heading = text.match(/Top Holdings as of\s+([A-Z][a-z]{2,8}\s+\d{1,2},?\s+\d{4})/i);
+  if (!heading) throw new Error('no "Top Holdings as of" section — page structure may have changed');
+  const sourceAsOf = normalizeDate(heading[1]);
 
-  // The allocation "as of" is the latest month-end the page advertises. Pages
-  // also carry a NAV date (yesterday) and a holdings date, so take month-ends
-  // only and use the most recent.
-  const monthEnds = [...text.matchAll(/as of\s+([A-Z][a-z]{2,8}\s+\d{1,2},?\s+\d{4})/gi)]
-    .map(match => normalizeDate(match[1]))
-    .filter(date => /^\d{4}-\d{2}-\d{2}$/.test(date))
-    .filter(date => {
-      const day = Number(date.slice(8, 10));
-      const month = Number(date.slice(5, 7));
-      const lastDay = new Date(Date.UTC(Number(date.slice(0, 4)), month, 0)).getUTCDate();
-      return day === lastDay;
-    })
-    .sort();
-  const sourceAsOf = monthEnds[monthEnds.length - 1] ?? 'unknown';
+  // The table runs from its heading to the download link that follows it.
+  const start = (heading.index ?? 0) + heading[0].length;
+  const rest = text.slice(start);
+  const end = rest.search(/Download All Holdings|Asset Allocation/i);
+  const table = end === -1 ? rest : rest.slice(0, end);
+
+  const holdings = [...table.matchAll(/([A-Z][A-Za-z0-9 .,&()\/'-]{4,70}?)\s+(\d{1,2}\.\d{2})\s*%/g)]
+    .map(match => `${match[1].replace(/^Name Weight\s*/i, '').trim().toLowerCase()}=${match[2]}`)
+    .filter(line => !/^name weight=/.test(line));
+  const unique = [...new Set(holdings)].sort();
+  if (unique.length === 0) throw new Error('no holdings rows parsed — page structure may have changed');
 
   const canonical = `${sourceAsOf}|${unique.join('|')}`;
   return {
@@ -198,7 +207,7 @@ type Status = 'unchanged' | 'drifted' | 'baseline' | 'error';
     for (const result of results) {
       if (!result.fingerprint) continue;
       console.log(`\n// ${result.key}`);
-      console.log(`sourceFingerprint: ${JSON.stringify(result.fingerprint, null, 2).replace(/\n/g, '\n')},`);
+      console.log(`sourceFingerprint: ${JSON.stringify(result.fingerprint, null, 2)},`);
     }
   }
 
