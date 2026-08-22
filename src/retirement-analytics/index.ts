@@ -103,7 +103,7 @@ export async function analyzeRetirementPortfolio(
     input.securities,
     dataProviderFactory,
     tickerToMetadata,
-    portfolioMapping,
+    portfolioMapping.holdingExposures,
     asOfDate,
   );
   const assumptions = populateAssumptions(portfolioMapping, input.holdings, input.securities);

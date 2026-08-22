@@ -142,14 +142,15 @@ export interface HoldingExposureWeights {
   usEquity: number;
   internationalEquity: number;
   nominalBonds: number;
+  /** Reserved separately from nominal bonds even when no TIPS return series is available. */
+  tips: number;
   cash: number;
 }
 
 export type HoldingMappingMethod =
   | 'provider'
   | 'fund-registry'
-  | 'name-inference'
-  | 'unmapped';
+  | 'name-inference';
 
 /**
  * The auditable classification result for one holding. Exposure weights may
@@ -161,15 +162,17 @@ export interface ResolvedHoldingExposure {
   holdingId: string;
   label: string;
   value: number;
-  mappedValue: number;
-  unmappedValue: number;
-  weights: HoldingExposureWeights;
+  status: 'mapped' | 'unmapped';
+  /** Absent when no supported exposure could be resolved. */
+  weights?: HoldingExposureWeights;
   method: HoldingMappingMethod;
   confidence: 'high' | 'medium' | 'low';
   allocationAsOf?: string;
   allocationAgeDays?: number;
   staleAllocation?: boolean;
   sourceUrl?: string;
+  /** Provider whose dated holdings supplied a registry allocation. */
+  sourceProvider?: string;
   sourceContext?: string;
   /** False when a public sibling share class is used as a documented proxy. */
   exactAllocation?: boolean;
@@ -180,6 +183,7 @@ export interface PortfolioMapping {
   /** Signed net exposure weights; shorts can make a sleeve negative or another exceed one. */
   usEquityWeight: number;
   internationalEquityWeight: number;
+  /** Weight fed to the nominal-bond return series, including disclosed TIPS proxies. */
   nominalBondsWeight: number;
   cashWeight: number;
   /** Signed net sum of itemized holding values presented to the mapper. */
@@ -206,6 +210,7 @@ export interface PortfolioMapping {
    */
   targetDateFunds: Array<{
     label: string;
+    provider: string;
     targetYear: number;
     equityShare: number;
     allocationAsOf: string;

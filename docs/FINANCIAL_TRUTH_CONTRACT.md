@@ -96,6 +96,16 @@ percentages do not move with the excluded value. The modeled basis is measured t
 engine sums holdings, not the way the canonical portfolio does, so a stated basis always matches what
 was actually simulated.
 
+Retirement classification produces exactly one `ResolvedHoldingExposure` per itemized holding.
+Portfolio weights, published composition metrics, simulation inputs, mapping confidence, coverage,
+provenance assumptions, and missing-data labels are projections of that collection; none may run a
+second classifier or retain an independently authored allocation. TIPS remain distinct in the
+holding record and currently use the nominal 10-year government-bond return series as an explicit,
+confidence-lowering proxy. That substitution understates the portfolio's inflation protection,
+especially when withdrawals rise with CPI. Target-date recognition considers every declared provider
+type, and any specific fixed-income declaration vetoes a target-like name consistently in Plaid views,
+canonical snapshots, and retirement analytics.
+
 Two allocation buckets describe missing information and must not be merged, because they describe
 opposite problems with different remedies. `Not itemized` is value an account reports that no holding
 explains -- money with no security behind it, resolvable only by the provider. `Unrecognized holdings`

@@ -23,6 +23,7 @@ import {
   PortfolioOutcome,
   WithdrawalPolicy,
 } from '../types';
+import { mappingFromResolvedExposures } from './portfolio-mapper';
 
 export interface WithdrawalSimulationOptions {
   withdrawalDelayMonths?: number;
@@ -55,7 +56,7 @@ export function simulateWithdrawals(
   annualWithdrawal: number,
   options: WithdrawalSimulationOptions = {}
 ): PortfolioOutcome {
-  const w = portfolioMapping;
+  const w = mappingFromResolvedExposures(portfolioMapping);
   const withdrawalPolicy = options.withdrawalPolicy ?? DEFAULT_WITHDRAWAL_POLICY;
   validateWithdrawalPolicy(withdrawalPolicy);
   const annualContributionAmount = options.annualContributionAmount ?? 0;

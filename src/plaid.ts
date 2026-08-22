@@ -8,8 +8,8 @@ import { matchAccountsAcrossConnections, toConnectionAccount } from './services/
 import { normalizeAssetType } from './services/asset-class';
 import { normalizeLabel } from './services/label-normalization';
 import { getProviderRequestTimeoutMs } from './services/provider-request-policy';
-import { isTargetDateFund, TARGET_DATE_ASSET_TYPE } from './services/target-date-fund';
-import { isDeclaredFixedIncomeType } from './retirement-analytics/engine/asset-classification';
+import { isTargetDateFundHolding, TARGET_DATE_ASSET_TYPE } from './services/target-date-fund';
+import { selectDeclaredAssetType } from './services/investment-holding-classification';
 import { removePlaidItem, removePlaidItems } from './services/plaid-item-removal';
 import { latestObservedAt } from './services/account-observation-time';
 import { deleteTransactionsWithOverrides } from './services/transaction-cleanup';
@@ -266,12 +266,11 @@ const analyzePortfolio = (holdings: any[], securities: any[]) => {
     const security = securityMap.get(holding.security_id);
     // Same recognition as the canonical snapshot: provider type says "mutual
     // fund" (or nothing) for a blend that only the label describes.
-    const declaredAssetType = security?.type || holding.security_type || '';
-    const assetType = !isDeclaredFixedIncomeType(declaredAssetType) && isTargetDateFund(
-      security?.name,
-      holding.security_name,
-      security?.ticker_symbol,
-      holding.ticker_symbol
+    const declaredAssetTypes = [security?.type, holding.security_type];
+    const declaredAssetType = selectDeclaredAssetType(declaredAssetTypes);
+    const assetType = isTargetDateFundHolding(
+      [security?.name, holding.security_name, security?.ticker_symbol, holding.ticker_symbol],
+      declaredAssetTypes,
     )
       ? TARGET_DATE_ASSET_TYPE
       : normalizeAssetType(declaredAssetType);

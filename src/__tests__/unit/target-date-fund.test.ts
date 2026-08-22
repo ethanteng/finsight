@@ -130,8 +130,15 @@ describe('target-date funds in the allocation view', () => {
 
   it('lets a declared fixed-income type veto a target-like label in the allocation view', () => {
     const portfolio = buildCanonicalInvestmentPortfolio(
-      [{ id: 'h', account_id: 'a', security_id: 'note', institution_value: 10_000, iso_currency_code: 'USD' }],
-      [{ security_id: 'note', type: 'Fixed Income', name: 'Pathway Capital 2030 Senior Notes' }],
+      [{
+        id: 'h',
+        account_id: 'a',
+        security_id: 'note',
+        institution_value: 10_000,
+        iso_currency_code: 'USD',
+        security_type: 'Fixed Income',
+      }],
+      [{ security_id: 'note', type: 'mutual fund', name: 'Pathway Capital 2030 Senior Notes' }],
       [],
       'USD'
     );
@@ -165,15 +172,17 @@ describe('target-date funds in retirement mapping', () => {
         expect(mapping.targetDateFunds).toHaveLength(1);
         expect(mapping.targetDateFunds[0]).toMatchObject({
           label: 'BTC LPATH IDX 2040 N',
+          provider: 'blackrock',
           targetYear: 2040,
           equityShare: 0.7471,
           allocationAsOf: '2026-03-31',
           allocationAgeDays: 275,
           staleAllocation: false,
           sourceUrl: 'https://assets.mersofmich.com/forms/MERS_LifePath_2040.pdf',
-          sourceContext: 'MERS plan-sponsor fact sheet for the BlackRock LifePath Fund N share class',
+          sourceContext: 'MERS plan-sponsor fact sheet for the BlackRock LifePath Fund N share class; no separate TIPS weight is published in its holdings',
           exactAllocation: true,
         });
+        expect(mapping.holdingExposures[0].weights?.tips).toBe(0);
       });
   });
 
@@ -189,8 +198,30 @@ describe('target-date funds in retirement mapping', () => {
 
     expect(mapping.unmappedHoldings).toEqual([]);
     expect(mapping.partiallyMappedHoldings).toEqual(['State St Target Ret 2030 SL SF CL III']);
-    expect(mapping.nominalBondsWeight).toBeCloseTo(0.311 / 0.837, 6);
-    expect(mapping.valueCoverage).toBeCloseTo(0.837, 6);
+    expect(mapping.holdingExposures[0].weights?.tips).toBeCloseTo(0.1207, 6);
+    expect(mapping.nominalBondsWeight).toBeCloseTo((0.311 + 0.1207) / 0.9577, 6);
+    expect(mapping.valueCoverage).toBeCloseTo(0.9577, 6);
+  });
+
+  it.each([
+    [2025, 0.1793],
+    [2030, 0.1207],
+    [2035, 0.0293],
+    [2040, 0],
+    [2050, 0],
+  ])('preserves the published State Street %i TIPS sleeve', async (targetYear, tipsWeight) => {
+    const name = `State St Target Ret ${targetYear} SL SF CL III`;
+    const mapping = await mapPortfolioToAssetBasket(
+      [{ security_id: 'ss', security_name: name, institution_value: 100_000 }] as any[],
+      [{ security_id: 'ss', type: 'mutual fund', name }] as any[],
+      100_000,
+      undefined,
+      new Map(),
+      2026,
+    );
+
+    expect(mapping.holdingExposures[0].weights?.tips).toBeCloseTo(tipsWeight, 6);
+    expect(mapping.targetDateFunds[0].provider).toBe('state-street');
   });
 
   it('keeps supported cash while excluding unsupported target-date sleeves', async () => {
@@ -203,9 +234,10 @@ describe('target-date funds in retirement mapping', () => {
       2026,
     );
 
-    expect(mapping.mappedValue).toBeCloseTo(96_340, 2);
-    expect(mapping.unmappedValue).toBeCloseTo(3_660, 2);
-    expect(mapping.cashWeight).toBeCloseTo(0.0019 / 0.9634, 8);
+    expect(mapping.holdingExposures[0].weights?.tips).toBeCloseTo(0.0293, 6);
+    expect(mapping.mappedValue).toBeCloseTo(99_270, 2);
+    expect(mapping.unmappedValue).toBeCloseTo(730, 2);
+    expect(mapping.cashWeight).toBeCloseTo(0.0019 / 0.9927, 8);
   });
 
   it('leaves a dated Treasury in bonds rather than on a glidepath', async () => {
@@ -234,7 +266,10 @@ describe('target-date funds in retirement mapping', () => {
 
     expect(mapping.targetDateFunds).toEqual([]);
     expect(mapping.holdingExposures[0].targetYear).toBe(2040);
-    expect(mapping.holdingExposures[0].method).toBe('unmapped');
+    expect(mapping.holdingExposures[0]).toMatchObject({
+      status: 'unmapped',
+      method: 'name-inference',
+    });
     expect(mapping.mappedValue).toBe(0);
     expect(mapping.unmappedValue).toBe(25_000);
     expect(mapping.valueCoverage).toBe(0);
@@ -252,9 +287,10 @@ describe('target-date funds in retirement mapping', () => {
 
     expect(mapping.holdingExposures[0]).toMatchObject({
       targetYear: 2040,
-      method: 'unmapped',
-      mappedValue: 0,
+      status: 'unmapped',
+      method: 'name-inference',
     });
+    expect(mapping.holdingExposures[0].weights).toBeUndefined();
     expect(mapping.targetDateFunds).toEqual([]);
     expect(mapping.unmappedHoldings).toEqual(['Fidelity Freedom 2040 Fund']);
   });
@@ -272,7 +308,8 @@ describe('target-date funds in retirement mapping', () => {
     expect(mapping.mappedValue).toBe(0);
     expect(mapping.unmappedValue).toBe(100_000);
     expect(mapping.holdingExposures[0]).toMatchObject({
-      method: 'unmapped',
+      status: 'unmapped',
+      method: 'name-inference',
       targetYear: 2040,
     });
   });
@@ -373,7 +410,10 @@ describe('institutional and employer-plan funds', () => {
       const mapping = await map(name, ticker, 'mutual fund');
       expect(mapping.mappedValue).toBe(0);
       expect(mapping.unmappedValue).toBe(100_000);
-      expect(mapping.holdingExposures[0].method).toBe('unmapped');
+      expect(mapping.holdingExposures[0]).toMatchObject({
+        status: 'unmapped',
+        method: 'name-inference',
+      });
     }
   });
 
@@ -393,7 +433,10 @@ describe('institutional and employer-plan funds', () => {
     const mapping = await map('Small Cap Fund', 'SPUSA061004C00000000', 'mutual fund');
     expect(mapping.mappedValue).toBe(0);
     expect(mapping.unmappedValue).toBe(100_000);
-    expect(mapping.holdingExposures[0].method).toBe('unmapped');
+    expect(mapping.holdingExposures[0]).toMatchObject({
+      status: 'unmapped',
+      method: 'name-inference',
+    });
     expect(populateAssumptions(mapping, [], []).join(' ')).not.toContain('70%');
   });
 
@@ -421,6 +464,7 @@ describe('institutional and employer-plan funds', () => {
     expect(assumption).toContain('as of 2026-03-31');
     expect(assumption).toContain('State Street public mutual-fund share class');
     expect(assumption).toContain('BlackRock LifePath Fund N share class');
+    expect(assumption.match(/Plan CIT has no public holdings/g)).toHaveLength(1);
     expect(assumption).not.toContain('State St Target Ret');
     expect(assumption).not.toContain('BTC LPATH IDX');
   });
@@ -494,6 +538,33 @@ describe('container provider types', () => {
       expect(mapping.usEquityWeight).toBeCloseTo(0, 6);
       expect(mapping.targetDateFunds).toEqual([]);
     }
+  });
+
+  it('applies a holding-level fixed-income veto when the security type is only a wrapper', async () => {
+    const mapping = await mapPortfolioToAssetBasket(
+      [{
+        security_id: 'note',
+        security_name: 'Pathway Capital 2030 Senior Notes',
+        security_type: 'Fixed Income',
+        institution_value: 10_000,
+      }] as any[],
+      [{
+        security_id: 'note',
+        name: 'Pathway Capital 2030 Senior Notes',
+        type: 'mutual fund',
+      }] as any[],
+      10_000,
+      undefined,
+      new Map(),
+      '2026-08-21',
+    );
+
+    expect(mapping.holdingExposures[0]).toMatchObject({
+      status: 'mapped',
+      method: 'provider',
+      weights: { nominalBonds: 1 },
+    });
+    expect(mapping.targetDateFunds).toEqual([]);
   });
 
   it('still recognizes target-date funds under the types they actually arrive with', async () => {

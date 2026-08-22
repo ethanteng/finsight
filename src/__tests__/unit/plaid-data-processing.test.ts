@@ -377,6 +377,24 @@ describe('analyzePortfolio', () => {
     ]);
   });
 
+  it('lets a holding-level fixed-income type veto a target-like security label', () => {
+    const holdings = [{
+      security_id: 'note',
+      institution_value: 10_000,
+      security_type: 'Fixed Income',
+      security_name: 'Pathway Capital 2030 Senior Notes',
+    }];
+    const noteSecurities = [{
+      security_id: 'note',
+      type: 'mutual fund',
+      name: 'Pathway Capital 2030 Senior Notes',
+    }];
+
+    expect(analyzePortfolio(holdings, noteSecurities).assetAllocation).toEqual([
+      { type: 'Fixed Income', value: 10_000, percentage: 100 },
+    ]);
+  });
+
   it('treats a missing institution_value as zero rather than producing NaN', () => {
     const holdings = [{ security_id: 'sec-1', institution_value: 1000 }, { security_id: 'sec-2' }];
     const result = analyzePortfolio(holdings, securities);

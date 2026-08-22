@@ -4,7 +4,11 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import * as XLSX from 'xlsx';
-import { mapPortfolioToAssetBasket, populateAssumptions } from '../../retirement-analytics/engine/portfolio-mapper';
+import {
+  mapPortfolioToAssetBasket,
+  populateAssumptions,
+  summarizeHoldingExposures,
+} from '../../retirement-analytics/engine/portfolio-mapper';
 import { analyzePortfolio } from '../../retirement-analytics/engine/portfolio-analyzer';
 import { simulateWithdrawals } from '../../retirement-analytics/engine/withdrawal-simulator';
 import {
@@ -88,7 +92,10 @@ describe('retirement correctness contracts', () => {
 
     expect(mapping.mappedValue).toBe(0);
     expect(mapping.unmappedValue).toBe(100);
-    expect(mapping.holdingExposures[0].method).toBe('unmapped');
+    expect(mapping.holdingExposures[0]).toMatchObject({
+      status: 'unmapped',
+      method: 'name-inference',
+    });
     expect(metrics.equityAllocation).toBe(0);
     expect(metrics.internationalAllocation).toBe(0);
   });
@@ -118,6 +125,119 @@ describe('retirement correctness contracts', () => {
     expect(metrics.fixedIncomeAllocation).toBeCloseTo(100);
   });
 
+  it('preserves TIPS as a distinct holding exposure and discloses its return proxy', async () => {
+    const holdings = [holding('tips', 'TIP', 100_000)];
+    const securities = [security('tips', 'TIP', 'iShares TIPS Bond ETF', 'fixed income')];
+
+    const mapping = await mapPortfolioToAssetBasket(holdings, securities, 100_000);
+    const assumptions = populateAssumptions(mapping, holdings, securities).join(' ');
+
+    expect(mapping.holdingExposures[0]).toMatchObject({
+      status: 'mapped',
+      method: 'provider',
+      weights: { nominalBonds: 0, tips: 1 },
+    });
+    expect(mapping.nominalBondsWeight).toBe(1);
+    expect(mapping.proxiedValuePercentage).toBe(1);
+    expect(mapping.mappingConfidence).toBe('medium');
+    expect(assumptions).toContain(
+      '$100,000 of TIPS exposure uses the nominal 10-year US government-bond history',
+    );
+    expect(assumptions).toContain(
+      'understates the portfolio\'s inflation protection, especially for CPI-linked withdrawals',
+    );
+    expect(assumptions).not.toContain(
+      'Bond exposure uses the Shiller synthetic 10-year US government-bond total-return history',
+    );
+  });
+
+  it.each(['VTIP', 'SCHP'])('recognizes provider-sparse %s holdings as TIPS', async ticker => {
+    const holdings = [holding('tips', ticker, 100_000)];
+    const securities = [security('tips', ticker, 'Institutional Fund', 'etf')];
+
+    const mapping = await mapPortfolioToAssetBasket(holdings, securities, 100_000);
+
+    expect(mapping.holdingExposures[0]).toMatchObject({
+      status: 'mapped',
+      method: 'name-inference',
+      weights: { nominalBonds: 0, tips: 1 },
+    });
+  });
+
+  it('keeps provider mappingMethod when unrecognized holdings sit beside direct holdings', async () => {
+    const holdings = [
+      holding('stock', 'WFC', 90_000),
+      holding('mystery', 'X123', 10_000),
+    ];
+    holdings[1].security_name = 'Unidentified Plan Holding';
+    holdings[1].security_type = 'Unknown';
+    const securities = [
+      security('stock', 'WFC', 'Wells Fargo & Co.', 'equity'),
+      security('mystery', 'X123', 'Unidentified Plan Holding', 'Unknown'),
+    ];
+
+    const mapping = await mapPortfolioToAssetBasket(holdings, securities, 100_000);
+
+    expect(mapping.holdingExposures.map(exposure => exposure.method)).toEqual([
+      'provider',
+      'name-inference',
+    ]);
+    expect(mapping.mappingMethod).toBe('direct');
+  });
+
+  it('derives excluded-holding descriptions and missing data from exposure records', () => {
+    const mapping = summarizeHoldingExposures([
+      {
+        holdingId: 'fully-unmodeled',
+        label: 'Unknown Plan Fund',
+        value: 100,
+        status: 'unmapped',
+        method: 'name-inference',
+        confidence: 'low',
+      },
+      {
+        holdingId: 'partially-modeled',
+        label: 'Partially Supported Fund',
+        value: 100,
+        status: 'mapped',
+        weights: {
+          usEquity: 0.5,
+          internationalEquity: 0,
+          nominalBonds: 0,
+          tips: 0,
+          cash: 0,
+        },
+        method: 'fund-registry',
+        confidence: 'medium',
+      },
+      {
+        holdingId: 'zero-value-unmodeled',
+        label: 'Zero-value Unknown Fund',
+        value: 0,
+        status: 'unmapped',
+        method: 'name-inference',
+        confidence: 'low',
+      },
+      {
+        holdingId: 'duplicate-label-unmodeled',
+        label: 'Unknown Plan Fund',
+        value: 0,
+        status: 'unmapped',
+        method: 'name-inference',
+        confidence: 'low',
+      },
+    ]);
+
+    expect(populateAssumptions(mapping, [], []).join(' ')).toContain(
+      '$150 was excluded from analysis: 1 holding was fully unmodeled and 1 holding was partially modeled',
+    );
+    const quality = calculateDataQuality([], [], mapping, 1, []);
+    expect(quality.missingData).toEqual([
+      'Unknown Plan Fund (2 holdings)',
+      'Zero-value Unknown Fund',
+    ]);
+  });
+
   it('excludes unmapped dollars instead of reallocating them across mapped assets', async () => {
     const holdings = [
       holding('stock', 'WFC', 90_000),
@@ -136,7 +256,7 @@ describe('retirement correctness contracts', () => {
     expect(mapping.mappedValue).toBe(90_000);
     expect(mapping.unmappedValue).toBe(10_000);
     expect(mapping.valueCoverage).toBe(0.9);
-    expect(mapping.holdingExposures.map(exposure => exposure.mappedValue)).toEqual([90_000, 0]);
+    expect(mapping.holdingExposures.map(exposure => exposure.status)).toEqual(['mapped', 'unmapped']);
   });
 
   it('keeps a supported short position in the net simulation basis', async () => {
@@ -163,7 +283,7 @@ describe('retirement correctness contracts', () => {
     expect(mapping.mappedValue).toBe(80_000);
     expect(mapping.valueCoverage).toBe(1);
     expect(mapping.usEquityWeight).toBe(1);
-    expect(mapping.holdingExposures.map(exposure => exposure.mappedValue)).toEqual([100_000, -20_000]);
+    expect(mapping.holdingExposures.map(exposure => exposure.status)).toEqual(['mapped', 'mapped']);
     expect(outcome.finalValue).toBe(80_000);
     expect(populateAssumptions(mapping, holdings, securities).join(' ')).toContain(
       '$20,000 across 1 negative-valued position',
@@ -198,7 +318,14 @@ describe('retirement correctness contracts', () => {
     holdings[0].security_type = 'Unknown';
     const securities = [security('lifepath', 'O7PE', 'BTC LPATH IDX 2040 N', 'Unknown')];
     const mapping = await mapPortfolioToAssetBasket(holdings, securities, 100_000, undefined, new Map(), 2026);
-    const metrics = await analyzePortfolio(holdings, securities, undefined, new Map(), mapping, 2026);
+    const metrics = await analyzePortfolio(
+      holdings,
+      securities,
+      undefined,
+      new Map(),
+      mapping.holdingExposures,
+      2026,
+    );
 
     expect(metrics.equityAllocation).toBeCloseTo(
       (mapping.usEquityWeight + mapping.internationalEquityWeight) * 100,
@@ -206,6 +333,77 @@ describe('retirement correctness contracts', () => {
     );
     expect(metrics.fixedIncomeAllocation).toBeCloseTo(mapping.nominalBondsWeight * 100, 8);
     expect(metrics.equityAllocation).toBeLessThan(100);
+  });
+
+  it('rebuilds every downstream view from holding exposures when aggregate fields disagree', async () => {
+    const holdings = [
+      holding('stock', 'WFC', 78),
+      holding('bond', 'BND', 22),
+    ];
+    const securities = [
+      security('stock', 'WFC', 'Wells Fargo & Co.', 'equity'),
+      security('bond', 'BND', 'Vanguard Total Bond Market ETF', 'fixed income'),
+    ];
+    const mapping = await mapPortfolioToAssetBasket(
+      holdings,
+      securities,
+      100,
+      undefined,
+      new Map(),
+      '2026-08-21',
+    );
+    const contradictory: PortfolioMapping = {
+      ...mapping,
+      usEquityWeight: 1,
+      internationalEquityWeight: 0,
+      nominalBondsWeight: 0,
+      cashWeight: 0,
+      mappedValue: 1,
+      unmappedValue: 99,
+      valueCoverage: 0.01,
+      mappingConfidence: 'high',
+    };
+
+    const metrics = await analyzePortfolio(
+      holdings,
+      securities,
+      undefined,
+      new Map(),
+      contradictory.holdingExposures,
+      '2026-08-21',
+    );
+    const sequence = flatSequence(1);
+    sequence.assetBasketReturns.usEquity = [1];
+    const outcome = simulateWithdrawals(contradictory, 100, sequence, 0);
+    const quality = calculateDataQuality(holdings, securities, contradictory, 1, []);
+    const assumptions = populateAssumptions(contradictory, holdings, securities);
+
+    expect(metrics.equityAllocation).toBeCloseTo(78);
+    expect(metrics.fixedIncomeAllocation).toBeCloseTo(22);
+    expect(outcome.finalValue).toBeCloseTo(178);
+    expect(quality.modeledValue).toBe(100);
+    expect(quality.valueCoverage).toBe(1);
+    expect(assumptions).toContain(
+      'Bond exposure uses the Shiller synthetic 10-year US government-bond total-return history',
+    );
+  });
+
+  it('emits one resolved result for every holding, including a zero-value position', async () => {
+    const holdings = [
+      holding('stock', 'WFC', 100),
+      holding('zero', 'X123', 0),
+    ];
+    holdings[1].security_name = 'Unidentified Plan Holding';
+    holdings[1].security_type = 'Unknown';
+    const securities = [
+      security('stock', 'WFC', 'Wells Fargo & Co.', 'equity'),
+      security('zero', 'X123', 'Unidentified Plan Holding', 'Unknown'),
+    ];
+
+    const mapping = await mapPortfolioToAssetBasket(holdings, securities, 100);
+
+    expect(mapping.holdingExposures).toHaveLength(holdings.length);
+    expect(mapping.holdingExposures.map(exposure => exposure.status)).toEqual(['mapped', 'unmapped']);
   });
 
   it('calculates proxied value from per-holding provenance', async () => {

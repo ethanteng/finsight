@@ -3,6 +3,7 @@
 
 import { DataQualityReport, ConfidenceLevel, PortfolioMapping } from '../types';
 import { Holding, Security } from '../../services/financial-data-service';
+import { mappingFromResolvedExposures } from '../engine/portfolio-mapper';
 import {
   describeUnmodeledInvestmentValue,
   type UnmodeledInvestmentValue,
@@ -20,6 +21,10 @@ export function calculateDataQuality(
   stressTestMissingData: string[] = [],
   unmodeledInvestments?: UnmodeledInvestmentValue | null
 ): DataQualityReport {
+  // Production mappings always carry the per-holding source of truth. The
+  // fallback preserves compatibility for historical serialized analyses that
+  // predate exposure records.
+  const resolvedMapping = mappingFromResolvedExposures(portfolioMapping);
   // Calculate completeness (percentage of holdings with full metadata)
   const securityMap = new Map(securities.map(s => [s.security_id, s]));
   let holdingsWithMetadata = 0;
@@ -41,22 +46,38 @@ export function calculateDataQuality(
     metadataConfidence = 'medium';
   }
 
-  const totalValue = portfolioMapping.totalValue;
-  const proxiedValuePercentage = portfolioMapping.proxiedValuePercentage;
+  const totalValue = resolvedMapping.totalValue;
+  const proxiedValuePercentage = resolvedMapping.proxiedValuePercentage;
 
-  const missingData = [...portfolioMapping.unmappedHoldings, ...stressTestMissingData];
+  // Exposure records include zero-valued and repeated-label positions that do
+  // not appear in the dollar-material `unmappedHoldings` summary. Collapse
+  // repeated display labels while retaining their multiplicity, so the raw
+  // list is useful as distinct-label data without hiding a holding.
+  const fullyUnmappedHoldingLabels = resolvedMapping.holdingExposures.length > 0
+    ? (() => {
+        const labelCounts = new Map<string, number>();
+        for (const exposure of resolvedMapping.holdingExposures) {
+          if (exposure.status !== 'unmapped') continue;
+          labelCounts.set(exposure.label, (labelCounts.get(exposure.label) ?? 0) + 1);
+        }
+        return Array.from(labelCounts, ([label, count]) =>
+          count === 1 ? label : `${label} (${count} holdings)`
+        );
+      })()
+    : Array.from(new Set(resolvedMapping.unmappedHoldings));
+  const missingData = [...fullyUnmappedHoldingLabels, ...stressTestMissingData];
 
   // Combine provider-level value with no holdings detail and itemized holdings
   // whose exposures the mapper could not support. Both are deliberately left
   // out of the same simulation basis.
   const canonicalTotalValue = unmodeledInvestments?.totalInvestments ?? totalValue;
-  const modeledValue = portfolioMapping.mappedValue;
+  const modeledValue = resolvedMapping.mappedValue;
   const unmodeledValue = Math.max(0, canonicalTotalValue - modeledValue);
   const valueCoverage = canonicalTotalValue > 0 ? modeledValue / canonicalTotalValue : 1;
-  const mappingReason = portfolioMapping.unmappedValue > 0.005
+  const mappingReason = resolvedMapping.unmappedValue > 0.005
     ? [{
         label: 'Unrecognized or unsupported holdings',
-        amount: portfolioMapping.unmappedValue,
+        amount: resolvedMapping.unmappedValue,
         kind: 'unrecognized-holdings',
       }]
     : [];
@@ -76,14 +97,14 @@ export function calculateDataQuality(
       ...mappingReason,
     ],
     metadataConfidence,
-    portfolioMappingConfidence: portfolioMapping.mappingConfidence,
+    portfolioMappingConfidence: resolvedMapping.mappingConfidence,
     proxiedValuePercentage,
     proxyUsage: {
       usEquityProxy: 'Kenneth French broad US market total-return history',
       internationalEquityProxy: 'Kenneth French EAFE-plus-Canada market return history',
       bondsProxy: 'Shiller synthetic 10-year US government-bond total-return history',
-      unmappedHoldings: portfolioMapping.unmappedHoldings,
-      mappingMethod: portfolioMapping.mappingMethod
+      unmappedHoldings: resolvedMapping.unmappedHoldings,
+      mappingMethod: resolvedMapping.mappingMethod
     },
     assumptions,
     missingData

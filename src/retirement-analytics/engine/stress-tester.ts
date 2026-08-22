@@ -6,6 +6,7 @@
 
 import { HistoricalDataSummary, HistoricalSequence, PortfolioMapping, TimelineBucket } from '../types';
 import { loadHistoricalReturns } from './historical-data-loader';
+import { mappingFromResolvedExposures } from './portfolio-mapper';
 
 export class InsufficientHistoricalDataError extends Error {
   constructor(
@@ -70,6 +71,7 @@ export async function generateRollingSequences(
   missingData: string[];
   historicalData?: HistoricalDataSummary;
 }> {
+  const resolvedMapping = mappingFromResolvedExposures(mapping);
   const data = loadHistoricalReturns();
   const { dates, usEquityReturns, intlEquityReturns, bondReturns, cashReturns, inflationRates } = data;
 
@@ -78,7 +80,7 @@ export async function generateRollingSequences(
     throw new Error('Historical analysis horizon must be positive');
   }
 
-  const internationalRequired = Math.abs(mapping.internationalEquityWeight) > 1e-12;
+  const internationalRequired = Math.abs(resolvedMapping.internationalEquityWeight) > 1e-12;
   const usable = dates.map((_, index) =>
     !internationalRequired || intlEquityReturns[index] !== null
   );
@@ -175,12 +177,13 @@ export function calculateHistoricalPriceCoverage(
   minimumMonths = 120
 ): number {
   if (minimumMonths <= 0) throw new Error('minimumMonths must be positive');
+  const resolvedMapping = mappingFromResolvedExposures(mapping);
   const data = loadHistoricalReturns();
   const sleeves: Array<[number, Array<number | null>]> = [
-    [mapping.usEquityWeight, data.usEquityReturns],
-    [mapping.internationalEquityWeight, data.intlEquityReturns],
-    [mapping.nominalBondsWeight, data.bondReturns],
-    [mapping.cashWeight, data.cashReturns],
+    [resolvedMapping.usEquityWeight, data.usEquityReturns],
+    [resolvedMapping.internationalEquityWeight, data.intlEquityReturns],
+    [resolvedMapping.nominalBondsWeight, data.bondReturns],
+    [resolvedMapping.cashWeight, data.cashReturns],
   ];
   const activeWeight = sleeves.reduce((total, [weight]) => total + Math.abs(weight), 0);
   if (activeWeight <= 0) return 0;
