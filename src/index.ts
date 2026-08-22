@@ -1128,15 +1128,30 @@ app.get('/sync/status', async (req: Request, res: Response) => {
         const { aggregateDataGaps } = await import('./services/data-gap-report');
         const prisma = getPrismaClient();
 
-        // Bounded: newest first, so a large table cannot stall the admin page.
-        // aggregateDataGaps keeps only each user's most recent row anyway.
-        const rows = await prisma.retirementAnalysis.findMany({
-          select: { userId: true, computedAt: true, historicalImplications: true },
-          orderBy: { computedAt: 'desc' },
-          take: 2000,
-        });
+        // One latest analysis per user. A global `take` of newest rows would
+        // drop quieter users when power users fill the window, undercounting
+        // widely-held gaps. Project only dataQuality — historicalImplications
+        // stores the full analysis result (stress tests included).
+        const rows = await prisma.$queryRaw<Array<{
+          userId: string;
+          computedAt: Date;
+          dataQuality: unknown;
+        }>>`
+          SELECT DISTINCT ON ("userId")
+            "userId",
+            "computedAt",
+            "historicalImplications"->'dataQuality' AS "dataQuality"
+          FROM retirement_analyses
+          ORDER BY "userId", "computedAt" DESC
+        `;
 
-        const report = aggregateDataGaps(rows as any);
+        const report = aggregateDataGaps(
+          rows.map(row => ({
+            userId: row.userId,
+            computedAt: row.computedAt,
+            historicalImplications: { dataQuality: row.dataQuality },
+          }))
+        );
         console.log(`Admin: data gaps — ${report.securities.length} securities across ${report.usersConsidered} users`);
         res.json(report);
       } catch (error) {
