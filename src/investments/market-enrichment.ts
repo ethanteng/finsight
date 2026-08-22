@@ -61,6 +61,8 @@ export async function enrichInvestmentSnapshot(
   const historyStart = new Date(historyEnd);
   historyStart.setUTCMonth(historyStart.getUTCMonth() - 13);
 
+  const historyPositions = selected.slice(0, MAX_HISTORY_SECURITIES);
+
   const [metadataResult, quotesResult, historiesResult] = await Promise.allSettled([
     fmpKey
       ? providerFactory.getSecurityMetadataBatch(tickers)
@@ -69,10 +71,19 @@ export async function enrichInvestmentSnapshot(
       ? new TiingoProvider(tiingoKey).getIexQuotes(iexTickers)
       : Promise.resolve([] as TiingoIexQuote[]),
     tiingoKey
-      ? Promise.allSettled(selected.slice(0, MAX_HISTORY_SECURITIES).map(async position => ({
+      ? Promise.allSettled(historyPositions.map(async position => ({
           ticker: position.ticker,
           history: await providerFactory.getPriceHistory(position.ticker, historyStart, historyEnd),
-        }))).then(results => results.flatMap(result => result.status === 'fulfilled' ? [result.value] : []))
+        }))).then(results => results.flatMap((result, index) => {
+          if (result.status === 'fulfilled') return [result.value];
+          // Name the position that dropped out. Without this the holding simply
+          // has no trailing return and nothing says why.
+          console.warn(
+            `Tiingo history unavailable for ${historyPositions[index].ticker}:`,
+            result.reason,
+          );
+          return [];
+        }))
       : Promise.resolve([]),
   ]);
 
@@ -82,7 +93,6 @@ export async function enrichInvestmentSnapshot(
   const quotes = quotesResult.status === 'fulfilled' ? quotesResult.value : [];
   if (metadataResult.status === 'rejected') console.warn('FMP investment enrichment failed:', metadataResult.reason);
   if (quotesResult.status === 'rejected') console.warn('Tiingo investment quote enrichment failed:', quotesResult.reason);
-  if (historiesResult.status === 'rejected') console.warn('Tiingo investment history enrichment failed:', historiesResult.reason);
   const quoteMap = new Map(quotes.map(quote => [quote.ticker.toUpperCase(), quote]));
   const historyMap = new Map(
     (historiesResult.status === 'fulfilled' ? historiesResult.value : []).map(item => [item.ticker, item.history]),

@@ -1,5 +1,8 @@
-import { TiingoProvider } from '../../data/providers/tiingo';
-import { TiingoProvider as RetirementTiingoProvider } from '../../retirement-analytics/data/providers/tiingo-provider';
+import { TiingoHttpError, TiingoProvider } from '../../data/providers/tiingo';
+import {
+  TiingoCoverageGapError,
+  TiingoProvider as RetirementTiingoProvider,
+} from '../../retirement-analytics/data/providers/tiingo-provider';
 import { dbCache } from '../../retirement-analytics/data/db-cache';
 
 function response(status: number, body: unknown, headers: Record<string, string> = {}): Response {
@@ -105,5 +108,129 @@ describe('Tiingo Power client', () => {
     const currentMonthEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0, 23, 59, 59));
     const priorMonthEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 0));
     expect(covers([{ date: priorMonthEnd }], currentMonthEnd)).toBe(true);
+  });
+});
+
+describe('Tiingo coverage gaps', () => {
+  const HISTORY_START = new Date('2025-07-01T00:00:00Z');
+  const HISTORY_END = new Date('2026-08-01T00:00:00Z');
+  const originalGithubActions = process.env.GITHUB_ACTIONS;
+
+  function liveProvider(fetchImplementation: jest.Mock): RetirementTiingoProvider {
+    const provider = new RetirementTiingoProvider('power-key');
+    // The provider builds its own client; swap in one with a stubbed transport
+    // so the 404 path runs without a real request.
+    (provider as any).client = new TiingoProvider('power-key', {
+      fetchImplementation,
+      maxAttempts: 1,
+    });
+    return provider;
+  }
+
+  beforeEach(() => {
+    // The mock-data branch short-circuits before the API call under CI.
+    delete process.env.GITHUB_ACTIONS;
+    jest.spyOn(dbCache, 'getPriceHistory').mockResolvedValue(null);
+    jest.spyOn(dbCache, 'savePriceHistory').mockResolvedValue(undefined);
+  });
+
+  afterEach(() => {
+    if (originalGithubActions === undefined) delete process.env.GITHUB_ACTIONS;
+    else process.env.GITHUB_ACTIONS = originalGithubActions;
+    jest.restoreAllMocks();
+  });
+
+  it('records a coverage gap when Tiingo has no data for the symbol', async () => {
+    jest.spyOn(dbCache, 'getCoverageGap').mockResolvedValue(null);
+    const record = jest.spyOn(dbCache, 'recordCoverageGap').mockResolvedValue(undefined);
+    const fetchImplementation = jest.fn().mockResolvedValue(response(404, {}));
+
+    await expect(
+      liveProvider(fetchImplementation).getPriceHistory('SSISLX', HISTORY_START, HISTORY_END),
+    ).rejects.toBeInstanceOf(TiingoHttpError);
+
+    expect(record).toHaveBeenCalledWith(expect.objectContaining({
+      ticker: 'SSISLX',
+      provider: 'tiingo',
+      statusCode: 404,
+      endpoint: '/tiingo/daily',
+    }));
+  });
+
+  it('skips the request entirely once a gap is cached', async () => {
+    jest.spyOn(dbCache, 'getCoverageGap').mockResolvedValue({
+      recheckAfter: new Date(Date.now() + 60_000),
+    });
+    const record = jest.spyOn(dbCache, 'recordCoverageGap').mockResolvedValue(undefined);
+    const fetchImplementation = jest.fn();
+
+    await expect(
+      liveProvider(fetchImplementation).getPriceHistory('O7PE', HISTORY_START, HISTORY_END),
+    ).rejects.toBeInstanceOf(TiingoCoverageGapError);
+
+    // The point of the whole change: no outbound request, no repeat report.
+    expect(fetchImplementation).not.toHaveBeenCalled();
+    expect(record).not.toHaveBeenCalled();
+  });
+
+  it('does not treat a server error as a coverage gap', async () => {
+    jest.spyOn(dbCache, 'getCoverageGap').mockResolvedValue(null);
+    const record = jest.spyOn(dbCache, 'recordCoverageGap').mockResolvedValue(undefined);
+    const fetchImplementation = jest.fn().mockResolvedValue(response(500, {}));
+
+    await expect(
+      liveProvider(fetchImplementation).getPriceHistory('SPY', HISTORY_START, HISTORY_END),
+    ).rejects.toBeInstanceOf(TiingoHttpError);
+
+    // A 500 is transient; caching it would blind us to a symbol we do cover.
+    expect(record).not.toHaveBeenCalled();
+  });
+
+  it('clears the gap when an expired recheck finds Tiingo now covers the symbol', async () => {
+    // Expired: past the recheck date, so the request goes out again.
+    jest.spyOn(dbCache, 'getCoverageGap').mockResolvedValue({
+      recheckAfter: new Date(Date.now() - 60_000),
+    });
+    const clear = jest.spyOn(dbCache, 'clearCoverageGap').mockResolvedValue(undefined);
+    const fetchImplementation = jest.fn().mockResolvedValue(response(200, [
+      { date: '2025-06-30T00:00:00Z', adjClose: 100 },
+      { date: '2025-07-31T00:00:00Z', adjClose: 110 },
+    ]));
+
+    await expect(
+      liveProvider(fetchImplementation).getPriceHistory('SSISLX', HISTORY_START, HISTORY_END),
+    ).resolves.toMatchObject({ ticker: 'SSISLX', provider: 'tiingo' });
+
+    expect(fetchImplementation).toHaveBeenCalled();
+    expect(clear).toHaveBeenCalledWith('SSISLX', 'tiingo');
+  });
+
+  it('does not write a clear for a symbol that never had a gap', async () => {
+    jest.spyOn(dbCache, 'getCoverageGap').mockResolvedValue(null);
+    const clear = jest.spyOn(dbCache, 'clearCoverageGap').mockResolvedValue(undefined);
+    const fetchImplementation = jest.fn().mockResolvedValue(response(200, [
+      { date: '2025-06-30T00:00:00Z', adjClose: 100 },
+      { date: '2025-07-31T00:00:00Z', adjClose: 110 },
+    ]));
+
+    await liveProvider(fetchImplementation).getPriceHistory('SPY', HISTORY_START, HISTORY_END);
+
+    // The healthy path must not pay for the gap bookkeeping.
+    expect(clear).not.toHaveBeenCalled();
+  });
+
+  it('keys a class-share gap the same way however the broker spells it', async () => {
+    jest.spyOn(dbCache, 'getCoverageGap').mockResolvedValue(null);
+    const record = jest.spyOn(dbCache, 'recordCoverageGap').mockResolvedValue(undefined);
+    const fetchImplementation = jest.fn().mockResolvedValue(response(404, {}));
+
+    await expect(
+      liveProvider(fetchImplementation).getPriceHistory('BRK.B', HISTORY_START, HISTORY_END),
+    ).rejects.toBeInstanceOf(TiingoHttpError);
+
+    // Recorded under the dotted form the broker sent; the key normalizer is
+    // what collapses it onto the same row as a BRK-B caller.
+    expect(record).toHaveBeenCalledWith(expect.objectContaining({ ticker: 'BRK.B' }));
+    expect(String(fetchImplementation.mock.calls[0][0])).toContain('/tiingo/daily/BRK-B/prices');
   });
 });

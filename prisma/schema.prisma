@@ -562,6 +562,34 @@ model AssetPriceHistory {
   @@map("asset_price_history")
 }
 
+/// Symbols a market-data provider does not cover, so we stop re-asking.
+///
+/// A provider 404 is a durable fact about coverage, not a transient failure,
+/// but caching only successes meant every unsupported holding was re-requested
+/// on every user request forever. Recording the negative closes that loop and
+/// doubles as the operator's list of coverage gaps to go and source.
+///
+/// `recheckAfter` keeps it from being permanent: coverage does change when a
+/// provider adds a fund, so an entry expires and the symbol is tried once more.
+model ProviderCoverageGap {
+  id           String   @id @default(cuid())
+  tickerSymbol String
+  provider     String   // 'tiingo'
+  statusCode   Int
+  /// Provider endpoint that reported the gap, e.g. '/tiingo/daily'.
+  endpoint     String
+  firstSeenAt  DateTime @default(now())
+  lastSeenAt   DateTime @default(now())
+  /// How many times the gap has been observed since firstSeenAt.
+  observations Int      @default(1)
+  /// When the symbol becomes eligible for one more live attempt.
+  recheckAfter DateTime
+
+  @@unique([tickerSymbol, provider])
+  @@index([provider, recheckAfter])
+  @@map("provider_coverage_gaps")
+}
+
 /// Security metadata cache (ETF/fund classifications)
 model SecurityMetadata {
   id                String   @id @default(cuid())

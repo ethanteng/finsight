@@ -10,6 +10,22 @@ import { SecurityMetadata } from '../types';
 // single-symbol and batch FMP paths obey the same cache contract.
 export const SECURITY_METADATA_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
+// How long a provider's "I do not have this symbol" answer is trusted before we
+// spend one more request checking. Coverage does change — a provider adds a
+// fund, a delisted symbol is backfilled — so this is a pause, not a blocklist.
+export const PROVIDER_COVERAGE_GAP_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+
+// Callers reach this from several paths that differ in casing, whitespace, and
+// class-share punctuation. One symbol must be one row, or a gap recorded by one
+// caller is invisible to the next and nothing is actually skipped.
+//
+// Dots collapse to dashes to match how the providers themselves spell class
+// shares over HTTP (Tiingo's normalizeTicker does the same): brokers send
+// BRK.B, the request goes out as BRK-B, and both must land on one row.
+function coverageGapKey(ticker: string): string {
+  return ticker.trim().toUpperCase().replace(/\./g, '-');
+}
+
 export class DatabaseCache {
   private prisma = getPrismaClient();
 
@@ -514,6 +530,129 @@ export class DatabaseCache {
     } catch (error) {
       console.error('Error saving security metadata batch to database:', error);
       // Don't throw - cache failures shouldn't break the analysis
+    }
+  }
+
+  /**
+   * Whether a provider is known not to cover this symbol right now.
+   *
+   * A miss here is deliberately indistinguishable from an expired entry: both
+   * mean "go ask the provider". The caller never needs to know which it was.
+   */
+  async getCoverageGap(
+    ticker: string,
+    provider: string,
+  ): Promise<{ recheckAfter: Date } | null> {
+    try {
+      return await this.prisma.providerCoverageGap.findUnique({
+        where: {
+          tickerSymbol_provider: { tickerSymbol: coverageGapKey(ticker), provider },
+        },
+        select: { recheckAfter: true },
+      });
+    } catch (error) {
+      // A cache read must never decide whether a fetch happens. Failing open
+      // costs one request; failing closed would hide a symbol we do cover.
+      console.error(`Error reading coverage gap for ${ticker}:`, error);
+      return null;
+    }
+  }
+
+  /**
+   * Forget a gap because the provider has started covering the symbol.
+   *
+   * Without this a recovered symbol stays on the operator's gap list forever,
+   * claiming it contributes no price history while it is in fact being priced.
+   */
+  async clearCoverageGap(ticker: string, provider: string): Promise<void> {
+    try {
+      // deleteMany rather than delete: a row that is already gone is the
+      // desired state, not an error to handle.
+      await this.prisma.providerCoverageGap.deleteMany({
+        where: { tickerSymbol: coverageGapKey(ticker), provider },
+      });
+    } catch (error) {
+      console.error(`Error clearing coverage gap for ${ticker}:`, error);
+      // Don't throw - cache failures shouldn't break the analysis
+    }
+  }
+
+  /**
+   * Record that a provider does not cover a symbol, extending the recheck
+   * window and counting the observation.
+   */
+  async recordCoverageGap(options: {
+    ticker: string;
+    provider: string;
+    statusCode: number;
+    endpoint: string;
+    ttlMs?: number;
+  }): Promise<void> {
+    const now = new Date();
+    const recheckAfter = new Date(
+      now.getTime() + (options.ttlMs ?? PROVIDER_COVERAGE_GAP_TTL_MS),
+    );
+    try {
+      await this.prisma.providerCoverageGap.upsert({
+        where: {
+          tickerSymbol_provider: {
+            tickerSymbol: coverageGapKey(options.ticker),
+            provider: options.provider,
+          },
+        },
+        create: {
+          tickerSymbol: coverageGapKey(options.ticker),
+          provider: options.provider,
+          statusCode: options.statusCode,
+          endpoint: options.endpoint,
+          firstSeenAt: now,
+          lastSeenAt: now,
+          recheckAfter,
+        },
+        update: {
+          statusCode: options.statusCode,
+          endpoint: options.endpoint,
+          lastSeenAt: now,
+          observations: { increment: 1 },
+          recheckAfter,
+        },
+      });
+    } catch (error) {
+      console.error(`Error recording coverage gap for ${options.ticker}:`, error);
+      // Don't throw - cache failures shouldn't break the analysis
+    }
+  }
+
+  /** Every recorded coverage gap, worst (most re-observed) first. */
+  async listCoverageGaps(): Promise<Array<{
+    tickerSymbol: string;
+    provider: string;
+    statusCode: number;
+    endpoint: string;
+    firstSeenAt: Date;
+    lastSeenAt: Date;
+    observations: number;
+    recheckAfter: Date;
+  }>> {
+    try {
+      return await this.prisma.providerCoverageGap.findMany({
+        orderBy: [{ observations: 'desc' }, { lastSeenAt: 'desc' }],
+        select: {
+          tickerSymbol: true,
+          provider: true,
+          statusCode: true,
+          endpoint: true,
+          firstSeenAt: true,
+          lastSeenAt: true,
+          observations: true,
+          recheckAfter: true,
+        },
+      });
+    } catch (error) {
+      // The classifier half of /admin/data-gaps must still load when this table
+      // is missing (migration not applied yet) or the read otherwise fails.
+      console.error('Error listing coverage gaps:', error);
+      return [];
     }
   }
 }

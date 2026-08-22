@@ -15,6 +15,25 @@ async function delay(milliseconds: number): Promise<void> {
 
 type SleepImplementation = typeof delay;
 
+/**
+ * A Tiingo response that carried an HTTP error status.
+ *
+ * The status is a property rather than only prose in the message so callers can
+ * branch on it — a 404 means Tiingo does not cover the symbol and never will
+ * within this plan, which is a different situation from a transient 5xx.
+ */
+export class TiingoHttpError extends Error {
+  readonly status: number;
+  readonly path: string;
+
+  constructor(path: string, status: number) {
+    super(`Tiingo API error for ${path}: HTTP ${status}`);
+    this.name = 'TiingoHttpError';
+    this.status = status;
+    this.path = path;
+  }
+}
+
 export interface TiingoEodPrice {
   date: string;
   open?: number;
@@ -166,7 +185,7 @@ export class TiingoProvider {
 
       if (response.ok) return await response.json() as T;
 
-      const error = new Error(`Tiingo API error for ${path}: HTTP ${response.status}`);
+      const error = new TiingoHttpError(path, response.status);
       if (!this.isRetryableStatus(response.status) || attempt === this.maxAttempts) throw error;
       const retryDelayMs = this.getRetryDelayMs(response, attempt);
       if (retryDelayMs > this.maxRetryDelayMs) throw error;
