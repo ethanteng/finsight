@@ -66,6 +66,26 @@ export class NoSupportedSimulationValueError extends Error {
   }
 }
 
+/**
+ * Thrown when a holding with a negative value carries no complete supported
+ * asset-class mapping. A negative line is ordinary — a margin loan, an
+ * unsettled debit — and mapped ones simulate fine; what cannot be done is
+ * publishing a projection that either drops the liability, which overstates
+ * the portfolio, or invents a return series for it.
+ *
+ * Typed because it is a data condition about one identifiable holding, not a
+ * service failure: retrying reproduces it exactly.
+ */
+export class UnmappedNegativeHoldingError extends Error {
+  constructor(public readonly label: string) {
+    super(
+      `Negative holding "${label}" has no complete supported asset-class mapping; ` +
+      'retirement analysis stopped rather than discarding its liability or guessing its return',
+    );
+    this.name = 'UnmappedNegativeHoldingError';
+  }
+}
+
 /** Product capitalization for series slugs shown in analysis assumptions. */
 const TARGET_DATE_SERIES_DISPLAY_NAMES: Record<string, string> = {
   'lifepath-index': 'LifePath Index',
@@ -639,10 +659,7 @@ export async function mapPortfolioToAssetBasket(
     const modeledFraction = Math.max(0, Math.min(1, modeledWeightTotal(draft.weights)));
     const label = security?.name || holding.security_name || ticker || holding.security_id;
     if (holdingValue < 0 && modeledFraction < 0.999999) {
-      throw new Error(
-        `Negative holding "${label}" has no complete supported asset-class mapping; ` +
-        'retirement analysis stopped rather than discarding its liability or guessing its return',
-      );
+      throw new UnmappedNegativeHoldingError(label);
     }
     const resolution: ResolvedHoldingExposure = {
       holdingId: holding.id || `${holding.security_id}:${holdingIndex}`,

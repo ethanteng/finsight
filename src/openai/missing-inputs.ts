@@ -82,6 +82,16 @@ export function collectMissingInputAsks(
           'TIPS, credit, international bonds, real assets, and unresolved equity geography are disclosed ' +
           'but not simulated.',
       });
+    } else if (needsInfo?.unavailableCode === 'unmapped_negative_holding') {
+      const holding = needsInfo.blockingHoldingLabel;
+      asks.push({
+        id: 'retirement_unmapped_negative_holding',
+        message:
+          `I could not run a retirement projection because ${holding ? `"${holding}"` : 'one of your holdings'} ` +
+          'has a negative balance I cannot match to an asset class. Dropping it would overstate your ' +
+          'portfolio and I will not guess a return for it, so check that position under Accounts & ' +
+          'context — asking again on its own will not change the result.',
+      });
     } else if (needsInfo?.unavailableCode === 'insufficient_history') {
       asks.push({
         id: 'retirement_insufficient_history',

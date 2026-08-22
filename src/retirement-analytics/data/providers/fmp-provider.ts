@@ -358,10 +358,14 @@ export class FMPProvider {
     // Common bond ETF ticker patterns (when FMP API fails)
     const bondTickerPatterns = ['BOND', 'AGG', 'BND', 'BNDX', 'JCPB', 'JPST', 'STIP', 'VWOB', 'EMB',
       'IUSB', 'MUB', 'EAGG', 'SUSC', 'TIP', 'TLT', 'IEF', 'SHY', 'LQD', 'HYG', 'VCIT', 'VCSH'];
+    // Only a positive signal sets a class. Calling everything unrecognized
+    // "Equity" is a guess wearing a provider's clothes, and the retirement
+    // mapper ranks a declared class ahead of the custodian's own security
+    // type: an inferred Equity on a cash line (Plaid ships US dollars as
+    // CUR:USD, which FMP has no record of) sent it down the equity branch,
+    // where it resolved no geography and mapped to nothing.
     if (bondTickerPatterns.some(p => tickerUpper.includes(p))) {
       assetClass = 'Fixed Income';
-    } else {
-      assetClass = 'Equity';
     }
 
     if (tickerUpper.includes('VXUS') || tickerUpper.includes('EFA') || tickerUpper.includes('IXUS') || 

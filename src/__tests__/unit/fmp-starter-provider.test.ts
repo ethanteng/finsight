@@ -197,6 +197,22 @@ describe('FMP Starter fund metadata', () => {
     expect(metadata.securityName).not.toContain('Mock');
   });
 
+  it('leaves an unrecognized ticker unclassified rather than calling it equity', async () => {
+    // The retirement mapper ranks a declared class ahead of the custodian's
+    // own security type, so a guessed "Equity" here is not a harmless default:
+    // on Plaid's CUR:USD cash line it produced an equity position with no
+    // geography, which mapped to nothing.
+    const unconfiguredProvider = new FMPProvider('');
+    const options = { persistToDatabase: false, skipDatabaseLookup: true };
+
+    const cash = await unconfiguredProvider.getSecurityMetadata('CUR:USD', options);
+    expect(cash.assetClass).toBeUndefined();
+
+    // A positive signal still classifies.
+    const bond = await unconfiguredProvider.getSecurityMetadata('BND', options);
+    expect(bond.assetClass).toBe('Fixed Income');
+  });
+
   it('bounds cold-cache FMP ticker enrichment concurrency', async () => {
     const previousConcurrency = process.env.FMP_METADATA_CONCURRENCY;
     process.env.FMP_METADATA_CONCURRENCY = '2';

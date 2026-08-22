@@ -23,7 +23,7 @@ export async function askOpenAIWithPreparedPrompt(
   const model = getActiveModel('fallback');
   const response = await getClient().chat.completions.create({
     model,
-    ...openAIGenerationParams('fallback'),
+    ...openAIGenerationParams('fallback', model),
     response_format: {
       type: 'json_schema',
       json_schema: {

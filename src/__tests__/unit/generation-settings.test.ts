@@ -41,9 +41,9 @@ describe('generation settings', () => {
     });
 
     it('keeps each OpenAI call on the temperature it was hardcoded with', () => {
-      expect(openAIGenerationParams('fallback')).toEqual({ temperature: 0.2, max_tokens: 16_000 });
-      expect(openAIGenerationParams('profile')).toEqual({ temperature: 0.1 });
-      expect(openAIGenerationParams('contextPlanner')).toEqual({ temperature: 0, max_tokens: 1500 });
+      expect(openAIGenerationParams('fallback', 'gpt-4o')).toEqual({ temperature: 0.2, max_tokens: 16_000 });
+      expect(openAIGenerationParams('profile', 'gpt-4o')).toEqual({ temperature: 0.1 });
+      expect(openAIGenerationParams('contextPlanner', 'gpt-4o')).toEqual({ temperature: 0, max_tokens: 1500 });
     });
 
     it('sends Gemini nothing, as the validator did before these settings existed', () => {
@@ -78,15 +78,41 @@ describe('generation settings', () => {
     });
   });
 
+  describe('parameter names the selected model accepts', () => {
+    // A slot pointed at gpt-5 used to 400 on every call, which turned context
+    // planning into "include every pack" until someone read the logs.
+    it('renames the ceiling for models that only take max_completion_tokens', () => {
+      expect(openAIGenerationParams('contextPlanner', 'gpt-5.6-sol'))
+        .toEqual({ max_completion_tokens: 1500 });
+      expect(openAIGenerationParams('fallback', 'o3-mini'))
+        .toEqual({ max_completion_tokens: 16_000 });
+    });
+
+    it('drops a temperature those models cannot honour instead of failing the call', () => {
+      expect(openAIGenerationParams('contextPlanner', 'gpt-5.6-sol')).not.toHaveProperty('temperature');
+      expect(openAIGenerationParams('profile', 'gpt-5-mini')).toEqual({});
+    });
+
+    it('leaves the older models on the names they take', () => {
+      expect(openAIGenerationParams('contextPlanner', 'gpt-4.1'))
+        .toEqual({ temperature: 0, max_tokens: 1500 });
+    });
+
+    it('still omits a ceiling set to off on a renamed model', () => {
+      setActiveGenerationSettings({ contextPlanner: { maxOutputTokens: OMIT_SETTING } });
+      expect(openAIGenerationParams('contextPlanner', 'gpt-5.6-sol')).toEqual({});
+    });
+  });
+
   describe('omission', () => {
     it('drops a parameter set to off rather than sending a default', () => {
       setActiveGenerationSettings({ contextPlanner: { temperature: OMIT_SETTING, maxOutputTokens: OMIT_SETTING } });
-      expect(openAIGenerationParams('contextPlanner')).toEqual({});
+      expect(openAIGenerationParams('contextPlanner', 'gpt-4o')).toEqual({});
     });
 
     it('adds a parameter that ships omitted once a value is set', () => {
       setActiveGenerationSettings({ profile: { maxOutputTokens: '2048' } });
-      expect(openAIGenerationParams('profile')).toEqual({ temperature: 0.1, max_tokens: 2048 });
+      expect(openAIGenerationParams('profile', 'gpt-4o')).toEqual({ temperature: 0.1, max_tokens: 2048 });
     });
 
     it('refuses to omit a parameter the provider requires', () => {

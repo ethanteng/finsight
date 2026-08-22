@@ -570,6 +570,64 @@ describe('retirement correctness contracts', () => {
     )).rejects.toThrow(/negative holding.*no complete supported asset-class mapping/i);
   });
 
+  it('models a negative cash balance instead of stopping on it', async () => {
+    // Plaid reports US dollars as the CUR:USD security, which FMP has no
+    // record of. An inferred "Equity" class on that line used to outrank the
+    // custodian's own `cash` type, leaving a perfectly ordinary margin debit
+    // unmapped and stopping the whole analysis.
+    const holdings = [
+      holding('long', 'WFC', 100_000),
+      holding('cash', 'CUR:USD', -20_000),
+    ];
+    holdings[1].security_name = 'U S Dollar';
+    holdings[1].security_type = 'cash';
+    const securities = [
+      security('long', 'WFC', 'Wells Fargo & Co.', 'equity'),
+      security('cash', 'CUR:USD', 'U S Dollar', 'cash'),
+    ];
+    const metadata = usEquityMetadata('WFC');
+    metadata.set('CUR:USD', { assetClass: 'Equity', geographicFocus: undefined });
+
+    const mapping = await mapPortfolioToAssetBasket(
+      holdings,
+      securities,
+      80_000,
+      undefined,
+      metadata,
+      '2026-08-21',
+    );
+
+    expect(mapping.totalValue).toBe(80_000);
+    expect(mapping.mappedValue).toBe(80_000);
+    expect(mapping.cashValue).toBe(-20_000);
+    expect(mapping.holdingExposures.map(exposure => exposure.status)).toEqual(['mapped', 'mapped']);
+  });
+
+  it('names the holding that blocked the run so the ask is not a retry', async () => {
+    const holdings = [
+      holding('long', 'WFC', 100_000),
+      holding('short', 'X123', -20_000),
+    ];
+    holdings[1].security_name = 'Unidentified Short Position';
+    holdings[1].security_type = 'Unknown';
+    const securities = [
+      security('long', 'WFC', 'Wells Fargo & Co.', 'equity'),
+      security('short', 'X123', 'Unidentified Short Position', 'Unknown'),
+    ];
+
+    await expect(mapPortfolioToAssetBasket(
+      holdings,
+      securities,
+      80_000,
+      undefined,
+      usEquityMetadata('WFC'),
+      '2026-08-21',
+    )).rejects.toMatchObject({
+      name: 'UnmappedNegativeHoldingError',
+      label: 'Unidentified Short Position',
+    });
+  });
+
   it('publishes sourced target-date composition while simulation uses supported sleeves', async () => {
     const holdings = [holding('lifepath', 'O7PE', 100_000)];
     holdings[0].security_name = 'BTC LPATH IDX 2040 N';

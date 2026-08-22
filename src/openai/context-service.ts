@@ -1,3 +1,4 @@
+import * as Sentry from '@sentry/node';
 import { UserTier } from '../data/types';
 import { dataOrchestrator } from '../data/orchestrator';
 import { Account, Transaction, UnifiedFinancialData, HomeData } from '../services/financial-data-service';
@@ -955,6 +956,27 @@ async function fetchOrCreateRetirementAnalysis(args: {
       securitiesCount: securities.length
     });
 
+    // Every failure below becomes a user-facing "I could not run this", which
+    // makes the run that produced it invisible unless it is reported: the
+    // misclassified cash balance that stopped this analysis reached Sentry
+    // only as an unrelated provider warning from a different code path.
+    // Typed conditions describe the user's data and ride at warning level;
+    // anything unrecognized is a defect until proven otherwise.
+    const { InsufficientHistoricalDataError } = await import(
+      '../retirement-analytics/engine/stress-tester'
+    );
+    const { NoSupportedSimulationValueError, UnmappedNegativeHoldingError } = await import(
+      '../retirement-analytics/engine/portfolio-mapper'
+    );
+    const isClassifiedDataCondition = error instanceof InsufficientHistoricalDataError
+      || error instanceof NoSupportedSimulationValueError
+      || error instanceof UnmappedNegativeHoldingError;
+    Sentry.captureException(error, {
+      level: isClassifiedDataCondition ? 'warning' : 'error',
+      tags: { area: 'retirement_analysis' },
+      extra: { holdingsCount: holdings.length, securitiesCount: securities.length },
+    });
+
     // Log specific error details for common failure modes
     if (errorMessage.includes('Failed to fetch required asset basket data')) {
       console.error('💡 Retirement analysis failed due to missing asset basket data (VTI/VXUS/AGG). ' +
@@ -964,9 +986,6 @@ async function fetchOrCreateRetirementAnalysis(args: {
         'Check Tiingo API status and rate limits.');
     }
 
-    const { InsufficientHistoricalDataError } = await import(
-      '../retirement-analytics/engine/stress-tester'
-    );
     if (error instanceof InsufficientHistoricalDataError) {
       const { maxTimelineYears } = error;
       // The engine knows exactly how far the record reaches. Carry that through
@@ -994,9 +1013,6 @@ async function fetchOrCreateRetirementAnalysis(args: {
       };
     }
 
-    const { NoSupportedSimulationValueError } = await import(
-      '../retirement-analytics/engine/portfolio-mapper'
-    );
     if (error instanceof NoSupportedSimulationValueError) {
       return {
         needsInfo: {
@@ -1005,6 +1021,21 @@ async function fetchOrCreateRetirementAnalysis(args: {
           unavailableReason:
             `${errorMessage}. Do not invent a historical projection for unsupported or unresolved sleeves.`,
           unavailableCode: 'no_supported_simulation',
+        },
+      };
+    }
+
+    if (error instanceof UnmappedNegativeHoldingError) {
+      return {
+        needsInfo: {
+          missingParams: [],
+          detectedParams: {},
+          // Not a retry: the same holding blocks the same way every time.
+          unavailableReason:
+            `${errorMessage}. Name the holding for the user and say that retrying will not help, ` +
+            'instead of estimating the projection from aggregates.',
+          unavailableCode: 'unmapped_negative_holding',
+          blockingHoldingLabel: error.label,
         },
       };
     }

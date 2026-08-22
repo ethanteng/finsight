@@ -179,6 +179,8 @@ function maxOutputTokensSetting(options: {
   omittable: boolean;
   envVar?: string;
   description: string;
+  /** Overrides the panel label where the wire parameter is not `max_tokens`. */
+  label?: string;
 }): GenerationSettingMeta {
   return {
     id: 'maxOutputTokens',
@@ -189,6 +191,21 @@ function maxOutputTokensSetting(options: {
     ...options,
   };
 }
+
+/**
+ * What the OpenAI slots send this ceiling as. The o-series and GPT-5 models
+ * renamed it and reject the old spelling outright, so the request adapts to
+ * the selected model and the panel says so rather than naming one parameter
+ * that is only sometimes the one on the wire.
+ */
+const OPENAI_CEILING_LABEL = 'Max completion tokens';
+const OPENAI_CEILING_NOTE =
+  ' Sent as `max_completion_tokens` on the o-series and GPT-5 models, which renamed the parameter, ' +
+  'and as `max_tokens` on the models that still take that name.';
+
+/** The same note for temperature, which those models accept only at their own default. */
+const OPENAI_TEMPERATURE_NOTE =
+  ' Not sent at all on the o-series and GPT-5 models, which accept only their own default.';
 
 function temperatureSetting(shippedDefault: string, description: string): GenerationSettingMeta {
   return {
@@ -221,14 +238,16 @@ export const SLOT_GENERATION_SETTINGS: Record<ModelSlotId, GenerationSettingMeta
   fallback: [
     temperatureSetting(
       '0.2',
-      'How much the wording varies between identical questions. Set to off if the model rejects the parameter — several newer OpenAI models accept only their own default.'
+      'How much the wording varies between identical questions.' + OPENAI_TEMPERATURE_NOTE
     ),
     maxOutputTokensSetting({
       shippedDefault: '16000',
       omittable: true,
       envVar: 'ASK_LINC_MAX_OUTPUT_TOKENS',
+      label: OPENAI_CEILING_LABEL,
       description:
-        'Ceiling on a single answer from the fallback provider. Truncation is reported to Sentry when it happens.',
+        'Ceiling on a single answer from the fallback provider. Truncation is reported to Sentry when it happens.'
+        + OPENAI_CEILING_NOTE,
     }),
   ],
   validation: [
@@ -246,25 +265,31 @@ export const SLOT_GENERATION_SETTINGS: Record<ModelSlotId, GenerationSettingMeta
   profile: [
     temperatureSetting(
       '0.1',
-      'How much the structured personal-context patch varies between identical user messages. Low values keep unchanged details stable.'
+      'How much the structured personal-context patch varies between identical user messages. '
+        + 'Low values keep unchanged details stable.' + OPENAI_TEMPERATURE_NOTE
     ),
     maxOutputTokensSetting({
       shippedDefault: OMIT_SETTING,
       omittable: true,
+      label: OPENAI_CEILING_LABEL,
       description:
-        'Ceiling on the small structured personal-context patch. The application rejects malformed or incomplete output instead of storing it.',
+        'Ceiling on the small structured personal-context patch. The application rejects malformed '
+        + 'or incomplete output instead of storing it.' + OPENAI_CEILING_NOTE,
     }),
   ],
   contextPlanner: [
     temperatureSetting(
       '0',
-      'How much routing varies between identical decisions. Zero is deliberate: context selection and extracted inputs should be stable.'
+      'How much routing varies between identical decisions. Zero is deliberate: context selection '
+        + 'and extracted inputs should be stable.' + OPENAI_TEMPERATURE_NOTE
     ),
     maxOutputTokensSetting({
       shippedDefault: '1500',
       omittable: true,
+      label: OPENAI_CEILING_LABEL,
       description:
-        'Ceiling on the structured context plan. The response is a small fixed JSON object.',
+        'Ceiling on the structured context plan. The response is a small fixed JSON object.'
+        + OPENAI_CEILING_NOTE,
     }),
   ],
 };
