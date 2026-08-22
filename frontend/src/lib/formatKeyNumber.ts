@@ -45,10 +45,17 @@ function isOpaqueSegment(segment: string): boolean {
  *
  * Null rather than a best effort: this line is supplementary, and a row of hex
  * under a dollar figure is worse for the reader than no attribution at all.
+ *
+ * The server-set label is preferred, but only when it does not itself embed an
+ * opaque identifier — a holding fact used to fall back to `security_id` in its
+ * label, which would reintroduce the hex this helper exists to suppress.
  */
 export function formatProvenance(metric: DisplayKeyNumber): string | null {
   const label = metric.provenanceLabel?.trim();
-  if (label) return label;
+  if (label) {
+    const words = label.split(/\s+/).filter(Boolean);
+    if (!words.some(isOpaqueSegment)) return label;
+  }
   if (!metric.provenance) return null;
   const segments = metric.provenance.split('_').filter(Boolean);
   if (segments.some(isOpaqueSegment)) return null;

@@ -670,4 +670,49 @@ describe('buildCanonicalFactPack', () => {
     expect(categoryFacts.find((fact) => fact.id === 'category_spending_travel')?.value).toBe(800);
     expect(categoryFacts.find((fact) => fact.id === 'category_spending_rent')?.value).toBe(2_000);
   });
+
+  it('labels holding facts with a ticker or name, never a bare provider id', () => {
+    // provenanceLabel is shown as "Source:" on key-metric tiles. Falling back to
+    // security_id here would put hex under a dollar figure — the same class of
+    // bug this PR fixes for fact ids and missingData prose.
+    const data = snapshot();
+    data.investments = {
+      totalValue: 1_000,
+      holdingCount: 2,
+      summaryLines: [],
+      securities: [],
+      holdings: [
+        {
+          id: 'h1',
+          account_id: 'a1',
+          security_id: '7dD8KV8owvUX4bDwnDNPcLPy8Kyr9dFzwg9RN',
+          ticker_symbol: 'VTI',
+          security_name: 'Vanguard Total Stock Market',
+          institution_value: 600,
+        },
+        {
+          id: 'h2',
+          account_id: 'a1',
+          security_id: 'SPUSA061004C00000000',
+          institution_value: 400,
+        },
+        {
+          id: 'h3',
+          account_id: 'a1',
+          security_id: 'M654JE4yQdCRMKroO17KuZJ3Lo34kKHkV08Je',
+          // Some feeds echo the id into security_name when they have nothing else.
+          security_name: 'M654JE4yQdCRMKroO17KuZJ3Lo34kKHkV08Je',
+          institution_value: 50,
+        },
+      ],
+    };
+
+    const pack = buildCanonicalFactPack(data, 'What are my holdings worth?', needs('investment_details'));
+    const holdingFacts = pack.facts.filter((fact) => fact.id.startsWith('holding_value_'));
+
+    expect(holdingFacts.find((fact) => fact.id.includes('h1'))?.label).toBe('VTI holding value');
+    expect(holdingFacts.find((fact) => fact.id.includes('h2'))?.label).toBe('Unidentified holding value');
+    expect(holdingFacts.find((fact) => fact.id.includes('h3'))?.label).toBe('Unidentified holding value');
+    expect(holdingFacts.every((fact) => !/SPUSA061004C00000000|7dD8KV8owv|M654JE4yQd/.test(fact.label))).toBe(true);
+  });
 });

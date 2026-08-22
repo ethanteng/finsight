@@ -49,4 +49,13 @@ describe('formatProvenance', () => {
   it('ignores a blank label and falls back to the id', () => {
     expect(formatProvenance(metric('total_cash', '   '))).toBe('total cash');
   });
+
+  it('rejects a server label that still embeds an opaque identifier', () => {
+    // Holding facts once fell back to security_id in the label. Preferring that
+    // string as "Source:" would reintroduce the hex this helper exists to hide.
+    expect(formatProvenance(metric(
+      'holding_value_qq9wmog6pvh1xrv4dpaqc11orpeexyfzzodop_2893',
+      'SPUSA061004C00000000 holding value'
+    ))).toBeNull();
+  });
 });
