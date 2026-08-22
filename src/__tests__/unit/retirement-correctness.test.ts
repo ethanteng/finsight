@@ -4,7 +4,11 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import * as XLSX from 'xlsx';
-import { mapPortfolioToAssetBasket, populateAssumptions } from '../../retirement-analytics/engine/portfolio-mapper';
+import {
+  mapPortfolioToAssetBasket,
+  populateAssumptions,
+  summarizeHoldingExposures,
+} from '../../retirement-analytics/engine/portfolio-mapper';
 import { analyzePortfolio } from '../../retirement-analytics/engine/portfolio-analyzer';
 import { simulateWithdrawals } from '../../retirement-analytics/engine/withdrawal-simulator';
 import {
@@ -138,6 +142,51 @@ describe('retirement correctness contracts', () => {
     expect(populateAssumptions(mapping, holdings, securities).join(' ')).toContain(
       '$100,000 of TIPS exposure uses the nominal 10-year US government-bond history',
     );
+    expect(populateAssumptions(mapping, holdings, securities).join(' ')).toContain(
+      'understates the portfolio\'s inflation protection, especially for CPI-linked withdrawals',
+    );
+  });
+
+  it('derives excluded-holding descriptions and missing data from exposure records', () => {
+    const mapping = summarizeHoldingExposures([
+      {
+        holdingId: 'fully-unmodeled',
+        label: 'Unknown Plan Fund',
+        value: 100,
+        status: 'unmapped',
+        method: 'name-inference',
+        confidence: 'low',
+      },
+      {
+        holdingId: 'partially-modeled',
+        label: 'Partially Supported Fund',
+        value: 100,
+        status: 'mapped',
+        weights: {
+          usEquity: 0.5,
+          internationalEquity: 0,
+          nominalBonds: 0,
+          tips: 0,
+          cash: 0,
+        },
+        method: 'fund-registry',
+        confidence: 'medium',
+      },
+      {
+        holdingId: 'zero-value-unmodeled',
+        label: 'Zero-value Unknown Fund',
+        value: 0,
+        status: 'unmapped',
+        method: 'name-inference',
+        confidence: 'low',
+      },
+    ]);
+
+    expect(populateAssumptions(mapping, [], []).join(' ')).toContain(
+      '$150 was excluded from analysis: 1 holding was fully unmodeled and 1 holding was partially modeled',
+    );
+    const quality = calculateDataQuality([], [], mapping, 1, []);
+    expect(quality.missingData).toEqual(['Unknown Plan Fund', 'Zero-value Unknown Fund']);
   });
 
   it('excludes unmapped dollars instead of reallocating them across mapped assets', async () => {

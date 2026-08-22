@@ -263,6 +263,7 @@ export function summarizeHoldingExposures(
       exposure.allocationAgeDays === undefined ||
       exposure.staleAllocation === undefined ||
       exposure.sourceUrl === undefined ||
+      exposure.sourceProvider === undefined ||
       exposure.sourceContext === undefined ||
       exposure.exactAllocation === undefined
     ) {
@@ -270,6 +271,7 @@ export function summarizeHoldingExposures(
     }
     return [{
       label: exposure.label,
+      provider: exposure.sourceProvider,
       targetYear: exposure.targetYear,
       equityShare: exposure.weights.usEquity + exposure.weights.internationalEquity,
       allocationAsOf: exposure.allocationAsOf,
@@ -390,6 +392,7 @@ export async function mapPortfolioToAssetBasket(
       allocationAgeDays: draft.targetAllocation?.allocationAgeDays,
       staleAllocation: draft.targetAllocation?.staleAllocation,
       sourceUrl: draft.targetAllocation?.sourceUrl,
+      sourceProvider: draft.targetAllocation?.provider,
       sourceContext: draft.targetAllocation?.sourceContext,
       exactAllocation: draft.targetAllocation?.exactAllocation,
       targetYear: draft.targetYear,
@@ -456,55 +459,76 @@ export function populateAssumptions(
   }
 
   if (resolvedMapping.targetDateFunds.length > 0) {
-    // Group identical sourced allocations without putting holding labels into
-    // the analysis context for questions that did not ask for investment detail.
-    const groups = new Map<string, {
-      count: number;
-      targetYear: number;
-      equityShare: number;
+    // State provenance once per provider publication, then list the vintages
+    // that use it without putting holding labels into unrelated LLM context.
+    const sourceGroups = new Map<string, {
+      provider: string;
       allocationAsOf: string;
       allocationAgeDays: number;
       staleAllocation: boolean;
       sourceContext: string;
       exactAllocation: boolean;
+      vintages: Map<string, { count: number; targetYear: number; equityShare: number }>;
     }>();
     for (const fund of resolvedMapping.targetDateFunds) {
-      const key = [
-        fund.targetYear,
-        fund.equityShare,
+      const sourceKey = [
+        fund.provider,
         fund.allocationAsOf,
         fund.sourceContext,
         fund.exactAllocation,
       ].join(':');
-      const existing = groups.get(key);
-      if (existing) existing.count += 1;
-      else groups.set(key, {
+      let sourceGroup = sourceGroups.get(sourceKey);
+      if (!sourceGroup) {
+        sourceGroup = {
+          provider: fund.provider,
+          allocationAsOf: fund.allocationAsOf,
+          allocationAgeDays: fund.allocationAgeDays,
+          staleAllocation: fund.staleAllocation,
+          sourceContext: fund.sourceContext,
+          exactAllocation: fund.exactAllocation,
+          vintages: new Map(),
+        };
+        sourceGroups.set(sourceKey, sourceGroup);
+      }
+      const vintageKey = `${fund.targetYear}:${fund.equityShare}`;
+      const vintage = sourceGroup.vintages.get(vintageKey);
+      if (vintage) vintage.count += 1;
+      else sourceGroup.vintages.set(vintageKey, {
         count: 1,
         targetYear: fund.targetYear,
         equityShare: fund.equityShare,
-        allocationAsOf: fund.allocationAsOf,
-        allocationAgeDays: fund.allocationAgeDays,
-        staleAllocation: fund.staleAllocation,
-        sourceContext: fund.sourceContext,
-        exactAllocation: fund.exactAllocation,
       });
     }
-    const described = Array.from(groups.values())
-      .sort((left, right) => left.targetYear - right.targetYear)
+    const described = Array.from(sourceGroups.values())
+      .sort((left, right) =>
+        left.allocationAsOf.localeCompare(right.allocationAsOf) ||
+        left.provider.localeCompare(right.provider)
+      )
       .map(({
-        count,
-        targetYear,
-        equityShare,
+        provider,
         allocationAsOf,
         allocationAgeDays,
         staleAllocation,
         sourceContext,
         exactAllocation,
-      }) =>
-        `${count} targeting ${targetYear} at ${Math.round(equityShare * 100)}% equity ` +
-        `(${exactAllocation ? 'same share class' : 'public share-class proxy'}, ` +
-        `${sourceContext}, as of ${allocationAsOf}` +
-        `${staleAllocation ? `; stale by ${Math.floor(allocationAgeDays / 30)} months` : ''})`)
+        vintages,
+      }) => {
+        const providerName = provider === 'state-street'
+          ? 'State Street'
+          : provider === 'blackrock' ? 'BlackRock' : provider;
+        const vintageDescription = Array.from(vintages.values())
+          .sort((left, right) => left.targetYear - right.targetYear)
+          .map(({ count, targetYear, equityShare }) =>
+            `${count} targeting ${targetYear} at ${Math.round(equityShare * 100)}% equity`
+          )
+          .join(', ');
+        return (
+          `${providerName} (${exactAllocation ? 'same share class' : 'public share-class proxy'}; ` +
+          `${sourceContext}; as of ${allocationAsOf}` +
+          `${staleAllocation ? `; stale by ${Math.floor(allocationAgeDays / 30)} months` : ''}): ` +
+          vintageDescription
+        );
+      })
       .join('; ');
     assumptions.push(
       `Target-date funds use versioned published holdings rather than an industry glidepath: ${described}`
@@ -512,11 +536,31 @@ export function populateAssumptions(
   }
 
   if (resolvedMapping.unmappedValue > 0.005) {
+    const materiallyExcluded = resolvedMapping.holdingExposures.filter(exposure => {
+      const mappedFraction = exposure.status === 'mapped' && exposure.weights
+        ? Math.max(0, Math.min(1, weightTotal(exposure.weights)))
+        : 0;
+      return exposure.value * (1 - mappedFraction) > 0.005;
+    });
+    const fullyUnmodeledCount = resolvedMapping.holdingExposures.length > 0
+      ? materiallyExcluded.filter(exposure => exposure.status === 'unmapped').length
+      : resolvedMapping.unmappedHoldings.length;
+    const partiallyModeledCount = resolvedMapping.holdingExposures.length > 0
+      ? materiallyExcluded.length - fullyUnmodeledCount
+      : resolvedMapping.partiallyMappedHoldings.length;
+    const countDescription = [
+      fullyUnmodeledCount > 0
+        ? `${fullyUnmodeledCount} holding${fullyUnmodeledCount === 1 ? '' : 's'} ` +
+          `${fullyUnmodeledCount === 1 ? 'was' : 'were'} fully unmodeled`
+        : '',
+      partiallyModeledCount > 0
+        ? `${partiallyModeledCount} holding${partiallyModeledCount === 1 ? '' : 's'} ` +
+          `${partiallyModeledCount === 1 ? 'was' : 'were'} partially modeled`
+        : '',
+    ].filter(Boolean).join(' and ');
     assumptions.push(
-      `$${Math.round(resolvedMapping.unmappedValue).toLocaleString('en-US')} across ` +
-      `${resolvedMapping.unmappedHoldings.length + resolvedMapping.partiallyMappedHoldings.length} ` +
-      `holding${resolvedMapping.unmappedHoldings.length + resolvedMapping.partiallyMappedHoldings.length === 1 ? '' : 's'} ` +
-      'could not be represented by supported asset classes and was excluded from analysis'
+      `$${Math.round(resolvedMapping.unmappedValue).toLocaleString('en-US')} was excluded from analysis: ` +
+      countDescription
     );
   }
 
@@ -539,7 +583,8 @@ export function populateAssumptions(
   if (tipsValue > 0.005) {
     assumptions.push(
       `$${Math.round(tipsValue).toLocaleString('en-US')} of TIPS exposure uses the nominal ` +
-      '10-year US government-bond history because the engine has no dedicated TIPS return series'
+      '10-year US government-bond history because the engine has no dedicated TIPS return series; ' +
+      'this understates the portfolio\'s inflation protection, especially for CPI-linked withdrawals'
     );
   }
 

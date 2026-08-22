@@ -172,6 +172,7 @@ describe('target-date funds in retirement mapping', () => {
         expect(mapping.targetDateFunds).toHaveLength(1);
         expect(mapping.targetDateFunds[0]).toMatchObject({
           label: 'BTC LPATH IDX 2040 N',
+          provider: 'blackrock',
           targetYear: 2040,
           equityShare: 0.7471,
           allocationAsOf: '2026-03-31',
@@ -196,8 +197,30 @@ describe('target-date funds in retirement mapping', () => {
 
     expect(mapping.unmappedHoldings).toEqual([]);
     expect(mapping.partiallyMappedHoldings).toEqual(['State St Target Ret 2030 SL SF CL III']);
-    expect(mapping.nominalBondsWeight).toBeCloseTo(0.311 / 0.837, 6);
-    expect(mapping.valueCoverage).toBeCloseTo(0.837, 6);
+    expect(mapping.holdingExposures[0].weights?.tips).toBeCloseTo(0.1207, 6);
+    expect(mapping.nominalBondsWeight).toBeCloseTo((0.311 + 0.1207) / 0.9577, 6);
+    expect(mapping.valueCoverage).toBeCloseTo(0.9577, 6);
+  });
+
+  it.each([
+    [2025, 0.1793],
+    [2030, 0.1207],
+    [2035, 0.0293],
+    [2040, 0],
+    [2050, 0],
+  ])('preserves the published State Street %i TIPS sleeve', async (targetYear, tipsWeight) => {
+    const name = `State St Target Ret ${targetYear} SL SF CL III`;
+    const mapping = await mapPortfolioToAssetBasket(
+      [{ security_id: 'ss', security_name: name, institution_value: 100_000 }] as any[],
+      [{ security_id: 'ss', type: 'mutual fund', name }] as any[],
+      100_000,
+      undefined,
+      new Map(),
+      2026,
+    );
+
+    expect(mapping.holdingExposures[0].weights?.tips).toBeCloseTo(tipsWeight, 6);
+    expect(mapping.targetDateFunds[0].provider).toBe('state-street');
   });
 
   it('keeps supported cash while excluding unsupported target-date sleeves', async () => {
@@ -210,9 +233,10 @@ describe('target-date funds in retirement mapping', () => {
       2026,
     );
 
-    expect(mapping.mappedValue).toBeCloseTo(96_340, 2);
-    expect(mapping.unmappedValue).toBeCloseTo(3_660, 2);
-    expect(mapping.cashWeight).toBeCloseTo(0.0019 / 0.9634, 8);
+    expect(mapping.holdingExposures[0].weights?.tips).toBeCloseTo(0.0293, 6);
+    expect(mapping.mappedValue).toBeCloseTo(99_270, 2);
+    expect(mapping.unmappedValue).toBeCloseTo(730, 2);
+    expect(mapping.cashWeight).toBeCloseTo(0.0019 / 0.9927, 8);
   });
 
   it('leaves a dated Treasury in bonds rather than on a glidepath', async () => {
@@ -439,6 +463,7 @@ describe('institutional and employer-plan funds', () => {
     expect(assumption).toContain('as of 2026-03-31');
     expect(assumption).toContain('State Street public mutual-fund share class');
     expect(assumption).toContain('BlackRock LifePath Fund N share class');
+    expect(assumption.match(/Plan CIT has no public holdings/g)).toHaveLength(1);
     expect(assumption).not.toContain('State St Target Ret');
     expect(assumption).not.toContain('BTC LPATH IDX');
   });

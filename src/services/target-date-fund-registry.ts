@@ -28,9 +28,11 @@ const STALE_ALLOCATION_DAYS = 366;
 
 /**
  * Versioned, reviewable allocations for target-date products observed in the
- * live portfolio. Unsupported sleeves such as TIPS, commodities and global
- * infrastructure are intentionally omitted from `weights`; callers report
- * and exclude that fraction instead of redistributing it.
+ * live portfolio. Reported TIPS sleeves remain distinct in `weights` so the
+ * retirement engine can apply and disclose its nominal-bond return proxy.
+ * Other unsupported sleeves, such as commodities and global infrastructure,
+ * are omitted; callers report and exclude that fraction instead of
+ * redistributing it.
  *
  * State Street's plan-specific Class III CIT does not publish holdings in the
  * public plan sheet, so these entries are explicitly marked as proxies for the
@@ -54,7 +56,7 @@ const REGISTRY: RegistryEntry[] = [
     sourceUrl: 'https://www.ssga.com/us/en/institutional/mf/state-street-target-retirement-2025-fund-class-r3-ssahx',
     sourceContext: 'Plan CIT has no public holdings; a State Street public mutual-fund share class supplies the proxy allocation',
     exactAllocation: false,
-    weights: { usEquity: 0.2201, internationalEquity: 0.1368, nominalBonds: 0.3783, tips: 0, cash: 0.0014 },
+    weights: { usEquity: 0.2201, internationalEquity: 0.1368, nominalBonds: 0.3783, tips: 0.1793, cash: 0.0014 },
   },
   {
     provider: 'state-street',
@@ -63,7 +65,7 @@ const REGISTRY: RegistryEntry[] = [
     sourceUrl: 'https://www.ssga.com/us/en/individual/mf/state-street-target-retirement-2030-fund-class-r3-ssajx',
     sourceContext: 'Plan CIT has no public holdings; a State Street public mutual-fund share class supplies the proxy allocation',
     exactAllocation: false,
-    weights: { usEquity: 0.3145, internationalEquity: 0.2101, nominalBonds: 0.3110, tips: 0, cash: 0.0014 },
+    weights: { usEquity: 0.3145, internationalEquity: 0.2101, nominalBonds: 0.3110, tips: 0.1207, cash: 0.0014 },
   },
   {
     provider: 'state-street',
@@ -72,7 +74,7 @@ const REGISTRY: RegistryEntry[] = [
     sourceUrl: 'https://www.ssga.com/us/en/institutional/mf/state-street-target-retirement-2035-fund-class-r3-ssazx',
     sourceContext: 'Plan CIT has no public holdings; a State Street public mutual-fund share class supplies the proxy allocation',
     exactAllocation: false,
-    weights: { usEquity: 0.3898, internationalEquity: 0.2797, nominalBonds: 0.2920, tips: 0, cash: 0.0019 },
+    weights: { usEquity: 0.3898, internationalEquity: 0.2797, nominalBonds: 0.2920, tips: 0.0293, cash: 0.0019 },
   },
   {
     provider: 'state-street',

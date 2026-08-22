@@ -49,7 +49,16 @@ export function calculateDataQuality(
   const totalValue = resolvedMapping.totalValue;
   const proxiedValuePercentage = resolvedMapping.proxiedValuePercentage;
 
-  const missingData = [...resolvedMapping.unmappedHoldings, ...stressTestMissingData];
+  // Exposure records include zero-valued and repeated-label positions that do
+  // not appear in the dollar-material `unmappedHoldings` summary. Preserve one
+  // missing-data entry per fully unresolved holding so the count cannot drift
+  // from the collection that drove the analysis.
+  const fullyUnmappedHoldingLabels = resolvedMapping.holdingExposures.length > 0
+    ? resolvedMapping.holdingExposures
+        .filter(exposure => exposure.status === 'unmapped')
+        .map(exposure => exposure.label)
+    : resolvedMapping.unmappedHoldings;
+  const missingData = [...fullyUnmappedHoldingLabels, ...stressTestMissingData];
 
   // Combine provider-level value with no holdings detail and itemized holdings
   // whose exposures the mapper could not support. Both are deliberately left

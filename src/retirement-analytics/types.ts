@@ -171,6 +171,8 @@ export interface ResolvedHoldingExposure {
   allocationAgeDays?: number;
   staleAllocation?: boolean;
   sourceUrl?: string;
+  /** Provider whose dated holdings supplied a registry allocation. */
+  sourceProvider?: string;
   sourceContext?: string;
   /** False when a public sibling share class is used as a documented proxy. */
   exactAllocation?: boolean;
@@ -208,6 +210,7 @@ export interface PortfolioMapping {
    */
   targetDateFunds: Array<{
     label: string;
+    provider: string;
     targetYear: number;
     equityShare: number;
     allocationAsOf: string;
