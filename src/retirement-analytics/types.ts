@@ -3,6 +3,7 @@
 
 import { Holding, Security } from '../services/financial-data-service';
 import type { UnmodeledInvestmentValue } from '../services/investment-coverage';
+import type { TargetDateFundIdentity } from '../services/target-date-fund';
 
 /**
  * How retirement spending changes after withdrawals begin.
@@ -176,7 +177,8 @@ export interface ResolvedHoldingExposure {
   sourceContext?: string;
   /** False when a public sibling share class is used as a documented proxy. */
   exactAllocation?: boolean;
-  targetYear?: number;
+  /** Recognition result retained even when no sourced allocation is available. */
+  targetDateIdentity?: TargetDateFundIdentity;
 }
 
 export interface PortfolioMapping {
@@ -211,7 +213,8 @@ export interface PortfolioMapping {
   targetDateFunds: Array<{
     label: string;
     provider: string;
-    targetYear: number;
+    series: string;
+    vintage: number;
     equityShare: number;
     allocationAsOf: string;
     allocationAgeDays: number;

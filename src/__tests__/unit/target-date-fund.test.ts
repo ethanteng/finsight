@@ -1,11 +1,11 @@
 import { describe, expect, it } from '@jest/globals';
 import {
+  identifyTargetDateFund,
   isTargetDateFund,
-  resolveTargetDateFund,
   targetDateFundYear,
-  targetDateGlidepath,
   TARGET_DATE_ASSET_TYPE,
 } from '../../services/target-date-fund';
+import { lookupTargetDateAllocation } from '../../services/target-date-fund-registry';
 import { buildCanonicalInvestmentPortfolio } from '../../services/canonical-financial-snapshot';
 import { mapPortfolioToAssetBasket, populateAssumptions } from '../../retirement-analytics/engine/portfolio-mapper';
 import {
@@ -23,6 +23,28 @@ describe('target-date fund recognition', () => {
       'State Street Institutional Investment Trust - State Street Target Retir Cl 2030 Fd USD Cls I'
     )).toBe(2030);
     expect(targetDateFundYear('Fidelity Freedom 2045 Fund')).toBe(2045);
+  });
+
+  it('recognizes provider, series, and vintage without implying an allocation', () => {
+    expect(identifyTargetDateFund('State St Target Ret 2040 SL SF CL III')).toEqual({
+      provider: 'state-street',
+      series: 'target-retirement',
+      vintage: 2040,
+    });
+    expect(identifyTargetDateFund(['BTC LPATH IDX 2040 N', 'O7PE'])).toEqual({
+      provider: 'blackrock',
+      series: 'lifepath-index',
+      vintage: 2040,
+    });
+    expect(identifyTargetDateFund('UC PATHWAY 2040')).toEqual({
+      provider: 'uc',
+      series: 'pathway',
+      vintage: 2040,
+    });
+    expect(identifyTargetDateFund('Target Date 2035 Fund')).toEqual({
+      series: 'target-date',
+      vintage: 2035,
+    });
   });
 
   it('prefers the target year over a trailing series or inception year', () => {
@@ -69,27 +91,30 @@ describe('target-date fund recognition', () => {
     expect(targetDateFundYear('2010 Vanguard Target Retirement 2050 Trust')).toBe(2050);
   });
 
-  it('keeps the legacy sensitivity curve deterministic for explicit scenario use', () => {
-    expect(targetDateGlidepath(2050, 2026).equityShare).toBeCloseTo(0.9, 6); // clamped
-    expect(targetDateGlidepath(2040, 2026).equityShare).toBeCloseTo(0.78, 6);
-    expect(targetDateGlidepath(2035, 2026).equityShare).toBeCloseTo(0.68, 6);
-    expect(targetDateGlidepath(2030, 2026).equityShare).toBeCloseTo(0.58, 6);
-    expect(targetDateGlidepath(2026, 2026).equityShare).toBeCloseTo(0.5, 6);
-    expect(targetDateGlidepath(2000, 2026).equityShare).toBeCloseTo(0.3, 6); // clamped
+  it('requires an exact registered identity before returning an allocation', () => {
+    const stateStreet = identifyTargetDateFund('State St Target Ret 2040 SL SF CL III')!;
+    expect(lookupTargetDateAllocation(stateStreet, '2026-06-29')).toBeNull();
+    expect(lookupTargetDateAllocation(stateStreet, '2026-06-30')).toMatchObject({
+      identity: stateStreet,
+      allocationAsOf: '2026-06-30',
+      exactAllocation: false,
+    });
+    expect(lookupTargetDateAllocation(
+      { provider: 'state-street', series: 'another-series', vintage: 2040 },
+      '2026-12-31',
+    )).toBeNull();
   });
 
-  it('always splits the whole fund between equity and bonds', () => {
-    for (const year of [2020, 2030, 2040, 2060]) {
-      const fund = targetDateGlidepath(year, 2026);
-      expect(fund.equityShare + fund.bondShare).toBeCloseTo(1, 10);
+  it('keeps recognized but unsourced series allocation-unavailable', () => {
+    for (const label of [
+      'UC PATHWAY 2040',
+      'Fidelity Freedom 2040 Fund',
+      'Target Date 2040 Fund',
+    ]) {
+      const identity = identifyTargetDateFund(label)!;
+      expect(identity.vintage).toBe(2040);
+      expect(lookupTargetDateAllocation(identity, '2026-12-31')).toBeNull();
     }
-  });
-
-  it('resolves the same split for the same data regardless of when it runs', () => {
-    // asOfYear is a parameter, not a clock read, so replays agree.
-    expect(resolveTargetDateFund(['State St Target Ret 2040'], 2026)?.equityShare)
-      .toBe(resolveTargetDateFund(['State St Target Ret 2040'], 2026)?.equityShare);
-    expect(resolveTargetDateFund(['UST 4.0% 03/31/2030'], 2026)).toBeNull();
   });
 });
 
@@ -125,6 +150,19 @@ describe('target-date funds in the allocation view', () => {
 
     expect(portfolio.assetAllocation).toEqual([
       { type: TARGET_DATE_ASSET_TYPE, value: 188_369.7, percentage: 100 },
+    ]);
+  });
+
+  it('keeps an unsourced UC Pathway holding in the target-date display bucket', () => {
+    const portfolio = buildCanonicalInvestmentPortfolio(
+      [{ id: 'h', account_id: 'a', security_id: 'uc', institution_value: 25_000, iso_currency_code: 'USD' }],
+      [{ security_id: 'uc', type: 'mutual fund', name: 'UC PATHWAY 2040' }],
+      [],
+      'USD',
+    );
+
+    expect(portfolio.assetAllocation).toEqual([
+      { type: TARGET_DATE_ASSET_TYPE, value: 25_000, percentage: 100 },
     ]);
   });
 
@@ -173,7 +211,8 @@ describe('target-date funds in retirement mapping', () => {
         expect(mapping.targetDateFunds[0]).toMatchObject({
           label: 'BTC LPATH IDX 2040 N',
           provider: 'blackrock',
-          targetYear: 2040,
+          series: 'lifepath-index',
+          vintage: 2040,
           equityShare: 0.7471,
           allocationAsOf: '2026-03-31',
           allocationAgeDays: 275,
@@ -265,7 +304,11 @@ describe('target-date funds in retirement mapping', () => {
     );
 
     expect(mapping.targetDateFunds).toEqual([]);
-    expect(mapping.holdingExposures[0].targetYear).toBe(2040);
+    expect(mapping.holdingExposures[0].targetDateIdentity).toEqual({
+      provider: 'uc',
+      series: 'pathway',
+      vintage: 2040,
+    });
     expect(mapping.holdingExposures[0]).toMatchObject({
       status: 'unmapped',
       method: 'name-inference',
@@ -286,7 +329,11 @@ describe('target-date funds in retirement mapping', () => {
     );
 
     expect(mapping.holdingExposures[0]).toMatchObject({
-      targetYear: 2040,
+      targetDateIdentity: {
+        provider: 'fidelity',
+        series: 'freedom',
+        vintage: 2040,
+      },
       status: 'unmapped',
       method: 'name-inference',
     });
@@ -310,7 +357,11 @@ describe('target-date funds in retirement mapping', () => {
     expect(mapping.holdingExposures[0]).toMatchObject({
       status: 'unmapped',
       method: 'name-inference',
-      targetYear: 2040,
+      targetDateIdentity: {
+        provider: 'blackrock',
+        series: 'lifepath-index',
+        vintage: 2040,
+      },
     });
   });
 
@@ -574,7 +625,7 @@ describe('container provider types', () => {
     for (const type of ['mutual fund', 'Mutual Fund', 'Unknown', null, '']) {
       const mapping = await map('State St Target Ret 2040 SL SF CL III', 'O7PE', type);
       expect(mapping.targetDateFunds).toHaveLength(1);
-      expect(mapping.targetDateFunds[0].targetYear).toBe(2040);
+      expect(mapping.targetDateFunds[0].vintage).toBe(2040);
       expect(mapping.nominalBondsWeight).toBeCloseTo(0.2467, 6);
       expect(mapping.targetDateFunds[0].allocationAsOf).toBe('2026-06-30');
     }

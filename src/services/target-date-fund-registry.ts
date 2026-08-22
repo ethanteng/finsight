@@ -1,8 +1,11 @@
-import { targetDateFundYear } from './target-date-fund';
+import type { TargetDateFundIdentity } from './target-date-fund';
+
+type RegisteredTargetDateFundIdentity =
+  | { provider: 'state-street'; series: 'target-retirement'; vintage: number }
+  | { provider: 'blackrock'; series: 'lifepath-index'; vintage: number };
 
 export interface TargetDateFundAllocation {
-  provider: 'state-street' | 'blackrock';
-  targetYear: number;
+  identity: RegisteredTargetDateFundIdentity;
   allocationAsOf: string;
   allocationAgeDays: number;
   staleAllocation: boolean;
@@ -19,10 +22,12 @@ export interface TargetDateFundAllocation {
   };
 }
 
-type RegistryEntry = Omit<
+interface RegistryEntry extends Omit<
   TargetDateFundAllocation,
-  'allocationAgeDays' | 'staleAllocation'
->;
+  'allocationAsOf' | 'allocationAgeDays' | 'staleAllocation'
+> {
+  effectiveDate: string;
+}
 
 const STALE_ALLOCATION_DAYS = 366;
 
@@ -50,54 +55,48 @@ const STALE_ALLOCATION_DAYS = 366;
  */
 const REGISTRY: RegistryEntry[] = [
   {
-    provider: 'state-street',
-    targetYear: 2025,
-    allocationAsOf: '2026-06-30',
+    identity: { provider: 'state-street', series: 'target-retirement', vintage: 2025 },
+    effectiveDate: '2026-06-30',
     sourceUrl: 'https://www.ssga.com/us/en/institutional/mf/state-street-target-retirement-2025-fund-class-r3-ssahx',
     sourceContext: 'Plan CIT has no public holdings; a State Street public mutual-fund share class supplies the proxy allocation',
     exactAllocation: false,
     weights: { usEquity: 0.2201, internationalEquity: 0.1368, nominalBonds: 0.3783, tips: 0.1793, cash: 0.0014 },
   },
   {
-    provider: 'state-street',
-    targetYear: 2030,
-    allocationAsOf: '2026-06-30',
+    identity: { provider: 'state-street', series: 'target-retirement', vintage: 2030 },
+    effectiveDate: '2026-06-30',
     sourceUrl: 'https://www.ssga.com/us/en/individual/mf/state-street-target-retirement-2030-fund-class-r3-ssajx',
     sourceContext: 'Plan CIT has no public holdings; a State Street public mutual-fund share class supplies the proxy allocation',
     exactAllocation: false,
     weights: { usEquity: 0.3145, internationalEquity: 0.2101, nominalBonds: 0.3110, tips: 0.1207, cash: 0.0014 },
   },
   {
-    provider: 'state-street',
-    targetYear: 2035,
-    allocationAsOf: '2026-06-30',
+    identity: { provider: 'state-street', series: 'target-retirement', vintage: 2035 },
+    effectiveDate: '2026-06-30',
     sourceUrl: 'https://www.ssga.com/us/en/institutional/mf/state-street-target-retirement-2035-fund-class-r3-ssazx',
     sourceContext: 'Plan CIT has no public holdings; a State Street public mutual-fund share class supplies the proxy allocation',
     exactAllocation: false,
     weights: { usEquity: 0.3898, internationalEquity: 0.2797, nominalBonds: 0.2920, tips: 0.0293, cash: 0.0019 },
   },
   {
-    provider: 'state-street',
-    targetYear: 2040,
-    allocationAsOf: '2026-06-30',
+    identity: { provider: 'state-street', series: 'target-retirement', vintage: 2040 },
+    effectiveDate: '2026-06-30',
     sourceUrl: 'https://www.ssga.com/us/en/individual/mf/state-street-target-retirement-2040-fund-class-i-sscnx',
     sourceContext: 'Plan CIT has no public holdings; a State Street public mutual-fund share class supplies the proxy allocation',
     exactAllocation: false,
     weights: { usEquity: 0.4341, internationalEquity: 0.3176, nominalBonds: 0.2467, tips: 0, cash: 0.0016 },
   },
   {
-    provider: 'state-street',
-    targetYear: 2050,
-    allocationAsOf: '2026-06-30',
+    identity: { provider: 'state-street', series: 'target-retirement', vintage: 2050 },
+    effectiveDate: '2026-06-30',
     sourceUrl: 'https://www.ssga.com/us/en/individual/mf/state-street-target-retirement-2050-fund-class-i-ssdjx',
     sourceContext: 'Plan CIT has no public holdings; a State Street public mutual-fund share class supplies the proxy allocation',
     exactAllocation: false,
     weights: { usEquity: 0.5011, internationalEquity: 0.3668, nominalBonds: 0.1304, tips: 0, cash: 0.0017 },
   },
   {
-    provider: 'blackrock',
-    targetYear: 2040,
-    allocationAsOf: '2026-03-31',
+    identity: { provider: 'blackrock', series: 'lifepath-index', vintage: 2040 },
+    effectiveDate: '2026-03-31',
     sourceUrl: 'https://assets.mersofmich.com/forms/MERS_LifePath_2040.pdf',
     sourceContext: 'MERS plan-sponsor fact sheet for the BlackRock LifePath Fund N share class; no separate TIPS weight is published in its holdings',
     exactAllocation: true,
@@ -108,48 +107,42 @@ const REGISTRY: RegistryEntry[] = [
   },
 ];
 
-function providerForLabel(text: string): TargetDateFundAllocation['provider'] | null {
-  if (/state\s*(st|street).*target\s*-?\s*(ret|retirement)/i.test(text)) return 'state-street';
-  if (/\b(btc|blackrock)\b.*\b(lpath|life\s*-?\s*path)\b/i.test(text)) return 'blackrock';
-  return null;
-}
-
-export function lookupTargetDateFundAllocation(
-  labels: Array<unknown>,
+/**
+ * Resolve a recognized identity against dated, sourced holdings. This function
+ * deliberately performs no label parsing: recognition can be heuristic while
+ * allocation requires an exact provider/series/vintage registry key.
+ */
+export function lookupTargetDateAllocation(
+  identity: TargetDateFundIdentity,
   asOfDate: string | number,
 ): TargetDateFundAllocation | null {
-  const targetYear = targetDateFundYear(...labels);
-  if (targetYear === null) return null;
-
-  const text = labels.filter((label): label is string => typeof label === 'string').join(' ');
-  const provider = providerForLabel(text);
-  if (!provider) return null;
+  if (!identity.provider || !identity.series) return null;
 
   const normalizedAsOfDate = normalizeAsOfDate(asOfDate);
   if (!normalizedAsOfDate) return null;
 
   const entry = REGISTRY
     .filter(candidate =>
-      candidate.provider === provider &&
-      candidate.targetYear === targetYear &&
-      candidate.allocationAsOf <= normalizedAsOfDate
+      candidate.identity.provider === identity.provider &&
+      candidate.identity.series === identity.series &&
+      candidate.identity.vintage === identity.vintage &&
+      candidate.effectiveDate <= normalizedAsOfDate
     )
-    .sort((left, right) => right.allocationAsOf.localeCompare(left.allocationAsOf))[0];
+    .sort((left, right) => right.effectiveDate.localeCompare(left.effectiveDate))[0];
   if (!entry) return null;
 
   const allocationAgeDays = Math.max(
     0,
     Math.floor(
       (Date.parse(`${normalizedAsOfDate}T00:00:00.000Z`) -
-        Date.parse(`${entry.allocationAsOf}T00:00:00.000Z`)) /
+        Date.parse(`${entry.effectiveDate}T00:00:00.000Z`)) /
       (24 * 60 * 60 * 1000)
     ),
   );
 
   return {
-    provider: entry.provider,
-    targetYear: entry.targetYear,
-    allocationAsOf: entry.allocationAsOf,
+    identity: { ...entry.identity },
+    allocationAsOf: entry.effectiveDate,
     allocationAgeDays,
     staleAllocation: allocationAgeDays > STALE_ALLOCATION_DAYS,
     sourceUrl: entry.sourceUrl,
