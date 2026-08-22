@@ -92,8 +92,9 @@ export function calculateDataQuality(
 
 /**
  * Calculate confidence ceiling - explicit mechanical rules
+ * - Low portfolio-mapping confidence caps the result at low.
  * Confidence cannot be "high" if:
- * - portfolioMappingConfidence !== 'high'
+ * - portfolioMappingConfidence === 'medium'
  * - priceHistoryCoverage < 0.8
  * - proxiedValuePercentage >= 0.4
  * - valueCoverage < 0.95
@@ -101,8 +102,12 @@ export function calculateDataQuality(
 export function calculateConfidenceCeiling(
   dataQuality: DataQualityReport
 ): ConfidenceLevel {
-  // Explicit mechanical rules: confidence cannot be "high" if:
-  if (dataQuality.portfolioMappingConfidence !== 'high') {
+  // Do not dilute an explicit low-confidence mapping into a medium-confidence
+  // answer. This is especially important when registry evidence is stale.
+  if (dataQuality.portfolioMappingConfidence === 'low') {
+    return 'low';
+  }
+  if (dataQuality.portfolioMappingConfidence === 'medium') {
     return 'medium';
   }
   if (dataQuality.priceHistoryCoverage < 0.8) {

@@ -94,7 +94,7 @@ const REGISTRY: RegistryEntry[] = [
   {
     provider: 'blackrock',
     targetYear: 2040,
-    allocationAsOf: '2026-06-30',
+    allocationAsOf: '2026-03-31',
     sourceUrl: 'https://assets.mersofmich.com/forms/MERS_LifePath_2040.pdf',
     sourceContext: 'MERS plan-sponsor fact sheet for the BlackRock LifePath Fund N share class',
     exactAllocation: true,

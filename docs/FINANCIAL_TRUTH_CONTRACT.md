@@ -104,7 +104,8 @@ A target-date fund is neither: it is a declared blend, recognized from its own l
 a provider type. It is modeled only when a dated registry entry links that provider and vintage to
 published holdings no later than the snapshot's full UTC date. The newest eligible entry carries
 forward instead of expiring on January 1; its age is recorded, and an entry older than 366 days is
-disclosed as stale and lowers mapping confidence. The result records the allocation date, source,
+disclosed as stale, lowers mapping confidence, and hard-caps the final analysis confidence at low.
+The result records the allocation date, source,
 source/share-class context, and whether the entry is the exact share class or a public share-class
 proxy. Unsupported sleeves are excluded rather than redistributed and are tracked as a partial
 mapping, not falsely reported as a wholly unrecognized holding. A recognized fund with no matching

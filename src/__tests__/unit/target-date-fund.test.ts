@@ -8,6 +8,10 @@ import {
 } from '../../services/target-date-fund';
 import { buildCanonicalInvestmentPortfolio } from '../../services/canonical-financial-snapshot';
 import { mapPortfolioToAssetBasket, populateAssumptions } from '../../retirement-analytics/engine/portfolio-mapper';
+import {
+  calculateConfidenceCeiling,
+  calculateDataQuality,
+} from '../../retirement-analytics/interpretation/uncertainty-quantifier';
 
 describe('target-date fund recognition', () => {
   it('reads the target year through provider share-class noise', () => {
@@ -163,8 +167,8 @@ describe('target-date funds in retirement mapping', () => {
           label: 'BTC LPATH IDX 2040 N',
           targetYear: 2040,
           equityShare: 0.7471,
-          allocationAsOf: '2026-06-30',
-          allocationAgeDays: 184,
+          allocationAsOf: '2026-03-31',
+          allocationAgeDays: 275,
           staleAllocation: false,
           sourceUrl: 'https://assets.mersofmich.com/forms/MERS_LifePath_2040.pdf',
           sourceContext: 'MERS plan-sponsor fact sheet for the BlackRock LifePath Fund N share class',
@@ -273,18 +277,31 @@ describe('target-date funds in retirement mapping', () => {
     });
   });
 
-  it('does not let a January snapshot see a June allocation', async () => {
-    const mapping = await mapPortfolioToAssetBasket(
+  it('enforces the BlackRock publication-date boundary', async () => {
+    const beforePublication = await mapPortfolioToAssetBasket(
       holdings,
       securities,
       100_000,
       undefined,
       new Map(),
-      '2026-01-15',
+      '2026-03-30',
+    );
+    const onPublication = await mapPortfolioToAssetBasket(
+      holdings,
+      securities,
+      100_000,
+      undefined,
+      new Map(),
+      '2026-03-31',
     );
 
-    expect(mapping.mappedValue).toBe(0);
-    expect(mapping.targetDateFunds).toEqual([]);
+    expect(beforePublication.mappedValue).toBe(0);
+    expect(beforePublication.targetDateFunds).toEqual([]);
+    expect(onPublication.mappedValue).toBeCloseTo(97_470, 2);
+    expect(onPublication.targetDateFunds[0]).toMatchObject({
+      allocationAsOf: '2026-03-31',
+      allocationAgeDays: 0,
+    });
   });
 
   it('carries the newest eligible allocation into the following year', async () => {
@@ -299,8 +316,8 @@ describe('target-date funds in retirement mapping', () => {
 
     expect(mapping.mappedValue).toBeCloseTo(97_470, 2);
     expect(mapping.targetDateFunds[0]).toMatchObject({
-      allocationAsOf: '2026-06-30',
-      allocationAgeDays: 199,
+      allocationAsOf: '2026-03-31',
+      allocationAgeDays: 290,
       staleAllocation: false,
     });
   });
@@ -312,11 +329,15 @@ describe('target-date funds in retirement mapping', () => {
       100_000,
       undefined,
       new Map(),
-      '2027-07-02',
+      '2027-04-02',
     );
 
     expect(mapping.targetDateFunds[0].staleAllocation).toBe(true);
+    expect(mapping.targetDateFunds[0].allocationAgeDays).toBe(367);
     expect(mapping.mappingConfidence).toBe('low');
+    expect(calculateConfidenceCeiling(
+      calculateDataQuality(holdings, securities, mapping, 1, []),
+    )).toBe('low');
     expect(populateAssumptions(mapping, [], []).join(' ')).toContain('stale by 12 months');
   });
 });
@@ -397,6 +418,7 @@ describe('institutional and employer-plan funds', () => {
     expect(assumption).toContain('targeting 2040 at 75% equity');
     expect(assumption).toContain('1 targeting 2035 at 67% equity');
     expect(assumption).toContain('as of 2026-06-30');
+    expect(assumption).toContain('as of 2026-03-31');
     expect(assumption).toContain('State Street public mutual-fund share class');
     expect(assumption).toContain('BlackRock LifePath Fund N share class');
     expect(assumption).not.toContain('State St Target Ret');

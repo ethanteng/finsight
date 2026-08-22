@@ -281,6 +281,18 @@ describe('retirement data quality with excluded value', () => {
     expect(calculateConfidenceCeiling(quality)).toBe('medium');
   });
 
+  it('hard-caps the result at low when portfolio mapping confidence is low', () => {
+    const quality = calculateDataQuality(
+      holdings,
+      securities,
+      { ...mapping, mappingConfidence: 'low' as const },
+      1,
+      [],
+    );
+
+    expect(calculateConfidenceCeiling(quality)).toBe('low');
+  });
+
   it('still caps confidence when only valueCoverage is restated onto otherwise-high data quality', () => {
     // Cache hits restate coverage onto a stored analysis without re-running the
     // engine; the ceiling must still see the restated valueCoverage.
@@ -295,8 +307,7 @@ describe('retirement data quality with excluded value', () => {
   });
 
   it('never promotes a stored low confidence, because a ceiling only caps', () => {
-    // calculateConfidenceCeiling returns only high or medium, so applying it
-    // outright to a cached analysis would raise a stored "low" to "medium".
+    // A newly calculated high or medium ceiling must not promote a stored low.
     const quality = calculateDataQuality(holdings, securities, mapping, 1, []);
     const ceiling = calculateConfidenceCeiling(quality);
     const rank: Record<string, number> = { low: 0, medium: 1, high: 2 };
