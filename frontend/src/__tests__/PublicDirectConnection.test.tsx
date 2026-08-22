@@ -127,6 +127,40 @@ describe('PublicDirectConnection', () => {
     expect(within(dialog).getByText(/will go missing again/i)).toBeInTheDocument();
   });
 
+  // Requiring remove-then-reconnect would mean deleting the only stored
+  // configuration in order to fix it.
+  it('lets a rejected key be replaced in place', async () => {
+    global.fetch = mockFetch({
+      eligible: true,
+      configured: true,
+      lastError: 'Public rejected the stored API secret.',
+    });
+    render(<PublicDirectConnection />);
+
+    const input = await screen.findByLabelText(/replace with a new secret key/i);
+    fireEvent.change(input, { target: { value: 'NEW-SECRET' } });
+    fireEvent.click(screen.getByRole('button', { name: /replace key/i }));
+
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.stringContaining('/public-api/secret'),
+        expect.objectContaining({ method: 'PUT', body: JSON.stringify({ secret: 'NEW-SECRET' }) }),
+      );
+    });
+    const deletes = (global.fetch as jest.Mock).mock.calls.filter(call => call[1]?.method === 'DELETE');
+    expect(deletes).toHaveLength(0);
+  });
+
+  // A working key must not invite replacement -- the field only appears once
+  // Public has actually rejected the stored one.
+  it('offers no replacement field while the key is working', async () => {
+    global.fetch = mockFetch({ eligible: true, configured: true, lastError: null });
+    render(<PublicDirectConnection />);
+
+    await screen.findByText('Connected');
+    expect(screen.queryByLabelText(/replace with a new secret key/i)).toBeNull();
+  });
+
   it('surfaces a stored credential error', async () => {
     global.fetch = mockFetch({
       eligible: true,

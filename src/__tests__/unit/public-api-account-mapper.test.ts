@@ -1,5 +1,7 @@
+import { classifyAccount } from '../../services/account-classifier';
 import {
   mapPublicAccount,
+  publicAccountKind,
   mapPublicHoldings,
   publicAccountBalance,
   publicAccountLabel,
@@ -32,6 +34,28 @@ describe('mapping Public accounts', () => {
   ])('names and types %s as %s', (type, label, subtype) => {
     expect(publicAccountLabel(type)).toBe(label);
     expect(publicAccountSubtype(type)).toBe(subtype);
+  });
+
+  // `classifyAccount` tests `type === 'investment'` before it looks at cash
+  // subtypes, so an investment-typed High Yield account never reaches the cash
+  // branch and its balance lands in investments rather than totalCash.
+  it('types High Yield Cash as a depository account so it counts as cash', () => {
+    expect(publicAccountKind('HIGH_YIELD')).toBe('depository');
+
+    const account = mapPublicAccount(portfolio({ accountType: 'HIGH_YIELD' }), OBSERVED_AT);
+    const classified = classifyAccount(account as any);
+
+    expect(classified.isCash).toBe(true);
+    expect(classified.isInvestment).toBe(false);
+    expect(classified.category).toBe('cash');
+  });
+
+  // Yield products, but the assets behind them are securities.
+  it.each(['TREASURY', 'BOND_ACCOUNT', 'BROKERAGE'])('keeps %s an investment account', type => {
+    expect(publicAccountKind(type)).toBe('investment');
+
+    const classified = classifyAccount(mapPublicAccount(portfolio({ accountType: type }), OBSERVED_AT) as any);
+    expect(classified.isInvestment).toBe(true);
   });
 
   it('falls back for an account type Public adds later', () => {

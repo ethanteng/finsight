@@ -160,6 +160,34 @@ export default function PublicDirectConnection({ onChanged, refreshKey }: Public
           {status.lastError && (
             <p className="text-sm text-red-600">{status.lastError}</p>
           )}
+          {/* A key Public has rejected can be replaced in place. Requiring
+              remove-then-reconnect would mean deliberately deleting the only
+              working configuration to fix a broken one. */}
+          {status.lastError && (
+            <div className="space-y-2 pt-1">
+              <label className="block text-sm" htmlFor="public-api-secret-replace">
+                Replace with a new secret key
+              </label>
+              <input
+                id="public-api-secret-replace"
+                type="password"
+                autoComplete="off"
+                value={secret}
+                onChange={event => setSecret(event.target.value)}
+                className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
+                placeholder="Paste your new Public secret key"
+              />
+              {formError && <p className="text-sm text-red-600">{formError}</p>}
+              <button
+                type="button"
+                onClick={connect}
+                disabled={saving}
+                className="rounded bg-gray-900 px-3 py-1.5 text-sm text-white disabled:opacity-50"
+              >
+                {saving ? 'Saving…' : 'Replace key'}
+              </button>
+            </div>
+          )}
           <button
             type="button"
             onClick={disconnect}

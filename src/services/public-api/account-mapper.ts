@@ -62,6 +62,28 @@ export function publicAccountSubtype(accountType: string | null | undefined): st
 }
 
 /**
+ * Our account `type` per Public account type.
+ *
+ * High Yield Cash is a cash product, not an investment one, and the distinction
+ * is load-bearing: `classifyAccount` tests `type === 'investment'` before it ever
+ * looks at cash subtypes, so an investment-typed account carrying the
+ * `cash management` subtype never reaches the cash branch. It would count toward
+ * investments instead of `totalCash`, understating the user's cash position in
+ * every answer that reasons about liquidity or an emergency fund.
+ *
+ * Treasury and Bond accounts stay investments: they are yield products, but the
+ * assets behind them are securities.
+ */
+const ACCOUNT_KINDS: Record<string, string> = {
+  HIGH_YIELD: 'depository',
+};
+
+export function publicAccountKind(accountType: string | null | undefined): string {
+  const key = String(accountType || '').toUpperCase();
+  return ACCOUNT_KINDS[key] || 'investment';
+}
+
+/**
  * The account's value.
  *
  * `totalAccountValue` as reported wins over anything derived. The managed-yield
@@ -110,7 +132,7 @@ export function mapPublicAccount(portfolio: PublicPortfolio, observedAt: string)
     account_id: id,
     id,
     name: publicAccountLabel(portfolio.accountType),
-    type: 'investment',
+    type: publicAccountKind(portfolio.accountType),
     subtype: publicAccountSubtype(portfolio.accountType),
     // `available` is left unset when there is no balance rather than carrying a
     // null: the shared Account type models an absent available balance as absent,
