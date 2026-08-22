@@ -1111,7 +1111,6 @@ app.get('/sync/status', async (req: Request, res: Response) => {
       }
     });
 
-    // Admin endpoint to get all production users
     /**
      * Securities the classifier could not place, aggregated across users.
      *
@@ -1160,6 +1159,7 @@ app.get('/sync/status', async (req: Request, res: Response) => {
       }
     });
 
+    // Admin endpoint to get all production users
     app.get('/admin/production-users', adminAuth, async (req: Request, res: Response) => {
       try {
         const { getPrismaClient } = await import('./prisma-client');
