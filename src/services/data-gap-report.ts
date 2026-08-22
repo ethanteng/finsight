@@ -119,6 +119,24 @@ function normalizeLabel(label: string): string {
   return label.replace(/\s+/g, ' ').trim().toLowerCase();
 }
 
+/**
+ * Pick the better public name when two snapshots disagree for the same id.
+ *
+ * SQL already ranks field quality within a user. Across users the index used
+ * to be first-wins, so a ticker from an earlier `userId` could lock out a full
+ * fund name from a later one. Prefer spaced names (real titles) over bare
+ * tokens, and length when both are the same kind.
+ */
+function preferSecurityName(current: string | undefined, candidate: string): string {
+  const next = candidate.trim();
+  if (!next) return current ?? '';
+  if (!current) return next;
+  const currentSpaced = /\s/.test(current);
+  const nextSpaced = /\s/.test(next);
+  if (nextSpaced !== currentSpaced) return nextSpaced ? next : current;
+  return next.length > current.length ? next : current;
+}
+
 function median(values: number[]): number | null {
   if (values.length === 0) return null;
   const sorted = [...values].sort((left, right) => left - right);
@@ -157,9 +175,13 @@ export function aggregateDataGaps(rows: readonly AnalysisRow[]): DataGapReport {
   const namesByIdentifier = new Map<string, string>();
   for (const { row } of latestByUser.values()) {
     for (const [identifier, name] of Object.entries(row.securityNames ?? {})) {
-      if (typeof name !== 'string' || namesByIdentifier.has(identifier)) continue;
+      if (typeof name !== 'string') continue;
       const trimmed = name.trim();
-      if (trimmed) namesByIdentifier.set(identifier, trimmed);
+      if (!trimmed) continue;
+      namesByIdentifier.set(
+        identifier,
+        preferSecurityName(namesByIdentifier.get(identifier), trimmed)
+      );
     }
   }
 

@@ -261,6 +261,31 @@ describe('data gap report', () => {
     expect(report.securities[0].label).toBe('EQ/Com Stck Index');
   });
 
+  it('prefers a fuller name from any user over a ticker locked in first', () => {
+    // Map insertion follows row order; without quality-aware merge, user a's
+    // ticker would win and the report would show "VTI" instead of the fund name.
+    const report = aggregateDataGaps([
+      row('a', '2026-08-19', analysis({ unmapped: ['sec-id-abcdef12'] }),
+        { 'sec-id-abcdef12': 'VTI' }),
+      row('b', '2026-08-20', analysis({ unmapped: ['sec-id-abcdef12'] }),
+        { 'sec-id-abcdef12': 'Vanguard Total Stock Market Index Fund' }),
+    ]);
+
+    expect(report.securities).toHaveLength(1);
+    expect(report.securities[0].label).toBe('Vanguard Total Stock Market Index Fund');
+  });
+
+  it('does not let a later ticker overwrite an earlier full name', () => {
+    const report = aggregateDataGaps([
+      row('a', '2026-08-19', analysis({ unmapped: ['sec-id-abcdef12'] }),
+        { 'sec-id-abcdef12': 'Vanguard Total Stock Market Index Fund' }),
+      row('b', '2026-08-20', analysis({ unmapped: ['sec-id-abcdef12'] }),
+        { 'sec-id-abcdef12': 'VTI' }),
+    ]);
+
+    expect(report.securities[0].label).toBe('Vanguard Total Stock Market Index Fund');
+  });
+
   it('counts analyses written before the current data-quality contract', () => {
     // Analyses are cached, so the report reads whatever each user last computed
     // -- which can predate the target-date registry entirely. Those gaps may
