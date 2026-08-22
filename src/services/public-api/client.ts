@@ -20,6 +20,16 @@ const ACCESS_TOKEN_PATH = '/userapiauthservice/personal/access-tokens';
 const ACCOUNTS_PATH = '/userapigateway/trading/account';
 const PORTFOLIO_PATH = (accountId: string) =>
   `/userapigateway/trading/${encodeURIComponent(accountId)}/portfolio/v2`;
+/**
+ * Tax lots, used as the balance source for accounts `portfolio/v2` will not serve.
+ *
+ * Public's managed-yield accounts (TREASURY, BOND_ACCOUNT) 404 on `portfolio/v2`
+ * while returning tax lots normally -- verified against the live API. The lots
+ * carry `currentValue` per position, so a holdings value is derivable where the
+ * portfolio endpoint offers nothing at all.
+ */
+const TAX_LOTS_PATH = (accountId: string) =>
+  `/userapigateway/trading/${encodeURIComponent(accountId)}/taxlots/unrealized`;
 
 /**
  * Access-token validity requested when minting.
@@ -59,6 +69,15 @@ export interface PublicPortfolio {
   totalAccountValue: number | null;
   cash: number | null;
   positions: PublicPosition[];
+  /**
+   * True when the value came from tax lots because `portfolio/v2` would not
+   * serve this account. A derived sum of positions rather than a reported
+   * total, so it cannot see uninvested cash -- worth carrying so the snapshot
+   * can say where the number came from.
+   */
+  valuedFromTaxLots?: boolean;
+  /** Public's valuation date for the lots, when the fallback was used. */
+  taxLotsAsOf?: string | null;
 }
 
 export interface PublicAccountSummary {
@@ -240,6 +259,87 @@ export async function getPortfolio(accessToken: string, accountId: string): Prom
     accountType: stringOrNull(payload?.accountType),
     totalAccountValue: numberOrNull(payload?.totalAccountValue),
     cash: numberOrNull(payload?.cash),
+    positions,
+  };
+}
+
+/**
+ * An account's holdings value derived from its unrealized tax lots.
+ *
+ * Deliberately typed apart from `PublicPortfolio`. This is a *derived* figure --
+ * the sum of positions that have lots -- not an institution-reported account
+ * total, and any uninvested cash sitting in the account is invisible to it.
+ * Keeping the two shapes distinct stops a derived value being mistaken for a
+ * reported one further down, which is the same distinction `publicAccountBalance`
+ * already draws when it prefers `totalAccountValue` over any sum.
+ */
+export interface PublicTaxLotHoldings {
+  accountId: string;
+  /** Public's own valuation date for these lots. Real provenance, unlike a fetch time. */
+  asOf: string | null;
+  /** Sum of `currentValue` across lots, or null when the account reported none. */
+  totalValue: number | null;
+  positions: PublicPosition[];
+}
+
+export async function getTaxLotHoldings(
+  accessToken: string,
+  accountId: string,
+): Promise<PublicTaxLotHoldings> {
+  const payload = await requestJson(
+    TAX_LOTS_PATH(accountId),
+    { method: 'GET', headers: authHeaders(accessToken) },
+    'reading account tax lots',
+  );
+
+  const lots: any[] = Array.isArray(payload?.lots) ? payload.lots : [];
+
+  // Aggregate by symbol. Tax lots are per purchase, so one holding routinely
+  // appears several times; leaving them split would show a user the same
+  // security three times at a third of its size each.
+  const bySymbol = new Map<string, PublicPosition>();
+  for (const lot of lots) {
+    const symbol = stringOrNull(lot?.symbol);
+    const name = stringOrNull(lot?.companyName);
+    const key = symbol || name;
+    if (!key) continue;
+
+    const quantity = numberOrNull(lot?.quantity);
+    const currentValue = numberOrNull(lot?.currentValue);
+    const existing = bySymbol.get(key);
+    if (existing) {
+      existing.quantity = (existing.quantity ?? 0) + (quantity ?? 0);
+      existing.currentValue = (existing.currentValue ?? 0) + (currentValue ?? 0);
+      continue;
+    }
+    bySymbol.set(key, {
+      symbol,
+      name,
+      // Tax lots do not carry a security type. Left null rather than guessed:
+      // asset-class inference already has a documented path for an unresolved
+      // type, and inventing one here would launder a guess into that pipeline.
+      instrumentType: null,
+      quantity,
+      currentValue,
+      // Per-share price is shared across lots of the same symbol, so the last
+      // one seen is the current price rather than something to accumulate.
+      lastPrice: numberOrNull(lot?.currentPrice),
+    });
+  }
+
+  const positions = [...bySymbol.values()];
+  // Null rather than 0 when nothing was reported. An account with no lots -- a
+  // pure cash product such as HIGH_YIELD -- has an unknown value here, not a
+  // zero one, and publishing a confident zero is the failure this integration
+  // exists to stop.
+  const totalValue = positions.length > 0
+    ? positions.reduce((sum, position) => sum + (position.currentValue ?? 0), 0)
+    : null;
+
+  return {
+    accountId: stringOrNull(payload?.accountId) || accountId,
+    asOf: stringOrNull(payload?.asOf),
+    totalValue,
     positions,
   };
 }

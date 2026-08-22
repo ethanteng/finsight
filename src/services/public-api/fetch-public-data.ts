@@ -1,6 +1,7 @@
 import {
   PublicApiError,
   getPortfolio,
+  getTaxLotHoldings,
   listAccounts,
   mintAccessToken,
   type PublicAccountSummary,
@@ -13,6 +14,7 @@ import {
   publicAccountKind,
   publicAccountLabel,
   publicAccountSubtype,
+  publicObservationTime,
   type MappedPublicAccount,
   type MappedPublicHolding,
 } from './account-mapper';
@@ -118,6 +120,48 @@ async function noteFailure(userId: string, error: unknown, context: string): Pro
   return rejected;
 }
 
+/**
+ * Read one account, falling back to tax lots when the portfolio endpoint will
+ * not serve it.
+ *
+ * `portfolio/v2` returns 404 for Public's managed-yield accounts -- verified
+ * live against TREASURY and BOND_ACCOUNT, both of which carry
+ * `tradePermissions: BUY_AND_SELL`, so this is not a matter of them being
+ * non-trading accounts. The same accounts return tax lots normally.
+ *
+ * The fallback is gated on 404 alone. A 500 means Public is briefly unwell and
+ * the next pass should retry the real endpoint, not quietly switch to a derived
+ * figure and keep serving it as though nothing were wrong.
+ */
+async function readAccount(
+  accessToken: string,
+  summary: PublicAccountSummary,
+): Promise<PublicPortfolio> {
+  try {
+    return await getPortfolio(accessToken, summary.accountId);
+  } catch (error) {
+    if (!(error instanceof PublicApiError) || error.status !== 404) throw error;
+
+    const lots = await getTaxLotHoldings(accessToken, summary.accountId);
+    console.log(
+      `Public API: account ${summary.accountId} (${summary.accountType || 'unknown type'}) ` +
+      `has no portfolio endpoint; valued from ${lots.positions.length} tax lot position(s)`,
+    );
+    return {
+      accountId: lots.accountId,
+      accountType: summary.accountType,
+      // A derived sum, not an institution-reported total. `cash` stays null
+      // rather than 0 because tax lots say nothing about uninvested cash --
+      // claiming zero would understate an account we cannot fully see.
+      totalAccountValue: lots.totalValue,
+      cash: null,
+      positions: lots.positions,
+      valuedFromTaxLots: true,
+      taxLotsAsOf: lots.asOf,
+    };
+  }
+}
+
 export async function fetchPublicData(userId: string): Promise<PublicFetchResult | null> {
   const secret = await readSecret(userId);
   if (!secret) return null;
@@ -154,7 +198,7 @@ export async function fetchPublicData(userId: string): Promise<PublicFetchResult
   const observedAt = new Date().toISOString();
 
   const settled = await mapWithConcurrency(summaries, PORTFOLIO_CONCURRENCY, summary =>
-    getPortfolio(accessToken, summary.accountId),
+    readAccount(accessToken, summary),
   );
 
   const accounts: MappedPublicAccount[] = [];
@@ -170,7 +214,7 @@ export async function fetchPublicData(userId: string): Promise<PublicFetchResult
       // positions into the investment portfolio would double-count the same
       // dollars in totalCash and totalInvestments.
       if (publicAccountKind(summary.accountType) !== 'depository') {
-        holdings.push(...mapPublicHoldings(portfolio, observedAt));
+        holdings.push(...mapPublicHoldings(portfolio, publicObservationTime(portfolio, observedAt)));
       }
     } else {
       const message = errorMessage(result.reason);
