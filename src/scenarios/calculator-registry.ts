@@ -2,6 +2,7 @@ import type { FinancialContextSnapshot } from '../openai/types';
 import type { ContextPackId } from '../openai/context-packs';
 import type { CanonicalFact } from '../openai/canonical-facts';
 import { retirementScenarioCalculator } from './retirement-scenario';
+import { homeAffordabilityScenarioCalculator } from './home-affordability-scenario';
 
 export type ScenarioOverrideValueType =
   | 'currency'
@@ -269,4 +270,5 @@ export class ScenarioCalculatorRegistry {
 
 export const scenarioCalculatorRegistry = new ScenarioCalculatorRegistry([
   retirementScenarioCalculator,
+  homeAffordabilityScenarioCalculator,
 ]);

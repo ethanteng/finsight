@@ -9,6 +9,7 @@ import { askOpenAIWithPreparedPrompt } from '../../openai/openai-fallback-client
 import { planContext, type ContextPlan } from '../../openai/context-planner';
 import { normalizeContextPacks, questionNeedsFromPacks, type ContextPackId } from '../../openai/context-packs';
 import { scenarioCalculatorRegistry } from '../../scenarios/calculator-registry';
+import { runHomeAffordabilityScenario } from '../../scenarios/home-affordability-scenario';
 
 jest.mock('../../openai/context-service', () => ({
   gatherContextSnapshot: jest.fn(),
@@ -253,6 +254,68 @@ describe('runAskLincAnalysis validation routing', () => {
     });
     expect(result.showTheMathData?.evidenceManifest.contextToolExpanded).toBe(true);
     expect(result.showTheMathData?.evidenceManifest.timings.contextToolMs).toBe(7);
+  });
+
+  it('reloads typed market context when the audit discovers a home calculator', async () => {
+    const preflight = contextPlan(['market_context']);
+    mockedPlanContext.mockResolvedValue(preflight);
+    mockedAuditPacks.mockResolvedValue({
+      packs: [],
+      searchQueries: [],
+      scenarioPlans: {
+        home_affordability: {
+          requested: true,
+          primary: {
+            overrides: {
+              homePrice: 700_000,
+              sources: { homePrice: '$700,000 home' },
+            },
+          },
+        },
+      },
+      reason: 'The question asks for a target-home scenario.',
+      model: 'claude-test',
+      durationMs: 2,
+    });
+    mockedGatherContext
+      .mockResolvedValueOnce(snapshot())
+      .mockResolvedValueOnce({
+        ...snapshot(),
+        tierContext: {
+          ...snapshot().tierContext,
+          marketContext: {
+            economicIndicators: {
+              mortgageRate: {
+                value: 6.5,
+                date: '2026-08-20',
+                source: 'FRED',
+                lastUpdated: '2026-08-20T00:00:00.000Z',
+              },
+            },
+          },
+        },
+      } as any);
+    mockedExecuteScenario.mockResolvedValueOnce({
+      version: 1,
+      calculator: 'home_affordability',
+      status: 'unavailable',
+      computedAt: '2026-08-20T00:00:00.000Z',
+      durationMs: 1,
+      reason: 'Test execution is not part of context routing.',
+    });
+    mockedAskClaude.mockResolvedValue(JSON.stringify({ summary: 'I checked the target-home scenario.' }));
+
+    await runAskLincAnalysis({
+      question: 'Would that home work?',
+      userId: 'user-1',
+    });
+
+    expect(mockedGatherContext).toHaveBeenCalledTimes(2);
+    expect(mockedGatherContext.mock.calls[0][0].includeStructuredMarketContext).toBe(false);
+    expect(mockedGatherContext.mock.calls[1][0]).toMatchObject({
+      includeStructuredMarketContext: true,
+      questionNeeds: expect.objectContaining({ needsMarketContext: true }),
+    });
   });
 
   it('keeps preflight scenario overrides out of the baseline gather and focused completion', async () => {
@@ -595,6 +658,91 @@ describe('runAskLincAnalysis validation routing', () => {
     });
     expect(result.showTheMathData?.evidenceManifest.timings.scenarioMs).toBe(12);
     expect(result.structuredResponse.summary).toContain('Scenario assumptions:');
+  });
+
+  it('runs a home-affordability plan through canonical facts and Show the Math', async () => {
+    const plan = contextPlan(['market_context'], true);
+    plan.scenarioPlans.home_affordability = {
+      requested: true,
+      primary: {
+        overrides: {
+          homePrice: 700_000,
+          downPaymentPercent: 20,
+          mortgageRatePercent: 6.5,
+          propertyTaxAnnual: 8_400,
+          homeownersInsuranceAnnual: 2_400,
+          hoaMonthly: 0,
+          mortgageInsuranceMonthly: 0,
+          currentHousingCostMonthly: 2_500,
+          sources: {
+            homePrice: '$700,000 home',
+            downPaymentPercent: '20% down',
+            mortgageRatePercent: '6.5% mortgage',
+            propertyTaxAnnual: '$8,400 taxes',
+            homeownersInsuranceAnnual: '$2,400 insurance',
+            hoaMonthly: 'no HOA',
+            mortgageInsuranceMonthly: 'no PMI',
+            currentHousingCostMonthly: '$2,500 rent',
+          },
+        },
+      },
+    };
+    const homeSnapshot = {
+      ...snapshot(),
+      averageMonthlyIncome: 15_000,
+      averageMonthlyExpense: 8_000,
+      financialSummary: {
+        ...snapshot().financialSummary,
+        financialOverview: {
+          netWorth: 1_000_000,
+          totalCash: 300_000,
+          totalInvestments: 800_000,
+          totalDebt: 100_000,
+          homeValue: null,
+        },
+      },
+    } as any;
+    mockedExecuteScenario.mockImplementationOnce(async (_id, currentSnapshot, scenarioPlan) =>
+      runHomeAffordabilityScenario(currentSnapshot, scenarioPlan as any)
+    );
+
+    const result = await runAskLincAnalysis({
+      question: 'Can we afford a $700,000 home with 20% down?',
+      evaluation: {
+        snapshot: homeSnapshot,
+        contextPlan: plan,
+        scenarioPlans: plan.scenarioPlans,
+        skipToneConfig: true,
+        model: ({ userMessage }) => {
+          expect(userMessage).toContain('all_in_monthly_housing_cost');
+          expect(userMessage).toContain('post_purchase_monthly_surplus');
+          return JSON.stringify({
+            summary: 'The modeled purchase keeps monthly operating cash flow positive and the emergency reserve above its target.',
+            insights: [],
+            suggested_actions: [],
+          });
+        },
+      },
+    });
+
+    expect(result.showTheMathData?.evidenceManifest.scenarioExecutions).toMatchObject({
+      home_affordability: {
+        status: 'completed',
+        scenarios: [{ assessment: 'supported', costCoverage: 'complete' }],
+      },
+    });
+    expect(result.showTheMathData?.evidenceManifest.facts).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: expect.stringMatching(/home_affordability_scenario_.*_all_in_monthly_housing_cost/),
+        provenance: expect.objectContaining({ calculatorId: 'home_affordability' }),
+      }),
+      expect.objectContaining({
+        id: expect.stringMatching(/home_affordability_scenario_.*_cash_remaining/),
+        value: 139_000,
+      }),
+    ]));
+    expect(result.structuredResponse.summary).toContain('Home-affordability assumptions:');
+    expect(result.showTheMathData?.evidenceManifest.validation.deterministic.valid).toBe(true);
   });
 
   it('keeps scenario facts after late context escalation replaces the snapshot', async () => {

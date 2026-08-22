@@ -41,6 +41,8 @@ interface GatherContextArgs {
   searchQueries?: readonly PlannedSearchQuery[];
   /** Do not call an external search provider until the primary audit is final. */
   deferSearchContext?: boolean;
+  /** Load typed economic observations for a deterministic calculator consumer. */
+  includeStructuredMarketContext?: boolean;
   /** Skip the expensive/persisted retirement calculation until scenario planning is final. */
   deferRetirementAnalysis?: boolean;
   /** A scenario compares with the existing baseline, so its stored spending can be reused. */
@@ -90,6 +92,7 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
     plannedRetirementInputs,
     searchQueries = [],
     deferSearchContext = false,
+    includeStructuredMarketContext = false,
     deferRetirementAnalysis = false,
     useExistingRetirementBaseline = false,
     onProgress
@@ -378,7 +381,13 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
       tier,
       tierContextAccounts,
       tierContextTransactions,
-      { includeMarketContext: false }
+      // The narrative market pack and typed economic observations have
+      // different consumers. Avoid fetching every FRED series for ordinary
+      // market-context questions; a deterministic calculator must opt in.
+      {
+        includeMarketContext:
+          questionNeeds.needsMarketContext && includeStructuredMarketContext,
+      }
     ),
     maybeFetchSearchContext(searchQueries, questionNeeds, tier, deferSearchContext),
     maybeFetchMarketContext(questionNeeds, tier),

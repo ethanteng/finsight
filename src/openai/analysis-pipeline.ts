@@ -62,6 +62,7 @@ import {
   RETIREMENT_CALCULATOR_ID,
   type RetirementScenarioPlan,
 } from '../scenarios/retirement-scenario';
+import { HOME_AFFORDABILITY_CALCULATOR_ID } from '../scenarios/home-affordability-scenario';
 import {
   scenarioCalculatorRegistry,
   type ScenarioExecutionRecord,
@@ -233,6 +234,9 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
   let selectedPacks = [...initiallySelectedPacks];
   let questionNeeds = contextPlan.questionNeeds;
   let scenarioPlans = evaluation?.scenarioPlans ?? contextPlan.scenarioPlans;
+  let structuredMarketContextRequested = Boolean(
+    scenarioCalculatorRegistry.getPlan(scenarioPlans, HOME_AFFORDABILITY_CALCULATOR_ID)
+  );
   let retirementScenarioPlan = scenarioCalculatorRegistry.getPlan<RetirementScenarioPlan>(
     scenarioPlans,
     RETIREMENT_CALCULATOR_ID
@@ -259,6 +263,7 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
     plannedRetirementInputs: retirementBaselineInputs,
     searchQueries: finalSearchQueries,
     deferSearchContext: true,
+    includeStructuredMarketContext: structuredMarketContextRequested,
     deferRetirementAnalysis: retirementAnalysisDeferred,
     useExistingRetirementBaseline: Boolean(retirementScenarioPlan),
     onProgress
@@ -298,6 +303,9 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
       auditDurationMs = toolResult.durationMs;
       finalSearchQueries = [...toolResult.searchQueries];
       scenarioPlans = scenarioCalculatorRegistry.mergePlans(scenarioPlans, toolResult.scenarioPlans);
+      const shouldRequestStructuredMarketContext = Boolean(
+        scenarioCalculatorRegistry.getPlan(scenarioPlans, HOME_AFFORDABILITY_CALCULATOR_ID)
+      );
       retirementScenarioPlan = scenarioCalculatorRegistry.getPlan<RetirementScenarioPlan>(
         scenarioPlans,
         RETIREMENT_CALCULATOR_ID
@@ -324,7 +332,8 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
       };
       if (
         addedPacks.length > 0 ||
-        (widenedPacks.includes('search_context') && finalSearchQueries.length > 0)
+        (widenedPacks.includes('search_context') && finalSearchQueries.length > 0) ||
+        (shouldRequestStructuredMarketContext && !structuredMarketContextRequested)
       ) {
         const widenedNeeds = questionNeedsFromPacks(widenedPacks, contextPlan.needsSecondaryValidation);
         const toolGatherStartedAt = Date.now();
@@ -336,6 +345,7 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
           recentTurns,
           plannedRetirementInputs: retirementBaselineInputs,
           searchQueries: finalSearchQueries,
+          includeStructuredMarketContext: shouldRequestStructuredMarketContext,
           useExistingRetirementBaseline: Boolean(retirementScenarioPlan),
           onProgress,
         });
@@ -344,6 +354,7 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
         snapshot = widenedSnapshot;
         selectedPacks = widenedPacks;
         questionNeeds = widenedNeeds;
+        structuredMarketContextRequested = shouldRequestStructuredMarketContext;
         contextTool.addedPacks = addedPacks;
         // Mark retrieval only after a successful gather so a failed widen can
         // still fall through to the deferred-search recovery path below.
@@ -383,6 +394,7 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
           recentTurns,
           plannedRetirementInputs: retirementBaselineInputs,
           searchQueries: finalSearchQueries,
+          includeStructuredMarketContext: structuredMarketContextRequested,
           useExistingRetirementBaseline: Boolean(retirementScenarioPlan),
           onProgress,
         });
@@ -603,6 +615,7 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
             recentTurns,
             plannedRetirementInputs: retirementBaselineInputs,
             searchQueries: finalSearchQueries,
+            includeStructuredMarketContext: structuredMarketContextRequested,
             useExistingRetirementBaseline: Boolean(retirementScenarioPlan),
             onProgress,
           });

@@ -45,8 +45,11 @@ function rawPlan(selected: string[] = []): any {
 describe('context planner', () => {
   it('builds the strict scenario object from registered calculator ids', () => {
     expect(CONTEXT_PLAN_JSON_SCHEMA.properties.scenarios).toMatchObject({
-      required: ['retirement'],
-      properties: { retirement: { type: 'object' } },
+      required: ['retirement', 'home_affordability'],
+      properties: {
+        retirement: { type: 'object' },
+        home_affordability: { type: 'object' },
+      },
     });
   });
 
@@ -229,6 +232,68 @@ describe('context planner', () => {
     expect(plan.retirementInputs?.retirementAge).toBeUndefined();
     expect(plan.retirementInputs?.withdrawalStartAge).toBeUndefined();
     expect(plan.retirementScenario).toEqual(plan.scenarioPlans.retirement);
+  });
+
+  it('adds the home calculator market dependency when a target-home scenario is planned', () => {
+    const raw = rawPlan();
+    raw.scenarios.home_affordability = {
+      requested: true,
+      primary: {
+        overrides: {
+          homePrice: 700_000,
+          downPaymentAmount: null,
+          downPaymentPercent: 15,
+          availableCashAmount: null,
+          mortgageRatePercent: null,
+          loanTermYears: null,
+          closingCostsAmount: null,
+          closingCostPercent: null,
+          propertyTaxAnnual: null,
+          homeownersInsuranceAnnual: null,
+          hoaMonthly: null,
+          mortgageInsuranceMonthly: null,
+          maintenanceAnnual: null,
+          movingAndInitialCosts: null,
+          currentHousingCostMonthly: 2_500,
+          emergencyFundMonths: null,
+          sources: {
+            homePrice: '$700,000 home',
+            downPaymentAmount: null,
+            downPaymentPercent: '15% down',
+            availableCashAmount: null,
+            mortgageRatePercent: null,
+            loanTermYears: null,
+            closingCostsAmount: null,
+            closingCostPercent: null,
+            propertyTaxAnnual: null,
+            homeownersInsuranceAnnual: null,
+            hoaMonthly: null,
+            mortgageInsuranceMonthly: null,
+            maintenanceAnnual: null,
+            movingAndInitialCosts: null,
+            currentHousingCostMonthly: '$2,500 rent',
+            emergencyFundMonths: null,
+          },
+        },
+      },
+      comparison: { overrides: { sources: {} } },
+    };
+
+    const plan = parseContextPlan(raw);
+
+    expect(plan.scenarioPlans.home_affordability).toMatchObject({
+      requested: true,
+      primary: {
+        overrides: {
+          homePrice: 700_000,
+          downPaymentPercent: 15,
+          currentHousingCostMonthly: 2_500,
+        },
+      },
+    });
+    expect(plan.requestedPacks).toEqual([]);
+    expect(plan.selectedPacks).toContain('market_context');
+    expect(plan.questionNeeds.needsMarketContext).toBe(true);
   });
 
   it('still parses the legacy singular retirementScenario planner field', () => {
