@@ -96,6 +96,26 @@ interface PublicRequestInit {
   signal?: AbortSignal;
 }
 
+/**
+ * Public's structured error fields, for the log line only.
+ *
+ * Bounded and field-scoped rather than dumping the body: a provider payload can
+ * be large and can carry detail that has no business in a log. `code` and
+ * `detail` are what Public uses to say what went wrong -- the 425s that motivated
+ * this whole integration arrived as `{"code": "3012", "detail": "Initial holdings
+ * sync not yet completed"}`.
+ */
+async function readErrorDetail(response: Response): Promise<string | null> {
+  try {
+    const body: any = await response.json();
+    const code = typeof body?.code === 'string' || typeof body?.code === 'number' ? String(body.code) : null;
+    const detail = typeof body?.detail === 'string' ? body.detail.slice(0, 200) : null;
+    return [code && `code ${code}`, detail].filter(Boolean).join(': ') || null;
+  } catch {
+    return null;
+  }
+}
+
 async function requestJson(
   path: string,
   init: PublicRequestInit,
@@ -115,13 +135,29 @@ async function requestJson(
   }
 
   if (!response.ok) {
+    // Log the status and Public's own error code server-side.
+    //
+    // The user-facing message stays deliberately opaque, but making the *status*
+    // opaque too was a mistake: it left no way to tell a 404 from a 500 without a
+    // redeploy, which is exactly the question when one account type works and
+    // another does not.
+    //
+    // Safe for every call except the token mint, whose request body carries the
+    // secret -- so that one logs the status alone and never the body. A portfolio
+    // request has no body, and its URL holds only an account id we already log.
+    const detail = init.method === 'POST' ? null : await readErrorDetail(response);
+    console.warn(
+      `Public API: ${response.status} while ${context}` +
+      (detail ? ` (${detail})` : ''),
+    );
+
     // 401/403 on a personal secret means the secret is wrong or revoked. Anything
     // else is Public being unwell, which a later pass can retry.
     const credentialRejected = response.status === 401 || response.status === 403;
     throw new PublicApiError(
       credentialRejected
         ? 'Public rejected the stored API secret. Generate a new one in Public and re-enter it.'
-        : `Public API returned an error while ${context}.`,
+        : `Public API returned an error (${response.status}) while ${context}.`,
       response.status,
       credentialRejected,
     );

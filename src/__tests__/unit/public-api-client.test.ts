@@ -57,6 +57,45 @@ describe('Public API client', () => {
     expect(error.message).not.toContain('api.public.com');
   });
 
+  // Making the status opaque alongside the message left no way to tell a 404
+  // from a 500 without a redeploy -- which is exactly the question when one
+  // Public account type works and another does not.
+  it('carries the status code on a read failure', async () => {
+    fetchMock.mockResolvedValue({ ok: false, status: 404, json: async () => ({}) } as any);
+
+    const error = await getPortfolio('tok', 'a1').catch(caught => caught);
+
+    expect(error.status).toBe(404);
+    expect(error.message).toContain('404');
+  });
+
+  it('logs Public\'s own error code and detail on a read failure', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    fetchMock.mockResolvedValue({
+      ok: false,
+      status: 425,
+      json: async () => ({ code: '3012', detail: 'Initial holdings sync not yet completed.' }),
+    } as any);
+
+    await getPortfolio('tok', 'a1').catch(() => undefined);
+
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('425'));
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('code 3012'));
+    warn.mockRestore();
+  });
+
+  // The token request body carries the secret, so its error body is never read
+  // and never logged -- the status alone is enough to act on.
+  it('never reads the error body of the token request', async () => {
+    const json = jest.fn(async () => ({ secret: 'SECRET-VALUE' }));
+    fetchMock.mockResolvedValue({ ok: false, status: 500, json } as any);
+
+    const error = await mintAccessToken('SECRET-VALUE').catch(caught => caught);
+
+    expect(json).not.toHaveBeenCalled();
+    expect(error.message).not.toContain('SECRET-VALUE');
+  });
+
   it('sends the token as a bearer header on reads', async () => {
     fetchMock.mockResolvedValue(ok({ accounts: [{ accountId: 'a1', accountType: 'TREASURY' }] }));
 

@@ -174,6 +174,13 @@ export async function fetchPublicData(userId: string): Promise<PublicFetchResult
       }
     } else {
       const message = errorMessage(result.reason);
+      // Name the account and its type. When one Public product works and another
+      // does not, which types failed is the entire diagnosis, and a bare count
+      // does not carry it.
+      console.warn(
+        `Public API: portfolio read failed for account ${summary.accountId} ` +
+        `(${summary.accountType || 'unknown type'}): ${message}`,
+      );
       errors.push({ accountId: summary.accountId, error: message });
       accounts.push(mapFailedPublicAccount(summary, observedAt));
     }
