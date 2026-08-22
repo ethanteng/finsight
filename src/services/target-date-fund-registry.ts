@@ -48,10 +48,9 @@ const STALE_ALLOCATION_DAYS = 366;
  * reduced by 0.01 percentage point so modeled weights never create value.
  *
  * UC Pathway is knowingly absent: no public per-vintage allocation was found,
- * so recognizing its target year is not enough evidence to model its sleeves.
- * Provider matching below is deliberately narrow for the same reason. A label
- * that no longer carries one of the reviewed provider aliases stays unmodeled
- * instead of inheriting another fund family's allocation.
+ * so recognizing its identity is not enough evidence to model its sleeves.
+ * Lookup requires an exact provider/series/vintage key; recognition heuristics
+ * live elsewhere and cannot invent an allocation for an unregistered identity.
  */
 const REGISTRY: RegistryEntry[] = [
   {
