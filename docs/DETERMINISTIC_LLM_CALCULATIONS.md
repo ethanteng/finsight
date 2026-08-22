@@ -177,6 +177,9 @@ supported value. TIPS are shown in composition but excluded from simulation;
 observed U.S. TIPS history begins in 1997 and cannot meet the engine's 50-year
 evidence floor. Known credit, international-bond, and real-asset holdings are
 also excluded until corresponding checked-in total-return series are available.
+Provider-typed single equities with exchange-style U.S. tickers may use a
+medium-confidence U.S.-listing fallback when country metadata is unavailable;
+the fallback is disclosed and never applies to funds.
 
 ### Withdrawal Simulation (Phase 4)
 

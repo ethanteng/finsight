@@ -112,6 +112,11 @@ export function calculateDataQuality(
       bondsProxy: 'Shiller synthetic 10-year US government-bond total-return history',
       unmappedHoldings: resolvedMapping.unmappedHoldings,
       unsupportedHoldings: resolvedMapping.unsupportedHoldings ?? [],
+      usListingFallbackHoldings: Array.from(new Set(
+        resolvedMapping.holdingExposures
+          .filter(exposure => exposure.usedUsListingFallback && Math.abs(exposure.value) > 0.005)
+          .map(exposure => exposure.label)
+      )),
       mappingMethod: resolvedMapping.mappingMethod
     },
     assumptions,

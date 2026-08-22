@@ -174,6 +174,8 @@ export interface ResolvedHoldingExposure {
   weights?: HoldingExposureWeights;
   /** Known exposure deliberately withheld until the engine has a corresponding historical series. */
   unsupportedAssetClass?: UnsupportedAssetClass;
+  /** Medium-confidence US geography inferred only for a provider-typed, exchange-style single security. */
+  usedUsListingFallback?: boolean;
   method: HoldingMappingMethod;
   confidence: 'high' | 'medium' | 'low';
   allocationAsOf?: string;
@@ -348,6 +350,7 @@ export interface DataQualityReport {
     bondsProxy: string; // e.g., "AGG"
     unmappedHoldings: string[];
     unsupportedHoldings: string[];
+    usListingFallbackHoldings: string[];
     mappingMethod: string;
   };
   /**

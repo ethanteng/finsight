@@ -232,6 +232,7 @@ export interface FinancialContextSnapshot {
         bondsProxy: string;
         unmappedHoldings: string[];
         unsupportedHoldings?: string[];
+        usListingFallbackHoldings?: string[];
         mappingMethod: string;
       };
       assumptions: string[];

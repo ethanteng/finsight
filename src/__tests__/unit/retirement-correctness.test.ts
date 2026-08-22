@@ -117,19 +117,83 @@ describe('retirement correctness contracts', () => {
     expect(metrics.internationalAllocation).toBe(0);
   });
 
-  it('keeps equity geography unavailable when the provider supplies no country evidence', async () => {
+  it('uses and discloses a US-listing fallback for a provider-typed single equity', async () => {
     const holdings = [holding('stock', 'WFC')];
     const securities = [security('stock', 'WFC', 'Wells Fargo & Co.', 'equity')];
 
     const mapping = await mapPortfolioToAssetBasket(holdings, securities, 100);
+    const assumptions = populateAssumptions(mapping, holdings, securities).join(' ');
+    const quality = calculateDataQuality(holdings, securities, mapping, 1, []);
+
+    expect(mapping.mappedValue).toBe(100);
+    expect(mapping.usEquityWeight).toBe(1);
+    expect(mapping.unrecognizedValue).toBe(0);
+    expect(mapping.holdingExposures[0]).toMatchObject({
+      status: 'mapped',
+      method: 'name-inference',
+      confidence: 'medium',
+      usedUsListingFallback: true,
+    });
+    expect(assumptions).toContain(
+      '$100 across 1 directly held equity was classified as US from provider equity type plus an exchange-style ticker',
+    );
+    expect(quality.proxyUsage.usListingFallbackHoldings).toEqual(['Wells Fargo & Co.']);
+  });
+
+  it('keeps the listing fallback when FMP returns outage-inferred metadata', async () => {
+    const holdings = [holding('stock', 'WFC')];
+    const securities = [security('stock', 'WFC', 'Wells Fargo & Co.', 'equity')];
+    const inferredMetadata = new Map([['WFC', {
+      assetClass: 'Equity',
+      isETF: true,
+      provider: 'inferred',
+    }]]);
+
+    const mapping = await mapPortfolioToAssetBasket(
+      holdings,
+      securities,
+      100,
+      undefined,
+      inferredMetadata,
+    );
+
+    expect(mapping.usEquityWeight).toBe(1);
+    expect(mapping.holdingExposures[0].usedUsListingFallback).toBe(true);
+  });
+
+  it.each([
+    ['Small Cap Fund', 'SCAP'],
+    ['Opaque Plan Equity', 'ABCDX'],
+  ])('does not apply the single-equity listing fallback to fund-shaped %s', async (name, ticker) => {
+    const holdings = [holding('fund', ticker)];
+    const securities = [security('fund', ticker, name, 'equity')];
+
+    const mapping = await mapPortfolioToAssetBasket(holdings, securities, 100);
 
     expect(mapping.mappedValue).toBe(0);
-    expect(mapping.unrecognizedValue).toBe(100);
-    expect(mapping.holdingExposures[0]).toMatchObject({
-      status: 'unmapped',
-      method: 'provider',
-      confidence: 'low',
-    });
+    expect(mapping.holdingExposures[0].usedUsListingFallback).toBeUndefined();
+  });
+
+  it('lets authoritative FMP fund metadata veto the listing fallback', async () => {
+    const holdings = [holding('fund', 'ACME')];
+    const securities = [security('fund', 'ACME', 'Acme Growth', 'equity')];
+    const fundMetadata = new Map([['ACME', {
+      assetClass: 'Equity',
+      isETF: true,
+      provider: 'fmp',
+      fundData: { instrumentType: 'etf' },
+    }]]);
+
+    const mapping = await mapPortfolioToAssetBasket(
+      holdings,
+      securities,
+      100,
+      undefined,
+      fundMetadata,
+    );
+
+    expect(mapping.mappedValue).toBe(0);
+    expect(mapping.holdingExposures[0].usedUsListingFallback).toBeUndefined();
   });
 
   it('uses an explicit US market label without treating every equity as domestic', async () => {

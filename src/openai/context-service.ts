@@ -835,6 +835,7 @@ async function fetchOrCreateRetirementAnalysis(args: {
           bondsProxy: 'AGG',
           unmappedHoldings: [],
           unsupportedHoldings: [],
+          usListingFallbackHoldings: [],
           mappingMethod: 'direct',
         },
         assumptions: [],

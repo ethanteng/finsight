@@ -52,6 +52,7 @@ function analysis(survivalRate = 0.8): RetirementAnalysisOutput {
         bondsProxy: 'AGG',
         unmappedHoldings: [],
         unsupportedHoldings: [],
+        usListingFallbackHoldings: [],
         mappingMethod: 'direct',
       },
       assumptions: [],

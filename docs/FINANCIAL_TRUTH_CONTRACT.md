@@ -149,9 +149,12 @@ no geography, remains unmodeled; the engine does not manufacture a US/internatio
 A provider type that names the wrapper rather than the exposure -- "ETF", "Mutual Fund", a collective
 trust -- carries no asset class and must not be read as one. Such a holding is classified from its
 name while still inside the provider-metadata path, so the provider's own country split and
-geographic focus are applied where they exist, and it is not recorded as a heuristic guess. An equity
-type without sourced country data or an explicit geographic name remains unavailable, including a
-direct security; a U.S. ticker and a U.S. account are not proof of issuer geography.
+geographic focus are applied where they exist, and it is not recorded as a heuristic guess. A fund
+without sourced country data or an explicit geographic name remains unavailable. A provider-typed
+single equity with an exchange-style U.S. ticker may use a disclosed, medium-confidence U.S.-listing
+fallback when country metadata is unavailable; a wrapper alone cannot activate it, and fund-shaped
+labels, mutual-fund ticker conventions, or authoritative fund metadata veto it. A ticker or U.S.
+account alone never supplies fund geography.
 
 Amounts remain unrounded during calculation; formatting and rounding are presentation concerns. Metrics in API and LLM responses must carry an explicit unit/currency rather than infer one from a label.
 

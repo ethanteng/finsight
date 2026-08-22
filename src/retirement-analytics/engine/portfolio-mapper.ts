@@ -79,6 +79,7 @@ interface HoldingResolutionDraft {
   method: HoldingMappingMethod;
   confidence: 'high' | 'medium' | 'low';
   unsupportedAssetClass?: UnsupportedAssetClass;
+  usedUsListingFallback?: boolean;
   targetDateIdentity?: TargetDateFundIdentity;
   targetAllocation?: TargetDateFundAllocation;
 }
@@ -93,6 +94,58 @@ function modeledWeightTotal(weights: HoldingExposureWeights): number {
 
 function copyWeights(weights: HoldingExposureWeights): HoldingExposureWeights {
   return { ...weights };
+}
+
+const DIRECT_EQUITY_TYPES = new Set([
+  'equity',
+  'stock',
+  'common equity',
+  'common stock',
+  'equity security',
+  'ordinary shares',
+  'adr',
+  'depositary receipt',
+]);
+
+const FUND_LABEL_SIGNAL = /\b(?:collective|etf|fund|index|pooled|portfolio)\b/i;
+
+/**
+ * A provider-typed single security with a short exchange-style ticker carries
+ * more geography evidence than a fund mandate does. This fallback is narrow:
+ * a wrapper alone cannot activate it, while fund-shaped labels, mutual-fund
+ * ticker conventions, and authoritative FMP fund classification veto it.
+ */
+function hasUsListingFallbackEvidence(
+  holding: Holding,
+  security: Security | undefined,
+  fmpMetadata: SecurityMetadata | null,
+  ticker: string,
+  securityName: string,
+): boolean {
+  const declaredTypes = [security?.type, holding.security_type]
+    .filter((type): type is string => typeof type === 'string' && type.trim().length > 0)
+    .map(type => type.trim().toLowerCase());
+  const selectedDeclaredType = selectDeclaredAssetType(declaredTypes).toLowerCase();
+  if (!DIRECT_EQUITY_TYPES.has(selectedDeclaredType)) return false;
+  if (!/^[A-Z]{1,5}(?:[.-][A-Z])?$/.test(ticker)) return false;
+  // Five-character tickers ending in X are conventionally mutual funds.
+  if (ticker.length === 5 && ticker.endsWith('X')) return false;
+  if (FUND_LABEL_SIGNAL.test(securityName)) return false;
+
+  // Ignore `isETF` on inferred metadata: the outage fallback currently marks
+  // every short alphabetic ticker, including WFC, as an ETF. Real FMP metadata
+  // is authoritative and must keep actual funds out of this path.
+  if (
+    fmpMetadata?.provider === 'fmp' &&
+    (
+      fmpMetadata.isETF ||
+      fmpMetadata.fundData?.instrumentType === 'etf' ||
+      fmpMetadata.fundData?.instrumentType === 'mutual_fund'
+    )
+  ) {
+    return false;
+  }
+  return true;
 }
 
 function resolveHoldingExposure(
@@ -222,9 +275,16 @@ function resolveHoldingExposure(
         confidence: 'low',
       };
     }
-    // An equity declaration is not evidence of geography. Direct securities
-    // normally receive a country from FMP's profile; if that source is absent,
-    // keep the exposure unavailable instead of defaulting it to the US.
+    if (hasUsListingFallbackEvidence(holding, security, fmpMetadata, ticker, securityName)) {
+      return {
+        weights: { ...EMPTY_WEIGHTS, usEquity: 1 },
+        method: 'name-inference',
+        confidence: 'medium',
+        usedUsListingFallback: true,
+      };
+    }
+    // A generic equity declaration is not geography evidence. Funds and
+    // securities without a qualifying listing remain unavailable.
     return { weights: copyWeights(EMPTY_WEIGHTS), method: 'provider', confidence: 'low' };
   }
 
@@ -544,6 +604,7 @@ export async function mapPortfolioToAssetBasket(
       status: classifiedFraction > 0 ? 'mapped' : 'unmapped',
       weights: resolvedWeightFraction > 0 ? copyWeights(draft.weights) : undefined,
       unsupportedAssetClass: draft.unsupportedAssetClass,
+      usedUsListingFallback: draft.usedUsListingFallback,
       method: draft.method,
       confidence: draft.confidence,
       allocationAsOf: draft.targetAllocation?.allocationAsOf,
@@ -709,6 +770,19 @@ export function populateAssumptions(
     assumptions.push(
       `$${Math.round(unrecognizedValue).toLocaleString('en-US')} was excluded because ` +
       'its asset class or equity geography could not be resolved'
+    );
+  }
+
+  const listingFallbackExposures = resolvedMapping.holdingExposures
+    .filter(exposure => exposure.usedUsListingFallback && Math.abs(exposure.value) > 0.005);
+  if (listingFallbackExposures.length > 0) {
+    const listingFallbackValue = listingFallbackExposures
+      .reduce((sum, exposure) => sum + Math.abs(exposure.value), 0);
+    assumptions.push(
+      `$${Math.round(listingFallbackValue).toLocaleString('en-US')} across ` +
+      `${listingFallbackExposures.length} directly held equit${listingFallbackExposures.length === 1 ? 'y was' : 'ies were'} ` +
+      'classified as US from provider equity type plus an exchange-style ticker because country metadata ' +
+      'was unavailable; this medium-confidence fallback never applies to funds'
     );
   }
 

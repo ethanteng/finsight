@@ -676,11 +676,16 @@ describe('container provider types', () => {
     }
   });
 
-  it('leaves a directly held stock unmodeled when no source establishes geography', async () => {
+  it('uses the disclosed listing fallback for a directly held stock without country metadata', async () => {
     const mapping = await map('Wells Fargo & Co.', 'WFC', 'equity');
-    expect(mapping.usEquityWeight).toBe(0);
-    expect(mapping.mappedValue).toBe(0);
-    expect(mapping.unrecognizedValue).toBe(1000);
+    expect(mapping.usEquityWeight).toBe(1);
+    expect(mapping.mappedValue).toBe(1000);
+    expect(mapping.unrecognizedValue).toBe(0);
+    expect(mapping.holdingExposures[0]).toMatchObject({
+      method: 'name-inference',
+      confidence: 'medium',
+      usedUsListingFallback: true,
+    });
   });
 
   it('maps a directly held stock when provider metadata establishes US geography', async () => {
@@ -694,6 +699,7 @@ describe('container provider types', () => {
       2026,
     );
     expect(mapping.usEquityWeight).toBeCloseTo(1, 6);
+    expect(mapping.holdingExposures[0].usedUsListingFallback).toBeUndefined();
   });
 
   it('leaves a wrapper-typed fund with no geography unmodeled', async () => {
