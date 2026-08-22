@@ -213,6 +213,57 @@ describe('home affordability scenario runner', () => {
     );
   });
 
+  it('validates every fact pack across irregular price, rate, and down-payment combinations', async () => {
+    // The pinned case above guards one pair. Rounding disagreements are a class
+    // bug, not a single case: before the fix 91 of these 144 combinations
+    // aborted the request, and every one of them used values a user could
+    // plausibly state. Deliberately irregular cents keep this honest — round
+    // inputs like $8,400 of tax divide evenly and hide the defect.
+    const cashFlow = snapshot({
+      averageMonthlyIncome: 15_000.37,
+      averageMonthlyExpense: 8_000.11,
+      financialSummary: { financialOverview: { totalCash: 300_000.29 } },
+    });
+    const failures: string[] = [];
+
+    for (const homePrice of [100_000, 237_500, 415_000, 700_000, 1_234_567, 2_050_000]) {
+      for (const mortgageRatePercent of [3, 3.375, 5.125, 6.5, 6.65, 7.875]) {
+        for (const downPaymentPercent of [3.5, 15, 20, 25]) {
+          const execution = await runHomeAffordabilityScenario(cashFlow, {
+            requested: true,
+            primary: variant(
+              { homePrice, mortgageRatePercent, downPaymentPercent, currentHousingCostMonthly: 2_500.13 },
+              {
+                homePrice: `$${homePrice} home`,
+                mortgageRatePercent: `${mortgageRatePercent}% mortgage`,
+                downPaymentPercent: `${downPaymentPercent}% down`,
+                currentHousingCostMonthly: '$2,500.13 rent',
+              }
+            ),
+            comparison: variant(
+              { downPaymentPercent: downPaymentPercent === 20 ? 15 : 20 },
+              { downPaymentPercent: 'the other down payment' }
+            ),
+          } as any);
+
+          if (execution.status !== 'completed') {
+            failures.push(`${homePrice}/${mortgageRatePercent}/${downPaymentPercent}: ${execution.reason}`);
+            continue;
+          }
+          const issues = validateCanonicalFactPack({
+            version: 1,
+            facts: homeAffordabilityScenarioCanonicalFacts(execution),
+          });
+          if (issues.length > 0) {
+            failures.push(`${homePrice}/${mortgageRatePercent}/${downPaymentPercent}: ${issues.join('; ')}`);
+          }
+        }
+      }
+    }
+
+    expect(failures).toEqual([]);
+  });
+
   it('uses named defaults but marks omitted taxes and insurance as a lower bound', async () => {
     const execution = await runHomeAffordabilityScenario(snapshot(), {
       requested: true,
