@@ -8,17 +8,24 @@ import {
   PortfolioMapping,
   ResolvedHoldingExposure,
   SecurityMetadata,
+  UnsupportedAssetClass,
 } from '../types';
 import { DataProviderFactory } from '../data/data-provider-factory';
 import {
   hasBondNameSignal,
   hasCashNameSignal,
+  hasCreditNameSignal,
   hasEquityNameSignal,
+  hasInternationalBondNameSignal,
+  hasRealAssetNameSignal,
   hasTipsNameSignal,
   inferEquityGeography,
   isContainerAssetType,
   isDeclaredFixedIncomeType,
   isKnownBondTicker,
+  isKnownCreditTicker,
+  isKnownInternationalBondTicker,
+  isKnownRealAssetTicker,
   isKnownTipsTicker,
   selectDeclaredAssetType,
 } from './asset-classification';
@@ -39,6 +46,26 @@ const EMPTY_WEIGHTS: HoldingExposureWeights = {
   cash: 0,
 };
 
+/**
+ * Thrown when the itemized portfolio has positive value but nothing maps onto
+ * a historical return series the engine can simulate. Publishing a zero-basis
+ * stress test would invent depletion / 2% withdrawal-rate floors.
+ */
+export class NoSupportedSimulationValueError extends Error {
+  constructor(
+    public readonly totalValue: number,
+    public readonly unsupportedValue: number,
+    public readonly unrecognizedValue: number,
+  ) {
+    super(
+      'Retirement simulation requires holdings mapped to a supported historical return series ' +
+      '(US equity, international equity, nominal US government bonds, or cash); ' +
+      `none of the $${Math.round(totalValue).toLocaleString('en-US')} itemized portfolio could be modeled`
+    );
+    this.name = 'NoSupportedSimulationValueError';
+  }
+}
+
 /** Product capitalization for series slugs shown in analysis assumptions. */
 const TARGET_DATE_SERIES_DISPLAY_NAMES: Record<string, string> = {
   'lifepath-index': 'LifePath Index',
@@ -51,6 +78,8 @@ interface HoldingResolutionDraft {
   weights: HoldingExposureWeights;
   method: HoldingMappingMethod;
   confidence: 'high' | 'medium' | 'low';
+  unsupportedAssetClass?: UnsupportedAssetClass;
+  usedUsListingFallback?: boolean;
   targetDateIdentity?: TargetDateFundIdentity;
   targetAllocation?: TargetDateFundAllocation;
 }
@@ -59,8 +88,85 @@ function weightTotal(weights: HoldingExposureWeights): number {
   return weights.usEquity + weights.internationalEquity + weights.nominalBonds + weights.tips + weights.cash;
 }
 
+function modeledWeightTotal(weights: HoldingExposureWeights): number {
+  return weights.usEquity + weights.internationalEquity + weights.nominalBonds + weights.cash;
+}
+
 function copyWeights(weights: HoldingExposureWeights): HoldingExposureWeights {
   return { ...weights };
+}
+
+const DIRECT_EQUITY_TYPES = new Set([
+  'equity',
+  'stock',
+  'common equity',
+  'common stock',
+  'equity security',
+  'ordinary shares',
+]);
+
+const FUND_LABEL_SIGNAL = /\b(?:collective|etf|fund|index|pooled|portfolio)\b/i;
+const ADR_TYPE_SIGNAL = /\b(?:adrs?|ads|gdrs?|depos(?:itary|itory) (?:receipts?|shares?))\b/i;
+
+function declaredHoldingTypes(
+  holding: Holding,
+  security: Security | undefined,
+): string[] {
+  return [security?.type, holding.security_type]
+    .filter((type): type is string => typeof type === 'string' && type.trim().length > 0)
+    .map(type => type.trim().toLowerCase());
+}
+
+/**
+ * ADRs / depositary receipts are US-listed wrappers over foreign issuers.
+ * Their listing is not US-equity geography evidence.
+ */
+function hasAdrDeclaredType(holding: Holding, security: Security | undefined): boolean {
+  return declaredHoldingTypes(holding, security).some(type => ADR_TYPE_SIGNAL.test(type));
+}
+
+/**
+ * A provider-typed single security with a short exchange-style ticker carries
+ * more geography evidence than a fund mandate does. This fallback is narrow:
+ * a wrapper alone cannot activate it, while fund-shaped labels, mutual-fund
+ * ticker conventions, ADR/depositary types, and authoritative FMP fund
+ * classification veto it.
+ */
+function hasUsListingFallbackEvidence(
+  holding: Holding,
+  security: Security | undefined,
+  fmpMetadata: SecurityMetadata | null,
+  ticker: string,
+  securityName: string,
+): boolean {
+  const declaredTypes = declaredHoldingTypes(holding, security);
+  const selectedDeclaredType = selectDeclaredAssetType(declaredTypes).toLowerCase();
+  if (!DIRECT_EQUITY_TYPES.has(selectedDeclaredType)) return false;
+  // A US listing of a foreign issuer is not domestic equity exposure.
+  const hasDeclaredAdrType = hasAdrDeclaredType(holding, security);
+  const hasAdrNameSignal = ADR_TYPE_SIGNAL.test(securityName);
+  if (hasDeclaredAdrType || hasAdrNameSignal) {
+    return false;
+  }
+  if (!/^[A-Z]{1,5}(?:[.-][A-Z])?$/.test(ticker)) return false;
+  // Five-character tickers ending in X are conventionally mutual funds.
+  if (ticker.length === 5 && ticker.endsWith('X')) return false;
+  if (FUND_LABEL_SIGNAL.test(securityName)) return false;
+
+  // Ignore `isETF` on inferred metadata: the outage fallback currently marks
+  // every short alphabetic ticker, including WFC, as an ETF. Real FMP metadata
+  // is authoritative and must keep actual funds out of this path.
+  if (
+    fmpMetadata?.provider === 'fmp' &&
+    (
+      fmpMetadata.isETF ||
+      fmpMetadata.fundData?.instrumentType === 'etf' ||
+      fmpMetadata.fundData?.instrumentType === 'mutual_fund'
+    )
+  ) {
+    return false;
+  }
+  return true;
 }
 
 function resolveHoldingExposure(
@@ -115,8 +221,61 @@ function resolveHoldingExposure(
   ) {
     return { weights: { ...EMPTY_WEIGHTS, tips: 1 }, method: 'provider', confidence: 'high' };
   }
+  if (
+    isDeclaredFixedIncomeType(specificAssetType) &&
+    (hasInternationalBondNameSignal(specificAssetType) || hasInternationalBondNameSignal(securityName) ||
+      isKnownInternationalBondTicker(ticker) ||
+      ['international', 'ex-us', 'global', 'world'].includes(geographicFocus))
+  ) {
+    return {
+      weights: copyWeights(EMPTY_WEIGHTS),
+      method: 'provider',
+      confidence: 'high',
+      unsupportedAssetClass: 'international-bonds',
+    };
+  }
+  if (
+    isDeclaredFixedIncomeType(specificAssetType) &&
+    (hasCreditNameSignal(specificAssetType) || hasCreditNameSignal(securityName) || isKnownCreditTicker(ticker))
+  ) {
+    return {
+      weights: copyWeights(EMPTY_WEIGHTS),
+      method: 'provider',
+      confidence: 'high',
+      unsupportedAssetClass: 'credit',
+    };
+  }
   if (isDeclaredFixedIncomeType(specificAssetType)) {
     return { weights: { ...EMPTY_WEIGHTS, nominalBonds: 1 }, method: 'provider', confidence: 'high' };
+  }
+  // Provider ADR / depositary types are foreign-issuer evidence on their own —
+  // do not wait for an Equity wrapper class or invent US geography from the listing.
+  const hasDeclaredAdrType = hasAdrDeclaredType(holding, security);
+  const hasAdrNameSignal = ADR_TYPE_SIGNAL.test(securityName);
+  if (hasDeclaredAdrType || hasAdrNameSignal) {
+    if (
+      !specificAssetType ||
+      specificAssetType.includes('equity') ||
+      specificAssetType.includes('stock') ||
+      ADR_TYPE_SIGNAL.test(specificAssetType)
+    ) {
+      return {
+        weights: { ...EMPTY_WEIGHTS, internationalEquity: 1 },
+        method: hasDeclaredAdrType ? 'provider' : 'name-inference',
+        confidence: 'medium',
+      };
+    }
+  }
+  if (
+    hasRealAssetNameSignal(specificAssetType) || hasRealAssetNameSignal(securityName) ||
+    isKnownRealAssetTicker(ticker)
+  ) {
+    return {
+      weights: copyWeights(EMPTY_WEIGHTS),
+      method: 'provider',
+      confidence: 'high',
+      unsupportedAssetClass: 'real-assets',
+    };
   }
   if (specificAssetType.includes('equity') || specificAssetType.includes('stock')) {
     const countrySplit = getCountrySplit(fmpMetadata);
@@ -145,6 +304,9 @@ function resolveHoldingExposure(
     if (inferredGeography === 'international') {
       return { weights: { ...EMPTY_WEIGHTS, internationalEquity: 1 }, method: 'name-inference', confidence: 'medium' };
     }
+    if (inferredGeography === 'us') {
+      return { weights: { ...EMPTY_WEIGHTS, usEquity: 1 }, method: 'name-inference', confidence: 'medium' };
+    }
     if (inferredGeography === 'global') {
       return {
         weights: copyWeights(EMPTY_WEIGHTS),
@@ -152,9 +314,17 @@ function resolveHoldingExposure(
         confidence: 'low',
       };
     }
-    // Preserve the existing directly-held-security default when the provider
-    // names an equity exposure but supplies no country data.
-    return { weights: { ...EMPTY_WEIGHTS, usEquity: 1 }, method: 'provider', confidence: 'medium' };
+    if (hasUsListingFallbackEvidence(holding, security, fmpMetadata, ticker, securityName)) {
+      return {
+        weights: { ...EMPTY_WEIGHTS, usEquity: 1 },
+        method: 'name-inference',
+        confidence: 'medium',
+        usedUsListingFallback: true,
+      };
+    }
+    // A generic equity declaration is not geography evidence. Funds and
+    // securities without a qualifying listing remain unavailable.
+    return { weights: copyWeights(EMPTY_WEIGHTS), method: 'provider', confidence: 'low' };
   }
 
   // No provider exposure: infer from the label, in specificity order.
@@ -164,8 +334,32 @@ function resolveHoldingExposure(
   if (hasTipsNameSignal(securityName) || isKnownTipsTicker(ticker)) {
     return { weights: { ...EMPTY_WEIGHTS, tips: 1 }, method: 'name-inference', confidence: 'medium' };
   }
+  if (hasInternationalBondNameSignal(securityName) || isKnownInternationalBondTicker(ticker)) {
+    return {
+      weights: copyWeights(EMPTY_WEIGHTS),
+      method: 'name-inference',
+      confidence: 'medium',
+      unsupportedAssetClass: 'international-bonds',
+    };
+  }
+  if (hasCreditNameSignal(securityName) || isKnownCreditTicker(ticker)) {
+    return {
+      weights: copyWeights(EMPTY_WEIGHTS),
+      method: 'name-inference',
+      confidence: 'medium',
+      unsupportedAssetClass: 'credit',
+    };
+  }
   if (hasBondNameSignal(securityName) || isKnownBondTicker(ticker)) {
     return { weights: { ...EMPTY_WEIGHTS, nominalBonds: 1 }, method: 'name-inference', confidence: 'medium' };
+  }
+  if (hasRealAssetNameSignal(securityName) || isKnownRealAssetTicker(ticker)) {
+    return {
+      weights: copyWeights(EMPTY_WEIGHTS),
+      method: 'name-inference',
+      confidence: 'medium',
+      unsupportedAssetClass: 'real-assets',
+    };
   }
   if (hasEquityNameSignal(securityName) || /^[A-Z]{1,5}$/.test(ticker)) {
     const geography = inferEquityGeography(securityName, ticker);
@@ -202,26 +396,49 @@ export function summarizeHoldingExposures(
   let usEquityValue = 0;
   let internationalEquityValue = 0;
   let nominalBondsValue = 0;
+  let tipsValue = 0;
+  let unsupportedFixedIncomeValue = 0;
   let cashValue = 0;
+  let unsupportedValue = 0;
+  let unrecognizedValue = 0;
   const unmappedHoldings: string[] = [];
+  const unsupportedHoldings: string[] = [];
   const partiallyMappedHoldings: string[] = [];
 
   for (const exposure of holdingExposures) {
     const weights = exposure.status === 'mapped' ? exposure.weights : undefined;
     const mappedFraction = weights
-      ? Math.max(0, Math.min(1, weightTotal(weights)))
+      ? Math.max(0, Math.min(1, modeledWeightTotal(weights)))
       : 0;
+    const tipsFraction = weights
+      ? Math.max(0, Math.min(1 - mappedFraction, weights.tips))
+      : 0;
+    // Registry residuals are sourced sleeves the historical engine does not
+    // support (for example commodities), not failures to recognize the fund.
+    const unsupportedResidual = exposure.unsupportedAssetClass || exposure.method === 'fund-registry'
+      ? Math.max(0, 1 - mappedFraction - tipsFraction)
+      : 0;
+    const unsupportedFraction = tipsFraction + unsupportedResidual;
+    const unrecognizedFraction = Math.max(0, 1 - mappedFraction - unsupportedFraction);
     const exposureMappedValue = exposure.value * mappedFraction;
-    const exposureUnmappedValue = exposure.value - exposureMappedValue;
+    const exposureUnsupportedValue = exposure.value * unsupportedFraction;
+    const exposureUnrecognizedValue = exposure.value * unrecognizedFraction;
+    const exposureUnmodeledValue = exposureUnsupportedValue + exposureUnrecognizedValue;
 
     mappedValue += exposureMappedValue;
+    unsupportedValue += exposureUnsupportedValue;
+    unrecognizedValue += exposureUnrecognizedValue;
+    if (
+      exposure.unsupportedAssetClass === 'credit' ||
+      exposure.unsupportedAssetClass === 'international-bonds'
+    ) {
+      unsupportedFixedIncomeValue += exposure.value;
+    }
     if (weights) {
       usEquityValue += exposure.value * weights.usEquity;
       internationalEquityValue += exposure.value * weights.internationalEquity;
-      // Until a dedicated TIPS history is added, preserve the resolved TIPS
-      // sleeve and deliberately feed it through the nominal government-bond
-      // return series. Assumptions and confidence disclose this proxy.
-      nominalBondsValue += exposure.value * (weights.nominalBonds + weights.tips);
+      nominalBondsValue += exposure.value * weights.nominalBonds;
+      tipsValue += exposure.value * weights.tips;
       cashValue += exposure.value * weights.cash;
     }
 
@@ -230,12 +447,15 @@ export function summarizeHoldingExposures(
       (exposure.method === 'fund-registry' && exposure.exactAllocation === false)
     ) {
       proxiedValue += Math.abs(exposureMappedValue);
-    } else if (weights && weights.tips > 0) {
-      proxiedValue += Math.abs(exposure.value * weights.tips);
     }
-    if (exposureUnmappedValue > 0.005) {
+    if (exposureUnsupportedValue > 0.005) {
+      unsupportedHoldings.push(exposure.label);
+    }
+    if (exposureUnrecognizedValue > 0.005 && exposureMappedValue <= 0.005) {
+      unmappedHoldings.push(exposure.label);
+    }
+    if (exposureUnmodeledValue > 0.005) {
       if (exposureMappedValue > 0.005) partiallyMappedHoldings.push(exposure.label);
-      else unmappedHoldings.push(exposure.label);
     }
   }
 
@@ -247,16 +467,21 @@ export function summarizeHoldingExposures(
   const valueCoverage = totalValue > 0 ? mappedValue / totalValue : 1;
   const proxiedValuePercentage = totalValue > 0 ? proxiedValue / totalValue : 0;
   const materialExposures = holdingExposures.filter(exposure => Math.abs(exposure.value) > 0.005);
+  const tipsAllocationStatus = materialExposures.some(
+    exposure => exposure.tipsAllocationStatus === 'lower-bound',
+  ) ? 'lower-bound' : 'exact';
   // Only successfully mapped name-inference results describe how the modeled
   // portfolio was built. Unmapped holdings still use method `name-inference`
   // (the classifier path that failed), but they must not relabel a mostly
   // provider-mapped book as "inferred".
   const hasInference = materialExposures.some(
-    exposure => exposure.status === 'mapped' && exposure.method === 'name-inference',
+    exposure => exposure.status === 'mapped' &&
+      exposure.method === 'name-inference' &&
+      exposure.weights !== undefined &&
+      modeledWeightTotal(exposure.weights) > 0,
   );
   const hasRegistry = materialExposures.some(exposure => exposure.method === 'fund-registry');
   const hasStaleRegistry = materialExposures.some(exposure => exposure.staleAllocation === true);
-  const hasTipsProxy = materialExposures.some(exposure => (exposure.weights?.tips ?? 0) > 0);
   const hasLowConfidence = materialExposures.some(exposure => exposure.confidence === 'low');
   const hasMediumConfidence = materialExposures.some(exposure => exposure.confidence === 'medium');
   const lowConfidenceValue = materialExposures
@@ -267,7 +492,7 @@ export function summarizeHoldingExposures(
   if (valueCoverage < 0.95 || hasStaleRegistry || lowConfidenceShare >= 0.05) {
     mappingConfidence = 'low';
   } else if (
-    valueCoverage < 1 || hasInference || hasRegistry || hasTipsProxy ||
+    valueCoverage < 1 || hasInference || hasRegistry ||
     hasLowConfidence || hasMediumConfidence
   ) {
     mappingConfidence = 'medium';
@@ -280,12 +505,14 @@ export function summarizeHoldingExposures(
       !exposure.weights ||
       !exposure.targetDateIdentity?.series ||
       exposure.allocationAsOf === undefined ||
+      exposure.allocationAvailableFrom === undefined ||
       exposure.allocationAgeDays === undefined ||
       exposure.staleAllocation === undefined ||
       exposure.sourceUrl === undefined ||
       exposure.sourceProvider === undefined ||
       exposure.sourceContext === undefined ||
-      exposure.exactAllocation === undefined
+      exposure.exactAllocation === undefined ||
+      exposure.tipsAllocationStatus === undefined
     ) {
       return [];
     }
@@ -296,11 +523,13 @@ export function summarizeHoldingExposures(
       vintage: exposure.targetDateIdentity.vintage,
       equityShare: exposure.weights.usEquity + exposure.weights.internationalEquity,
       allocationAsOf: exposure.allocationAsOf,
+      allocationAvailableFrom: exposure.allocationAvailableFrom,
       allocationAgeDays: exposure.allocationAgeDays,
       staleAllocation: exposure.staleAllocation,
       sourceUrl: exposure.sourceUrl,
       sourceContext: exposure.sourceContext,
       exactAllocation: exposure.exactAllocation,
+      tipsAllocationStatus: exposure.tipsAllocationStatus,
     }];
   });
 
@@ -310,14 +539,24 @@ export function summarizeHoldingExposures(
     nominalBondsWeight: mappedValue > 0 ? nominalBondsValue / mappedValue : 0,
     cashWeight: mappedValue > 0 ? cashValue / mappedValue : 0,
     totalValue,
+    usEquityValue,
+    internationalEquityValue,
+    nominalBondsValue,
+    tipsValue,
+    tipsAllocationStatus,
+    unsupportedFixedIncomeValue,
+    cashValue,
     mappedValue,
     unmappedValue,
+    unsupportedValue: Math.max(0, unsupportedValue),
+    unrecognizedValue: Math.max(0, unrecognizedValue),
     valueCoverage,
     proxiedValue,
     proxiedValuePercentage,
     holdingExposures,
     mappingConfidence,
     unmappedHoldings,
+    unsupportedHoldings,
     partiallyMappedHoldings,
     mappingMethod: hasInference ? 'inferred' : hasRegistry ? 'proxy' : 'direct',
     targetDateFunds,
@@ -393,9 +632,13 @@ export async function mapPortfolioToAssetBasket(
     const ticker = security?.ticker_symbol?.toUpperCase() || holding.ticker_symbol?.toUpperCase() || '';
     const fmpMetadata = (ticker ? tickerToMetadata.get(ticker) : null) as SecurityMetadata | null;
     const draft = resolveHoldingExposure(holding, security, fmpMetadata, asOfDate);
-    const mappedFraction = Math.max(0, Math.min(1, weightTotal(draft.weights)));
+    const resolvedWeightFraction = Math.max(0, Math.min(1, weightTotal(draft.weights)));
+    const classifiedFraction = draft.unsupportedAssetClass
+      ? 1
+      : resolvedWeightFraction;
+    const modeledFraction = Math.max(0, Math.min(1, modeledWeightTotal(draft.weights)));
     const label = security?.name || holding.security_name || ticker || holding.security_id;
-    if (holdingValue < 0 && mappedFraction < 0.999999) {
+    if (holdingValue < 0 && modeledFraction < 0.999999) {
       throw new Error(
         `Negative holding "${label}" has no complete supported asset-class mapping; ` +
         'retirement analysis stopped rather than discarding its liability or guessing its return',
@@ -405,17 +648,21 @@ export async function mapPortfolioToAssetBasket(
       holdingId: holding.id || `${holding.security_id}:${holdingIndex}`,
       label,
       value: holdingValue,
-      status: mappedFraction > 0 ? 'mapped' : 'unmapped',
-      weights: mappedFraction > 0 ? copyWeights(draft.weights) : undefined,
+      status: classifiedFraction > 0 ? 'mapped' : 'unmapped',
+      weights: resolvedWeightFraction > 0 ? copyWeights(draft.weights) : undefined,
+      unsupportedAssetClass: draft.unsupportedAssetClass,
+      usedUsListingFallback: draft.usedUsListingFallback,
       method: draft.method,
       confidence: draft.confidence,
       allocationAsOf: draft.targetAllocation?.allocationAsOf,
+      allocationAvailableFrom: draft.targetAllocation?.availableFrom,
       allocationAgeDays: draft.targetAllocation?.allocationAgeDays,
       staleAllocation: draft.targetAllocation?.staleAllocation,
       sourceUrl: draft.targetAllocation?.sourceUrl,
       sourceProvider: draft.targetAllocation?.identity.provider,
       sourceContext: draft.targetAllocation?.sourceContext,
       exactAllocation: draft.targetAllocation?.exactAllocation,
+      tipsAllocationStatus: draft.targetAllocation?.tipsAllocationStatus,
       targetDateIdentity: draft.targetDateIdentity
         ? { ...draft.targetDateIdentity }
         : undefined,
@@ -488,10 +735,12 @@ export function populateAssumptions(
       provider: string;
       series: string;
       allocationAsOf: string;
+      allocationAvailableFrom: string;
       allocationAgeDays: number;
       staleAllocation: boolean;
       sourceContext: string;
       exactAllocation: boolean;
+      tipsAllocationStatus: 'exact' | 'lower-bound';
       vintages: Map<string, { count: number; vintage: number; equityShare: number }>;
     }>();
     for (const fund of resolvedMapping.targetDateFunds) {
@@ -499,8 +748,10 @@ export function populateAssumptions(
         fund.provider,
         fund.series,
         fund.allocationAsOf,
+        fund.allocationAvailableFrom,
         fund.sourceContext,
         fund.exactAllocation,
+        fund.tipsAllocationStatus,
       ].join(':');
       let sourceGroup = sourceGroups.get(sourceKey);
       if (!sourceGroup) {
@@ -508,10 +759,12 @@ export function populateAssumptions(
           provider: fund.provider,
           series: fund.series,
           allocationAsOf: fund.allocationAsOf,
+          allocationAvailableFrom: fund.allocationAvailableFrom,
           allocationAgeDays: fund.allocationAgeDays,
           staleAllocation: fund.staleAllocation,
           sourceContext: fund.sourceContext,
           exactAllocation: fund.exactAllocation,
+          tipsAllocationStatus: fund.tipsAllocationStatus,
           vintages: new Map(),
         };
         sourceGroups.set(sourceKey, sourceGroup);
@@ -534,10 +787,12 @@ export function populateAssumptions(
         provider,
         series,
         allocationAsOf,
+        allocationAvailableFrom,
         allocationAgeDays,
         staleAllocation,
         sourceContext,
         exactAllocation,
+        tipsAllocationStatus,
         vintages,
       }) => {
         const providerName = provider === 'state-street'
@@ -556,7 +811,8 @@ export function populateAssumptions(
         return (
           `${providerName} ${seriesName} ` +
           `(${exactAllocation ? 'same share class' : 'public share-class proxy'}; ` +
-          `${sourceContext}; as of ${allocationAsOf}` +
+          `${sourceContext}; allocation as of ${allocationAsOf}; available from ${allocationAvailableFrom}` +
+          `${tipsAllocationStatus === 'lower-bound' ? '; embedded TIPS not separately reported' : ''}` +
           `${staleAllocation ? `; stale by ${Math.floor(allocationAgeDays / 30)} months` : ''}): ` +
           vintageDescription
         );
@@ -567,36 +823,28 @@ export function populateAssumptions(
     );
   }
 
-  if (resolvedMapping.unmappedValue > 0.005) {
-    const materiallyExcluded = resolvedMapping.holdingExposures.filter(exposure => {
-      const mappedFraction = exposure.status === 'mapped' && exposure.weights
-        ? Math.max(0, Math.min(1, weightTotal(exposure.weights)))
-        : 0;
-      return exposure.value * (1 - mappedFraction) > 0.005;
-    });
-    const fullyUnmodeledCount = resolvedMapping.holdingExposures.length > 0
-      ? materiallyExcluded.filter(exposure => exposure.status === 'unmapped').length
-      : resolvedMapping.unmappedHoldings.length;
-    const partiallyModeledCount = resolvedMapping.holdingExposures.length > 0
-      ? materiallyExcluded.length - fullyUnmodeledCount
-      : resolvedMapping.partiallyMappedHoldings.length;
-    const countDescription = [
-      fullyUnmodeledCount > 0
-        ? `${fullyUnmodeledCount} holding${fullyUnmodeledCount === 1 ? '' : 's'} ` +
-          `${fullyUnmodeledCount === 1 ? 'was' : 'were'} fully unmodeled`
-        : '',
-      partiallyModeledCount > 0
-        ? `${partiallyModeledCount} holding${partiallyModeledCount === 1 ? '' : 's'} ` +
-          `${partiallyModeledCount === 1 ? 'was' : 'were'} partially modeled`
-        : '',
-    ].filter(Boolean).join(' and ');
+  const unrecognizedValue = resolvedMapping.unrecognizedValue ?? resolvedMapping.unmappedValue;
+  if (unrecognizedValue > 0.005) {
     assumptions.push(
-      `$${Math.round(resolvedMapping.unmappedValue).toLocaleString('en-US')} was excluded from analysis: ` +
-      countDescription
+      `$${Math.round(unrecognizedValue).toLocaleString('en-US')} was excluded because ` +
+      'its asset class or equity geography could not be resolved'
     );
   }
 
-  if (resolvedMapping.usEquityWeight !== 0 || resolvedMapping.internationalEquityWeight !== 0) {
+  const listingFallbackExposures = resolvedMapping.holdingExposures
+    .filter(exposure => exposure.usedUsListingFallback && Math.abs(exposure.value) > 0.005);
+  if (listingFallbackExposures.length > 0) {
+    const listingFallbackValue = listingFallbackExposures
+      .reduce((sum, exposure) => sum + Math.abs(exposure.value), 0);
+    assumptions.push(
+      `$${Math.round(listingFallbackValue).toLocaleString('en-US')} across ` +
+      `${listingFallbackExposures.length} directly held equit${listingFallbackExposures.length === 1 ? 'y was' : 'ies were'} ` +
+      'classified as US from provider equity type plus an exchange-style ticker because country metadata ' +
+      'was unavailable; this medium-confidence fallback never applies to funds or depositary receipts'
+    );
+  }
+
+  if (resolvedMapping.usEquityWeight !== 0) {
     assumptions.push('US equity exposure uses the Kenneth French broad US market total-return history (Mkt-RF plus RF)');
   }
 
@@ -604,25 +852,45 @@ export function populateAssumptions(
     assumptions.push('International equity exposure uses the Kenneth French EAFE-plus-Canada market return in US dollars; emerging markets are not modeled separately');
   }
 
-  const tipsValue = resolvedMapping.holdingExposures.reduce(
-    (sum, exposure) => sum + Math.abs(exposure.value * (exposure.weights?.tips ?? 0)),
-    0,
-  );
+  const tipsValue = Math.abs(resolvedMapping.tipsValue ?? 0);
+  if (resolvedMapping.tipsAllocationStatus === 'lower-bound') {
+    const incompleteTipsExposures = resolvedMapping.holdingExposures.filter(
+      exposure => exposure.tipsAllocationStatus === 'lower-bound' && Math.abs(exposure.value) > 0.005,
+    );
+    const incompleteTipsValue = incompleteTipsExposures.reduce(
+      (sum, exposure) => sum + Math.abs(exposure.value),
+      0,
+    );
+    assumptions.push(
+      `Reported TIPS allocation is a known lower bound because ` +
+      `$${Math.round(incompleteTipsValue).toLocaleString('en-US')} across ` +
+      `${incompleteTipsExposures.length} target-date holding${incompleteTipsExposures.length === 1 ? '' : 's'} ` +
+      `${incompleteTipsExposures.length === 1 ? 'does' : 'do'} not publish embedded TIPS separately; ` +
+      'any unreported sleeve remains excluded rather than recorded as zero or reassigned to nominal bonds'
+    );
+  }
   const nonTipsBondValue = resolvedMapping.holdingExposures.reduce(
     (sum, exposure) => sum + Math.abs(exposure.value * (exposure.weights?.nominalBonds ?? 0)),
     0,
   );
-  // Keep the generic bond series note for true nominal-bond sleeves only. Pure
-  // TIPS portfolios are covered by the dedicated proxy disclosure below.
+  // Keep the generic bond series note for true nominal-bond sleeves only.
   if (nonTipsBondValue > 0.005) {
     assumptions.push('Bond exposure uses the Shiller synthetic 10-year US government-bond total-return history');
   }
 
   if (tipsValue > 0.005) {
     assumptions.push(
-      `$${Math.round(tipsValue).toLocaleString('en-US')} of TIPS exposure uses the nominal ` +
-      '10-year US government-bond history because the engine has no dedicated TIPS return series; ' +
-      'this understates the portfolio\'s inflation protection, especially for CPI-linked withdrawals'
+      `$${Math.round(tipsValue).toLocaleString('en-US')} of TIPS exposure was excluded from the ` +
+      'historical simulation rather than reassigned to nominal bonds: TIPS began in 1997, so ' +
+      'observed market history cannot satisfy the engine\'s 50-year evidence floor'
+    );
+  }
+
+  const otherUnsupportedValue = Math.max(0, (resolvedMapping.unsupportedValue ?? 0) - tipsValue);
+  if (otherUnsupportedValue > 0.005) {
+    assumptions.push(
+      `$${Math.round(otherUnsupportedValue).toLocaleString('en-US')} in other known asset sleeves ` +
+      'was excluded because the engine has no corresponding historical return series'
     );
   }
 

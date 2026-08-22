@@ -161,13 +161,34 @@ expenses = (averageMonthlyExpense ?? 0) * 12
 ```
 totalValue = Σ holding.institution_value
 // Guard: totalValue > 0 to avoid NaN
-equityAllocation = totalValue > 0 ? (equityValue / totalValue) * 100 : 0
-fixedIncomeAllocation = totalValue > 0 ? (fixedIncomeValue / totalValue) * 100 : 0
+equityAllocation = totalValue > 0 ? ((usEquityValue + internationalEquityValue) / totalValue) * 100 : 0
+fixedIncomeAllocation = totalValue > 0 ? ((nominalBondValue + tipsValue + unsupportedFixedIncomeValue) / totalValue) * 100 : 0
+tipsAllocation = totalValue > 0 ? (tipsValue / totalValue) * 100 : 0
+tipsAllocationStatus = any sourced holding omits a separate embedded-TIPS weight ? 'lower-bound' : 'exact'
 cashAllocation = totalValue > 0 ? (cashValue / totalValue) * 100 : 0
 internationalAllocation = totalValue > 0 ? (internationalValue / totalValue) * 100 : 0
 concentrationRisk (HHI) = totalValue > 0 ? Σ (weight²) : 0  for top 10 holdings, weight = holdingValue / totalValue
 expenseRatioWeighted = Σ(expenseRatio * weight) / Σ(weight)  for holdings with expense ratio
 ```
+
+These composition percentages use the full itemized-value denominator. Unknown
+equity geography and unsupported sourced sleeves are not redistributed, so the
+reported buckets may sum to less than 100%. Historical simulation uses only the
+supported value. TIPS are shown in composition but excluded from simulation;
+observed U.S. TIPS history begins in 1997 and cannot meet the engine's 50-year
+evidence floor. If a target-date source does not separately publish embedded
+TIPS, `tipsAllocation` is the known reported minimum and is labeled
+`lower-bound`; the unreported residual is excluded rather than recorded as
+zero. Registry lookup gates on the source's verified `availableFrom` date while
+reporting the distinct holdings `allocationAsOf` date, preventing a later
+publication from entering an earlier snapshot. Known credit,
+international-bond, and real-asset holdings are
+also excluded until corresponding checked-in total-return series are available.
+Provider-typed single equities with exchange-style U.S. tickers may use a
+medium-confidence U.S.-listing fallback when country metadata is unavailable;
+the fallback is disclosed and never applies to funds or depositary receipts.
+ADR/ADS/GDR and spelled-out depositary-share/receipt signals map to
+international equity, with name-only evidence counted as name inference.
 
 ### Withdrawal Simulation (Phase 4)
 

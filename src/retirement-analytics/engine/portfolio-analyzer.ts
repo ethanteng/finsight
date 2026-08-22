@@ -22,6 +22,8 @@ export async function analyzePortfolio(
     return {
       equityAllocation: 0,
       fixedIncomeAllocation: 0,
+      tipsAllocation: 0,
+      tipsAllocationStatus: 'exact',
       cashAllocation: 0,
       internationalAllocation: 0,
       concentrationRisk: 0,
@@ -45,6 +47,8 @@ export async function analyzePortfolio(
     return {
       equityAllocation: 0,
       fixedIncomeAllocation: 0,
+      tipsAllocation: 0,
+      tipsAllocationStatus: 'exact',
       cashAllocation: 0,
       internationalAllocation: 0,
       concentrationRisk: 0,
@@ -151,10 +155,18 @@ export async function analyzePortfolio(
 
   // Guard against division by zero (defense-in-depth; totalValue === 0 already returns early above)
   return {
-    equityAllocation: (resolvedMapping.usEquityWeight + resolvedMapping.internationalEquityWeight) * 100,
-    fixedIncomeAllocation: resolvedMapping.nominalBondsWeight * 100,
-    cashAllocation: resolvedMapping.cashWeight * 100,
-    internationalAllocation: resolvedMapping.internationalEquityWeight * 100,
+    equityAllocation: ((resolvedMapping.usEquityValue + resolvedMapping.internationalEquityValue) / totalValue) * 100,
+    fixedIncomeAllocation: (
+      (
+        resolvedMapping.nominalBondsValue +
+        resolvedMapping.tipsValue +
+        resolvedMapping.unsupportedFixedIncomeValue
+      ) / totalValue
+    ) * 100,
+    tipsAllocation: (resolvedMapping.tipsValue / totalValue) * 100,
+    tipsAllocationStatus: resolvedMapping.tipsAllocationStatus ?? 'exact',
+    cashAllocation: (resolvedMapping.cashValue / totalValue) * 100,
+    internationalAllocation: (resolvedMapping.internationalEquityValue / totalValue) * 100,
     concentrationRisk,
     expenseRatioWeighted,
     expenseRatioCoverage: totalExpenseRatioWeight,

@@ -25,7 +25,8 @@ export function formatAnalysisOutput(
   withdrawalMetrics: WithdrawalSustainabilityMetrics,
   dataQuality: DataQualityReport,
   timelineBucketNote?: string,
-  historicalData?: HistoricalDataSummary
+  historicalData?: HistoricalDataSummary,
+  modeledEquityAllocation: number = portfolioMetrics.equityAllocation,
 ): RetirementAnalysisOutput {
   // Enforce confidence ceiling
   const confidence = calculateConfidenceCeiling(dataQuality);
@@ -38,7 +39,8 @@ export function formatAnalysisOutput(
     assessment,
     stressTestResults,
     portfolioMetrics,
-    withdrawalMetrics
+    withdrawalMetrics,
+    modeledEquityAllocation,
   );
 
   return {
@@ -53,6 +55,8 @@ export function formatAnalysisOutput(
     metrics: {
       equityAllocation: portfolioMetrics.equityAllocation,
       fixedIncomeAllocation: portfolioMetrics.fixedIncomeAllocation,
+      tipsAllocation: portfolioMetrics.tipsAllocation,
+      tipsAllocationStatus: portfolioMetrics.tipsAllocationStatus,
       cashAllocation: portfolioMetrics.cashAllocation,
       internationalAllocation: portfolioMetrics.internationalAllocation,
       expenseRatioWeighted: portfolioMetrics.expenseRatioWeighted,
@@ -88,7 +92,8 @@ function generateHistoricalImplications(
   assessment: PortfolioAssessment,
   stressTestResults: StressTestResult,
   portfolioMetrics: PortfolioCompositionMetrics,
-  withdrawalMetrics: WithdrawalSustainabilityMetrics
+  withdrawalMetrics: WithdrawalSustainabilityMetrics,
+  modeledEquityAllocation: number,
 ): Array<{
   category: 'allocation' | 'diversification' | 'expenses' | 'withdrawal';
   observation: string;
@@ -101,11 +106,11 @@ function generateHistoricalImplications(
   }> = [];
 
   // Allocation implications
-  if (assessment.characteristics.growthPotential === 'low' && portfolioMetrics.equityAllocation < 30) {
+  if (assessment.characteristics.growthPotential === 'low' && modeledEquityAllocation < 30) {
     implications.push({
       category: 'allocation',
       observation: 'Portfolio shows growth-constrained characteristics relative to portfolios with similar equity allocations and horizon',
-      historicalContext: `Historical analysis shows portfolios with ${Math.round(portfolioMetrics.equityAllocation)}% equity allocation had median real returns below inflation in the majority of sequences`
+      historicalContext: `Historical analysis shows portfolios with ${Math.round(modeledEquityAllocation)}% modeled equity allocation had median real returns below inflation in the majority of sequences`
     });
   }
 

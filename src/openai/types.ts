@@ -169,6 +169,8 @@ export interface FinancialContextSnapshot {
     metrics: {
       equityAllocation: number;
       fixedIncomeAllocation?: number;
+      tipsAllocation?: number;
+      tipsAllocationStatus?: 'exact' | 'lower-bound';
       cashAllocation?: number;
       internationalAllocation?: number;
       expenseRatioWeighted?: number;
@@ -230,6 +232,8 @@ export interface FinancialContextSnapshot {
         internationalEquityProxy: string;
         bondsProxy: string;
         unmappedHoldings: string[];
+        unsupportedHoldings?: string[];
+        usListingFallbackHoldings?: string[];
         mappingMethod: string;
       };
       assumptions: string[];
@@ -285,7 +289,7 @@ export interface FinancialContextSnapshot {
     /** When retirement analysis cannot run despite a retirement question (e.g. no holdings). */
     unavailableReason?: string;
     /** Machine-readable form of unavailableReason: only some causes are the user's to fix. */
-    unavailableCode?: 'no_holdings' | 'insufficient_history' | 'service_error';
+    unavailableCode?: 'no_holdings' | 'insufficient_history' | 'no_supported_simulation' | 'service_error';
     /**
      * What the history actually allows, when its length is what blocked the run.
      * Present only with unavailableCode 'insufficient_history', so the ask can

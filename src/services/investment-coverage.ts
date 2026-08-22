@@ -22,7 +22,7 @@ export interface UnmodeledInvestmentReason {
   /** Account name when known, so the exclusion can be described to its owner. */
   label: string;
   amount: number;
-  kind: 'partial-holdings' | 'no-holdings' | 'unrecognized-holdings';
+  kind: 'partial-holdings' | 'no-holdings' | 'unrecognized-holdings' | 'unsupported-asset-class';
 }
 
 export interface UnmodeledInvestmentValue {
@@ -202,7 +202,9 @@ export function describeUnmodeledInvestmentValue(
       ? `${money(reason.amount)} of ${reason.label} is not itemized by the provider`
       : reason.kind === 'no-holdings'
         ? `${money(reason.amount)} in ${reason.label} has no holdings detail`
-        : `${money(reason.amount)} in ${reason.label} has no supported asset-class mapping`
+        : reason.kind === 'unsupported-asset-class'
+          ? `${money(reason.amount)} in ${reason.label} has no sufficiently long historical return series`
+          : `${money(reason.amount)} in ${reason.label} has no supported asset-class mapping`
   );
   const attribution = parts.length > 0 ? ` (${parts.join('; ')})` : '';
   const remainder = summary.reasons.length > 3
@@ -212,7 +214,8 @@ export function describeUnmodeledInvestmentValue(
   return (
     `${UNMODELED_VALUE_NOTE_PREFIX}${money(summary.unmodeledValue)} of your investments` +
     `${attribution}${remainder}, about ${share}% of the total. ` +
-    'Their asset mix is unknown, and modeling them would mean assuming a return they may not earn, ' +
+    'Their asset mix or a sufficiently long return series is unavailable, and modeling them would ' +
+    'mean assuming a return they may not earn, ' +
     `so the projection runs on the ${money(summary.modeledValue)} that can be modeled position by position. ` +
     'Portfolio value, years of expenses, depletion horizon, and historical survival share are therefore ' +
     'floors — they understate what the full portfolio would support. Withdrawal rates move the other way: ' +

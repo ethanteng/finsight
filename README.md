@@ -74,6 +74,11 @@ data request:
 - Kenneth French EAFE-plus-Canada market returns for international equity
 - Robert Shiller 10-year US government-bond returns and CPI inflation
 
+TIPS are classified and reported separately but are not simulated: [the first
+U.S. TIPS auction was in 1997](https://www.treasurydirect.gov/research-center/history-of-marketable-securities/tips/), which is shorter than the engine's 50-year
+historical-evidence floor. The engine excludes that sleeve instead of assigning
+it nominal Treasury returns or inventing a pre-issuance history.
+
 Run `npm run refresh:market-datasets` to download validated official snapshots,
 update their hashes and vintages, and rebuild the unified dataset. Monthly
 rolling stress-test windows overlap and must be described as historical shares,

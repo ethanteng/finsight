@@ -42,6 +42,23 @@ describe('missing input asks', () => {
     expect(asks[0].message).toContain('Link an investment account');
   });
 
+  it('explains when holdings exist but none are simulatable', () => {
+    const asks = collectMissingInputAsks(
+      {
+        retirementAnalysisNeedsInfo: {
+          missingParams: [],
+          detectedParams: {},
+          unavailableReason: 'None of the itemized portfolio could be modeled.',
+          unavailableCode: 'no_supported_simulation',
+        },
+      } as any,
+      { needsRetirement: true, needsHomeValue: false }
+    );
+
+    expect(asks[0]).toMatchObject({ id: 'retirement_no_supported_simulation' });
+    expect(asks[0].message).toContain('supported historical return series');
+  });
+
   it('stays quiet about failures the user cannot do anything about', () => {
     // A pricing service outage is ours to fix; telling the user is an apology,
     // not an ask.

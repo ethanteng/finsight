@@ -558,6 +558,15 @@ export function buildCanonicalFactPack(
     addCalculatedFact('withdrawal_rate', 'Withdrawal rate', retirement.metrics.withdrawalRate * 100, 'percent', 'input * 100', ['withdrawal_rate_ratio']);
     addSnapshotFact('equity_allocation', 'Equity allocation', retirement.metrics.equityAllocation, 'percent', 'retirementAnalysis.metrics.equityAllocation');
     addSnapshotFact('fixed_income_allocation', 'Fixed-income allocation', retirement.metrics.fixedIncomeAllocation, 'percent', 'retirementAnalysis.metrics.fixedIncomeAllocation');
+    addSnapshotFact(
+      'tips_allocation',
+      retirement.metrics.tipsAllocationStatus === 'lower-bound'
+        ? 'Known TIPS allocation (lower bound)'
+        : 'TIPS allocation',
+      retirement.metrics.tipsAllocation,
+      'percent',
+      'retirementAnalysis.metrics.tipsAllocation',
+    );
     addSnapshotFact('cash_allocation', 'Cash allocation', retirement.metrics.cashAllocation, 'percent', 'retirementAnalysis.metrics.cashAllocation');
     addSnapshotFact('international_allocation', 'International equity allocation', retirement.metrics.internationalAllocation, 'percent', 'retirementAnalysis.metrics.internationalAllocation');
     if (retirement.metrics.expenseRatioWeighted !== undefined) {
@@ -631,7 +640,7 @@ export function buildCanonicalFactPack(
     addSnapshotFact('withdrawal_start_age', 'Withdrawal start age', retirement._storedInputParams?.withdrawalStartAge, 'age', 'retirementAnalysis.inputs.withdrawalStartAge');
 
     // Investment value deliberately excluded from the projection because its
-    // asset mix is unknown. Published as facts because the answer cannot state
+    // exposure or a sufficiently long return series is unavailable. Published as facts because the answer cannot state
     // the exclusion without them: every dollar figure in prose must come from
     // a fact, so an unciteable caveat is a caveat the model has to leave out.
     // Caveats are stamped after scenario facts are added below -- variants run
@@ -672,30 +681,36 @@ export function buildCanonicalFactPack(
   // Stamp the exclusion onto every figure it distorts -- baseline and scenario
   // variants alike. Support metrics understate what the full portfolio would
   // support; the requested withdrawal rate is overstated (excluded value sits
-  // in its denominator); allocation describes the modeled holdings only.
+  // in its denominator). Composition metrics retain the full itemized-value
+  // denominator and do not redistribute unresolved or unsupported classes.
   const retirementCoverage = snapshot.retirementAnalysis?.dataQuality;
   const excludedValue = retirementCoverage?.unmodeledValue;
   if (finite(excludedValue) && excludedValue > 0) {
     const exclusionBasis =
       `Computed on the ${formatUsd(retirementCoverage?.modeledValue)} this projection modeled, not the full portfolio: ` +
-      `${formatUsd(excludedValue)} of investments is excluded because its asset mix is unknown. `;
+      `${formatUsd(excludedValue)} of investments is excluded because its exposure or a sufficiently long ` +
+      'historical return series is unavailable. ';
     const supportFloorCaveat =
       `${exclusionBasis}Read this as a floor, and state the exclusion whenever you state this number.`;
     const withdrawalRateCaveat =
       `${exclusionBasis}This rate is overstated relative to the full portfolio (read it as a ceiling on the true rate), ` +
       'and state the exclusion whenever you state this number.';
     const partialMixCaveat =
-      `${exclusionBasis}This is the mix of the modeled holdings only; the excluded value's ` +
-      'asset mix is unknown, so it may not be the mix of the full portfolio. ' +
+      `${formatUsd(excludedValue)} is excluded from historical simulation. This composition uses the ` +
+      'full itemized-value denominator and does not renormalize unresolved or unsupported classes, so ' +
+      'the reported buckets may sum to less than 100%. ' +
       'State the exclusion whenever you state this number.';
-    // Exposure and fee metrics are aggregated over the same itemized positions,
-    // so they describe the modeled holdings rather than the portfolio. Their
-    // labels do not say so -- "fee drag across the whole portfolio" is exactly
-    // the claim the exclusion undermines -- so the caveat has to.
-    const modeledHoldingsCaveat =
-      `${exclusionBasis}This is measured across the modeled holdings only; the excluded ` +
-      'value has no itemized positions, so it is not represented in this figure. ' +
-      'State the exclusion whenever you state this number.';
+    // Exposure and fee metrics already include recognizable-but-unsimulated
+    // holdings. Only provider-level value with no itemized position is absent
+    // from their denominator, so do not attach the simulation exclusion to
+    // these facts when every holding is itemized.
+    const notItemizedValue = (retirementCoverage?.unmodeledReasons ?? [])
+      .filter(reason => reason.kind === 'partial-holdings' || reason.kind === 'no-holdings')
+      .reduce((sum, reason) => sum + (finite(reason.amount) ? reason.amount : 0), 0);
+    const itemizedHoldingsCaveat = notItemizedValue > 0
+      ? `${formatUsd(notItemizedValue)} of investments is not itemized by the provider and is not represented. ` +
+        'This metric uses itemized holdings only; state the exclusion whenever you state this number.'
+      : undefined;
     // Match baseline ids and scenario-prefixed ids (`retirement_scenario_*_…`).
     // Exact or `_${metric}` so `historical_withdrawal_rate_*` (scale-invariant)
     // are not swept in with the requested `withdrawal_rate`.
@@ -712,6 +727,7 @@ export function buildCanonicalFactPack(
     const partialMixMetrics = [
       'equity_allocation',
       'fixed_income_allocation',
+      'tips_allocation',
       'cash_allocation',
       'international_allocation',
     ];
@@ -742,9 +758,22 @@ export function buildCanonicalFactPack(
         modeledHoldingsFactIds.has(factId) ||
         modeledHoldingsPrefixes.some(prefix => factId.startsWith(prefix))
       ) {
-        caveat = modeledHoldingsCaveat;
+        caveat = itemizedHoldingsCaveat;
       }
       if (caveat) facts.set(factId, { ...fact, caveat });
+    }
+  }
+
+  if (snapshot.retirementAnalysis?.metrics.tipsAllocationStatus === 'lower-bound') {
+    const tipsFact = facts.get('tips_allocation');
+    if (tipsFact) {
+      const lowerBoundCaveat =
+        'This is only the separately reported TIPS allocation. At least one sourced target-date holding ' +
+        'does not publish embedded TIPS as a separate weight, so the portfolio\'s true TIPS allocation may be higher.';
+      facts.set('tips_allocation', {
+        ...tipsFact,
+        caveat: tipsFact.caveat ? `${tipsFact.caveat} ${lowerBoundCaveat}` : lowerBoundCaveat,
+      });
     }
   }
 

@@ -112,6 +112,9 @@ export function validateResponseGrounding(
   if (retirement?.metrics) {
     knownMetrics.set('withdrawal_rate', retirement.metrics.withdrawalRate * 100);
     knownMetrics.set('equity_allocation', retirement.metrics.equityAllocation);
+    if (retirement.metrics.tipsAllocation !== undefined) {
+      knownMetrics.set('tips_allocation', retirement.metrics.tipsAllocation);
+    }
     knownMetrics.set('years_of_expenses', retirement.metrics.yearsOfExpenses);
   }
   if (retirement?.stressTest) {
@@ -149,6 +152,11 @@ export function validateResponseGrounding(
     textualMetrics.push(
       { label: 'withdrawal rate', pattern: String.raw`\bwithdrawal\s+rate\b`, value: retirement.metrics.withdrawalRate * 100 },
       { label: 'equity allocation', pattern: String.raw`\bequity\s+allocation\b`, value: retirement.metrics.equityAllocation },
+      ...(retirement.metrics.tipsAllocation !== undefined ? [{
+        label: 'TIPS allocation',
+        pattern: String.raw`\bTIPS\s+allocation\b`,
+        value: retirement.metrics.tipsAllocation,
+      }] : []),
       { label: 'years of expenses', pattern: String.raw`\byears?\s+of\s+expenses\b`, value: retirement.metrics.yearsOfExpenses },
     );
   }

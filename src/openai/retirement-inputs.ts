@@ -141,10 +141,13 @@ export function resolveRetirementInputs(args: {
 /**
  * Snapshot date a stored retirement analysis was actually built for.
  *
- * Target-date-fund entries are selected only when `allocationAsOf <= asOfDate`,
- * so two otherwise identical analyses can use different evidence on adjacent
- * dates. The full UTC date therefore belongs in the cache key; a year cannot
- * prevent a January snapshot from seeing a June allocation.
+ * Target-date-fund entries are selected only when their verified
+ * `availableFrom <= asOfDate`. `allocationAsOf` records the older holdings
+ * date separately, so a report cannot become visible to snapshots before it
+ * was published or first observed. Two otherwise identical analyses can use
+ * different evidence on adjacent dates. The full UTC date therefore belongs
+ * in the cache key; a year cannot prevent a January snapshot from seeing a
+ * publication first observed in August.
  *
  * Only an explicit, valid stored `asOfDate` matches. Legacy rows that recorded
  * only `asOfYear` (or nothing), and rows with an invalid date, return null so

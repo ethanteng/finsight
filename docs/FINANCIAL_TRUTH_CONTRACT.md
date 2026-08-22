@@ -88,9 +88,10 @@ fifth of the money is absent. Coverage below 95% caps the analysis's confidence,
 computed on the modeled subset carries the exclusion as a caveat on its canonical fact, so a
 qualified number cannot be quoted unqualified, with the caveat naming the direction of the error.
 Support metrics (portfolio value, years of expenses, survival, depletion) are floors. The requested
-withdrawal rate is overstated, because the excluded value sits in its denominator. Asset-allocation
-shares, country and sector exposure, and portfolio fee drag describe the modeled holdings only,
-since the excluded value has no itemized positions -- their labels do not say so, so the caveat must. Solved
+withdrawal rate is overstated, because the excluded value sits in its denominator. Country and sector
+exposure and portfolio fee drag describe the itemized holdings only, since the excluded value has no
+positions -- their labels do not say so, so the caveat must. Retirement asset-allocation shares use the
+same itemized-value denominator and leave unresolved classes absent rather than renormalizing them.
 sustainable withdrawal rates carry no caveat: withdrawal survival is scale-invariant, so those
 percentages do not move with the excluded value. The modeled basis is measured the way the consuming
 engine sums holdings, not the way the canonical portfolio does, so a stated basis always matches what
@@ -99,12 +100,23 @@ was actually simulated.
 Retirement classification produces exactly one `ResolvedHoldingExposure` per itemized holding.
 Portfolio weights, published composition metrics, simulation inputs, mapping confidence, coverage,
 provenance assumptions, and missing-data labels are projections of that collection; none may run a
-second classifier or retain an independently authored allocation. TIPS remain distinct in the
-holding record and currently use the nominal 10-year government-bond return series as an explicit,
-confidence-lowering proxy. That substitution understates the portfolio's inflation protection,
-especially when withdrawals rise with CPI. Target-date recognition considers every declared provider
+second classifier or retain an independently authored allocation. TIPS remain distinct in both the
+holding record and published composition. They are excluded from historical simulation rather than
+assigned nominal-bond returns: [the United States first issued TIPS in 1997](https://www.treasurydirect.gov/research-center/history-of-marketable-securities/tips/),
+so observed TIPS market history cannot meet the engine's 50-year evidence floor. When a sourced
+target-date publication does not report embedded TIPS separately, the published TIPS percentage is
+labeled as a known lower bound; the unreported residual stays unsupported and is never asserted to
+be zero. Target-date recognition considers every declared provider
 type, and any specific fixed-income declaration vetoes a target-like name consistently in Plaid views,
 canonical snapshots, and retirement analytics.
+
+Known credit, international-bond, and real-asset holdings are likewise excluded rather than passed
+through the nominal Treasury series. Recognizing one of those classes does not add it to the simulated
+taxonomy; a new sleeve requires a checked-in historical total-return series that can support the
+engine's evidence and horizon requirements. Qualitative characteristics that interpret historical
+outcomes use the normalized mix of the value actually simulated; published composition percentages
+retain the full itemized-value denominator. Those are different named bases, not independently
+classified portfolios.
 
 Two allocation buckets describe missing information and must not be merged, because they describe
 opposite problems with different remedies. `Not itemized` is value an account reports that no holding
@@ -113,12 +125,15 @@ is a security we do hold whose asset class we could not resolve -- resolvable by
 A target-date fund is neither: it is a declared blend, recognized from its own label rather than from
 a provider type. Heuristic recognition produces an identity (`provider`, `series`, and `vintage`) but
 never an allocation. A separate lookup accepts only that identity and models it only when a dated
-registry entry links the exact provider, series, and vintage to published holdings no later than the
-snapshot's full UTC date. The registry performs no label parsing, and no formula or generic glidepath
+registry entry links the exact provider, series, and vintage to published holdings whose verified
+availability date is no later than the snapshot's full UTC date. The holdings' `allocationAsOf` date
+is stored separately from `availableFrom`, so a later publication cannot leak into an earlier replay.
+Mutable source pages without a publication timestamp use their first verified observation date.
+The registry performs no label parsing, and no formula or generic glidepath
 can supply an authoritative allocation. The newest eligible entry carries
 forward instead of expiring on January 1; its age is recorded, and an entry older than 366 days is
 disclosed as stale, lowers mapping confidence, and hard-caps the final analysis confidence at low.
-The result records the allocation date, source,
+The result records the allocation date, availability date, source,
 source/share-class context, and whether the entry is the exact share class or a public share-class
 proxy. Unsupported sleeves are excluded rather than redistributed and are tracked as a partial
 mapping, not falsely reported as a wholly unrecognized holding. A recognized fund with no matching
@@ -140,9 +155,14 @@ no geography, remains unmodeled; the engine does not manufacture a US/internatio
 A provider type that names the wrapper rather than the exposure -- "ETF", "Mutual Fund", a collective
 trust -- carries no asset class and must not be read as one. Such a holding is classified from its
 name while still inside the provider-metadata path, so the provider's own country split and
-geographic focus are applied where they exist, and it is not recorded as a heuristic guess. A
-directly held security whose provider type does name a class keeps its existing domestic default; a
-fund recognized only by name does not, since a fund genuinely could be either.
+geographic focus are applied where they exist, and it is not recorded as a heuristic guess. A fund
+without sourced country data or an explicit geographic name remains unavailable. A provider-typed
+single equity with an exchange-style U.S. ticker may use a disclosed, medium-confidence U.S.-listing
+fallback when country metadata is unavailable; a wrapper alone cannot activate it, and fund-shaped
+labels, mutual-fund ticker conventions, or authoritative fund metadata veto it. A ticker or U.S.
+account alone never supplies fund geography. ADR/ADS/GDR or depositary-share/receipt provider types
+map to international equity directly; the same evidence found only in a security name is recorded as
+name inference, so proxy usage and mapping provenance retain the distinction.
 
 Amounts remain unrounded during calculation; formatting and rounding are presentation concerns. Metrics in API and LLM responses must carry an explicit unit/currency rather than infer one from a label.
 
