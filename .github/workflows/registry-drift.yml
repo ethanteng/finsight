@@ -1,0 +1,52 @@
+name: Registry Source Drift
+
+# Emails when a target-date registry source publishes something other than what
+# its entry records.
+#
+# The registry's allocations are hand-transcribed from provider pages, and those
+# pages are mutable — State Street republishes monthly. #165 made that detectable
+# in the admin panel, but nobody opens a panel to check on something that is
+# usually fine, so this pushes instead.
+#
+# Weekly rather than monthly: State Street's cadence is monthly, and checking at
+# half that interval keeps the detection lag under a fortnight without adding
+# noise, since a clean run sends nothing.
+on:
+  schedule:
+    - cron: '0 13 * * 1'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Print what would be emailed without sending'
+        type: boolean
+        default: false
+
+concurrency:
+  group: registry-source-drift
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Check registry sources and email on drift
+        env:
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          REGISTRY_ALERT_EMAIL_TO: ${{ secrets.REGISTRY_ALERT_EMAIL_TO }}
+          # Quoted through the environment rather than interpolated into `run:`,
+          # matching draft-social-posts: a dispatch input pasted into a shell
+          # command would let anyone able to dispatch this run commands beside
+          # the secrets above.
+          DRY_RUN: ${{ inputs.dry_run && '--dry-run' || '' }}
+        run: npm run notify:registry-drift -- $DRY_RUN
