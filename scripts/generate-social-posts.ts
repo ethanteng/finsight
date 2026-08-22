@@ -44,6 +44,10 @@ const CANONICAL_ORIGIN = (process.env.BLOG_CANONICAL_ORIGIN || 'https://asklinc.
 const SOCIAL_MODEL = process.env.SOCIAL_MODEL || 'claude-opus-5';
 const EMAIL_FROM = process.env.SOCIAL_EMAIL_FROM || 'Ask Linc <noreply@asklinc.com>';
 
+/** Fixed UTM values for the automated Soro programme. */
+const UTM_MEDIUM = 'social';
+const UTM_CAMPAIGN = 'soro_daily';
+
 /** Marks a post whose social copy has been delivered. Internal, so never public. */
 const SENT_TAG = '#social-sent';
 
@@ -120,48 +124,36 @@ type Platform = 'linkedin' | 'facebook' | 'x' | 'bluesky';
 interface PlatformSpec {
   key: Platform;
   label: string;
+  /** utm_source value. Not always the platform key — X is still "twitter" here. */
+  utmSource: string;
   /** Hard character ceiling, measured the way the platform itself measures. */
   limit: number;
-  guidance: string;
 }
 
 const PLATFORMS: PlatformSpec[] = [
   {
     key: 'linkedin',
+    utmSource: 'linkedin',
     label: 'LinkedIn',
     limit: 3000,
-    guidance:
-      '150-300 words. Professional and insight-led, opening on a concrete hook or a surprising statistic from the post. ' +
-      'Short punchy paragraphs, never a wall of text. At most one or two emoji, and only where natural. ' +
-      'End with a soft call to action and the post link. Three to five relevant hashtags on the final line.',
   },
   {
     key: 'facebook',
+    utmSource: 'facebook',
     label: 'Facebook',
     limit: 2000,
-    guidance:
-      '80-150 words. Conversational, friendly and relatable, speaking to everyday money concerns. ' +
-      'Two or three short paragraphs, one or two emoji where they fit. End with the post link and a direct ' +
-      'question that invites replies. Two or three hashtags.',
   },
   {
     key: 'x',
+    utmSource: 'twitter',
     label: 'X / Twitter',
     limit: 280,
-    guidance:
-      'At most 280 characters INCLUDING the link, which always counts as 23 characters however long it is. '
-      + 'Keep the text itself under 240 characters to leave room. ' +
-      'Lead with the single most interesting claim or number in the post — no throat-clearing, no "thread below". ' +
-      'One hashtag at most; often none reads better. The link goes last.',
   },
   {
     key: 'bluesky',
+    utmSource: 'bluesky',
     label: 'Bluesky',
     limit: 280,
-    guidance:
-      'At most 280 characters INCLUDING the full link, which counts every character (Bluesky does not shorten links). '
-      + 'The link runs to about 50 characters, so keep the text itself under 210. ' +
-      'Punchy and direct, leading with the sharpest insight. One or two hashtags at most.',
   },
 ];
 
@@ -187,6 +179,29 @@ function measure(platform: Platform, text: string): number {
   return [...text].length;
 }
 
+/**
+ * The link for one platform, carrying the campaign tags. Built here rather than
+ * asked of the model: these run past 170 characters, and a single mistyped
+ * parameter loses the attribution silently while still looking like a link.
+ */
+function trackedUrl(spec: PlatformSpec, baseUrl: string, slug: string): string {
+  const params = new URLSearchParams({
+    utm_source: spec.utmSource,
+    utm_medium: UTM_MEDIUM,
+    utm_campaign: UTM_CAMPAIGN,
+    utm_content: slug,
+  });
+  return `${baseUrl}?${params.toString()}`;
+}
+
+type PlatformLinks = Record<Platform, string>;
+
+function buildLinks(baseUrl: string, slug: string): PlatformLinks {
+  return Object.fromEntries(
+    PLATFORMS.map((spec) => [spec.key, trackedUrl(spec, baseUrl, slug)]),
+  ) as PlatformLinks;
+}
+
 function overLimit(spec: PlatformSpec, text: string): boolean {
   return measure(spec.key, text) > spec.limit;
 }
@@ -205,10 +220,13 @@ interface CopyProblems {
   linkless: PlatformSpec[];
 }
 
-function findProblems(copy: SocialCopy, url: string): CopyProblems {
+function findProblems(copy: SocialCopy, links: PlatformLinks): CopyProblems {
   return {
     tooLong: PLATFORMS.filter((spec) => overLimit(spec, copy[spec.key])),
-    linkless: PLATFORMS.filter((spec) => missingUrl(copy[spec.key], url)),
+    // Each platform carries its own tagged link, so each is checked against its
+    // own — copy holding another platform's link would attribute to the wrong
+    // source.
+    linkless: PLATFORMS.filter((spec) => missingUrl(copy[spec.key], links[spec.key])),
   };
 }
 
@@ -219,33 +237,190 @@ const COPY_TOOL = {
     type: 'object' as const,
     additionalProperties: false,
     properties: Object.fromEntries(
-      PLATFORMS.map((p) => [p.key, { type: 'string', description: `${p.label}: ${p.guidance}` }]),
+      PLATFORMS.map((p) => [p.key, { type: 'string', description: `The ${p.label} post.` }]),
     ),
     required: PLATFORMS.map((p) => p.key),
   },
 };
 
-function systemPrompt(): string {
-  return [
-    'You write social copy promoting articles from Ask Linc, an AI-powered personal finance assistant at https://asklinc.com.',
-    '',
-    'Voice: knowledgeable, practical, plain-spoken. Never salesy, never breathless, no growth-hack cadence.',
-    'Ground every post in something specific the article actually says — a number, a tradeoff, a concrete scenario.',
-    'A post that could have been written without reading the article is a failure.',
-    'Never invent statistics or claims that are not in the article.',
-    'Include the post URL exactly as given, without tracking parameters or shortening.',
-    '',
-    'Per-platform requirements:',
-    ...PLATFORMS.map((p) => `- ${p.label}: ${p.guidance}`),
-  ].join('\n');
-}
+/**
+ * The editorial brief. Platform requirements live here rather than on
+ * `PlatformSpec` so they can be stated at the length they need.
+ *
+ * Two sections are adapted to how the copy is actually collected: the posts are
+ * returned through a forced tool call rather than as labelled sections, and the
+ * links are supplied per platform in the brief rather than composed by the
+ * model.
+ */
+const SYSTEM_PROMPT = `You write social media posts promoting published articles from Ask Linc, an AI-powered personal finance platform at https://asklinc.com.
 
-function postBrief(post: GhostPostRecord, url: string): string {
+Your job is not to summarize the article. Your job is to find the most interesting idea inside it and turn that idea into a post worth reading on its own.
+
+Editorial standard
+
+Read the entire article before drafting.
+Before writing, internally identify the 2-4 strongest social angles in the article. Good angles include:
+
+* a surprising number or comparison
+* a counterintuitive conclusion
+* a useful rule of thumb
+* a misconception the article corrects
+* a meaningful tradeoff
+* a concrete financial scenario
+* a consequence that isn't immediately obvious
+* a practical question readers should be asking themselves
+
+Choose the strongest angle for each platform.
+A post that could have been written without reading the article is a failure.
+Ground every post in something specific the article actually says. Use its numbers, examples, reasoning, scenarios, or conclusions.
+Never invent statistics, examples, claims, quotes, or conclusions that are not supported by the article.
+Do not turn the article into clickbait. If the article's conclusion is nuanced, preserve that nuance.
+
+Voice
+
+Ask Linc sounds:
+
+* knowledgeable
+* practical
+* plain-spoken
+* curious
+* slightly opinionated when the evidence supports it
+* comfortable talking about money like a normal person
+
+It does not sound:
+
+* salesy
+* breathless
+* corporate
+* inspirational
+* preachy
+* like a financial influencer
+* like a growth marketer
+
+Prefer concrete language over abstractions.
+Write like a smart person sharing something they found genuinely useful - not a brand announcing that it has published content.
+Avoid stock social-media phrases such as:
+
+* "When it comes to..."
+* "Here's the thing..."
+* "Most people don't realize..."
+* "Let's talk about..."
+* "In today's..."
+* "Whether you're..."
+* "This is a game changer."
+* "You might be surprised..."
+* "Read on to learn more."
+* "We break it down."
+* "Knowledge is power."
+
+Do not manufacture controversy or suspense.
+Don't begin every post with a question. Don't force a question when a declarative statement is stronger.
+
+Relationship to Ask Linc
+
+The article is the subject of the post, not the Ask Linc product.
+Do not shoehorn Ask Linc features, pricing, or positioning into the copy unless the article itself makes them relevant.
+The broader Ask Linc worldview can shape the writing:
+Financial decisions are rarely answered well by generic rules alone. The useful answer often depends on someone's actual income, spending, assets, debts, taxes, goals, timeline, and tradeoffs.
+Ask Linc favors specific numbers, explicit assumptions, visible calculations, and practical recommendations over vague financial advice.
+But communicate that worldview through the substance of the post rather than advertising the product.
+
+Platform requirements
+
+LinkedIn
+Target 120-220 words. Go longer only when the idea genuinely warrants it.
+Make it insight-led rather than promotional.
+Open with the article's strongest observation, number, tension, or conclusion. Develop one central idea rather than recapping several sections of the article.
+Use short paragraphs. Sentence fragments are fine occasionally when natural.
+A useful structure is:
+specific hook -> why it matters -> nuance/tradeoff -> article
+But vary the structure so posts don't become formulaic.
+End naturally with a low-pressure reason to read the article and the URL.
+Do not use phrases like "Check out our latest blog post."
+Emoji are optional and usually unnecessary.
+Use 0-3 relevant hashtags. Prefer zero when hashtags don't add anything.
+
+Facebook
+Target 70-140 words.
+Write conversationally, as though sharing an interesting money observation with people you know.
+Make the financial situation feel recognizable and concrete.
+Focus on one useful takeaway rather than summarizing the article.
+A question at the end is welcome only if there is a genuinely interesting question people might answer. Never tack on generic engagement bait such as "What do you think?"
+Use emoji sparingly or not at all.
+Use 0-2 hashtags, only when natural.
+Include the URL.
+
+X / Twitter
+Maximum 280 characters total.
+Assume the URL consumes 23 characters regardless of its actual length.
+Aim for 220 characters or fewer before the link to leave comfortable room.
+Use the single sharpest idea from the article.
+No setup. No headline-style intro. No "new post," "new on the blog," or "thread below."
+Favor:
+specific claim -> implication
+or
+number -> surprising context
+One hashtag at most, and usually none.
+Put the link last.
+
+Bluesky
+Maximum 280 characters total, and the URL counts at its actual character length.
+Leave sufficient room for the provided URL.
+Use the strongest insight, but don't simply duplicate the X post. When possible, use a different angle, observation, or phrasing.
+Keep it conversational and specific.
+Use 0-1 hashtags unless there is an unusually good reason for more.
+Put the link last.
+
+Cross-platform rules
+
+Do not write four resized versions of the same post.
+LinkedIn can explore the reasoning or tradeoff.
+Facebook can emphasize the recognizable human situation.
+X should isolate the sharpest fact or conclusion.
+Bluesky can highlight a second interesting implication or phrase the primary insight more conversationally.
+Some overlap is inevitable, but each should feel written for that platform.
+Do not overstate what the article proves.
+Do not give personalized financial advice to the reader.
+Do not use dollar signs, percentages, or numerical claims unless they come directly from the article or are simple arithmetic clearly supported by it.
+Preserve meaningful qualifiers such as "may," "could," "on average," or assumptions underlying calculations.
+
+Links
+
+Every platform has its own link, listed in the brief along with the characters it costs on that platform. Paste that platform's link into that platform's post exactly as given - never edit, shorten, reorder or drop its tracking parameters, and never use another platform's link.
+
+Output
+
+Return the four posts through the draft_social_posts tool, one field per platform.
+Do not include analysis, explanations, alternative versions, character counts, or commentary in any field.
+
+Ask Linc context
+
+Ask Linc is a consumer financial planning platform that lets people connect their financial accounts and ask questions about decisions such as retirement, buying a home, changing jobs, parental leave, debt, investing, cash reserves, and family planning.
+It combines a user's financial data with calculations and current financial context to produce recommendations with visible assumptions, calculations, source dates, and tradeoffs.
+Ask Linc's philosophy is that important financial questions deserve answers grounded in someone's actual financial picture - not generic advice, opaque AI output, or another dashboard.
+The brand values independence, transparency, privacy, evidence, and user control.
+Its audience is primarily U.S. professionals, couples, and families who have multiple accounts and competing financial goals and want understandable, decision-ready answers without having to build the analysis themselves.`;
+
+function postBrief(post: GhostPostRecord, links: PlatformLinks): string {
   const body = (post.plaintext || post.excerpt || post.custom_excerpt || '').slice(0, 6000);
+
+  // The tagged links are long, and on the short platforms they eat the budget.
+  // Stating what is left removes the guesswork a model is worst at.
+  const linkLines = PLATFORMS.map((spec) => {
+    const link = links[spec.key];
+    const cost = measure(spec.key, link);
+    const line = `- ${spec.label}: ${link}`;
+    return spec.limit <= 280
+      ? `${line}\n  (that link costs ${cost} of the ${spec.limit} characters, leaving about ${spec.limit - cost - 1} for your text)`
+      : line;
+  });
+
   return [
     `Title: ${post.title}`,
-    `URL: ${url}`,
     `Summary: ${post.custom_excerpt || post.excerpt || 'none'}`,
+    '',
+    'Link to use in each post:',
+    ...linkLines,
     '',
     'Article:',
     body,
@@ -274,20 +449,20 @@ function readCopy(response: Anthropic.Message): { copy: SocialCopy; toolUseId: s
  * rather than trusted, because an over-length X or Bluesky post simply cannot
  * be published.
  */
-async function draftCopy(client: Anthropic, post: GhostPostRecord, url: string): Promise<SocialCopy> {
+async function draftCopy(client: Anthropic, post: GhostPostRecord, links: PlatformLinks): Promise<SocialCopy> {
   const request = (messages: Anthropic.MessageParam[]) => client.messages.create({
     model: SOCIAL_MODEL,
     max_tokens: 2048,
-    system: systemPrompt(),
+    system: SYSTEM_PROMPT,
     tools: [COPY_TOOL],
     tool_choice: { type: 'tool', name: 'draft_social_posts', disable_parallel_tool_use: true },
     messages,
   });
 
-  const first = await request([{ role: 'user', content: postBrief(post, url) }]);
+  const first = await request([{ role: 'user', content: postBrief(post, links) }]);
   const { copy, toolUseId } = readCopy(first);
 
-  const problems = findProblems(copy, url);
+  const problems = findProblems(copy, links);
   if (problems.tooLong.length === 0 && problems.linkless.length === 0) return copy;
 
   const summary = [
@@ -301,7 +476,7 @@ async function draftCopy(client: Anthropic, post: GhostPostRecord, url: string):
   // first block is a matching `tool_result`; anything else is rejected by the
   // API with a 400 before the model ever sees it.
   const { copy: repaired } = readCopy(await request([
-    { role: 'user', content: postBrief(post, url) },
+    { role: 'user', content: postBrief(post, links) },
     { role: 'assistant', content: first.content },
     {
       role: 'user',
@@ -315,8 +490,8 @@ async function draftCopy(client: Anthropic, post: GhostPostRecord, url: string):
             `- ${spec.label}: ${measure(spec.key, copy[spec.key])} characters, limit ${spec.limit}` +
             (spec.key === 'x' ? ' (the link counts as 23 characters)' : ''),
           ),
-          ...problems.linkless.map((spec) => `- ${spec.label}: must contain the URL exactly as given`),
-          `The URL is ${url} — include it verbatim. Cut words, never the link.`,
+          ...problems.linkless.map((spec) => `- ${spec.label}: must contain its link exactly: ${links[spec.key]}`),
+          'Cut words, never the link, and never its tracking parameters.',
         ].join('\n'),
       }],
     },
@@ -325,7 +500,7 @@ async function draftCopy(client: Anthropic, post: GhostPostRecord, url: string):
   // Length is left to the recipient to trim, flagged in the email. A missing
   // link cannot be trimmed into existence, so it fails the post instead: it
   // stays untagged and is retried on the next run.
-  const stillLinkless = PLATFORMS.filter((spec) => missingUrl(repaired[spec.key], url));
+  const stillLinkless = PLATFORMS.filter((spec) => missingUrl(repaired[spec.key], links[spec.key]));
   if (stillLinkless.length > 0) {
     throw new Error(`copy omitted the post URL for ${stillLinkless.map((s) => s.label).join(', ')}`);
   }
@@ -444,9 +619,10 @@ async function main(): Promise<void> {
     }
 
     const url = `${CANONICAL_ORIGIN}/blog/${post.slug}`;
+    const links = buildLinks(url, post.slug as string);
     try {
       console.log(`  drafting: ${post.title}`);
-      const copy = await draftCopy(client, post, url);
+      const copy = await draftCopy(client, post, links);
 
       if (options.dryRun || !resend) {
         printCopy(post, url, copy);
@@ -517,4 +693,4 @@ if (require.main === module) {
   });
 }
 
-export { measure, overLimit, missingUrl, findProblems, PLATFORMS, readCopy, emailHtml, parseArgs, SENT_TAG };
+export { measure, overLimit, missingUrl, findProblems, trackedUrl, buildLinks, PLATFORMS, readCopy, emailHtml, parseArgs, SENT_TAG };
