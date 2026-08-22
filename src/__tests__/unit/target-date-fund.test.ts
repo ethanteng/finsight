@@ -41,6 +41,11 @@ describe('target-date fund recognition', () => {
       series: 'pathway',
       vintage: 2040,
     });
+    expect(identifyTargetDateFund('UC Pathway Fund 2040')).toEqual({
+      provider: 'uc',
+      series: 'pathway',
+      vintage: 2040,
+    });
     expect(identifyTargetDateFund('Target Date 2035 Fund')).toEqual({
       series: 'target-date',
       vintage: 2035,
@@ -71,6 +76,11 @@ describe('target-date fund recognition', () => {
     expect(targetDateFundYear('iShs iBd Dec 25 Shs')).toBeNull();
     expect(targetDateFundYear('iShares iBonds Dec 2030 Term Treasury ETF')).toBeNull();
     expect(isTargetDateFund('Vanguard Total Stock Market ETF')).toBe(false);
+  });
+
+  it('does not treat an unrelated Pathway name and year as a target-date identity', () => {
+    expect(identifyTargetDateFund('Pathway Capital 2030 Senior Notes')).toBeNull();
+    expect(identifyTargetDateFund('Career Pathway Fund 2025')).toBeNull();
   });
 
   it('requires a plausible year alongside the signal', () => {
@@ -183,6 +193,25 @@ describe('target-date funds in the allocation view', () => {
 
     expect(portfolio.assetAllocation).toEqual([
       { type: 'Fixed Income', value: 10_000, percentage: 100 },
+    ]);
+  });
+
+  it('does not give an untyped Pathway debt label the target-date display bucket', () => {
+    const portfolio = buildCanonicalInvestmentPortfolio(
+      [{
+        id: 'h',
+        account_id: 'a',
+        security_id: 'note',
+        institution_value: 10_000,
+        iso_currency_code: 'USD',
+      }],
+      [{ security_id: 'note', name: 'Pathway Capital 2030 Senior Notes' }],
+      [],
+      'USD',
+    );
+
+    expect(portfolio.assetAllocation).toEqual([
+      { type: 'Unrecognized holdings', value: 10_000, percentage: 100 },
     ]);
   });
 });

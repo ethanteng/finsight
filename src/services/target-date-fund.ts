@@ -29,10 +29,10 @@ const TARGET_DATE_SIGNALS: RegExp[] = [
   /target\s*-?\s*(date|ret)/i,
   /life\s*-?\s*path/i,
   /\blpath\b/i,
-  /\bpathway\b/i,
   /\bfreedom\s+20\d{2}\b/i,
   /\bretirement\s+20\d{2}\b/i,
 ];
+const UC_PATHWAY_SIGNAL = /\bpathway\b/i;
 
 /** Plausible target years. Beyond this a match is far likelier to be noise. */
 const MIN_TARGET_YEAR = 2000;
@@ -66,7 +66,6 @@ function seriesFromLabel(text: string, provider?: string): string | undefined {
   if (provider === 'american-funds' && /target\s*-?\s*date/i.test(text)) return 'target-date';
 
   if (/(?:life\s*-?\s*path|\blpath\b)/i.test(text)) return 'lifepath';
-  if (/\bpathway\b/i.test(text)) return 'pathway';
   if (/\bfreedom\b/i.test(text)) return 'freedom';
   if (/target\s*-?\s*date/i.test(text)) return 'target-date';
   if (/target\s*-?\s*(?:ret|retirement)/i.test(text)) return 'target-retirement';
@@ -99,9 +98,17 @@ export function identifyTargetDateFund(
     .join(' ');
   if (!text) return null;
 
+  const provider = providerFromLabel(text);
+  // "Pathway" alone is used by unrelated businesses and debt securities. It
+  // identifies a target-date series only when the same labels identify UC,
+  // which preserves the verified "UC Pathway Fund 2040" product name without
+  // relabeling an untyped "Pathway Capital 2030 Senior Notes" holding.
+  const recognitionSignals = provider === 'uc'
+    ? [...TARGET_DATE_SIGNALS, UC_PATHWAY_SIGNAL]
+    : TARGET_DATE_SIGNALS;
   let signalIndex = -1;
   let signalLength = 0;
-  for (const signal of TARGET_DATE_SIGNALS) {
+  for (const signal of recognitionSignals) {
     const match = text.match(signal);
     if (match?.index === undefined) continue;
     if (signalIndex === -1 || match.index < signalIndex) {
@@ -147,7 +154,6 @@ export function identifyTargetDateFund(
   }
 
   if (!best) return null;
-  const provider = providerFromLabel(text);
   const series = seriesFromLabel(text, provider);
   return {
     ...(provider ? { provider } : {}),
