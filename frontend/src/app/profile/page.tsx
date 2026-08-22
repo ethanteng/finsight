@@ -1113,9 +1113,12 @@ export default function ProfilePage() {
       }
 
       // Per-institution lists are independent of loadConnectedAccounts; bump both
-      // so a partial disconnect does not leave stale rows on the page.
+      // so a partial disconnect does not leave stale rows on the page. The Public
+      // direct panel must refresh too: disconnect-accounts destroys the stored
+      // secret, and leaving it on "Connected" would lie about a tradeable key.
       setPlaidConnectionsKey(key => key + 1);
       setSnapTradeConnectionsKey(key => key + 1);
+      setPublicDirectKey(key => key + 1);
       loadConnectedAccounts();
     } catch (_error) {
       setDeleteMessage('An error occurred while disconnecting your accounts. Please try again.');
@@ -1433,6 +1436,9 @@ export default function ProfilePage() {
                   // A new or repaired connection changes the institution list, so
                   // re-read it rather than leaving a row that no longer matches.
                   setSnapTradeConnectionsKey(key => key + 1);
+                  // Linking Public (or repairing it) can flip direct-connection
+                  // eligibility once the snapshot catches up; re-check the panel.
+                  setPublicDirectKey(key => key + 1);
                 }}
               />
             </div>
