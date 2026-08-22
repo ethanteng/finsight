@@ -9,6 +9,8 @@
 
 import { CONTEXT_PACK_IDS, type ContextPackId } from '../openai/context-packs';
 import type { EvidenceManifest } from '../openai/show-the-math-types';
+import type { RemovedKeyNumber, RemovedProseSentence } from '../openai/response-facts';
+import type { PlannedSearchQuery, SearchQueryEvidence } from '../data/search-types';
 
 export interface AnswerQualityConversation {
   id: string;
@@ -48,6 +50,29 @@ export interface AnswerQualityObservation {
   searchProviderCalls: number;
   searchCacheHits: number;
   searchResultCount: number;
+  /**
+   * Everything behind the summary counters, so a reviewer can see the answer the
+   * safeguards acted on instead of only how often they acted.
+   */
+  details: AnswerQualityDetails;
+}
+
+/** The per-answer record the admin view expands into. */
+export interface AnswerQualityDetails {
+  /** Deterministic grounding complaints, in the wording the validator produced. */
+  groundingIssues: string[];
+  /** Reasoning objections raised by the secondary reviewer, by phase. */
+  secondaryIssues: Array<{ phase: 'initial' | 'retry'; issues: string[] }>;
+  /** Sentences cut out of the delivered answer, with the values that failed. */
+  removedSentences: RemovedProseSentence[];
+  /** Key numbers dropped because they did not cite or match a canonical fact. */
+  removedKeyNumbers: RemovedKeyNumber[];
+  /** The discarded answer, when the whole thing was swapped for the placeholder. */
+  replacedSummary?: string;
+  /** Queries the plan asked for, whether or not retrieval reached the provider. */
+  plannedSearchQueries: PlannedSearchQuery[];
+  /** What each query hit and returned, including queries that failed outright. */
+  searchQueryOutcomes: SearchQueryEvidence[];
 }
 
 function manifestOf(showTheMathData: unknown): EvidenceManifest | null {
@@ -150,6 +175,17 @@ function toObservation(conversation: AnswerQualityConversation): AnswerQualityOb
   const finalSearchQueries = planning?.primaryTool?.searchQueries ?? planning?.searchQueries ?? [];
   const searchEvidence = manifest.evidenceRefs?.search;
   const searchRequested = finalPacks.includes('search_context') && finalSearchQueries.length > 0;
+  const removals = deterministic?.removals;
+  // A plan whose every query failed has no search evidence block, so routing
+  // counts have to come from the standalone outcome list instead of looking
+  // like the provider was never called.
+  const searchQueryOutcomes = searchEvidence?.queryOutcomes
+    ?? manifest.evidenceRefs?.searchQueryOutcomes
+    ?? [];
+  const searchProviderCalls = searchEvidence?.providerCalls
+    ?? searchQueryOutcomes.filter((outcome) => outcome.source === 'provider').length;
+  const searchCacheHits = searchEvidence?.cacheHits
+    ?? searchQueryOutcomes.filter((outcome) => outcome.source === 'cache').length;
   return {
     id: conversation.id,
     createdAt: new Date(conversation.createdAt).toISOString(),
@@ -169,9 +205,20 @@ function toObservation(conversation: AnswerQualityConversation): AnswerQualityOb
     searchRequested,
     searchQueryCount: finalSearchQueries.length,
     searchRetrieved: Boolean(searchEvidence),
-    searchProviderCalls: searchEvidence?.providerCalls ?? 0,
-    searchCacheHits: searchEvidence?.cacheHits ?? 0,
+    searchProviderCalls,
+    searchCacheHits,
     searchResultCount: searchEvidence?.resultCount ?? 0,
+    details: {
+      groundingIssues: deterministic?.issues ?? [],
+      secondaryIssues: (manifest.validation?.secondary ?? [])
+        .filter((validation) => validation.issues.length > 0)
+        .map((validation) => ({ phase: validation.phase, issues: validation.issues })),
+      removedSentences: removals?.sentences ?? [],
+      removedKeyNumbers: removals?.keyNumbers ?? [],
+      ...(removals?.replacedSummary && { replacedSummary: removals.replacedSummary }),
+      plannedSearchQueries: finalSearchQueries,
+      searchQueryOutcomes,
+    },
     ...deliveryStatus({ outcome, rating, lateExpansion }),
   };
 }
@@ -216,6 +263,10 @@ export interface AnswerQualityReport {
     salvaged: number;
     replaced: number;
     verifiedRate: number | null;
+    /** Sentences cut from delivered answers across the window. */
+    trimmedSentences: number;
+    /** Key numbers dropped from delivered answers across the window. */
+    trimmedKeyNumbers: number;
   };
   planning: {
     semanticPlans: number;
@@ -255,6 +306,8 @@ export interface AnswerQualityReport {
     cacheHits: number;
     cacheReuseRate: number | null;
     resultCount: number;
+    /** Individual queries the provider rejected or timed out on. */
+    failedQueries: number;
   };
   users: {
     rated: number;
@@ -347,6 +400,12 @@ export function buildAnswerQualityReport(
       salvaged,
       replaced,
       verifiedRate: rate(verified, observations.length),
+      trimmedSentences: observations.reduce(
+        (total, observation) => total + observation.details.removedSentences.length, 0
+      ),
+      trimmedKeyNumbers: observations.reduce(
+        (total, observation) => total + observation.details.removedKeyNumbers.length, 0
+      ),
     },
     planning: {
       semanticPlans: semantic.length,
@@ -383,6 +442,10 @@ export function buildAnswerQualityReport(
       cacheHits: searchCacheHits,
       cacheReuseRate: rate(searchCacheHits, searchCacheHits + searchProviderCalls),
       resultCount: searchRequested.reduce((total, observation) => total + observation.searchResultCount, 0),
+      // Counted over every observation: a plan whose queries all failed never
+      // produced search evidence, so it is not in searchRequested above.
+      failedQueries: observations.reduce((total, observation) => total
+        + observation.details.searchQueryOutcomes.filter((outcome) => outcome.status === 'failed').length, 0),
     },
     users: {
       rated: ratings.length,

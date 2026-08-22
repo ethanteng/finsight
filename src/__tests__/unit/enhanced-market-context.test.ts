@@ -184,6 +184,29 @@ describe('Enhanced Market Context System', () => {
       }]);
       expect(result?.results).toHaveLength(1);
       expect(search).toHaveBeenCalledTimes(2);
+      // The failed sibling is still recorded, so the admin view can show that
+      // Brave was asked and why nothing came back.
+      expect(result?.queryOutcomes).toMatchObject([
+        { query: 'current Federal Reserve target rate', source: 'provider', status: 'succeeded', resultCount: 1 },
+        { query: 'current US mortgage rates', source: 'provider', status: 'failed', resultCount: 0, error: 'Brave rate limited' },
+      ]);
+      expect(result?.queryOutcomes?.[0].results[0]).toMatchObject({ url: 'https://federalreserve.gov/rates' });
+    });
+
+    test('should report every query outcome when the whole plan fails', async () => {
+      MockSearchProvider.mock.results[0].value.search.mockRejectedValue(new Error('Brave quota exhausted'));
+      const outcomes: unknown[] = [];
+
+      const result = await dataOrchestrator.getSearchContextForQueries(
+        [{ query: 'current US mortgage rates', purpose: 'rate', freshness: 'pd' }],
+        UserTier.STANDARD,
+        { onQueryOutcomes: (queryOutcomes) => outcomes.push(...queryOutcomes) }
+      );
+
+      expect(result).toBeNull();
+      expect(outcomes).toMatchObject([
+        { query: 'current US mortgage rates', status: 'failed', error: 'Brave quota exhausted', results: [] },
+      ]);
     });
 
     test('should handle search errors gracefully', async () => {

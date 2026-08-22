@@ -4,7 +4,7 @@ import { SearchProvider } from './providers/search';
 import { cacheService } from './cache';
 import { DataSourceManager, dataSourceRegistry } from './sources';
 import { createHash } from 'crypto';
-import type { PlannedSearchQuery } from './search-types';
+import type { PlannedSearchQuery, SearchQueryEvidence, SearchResultEvidence } from './search-types';
 
 export interface TierAwareContext {
   accounts: any[];
@@ -35,6 +35,8 @@ export interface SearchContext {
   lastUpdate: Date;
   cacheHits: number;
   providerCalls: number;
+  /** Per-query record of cache/provider routing and what each query returned. */
+  queryOutcomes?: SearchQueryEvidence[];
 }
 
 export interface SearchResult {
@@ -415,7 +417,10 @@ export class DataOrchestrator {
   /** Retrieve a validated semantic query plan, caching each standalone query independently. */
   async getSearchContextForQueries(
     queries: readonly PlannedSearchQuery[],
-    tier: UserTier
+    tier: UserTier,
+    // A plan whose every query failed returns null, so the record of what was
+    // attempted is handed back separately rather than lost with the context.
+    options: { onQueryOutcomes?: (outcomes: SearchQueryEvidence[]) => void } = {}
   ): Promise<SearchContext | null> {
     console.log('DataOrchestrator: getSearchContextForQueries called with queries:', queries, 'tier:', tier);
 
@@ -430,8 +435,17 @@ export class DataOrchestrator {
     if (queries.length === 0) return null;
 
     const contexts: SearchContext[] = [];
+    const queryOutcomes: SearchQueryEvidence[] = [];
     let cacheHits = 0;
     let providerCalls = 0;
+    const asEvidence = (results: readonly SearchResult[]): SearchResultEvidence[] => results.map((result) => ({
+      title: result.title,
+      url: result.url,
+      source: result.source,
+      snippet: result.snippet,
+      ...(result.age ? { age: result.age } : {}),
+      ...(result.publishedAt ? { publishedAt: result.publishedAt } : {}),
+    }));
     for (const request of queries) {
       // Search evidence is public and provider output is tier-independent. The
       // access check above still gates retrieval, while one identical provider
@@ -442,6 +456,13 @@ export class DataOrchestrator {
         console.log('DataOrchestrator: Using cached search results for query:', request.query);
         cacheHits += 1;
         contexts.push(cached);
+        queryOutcomes.push({
+          ...request,
+          source: 'cache',
+          status: 'succeeded',
+          resultCount: cached.results.length,
+          results: asEvidence(cached.results),
+        });
         continue;
       }
 
@@ -463,13 +484,29 @@ export class DataOrchestrator {
         };
         this.searchCache.set(cacheKey, context);
         contexts.push(context);
+        queryOutcomes.push({
+          ...request,
+          source: 'provider',
+          status: 'succeeded',
+          resultCount: results.length,
+          results: asEvidence(results),
+        });
       } catch (error) {
         // Keep successful sibling queries. Returning null for the whole plan
         // would discard usable public evidence when only one Brave call fails.
         console.error('DataOrchestrator: Failed to get search context for query:', request.query, error);
+        queryOutcomes.push({
+          ...request,
+          source: 'provider',
+          status: 'failed',
+          resultCount: 0,
+          error: error instanceof Error ? error.message : String(error),
+          results: [],
+        });
       }
     }
 
+    options.onQueryOutcomes?.(queryOutcomes);
     if (contexts.length === 0) return null;
 
     const resultsByUrl = new Map<string, SearchResult>();
@@ -486,6 +523,7 @@ export class DataOrchestrator {
       lastUpdate: new Date(),
       cacheHits,
       providerCalls,
+      queryOutcomes,
     };
   }
 

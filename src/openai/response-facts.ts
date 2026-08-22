@@ -388,6 +388,44 @@ const DEPENDENT_OPENER = new RegExp(
 );
 
 /**
+ * A sentence salvage cut out of the delivered answer, recorded so an admin can
+ * see what the user did not receive and why. `unsupportedValues` names the
+ * numbers that failed grounding, in the same wording as the validation issues.
+ */
+export interface RemovedProseSentence {
+  field: 'summary' | 'insight' | 'suggested_action';
+  /** Position within insights/suggested_actions; absent for the summary. */
+  index?: number;
+  text: string;
+  reason: 'unsupported_value' | 'dependent_on_removed';
+  unsupportedValues?: string[];
+}
+
+/** A key number dropped because it did not cite, match, or unit-match a fact. */
+export interface RemovedKeyNumber {
+  key: string;
+  value: number | null;
+  unit?: string;
+  provenance?: string;
+  issues: string[];
+}
+
+/** What salvage removed from an answer before the user saw it. */
+export interface SalvageRemovals {
+  sentences: RemovedProseSentence[];
+  keyNumbers: RemovedKeyNumber[];
+  /** The discarded summary, present only when the whole answer was replaced. */
+  replacedSummary?: string;
+}
+
+/** "$120,000" reads better in a removal record than the bare parsed value. */
+function describeClaim(claim: ProseClaim): string {
+  if (claim.unit === 'usd') return `$${claim.value.toLocaleString('en-US')}`;
+  if (claim.unit === 'percent') return `${claim.value}%`;
+  return String(claim.value);
+}
+
+/**
  * Drop only the sentences carrying an unverifiable number; keep the rest.
  *
  * `startsAfterRemoval` carries the previous entry's state in, because insights
@@ -398,20 +436,25 @@ function stripSentences(
   text: string,
   pack: CanonicalFactPack,
   startsAfterRemoval = false
-): { text: string; removed: number; endedRemoved: boolean } {
+): { text: string; removed: RemovedSentenceReason[]; endedRemoved: boolean } {
   const kept: string[] = [];
-  let removed = 0;
+  const removed: RemovedSentenceReason[] = [];
   let previousRemoved = startsAfterRemoval;
   for (const sentence of splitSentences(text)) {
-    if (sentence.trim() && unsupportedClaims(sentence, pack).length > 0) {
-      removed++;
+    const unsupported = sentence.trim() ? unsupportedClaims(sentence, pack) : [];
+    if (unsupported.length > 0) {
+      removed.push({
+        text: sentence.trim(),
+        reason: 'unsupported_value',
+        unsupportedValues: Array.from(new Set(unsupported.map(describeClaim))),
+      });
       previousRemoved = true;
       continue;
     }
     // Its antecedent just went; on its own it reads as a fragment, and a
     // reviewer or a user will read it as one.
     if (previousRemoved && sentence.trim() && DEPENDENT_OPENER.test(sentence)) {
-      removed++;
+      removed.push({ text: sentence.trim(), reason: 'dependent_on_removed' });
       continue;
     }
     previousRemoved = false;
@@ -422,34 +465,37 @@ function stripSentences(
   return { text: joined, removed, endedRemoved: previousRemoved };
 }
 
+type RemovedSentenceReason = Omit<RemovedProseSentence, 'field' | 'index'>;
+
 export function stripUnverifiedProse(
   response: AskLincResponse,
   pack: CanonicalFactPack
-): { response: AskLincResponse; removed: number } {
-  let removed = 0;
+): { response: AskLincResponse; removed: number; removedSentences: RemovedProseSentence[] } {
+  const removedSentences: RemovedProseSentence[] = [];
   /** Each list is its own chain; a bullet can depend on the bullet above it. */
-  const stripList = (items: readonly string[]): string[] => {
+  const stripList = (items: readonly string[], field: 'insight' | 'suggested_action'): string[] => {
     let carriedRemoval = false;
     const kept: string[] = [];
-    for (const item of items) {
+    items.forEach((item, index) => {
       const result = stripSentences(item, pack, carriedRemoval);
-      removed += result.removed;
+      removedSentences.push(...result.removed.map((sentence) => ({ field, index, ...sentence })));
       carriedRemoval = result.endedRemoved || (result.text.trim() === '' && item.trim() !== '');
       if (result.text) kept.push(result.text);
-    }
+    });
     return kept;
   };
 
   const summaryResult = stripSentences(response.summary || '', pack);
-  removed += summaryResult.removed;
+  removedSentences.push(...summaryResult.removed.map((sentence) => ({ field: 'summary' as const, ...sentence })));
   return {
     response: {
       ...response,
       summary: summaryResult.text,
-      insights: stripList(response.insights || []),
-      suggested_actions: stripList(response.suggested_actions || []),
+      insights: stripList(response.insights || [], 'insight'),
+      suggested_actions: stripList(response.suggested_actions || [], 'suggested_action'),
     },
-    removed,
+    removed: removedSentences.length,
+    removedSentences,
   };
 }
 
@@ -465,10 +511,58 @@ export function salvageUngroundedResponse(
   pack: CanonicalFactPack,
   result: FactResponseValidationResult
 ): AskLincResponse {
+  return salvageUngroundedResponseWithDetail(response, pack, result).response;
+}
+
+/** Which key numbers were dropped, and what each of them was cited as. */
+function describeRemovedKeyNumbers(
+  response: AskLincResponse,
+  result: FactResponseValidationResult
+): RemovedKeyNumber[] {
+  return result.invalidKeyNumbers.map((key) => {
+    const metric = response.key_numbers?.[key];
+    const normalized = typeof metric === 'number' ? { value: metric } : metric;
+    return {
+      key,
+      value: typeof normalized?.value === 'number' ? normalized.value : null,
+      ...(normalized && 'unit' in normalized && normalized.unit ? { unit: normalized.unit } : {}),
+      ...(normalized && 'provenance' in normalized && normalized.provenance
+        ? { provenance: normalized.provenance }
+        : {}),
+      issues: result.issues.filter((issue) => issue.startsWith(`${key} `)),
+    };
+  });
+}
+
+/**
+ * Salvage, with a record of everything it took out.
+ *
+ * The delivered answer only shows what survived, so the removals are the one
+ * place an admin can see what the safeguards actually caught.
+ */
+export function salvageUngroundedResponseWithDetail(
+  response: AskLincResponse,
+  pack: CanonicalFactPack,
+  result: FactResponseValidationResult
+): { response: AskLincResponse; removals: SalvageRemovals } {
   const base = omitInvalidKeyNumbers(response, result.invalidKeyNumbers);
-  const { response: stripped, removed } = stripUnverifiedProse(base, pack);
-  if (!hasSubstantiveContent(stripped.summary || '')) return sanitizeUngroundedResponse(base, result);
+  const { response: stripped, removed, removedSentences } = stripUnverifiedProse(base, pack);
+  const keyNumbers = describeRemovedKeyNumbers(response, result);
+  if (!hasSubstantiveContent(stripped.summary || '')) {
+    return {
+      response: sanitizeUngroundedResponse(base, result),
+      removals: {
+        sentences: removedSentences,
+        keyNumbers,
+        ...(response.summary?.trim() ? { replacedSummary: response.summary.trim() } : {}),
+      },
+    };
+  }
+  const removals: SalvageRemovals = { sentences: removedSentences, keyNumbers };
   // Nothing was cut from the prose, so dropping the miscited key numbers was enough.
-  if (removed === 0) return stripped;
-  return { ...stripped, summary: `${stripped.summary.trim()}\n\n${UNVERIFIED_PROSE_NOTICE}` };
+  if (removed === 0) return { response: stripped, removals };
+  return {
+    response: { ...stripped, summary: `${stripped.summary.trim()}\n\n${UNVERIFIED_PROSE_NOTICE}` },
+    removals,
+  };
 }

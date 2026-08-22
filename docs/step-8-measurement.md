@@ -73,3 +73,24 @@ availability. The authenticated end-to-end audit in
 Durable answer-level planning outcomes are reported in `/admin` Answer quality,
 including preflight fallback, primary-tool widening or failure, and late
 all-pack recovery. See `docs/CONTEXT_PLANNING.md`.
+
+Each recent answer in that panel expands into the evidence behind its counters,
+read from the persisted manifest:
+
+- **Removed from the answer** — the sentences salvage cut before delivery, with
+  the numbers that failed grounding and whether the sentence went because it
+  carried one or because its antecedent did
+  (`validation.deterministic.removals.sentences`).
+- **Dropped key numbers** — figures that did not cite, match, or unit-match a
+  canonical fact (`validation.deterministic.removals.keyNumbers`).
+- **Replaced answer** — the discarded text, when nothing survived and the user
+  received the placeholder (`validation.deterministic.removals.replacedSummary`).
+- **Brave searches** — every standalone query, whether it was served from cache
+  or cost a provider call, and the titles, links, and snippets it returned
+  (`evidenceRefs.search.queryOutcomes`). A plan whose queries all failed has no
+  search context to hang the record on, so those attempts are kept in
+  `evidenceRefs.searchQueryOutcomes` with the provider error.
+
+Search evidence is bounded before it is persisted — see `SEARCH_EVIDENCE_LIMITS`
+in `src/data/search-types.ts`. Manifests written before these fields existed
+simply expand into whatever they do carry.

@@ -2,7 +2,7 @@ import { TierAwareContext } from '../data/orchestrator';
 import { Transaction as UnifiedTransaction, UnifiedFinancialData, Holding, Security, HomeData } from '../services/financial-data-service';
 import type { RetirementScenarioExecution } from '../scenarios/retirement-scenario';
 import type { ScenarioExecutionRecord } from '../scenarios/calculator-registry';
-import type { PlannedSearchQuery } from '../data/search-types';
+import type { PlannedSearchQuery, SearchQueryEvidence } from '../data/search-types';
 import type { PlaidLiabilityDetails } from '../services/plaid-liabilities';
 import type { UnmodeledInvestmentValue } from '../services/investment-coverage';
 
@@ -137,7 +137,14 @@ export interface FinancialContextSnapshot {
     providerCalls: number;
     resultCount: number;
     retrievedAt: string;
+    /** What each planned query hit and returned, bounded for persistence. */
+    queryOutcomes?: SearchQueryEvidence[];
   };
+  /**
+   * Present only when every planned query failed, so there is no search context
+   * to attach the record to. Retrieval was still attempted and is worth showing.
+   */
+  searchQueryOutcomes?: SearchQueryEvidence[];
   marketContext?: string;
   marketContextMetadata?: {
     id?: string;
