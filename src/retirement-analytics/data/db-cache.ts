@@ -535,20 +535,41 @@ export class DatabaseCache {
    * A miss here is deliberately indistinguishable from an expired entry: both
    * mean "go ask the provider". The caller never needs to know which it was.
    */
-  async isCoverageGap(ticker: string, provider: string): Promise<boolean> {
+  async getCoverageGap(
+    ticker: string,
+    provider: string,
+  ): Promise<{ recheckAfter: Date } | null> {
     try {
-      const gap = await this.prisma.providerCoverageGap.findUnique({
+      return await this.prisma.providerCoverageGap.findUnique({
         where: {
           tickerSymbol_provider: { tickerSymbol: coverageGapKey(ticker), provider },
         },
         select: { recheckAfter: true },
       });
-      return Boolean(gap && gap.recheckAfter > new Date());
     } catch (error) {
       // A cache read must never decide whether a fetch happens. Failing open
       // costs one request; failing closed would hide a symbol we do cover.
       console.error(`Error reading coverage gap for ${ticker}:`, error);
-      return false;
+      return null;
+    }
+  }
+
+  /**
+   * Forget a gap because the provider has started covering the symbol.
+   *
+   * Without this a recovered symbol stays on the operator's gap list forever,
+   * claiming it contributes no price history while it is in fact being priced.
+   */
+  async clearCoverageGap(ticker: string, provider: string): Promise<void> {
+    try {
+      // deleteMany rather than delete: a row that is already gone is the
+      // desired state, not an error to handle.
+      await this.prisma.providerCoverageGap.deleteMany({
+        where: { tickerSymbol: coverageGapKey(ticker), provider },
+      });
+    } catch (error) {
+      console.error(`Error clearing coverage gap for ${ticker}:`, error);
+      // Don't throw - cache failures shouldn't break the analysis
     }
   }
 

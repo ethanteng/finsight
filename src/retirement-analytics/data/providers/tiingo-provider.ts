@@ -65,7 +65,10 @@ export class TiingoProvider {
     // Tiingo has already said it does not carry this symbol. Caching only
     // successes meant every uncovered holding was re-requested on every user
     // request, forever, on the critical path. Skip until the entry expires.
-    if (await dbCache.isCoverageGap(ticker, 'tiingo')) {
+    // Read the row rather than a boolean so a successful recheck below can
+    // clear it without costing every healthy symbol an extra write.
+    const knownGap = await dbCache.getCoverageGap(ticker, 'tiingo');
+    if (knownGap && knownGap.recheckAfter > new Date()) {
       throw new TiingoCoverageGapError(ticker);
     }
 
@@ -86,6 +89,13 @@ export class TiingoProvider {
       // Cache in memory for 24 hours (historical data changes infrequently)
       await this.cache.set(ticker, startDate, endDate, timeSeries, 24 * 60 * 60 * 1000);
       
+      // The recheck succeeded, so the gap is over. Leaving the row would keep
+      // the symbol on the operator's gap list while it is being priced.
+      if (knownGap) {
+        await dbCache.clearCoverageGap(ticker, 'tiingo');
+        console.log(`Tiingo now covers ${ticker}; coverage gap cleared`);
+      }
+
       // Also persist to database for long-term storage
       console.log(`💾 Tiingo: Saving to database cache for ${ticker}`);
       await dbCache.savePriceHistory(ticker, timeSeries, 'tiingo').catch((err) => {

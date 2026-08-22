@@ -141,7 +141,7 @@ describe('Tiingo coverage gaps', () => {
   });
 
   it('records a coverage gap when Tiingo has no data for the symbol', async () => {
-    jest.spyOn(dbCache, 'isCoverageGap').mockResolvedValue(false);
+    jest.spyOn(dbCache, 'getCoverageGap').mockResolvedValue(null);
     const record = jest.spyOn(dbCache, 'recordCoverageGap').mockResolvedValue(undefined);
     const fetchImplementation = jest.fn().mockResolvedValue(response(404, {}));
 
@@ -158,7 +158,9 @@ describe('Tiingo coverage gaps', () => {
   });
 
   it('skips the request entirely once a gap is cached', async () => {
-    jest.spyOn(dbCache, 'isCoverageGap').mockResolvedValue(true);
+    jest.spyOn(dbCache, 'getCoverageGap').mockResolvedValue({
+      recheckAfter: new Date(Date.now() + 60_000),
+    });
     const record = jest.spyOn(dbCache, 'recordCoverageGap').mockResolvedValue(undefined);
     const fetchImplementation = jest.fn();
 
@@ -172,7 +174,7 @@ describe('Tiingo coverage gaps', () => {
   });
 
   it('does not treat a server error as a coverage gap', async () => {
-    jest.spyOn(dbCache, 'isCoverageGap').mockResolvedValue(false);
+    jest.spyOn(dbCache, 'getCoverageGap').mockResolvedValue(null);
     const record = jest.spyOn(dbCache, 'recordCoverageGap').mockResolvedValue(undefined);
     const fetchImplementation = jest.fn().mockResolvedValue(response(500, {}));
 
@@ -182,5 +184,36 @@ describe('Tiingo coverage gaps', () => {
 
     // A 500 is transient; caching it would blind us to a symbol we do cover.
     expect(record).not.toHaveBeenCalled();
+  });
+
+  it('clears the gap when an expired recheck finds Tiingo now covers the symbol', async () => {
+    // Expired: past the recheck date, so the request goes out again.
+    jest.spyOn(dbCache, 'getCoverageGap').mockResolvedValue({
+      recheckAfter: new Date(Date.now() - 60_000),
+    });
+    const clear = jest.spyOn(dbCache, 'clearCoverageGap').mockResolvedValue(undefined);
+    const fetchImplementation = jest.fn().mockResolvedValue(response(200, [
+      { date: '2025-06-30T00:00:00Z', adjClose: 100 },
+      { date: '2025-07-31T00:00:00Z', adjClose: 110 },
+    ]));
+
+    await liveProvider(fetchImplementation).getPriceHistory('SSISLX', HISTORY_START, HISTORY_END);
+
+    expect(fetchImplementation).toHaveBeenCalled();
+    expect(clear).toHaveBeenCalledWith('SSISLX', 'tiingo');
+  });
+
+  it('does not write a clear for a symbol that never had a gap', async () => {
+    jest.spyOn(dbCache, 'getCoverageGap').mockResolvedValue(null);
+    const clear = jest.spyOn(dbCache, 'clearCoverageGap').mockResolvedValue(undefined);
+    const fetchImplementation = jest.fn().mockResolvedValue(response(200, [
+      { date: '2025-06-30T00:00:00Z', adjClose: 100 },
+      { date: '2025-07-31T00:00:00Z', adjClose: 110 },
+    ]));
+
+    await liveProvider(fetchImplementation).getPriceHistory('SPY', HISTORY_START, HISTORY_END);
+
+    // The healthy path must not pay for the gap bookkeeping.
+    expect(clear).not.toHaveBeenCalled();
   });
 });
