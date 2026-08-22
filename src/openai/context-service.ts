@@ -912,6 +912,7 @@ async function fetchOrCreateRetirementAnalysis(args: {
         portfolioMetrics: {
           equityAllocation: analysisResult.metrics.equityAllocation,
           tipsAllocation: analysisResult.metrics.tipsAllocation,
+          tipsAllocationStatus: analysisResult.metrics.tipsAllocationStatus,
           withdrawalRate: analysisResult.metrics.withdrawalRate,
           yearsOfExpenses: analysisResult.metrics.yearsOfExpenses,
           historicalWithdrawalRates: analysisResult.metrics.historicalWithdrawalRates

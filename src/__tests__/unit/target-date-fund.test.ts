@@ -103,11 +103,13 @@ describe('target-date fund recognition', () => {
 
   it('requires an exact registered identity before returning an allocation', () => {
     const stateStreet = identifyTargetDateFund('State St Target Ret 2040 SL SF CL III')!;
-    expect(lookupTargetDateAllocation(stateStreet, '2026-06-29')).toBeNull();
-    expect(lookupTargetDateAllocation(stateStreet, '2026-06-30')).toMatchObject({
+    expect(lookupTargetDateAllocation(stateStreet, '2026-08-20')).toBeNull();
+    expect(lookupTargetDateAllocation(stateStreet, '2026-08-21')).toMatchObject({
       identity: stateStreet,
       allocationAsOf: '2026-06-30',
+      availableFrom: '2026-08-21',
       exactAllocation: false,
+      tipsAllocationStatus: 'exact',
     });
     expect(lookupTargetDateAllocation(
       { provider: 'state-street', series: 'another-series', vintage: 2040 },
@@ -243,14 +245,20 @@ describe('target-date funds in retirement mapping', () => {
           series: 'lifepath-index',
           vintage: 2040,
           equityShare: 0.7471,
-          allocationAsOf: '2026-03-31',
-          allocationAgeDays: 275,
+          allocationAsOf: '2026-06-30',
+          allocationAvailableFrom: '2026-07-16',
+          allocationAgeDays: 184,
           staleAllocation: false,
           sourceUrl: 'https://assets.mersofmich.com/forms/MERS_LifePath_2040.pdf',
           sourceContext: 'MERS plan-sponsor fact sheet for the BlackRock LifePath Fund N share class; no separate TIPS weight is published in its holdings',
           exactAllocation: true,
+          tipsAllocationStatus: 'lower-bound',
         });
         expect(mapping.holdingExposures[0].weights?.tips).toBe(0);
+        expect(mapping.tipsAllocationStatus).toBe('lower-bound');
+        expect(populateAssumptions(mapping, holdings, securities).join(' ')).toContain(
+          'Reported TIPS allocation is a known lower bound',
+        );
       });
   });
 
@@ -404,7 +412,7 @@ describe('target-date funds in retirement mapping', () => {
       100_000,
       undefined,
       new Map(),
-      '2026-03-30',
+      '2026-07-15',
     );
     const onPublication = await mapPortfolioToAssetBasket(
       holdings,
@@ -412,15 +420,16 @@ describe('target-date funds in retirement mapping', () => {
       100_000,
       undefined,
       new Map(),
-      '2026-03-31',
+      '2026-07-16',
     );
 
     expect(beforePublication.mappedValue).toBe(0);
     expect(beforePublication.targetDateFunds).toEqual([]);
     expect(onPublication.mappedValue).toBeCloseTo(97_470, 2);
     expect(onPublication.targetDateFunds[0]).toMatchObject({
-      allocationAsOf: '2026-03-31',
-      allocationAgeDays: 0,
+      allocationAsOf: '2026-06-30',
+      allocationAvailableFrom: '2026-07-16',
+      allocationAgeDays: 16,
     });
   });
 
@@ -436,8 +445,9 @@ describe('target-date funds in retirement mapping', () => {
 
     expect(mapping.mappedValue).toBeCloseTo(97_470, 2);
     expect(mapping.targetDateFunds[0]).toMatchObject({
-      allocationAsOf: '2026-03-31',
-      allocationAgeDays: 290,
+      allocationAsOf: '2026-06-30',
+      allocationAvailableFrom: '2026-07-16',
+      allocationAgeDays: 199,
       staleAllocation: false,
     });
   });
@@ -449,7 +459,7 @@ describe('target-date funds in retirement mapping', () => {
       100_000,
       undefined,
       new Map(),
-      '2027-04-02',
+      '2027-07-02',
     );
 
     expect(mapping.targetDateFunds[0].staleAllocation).toBe(true);
@@ -543,8 +553,10 @@ describe('institutional and employer-plan funds', () => {
 
     expect(assumption).toContain('targeting 2040 at 75% equity');
     expect(assumption).toContain('1 targeting 2035 at 67% equity');
-    expect(assumption).toContain('as of 2026-06-30');
-    expect(assumption).toContain('as of 2026-03-31');
+    expect(assumption).toContain('allocation as of 2026-06-30');
+    expect(assumption).toContain('available from 2026-07-16');
+    expect(assumption).toContain('available from 2026-08-21');
+    expect(assumption).toContain('embedded TIPS not separately reported');
     expect(assumption).toContain('State Street Target Retirement');
     expect(assumption).toContain('BlackRock LifePath Index');
     expect(assumption).toContain('State Street public mutual-fund share class');

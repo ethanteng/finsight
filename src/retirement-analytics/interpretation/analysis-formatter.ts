@@ -56,6 +56,7 @@ export function formatAnalysisOutput(
       equityAllocation: portfolioMetrics.equityAllocation,
       fixedIncomeAllocation: portfolioMetrics.fixedIncomeAllocation,
       tipsAllocation: portfolioMetrics.tipsAllocation,
+      tipsAllocationStatus: portfolioMetrics.tipsAllocationStatus,
       cashAllocation: portfolioMetrics.cashAllocation,
       internationalAllocation: portfolioMetrics.internationalAllocation,
       expenseRatioWeighted: portfolioMetrics.expenseRatioWeighted,

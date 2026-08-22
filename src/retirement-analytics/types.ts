@@ -49,9 +49,9 @@ export interface RetirementAnalysisInput {
   unmodeledInvestments?: UnmodeledInvestmentValue | null;
 
   /**
-   * UTC calendar date used to select the newest target-date allocation that
-   * was already published. Defaults to today; supply the snapshot date for a
-   * reproducible replay without look-ahead bias.
+   * UTC calendar date used to select the newest target-date allocation whose
+   * verified availability date has passed. Defaults to today; supply the
+   * snapshot date for a reproducible replay without look-ahead bias.
    */
   asOfDate?: string;
   /** Legacy direct-caller fallback. Production callers should use asOfDate. */
@@ -70,6 +70,8 @@ export interface PortfolioCompositionMetrics {
   equityAllocation: number; // percentage of itemized value classified as US + international equity
   fixedIncomeAllocation: number; // percentage of itemized value classified as nominal bonds, TIPS, credit, or international bonds
   tipsAllocation: number; // percentage of itemized value classified as TIPS
+  /** `lower-bound` when a sourced holding does not separately report embedded TIPS. */
+  tipsAllocationStatus: 'exact' | 'lower-bound';
   cashAllocation: number; // percentage of itemized value classified as cash
   internationalAllocation: number; // percentage of itemized value classified as non-US equity
   concentrationRisk: number; // Herfindahl-Hirschman Index (HHI) across top 10 holdings
@@ -179,6 +181,8 @@ export interface ResolvedHoldingExposure {
   method: HoldingMappingMethod;
   confidence: 'high' | 'medium' | 'low';
   allocationAsOf?: string;
+  /** Earliest date the allocation source was observable without look-ahead. */
+  allocationAvailableFrom?: string;
   allocationAgeDays?: number;
   staleAllocation?: boolean;
   sourceUrl?: string;
@@ -187,6 +191,8 @@ export interface ResolvedHoldingExposure {
   sourceContext?: string;
   /** False when a public sibling share class is used as a documented proxy. */
   exactAllocation?: boolean;
+  /** Whether the source separately reports the holding's embedded TIPS weight. */
+  tipsAllocationStatus?: 'exact' | 'lower-bound';
   /** Recognition result retained even when no sourced allocation is available. */
   targetDateIdentity?: TargetDateFundIdentity;
 }
@@ -205,6 +211,8 @@ export interface PortfolioMapping {
   internationalEquityValue: number;
   nominalBondsValue: number;
   tipsValue: number;
+  /** Whether aggregate `tipsValue` is exact or only the known lower bound. */
+  tipsAllocationStatus?: 'exact' | 'lower-bound';
   /** Known credit/international-bond dollars excluded from simulation but retained in fixed-income composition. */
   unsupportedFixedIncomeValue: number;
   cashValue: number;
@@ -240,11 +248,13 @@ export interface PortfolioMapping {
     vintage: number;
     equityShare: number;
     allocationAsOf: string;
+    allocationAvailableFrom: string;
     allocationAgeDays: number;
     staleAllocation: boolean;
     sourceUrl: string;
     sourceContext: string;
     exactAllocation: boolean;
+    tipsAllocationStatus: 'exact' | 'lower-bound';
   }>;
 }
 
@@ -410,6 +420,7 @@ export interface RetirementAnalysisOutput {
     equityAllocation: number;
     fixedIncomeAllocation?: number;
     tipsAllocation?: number;
+    tipsAllocationStatus?: 'exact' | 'lower-bound';
     cashAllocation?: number;
     internationalAllocation?: number;
     expenseRatioWeighted?: number;

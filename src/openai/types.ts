@@ -170,6 +170,7 @@ export interface FinancialContextSnapshot {
       equityAllocation: number;
       fixedIncomeAllocation?: number;
       tipsAllocation?: number;
+      tipsAllocationStatus?: 'exact' | 'lower-bound';
       cashAllocation?: number;
       internationalAllocation?: number;
       expenseRatioWeighted?: number;

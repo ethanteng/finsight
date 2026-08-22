@@ -588,6 +588,7 @@ describe('retirement correctness contracts', () => {
     expect(metrics.equityAllocation).toBeCloseTo(74.71, 8);
     expect(metrics.fixedIncomeAllocation).toBeCloseTo(22.76, 8);
     expect(metrics.tipsAllocation).toBe(0);
+    expect(metrics.tipsAllocationStatus).toBe('lower-bound');
     expect(mapping.usEquityWeight + mapping.internationalEquityWeight).toBeGreaterThan(0.74);
     expect(metrics.equityAllocation).toBeLessThan(100);
   });

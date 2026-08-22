@@ -558,7 +558,15 @@ export function buildCanonicalFactPack(
     addCalculatedFact('withdrawal_rate', 'Withdrawal rate', retirement.metrics.withdrawalRate * 100, 'percent', 'input * 100', ['withdrawal_rate_ratio']);
     addSnapshotFact('equity_allocation', 'Equity allocation', retirement.metrics.equityAllocation, 'percent', 'retirementAnalysis.metrics.equityAllocation');
     addSnapshotFact('fixed_income_allocation', 'Fixed-income allocation', retirement.metrics.fixedIncomeAllocation, 'percent', 'retirementAnalysis.metrics.fixedIncomeAllocation');
-    addSnapshotFact('tips_allocation', 'TIPS allocation', retirement.metrics.tipsAllocation, 'percent', 'retirementAnalysis.metrics.tipsAllocation');
+    addSnapshotFact(
+      'tips_allocation',
+      retirement.metrics.tipsAllocationStatus === 'lower-bound'
+        ? 'Known TIPS allocation (lower bound)'
+        : 'TIPS allocation',
+      retirement.metrics.tipsAllocation,
+      'percent',
+      'retirementAnalysis.metrics.tipsAllocation',
+    );
     addSnapshotFact('cash_allocation', 'Cash allocation', retirement.metrics.cashAllocation, 'percent', 'retirementAnalysis.metrics.cashAllocation');
     addSnapshotFact('international_allocation', 'International equity allocation', retirement.metrics.internationalAllocation, 'percent', 'retirementAnalysis.metrics.internationalAllocation');
     if (retirement.metrics.expenseRatioWeighted !== undefined) {
@@ -753,6 +761,19 @@ export function buildCanonicalFactPack(
         caveat = itemizedHoldingsCaveat;
       }
       if (caveat) facts.set(factId, { ...fact, caveat });
+    }
+  }
+
+  if (snapshot.retirementAnalysis?.metrics.tipsAllocationStatus === 'lower-bound') {
+    const tipsFact = facts.get('tips_allocation');
+    if (tipsFact) {
+      const lowerBoundCaveat =
+        'This is only the separately reported TIPS allocation. At least one sourced target-date holding ' +
+        'does not publish embedded TIPS as a separate weight, so the portfolio\'s true TIPS allocation may be higher.';
+      facts.set('tips_allocation', {
+        ...tipsFact,
+        caveat: tipsFact.caveat ? `${tipsFact.caveat} ${lowerBoundCaveat}` : lowerBoundCaveat,
+      });
     }
   }
 

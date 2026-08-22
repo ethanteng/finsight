@@ -467,6 +467,9 @@ export function summarizeHoldingExposures(
   const valueCoverage = totalValue > 0 ? mappedValue / totalValue : 1;
   const proxiedValuePercentage = totalValue > 0 ? proxiedValue / totalValue : 0;
   const materialExposures = holdingExposures.filter(exposure => Math.abs(exposure.value) > 0.005);
+  const tipsAllocationStatus = materialExposures.some(
+    exposure => exposure.tipsAllocationStatus === 'lower-bound',
+  ) ? 'lower-bound' : 'exact';
   // Only successfully mapped name-inference results describe how the modeled
   // portfolio was built. Unmapped holdings still use method `name-inference`
   // (the classifier path that failed), but they must not relabel a mostly
@@ -502,12 +505,14 @@ export function summarizeHoldingExposures(
       !exposure.weights ||
       !exposure.targetDateIdentity?.series ||
       exposure.allocationAsOf === undefined ||
+      exposure.allocationAvailableFrom === undefined ||
       exposure.allocationAgeDays === undefined ||
       exposure.staleAllocation === undefined ||
       exposure.sourceUrl === undefined ||
       exposure.sourceProvider === undefined ||
       exposure.sourceContext === undefined ||
-      exposure.exactAllocation === undefined
+      exposure.exactAllocation === undefined ||
+      exposure.tipsAllocationStatus === undefined
     ) {
       return [];
     }
@@ -518,11 +523,13 @@ export function summarizeHoldingExposures(
       vintage: exposure.targetDateIdentity.vintage,
       equityShare: exposure.weights.usEquity + exposure.weights.internationalEquity,
       allocationAsOf: exposure.allocationAsOf,
+      allocationAvailableFrom: exposure.allocationAvailableFrom,
       allocationAgeDays: exposure.allocationAgeDays,
       staleAllocation: exposure.staleAllocation,
       sourceUrl: exposure.sourceUrl,
       sourceContext: exposure.sourceContext,
       exactAllocation: exposure.exactAllocation,
+      tipsAllocationStatus: exposure.tipsAllocationStatus,
     }];
   });
 
@@ -536,6 +543,7 @@ export function summarizeHoldingExposures(
     internationalEquityValue,
     nominalBondsValue,
     tipsValue,
+    tipsAllocationStatus,
     unsupportedFixedIncomeValue,
     cashValue,
     mappedValue,
@@ -647,12 +655,14 @@ export async function mapPortfolioToAssetBasket(
       method: draft.method,
       confidence: draft.confidence,
       allocationAsOf: draft.targetAllocation?.allocationAsOf,
+      allocationAvailableFrom: draft.targetAllocation?.availableFrom,
       allocationAgeDays: draft.targetAllocation?.allocationAgeDays,
       staleAllocation: draft.targetAllocation?.staleAllocation,
       sourceUrl: draft.targetAllocation?.sourceUrl,
       sourceProvider: draft.targetAllocation?.identity.provider,
       sourceContext: draft.targetAllocation?.sourceContext,
       exactAllocation: draft.targetAllocation?.exactAllocation,
+      tipsAllocationStatus: draft.targetAllocation?.tipsAllocationStatus,
       targetDateIdentity: draft.targetDateIdentity
         ? { ...draft.targetDateIdentity }
         : undefined,
@@ -725,10 +735,12 @@ export function populateAssumptions(
       provider: string;
       series: string;
       allocationAsOf: string;
+      allocationAvailableFrom: string;
       allocationAgeDays: number;
       staleAllocation: boolean;
       sourceContext: string;
       exactAllocation: boolean;
+      tipsAllocationStatus: 'exact' | 'lower-bound';
       vintages: Map<string, { count: number; vintage: number; equityShare: number }>;
     }>();
     for (const fund of resolvedMapping.targetDateFunds) {
@@ -736,8 +748,10 @@ export function populateAssumptions(
         fund.provider,
         fund.series,
         fund.allocationAsOf,
+        fund.allocationAvailableFrom,
         fund.sourceContext,
         fund.exactAllocation,
+        fund.tipsAllocationStatus,
       ].join(':');
       let sourceGroup = sourceGroups.get(sourceKey);
       if (!sourceGroup) {
@@ -745,10 +759,12 @@ export function populateAssumptions(
           provider: fund.provider,
           series: fund.series,
           allocationAsOf: fund.allocationAsOf,
+          allocationAvailableFrom: fund.allocationAvailableFrom,
           allocationAgeDays: fund.allocationAgeDays,
           staleAllocation: fund.staleAllocation,
           sourceContext: fund.sourceContext,
           exactAllocation: fund.exactAllocation,
+          tipsAllocationStatus: fund.tipsAllocationStatus,
           vintages: new Map(),
         };
         sourceGroups.set(sourceKey, sourceGroup);
@@ -771,10 +787,12 @@ export function populateAssumptions(
         provider,
         series,
         allocationAsOf,
+        allocationAvailableFrom,
         allocationAgeDays,
         staleAllocation,
         sourceContext,
         exactAllocation,
+        tipsAllocationStatus,
         vintages,
       }) => {
         const providerName = provider === 'state-street'
@@ -793,7 +811,8 @@ export function populateAssumptions(
         return (
           `${providerName} ${seriesName} ` +
           `(${exactAllocation ? 'same share class' : 'public share-class proxy'}; ` +
-          `${sourceContext}; as of ${allocationAsOf}` +
+          `${sourceContext}; allocation as of ${allocationAsOf}; available from ${allocationAvailableFrom}` +
+          `${tipsAllocationStatus === 'lower-bound' ? '; embedded TIPS not separately reported' : ''}` +
           `${staleAllocation ? `; stale by ${Math.floor(allocationAgeDays / 30)} months` : ''}): ` +
           vintageDescription
         );
@@ -834,6 +853,22 @@ export function populateAssumptions(
   }
 
   const tipsValue = Math.abs(resolvedMapping.tipsValue ?? 0);
+  if (resolvedMapping.tipsAllocationStatus === 'lower-bound') {
+    const incompleteTipsExposures = resolvedMapping.holdingExposures.filter(
+      exposure => exposure.tipsAllocationStatus === 'lower-bound' && Math.abs(exposure.value) > 0.005,
+    );
+    const incompleteTipsValue = incompleteTipsExposures.reduce(
+      (sum, exposure) => sum + Math.abs(exposure.value),
+      0,
+    );
+    assumptions.push(
+      `Reported TIPS allocation is a known lower bound because ` +
+      `$${Math.round(incompleteTipsValue).toLocaleString('en-US')} across ` +
+      `${incompleteTipsExposures.length} target-date holding${incompleteTipsExposures.length === 1 ? '' : 's'} ` +
+      `${incompleteTipsExposures.length === 1 ? 'does' : 'do'} not publish embedded TIPS separately; ` +
+      'any unreported sleeve remains excluded rather than recorded as zero or reassigned to nominal bonds'
+    );
+  }
   const nonTipsBondValue = resolvedMapping.holdingExposures.reduce(
     (sum, exposure) => sum + Math.abs(exposure.value * (exposure.weights?.nominalBonds ?? 0)),
     0,

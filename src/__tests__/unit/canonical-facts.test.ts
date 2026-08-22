@@ -337,6 +337,7 @@ describe('buildCanonicalFactPack', () => {
         equityAllocation: 70,
         fixedIncomeAllocation: 20,
         tipsAllocation: 7,
+        tipsAllocationStatus: 'lower-bound',
         cashAllocation: 5,
         internationalAllocation: 5,
         yearsOfExpenses: 20,
@@ -386,6 +387,13 @@ describe('buildCanonicalFactPack', () => {
         'does not renormalize unresolved or unsupported classes',
       );
     }
+    expect(pack.facts.find((fact) => fact.id === 'tips_allocation')).toMatchObject({
+      label: 'Known TIPS allocation (lower bound)',
+      value: 7,
+    });
+    expect(pack.facts.find((fact) => fact.id === 'tips_allocation')?.caveat).toContain(
+      'true TIPS allocation may be higher',
+    );
 
     // Solved sustainable rates are scale-invariant (withdrawal scales with the
     // portfolio), so the exclusion does not move them and they carry no caveat.

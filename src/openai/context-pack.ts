@@ -29,6 +29,7 @@ function compactRetirementAnalysis(snapshot: FinancialContextSnapshot): unknown 
       equityAllocation: analysis.metrics.equityAllocation,
       fixedIncomeAllocation: analysis.metrics.fixedIncomeAllocation,
       tipsAllocation: analysis.metrics.tipsAllocation,
+      tipsAllocationStatus: analysis.metrics.tipsAllocationStatus,
       cashAllocation: analysis.metrics.cashAllocation,
       internationalAllocation: analysis.metrics.internationalAllocation,
       expenseRatioWeighted: analysis.metrics.expenseRatioWeighted,

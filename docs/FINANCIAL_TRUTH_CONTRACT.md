@@ -103,7 +103,10 @@ provenance assumptions, and missing-data labels are projections of that collecti
 second classifier or retain an independently authored allocation. TIPS remain distinct in both the
 holding record and published composition. They are excluded from historical simulation rather than
 assigned nominal-bond returns: [the United States first issued TIPS in 1997](https://www.treasurydirect.gov/research-center/history-of-marketable-securities/tips/),
-so observed TIPS market history cannot meet the engine's 50-year evidence floor. Target-date recognition considers every declared provider
+so observed TIPS market history cannot meet the engine's 50-year evidence floor. When a sourced
+target-date publication does not report embedded TIPS separately, the published TIPS percentage is
+labeled as a known lower bound; the unreported residual stays unsupported and is never asserted to
+be zero. Target-date recognition considers every declared provider
 type, and any specific fixed-income declaration vetoes a target-like name consistently in Plaid views,
 canonical snapshots, and retirement analytics.
 
@@ -122,12 +125,15 @@ is a security we do hold whose asset class we could not resolve -- resolvable by
 A target-date fund is neither: it is a declared blend, recognized from its own label rather than from
 a provider type. Heuristic recognition produces an identity (`provider`, `series`, and `vintage`) but
 never an allocation. A separate lookup accepts only that identity and models it only when a dated
-registry entry links the exact provider, series, and vintage to published holdings no later than the
-snapshot's full UTC date. The registry performs no label parsing, and no formula or generic glidepath
+registry entry links the exact provider, series, and vintage to published holdings whose verified
+availability date is no later than the snapshot's full UTC date. The holdings' `allocationAsOf` date
+is stored separately from `availableFrom`, so a later publication cannot leak into an earlier replay.
+Mutable source pages without a publication timestamp use their first verified observation date.
+The registry performs no label parsing, and no formula or generic glidepath
 can supply an authoritative allocation. The newest eligible entry carries
 forward instead of expiring on January 1; its age is recorded, and an entry older than 366 days is
 disclosed as stale, lowers mapping confidence, and hard-caps the final analysis confidence at low.
-The result records the allocation date, source,
+The result records the allocation date, availability date, source,
 source/share-class context, and whether the entry is the exact share class or a public share-class
 proxy. Unsupported sleeves are excluded rather than redistributed and are tracked as a partial
 mapping, not falsely reported as a wholly unrecognized holding. A recognized fund with no matching

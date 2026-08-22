@@ -23,6 +23,7 @@ export async function analyzePortfolio(
       equityAllocation: 0,
       fixedIncomeAllocation: 0,
       tipsAllocation: 0,
+      tipsAllocationStatus: 'exact',
       cashAllocation: 0,
       internationalAllocation: 0,
       concentrationRisk: 0,
@@ -47,6 +48,7 @@ export async function analyzePortfolio(
       equityAllocation: 0,
       fixedIncomeAllocation: 0,
       tipsAllocation: 0,
+      tipsAllocationStatus: 'exact',
       cashAllocation: 0,
       internationalAllocation: 0,
       concentrationRisk: 0,
@@ -162,6 +164,7 @@ export async function analyzePortfolio(
       ) / totalValue
     ) * 100,
     tipsAllocation: (resolvedMapping.tipsValue / totalValue) * 100,
+    tipsAllocationStatus: resolvedMapping.tipsAllocationStatus ?? 'exact',
     cashAllocation: (resolvedMapping.cashValue / totalValue) * 100,
     internationalAllocation: (resolvedMapping.internationalEquityValue / totalValue) * 100,
     concentrationRisk,
