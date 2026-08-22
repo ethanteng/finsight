@@ -503,6 +503,40 @@ describe('home affordability scenario runner', () => {
     );
   });
 
+  it('prices an all-cash purchase without requiring a benchmark rate', async () => {
+    const cashOnly = snapshot({
+      tierContext: {
+        marketContext: { economicIndicators: {} },
+        tierInfo: { currentTier: 'starter', availableSources: [] },
+        upgradeHints: [],
+      },
+    });
+    const execution: any = await runHomeAffordabilityScenario(cashOnly, {
+      requested: true,
+      primary: variant(
+        { homePrice: 700_000, downPaymentPercent: 100 },
+        { homePrice: '$700,000 home', downPaymentPercent: 'paying all cash' }
+      ),
+    } as any);
+
+    expect(execution.status).toBe('completed');
+    const [scenario] = execution.scenarios;
+    expect(scenario.metrics.loanAmount).toBe(0);
+    expect(scenario.metrics.principalAndInterestMonthly).toBe(0);
+    const rateAssumption = scenario.assumptions.find(
+      (assumption: any) => assumption.key === 'mortgage_rate_percent'
+    );
+    expect(rateAssumption).toMatchObject({
+      value: 0,
+      origin: 'default',
+      source: 'No mortgage required for an all-cash purchase',
+    });
+    expect(validateCanonicalFactPack({
+      version: 1,
+      facts: homeAffordabilityScenarioCanonicalFacts(execution),
+    })).toEqual([]);
+  });
+
   it('refuses a non-positive benchmark rate instead of pricing an interest-free mortgage', async () => {
     const execution: any = await runHomeAffordabilityScenario(
       snapshot({

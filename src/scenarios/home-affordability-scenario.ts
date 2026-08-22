@@ -474,7 +474,12 @@ function resolveVariant(
   const marketRateValue = rawMarketRateValue !== undefined && rawMarketRateValue > 0
     ? rawMarketRateValue
     : undefined;
-  const mortgageRatePercent = overrides.mortgageRatePercent ?? marketRateValue;
+  const resolvedRatePercent = overrides.mortgageRatePercent ?? marketRateValue;
+  // The accepted ranges permit a down payment equal to the price, and a zero
+  // principal never reaches the rate in `mortgagePayment`. An all-cash purchase
+  // must not be made unavailable just because no benchmark loaded.
+  const loanAmount = homePrice - downPaymentAmount;
+  const mortgageRatePercent = resolvedRatePercent ?? (loanAmount <= 0 ? 0 : undefined);
   if (mortgageRatePercent === undefined || mortgageRatePercent < 0 || mortgageRatePercent > 30) {
     return 'A mortgage rate is required. State a rate or load the current mortgage-rate context.';
   }
@@ -483,9 +488,13 @@ function resolveVariant(
     'Annual mortgage rate',
     mortgageRatePercent,
     'percent',
-    overrides.mortgageRatePercent !== undefined ? 'user' : 'external',
+    resolvedRatePercent === undefined
+      ? 'default'
+      : overrides.mortgageRatePercent !== undefined ? 'user' : 'external',
     overrides.sources.mortgageRatePercent
-      ?? (marketRate ? `${marketRate.source}, observation ${marketRate.date}` : undefined)
+      ?? (resolvedRatePercent === undefined
+        ? 'No mortgage required for an all-cash purchase'
+        : marketRate ? `${marketRate.source}, observation ${marketRate.date}` : undefined)
   );
 
   const loanTermYears = overrides.loanTermYears ?? DEFAULT_LOAN_TERM_YEARS;
@@ -664,7 +673,6 @@ function resolveVariant(
     );
   }
 
-  const loanAmount = homePrice - downPaymentAmount;
   const principalAndInterestMonthly = mortgagePayment(
     loanAmount,
     mortgageRatePercent,
