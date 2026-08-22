@@ -30,16 +30,25 @@ describe('formatProvenance', () => {
       .toBeNull();
   });
 
-  it('still de-underscores an id that reads fine', () => {
-    expect(formatProvenance(metric('allocation_equity'))).toBe('allocation equity');
-    expect(formatProvenance(metric('total_investments'))).toBe('total investments');
-    expect(formatProvenance(metric('allocation_target_date_fund'))).toBe('allocation target date fund');
+  it('still de-underscores an id that reads fine, title-cased', () => {
+    // Title-casing lives here rather than in a CSS `capitalize` on the element:
+    // that rule could not tell a fact id from a label, so it also rewrote real
+    // labels ("WFC holding value" -> "Wfc Holding Value").
+    expect(formatProvenance(metric('allocation_equity'))).toBe('Allocation Equity');
+    expect(formatProvenance(metric('total_investments'))).toBe('Total Investments');
+    expect(formatProvenance(metric('allocation_target_date_fund'))).toBe('Allocation Target Date Fund');
+  });
+
+  it('leaves a server label exactly as the server wrote it', () => {
+    // A ticker must survive: "WFC holding value" is not "Wfc Holding Value".
+    expect(formatProvenance(metric('holding_value_h1', 'WFC holding value'))).toBe('WFC holding value');
+    expect(formatProvenance(metric('net_worth', 'Net worth'))).toBe('Net worth');
   });
 
   it('does not mistake a short or wordy segment for an identifier', () => {
     // `401k` is short; `net_worth` has no digits. Neither should suppress the line.
-    expect(formatProvenance(metric('allocation_401k'))).toBe('allocation 401k');
-    expect(formatProvenance(metric('net_worth'))).toBe('net worth');
+    expect(formatProvenance(metric('allocation_401k'))).toBe('Allocation 401k');
+    expect(formatProvenance(metric('net_worth'))).toBe('Net Worth');
   });
 
   it('returns null when there is no provenance at all', () => {
@@ -47,7 +56,7 @@ describe('formatProvenance', () => {
   });
 
   it('ignores a blank label and falls back to the id', () => {
-    expect(formatProvenance(metric('total_cash', '   '))).toBe('total cash');
+    expect(formatProvenance(metric('total_cash', '   '))).toBe('Total Cash');
   });
 
   it('rejects a server label that still embeds an opaque identifier', () => {

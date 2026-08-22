@@ -59,7 +59,13 @@ export function formatProvenance(metric: DisplayKeyNumber): string | null {
   if (!metric.provenance) return null;
   const segments = metric.provenance.split('_').filter(Boolean);
   if (segments.some(isOpaqueSegment)) return null;
-  return segments.join(' ');
+  // Title-cased here rather than by a CSS `capitalize` on the element. That
+  // rule cannot tell a fact id from a label, so it also rewrote server labels:
+  // "WFC holding value" rendered as "Wfc Holding Value", turning a ticker into
+  // a word. Only this fallback wants the transform.
+  return segments
+    .map(segment => segment.charAt(0).toUpperCase() + segment.slice(1))
+    .join(' ');
 }
 
 export function formatKeyNumberValue(key: string, metric: number | DisplayKeyNumber | unknown): string {
