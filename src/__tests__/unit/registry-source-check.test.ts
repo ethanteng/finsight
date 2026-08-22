@@ -1,5 +1,5 @@
-import { describe, expect, it } from '@jest/globals';
-import { hasDiverged, type RegistrySourceResult } from '../../services/registry-source-check';
+import { afterEach, describe, expect, it, jest } from '@jest/globals';
+import { checkRegistrySources, hasDiverged, type RegistrySourceResult } from '../../services/registry-source-check';
 
 const result = (over: Partial<RegistrySourceResult>): RegistrySourceResult => ({
   key: 'state-street/target-retirement/2040',
@@ -41,5 +41,30 @@ describe('registry source divergence', () => {
     const oldButAccurate = result({ status: 'unchanged', allocationAgeDays: 400, staleByAge: true });
     expect(hasDiverged(oldButAccurate)).toBe(false);
     expect(oldButAccurate.staleByAge).toBe(true);
+  });
+});
+
+describe('registry source fetch bounds', () => {
+  const originalFetch = global.fetch;
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+  });
+
+  it('rejects responses that declare more than the size cap before reading the body', async () => {
+    // Admin-triggered fetches follow redirects; an unbounded body read would let
+    // a malicious or misconfigured hop exhaust the process. Content-Length is
+    // checked before the body is consumed.
+    global.fetch = jest.fn(async () =>
+      new Response('ignored', {
+        status: 200,
+        headers: { 'content-length': String(6 * 1024 * 1024) },
+      })
+    ) as typeof fetch;
+
+    const results = await checkRegistrySources();
+    expect(results.length).toBeGreaterThan(0);
+    expect(results.every(entry => entry.status === 'error')).toBe(true);
+    expect(results[0].detail).toMatch(/too large/);
   });
 });

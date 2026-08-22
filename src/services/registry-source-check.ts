@@ -18,6 +18,8 @@ import {
 } from './target-date-fund-registry';
 
 const REQUEST_TIMEOUT_MS = 30_000;
+/** Fact sheets and fund pages stay well under this; the cap is DoS defense. */
+const MAX_RESPONSE_BYTES = 5 * 1024 * 1024;
 
 /** Today in UTC, matching how the rest of the engine derives dates. */
 function todayUtc(): string {
@@ -28,11 +30,56 @@ function sha256(input: string | Uint8Array): string {
   return createHash('sha256').update(input).digest('hex');
 }
 
-async function fetchWithTimeout(url: string): Promise<Response> {
+/**
+ * Fetch a registry source and read its body under the same abort deadline.
+ *
+ * Clearing the timer when headers arrive would let a stalled body hang the
+ * admin request indefinitely (the same trap `http-retry.bindTimeoutToResponse`
+ * exists to prevent). Size is capped because these URLs follow redirects and
+ * an unbounded `arrayBuffer`/`text` is an easy way to exhaust the process.
+ */
+async function fetchBodyLimited(url: string): Promise<Uint8Array> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
-    return await fetch(url, { signal: controller.signal, redirect: 'follow' });
+    const response = await fetch(url, { signal: controller.signal, redirect: 'follow' });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+    const declared = Number(response.headers.get('content-length') || '');
+    if (Number.isFinite(declared) && declared > MAX_RESPONSE_BYTES) {
+      await response.body?.cancel().catch(() => undefined);
+      throw new Error(`response too large (${declared} bytes)`);
+    }
+
+    if (!response.body) {
+      const bytes = new Uint8Array(await response.arrayBuffer());
+      if (bytes.byteLength > MAX_RESPONSE_BYTES) {
+        throw new Error(`response too large (${bytes.byteLength} bytes)`);
+      }
+      return bytes;
+    }
+
+    const reader = response.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let total = 0;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > MAX_RESPONSE_BYTES) {
+        await reader.cancel().catch(() => undefined);
+        throw new Error(`response too large (>${MAX_RESPONSE_BYTES} bytes)`);
+      }
+      chunks.push(value);
+    }
+
+    const bytes = new Uint8Array(total);
+    let offset = 0;
+    for (const chunk of chunks) {
+      bytes.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+    return bytes;
   } finally {
     clearTimeout(timer);
   }
@@ -71,9 +118,8 @@ function normalizeDate(raw: string): string {
  * page happens to summarize today.
  */
 async function observeStateStreet(url: string): Promise<SourceFingerprint> {
-  const response = await fetchWithTimeout(url);
-  if (!response.ok) throw new Error(`HTTP ${response.status}`);
-  const html = await response.text();
+  const bytes = await fetchBodyLimited(url);
+  const html = new TextDecoder('utf-8').decode(bytes);
   const text = html
     .replace(/<script[\s\S]*?<\/script>/gi, ' ')
     .replace(/<style[\s\S]*?<\/style>/gi, ' ')
@@ -115,9 +161,7 @@ async function observeStateStreet(url: string): Promise<SourceFingerprint> {
 
 /** BlackRock publishes a PDF fact sheet, so the bytes themselves are evidence. */
 async function observeBlackRock(url: string): Promise<SourceFingerprint> {
-  const response = await fetchWithTimeout(url);
-  if (!response.ok) throw new Error(`HTTP ${response.status}`);
-  const bytes = new Uint8Array(await response.arrayBuffer());
+  const bytes = await fetchBodyLimited(url);
 
   // The holdings date is rendered inside compressed content streams; reading it
   // needs a PDF toolchain this script deliberately does not depend on. The byte
