@@ -79,6 +79,39 @@ skin tone — is one grapheme and costs 2 in total rather than 2 apiece, so the
 text is segmented before weighting. Bluesky counts code points, so an emoji
 costs 1 there rather than the 2 that `String.length` reports.
 
+## Campaign tracking
+
+Each platform gets its own tagged link, built by the script and handed to the
+model to paste verbatim:
+
+```
+https://asklinc.com/blog/<slug>?utm_source=<platform>&utm_medium=social&utm_campaign=soro_daily&utm_content=<slug>
+```
+
+`utm_source` is `linkedin`, `facebook`, `twitter` (X posts still attribute as
+twitter) or `bluesky`. `utm_medium` and `utm_campaign` are fixed; keeping the
+campaign stable and low-cardinality lets GA4 aggregate the whole programme into
+one row. To compare Soro's output against hand-written posts, give those a
+campaign of their own — without a second label there is nothing to compare
+against.
+
+The URLs are composed in code rather than asked of the model. They run past 170
+characters, and a single mistyped parameter loses the attribution while still
+looking like a working link. Each platform's copy is then checked against *its
+own* link, so copy carrying another platform's tags is rejected and redrafted.
+
+**These tags cost real space on Bluesky**, which counts the whole URL where X
+charges a flat 23 characters for any link. On a 40-character slug the tagged
+link runs about 179 characters, leaving roughly 100 of the 280 for the post
+itself. The brief states the remaining budget per platform so the model is not
+guessing. Dropping `utm_content` on Bluesky alone would return about 50
+characters if the copy feels cramped — the landing page still identifies the
+post.
+
+UTM tags only capture traffic from links placed by hand. Organic search, which
+is the point of the blog programme, arrives untagged; measuring that means
+segmenting on landing page rather than campaign.
+
 ## Drafts are checked before they are sent
 
 After the first draft, every platform is checked for two failures:

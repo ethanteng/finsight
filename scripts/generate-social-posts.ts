@@ -44,6 +44,10 @@ const CANONICAL_ORIGIN = (process.env.BLOG_CANONICAL_ORIGIN || 'https://asklinc.
 const SOCIAL_MODEL = process.env.SOCIAL_MODEL || 'claude-opus-5';
 const EMAIL_FROM = process.env.SOCIAL_EMAIL_FROM || 'Ask Linc <noreply@asklinc.com>';
 
+/** Fixed UTM values for the automated Soro programme. */
+const UTM_MEDIUM = 'social';
+const UTM_CAMPAIGN = 'soro_daily';
+
 /** Marks a post whose social copy has been delivered. Internal, so never public. */
 const SENT_TAG = '#social-sent';
 
@@ -120,6 +124,8 @@ type Platform = 'linkedin' | 'facebook' | 'x' | 'bluesky';
 interface PlatformSpec {
   key: Platform;
   label: string;
+  /** utm_source value. Not always the platform key — X is still "twitter" here. */
+  utmSource: string;
   /** Hard character ceiling, measured the way the platform itself measures. */
   limit: number;
   guidance: string;
@@ -128,6 +134,7 @@ interface PlatformSpec {
 const PLATFORMS: PlatformSpec[] = [
   {
     key: 'linkedin',
+    utmSource: 'linkedin',
     label: 'LinkedIn',
     limit: 3000,
     guidance:
@@ -137,6 +144,7 @@ const PLATFORMS: PlatformSpec[] = [
   },
   {
     key: 'facebook',
+    utmSource: 'facebook',
     label: 'Facebook',
     limit: 2000,
     guidance:
@@ -146,21 +154,21 @@ const PLATFORMS: PlatformSpec[] = [
   },
   {
     key: 'x',
+    utmSource: 'twitter',
     label: 'X / Twitter',
     limit: 280,
     guidance:
-      'At most 280 characters INCLUDING the link, which always counts as 23 characters however long it is. '
-      + 'Keep the text itself under 240 characters to leave room. ' +
+      'At most 280 characters INCLUDING the link, which always counts as 23 characters however long it is. ' +
       'Lead with the single most interesting claim or number in the post — no throat-clearing, no "thread below". ' +
       'One hashtag at most; often none reads better. The link goes last.',
   },
   {
     key: 'bluesky',
+    utmSource: 'bluesky',
     label: 'Bluesky',
     limit: 280,
     guidance:
-      'At most 280 characters INCLUDING the full link, which counts every character (Bluesky does not shorten links). '
-      + 'The link runs to about 50 characters, so keep the text itself under 210. ' +
+      'At most 280 characters INCLUDING the full link, which counts every character (Bluesky does not shorten links). ' +
       'Punchy and direct, leading with the sharpest insight. One or two hashtags at most.',
   },
 ];
@@ -187,6 +195,29 @@ function measure(platform: Platform, text: string): number {
   return [...text].length;
 }
 
+/**
+ * The link for one platform, carrying the campaign tags. Built here rather than
+ * asked of the model: these run past 170 characters, and a single mistyped
+ * parameter loses the attribution silently while still looking like a link.
+ */
+function trackedUrl(spec: PlatformSpec, baseUrl: string, slug: string): string {
+  const params = new URLSearchParams({
+    utm_source: spec.utmSource,
+    utm_medium: UTM_MEDIUM,
+    utm_campaign: UTM_CAMPAIGN,
+    utm_content: slug,
+  });
+  return `${baseUrl}?${params.toString()}`;
+}
+
+type PlatformLinks = Record<Platform, string>;
+
+function buildLinks(baseUrl: string, slug: string): PlatformLinks {
+  return Object.fromEntries(
+    PLATFORMS.map((spec) => [spec.key, trackedUrl(spec, baseUrl, slug)]),
+  ) as PlatformLinks;
+}
+
 function overLimit(spec: PlatformSpec, text: string): boolean {
   return measure(spec.key, text) > spec.limit;
 }
@@ -205,10 +236,13 @@ interface CopyProblems {
   linkless: PlatformSpec[];
 }
 
-function findProblems(copy: SocialCopy, url: string): CopyProblems {
+function findProblems(copy: SocialCopy, links: PlatformLinks): CopyProblems {
   return {
     tooLong: PLATFORMS.filter((spec) => overLimit(spec, copy[spec.key])),
-    linkless: PLATFORMS.filter((spec) => missingUrl(copy[spec.key], url)),
+    // Each platform carries its own tagged link, so each is checked against its
+    // own — copy holding another platform's link would attribute to the wrong
+    // source.
+    linkless: PLATFORMS.filter((spec) => missingUrl(copy[spec.key], links[spec.key])),
   };
 }
 
@@ -233,19 +267,35 @@ function systemPrompt(): string {
     'Ground every post in something specific the article actually says — a number, a tradeoff, a concrete scenario.',
     'A post that could have been written without reading the article is a failure.',
     'Never invent statistics or claims that are not in the article.',
-    'Include the post URL exactly as given, without tracking parameters or shortening.',
+    'Every platform has its own link, listed in the brief. Paste that platform\'s link into that '
+      + 'platform\'s post exactly as given — never edit, shorten, reorder or drop its tracking '
+      + 'parameters, and never use another platform\'s link.',
     '',
     'Per-platform requirements:',
     ...PLATFORMS.map((p) => `- ${p.label}: ${p.guidance}`),
   ].join('\n');
 }
 
-function postBrief(post: GhostPostRecord, url: string): string {
+function postBrief(post: GhostPostRecord, links: PlatformLinks): string {
   const body = (post.plaintext || post.excerpt || post.custom_excerpt || '').slice(0, 6000);
+
+  // The tagged links are long, and on the short platforms they eat the budget.
+  // Stating what is left removes the guesswork a model is worst at.
+  const linkLines = PLATFORMS.map((spec) => {
+    const link = links[spec.key];
+    const cost = measure(spec.key, link);
+    const line = `- ${spec.label}: ${link}`;
+    return spec.limit <= 280
+      ? `${line}\n  (that link costs ${cost} of the ${spec.limit} characters, leaving about ${spec.limit - cost - 1} for your text)`
+      : line;
+  });
+
   return [
     `Title: ${post.title}`,
-    `URL: ${url}`,
     `Summary: ${post.custom_excerpt || post.excerpt || 'none'}`,
+    '',
+    'Link to use in each post:',
+    ...linkLines,
     '',
     'Article:',
     body,
@@ -274,7 +324,7 @@ function readCopy(response: Anthropic.Message): { copy: SocialCopy; toolUseId: s
  * rather than trusted, because an over-length X or Bluesky post simply cannot
  * be published.
  */
-async function draftCopy(client: Anthropic, post: GhostPostRecord, url: string): Promise<SocialCopy> {
+async function draftCopy(client: Anthropic, post: GhostPostRecord, links: PlatformLinks): Promise<SocialCopy> {
   const request = (messages: Anthropic.MessageParam[]) => client.messages.create({
     model: SOCIAL_MODEL,
     max_tokens: 2048,
@@ -284,10 +334,10 @@ async function draftCopy(client: Anthropic, post: GhostPostRecord, url: string):
     messages,
   });
 
-  const first = await request([{ role: 'user', content: postBrief(post, url) }]);
+  const first = await request([{ role: 'user', content: postBrief(post, links) }]);
   const { copy, toolUseId } = readCopy(first);
 
-  const problems = findProblems(copy, url);
+  const problems = findProblems(copy, links);
   if (problems.tooLong.length === 0 && problems.linkless.length === 0) return copy;
 
   const summary = [
@@ -301,7 +351,7 @@ async function draftCopy(client: Anthropic, post: GhostPostRecord, url: string):
   // first block is a matching `tool_result`; anything else is rejected by the
   // API with a 400 before the model ever sees it.
   const { copy: repaired } = readCopy(await request([
-    { role: 'user', content: postBrief(post, url) },
+    { role: 'user', content: postBrief(post, links) },
     { role: 'assistant', content: first.content },
     {
       role: 'user',
@@ -315,8 +365,8 @@ async function draftCopy(client: Anthropic, post: GhostPostRecord, url: string):
             `- ${spec.label}: ${measure(spec.key, copy[spec.key])} characters, limit ${spec.limit}` +
             (spec.key === 'x' ? ' (the link counts as 23 characters)' : ''),
           ),
-          ...problems.linkless.map((spec) => `- ${spec.label}: must contain the URL exactly as given`),
-          `The URL is ${url} — include it verbatim. Cut words, never the link.`,
+          ...problems.linkless.map((spec) => `- ${spec.label}: must contain its link exactly: ${links[spec.key]}`),
+          'Cut words, never the link, and never its tracking parameters.',
         ].join('\n'),
       }],
     },
@@ -325,7 +375,7 @@ async function draftCopy(client: Anthropic, post: GhostPostRecord, url: string):
   // Length is left to the recipient to trim, flagged in the email. A missing
   // link cannot be trimmed into existence, so it fails the post instead: it
   // stays untagged and is retried on the next run.
-  const stillLinkless = PLATFORMS.filter((spec) => missingUrl(repaired[spec.key], url));
+  const stillLinkless = PLATFORMS.filter((spec) => missingUrl(repaired[spec.key], links[spec.key]));
   if (stillLinkless.length > 0) {
     throw new Error(`copy omitted the post URL for ${stillLinkless.map((s) => s.label).join(', ')}`);
   }
@@ -444,9 +494,10 @@ async function main(): Promise<void> {
     }
 
     const url = `${CANONICAL_ORIGIN}/blog/${post.slug}`;
+    const links = buildLinks(url, post.slug as string);
     try {
       console.log(`  drafting: ${post.title}`);
-      const copy = await draftCopy(client, post, url);
+      const copy = await draftCopy(client, post, links);
 
       if (options.dryRun || !resend) {
         printCopy(post, url, copy);
@@ -517,4 +568,4 @@ if (require.main === module) {
   });
 }
 
-export { measure, overLimit, missingUrl, findProblems, PLATFORMS, readCopy, emailHtml, parseArgs, SENT_TAG };
+export { measure, overLimit, missingUrl, findProblems, trackedUrl, buildLinks, PLATFORMS, readCopy, emailHtml, parseArgs, SENT_TAG };
