@@ -28,6 +28,7 @@ describe('isPartialData', () => {
   it('is true when a provider actually lost data', () => {
     expect(isPartialData({ ...noErrors, plaid: [dataMissing('Plaid unavailable')] })).toBe(true);
     expect(isPartialData({ ...noErrors, snaptrade: [dataMissing('holdings incomplete')] })).toBe(true);
+    expect(isPartialData({ ...noErrors, public: [dataMissing('Public portfolio unavailable')] })).toBe(true);
   });
 
   it('treats an untagged error as data-missing', () => {

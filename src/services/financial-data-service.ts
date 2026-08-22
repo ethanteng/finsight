@@ -207,10 +207,12 @@ export function isPartialData(errors: {
   plaid: ErrorDetail[];
   snaptrade: ErrorDetail[];
   homeValue: unknown;
+  public?: ErrorDetail[];
 }): boolean {
   const costsData = (error: ErrorDetail) => (error.severity ?? 'data-missing') === 'data-missing';
   return errors.plaid.some(costsData)
     || errors.snaptrade.some(costsData)
+    || (errors.public?.some(costsData) ?? false)
     || errors.homeValue !== null;
 }
 
@@ -243,6 +245,7 @@ export interface UnifiedFinancialData {
     errors: {
       plaid: ErrorDetail[];
       snaptrade: ErrorDetail[];
+      public?: ErrorDetail[];
       homeValue: ErrorDetail | null;
     };
     partialData: boolean;
@@ -389,9 +392,15 @@ export class FinancialDataService {
     // configures a direct Public secret while still connected to Public through
     // SnapTrade would otherwise have every Public account counted twice -- a far
     // worse failure than the missing balances the direct read exists to fix.
+    //
+    // Only suppress after Public accepted the secret and returned an account
+    // list. An auth/list failure returns observed:false with empty accounts; if
+    // we still suppressed, the working SnapTrade brokerage balance ($348k in
+    // the motivating case) would vanish for a bad or briefly unreachable secret.
+    const hasDirectPublicData = publicData?.observed === true;
     const { data: dedupedSnapTradeData, supersededAccountIds } = supersedeSnapTradePublicAccounts(
       snapTradeData,
-      publicData !== null,
+      hasDirectPublicData,
     );
     if (supersededAccountIds.length > 0) {
       console.log(
@@ -406,7 +415,7 @@ export class FinancialDataService {
       dedupedSnapTradeData,
       manualAccountsData,
       homeValue,
-      publicData,
+      hasDirectPublicData ? publicData : null,
     );
 
     // ✅ STEP 1: Categorize transactions BEFORE normalization (skip for UI-only requests)
@@ -961,10 +970,19 @@ export class FinancialDataService {
     const plaidDuration = plaidData?.performance?.duration || 0;
     const snaptradeDuration = snapTradeData?.performance?.duration || 0;
 
-    // Build error details
+    // Build error details. Portfolio-level Public failures cost data after
+    // SnapTrade's Public rows were suppressed; auth/list failures do not
+    // suppress, so they stay on the credential status rather than here.
+    const publicErrors: ErrorDetail[] = (publicData?.errors || []).map(error => ({
+      accountId: error.accountId,
+      error: error.error,
+      timestamp: new Date(),
+      severity: 'data-missing' as const,
+    }));
     const errors = {
       plaid: this.extractPlaidErrors(plaidData, plaidResult),
       snaptrade: this.extractSnapTradeErrors(snapTradeData, snapTradeResult),
+      public: publicErrors,
       homeValue: homeValueResult.status === 'rejected' ? {
         error: homeValueResult.reason?.message || 'Failed to fetch home value',
         timestamp: new Date()

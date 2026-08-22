@@ -3,9 +3,18 @@ import {
   getPortfolio,
   listAccounts,
   mintAccessToken,
+  type PublicAccountSummary,
   type PublicPortfolio,
 } from './client';
-import { mapPublicAccount, mapPublicHoldings, type MappedPublicAccount, type MappedPublicHolding } from './account-mapper';
+import {
+  mapPublicAccount,
+  mapPublicHoldings,
+  publicAccountId,
+  publicAccountLabel,
+  publicAccountSubtype,
+  type MappedPublicAccount,
+  type MappedPublicHolding,
+} from './account-mapper';
 import { readSecret, recordFailure, recordSuccess } from './credential-store';
 
 /**
@@ -22,6 +31,12 @@ export interface PublicFetchResult {
   errors: Array<{ accountId: string; error: string }>;
   /** True when the stored secret was rejected and the user must supply a new one. */
   credentialRejected: boolean;
+  /**
+   * True only after Public accepted the secret and returned an account list
+   * (possibly empty). Auth or list failures leave this false so callers do not
+   * suppress SnapTrade's still-working Public brokerage balances.
+   */
+  observed: boolean;
 }
 
 /** Cap concurrent portfolio reads so a multi-account user does not burst Public. */
@@ -52,6 +67,34 @@ function errorMessage(error: unknown): string {
   return error instanceof PublicApiError ? error.message : 'Public API request failed.';
 }
 
+/**
+ * Placeholder for an account Public listed but whose portfolio could not be read.
+ *
+ * After SnapTrade's Public rows are suppressed, omitting these would silently
+ * erase balances that previously existed. A null current balance lets the
+ * snapshot mark the account unavailable instead.
+ */
+function mapFailedPublicAccount(
+  summary: PublicAccountSummary,
+  observedAt: string,
+): MappedPublicAccount {
+  const id = publicAccountId(summary.accountId);
+  return {
+    account_id: id,
+    id,
+    name: publicAccountLabel(summary.accountType),
+    type: 'investment',
+    subtype: publicAccountSubtype(summary.accountType),
+    balance: { current: null, iso_currency_code: 'USD' },
+    institution: 'Public',
+    source: 'public',
+    persistentAccountId: id,
+    snapshotTimestamp: observedAt,
+    lastSyncedAt: observedAt,
+    publicAccountType: summary.accountType,
+  };
+}
+
 export async function fetchPublicData(userId: string): Promise<PublicFetchResult | null> {
   const secret = await readSecret(userId);
   if (!secret) return null;
@@ -67,6 +110,7 @@ export async function fetchPublicData(userId: string): Promise<PublicFetchResult
       holdings: [],
       errors: [],
       credentialRejected: error instanceof PublicApiError ? error.credentialRejected : false,
+      observed: false,
     };
   }
 
@@ -81,6 +125,7 @@ export async function fetchPublicData(userId: string): Promise<PublicFetchResult
       holdings: [],
       errors: [],
       credentialRejected: error instanceof PublicApiError ? error.credentialRejected : false,
+      observed: false,
     };
   }
 
@@ -104,7 +149,9 @@ export async function fetchPublicData(userId: string): Promise<PublicFetchResult
       accounts.push(mapPublicAccount(portfolio, observedAt));
       holdings.push(...mapPublicHoldings(portfolio, observedAt));
     } else {
-      errors.push({ accountId: summary.accountId, error: errorMessage(result.reason) });
+      const message = errorMessage(result.reason);
+      errors.push({ accountId: summary.accountId, error: message });
+      accounts.push(mapFailedPublicAccount(summary, observedAt));
     }
   });
 
@@ -115,5 +162,5 @@ export async function fetchPublicData(userId: string): Promise<PublicFetchResult
     console.warn(`Public API: ${errors.length} account(s) failed for user ${userId}`);
   }
 
-  return { accounts, holdings, errors, credentialRejected: false };
+  return { accounts, holdings, errors, credentialRejected: false, observed: true };
 }

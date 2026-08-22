@@ -46,6 +46,10 @@ function accountKey(account: SuppressibleAccount): string {
  * account list. A pass that reached Public and legitimately found nothing must
  * still suppress: leaving SnapTrade's copies in place would show the user two
  * sources disagreeing about which accounts exist.
+ *
+ * Callers must pass false when the direct fetch failed to authenticate or list
+ * accounts. Suppressing on that path would drop SnapTrade's still-working Public
+ * brokerage balances for a bad or briefly unreachable secret.
  */
 export function supersedeSnapTradePublicAccounts<T extends SnapTradeDataShape | null | undefined>(
   snapTradeData: T,

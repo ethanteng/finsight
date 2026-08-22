@@ -56,6 +56,15 @@ describe('superseding SnapTrade Public accounts', () => {
     expect(supersededAccountIds).toEqual([]);
   });
 
+  // Auth/list failures must pass false here. Suppressing on that path would
+  // drop SnapTrade's still-working Public brokerage for a bad secret.
+  it('leaves SnapTrade Public accounts when the caller reports no successful observation', () => {
+    const { data, supersededAccountIds } = supersedeSnapTradePublicAccounts(snapTradeData(), false);
+
+    expect(data!.accounts).toHaveLength(3);
+    expect(supersededAccountIds).toEqual([]);
+  });
+
   // A pass that reached Public and found nothing must still suppress: leaving
   // SnapTrade's copies would show two sources disagreeing about which accounts
   // exist, rather than one source reporting none.
