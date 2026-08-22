@@ -219,6 +219,11 @@ describe('home affordability scenario runner', () => {
     // aborted the request, and every one of them used values a user could
     // plausibly state. Deliberately irregular cents keep this honest — round
     // inputs like $8,400 of tax divide evenly and hide the defect.
+    //
+    // Prices carry cents for the same reason. A whole-dollar price hid the PMI
+    // threshold regression entirely: cent-rounding a 20% down payment on
+    // $712,345.67 lands at 19.999999…%, which falsely demanded mortgage
+    // insurance, while every whole-dollar price divided evenly and passed.
     const cashFlow = snapshot({
       averageMonthlyIncome: 15_000.37,
       averageMonthlyExpense: 8_000.11,
@@ -226,9 +231,13 @@ describe('home affordability scenario runner', () => {
     });
     const failures: string[] = [];
 
-    for (const homePrice of [100_000, 237_500, 415_000, 700_000, 1_234_567, 2_050_000]) {
+    for (const homePrice of [
+      100_000, 237_500, 415_000, 700_000, 1_234_567, 2_050_000,
+      712_345.67, 350_000.01, 499_999.99, 1_000_000.33,
+    ]) {
       for (const mortgageRatePercent of [3, 3.375, 5.125, 6.5, 6.65, 7.875]) {
         for (const downPaymentPercent of [3.5, 15, 20, 25]) {
+          const comparisonDownPaymentPercent = downPaymentPercent === 20 ? 15 : 20;
           const execution = await runHomeAffordabilityScenario(cashFlow, {
             requested: true,
             primary: variant(
@@ -241,7 +250,7 @@ describe('home affordability scenario runner', () => {
               }
             ),
             comparison: variant(
-              { downPaymentPercent: downPaymentPercent === 20 ? 15 : 20 },
+              { downPaymentPercent: comparisonDownPaymentPercent },
               { downPaymentPercent: 'the other down payment' }
             ),
           } as any);
@@ -257,6 +266,22 @@ describe('home affordability scenario runner', () => {
           if (issues.length > 0) {
             failures.push(`${homePrice}/${mortgageRatePercent}/${downPaymentPercent}: ${issues.join('; ')}`);
           }
+          // Putting 20% or more down never requires mortgage insurance, so it
+          // must never be reported missing however the cents fall. Key this on
+          // the percentage the caller asked for, never on the one the runner
+          // derived: the derived value is what the regression corrupts, so an
+          // assertion reading it would excuse the very case it must catch.
+          const requestedPercents = [downPaymentPercent, comparisonDownPaymentPercent];
+          execution.scenarios.forEach((scenario, index) => {
+            if (
+              requestedPercents[index] >= 20 &&
+              scenario.missingInputs.includes('mortgage insurance')
+            ) {
+              failures.push(
+                `${homePrice}/${mortgageRatePercent}/${requestedPercents[index]}: demanded mortgage insurance at 20% or more down`
+              );
+            }
+          });
         }
       }
     }
