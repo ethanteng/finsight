@@ -6,6 +6,7 @@ import { join } from 'path';
 import * as XLSX from 'xlsx';
 import {
   mapPortfolioToAssetBasket,
+  NoSupportedSimulationValueError,
   populateAssumptions,
   summarizeHoldingExposures,
 } from '../../retirement-analytics/engine/portfolio-mapper';
@@ -21,7 +22,7 @@ import {
   loadHistoricalReturns,
 } from '../../retirement-analytics/engine/historical-data-loader';
 import { computeHistoricalWithdrawalRates } from '../../retirement-analytics/engine/withdrawal-rate-solver';
-import { buildRetirementTimeline } from '../../retirement-analytics';
+import { analyzeRetirementPortfolio, buildRetirementTimeline } from '../../retirement-analytics';
 import { calculateDataQuality } from '../../retirement-analytics/interpretation/uncertainty-quantifier';
 import type { HistoricalSequence, PortfolioMapping } from '../../retirement-analytics/types';
 import type { Holding, Security } from '../../services/financial-data-service';
@@ -250,6 +251,34 @@ describe('retirement correctness contracts', () => {
     expect(assumptions).not.toContain(
       'Bond exposure uses the Shiller synthetic 10-year US government-bond total-return history',
     );
+  });
+
+  it('refuses historical simulation when no supported series value remains', async () => {
+    const holdings = [holding('tips', 'TIP', 100_000)];
+    const securities = [security('tips', 'TIP', 'iShares TIPS Bond ETF', 'fixed income')];
+
+    await expect(analyzeRetirementPortfolio({
+      holdings,
+      securities,
+      currentAge: 40,
+      retirementAge: 65,
+      lifeExpectancy: 95,
+      annualWithdrawalAmount: 40_000,
+      withdrawalStartAge: 65,
+      asOfDate: '2026-01-15',
+    })).rejects.toBeInstanceOf(NoSupportedSimulationValueError);
+  });
+
+  it('keeps EAGG on the nominal aggregate path instead of international bonds', async () => {
+    const holdings = [holding('eagg', 'EAGG', 50_000)];
+    const securities = [security('eagg', 'EAGG', 'iShares ESG Aware U.S. Aggregate Bond ETF', 'etf')];
+
+    const mapping = await mapPortfolioToAssetBasket(holdings, securities, 50_000);
+
+    expect(mapping.nominalBondsWeight).toBe(1);
+    expect(mapping.mappedValue).toBe(50_000);
+    expect(mapping.unsupportedValue).toBe(0);
+    expect(mapping.holdingExposures[0].unsupportedAssetClass).toBeUndefined();
   });
 
   it.each(['VTIP', 'SCHP'])('recognizes provider-sparse %s holdings as TIPS', async ticker => {

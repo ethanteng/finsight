@@ -73,6 +73,15 @@ export function collectMissingInputAsks(
         message: 'I could not run a retirement projection because no investment holdings are connected. ' +
           'Link an investment account and ask again, and I will include it.',
       });
+    } else if (needsInfo?.unavailableCode === 'no_supported_simulation') {
+      asks.push({
+        id: 'retirement_no_supported_simulation',
+        message:
+          'I could not run a retirement projection because none of your holdings map to a supported ' +
+          'historical return series (US equity, international equity, nominal US government bonds, or cash). ' +
+          'TIPS, credit, international bonds, real assets, and unresolved equity geography are disclosed ' +
+          'but not simulated.',
+      });
     } else if (needsInfo?.unavailableCode === 'insufficient_history') {
       asks.push({
         id: 'retirement_insufficient_history',

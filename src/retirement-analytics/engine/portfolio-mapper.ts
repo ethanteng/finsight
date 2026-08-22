@@ -46,6 +46,26 @@ const EMPTY_WEIGHTS: HoldingExposureWeights = {
   cash: 0,
 };
 
+/**
+ * Thrown when the itemized portfolio has positive value but nothing maps onto
+ * a historical return series the engine can simulate. Publishing a zero-basis
+ * stress test would invent depletion / 2% withdrawal-rate floors.
+ */
+export class NoSupportedSimulationValueError extends Error {
+  constructor(
+    public readonly totalValue: number,
+    public readonly unsupportedValue: number,
+    public readonly unrecognizedValue: number,
+  ) {
+    super(
+      'Retirement simulation requires holdings mapped to a supported historical return series ' +
+      '(US equity, international equity, nominal US government bonds, or cash); ' +
+      `none of the $${Math.round(totalValue).toLocaleString('en-US')} itemized portfolio could be modeled`
+    );
+    this.name = 'NoSupportedSimulationValueError';
+  }
+}
+
 /** Product capitalization for series slugs shown in analysis assumptions. */
 const TARGET_DATE_SERIES_DISPLAY_NAMES: Record<string, string> = {
   'lifepath-index': 'LifePath Index',

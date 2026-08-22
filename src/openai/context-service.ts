@@ -992,6 +992,21 @@ async function fetchOrCreateRetirementAnalysis(args: {
       };
     }
 
+    const { NoSupportedSimulationValueError } = await import(
+      '../retirement-analytics/engine/portfolio-mapper'
+    );
+    if (error instanceof NoSupportedSimulationValueError) {
+      return {
+        needsInfo: {
+          missingParams: [],
+          detectedParams: {},
+          unavailableReason:
+            `${errorMessage}. Do not invent a historical projection for unsupported or unresolved sleeves.`,
+          unavailableCode: 'no_supported_simulation',
+        },
+      };
+    }
+
     return {
       needsInfo: {
         missingParams: [],

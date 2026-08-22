@@ -3,7 +3,11 @@
 
 import { RetirementAnalysisInput, RetirementAnalysisOutput } from './types';
 import { analyzePortfolio } from './engine/portfolio-analyzer';
-import { mapPortfolioToAssetBasket, populateAssumptions } from './engine/portfolio-mapper';
+import {
+  mapPortfolioToAssetBasket,
+  NoSupportedSimulationValueError,
+  populateAssumptions,
+} from './engine/portfolio-mapper';
 import { DataProviderFactory } from './data/data-provider-factory';
 import {
   calculateHistoricalPriceCoverage,
@@ -98,6 +102,17 @@ export async function analyzeRetirementPortfolio(
     ?? (input.asOfYear != null ? input.asOfYear : new Date().toISOString().slice(0, 10));
   const portfolioMapping = await mapPortfolioToAssetBasket(input.holdings, input.securities, totalValue, dataProviderFactory, tickerToMetadata, asOfDate);
   const modeledValue = portfolioMapping.mappedValue;
+  // Classification may leave only TIPS / credit / international bonds / real
+  // assets / unresolved geography. Those are disclosed, not simulated — a
+  // zero starting basis would make every sequence deplete and pin the solver
+  // at its 2% floor.
+  if (!(modeledValue > 0.005)) {
+    throw new NoSupportedSimulationValueError(
+      portfolioMapping.totalValue,
+      portfolioMapping.unsupportedValue,
+      portfolioMapping.unrecognizedValue,
+    );
+  }
   const portfolioMetrics = await analyzePortfolio(
     input.holdings,
     input.securities,
@@ -264,3 +279,4 @@ export async function analyzeRetirementPortfolio(
 // Re-export types for convenience
 export * from './types';
 export { RETIREMENT_ANALYSIS_VERSION } from './version';
+export { NoSupportedSimulationValueError } from './engine/portfolio-mapper';
