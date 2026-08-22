@@ -1,7 +1,8 @@
 import type { CanonicalFact } from './canonical-facts';
+import type { SalvageRemovals } from './response-facts';
 import type { ContextPackId } from './context-packs';
 import type { AskLincResponse } from './structured-response';
-import type { PlannedSearchQuery } from '../data/search-types';
+import type { PlannedSearchQuery, SearchQueryEvidence } from '../data/search-types';
 import type {
   RetirementScenarioEvidence,
   RetirementScenarioPlan,
@@ -141,6 +142,12 @@ export interface EvidenceManifest {
        * answer, or replaced it with the placeholder. Absent on older manifests.
        */
       outcome?: 'passed' | 'salvaged' | 'replaced';
+      /**
+       * The specific sentences and key numbers salvage took out before the
+       * answer reached the user. Present only on a salvaged or replaced answer;
+       * absent on manifests persisted before removals were recorded.
+       */
+      removals?: SalvageRemovals;
     };
     secondary?: Array<{ phase: 'initial' | 'retry'; valid: boolean; issues: string[] }>;
   };
@@ -160,7 +167,11 @@ export interface EvidenceManifest {
       providerCalls: number;
       resultCount: number;
       retrievedAt: string;
+      /** Per-query cache/provider routing and the results each query returned. */
+      queryOutcomes?: SearchQueryEvidence[];
     };
+    /** Attempted queries when every one of them failed and no context was built. */
+    searchQueryOutcomes?: SearchQueryEvidence[];
   };
 }
 

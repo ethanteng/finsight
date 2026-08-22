@@ -4,6 +4,52 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 type DeliveryStatus = 'clean' | 'recovered' | 'failed';
 
+interface RemovedSentence {
+  field: 'summary' | 'insight' | 'suggested_action';
+  index?: number;
+  text: string;
+  reason: 'unsupported_value' | 'dependent_on_removed';
+  unsupportedValues?: string[];
+}
+
+interface RemovedKeyNumber {
+  key: string;
+  value: number | null;
+  unit?: string;
+  provenance?: string;
+  issues: string[];
+}
+
+interface SearchResultEvidence {
+  title: string;
+  url: string;
+  source: string;
+  snippet: string;
+  age?: string;
+  publishedAt?: string;
+}
+
+interface SearchQueryEvidence {
+  query: string;
+  purpose: string;
+  freshness: string | null;
+  source: 'cache' | 'provider';
+  status: 'succeeded' | 'failed';
+  resultCount: number;
+  error?: string;
+  results: SearchResultEvidence[];
+}
+
+interface AnswerDetails {
+  groundingIssues: string[];
+  secondaryIssues: Array<{ phase: 'initial' | 'retry'; issues: string[] }>;
+  removedSentences: RemovedSentence[];
+  removedKeyNumbers: RemovedKeyNumber[];
+  replacedSummary?: string;
+  plannedSearchQueries: Array<{ query: string; purpose: string; freshness: string | null }>;
+  searchQueryOutcomes: SearchQueryEvidence[];
+}
+
 interface Observation {
   id: string;
   createdAt: string;
@@ -27,6 +73,8 @@ interface Observation {
   searchProviderCalls: number;
   searchCacheHits: number;
   searchResultCount: number;
+  /** Absent on a report from a backend that predates the detail fields. */
+  details?: AnswerDetails;
 }
 
 interface AnswerQualityReport {
@@ -39,7 +87,14 @@ interface AnswerQualityReport {
     cleanRate: number | null;
     headline: string;
   };
-  evidence: { verified: number; salvaged: number; replaced: number; verifiedRate: number | null };
+  evidence: {
+    verified: number;
+    salvaged: number;
+    replaced: number;
+    verifiedRate: number | null;
+    trimmedSentences?: number;
+    trimmedKeyNumbers?: number;
+  };
   planning: {
     semanticPlans: number;
     fallbackPlans: number;
@@ -71,6 +126,7 @@ interface AnswerQualityReport {
     cacheHits: number;
     cacheReuseRate: number | null;
     resultCount: number;
+    failedQueries?: number;
   };
   users: { rated: number; positive: number; neutral: number; negative: number; averageRating: number | null };
   recent: Observation[];
@@ -118,6 +174,202 @@ function scenarioRunSummary(answer: Observation): string {
 
 const percent = (value: number | null) => value === null ? '—' : `${Math.round(value * 100)}%`;
 
+const FIELD_LABELS: Record<RemovedSentence['field'], string> = {
+  summary: 'Summary',
+  insight: 'Insight',
+  suggested_action: 'Suggested action',
+};
+
+const REMOVAL_REASONS: Record<RemovedSentence['reason'], string> = {
+  unsupported_value: 'cited a number the fact pack did not contain',
+  dependent_on_removed: 'referred back to a sentence that was removed',
+};
+
+const FRESHNESS_LABELS: Record<string, string> = {
+  pd: 'past day',
+  pw: 'past week',
+  pm: 'past month',
+  py: 'past year',
+};
+
+/** True when there is anything worth expanding for this answer. */
+function hasDetails(details: AnswerDetails | undefined): details is AnswerDetails {
+  if (!details) return false;
+  return details.removedSentences.length > 0
+    || details.removedKeyNumbers.length > 0
+    || Boolean(details.replacedSummary)
+    || details.groundingIssues.length > 0
+    || details.secondaryIssues.length > 0
+    || details.searchQueryOutcomes.length > 0
+    || details.plannedSearchQueries.length > 0;
+}
+
+function DetailSection({ title, note, children }: { title: string; note?: string; children: React.ReactNode }) {
+  return (
+    <div className="mt-3 first:mt-0">
+      <div className="text-xs font-semibold uppercase tracking-wide text-gray-400">{title}</div>
+      {note && <div className="mt-0.5 text-xs text-gray-500">{note}</div>}
+      <div className="mt-2 space-y-2">{children}</div>
+    </div>
+  );
+}
+
+function Chip({ children, tone = 'text-gray-300 border-gray-600' }: { children: React.ReactNode; tone?: string }) {
+  return <span className={`rounded-full border px-2 py-0.5 text-[11px] ${tone}`}>{children}</span>;
+}
+
+function SearchQueryCard({ outcome }: { outcome: SearchQueryEvidence }) {
+  const failed = outcome.status === 'failed';
+  return (
+    <div className="rounded border border-gray-700 bg-gray-950/40 p-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-sm text-gray-200">“{outcome.query}”</span>
+        <Chip tone={outcome.source === 'cache' ? 'border-blue-800 text-blue-300' : 'border-gray-600 text-gray-300'}>
+          {outcome.source === 'cache' ? 'served from cache' : 'Brave provider call'}
+        </Chip>
+        <Chip>{outcome.purpose}</Chip>
+        {outcome.freshness && <Chip>{FRESHNESS_LABELS[outcome.freshness] ?? outcome.freshness}</Chip>}
+        <Chip tone={failed ? 'border-red-800 text-red-300' : 'border-green-800 text-green-300'}>
+          {failed ? 'failed' : `${outcome.resultCount} result${outcome.resultCount === 1 ? '' : 's'}`}
+        </Chip>
+      </div>
+      {outcome.error && <div className="mt-1 text-xs text-red-300">{outcome.error}</div>}
+      {outcome.results.length > 0 && (
+        <ol className="mt-2 space-y-2">
+          {outcome.results.map((result, index) => (
+            <li key={`${result.url}-${index}`} className="border-l-2 border-gray-700 pl-2">
+              <a
+                href={result.url}
+                target="_blank"
+                rel="noreferrer noopener"
+                className="text-sm text-blue-300 hover:underline"
+              >
+                {result.title || result.url}
+              </a>
+              <div className="text-[11px] text-gray-500">
+                {result.source}
+                {result.publishedAt ? ` · ${new Date(result.publishedAt).toLocaleDateString()}` : result.age ? ` · ${result.age}` : ''}
+              </div>
+              {result.snippet && <div className="mt-0.5 text-xs leading-5 text-gray-400">{result.snippet}</div>}
+            </li>
+          ))}
+        </ol>
+      )}
+    </div>
+  );
+}
+
+function AnswerDetailPanel({ details }: { details: AnswerDetails }) {
+  const retrievedQueries = new Set(details.searchQueryOutcomes.map((outcome) => outcome.query));
+  const unattempted = details.plannedSearchQueries.filter((planned) => !retrievedQueries.has(planned.query));
+  return (
+    <div className="mt-3 rounded border border-gray-700 bg-gray-950/60 p-3">
+      {details.removedSentences.length > 0 && (
+        <DetailSection
+          title={`Removed from the answer (${details.removedSentences.length})`}
+          note="These sentences were cut before the answer reached the user."
+        >
+          {details.removedSentences.map((sentence, index) => (
+            <div key={`${sentence.field}-${index}`} className="rounded border border-yellow-900/60 bg-yellow-950/10 p-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <Chip tone="border-yellow-800 text-yellow-300">
+                  {FIELD_LABELS[sentence.field]}
+                  {sentence.index === undefined ? '' : ` #${sentence.index + 1}`}
+                </Chip>
+                <span className="text-[11px] text-gray-500">{REMOVAL_REASONS[sentence.reason]}</span>
+                {(sentence.unsupportedValues ?? []).map((value) => (
+                  <Chip key={value} tone="border-red-800 text-red-300">{value}</Chip>
+                ))}
+              </div>
+              <div className="mt-1 text-sm leading-6 text-gray-300 line-through decoration-gray-600">{sentence.text}</div>
+            </div>
+          ))}
+        </DetailSection>
+      )}
+
+      {details.removedKeyNumbers.length > 0 && (
+        <DetailSection
+          title={`Dropped key numbers (${details.removedKeyNumbers.length})`}
+          note="Figures that did not cite, match, or unit-match a canonical fact."
+        >
+          {details.removedKeyNumbers.map((number) => (
+            <div key={number.key} className="rounded border border-yellow-900/60 bg-yellow-950/10 p-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-sm text-gray-200">{number.key}</span>
+                <Chip tone="border-red-800 text-red-300">
+                  {number.value === null ? 'no value' : number.value.toLocaleString()}{number.unit ? ` ${number.unit}` : ''}
+                </Chip>
+                {number.provenance && <Chip>cited {number.provenance}</Chip>}
+              </div>
+              {number.issues.map((issue) => (
+                <div key={issue} className="mt-1 text-xs text-gray-400">{issue}</div>
+              ))}
+            </div>
+          ))}
+        </DetailSection>
+      )}
+
+      {details.replacedSummary && (
+        <DetailSection
+          title="Replaced answer"
+          note="Nothing in this answer survived grounding, so the user received the fallback instead of the text below."
+        >
+          <div className="rounded border border-red-900/60 bg-red-950/10 p-2 text-sm leading-6 text-gray-300 whitespace-pre-wrap">
+            {details.replacedSummary}
+          </div>
+        </DetailSection>
+      )}
+
+      {details.groundingIssues.length > 0 && (
+        <DetailSection title="Grounding checks that failed">
+          <ul className="list-disc space-y-1 pl-5 text-xs leading-5 text-gray-400">
+            {details.groundingIssues.map((issue) => <li key={issue}>{issue}</li>)}
+          </ul>
+        </DetailSection>
+      )}
+
+      {details.secondaryIssues.length > 0 && (
+        <DetailSection title="Secondary reviewer objections">
+          {details.secondaryIssues.map((entry) => (
+            <div key={entry.phase}>
+              <div className="text-[11px] uppercase tracking-wide text-gray-500">{entry.phase} generation</div>
+              <ul className="list-disc space-y-1 pl-5 text-xs leading-5 text-gray-400">
+                {entry.issues.map((issue) => <li key={issue}>{issue}</li>)}
+              </ul>
+            </div>
+          ))}
+        </DetailSection>
+      )}
+
+      {details.searchQueryOutcomes.length > 0 && (
+        <DetailSection
+          title={`Brave searches (${details.searchQueryOutcomes.length})`}
+          note="Each standalone query the plan asked for, and what came back."
+        >
+          {details.searchQueryOutcomes.map((outcome, index) => (
+            <SearchQueryCard key={`${outcome.query}-${index}`} outcome={outcome} />
+          ))}
+        </DetailSection>
+      )}
+
+      {unattempted.length > 0 && (
+        <DetailSection
+          title={`Planned queries with no recorded retrieval (${unattempted.length})`}
+          note="Planned before answering; no per-query record was stored for these."
+        >
+          {unattempted.map((planned) => (
+            <div key={planned.query} className="flex flex-wrap items-center gap-2 text-sm text-gray-300">
+              <span>“{planned.query}”</span>
+              <Chip>{planned.purpose}</Chip>
+              {planned.freshness && <Chip>{FRESHNESS_LABELS[planned.freshness] ?? planned.freshness}</Chip>}
+            </div>
+          ))}
+        </DetailSection>
+      )}
+    </div>
+  );
+}
+
 function CountCard({
   title,
   value,
@@ -148,6 +400,7 @@ export default function AnswerQualityPanel({
   refreshToken?: number;
 }) {
   const [report, setReport] = useState<AnswerQualityReport | null>(null);
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const authHeadersRef = useRef(getAuthHeaders);
@@ -160,6 +413,7 @@ export default function AnswerQualityPanel({
       const response = await fetch(`${apiUrl}/admin/answer-quality`, { headers: authHeadersRef.current() });
       if (!response.ok) throw new Error('Failed to load answer quality');
       setReport(await response.json());
+      setExpanded(new Set());
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Failed to load answer quality');
     } finally {
@@ -168,6 +422,14 @@ export default function AnswerQualityPanel({
   }, [apiUrl]);
 
   useEffect(() => { void load(); }, [load, refreshToken]);
+
+  const toggleDetails = useCallback((id: string) => {
+    setExpanded((current) => {
+      const next = new Set(current);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
+  }, []);
 
   const overall: DeliveryStatus = report?.delivery.failed
     ? 'failed'
@@ -194,6 +456,7 @@ export default function AnswerQualityPanel({
     cacheHits: 0,
     cacheReuseRate: null,
     resultCount: 0,
+    failedQueries: 0,
   };
 
   return (
@@ -240,7 +503,11 @@ export default function AnswerQualityPanel({
             <CountCard
               title="Evidence verified"
               value={percent(report.evidence.verifiedRate)}
-              detail={`${report.evidence.verified} passed · ${report.evidence.salvaged} trimmed · ${report.evidence.replaced} replaced`}
+              detail={`${report.evidence.verified} passed · ${report.evidence.salvaged} trimmed · ${report.evidence.replaced} replaced${
+                report.evidence.trimmedSentences
+                  ? ` · ${report.evidence.trimmedSentences} sentence(s) and ${report.evidence.trimmedKeyNumbers ?? 0} key number(s) removed`
+                  : ''
+              }`}
             />
             <CountCard
               title="Planner sufficient"
@@ -296,6 +563,7 @@ export default function AnswerQualityPanel({
             </div>
             <div className="mt-3 text-xs font-medium text-[#3f4d45]">
               {search.plannedQueries} planned queries · {search.cacheHits} cache hits · {search.resultCount} results · {search.unavailable} requests without evidence
+              {search.failedQueries ? ` · ${search.failedQueries} query failure(s)` : ''}
             </div>
           </div>
 
@@ -304,6 +572,9 @@ export default function AnswerQualityPanel({
             {report.recent.length === 0 && <div className="text-sm text-gray-500">No answers with evidence yet.</div>}
             {report.recent.map((answer) => {
               const scenarioSummary = scenarioRunSummary(answer);
+              const details = answer.details;
+              const expandable = hasDetails(details);
+              const isOpen = expanded.has(answer.id);
               return (
                 <div key={answer.id} className="rounded-lg border border-gray-700 bg-gray-900 p-3">
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
@@ -323,10 +594,23 @@ export default function AnswerQualityPanel({
                         </div>
                       </div>
                     </div>
-                    <div className={`shrink-0 pl-5 text-xs font-medium sm:pl-0 ${STATUS[answer.deliveryStatus].text}`}>
-                      {STATUS[answer.deliveryStatus].label}
+                    <div className="flex shrink-0 items-center gap-3 pl-5 sm:pl-0">
+                      {expandable && (
+                        <button
+                          type="button"
+                          onClick={() => toggleDetails(answer.id)}
+                          aria-expanded={isOpen}
+                          className="rounded border border-gray-600 px-2 py-1 text-xs text-gray-300 hover:bg-gray-800"
+                        >
+                          {isOpen ? 'Hide details' : 'Show details'}
+                        </button>
+                      )}
+                      <div className={`text-xs font-medium ${STATUS[answer.deliveryStatus].text}`}>
+                        {STATUS[answer.deliveryStatus].label}
+                      </div>
                     </div>
                   </div>
+                  {expandable && isOpen && <AnswerDetailPanel details={details} />}
                 </div>
               );
             })}

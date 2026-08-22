@@ -32,9 +32,10 @@ import {
 import {
   canonicalizeResponseNumbers,
   hasUnsupportedValueIssue,
-  salvageUngroundedResponse,
+  salvageUngroundedResponseWithDetail,
   validateResponseFacts,
 } from './response-facts';
+import type { SalvageRemovals } from './response-facts';
 import { validateCanonicalFactPack } from './canonical-facts';
 import { describeMissingInputs } from './missing-inputs';
 import {
@@ -540,6 +541,7 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
   let structuredResponse = canonicalizeResponseNumbers(parseStructuredResponse(rawResponse), factPack);
   let groundingResult = validateResponseFacts(structuredResponse, factPack);
   let deterministicOutcome: 'passed' | 'salvaged' | 'replaced' = 'passed';
+  let salvageRemovals: SalvageRemovals | undefined;
   let contextEscalated = false;
   let secondaryCaveat = false;
 
@@ -675,7 +677,9 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
       if (!groundingResult.valid) {
         console.error('Ask Linc: Retry was still not grounded:', groundingResult.issues);
         // Keep the grounded part of the answer; the placeholder is the last resort.
-        structuredResponse = salvageUngroundedResponse(structuredResponse, factPack, groundingResult);
+        const salvage = salvageUngroundedResponseWithDetail(structuredResponse, factPack, groundingResult);
+        structuredResponse = salvage.response;
+        salvageRemovals = salvage.removals;
         deterministicOutcome = structuredResponse.summary === UNVERIFIABLE_SUMMARY ? 'replaced' : 'salvaged';
       }
 
@@ -788,7 +792,12 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
         totalMs: Date.now() - pipelineStartedAt,
       },
       validation: {
-        deterministic: { valid: groundingResult.valid, issues: groundingResult.issues, outcome: deterministicOutcome },
+        deterministic: {
+          valid: groundingResult.valid,
+          issues: groundingResult.issues,
+          outcome: deterministicOutcome,
+          ...(salvageRemovals && { removals: salvageRemovals }),
+        },
         ...(secondaryValidations.length > 0 && { secondary: secondaryValidations }),
       },
       evidenceRefs: {
@@ -806,6 +815,7 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
         }),
         ...(searchContextDigest && { searchContextDigest }),
         ...(snapshot.searchContextMetadata && { search: snapshot.searchContextMetadata }),
+        ...(snapshot.searchQueryOutcomes && { searchQueryOutcomes: snapshot.searchQueryOutcomes }),
       },
     },
   };

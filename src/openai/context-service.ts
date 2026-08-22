@@ -17,7 +17,9 @@ import { generateDisclaimers, calculateConfidenceCeiling } from '../retirement-a
 import type { DataQualityReport } from '../retirement-analytics/types';
 import { RETIREMENT_ANALYSIS_VERSION } from '../retirement-analytics/version';
 import type { ExtractedRetirementInputs } from './retirement-input-extraction';
-import type { PlannedSearchQuery } from '../data/search-types';
+import type { PlannedSearchQuery, SearchQueryEvidence } from '../data/search-types';
+import { compactSearchQueryEvidence } from '../data/search-types';
+import type { SearchContext } from '../data/orchestrator';
 
 interface GatherContextArgs {
   userId?: string;
@@ -371,7 +373,7 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
     ? sortedTransactions.slice(0, MAX_PROMPT_TRANSACTIONS)
     : [];
 
-  const [tierContext, searchContextResult, marketContextResult, userOverrides, userProfile, investmentExternalData] = await Promise.all([
+  const [tierContext, searchRetrieval, marketContextResult, userOverrides, userProfile, investmentExternalData] = await Promise.all([
     dataOrchestrator.buildTierAwareContext(
       tier,
       tierContextAccounts,
@@ -397,6 +399,8 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
   if (investmentsSnapshot && investmentExternalData) {
     investmentsSnapshot.externalData = investmentExternalData;
   }
+
+  const { context: searchContext, queryOutcomes: searchQueryOutcomes } = searchRetrieval;
 
   const monthlyIncomeOverride = userOverrides.monthlyIncomeOverride;
   const monthlyExpenseOverride = userOverrides.monthlyExpenseOverride;
@@ -429,15 +433,21 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
       marketContextRequested: questionNeeds.needsMarketContext,
       searchContextRequested: questionNeeds.needsSearchContext,
     },
-    searchContext: searchContextResult?.summary,
-    ...(searchContextResult && {
+    searchContext: searchContext?.summary,
+    ...(searchContext && {
       searchContextMetadata: {
-        queries: searchContextResult.queries,
-        cacheHits: searchContextResult.cacheHits,
-        providerCalls: searchContextResult.providerCalls,
-        resultCount: searchContextResult.results.length,
-        retrievedAt: searchContextResult.lastUpdate.toISOString(),
+        queries: searchContext.queries,
+        cacheHits: searchContext.cacheHits,
+        providerCalls: searchContext.providerCalls,
+        resultCount: searchContext.results.length,
+        retrievedAt: searchContext.lastUpdate.toISOString(),
+        ...(searchQueryOutcomes.length > 0 && {
+          queryOutcomes: compactSearchQueryEvidence(searchQueryOutcomes),
+        }),
       },
+    }),
+    ...(!searchContext && searchQueryOutcomes.length > 0 && {
+      searchQueryOutcomes: compactSearchQueryEvidence(searchQueryOutcomes),
     }),
     marketContext: marketContextResult?.text,
     marketContextMetadata: marketContextResult?.metadata,
@@ -1313,21 +1323,30 @@ function buildHomeValueSummary(homeData: HomeData): string {
   return lines.join('\n');
 }
 
+/**
+ * Retrieval plus the per-query record of it. The outcomes survive a null
+ * context so a plan that reached Brave and came back empty is still visible in
+ * the evidence manifest, rather than looking like a search that never ran.
+ */
 async function maybeFetchSearchContext(
   searchQueries: readonly PlannedSearchQuery[],
   questionNeeds: QuestionNeeds,
   tier: UserTier,
   deferred: boolean
-) {
+): Promise<{ context?: SearchContext; queryOutcomes: SearchQueryEvidence[] }> {
   if (!questionNeeds.needsSearchContext || deferred || searchQueries.length === 0) {
-    return undefined;
+    return { queryOutcomes: [] };
   }
 
+  let queryOutcomes: SearchQueryEvidence[] = [];
   try {
-    return await dataOrchestrator.getSearchContextForQueries(searchQueries, tier) ?? undefined;
+    const context = await dataOrchestrator.getSearchContextForQueries(searchQueries, tier, {
+      onQueryOutcomes: (outcomes) => { queryOutcomes = outcomes; },
+    }) ?? undefined;
+    return { context, queryOutcomes };
   } catch (error) {
     console.warn('Search context fetch failed', error);
-    return undefined;
+    return { queryOutcomes };
   }
 }
 

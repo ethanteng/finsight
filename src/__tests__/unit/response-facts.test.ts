@@ -4,6 +4,7 @@ import {
   canonicalizeResponseNumbers,
   hasUnsupportedPercentValue,
   salvageUngroundedResponse,
+  salvageUngroundedResponseWithDetail,
   validateResponseFacts,
   UNVERIFIED_PROSE_NOTICE,
 } from '../../openai/response-facts';
@@ -370,6 +371,51 @@ describe('rounded canonical values', () => {
     const salvaged = salvageUngroundedResponse(response, pack, validateResponseFacts(response, pack));
 
     expect(salvaged.summary).toBe(UNVERIFIABLE_SUMMARY);
+  });
+
+  it('records which sentences and key numbers salvage removed', () => {
+    const response = {
+      summary: 'Your portfolio is worth $1.92 million. A 20% drop would cost you $384,000. That is a big hit.',
+      insights: ['You could add $50,000 a year.'],
+      key_numbers: { made_up: { value: 42, unit: 'usd' as const, provenance: 'no_such_fact' } },
+    };
+    const { response: salvaged, removals } = salvageUngroundedResponseWithDetail(
+      response,
+      pack,
+      validateResponseFacts(response, pack)
+    );
+
+    expect(salvaged.summary).toContain('$1.92 million');
+    // Summary sentences first, in order, then each list item.
+    expect(removals.sentences.map((sentence) => sentence.reason)).toEqual([
+      'unsupported_value',
+      'dependent_on_removed',
+      'unsupported_value',
+    ]);
+    const dropped = removals.sentences.find((sentence) => sentence.text.includes('384,000'));
+    expect(dropped).toMatchObject({ field: 'summary', unsupportedValues: ['20%', '$384,000'] });
+    expect(removals.sentences.find((sentence) => sentence.field === 'insight')).toMatchObject({ index: 0 });
+    expect(removals.keyNumbers).toEqual([{
+      key: 'made_up',
+      value: 42,
+      unit: 'usd',
+      provenance: 'no_such_fact',
+      issues: ['made_up does not cite a canonical fact.'],
+    }]);
+    expect(removals.replacedSummary).toBeUndefined();
+  });
+
+  it('keeps the discarded summary when the answer is replaced wholesale', () => {
+    const response = { summary: 'Your net worth is $12,345,678.', insights: ['Also unverifiable: $99,999.'] };
+    const { response: salvaged, removals } = salvageUngroundedResponseWithDetail(
+      response,
+      pack,
+      validateResponseFacts(response, pack)
+    );
+
+    expect(salvaged.summary).toBe(UNVERIFIABLE_SUMMARY);
+    expect(removals.replacedSummary).toBe('Your net worth is $12,345,678.');
+    expect(removals.sentences).toHaveLength(2);
   });
 
   it('keeps a verified answer when only a key number was miscited', () => {

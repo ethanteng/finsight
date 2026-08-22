@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import AnswerQualityPanel from '@/components/admin/AnswerQualityPanel';
 
 const REPORT = {
@@ -7,7 +7,7 @@ const REPORT = {
     total: 6, clean: 4, recovered: 1, failed: 1, cleanRate: 0.667,
     headline: '4 of 6 answers were delivered cleanly; 1 failed and needs review.',
   },
-  evidence: { verified: 4, salvaged: 1, replaced: 1, verifiedRate: 0.667 },
+  evidence: { verified: 4, salvaged: 1, replaced: 1, verifiedRate: 0.667, trimmedSentences: 2, trimmedKeyNumbers: 1 },
   planning: {
     semanticPlans: 6,
     fallbackPlans: 2,
@@ -45,6 +45,7 @@ const REPORT = {
     cacheHits: 2,
     cacheReuseRate: 0.5,
     resultCount: 9,
+    failedQueries: 1,
   },
   users: { rated: 3, positive: 2, neutral: 0, negative: 1, averageRating: 3.67 },
   recent: [{
@@ -70,6 +71,56 @@ const REPORT = {
     searchProviderCalls: 1,
     searchCacheHits: 1,
     searchResultCount: 5,
+    details: {
+      groundingIssues: ['User-facing usd value 384000 is not present in the canonical fact pack.'],
+      secondaryIssues: [{ phase: 'retry', issues: ['The conclusion does not follow from the cited figures.'] }],
+      removedSentences: [{
+        field: 'summary',
+        text: 'A 20% drop would cost you $384,000.',
+        reason: 'unsupported_value',
+        unsupportedValues: ['$384,000'],
+      }, {
+        field: 'insight',
+        index: 0,
+        text: 'That is a big hit this close to retirement.',
+        reason: 'dependent_on_removed',
+      }],
+      removedKeyNumbers: [{
+        key: 'drawdown_loss',
+        value: 384000,
+        unit: 'usd',
+        provenance: 'no_such_fact',
+        issues: ['drawdown_loss does not cite a canonical fact.'],
+      }],
+      replacedSummary: 'You can retire next year on $384,000 of savings.',
+      plannedSearchQueries: [
+        { query: 'current Federal Reserve interest rate', purpose: 'rate', freshness: 'pm' },
+        { query: '2026 IRA contribution limit', purpose: 'rule', freshness: null },
+      ],
+      searchQueryOutcomes: [{
+        query: 'current Federal Reserve interest rate',
+        purpose: 'rate',
+        freshness: 'pm',
+        source: 'provider',
+        status: 'succeeded',
+        resultCount: 1,
+        results: [{
+          title: 'Fed holds rates steady',
+          url: 'https://example.com/fed',
+          source: 'example.com',
+          snippet: 'The target range is unchanged at 4.25-4.50%.',
+        }],
+      }, {
+        query: '2026 IRA contribution limit',
+        purpose: 'rule',
+        freshness: null,
+        source: 'cache',
+        status: 'failed',
+        resultCount: 0,
+        error: 'Brave Search quota is exhausted for another 4 seconds',
+        results: [],
+      }],
+    },
   }],
 };
 
@@ -122,6 +173,40 @@ describe('AnswerQualityPanel', () => {
     expect(screen.getByText('Brave provider calls')).toBeInTheDocument();
     expect(screen.getByText('queries served from cache')).toBeInTheDocument();
     expect(screen.getByText(/search loaded 5 results/)).toBeInTheDocument();
+  });
+
+  it('expands a recent answer into what was removed and why', async () => {
+    render(<AnswerQualityPanel apiUrl="https://api.test" getAuthHeaders={() => ({})} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Show details' }));
+
+    expect(screen.getByText('A 20% drop would cost you $384,000.')).toBeInTheDocument();
+    expect(screen.getByText('That is a big hit this close to retirement.')).toBeInTheDocument();
+    expect(screen.getByText(/referred back to a sentence that was removed/)).toBeInTheDocument();
+    expect(screen.getByText('drawdown_loss')).toBeInTheDocument();
+    expect(screen.getByText('drawdown_loss does not cite a canonical fact.')).toBeInTheDocument();
+    expect(screen.getByText('You can retire next year on $384,000 of savings.')).toBeInTheDocument();
+    expect(screen.getByText('The conclusion does not follow from the cited figures.')).toBeInTheDocument();
+  });
+
+  it('shows each Brave query, its routing, and the results it returned', async () => {
+    render(<AnswerQualityPanel apiUrl="https://api.test" getAuthHeaders={() => ({})} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Show details' }));
+
+    expect(screen.getByText('“current Federal Reserve interest rate”')).toBeInTheDocument();
+    expect(screen.getByText('Brave provider call')).toBeInTheDocument();
+    expect(screen.getByText('served from cache')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Fed holds rates steady' })).toHaveAttribute('href', 'https://example.com/fed');
+    expect(screen.getByText('The target range is unchanged at 4.25-4.50%.')).toBeInTheDocument();
+    expect(screen.getByText('Brave Search quota is exhausted for another 4 seconds')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Hide details' }));
+    expect(screen.queryByText('The target range is unchanged at 4.25-4.50%.')).not.toBeInTheDocument();
+  });
+
+  it('rolls removals and query failures into the summary cards', async () => {
+    render(<AnswerQualityPanel apiUrl="https://api.test" getAuthHeaders={() => ({})} />);
+    expect(await screen.findByText(/2 sentence\(s\) and 1 key number\(s\) removed/)).toBeInTheDocument();
+    expect(screen.getByText(/1 query failure\(s\)/)).toBeInTheDocument();
   });
 
   it('explains recent answer status in plain language', async () => {

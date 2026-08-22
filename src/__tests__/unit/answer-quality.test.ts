@@ -15,6 +15,10 @@ function conversation(options: {
   scenario?: 'completed' | 'unavailable' | 'not_run';
   searchPlanned?: boolean;
   search?: { providerCalls: number; cacheHits: number; resultCount: number };
+  searchOutcomes?: unknown[];
+  failedSearchOutcomes?: unknown[];
+  removals?: unknown;
+  secondaryIssues?: string[];
   manifest?: boolean;
 }): AnswerQualityConversation {
   const createdAt = new Date(Date.UTC(2026, 7, 17, 12, options.minute));
@@ -88,7 +92,17 @@ function conversation(options: {
         ...(options.late && { contextEscalated: true }),
         modelCalls: [],
         timings: { contextGatherMs: 1, promptBuildMs: 1, totalMs: 2 },
-        validation: { deterministic: { valid: outcome === 'passed', issues: [], outcome } },
+        validation: {
+          deterministic: {
+            valid: outcome === 'passed',
+            issues: outcome === 'passed' ? [] : ['User-facing usd value 120000 is not present in the canonical fact pack.'],
+            outcome,
+            ...(options.removals ? { removals: options.removals } : {}),
+          },
+          ...(options.secondaryIssues && {
+            secondary: [{ phase: 'retry', valid: false, issues: options.secondaryIssues }],
+          }),
+        },
         evidenceRefs: {
           tickers: [],
           retirementAnalysis: false,
@@ -98,8 +112,10 @@ function conversation(options: {
               queries: [{ query: 'current Federal Reserve interest rate', purpose: 'rate', freshness: 'pm' }],
               ...options.search,
               retrievedAt: createdAt.toISOString(),
+              ...(options.searchOutcomes && { queryOutcomes: options.searchOutcomes }),
             },
           }),
+          ...(options.failedSearchOutcomes && { searchQueryOutcomes: options.failedSearchOutcomes }),
         },
       },
     },
@@ -267,8 +283,116 @@ describe('answer quality report', () => {
       cacheHits: 1,
       cacheReuseRate: 0.5,
       resultCount: 5,
+      failedQueries: 0,
     });
     expect(report.recent[0]).toMatchObject({ searchRequested: true, searchRetrieved: true });
+  });
+
+  it('carries what salvage removed, so a trimmed answer can be reviewed', () => {
+    const report = buildAnswerQualityReport([
+      conversation({
+        id: 'trimmed',
+        minute: 1,
+        outcome: 'salvaged',
+        removals: {
+          sentences: [
+            {
+              field: 'summary',
+              text: 'Your emergency fund covers $18,400 of expenses.',
+              reason: 'unsupported_value',
+              unsupportedValues: ['$18,400'],
+            },
+            { field: 'insight', index: 0, text: 'That leaves you thin.', reason: 'dependent_on_removed' },
+          ],
+          keyNumbers: [
+            { key: 'emergency_fund', value: 18400, unit: 'usd', provenance: 'fact_missing', issues: ['emergency_fund does not cite a canonical fact.'] },
+          ],
+        },
+        secondaryIssues: ['The recommendation does not follow from the cited figures.'],
+      }),
+    ]);
+
+    expect(report.evidence).toMatchObject({ salvaged: 1, trimmedSentences: 2, trimmedKeyNumbers: 1 });
+    expect(report.recent[0].details.removedSentences[0]).toMatchObject({
+      field: 'summary',
+      reason: 'unsupported_value',
+      unsupportedValues: ['$18,400'],
+    });
+    expect(report.recent[0].details.removedKeyNumbers[0].key).toBe('emergency_fund');
+    expect(report.recent[0].details.groundingIssues).toHaveLength(1);
+    expect(report.recent[0].details.secondaryIssues).toEqual([
+      { phase: 'retry', issues: ['The recommendation does not follow from the cited figures.'] },
+    ]);
+  });
+
+  it('keeps the discarded answer when the whole response was replaced', () => {
+    const report = buildAnswerQualityReport([
+      conversation({
+        id: 'replaced',
+        minute: 1,
+        outcome: 'replaced',
+        removals: {
+          sentences: [],
+          keyNumbers: [],
+          replacedSummary: 'You can retire in 2031 with $2.4M.',
+        },
+      }),
+    ]);
+
+    expect(report.recent[0].details.replacedSummary).toBe('You can retire in 2031 with $2.4M.');
+  });
+
+  it('records each Brave query, its routing, and the results it returned', () => {
+    const report = buildAnswerQualityReport([
+      conversation({
+        id: 'search-detail',
+        minute: 1,
+        selected: ['search_context'],
+        search: { providerCalls: 1, cacheHits: 0, resultCount: 2 },
+        searchOutcomes: [{
+          query: 'current Federal Reserve interest rate',
+          purpose: 'rate',
+          freshness: 'pm',
+          source: 'provider',
+          status: 'succeeded',
+          resultCount: 2,
+          results: [
+            { title: 'Fed holds rates', url: 'https://example.com/fed', source: 'example.com', snippet: 'The target range is unchanged.' },
+            { title: 'Rate outlook', url: 'https://example.com/outlook', source: 'example.com', snippet: 'Markets expect one cut.' },
+          ],
+        }],
+      }),
+    ]);
+
+    const outcomes = report.recent[0].details.searchQueryOutcomes;
+    expect(outcomes).toHaveLength(1);
+    expect(outcomes[0]).toMatchObject({ source: 'provider', status: 'succeeded', resultCount: 2 });
+    expect(outcomes[0].results[0].url).toBe('https://example.com/fed');
+    expect(report.recent[0].details.plannedSearchQueries[0].query).toBe('current Federal Reserve interest rate');
+  });
+
+  it('keeps queries that failed outright, where no search evidence was built', () => {
+    const report = buildAnswerQualityReport([
+      conversation({
+        id: 'search-failed',
+        minute: 1,
+        selected: ['search_context'],
+        searchPlanned: true,
+        failedSearchOutcomes: [{
+          query: 'current Federal Reserve interest rate',
+          purpose: 'rate',
+          freshness: 'pm',
+          source: 'provider',
+          status: 'failed',
+          resultCount: 0,
+          error: 'Brave Search quota is exhausted for another 4 seconds',
+          results: [],
+        }],
+      }),
+    ]);
+
+    expect(report.search).toMatchObject({ requested: 1, retrieved: 0, failedQueries: 1 });
+    expect(report.recent[0].details.searchQueryOutcomes[0].error).toContain('quota is exhausted');
   });
 
   it('returns explicit empty-state nulls', () => {
@@ -297,6 +421,7 @@ describe('answer quality report', () => {
       cacheHits: 0,
       cacheReuseRate: null,
       resultCount: 0,
+      failedQueries: 0,
     });
     expect(report.window).toEqual({ from: null, to: null, conversations: 0, withEvidence: 0 });
   });
