@@ -81,7 +81,7 @@ interface MarketNewsContext {
 }
 
 export default function AdminPage() {
-  const [activeTab, setActiveTab] = useState<'production' | 'users' | 'market-news' | 'ai-settings'>('production');
+  const [activeTab, setActiveTab] = useState<'production' | 'users' | 'market-news' | 'ai-settings' | 'data-gaps'>('production');
 
   // Production data state
   const [productionUsers, setProductionUsers] = useState<ProductionUser[]>([]);
@@ -718,6 +718,133 @@ export default function AdminPage() {
 
   const truncateText = (text: string, maxLength: number = 100) => {
     return text.length > maxLength ? text.substring(0, maxLength) + '...' : text;
+  };
+
+  // Securities the classifier could not place, aggregated across users so the
+  // panel shows what provider data to go and find without exposing anyone's
+  // individual positions.
+  type DataGapSecurity = {
+    label: string;
+    category: 'unmapped' | 'unsupported' | 'us-listing-fallback';
+    userCount: number;
+    lastSeenAt: string;
+  };
+  type DataGapReport = {
+    usersConsidered: number;
+    usersWithAnyGap: number;
+    securities: DataGapSecurity[];
+    coverage: {
+      totalUnmodeledValue: number;
+      worstValueCoverage: number | null;
+      medianValueCoverage: number | null;
+    };
+  };
+  const [dataGaps, setDataGaps] = useState<DataGapReport | null>(null);
+  const [dataGapsLoading, setDataGapsLoading] = useState(false);
+  const [dataGapsError, setDataGapsError] = useState<string | null>(null);
+
+  const loadDataGaps = async () => {
+    setDataGapsLoading(true);
+    setDataGapsError(null);
+    try {
+      const response = await fetch(`${API_URL}/admin/data-gaps`, { headers: getAuthHeaders() });
+      if (!response.ok) throw new Error(`Request failed (${response.status})`);
+      setDataGaps(await response.json());
+    } catch (error) {
+      setDataGapsError(error instanceof Error ? error.message : 'Failed to load data gaps');
+    } finally {
+      setDataGapsLoading(false);
+    }
+  };
+
+  const CATEGORY_LABEL: Record<DataGapSecurity['category'], string> = {
+    unmapped: 'No asset class resolved',
+    unsupported: 'Recognized, no return series',
+    'us-listing-fallback': 'US-listed fallback used',
+  };
+
+  const renderDataGapsTab = () => {
+    const pct = (value: number | null) => (value === null ? '—' : `${(value * 100).toFixed(1)}%`);
+    return (
+      <div className="space-y-6">
+        <div className="rounded-lg bg-white/70 p-6">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-xl font-semibold text-[#102319]">Data gaps</h2>
+              <p className="mt-1 text-sm text-[#5e6b63]">
+                Securities the classifier could not place, ranked by how many users hold them.
+                Aggregated by security — no individual positions are shown.
+              </p>
+            </div>
+            <button
+              onClick={loadDataGaps}
+              disabled={dataGapsLoading}
+              className="min-h-10 rounded bg-[#102319] px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+            >
+              {dataGapsLoading ? 'Loading…' : dataGaps ? 'Refresh' : 'Load report'}
+            </button>
+          </div>
+
+          {dataGapsError && (
+            <p className="mt-4 rounded bg-red-50 p-3 text-sm text-red-700">{dataGapsError}</p>
+          )}
+
+          {dataGaps && (
+            <>
+              <div className="mt-5 grid grid-cols-2 gap-4 sm:grid-cols-4">
+                {[
+                  ['Users considered', String(dataGaps.usersConsidered)],
+                  ['Users with a gap', String(dataGaps.usersWithAnyGap)],
+                  ['Median coverage', pct(dataGaps.coverage.medianValueCoverage)],
+                  ['Worst coverage', pct(dataGaps.coverage.worstValueCoverage)],
+                ].map(([label, value]) => (
+                  <div key={label} className="rounded bg-white/80 p-3">
+                    <div className="text-xs uppercase tracking-wide text-[#5e6b63]">{label}</div>
+                    <div className="mt-1 text-lg font-semibold text-[#102319]">{value}</div>
+                  </div>
+                ))}
+              </div>
+              <p className="mt-3 text-sm text-[#5e6b63]">
+                {`$${Math.round(dataGaps.coverage.totalUnmodeledValue).toLocaleString()} excluded from simulation across these analyses.`}
+              </p>
+
+              {dataGaps.securities.length === 0 ? (
+                <p className="mt-5 text-sm text-[#5e6b63]">
+                  No unclassifiable securities reported. Every holding in the analyses read reached the simulation.
+                </p>
+              ) : (
+                <div className="mt-5 overflow-x-auto">
+                  <table className="w-full min-w-[640px] text-left text-sm">
+                    <thead className="text-xs uppercase tracking-wide text-[#5e6b63]">
+                      <tr>
+                        <th className="py-2 pr-4">Security</th>
+                        <th className="py-2 pr-4">Why</th>
+                        <th className="py-2 pr-4 text-right">Users</th>
+                        <th className="py-2 text-right">Last seen</th>
+                      </tr>
+                    </thead>
+                    <tbody className="text-[#102319]">
+                      {dataGaps.securities.map(security => (
+                        <tr key={`${security.category}-${security.label}`} className="border-t border-black/5">
+                          <td className="py-2 pr-4 font-medium">{security.label}</td>
+                          <td className="py-2 pr-4 text-[#5e6b63]">{CATEGORY_LABEL[security.category]}</td>
+                          <td className="py-2 pr-4 text-right tabular-nums">{security.userCount}</td>
+                          <td className="py-2 text-right tabular-nums text-[#5e6b63]">{security.lastSeenAt}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              <p className="mt-4 text-xs text-[#5e6b63]">
+                Built from stored retirement analyses, so users who have never run one do not appear.
+              </p>
+            </>
+          )}
+        </div>
+      </div>
+    );
   };
 
   const renderProductionTab = () => {
@@ -1635,6 +1762,16 @@ export default function AdminPage() {
           >
             AI Settings
           </button>
+          <button
+            onClick={() => setActiveTab('data-gaps')}
+            className={`min-h-12 min-w-0 rounded px-3 py-2 text-sm font-medium leading-tight transition-colors sm:flex-1 sm:px-4 ${
+              activeTab === 'data-gaps'
+                ? 'bg-[#102319] text-white shadow-sm'
+                : 'text-[#5e6b63] hover:bg-white/65 hover:text-[#102319]'
+            }`}
+          >
+            Data Gaps
+          </button>
         </div>
 
         {/* Tab Content */}
@@ -1642,6 +1779,7 @@ export default function AdminPage() {
         {activeTab === 'users' && renderUsersTab()}
         {activeTab === 'market-news' && renderMarketNewsTab()}
         {activeTab === 'ai-settings' && renderAiSettingsTab()}
+        {activeTab === 'data-gaps' && renderDataGapsTab()}
         </div>
       </div>
     </>

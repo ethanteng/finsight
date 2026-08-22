@@ -1112,6 +1112,39 @@ app.get('/sync/status', async (req: Request, res: Response) => {
     });
 
     // Admin endpoint to get all production users
+    /**
+     * Securities the classifier could not place, aggregated across users.
+     *
+     * Reads analyses already persisted rather than adding a write to the
+     * classification path, so it needs no migration. The tradeoff is coverage:
+     * a user who has never run a retirement analysis does not appear.
+     *
+     * Aggregated by security and never by user — the counts decide which
+     * provider data to source, and individual positions are not needed for that.
+     */
+    app.get('/admin/data-gaps', adminAuth, async (req: Request, res: Response) => {
+      try {
+        const { getPrismaClient } = await import('./prisma-client');
+        const { aggregateDataGaps } = await import('./services/data-gap-report');
+        const prisma = getPrismaClient();
+
+        // Bounded: newest first, so a large table cannot stall the admin page.
+        // aggregateDataGaps keeps only each user's most recent row anyway.
+        const rows = await prisma.retirementAnalysis.findMany({
+          select: { userId: true, computedAt: true, historicalImplications: true },
+          orderBy: { computedAt: 'desc' },
+          take: 2000,
+        });
+
+        const report = aggregateDataGaps(rows as any);
+        console.log(`Admin: data gaps — ${report.securities.length} securities across ${report.usersConsidered} users`);
+        res.json(report);
+      } catch (error) {
+        console.error('Error building data gap report:', error);
+        res.status(500).json({ error: 'Failed to build data gap report' });
+      }
+    });
+
     app.get('/admin/production-users', adminAuth, async (req: Request, res: Response) => {
       try {
         const { getPrismaClient } = await import('./prisma-client');
