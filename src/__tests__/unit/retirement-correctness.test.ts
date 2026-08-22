@@ -151,6 +151,19 @@ describe('retirement correctness contracts', () => {
     );
   });
 
+  it.each(['VTIP', 'SCHP'])('recognizes provider-sparse %s holdings as TIPS', async ticker => {
+    const holdings = [holding('tips', ticker, 100_000)];
+    const securities = [security('tips', ticker, 'Institutional Fund', 'etf')];
+
+    const mapping = await mapPortfolioToAssetBasket(holdings, securities, 100_000);
+
+    expect(mapping.holdingExposures[0]).toMatchObject({
+      status: 'mapped',
+      method: 'name-inference',
+      weights: { nominalBonds: 0, tips: 1 },
+    });
+  });
+
   it('keeps provider mappingMethod when unrecognized holdings sit beside direct holdings', async () => {
     const holdings = [
       holding('stock', 'WFC', 90_000),
@@ -205,13 +218,24 @@ describe('retirement correctness contracts', () => {
         method: 'name-inference',
         confidence: 'low',
       },
+      {
+        holdingId: 'duplicate-label-unmodeled',
+        label: 'Unknown Plan Fund',
+        value: 0,
+        status: 'unmapped',
+        method: 'name-inference',
+        confidence: 'low',
+      },
     ]);
 
     expect(populateAssumptions(mapping, [], []).join(' ')).toContain(
       '$150 was excluded from analysis: 1 holding was fully unmodeled and 1 holding was partially modeled',
     );
     const quality = calculateDataQuality([], [], mapping, 1, []);
-    expect(quality.missingData).toEqual(['Unknown Plan Fund', 'Zero-value Unknown Fund']);
+    expect(quality.missingData).toEqual([
+      'Unknown Plan Fund (2 holdings)',
+      'Zero-value Unknown Fund',
+    ]);
   });
 
   it('excludes unmapped dollars instead of reallocating them across mapped assets', async () => {

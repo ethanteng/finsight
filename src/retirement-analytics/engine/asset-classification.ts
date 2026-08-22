@@ -1,11 +1,11 @@
 const BOND_TICKERS = new Set([
   'AGG', 'BND', 'BNDX', 'BOND', 'EAGG', 'EMB', 'HYG', 'IEF', 'IUSB',
-  'JCPB', 'JPST', 'LQD', 'MUB', 'SHY', 'STIP', 'TIP', 'TLT', 'VCIT',
-  'VCSH', 'VWOB',
+  'JCPB', 'JPST', 'LQD', 'MUB', 'SCHP', 'SHY', 'STIP', 'TIP', 'TLT',
+  'VCIT', 'VCSH', 'VTIP', 'VWOB',
 ]);
 
 const INTERNATIONAL_EQUITY_TICKERS = new Set(['EFA', 'IXUS', 'VEA', 'VWO', 'VXUS']);
-const TIPS_TICKERS = new Set(['STIP', 'TIP']);
+const TIPS_TICKERS = new Set(['SCHP', 'STIP', 'TIP', 'VTIP']);
 
 export {
   isContainerAssetType,

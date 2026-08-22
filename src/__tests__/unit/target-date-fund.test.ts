@@ -179,9 +179,10 @@ describe('target-date funds in retirement mapping', () => {
           allocationAgeDays: 275,
           staleAllocation: false,
           sourceUrl: 'https://assets.mersofmich.com/forms/MERS_LifePath_2040.pdf',
-          sourceContext: 'MERS plan-sponsor fact sheet for the BlackRock LifePath Fund N share class',
+          sourceContext: 'MERS plan-sponsor fact sheet for the BlackRock LifePath Fund N share class; no separate TIPS weight is published in its holdings',
           exactAllocation: true,
         });
+        expect(mapping.holdingExposures[0].weights?.tips).toBe(0);
       });
   });
 

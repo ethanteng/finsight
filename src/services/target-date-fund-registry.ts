@@ -99,8 +99,11 @@ const REGISTRY: RegistryEntry[] = [
     targetYear: 2040,
     allocationAsOf: '2026-03-31',
     sourceUrl: 'https://assets.mersofmich.com/forms/MERS_LifePath_2040.pdf',
-    sourceContext: 'MERS plan-sponsor fact sheet for the BlackRock LifePath Fund N share class',
+    sourceContext: 'MERS plan-sponsor fact sheet for the BlackRock LifePath Fund N share class; no separate TIPS weight is published in its holdings',
     exactAllocation: true,
+    // The fact sheet names a TIPS index only among possible custom-benchmark
+    // components, not as a separately weighted reported holding. Leave the
+    // unreported residual unsupported instead of inventing a TIPS allocation.
     weights: { usEquity: 0.4773, internationalEquity: 0.2698, nominalBonds: 0.2276, tips: 0, cash: 0 },
   },
 ];
