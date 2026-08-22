@@ -5,8 +5,8 @@
  * The registry stores hand-transcribed allocations, each citing a live URL.
  * Those URLs are mutable and are republished on each provider's own cadence --
  * State Street monthly -- so a citation alone does not reproduce the figure it
- * supports. This script records a fingerprint of what each source says now and
- * compares it against the fingerprint stored with the entry.
+ * supports. This reports what each source says now against the fingerprint
+ * stored with the entry.
  *
  * It reports divergence. It never edits the registry: deciding that new
  * published weights should replace transcribed ones is a human judgment, and
@@ -15,193 +15,40 @@
  *   npx ts-node scripts/verify-registry-sources.ts
  *   npx ts-node scripts/verify-registry-sources.ts --emit   # print TS to paste back
  *
- * Read-only over the network and the repo. Exits non-zero when any source has
- * drifted, so it can be wired to a schedule later.
+ * Observation and classification live in `src/services/registry-source-check.ts`,
+ * shared with the admin panel so a check cannot mean one thing on the command
+ * line and something else in the UI.
+ *
+ * Read-only over the network and the repo. Exits non-zero on drift or error so
+ * it can be scheduled later -- see #164, which covers making that non-blocking
+ * first, since an unreachable provider is not the same as a republished one.
  */
 
-import { createHash } from 'node:crypto';
-import { listRegistryEntries, type SourceFingerprint } from '../src/services/target-date-fund-registry';
+import { checkRegistrySources, type RegistrySourceStatus } from '../src/services/registry-source-check';
 
-const REQUEST_TIMEOUT_MS = 30_000;
-
-/** Today in UTC, matching how the rest of the engine derives dates. */
-function todayUtc(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function sha256(input: string | Uint8Array): string {
-  return createHash('sha256').update(input).digest('hex');
-}
-
-async function fetchWithTimeout(url: string): Promise<Response> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-  try {
-    return await fetch(url, { signal: controller.signal, redirect: 'follow' });
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-function normalizeDate(raw: string): string {
-  // Providers write "Jul 31 2026", "July 31, 2026", "07/31/2026" and "06-30-26".
-  const cleaned = raw.replace(/,/g, ' ').replace(/\s+/g, ' ').trim();
-  const slash = cleaned.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-  if (slash) return `${slash[3]}-${slash[1]}-${slash[2]}`;
-  const dashed = cleaned.match(/^(\d{2})-(\d{2})-(\d{2})$/);
-  if (dashed) return `20${dashed[3]}-${dashed[1]}-${dashed[2]}`;
-  const parsed = Date.parse(`${cleaned} UTC`);
-  return Number.isNaN(parsed) ? cleaned : new Date(parsed).toISOString().slice(0, 10);
-}
-
-/**
- * State Street publishes on a server-rendered fund page carrying two different
- * tables, and the distinction matters.
- *
- * "Fund Asset Allocation" gives aggregate Equity/Fixed Income for the latest
- * month-end. The registry is NOT derived from it: an equity total is unchanged
- * when the provider shifts weight between US and international, so hashing it
- * would report `unchanged` while the values feeding the simulation had moved.
- *
- * "Fund Top Holdings" lists the component portfolios and their weights, and
- * that is where every stored weight comes from. For the 2040 entry:
- *   usEquity      0.4341 = Equity 500 35.90 + Small/Mid Cap 7.51
- *   international 0.3176 = Global Equity ex-U.S. 31.76
- *   nominalBonds  0.2467 = Aggregate Bond 12.22 + Long Term Treasury 9.61
- *                          + High Yield 2.84
- *   cash          0.0016 = money market 0.17, less the documented rounding
- *
- * So the fingerprint covers the holdings lines and their own as-of date, which
- * is the publication the transcription was taken from rather than whatever the
- * page happens to summarize today.
- */
-async function observeStateStreet(url: string): Promise<SourceFingerprint> {
-  const response = await fetchWithTimeout(url);
-  if (!response.ok) throw new Error(`HTTP ${response.status}`);
-  const html = await response.text();
-  const text = html
-    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
-    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&amp;/g, '&')
-    .replace(/\s+/g, ' ');
-
-  const heading = text.match(/Top Holdings as of\s+([A-Z][a-z]{2,8}\s+\d{1,2},?\s+\d{4})/i);
-  if (!heading) throw new Error('no "Top Holdings as of" section — page structure may have changed');
-  const sourceAsOf = normalizeDate(heading[1]);
-
-  // The table runs from its heading to the download link that follows it.
-  const start = (heading.index ?? 0) + heading[0].length;
-  const rest = text.slice(start);
-  const end = rest.search(/Download All Holdings|Asset Allocation/i);
-  const table = end === -1 ? rest : rest.slice(0, end);
-
-  // Holding names routinely exceed ~70 characters (e.g. State Street's
-  // "Enhanced Roll Yield Commodity Strategy" ETF is 77). Cap the capture high
-  // enough that a long name is read whole — a too-short limit silently starts
-  // mid-name ("Street SPDR…") and leaves auditors comparing a truncated string
-  // that does not appear on the page.
-  const holdings = [...table.matchAll(/([A-Z][A-Za-z0-9 .,&()\/'-]{4,160}?)\s+(\d{1,2}\.\d{2})\s*%/g)]
-    .map(match => `${match[1].replace(/^Name Weight\s*/i, '').trim().toLowerCase()}=${match[2]}`)
-    .filter(line => !/^name weight=/.test(line));
-  const unique = [...new Set(holdings)].sort();
-  if (unique.length === 0) throw new Error('no holdings rows parsed — page structure may have changed');
-
-  const canonical = `${sourceAsOf}|${unique.join('|')}`;
-  return {
-    kind: 'published-values',
-    value: sha256(canonical),
-    observedAt: todayUtc(),
-    sourceAsOf,
-    observed: canonical,
-  };
-}
-
-/** BlackRock publishes a PDF fact sheet, so the bytes themselves are evidence. */
-async function observeBlackRock(url: string): Promise<SourceFingerprint> {
-  const response = await fetchWithTimeout(url);
-  if (!response.ok) throw new Error(`HTTP ${response.status}`);
-  const bytes = new Uint8Array(await response.arrayBuffer());
-
-  // The holdings date is rendered inside compressed content streams; reading it
-  // needs a PDF toolchain this script deliberately does not depend on. The byte
-  // hash is the load-bearing signal — any republication changes it.
-  return {
-    kind: 'document-sha256',
-    value: sha256(bytes),
-    observedAt: todayUtc(),
-    sourceAsOf: 'see-document',
-    observed: `${bytes.length} bytes`,
-  };
-}
-
-const OBSERVERS: Record<string, (url: string) => Promise<SourceFingerprint>> = {
-  'state-street': observeStateStreet,
-  blackrock: observeBlackRock,
+const ICON: Record<RegistrySourceStatus, string> = {
+  unchanged: 'ok      ',
+  drifted: 'DRIFTED ',
+  baseline: 'baseline',
+  error: 'ERROR   ',
 };
-
-type Status = 'unchanged' | 'drifted' | 'baseline' | 'error';
 
 (async () => {
   const emit = process.argv.includes('--emit');
-  const entries = listRegistryEntries();
-  const results: Array<{ key: string; status: Status; detail: string; fingerprint?: SourceFingerprint }> = [];
+  const results = await checkRegistrySources();
 
-  for (const entry of entries) {
-    const key = `${entry.identity.provider}/${entry.identity.series}/${entry.identity.vintage}`;
-    const observe = OBSERVERS[entry.identity.provider];
-    if (!observe) {
-      results.push({ key, status: 'error', detail: `no observer for provider ${entry.identity.provider}` });
-      continue;
-    }
-    try {
-      const fingerprint = await observe(entry.sourceUrl);
-      const stored = entry.sourceFingerprint;
-      if (!stored) {
-        results.push({ key, status: 'baseline', detail: `no stored fingerprint; observed ${fingerprint.observed}`, fingerprint });
-      } else if (
-        stored.kind === 'published-values' &&
-        sha256(stored.observed) !== stored.value
-      ) {
-        // Auditors read `observed`; drift detection compares `value`. A split
-        // here means the registry itself is inconsistent, not that the source moved.
-        results.push({
-          key,
-          status: 'error',
-          detail: 'stored published-values fingerprint: value !== sha256(observed)',
-          fingerprint,
-        });
-      } else if (stored.kind !== fingerprint.kind) {
-        results.push({
-          key,
-          status: 'drifted',
-          detail: `recorded kind ${stored.kind}; observer now reports ${fingerprint.kind}`,
-          fingerprint,
-        });
-      } else if (stored.value === fingerprint.value) {
-        results.push({ key, status: 'unchanged', detail: `matches fingerprint recorded ${stored.observedAt}`, fingerprint });
-      } else {
-        results.push({
-          key,
-          status: 'drifted',
-          detail: `recorded ${stored.observedAt}: ${stored.observed}\n      now:              ${fingerprint.observed}`,
-          fingerprint,
-        });
-      }
-    } catch (error) {
-      results.push({ key, status: 'error', detail: error instanceof Error ? error.message : String(error) });
-    }
-  }
-
-  const icon: Record<Status, string> = { unchanged: 'ok      ', drifted: 'DRIFTED ', baseline: 'baseline', error: 'ERROR   ' };
   for (const result of results) {
-    console.log(`${icon[result.status]} ${result.key}`);
+    console.log(`${ICON[result.status]} ${result.key}`);
     console.log(`         ${result.detail}`);
-    const entry = entries.find(e => `${e.identity.provider}/${e.identity.series}/${e.identity.vintage}` === result.key);
-    if (result.fingerprint && entry && result.fingerprint.sourceAsOf !== 'see-document'
-        && result.fingerprint.sourceAsOf !== entry.allocationAsOf) {
-      console.log(`         note: source now advertises ${result.fingerprint.sourceAsOf}, entry records ${entry.allocationAsOf}`);
+    if (
+      result.observedSourceAsOf &&
+      result.observedSourceAsOf !== 'see-document' &&
+      result.observedSourceAsOf !== result.allocationAsOf
+    ) {
+      console.log(`         note: source advertises ${result.observedSourceAsOf}, entry records ${result.allocationAsOf}`);
+    }
+    if (result.staleByAge) {
+      console.log(`         note: stored allocation is ${result.allocationAgeDays} days old`);
     }
   }
 
@@ -216,9 +63,10 @@ type Status = 'unchanged' | 'drifted' | 'baseline' | 'error';
     }
   }
 
-  const drifted = results.filter(r => r.status === 'drifted').length;
-  const errored = results.filter(r => r.status === 'error').length;
-  console.log(`\n${results.length} entries — ${results.filter(r => r.status === 'unchanged').length} unchanged, ` +
-    `${drifted} drifted, ${results.filter(r => r.status === 'baseline').length} baseline, ${errored} error`);
-  process.exit(drifted > 0 || errored > 0 ? 1 : 0);
+  const count = (status: RegistrySourceStatus) => results.filter(result => result.status === status).length;
+  console.log(
+    `\n${results.length} entries — ${count('unchanged')} unchanged, ${count('drifted')} drifted, ` +
+    `${count('baseline')} baseline, ${count('error')} error`
+  );
+  process.exit(count('drifted') > 0 || count('error') > 0 ? 1 : 0);
 })();

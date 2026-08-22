@@ -156,6 +156,24 @@ export default function AdminPage() {
   } | null>(null);
   const [dataGapsLoading, setDataGapsLoading] = useState(false);
   const [dataGapsError, setDataGapsError] = useState<string | null>(null);
+  // Whether each registry source still publishes what its entry records. The
+  // engine's staleness flag is age-based; this is the divergence signal it
+  // cannot give, because only a provider fetch establishes divergence.
+  const [registrySources, setRegistrySources] = useState<{
+    checkedAt: string;
+    sources: Array<{
+      key: string;
+      status: 'unchanged' | 'drifted' | 'baseline' | 'error';
+      detail: string;
+      sourceUrl: string;
+      allocationAsOf: string;
+      allocationAgeDays: number;
+      staleByAge: boolean;
+      observedSourceAsOf?: string;
+    }>;
+  } | null>(null);
+  const [registryLoading, setRegistryLoading] = useState(false);
+  const [registryError, setRegistryError] = useState<string | null>(null);
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
@@ -758,6 +776,23 @@ export default function AdminPage() {
     }
   };
 
+  const loadRegistrySources = async () => {
+    setRegistryLoading(true);
+    setRegistryError(null);
+    try {
+      const response = await fetch(`${API_URL}/admin/registry-sources`, { headers: getAuthHeaders() });
+      if (response.status === 401 || response.status === 403) {
+        throw new Error('Authentication required for admin access');
+      }
+      if (!response.ok) throw new Error(`Request failed (${response.status})`);
+      setRegistrySources(await response.json());
+    } catch (error) {
+      setRegistryError(error instanceof Error ? error.message : 'Failed to check registry sources');
+    } finally {
+      setRegistryLoading(false);
+    }
+  };
+
   const CATEGORY_LABEL: Record<'unmapped' | 'unsupported' | 'us-listing-fallback', string> = {
     unmapped: 'No asset class resolved',
     unsupported: 'Recognized, no return series',
@@ -840,6 +875,114 @@ export default function AdminPage() {
 
               <p className="mt-4 text-xs text-[#5e6b63]">
                 Built from stored retirement analyses, so users who have never run one do not appear.
+              </p>
+            </>
+          )}
+        </div>
+
+        <div className="rounded-lg bg-white/70 p-6">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-xl font-semibold text-[#102319]">Registry sources</h2>
+              <p className="mt-1 text-sm text-[#5e6b63]">
+                Whether each target-date source still publishes what its entry records. The
+                engine&apos;s own staleness flag is age-based and will not notice a provider
+                republishing inside its window.
+              </p>
+            </div>
+            <button
+              onClick={loadRegistrySources}
+              disabled={registryLoading}
+              className="min-h-10 rounded bg-[#102319] px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+            >
+              {registryLoading ? 'Checking…' : registrySources ? 'Re-check' : 'Check sources'}
+            </button>
+          </div>
+
+          {registryError && (
+            <p className="mt-4 rounded bg-red-50 p-3 text-sm text-red-700">{registryError}</p>
+          )}
+
+          {registrySources && (
+            <>
+              {(() => {
+                const diverged = registrySources.sources.filter(s => s.status === 'drifted');
+                const errored = registrySources.sources.filter(s => s.status === 'error');
+                if (diverged.length > 0) {
+                  return (
+                    <p className="mt-4 rounded bg-amber-50 p-3 text-sm text-amber-900">
+                      <strong>{diverged.length} source{diverged.length === 1 ? '' : 's'} moved since transcription.</strong>{' '}
+                      The stored weights are not wrong, but they no longer match what the provider
+                      publishes. Re-transcribe from the current publication when you are ready — this
+                      panel never edits the registry.
+                    </p>
+                  );
+                }
+                if (errored.length > 0) {
+                  return (
+                    <p className="mt-4 rounded bg-amber-50 p-3 text-sm text-amber-900">
+                      {errored.length} source{errored.length === 1 ? '' : 's'} could not be read. That is
+                      an availability problem, not evidence that anything diverged.
+                    </p>
+                  );
+                }
+                return (
+                  <p className="mt-4 rounded bg-emerald-50 p-3 text-sm text-emerald-900">
+                    All {registrySources.sources.length} sources still publish what their entries record.
+                  </p>
+                );
+              })()}
+
+              <div className="mt-5 overflow-x-auto">
+                <table className="w-full min-w-[720px] text-left text-sm">
+                  <thead className="text-xs uppercase tracking-wide text-[#5e6b63]">
+                    <tr>
+                      <th className="py-2 pr-4">Entry</th>
+                      <th className="py-2 pr-4">Source</th>
+                      <th className="py-2 pr-4">Transcribed from</th>
+                      <th className="py-2 pr-4">Source now says</th>
+                      <th className="py-2 text-right">Age</th>
+                    </tr>
+                  </thead>
+                  <tbody className="text-[#102319]">
+                    {registrySources.sources.map(source => (
+                      <tr key={source.key} className="border-t border-black/5">
+                        <td className="py-2 pr-4 font-medium">
+                          <a href={source.sourceUrl} target="_blank" rel="noopener noreferrer" className="underline">
+                            {source.key}
+                          </a>
+                        </td>
+                        <td className="py-2 pr-4">
+                          <span className={
+                            source.status === 'drifted' ? 'text-amber-700 font-medium'
+                              : source.status === 'error' ? 'text-red-700'
+                              : 'text-emerald-700'
+                          }>
+                            {source.status === 'unchanged' ? 'unchanged'
+                              : source.status === 'drifted' ? 'moved'
+                              : source.status === 'error' ? 'unreadable'
+                              : 'no baseline'}
+                          </span>
+                        </td>
+                        <td className="py-2 pr-4 tabular-nums text-[#5e6b63]">{source.allocationAsOf}</td>
+                        <td className="py-2 pr-4 tabular-nums text-[#5e6b63]">
+                          {source.observedSourceAsOf && source.observedSourceAsOf !== 'see-document'
+                            ? source.observedSourceAsOf
+                            : '—'}
+                        </td>
+                        <td className="py-2 text-right tabular-nums text-[#5e6b63]">
+                          {source.allocationAgeDays}d{source.staleByAge ? ' · stale' : ''}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <p className="mt-4 text-xs text-[#5e6b63]">
+                Checked {new Date(registrySources.checkedAt).toLocaleString()}. Age drives the
+                engine&apos;s confidence today; divergence does not, because establishing it needs a
+                provider fetch that does not belong in a user&apos;s projection request.
               </p>
             </>
           )}

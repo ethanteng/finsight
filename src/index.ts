@@ -1159,6 +1159,44 @@ app.get('/sync/status', async (req: Request, res: Response) => {
       }
     });
 
+    /**
+     * Whether each target-date registry source still publishes what its entry
+     * records. Answers the question the runtime staleness flag cannot.
+     *
+     * `staleAllocation` in the engine is age-based, because divergence can only
+     * be established by fetching the provider and provider fetches do not belong
+     * in a request that computes someone's projection. State Street republishes
+     * monthly, so an entry stays under the 366-day threshold for a year while a
+     * dozen newer publications ship. This is where an operator sees that.
+     *
+     * On demand rather than on page load: six outbound fetches, and nobody
+     * needs them every time the admin panel opens.
+     */
+    app.get('/admin/registry-sources', adminAuth, async (req: Request, res: Response) => {
+      try {
+        const { checkRegistrySources } = await import('./services/registry-source-check');
+        const results = await checkRegistrySources();
+        const diverged = results.filter(result => result.status === 'drifted').length;
+        console.log(`Admin: registry sources — ${results.length} checked, ${diverged} diverged`);
+        res.json({
+          checkedAt: new Date().toISOString(),
+          sources: results.map(result => ({
+            key: result.key,
+            status: result.status,
+            detail: result.detail,
+            sourceUrl: result.sourceUrl,
+            allocationAsOf: result.allocationAsOf,
+            allocationAgeDays: result.allocationAgeDays,
+            staleByAge: result.staleByAge,
+            observedSourceAsOf: result.observedSourceAsOf,
+          })),
+        });
+      } catch (error) {
+        console.error('Error checking registry sources:', error);
+        res.status(500).json({ error: 'Failed to check registry sources' });
+      }
+    });
+
     // Admin endpoint to get all production users
     app.get('/admin/production-users', adminAuth, async (req: Request, res: Response) => {
       try {
