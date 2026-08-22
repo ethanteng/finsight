@@ -146,21 +146,23 @@ export function resolveRetirementInputs(args: {
  * dates. The full UTC date therefore belongs in the cache key; a year cannot
  * prevent a January snapshot from seeing a June allocation.
  *
- * Rows written before `asOfDate` was persisted, or with an invalid stored date,
- * fall back to the row's UTC computation date. That may cause a safe cache miss
- * when the original snapshot was older, but it cannot introduce future data.
+ * Only an explicit, valid stored `asOfDate` matches. Legacy rows that recorded
+ * only `asOfYear` (or nothing), and rows with an invalid date, return null so
+ * the cache misses and the analysis is recomputed. Falling back to `computedAt`
+ * looks safe against look-ahead, but on the common path where the snapshot and
+ * the analysis share a calendar day it would reuse pre-registry survival rates
+ * that silently redistributed unsupported sleeves.
  *
  * Null never equals a candidate date, so a row with no trustworthy date is
  * recomputed rather than trusted.
  */
 export function resolveStoredAsOfDate(
   storedAnalysisInput: Record<string, unknown> | null | undefined,
-  computedAt: Date | null | undefined
+  _computedAt?: Date | null | undefined
 ): string | null {
   const stored = storedAnalysisInput?.asOfDate;
   if (typeof stored === 'string' && isUtcCalendarDate(stored)) return stored;
-  if (!(computedAt instanceof Date) || Number.isNaN(computedAt.getTime())) return null;
-  return computedAt.toISOString().slice(0, 10);
+  return null;
 }
 
 function isUtcCalendarDate(value: string): boolean {
