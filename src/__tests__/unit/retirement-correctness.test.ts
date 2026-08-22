@@ -196,6 +196,33 @@ describe('retirement correctness contracts', () => {
     expect(mapping.holdingExposures[0].usedUsListingFallback).toBeUndefined();
   });
 
+  it('maps ADR / depositary receipts to international instead of the US listing fallback', async () => {
+    const holdings = [holding('adr', 'TSM')];
+    const securities = [security('adr', 'TSM', 'Taiwan Semiconductor Manufacturing', 'adr')];
+
+    const mapping = await mapPortfolioToAssetBasket(holdings, securities, 100);
+
+    expect(mapping.mappedValue).toBe(100);
+    expect(mapping.internationalEquityWeight).toBe(1);
+    expect(mapping.usEquityWeight).toBe(0);
+    expect(mapping.holdingExposures[0]).toMatchObject({
+      status: 'mapped',
+      method: 'provider',
+      confidence: 'medium',
+    });
+    expect(mapping.holdingExposures[0].usedUsListingFallback).toBeUndefined();
+  });
+
+  it('does not treat an equity-typed ADR name as US-listed domestic exposure', async () => {
+    const holdings = [holding('stock', 'BABA')];
+    const securities = [security('stock', 'BABA', 'Alibaba Group Holding Ltd ADR', 'equity')];
+
+    const mapping = await mapPortfolioToAssetBasket(holdings, securities, 100);
+
+    expect(mapping.internationalEquityWeight).toBe(1);
+    expect(mapping.holdingExposures[0].usedUsListingFallback).toBeUndefined();
+  });
+
   it('uses an explicit US market label without treating every equity as domestic', async () => {
     const holdings = [holding('index', 'PLAN500')];
     const securities = [security('index', 'PLAN500', 'S&P 500 Index Fund', 'equity')];

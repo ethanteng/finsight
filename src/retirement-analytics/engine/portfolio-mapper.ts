@@ -103,17 +103,34 @@ const DIRECT_EQUITY_TYPES = new Set([
   'common stock',
   'equity security',
   'ordinary shares',
-  'adr',
-  'depositary receipt',
 ]);
 
 const FUND_LABEL_SIGNAL = /\b(?:collective|etf|fund|index|pooled|portfolio)\b/i;
+const ADR_TYPE_SIGNAL = /\b(?:adr|ads|depositary receipts?)\b/i;
+
+function declaredHoldingTypes(
+  holding: Holding,
+  security: Security | undefined,
+): string[] {
+  return [security?.type, holding.security_type]
+    .filter((type): type is string => typeof type === 'string' && type.trim().length > 0)
+    .map(type => type.trim().toLowerCase());
+}
+
+/**
+ * ADRs / depositary receipts are US-listed wrappers over foreign issuers.
+ * Their listing is not US-equity geography evidence.
+ */
+function hasAdrDeclaredType(holding: Holding, security: Security | undefined): boolean {
+  return declaredHoldingTypes(holding, security).some(type => ADR_TYPE_SIGNAL.test(type));
+}
 
 /**
  * A provider-typed single security with a short exchange-style ticker carries
  * more geography evidence than a fund mandate does. This fallback is narrow:
  * a wrapper alone cannot activate it, while fund-shaped labels, mutual-fund
- * ticker conventions, and authoritative FMP fund classification veto it.
+ * ticker conventions, ADR/depositary types, and authoritative FMP fund
+ * classification veto it.
  */
 function hasUsListingFallbackEvidence(
   holding: Holding,
@@ -122,11 +139,13 @@ function hasUsListingFallbackEvidence(
   ticker: string,
   securityName: string,
 ): boolean {
-  const declaredTypes = [security?.type, holding.security_type]
-    .filter((type): type is string => typeof type === 'string' && type.trim().length > 0)
-    .map(type => type.trim().toLowerCase());
+  const declaredTypes = declaredHoldingTypes(holding, security);
   const selectedDeclaredType = selectDeclaredAssetType(declaredTypes).toLowerCase();
   if (!DIRECT_EQUITY_TYPES.has(selectedDeclaredType)) return false;
+  // A US listing of a foreign issuer is not domestic equity exposure.
+  if (hasAdrDeclaredType(holding, security) || ADR_TYPE_SIGNAL.test(securityName)) {
+    return false;
+  }
   if (!/^[A-Z]{1,5}(?:[.-][A-Z])?$/.test(ticker)) return false;
   // Five-character tickers ending in X are conventionally mutual funds.
   if (ticker.length === 5 && ticker.endsWith('X')) return false;
@@ -226,6 +245,22 @@ function resolveHoldingExposure(
   }
   if (isDeclaredFixedIncomeType(specificAssetType)) {
     return { weights: { ...EMPTY_WEIGHTS, nominalBonds: 1 }, method: 'provider', confidence: 'high' };
+  }
+  // Provider ADR / depositary types are foreign-issuer evidence on their own —
+  // do not wait for an Equity wrapper class or invent US geography from the listing.
+  if (hasAdrDeclaredType(holding, security) || ADR_TYPE_SIGNAL.test(securityName)) {
+    if (
+      !specificAssetType ||
+      specificAssetType.includes('equity') ||
+      specificAssetType.includes('stock') ||
+      ADR_TYPE_SIGNAL.test(specificAssetType)
+    ) {
+      return {
+        weights: { ...EMPTY_WEIGHTS, internationalEquity: 1 },
+        method: 'provider',
+        confidence: 'medium',
+      };
+    }
   }
   if (
     hasRealAssetNameSignal(specificAssetType) || hasRealAssetNameSignal(securityName) ||
