@@ -68,11 +68,14 @@ async function probe(path: string, ticker: string) {
     return {
       status: `ok (${body.length})`,
       shape: keys.slice(0, 8).join(','),
-      // Surface anything that looks like an asset-class signal.
+      // Surface asset-class signals AND the identity fields the provider maps
+      // to geographicFocus. `country` on a /profile response is what decides
+      // whether a directly held stock gets geography from FMP or falls through
+      // to the medium-confidence US-listing rule.
       sample: keys
-        .filter(k => /asset|class|equity|bond|fixed|cash|weight|percent/i.test(k))
+        .filter(k => /asset|class|equity|bond|fixed|cash|weight|percent|country|sector|industry|exchange|isEtf|domicile/i.test(k))
         .map(k => `${k}=${JSON.stringify(first[k])}`)
-        .slice(0, 4)
+        .slice(0, 6)
         .join(' '),
     };
   } catch (error) {
