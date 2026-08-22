@@ -8,6 +8,7 @@ import {
 import { classifyAccount, type AccountLike } from './account-classifier';
 import { normalizeAssetType } from './asset-class';
 import { isTargetDateFund, TARGET_DATE_ASSET_TYPE } from './target-date-fund';
+import { isDeclaredFixedIncomeType } from '../retirement-analytics/engine/asset-classification';
 
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
@@ -325,7 +326,8 @@ export function buildCanonicalInvestmentPortfolio(
     // arrive with no type at all. Recognize it from its own label before
     // falling back to what the provider said.
     const security = securityRecords.get(String(holding.security_id || ''));
-    const assetType = isTargetDateFund(
+    const declaredAssetType = securityTypes.get(String(holding.security_id || '')) || holding.security_type || '';
+    const assetType = !isDeclaredFixedIncomeType(declaredAssetType) && isTargetDateFund(
       security?.name,
       holding.security_name,
       security?.ticker_symbol,
@@ -335,7 +337,7 @@ export function buildCanonicalInvestmentPortfolio(
       // Normalize so the same asset class from different providers (Plaid's "etf"
       // vs SnapTrade's "ETF") lands in one bucket instead of several.
       : normalizeAssetType(
-          securityTypes.get(String(holding.security_id || '')) || holding.security_type
+          declaredAssetType
         );
     allocation.set(assetType, (allocation.get(assetType) || 0) + value);
   });

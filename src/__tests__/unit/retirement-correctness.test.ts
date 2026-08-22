@@ -48,11 +48,17 @@ const balancedMapping: PortfolioMapping = {
   internationalEquityWeight: 0.2,
   nominalBondsWeight: 0.2,
   cashWeight: 0,
+  totalValue: 1,
+  mappedValue: 1,
+  unmappedValue: 0,
+  valueCoverage: 1,
+  proxiedValue: 0,
+  proxiedValuePercentage: 0,
+  holdingExposures: [],
   mappingConfidence: 'high',
   unmappedHoldings: [],
   mappingMethod: 'direct',
   targetDateFunds: [],
-  unclassifiedEquityCount: 0,
 };
 
 function flatSequence(months: number): HistoricalSequence {
@@ -72,17 +78,18 @@ function flatSequence(months: number): HistoricalSequence {
 }
 
 describe('retirement correctness contracts', () => {
-  it('splits global equity between US and international exposure', async () => {
+  it('leaves global equity unmodeled without sourced country weights', async () => {
     const holdings = [holding('world', 'VT')];
     const securities = [security('world', 'VT', 'Vanguard Total World Stock', 'equity')];
 
     const mapping = await mapPortfolioToAssetBasket(holdings, securities, 100);
     const metrics = await analyzePortfolio(holdings, securities);
 
-    expect(mapping.usEquityWeight).toBeCloseTo(0.7);
-    expect(mapping.internationalEquityWeight).toBeCloseTo(0.3);
-    expect(metrics.equityAllocation).toBeCloseTo(100);
-    expect(metrics.internationalAllocation).toBeCloseTo(30);
+    expect(mapping.mappedValue).toBe(0);
+    expect(mapping.unmappedValue).toBe(100);
+    expect(mapping.holdingExposures[0].method).toBe('unmapped');
+    expect(metrics.equityAllocation).toBe(0);
+    expect(metrics.internationalAllocation).toBe(0);
   });
 
   it('honors explicit international geography over a generic global name', async () => {
@@ -108,6 +115,62 @@ describe('retirement correctness contracts', () => {
     expect(mapping.nominalBondsWeight).toBeCloseTo(1);
     expect(mapping.usEquityWeight).toBeCloseTo(0);
     expect(metrics.fixedIncomeAllocation).toBeCloseTo(100);
+  });
+
+  it('excludes unmapped dollars instead of reallocating them across mapped assets', async () => {
+    const holdings = [
+      holding('stock', 'WFC', 90_000),
+      holding('mystery', 'X123', 10_000),
+    ];
+    holdings[1].security_name = 'Unidentified Plan Holding';
+    holdings[1].security_type = 'Unknown';
+    const securities = [
+      security('stock', 'WFC', 'Wells Fargo & Co.', 'equity'),
+      security('mystery', 'X123', 'Unidentified Plan Holding', 'Unknown'),
+    ];
+
+    const mapping = await mapPortfolioToAssetBasket(holdings, securities, 100_000, undefined, new Map(), 2026);
+
+    expect(mapping.usEquityWeight).toBe(1);
+    expect(mapping.mappedValue).toBe(90_000);
+    expect(mapping.unmappedValue).toBe(10_000);
+    expect(mapping.valueCoverage).toBe(0.9);
+    expect(mapping.holdingExposures.map(exposure => exposure.mappedValue)).toEqual([90_000, 0]);
+  });
+
+  it('publishes the same target-date allocation that the simulator consumes', async () => {
+    const holdings = [holding('lifepath', 'O7PE', 100_000)];
+    holdings[0].security_name = 'BTC LPATH IDX 2040 N';
+    holdings[0].security_type = 'Unknown';
+    const securities = [security('lifepath', 'O7PE', 'BTC LPATH IDX 2040 N', 'Unknown')];
+    const mapping = await mapPortfolioToAssetBasket(holdings, securities, 100_000, undefined, new Map(), 2026);
+    const metrics = await analyzePortfolio(holdings, securities, undefined, new Map(), mapping, 2026);
+
+    expect(metrics.equityAllocation).toBeCloseTo(
+      (mapping.usEquityWeight + mapping.internationalEquityWeight) * 100,
+      8,
+    );
+    expect(metrics.fixedIncomeAllocation).toBeCloseTo(mapping.nominalBondsWeight * 100, 8);
+    expect(metrics.equityAllocation).toBeLessThan(100);
+  });
+
+  it('calculates proxied value from per-holding provenance', async () => {
+    const holdings = [
+      holding('stock', 'WFC', 90_000),
+      holding('plan-fund', 'LONGTICKER', 10_000),
+    ];
+    holdings[1].security_name = 'S&P 500 Index Fund';
+    holdings[1].security_type = 'mutual fund';
+    const securities = [
+      security('stock', 'WFC', 'Wells Fargo & Co.', 'equity'),
+      security('plan-fund', 'LONGTICKER', 'S&P 500 Index Fund', 'mutual fund'),
+    ];
+
+    const mapping = await mapPortfolioToAssetBasket(holdings, securities, 100_000, undefined, new Map(), 2026);
+
+    expect(mapping.proxiedValue).toBe(10_000);
+    expect(mapping.proxiedValuePercentage).toBe(0.1);
+    expect(mapping.holdingExposures.map(exposure => exposure.method)).toEqual(['provider', 'name-inference']);
   });
 
   it('delays withdrawals until the modeled withdrawal start', () => {

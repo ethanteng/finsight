@@ -48,9 +48,9 @@ export interface RetirementAnalysisInput {
   unmodeledInvestments?: UnmodeledInvestmentValue | null;
 
   /**
-   * Year the target-date glidepath is evaluated against. Defaults to the
-   * current year; supply the snapshot's year when a result must reproduce
-   * across a year boundary.
+   * Year used to select a dated, sourced target-date-fund registry entry.
+   * Defaults to the current year; supply the snapshot's year when a result
+   * must reproduce across a year boundary.
    */
   asOfYear?: number;
 
@@ -64,10 +64,10 @@ export interface RetirementAnalysisInput {
 // ============================================================================
 
 export interface PortfolioCompositionMetrics {
-  equityAllocation: number; // percentage (stocks + stock ETFs)
-  fixedIncomeAllocation: number; // percentage (bonds + bond ETFs)
-  cashAllocation: number; // percentage
-  internationalAllocation: number; // percentage (non-US holdings)
+  equityAllocation: number; // percentage of mapped value (US + international equity)
+  fixedIncomeAllocation: number; // percentage of mapped value represented by nominal bonds
+  cashAllocation: number; // percentage of mapped value
+  internationalAllocation: number; // percentage of mapped value represented by non-US equity
   concentrationRisk: number; // Herfindahl-Hirschman Index (HHI) across top 10 holdings
   /**
    * Annual fee drag over the WHOLE portfolio: sum of (holding weight x fund fee)
@@ -135,26 +135,76 @@ export interface AssetBasket {
   cash: string; // "CASHX" or use treasury bill rate
 }
 
+export interface HoldingExposureWeights {
+  /** Fractions of the holding's value, not normalized portfolio weights. */
+  usEquity: number;
+  internationalEquity: number;
+  nominalBonds: number;
+  cash: number;
+}
+
+export type HoldingMappingMethod =
+  | 'provider'
+  | 'fund-registry'
+  | 'name-inference'
+  | 'unmapped';
+
+/**
+ * The auditable classification result for one holding. Exposure weights may
+ * sum to less than one when a sourced fund allocation contains an asset class
+ * for which the historical engine has no return series. That unsupported
+ * fraction is excluded rather than redistributed across the supported assets.
+ */
+export interface ResolvedHoldingExposure {
+  holdingId: string;
+  label: string;
+  value: number;
+  mappedValue: number;
+  unmappedValue: number;
+  weights: HoldingExposureWeights;
+  method: HoldingMappingMethod;
+  confidence: 'high' | 'medium' | 'low';
+  allocationAsOf?: string;
+  sourceUrl?: string;
+  /** False when a public sibling share class is used as a documented proxy. */
+  exactAllocation?: boolean;
+  targetYear?: number;
+}
+
 export interface PortfolioMapping {
   usEquityWeight: number; // 0-1
   internationalEquityWeight: number; // 0-1
   nominalBondsWeight: number; // 0-1
   cashWeight: number; // 0-1
+  /** Sum of positive itemized holding values presented to the mapper. */
+  totalValue: number;
+  /** Dollars represented by the four supported historical return series. */
+  mappedValue: number;
+  /** Itemized dollars deliberately excluded because no supported exposure was resolved. */
+  unmappedValue: number;
+  /** mappedValue / totalValue, or 1 for an empty portfolio. */
+  valueCoverage: number;
+  /** Dollars resolved by name inference or a documented sibling-share-class proxy. */
+  proxiedValue: number;
+  /** proxiedValue / totalValue, or 0 for an empty portfolio. */
+  proxiedValuePercentage: number;
+  holdingExposures: ResolvedHoldingExposure[];
   mappingConfidence: 'high' | 'medium' | 'low'; // based on how well holdings map
-  unmappedHoldings: string[]; // tickers that couldn't be mapped
+  unmappedHoldings: string[]; // labels of fully or partially unsupported holdings
   mappingMethod: 'direct' | 'inferred' | 'proxy'; // how mapping was determined
   /**
-   * Target-date funds mapped by their declared target year rather than by a
-   * provider asset type. Recorded so the split can be stated as an assumption:
-   * the glidepath is an approximation of a curve we do not hold.
+   * Target-date funds mapped from a dated registry of published holdings.
+   * Recorded so the allocation source, date, and exact/proxy status remain
+   * auditable in the result.
    */
-  targetDateFunds: Array<{ label: string; targetYear: number; equityShare: number }>;
-  /**
-   * Holdings placed on the 70/30 historical-average split because their name
-   * carried no geography. Counted separately from inference in general so the
-   * assumption describing that split is only claimed when it was applied.
-   */
-  unclassifiedEquityCount: number;
+  targetDateFunds: Array<{
+    label: string;
+    targetYear: number;
+    equityShare: number;
+    allocationAsOf: string;
+    sourceUrl: string;
+    exactAllocation: boolean;
+  }>;
 }
 
 // ============================================================================
@@ -278,7 +328,7 @@ export interface DataQualityReport {
   unmodeledReasons: Array<{ label: string; amount: number; kind: string }>;
   assumptions: string[]; // Explicit assumptions made during mapping/analysis
   // Examples:
-  // "Unclassified equity holdings split 70% US / 30% international based on historical averages"
+  // "Target-date funds use versioned published holdings ..."
   // "Bond exposure modeled using nominal bond index proxy"
   // "Cash holdings assumed to earn treasury bill rate"
   missingData: string[]; // list of tickers with incomplete data

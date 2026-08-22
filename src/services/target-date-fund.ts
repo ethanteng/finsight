@@ -1,5 +1,5 @@
 /**
- * Target-date fund recognition and glidepath approximation.
+ * Target-date fund recognition.
  *
  * A target-date fund is a blend that shifts from equity to bonds as its target
  * year approaches, so it is neither an equity fund nor a bond fund and no
@@ -37,13 +37,10 @@ const MIN_TARGET_YEAR = 2000;
 const MAX_TARGET_YEAR = 2100;
 
 /**
- * Equity share at the target year, and how much it adds per year still to run.
- *
- * A linear approximation of the glidepaths the large providers publish:
- * roughly 90% equity twenty or more years out, about half at the target date,
- * levelling near 30% well after it. It is deliberately provider-agnostic --
- * modeling one issuer's exact curve would be a false precision when the fund's
- * own prospectus is not something we hold.
+ * Legacy sensitivity curve retained for callers that explicitly request a
+ * hypothetical glidepath. Retirement analytics does not use this curve for an
+ * authoritative allocation; it uses the versioned published-allocation
+ * registry and leaves unmatched funds unmodeled.
  */
 const EQUITY_SHARE_AT_TARGET = 0.5;
 const EQUITY_SHARE_PER_YEAR = 0.02;
@@ -153,7 +150,7 @@ export function targetDateGlidepath(targetYear: number, asOfYear: number): Targe
   return { targetYear, equityShare, bondShare: 1 - equityShare };
 }
 
-/** Resolve a holding to its glidepath in one step, or null when it is not one. */
+/** Resolve the legacy sensitivity curve in one step, or null when unrecognized. */
 export function resolveTargetDateFund(
   labels: Array<unknown>,
   asOfYear: number

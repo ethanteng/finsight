@@ -2,14 +2,9 @@
 // Phase 1: Portfolio Metrics & Mapping
 
 import { Holding, Security } from '../../services/financial-data-service';
-import { PortfolioCompositionMetrics, SecurityMetadata } from '../types';
+import { PortfolioCompositionMetrics, PortfolioMapping, SecurityMetadata } from '../types';
 import { DataProviderFactory } from '../data/data-provider-factory';
-import {
-  hasBondNameSignal,
-  isGlobalEquity,
-  isInternationalEquity,
-  isKnownBondTicker,
-} from './asset-classification';
+import { mapPortfolioToAssetBasket } from './portfolio-mapper';
 
 /**
  * Calculate portfolio composition metrics including allocations, concentration, and expense ratios
@@ -19,7 +14,9 @@ export async function analyzePortfolio(
   holdings: Holding[],
   securities: Security[],
   dataProviderFactory?: DataProviderFactory,
-  preFetchedMetadata?: Map<string, any>
+  preFetchedMetadata?: Map<string, any>,
+  portfolioMapping?: PortfolioMapping,
+  asOfYear: number = new Date().getUTCFullYear(),
 ): Promise<PortfolioCompositionMetrics> {
   if (holdings.length === 0) {
     return {
@@ -84,11 +81,17 @@ export async function analyzePortfolio(
     }
   }
 
-  // Initialize allocation counters
-  let equityValue = 0;
-  let fixedIncomeValue = 0;
-  let cashValue = 0;
-  let internationalValue = 0;
+  // Allocation, simulation and confidence must all consume the same resolved
+  // holdings. Standalone callers still get that contract by resolving here.
+  const resolvedMapping = portfolioMapping ?? await mapPortfolioToAssetBasket(
+    holdings,
+    securities,
+    totalValue,
+    dataProviderFactory,
+    tickerToMetadata,
+    asOfYear,
+  );
+
   let totalExpenseRatio = 0;
   let totalExpenseRatioWeight = 0;
   let countryCoverageValue = 0;
@@ -106,45 +109,6 @@ export async function analyzePortfolio(
     const fmpMetadata = (ticker ? tickerToMetadata.get(ticker) : null) as SecurityMetadata | null;
 
     // Prefer FMP metadata if available, fallback to security metadata
-    const assetType = fmpMetadata?.assetClass?.toLowerCase() || 
-                     security?.type?.toLowerCase() || 
-                     holding.security_type?.toLowerCase() || '';
-    const securityName = security?.name?.toLowerCase() || holding.security_name?.toLowerCase() || '';
-    const geographicFocus = fmpMetadata?.geographicFocus?.toLowerCase() || '';
-    
-    // Classify as equity, fixed income, or cash (FMP metadata takes precedence)
-    if (assetType.includes('equity') || assetType.includes('stock') || 
-        (!assetType && (securityName.includes('equity') || securityName.includes('stock')))) {
-      equityValue += holdingValue;
-      
-      // FMP Starter's country vector is preferable to fund domicile/name
-      // inference. Normalize within the supplied vector so small rounding
-      // differences do not distort the holding's allocation.
-      const countrySplit = countrySplitForMetadata(fmpMetadata);
-      if (countrySplit) {
-        internationalValue += holdingValue * countrySplit.international;
-      } else if (isGlobalEquity(geographicFocus, securityName)) {
-        internationalValue += holdingValue * 0.3;
-      } else if (isInternationalEquity(geographicFocus, securityName, ticker)) {
-        internationalValue += holdingValue;
-      }
-    } else if (assetType.includes('bond') || assetType.includes('fixed income') ||
-               (securityName.includes('bond') || securityName.includes('fixed income'))) {
-      fixedIncomeValue += holdingValue;
-    } else if (assetType.includes('cash') || assetType.includes('money market') ||
-               (!assetType && (securityName.includes('cash') || securityName.includes('money market')))) {
-      cashValue += holdingValue;
-    } else {
-      // Default classification: when assetType is generic (e.g. "etf", "mutual fund")
-      // or unknown, check security name for bond hints before assuming equity.
-      // Fixes misclassification where bond ETFs defaulted to equity (e.g. 91.9% vs actual ~30%).
-      if (hasBondNameSignal(securityName) || isKnownBondTicker(ticker)) {
-        fixedIncomeValue += holdingValue;
-      } else {
-        equityValue += holdingValue;
-      }
-    }
-
     const fundData = fmpMetadata?.fundData;
     if (fundData?.countryCoverage === 'available') {
       countryCoverageValue += holdingValue;
@@ -186,10 +150,10 @@ export async function analyzePortfolio(
 
   // Guard against division by zero (defense-in-depth; totalValue === 0 already returns early above)
   return {
-    equityAllocation: totalValue > 0 ? (equityValue / totalValue) * 100 : 0,
-    fixedIncomeAllocation: totalValue > 0 ? (fixedIncomeValue / totalValue) * 100 : 0,
-    cashAllocation: totalValue > 0 ? (cashValue / totalValue) * 100 : 0,
-    internationalAllocation: totalValue > 0 ? (internationalValue / totalValue) * 100 : 0,
+    equityAllocation: (resolvedMapping.usEquityWeight + resolvedMapping.internationalEquityWeight) * 100,
+    fixedIncomeAllocation: resolvedMapping.nominalBondsWeight * 100,
+    cashAllocation: resolvedMapping.cashWeight * 100,
+    internationalAllocation: resolvedMapping.internationalEquityWeight * 100,
     concentrationRisk,
     expenseRatioWeighted,
     expenseRatioCoverage: totalExpenseRatioWeight,
@@ -198,17 +162,6 @@ export async function analyzePortfolio(
     countryCoverage: countryCoverageValue / totalValue,
     sectorCoverage: sectorCoverageValue / totalValue,
   };
-}
-
-function countrySplitForMetadata(metadata: SecurityMetadata | null): { us: number; international: number } | null {
-  if (metadata?.fundData?.countryCoverage !== 'available') return null;
-  const allocations = metadata.fundData.countryAllocations;
-  const total = allocations.reduce((sum, allocation) => sum + allocation.weight, 0);
-  if (total <= 0) return null;
-  const us = allocations
-    .filter(allocation => ['united states', 'us', 'usa'].includes(allocation.name.trim().toLowerCase()))
-    .reduce((sum, allocation) => sum + allocation.weight, 0) / total;
-  return { us, international: Math.max(0, Math.min(1, 1 - us)) };
 }
 
 function addExposureValues(

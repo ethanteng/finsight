@@ -141,10 +141,10 @@ export function resolveRetirementInputs(args: {
 /**
  * Year a stored retirement analysis was actually built for.
  *
- * The glidepath equity share of a target-date fund depends on `asOfYear`, so
- * two analyses of identical holdings and identical parameters are still
- * different answers if they were computed for different years. That makes the
- * year part of the cache key, not merely part of the payload.
+ * Target-date-fund registry entries are dated and selected by `asOfYear`, so
+ * two analyses of identical holdings and identical parameters may still use
+ * different published allocations in different years. That makes the year
+ * part of the cache key, not merely part of the payload.
  *
  * Rows written before `asOfYear` was persisted -- and rows whose stored year
  * is unusable, which is how a non-finite year reaches us, since JSON turns it

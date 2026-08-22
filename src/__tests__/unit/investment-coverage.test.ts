@@ -24,11 +24,17 @@ const mapping = {
   internationalEquityWeight: 0,
   nominalBondsWeight: 0,
   cashWeight: 0,
+  totalValue: 804_827.9,
+  mappedValue: 804_827.9,
+  unmappedValue: 0,
+  valueCoverage: 1,
+  proxiedValue: 0,
+  proxiedValuePercentage: 0,
+  holdingExposures: [],
   mappingConfidence: 'high' as const,
   unmappedHoldings: [],
   mappingMethod: 'direct' as const,
   targetDateFunds: [],
-  unclassifiedEquityCount: 0,
 };
 
 describe('unmodeled investment value', () => {
@@ -200,6 +206,35 @@ describe('retirement data quality with excluded value', () => {
     expect(quality.unmodeledValue).toBeCloseTo(386_603.06, 2);
     expect(quality.valueCoverage).toBeLessThan(0.7);
     expect(quality.unmodeledReasons).toEqual([{ label: '401(k)', amount: 386_603.06, kind: 'partial-holdings' }]);
+  });
+
+  it('combines not-itemized value with itemized holdings the mapper excluded', () => {
+    const internalGap = {
+      ...mapping,
+      mappedValue: 704_827.9,
+      unmappedValue: 100_000,
+      valueCoverage: 704_827.9 / 804_827.9,
+      mappingConfidence: 'low' as const,
+      unmappedHoldings: ['Unknown Plan Fund'],
+    };
+    const quality = calculateDataQuality(holdings, securities, internalGap, 1, [], [], {
+      totalInvestments: 1_191_430.96,
+      modeledValue: 804_827.9,
+      unmodeledValue: 386_603.06,
+      valueCoverage: 804_827.9 / 1_191_430.96,
+      reasons: [{ accountId: '401k', label: '401(k)', amount: 386_603.06, kind: 'partial-holdings' }],
+    });
+
+    expect(quality.modeledValue).toBeCloseTo(704_827.9, 2);
+    expect(quality.unmodeledValue).toBeCloseTo(486_603.06, 2);
+    expect(quality.valueCoverage).toBeCloseTo(704_827.9 / 1_191_430.96, 8);
+    expect(quality.unmodeledReasons).toEqual([
+      { label: '401(k)', amount: 386_603.06, kind: 'partial-holdings' },
+      { label: 'Unrecognized or unsupported holdings', amount: 100_000, kind: 'unrecognized-holdings' },
+    ]);
+    expect(generateDisclaimers(quality)[0]).toContain(
+      '$100,000 in Unrecognized or unsupported holdings has no supported asset-class mapping',
+    );
   });
 
   it('treats a fully explained portfolio as complete rather than unmodeled', () => {

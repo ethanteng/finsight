@@ -527,8 +527,8 @@ export async function completeRetirementAnalysis(
       holdings,
       securities,
       unmodeledInvestments: snapshot.investments?.unmodeledInvestments,
-      // The glidepath split depends on the year, so take it from the snapshot
-      // the analysis is built on rather than the wall clock. That keeps a
+      // The target-date allocation registry is dated, so take its year from
+      // the snapshot rather than the wall clock. That keeps a
       // recomputation and a cached result agreeing across a year boundary, and
       // makes the analysis a function of its inputs like everything else here.
       asOfYear: snapshotYear(snapshot),
@@ -645,20 +645,48 @@ async function fetchOrCreateRetirementAnalysis(args: {
    * while keeping its understated figures is the worst of both.
    */
   const withCoverage = (analysis: RetirementAnalysis): RetirementAnalysis => {
-    const note = describeUnmodeledInvestmentValue(unmodeledInvestments);
     const carried = (analysis.disclaimers || [])
       .filter(disclaimer => !disclaimer.startsWith(UNMODELED_VALUE_NOTE_PREFIX));
+    const internalReasons = (analysis.dataQuality?.unmodeledReasons || [])
+      .filter(reason => reason.kind === 'unrecognized-holdings');
+    const internallyUnmodeledValue = internalReasons
+      .reduce((sum, reason) => sum + (Number.isFinite(reason.amount) ? reason.amount : 0), 0);
+    const itemizedValue = unmodeledInvestments?.modeledValue ??
+      ((analysis.dataQuality?.modeledValue ?? 0) + internallyUnmodeledValue);
+    const modeledValue = Math.max(0, itemizedValue - internallyUnmodeledValue);
+    const externallyUnmodeledValue = unmodeledInvestments?.unmodeledValue ?? 0;
+    const unmodeledValue = internallyUnmodeledValue + externallyUnmodeledValue;
+    const totalInvestments = modeledValue + unmodeledValue;
     const dataQuality = {
       ...analysis.dataQuality,
-      modeledValue: unmodeledInvestments?.modeledValue ?? analysis.dataQuality?.modeledValue,
-      unmodeledValue: unmodeledInvestments?.unmodeledValue ?? 0,
-      valueCoverage: unmodeledInvestments?.valueCoverage ?? 1,
-      unmodeledReasons: (unmodeledInvestments?.reasons ?? []).map(reason => ({
+      modeledValue,
+      unmodeledValue,
+      valueCoverage: totalInvestments > 0 ? modeledValue / totalInvestments : 1,
+      unmodeledReasons: [
+        ...(unmodeledInvestments?.reasons ?? []).map(reason => ({
+          label: reason.label,
+          amount: reason.amount,
+          kind: reason.kind,
+        })),
+        ...internalReasons,
+      ],
+    };
+    const note = describeUnmodeledInvestmentValue({
+      totalInvestments,
+      modeledValue,
+      unmodeledValue,
+      valueCoverage: dataQuality.valueCoverage,
+      reasons: dataQuality.unmodeledReasons.map(reason => ({
+        accountId: '',
         label: reason.label,
         amount: reason.amount,
-        kind: reason.kind,
+        kind: reason.kind === 'no-holdings'
+          ? 'no-holdings'
+          : reason.kind === 'unrecognized-holdings'
+            ? 'unrecognized-holdings'
+            : 'partial-holdings',
       })),
-    };
+    });
     // Coverage is restated on cache hits too; re-apply the ceiling so a stored
     // "high" cannot outlive a valueCoverage that now forbids it. A ceiling only
     // caps: calculateConfidenceCeiling never returns "low", so taking it

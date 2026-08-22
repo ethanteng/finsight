@@ -22,7 +22,7 @@ export interface UnmodeledInvestmentReason {
   /** Account name when known, so the exclusion can be described to its owner. */
   label: string;
   amount: number;
-  kind: 'partial-holdings' | 'no-holdings';
+  kind: 'partial-holdings' | 'no-holdings' | 'unrecognized-holdings';
 }
 
 export interface UnmodeledInvestmentValue {
@@ -200,7 +200,9 @@ export function describeUnmodeledInvestmentValue(
   const parts = summary.reasons.slice(0, 3).map(reason =>
     reason.kind === 'partial-holdings'
       ? `${money(reason.amount)} of ${reason.label} is not itemized by the provider`
-      : `${money(reason.amount)} in ${reason.label} has no holdings detail`
+      : reason.kind === 'no-holdings'
+        ? `${money(reason.amount)} in ${reason.label} has no holdings detail`
+        : `${money(reason.amount)} in ${reason.label} has no supported asset-class mapping`
   );
   const attribution = parts.length > 0 ? ` (${parts.join('; ')})` : '';
   const remainder = summary.reasons.length > 3

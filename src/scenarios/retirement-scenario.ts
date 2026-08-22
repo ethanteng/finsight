@@ -538,7 +538,8 @@ export async function runRetirementScenario(
     // comparison would attribute a coverage difference to the change modeled.
     unmodeledInvestments: snapshot.investments?.unmodeledInvestments ?? null,
     // Same reason: a variant computed on the other side of a year boundary from
-    // its baseline would carry a different glidepath, and the comparison would
+    // its baseline could select a different dated fund allocation, and the
+    // comparison would
     // read that difference as an effect of the change being modeled.
     asOfYear: baselineYear,
   };

@@ -2,7 +2,13 @@
 // Phase 1: Portfolio Metrics & Mapping
 
 import { Holding, Security } from '../../services/financial-data-service';
-import { PortfolioMapping, SecurityMetadata } from '../types';
+import {
+  HoldingExposureWeights,
+  HoldingMappingMethod,
+  PortfolioMapping,
+  ResolvedHoldingExposure,
+  SecurityMetadata,
+} from '../types';
 import { DataProviderFactory } from '../data/data-provider-factory';
 import {
   hasBondNameSignal,
@@ -11,17 +17,144 @@ import {
   inferEquityGeography,
   isContainerAssetType,
   isDeclaredFixedIncomeType,
-  isGlobalEquity,
-  isInternationalEquity,
   isKnownBondTicker,
 } from './asset-classification';
-import { resolveTargetDateFund } from '../../services/target-date-fund';
+import { targetDateFundYear } from '../../services/target-date-fund';
+import {
+  lookupTargetDateFundAllocation,
+  TargetDateFundAllocation,
+} from '../../services/target-date-fund-registry';
 
-/**
- * Equity inside a target-date fund is global, so it is split the same way the
- * mapper splits any equity it cannot place by geography.
- */
-const TARGET_DATE_US_EQUITY_SHARE = 0.7;
+const EMPTY_WEIGHTS: HoldingExposureWeights = {
+  usEquity: 0,
+  internationalEquity: 0,
+  nominalBonds: 0,
+  cash: 0,
+};
+
+interface HoldingResolutionDraft {
+  weights: HoldingExposureWeights;
+  method: HoldingMappingMethod;
+  confidence: 'high' | 'medium' | 'low';
+  targetYear?: number;
+  targetAllocation?: TargetDateFundAllocation;
+}
+
+function weightTotal(weights: HoldingExposureWeights): number {
+  return weights.usEquity + weights.internationalEquity + weights.nominalBonds + weights.cash;
+}
+
+function copyWeights(weights: HoldingExposureWeights): HoldingExposureWeights {
+  return { ...weights };
+}
+
+function resolveHoldingExposure(
+  holding: Holding,
+  security: Security | undefined,
+  fmpMetadata: SecurityMetadata | null,
+  asOfYear: number,
+): HoldingResolutionDraft {
+  const ticker = security?.ticker_symbol?.toUpperCase() || holding.ticker_symbol?.toUpperCase() || '';
+  const securityName = security?.name?.toLowerCase() || holding.security_name?.toLowerCase() || '';
+  const geographicFocus = fmpMetadata?.geographicFocus?.toLowerCase() || '';
+  const labels = [security?.name, holding.security_name, security?.ticker_symbol, holding.ticker_symbol];
+
+  // Consider every declared type. A generic FMP wrapper value must not erase a
+  // more specific fixed-income type supplied with the security or holding.
+  const providerTypes = [fmpMetadata?.assetClass, security?.type, holding.security_type]
+    .filter((type): type is string => typeof type === 'string' && type.trim().length > 0)
+    .map(type => type.trim().toLowerCase());
+  const declaredFixedIncome = providerTypes.some(isDeclaredFixedIncomeType);
+  const targetYear = targetDateFundYear(...labels);
+
+  if (targetYear !== null && !declaredFixedIncome) {
+    const allocation = lookupTargetDateFundAllocation(labels, asOfYear);
+    if (!allocation) {
+      return {
+        weights: copyWeights(EMPTY_WEIGHTS),
+        method: 'unmapped',
+        confidence: 'low',
+        targetYear,
+      };
+    }
+    return {
+      weights: copyWeights(allocation.weights),
+      method: 'fund-registry',
+      confidence: allocation.exactAllocation ? 'high' : 'medium',
+      targetYear,
+      targetAllocation: allocation,
+    };
+  }
+
+  const specificAssetType = providerTypes.find(type =>
+    !isContainerAssetType(type) && !['unknown', 'unclassified', 'other'].includes(type)
+  ) || '';
+
+  if (specificAssetType.includes('cash') || specificAssetType.includes('money market')) {
+    return { weights: { ...EMPTY_WEIGHTS, cash: 1 }, method: 'provider', confidence: 'high' };
+  }
+  if (specificAssetType.includes('bond') || specificAssetType.includes('fixed income')) {
+    return { weights: { ...EMPTY_WEIGHTS, nominalBonds: 1 }, method: 'provider', confidence: 'high' };
+  }
+  if (specificAssetType.includes('equity') || specificAssetType.includes('stock')) {
+    const countrySplit = getCountrySplit(fmpMetadata);
+    if (countrySplit) {
+      return {
+        weights: { ...EMPTY_WEIGHTS, usEquity: countrySplit.us, internationalEquity: countrySplit.international },
+        method: 'provider',
+        confidence: 'high',
+      };
+    }
+    if (geographicFocus === 'international' || geographicFocus === 'ex-us') {
+      return { weights: { ...EMPTY_WEIGHTS, internationalEquity: 1 }, method: 'provider', confidence: 'high' };
+    }
+    if (geographicFocus === 'global' || geographicFocus === 'world') {
+      return {
+        weights: copyWeights(EMPTY_WEIGHTS),
+        method: 'unmapped',
+        confidence: 'low',
+      };
+    }
+    if (geographicFocus === 'us') {
+      return { weights: { ...EMPTY_WEIGHTS, usEquity: 1 }, method: 'provider', confidence: 'high' };
+    }
+
+    const inferredGeography = inferEquityGeography(securityName, ticker);
+    if (inferredGeography === 'international') {
+      return { weights: { ...EMPTY_WEIGHTS, internationalEquity: 1 }, method: 'name-inference', confidence: 'medium' };
+    }
+    if (inferredGeography === 'global') {
+      return {
+        weights: copyWeights(EMPTY_WEIGHTS),
+        method: 'unmapped',
+        confidence: 'low',
+      };
+    }
+    // Preserve the existing directly-held-security default when the provider
+    // names an equity exposure but supplies no country data.
+    return { weights: { ...EMPTY_WEIGHTS, usEquity: 1 }, method: 'provider', confidence: 'medium' };
+  }
+
+  // No provider exposure: infer from the label, in specificity order.
+  if (hasCashNameSignal(securityName)) {
+    return { weights: { ...EMPTY_WEIGHTS, cash: 1 }, method: 'name-inference', confidence: 'medium' };
+  }
+  if (hasBondNameSignal(securityName) || isKnownBondTicker(ticker)) {
+    return { weights: { ...EMPTY_WEIGHTS, nominalBonds: 1 }, method: 'name-inference', confidence: 'medium' };
+  }
+  if (hasEquityNameSignal(securityName) || /^[A-Z]{1,5}$/.test(ticker)) {
+    const geography = inferEquityGeography(securityName, ticker);
+    if (geography === 'international') {
+      return { weights: { ...EMPTY_WEIGHTS, internationalEquity: 1 }, method: 'name-inference', confidence: 'medium' };
+    }
+    if (geography === 'us') {
+      return { weights: { ...EMPTY_WEIGHTS, usEquity: 1 }, method: 'name-inference', confidence: 'medium' };
+    }
+    return { weights: copyWeights(EMPTY_WEIGHTS), method: 'unmapped', confidence: 'low' };
+  }
+
+  return { weights: copyWeights(EMPTY_WEIGHTS), method: 'unmapped', confidence: 'low' };
+}
 
 /**
  * Map portfolio holdings to asset basket (US equity, international equity, bonds, cash)
@@ -31,37 +164,43 @@ const TARGET_DATE_US_EQUITY_SHARE = 0.7;
 export async function mapPortfolioToAssetBasket(
   holdings: Holding[],
   securities: Security[],
-  totalValue: number,
+  _totalValue: number,
   dataProviderFactory?: DataProviderFactory,
   preFetchedMetadata?: Map<string, any>,
   /**
-   * Year the glidepath is evaluated against. Passed rather than read from the
-   * clock so a snapshot, a test, and a replay resolve the same split.
+   * Registry year used to select a dated, sourced target-date allocation.
+   * Passed rather than read from the clock so a snapshot, test, and replay use
+   * the same registry version.
    */
   asOfYear: number = new Date().getUTCFullYear()
 ): Promise<PortfolioMapping> {
+  const portfolioValue = holdings.reduce(
+    (sum, holding) => sum + Math.max(0, holding.institution_value || 0),
+    0,
+  );
   const mapping: PortfolioMapping = {
     usEquityWeight: 0,
     internationalEquityWeight: 0,
     nominalBondsWeight: 0,
     cashWeight: 0,
+    totalValue: portfolioValue,
+    mappedValue: 0,
+    unmappedValue: portfolioValue,
+    valueCoverage: portfolioValue > 0 ? 0 : 1,
+    proxiedValue: 0,
+    proxiedValuePercentage: 0,
+    holdingExposures: [],
     mappingConfidence: 'high',
     unmappedHoldings: [],
     mappingMethod: 'direct',
     targetDateFunds: [],
-    unclassifiedEquityCount: 0
   };
 
-  if (totalValue === 0 || holdings.length === 0) {
+  if (portfolioValue === 0 || holdings.length === 0) {
     return mapping;
   }
 
   const securityMap = new Map(securities.map(sec => [sec.security_id, sec]));
-  let mappedValue = 0;
-  let inferredCount = 0;
-  let unclassifiedEquityCount = 0;
-  let unmappedCount = 0;
-
   // Use pre-fetched metadata if provided, otherwise fetch (for backward compatibility)
   const tickerToMetadata = preFetchedMetadata || new Map<string, any>();
   
@@ -92,211 +231,74 @@ export async function mapPortfolioToAssetBasket(
     
     if (holdingValue <= 0) continue;
 
-    const weight = holdingValue / totalValue;
-    let mapped = false;
-
     const ticker = security?.ticker_symbol?.toUpperCase() || holding.ticker_symbol?.toUpperCase() || '';
-
-    // Resolved before the target-date branch because the provider's declared
-    // type can veto it. FMP metadata is preferred over the security's own type.
     const fmpMetadata = (ticker ? tickerToMetadata.get(ticker) : null) as SecurityMetadata | null;
-    const providerAssetClass = fmpMetadata?.assetClass?.toLowerCase() ||
-      security?.type?.toLowerCase() || '';
+    const draft = resolveHoldingExposure(holding, security, fmpMetadata, asOfYear);
+    const mappedFraction = Math.max(0, Math.min(1, weightTotal(draft.weights)));
+    const holdingMappedValue = holdingValue * mappedFraction;
+    const holdingUnmappedValue = holdingValue - holdingMappedValue;
+    const label = security?.name || holding.security_name || ticker || holding.security_id;
+    const resolution: ResolvedHoldingExposure = {
+      holdingId: holding.id || holding.security_id,
+      label,
+      value: holdingValue,
+      mappedValue: holdingMappedValue,
+      unmappedValue: holdingUnmappedValue,
+      weights: copyWeights(draft.weights),
+      method: draft.method,
+      confidence: draft.confidence,
+      allocationAsOf: draft.targetAllocation?.allocationAsOf,
+      sourceUrl: draft.targetAllocation?.sourceUrl,
+      exactAllocation: draft.targetAllocation?.exactAllocation,
+      targetYear: draft.targetYear,
+    };
+    mapping.holdingExposures.push(resolution);
 
-    // Before anything else. A target-date fund is a declared blend, and its own
-    // label states the target year -- better evidence than a provider type that
-    // says "Mutual Fund", and far better than the ticker-shaped-like-a-stock
-    // heuristic further down, which was modeling a de-risking 2040 fund as 100%
-    // equity purely because its ticker is four letters.
-    //
-    // A declared fixed-income type outranks the name, though: bonds carry years
-    // for their maturities, and a signal word near one must not turn a bond into
-    // mostly equity. Real target-date funds are never typed this way.
-    const targetDate = isDeclaredFixedIncomeType(providerAssetClass)
-      ? null
-      : resolveTargetDateFund(
-          [security?.name, holding.security_name, security?.ticker_symbol, holding.ticker_symbol],
-          asOfYear
-        );
-    if (targetDate) {
-      mapping.usEquityWeight += weight * targetDate.equityShare * TARGET_DATE_US_EQUITY_SHARE;
-      mapping.internationalEquityWeight +=
-        weight * targetDate.equityShare * (1 - TARGET_DATE_US_EQUITY_SHARE);
-      mapping.nominalBondsWeight += weight * targetDate.bondShare;
+    mapping.usEquityWeight += holdingValue * draft.weights.usEquity;
+    mapping.internationalEquityWeight += holdingValue * draft.weights.internationalEquity;
+    mapping.nominalBondsWeight += holdingValue * draft.weights.nominalBonds;
+    mapping.cashWeight += holdingValue * draft.weights.cash;
+    mapping.mappedValue += holdingMappedValue;
+
+    if (draft.method === 'name-inference' ||
+        (draft.method === 'fund-registry' && draft.targetAllocation?.exactAllocation === false)) {
+      mapping.proxiedValue += holdingMappedValue;
+    }
+    if (holdingUnmappedValue > 0.005) mapping.unmappedHoldings.push(label);
+
+    if (draft.targetAllocation && draft.targetYear !== undefined) {
       mapping.targetDateFunds.push({
-        label: security?.name || holding.security_name || ticker || 'Target-date fund',
-        targetYear: targetDate.targetYear,
-        equityShare: targetDate.equityShare,
+        label,
+        targetYear: draft.targetYear,
+        equityShare: draft.weights.usEquity + draft.weights.internationalEquity,
+        allocationAsOf: draft.targetAllocation.allocationAsOf,
+        sourceUrl: draft.targetAllocation.sourceUrl,
+        exactAllocation: draft.targetAllocation.exactAllocation,
       });
-      // The glidepath is an approximation of a curve we do not hold, so this is
-      // inference, not provider metadata -- and it must be stated as such.
-      mapping.mappingMethod = 'inferred';
-      mapping.mappingConfidence = 'medium';
-      inferredCount++;
-      mappedValue += holdingValue;
-      continue;
-    }
-
-    if (security || fmpMetadata) {
-      // A container type names the wrapper, not the exposure, so it is treated
-      // as no class at all and the name decides -- here, where the provider's
-      // country split and geographic focus are still in reach.
-      const assetType = isContainerAssetType(providerAssetClass) ? '' : providerAssetClass;
-      const securityName = security?.name?.toLowerCase() || holding.security_name?.toLowerCase() || '';
-      const geographicFocus = fmpMetadata?.geographicFocus?.toLowerCase() || '';
-
-      // Cash before bonds before equity, matching the inference order below: a
-      // Treasury money market must not be caught by the "treasury" bond signal,
-      // and a bond fund must not be caught by an index-family word.
-      if (assetType.includes('cash') || assetType.includes('money market') ||
-          (!assetType && hasCashNameSignal(securityName))) {
-        mapping.cashWeight += weight;
-        mappedValue += holdingValue;
-        mapped = true;
-      } else if (assetType.includes('bond') || assetType.includes('fixed income') ||
-          (!assetType && hasBondNameSignal(securityName))) {
-        mapping.nominalBondsWeight += weight;
-        mappedValue += holdingValue;
-        mapped = true;
-      } else if (assetType.includes('equity') || assetType.includes('stock') ||
-          (!assetType && hasEquityNameSignal(securityName))) {
-        
-        const countrySplit = getCountrySplit(fmpMetadata);
-        if (countrySplit) {
-          mapping.usEquityWeight += weight * countrySplit.us;
-          mapping.internationalEquityWeight += weight * countrySplit.international;
-          mappedValue += holdingValue;
-          mapped = true;
-        // Use FMP geographic focus if available, otherwise use heuristics
-        } else if (isGlobalEquity(geographicFocus, securityName)) {
-          // A global fund contains both US and non-US exposure. Use the same
-          // explicit broad-market split used for otherwise unclassified equity.
-          mapping.usEquityWeight += weight * 0.7;
-          mapping.internationalEquityWeight += weight * 0.3;
-          mappedValue += holdingValue;
-          mapped = true;
-        } else if (isInternationalEquity(geographicFocus, securityName, ticker)) {
-          mapping.internationalEquityWeight += weight;
-          mappedValue += holdingValue;
-          mapped = true;
-        } else if (geographicFocus === 'us') {
-          mapping.usEquityWeight += weight;
-          mappedValue += holdingValue;
-          mapped = true;
-        } else {
-          // No provider geography. Read it from the name first.
-          const inferredGeography = inferEquityGeography(securityName, ticker);
-          if (inferredGeography === 'international') {
-            mapping.internationalEquityWeight += weight;
-          } else if (inferredGeography === 'us') {
-            mapping.usEquityWeight += weight;
-          } else if (assetType) {
-            // The provider named a specific asset class, so this is a security
-            // rather than a fund inferred from its name -- a directly held
-            // stock, which stays domestic by default as it always has. Widening
-            // this to 70/30 would have split single US names like "Wells Fargo
-            // & Co." across two continents.
-            mapping.usEquityWeight += weight;
-          } else {
-            // Equity recognized only from a fund's name, with nothing saying
-            // where it invests. A fund genuinely could be either, so it takes
-            // the documented historical-average split.
-            mapping.usEquityWeight += weight * 0.7;
-            mapping.internationalEquityWeight += weight * 0.3;
-            unclassifiedEquityCount++;
-          }
-          mappedValue += holdingValue;
-          mapped = true;
-        }
-      }
-    }
-
-    // If not mapped by security metadata, try inference
-    if (!mapped) {
-      const securityName = security?.name?.toLowerCase() || holding.security_name?.toLowerCase() || '';
-      const ticker = security?.ticker_symbol?.toUpperCase() || holding.ticker_symbol?.toUpperCase() || '';
-      const holdingType = holding.security_type?.toLowerCase() || '';
-
-      // Inference heuristics, most specific evidence first.
-      //
-      // Cash precedes bonds so a Treasury money-market fund is not caught by
-      // the "treasury" bond signal, and both precede equity so a bond or cash
-      // fund is never swept up by the ticker-shaped-like-a-stock fallback --
-      // which had been classifying a government cash reserve as stocks purely
-      // because its ticker is five letters.
-      if (hasCashNameSignal(securityName)) {
-        mapping.cashWeight += weight;
-        mapping.mappingMethod = 'inferred';
-        mapping.mappingConfidence = 'medium';
-        inferredCount++;
-        mappedValue += holdingValue;
-        mapped = true;
-      } else if (holdingType.includes('bond') || holdingType.includes('fixed income') ||
-          hasBondNameSignal(securityName) || isKnownBondTicker(ticker)) {
-        mapping.nominalBondsWeight += weight;
-        mapping.mappingMethod = 'inferred';
-        mapping.mappingConfidence = 'medium';
-        inferredCount++;
-        mappedValue += holdingValue;
-        mapped = true;
-      } else if (holdingType.includes('equity') || holdingType.includes('stock') ||
-          // Employer-plan and institutional share classes state their mandate
-          // in the name and nowhere else: "Large Cap Growth Fund", "S&P 500
-          // Indx SL Sr Fd Cl X". Without this they fell out of the basket
-          // entirely, and their value was then spread across whatever the rest
-          // of the portfolio happened to hold.
-          hasEquityNameSignal(securityName) ||
-          ticker.match(/^[A-Z]{1,5}$/)) { // Common stock ticker pattern
-        // Place it by geography when the name says, rather than defaulting a
-        // fund called "International Equity Fund" to 70% US.
-        const geography = inferEquityGeography(securityName, ticker);
-        if (geography === 'international') {
-          mapping.internationalEquityWeight += weight;
-        } else if (geography === 'us') {
-          mapping.usEquityWeight += weight;
-        } else {
-          // 'global', and names that carry no geography at all, take the
-          // documented historical-average split. Only this branch is
-          // "unclassified equity", and only it may claim that assumption.
-          mapping.usEquityWeight += weight * 0.7;
-          mapping.internationalEquityWeight += weight * 0.3;
-          unclassifiedEquityCount++;
-        }
-        mapping.mappingMethod = 'inferred';
-        mapping.mappingConfidence = 'medium';
-        inferredCount++;
-        mappedValue += holdingValue;
-        mapped = true;
-      }
-    }
-
-    // If still not mapped, add to unmapped
-    if (!mapped) {
-      const ticker = security?.ticker_symbol || holding.ticker_symbol || holding.security_id;
-      mapping.unmappedHoldings.push(ticker);
-      unmappedCount++;
     }
   }
 
-  // Normalize weights to sum to 1.0
-  const totalMappedWeight = mapping.usEquityWeight + mapping.internationalEquityWeight +
-                            mapping.nominalBondsWeight + mapping.cashWeight;
-  
-  if (totalMappedWeight > 0) {
-    mapping.usEquityWeight /= totalMappedWeight;
-    mapping.internationalEquityWeight /= totalMappedWeight;
-    mapping.nominalBondsWeight /= totalMappedWeight;
-    mapping.cashWeight /= totalMappedWeight;
+  // Convert dollar exposures to weights of the dollars actually modeled. The
+  // simulation uses the same mappedValue, so excluded dollars are never
+  // silently spread across these weights.
+  if (mapping.mappedValue > 0) {
+    mapping.usEquityWeight /= mapping.mappedValue;
+    mapping.internationalEquityWeight /= mapping.mappedValue;
+    mapping.nominalBondsWeight /= mapping.mappedValue;
+    mapping.cashWeight /= mapping.mappedValue;
   }
 
-  mapping.unclassifiedEquityCount = unclassifiedEquityCount;
-
-  // Adjust confidence based on mapping quality
-  if (unmappedCount > 0 || inferredCount > holdings.length * 0.3) {
+  mapping.unmappedValue = Math.max(0, mapping.totalValue - mapping.mappedValue);
+  mapping.valueCoverage = mapping.totalValue > 0 ? mapping.mappedValue / mapping.totalValue : 1;
+  mapping.proxiedValuePercentage = mapping.totalValue > 0 ? mapping.proxiedValue / mapping.totalValue : 0;
+  const hasInference = mapping.holdingExposures.some(exposure => exposure.method === 'name-inference');
+  const hasRegistry = mapping.holdingExposures.some(exposure => exposure.method === 'fund-registry');
+  if (mapping.valueCoverage < 0.95) {
     mapping.mappingConfidence = 'low';
-  } else if (inferredCount > 0) {
+  } else if (mapping.valueCoverage < 1 || hasInference || hasRegistry) {
     mapping.mappingConfidence = 'medium';
   }
+  mapping.mappingMethod = hasInference ? 'inferred' : hasRegistry ? 'proxy' : 'direct';
 
   return mapping;
 }
@@ -328,25 +330,11 @@ export function calculateMappingConfidence(
  */
 export function calculateProxiedValuePercentage(
   mapping: PortfolioMapping,
-  holdings: Holding[],
+  _holdings: Holding[],
   totalValue: number
 ): number {
   if (totalValue === 0) return 0;
-
-  // Count holdings that were inferred or unmapped
-  let proxiedValue = 0;
-  
-  for (const holding of holdings) {
-    const holdingValue = holding.institution_value || 0;
-    const ticker = holding.ticker_symbol || holding.security_id;
-    
-    // If unmapped or inferred, count as proxied
-    if (mapping.unmappedHoldings.includes(ticker) || mapping.mappingMethod === 'inferred') {
-      proxiedValue += holdingValue;
-    }
-  }
-
-  return proxiedValue / totalValue;
+  return mapping.proxiedValue / totalValue;
 }
 
 /**
@@ -359,38 +347,45 @@ export function populateAssumptions(
 ): string[] {
   const assumptions: string[] = [];
 
-  // Gated on the split actually being used, not on inference having happened at
-  // all. A portfolio whose only inference was a recognized target-date fund has
-  // no unclassified equity, and claiming otherwise gave it a caveat describing
-  // a split it never received.
-  if (mapping.unclassifiedEquityCount > 0) {
-    assumptions.push('Unclassified equity holdings split 70% US / 30% international based on historical averages');
-  }
-
   if (mapping.targetDateFunds.length > 0) {
-    // Grouped by target year rather than listed by name. The split is a
-    // function of the year alone, so naming each fund adds nothing to what a
-    // reader needs to judge the model -- and it would put holding labels into
-    // the analysis context even for questions that never asked for investment
-    // detail. Grouping also keeps this readable for a portfolio holding many.
-    const byYear = new Map<number, { count: number; equityShare: number }>();
+    // Group identical sourced allocations without putting holding labels into
+    // the analysis context for questions that did not ask for investment detail.
+    const groups = new Map<string, {
+      count: number;
+      targetYear: number;
+      equityShare: number;
+      allocationAsOf: string;
+      exactAllocation: boolean;
+    }>();
     for (const fund of mapping.targetDateFunds) {
-      const existing = byYear.get(fund.targetYear);
+      const key = [fund.targetYear, fund.equityShare, fund.allocationAsOf, fund.exactAllocation].join(':');
+      const existing = groups.get(key);
       if (existing) existing.count += 1;
-      else byYear.set(fund.targetYear, { count: 1, equityShare: fund.equityShare });
+      else groups.set(key, {
+        count: 1,
+        targetYear: fund.targetYear,
+        equityShare: fund.equityShare,
+        allocationAsOf: fund.allocationAsOf,
+        exactAllocation: fund.exactAllocation,
+      });
     }
-    const described = Array.from(byYear.entries())
-      .sort(([left], [right]) => left - right)
-      .map(([year, { count, equityShare }]) =>
-        `${count} targeting ${year} at ${Math.round(equityShare * 100)}% equity`)
+    const described = Array.from(groups.values())
+      .sort((left, right) => left.targetYear - right.targetYear)
+      .map(({ count, targetYear, equityShare, allocationAsOf, exactAllocation }) =>
+        `${count} targeting ${targetYear} at ${Math.round(equityShare * 100)}% equity ` +
+        `(${exactAllocation ? 'exact share class' : 'public share-class proxy'}, as of ${allocationAsOf})`)
       .join('; ');
     assumptions.push(
-      `Target-date funds modeled on an approximate industry glidepath rather than each fund's own published curve: ${described}`
+      `Target-date funds use versioned published holdings rather than an industry glidepath: ${described}`
     );
   }
 
-  if (mapping.unmappedHoldings.length > 0) {
-    assumptions.push(`${mapping.unmappedHoldings.length} holdings could not be mapped to asset classes and were excluded from analysis`);
+  if (mapping.unmappedValue > 0.005) {
+    assumptions.push(
+      `$${Math.round(mapping.unmappedValue).toLocaleString('en-US')} across ` +
+      `${mapping.unmappedHoldings.length} holding${mapping.unmappedHoldings.length === 1 ? '' : 's'} ` +
+      'could not be represented by supported asset classes and was excluded from analysis'
+    );
   }
 
   if (mapping.usEquityWeight > 0 || mapping.internationalEquityWeight > 0) {
