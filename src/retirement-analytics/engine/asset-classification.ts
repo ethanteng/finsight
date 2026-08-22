@@ -102,8 +102,8 @@ export type EquityGeography = 'us' | 'international' | 'global' | 'unknown';
  *
  * Returns 'unknown' rather than guessing when the name carries no geography.
  * A fund called "Small Cap Fund" is probably domestic in a US plan, but
- * probably is not evidence -- unknown routes it to the documented default
- * split, which is stated as an assumption, instead of asserting a country.
+ * probability is not evidence. Unknown geography stays unknown so the mapper
+ * can exclude the holding instead of inventing a country split.
  *
  * International is tested first: "Total International Stock Index" contains a
  * US market word ("total ... stock") and is emphatically not US.

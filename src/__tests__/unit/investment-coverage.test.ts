@@ -24,11 +24,18 @@ const mapping = {
   internationalEquityWeight: 0,
   nominalBondsWeight: 0,
   cashWeight: 0,
+  totalValue: 804_827.9,
+  mappedValue: 804_827.9,
+  unmappedValue: 0,
+  valueCoverage: 1,
+  proxiedValue: 0,
+  proxiedValuePercentage: 0,
+  holdingExposures: [],
   mappingConfidence: 'high' as const,
   unmappedHoldings: [],
+  partiallyMappedHoldings: [],
   mappingMethod: 'direct' as const,
   targetDateFunds: [],
-  unclassifiedEquityCount: 0,
 };
 
 describe('unmodeled investment value', () => {
@@ -202,6 +209,56 @@ describe('retirement data quality with excluded value', () => {
     expect(quality.unmodeledReasons).toEqual([{ label: '401(k)', amount: 386_603.06, kind: 'partial-holdings' }]);
   });
 
+  it('combines not-itemized value with itemized holdings the mapper excluded', () => {
+    const internalGap = {
+      ...mapping,
+      mappedValue: 704_827.9,
+      unmappedValue: 100_000,
+      valueCoverage: 704_827.9 / 804_827.9,
+      mappingConfidence: 'low' as const,
+      unmappedHoldings: ['Unknown Plan Fund'],
+    };
+    const quality = calculateDataQuality(holdings, securities, internalGap, 1, [], [], {
+      totalInvestments: 1_191_430.96,
+      modeledValue: 804_827.9,
+      unmodeledValue: 386_603.06,
+      valueCoverage: 804_827.9 / 1_191_430.96,
+      reasons: [{ accountId: '401k', label: '401(k)', amount: 386_603.06, kind: 'partial-holdings' }],
+    });
+
+    expect(quality.modeledValue).toBeCloseTo(704_827.9, 2);
+    expect(quality.unmodeledValue).toBeCloseTo(486_603.06, 2);
+    expect(quality.valueCoverage).toBeCloseTo(704_827.9 / 1_191_430.96, 8);
+    expect(quality.unmodeledReasons).toEqual([
+      { label: '401(k)', amount: 386_603.06, kind: 'partial-holdings' },
+      { label: 'Unrecognized or unsupported holdings', amount: 100_000, kind: 'unrecognized-holdings' },
+    ]);
+    expect(generateDisclaimers(quality)[0]).toContain(
+      '$100,000 in Unrecognized or unsupported holdings has no supported asset-class mapping',
+    );
+  });
+
+  it('does not report a partially supported fund as wholly missing', () => {
+    const partialFund = {
+      ...mapping,
+      mappedValue: 780_000,
+      unmappedValue: 24_827.9,
+      valueCoverage: 780_000 / 804_827.9,
+      mappingConfidence: 'medium' as const,
+      partiallyMappedHoldings: ['Target Retirement 2040 Fund'],
+    };
+
+    const quality = calculateDataQuality(holdings, securities, partialFund, 1, []);
+
+    expect(quality.missingData).not.toContain('Target Retirement 2040 Fund');
+    expect(quality.proxyUsage.unmappedHoldings).toEqual([]);
+    expect(quality.unmodeledReasons).toContainEqual({
+      label: 'Unrecognized or unsupported holdings',
+      amount: 24_827.9,
+      kind: 'unrecognized-holdings',
+    });
+  });
+
   it('treats a fully explained portfolio as complete rather than unmodeled', () => {
     const quality = calculateDataQuality(holdings, securities, mapping, 1, []);
     expect(quality.unmodeledValue).toBe(0);
@@ -224,6 +281,18 @@ describe('retirement data quality with excluded value', () => {
     expect(calculateConfidenceCeiling(quality)).toBe('medium');
   });
 
+  it('hard-caps the result at low when portfolio mapping confidence is low', () => {
+    const quality = calculateDataQuality(
+      holdings,
+      securities,
+      { ...mapping, mappingConfidence: 'low' as const },
+      1,
+      [],
+    );
+
+    expect(calculateConfidenceCeiling(quality)).toBe('low');
+  });
+
   it('still caps confidence when only valueCoverage is restated onto otherwise-high data quality', () => {
     // Cache hits restate coverage onto a stored analysis without re-running the
     // engine; the ceiling must still see the restated valueCoverage.
@@ -238,8 +307,7 @@ describe('retirement data quality with excluded value', () => {
   });
 
   it('never promotes a stored low confidence, because a ceiling only caps', () => {
-    // calculateConfidenceCeiling returns only high or medium, so applying it
-    // outright to a cached analysis would raise a stored "low" to "medium".
+    // A newly calculated high or medium ceiling must not promote a stored low.
     const quality = calculateDataQuality(holdings, securities, mapping, 1, []);
     const ceiling = calculateConfidenceCeiling(quality);
     const rank: Record<string, number> = { low: 0, medium: 1, high: 2 };

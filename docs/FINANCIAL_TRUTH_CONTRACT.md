@@ -101,14 +101,28 @@ opposite problems with different remedies. `Not itemized` is value an account re
 explains -- money with no security behind it, resolvable only by the provider. `Unrecognized holdings`
 is a security we do hold whose asset class we could not resolve -- resolvable by better metadata.
 A target-date fund is neither: it is a declared blend, recognized from its own label rather than from
-a provider type, and modeled on an approximate industry glidepath. That approximation is stated as an
-assumption naming each fund and its split, because it is not the fund's own published curve.
+a provider type. It is modeled only when a dated registry entry links that provider and vintage to
+published holdings no later than the snapshot's full UTC date. The newest eligible entry carries
+forward instead of expiring on January 1; its age is recorded, and an entry older than 366 days is
+disclosed as stale, lowers mapping confidence, and hard-caps the final analysis confidence at low.
+The result records the allocation date, source,
+source/share-class context, and whether the entry is the exact share class or a public share-class
+proxy. Unsupported sleeves are excluded rather than redistributed and are tracked as a partial
+mapping, not falsely reported as a wholly unrecognized holding. A recognized fund with no matching
+dated entry remains fully unmodeled. UC Pathway funds are intentionally in that state because no
+public per-vintage allocation is available. Provider-name matching is deliberately narrow: an
+unreviewed alias or different fund family never inherits a reviewed allocation by similarity.
+
+Holding values are signed. A supported negative position reduces the net portfolio and simulation
+basis, and its asset exposure remains negative; this can make one sleeve exceed 100% and another fall
+below zero. A negative position without a complete supported mapping stops the analysis rather than
+being discarded or assigned a guessed return. A non-positive net portfolio also cannot be simulated.
 
 Employer-plan and institutional share classes are placed the same way: by reading the mandate their
 names state, since their provider type says only "Mutual Fund" and their tickers are too long to
 resemble a stock symbol. Geography is read from the name too, so a fund called "International Equity
-Fund" is not placed 70% in the US. Only holdings whose name carries no geography take the 70/30
-historical-average split, and only their presence may claim that assumption.
+Fund" is international. A global fund without sourced country weights, or a fund whose name carries
+no geography, remains unmodeled; the engine does not manufacture a US/international split.
 
 A provider type that names the wrapper rather than the exposure -- "ETF", "Mutual Fund", a collective
 trust -- carries no asset class and must not be read as one. Such a holding is classified from its

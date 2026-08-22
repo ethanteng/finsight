@@ -503,8 +503,8 @@ export async function runRetirementScenario(
   const parsedComputedAt = computedAt
     ? (computedAt instanceof Date ? computedAt : new Date(computedAt))
     : null;
-  const baselineYear = parsedComputedAt && !Number.isNaN(parsedComputedAt.getTime())
-    ? parsedComputedAt.getUTCFullYear()
+  const baselineDate = parsedComputedAt && !Number.isNaN(parsedComputedAt.getTime())
+    ? parsedComputedAt.toISOString().slice(0, 10)
     : undefined;
   const baseline = snapshot.retirementAnalysis;
   const stored = baseline?._storedInputParams;
@@ -537,10 +537,9 @@ export async function runRetirementScenario(
     // Variants must exclude exactly what the baseline excluded, or a scenario
     // comparison would attribute a coverage difference to the change modeled.
     unmodeledInvestments: snapshot.investments?.unmodeledInvestments ?? null,
-    // Same reason: a variant computed on the other side of a year boundary from
-    // its baseline would carry a different glidepath, and the comparison would
-    // read that difference as an effect of the change being modeled.
-    asOfYear: baselineYear,
+    // Same reason: a variant must use the baseline snapshot's evidence boundary
+    // or a newly published allocation could look like an effect of the scenario.
+    asOfDate: baselineDate,
   };
   const baselinePolicy: WithdrawalPolicy = { type: 'historical_cpi' };
   const baselineScenarioId = scenarioId(baseInput, baselinePolicy, baseline as RetirementAnalysisOutput);

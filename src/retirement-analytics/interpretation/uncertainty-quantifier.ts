@@ -41,27 +41,25 @@ export function calculateDataQuality(
     metadataConfidence = 'medium';
   }
 
-  // Calculate proxied value percentage
-  const totalValue = holdings.reduce((sum, h) => sum + (h.institution_value || 0), 0);
-  let proxiedValue = 0;
-  
-  for (const holding of holdings) {
-    const ticker = holding.ticker_symbol || holding.security_id;
-    if (portfolioMapping.unmappedHoldings.includes(ticker) || 
-        portfolioMapping.mappingMethod === 'inferred') {
-      proxiedValue += holding.institution_value || 0;
-    }
-  }
-  
-  const proxiedValuePercentage = totalValue > 0 ? proxiedValue / totalValue : 0;
+  const totalValue = portfolioMapping.totalValue;
+  const proxiedValuePercentage = portfolioMapping.proxiedValuePercentage;
 
   const missingData = [...portfolioMapping.unmappedHoldings, ...stressTestMissingData];
 
-  // With nothing excluded, the modeled portfolio is the whole portfolio and
-  // coverage is complete. Reporting 0 here would read as "nothing modeled".
-  const modeledValue = unmodeledInvestments?.modeledValue ?? totalValue;
-  const unmodeledValue = unmodeledInvestments?.unmodeledValue ?? 0;
-  const valueCoverage = unmodeledInvestments?.valueCoverage ?? 1;
+  // Combine provider-level value with no holdings detail and itemized holdings
+  // whose exposures the mapper could not support. Both are deliberately left
+  // out of the same simulation basis.
+  const canonicalTotalValue = unmodeledInvestments?.totalInvestments ?? totalValue;
+  const modeledValue = portfolioMapping.mappedValue;
+  const unmodeledValue = Math.max(0, canonicalTotalValue - modeledValue);
+  const valueCoverage = canonicalTotalValue > 0 ? modeledValue / canonicalTotalValue : 1;
+  const mappingReason = portfolioMapping.unmappedValue > 0.005
+    ? [{
+        label: 'Unrecognized or unsupported holdings',
+        amount: portfolioMapping.unmappedValue,
+        kind: 'unrecognized-holdings',
+      }]
+    : [];
 
   return {
     completeness,
@@ -69,11 +67,14 @@ export function calculateDataQuality(
     modeledValue,
     unmodeledValue,
     valueCoverage,
-    unmodeledReasons: (unmodeledInvestments?.reasons ?? []).map(reason => ({
-      label: reason.label,
-      amount: reason.amount,
-      kind: reason.kind,
-    })),
+    unmodeledReasons: [
+      ...(unmodeledInvestments?.reasons ?? []).map(reason => ({
+        label: reason.label,
+        amount: reason.amount,
+        kind: reason.kind,
+      })),
+      ...mappingReason,
+    ],
     metadataConfidence,
     portfolioMappingConfidence: portfolioMapping.mappingConfidence,
     proxiedValuePercentage,
@@ -91,8 +92,9 @@ export function calculateDataQuality(
 
 /**
  * Calculate confidence ceiling - explicit mechanical rules
+ * - Low portfolio-mapping confidence caps the result at low.
  * Confidence cannot be "high" if:
- * - portfolioMappingConfidence !== 'high'
+ * - portfolioMappingConfidence === 'medium'
  * - priceHistoryCoverage < 0.8
  * - proxiedValuePercentage >= 0.4
  * - valueCoverage < 0.95
@@ -100,8 +102,12 @@ export function calculateDataQuality(
 export function calculateConfidenceCeiling(
   dataQuality: DataQualityReport
 ): ConfidenceLevel {
-  // Explicit mechanical rules: confidence cannot be "high" if:
-  if (dataQuality.portfolioMappingConfidence !== 'high') {
+  // Do not dilute an explicit low-confidence mapping into a medium-confidence
+  // answer. This is especially important when registry evidence is stale.
+  if (dataQuality.portfolioMappingConfidence === 'low') {
+    return 'low';
+  }
+  if (dataQuality.portfolioMappingConfidence === 'medium') {
     return 'medium';
   }
   if (dataQuality.priceHistoryCoverage < 0.8) {
@@ -142,7 +148,11 @@ export function generateDisclaimers(
       accountId: '',
       label: reason.label,
       amount: reason.amount,
-      kind: reason.kind === 'no-holdings' ? 'no-holdings' : 'partial-holdings',
+      kind: reason.kind === 'no-holdings'
+        ? 'no-holdings'
+        : reason.kind === 'unrecognized-holdings'
+          ? 'unrecognized-holdings'
+          : 'partial-holdings',
     })),
   });
   if (unmodeledNote) disclaimers.push(unmodeledNote);
