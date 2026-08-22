@@ -12,9 +12,29 @@ export type OpenAISlotId = Extract<ModelSlotId, 'fallback' | 'profile' | 'contex
  * at gpt-5 silently turned every plan into "include every context pack" until
  * the parameters were adapted here. GPT-5 and later are matched as a family
  * rather than listed, so the next model an admin selects does not repeat it.
+ *
+ * Admin model ids may carry fine-tune or provider prefixes (`ft:gpt-5:…`,
+ * `openai/gpt-5`). The family check runs on the bare model segment so those
+ * spellings follow the same wire shape as an unprefixed id.
  */
+function bareOpenAIModelId(model: string): string {
+  const normalized = model.trim().toLowerCase();
+  if (!normalized) return normalized;
+  if (normalized.includes('/')) {
+    return normalized.slice(normalized.lastIndexOf('/') + 1);
+  }
+  // Fine-tune ids look like ft:<base>:<org>:… — use the first gpt-/o-segment.
+  if (normalized.includes(':')) {
+    const segment = normalized
+      .split(':')
+      .find(part => /^(?:o\d|gpt-)/.test(part));
+    if (segment) return segment;
+  }
+  return normalized;
+}
+
 function usesCompletionTokenCeiling(model: string): boolean {
-  return /^(?:o\d|gpt-(?:[5-9]|\d{2,}))/.test(model.trim().toLowerCase());
+  return /^(?:o\d|gpt-(?:[5-9]|\d{2,}))/.test(bareOpenAIModelId(model));
 }
 
 /**

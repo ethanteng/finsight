@@ -88,6 +88,17 @@ describe('generation settings', () => {
         .toEqual({ max_completion_tokens: 16_000 });
     });
 
+    it('adapts prefixed and fine-tuned ids the same way as a bare family id', () => {
+      // Model ids accept `:` and `/` (see MODEL_ID_PATTERN). A prefixed GPT-5
+      // id used to keep sending max_tokens and 400 every call.
+      expect(openAIGenerationParams('contextPlanner', 'ft:gpt-5-mini:org:label:abc123'))
+        .toEqual({ max_completion_tokens: 1500 });
+      expect(openAIGenerationParams('fallback', 'openai/o3-mini'))
+        .toEqual({ max_completion_tokens: 16_000 });
+      expect(openAIGenerationParams('contextPlanner', 'openai/gpt-4.1'))
+        .toEqual({ temperature: 0, max_tokens: 1500 });
+    });
+
     it('drops a temperature those models cannot honour instead of failing the call', () => {
       expect(openAIGenerationParams('contextPlanner', 'gpt-5.6-sol')).not.toHaveProperty('temperature');
       expect(openAIGenerationParams('profile', 'gpt-5-mini')).toEqual({});
