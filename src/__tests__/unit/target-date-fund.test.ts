@@ -513,8 +513,11 @@ describe('institutional and employer-plan funds', () => {
     expect(assumption).toContain('1 targeting 2035 at 67% equity');
     expect(assumption).toContain('as of 2026-06-30');
     expect(assumption).toContain('as of 2026-03-31');
+    expect(assumption).toContain('State Street Target Retirement');
+    expect(assumption).toContain('BlackRock LifePath Index');
     expect(assumption).toContain('State Street public mutual-fund share class');
     expect(assumption).toContain('BlackRock LifePath Fund N share class');
+    expect(assumption).not.toContain('Lifepath Index');
     expect(assumption.match(/Plan CIT has no public holdings/g)).toHaveLength(1);
     expect(assumption).not.toContain('State St Target Ret');
     expect(assumption).not.toContain('BTC LPATH IDX');

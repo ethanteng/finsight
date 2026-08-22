@@ -39,6 +39,14 @@ const EMPTY_WEIGHTS: HoldingExposureWeights = {
   cash: 0,
 };
 
+/** Product capitalization for series slugs shown in analysis assumptions. */
+const TARGET_DATE_SERIES_DISPLAY_NAMES: Record<string, string> = {
+  'lifepath-index': 'LifePath Index',
+  lifepath: 'LifePath',
+  'target-retirement': 'Target Retirement',
+  'target-date': 'Target Date',
+};
+
 interface HoldingResolutionDraft {
   weights: HoldingExposureWeights;
   method: HoldingMappingMethod;
@@ -535,7 +543,7 @@ export function populateAssumptions(
         const providerName = provider === 'state-street'
           ? 'State Street'
           : provider === 'blackrock' ? 'BlackRock' : provider;
-        const seriesName = series
+        const seriesName = TARGET_DATE_SERIES_DISPLAY_NAMES[series] ?? series
           .split('-')
           .map(word => word.charAt(0).toUpperCase() + word.slice(1))
           .join(' ');
