@@ -153,6 +153,12 @@ function idempotencyKey(prefix: string, results: RegistrySourceResult[]): string
 
   for (const result of results) {
     console.log(`${result.status.padEnd(9)} ${result.key}`);
+    // A partially-failed run is deliberately silent and exits 0, so this log is
+    // the only operational signal it leaves. Without the detail, `HTTP 403` and
+    // `no holdings rows parsed` read the same -- one is the provider blocking
+    // the runner, the other is the page restructuring under the parser. The
+    // clean path stays terse.
+    if (result.status !== 'unchanged') console.log(`          ${result.detail}`);
   }
   console.log(
     `\n${results.length} sources — ${drifted.length} drifted, ${unreadable.length} unreadable`
