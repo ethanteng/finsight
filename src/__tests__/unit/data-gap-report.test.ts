@@ -231,11 +231,35 @@ describe('data gap report', () => {
     expect(report.securities[0].userCount).toBe(1);
   });
 
+  it('counts analyses written before the current data-quality contract', () => {
+    // Analyses are cached, so the report reads whatever each user last computed
+    // -- which can predate the target-date registry entirely. Those gaps may
+    // already be fixed, and treating them as live sends an operator hunting for
+    // data the engine can already place.
+    const report = aggregateDataGaps([
+      row('a', '2026-08-20', {
+        dataQuality: { proxyUsage: { unmappedHoldings: ['State St Target Ret 2040'] } },
+      }),
+      row('b', '2026-08-20', analysis({ unmapped: ['Genuine Gap'], valueCoverage: 0.9 })),
+    ]);
+
+    expect(report.staleAnalyses).toBe(1);
+    expect(report.usersConsidered).toBe(2);
+  });
+
+  it('does not call an analysis stale merely because coverage is zero', () => {
+    const report = aggregateDataGaps([
+      row('a', '2026-08-20', analysis({ unmapped: ['X'], valueCoverage: 0 })),
+    ]);
+    expect(report.staleAnalyses).toBe(0);
+  });
+
   it('returns an empty report rather than throwing when there is nothing to read', () => {
     const report = aggregateDataGaps([]);
     expect(report).toEqual({
       usersConsidered: 0,
       usersWithAnyGap: 0,
+      staleAnalyses: 0,
       securities: [],
       coverage: { totalUnmodeledValue: 0, worstValueCoverage: null, medianValueCoverage: null },
     });

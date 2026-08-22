@@ -50,6 +50,16 @@ export interface DataGapReport {
   /** Distinct users contributing an analysis to this report. */
   usersConsidered: number;
   usersWithAnyGap: number;
+  /**
+   * Analyses computed before the current data-quality contract.
+   *
+   * Retirement analyses are cached, so the report reads whatever each user last
+   * computed -- which can be from an engine that predates the target-date
+   * registry and the canonical snapshot. Their gaps may already be fixed and
+   * simply not recomputed yet. Counting them separately stops an operator
+   * sourcing data for a security the engine can already place.
+   */
+  staleAnalyses: number;
   securities: DataGapSecurity[];
   coverage: {
     /** Sum of unmodeled value across the analyses considered. */
@@ -152,6 +162,7 @@ export function aggregateDataGaps(rows: readonly AnalysisRow[]): DataGapReport {
   const coverages: number[] = [];
   let totalUnmodeledValue = 0;
   let usersWithAnyGap = 0;
+  let staleAnalyses = 0;
 
   for (const { at, row } of latestByUser.values()) {
     const quality = (row.historicalImplications as any)?.dataQuality;
@@ -214,6 +225,10 @@ export function aggregateDataGaps(rows: readonly AnalysisRow[]): DataGapReport {
     if (unmodeled !== null && unmodeled > 0) totalUnmodeledValue += unmodeled;
     const coverage = finite(quality.valueCoverage);
     if (coverage !== null) coverages.push(coverage);
+    // `valueCoverage` is the marker for the current contract: every analysis the
+    // present engine writes reports it. Its absence dates the row rather than
+    // describing the portfolio.
+    else staleAnalyses += 1;
   }
 
   const securities = [...byKey.values()].sort((left, right) =>
@@ -223,6 +238,7 @@ export function aggregateDataGaps(rows: readonly AnalysisRow[]): DataGapReport {
   return {
     usersConsidered: latestByUser.size,
     usersWithAnyGap,
+    staleAnalyses,
     securities,
     coverage: {
       totalUnmodeledValue,

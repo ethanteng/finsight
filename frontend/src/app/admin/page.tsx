@@ -142,6 +142,7 @@ export default function AdminPage() {
   const [dataGaps, setDataGaps] = useState<{
     usersConsidered: number;
     usersWithAnyGap: number;
+    staleAnalyses: number;
     securities: Array<{
       label: string;
       /** Provider id the label was resolved from, when it was resolved. */
@@ -847,6 +848,15 @@ export default function AdminPage() {
               <p className="mt-3 text-sm text-[#5e6b63]">
                 {`$${Math.round(dataGaps.coverage.totalUnmodeledValue).toLocaleString()} excluded from simulation across these analyses.`}
               </p>
+
+              {dataGaps.staleAnalyses > 0 && (
+                <p className="mt-3 rounded bg-amber-50 p-3 text-sm text-amber-900">
+                  {`${dataGaps.staleAnalyses} of ${dataGaps.usersConsidered} analyses were computed before the
+                  current engine and do not report coverage. Their gaps may already be resolved — a
+                  target-date fund analysed before the registry existed still shows here as
+                  unclassifiable. Re-run those analyses before sourcing data for anything they list.`}
+                </p>
+              )}
 
               {dataGaps.securities.length === 0 ? (
                 <p className="mt-5 text-sm text-[#5e6b63]">
