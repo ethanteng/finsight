@@ -153,6 +153,17 @@ export default function AdminPage() {
       worstValueCoverage: number | null;
       medianValueCoverage: number | null;
     };
+    // Symbols a market-data provider returned 404 for, so we stopped asking.
+    providerCoverageGaps: Array<{
+      ticker: string;
+      provider: string;
+      statusCode: number;
+      endpoint: string;
+      observations: number;
+      firstSeenAt: string;
+      lastSeenAt: string;
+      recheckAfter: string;
+    }>;
   } | null>(null);
   const [dataGapsLoading, setDataGapsLoading] = useState(false);
   const [dataGapsError, setDataGapsError] = useState<string | null>(null);
@@ -879,6 +890,61 @@ export default function AdminPage() {
             </>
           )}
         </div>
+
+        {dataGaps && (
+          <div className="rounded-lg bg-white/70 p-6">
+            <h2 className="text-xl font-semibold text-[#102319]">Provider coverage gaps</h2>
+            <p className="mt-1 text-sm text-[#5e6b63]">
+              Symbols a market-data provider answered 404 for. These are skipped until the
+              recheck date rather than re-requested on every question, so a symbol listed
+              here contributes no price history to any answer.
+            </p>
+
+            {dataGaps.providerCoverageGaps.length === 0 ? (
+              <p className="mt-5 text-sm text-[#5e6b63]">
+                No coverage gaps recorded. Every symbol requested so far was priced.
+              </p>
+            ) : (
+              <div className="mt-5 overflow-x-auto">
+                <table className="w-full min-w-[720px] text-left text-sm">
+                  <thead className="text-xs uppercase tracking-wide text-[#5e6b63]">
+                    <tr>
+                      <th className="py-2 pr-4">Symbol</th>
+                      <th className="py-2 pr-4">Provider</th>
+                      <th className="py-2 pr-4">Endpoint</th>
+                      <th className="py-2 pr-4 text-right">Times seen</th>
+                      <th className="py-2 pr-4 text-right">Last seen</th>
+                      <th className="py-2 text-right">Rechecks</th>
+                    </tr>
+                  </thead>
+                  <tbody className="text-[#102319]">
+                    {dataGaps.providerCoverageGaps.map(gap => (
+                      <tr key={`${gap.provider}-${gap.ticker}`} className="border-t border-black/5">
+                        <td className="py-2 pr-4 font-medium">{gap.ticker}</td>
+                        <td className="py-2 pr-4 text-[#5e6b63]">{gap.provider}</td>
+                        <td className="py-2 pr-4 text-[#5e6b63]">
+                          {gap.endpoint} <span className="tabular-nums">({gap.statusCode})</span>
+                        </td>
+                        <td className="py-2 pr-4 text-right tabular-nums">{gap.observations}</td>
+                        <td className="py-2 pr-4 text-right tabular-nums text-[#5e6b63]">
+                          {gap.lastSeenAt.slice(0, 10)}
+                        </td>
+                        <td className="py-2 text-right tabular-nums text-[#5e6b63]">
+                          {gap.recheckAfter.slice(0, 10)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            <p className="mt-4 text-xs text-[#5e6b63]">
+              Coverage changes, so each entry expires and the symbol is tried once more on
+              its recheck date.
+            </p>
+          </div>
+        )}
 
         <div className="rounded-lg bg-white/70 p-6">
           <div className="flex flex-wrap items-center justify-between gap-3">

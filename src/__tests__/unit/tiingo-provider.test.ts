@@ -1,5 +1,8 @@
-import { TiingoProvider } from '../../data/providers/tiingo';
-import { TiingoProvider as RetirementTiingoProvider } from '../../retirement-analytics/data/providers/tiingo-provider';
+import { TiingoHttpError, TiingoProvider } from '../../data/providers/tiingo';
+import {
+  TiingoCoverageGapError,
+  TiingoProvider as RetirementTiingoProvider,
+} from '../../retirement-analytics/data/providers/tiingo-provider';
 import { dbCache } from '../../retirement-analytics/data/db-cache';
 
 function response(status: number, body: unknown, headers: Record<string, string> = {}): Response {
@@ -105,5 +108,79 @@ describe('Tiingo Power client', () => {
     const currentMonthEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0, 23, 59, 59));
     const priorMonthEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 0));
     expect(covers([{ date: priorMonthEnd }], currentMonthEnd)).toBe(true);
+  });
+});
+
+describe('Tiingo coverage gaps', () => {
+  const HISTORY_START = new Date('2025-07-01T00:00:00Z');
+  const HISTORY_END = new Date('2026-08-01T00:00:00Z');
+  const originalGithubActions = process.env.GITHUB_ACTIONS;
+
+  function liveProvider(fetchImplementation: jest.Mock): RetirementTiingoProvider {
+    const provider = new RetirementTiingoProvider('power-key');
+    // The provider builds its own client; swap in one with a stubbed transport
+    // so the 404 path runs without a real request.
+    (provider as any).client = new TiingoProvider('power-key', {
+      fetchImplementation,
+      maxAttempts: 1,
+    });
+    return provider;
+  }
+
+  beforeEach(() => {
+    // The mock-data branch short-circuits before the API call under CI.
+    delete process.env.GITHUB_ACTIONS;
+    jest.spyOn(dbCache, 'getPriceHistory').mockResolvedValue(null);
+    jest.spyOn(dbCache, 'savePriceHistory').mockResolvedValue(undefined);
+  });
+
+  afterEach(() => {
+    if (originalGithubActions === undefined) delete process.env.GITHUB_ACTIONS;
+    else process.env.GITHUB_ACTIONS = originalGithubActions;
+    jest.restoreAllMocks();
+  });
+
+  it('records a coverage gap when Tiingo has no data for the symbol', async () => {
+    jest.spyOn(dbCache, 'isCoverageGap').mockResolvedValue(false);
+    const record = jest.spyOn(dbCache, 'recordCoverageGap').mockResolvedValue(undefined);
+    const fetchImplementation = jest.fn().mockResolvedValue(response(404, {}));
+
+    await expect(
+      liveProvider(fetchImplementation).getPriceHistory('SSISLX', HISTORY_START, HISTORY_END),
+    ).rejects.toBeInstanceOf(TiingoHttpError);
+
+    expect(record).toHaveBeenCalledWith(expect.objectContaining({
+      ticker: 'SSISLX',
+      provider: 'tiingo',
+      statusCode: 404,
+      endpoint: '/tiingo/daily',
+    }));
+  });
+
+  it('skips the request entirely once a gap is cached', async () => {
+    jest.spyOn(dbCache, 'isCoverageGap').mockResolvedValue(true);
+    const record = jest.spyOn(dbCache, 'recordCoverageGap').mockResolvedValue(undefined);
+    const fetchImplementation = jest.fn();
+
+    await expect(
+      liveProvider(fetchImplementation).getPriceHistory('O7PE', HISTORY_START, HISTORY_END),
+    ).rejects.toBeInstanceOf(TiingoCoverageGapError);
+
+    // The point of the whole change: no outbound request, no repeat report.
+    expect(fetchImplementation).not.toHaveBeenCalled();
+    expect(record).not.toHaveBeenCalled();
+  });
+
+  it('does not treat a server error as a coverage gap', async () => {
+    jest.spyOn(dbCache, 'isCoverageGap').mockResolvedValue(false);
+    const record = jest.spyOn(dbCache, 'recordCoverageGap').mockResolvedValue(undefined);
+    const fetchImplementation = jest.fn().mockResolvedValue(response(500, {}));
+
+    await expect(
+      liveProvider(fetchImplementation).getPriceHistory('SPY', HISTORY_START, HISTORY_END),
+    ).rejects.toBeInstanceOf(TiingoHttpError);
+
+    // A 500 is transient; caching it would blind us to a symbol we do cover.
+    expect(record).not.toHaveBeenCalled();
   });
 });

@@ -4,7 +4,18 @@
 import { PriceTimeSeries } from '../../types';
 import { TimeSeriesCache } from '../time-series-cache';
 import { dbCache } from '../db-cache';
-import { TiingoEodPrice, TiingoProvider as TiingoClient } from '../../../data/providers/tiingo';
+import { TiingoEodPrice, TiingoHttpError, TiingoProvider as TiingoClient } from '../../../data/providers/tiingo';
+
+/** Thrown instead of re-requesting a symbol Tiingo is known not to cover. */
+export class TiingoCoverageGapError extends Error {
+  readonly ticker: string;
+
+  constructor(ticker: string) {
+    super(`Tiingo has no coverage for ${ticker} (cached); skipping request`);
+    this.name = 'TiingoCoverageGapError';
+    this.ticker = ticker;
+  }
+}
 
 export class TiingoProvider {
   private apiKey: string;
@@ -51,6 +62,13 @@ export class TiingoProvider {
       return mockData;
     }
 
+    // Tiingo has already said it does not carry this symbol. Caching only
+    // successes meant every uncovered holding was re-requested on every user
+    // request, forever, on the critical path. Skip until the entry expires.
+    if (await dbCache.isCoverageGap(ticker, 'tiingo')) {
+      throw new TiingoCoverageGapError(ticker);
+    }
+
     try {
       console.log(`🌐 Tiingo: Fetching from API for ${ticker} (${startDate.toISOString().split('T')[0]} to ${endDate.toISOString().split('T')[0]})`);
       // Fetch one prior month so the first requested month's adjusted return is
@@ -77,6 +95,18 @@ export class TiingoProvider {
       
       return timeSeries;
     } catch (error) {
+      // A 404 is a statement about coverage, not a transient failure. Record it
+      // so the next request short-circuits instead of re-asking.
+      if (error instanceof TiingoHttpError && error.status === 404) {
+        await dbCache.recordCoverageGap({
+          ticker,
+          provider: 'tiingo',
+          statusCode: 404,
+          endpoint: '/tiingo/daily',
+        });
+        console.warn(`Tiingo does not cover ${ticker}; skipping until the coverage gap expires`);
+        throw error;
+      }
       console.error(`Error fetching Tiingo data for ${ticker}:`, error);
       throw error;
     }
