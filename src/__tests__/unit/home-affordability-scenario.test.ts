@@ -161,6 +161,58 @@ describe('home affordability scenario runner', () => {
     );
   });
 
+  it('keeps sum(inputs) facts consistent after rounding money components to cents', async () => {
+    // round(sum(unrounded P&I + maintenance + ...)) disagreed with
+    // sum(round(each component)) for many ordinary price/rate pairs, and
+    // validateCanonicalFactPack then aborted the whole Ask Linc request.
+    const execution = await runHomeAffordabilityScenario(snapshot(), {
+      requested: true,
+      primary: {
+        overrides: {
+          homePrice: 100_000,
+          downPaymentPercent: 20,
+          mortgageRatePercent: 3,
+          propertyTaxAnnual: 1_200,
+          homeownersInsuranceAnnual: 1_200,
+          hoaMonthly: 0,
+          mortgageInsuranceMonthly: 0,
+          currentHousingCostMonthly: 1_200,
+          sources: {
+            homePrice: '$100,000 home',
+            downPaymentPercent: '20% down',
+            mortgageRatePercent: '3% mortgage',
+            propertyTaxAnnual: '$1,200 taxes',
+            homeownersInsuranceAnnual: '$1,200 insurance',
+            hoaMonthly: 'no HOA',
+            mortgageInsuranceMonthly: 'no PMI',
+            currentHousingCostMonthly: '$1,200 rent',
+          },
+        },
+      },
+    });
+
+    expect(execution.status).toBe('completed');
+    if (execution.status !== 'completed') return;
+    const facts = homeAffordabilityScenarioCanonicalFacts(execution);
+    const allIn = facts.find((fact) => fact.id.endsWith('_all_in_monthly_housing_cost'));
+    const upfront = facts.find((fact) => fact.id.endsWith('_upfront_cash_needed'));
+    expect(allIn).toBeDefined();
+    expect(upfront).toBeDefined();
+    expect(validateCanonicalFactPack({ version: 1, facts })).toEqual([]);
+    expect(allIn!.value).toBe(
+      Number(
+        (
+          facts.find((fact) => fact.id.endsWith('_principal_and_interest_monthly'))!.value
+          + facts.find((fact) => fact.id.endsWith('_property_tax_monthly'))!.value
+          + facts.find((fact) => fact.id.endsWith('_homeowners_insurance_monthly'))!.value
+          + facts.find((fact) => fact.id.endsWith('_assumption_hoa_monthly'))!.value
+          + facts.find((fact) => fact.id.endsWith('_assumption_mortgage_insurance_monthly'))!.value
+          + facts.find((fact) => fact.id.endsWith('_maintenance_monthly'))!.value
+        ).toFixed(2)
+      )
+    );
+  });
+
   it('uses named defaults but marks omitted taxes and insurance as a lower bound', async () => {
     const execution = await runHomeAffordabilityScenario(snapshot(), {
       requested: true,

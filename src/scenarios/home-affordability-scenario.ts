@@ -398,10 +398,11 @@ function resolveVariant(
   snapshot: FinancialContextSnapshot,
   overrides: PlannedHomeAffordabilityOverrides
 ): ResolvedHomeVariant | string {
-  const homePrice = overrides.homePrice;
-  if (homePrice === undefined) {
+  const rawHomePrice = overrides.homePrice;
+  if (rawHomePrice === undefined) {
     return 'A target home price is required to run the affordability calculator.';
   }
+  const homePrice = roundMoney(rawHomePrice);
 
   const assumptions: HomeAffordabilityAssumption[] = [];
   const addAssumption = (
@@ -424,9 +425,11 @@ function resolveVariant(
 
   const downPaymentUsesAmount = overrides.downPaymentAmount !== undefined;
   const requestedDownPaymentPercent = overrides.downPaymentPercent ?? DEFAULT_DOWN_PAYMENT_PERCENT;
-  const downPaymentAmount = downPaymentUsesAmount
-    ? overrides.downPaymentAmount!
-    : homePrice * (requestedDownPaymentPercent / 100);
+  const downPaymentAmount = roundMoney(
+    downPaymentUsesAmount
+      ? overrides.downPaymentAmount!
+      : homePrice * (requestedDownPaymentPercent / 100)
+  );
   if (downPaymentAmount > homePrice) {
     return 'The down payment cannot exceed the target home price.';
   }
@@ -454,7 +457,11 @@ function resolveVariant(
   }
 
   const overviewCash = finiteNumber(snapshot.financialSummary?.financialOverview?.totalCash);
-  const availableCash = overrides.availableCashAmount ?? overviewCash;
+  const availableCash = overrides.availableCashAmount !== undefined
+    ? roundMoney(overrides.availableCashAmount)
+    : overviewCash !== undefined
+      ? roundMoney(overviewCash)
+      : undefined;
   if (availableCash !== undefined) {
     addAssumption(
       'available_cash',
@@ -478,7 +485,7 @@ function resolveVariant(
   // The accepted ranges permit a down payment equal to the price, and a zero
   // principal never reaches the rate in `mortgagePayment`. An all-cash purchase
   // must not be made unavailable just because no benchmark loaded.
-  const loanAmount = homePrice - downPaymentAmount;
+  const loanAmount = roundMoney(homePrice - downPaymentAmount);
   const mortgageRatePercent = resolvedRatePercent ?? (loanAmount <= 0 ? 0 : undefined);
   if (mortgageRatePercent === undefined || mortgageRatePercent < 0 || mortgageRatePercent > 30) {
     return 'A mortgage rate is required. State a rate or load the current mortgage-rate context.';
@@ -509,9 +516,11 @@ function resolveVariant(
 
   const closingUsesAmount = overrides.closingCostsAmount !== undefined;
   const requestedClosingPercent = overrides.closingCostPercent ?? DEFAULT_CLOSING_COST_PERCENT;
-  const closingCosts = closingUsesAmount
-    ? overrides.closingCostsAmount!
-    : homePrice * (requestedClosingPercent / 100);
+  const closingCosts = roundMoney(
+    closingUsesAmount
+      ? overrides.closingCostsAmount!
+      : homePrice * (requestedClosingPercent / 100)
+  );
   if (closingUsesAmount) {
     addAssumption(
       'closing_costs_amount',
@@ -533,7 +542,7 @@ function resolveVariant(
   }
 
   const missingRecurringCosts: string[] = [];
-  const propertyTaxAnnual = overrides.propertyTaxAnnual ?? 0;
+  const propertyTaxAnnual = roundMoney(overrides.propertyTaxAnnual ?? 0);
   if (overrides.propertyTaxAnnual === undefined) missingRecurringCosts.push('property taxes');
   addAssumption(
     'property_tax_annual',
@@ -544,7 +553,7 @@ function resolveVariant(
     overrides.sources.propertyTaxAnnual ?? 'Not supplied; excluded from the lower-bound cost'
   );
 
-  const homeownersInsuranceAnnual = overrides.homeownersInsuranceAnnual ?? 0;
+  const homeownersInsuranceAnnual = roundMoney(overrides.homeownersInsuranceAnnual ?? 0);
   if (overrides.homeownersInsuranceAnnual === undefined) {
     missingRecurringCosts.push('homeowners insurance');
   }
@@ -557,7 +566,10 @@ function resolveVariant(
     overrides.sources.homeownersInsuranceAnnual ?? 'Not supplied; excluded from the lower-bound cost'
   );
 
-  const hoaMonthly = overrides.hoaMonthly ?? 0;
+  // Round money assumptions to cents before they enter the ledger. Aggregates
+  // that use sum(inputs) against these facts must add the same cent values or
+  // deterministic validation fails for ordinary price/rate combinations.
+  const hoaMonthly = roundMoney(overrides.hoaMonthly ?? 0);
   addAssumption(
     'hoa_monthly',
     'Monthly HOA dues',
@@ -567,7 +579,7 @@ function resolveVariant(
     overrides.sources.hoaMonthly ?? 'Assumes no HOA dues unless supplied'
   );
 
-  const mortgageInsuranceMonthly = overrides.mortgageInsuranceMonthly ?? 0;
+  const mortgageInsuranceMonthly = roundMoney(overrides.mortgageInsuranceMonthly ?? 0);
   if (downPaymentPercent < 20 && overrides.mortgageInsuranceMonthly === undefined) {
     missingRecurringCosts.push('mortgage insurance');
   }
@@ -583,8 +595,9 @@ function resolveVariant(
         : 'Assumes no mortgage insurance at this down payment')
   );
 
-  const maintenanceAnnual = overrides.maintenanceAnnual
-    ?? homePrice * (DEFAULT_MAINTENANCE_PERCENT / 100);
+  const maintenanceAnnual = roundMoney(
+    overrides.maintenanceAnnual ?? homePrice * (DEFAULT_MAINTENANCE_PERCENT / 100)
+  );
   addAssumption(
     'maintenance_annual',
     'Annual maintenance reserve',
@@ -595,7 +608,7 @@ function resolveVariant(
       ?? `${DEFAULT_MAINTENANCE_PERCENT}% of home price planning default`
   );
 
-  const movingAndInitialCosts = overrides.movingAndInitialCosts ?? 0;
+  const movingAndInitialCosts = roundMoney(overrides.movingAndInitialCosts ?? 0);
   addAssumption(
     'moving_and_initial_costs',
     'Moving and initial home costs',
@@ -605,7 +618,9 @@ function resolveVariant(
     overrides.sources.movingAndInitialCosts ?? 'Assumes no additional moving or immediate repair costs'
   );
 
-  const currentHousingCostMonthly = overrides.currentHousingCostMonthly;
+  const currentHousingCostMonthly = overrides.currentHousingCostMonthly !== undefined
+    ? roundMoney(overrides.currentHousingCostMonthly)
+    : undefined;
   if (currentHousingCostMonthly !== undefined) {
     addAssumption(
       'current_housing_cost_monthly',
@@ -628,7 +643,9 @@ function resolveVariant(
     overrides.sources.emergencyFundMonths ?? `${DEFAULT_EMERGENCY_FUND_MONTHS}-month planning default`
   );
 
-  const retirementContributionMonthly = overrides.retirementContributionMonthly;
+  const retirementContributionMonthly = overrides.retirementContributionMonthly !== undefined
+    ? roundMoney(overrides.retirementContributionMonthly)
+    : undefined;
   if (retirementContributionMonthly !== undefined) {
     addAssumption(
       'retirement_contribution_monthly',
@@ -640,7 +657,10 @@ function resolveVariant(
     );
   }
 
-  const averageMonthlyIncome = finiteNumber(snapshot.averageMonthlyIncome);
+  const rawAverageMonthlyIncome = finiteNumber(snapshot.averageMonthlyIncome);
+  const averageMonthlyIncome = rawAverageMonthlyIncome !== undefined
+    ? roundMoney(rawAverageMonthlyIncome)
+    : undefined;
   if (averageMonthlyIncome !== undefined) {
     addAssumption(
       'average_monthly_income',
@@ -661,7 +681,9 @@ function resolveVariant(
     observedMonthlyExpenses !== undefined &&
     currentHousingCostMonthly !== undefined &&
     currentHousingCostMonthly > observedMonthlyExpenses;
-  const averageMonthlyExpenses = expenseBaselineConflict ? undefined : observedMonthlyExpenses;
+  const averageMonthlyExpenses = expenseBaselineConflict || observedMonthlyExpenses === undefined
+    ? undefined
+    : roundMoney(observedMonthlyExpenses);
   if (averageMonthlyExpenses !== undefined) {
     addAssumption(
       'average_monthly_expenses',
@@ -673,40 +695,49 @@ function resolveVariant(
     );
   }
 
-  const principalAndInterestMonthly = mortgagePayment(
+  // Money outputs that participate in sum(inputs) facts are rounded to cents
+  // first. round(sum(unrounded)) disagrees with sum(round(parts)) often enough
+  // (~1 in 5 common price/rate pairs) that canonical validation would throw
+  // before the answer model ever runs.
+  const principalAndInterestMonthly = roundMoney(mortgagePayment(
     loanAmount,
     mortgageRatePercent,
     loanTermYears
-  );
-  const propertyTaxMonthly = propertyTaxAnnual / 12;
-  const homeownersInsuranceMonthly = homeownersInsuranceAnnual / 12;
-  const maintenanceMonthly = maintenanceAnnual / 12;
-  const allInHousingMonthly =
+  ));
+  const propertyTaxMonthly = roundMoney(propertyTaxAnnual / 12);
+  const homeownersInsuranceMonthly = roundMoney(homeownersInsuranceAnnual / 12);
+  const maintenanceMonthly = roundMoney(maintenanceAnnual / 12);
+  const allInHousingMonthly = roundMoney(
     principalAndInterestMonthly +
     propertyTaxMonthly +
     homeownersInsuranceMonthly +
     hoaMonthly +
     mortgageInsuranceMonthly +
-    maintenanceMonthly;
-  const upfrontCashNeeded = downPaymentAmount + closingCosts + movingAndInitialCosts;
+    maintenanceMonthly
+  );
+  const upfrontCashNeeded = roundMoney(
+    downPaymentAmount + closingCosts + movingAndInitialCosts
+  );
   const cashRemaining = availableCash === undefined
     ? undefined
-    : availableCash - upfrontCashNeeded;
+    : roundMoney(availableCash - upfrontCashNeeded);
   const monthlyHousingChange = currentHousingCostMonthly === undefined
     ? undefined
-    : allInHousingMonthly - currentHousingCostMonthly;
+    : roundMoney(allInHousingMonthly - currentHousingCostMonthly);
   const postPurchaseMonthlyExpenses =
     averageMonthlyExpenses === undefined || currentHousingCostMonthly === undefined
       ? undefined
-      : averageMonthlyExpenses - currentHousingCostMonthly + allInHousingMonthly;
+      : roundMoney(
+          averageMonthlyExpenses - currentHousingCostMonthly + allInHousingMonthly
+        );
   const postPurchaseMonthlySurplus =
     averageMonthlyIncome === undefined || postPurchaseMonthlyExpenses === undefined
       ? undefined
-      : averageMonthlyIncome - postPurchaseMonthlyExpenses;
+      : roundMoney(averageMonthlyIncome - postPurchaseMonthlyExpenses);
   const surplusAfterRetirementContribution =
     postPurchaseMonthlySurplus === undefined || retirementContributionMonthly === undefined
       ? undefined
-      : postPurchaseMonthlySurplus - retirementContributionMonthly;
+      : roundMoney(postPurchaseMonthlySurplus - retirementContributionMonthly);
 
   const reserveBasis = postPurchaseMonthlyExpenses !== undefined
     ? 'post_purchase' as const
@@ -716,14 +747,14 @@ function resolveVariant(
   const monthlyReserveExpense = postPurchaseMonthlyExpenses ?? averageMonthlyExpenses;
   const reserveTarget = monthlyReserveExpense === undefined
     ? undefined
-    : monthlyReserveExpense * emergencyFundMonths;
+    : roundMoney(monthlyReserveExpense * emergencyFundMonths);
   const reserveMonths =
     cashRemaining === undefined || monthlyReserveExpense === undefined || monthlyReserveExpense <= 0
       ? undefined
       : cashRemaining / monthlyReserveExpense;
   const reserveGap = cashRemaining === undefined || reserveTarget === undefined
     ? undefined
-    : cashRemaining - reserveTarget;
+    : roundMoney(cashRemaining - reserveTarget);
 
   const missingInputs = [
     ...missingRecurringCosts,
@@ -759,39 +790,33 @@ function resolveVariant(
     : undefined;
 
   const metrics: HomeAffordabilityMetrics = {
-    homePrice: roundMoney(homePrice),
-    downPaymentAmount: roundMoney(downPaymentAmount),
+    homePrice,
+    downPaymentAmount,
     downPaymentPercent: roundPercent(downPaymentPercent),
-    loanAmount: roundMoney(loanAmount),
-    principalAndInterestMonthly: roundMoney(principalAndInterestMonthly),
-    propertyTaxMonthly: roundMoney(propertyTaxMonthly),
-    homeownersInsuranceMonthly: roundMoney(homeownersInsuranceMonthly),
-    hoaMonthly: roundMoney(hoaMonthly),
-    mortgageInsuranceMonthly: roundMoney(mortgageInsuranceMonthly),
-    maintenanceMonthly: roundMoney(maintenanceMonthly),
-    allInHousingMonthly: roundMoney(allInHousingMonthly),
-    closingCosts: roundMoney(closingCosts),
-    movingAndInitialCosts: roundMoney(movingAndInitialCosts),
-    upfrontCashNeeded: roundMoney(upfrontCashNeeded),
-    ...(cashRemaining !== undefined && { cashRemaining: roundMoney(cashRemaining) }),
-    ...(monthlyHousingChange !== undefined && {
-      monthlyHousingChange: roundMoney(monthlyHousingChange),
-    }),
-    ...(postPurchaseMonthlyExpenses !== undefined && {
-      postPurchaseMonthlyExpenses: roundMoney(postPurchaseMonthlyExpenses),
-    }),
-    ...(postPurchaseMonthlySurplus !== undefined && {
-      postPurchaseMonthlySurplus: roundMoney(postPurchaseMonthlySurplus),
-    }),
+    loanAmount,
+    principalAndInterestMonthly,
+    propertyTaxMonthly,
+    homeownersInsuranceMonthly,
+    hoaMonthly,
+    mortgageInsuranceMonthly,
+    maintenanceMonthly,
+    allInHousingMonthly,
+    closingCosts,
+    movingAndInitialCosts,
+    upfrontCashNeeded,
+    ...(cashRemaining !== undefined && { cashRemaining }),
+    ...(monthlyHousingChange !== undefined && { monthlyHousingChange }),
+    ...(postPurchaseMonthlyExpenses !== undefined && { postPurchaseMonthlyExpenses }),
+    ...(postPurchaseMonthlySurplus !== undefined && { postPurchaseMonthlySurplus }),
     ...(retirementContributionMonthly !== undefined && {
-      retirementContributionMonthly: roundMoney(retirementContributionMonthly),
+      retirementContributionMonthly,
     }),
     ...(surplusAfterRetirementContribution !== undefined && {
-      surplusAfterRetirementContribution: roundMoney(surplusAfterRetirementContribution),
+      surplusAfterRetirementContribution,
     }),
-    ...(reserveTarget !== undefined && { reserveTarget: roundMoney(reserveTarget) }),
+    ...(reserveTarget !== undefined && { reserveTarget }),
     ...(reserveMonths !== undefined && { reserveMonths: Number(reserveMonths.toFixed(4)) }),
-    ...(reserveGap !== undefined && { reserveGap: roundMoney(reserveGap) }),
+    ...(reserveGap !== undefined && { reserveGap }),
     ...(reserveBasis && { reserveBasis }),
   };
   const key = JSON.stringify({
