@@ -48,6 +48,7 @@ export const SEARCH_EVIDENCE_LIMITS = {
   queries: 8,
   resultsPerQuery: 5,
   snippetCharacters: 320,
+  errorCharacters: 240,
 } as const;
 
 function truncate(text: string, limit: number): string {
@@ -61,6 +62,9 @@ export function compactSearchQueryEvidence(
 ): SearchQueryEvidence[] {
   return outcomes.slice(0, SEARCH_EVIDENCE_LIMITS.queries).map((outcome) => ({
     ...outcome,
+    ...(outcome.error
+      ? { error: truncate(outcome.error, SEARCH_EVIDENCE_LIMITS.errorCharacters) }
+      : {}),
     results: outcome.results.slice(0, SEARCH_EVIDENCE_LIMITS.resultsPerQuery).map((result) => ({
       title: truncate(result.title, 200),
       url: result.url,
