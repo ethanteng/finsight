@@ -22,10 +22,13 @@ import {
   isKnownTipsTicker,
   selectDeclaredAssetType,
 } from './asset-classification';
-import { targetDateFundYearForHolding } from '../../services/target-date-fund';
 import {
-  lookupTargetDateFundAllocation,
-  TargetDateFundAllocation,
+  identifyTargetDateFundHolding,
+  type TargetDateFundIdentity,
+} from '../../services/target-date-fund';
+import {
+  lookupTargetDateAllocation,
+  type TargetDateFundAllocation,
 } from '../../services/target-date-fund-registry';
 
 const EMPTY_WEIGHTS: HoldingExposureWeights = {
@@ -36,11 +39,19 @@ const EMPTY_WEIGHTS: HoldingExposureWeights = {
   cash: 0,
 };
 
+/** Product capitalization for series slugs shown in analysis assumptions. */
+const TARGET_DATE_SERIES_DISPLAY_NAMES: Record<string, string> = {
+  'lifepath-index': 'LifePath Index',
+  lifepath: 'LifePath',
+  'target-retirement': 'Target Retirement',
+  'target-date': 'Target Date',
+};
+
 interface HoldingResolutionDraft {
   weights: HoldingExposureWeights;
   method: HoldingMappingMethod;
   confidence: 'high' | 'medium' | 'low';
-  targetYear?: number;
+  targetDateIdentity?: TargetDateFundIdentity;
   targetAllocation?: TargetDateFundAllocation;
 }
 
@@ -68,23 +79,23 @@ function resolveHoldingExposure(
   const providerTypes = [fmpMetadata?.assetClass, security?.type, holding.security_type]
     .filter((type): type is string => typeof type === 'string' && type.trim().length > 0)
     .map(type => type.trim().toLowerCase());
-  const targetYear = targetDateFundYearForHolding(labels, providerTypes);
+  const targetDateIdentity = identifyTargetDateFundHolding(labels, providerTypes);
 
-  if (targetYear !== null) {
-    const allocation = lookupTargetDateFundAllocation(labels, asOfDate);
+  if (targetDateIdentity) {
+    const allocation = lookupTargetDateAllocation(targetDateIdentity, asOfDate);
     if (!allocation) {
       return {
         weights: copyWeights(EMPTY_WEIGHTS),
         method: 'name-inference',
         confidence: 'low',
-        targetYear,
+        targetDateIdentity,
       };
     }
     return {
       weights: copyWeights(allocation.weights),
       method: 'fund-registry',
       confidence: allocation.exactAllocation ? 'high' : 'medium',
-      targetYear,
+      targetDateIdentity,
       targetAllocation: allocation,
     };
   }
@@ -181,6 +192,9 @@ export function summarizeHoldingExposures(
   const holdingExposures = exposures.map(exposure => ({
     ...exposure,
     weights: exposure.weights ? copyWeights(exposure.weights) : undefined,
+    targetDateIdentity: exposure.targetDateIdentity
+      ? { ...exposure.targetDateIdentity }
+      : undefined,
   }));
   const totalValue = holdingExposures.reduce((sum, exposure) => sum + exposure.value, 0);
   let mappedValue = 0;
@@ -264,7 +278,7 @@ export function summarizeHoldingExposures(
       exposure.status !== 'mapped' ||
       exposure.method !== 'fund-registry' ||
       !exposure.weights ||
-      exposure.targetYear === undefined ||
+      !exposure.targetDateIdentity?.series ||
       exposure.allocationAsOf === undefined ||
       exposure.allocationAgeDays === undefined ||
       exposure.staleAllocation === undefined ||
@@ -278,7 +292,8 @@ export function summarizeHoldingExposures(
     return [{
       label: exposure.label,
       provider: exposure.sourceProvider,
-      targetYear: exposure.targetYear,
+      series: exposure.targetDateIdentity.series,
+      vintage: exposure.targetDateIdentity.vintage,
       equityShare: exposure.weights.usEquity + exposure.weights.internationalEquity,
       allocationAsOf: exposure.allocationAsOf,
       allocationAgeDays: exposure.allocationAgeDays,
@@ -398,10 +413,12 @@ export async function mapPortfolioToAssetBasket(
       allocationAgeDays: draft.targetAllocation?.allocationAgeDays,
       staleAllocation: draft.targetAllocation?.staleAllocation,
       sourceUrl: draft.targetAllocation?.sourceUrl,
-      sourceProvider: draft.targetAllocation?.provider,
+      sourceProvider: draft.targetAllocation?.identity.provider,
       sourceContext: draft.targetAllocation?.sourceContext,
       exactAllocation: draft.targetAllocation?.exactAllocation,
-      targetYear: draft.targetYear,
+      targetDateIdentity: draft.targetDateIdentity
+        ? { ...draft.targetDateIdentity }
+        : undefined,
     };
     holdingExposures.push(resolution);
   }
@@ -469,16 +486,18 @@ export function populateAssumptions(
     // that use it without putting holding labels into unrelated LLM context.
     const sourceGroups = new Map<string, {
       provider: string;
+      series: string;
       allocationAsOf: string;
       allocationAgeDays: number;
       staleAllocation: boolean;
       sourceContext: string;
       exactAllocation: boolean;
-      vintages: Map<string, { count: number; targetYear: number; equityShare: number }>;
+      vintages: Map<string, { count: number; vintage: number; equityShare: number }>;
     }>();
     for (const fund of resolvedMapping.targetDateFunds) {
       const sourceKey = [
         fund.provider,
+        fund.series,
         fund.allocationAsOf,
         fund.sourceContext,
         fund.exactAllocation,
@@ -487,6 +506,7 @@ export function populateAssumptions(
       if (!sourceGroup) {
         sourceGroup = {
           provider: fund.provider,
+          series: fund.series,
           allocationAsOf: fund.allocationAsOf,
           allocationAgeDays: fund.allocationAgeDays,
           staleAllocation: fund.staleAllocation,
@@ -496,12 +516,12 @@ export function populateAssumptions(
         };
         sourceGroups.set(sourceKey, sourceGroup);
       }
-      const vintageKey = `${fund.targetYear}:${fund.equityShare}`;
+      const vintageKey = `${fund.vintage}:${fund.equityShare}`;
       const vintage = sourceGroup.vintages.get(vintageKey);
       if (vintage) vintage.count += 1;
       else sourceGroup.vintages.set(vintageKey, {
         count: 1,
-        targetYear: fund.targetYear,
+        vintage: fund.vintage,
         equityShare: fund.equityShare,
       });
     }
@@ -512,6 +532,7 @@ export function populateAssumptions(
       )
       .map(({
         provider,
+        series,
         allocationAsOf,
         allocationAgeDays,
         staleAllocation,
@@ -522,14 +543,19 @@ export function populateAssumptions(
         const providerName = provider === 'state-street'
           ? 'State Street'
           : provider === 'blackrock' ? 'BlackRock' : provider;
+        const seriesName = TARGET_DATE_SERIES_DISPLAY_NAMES[series] ?? series
+          .split('-')
+          .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+          .join(' ');
         const vintageDescription = Array.from(vintages.values())
-          .sort((left, right) => left.targetYear - right.targetYear)
-          .map(({ count, targetYear, equityShare }) =>
-            `${count} targeting ${targetYear} at ${Math.round(equityShare * 100)}% equity`
+          .sort((left, right) => left.vintage - right.vintage)
+          .map(({ count, vintage, equityShare }) =>
+            `${count} targeting ${vintage} at ${Math.round(equityShare * 100)}% equity`
           )
           .join(', ');
         return (
-          `${providerName} (${exactAllocation ? 'same share class' : 'public share-class proxy'}; ` +
+          `${providerName} ${seriesName} ` +
+          `(${exactAllocation ? 'same share class' : 'public share-class proxy'}; ` +
           `${sourceContext}; as of ${allocationAsOf}` +
           `${staleAllocation ? `; stale by ${Math.floor(allocationAgeDays / 30)} months` : ''}): ` +
           vintageDescription

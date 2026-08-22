@@ -111,8 +111,11 @@ opposite problems with different remedies. `Not itemized` is value an account re
 explains -- money with no security behind it, resolvable only by the provider. `Unrecognized holdings`
 is a security we do hold whose asset class we could not resolve -- resolvable by better metadata.
 A target-date fund is neither: it is a declared blend, recognized from its own label rather than from
-a provider type. It is modeled only when a dated registry entry links that provider and vintage to
-published holdings no later than the snapshot's full UTC date. The newest eligible entry carries
+a provider type. Heuristic recognition produces an identity (`provider`, `series`, and `vintage`) but
+never an allocation. A separate lookup accepts only that identity and models it only when a dated
+registry entry links the exact provider, series, and vintage to published holdings no later than the
+snapshot's full UTC date. The registry performs no label parsing, and no formula or generic glidepath
+can supply an authoritative allocation. The newest eligible entry carries
 forward instead of expiring on January 1; its age is recorded, and an entry older than 366 days is
 disclosed as stale, lowers mapping confidence, and hard-caps the final analysis confidence at low.
 The result records the allocation date, source,
