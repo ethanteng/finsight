@@ -821,7 +821,7 @@ export function populateAssumptions(
       `$${Math.round(listingFallbackValue).toLocaleString('en-US')} across ` +
       `${listingFallbackExposures.length} directly held equit${listingFallbackExposures.length === 1 ? 'y was' : 'ies were'} ` +
       'classified as US from provider equity type plus an exchange-style ticker because country metadata ' +
-      'was unavailable; this medium-confidence fallback never applies to funds'
+      'was unavailable; this medium-confidence fallback never applies to funds or depositary receipts'
     );
   }
 
