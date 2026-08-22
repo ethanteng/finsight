@@ -9,6 +9,7 @@ import {
   retirementScenarioCalculator,
   type RetirementScenarioPlan,
 } from '../../scenarios/retirement-scenario';
+import { HOME_AFFORDABILITY_CALCULATOR_ID } from '../../scenarios/home-affordability-scenario';
 
 describe('scenario calculator registry', () => {
   const fakeCalculator: ScenarioCalculatorDefinition<
@@ -67,7 +68,10 @@ describe('scenario calculator registry', () => {
   };
 
   it('publishes the retirement calculator contract from one declaration', () => {
-    expect(scenarioCalculatorRegistry.ids()).toEqual([RETIREMENT_CALCULATOR_ID]);
+    expect(scenarioCalculatorRegistry.ids()).toEqual([
+      RETIREMENT_CALCULATOR_ID,
+      HOME_AFFORDABILITY_CALCULATOR_ID,
+    ]);
     expect(scenarioCalculatorRegistry.manifests()).toContainEqual(expect.objectContaining({
       id: 'retirement',
       version: 2,
@@ -85,6 +89,30 @@ describe('scenario calculator registry', () => {
       outputs: expect.arrayContaining([
         expect.objectContaining({ id: 'survival_rate', unit: 'percent' }),
         expect.objectContaining({ id: 'projected_portfolio_at_withdrawal_start', unit: 'usd' }),
+      ]),
+    }));
+  });
+
+  it('publishes the home-affordability contract from one declaration', () => {
+    expect(scenarioCalculatorRegistry.manifests()).toContainEqual(expect.objectContaining({
+      id: 'home_affordability',
+      version: 1,
+      requiredPacks: ['market_context'],
+      supportedOverrides: expect.arrayContaining([
+        expect.objectContaining({ id: 'home_price' }),
+        expect.objectContaining({ id: 'down_payment_percent' }),
+        expect.objectContaining({ id: 'property_tax_annual' }),
+        expect.objectContaining({ id: 'current_housing_cost_monthly' }),
+      ]),
+      defaults: expect.arrayContaining([
+        expect.objectContaining({ id: 'down_payment_percent', value: 20 }),
+        expect.objectContaining({ id: 'loan_term_years', value: 30 }),
+        expect.objectContaining({ id: 'emergency_fund_months', value: 6 }),
+      ]),
+      outputs: expect.arrayContaining([
+        expect.objectContaining({ id: 'all_in_housing_monthly', unit: 'usd' }),
+        expect.objectContaining({ id: 'cash_remaining', unit: 'usd' }),
+        expect.objectContaining({ id: 'reserve_months', unit: 'months' }),
       ]),
     }));
   });

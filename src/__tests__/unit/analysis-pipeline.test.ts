@@ -9,6 +9,7 @@ import { askOpenAIWithPreparedPrompt } from '../../openai/openai-fallback-client
 import { planContext, type ContextPlan } from '../../openai/context-planner';
 import { normalizeContextPacks, questionNeedsFromPacks, type ContextPackId } from '../../openai/context-packs';
 import { scenarioCalculatorRegistry } from '../../scenarios/calculator-registry';
+import { runHomeAffordabilityScenario } from '../../scenarios/home-affordability-scenario';
 
 jest.mock('../../openai/context-service', () => ({
   gatherContextSnapshot: jest.fn(),
@@ -595,6 +596,91 @@ describe('runAskLincAnalysis validation routing', () => {
     });
     expect(result.showTheMathData?.evidenceManifest.timings.scenarioMs).toBe(12);
     expect(result.structuredResponse.summary).toContain('Scenario assumptions:');
+  });
+
+  it('runs a home-affordability plan through canonical facts and Show the Math', async () => {
+    const plan = contextPlan(['market_context'], true);
+    plan.scenarioPlans.home_affordability = {
+      requested: true,
+      primary: {
+        overrides: {
+          homePrice: 700_000,
+          downPaymentPercent: 20,
+          mortgageRatePercent: 6.5,
+          propertyTaxAnnual: 8_400,
+          homeownersInsuranceAnnual: 2_400,
+          hoaMonthly: 0,
+          mortgageInsuranceMonthly: 0,
+          currentHousingCostMonthly: 2_500,
+          sources: {
+            homePrice: '$700,000 home',
+            downPaymentPercent: '20% down',
+            mortgageRatePercent: '6.5% mortgage',
+            propertyTaxAnnual: '$8,400 taxes',
+            homeownersInsuranceAnnual: '$2,400 insurance',
+            hoaMonthly: 'no HOA',
+            mortgageInsuranceMonthly: 'no PMI',
+            currentHousingCostMonthly: '$2,500 rent',
+          },
+        },
+      },
+    };
+    const homeSnapshot = {
+      ...snapshot(),
+      averageMonthlyIncome: 15_000,
+      averageMonthlyExpense: 8_000,
+      financialSummary: {
+        ...snapshot().financialSummary,
+        financialOverview: {
+          netWorth: 1_000_000,
+          totalCash: 300_000,
+          totalInvestments: 800_000,
+          totalDebt: 100_000,
+          homeValue: null,
+        },
+      },
+    } as any;
+    mockedExecuteScenario.mockImplementationOnce(async (_id, currentSnapshot, scenarioPlan) =>
+      runHomeAffordabilityScenario(currentSnapshot, scenarioPlan as any)
+    );
+
+    const result = await runAskLincAnalysis({
+      question: 'Can we afford a $700,000 home with 20% down?',
+      evaluation: {
+        snapshot: homeSnapshot,
+        contextPlan: plan,
+        scenarioPlans: plan.scenarioPlans,
+        skipToneConfig: true,
+        model: ({ userMessage }) => {
+          expect(userMessage).toContain('all_in_monthly_housing_cost');
+          expect(userMessage).toContain('post_purchase_monthly_surplus');
+          return JSON.stringify({
+            summary: 'The modeled purchase keeps monthly operating cash flow positive and the emergency reserve above its target.',
+            insights: [],
+            suggested_actions: [],
+          });
+        },
+      },
+    });
+
+    expect(result.showTheMathData?.evidenceManifest.scenarioExecutions).toMatchObject({
+      home_affordability: {
+        status: 'completed',
+        scenarios: [{ assessment: 'supported', costCoverage: 'complete' }],
+      },
+    });
+    expect(result.showTheMathData?.evidenceManifest.facts).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: expect.stringMatching(/home_affordability_scenario_.*_all_in_monthly_housing_cost/),
+        provenance: expect.objectContaining({ calculatorId: 'home_affordability' }),
+      }),
+      expect.objectContaining({
+        id: expect.stringMatching(/home_affordability_scenario_.*_cash_remaining/),
+        value: 139_000,
+      }),
+    ]));
+    expect(result.structuredResponse.summary).toContain('Home-affordability assumptions:');
+    expect(result.showTheMathData?.evidenceManifest.validation.deterministic.valid).toBe(true);
   });
 
   it('keeps scenario facts after late context escalation replaces the snapshot', async () => {

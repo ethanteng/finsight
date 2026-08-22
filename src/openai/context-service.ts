@@ -376,7 +376,10 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
       tier,
       tierContextAccounts,
       tierContextTransactions,
-      { includeMarketContext: false }
+      // Scenario calculators consume typed market observations, not numbers
+      // parsed back out of the stored narrative. Only load them when the
+      // semantic plan selected market_context.
+      { includeMarketContext: questionNeeds.needsMarketContext }
     ),
     maybeFetchSearchContext(searchQueries, questionNeeds, tier, deferSearchContext),
     maybeFetchMarketContext(questionNeeds, tier),
