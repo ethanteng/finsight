@@ -30,13 +30,37 @@ describe('registry source divergence', () => {
     expect(hasDiverged(result({ status: 'baseline' }))).toBe(false);
   });
 
-  it('uses the engine\'s own staleness threshold, not a second copy of it', () => {
+  it('computes the staleness boundary from the engine threshold, not a local copy', async () => {
+    // Asserting on a hand-built fixture would prove nothing: it would just
+    // restate the flag the fixture already carried. Drive the real code with a
+    // chosen asOfDate instead, so the `>` bound and the shared constant are
+    // both pinned by the production path.
+    //
     // The admin panel and the retirement engine must agree on when an
-    // allocation is stale. #164 is about revisiting this number, so a private
+    // allocation is stale. #164 is about revisiting this number, and a private
     // duplicate here would silently disagree the moment that lands.
-    expect(STALE_ALLOCATION_DAYS).toBe(366);
-    expect(result({ allocationAgeDays: STALE_ALLOCATION_DAYS, staleByAge: false }).staleByAge).toBe(false);
-    expect(result({ allocationAgeDays: STALE_ALLOCATION_DAYS + 1, staleByAge: true }).staleByAge).toBe(true);
+    global.fetch = jest.fn(async () =>
+      new Response('no holdings table here', { status: 200 })
+    ) as typeof fetch;
+
+    const dayAfter = (isoDate: string, days: number) =>
+      new Date(Date.parse(`${isoDate}T00:00:00.000Z`) + days * 24 * 60 * 60 * 1000)
+        .toISOString()
+        .slice(0, 10);
+
+    const [sample] = await checkRegistrySources();
+    const allocationAsOf = sample.allocationAsOf;
+
+    const atThreshold = await checkRegistrySources(dayAfter(allocationAsOf, STALE_ALLOCATION_DAYS));
+    const pastThreshold = await checkRegistrySources(dayAfter(allocationAsOf, STALE_ALLOCATION_DAYS + 1));
+
+    const entry = (results: Awaited<ReturnType<typeof checkRegistrySources>>) =>
+      results.find(candidate => candidate.allocationAsOf === allocationAsOf)!;
+
+    expect(entry(atThreshold).allocationAgeDays).toBe(STALE_ALLOCATION_DAYS);
+    expect(entry(atThreshold).staleByAge).toBe(false);
+    expect(entry(pastThreshold).allocationAgeDays).toBe(STALE_ALLOCATION_DAYS + 1);
+    expect(entry(pastThreshold).staleByAge).toBe(true);
   });
 
   it('reports age separately from divergence, because they answer different questions', () => {
