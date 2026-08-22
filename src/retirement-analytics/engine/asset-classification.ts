@@ -7,7 +7,9 @@ const BOND_TICKERS = new Set([
 const INTERNATIONAL_EQUITY_TICKERS = new Set(['EFA', 'IXUS', 'VEA', 'VWO', 'VXUS']);
 const TIPS_TICKERS = new Set(['SCHP', 'STIP', 'TIP', 'VTIP']);
 const CREDIT_TICKERS = new Set(['HYG', 'JCPB', 'JPST', 'LQD', 'MUB', 'VCIT', 'VCSH']);
-const INTERNATIONAL_BOND_TICKERS = new Set(['BNDX', 'EAGG', 'EMB', 'VWOB']);
+// EAGG is the iShares ESG Aware U.S. Aggregate Bond ETF — US aggregate, not
+// international — and must stay on the nominal government/aggregate path.
+const INTERNATIONAL_BOND_TICKERS = new Set(['BNDX', 'EMB', 'VWOB']);
 const REAL_ASSET_TICKERS = new Set(['DBC', 'GLD', 'GSG', 'IAU', 'PDBC', 'VNQ', 'VNQI']);
 
 export {
