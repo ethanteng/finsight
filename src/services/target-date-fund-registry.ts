@@ -24,7 +24,7 @@ export interface SourceFingerprint {
   value: string;
   /** Date this observation was made (YYYY-MM-DD). */
   observedAt: string;
-  /** Holdings date the source advertised at that observation (YYYY-MM-DD). */
+  /** Holdings date the source advertised at that observation (YYYY-MM-DD), or `see-document` when the date is only inside a binary. */
   sourceAsOf: string;
   /** Human-readable note on what was read, for auditors without the tooling. */
   observed: string;
@@ -44,12 +44,13 @@ export interface TargetDateFundAllocation {
   tipsAllocationStatus: 'exact' | 'lower-bound';
   /**
    * Fingerprint of the cited source, so a later audit can tell whether the
-   * document behind `sourceUrl` still says what these weights were taken from.
+   * document behind `sourceUrl` still says what was recorded when this entry
+   * was fingerprinted.
    *
    * Provider pages are mutable and are republished on the provider's own
    * cadence -- State Street monthly -- so a URL alone does not reproduce the
-   * figure it supports. Absent for entries transcribed before fingerprinting
-   * existed, where the original publication is no longer retrievable.
+   * figure it supports. Required on every registry row; omitted from
+   * `lookupTargetDateAllocation` results because allocation math does not use it.
    */
   sourceFingerprint?: SourceFingerprint;
   /** Fractions of the whole fund supported by the historical engine. */
@@ -62,10 +63,13 @@ export interface TargetDateFundAllocation {
   };
 }
 
+/** Registry rows always carry a fingerprint; lookup results may omit it. */
 type RegistryEntry = Omit<
   TargetDateFundAllocation,
   'allocationAgeDays' | 'staleAllocation'
->;
+> & {
+  sourceFingerprint: SourceFingerprint;
+};
 
 const STALE_ALLOCATION_DAYS = 366;
 
@@ -205,11 +209,6 @@ const REGISTRY: RegistryEntry[] = [
 ];
 
 /**
- * Resolve a recognized identity against dated, sourced holdings. This function
- * deliberately performs no label parsing: recognition can be heuristic while
- * allocation requires an exact provider/series/vintage registry key.
- */
-/**
  * The registry's entries, for auditing tools. Returns copies so a caller cannot
  * mutate the table that the retirement engine reads.
  *
@@ -221,10 +220,18 @@ export function listRegistryEntries(): RegistryEntry[] {
     ...entry,
     identity: { ...entry.identity },
     weights: { ...entry.weights },
-    sourceFingerprint: entry.sourceFingerprint ? { ...entry.sourceFingerprint } : undefined,
+    sourceFingerprint: { ...entry.sourceFingerprint },
   }));
 }
 
+/**
+ * Resolve a recognized identity against dated, sourced holdings. This function
+ * deliberately performs no label parsing: recognition can be heuristic while
+ * allocation requires an exact provider/series/vintage registry key.
+ *
+ * Omits `sourceFingerprint` on purpose: allocation math does not need it, and
+ * provenance audits go through `listRegistryEntries()` instead.
+ */
 export function lookupTargetDateAllocation(
   identity: TargetDateFundIdentity,
   asOfDate: string | number,
