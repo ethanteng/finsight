@@ -414,6 +414,40 @@ describe('home affordability scenario runner', () => {
     }));
   });
 
+  it('does not treat a rounded default 20% down payment as under the PMI threshold', async () => {
+    // $712,345.67 * 20% rounds to $142,469.13 (19.999999...%). The old
+    // `downPaymentPercent < 20` check then demanded mortgage insurance and
+    // marked ownership costs as a lower bound for an ordinary default-20% case.
+    const execution = await runHomeAffordabilityScenario(snapshot(), {
+      requested: true,
+      primary: {
+        overrides: {
+          homePrice: 712_345.67,
+          downPaymentPercent: 20,
+          propertyTaxAnnual: 8_400,
+          homeownersInsuranceAnnual: 2_400,
+          hoaMonthly: 0,
+          currentHousingCostMonthly: 2_500,
+          sources: {
+            homePrice: '$712,345.67 home',
+            downPaymentPercent: '20% down',
+            propertyTaxAnnual: '$8,400 taxes',
+            homeownersInsuranceAnnual: '$2,400 insurance',
+            hoaMonthly: 'no HOA',
+            currentHousingCostMonthly: '$2,500 rent',
+          },
+        },
+      },
+    });
+
+    expect(execution.status).toBe('completed');
+    if (execution.status !== 'completed') return;
+    const result = execution.scenarios[0];
+    expect(result.metrics.downPaymentAmount).toBe(142_469.13);
+    expect(result.missingInputs).not.toContain('mortgage insurance');
+    expect(result.costCoverage).toBe('complete');
+  });
+
   it('returns an actionable unavailable result when price or rate is absent', async () => {
     const noPrice = await runHomeAffordabilityScenario(snapshot(), {
       requested: true,

@@ -579,8 +579,15 @@ function resolveVariant(
     overrides.sources.hoaMonthly ?? 'Assumes no HOA dues unless supplied'
   );
 
+  // Compare rounded dollars to the rounded 20% threshold. Using the derived
+  // percentage can fall a hair under 20 after cent rounding (e.g. $712,345.67
+  // at the default 20%), which would falsely demand mortgage insurance and
+  // mark a complete ownership cost as a lower bound.
+  const conventionalMortgageInsuranceThreshold = roundMoney(homePrice * 0.2);
+  const mortgageInsuranceRequired =
+    downPaymentAmount < conventionalMortgageInsuranceThreshold;
   const mortgageInsuranceMonthly = roundMoney(overrides.mortgageInsuranceMonthly ?? 0);
-  if (downPaymentPercent < 20 && overrides.mortgageInsuranceMonthly === undefined) {
+  if (mortgageInsuranceRequired && overrides.mortgageInsuranceMonthly === undefined) {
     missingRecurringCosts.push('mortgage insurance');
   }
   addAssumption(
@@ -590,7 +597,7 @@ function resolveVariant(
     'usd',
     overrides.mortgageInsuranceMonthly !== undefined ? 'user' : 'default',
     overrides.sources.mortgageInsuranceMonthly
-      ?? (downPaymentPercent < 20
+      ?? (mortgageInsuranceRequired
         ? 'Not supplied; excluded from the lower-bound cost'
         : 'Assumes no mortgage insurance at this down payment')
   );
