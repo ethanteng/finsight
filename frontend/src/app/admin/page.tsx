@@ -779,7 +779,14 @@ export default function AdminPage() {
         throw new Error('Authentication required for admin access');
       }
       if (!response.ok) throw new Error(`Request failed (${response.status})`);
-      setDataGaps(await response.json());
+      // Backend and frontend deploy independently; an older API omits the field.
+      const payload = await response.json();
+      setDataGaps({
+        ...payload,
+        providerCoverageGaps: Array.isArray(payload.providerCoverageGaps)
+          ? payload.providerCoverageGaps
+          : [],
+      });
     } catch (error) {
       setDataGapsError(error instanceof Error ? error.message : 'Failed to load data gaps');
     } finally {
@@ -941,7 +948,7 @@ export default function AdminPage() {
 
             <p className="mt-4 text-xs text-[#5e6b63]">
               Coverage changes, so each entry expires and the symbol is tried once more on
-              its recheck date.
+              its recheck date. A successful recheck removes the row.
             </p>
           </div>
         )}
