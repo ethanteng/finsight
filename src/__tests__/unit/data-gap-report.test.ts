@@ -286,6 +286,33 @@ describe('data gap report', () => {
     expect(report.securities[0].label).toBe('Vanguard Total Stock Market Index Fund');
   });
 
+  it('never lets a name that is really an echoed id beat a real one', () => {
+    // Some feeds put the security id in security_name when they have nothing
+    // else. An echoed id is unspaced like a ticker but longer, so ranking on
+    // length alone would pick the hex over "VTI".
+    const report = aggregateDataGaps([
+      row('a', '2026-08-19', analysis({ unmapped: ['id-000000002'] }), { 'id-000000002': 'VTI' }),
+      row('b', '2026-08-20', analysis({ unmapped: ['id-000000002'] }),
+        { 'id-000000002': 'M654JE4yQdCRMKroO17KuZJ3Lo34kKHkV08Je' }),
+    ]);
+
+    expect(report.securities[0].label).toBe('VTI');
+  });
+
+  it('picks the same name whichever order the rows arrive in', () => {
+    // Order-independence is the point: DISTINCT ON guarantees nothing about
+    // ordering between users, so a report that varies with row order is not
+    // reproducible. Two equal-length candidates have to settle deterministically.
+    const rows = [
+      row('a', '2026-08-19', analysis({ unmapped: ['id-000000003'] }), { 'id-000000003': 'Alpha Fund' }),
+      row('b', '2026-08-20', analysis({ unmapped: ['id-000000003'] }), { 'id-000000003': 'Omega Fund' }),
+    ];
+
+    const forward = aggregateDataGaps(rows).securities[0].label;
+    const reversed = aggregateDataGaps([...rows].reverse()).securities[0].label;
+    expect(forward).toBe(reversed);
+  });
+
   it('counts analyses written before the current data-quality contract', () => {
     // Analyses are cached, so the report reads whatever each user last computed
     // -- which can predate the target-date registry entirely. Those gaps may

@@ -126,15 +126,29 @@ function normalizeLabel(label: string): string {
  * to be first-wins, so a ticker from an earlier `userId` could lock out a full
  * fund name from a later one. Prefer spaced names (real titles) over bare
  * tokens, and length when both are the same kind.
+ *
+ * Identifier shape outranks both. Some feeds echo the security id into
+ * `security_name` when they have nothing else, and an echoed id is longer than
+ * a real ticker while being just as unspaced -- so length alone would pick
+ * `M654JE4yQdCRMKroO17KuZJ3Lo34kKHkV08Je` over `VTI`, reinstating the hex this
+ * whole change removes.
+ *
+ * Spelling settles an exact tie. It is an arbitrary rule, but it makes the
+ * comparison a total order, so the report does not depend on the order rows
+ * came back in -- and `DISTINCT ON` guarantees nothing about ordering between
+ * users.
  */
 function preferSecurityName(current: string | undefined, candidate: string): string {
   const next = candidate.trim();
   if (!next) return current ?? '';
   if (!current) return next;
-  const currentSpaced = /\s/.test(current);
-  const nextSpaced = /\s/.test(next);
-  if (nextSpaced !== currentSpaced) return nextSpaced ? next : current;
-  return next.length > current.length ? next : current;
+  const rank = (value: string) =>
+    (isProviderIdentifierLabel(value) ? 0 : 2) + (/\s/.test(value) ? 1 : 0);
+  const nextRank = rank(next);
+  const currentRank = rank(current);
+  if (nextRank !== currentRank) return nextRank > currentRank ? next : current;
+  if (next.length !== current.length) return next.length > current.length ? next : current;
+  return next < current ? next : current;
 }
 
 function median(values: number[]): number | null {
