@@ -231,6 +231,36 @@ describe('data gap report', () => {
     expect(report.securities[0].userCount).toBe(1);
   });
 
+  it('names a security using any row that can, not only the row it appears on', () => {
+    // One user's feed carries the name and another's does not. Resolving per
+    // row would key the second user by the raw id, producing two rows that each
+    // report one holder for what is one fund held by two.
+    const report = aggregateDataGaps([
+      row('a', '2026-08-19', analysis({ unmapped: ['7dD8KV8owvUX4bDwn'] })),
+      row('b', '2026-08-20', analysis({ unmapped: ['7dD8KV8owvUX4bDwn'] }),
+        { '7dD8KV8owvUX4bDwn': 'State St Target Ret 2025 SL SF CL III' }),
+    ]);
+
+    expect(report.securities).toHaveLength(1);
+    expect(report.securities[0]).toMatchObject({
+      label: 'State St Target Ret 2025 SL SF CL III',
+      identifier: '7dD8KV8owvUX4bDwn',
+      userCount: 2,
+    });
+  });
+
+  it('does not mark a security unnamed when a later row supplies its name', () => {
+    const report = aggregateDataGaps([
+      row('a', '2026-08-19', analysis({ unmapped: ['M654JE4yQdCRMKroO17Ku'] })),
+      row('b', '2026-08-20', analysis({ unmapped: ['M654JE4yQdCRMKroO17Ku'] }),
+        { 'M654JE4yQdCRMKroO17Ku': 'EQ/Com Stck Index' }),
+    ]);
+
+    expect(report.securities).toHaveLength(1);
+    expect(report.securities[0].unnamed).toBeUndefined();
+    expect(report.securities[0].label).toBe('EQ/Com Stck Index');
+  });
+
   it('counts analyses written before the current data-quality contract', () => {
     // Analyses are cached, so the report reads whatever each user last computed
     // -- which can predate the target-date registry entirely. Those gaps may

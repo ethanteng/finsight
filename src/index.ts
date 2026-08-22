@@ -1155,30 +1155,43 @@ app.get('/sync/status', async (req: Request, res: Response) => {
             r."computedAt",
             r."historicalImplications"->'dataQuality' AS "dataQuality",
             (
-              SELECT jsonb_object_agg(entry.id, entry.name)
+              -- Priority is explicit rather than positional. Aggregating a
+              -- concatenation lets the *last* duplicate key win, so a holding
+              -- carrying only a ticker would overwrite the full name on the
+              -- security record for the same id -- "VTI" replacing "Vanguard
+              -- Total Stock Market Index Fund". Field quality decides first
+              -- (name, then the holding's own name, then ticker), and only
+              -- then does the fresher snapshot break the tie.
+              SELECT jsonb_object_agg(best.id, best.name)
               FROM (
-                SELECT
-                  item->>'security_id' AS id,
-                  COALESCE(
-                    NULLIF(btrim(item->>'name'), ''),
-                    NULLIF(btrim(item->>'security_name'), ''),
-                    NULLIF(btrim(item->>'ticker_symbol'), '')
-                  ) AS name
-                FROM jsonb_array_elements(
-                  CASE WHEN jsonb_typeof(r."portfolioSnapshot"->'securities') = 'array'
-                       THEN r."portfolioSnapshot"->'securities' ELSE '[]'::jsonb END
-                  ||
-                  CASE WHEN jsonb_typeof(r."portfolioSnapshot"->'holdings') = 'array'
-                       THEN r."portfolioSnapshot"->'holdings' ELSE '[]'::jsonb END
-                  ||
-                  CASE WHEN jsonb_typeof(snap.securities) = 'array'
-                       THEN snap.securities ELSE '[]'::jsonb END
-                  ||
-                  CASE WHEN jsonb_typeof(snap.holdings) = 'array'
-                       THEN snap.holdings ELSE '[]'::jsonb END
-                ) AS item
-              ) AS entry
-              WHERE entry.id IS NOT NULL AND entry.name IS NOT NULL
+                SELECT DISTINCT ON (found.id) found.id, found.name
+                FROM (
+                  SELECT
+                    item->>'security_id' AS id,
+                    candidate.name,
+                    candidate.quality,
+                    source.freshness
+                  FROM (VALUES
+                    (CASE WHEN jsonb_typeof(snap.securities) = 'array'
+                          THEN snap.securities ELSE '[]'::jsonb END, 0),
+                    (CASE WHEN jsonb_typeof(snap.holdings) = 'array'
+                          THEN snap.holdings ELSE '[]'::jsonb END, 0),
+                    (CASE WHEN jsonb_typeof(r."portfolioSnapshot"->'securities') = 'array'
+                          THEN r."portfolioSnapshot"->'securities' ELSE '[]'::jsonb END, 1),
+                    (CASE WHEN jsonb_typeof(r."portfolioSnapshot"->'holdings') = 'array'
+                          THEN r."portfolioSnapshot"->'holdings' ELSE '[]'::jsonb END, 1)
+                  ) AS source(entries, freshness),
+                  LATERAL jsonb_array_elements(source.entries) AS item,
+                  LATERAL (VALUES
+                    (NULLIF(btrim(item->>'name'), ''), 1),
+                    (NULLIF(btrim(item->>'security_name'), ''), 2),
+                    (NULLIF(btrim(item->>'ticker_symbol'), ''), 3)
+                  ) AS candidate(name, quality)
+                  WHERE item->>'security_id' IS NOT NULL
+                    AND candidate.name IS NOT NULL
+                ) AS found
+                ORDER BY found.id, found.quality, found.freshness
+              ) AS best
             ) AS "securityNames"
           FROM retirement_analyses r
           -- The analysis snapshot is frozen at compute time. A later re-sync can

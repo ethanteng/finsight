@@ -146,6 +146,23 @@ export function aggregateDataGaps(rows: readonly AnalysisRow[]): DataGapReport {
     if (!existing || at > existing.at) latestByUser.set(row.userId, { at, row });
   }
 
+  // One index across every row read, built before grouping.
+  //
+  // Resolving per row splits a security that only some users' snapshots can
+  // name: the users whose feed carried the name group under it, the rest stay
+  // keyed by the id, and the report shows two rows that each undercount --
+  // exactly inverting the ranking it exists to provide. A security's name is
+  // public metadata about a fund, not anything particular to whoever holds it,
+  // so a name found on any row is good for all of them.
+  const namesByIdentifier = new Map<string, string>();
+  for (const { row } of latestByUser.values()) {
+    for (const [identifier, name] of Object.entries(row.securityNames ?? {})) {
+      if (typeof name !== 'string' || namesByIdentifier.has(identifier)) continue;
+      const trimmed = name.trim();
+      if (trimmed) namesByIdentifier.set(identifier, trimmed);
+    }
+  }
+
   const byKey = new Map<string, DataGapSecurity>();
   const coverages: number[] = [];
   let totalUnmodeledValue = 0;
@@ -163,14 +180,13 @@ export function aggregateDataGaps(rows: readonly AnalysisRow[]): DataGapReport {
       ['us-listing-fallback', labelsOf(proxyUsage.usListingFallbackHoldings)],
     ];
 
-    const names = row.securityNames ?? {};
     // Resolve before grouping, not after: the same fund can arrive named from
     // one user's feed and as a bare id from another's, and grouping on the raw
     // label would split those into two rows that each look like one holder.
     const resolve = (label: string) => {
-      const name = names[label];
-      if (name && name.trim() && normalizeLabel(name) !== normalizeLabel(label)) {
-        return { display: name.trim(), identifier: label };
+      const name = namesByIdentifier.get(label);
+      if (name && normalizeLabel(name) !== normalizeLabel(label)) {
+        return { display: name, identifier: label };
       }
       return { display: label, identifier: undefined as string | undefined };
     };
