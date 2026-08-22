@@ -130,8 +130,15 @@ describe('target-date funds in the allocation view', () => {
 
   it('lets a declared fixed-income type veto a target-like label in the allocation view', () => {
     const portfolio = buildCanonicalInvestmentPortfolio(
-      [{ id: 'h', account_id: 'a', security_id: 'note', institution_value: 10_000, iso_currency_code: 'USD' }],
-      [{ security_id: 'note', type: 'Fixed Income', name: 'Pathway Capital 2030 Senior Notes' }],
+      [{
+        id: 'h',
+        account_id: 'a',
+        security_id: 'note',
+        institution_value: 10_000,
+        iso_currency_code: 'USD',
+        security_type: 'Fixed Income',
+      }],
+      [{ security_id: 'note', type: 'mutual fund', name: 'Pathway Capital 2030 Senior Notes' }],
       [],
       'USD'
     );
@@ -234,7 +241,10 @@ describe('target-date funds in retirement mapping', () => {
 
     expect(mapping.targetDateFunds).toEqual([]);
     expect(mapping.holdingExposures[0].targetYear).toBe(2040);
-    expect(mapping.holdingExposures[0].method).toBe('unmapped');
+    expect(mapping.holdingExposures[0]).toMatchObject({
+      status: 'unmapped',
+      method: 'name-inference',
+    });
     expect(mapping.mappedValue).toBe(0);
     expect(mapping.unmappedValue).toBe(25_000);
     expect(mapping.valueCoverage).toBe(0);
@@ -252,9 +262,10 @@ describe('target-date funds in retirement mapping', () => {
 
     expect(mapping.holdingExposures[0]).toMatchObject({
       targetYear: 2040,
-      method: 'unmapped',
-      mappedValue: 0,
+      status: 'unmapped',
+      method: 'name-inference',
     });
+    expect(mapping.holdingExposures[0].weights).toBeUndefined();
     expect(mapping.targetDateFunds).toEqual([]);
     expect(mapping.unmappedHoldings).toEqual(['Fidelity Freedom 2040 Fund']);
   });
@@ -272,7 +283,8 @@ describe('target-date funds in retirement mapping', () => {
     expect(mapping.mappedValue).toBe(0);
     expect(mapping.unmappedValue).toBe(100_000);
     expect(mapping.holdingExposures[0]).toMatchObject({
-      method: 'unmapped',
+      status: 'unmapped',
+      method: 'name-inference',
       targetYear: 2040,
     });
   });
@@ -373,7 +385,10 @@ describe('institutional and employer-plan funds', () => {
       const mapping = await map(name, ticker, 'mutual fund');
       expect(mapping.mappedValue).toBe(0);
       expect(mapping.unmappedValue).toBe(100_000);
-      expect(mapping.holdingExposures[0].method).toBe('unmapped');
+      expect(mapping.holdingExposures[0]).toMatchObject({
+        status: 'unmapped',
+        method: 'name-inference',
+      });
     }
   });
 
@@ -393,7 +408,10 @@ describe('institutional and employer-plan funds', () => {
     const mapping = await map('Small Cap Fund', 'SPUSA061004C00000000', 'mutual fund');
     expect(mapping.mappedValue).toBe(0);
     expect(mapping.unmappedValue).toBe(100_000);
-    expect(mapping.holdingExposures[0].method).toBe('unmapped');
+    expect(mapping.holdingExposures[0]).toMatchObject({
+      status: 'unmapped',
+      method: 'name-inference',
+    });
     expect(populateAssumptions(mapping, [], []).join(' ')).not.toContain('70%');
   });
 
@@ -494,6 +512,33 @@ describe('container provider types', () => {
       expect(mapping.usEquityWeight).toBeCloseTo(0, 6);
       expect(mapping.targetDateFunds).toEqual([]);
     }
+  });
+
+  it('applies a holding-level fixed-income veto when the security type is only a wrapper', async () => {
+    const mapping = await mapPortfolioToAssetBasket(
+      [{
+        security_id: 'note',
+        security_name: 'Pathway Capital 2030 Senior Notes',
+        security_type: 'Fixed Income',
+        institution_value: 10_000,
+      }] as any[],
+      [{
+        security_id: 'note',
+        name: 'Pathway Capital 2030 Senior Notes',
+        type: 'mutual fund',
+      }] as any[],
+      10_000,
+      undefined,
+      new Map(),
+      '2026-08-21',
+    );
+
+    expect(mapping.holdingExposures[0]).toMatchObject({
+      status: 'mapped',
+      method: 'provider',
+      weights: { nominalBonds: 1 },
+    });
+    expect(mapping.targetDateFunds).toEqual([]);
   });
 
   it('still recognizes target-date funds under the types they actually arrive with', async () => {

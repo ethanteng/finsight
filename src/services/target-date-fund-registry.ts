@@ -14,6 +14,7 @@ export interface TargetDateFundAllocation {
     usEquity: number;
     internationalEquity: number;
     nominalBonds: number;
+    tips: number;
     cash: number;
   };
 }
@@ -53,7 +54,7 @@ const REGISTRY: RegistryEntry[] = [
     sourceUrl: 'https://www.ssga.com/us/en/institutional/mf/state-street-target-retirement-2025-fund-class-r3-ssahx',
     sourceContext: 'Plan CIT has no public holdings; a State Street public mutual-fund share class supplies the proxy allocation',
     exactAllocation: false,
-    weights: { usEquity: 0.2201, internationalEquity: 0.1368, nominalBonds: 0.3783, cash: 0.0014 },
+    weights: { usEquity: 0.2201, internationalEquity: 0.1368, nominalBonds: 0.3783, tips: 0, cash: 0.0014 },
   },
   {
     provider: 'state-street',
@@ -62,7 +63,7 @@ const REGISTRY: RegistryEntry[] = [
     sourceUrl: 'https://www.ssga.com/us/en/individual/mf/state-street-target-retirement-2030-fund-class-r3-ssajx',
     sourceContext: 'Plan CIT has no public holdings; a State Street public mutual-fund share class supplies the proxy allocation',
     exactAllocation: false,
-    weights: { usEquity: 0.3145, internationalEquity: 0.2101, nominalBonds: 0.3110, cash: 0.0014 },
+    weights: { usEquity: 0.3145, internationalEquity: 0.2101, nominalBonds: 0.3110, tips: 0, cash: 0.0014 },
   },
   {
     provider: 'state-street',
@@ -71,7 +72,7 @@ const REGISTRY: RegistryEntry[] = [
     sourceUrl: 'https://www.ssga.com/us/en/institutional/mf/state-street-target-retirement-2035-fund-class-r3-ssazx',
     sourceContext: 'Plan CIT has no public holdings; a State Street public mutual-fund share class supplies the proxy allocation',
     exactAllocation: false,
-    weights: { usEquity: 0.3898, internationalEquity: 0.2797, nominalBonds: 0.2920, cash: 0.0019 },
+    weights: { usEquity: 0.3898, internationalEquity: 0.2797, nominalBonds: 0.2920, tips: 0, cash: 0.0019 },
   },
   {
     provider: 'state-street',
@@ -80,7 +81,7 @@ const REGISTRY: RegistryEntry[] = [
     sourceUrl: 'https://www.ssga.com/us/en/individual/mf/state-street-target-retirement-2040-fund-class-i-sscnx',
     sourceContext: 'Plan CIT has no public holdings; a State Street public mutual-fund share class supplies the proxy allocation',
     exactAllocation: false,
-    weights: { usEquity: 0.4341, internationalEquity: 0.3176, nominalBonds: 0.2467, cash: 0.0016 },
+    weights: { usEquity: 0.4341, internationalEquity: 0.3176, nominalBonds: 0.2467, tips: 0, cash: 0.0016 },
   },
   {
     provider: 'state-street',
@@ -89,7 +90,7 @@ const REGISTRY: RegistryEntry[] = [
     sourceUrl: 'https://www.ssga.com/us/en/individual/mf/state-street-target-retirement-2050-fund-class-i-ssdjx',
     sourceContext: 'Plan CIT has no public holdings; a State Street public mutual-fund share class supplies the proxy allocation',
     exactAllocation: false,
-    weights: { usEquity: 0.5011, internationalEquity: 0.3668, nominalBonds: 0.1304, cash: 0.0017 },
+    weights: { usEquity: 0.5011, internationalEquity: 0.3668, nominalBonds: 0.1304, tips: 0, cash: 0.0017 },
   },
   {
     provider: 'blackrock',
@@ -98,7 +99,7 @@ const REGISTRY: RegistryEntry[] = [
     sourceUrl: 'https://assets.mersofmich.com/forms/MERS_LifePath_2040.pdf',
     sourceContext: 'MERS plan-sponsor fact sheet for the BlackRock LifePath Fund N share class',
     exactAllocation: true,
-    weights: { usEquity: 0.4773, internationalEquity: 0.2698, nominalBonds: 0.2276, cash: 0 },
+    weights: { usEquity: 0.4773, internationalEquity: 0.2698, nominalBonds: 0.2276, tips: 0, cash: 0 },
   },
 ];
 

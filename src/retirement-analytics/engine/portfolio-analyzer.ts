@@ -2,9 +2,9 @@
 // Phase 1: Portfolio Metrics & Mapping
 
 import { Holding, Security } from '../../services/financial-data-service';
-import { PortfolioCompositionMetrics, PortfolioMapping, SecurityMetadata } from '../types';
+import { PortfolioCompositionMetrics, ResolvedHoldingExposure, SecurityMetadata } from '../types';
 import { DataProviderFactory } from '../data/data-provider-factory';
-import { mapPortfolioToAssetBasket } from './portfolio-mapper';
+import { mapPortfolioToAssetBasket, summarizeHoldingExposures } from './portfolio-mapper';
 
 /**
  * Calculate portfolio composition metrics including allocations, concentration, and expense ratios
@@ -15,7 +15,7 @@ export async function analyzePortfolio(
   securities: Security[],
   dataProviderFactory?: DataProviderFactory,
   preFetchedMetadata?: Map<string, any>,
-  portfolioMapping?: PortfolioMapping,
+  resolvedHoldingExposures?: readonly ResolvedHoldingExposure[],
   asOfDate: string | number = new Date().toISOString().slice(0, 10),
 ): Promise<PortfolioCompositionMetrics> {
   if (holdings.length === 0) {
@@ -83,14 +83,15 @@ export async function analyzePortfolio(
 
   // Allocation, simulation and confidence must all consume the same resolved
   // holdings. Standalone callers still get that contract by resolving here.
-  const resolvedMapping = portfolioMapping ?? await mapPortfolioToAssetBasket(
+  const exposures = resolvedHoldingExposures ?? (await mapPortfolioToAssetBasket(
     holdings,
     securities,
     totalValue,
     dataProviderFactory,
     tickerToMetadata,
     asOfDate,
-  );
+  )).holdingExposures;
+  const resolvedMapping = summarizeHoldingExposures(exposures);
 
   let totalExpenseRatio = 0;
   let totalExpenseRatioWeight = 0;

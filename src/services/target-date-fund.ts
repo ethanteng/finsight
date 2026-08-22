@@ -1,3 +1,5 @@
+import { isDeclaredFixedIncomeType } from './investment-holding-classification';
+
 /**
  * Target-date fund recognition.
  *
@@ -132,6 +134,26 @@ export function targetDateFundYear(...labels: Array<unknown>): number | null {
 /** True when any of the supplied labels identify a target-date fund. */
 export function isTargetDateFund(...labels: Array<unknown>): boolean {
   return targetDateFundYear(...labels) !== null;
+}
+
+/**
+ * Resolve a holding's target year only after considering every provider type.
+ * A fixed-income declaration is stronger evidence than a target-like word and
+ * year in a bond label. Wrapper types such as "mutual fund" do not veto.
+ */
+export function targetDateFundYearForHolding(
+  labels: Array<unknown>,
+  declaredAssetTypes: Array<unknown> = [],
+): number | null {
+  if (declaredAssetTypes.some(isDeclaredFixedIncomeType)) return null;
+  return targetDateFundYear(...labels);
+}
+
+export function isTargetDateFundHolding(
+  labels: Array<unknown>,
+  declaredAssetTypes: Array<unknown> = [],
+): boolean {
+  return targetDateFundYearForHolding(labels, declaredAssetTypes) !== null;
 }
 
 /**
