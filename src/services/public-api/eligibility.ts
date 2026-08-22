@@ -53,19 +53,38 @@ export interface PublicEligibility {
  * users who have no Public connection would be a poor trade. The snapshot is the
  * same source the finances page renders from, so anyone who can see their Public
  * accounts in the product is eligible here.
+ *
+ * Snapshot rows alone are not enough: `/privacy/disconnect-accounts` deletes the
+ * SnapTrade user and the Public credential immediately, but the snapshot rebuild
+ * is async. Until that lands the old Public accounts still sit in the JSON, and
+ * treating them as eligibility would re-offer the paste-a-tradeable-key form on
+ * the same page load that just disconnected everything. Require a live
+ * SnapTradeUser row before snapshot Public accounts count.
  */
 export async function getPublicEligibility(userId: string): Promise<PublicEligibility> {
   const prisma = getPrismaClient();
-  const snapshot = await prisma.financialSummarySnapshot.findFirst({
-    where: { userId },
-    select: { accounts: true },
-  });
+  const [snapshot, snapTradeUser, credential] = await Promise.all([
+    prisma.financialSummarySnapshot.findFirst({
+      where: { userId },
+      select: { accounts: true },
+    }),
+    prisma.snapTradeUser.findUnique({
+      where: { userId },
+      select: { id: true },
+    }),
+    prisma.publicApiCredential.findUnique({
+      where: { userId },
+      select: { id: true },
+    }),
+  ]);
 
   const accounts = Array.isArray(snapshot?.accounts) ? (snapshot!.accounts as any[]) : [];
-  const snapTradeAccountIds = accounts
-    .filter(account => account?.source === 'snaptrade' && isPublicInstitution(account?.institution))
-    .map(account => String(account?.id || account?.account_id || ''))
-    .filter(id => id.length > 0);
+  const snapTradeAccountIds = snapTradeUser
+    ? accounts
+        .filter(account => account?.source === 'snaptrade' && isPublicInstitution(account?.institution))
+        .map(account => String(account?.id || account?.account_id || ''))
+        .filter(id => id.length > 0)
+    : [];
 
   // An existing credential keeps the user eligible on its own. Once the direct
   // feed is live it supersedes SnapTrade's Public accounts, so they leave the
@@ -73,10 +92,6 @@ export async function getPublicEligibility(userId: string): Promise<PublicEligib
   // false, locking the user out of replacing their own secret the moment it
   // started working. It also means someone who has since removed the SnapTrade
   // link keeps the direct feed that is now their only source of Public data.
-  const credential = await prisma.publicApiCredential.findUnique({
-    where: { userId },
-    select: { id: true },
-  });
   const configured = Boolean(credential);
 
   return {
