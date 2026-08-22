@@ -218,6 +218,17 @@ function Chip({ children, tone = 'text-gray-300 border-gray-600' }: { children: 
   return <span className={`rounded-full border px-2 py-0.5 text-[11px] ${tone}`}>{children}</span>;
 }
 
+/** Admin detail links come from provider payloads; only open http(s) targets. */
+function safeExternalHref(url: string): string | undefined {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol === 'http:' || parsed.protocol === 'https:') return parsed.href;
+  } catch {
+    // Non-URL strings stay as plain text below.
+  }
+  return undefined;
+}
+
 function SearchQueryCard({ outcome }: { outcome: SearchQueryEvidence }) {
   const failed = outcome.status === 'failed';
   return (
@@ -236,23 +247,30 @@ function SearchQueryCard({ outcome }: { outcome: SearchQueryEvidence }) {
       {outcome.error && <div className="mt-1 text-xs text-red-300">{outcome.error}</div>}
       {outcome.results.length > 0 && (
         <ol className="mt-2 space-y-2">
-          {outcome.results.map((result, index) => (
-            <li key={`${result.url}-${index}`} className="border-l-2 border-gray-700 pl-2">
-              <a
-                href={result.url}
-                target="_blank"
-                rel="noreferrer noopener"
-                className="text-sm text-blue-300 hover:underline"
-              >
-                {result.title || result.url}
-              </a>
-              <div className="text-[11px] text-gray-500">
-                {result.source}
-                {result.publishedAt ? ` · ${new Date(result.publishedAt).toLocaleDateString()}` : result.age ? ` · ${result.age}` : ''}
-              </div>
-              {result.snippet && <div className="mt-0.5 text-xs leading-5 text-gray-400">{result.snippet}</div>}
-            </li>
-          ))}
+          {outcome.results.map((result, index) => {
+            const href = safeExternalHref(result.url);
+            return (
+              <li key={`${result.url}-${index}`} className="border-l-2 border-gray-700 pl-2">
+                {href ? (
+                  <a
+                    href={href}
+                    target="_blank"
+                    rel="noreferrer noopener"
+                    className="text-sm text-blue-300 hover:underline"
+                  >
+                    {result.title || result.url}
+                  </a>
+                ) : (
+                  <span className="text-sm text-gray-300">{result.title || result.url}</span>
+                )}
+                <div className="text-[11px] text-gray-500">
+                  {result.source}
+                  {result.publishedAt ? ` · ${new Date(result.publishedAt).toLocaleDateString()}` : result.age ? ` · ${result.age}` : ''}
+                </div>
+                {result.snippet && <div className="mt-0.5 text-xs leading-5 text-gray-400">{result.snippet}</div>}
+              </li>
+            );
+          })}
         </ol>
       )}
     </div>
@@ -504,8 +522,8 @@ export default function AnswerQualityPanel({
               title="Evidence verified"
               value={percent(report.evidence.verifiedRate)}
               detail={`${report.evidence.verified} passed · ${report.evidence.salvaged} trimmed · ${report.evidence.replaced} replaced${
-                report.evidence.trimmedSentences
-                  ? ` · ${report.evidence.trimmedSentences} sentence(s) and ${report.evidence.trimmedKeyNumbers ?? 0} key number(s) removed`
+                (report.evidence.trimmedSentences || report.evidence.trimmedKeyNumbers)
+                  ? ` · ${report.evidence.trimmedSentences ?? 0} sentence(s) and ${report.evidence.trimmedKeyNumbers ?? 0} key number(s) removed`
                   : ''
               }`}
             />

@@ -209,6 +209,19 @@ describe('AnswerQualityPanel', () => {
     expect(screen.getByText(/1 query failure\(s\)/)).toBeInTheDocument();
   });
 
+  it('still shows removal totals when only key numbers were dropped', async () => {
+    const keyOnlyReport = {
+      ...REPORT,
+      evidence: { ...REPORT.evidence, trimmedSentences: 0, trimmedKeyNumbers: 3 },
+    };
+    (global.fetch as jest.Mock).mockResolvedValue({
+      ok: true,
+      json: async () => keyOnlyReport,
+    });
+    render(<AnswerQualityPanel apiUrl="https://api.test" getAuthHeaders={() => ({})} />);
+    expect(await screen.findByText(/0 sentence\(s\) and 3 key number\(s\) removed/)).toBeInTheDocument();
+  });
+
   it('explains recent answer status in plain language', async () => {
     render(<AnswerQualityPanel apiUrl="https://api.test" getAuthHeaders={() => ({})} />);
     expect(await screen.findByText('Can I retire next year?')).toBeInTheDocument();
