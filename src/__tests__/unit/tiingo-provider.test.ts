@@ -197,7 +197,9 @@ describe('Tiingo coverage gaps', () => {
       { date: '2025-07-31T00:00:00Z', adjClose: 110 },
     ]));
 
-    await liveProvider(fetchImplementation).getPriceHistory('SSISLX', HISTORY_START, HISTORY_END);
+    await expect(
+      liveProvider(fetchImplementation).getPriceHistory('SSISLX', HISTORY_START, HISTORY_END),
+    ).resolves.toMatchObject({ ticker: 'SSISLX', provider: 'tiingo' });
 
     expect(fetchImplementation).toHaveBeenCalled();
     expect(clear).toHaveBeenCalledWith('SSISLX', 'tiingo');

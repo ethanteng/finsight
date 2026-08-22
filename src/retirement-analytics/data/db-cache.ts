@@ -630,19 +630,26 @@ export class DatabaseCache {
     observations: number;
     recheckAfter: Date;
   }>> {
-    return this.prisma.providerCoverageGap.findMany({
-      orderBy: [{ observations: 'desc' }, { lastSeenAt: 'desc' }],
-      select: {
-        tickerSymbol: true,
-        provider: true,
-        statusCode: true,
-        endpoint: true,
-        firstSeenAt: true,
-        lastSeenAt: true,
-        observations: true,
-        recheckAfter: true,
-      },
-    });
+    try {
+      return await this.prisma.providerCoverageGap.findMany({
+        orderBy: [{ observations: 'desc' }, { lastSeenAt: 'desc' }],
+        select: {
+          tickerSymbol: true,
+          provider: true,
+          statusCode: true,
+          endpoint: true,
+          firstSeenAt: true,
+          lastSeenAt: true,
+          observations: true,
+          recheckAfter: true,
+        },
+      });
+    } catch (error) {
+      // The classifier half of /admin/data-gaps must still load when this table
+      // is missing (migration not applied yet) or the read otherwise fails.
+      console.error('Error listing coverage gaps:', error);
+      return [];
+    }
   }
 }
 
