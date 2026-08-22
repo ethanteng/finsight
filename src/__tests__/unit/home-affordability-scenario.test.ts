@@ -5,6 +5,7 @@ import {
   DEFAULT_DOWN_PAYMENT_PERCENT,
   DEFAULT_EMERGENCY_FUND_MONTHS,
   DEFAULT_LOAN_TERM_YEARS,
+  describeHomeAffordabilityScenarioExecution,
   homeAffordabilityScenarioCanonicalFacts,
   parseHomeAffordabilityScenarioPlan,
   runHomeAffordabilityScenario,
@@ -326,5 +327,202 @@ describe('home affordability scenario runner', () => {
       },
     });
     expect(noRate).toMatchObject({ status: 'unavailable', reason: expect.stringMatching(/mortgage rate/i) });
+  });
+
+  it('reports whether a stated retirement contribution still fits after the purchase', async () => {
+    const execution: any = await runHomeAffordabilityScenario(snapshot(), {
+      requested: true,
+      primary: variant(
+        {
+          homePrice: 700_000,
+          downPaymentPercent: 20,
+          mortgageRatePercent: 6.5,
+          propertyTaxAnnual: 8_400,
+          homeownersInsuranceAnnual: 2_400,
+          hoaMonthly: 0,
+          currentHousingCostMonthly: 2_500,
+          retirementContributionMonthly: 2_000,
+        },
+        {
+          homePrice: '$700,000 home',
+          downPaymentPercent: '20% down',
+          mortgageRatePercent: '6.5%',
+          propertyTaxAnnual: '$8,400 taxes',
+          homeownersInsuranceAnnual: '$2,400 insurance',
+          hoaMonthly: 'no HOA',
+          currentHousingCostMonthly: '$2,500 rent',
+          retirementContributionMonthly: '$2,000 a month into retirement',
+        }
+      ),
+    } as any);
+
+    expect(execution.status).toBe('completed');
+    const [scenario] = execution.scenarios;
+    expect(scenario.metrics.surplusAfterRetirementContribution).toBe(
+      Number((scenario.metrics.postPurchaseMonthlySurplus - 2_000).toFixed(2))
+    );
+    expect(scenario.constraints.retirementContributionCovered).toBe(true);
+    expect(scenario.assessment).toBe('supported');
+    expect(scenario.bindingConstraint).toBe('none');
+    expect(describeHomeAffordabilityScenarioExecution(execution)).toContain(
+      'No modeled constraint binds: upfront cash, monthly cash flow, '
+      + 'the retirement contribution being preserved, the emergency-fund floor all clear.'
+    );
+
+    const facts = homeAffordabilityScenarioCanonicalFacts(execution);
+    const surplusFact = facts.find((fact) =>
+      fact.id.endsWith('_surplus_after_retirement_contribution')
+    );
+    expect(surplusFact).toBeDefined();
+    expect(surplusFact?.caveat).toContain('must not be subtracted twice');
+    expect(validateCanonicalFactPack({ version: 1, facts })).toEqual([]);
+  });
+
+  it('names the retirement contribution as the binding constraint when it no longer fits', async () => {
+    const execution: any = await runHomeAffordabilityScenario(
+      snapshot({ averageMonthlyIncome: 11_000 }),
+      {
+        requested: true,
+        primary: variant(
+          {
+            homePrice: 700_000,
+            downPaymentPercent: 20,
+            mortgageRatePercent: 6.5,
+            propertyTaxAnnual: 8_400,
+            homeownersInsuranceAnnual: 2_400,
+            hoaMonthly: 0,
+            currentHousingCostMonthly: 2_500,
+            retirementContributionMonthly: 3_000,
+          },
+          {
+            homePrice: '$700,000 home',
+            downPaymentPercent: '20% down',
+            mortgageRatePercent: '6.5%',
+            propertyTaxAnnual: '$8,400 taxes',
+            homeownersInsuranceAnnual: '$2,400 insurance',
+            hoaMonthly: 'no HOA',
+            currentHousingCostMonthly: '$2,500 rent',
+            retirementContributionMonthly: '$3,000 a month into retirement',
+          }
+        ),
+      } as any
+    );
+
+    const [scenario] = execution.scenarios;
+    expect(scenario.metrics.postPurchaseMonthlySurplus).toBeGreaterThanOrEqual(0);
+    expect(scenario.constraints.retirementContributionCovered).toBe(false);
+    expect(scenario.assessment).toBe('not_supported');
+    expect(scenario.bindingConstraint).toBe('retirement_contribution');
+    expect(describeHomeAffordabilityScenarioExecution(execution)).toContain(
+      'limited by the retirement contribution being preserved'
+    );
+  });
+
+  it('reports upfront cash as the binding constraint ahead of the reserve floor', async () => {
+    const execution: any = await runHomeAffordabilityScenario(
+      snapshot({ financialSummary: { financialOverview: { totalCash: 40_000 } } }),
+      {
+        requested: true,
+        primary: variant(
+          {
+            homePrice: 700_000,
+            downPaymentPercent: 20,
+            mortgageRatePercent: 6.5,
+            propertyTaxAnnual: 8_400,
+            homeownersInsuranceAnnual: 2_400,
+            hoaMonthly: 0,
+            currentHousingCostMonthly: 2_500,
+          },
+          {
+            homePrice: '$700,000 home',
+            downPaymentPercent: '20% down',
+            mortgageRatePercent: '6.5%',
+            propertyTaxAnnual: '$8,400 taxes',
+            homeownersInsuranceAnnual: '$2,400 insurance',
+            hoaMonthly: 'no HOA',
+            currentHousingCostMonthly: '$2,500 rent',
+          }
+        ),
+      } as any
+    );
+
+    const [scenario] = execution.scenarios;
+    expect(scenario.constraints).toMatchObject({
+      upfrontCashCovered: false,
+      emergencyReserveCovered: false,
+    });
+    expect(scenario.bindingConstraint).toBe('upfront_cash');
+  });
+
+  it('keeps the priceable results when the stated housing cost exceeds tracked spending', async () => {
+    const execution: any = await runHomeAffordabilityScenario(
+      snapshot({ averageMonthlyExpense: 2_000 }),
+      {
+        requested: true,
+        primary: variant(
+          { homePrice: 700_000, mortgageRatePercent: 6.5, currentHousingCostMonthly: 3_400 },
+          {
+            homePrice: '$700,000 home',
+            mortgageRatePercent: '6.5%',
+            currentHousingCostMonthly: '$3,400 rent',
+          }
+        ),
+      } as any
+    );
+
+    expect(execution.status).toBe('completed');
+    const [scenario] = execution.scenarios;
+    expect(scenario.metrics.upfrontCashNeeded).toBe(161_000);
+    expect(scenario.metrics.allInHousingMonthly).toBeGreaterThan(0);
+    expect(scenario.metrics.postPurchaseMonthlyExpenses).toBeUndefined();
+    expect(scenario.assessment).toBe('incomplete');
+    expect(scenario.bindingConstraint).toBeUndefined();
+    expect(scenario.missingInputs).toContain(
+      'a tracked spending baseline that covers the stated current housing cost'
+    );
+  });
+
+  it('keeps a valid primary case when only the comparison case is unusable', async () => {
+    const execution: any = await runHomeAffordabilityScenario(snapshot(), {
+      requested: true,
+      primary: variant(
+        { homePrice: 700_000, mortgageRatePercent: 6.5 },
+        { homePrice: '$700,000 home', mortgageRatePercent: '6.5%' }
+      ),
+      comparison: variant(
+        { downPaymentAmount: 900_000 },
+        { downPaymentAmount: '$900,000 down' }
+      ),
+    } as any);
+
+    expect(execution.status).toBe('completed');
+    expect(execution.scenarios).toHaveLength(1);
+    expect(execution.comparisonUnavailableReason).toContain('down payment cannot exceed');
+    expect(describeHomeAffordabilityScenarioExecution(execution)).toContain(
+      'could not run the requested comparison case'
+    );
+  });
+
+  it('refuses a non-positive benchmark rate instead of pricing an interest-free mortgage', async () => {
+    const execution: any = await runHomeAffordabilityScenario(
+      snapshot({
+        tierContext: {
+          marketContext: {
+            economicIndicators: {
+              mortgageRate: { value: 0, date: '2026-08-20', source: 'FRED', lastUpdated: '2026-08-20T00:00:00.000Z' },
+            },
+          },
+          tierInfo: { currentTier: 'premium', availableSources: [] },
+          upgradeHints: [],
+        },
+      }),
+      {
+        requested: true,
+        primary: variant({ homePrice: 700_000 }, { homePrice: '$700,000 home' }),
+      } as any
+    );
+
+    expect(execution.status).toBe('unavailable');
+    expect(execution.reason).toContain('mortgage rate is required');
   });
 });

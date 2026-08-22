@@ -87,13 +87,17 @@ Each variant can change:
 - mortgage rate and fully amortizing term;
 - closing, moving, and immediate repair costs;
 - property taxes, homeowners insurance, HOA dues, mortgage insurance, and maintenance;
-- current housing cost and the emergency-fund target.
+- current housing cost, the emergency-fund target, and a monthly retirement contribution to preserve.
 
 When the user omits them, the runner uses named defaults of 20% down, a 30-year loan, 3% closing costs, a 1% annual maintenance reserve, and a six-month emergency-fund target. A user-supplied mortgage rate takes precedence over the structured FRED 30-year fixed-rate observation. The runner never parses a rate out of model prose.
 
 Property taxes and homeowners insurance have no universal safe default. They are excluded when absent, the monthly ownership result is marked as a lower bound, and downstream cash-flow or reserve facts carry the same caveat. Mortgage insurance is treated the same way when the down payment is below 20%. The runner returns an `incomplete` assessment instead of declaring the purchase affordable until those recurring costs, available cash, connected income and expenses, and the current housing cost being replaced are all available.
 
-Outputs include mortgage principal, principal and interest, all-in monthly ownership cost, upfront cash needed, cash remaining, the change from current housing cost, post-purchase operating surplus, cash runway, and the emergency-fund gap. Two requested variants also receive deterministic monthly-cost and upfront-cash comparisons.
+A stated current housing cost above the connected spending baseline means the two series disagree — housing paid from an unconnected account, or a categorization gap. Subtracting it would understate post-purchase spending, so the runner drops the spending baseline, records the shortfall in `missingInputs`, and still returns the upfront-cash and monthly-cost results instead of failing the whole calculation. A benchmark mortgage rate that arrives as zero or negative is treated as a provider fault rather than an interest-free loan; only an explicitly stated rate may be non-positive. An unusable comparison case is reported in `comparisonUnavailableReason` and never discards a valid primary case.
+
+Outputs include mortgage principal, principal and interest, all-in monthly ownership cost, upfront cash needed, cash remaining, the change from current housing cost, post-purchase operating surplus, cash runway, and the emergency-fund gap. When the user states a monthly retirement contribution to preserve, the runner also reports the surplus remaining after it and whether it still fits. Because connected deposits are already net of payroll-deducted contributions, that number carries an explicit caveat against subtracting the same contribution twice.
+
+A completed variant also names its binding constraint: the first failing constraint in the order upfront cash, monthly cash flow, retirement contribution, emergency-fund floor, or `none` when all of them clear. Closing is impossible without the upfront cash, a negative operating surplus is structural, and the reserve floor is a cushion rather than a payment obligation. The binding constraint is withheld while the assessment is `incomplete`, because a missing input is not a shortfall. Two requested variants also receive deterministic monthly-cost and upfront-cash comparisons.
 
 ## Evidence and persistence
 

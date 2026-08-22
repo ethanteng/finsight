@@ -28,6 +28,7 @@ const HOME_AFFORDABILITY_OVERRIDE_FIELDS = [
   'maintenanceAnnual',
   'movingAndInitialCosts',
   'currentHousingCostMonthly',
+  'retirementContributionMonthly',
   'emergencyFundMonths',
 ] as const;
 
@@ -92,6 +93,7 @@ export interface PlannedHomeAffordabilityOverrides {
   maintenanceAnnual?: number;
   movingAndInitialCosts?: number;
   currentHousingCostMonthly?: number;
+  retirementContributionMonthly?: number;
   emergencyFundMonths?: number;
   sources: Partial<Record<HomeAffordabilityOverrideField, string>>;
 }
@@ -145,10 +147,26 @@ export interface HomeAffordabilityMetrics {
   monthlyHousingChange?: number;
   postPurchaseMonthlyExpenses?: number;
   postPurchaseMonthlySurplus?: number;
+  retirementContributionMonthly?: number;
+  surplusAfterRetirementContribution?: number;
   reserveTarget?: number;
   reserveMonths?: number;
   reserveGap?: number;
   reserveBasis?: 'post_purchase' | 'current_spending';
+}
+
+export type HomeAffordabilityBindingConstraint =
+  | 'upfront_cash'
+  | 'monthly_cash_flow'
+  | 'retirement_contribution'
+  | 'reserve_floor'
+  | 'none';
+
+export interface HomeAffordabilityConstraints {
+  upfrontCashCovered?: boolean;
+  emergencyReserveCovered?: boolean;
+  monthlyCashFlowNonnegative?: boolean;
+  retirementContributionCovered?: boolean;
 }
 
 export interface HomeAffordabilityScenarioResult {
@@ -159,12 +177,29 @@ export interface HomeAffordabilityScenarioResult {
   costCoverage: 'complete' | 'lower_bound';
   missingInputs: string[];
   assessment: HomeAffordabilityAssessment;
-  constraints: {
-    upfrontCashCovered?: boolean;
-    emergencyReserveCovered?: boolean;
-    monthlyCashFlowNonnegative?: boolean;
-  };
+  constraints: HomeAffordabilityConstraints;
+  /**
+   * Which constraint actually blocks the purchase, or `none` when every
+   * constraint clears. Absent while the assessment is `incomplete`, because a
+   * missing input cannot be ranked against a real shortfall.
+   */
+  bindingConstraint?: HomeAffordabilityBindingConstraint;
 }
+
+/**
+ * Order in which a failing constraint is reported as the binding one. Closing
+ * is impossible without the upfront cash; a negative operating surplus is
+ * structural; preserving the stated retirement contribution outranks the
+ * reserve floor, which is a cushion rather than a payment obligation.
+ */
+const BINDING_CONSTRAINT_PRIORITY: ReadonlyArray<
+  [keyof HomeAffordabilityConstraints, HomeAffordabilityBindingConstraint]
+> = [
+  ['upfrontCashCovered', 'upfront_cash'],
+  ['monthlyCashFlowNonnegative', 'monthly_cash_flow'],
+  ['retirementContributionCovered', 'retirement_contribution'],
+  ['emergencyReserveCovered', 'reserve_floor'],
+];
 
 export interface CompletedHomeAffordabilityScenarioExecution {
   version: number;
@@ -173,6 +208,8 @@ export interface CompletedHomeAffordabilityScenarioExecution {
   computedAt: string;
   durationMs: number;
   scenarios: HomeAffordabilityScenarioResult[];
+  /** Set when the primary case ran but the requested comparison could not. */
+  comparisonUnavailableReason?: string;
 }
 
 export interface UnavailableHomeAffordabilityScenarioExecution {
@@ -210,6 +247,7 @@ const OVERRIDE_RANGES: Record<HomeAffordabilityOverrideField, {
   maintenanceAnnual: { minimum: 0, maximum: 10_000_000 },
   movingAndInitialCosts: { minimum: 0, maximum: 20_000_000 },
   currentHousingCostMonthly: { minimum: 0, maximum: 1_000_000 },
+  retirementContributionMonthly: { minimum: 0, maximum: 1_000_000 },
   emergencyFundMonths: { minimum: 0, maximum: 60 },
 };
 
@@ -429,7 +467,13 @@ function resolveVariant(
   }
 
   const marketRate = snapshot.tierContext.marketContext.economicIndicators?.mortgageRate;
-  const marketRateValue = finiteNumber(marketRate?.value);
+  const rawMarketRateValue = finiteNumber(marketRate?.value);
+  // A benchmark that arrives as zero or negative is a provider fault. Falling
+  // through to it would silently price an interest-free mortgage and attribute
+  // it to FRED, so only an explicitly stated rate may be non-positive.
+  const marketRateValue = rawMarketRateValue !== undefined && rawMarketRateValue > 0
+    ? rawMarketRateValue
+    : undefined;
   const mortgageRatePercent = overrides.mortgageRatePercent ?? marketRateValue;
   if (mortgageRatePercent === undefined || mortgageRatePercent < 0 || mortgageRatePercent > 30) {
     return 'A mortgage rate is required. State a rate or load the current mortgage-rate context.';
@@ -575,6 +619,18 @@ function resolveVariant(
     overrides.sources.emergencyFundMonths ?? `${DEFAULT_EMERGENCY_FUND_MONTHS}-month planning default`
   );
 
+  const retirementContributionMonthly = overrides.retirementContributionMonthly;
+  if (retirementContributionMonthly !== undefined) {
+    addAssumption(
+      'retirement_contribution_monthly',
+      'Monthly retirement contribution to preserve',
+      retirementContributionMonthly,
+      'usd',
+      'user',
+      overrides.sources.retirementContributionMonthly
+    );
+  }
+
   const averageMonthlyIncome = finiteNumber(snapshot.averageMonthlyIncome);
   if (averageMonthlyIncome !== undefined) {
     addAssumption(
@@ -586,14 +642,18 @@ function resolveVariant(
       'Canonical transaction cash-flow average'
     );
   }
-  const averageMonthlyExpenses = finiteNumber(snapshot.averageMonthlyExpense);
+  const observedMonthlyExpenses = finiteNumber(snapshot.averageMonthlyExpense);
+  // A stated housing cost above the tracked spending baseline means the two
+  // series disagree — housing paid from an unconnected account, or a
+  // categorization gap. Subtracting it would understate post-purchase spending,
+  // so drop the baseline and report the projection as missing rather than
+  // discarding the upfront-cash and monthly-cost results the user can still use.
+  const expenseBaselineConflict =
+    observedMonthlyExpenses !== undefined &&
+    currentHousingCostMonthly !== undefined &&
+    currentHousingCostMonthly > observedMonthlyExpenses;
+  const averageMonthlyExpenses = expenseBaselineConflict ? undefined : observedMonthlyExpenses;
   if (averageMonthlyExpenses !== undefined) {
-    if (
-      currentHousingCostMonthly !== undefined &&
-      currentHousingCostMonthly > averageMonthlyExpenses
-    ) {
-      return 'Current housing cost cannot exceed the average monthly expense baseline.';
-    }
     addAssumption(
       'average_monthly_expenses',
       'Average monthly connected-account expenses',
@@ -635,6 +695,10 @@ function resolveVariant(
     averageMonthlyIncome === undefined || postPurchaseMonthlyExpenses === undefined
       ? undefined
       : averageMonthlyIncome - postPurchaseMonthlyExpenses;
+  const surplusAfterRetirementContribution =
+    postPurchaseMonthlySurplus === undefined || retirementContributionMonthly === undefined
+      ? undefined
+      : postPurchaseMonthlySurplus - retirementContributionMonthly;
 
   const reserveBasis = postPurchaseMonthlyExpenses !== undefined
     ? 'post_purchase' as const
@@ -657,15 +721,22 @@ function resolveVariant(
     ...missingRecurringCosts,
     ...(availableCash === undefined ? ['available cash'] : []),
     ...(averageMonthlyIncome === undefined ? ['average monthly income'] : []),
-    ...(averageMonthlyExpenses === undefined ? ['average monthly expenses'] : []),
+    ...(averageMonthlyExpenses === undefined
+      ? [expenseBaselineConflict
+          ? 'a tracked spending baseline that covers the stated current housing cost'
+          : 'average monthly expenses']
+      : []),
     ...(currentHousingCostMonthly === undefined ? ['current monthly housing cost'] : []),
   ];
   const complete = missingInputs.length === 0;
-  const constraints = {
+  const constraints: HomeAffordabilityConstraints = {
     ...(cashRemaining !== undefined && { upfrontCashCovered: cashRemaining >= 0 }),
     ...(reserveGap !== undefined && { emergencyReserveCovered: reserveGap >= 0 }),
     ...(postPurchaseMonthlySurplus !== undefined && {
       monthlyCashFlowNonnegative: postPurchaseMonthlySurplus >= 0,
+    }),
+    ...(surplusAfterRetirementContribution !== undefined && {
+      retirementContributionCovered: surplusAfterRetirementContribution >= 0,
     }),
   };
   const assessment: HomeAffordabilityAssessment = !complete
@@ -673,6 +744,11 @@ function resolveVariant(
     : Object.values(constraints).every(Boolean)
       ? 'supported'
       : 'not_supported';
+  // Only rank constraints once every input exists; a missing input is not a
+  // shortfall and must not be presented as one.
+  const bindingConstraint = complete
+    ? BINDING_CONSTRAINT_PRIORITY.find(([key]) => constraints[key] === false)?.[1] ?? 'none'
+    : undefined;
 
   const metrics: HomeAffordabilityMetrics = {
     homePrice: roundMoney(homePrice),
@@ -698,6 +774,12 @@ function resolveVariant(
     }),
     ...(postPurchaseMonthlySurplus !== undefined && {
       postPurchaseMonthlySurplus: roundMoney(postPurchaseMonthlySurplus),
+    }),
+    ...(retirementContributionMonthly !== undefined && {
+      retirementContributionMonthly: roundMoney(retirementContributionMonthly),
+    }),
+    ...(surplusAfterRetirementContribution !== undefined && {
+      surplusAfterRetirementContribution: roundMoney(surplusAfterRetirementContribution),
     }),
     ...(reserveTarget !== undefined && { reserveTarget: roundMoney(reserveTarget) }),
     ...(reserveMonths !== undefined && { reserveMonths: Number(reserveMonths.toFixed(4)) }),
@@ -725,6 +807,7 @@ function resolveVariant(
       missingInputs,
       assessment,
       constraints,
+      ...(bindingConstraint && { bindingConstraint }),
     },
   };
 }
@@ -746,9 +829,16 @@ export async function runHomeAffordabilityScenario(
 
   const scenarios: HomeAffordabilityScenarioResult[] = [];
   const seen = new Set<string>();
-  for (const overrides of variants.slice(0, 2)) {
+  let comparisonUnavailableReason: string | undefined;
+  for (const [index, overrides] of variants.slice(0, 2).entries()) {
     const resolved = resolveVariant(snapshot, overrides);
-    if (typeof resolved === 'string') return unavailable(startedAt, resolved);
+    if (typeof resolved === 'string') {
+      // Only the primary case is load-bearing. An unusable comparison is
+      // reported alongside a valid primary instead of discarding it.
+      if (index === 0) return unavailable(startedAt, resolved);
+      comparisonUnavailableReason = resolved;
+      continue;
+    }
     if (seen.has(resolved.key)) continue;
     seen.add(resolved.key);
     scenarios.push(resolved.result);
@@ -764,6 +854,7 @@ export async function runHomeAffordabilityScenario(
     computedAt: new Date().toISOString(),
     durationMs: Date.now() - startedAt,
     scenarios,
+    ...(comparisonUnavailableReason && { comparisonUnavailableReason }),
   };
 }
 
@@ -775,6 +866,19 @@ export function compactHomeAffordabilityScenarioExecution(
 
 function factId(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 80);
+}
+
+/**
+ * Connected deposits are already net of payroll-deducted contributions, so the
+ * funding assumption has to travel with the number rather than be inferred.
+ */
+const RETIREMENT_CONTRIBUTION_CAVEAT =
+  'This assumes the stated retirement contribution is funded out of post-purchase surplus. '
+  + 'A payroll-deducted contribution is already absent from connected deposits and must not be subtracted twice.';
+
+function joinCaveats(...parts: Array<string | undefined>): string | undefined {
+  const kept = parts.filter((part): part is string => Boolean(part));
+  return kept.length > 0 ? kept.join(' ') : undefined;
 }
 
 function lowerBoundCaveat(scenario: HomeAffordabilityScenarioResult): string | undefined {
@@ -1033,9 +1137,10 @@ export function homeAffordabilityScenarioCanonicalFacts(
       );
     }
 
+    const postPurchaseSurplusId = `${prefix}_post_purchase_monthly_surplus`;
     if (averageIncomeId && scenario.metrics.postPurchaseMonthlyExpenses !== undefined) {
       addCalculation(
-        `${prefix}_post_purchase_monthly_surplus`,
+        postPurchaseSurplusId,
         `${scenario.label} post-purchase monthly operating surplus`,
         scenario.metrics.postPurchaseMonthlySurplus,
         'usd',
@@ -1043,6 +1148,20 @@ export function homeAffordabilityScenarioCanonicalFacts(
         'input[0] - input[1]',
         [averageIncomeId, postPurchaseExpensesId],
         recurringCaveat
+      );
+    }
+
+    const retirementContributionId = assumptionIds.get('retirement_contribution_monthly');
+    if (retirementContributionId && scenario.metrics.surplusAfterRetirementContribution !== undefined) {
+      addCalculation(
+        `${prefix}_surplus_after_retirement_contribution`,
+        `${scenario.label} monthly surplus after preserving the stated retirement contribution`,
+        scenario.metrics.surplusAfterRetirementContribution,
+        'usd',
+        scenario.id,
+        'input[0] - input[1]',
+        [postPurchaseSurplusId, retirementContributionId],
+        joinCaveats(recurringCaveat, RETIREMENT_CONTRIBUTION_CAVEAT)
       );
     }
 
@@ -1123,6 +1242,21 @@ export function homeAffordabilityScenarioCanonicalFacts(
   return facts;
 }
 
+const BINDING_CONSTRAINT_LABELS: Record<HomeAffordabilityBindingConstraint, string> = {
+  upfront_cash: 'upfront cash',
+  monthly_cash_flow: 'monthly cash flow',
+  retirement_contribution: 'the retirement contribution being preserved',
+  reserve_floor: 'the emergency-fund floor',
+  none: 'no modeled constraint',
+};
+
+/** Name the constraints a cleared scenario actually tested, never a fixed list. */
+function clearedConstraintLabels(scenario: HomeAffordabilityScenarioResult): string[] {
+  return BINDING_CONSTRAINT_PRIORITY
+    .filter(([key]) => scenario.constraints[key] === true)
+    .map(([, constraint]) => BINDING_CONSTRAINT_LABELS[constraint]);
+}
+
 /** Deterministic disclosure appended to every home-affordability result. */
 export function describeHomeAffordabilityScenarioExecution(
   execution: HomeAffordabilityScenarioExecution
@@ -1146,7 +1280,28 @@ export function describeHomeAffordabilityScenarioExecution(
   const incompleteNotice = execution.scenarios.some((scenario) => scenario.assessment === 'incomplete')
     ? ' I did not label the purchase affordable or unaffordable because one or more cash-flow inputs are missing.'
     : '';
-  return `Home-affordability assumptions: ${execution.scenarios.map((scenario) => scenario.label).join(' compared with ')}. Defaults are a ${DEFAULT_LOAN_TERM_YEARS}-year loan, ${DEFAULT_CLOSING_COST_PERCENT}% closing costs, ${DEFAULT_MAINTENANCE_PERCENT}% annual maintenance, and a ${DEFAULT_EMERGENCY_FUND_MONTHS}-month emergency-fund target when the user did not supply those values.${lowerBoundNotice}${incompleteNotice} This evaluates household cash flow, not mortgage qualification or loan approval. Change any assumption and I will re-run it.`;
+  const bindingNotices = execution.scenarios
+    .filter((scenario) => scenario.bindingConstraint && scenario.bindingConstraint !== 'none')
+    .map((scenario) => `${scenario.label} is limited by ${
+      BINDING_CONSTRAINT_LABELS[scenario.bindingConstraint!]
+    }`);
+  const clearedScenario = execution.scenarios.find(
+    (scenario) => scenario.bindingConstraint === 'none'
+  );
+  const bindingNotice = bindingNotices.length > 0
+    ? ` Binding constraint: ${bindingNotices.join('; ')}.`
+    : clearedScenario
+      ? ` No modeled constraint binds: ${clearedConstraintLabels(clearedScenario).join(', ')} all clear.`
+      : '';
+  const retirementNotice = execution.scenarios.some(
+    (scenario) => scenario.metrics.surplusAfterRetirementContribution !== undefined
+  )
+    ? ` ${RETIREMENT_CONTRIBUTION_CAVEAT}`
+    : '';
+  const comparisonNotice = execution.comparisonUnavailableReason
+    ? ` I could not run the requested comparison case: ${execution.comparisonUnavailableReason}`
+    : '';
+  return `Home-affordability assumptions: ${execution.scenarios.map((scenario) => scenario.label).join(' compared with ')}. Defaults are a ${DEFAULT_LOAN_TERM_YEARS}-year loan, ${DEFAULT_CLOSING_COST_PERCENT}% closing costs, ${DEFAULT_MAINTENANCE_PERCENT}% annual maintenance, and a ${DEFAULT_EMERGENCY_FUND_MONTHS}-month emergency-fund target when the user did not supply those values.${lowerBoundNotice}${incompleteNotice}${bindingNotice}${retirementNotice}${comparisonNotice} This evaluates household cash flow, not mortgage qualification or loan approval. Change any assumption and I will re-run it.`;
 }
 
 export const homeAffordabilityScenarioCalculator: ScenarioCalculatorDefinition<
@@ -1175,6 +1330,7 @@ export const homeAffordabilityScenarioCalculator: ScenarioCalculatorDefinition<
     { id: 'maintenance_annual', label: 'Annual maintenance reserve', description: 'Annual reserve for maintenance and repairs.', valueType: 'currency', minimum: 0, maximum: 10_000_000 },
     { id: 'moving_and_initial_costs', label: 'Moving and initial costs', description: 'Moving, furnishing, and immediate repair costs paid at purchase.', valueType: 'currency', minimum: 0, maximum: 20_000_000 },
     { id: 'current_housing_cost_monthly', label: 'Current monthly housing cost', description: 'Current rent or ownership cost that the purchase replaces.', valueType: 'currency', minimum: 0, maximum: 1_000_000 },
+    { id: 'retirement_contribution_monthly', label: 'Monthly retirement contribution to preserve', description: 'Monthly retirement contribution the household wants to keep making after the purchase.', valueType: 'currency', minimum: 0, maximum: 1_000_000 },
     { id: 'emergency_fund_months', label: 'Emergency-fund target', description: 'Months of post-purchase expenses to retain in cash.', valueType: 'months', minimum: 0, maximum: 60 },
   ],
   defaults: [
@@ -1196,12 +1352,13 @@ export const homeAffordabilityScenarioCalculator: ScenarioCalculatorDefinition<
     { id: 'post_purchase_monthly_surplus', label: 'Post-purchase monthly operating surplus', unit: 'usd', scope: 'variant', description: 'Average connected-account income less modeled post-purchase expenses.' },
     { id: 'reserve_months', label: 'Cash runway after purchase', unit: 'months', scope: 'variant', description: 'Cash remaining divided by post-purchase expenses, or current spending when replacement housing cost is missing.' },
     { id: 'reserve_gap', label: 'Emergency-fund gap', unit: 'usd', scope: 'variant', description: 'Cash remaining above or below the selected emergency-fund target.' },
+    { id: 'surplus_after_retirement_contribution', label: 'Monthly surplus after preserving retirement contributions', unit: 'usd', scope: 'variant', description: 'Post-purchase operating surplus less the retirement contribution the household wants to keep making.' },
     { id: 'monthly_cost_gap', label: 'Monthly cost gap', unit: 'usd', scope: 'comparison', description: 'Absolute monthly ownership-cost difference between two variants.' },
     { id: 'upfront_cash_gap', label: 'Upfront cash gap', unit: 'usd', scope: 'comparison', description: 'Absolute upfront-cash difference between two variants.' },
   ],
   planner: {
     jsonSchema: HOME_AFFORDABILITY_SCENARIO_PLAN_JSON_SCHEMA,
-    instructions: `When the user asks whether a specific home purchase works, or asks to compare two home-price, down-payment, rate, term, or ownership-cost cases, set requested=true. Extract only numbers the user actually stated and put the matching short wording in overrides.sources. Percentage fields use percentage points: 6.5% is 6.5, not 0.065. The primary variant holds the first case. The comparison variant contains only values that differ from the primary; it inherits all other primary values. The application may use connected total cash, average income and expenses, the current FRED 30-year mortgage benchmark, and disclosed planning defaults for absent values. Do not infer property tax, insurance, HOA, PMI, current housing cost, or available cash from prose that does not state them. The overrides object and every field and source are always present; use null for every absent value and source. When no target-home scenario is requested, set requested=false and return null for every override and source in both variants. This calculator evaluates household cash flow, not lender qualification, and does not calculate a maximum qualifying loan.`,
+    instructions: `When the user asks whether a specific home purchase works, or asks to compare two home-price, down-payment, rate, term, or ownership-cost cases, set requested=true. Extract only numbers the user actually stated and put the matching short wording in overrides.sources. Percentage fields use percentage points: 6.5% is 6.5, not 0.065. The primary variant holds the first case. The comparison variant contains only values that differ from the primary; it inherits all other primary values. The application may use connected total cash, average income and expenses, the current FRED 30-year mortgage benchmark, and disclosed planning defaults for absent values. Do not infer property tax, insurance, HOA, PMI, current housing cost, available cash, or the retirement contribution from prose that does not state them. Set retirementContributionMonthly only when the user states a monthly retirement contribution they want to keep making; convert a stated per-paycheck or annual amount only when the user also states the frequency. The overrides object and every field and source are always present; use null for every absent value and source. When no target-home scenario is requested, set requested=false and return null for every override and source in both variants. This calculator evaluates household cash flow, not lender qualification, and does not calculate a maximum qualifying loan.`,
     parsePlan: parseHomeAffordabilityScenarioPlan,
   },
   execution: {
