@@ -146,6 +146,25 @@ type Status = 'unchanged' | 'drifted' | 'baseline' | 'error';
       const stored = entry.sourceFingerprint;
       if (!stored) {
         results.push({ key, status: 'baseline', detail: `no stored fingerprint; observed ${fingerprint.observed}`, fingerprint });
+      } else if (
+        stored.kind === 'published-values' &&
+        sha256(stored.observed) !== stored.value
+      ) {
+        // Auditors read `observed`; drift detection compares `value`. A split
+        // here means the registry itself is inconsistent, not that the source moved.
+        results.push({
+          key,
+          status: 'error',
+          detail: 'stored published-values fingerprint: value !== sha256(observed)',
+          fingerprint,
+        });
+      } else if (stored.kind !== fingerprint.kind) {
+        results.push({
+          key,
+          status: 'drifted',
+          detail: `recorded kind ${stored.kind}; observer now reports ${fingerprint.kind}`,
+          fingerprint,
+        });
       } else if (stored.value === fingerprint.value) {
         results.push({ key, status: 'unchanged', detail: `matches fingerprint recorded ${stored.observedAt}`, fingerprint });
       } else {

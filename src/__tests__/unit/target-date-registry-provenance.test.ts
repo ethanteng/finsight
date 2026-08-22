@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { describe, expect, it } from '@jest/globals';
 import { listRegistryEntries } from '../../services/target-date-fund-registry';
 
@@ -47,6 +48,18 @@ describe('target-date registry provenance', () => {
     }
   });
 
+  it('binds published-values hashes to the human-readable observed string', () => {
+    // Auditors read `observed`; the verifier compares `value`. If those diverge,
+    // humans and the machine are checking different evidence.
+    for (const entry of entries) {
+      const fingerprint = entry.sourceFingerprint;
+      if (fingerprint.kind !== 'published-values') continue;
+      expect(fingerprint.sourceAsOf).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+      expect(fingerprint.observed.startsWith(`${fingerprint.sourceAsOf}|`)).toBe(true);
+      expect(createHash('sha256').update(fingerprint.observed).digest('hex')).toBe(fingerprint.value);
+    }
+  });
+
   it('never claims an observation predating the allocation it attests to', () => {
     // A fingerprint taken before the holdings date would describe a different
     // publication than the one the weights came from.
@@ -70,8 +83,10 @@ describe('target-date registry provenance', () => {
     const first = listRegistryEntries()[0];
     first.weights.usEquity = -999;
     first.identity.vintage = 1900;
+    first.sourceFingerprint.value = 'tampered';
     const reread = listRegistryEntries()[0];
     expect(reread.weights.usEquity).not.toBe(-999);
     expect(reread.identity.vintage).not.toBe(1900);
+    expect(reread.sourceFingerprint.value).not.toBe('tampered');
   });
 });
