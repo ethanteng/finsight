@@ -105,6 +105,18 @@ describe('target-date registry provenance', () => {
     }
   });
 
+  it('keeps long holding names intact for human auditors', () => {
+    // A 71-character name cap previously truncated
+    // "State Street SPDR Bloomberg Enhanced Roll Yield…" to "Street SPDR…",
+    // which does not appear on the page. Auditors compare `observed` to the
+    // live table, so truncated names defeat the provenance check.
+    for (const entry of entries) {
+      const observed = entry.sourceFingerprint?.observed;
+      if (entry.sourceFingerprint?.kind !== 'published-values' || !observed) continue;
+      expect(observed).not.toMatch(/(^|\|)street spdr /);
+    }
+  });
+
   it('returns copies, so an auditing caller cannot mutate the live table', () => {
     const first = listRegistryEntries()[0];
     first.weights.usEquity = -999;

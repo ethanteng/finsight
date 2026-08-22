@@ -97,7 +97,12 @@ async function observeStateStreet(url: string): Promise<SourceFingerprint> {
   const end = rest.search(/Download All Holdings|Asset Allocation/i);
   const table = end === -1 ? rest : rest.slice(0, end);
 
-  const holdings = [...table.matchAll(/([A-Z][A-Za-z0-9 .,&()\/'-]{4,70}?)\s+(\d{1,2}\.\d{2})\s*%/g)]
+  // Holding names routinely exceed ~70 characters (e.g. State Street's
+  // "Enhanced Roll Yield Commodity Strategy" ETF is 77). Cap the capture high
+  // enough that a long name is read whole — a too-short limit silently starts
+  // mid-name ("Street SPDR…") and leaves auditors comparing a truncated string
+  // that does not appear on the page.
+  const holdings = [...table.matchAll(/([A-Z][A-Za-z0-9 .,&()\/'-]{4,160}?)\s+(\d{1,2}\.\d{2})\s*%/g)]
     .map(match => `${match[1].replace(/^Name Weight\s*/i, '').trim().toLowerCase()}=${match[2]}`)
     .filter(line => !/^name weight=/.test(line));
   const unique = [...new Set(holdings)].sort();
