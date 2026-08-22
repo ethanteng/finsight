@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, jest } from '@jest/globals';
 import { checkRegistrySources, hasDiverged, type RegistrySourceResult } from '../../services/registry-source-check';
+import { STALE_ALLOCATION_DAYS } from '../../services/target-date-fund-registry';
 
 const result = (over: Partial<RegistrySourceResult>): RegistrySourceResult => ({
   key: 'state-street/target-retirement/2040',
@@ -27,6 +28,15 @@ describe('registry source divergence', () => {
   it('does not treat an unchanged or unbaselined source as divergence', () => {
     expect(hasDiverged(result({ status: 'unchanged' }))).toBe(false);
     expect(hasDiverged(result({ status: 'baseline' }))).toBe(false);
+  });
+
+  it('uses the engine\'s own staleness threshold, not a second copy of it', () => {
+    // The admin panel and the retirement engine must agree on when an
+    // allocation is stale. #164 is about revisiting this number, so a private
+    // duplicate here would silently disagree the moment that lands.
+    expect(STALE_ALLOCATION_DAYS).toBe(366);
+    expect(result({ allocationAgeDays: STALE_ALLOCATION_DAYS, staleByAge: false }).staleByAge).toBe(false);
+    expect(result({ allocationAgeDays: STALE_ALLOCATION_DAYS + 1, staleByAge: true }).staleByAge).toBe(true);
   });
 
   it('reports age separately from divergence, because they answer different questions', () => {

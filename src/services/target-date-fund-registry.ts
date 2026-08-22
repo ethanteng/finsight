@@ -71,7 +71,15 @@ type RegistryEntry = Omit<
   sourceFingerprint: SourceFingerprint;
 };
 
-const STALE_ALLOCATION_DAYS = 366;
+/**
+ * Age at which a stored allocation is reported stale.
+ *
+ * Exported because the admin divergence check reports against the same
+ * threshold. Two copies would let the panel say an entry is fresh while the
+ * engine flags it stale — and #164 is specifically about revisiting this
+ * number, so a second copy is a bug waiting for that change to land.
+ */
+export const STALE_ALLOCATION_DAYS = 366;
 
 /**
  * Versioned, reviewable allocations for target-date products observed in the

@@ -14,6 +14,7 @@
 import { createHash } from 'node:crypto';
 import {
   listRegistryEntries,
+  STALE_ALLOCATION_DAYS,
   type SourceFingerprint,
 } from './target-date-fund-registry';
 
@@ -201,7 +202,6 @@ export interface RegistrySourceResult {
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-const STALE_ALLOCATION_DAYS = 366;
 
 /**
  * Observe every registry source concurrently and classify each result.
