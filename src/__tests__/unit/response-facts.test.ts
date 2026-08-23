@@ -524,6 +524,33 @@ describe('rounded canonical values', () => {
     expect(salvaged.insights).toEqual([]);
   });
 
+  it('rejoins a boundary made at an abbreviation nobody enumerated', () => {
+    // The point of the check: "amt." is on no list, and does not need to be.
+    // What follows it cannot open a sentence, so the boundary goes back and the
+    // grounded front half is never stranded as "Total owed, amt."
+    const response = {
+      summary: 'Your cash is $75,038.94.',
+      insights: ['Total owed, amt. $88,888, sits against debt of $350,095.40.'],
+    };
+    const salvaged = salvageUngroundedResponse(response, pack, validateResponseFacts(response, pack));
+
+    expect(salvaged.insights).toEqual([]);
+    expect(salvaged.insights?.join(' ')).not.toContain('amt.');
+  });
+
+  it('rejoins a sentence that really does open on an amount', () => {
+    // The cost of not trusting a leading figure, pinned deliberately: this is
+    // two sentences, and salvage removes both. Over-removal on the salvage path
+    // is the trade for never handing the reader half a sentence.
+    const response = {
+      summary: 'Your cash is $75,038.94.',
+      insights: ['Your cash is $75,038.94. $412,000 more would cover the gap.'],
+    };
+    const salvaged = salvageUngroundedResponse(response, pack, validateResponseFacts(response, pack));
+
+    expect(salvaged.insights).toEqual([]);
+  });
+
   it('still splits a takeaway that really is two sentences', () => {
     const response = {
       summary: 'Your cash is $75,038.94.',

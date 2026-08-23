@@ -346,13 +346,18 @@ export function validateResponseFacts(
  * Single-letter initialisms ("U.S.", "e.g.") are caught by the letter test in
  * `isAbbreviationPeriod`; these are the ones that survive it.
  *
- * The bar for membership is narrow on purpose. An entry here overrides every
- * other signal, so it may only hold shortenings that always govern something
- * after them: "vs. Treasury bills", "approx. $40,000", "Ms. Chen". Shortenings
- * that can close a sentence -- "etc.", "Acme Inc.", "the Treasury Dept." --
- * are deliberately absent, because they need no entry: when one of them really
- * is mid-sentence, the text after it continues in lowercase and
- * `continuesInLowercase` holds the sentence together on that evidence instead.
+ * The bar for membership is narrow on purpose. An entry here suppresses a
+ * boundary outright, so it may only hold shortenings that always govern
+ * something after them: "vs. Treasury bills", "approx. $40,000", "Ms. Chen".
+ * Shortenings that can close a sentence -- "etc.", "Acme Inc.", "the Treasury
+ * Dept." -- are deliberately absent.
+ *
+ * The list is a courtesy, not the guard. `rejoinFalseBoundaries` catches an
+ * abbreviation nobody enumerated, because what follows one mid-sentence cannot
+ * stand as a sentence. What the list still buys is the mirror case, where the
+ * stranded half is the one in front: "vs." followed by "Treasury bills" would
+ * leave a grounded "...compare your cash yield vs." behind, and no check on
+ * the segment after it can see that.
  */
 const NEVER_SENTENCE_FINAL_ABBREVIATIONS = new Set([
   'approx', 'cf', 'dr', 'est', 'excl', 'incl', 'mr', 'mrs', 'ms', 'vs',
@@ -369,24 +374,13 @@ function isAbbreviationPeriod(text: string, index: number, punctuation: string):
 
 const BRACKET_CLOSERS: Record<string, string> = { '(': ')', '[': ']' };
 
-/**
- * True when the punctuation at `index` sits inside a bracket that opens before
- * it and closes after it. "(average income of $9,000 vs. expenses of $12,000)"
- * is one parenthetical: cutting it in half leaves a stray ")" behind.
- *
- * Both halves of the pair have to be there, and they have to match. An opener
- * that never closes -- a lone "(" the model forgot about -- would otherwise
- * swallow every sentence boundary in the rest of the answer, and a "]" would
- * close a "(" if the two shared one depth counter. Either way the guard would
- * cause the over-merge it exists to prevent.
- */
-function isInsideBrackets(text: string, index: number): boolean {
-  const open: { closer: string; at: number }[] = [];
-  for (let i = 0; i < text.length; i++) {
-    const character = text[i];
+/** Every bracket this text opens, it also closes -- and closes with its own kind. */
+function bracketsBalanced(text: string): boolean {
+  const open: string[] = [];
+  for (const character of text) {
     const closer = BRACKET_CLOSERS[character];
     if (closer) {
-      open.push({ closer, at: i });
+      open.push(closer);
       continue;
     }
     if (character !== ')' && character !== ']') continue;
@@ -394,38 +388,66 @@ function isInsideBrackets(text: string, index: number): boolean {
     // still open inside that pair never closed and is discarded with it, so a
     // stray "[" cannot stop a "(" from closing.
     let matched = open.length - 1;
-    while (matched >= 0 && open[matched].closer !== character) matched--;
-    if (matched < 0) continue;
-    if (open[matched].at < index && i > index) return true;
+    while (matched >= 0 && open[matched] !== character) matched--;
+    if (matched < 0) return false;
     open.length = matched;
   }
-  return false;
+  return open.length === 0;
 }
 
 /**
- * A sentence starts with a capital, a digit, or a symbol — never a lowercase
- * word. When the text after the punctuation continues in lowercase, the period
- * belonged to an abbreviation this module has not enumerated.
+ * How a sentence begins: a capital, a name styled lowercase ("iShares",
+ * "eBay"), or an opening bracket or quote.
  *
- * A ticker-style brand is the exception that does open a sentence in
- * lowercase: "iShares", "eBay", "eTrade". The capital later in the word marks
- * it as a name rather than an ordinary word, and answers about a portfolio
- * name such funds often enough that merging there would cost a grounded
- * sentence.
+ * An amount is deliberately not on the list. "$9,848 of expenses" reads as a
+ * sentence to a regular expression and never does to a person -- the amount
+ * was governed by whatever stood in front of it. Treating it as a boundary is
+ * what leaves the front of a sentence stranded, so a real sentence opening on
+ * a figure is rejoined to the one before it instead. That costs a clause on
+ * the salvage path; the alternative costs the reader a fragment.
  */
-function continuesInLowercase(text: string, end: number): boolean {
-  const nextWord = /^\s+([a-z][A-Za-z'’]*)/.exec(text.slice(end))?.[1];
-  return nextWord !== undefined && !/[A-Z]/.test(nextWord);
+const SENTENCE_START = /^(?:[A-Z]|[a-z][A-Za-z'\u2019]*[A-Z]|["'\u201C\u2018([])/;
+
+/** A segment that can stand on its own: it opens like a sentence and closes its brackets. */
+function readsAsSentence(segment: string): boolean {
+  const trimmed = segment.trim();
+  return SENTENCE_START.test(trimmed) && bracketsBalanced(trimmed);
 }
 
 /**
- * Split on sentence punctuation that ends a sentence. A period inside "$1.92"
- * is followed by a digit, so decimals stay intact.
+ * Put back any boundary the split should not have made.
  *
- * Every test here errs toward keeping text together, because these sentences
- * are the unit that grounding removes: an over-eager split hands the user the
- * back half of a sentence whose subject was just deleted, while an under-eager
- * one only removes a clause that would have survived on its own.
+ * Punctuation alone cannot say where a sentence ends: an abbreviation, an
+ * amount, a bracket or a styled name will always be able to fool it, and the
+ * list of ways grows every time someone looks. So the split is a proposal and
+ * this is the check on it -- a segment that cannot stand on its own rejoins
+ * the one before it.
+ *
+ * What that buys is a bound on the damage. These segments are the unit
+ * grounding removes, so a boundary restored here costs a clause that would
+ * have survived, while a bad boundary left standing ships the back half of a
+ * sentence whose subject was just deleted. The proposal being wrong is now a
+ * question of how much text survives, not of what the reader is handed.
+ */
+function rejoinFalseBoundaries(segments: string[]): string[] {
+  const joined: string[] = [];
+  for (const segment of segments) {
+    if (joined.length > 0 && !readsAsSentence(segment)) {
+      joined[joined.length - 1] += segment;
+      continue;
+    }
+    joined.push(segment);
+  }
+  return joined;
+}
+
+/**
+ * Split into the units grounding may remove. A period inside "$1.92" is
+ * followed by a digit, so decimals stay intact.
+ *
+ * Punctuation proposes the boundaries and `rejoinFalseBoundaries` decides which
+ * of them survive, so this half does not have to be right about every
+ * abbreviation, bracket or amount in the language -- only cheap.
  */
 function splitSentences(text: string): string[] {
   const sentences: string[] = [];
@@ -433,14 +455,12 @@ function splitSentences(text: string): string[] {
   for (const match of text.matchAll(/[.!?]+(?=\s|$)/g)) {
     const index = match.index ?? 0;
     if (isAbbreviationPeriod(text, index, match[0])) continue;
-    if (isInsideBrackets(text, index)) continue;
     const end = index + match[0].length;
-    if (continuesInLowercase(text, end)) continue;
     sentences.push(text.slice(start, end));
     start = end;
   }
   if (start < text.length) sentences.push(text.slice(start));
-  return sentences;
+  return rejoinFalseBoundaries(sentences);
 }
 
 /** Guards against a stray fragment ("U.S.") passing for a surviving answer. */
