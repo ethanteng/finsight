@@ -164,8 +164,12 @@ const NON_MONEY_NOUN_AFTER =
  * sentence "a $3,000 monthly shortfall" is cut from the answer as an invented
  * number while the fact it names sits in the pack.
  */
+// Bare "gap of" is not a negative cue: scenario comparison facts publish
+// absolute gaps (monthly cost, upfront cash, survival rate) as positive
+// magnitudes via abs(input[0] - input[1]). Only gaps that name a shortfall
+// (reserve / funding / emergency-fund) are signed in the pack.
 const NEGATIVE_WORDING_BEFORE =
-  /\b(?:negative|minus|deficit\s+of|shortfall\s+of|shortage\s+of|gap\s+of|short(?:falling)?\s+by|down\s+by|behind\s+by|in\s+the\s+red\s+by)\s*(?:about\s+|roughly\s+|around\s+|approximately\s+|some\s+)?$/i;
+  /\b(?:negative|minus|deficit\s+of|shortfall\s+of|shortage\s+of|(?:reserve|funding|emergency(?:-|\s+)fund)\s+gap\s+of|short(?:falling)?\s+by|down\s+by|behind\s+by|in\s+the\s+red\s+by)\s*(?:about\s+|roughly\s+|around\s+|approximately\s+|some\s+)?$/i;
 const PERIOD_QUALIFIER = String.raw`(?:monthly|annual|annualized|yearly|weekly|net|average|per\s+(?:month|year|week)|a\s+(?:month|year|week))`;
 const NEGATIVE_WORDING_AFTER = new RegExp(
   String.raw`^\s*(?:${PERIOD_QUALIFIER}\s+)*(?:shortfall|deficit|shortage|negative|in\s+the\s+red)\b`,

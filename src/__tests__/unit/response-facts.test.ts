@@ -323,6 +323,35 @@ describe('negative canonical values written as magnitudes', () => {
     // Stated correctly, the same fact still grounds.
     expect(validateResponseFacts({ summary: 'You have $3,000 left over each month.' }, surplus).valid).toBe(true);
   });
+
+  it('does not treat absolute comparison gaps as negative magnitudes', () => {
+    // Home-affordability and retirement comparisons publish abs() gaps as
+    // positive facts. A bare "gap of $1,200" must still cite that positive
+    // magnitude — flipping the sign would reject a correct comparison sentence.
+    const gapPack = {
+      facts: [
+        { id: 'monthly_cost_gap', label: 'Absolute monthly ownership-cost gap', value: 1_200, unit: 'usd',
+          provenance: { kind: 'user_input', source: 'test' } },
+      ],
+    } as any;
+    expect(validateResponseFacts(
+      { summary: 'There is a monthly cost gap of $1,200 between the two homes.' },
+      gapPack
+    )).toMatchObject({ valid: true });
+  });
+
+  it('still reads a named reserve gap as the signed shortfall', () => {
+    const reservePack = {
+      facts: [
+        { id: 'reserve_gap', label: 'Emergency-fund gap', value: -15_000, unit: 'usd',
+          provenance: { kind: 'user_input', source: 'test' } },
+      ],
+    } as any;
+    expect(validateResponseFacts(
+      { summary: 'You have an emergency fund gap of $15,000 after the down payment.' },
+      reservePack
+    )).toMatchObject({ valid: true });
+  });
 });
 
 describe('rounded canonical values', () => {
