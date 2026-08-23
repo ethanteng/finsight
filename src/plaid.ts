@@ -569,9 +569,11 @@ export const setupPlaidRoutes = (app: any) => {
       const { public_token } = req.body;
       console.log('Exchanging public token for access token...');
 
-      // Debug authentication
-      console.log('Exchange token - headers:', req.headers);
-      console.log('Exchange token - user:', req.user);
+      // Debug authentication. Never dump req.headers — it carries the caller's
+      // live Bearer JWT and session cookies, and this runs on a route every
+      // linking user hits. Identify the caller by id, not by the user object,
+      // which carries their email address.
+      console.log('Exchange token - authenticated user:', req.user?.id ?? 'none');
 
       const exchangeResponse = await plaidClient.itemPublicTokenExchange({
         public_token: public_token,
