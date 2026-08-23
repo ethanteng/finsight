@@ -75,18 +75,28 @@ export class BraveSearchRateLimiter {
 
   async waitForNextCall(): Promise<void> {
     const now = Date.now();
-    const intervalBlockedUntil = this.lastCallTime + this.MIN_INTERVAL;
-    const waitTime = Math.max(intervalBlockedUntil, this.serverBlockedUntil) - now;
+    // Claim this call's slot before yielding. Concurrent callers all read the
+    // same lastCallTime, so without a reservation they would sleep to one
+    // shared deadline and then fire together, bursting past the per-second
+    // allowance the interval exists to respect.
+    const slot = Math.max(this.lastCallTime + this.MIN_INTERVAL, this.serverBlockedUntil, now);
+    const waitTime = slot - now;
 
     if (waitTime > this.MAX_SERVER_WAIT_MS) {
-      throw new Error(`Brave Search quota is exhausted for another ${Math.ceil(waitTime / 1000)} seconds`);
+      // Shed the call rather than queue it, and say which limit turned it
+      // away: a refusal we are still backing off from is a quota problem,
+      // while anything else is just more demand than the floor allows.
+      throw this.serverBlockedUntil - now > this.MAX_SERVER_WAIT_MS
+        ? new Error(`Brave Search quota is exhausted for another ${Math.ceil(waitTime / 1000)} seconds`)
+        : new Error(`Brave Search is pacing requests; the next free slot is ${Math.ceil(waitTime / 1000)}s away`);
     }
+
+    // Held even while sleeping, so the next caller queues behind this slot.
+    this.lastCallTime = slot;
     if (waitTime > 0) {
       console.log(`BraveSearchRateLimiter: Waiting ${waitTime}ms before next API call`);
       await new Promise(resolve => setTimeout(resolve, waitTime));
     }
-    
-    this.lastCallTime = Date.now();
   }
 
   observeResponse(response: Response): void {

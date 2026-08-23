@@ -209,6 +209,32 @@ describe('BraveSearchRateLimiter window accounting', () => {
     await expect(limiter.waitForNextCall()).resolves.toBeUndefined();
   });
 
+  it('reserves a slot per caller so concurrent searches cannot burst', async () => {
+    process.env.BRAVE_MIN_REQUEST_INTERVAL_MS = '50';
+    const limiter = new BraveSearchRateLimiter();
+    const startedAt = Date.now();
+    const admittedAt: number[] = [];
+
+    // Three callers arrive together, as concurrent Ask requests do. Reading a
+    // shared lastCallTime without reserving would admit all three at once.
+    await Promise.all([0, 1, 2].map(() => (
+      limiter.waitForNextCall().then(() => { admittedAt.push(Date.now() - startedAt); })
+    )));
+
+    admittedAt.sort((first, second) => first - second);
+    expect(admittedAt[1]).toBeGreaterThanOrEqual(45);
+    expect(admittedAt[2]).toBeGreaterThanOrEqual(95);
+  });
+
+  it('names pacing rather than quota when the floor is what turned a call away', async () => {
+    process.env.BRAVE_MIN_REQUEST_INTERVAL_MS = '5000';
+    const limiter = new BraveSearchRateLimiter();
+
+    await limiter.waitForNextCall();
+
+    await expect(limiter.waitForNextCall()).rejects.toThrow('pacing requests');
+  });
+
   it('caps a metered window whose reset is further out than a retry can wait', async () => {
     const limiter = new BraveSearchRateLimiter();
 
