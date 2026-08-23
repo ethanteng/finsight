@@ -459,6 +459,22 @@ describe('rounded canonical values', () => {
     expect(salvaged.insights).toEqual([]);
   });
 
+  it('does not cut a sentence in half at incl. before a dollar amount', () => {
+    // continuesInLowercase only catches letter continuations; financial prose
+    // often writes "incl. $X", which that backstop misses. Without incl/excl on
+    // the abbreviation list, salvage would keep the grounded tail as an orphan.
+    const response = {
+      summary: 'Your cash is $75,038.94.',
+      insights: [
+        "You're running a monthly gap of about -$3,000 incl. $9,848 of expenses already counted.",
+      ],
+    };
+    const salvaged = salvageUngroundedResponse(response, pack, validateResponseFacts(response, pack));
+
+    expect(salvaged.insights).toEqual([]);
+    expect(salvaged.insights?.join(' ')).not.toContain('expenses already counted');
+  });
+
   it('still splits a takeaway that really is two sentences', () => {
     const response = {
       summary: 'Your cash is $75,038.94.',

@@ -349,8 +349,8 @@ export function validateResponseFacts(
  * sentence too many costs less than gluing two together.
  */
 const SENTENCE_SAFE_ABBREVIATIONS = new Set([
-  'approx', 'avg', 'cf', 'co', 'corp', 'dept', 'dr', 'est', 'etc', 'fig',
-  'inc', 'jr', 'ltd', 'mr', 'mrs', 'ms', 'sr', 'vs',
+  'approx', 'avg', 'cf', 'co', 'corp', 'dept', 'dr', 'est', 'etc', 'excl',
+  'fig', 'inc', 'incl', 'jr', 'ltd', 'mr', 'mrs', 'ms', 'sr', 'vs',
 ]);
 
 /** "U.S." and "e.g." end in a single letter; a real sentence rarely does. */
