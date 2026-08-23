@@ -273,6 +273,23 @@ describe('negative canonical values written as magnitudes', () => {
     expect(validateResponseFacts({ summary }, pack)).toMatchObject({ valid: true });
   });
 
+  it('marks both ends of a trailing-shortfall range as negative', () => {
+    // "a $3,000-4,000 monthly shortfall" puts the cue after the range, so the
+    // first end only inherits the sign via backward propagation.
+    const rangePack = {
+      facts: [
+        { id: 'short_a', label: 'Shortfall low', value: -3_000, unit: 'usd',
+          provenance: { kind: 'user_input', source: 'test' } },
+        { id: 'short_b', label: 'Shortfall high', value: -4_000, unit: 'usd',
+          provenance: { kind: 'user_input', source: 'test' } },
+      ],
+    } as any;
+    expect(validateResponseFacts(
+      { summary: 'Income below expenses leaves a $3,000-4,000 monthly shortfall.' },
+      rangePack
+    )).toMatchObject({ valid: true });
+  });
+
   it('keeps the cash-flow sentence in the delivered answer', () => {
     const response = {
       summary: 'Your day-to-day cash flow is running negative most months (average monthly income of $9,000 against average monthly expenses of $12,000, a $3,000 monthly shortfall), which is a real flag before adding a mortgage payment.',

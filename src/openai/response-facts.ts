@@ -245,7 +245,8 @@ function scanProseClaims(prose: string): ProseClaim[] {
   }
 
   // Both ends of a range share a unit: "$50,000-100,000" and "10-15%".
-  // They share a sign too: "a shortfall of $3,000-4,000" is two negatives.
+  // They share a sign too: "a shortfall of $3,000-4,000" and
+  // "a $3,000-4,000 monthly shortfall" are two negatives either way.
   for (let i = 1; i < claims.length; i++) {
     if (claims[i].rangeLinked && !claims[i].unit) claims[i].unit = claims[i - 1].unit;
     if (claims[i].rangeLinked && claims[i - 1].negativeWording) claims[i].negativeWording = true;
@@ -253,6 +254,9 @@ function scanProseClaims(prose: string): ProseClaim[] {
   for (let i = claims.length - 1; i > 0; i--) {
     if (claims[i].rangeLinked && claims[i].unit && !claims[i - 1].unit) {
       claims[i - 1].unit = claims[i].unit;
+    }
+    if (claims[i].rangeLinked && claims[i].negativeWording) {
+      claims[i - 1].negativeWording = true;
     }
   }
   return claims;
