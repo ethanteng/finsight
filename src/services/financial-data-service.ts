@@ -19,6 +19,7 @@ import { fetchPublicData } from './public-api/fetch-public-data';
 import { supersedeSnapTradePublicAccounts } from './public-api/supersede-snaptrade';
 import type { CanonicalInvestmentPortfolio } from './canonical-financial-snapshot';
 import { loadPersistedPlaidData } from './financial-source-persistence';
+import { isNonPlaidAccountId } from './plaid-account-scope';
 import { normalizeAssetType, resolveAssetTypeWithHeuristics } from './asset-class';
 import {
   fetchAllPlaidTransactions,
@@ -1075,11 +1076,13 @@ export class FinancialDataService {
         }
       });
       
-      // Filter to only Plaid accounts (exclude SnapTrade and manual accounts)
-      const plaidDbAccounts = dbAccounts.filter(acc => 
-        acc.plaidAccountId && 
-        !acc.plaidAccountId.startsWith('snaptrade-') && 
-        !acc.plaidAccountId.startsWith('manual-')
+      // Filter to only Plaid accounts. This overlay is keyed by Plaid's own
+      // account_id and only ever read for accounts Plaid just returned, so a
+      // foreign row here is inert rather than harmful — but the namespaces
+      // belong in one list, not spelled out a second time where the next one
+      // added would go unnoticed.
+      const plaidDbAccounts = dbAccounts.filter(acc =>
+        acc.plaidAccountId && !isNonPlaidAccountId(acc.plaidAccountId)
       );
       
       // Create a map of plaidAccountId -> custom name
