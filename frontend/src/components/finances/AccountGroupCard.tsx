@@ -1,5 +1,6 @@
 "use client";
 import { useState } from 'react';
+import { Pencil } from 'lucide-react';
 import type { FinancesAccount } from '../../types/finances-overview';
 import { resolveAccountBalance } from '../../lib/account-balance';
 import { formatAccountAsOf } from '../../lib/account-as-of';
@@ -200,15 +201,22 @@ export default function AccountGroupCard({
                         </button>
                       </div>
                     ) : (
-                      <div className="flex min-w-0 items-center gap-2">
+                      <div className="flex min-w-0 items-start gap-1.5">
                         <div className="min-w-0 break-words font-medium text-white">{name}</div>
                         {account.source !== 'manual' && (
+                          /* The icon stays at the name's line height so it reads as an
+                             affordance rather than a second heading. `!min-h-0` opts out of
+                             the mobile 44px button floor in globals.css — that floor would
+                             stretch this button to 44px and pad every row out — and the
+                             `after` box restores a 40px touch target without taking layout
+                             space. */
                           <button
                             onClick={(e) => handleStartEdit(account, e)}
-                            className="text-gray-400 hover:text-white text-sm transition-opacity"
+                            className="relative grid h-6 w-6 shrink-0 place-items-center rounded text-gray-500 transition-colors after:absolute after:-inset-2 after:content-[''] hover:text-[#102319] !min-h-0"
                             title="Rename account"
+                            aria-label={`Rename ${name}`}
                           >
-                            ✏️
+                            <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
                           </button>
                         )}
                       </div>
