@@ -561,6 +561,43 @@ describe('rounded canonical values', () => {
     expect(salvaged.insights).toEqual(['Your cash is $75,038.94.']);
   });
 
+  it('does not ship an orphan ending in an unlisted abbreviation before a capital', () => {
+    // Mirror case the following-segment check cannot see: "No." is on no list,
+    // the next segment opens like a sentence, and without rejoining on the
+    // prior ending salvage would keep the stranded front half.
+    const response = {
+      summary: 'Your cash is $75,038.94.',
+      insights: ['See item No. Transfers could cost $88,888 against cash of $75,038.94.'],
+    };
+    const salvaged = salvageUngroundedResponse(response, pack, validateResponseFacts(response, pack));
+
+    expect(salvaged.insights).toEqual([]);
+    expect(salvaged.insights?.join(' ')).not.toContain('See item No.');
+  });
+
+  it('does not ship an orphan ending in a lowercase abbreviation before a capital', () => {
+    const response = {
+      summary: 'Your cash is $75,038.94.',
+      insights: ['Owed wt. Treasury debt of $350,095.40 after a gap of -$3,000.'],
+    };
+    const salvaged = salvageUngroundedResponse(response, pack, validateResponseFacts(response, pack));
+
+    expect(salvaged.insights).toEqual([]);
+    expect(salvaged.insights?.join(' ')).not.toContain('Owed wt.');
+  });
+
+  it('keeps a grounded sentence that ends in U.S. before a new sentence', () => {
+    // Single-letter initialisms must not suppress a real boundary when the
+    // following text already reads as its own sentence.
+    const response = {
+      summary: 'Your cash is $75,038.94.',
+      insights: ['Your cash is $75,038.94 in the U.S. A transfer could cost $88,888.'],
+    };
+    const salvaged = salvageUngroundedResponse(response, pack, validateResponseFacts(response, pack));
+
+    expect(salvaged.insights).toEqual(['Your cash is $75,038.94 in the U.S.']);
+  });
+
   it('keeps a verified answer when only a key number was miscited', () => {
     const response = {
       summary: 'Your portfolio is worth $1.92 million.',

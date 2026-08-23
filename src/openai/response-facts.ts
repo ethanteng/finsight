@@ -348,29 +348,26 @@ export function validateResponseFacts(
  *
  * The bar for membership is narrow on purpose. An entry here suppresses a
  * boundary outright, so it may only hold shortenings that always govern
- * something after them: "vs. Treasury bills", "approx. $40,000", "Ms. Chen".
- * Shortenings that can close a sentence -- "etc.", "Acme Inc.", "the Treasury
- * Dept." -- are deliberately absent.
+ * something after them: "vs. Treasury bills", "incl. fees", "Ms. Chen".
+ * Shortenings that can close a sentence -- "etc.", "Acme Inc.", "$40,000 est."
+ * -- are deliberately absent; `rejoinFalseBoundaries` handles those when the
+ * following segment cannot stand alone, and `endsWithLikelyAbbreviation`
+ * handles the mirror case when it can.
  *
- * The list is a courtesy, not the guard. `rejoinFalseBoundaries` catches an
- * abbreviation nobody enumerated, because what follows one mid-sentence cannot
- * stand as a sentence. What the list still buys is the mirror case, where the
- * stranded half is the one in front: "vs." followed by "Treasury bills" would
- * leave a grounded "...compare your cash yield vs." behind, and no check on
- * the segment after it can see that.
+ * Suppressing a boundary is skipped when the following text already reads as
+ * its own sentence (so "U.S. A transfer…" keeps the real boundary).
  */
 const NEVER_SENTENCE_FINAL_ABBREVIATIONS = new Set([
-  'approx', 'cf', 'dr', 'est', 'excl', 'incl', 'mr', 'mrs', 'ms', 'vs',
+  'cf', 'dr', 'excl', 'incl', 'mr', 'mrs', 'ms', 'vs',
 ]);
 
-/** "U.S." and "e.g." end in a single letter; a real sentence rarely does. */
-function isAbbreviationPeriod(text: string, index: number, punctuation: string): boolean {
-  if (punctuation !== '.') return false;
-  const before = text.slice(0, index);
-  if (/(?:^|[^A-Za-z])[A-Za-z]$/.test(before)) return true;
-  const word = /([A-Za-z]+)$/.exec(before)?.[1];
-  return word !== undefined && NEVER_SENTENCE_FINAL_ABBREVIATIONS.has(word.toLowerCase());
-}
+/**
+ * Company / person suffixes that may legitimately end a sentence. Used to keep
+ * "Acme Inc. A transfer…" split while still rejoining "See item No. Transfers…".
+ */
+const SENTENCE_FINAL_SHORT_FORMS = new Set([
+  'bros', 'co', 'corp', 'inc', 'jr', 'llc', 'llp', 'ltd', 'plc', 'sr',
+]);
 
 const BRACKET_CLOSERS: Record<string, string> = { '(': ')', '[': ']' };
 
@@ -415,13 +412,68 @@ function readsAsSentence(segment: string): boolean {
 }
 
 /**
+ * "U.S." / "e.g." / "vs." look like sentence endings to the punctuation pass.
+ * Suppress that boundary only when what follows cannot stand as a sentence --
+ * otherwise "Held in the U.S. A transfer…" would glue an unsupported claim onto
+ * a grounded one and delete both.
+ */
+function isAbbreviationPeriod(text: string, index: number, punctuation: string): boolean {
+  if (punctuation !== '.') return false;
+  const before = text.slice(0, index);
+  const singleLetter = /(?:^|[^A-Za-z])[A-Za-z]$/.test(before);
+  const word = /([A-Za-z]+)$/.exec(before)?.[1];
+  const knownMulti =
+    word !== undefined && NEVER_SENTENCE_FINAL_ABBREVIATIONS.has(word.toLowerCase());
+  if (!singleLetter && !knownMulti) return false;
+  const after = text.slice(index + punctuation.length);
+  if (readsAsSentence(after)) return false;
+  return true;
+}
+
+/**
+ * Abbreviations that strand a front half when the next segment opens like a
+ * sentence ("...yield vs. Treasury…", "See item No. Transfers…"). Includes the
+ * never-final set plus shortenings too common in financial prose to ignore,
+ * and deliberately includes "etc." / "est." / "approx." -- rejoining those
+ * over-removes rather than shipping a fragment.
+ *
+ * Do not replace this with a length heuristic: "million.", "cash.", and
+ * "year." are ordinary sentence endings.
+ */
+const MIRROR_ABBREVIATIONS = new Set([
+  ...NEVER_SENTENCE_FINAL_ABBREVIATIONS,
+  'al', 'approx', 'est', 'etc', 'amt', 'fig', 'mo', 'vol', 'wt', 'yr',
+  'jan', 'feb', 'mar', 'apr', 'jun', 'jul', 'aug', 'sep', 'sept', 'oct', 'nov', 'dec',
+]);
+
+/**
+ * The stranded-front half of a false split: "...yield vs." / "See item No." /
+ * "Per Smith et al." when the next segment opens like a real sentence.
+ *
+ * Membership is denylisted, not length-based -- "million." and "cash." must
+ * not rejoin. Capitalized endings of three letters or fewer that are not a
+ * known company/person suffix cover "No." / "Jan." / "Vol." Single-letter
+ * endings are left alone: "U.S. A transfer…" must stay split; "e.g. Cash…"
+ * is the residual trade.
+ */
+function endsWithLikelyAbbreviation(segment: string): boolean {
+  const word = /\b([A-Za-z]+)\.\s*$/.exec(segment.trim())?.[1];
+  if (!word || word.length === 1) return false;
+  const lower = word.toLowerCase();
+  if (SENTENCE_FINAL_SHORT_FORMS.has(lower)) return false;
+  if (MIRROR_ABBREVIATIONS.has(lower)) return true;
+  if (word[0] === word[0].toUpperCase() && word !== lower && word.length <= 3) return true;
+  return false;
+}
+
+/**
  * Put back any boundary the split should not have made.
  *
  * Punctuation alone cannot say where a sentence ends: an abbreviation, an
  * amount, a bracket or a styled name will always be able to fool it, and the
  * list of ways grows every time someone looks. So the split is a proposal and
- * this is the check on it -- a segment that cannot stand on its own rejoins
- * the one before it.
+ * this is the check on it -- a segment that cannot stand on its own, or that
+ * follows a segment ending in a likely abbreviation, rejoins the one before it.
  *
  * What that buys is a bound on the damage. These segments are the unit
  * grounding removes, so a boundary restored here costs a clause that would
@@ -432,7 +484,10 @@ function readsAsSentence(segment: string): boolean {
 function rejoinFalseBoundaries(segments: string[]): string[] {
   const joined: string[] = [];
   for (const segment of segments) {
-    if (joined.length > 0 && !readsAsSentence(segment)) {
+    if (
+      joined.length > 0 &&
+      (!readsAsSentence(segment) || endsWithLikelyAbbreviation(joined[joined.length - 1]))
+    ) {
       joined[joined.length - 1] += segment;
       continue;
     }
