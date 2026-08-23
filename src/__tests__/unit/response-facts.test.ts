@@ -283,11 +283,28 @@ describe('negative canonical values written as magnitudes', () => {
     expect(salvageUngroundedResponseWithDetail(response, pack, result).removals.sentences).toEqual([]);
   });
 
-  it('still rejects a magnitude no fact carries under either sign', () => {
+  it('still rejects a magnitude no fact carries as a negative', () => {
     expect(validateResponseFacts({ summary: 'You are running a $4,200 monthly shortfall.' }, pack).valid).toBe(false);
-    // The negative wording widens matching for the number it marks, not for
-    // every number in the sentence.
+    // The negative wording moves the number it marks, not every number in the
+    // sentence.
     expect(validateResponseFacts({ summary: 'A negative $3,000 month leaves $77,000 uncovered.' }, pack).valid).toBe(false);
+  });
+
+  it('refuses to read a positive fact as a shortfall', () => {
+    // The reversal the reasoning prompt forbids: a surplus reported as a
+    // deficit reverses the user's position, so negative wording must match
+    // the negated fact and only that one.
+    const surplus = buildCanonicalFactPack(
+      { ...negativeCashFlow, averageMonthlyIncome: 12_000, averageMonthlyExpense: 9_000 },
+      'Can I afford a second home?',
+      questionNeedsFromPacks([], false)
+    );
+    expect(surplus.facts.find((fact) => fact.id === 'average_monthly_operating_cash_flow'))
+      .toMatchObject({ value: 3_000 });
+    expect(validateResponseFacts({ summary: 'You are running a $3,000 monthly shortfall.' }, surplus).valid).toBe(false);
+    expect(validateResponseFacts({ summary: 'Your cash flow is negative $3,000.' }, surplus).valid).toBe(false);
+    // Stated correctly, the same fact still grounds.
+    expect(validateResponseFacts({ summary: 'You have $3,000 left over each month.' }, surplus).valid).toBe(true);
   });
 });
 

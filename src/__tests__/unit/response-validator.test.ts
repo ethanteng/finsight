@@ -43,10 +43,21 @@ describe('buildSnapshotSummaryForValidation', () => {
     expect(summary).toContain('retired');
   });
 
-  it('bounds the personal context block', () => {
-    const summary = buildSnapshotSummaryForValidation({ ...snapshot, userProfile: 'x'.repeat(2_000) });
-    expect(summary).toContain('x'.repeat(600));
-    expect(summary).not.toContain('x'.repeat(601));
+  it('bounds each line without dropping the fields written last', () => {
+    // formatPersonalContextForModel emits occupation, employment status and
+    // retirement status at the end, so a prefix cut on the whole block would
+    // hide exactly the details the reported objection was about.
+    const profile = [
+      `- Occupation: ${'x'.repeat(2_000)}`,
+      '- Employment status: retired',
+      '- Retirement status: retired',
+    ].join('\n');
+    const summary = buildSnapshotSummaryForValidation({ ...snapshot, userProfile: profile });
+
+    expect(summary).toContain('x'.repeat(180));
+    expect(summary).not.toContain('x'.repeat(201));
+    expect(summary).toContain('- Employment status: retired');
+    expect(summary).toContain('- Retirement status: retired');
   });
 
   it('says nothing about personal context when none was loaded', () => {

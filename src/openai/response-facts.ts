@@ -267,11 +267,14 @@ function claimNeedsGrounding(claim: ProseClaim): boolean {
 }
 
 function claimIsSupported(claim: ProseClaim, pack: CanonicalFactPack): boolean {
-  // A magnitude the sentence already called negative may cite the signed fact
-  // it names. The positive reading stays allowed as well, so this only widens
-  // what counts as grounded -- it never lets an unmatched number through.
+  // A magnitude the sentence called negative cites the negated fact and only
+  // that one. Accepting the positive reading too would let "a $3,000 monthly
+  // shortfall" pass against a +3000 surplus -- the exact reversal of the
+  // user's position that the reasoning prompt forbids. Every signed quantity
+  // in the pack follows this convention: cash flow, post-purchase surplus and
+  // reserve gap are all stored signed, never as positive magnitudes.
   const candidates = claim.negativeWording && claim.value > 0
-    ? [claim.value, -claim.value]
+    ? [-claim.value]
     : [claim.value];
   return pack.facts.some((fact) =>
     fact.displayable !== false &&

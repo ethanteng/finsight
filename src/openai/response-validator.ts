@@ -65,8 +65,24 @@ export function formatMetricPercent(value: unknown, digits = 2): string {
   return `${(value * 100).toFixed(digits)}%`;
 }
 
-/** Bounded: the reviewer needs to recognize these details, not to store them. */
-const MAX_PERSONAL_CONTEXT_CHARS = 600;
+/**
+ * Bounded per line rather than by slicing the block: the reviewer needs to
+ * recognize these details, not to store them, and `formatPersonalContextForModel`
+ * writes occupation, employment status and retirement status last. A prefix cut
+ * would drop exactly the fields the reported objection was about.
+ */
+const MAX_PERSONAL_CONTEXT_LINE_CHARS = 200;
+const MAX_PERSONAL_CONTEXT_LINES = 20;
+
+function boundedPersonalContext(profile: string): string {
+  return profile
+    .split('\n')
+    .slice(0, MAX_PERSONAL_CONTEXT_LINES)
+    .map((line) => (line.length > MAX_PERSONAL_CONTEXT_LINE_CHARS
+      ? `${line.slice(0, MAX_PERSONAL_CONTEXT_LINE_CHARS)}…`
+      : line))
+    .join('\n');
+}
 
 /**
  * Build a compact summary of the financial snapshot for validation.
@@ -83,7 +99,7 @@ export function buildSnapshotSummaryForValidation(snapshot: FinancialContextSnap
   // costs a regeneration and puts a caveat on a sound answer.
   if (snapshot.userProfile) {
     parts.push(
-      `Remembered personal context (user-stated biographical details, not financial balances): ${snapshot.userProfile.slice(0, MAX_PERSONAL_CONTEXT_CHARS)}`
+      `Remembered personal context (user-stated biographical details, not financial balances):\n${boundedPersonalContext(snapshot.userProfile)}`
     );
   }
 
