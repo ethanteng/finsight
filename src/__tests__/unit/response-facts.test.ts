@@ -340,6 +340,21 @@ describe('negative canonical values written as magnitudes', () => {
     )).toMatchObject({ valid: true });
   });
 
+  it('does not negate a difference that could run either way', () => {
+    // Same reasoning as the bare "gap of" case: "down by" and "behind by"
+    // describe a difference in either direction, and no fact in the pack is a
+    // signed "amount down". A comparison sentence must still cite the
+    // positive abs() gap it names.
+    const gapPack = {
+      facts: [
+        { id: 'monthly_cost_gap', label: 'Absolute monthly ownership-cost gap', value: 1_200, unit: 'usd',
+          provenance: { kind: 'user_input', source: 'test' } },
+      ],
+    } as any;
+    expect(validateResponseFacts({ summary: 'The cheaper home is down by $1,200 a month.' }, gapPack).valid).toBe(true);
+    expect(validateResponseFacts({ summary: 'That option is behind by $1,200 each month.' }, gapPack).valid).toBe(true);
+  });
+
   it('still reads a named reserve gap as the signed shortfall', () => {
     const reservePack = {
       facts: [
