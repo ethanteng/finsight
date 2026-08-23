@@ -218,7 +218,36 @@ router.get('/accounts', requireAuth, async (req, res) => {
       where: { userId }
     });
 
+    const { substituteDirectPublicAccounts } = await import(
+      '../services/public-api/direct-public-accounts'
+    );
+
+    // When SnapTrade itself is missing or unreachable, still surface a working
+    // direct Public feed. SnapTradeButton clears the list on a non-OK response,
+    // so returning 400/404 here would hide the accounts the direct path exists
+    // to cover — exactly when SnapTrade health handling says those rows should
+    // survive. substituteDirectPublicAccounts no-ops without a healthy credential.
+    const respondWithDirectPublicOnly = async (snapTradeError: string) => {
+      const substitution = await substituteDirectPublicAccounts(userId, []);
+      if (substitution.accounts.length === 0) {
+        return false;
+      }
+      console.log(
+        `SnapTrade accounts: returning ${substitution.accounts.length} direct Public ` +
+        `account(s) for user ${userId} after SnapTrade failure: ${snapTradeError}`
+      );
+      res.json({
+        success: true,
+        message: 'Direct Public accounts retrieved; SnapTrade accounts unavailable',
+        data: { accounts: substitution.accounts },
+      });
+      return true;
+    };
+
     if (!user) {
+      if (await respondWithDirectPublicOnly('SnapTrade user not found')) {
+        return;
+      }
       return res.status(404).json({
         success: false,
         error: 'SnapTrade user not found. Please initialize first.'
@@ -270,12 +299,32 @@ router.get('/accounts', requireAuth, async (req, res) => {
         });
       }
       
+      // Show the direct Public feed in place of SnapTrade's copies of the same
+      // accounts. SnapTrade cannot complete a holdings sync for Public's
+      // managed-yield products and so reports them with no balance, while the
+      // finances page shows a real figure from the direct read — leaving this
+      // list to contradict it on the very page a user opens to check their
+      // connections. No-ops for everyone without a working direct credential.
+      if (Array.isArray(result.data?.accounts)) {
+        const substitution = await substituteDirectPublicAccounts(userId, result.data.accounts);
+        if (substitution.supersededAccountIds.length > 0) {
+          console.log(
+            `SnapTrade accounts: direct Public data supersedes ` +
+            `${substitution.supersededAccountIds.length} SnapTrade account(s) for user ${userId}`
+          );
+        }
+        result.data.accounts = substitution.accounts;
+      }
+
       res.json({
         success: true,
         message: 'Accounts retrieved successfully',
         data: result.data
       });
     } else {
+      if (await respondWithDirectPublicOnly(result.error || 'SnapTrade accounts unavailable')) {
+        return;
+      }
       res.status(400).json({
         success: false,
         error: result.error
