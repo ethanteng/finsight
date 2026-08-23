@@ -223,6 +223,9 @@ RENTCAST_API_KEY="your_rentcast_api_key"
 SEARCH_API_KEY="your_search_api_key"
 SEARCH_PROVIDER="brave"                 # brave or google (default: brave)
 GOOGLE_SEARCH_ENGINE_ID="..."           # Required when SEARCH_PROVIDER=google
+BRAVE_MIN_REQUEST_INTERVAL_MS="1100"    # Min ms between Brave calls (default: 1100,
+                                        # the free tier's 1/s). Brave's paid Search
+                                        # plan allows 50/s, where 25 is appropriate.
 
 # Transaction & Investment History
 TRANSACTION_HISTORY_DAYS="90"           # Days of banking transactions (default: 90)

@@ -25,25 +25,55 @@ function retryableStatus(status: number): boolean {
   return status === 408 || status === 429 || status >= 500;
 }
 
-function numericHeaderValues(value: string | null): number[] {
+function numericHeaderValues(value: string | null): Array<number | undefined> {
   if (!value) return [];
-  return value.split(',').flatMap(part => {
+  // Positions are meaningful: the nth entry of Limit, Remaining and Reset all
+  // describe the same window, so an unparseable entry must hold its slot
+  // rather than shifting every later window onto the wrong counter.
+  return value.split(',').map(part => {
     const parsed = Number.parseFloat(part.trim());
-    return Number.isFinite(parsed) && parsed >= 0 ? [parsed] : [];
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined;
+  });
+}
+
+function headerValues(response: Response, ...names: string[]): Array<number | undefined> {
+  for (const name of names) {
+    const raw = response.headers?.get(name);
+    if (raw) return numericHeaderValues(raw);
+  }
+  return [];
+}
+
+/**
+ * Reset delays, in seconds, for every rate-limit window this response reports
+ * as genuinely spent.
+ *
+ * A window is only spent when it meters something. Brave advertises the
+ * unlimited monthly allowance on its paid plans as `Limit 0, Remaining 0` with
+ * Reset counting down to the end of the month, which reads as a permanently
+ * exhausted window and would park the provider for days at a time.
+ */
+export function exhaustedWindowResets(response: Response): number[] {
+  const resets = headerValues(response, 'x-ratelimit-reset', 'x-rate-limit-reset');
+  const remaining = headerValues(response, 'x-ratelimit-remaining', 'x-rate-limit-remaining');
+  const limits = headerValues(response, 'x-ratelimit-limit', 'x-rate-limit-limit');
+
+  return resets.flatMap((reset, index) => {
+    if (reset === undefined) return [];
+    const left = remaining[index];
+    if (left === undefined || left >= 1) return [];
+    if (limits[index] === 0) return [];
+    return [reset];
   });
 }
 
 function rateLimitResetDelayMs(response: Response): number | undefined {
-  const resets = numericHeaderValues(
-    response.headers?.get('x-ratelimit-reset')
-      || response.headers?.get('x-rate-limit-reset')
-  );
+  const resets = headerValues(response, 'x-ratelimit-reset', 'x-rate-limit-reset')
+    .filter((reset): reset is number => reset !== undefined);
   if (resets.length === 0) return undefined;
-  const remaining = numericHeaderValues(
-    response.headers?.get('x-ratelimit-remaining')
-      || response.headers?.get('x-rate-limit-remaining')
-  );
-  const exhaustedResets = resets.filter((_, index) => remaining[index] !== undefined && remaining[index] < 1);
+  const reportedRemaining = headerValues(response, 'x-ratelimit-remaining', 'x-rate-limit-remaining')
+    .filter((left): left is number => left !== undefined);
+  const exhaustedResets = exhaustedWindowResets(response);
   // Every exhausted window must reset before another request is safe.
   if (exhaustedResets.length > 0) return Math.max(...exhaustedResets) * 1_000;
   // No window reports itself exhausted, so these headers describe quota that is
@@ -52,7 +82,7 @@ function rateLimitResetDelayMs(response: Response): number | undefined {
   // full window reset, which usually exceeds maxRetryDelayMs and suppresses the
   // retry entirely. Only a 429 whose Remaining the provider omitted is evidence
   // of an exhausted window.
-  if (response.status === 429 && remaining.length === 0) return Math.min(...resets) * 1_000;
+  if (response.status === 429 && reportedRemaining.length === 0) return Math.min(...resets) * 1_000;
   return undefined;
 }
 
