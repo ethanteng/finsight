@@ -235,6 +235,22 @@ describe('BraveSearchRateLimiter window accounting', () => {
     await expect(limiter.waitForNextCall()).rejects.toThrow('pacing requests');
   });
 
+  it('blames pacing over quota when the floor outlasts a live server block', async () => {
+    process.env.BRAVE_MIN_REQUEST_INTERVAL_MS = '5000';
+    const limiter = new BraveSearchRateLimiter();
+
+    await limiter.waitForNextCall();
+    // Both limits are live and both exceed the wait budget, but the floor is
+    // the one holding this call back, so the block must not take the blame.
+    limiter.observeResponse(respond(429, {
+      'x-ratelimit-limit': '50, 2000',
+      'x-ratelimit-remaining': '0, 500',
+      'x-ratelimit-reset': '3, 704214',
+    }));
+
+    await expect(limiter.waitForNextCall()).rejects.toThrow('pacing requests');
+  });
+
   it('caps a metered window whose reset is further out than a retry can wait', async () => {
     const limiter = new BraveSearchRateLimiter();
 

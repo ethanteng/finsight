@@ -79,14 +79,15 @@ export class BraveSearchRateLimiter {
     // same lastCallTime, so without a reservation they would sleep to one
     // shared deadline and then fire together, bursting past the per-second
     // allowance the interval exists to respect.
-    const slot = Math.max(this.lastCallTime + this.MIN_INTERVAL, this.serverBlockedUntil, now);
+    const pacedUntil = this.lastCallTime + this.MIN_INTERVAL;
+    const slot = Math.max(pacedUntil, this.serverBlockedUntil, now);
     const waitTime = slot - now;
 
     if (waitTime > this.MAX_SERVER_WAIT_MS) {
-      // Shed the call rather than queue it, and say which limit turned it
-      // away: a refusal we are still backing off from is a quota problem,
-      // while anything else is just more demand than the floor allows.
-      throw this.serverBlockedUntil - now > this.MAX_SERVER_WAIT_MS
+      // Shed the call rather than queue it, and blame whichever limit actually
+      // set the deadline: a refusal we are still backing off from is a quota
+      // problem, while the floor winning means it is only local demand.
+      throw this.serverBlockedUntil >= pacedUntil
         ? new Error(`Brave Search quota is exhausted for another ${Math.ceil(waitTime / 1000)} seconds`)
         : new Error(`Brave Search is pacing requests; the next free slot is ${Math.ceil(waitTime / 1000)}s away`);
     }
