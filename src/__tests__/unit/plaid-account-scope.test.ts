@@ -1,0 +1,32 @@
+import { filterPlaidOnlyAccounts } from '../../services/plaid-account-scope';
+
+describe('filterPlaidOnlyAccounts', () => {
+  const account = (account_id: string, source?: string) => ({ account_id, source });
+
+  it('keeps Plaid accounts', () => {
+    const accounts = [account('abc123', 'plaid'), account('def456', 'plaid')];
+    expect(filterPlaidOnlyAccounts(accounts)).toEqual(accounts);
+  });
+
+  it('drops SnapTrade accounts', () => {
+    const plaid = account('abc123', 'plaid');
+    expect(filterPlaidOnlyAccounts([plaid, account('snaptrade-9f2', 'snaptrade')])).toEqual([plaid]);
+  });
+
+  it('drops direct Public.com accounts', () => {
+    // The bug this guards: an "is not SnapTrade" test passed these through, so
+    // Public accounts appeared under "Your Connected Accounts (Plaid)" as well
+    // as under SnapTrade.
+    const plaid = account('abc123', 'plaid');
+    expect(filterPlaidOnlyAccounts([plaid, account('public-5OQ83585', 'public')])).toEqual([plaid]);
+  });
+
+  it('drops manual accounts, which have their own section', () => {
+    const plaid = account('abc123', 'plaid');
+    expect(filterPlaidOnlyAccounts([plaid, account('manual-17', 'manual')])).toEqual([plaid]);
+  });
+
+  it('drops an account with no source rather than assuming it is Plaid', () => {
+    expect(filterPlaidOnlyAccounts([account('abc123')])).toEqual([]);
+  });
+});
