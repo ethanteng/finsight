@@ -212,7 +212,7 @@ export default function AccountGroupCard({
                              space. */
                           <button
                             onClick={(e) => handleStartEdit(account, e)}
-                            className="relative grid h-6 w-6 shrink-0 place-items-center rounded text-gray-500 transition-colors after:absolute after:-inset-2 after:content-[''] hover:text-[#102319] !min-h-0"
+                            className="relative grid h-6 w-6 shrink-0 place-items-center rounded text-gray-500 transition-colors after:absolute after:-inset-2 after:content-[''] hover:text-[#102319] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#102319] focus-visible:ring-offset-1 !min-h-0"
                             title="Rename account"
                             aria-label={`Rename ${name}`}
                           >

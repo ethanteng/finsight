@@ -182,7 +182,7 @@ export default function AccountDetailModal({
                      wrapped name. See AccountGroupCard for why `!min-h-0` and `after`. */
                   <button
                     onClick={() => setIsEditingName(true)}
-                    className="relative grid h-7 w-7 shrink-0 place-items-center rounded-full text-gray-400 transition-colors after:absolute after:-inset-2 after:content-[''] hover:bg-gray-700 hover:text-[#102319] sm:h-8 sm:w-8 !min-h-0"
+                    className="relative grid h-7 w-7 shrink-0 place-items-center rounded-full text-gray-400 transition-colors after:absolute after:-inset-2 after:content-[''] hover:bg-gray-700 hover:text-[#102319] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#102319] focus-visible:ring-offset-1 sm:h-8 sm:w-8 !min-h-0"
                     title="Rename account"
                     aria-label={`Rename ${displayName}`}
                   >
@@ -221,7 +221,7 @@ export default function AccountDetailModal({
               </div>
             )}
           </div>
-          <button onClick={onClose} className="grid h-11 w-11 shrink-0 place-items-center rounded-full text-2xl text-gray-400 hover:bg-gray-700 hover:text-white" aria-label="Close account details">×</button>
+          <button onClick={onClose} className="grid h-11 w-11 shrink-0 place-items-center rounded-full text-2xl text-gray-400 hover:bg-gray-700 hover:text-[#102319]" aria-label="Close account details">×</button>
         </div>
 
         <div className="flex-1 overflow-y-auto p-4 sm:p-6">
