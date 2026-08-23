@@ -1,4 +1,6 @@
 import { buildCanonicalSnapshotCore } from '../../services/canonical-financial-snapshot';
+import { mergeFinancialSources } from '../../services/financial-calculations';
+import { mapPublicAccount } from '../../services/public-api/account-mapper';
 
 /**
  * An account valued from its own positions reports a total that is a floor, not
@@ -74,6 +76,34 @@ describe('an account balance derived from its own positions', () => {
     }));
 
     expect(observation).toBeUndefined();
+  });
+
+  // The flag has to survive the merge to be worth anything. It crosses from the
+  // Public mapper through mergeFinancialSources to the snapshot, and an
+  // undeclared field is one a refactor drops silently.
+  it('survives the merge from a Public account into the snapshot', () => {
+    const publicAccount = mapPublicAccount(
+      {
+        accountId: '3CR23334', accountType: 'TREASURY', totalAccountValue: 227261.16,
+        cash: null, positions: [], valuedFromTaxLots: true, taxLotsAsOf: '2026-08-21',
+      } as any,
+      '2026-08-22T00:00:00.000Z',
+    );
+
+    const merged = mergeFinancialSources(null, null, null, null, {
+      accounts: [publicAccount as any],
+      holdings: [],
+    } as any);
+
+    const snapshot: any = buildCanonicalSnapshotCore({
+      accounts: merged.accounts,
+      investments: { holdings: [HOLDING], securities: [] },
+    } as any);
+
+    expect(merged.accounts[0].balanceDerivedFromPositions).toBe(true);
+    expect((snapshot.sourceObservations || []).some(
+      (o: any) => o.id === 'account:public-3CR23334:balance-derived',
+    )).toBe(true);
   });
 
   // The coverage check is structurally blind here, which is why the flag has to
