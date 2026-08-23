@@ -63,4 +63,47 @@ describe('buildSnapshotSummaryForValidation', () => {
   it('says nothing about personal context when none was loaded', () => {
     expect(buildSnapshotSummaryForValidation(snapshot)).not.toContain('Remembered personal context');
   });
+
+  it('shows the reviewer the connection gaps behind an incomplete-totals caveat', () => {
+    // The reported objection: the answer said "6 accounts that aren't currently
+    // reporting" from the quality block the context pack hands the primary
+    // model, and the reviewer -- which could not see it -- called it invented.
+    const summary = buildSnapshotSummaryForValidation({
+      ...snapshot,
+      financialSummary: {
+        ...snapshot.financialSummary,
+        quality: {
+          unavailableSourceIds: ['a', 'b', 'c', 'd', 'e'],
+          requiredUnavailableSourceIds: ['f'],
+          staleSourceIds: ['g'],
+          errors: [{ sourceId: 'a', message: 'login required' }],
+        },
+      },
+    } as any);
+
+    expect(summary).toContain('6 account connection(s) not reporting');
+    expect(summary).toContain('1 stale source(s)');
+    expect(summary).toContain('1 source error(s)');
+  });
+
+  it('counts connection gaps the way the user-facing ask counts them', () => {
+    // Advisory annotations cannot be cleared by reconnecting, so the ask
+    // excludes them. A reviewer told a different number would object to the
+    // answer's own wording.
+    const summary = buildSnapshotSummaryForValidation({
+      ...snapshot,
+      financialSummary: {
+        ...snapshot.financialSummary,
+        quality: {
+          unavailableSourceIds: ['a', 'b', 'b', 'c:holdings-coverage', 'd:balance-derived'],
+        },
+      },
+    } as any);
+
+    expect(summary).toContain('2 account connection(s) not reporting');
+  });
+
+  it('says nothing about data quality when the snapshot carries none', () => {
+    expect(buildSnapshotSummaryForValidation(snapshot)).not.toContain('Data quality');
+  });
 });
