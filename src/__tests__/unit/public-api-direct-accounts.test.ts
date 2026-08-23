@@ -76,9 +76,27 @@ describe('substituteDirectPublicAccounts', () => {
     expect(result.supersededAccountIds).toEqual([]);
   });
 
+  it('leaves SnapTrade alone when the credential has a current error', async () => {
+    // Auth/list failure leaves lastError set while the retained snapshot can still
+    // hold prior source:'public' rows for up to 48h. Substituting those would hide
+    // SnapTrade's fallback and show stale balances as a healthy direct feed.
+    getStatusMock.mockResolvedValue({
+      configured: true,
+      lastVerifiedAt: new Date('2026-01-01'),
+      lastError: 'Public rejected the stored API secret.',
+    });
+    const accounts = [fidelity, publicTreasuryViaSnapTrade];
+
+    const result = await substituteDirectPublicAccounts('user-1', accounts);
+
+    expect(result.accounts).toBe(accounts);
+    expect(result.supersededAccountIds).toEqual([]);
+  });
+
   it('leaves SnapTrade alone when the credential exists but has produced no accounts', async () => {
-    // A new or rejected secret. Dropping SnapTrade's copies here would leave the
-    // user with no Public accounts at all -- worse than the stale balance.
+    // A new secret whose first fetch has not landed. Dropping SnapTrade's copies
+    // here would leave the user with no Public accounts at all -- worse than the
+    // stale balance.
     findFirstSnapshot.mockResolvedValue({ accounts: [] });
     const accounts = [fidelity, publicTreasuryViaSnapTrade];
 

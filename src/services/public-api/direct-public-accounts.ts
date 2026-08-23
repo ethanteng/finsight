@@ -98,6 +98,17 @@ export async function substituteDirectPublicAccounts(
     return { accounts: snapTradeAccounts, supersededAccountIds: [] };
   }
 
+  // A credential with a current error is not a working direct feed. Auth/list
+  // failures set lastError and observed:false, but SummaryCacheService can retain
+  // the prior snapshot (with source:'public' rows) for up to 48 hours. Substituting
+  // from that retained JSON would hide freshly fetched SnapTrade Public rows and
+  // present stale balances under a healthy "Read directly from Public" checkmark —
+  // the same class of failure supersedeSnapTradePublicAccounts avoids by requiring
+  // hasDirectPublicData (observed:true) rather than merely a configured secret.
+  if (status.lastError) {
+    return { accounts: snapTradeAccounts, supersededAccountIds: [] };
+  }
+
   const snapshotAccounts = Array.isArray(snapshot?.accounts) ? (snapshot!.accounts as any[]) : [];
   const directAccounts = snapshotAccounts
     .filter(account => account?.source === 'public')
@@ -105,9 +116,9 @@ export async function substituteDirectPublicAccounts(
     .filter(account => accountKey(account).length > 0);
 
   // A configured secret that has not yet produced any account is not a reason to
-  // hide SnapTrade's copies: the credential may be new, rejected, or the fetch
-  // may be failing. Removing them here would leave the user looking at no Public
-  // accounts at all, which is worse than the stale balance this replaces.
+  // hide SnapTrade's copies: the credential may be new, or the first fetch has not
+  // landed. Removing them here would leave the user looking at no Public accounts
+  // at all, which is worse than the stale balance this replaces.
   if (directAccounts.length === 0) {
     return { accounts: snapTradeAccounts, supersededAccountIds: [] };
   }
