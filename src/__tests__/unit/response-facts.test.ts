@@ -452,11 +452,36 @@ describe('rounded canonical values', () => {
     // so a lowercase continuation is the general backstop.
     const response = {
       summary: 'Your cash is $75,038.94.',
-      insights: ['You owe $88,888 more than expected, incl. fees, against debt of $350,095.40.'],
+      insights: ['You owe $88,888 in interest per mo. against debt of $350,095.40.'],
     };
     const salvaged = salvageUngroundedResponse(response, pack, validateResponseFacts(response, pack));
 
     expect(salvaged.insights).toEqual([]);
+  });
+
+  it('splits when a company suffix really does end the sentence', () => {
+    // "Inc." is not in the abbreviation list for exactly this reason: when it
+    // ends a sentence, merging would delete the grounded sentence in front of
+    // the unsupported one.
+    const response = {
+      summary: 'Your cash is $75,038.94.',
+      insights: ['Your cash is held at Acme Inc. A transfer could cost $88,888.'],
+    };
+    const salvaged = salvageUngroundedResponse(response, pack, validateResponseFacts(response, pack));
+
+    expect(salvaged.insights).toEqual(['Your cash is held at Acme Inc.']);
+  });
+
+  it('splits before a fund name that is styled lowercase', () => {
+    // "iShares" opens a sentence despite the lowercase first letter, so the
+    // lowercase backstop must not swallow the boundary in front of it.
+    const response = {
+      summary: 'Your cash is $75,038.94.',
+      insights: ['Your cash is $75,038.94. iShares positions could cost $88,888 to unwind.'],
+    };
+    const salvaged = salvageUngroundedResponse(response, pack, validateResponseFacts(response, pack));
+
+    expect(salvaged.insights).toEqual(['Your cash is $75,038.94.']);
   });
 
   it('still splits a takeaway that really is two sentences', () => {

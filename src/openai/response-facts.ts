@@ -341,16 +341,21 @@ export function validateResponseFacts(
 }
 
 /**
- * Multi-letter abbreviations that end in a period without ending a sentence.
+ * Multi-letter abbreviations that are never the last word of a sentence.
  *
  * Single-letter initialisms ("U.S.", "e.g.") are caught by the letter test in
- * `isAbbreviationPeriod`; these are the ones that survive it. Words that can
- * legitimately close a sentence ("no", "st") are left out: splitting one
- * sentence too many costs less than gluing two together.
+ * `isAbbreviationPeriod`; these are the ones that survive it.
+ *
+ * The bar for membership is narrow on purpose. An entry here overrides every
+ * other signal, so it may only hold shortenings that always govern something
+ * after them: "vs. Treasury bills", "approx. $40,000", "Ms. Chen". Shortenings
+ * that can close a sentence -- "etc.", "Acme Inc.", "the Treasury Dept." --
+ * are deliberately absent, because they need no entry: when one of them really
+ * is mid-sentence, the text after it continues in lowercase and
+ * `continuesInLowercase` holds the sentence together on that evidence instead.
  */
-const SENTENCE_SAFE_ABBREVIATIONS = new Set([
-  'approx', 'avg', 'cf', 'co', 'corp', 'dept', 'dr', 'est', 'etc', 'fig',
-  'inc', 'jr', 'ltd', 'mr', 'mrs', 'ms', 'sr', 'vs',
+const NEVER_SENTENCE_FINAL_ABBREVIATIONS = new Set([
+  'approx', 'cf', 'dr', 'est', 'incl', 'mr', 'mrs', 'ms', 'vs',
 ]);
 
 /** "U.S." and "e.g." end in a single letter; a real sentence rarely does. */
@@ -359,7 +364,7 @@ function isAbbreviationPeriod(text: string, index: number, punctuation: string):
   const before = text.slice(0, index);
   if (/(?:^|[^A-Za-z])[A-Za-z]$/.test(before)) return true;
   const word = /([A-Za-z]+)$/.exec(before)?.[1];
-  return word !== undefined && SENTENCE_SAFE_ABBREVIATIONS.has(word.toLowerCase());
+  return word !== undefined && NEVER_SENTENCE_FINAL_ABBREVIATIONS.has(word.toLowerCase());
 }
 
 /**
@@ -381,9 +386,16 @@ function isInsideBrackets(text: string, index: number): boolean {
  * A sentence starts with a capital, a digit, or a symbol — never a lowercase
  * word. When the text after the punctuation continues in lowercase, the period
  * belonged to an abbreviation this module has not enumerated.
+ *
+ * A ticker-style brand is the exception that does open a sentence in
+ * lowercase: "iShares", "eBay", "eTrade". The capital later in the word marks
+ * it as a name rather than an ordinary word, and answers about a portfolio
+ * name such funds often enough that merging there would cost a grounded
+ * sentence.
  */
 function continuesInLowercase(text: string, end: number): boolean {
-  return /^\s+[a-z]/.test(text.slice(end));
+  const nextWord = /^\s+([a-z][A-Za-z'’]*)/.exec(text.slice(end))?.[1];
+  return nextWord !== undefined && !/[A-Z]/.test(nextWord);
 }
 
 /**
