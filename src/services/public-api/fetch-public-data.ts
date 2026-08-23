@@ -143,6 +143,15 @@ async function readAccount(
     if (!(error instanceof PublicApiError) || error.status !== 404) throw error;
 
     const lots = await getTaxLotHoldings(accessToken, summary.accountId);
+    // Empty lots (HIGH_YIELD) or lots with no currentValue are still unknown.
+    // Treating that as a successful read would set observed:true with only
+    // null-balance stubs and suppress SnapTrade's still-working Public
+    // brokerage -- the wipe the all-portfolio-failed gate exists to prevent.
+    if (lots.totalValue === null) {
+      throw new PublicApiError(
+        `Public tax lots returned no holdings value for account ${summary.accountId}.`,
+      );
+    }
     console.log(
       `Public API: account ${summary.accountId} (${summary.accountType || 'unknown type'}) ` +
       `has no portfolio endpoint; valued from ${lots.positions.length} tax lot position(s)`,

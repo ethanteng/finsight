@@ -148,7 +148,9 @@ describe('Public fetch failure handling', () => {
   });
 
   // HIGH_YIELD is a pure cash product: tax lots return, but empty. Its value is
-  // unknown, and the account must read as unavailable rather than zero.
+  // unknown, and the account must read as unavailable rather than zero. An empty
+  // fallback must also count as a failed read so a HIGH_YIELD-only pass does not
+  // claim observation and wipe SnapTrade.
   it('leaves a cash account unvalued when its tax lots are empty', async () => {
     mintAccessToken.mockResolvedValue('tok');
     listAccounts.mockResolvedValue([
@@ -164,8 +166,29 @@ describe('Public fetch failure handling', () => {
 
     const highYield = result!.accounts.find(a => a.account_id === 'public-2OE66869')!;
     expect(highYield.balance.current).toBeNull();
+    expect(result!.errors).toEqual([
+      expect.objectContaining({ accountId: '2OE66869' }),
+    ]);
     // Valued from a balance, not positions -- no holdings may be emitted for it.
     expect(result!.holdings).toEqual([]);
+    expect(result!.observed).toBe(true);
+  });
+
+  // Same wipe the all-portfolio-failed gate exists to prevent: empty tax-lot
+  // fallbacks must not masquerade as successful observations.
+  it('does not claim observation when every 404 fallback has empty tax lots', async () => {
+    mintAccessToken.mockResolvedValue('tok');
+    listAccounts.mockResolvedValue([
+      { accountId: '2OE66869', accountType: 'HIGH_YIELD' },
+      { accountId: '3CR23334', accountType: 'TREASURY' },
+    ]);
+    getPortfolio.mockRejectedValue(new PublicApiError('gone', 404, false));
+    getTaxLotHoldings.mockResolvedValue({ accountId: 'x', asOf: '2026-08-21', totalValue: null, positions: [] });
+
+    const result = await fetchPublicData('user-1');
+
+    expect(result).toMatchObject({ observed: false, accounts: [], errors: [] });
+    expect(recordSuccess).not.toHaveBeenCalled();
   });
 
   it('returns null when the user has no secret', async () => {
