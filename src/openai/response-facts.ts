@@ -361,14 +361,6 @@ const NEVER_SENTENCE_FINAL_ABBREVIATIONS = new Set([
   'cf', 'dr', 'excl', 'incl', 'mr', 'mrs', 'ms', 'vs',
 ]);
 
-/**
- * Company / person suffixes that may legitimately end a sentence. Used to keep
- * "Acme Inc. A transfer…" split while still rejoining "See item No. Transfers…".
- */
-const SENTENCE_FINAL_SHORT_FORMS = new Set([
-  'bros', 'co', 'corp', 'inc', 'jr', 'llc', 'llp', 'ltd', 'plc', 'sr',
-]);
-
 const BRACKET_CLOSERS: Record<string, string> = { '(': ')', '[': ']' };
 
 /** Every bracket this text opens, it also closes -- and closes with its own kind. */
@@ -447,23 +439,31 @@ const MIRROR_ABBREVIATIONS = new Set([
 ]);
 
 /**
+ * Ordinary words in lowercase, shortenings only when capitalized: "See item
+ * No." abbreviates "number", while "the answer is no." ends a sentence.
+ */
+const CAPITALIZED_MIRROR_ABBREVIATIONS = new Set(['No', 'Nos']);
+
+/**
  * The stranded-front half of a false split: "...yield vs." / "See item No." /
  * "Per Smith et al." when the next segment opens like a real sentence.
  *
- * Membership is denylisted, not length-based -- "million." and "cash." must
- * not rejoin. Capitalized endings of three letters or fewer that are not a
- * known company/person suffix cover "No." / "Jan." / "Vol." Single-letter
- * endings are left alone: "U.S. A transfer…" must stay split; "e.g. Cash…"
- * is the residual trade.
+ * Membership is enumerated, and stays enumerated. Neither length nor
+ * capitalization generalizes here: a short capitalized ending is far more
+ * often this product's own vocabulary than an abbreviation -- "priced in
+ * USD.", "held in an IRA.", "your largest position is VTI.", "outside the
+ * CD." all end sentences, and rejoining them would delete the grounded half
+ * along with whatever follows. That is the failure this function exists to
+ * prevent, pointed the other way.
+ *
+ * Single-letter endings are left alone so "U.S. A transfer…" stays split;
+ * "e.g. Cash of $75,038.94…" is the residual that buys it.
  */
 function endsWithLikelyAbbreviation(segment: string): boolean {
   const word = /\b([A-Za-z]+)\.\s*$/.exec(segment.trim())?.[1];
   if (!word || word.length === 1) return false;
-  const lower = word.toLowerCase();
-  if (SENTENCE_FINAL_SHORT_FORMS.has(lower)) return false;
-  if (MIRROR_ABBREVIATIONS.has(lower)) return true;
-  if (word[0] === word[0].toUpperCase() && word !== lower && word.length <= 3) return true;
-  return false;
+  if (CAPITALIZED_MIRROR_ABBREVIATIONS.has(word)) return true;
+  return MIRROR_ABBREVIATIONS.has(word.toLowerCase());
 }
 
 /**

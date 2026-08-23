@@ -551,6 +551,26 @@ describe('rounded canonical values', () => {
     expect(salvaged.insights).toEqual([]);
   });
 
+  it.each([
+    ['USD', 'Your holdings are priced in USD.'],
+    ['IRA', 'Your cash is $75,038.94 in an IRA.'],
+    ['VTI', 'Your largest position is VTI.'],
+    ['ETF', 'Your cash is $75,038.94 outside the ETF.'],
+    ['CD', 'Your cash is $75,038.94 outside the CD.'],
+  ])('keeps a grounded sentence that ends in %s', (_label, grounded) => {
+    // A short capitalized ending is this product's own vocabulary far more
+    // often than an abbreviation. Rejoining on shape rather than on the word
+    // itself deletes the grounded half along with the unsupported one -- the
+    // mirror check's own failure mode, pointed backwards.
+    const response = {
+      summary: 'Your cash is $75,038.94.',
+      insights: [`${grounded} A transfer could cost $88,888.`],
+    };
+    const salvaged = salvageUngroundedResponse(response, pack, validateResponseFacts(response, pack));
+
+    expect(salvaged.insights).toEqual([grounded]);
+  });
+
   it('still splits a takeaway that really is two sentences', () => {
     const response = {
       summary: 'Your cash is $75,038.94.',
