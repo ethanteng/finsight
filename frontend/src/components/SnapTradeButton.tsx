@@ -22,6 +22,14 @@ interface SnapTradeAccount {
   /** True when this account's brokerage authorization is disabled. */
   connectionDisabled?: boolean;
   brokerageAuthorizationId?: string;
+  /**
+   * 'public' when the row comes from the direct Public.com feed rather than from
+   * SnapTrade. Those accounts have no brokerage authorization, so none of
+   * SnapTrade's connection health applies to them.
+   */
+  source?: string;
+  /** Balance is a sum of positions, so it cannot see uninvested cash. */
+  balanceDerivedFromPositions?: boolean;
 }
 
 interface SnapTradeTokenStatus {
@@ -430,19 +438,28 @@ export default function SnapTradeButton({ onAccountsUpdated, snapTradeStatus: sn
               // the SnapTrade *user* status marked every account broken the moment
               // any one connection was disabled -- including healthy Fidelity
               // accounts when only Public needed reconnecting.
-              const connectionDisabled = account.connectionDisabled === true
+              // Read directly from Public, not through SnapTrade. Applying
+              // SnapTrade's health here would report a working feed as broken
+              // whenever the user's SnapTrade link happens to be disabled --
+              // and the direct feed is precisely what still works in that case.
+              const isDirect = account.source === 'public';
+              const connectionDisabled = !isDirect && (
+                account.connectionDisabled === true
                 || Boolean(
                   account.brokerageAuthorizationId
                   && snapTradeTokenStatus?.disabledConnections?.some(
                     connection => connection.authorizationId === account.brokerageAuthorizationId
                   )
-                );
+                )
+              );
               // Whole-user failure still applies across the board. LOGIN_REQUIRED
               // does not: it means some authorization is disabled, and which ones
               // is what connectionDisabled answers.
-              const connectionUnusable = !snapTradeTokenStatus?.connected
+              const connectionUnusable = !isDirect && (
+                !snapTradeTokenStatus?.connected
                 || snapTradeTokenStatus?.status === 'error'
-                || snapTradeTokenStatus?.status === 'ERROR';
+                || snapTradeTokenStatus?.status === 'ERROR'
+              );
               const isHealthy = !connectionDisabled && !connectionUnusable;
               const institutionName = account.institution || 'this brokerage';
               const accountIssue = connectionDisabled
@@ -459,7 +476,10 @@ export default function SnapTradeButton({ onAccountsUpdated, snapTradeStatus: sn
                       <div className="mt-1 flex min-w-0 items-start gap-2 text-sm text-gray-400">
                         {/* Keep connection health in the same stable column as the other account cards. */}
                         {isHealthy ? (
-                          <span className="w-4 shrink-0 text-center text-green-400" title="Connection active">
+                          <span
+                            className="w-4 shrink-0 text-center text-green-400"
+                            title={isDirect ? 'Read directly from Public' : 'Connection active'}
+                          >
                             ✓
                           </span>
                         ) : (
@@ -478,11 +498,27 @@ export default function SnapTradeButton({ onAccountsUpdated, snapTradeStatus: sn
                         </div>
                       )}
                     </div>
-                    {typeof account.balance === 'number' && (
+                    {typeof account.balance === 'number' ? (
                       <div className="shrink-0 text-right">
                         <div className="font-semibold text-white text-base">
                           {formatCurrency(account.balance)}
                         </div>
+                        {/* A sum of positions is a floor: it cannot see uninvested
+                            cash, so presenting it as a reported total would
+                            overstate what is known. Same caveat the finances page
+                            carries for these accounts. */}
+                        {account.balanceDerivedFromPositions && (
+                          <div className="text-xs text-gray-400" title="Summed from this account's positions; any uninvested cash is not included.">
+                            from positions
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      /* Distinguish "we have no figure" from "$0". The old blank
+                         cell read as a rendering bug, which is how it was
+                         reported. */
+                      <div className="shrink-0 text-right text-sm text-gray-400" title="This provider did not report a balance for this account.">
+                        Not reported
                       </div>
                     )}
                   </div>

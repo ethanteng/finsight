@@ -270,6 +270,26 @@ router.get('/accounts', requireAuth, async (req, res) => {
         });
       }
       
+      // Show the direct Public feed in place of SnapTrade's copies of the same
+      // accounts. SnapTrade cannot complete a holdings sync for Public's
+      // managed-yield products and so reports them with no balance, while the
+      // finances page shows a real figure from the direct read — leaving this
+      // list to contradict it on the very page a user opens to check their
+      // connections. No-ops for everyone without a working direct credential.
+      if (Array.isArray(result.data?.accounts)) {
+        const { substituteDirectPublicAccounts } = await import(
+          '../services/public-api/direct-public-accounts'
+        );
+        const substitution = await substituteDirectPublicAccounts(userId, result.data.accounts);
+        if (substitution.supersededAccountIds.length > 0) {
+          console.log(
+            `SnapTrade accounts: direct Public data supersedes ` +
+            `${substitution.supersededAccountIds.length} SnapTrade account(s) for user ${userId}`
+          );
+        }
+        result.data.accounts = substitution.accounts;
+      }
+
       res.json({
         success: true,
         message: 'Accounts retrieved successfully',
