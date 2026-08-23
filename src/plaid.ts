@@ -569,9 +569,11 @@ export const setupPlaidRoutes = (app: any) => {
       const { public_token } = req.body;
       console.log('Exchanging public token for access token...');
 
-      // Debug authentication
-      console.log('Exchange token - headers:', req.headers);
-      console.log('Exchange token - user:', req.user);
+      // Debug authentication. Never dump req.headers — it carries the caller's
+      // live Bearer JWT and session cookies, and this runs on a route every
+      // linking user hits. Identify the caller by id, not by the user object,
+      // which carries their email address.
+      console.log('Exchange token - authenticated user:', req.user?.id ?? 'none');
 
       const exchangeResponse = await plaidClient.itemPublicTokenExchange({
         public_token: public_token,
@@ -580,8 +582,11 @@ export const setupPlaidRoutes = (app: any) => {
       const access_token = exchangeResponse.data.access_token;
       const item_id = exchangeResponse.data.item_id;
 
-      console.log(`Received access token: ${access_token.substring(0, 8)}...`);
-      console.log(`Item ID: ${item_id}`);
+      // No substring of the access token, for the same reason the Bearer prefix
+      // above is gone: a rule that logs "only a bit" of a credential is one
+      // someone has to re-audit every time the format changes. The item_id
+      // identifies the connection for debugging and is not a credential.
+      console.log(`Received access token for item ${item_id}`);
 
       // Store the access token and item_id in the database
       // Only update tokens we're allowed to: current user's, or unassigned (userId: null).

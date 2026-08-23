@@ -89,7 +89,8 @@ async function authenticate(
       tier: user.tier
     };
 
-    console.log('🔐 req.user set:', req.user);
+    // Identify the user by id, not by logging the object — it carries their email.
+    console.log('🔐 req.user set:', req.user.id, `(tier ${req.user.tier})`);
 
     next();
   } catch (error) {
@@ -134,9 +135,13 @@ export function optionalAuth(
   // This middleware doesn't block the request if no user is present
   // It just populates req.user if a valid token is provided
   const token = extractTokenFromHeader(req.headers.authorization);
-  
-  console.log('OptionalAuth middleware - headers:', req.headers);
-  console.log('OptionalAuth middleware - token:', token ? token.substring(0, 20) + '...' : 'none');
+
+  // Never log the request headers, the raw token, or any part of it. This
+  // middleware is mounted on every route, so a header dump here writes a live
+  // Bearer JWT (and the session cookies) into the platform logs on every
+  // authenticated request — anyone with log access could replay them until they
+  // expire. Whether a token was presented is the only part worth recording.
+  console.log('OptionalAuth middleware - bearer token present:', token ? 'yes' : 'no');
   
   if (token) {
     // verifyToken throws when JWT_SECRET is unset/public in production (resolved
@@ -151,14 +156,15 @@ export function optionalAuth(
       res.status(500).json({ error: 'Authentication error' });
       return;
     }
-    console.log('OptionalAuth middleware - payload:', payload);
+    // userId, not the whole payload: the claims carry the user's email address.
+    console.log('OptionalAuth middleware - token verified for user:', payload ? payload.userId : 'no');
     if (payload) {
       (req as AuthenticatedRequest).user = {
         id: payload.userId,
         email: payload.email,
         tier: payload.tier
       };
-      console.log('OptionalAuth middleware - user set:', (req as AuthenticatedRequest).user);
+      console.log('OptionalAuth middleware - user set:', payload.userId, `(tier ${payload.tier})`);
     } else {
       console.log('OptionalAuth middleware - token verification failed');
     }

@@ -69,7 +69,9 @@ export async function syncAllAccounts(userId?: string): Promise<SyncResult> {
       : { isActive: true, supersededAt: null };
     const accessTokens = await getPrismaClient().accessToken.findMany({
       where: whereClause,
-      select: { token: true }
+      // id comes along so the per-connection log line below can name the
+      // connection without printing any part of its access token.
+      select: { id: true, token: true }
     });
 
     if (accessTokens.length === 0) {
@@ -89,7 +91,7 @@ export async function syncAllAccounts(userId?: string): Promise<SyncResult> {
     
     console.log(`Processing ${accessTokens.length} access tokens...`);
 
-    for (const { token } of accessTokens) {
+    for (const { id: tokenId, token } of accessTokens) {
       try {
         // Get accounts for this token
         const accountsResponse = await withTransientProviderRetry(() => plaidClient.accountsGet({
@@ -98,7 +100,7 @@ export async function syncAllAccounts(userId?: string): Promise<SyncResult> {
 
         // Provider IDs are stable across renames and avoid collapsing two
         // same-type accounts that happen to share a display name.
-        console.log(`Token ${token.substring(0, 8)}... accounts:`, accountsResponse.data.accounts.map(a => a.name));
+        console.log(`Connection ${tokenId} accounts:`, accountsResponse.data.accounts.map(a => a.name));
         for (const account of accountsResponse.data.accounts) {
           const accountKey = account.account_id;
           if (!allAccounts.has(accountKey)) {

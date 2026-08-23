@@ -12,3 +12,20 @@
 export function filterPlaidOnlyAccounts<T extends { source?: string }>(accounts: T[]): T[] {
   return accounts.filter(account => account.source === 'plaid');
 }
+
+/**
+ * Account IDs are namespaced by the provider that minted them, and the Account
+ * table has no source column — so for a persisted row the namespace is the only
+ * thing that says where it came from.
+ *
+ * Keep every non-Plaid namespace in one list. They were previously tested one
+ * `startsWith` at a time in the persisted loader, which is how direct Public.com
+ * rows (`public-…`) came back stamped `source: 'plaid'` and turned up under
+ * "Your Connected Accounts (Plaid)": the loader knew about `snaptrade-` and
+ * `manual-` and nothing had taught it the third namespace existed.
+ */
+const NON_PLAID_ACCOUNT_ID_PREFIXES = ['snaptrade-', 'manual-', 'public-'] as const;
+
+export function isNonPlaidAccountId(plaidAccountId: string): boolean {
+  return NON_PLAID_ACCOUNT_ID_PREFIXES.some(prefix => plaidAccountId.startsWith(prefix));
+}
