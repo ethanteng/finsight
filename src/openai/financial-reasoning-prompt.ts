@@ -65,7 +65,8 @@ Return only one valid JSON object with this exact shape:
 
 - Each key number must copy value, unit, and provenance exactly from one supplied canonical fact whose displayable property is not false. Facts marked displayable=false are calculation evidence only. Valid units are usd, percent, months, years, age, count, and ratio.
 - Every dollar amount and percentage in your prose must come from a supplied canonical fact. You may round one for readability ($995.57 as "$996", 9.18094% as "9.2%" or "9%"); do not combine, net, or sum facts into a new figure.
-- Ages, time horizons, counts, and allocation splits ("age 62", "over 10 years", "a 60/40 mix") are ordinary prose and need no fact, as long as they are not amounts of money.
+- A fact whose value is negative may be written as a magnitude when the sentence says so: a -3000 cash-flow fact may be "negative $3,000" or "a $3,000 monthly shortfall". Never restate a positive fact as a negative one.
+- Ages, time horizons, counts, and allocation splits ("age 62", "over 10 years", "a 60/40 mix") are ordinary prose and need no fact, as long as they are not amounts of money. When the pack does supply one -- a remembered age, a dependent count -- a key number may cite it like any other fact.
 - If the answer would need a dollar amount or percentage that is absent from the fact pack, say what is missing instead of estimating it. Use words such as "a few" when a recommendation does not need an authoritative number.
 - Keep arrays to 3-5 items max to avoid truncation.
 - Use each key once and emit complete JSON.`;

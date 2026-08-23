@@ -5,6 +5,7 @@ import type { ScenarioExecutionRecord } from '../scenarios/calculator-registry';
 import type { PlannedSearchQuery, SearchQueryEvidence } from '../data/search-types';
 import type { PlaidLiabilityDetails } from '../services/plaid-liabilities';
 import type { UnmodeledInvestmentValue } from '../services/investment-coverage';
+import type { PersonalContextValues } from '../profile/personal-context';
 
 export interface QuestionNeeds {
   needsMarketContext: boolean;
@@ -153,6 +154,13 @@ export interface FinancialContextSnapshot {
     source: 'stored' | 'fallback';
   };
   userProfile?: string;
+  /**
+   * The same remembered personal context as `userProfile`, structured. The
+   * formatted string is for the prompt; these typed values are what the
+   * canonical fact pack cites, so an age the user stated is a fact the answer
+   * may quote rather than a number the model appears to have invented.
+   */
+  userProfileValues?: PersonalContextValues;
   homeValueSummary?: string;
   /** Structured RentCast value data used for fact provenance and uncertainty bounds. */
   homeValueData?: HomeData;

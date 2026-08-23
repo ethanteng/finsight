@@ -171,6 +171,16 @@ export function buildCanonicalFactPack(
       },
     });
   };
+  const addProfileFact = (
+    id: string,
+    label: string,
+    value: unknown,
+    unit: CanonicalFactUnit,
+    source: string
+  ) => {
+    if (!finite(value)) return;
+    facts.set(id, { id, label, value, unit, provenance: { kind: 'user_input', source } });
+  };
   const addCalculatedFact = (
     id: string,
     label: string,
@@ -784,6 +794,33 @@ export function buildCanonicalFactPack(
         caveat: tipsFact.caveat ? `${tipsFact.caveat} ${lowerBoundCaveat}` : lowerBoundCaveat,
       });
     }
+  }
+
+  // What Linc remembers about the user is loaded only when the semantic plan
+  // asked for the user_profile pack, so its presence is the routing decision.
+  // These are the user's own stated details, not derived financial truth: an
+  // answer that reasons from the user's age was reading supplied context, and
+  // without the facts here that reasoning reads to a reviewer -- and to the
+  // grounding check -- as a number nobody supplied.
+  const profile = snapshot.userProfileValues;
+  if (profile) {
+    addProfileFact('profile_age', 'User-stated age', profile.age, 'age', 'userProfile.age');
+    addProfileFact(
+      'profile_dependent_count',
+      'User-stated number of dependents',
+      profile.dependentCount,
+      'count',
+      'userProfile.dependentCount'
+    );
+    (profile.dependentAges ?? []).slice(0, 10).forEach((dependentAge, index) => {
+      addProfileFact(
+        `profile_dependent_age_${index + 1}`,
+        `User-stated age of dependent ${index + 1}`,
+        dependentAge,
+        'age',
+        `userProfile.dependentAges.${index}`
+      );
+    });
   }
 
   // Scenario premises and explicitly requested external context are canonical inputs too.

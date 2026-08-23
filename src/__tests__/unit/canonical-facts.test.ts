@@ -23,6 +23,45 @@ function snapshot() {
   } as any;
 }
 
+describe('remembered personal context facts', () => {
+  // "What Linc remembers about you" is loaded only when the plan selects the
+  // user_profile pack, so its presence is the routing decision. Without these
+  // facts, an answer reasoning from the user's own stated age had nothing in
+  // the pack to cite and read as invented demographics.
+  function profileSnapshot() {
+    return {
+      ...snapshot(),
+      userProfile: '- The user is 77 years old.\n- Retirement status: retired',
+      userProfileValues: { age: 77, retirementStatus: 'retired', dependentCount: 2, dependentAges: [12, 15] },
+    } as any;
+  }
+
+  it('publishes user-stated age and dependents as citable facts', () => {
+    const pack = buildCanonicalFactPack(profileSnapshot(), 'Should I buy a house?', needs('user_profile'));
+    expect(pack.facts.find((fact) => fact.id === 'profile_age')).toMatchObject({
+      value: 77,
+      unit: 'age',
+      provenance: { kind: 'user_input', source: 'userProfile.age' },
+    });
+    expect(pack.facts.find((fact) => fact.id === 'profile_dependent_count')).toMatchObject({ value: 2, unit: 'count' });
+    expect(pack.facts.filter((fact) => fact.id.startsWith('profile_dependent_age_')).map((fact) => fact.value))
+      .toEqual([12, 15]);
+    expect(validateCanonicalFactPack(pack)).toEqual([]);
+  });
+
+  it('publishes nothing when the plan did not load the profile', () => {
+    const pack = buildCanonicalFactPack(snapshot(), 'Should I buy a house?', needs());
+    expect(pack.facts.some((fact) => fact.id.startsWith('profile_'))).toBe(false);
+  });
+
+  it('omits fields the user never stated', () => {
+    const data = profileSnapshot();
+    data.userProfileValues = { retirementStatus: 'retired' };
+    const pack = buildCanonicalFactPack(data, 'Should I buy a house?', needs('user_profile'));
+    expect(pack.facts.some((fact) => fact.id.startsWith('profile_'))).toBe(false);
+  });
+});
+
 describe('buildCanonicalFactPack', () => {
   it('supplies every always-loaded fact, whatever the question names', () => {
     // These all come from snapshot columns that are read on every request, so

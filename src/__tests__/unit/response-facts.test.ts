@@ -236,6 +236,139 @@ describe('RentCast canonical estimate bounds', () => {
   });
 });
 
+describe('negative canonical values written as magnitudes', () => {
+  // The reported failure: a user whose manual overrides put income below
+  // expenses. Both overrides reach the fact pack, and the derived cash-flow
+  // fact is -3000 -- but the answer says "a $3,000 monthly shortfall", which
+  // parsed as +3000 and took the whole cash-flow sentence out of the answer.
+  const negativeCashFlow = {
+    accounts: [],
+    bankingTransactions: [],
+    averageMonthlyIncome: 9_000,
+    averageMonthlyExpense: 12_000,
+    metadata: { lastUpdated: new Date(), dataSources: {}, errors: [] },
+    tierContext: { tierInfo: { currentTier: 'premium', availableSources: [] }, upgradeHints: [] },
+    financialSummary: {
+      financialOverview: { netWorth: 500_000, totalCash: 40_000, totalInvestments: 460_000, totalDebt: 0, homeValue: null },
+    },
+  } as any;
+  const pack = buildCanonicalFactPack(
+    negativeCashFlow,
+    'Can I afford a second home?',
+    questionNeedsFromPacks([], false)
+  );
+
+  it('publishes the signed cash-flow fact the sentences cite', () => {
+    expect(pack.facts.find((fact) => fact.id === 'average_monthly_operating_cash_flow'))
+      .toMatchObject({ value: -3_000 });
+  });
+
+  it.each([
+    ['negative $3,000', 'Your average monthly cash flow is negative $3,000.'],
+    ['a $3,000 monthly shortfall', 'Income of $9,000 against expenses of $12,000 is a $3,000 monthly shortfall.'],
+    ['a shortfall of $3,000', 'You are running a shortfall of $3,000 each month.'],
+    ['a $3,000 deficit', 'That leaves a $3,000 deficit before any mortgage payment.'],
+    ['negative 33%', 'Your savings rate is negative 33%.'],
+  ])('accepts %s as the signed fact it names', (_label, summary) => {
+    expect(validateResponseFacts({ summary }, pack)).toMatchObject({ valid: true });
+  });
+
+  it('marks both ends of a trailing-shortfall range as negative', () => {
+    // "a $3,000-4,000 monthly shortfall" puts the cue after the range, so the
+    // first end only inherits the sign via backward propagation.
+    const rangePack = {
+      facts: [
+        { id: 'short_a', label: 'Shortfall low', value: -3_000, unit: 'usd',
+          provenance: { kind: 'user_input', source: 'test' } },
+        { id: 'short_b', label: 'Shortfall high', value: -4_000, unit: 'usd',
+          provenance: { kind: 'user_input', source: 'test' } },
+      ],
+    } as any;
+    expect(validateResponseFacts(
+      { summary: 'Income below expenses leaves a $3,000-4,000 monthly shortfall.' },
+      rangePack
+    )).toMatchObject({ valid: true });
+  });
+
+  it('keeps the cash-flow sentence in the delivered answer', () => {
+    const response = {
+      summary: 'Your day-to-day cash flow is running negative most months (average monthly income of $9,000 against average monthly expenses of $12,000, a $3,000 monthly shortfall), which is a real flag before adding a mortgage payment.',
+      insights: ['Your average monthly cash flow is negative $3,000.'],
+    };
+    const result = validateResponseFacts(response, pack);
+    expect(result.valid).toBe(true);
+    expect(salvageUngroundedResponseWithDetail(response, pack, result).removals.sentences).toEqual([]);
+  });
+
+  it('still rejects a magnitude no fact carries as a negative', () => {
+    expect(validateResponseFacts({ summary: 'You are running a $4,200 monthly shortfall.' }, pack).valid).toBe(false);
+    // The negative wording moves the number it marks, not every number in the
+    // sentence.
+    expect(validateResponseFacts({ summary: 'A negative $3,000 month leaves $77,000 uncovered.' }, pack).valid).toBe(false);
+  });
+
+  it('refuses to read a positive fact as a shortfall', () => {
+    // The reversal the reasoning prompt forbids: a surplus reported as a
+    // deficit reverses the user's position, so negative wording must match
+    // the negated fact and only that one.
+    const surplus = buildCanonicalFactPack(
+      { ...negativeCashFlow, averageMonthlyIncome: 12_000, averageMonthlyExpense: 9_000 },
+      'Can I afford a second home?',
+      questionNeedsFromPacks([], false)
+    );
+    expect(surplus.facts.find((fact) => fact.id === 'average_monthly_operating_cash_flow'))
+      .toMatchObject({ value: 3_000 });
+    expect(validateResponseFacts({ summary: 'You are running a $3,000 monthly shortfall.' }, surplus).valid).toBe(false);
+    expect(validateResponseFacts({ summary: 'Your cash flow is negative $3,000.' }, surplus).valid).toBe(false);
+    // Stated correctly, the same fact still grounds.
+    expect(validateResponseFacts({ summary: 'You have $3,000 left over each month.' }, surplus).valid).toBe(true);
+  });
+
+  it('does not treat absolute comparison gaps as negative magnitudes', () => {
+    // Home-affordability and retirement comparisons publish abs() gaps as
+    // positive facts. A bare "gap of $1,200" must still cite that positive
+    // magnitude — flipping the sign would reject a correct comparison sentence.
+    const gapPack = {
+      facts: [
+        { id: 'monthly_cost_gap', label: 'Absolute monthly ownership-cost gap', value: 1_200, unit: 'usd',
+          provenance: { kind: 'user_input', source: 'test' } },
+      ],
+    } as any;
+    expect(validateResponseFacts(
+      { summary: 'There is a monthly cost gap of $1,200 between the two homes.' },
+      gapPack
+    )).toMatchObject({ valid: true });
+  });
+
+  it('does not negate a difference that could run either way', () => {
+    // Same reasoning as the bare "gap of" case: "down by" and "behind by"
+    // describe a difference in either direction, and no fact in the pack is a
+    // signed "amount down". A comparison sentence must still cite the
+    // positive abs() gap it names.
+    const gapPack = {
+      facts: [
+        { id: 'monthly_cost_gap', label: 'Absolute monthly ownership-cost gap', value: 1_200, unit: 'usd',
+          provenance: { kind: 'user_input', source: 'test' } },
+      ],
+    } as any;
+    expect(validateResponseFacts({ summary: 'The cheaper home is down by $1,200 a month.' }, gapPack).valid).toBe(true);
+    expect(validateResponseFacts({ summary: 'That option is behind by $1,200 each month.' }, gapPack).valid).toBe(true);
+  });
+
+  it('still reads a named reserve gap as the signed shortfall', () => {
+    const reservePack = {
+      facts: [
+        { id: 'reserve_gap', label: 'Emergency-fund gap', value: -15_000, unit: 'usd',
+          provenance: { kind: 'user_input', source: 'test' } },
+      ],
+    } as any;
+    expect(validateResponseFacts(
+      { summary: 'You have an emergency fund gap of $15,000 after the down payment.' },
+      reservePack
+    )).toMatchObject({ valid: true });
+  });
+});
+
 describe('rounded canonical values', () => {
   // The values behind the reported failure: every canonical fact carries full
   // precision, and the UI itself renders them rounded.
