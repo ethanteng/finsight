@@ -125,16 +125,27 @@ export function buildSnapshotSummaryForValidation(snapshot: FinancialContextSnap
   // invented data.
   const quality = snapshot.financialSummary?.quality;
   if (quality) {
+    // Only what is actually wrong, and each signal described as what it is.
+    // `deriveSnapshotQuality` always returns this object with empty arrays, so
+    // emitting it unconditionally announced "0 account connection(s) not
+    // reporting" under an incomplete-totals heading on every healthy snapshot
+    // -- a false premise that invites the reviewer to accept a caveat the
+    // answer had no basis for. Staleness and source errors are not
+    // incompleteness either: the totals carry those sources' last known
+    // values, so only a missing connection gets that wording.
     const connectionGaps = countConnectionGaps(quality);
     const staleCount = quality.staleSourceIds?.length ?? 0;
+    const errorCount = quality.errors?.length ?? 0;
     const qualityParts = [
-      `${connectionGaps} account connection(s) not reporting`,
-      ...(staleCount > 0 ? [`${staleCount} stale source(s)`] : []),
-      ...(quality.errors?.length ? [`${quality.errors.length} source error(s)`] : []),
+      ...(connectionGaps > 0
+        ? [`${connectionGaps} account connection(s) not reporting, so the totals above may be incomplete`]
+        : []),
+      ...(staleCount > 0 ? [`${staleCount} source(s) too old to count as current`] : []),
+      ...(errorCount > 0 ? [`${errorCount} source(s) reported an error`] : []),
     ];
-    parts.push(
-      `Data quality (the totals above may be incomplete because of these): ${qualityParts.join(', ')}`
-    );
+    if (qualityParts.length > 0) {
+      parts.push(`Data quality: ${qualityParts.join('; ')}`);
+    }
   }
 
   const overview = snapshot.financialSummary?.financialOverview;
