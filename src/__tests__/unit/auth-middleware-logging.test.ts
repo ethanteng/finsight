@@ -1,4 +1,9 @@
-import { optionalAuth } from '../../auth/middleware';
+const findUniqueUser = jest.fn();
+jest.mock('../../prisma-client', () => ({
+  getPrismaClient: () => ({ user: { findUnique: findUniqueUser } }),
+}));
+
+import { optionalAuth, authenticateUser } from '../../auth/middleware';
 import { generateToken } from '../../auth/utils';
 
 /**
@@ -101,5 +106,64 @@ describe('optionalAuth logging', () => {
     expect(next).toHaveBeenCalled();
     expect(req.user).toBeUndefined();
     expect(logged.join('\n')).toMatch(/bearer token present: no/i);
+  });
+});
+
+/**
+ * The same invariant on the required-auth path. `authenticate` looks the user up
+ * rather than trusting the claims, so it logs a different object — but it is the
+ * same credential arriving in the same header.
+ */
+describe('authenticateUser logging', () => {
+  const ORIGINAL_SECRET = process.env.JWT_SECRET;
+  let logged: string[];
+  let spies: jest.SpyInstance[];
+
+  const record = (...args: unknown[]) => {
+    logged.push(args.map(a => (typeof a === 'string' ? a : JSON.stringify(a))).join(' '));
+  };
+
+  beforeEach(() => {
+    process.env.JWT_SECRET = 'test-secret-for-logging-assertions';
+    logged = [];
+    spies = [
+      jest.spyOn(console, 'log').mockImplementation(record),
+      jest.spyOn(console, 'error').mockImplementation(record),
+    ];
+    findUniqueUser.mockResolvedValue({
+      id: 'user-abc',
+      email: 'someone@example.com',
+      tier: 'premium',
+      isActive: true,
+      subscriptionStatus: 'active',
+    });
+  });
+
+  afterEach(() => {
+    spies.forEach(spy => spy.mockRestore());
+    if (ORIGINAL_SECRET === undefined) delete process.env.JWT_SECRET;
+    else process.env.JWT_SECRET = ORIGINAL_SECRET;
+  });
+
+  it('logs neither the bearer token nor the email of the user it resolved', async () => {
+    const token = generateToken({ userId: 'user-abc', email: 'someone@example.com', tier: 'premium' });
+    const req: any = {
+      headers: { authorization: `Bearer ${token}`, cookie: 'session=super-secret-cookie-value' },
+    };
+    const res: any = { status: jest.fn().mockReturnThis(), json: jest.fn() };
+    const next = jest.fn();
+
+    await authenticateUser(req, res, next);
+
+    expect(next).toHaveBeenCalled();
+    expect(req.user).toEqual({ id: 'user-abc', email: 'someone@example.com', tier: 'premium' });
+
+    const output = logged.join('\n');
+    expect(output).not.toContain(token);
+    expect(output).not.toContain(token.slice(0, 20));
+    expect(output).not.toContain('someone@example.com');
+    expect(output).not.toContain('super-secret-cookie-value');
+    // Still identifies who the request was for.
+    expect(output).toContain('user-abc');
   });
 });
