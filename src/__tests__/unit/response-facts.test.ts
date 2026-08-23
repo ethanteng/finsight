@@ -236,6 +236,61 @@ describe('RentCast canonical estimate bounds', () => {
   });
 });
 
+describe('negative canonical values written as magnitudes', () => {
+  // The reported failure: a user whose manual overrides put income below
+  // expenses. Both overrides reach the fact pack, and the derived cash-flow
+  // fact is -3000 -- but the answer says "a $3,000 monthly shortfall", which
+  // parsed as +3000 and took the whole cash-flow sentence out of the answer.
+  const negativeCashFlow = {
+    accounts: [],
+    bankingTransactions: [],
+    averageMonthlyIncome: 9_000,
+    averageMonthlyExpense: 12_000,
+    metadata: { lastUpdated: new Date(), dataSources: {}, errors: [] },
+    tierContext: { tierInfo: { currentTier: 'premium', availableSources: [] }, upgradeHints: [] },
+    financialSummary: {
+      financialOverview: { netWorth: 500_000, totalCash: 40_000, totalInvestments: 460_000, totalDebt: 0, homeValue: null },
+    },
+  } as any;
+  const pack = buildCanonicalFactPack(
+    negativeCashFlow,
+    'Can I afford a second home?',
+    questionNeedsFromPacks([], false)
+  );
+
+  it('publishes the signed cash-flow fact the sentences cite', () => {
+    expect(pack.facts.find((fact) => fact.id === 'average_monthly_operating_cash_flow'))
+      .toMatchObject({ value: -3_000 });
+  });
+
+  it.each([
+    ['negative $3,000', 'Your average monthly cash flow is negative $3,000.'],
+    ['a $3,000 monthly shortfall', 'Income of $9,000 against expenses of $12,000 is a $3,000 monthly shortfall.'],
+    ['a shortfall of $3,000', 'You are running a shortfall of $3,000 each month.'],
+    ['a $3,000 deficit', 'That leaves a $3,000 deficit before any mortgage payment.'],
+    ['negative 33%', 'Your savings rate is negative 33%.'],
+  ])('accepts %s as the signed fact it names', (_label, summary) => {
+    expect(validateResponseFacts({ summary }, pack)).toMatchObject({ valid: true });
+  });
+
+  it('keeps the cash-flow sentence in the delivered answer', () => {
+    const response = {
+      summary: 'Your day-to-day cash flow is running negative most months (average monthly income of $9,000 against average monthly expenses of $12,000, a $3,000 monthly shortfall), which is a real flag before adding a mortgage payment.',
+      insights: ['Your average monthly cash flow is negative $3,000.'],
+    };
+    const result = validateResponseFacts(response, pack);
+    expect(result.valid).toBe(true);
+    expect(salvageUngroundedResponseWithDetail(response, pack, result).removals.sentences).toEqual([]);
+  });
+
+  it('still rejects a magnitude no fact carries under either sign', () => {
+    expect(validateResponseFacts({ summary: 'You are running a $4,200 monthly shortfall.' }, pack).valid).toBe(false);
+    // The negative wording widens matching for the number it marks, not for
+    // every number in the sentence.
+    expect(validateResponseFacts({ summary: 'A negative $3,000 month leaves $77,000 uncovered.' }, pack).valid).toBe(false);
+  });
+});
+
 describe('rounded canonical values', () => {
   // The values behind the reported failure: every canonical fact carries full
   // precision, and the UI itself renders them rounded.

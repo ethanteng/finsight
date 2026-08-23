@@ -140,6 +140,11 @@ interface ProseClaim {
   hasMagnitude: boolean;
   /** True when a dash joined this number to the one before it ("$1,400-2,029"). */
   rangeLinked: boolean;
+  /**
+   * True when the sentence marks this magnitude as a negative quantity without
+   * writing a minus sign -- "negative $3,000", "a $3,000 monthly shortfall".
+   */
+  negativeWording: boolean;
   identifier: boolean;
   calendarYear: boolean;
 }
@@ -151,6 +156,21 @@ const MONEY_VERB_BEFORE =
 const PER_PERIOD_AFTER = /^\s*(?:\/|per\s+|an?\s+|each\s+|every\s+)(?:month|year|week|quarter|day|paycheck|pay\s+period)\b/i;
 const NON_MONEY_NOUN_AFTER =
   /^\s*(?:years?|months?|weeks?|days?|decades?|times|holdings?|accounts?|positions?|shares?|securities|funds?|people|percent|percentage)\b/i;
+
+/**
+ * English writes a negative amount as a positive magnitude far more often than
+ * with a minus sign: a shortfall, a deficit, cash flow that runs negative. The
+ * canonical fact holds the signed value (-3000), so without these the honest
+ * sentence "a $3,000 monthly shortfall" is cut from the answer as an invented
+ * number while the fact it names sits in the pack.
+ */
+const NEGATIVE_WORDING_BEFORE =
+  /\b(?:negative|minus|deficit\s+of|shortfall\s+of|shortage\s+of|gap\s+of|short(?:falling)?\s+by|down\s+by|behind\s+by|in\s+the\s+red\s+by)\s*(?:about\s+|roughly\s+|around\s+|approximately\s+|some\s+)?$/i;
+const PERIOD_QUALIFIER = String.raw`(?:monthly|annual|annualized|yearly|weekly|net|average|per\s+(?:month|year|week)|a\s+(?:month|year|week))`;
+const NEGATIVE_WORDING_AFTER = new RegExp(
+  String.raw`^\s*(?:${PERIOD_QUALIFIER}\s+)*(?:shortfall|deficit|shortage|negative|in\s+the\s+red)\b`,
+  'i'
+);
 
 const NUMBER_PATTERN = /\d[\d,]*(?:\.\d+)?/g;
 const MAGNITUDE_WORD = /^\s*(thousand|million|billion)\b/i;
@@ -217,14 +237,18 @@ function scanProseClaims(prose: string): ProseClaim[] {
       step: displayStep(digits, multiplier),
       hasMagnitude: magnitude !== undefined,
       rangeLinked,
+      negativeWording: !negative &&
+        (NEGATIVE_WORDING_BEFORE.test(beforeDollar) || NEGATIVE_WORDING_AFTER.test(after)),
       identifier: isNumericIdentifier(prose, start, digits),
       calendarYear: !magnitude && !negative && Number.isInteger(value) && value >= 1900 && value <= 2099,
     });
   }
 
   // Both ends of a range share a unit: "$50,000-100,000" and "10-15%".
+  // They share a sign too: "a shortfall of $3,000-4,000" is two negatives.
   for (let i = 1; i < claims.length; i++) {
     if (claims[i].rangeLinked && !claims[i].unit) claims[i].unit = claims[i - 1].unit;
+    if (claims[i].rangeLinked && claims[i - 1].negativeWording) claims[i].negativeWording = true;
   }
   for (let i = claims.length - 1; i > 0; i--) {
     if (claims[i].rangeLinked && claims[i].unit && !claims[i - 1].unit) {
@@ -243,10 +267,16 @@ function claimNeedsGrounding(claim: ProseClaim): boolean {
 }
 
 function claimIsSupported(claim: ProseClaim, pack: CanonicalFactPack): boolean {
+  // A magnitude the sentence already called negative may cite the signed fact
+  // it names. The positive reading stays allowed as well, so this only widens
+  // what counts as grounded -- it never lets an unmatched number through.
+  const candidates = claim.negativeWording && claim.value > 0
+    ? [claim.value, -claim.value]
+    : [claim.value];
   return pack.facts.some((fact) =>
     fact.displayable !== false &&
     (claim.unit === undefined || fact.unit === claim.unit) &&
-    matchesAtWrittenPrecision(claim.value, fact.value, claim.step));
+    candidates.some((value) => matchesAtWrittenPrecision(value, fact.value, claim.step)));
 }
 
 function unsupportedClaims(prose: string, pack: CanonicalFactPack): ProseClaim[] {

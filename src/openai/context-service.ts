@@ -20,6 +20,7 @@ import type { ExtractedRetirementInputs } from './retirement-input-extraction';
 import type { PlannedSearchQuery, SearchQueryEvidence } from '../data/search-types';
 import { compactSearchQueryEvidence } from '../data/search-types';
 import type { SearchContext } from '../data/orchestrator';
+import type { PersonalContextValues } from '../profile/personal-context';
 
 interface GatherContextArgs {
   userId?: string;
@@ -460,7 +461,8 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
     }),
     marketContext: marketContextResult?.text,
     marketContextMetadata: marketContextResult?.metadata,
-    userProfile,
+    userProfile: userProfile?.text,
+    userProfileValues: userProfile?.values,
     homeValueSummary,
     homeValueData,
     financialSummary: financialSummary || undefined,
@@ -1405,18 +1407,28 @@ async function maybeFetchMarketContext(
   }
 }
 
-async function loadPersonalContext(userId?: string): Promise<string | undefined> {
+/**
+ * The remembered personal context, in both forms the pipeline needs: the
+ * formatted lines the prompt shows the model, and the typed values the
+ * canonical fact pack cites. Both come from one decrypt-and-parse so the two
+ * can never describe different people.
+ */
+async function loadPersonalContext(
+  userId?: string
+): Promise<{ text: string; values: PersonalContextValues } | undefined> {
   if (!userId) {
     return undefined;
   }
 
   try {
     const { ProfileManager } = await import('../profile/manager');
+    const { formatPersonalContextForModel, personalContextValues } = await import('../profile/personal-context');
     const profileManager = new ProfileManager();
 
-    const personalContext = await profileManager.getPersonalContextForModel(userId);
-    if (personalContext) return personalContext;
-    return undefined;
+    const facts = await profileManager.getPersonalContextFacts(userId);
+    const text = formatPersonalContextForModel(facts);
+    if (!text) return undefined;
+    return { text, values: personalContextValues(facts) };
   } catch (error) {
     console.warn('Remembered personal context load failed', error);
     return undefined;

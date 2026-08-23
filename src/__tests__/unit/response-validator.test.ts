@@ -1,4 +1,4 @@
-import { formatMetricPercent } from '../../openai/response-validator';
+import { buildSnapshotSummaryForValidation, formatMetricPercent } from '../../openai/response-validator';
 
 describe('formatMetricPercent', () => {
   it('converts decimal fractions to whole-number percents', () => {
@@ -17,5 +17,39 @@ describe('formatMetricPercent', () => {
   it('returns N/A for non-finite values', () => {
     expect(formatMetricPercent(undefined)).toBe('N/A');
     expect(formatMetricPercent(NaN)).toBe('N/A');
+  });
+});
+
+describe('buildSnapshotSummaryForValidation', () => {
+  const snapshot = {
+    accounts: [],
+    bankingTransactions: [],
+    metadata: { lastUpdated: new Date(), dataSources: {}, errors: [] },
+    tierContext: { tierInfo: { currentTier: 'premium', availableSources: [] }, upgradeHints: [] },
+    financialSummary: {
+      financialOverview: { netWorth: 500000, totalCash: 40000, totalInvestments: 460000, totalDebt: 0, homeValue: null },
+    },
+  } as any;
+
+  it('shows the reviewer the remembered personal context the model was given', () => {
+    // Omitting it made the reviewer object that an answer had invented the
+    // user's age -- demographics the primary model was in fact handed.
+    const summary = buildSnapshotSummaryForValidation({
+      ...snapshot,
+      userProfile: '- The user is 77 years old.\n- Retirement status: retired',
+    });
+    expect(summary).toContain('Remembered personal context');
+    expect(summary).toContain('77 years old');
+    expect(summary).toContain('retired');
+  });
+
+  it('bounds the personal context block', () => {
+    const summary = buildSnapshotSummaryForValidation({ ...snapshot, userProfile: 'x'.repeat(2_000) });
+    expect(summary).toContain('x'.repeat(600));
+    expect(summary).not.toContain('x'.repeat(601));
+  });
+
+  it('says nothing about personal context when none was loaded', () => {
+    expect(buildSnapshotSummaryForValidation(snapshot)).not.toContain('Remembered personal context');
   });
 });

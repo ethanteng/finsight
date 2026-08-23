@@ -46,7 +46,7 @@ Given:
 Check for:
 - Calculation consistency: Do the key_numbers align with the summary and insights?
 - Logical reasoning: Are the conclusions supported by the data?
-- Unsupported assumptions: Does the response invent data NOT present in the financial context? (If the snapshot contains portfolio value, holdings, withdrawal amounts, etc., the response may use them—do NOT flag as invented.)
+- Unsupported assumptions: Does the response invent data NOT present in the financial context? (If the snapshot contains portfolio value, holdings, withdrawal amounts, remembered personal context, etc., the response may use them—do NOT flag as invented. Age, household, occupation and retirement status supplied under "Remembered personal context" are user-stated facts the response is entitled to reason from.)
 - Formula errors: Are any financial formulas (e.g., 4% rule, debt-to-income) applied correctly?
 
 Respond with a JSON object:
@@ -65,12 +65,27 @@ export function formatMetricPercent(value: unknown, digits = 2): string {
   return `${(value * 100).toFixed(digits)}%`;
 }
 
+/** Bounded: the reviewer needs to recognize these details, not to store them. */
+const MAX_PERSONAL_CONTEXT_CHARS = 600;
+
 /**
  * Build a compact summary of the financial snapshot for validation.
  * Gives Gemini enough context to know what data was available to Claude.
+ *
+ * Exported for unit testing: what this omits, the reviewer treats as invented.
  */
-function buildSnapshotSummaryForValidation(snapshot: FinancialContextSnapshot): string {
+export function buildSnapshotSummaryForValidation(snapshot: FinancialContextSnapshot): string {
   const parts: string[] = [];
+
+  // The primary model is shown this block whenever the plan asks for it, so an
+  // answer may legitimately say the user is retired or 77. Leaving it out here
+  // made the reviewer object to demographics it simply could not see, which
+  // costs a regeneration and puts a caveat on a sound answer.
+  if (snapshot.userProfile) {
+    parts.push(
+      `Remembered personal context (user-stated biographical details, not financial balances): ${snapshot.userProfile.slice(0, MAX_PERSONAL_CONTEXT_CHARS)}`
+    );
+  }
 
   const overview = snapshot.financialSummary?.financialOverview;
   if (overview) {
