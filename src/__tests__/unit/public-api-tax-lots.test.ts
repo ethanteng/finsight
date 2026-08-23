@@ -71,6 +71,38 @@ describe('valuing an account from its tax lots', () => {
     expect(holdings.positions).toEqual([]);
   });
 
+  // Lots that name a security but carry no currentValue must not sum to zero
+  // via `(null ?? 0)` -- that is the same confident-zero failure as an empty list.
+  it('reports null rather than zero when lots lack currentValue', async () => {
+    fetchMock.mockResolvedValue(ok({
+      asOf: '2026-08-22',
+      lots: [
+        LOT({ currentValue: '', currentPrice: '' }),
+        LOT({ quantity: '5', currentValue: null, currentPrice: null }),
+      ],
+    }));
+
+    const holdings = await getTaxLotHoldings('tok', 'acct');
+
+    expect(holdings.totalValue).toBeNull();
+    expect(holdings.positions[0].currentValue).toBeNull();
+  });
+
+  it('keeps a partial sum when only some lots report currentValue', async () => {
+    fetchMock.mockResolvedValue(ok({
+      asOf: '2026-08-22',
+      lots: [
+        LOT({ symbol: 'A', currentValue: '100' }),
+        LOT({ symbol: 'B', currentValue: null }),
+      ],
+    }));
+
+    const holdings = await getTaxLotHoldings('tok', 'acct');
+
+    expect(holdings.totalValue).toBe(100);
+    expect(holdings.positions).toHaveLength(2);
+  });
+
   it('does not invent a security type the lots never carried', async () => {
     fetchMock.mockResolvedValue(ok({ asOf: '2026-08-22', lots: [LOT()] }));
 

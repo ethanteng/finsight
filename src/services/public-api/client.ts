@@ -11,8 +11,9 @@ import { getProviderRequestTimeoutMs } from '../provider-request-policy';
  *
  * DELIBERATELY READ-ONLY. The same Public API places, replaces and cancels orders,
  * and the personal secret is not scope-limited, so nothing here may ever call a
- * mutating endpoint. Only `/account` and `/{accountId}/portfolio/v2` are reachable
- * from this module, and there is a test asserting no order path appears in it.
+ * mutating endpoint. Reachable paths: token mint (POST), `/account`,
+ * `/{accountId}/portfolio/v2`, and `/{accountId}/taxlots/unrealized`. A test
+ * asserts no order or other mutating path appears in this module.
  */
 
 const PUBLIC_API_BASE_URL = 'https://api.public.com';
@@ -306,10 +307,22 @@ export async function getTaxLotHoldings(
 
     const quantity = numberOrNull(lot?.quantity);
     const currentValue = numberOrNull(lot?.currentValue);
+    const lastPrice = numberOrNull(lot?.currentPrice);
     const existing = bySymbol.get(key);
     if (existing) {
-      existing.quantity = (existing.quantity ?? 0) + (quantity ?? 0);
-      existing.currentValue = (existing.currentValue ?? 0) + (currentValue ?? 0);
+      // Keep null when every contribution is missing. `(null ?? 0) + (null ?? 0)`
+      // would invent a confident zero for an unknown quantity or value.
+      existing.quantity =
+        existing.quantity === null && quantity === null
+          ? null
+          : (existing.quantity ?? 0) + (quantity ?? 0);
+      existing.currentValue =
+        existing.currentValue === null && currentValue === null
+          ? null
+          : (existing.currentValue ?? 0) + (currentValue ?? 0);
+      // Per-share price is shared across lots of the same symbol; prefer the
+      // latest non-null reading rather than accumulating.
+      if (lastPrice !== null) existing.lastPrice = lastPrice;
       continue;
     }
     bySymbol.set(key, {
@@ -321,9 +334,7 @@ export async function getTaxLotHoldings(
       instrumentType: null,
       quantity,
       currentValue,
-      // Per-share price is shared across lots of the same symbol, so the last
-      // one seen is the current price rather than something to accumulate.
-      lastPrice: numberOrNull(lot?.currentPrice),
+      lastPrice,
     });
   }
 
@@ -331,9 +342,13 @@ export async function getTaxLotHoldings(
   // Null rather than 0 when nothing was reported. An account with no lots -- a
   // pure cash product such as HIGH_YIELD -- has an unknown value here, not a
   // zero one, and publishing a confident zero is the failure this integration
-  // exists to stop.
-  const totalValue = positions.length > 0
-    ? positions.reduce((sum, position) => sum + (position.currentValue ?? 0), 0)
+  // exists to stop. Same for lots that name a symbol but carry no currentValue:
+  // summing `(null ?? 0)` would invent zero.
+  const reportedValues = positions
+    .map(position => position.currentValue)
+    .filter((value): value is number => value !== null);
+  const totalValue = reportedValues.length > 0
+    ? reportedValues.reduce((sum, value) => sum + value, 0)
     : null;
 
   return {
