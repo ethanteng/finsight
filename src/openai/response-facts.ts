@@ -355,7 +355,7 @@ export function validateResponseFacts(
  * `continuesInLowercase` holds the sentence together on that evidence instead.
  */
 const NEVER_SENTENCE_FINAL_ABBREVIATIONS = new Set([
-  'approx', 'cf', 'dr', 'est', 'incl', 'mr', 'mrs', 'ms', 'vs',
+  'approx', 'cf', 'dr', 'est', 'excl', 'incl', 'mr', 'mrs', 'ms', 'vs',
 ]);
 
 /** "U.S." and "e.g." end in a single letter; a real sentence rarely does. */
