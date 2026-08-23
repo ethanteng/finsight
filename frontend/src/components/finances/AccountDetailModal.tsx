@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from 'react';
+import { Pencil } from 'lucide-react';
 import InvestmentPortfolio from '../InvestmentPortfolio';
 import { useDialog } from '../ui/dialog';
 import type {
@@ -177,7 +178,16 @@ export default function AccountDetailModal({
               <div className="flex min-w-0 items-start gap-2">
                 <h2 className="min-w-0 break-words text-xl font-bold text-white sm:text-2xl">{displayName}</h2>
                 {account.source !== 'manual' && (
-                  <button onClick={() => setIsEditingName(true)} className="text-gray-400 hover:text-white" title="Rename account">✏️</button>
+                  /* Sized to the heading's line box so it aligns with the first line of a
+                     wrapped name. See AccountGroupCard for why `!min-h-0` and `after`. */
+                  <button
+                    onClick={() => setIsEditingName(true)}
+                    className="relative grid h-7 w-7 shrink-0 place-items-center rounded-full text-gray-400 transition-colors after:absolute after:-inset-2 after:content-[''] hover:bg-gray-700 hover:text-[#102319] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#102319] focus-visible:ring-offset-1 sm:h-8 sm:w-8 !min-h-0"
+                    title="Rename account"
+                    aria-label={`Rename ${displayName}`}
+                  >
+                    <Pencil className="h-4 w-4" aria-hidden="true" />
+                  </button>
                 )}
               </div>
             )}
@@ -211,7 +221,7 @@ export default function AccountDetailModal({
               </div>
             )}
           </div>
-          <button onClick={onClose} className="grid h-11 w-11 shrink-0 place-items-center rounded-full text-2xl text-gray-400 hover:bg-gray-700 hover:text-white" aria-label="Close account details">×</button>
+          <button onClick={onClose} className="grid h-11 w-11 shrink-0 place-items-center rounded-full text-2xl text-gray-400 hover:bg-gray-700 hover:text-[#102319]" aria-label="Close account details">×</button>
         </div>
 
         <div className="flex-1 overflow-y-auto p-4 sm:p-6">
