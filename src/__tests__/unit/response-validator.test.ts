@@ -106,4 +106,24 @@ describe('buildSnapshotSummaryForValidation', () => {
   it('says nothing about data quality when the snapshot carries none', () => {
     expect(buildSnapshotSummaryForValidation(snapshot)).not.toContain('Data quality');
   });
+
+  it('says nothing about data quality when the quality object is empty', () => {
+    // Production snapshots always attach quality; an empty object must not
+    // become "0 connections not reporting" / "totals may be incomplete."
+    const summary = buildSnapshotSummaryForValidation({
+      ...snapshot,
+      financialSummary: {
+        ...snapshot.financialSummary,
+        quality: {
+          unavailableSourceIds: [],
+          requiredUnavailableSourceIds: [],
+          staleSourceIds: [],
+          errors: [],
+        },
+      },
+    } as any);
+
+    expect(summary).not.toContain('Data quality');
+    expect(summary).not.toContain('not reporting');
+  });
 });

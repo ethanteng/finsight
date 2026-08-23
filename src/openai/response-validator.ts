@@ -122,19 +122,25 @@ export function buildSnapshotSummaryForValidation(snapshot: FinancialContextSnap
   // model `financialSummary.quality`, so an answer may legitimately say that
   // some connections are not reporting and that the totals are therefore
   // incomplete. Without the counts here the reviewer read a sourced caveat as
-  // invented data.
+  // invented data. Real snapshots always carry a quality object, so only emit
+  // this block when at least one count is non-zero — otherwise every healthy
+  // answer would tell the reviewer "0 connections not reporting" and that
+  // totals "may be incomplete because of these."
   const quality = snapshot.financialSummary?.quality;
   if (quality) {
     const connectionGaps = countConnectionGaps(quality);
     const staleCount = quality.staleSourceIds?.length ?? 0;
+    const errorCount = quality.errors?.length ?? 0;
     const qualityParts = [
-      `${connectionGaps} account connection(s) not reporting`,
+      ...(connectionGaps > 0 ? [`${connectionGaps} account connection(s) not reporting`] : []),
       ...(staleCount > 0 ? [`${staleCount} stale source(s)`] : []),
-      ...(quality.errors?.length ? [`${quality.errors.length} source error(s)`] : []),
+      ...(errorCount > 0 ? [`${errorCount} source error(s)`] : []),
     ];
-    parts.push(
-      `Data quality (the totals above may be incomplete because of these): ${qualityParts.join(', ')}`
-    );
+    if (qualityParts.length > 0) {
+      parts.push(
+        `Data quality (the totals above may be incomplete because of these): ${qualityParts.join(', ')}`
+      );
+    }
   }
 
   const overview = snapshot.financialSummary?.financialOverview;
