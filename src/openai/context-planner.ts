@@ -274,9 +274,23 @@ export function parseContextPlan(raw: unknown, durationMs = 0, model?: string): 
   };
 }
 
-/** Failure is recall-safe and contains no language heuristics: include everything. */
-export function fallbackContextPlan(durationMs = 0, summary = 'Context planner unavailable; included every pack.'): ContextPlan {
-  const selectedPacks = allContextPacks();
+/**
+ * Failure is recall-safe and contains no language heuristics: include every
+ * pack that can actually be loaded without a plan.
+ *
+ * search_context is the one exception, and leaving it in was a bug. Retrieval
+ * needs a planned standalone query; this path has none, and the raw user
+ * prompt must never become one. Selecting the pack anyway produced a plan that
+ * `validateSearchPlan` rejects, so every planner failure also failed the
+ * primary data-pack audit that exists to recover from it -- two failures
+ * reported for one cause, and the audit's own widening lost with it. The
+ * primary model can still add the pack during that audit, with real queries.
+ */
+export function fallbackContextPlan(
+  durationMs = 0,
+  summary = 'Context planner unavailable; included every loadable pack.'
+): ContextPlan {
+  const selectedPacks = allContextPacks().filter((pack) => pack !== 'search_context');
   return {
     source: 'fallback_all',
     requestedPacks: selectedPacks,

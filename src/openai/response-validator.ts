@@ -46,7 +46,7 @@ Given:
 Check for:
 - Calculation consistency: Do the key_numbers align with the summary and insights?
 - Logical reasoning: Are the conclusions supported by the data?
-- Unsupported assumptions: Does the response invent data NOT present in the financial context? (If the snapshot contains portfolio value, holdings, withdrawal amounts, remembered personal context, etc., the response may use them—do NOT flag as invented. Age, household, occupation and retirement status supplied under "Remembered personal context" are user-stated facts the response is entitled to reason from.)
+- Unsupported assumptions: Does the response invent data NOT present in the financial context? (If the snapshot contains portfolio value, holdings, withdrawal amounts, remembered personal context, etc., the response may use them—do NOT flag as invented. Age, household, occupation and retirement status supplied under "Remembered personal context" are user-stated facts the response is entitled to reason from, and the counts under "Data quality" are the basis for any statement that connections are not reporting or that totals are incomplete.)
 - Formula errors: Are any financial formulas (e.g., 4% rule, debt-to-income) applied correctly?
 
 Respond with a JSON object:
@@ -63,6 +63,21 @@ Be strict but fair. Only flag real problems.`;
 export function formatMetricPercent(value: unknown, digits = 2): string {
   if (typeof value !== 'number' || !Number.isFinite(value)) return 'N/A';
   return `${(value * 100).toFixed(digits)}%`;
+}
+
+/**
+ * Connection gaps, counted the way `collectMissingInputAsks` counts them, so
+ * the reviewer sees the same number the user is shown. The advisory
+ * annotations are excluded there because reconnecting cannot clear them, and a
+ * reviewer told a different number would object to the answer's own wording.
+ */
+function countConnectionGaps(
+  quality: NonNullable<NonNullable<FinancialContextSnapshot['financialSummary']>['quality']>
+): number {
+  return new Set(
+    [...(quality.requiredUnavailableSourceIds ?? []), ...(quality.unavailableSourceIds ?? [])]
+      .filter((id) => !id.endsWith(':holdings-coverage') && !id.endsWith(':balance-derived'))
+  ).size;
 }
 
 /**
@@ -101,6 +116,36 @@ export function buildSnapshotSummaryForValidation(snapshot: FinancialContextSnap
     parts.push(
       `Remembered personal context (user-stated biographical details, not financial balances):\n${boundedPersonalContext(snapshot.userProfile)}`
     );
+  }
+
+  // Same omission, different field. The question context pack hands the primary
+  // model `financialSummary.quality`, so an answer may legitimately say that
+  // some connections are not reporting and that the totals are therefore
+  // incomplete. Without the counts here the reviewer read a sourced caveat as
+  // invented data.
+  const quality = snapshot.financialSummary?.quality;
+  if (quality) {
+    // Only what is actually wrong, and each signal described as what it is.
+    // `deriveSnapshotQuality` always returns this object with empty arrays, so
+    // emitting it unconditionally announced "0 account connection(s) not
+    // reporting" under an incomplete-totals heading on every healthy snapshot
+    // -- a false premise that invites the reviewer to accept a caveat the
+    // answer had no basis for. Staleness and source errors are not
+    // incompleteness either: the totals carry those sources' last known
+    // values, so only a missing connection gets that wording.
+    const connectionGaps = countConnectionGaps(quality);
+    const staleCount = quality.staleSourceIds?.length ?? 0;
+    const errorCount = quality.errors?.length ?? 0;
+    const qualityParts = [
+      ...(connectionGaps > 0
+        ? [`${connectionGaps} account connection(s) not reporting, so the totals above may be incomplete`]
+        : []),
+      ...(staleCount > 0 ? [`${staleCount} source(s) too old to count as current`] : []),
+      ...(errorCount > 0 ? [`${errorCount} source(s) reported an error`] : []),
+    ];
+    if (qualityParts.length > 0) {
+      parts.push(`Data quality: ${qualityParts.join('; ')}`);
+    }
   }
 
   const overview = snapshot.financialSummary?.financialOverview;

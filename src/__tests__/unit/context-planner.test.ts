@@ -5,6 +5,7 @@ import {
   parseContextPlan,
 } from '../../openai/context-planner';
 import { CONTEXT_PACK_IDS } from '../../openai/context-packs';
+import { validateSearchPlan } from '../../openai/search-query-plan';
 import {
   UNTRUSTED_CONTENT_CLOSE,
   UNTRUSTED_CONTENT_OPEN,
@@ -131,12 +132,34 @@ describe('context planner', () => {
     });
   });
 
-  it('falls back to every pack without consulting language rules', () => {
+  it('falls back to every loadable pack without consulting language rules', () => {
     const plan = fallbackContextPlan(30);
     expect(plan.source).toBe('fallback_all');
-    expect(plan.selectedPacks).toEqual([...CONTEXT_PACK_IDS]);
-    expect(Object.values(plan.questionNeeds).every(Boolean)).toBe(true);
+    expect(plan.selectedPacks).toEqual(CONTEXT_PACK_IDS.filter((pack) => pack !== 'search_context'));
     expect(plan.searchQueries).toEqual([]);
+  });
+
+  it('leaves search_context out of the fallback rather than selecting it with no query', () => {
+    // Retrieval needs a planned standalone query and this path has none, so
+    // selecting the pack could only ever produce an unloadable plan.
+    const plan = fallbackContextPlan(30);
+    expect(plan.selectedPacks).not.toContain('search_context');
+    expect(plan.questionNeeds.needsSearchContext).toBe(false);
+    // Everything a fallback can actually load is still in.
+    expect(plan.questionNeeds.needsAccountDetails).toBe(true);
+    expect(plan.questionNeeds.needsUserProfile).toBe(true);
+    expect(plan.questionNeeds.needsRetirement).toBe(true);
+    expect(plan.questionNeeds.needsMarketContext).toBe(true);
+  });
+
+  it('produces a plan the downstream search validation accepts', () => {
+    // The cascade this fixes: the fallback selected search_context with zero
+    // queries, which validateSearchPlan rejects. Every planner failure then
+    // also failed the primary data-pack audit that exists to recover from it.
+    const plan = fallbackContextPlan(30);
+    expect(() =>
+      validateSearchPlan(plan.selectedPacks.includes('search_context'), plan.searchQueries)
+    ).not.toThrow();
   });
 
   it('validates standalone semantic search queries with freshness metadata', () => {
