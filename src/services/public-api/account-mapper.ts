@@ -123,11 +123,42 @@ export interface MappedPublicAccount {
   snapshotTimestamp: string;
   lastSyncedAt: string;
   publicAccountType: PublicAccountType | string | null;
+  /**
+   * True when the balance is a sum of tax-lot positions rather than a total
+   * Public reported. Cannot see uninvested cash, so it may understate.
+   *
+   * Named for what it means to every consumer rather than for where it came
+   * from: the canonical snapshot reads this to record that the account's total
+   * is a floor, and nothing downstream should have to know Public has a tax-lot
+   * endpoint to understand that.
+   */
+  balanceDerivedFromPositions?: boolean;
 }
 
-export function mapPublicAccount(portfolio: PublicPortfolio, observedAt: string): MappedPublicAccount {
+/**
+ * When the value we are publishing was actually observed.
+ *
+ * A tax-lot fallback carries Public's own valuation date, which is the truthful
+ * "as of" for that number -- our fetch time would overstate its freshness, the
+ * same mistake #146 and #150 exist to correct.
+ *
+ * A bare `YYYY-MM-DD` is anchored to midday UTC rather than midnight. Date-only
+ * ISO strings parse as UTC midnight, which `toLocaleDateString` then renders as
+ * the *previous* day everywhere west of Greenwich -- so an account valued today
+ * would display as yesterday for every US user.
+ */
+export function publicObservationTime(portfolio: PublicPortfolio, fetchedAt: string): string {
+  const asOf = portfolio.taxLotsAsOf;
+  if (!asOf) return fetchedAt;
+  const anchored = /^\d{4}-\d{2}-\d{2}$/.test(asOf) ? `${asOf}T12:00:00.000Z` : asOf;
+  const parsed = new Date(anchored);
+  return Number.isNaN(parsed.getTime()) ? fetchedAt : parsed.toISOString();
+}
+
+export function mapPublicAccount(portfolio: PublicPortfolio, fetchedAt: string): MappedPublicAccount {
   const id = publicAccountId(portfolio.accountId);
   const balance = publicAccountBalance(portfolio);
+  const observedAt = publicObservationTime(portfolio, fetchedAt);
   return {
     account_id: id,
     id,
@@ -144,6 +175,7 @@ export function mapPublicAccount(portfolio: PublicPortfolio, observedAt: string)
     snapshotTimestamp: observedAt,
     lastSyncedAt: observedAt,
     publicAccountType: portfolio.accountType,
+    balanceDerivedFromPositions: portfolio.valuedFromTaxLots === true,
   };
 }
 

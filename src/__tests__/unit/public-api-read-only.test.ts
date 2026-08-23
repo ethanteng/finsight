@@ -38,29 +38,44 @@ describe('Public API client is read-only', () => {
   // The token call is a POST by necessity. Any other POST, or any PUT/PATCH/DELETE,
   // would be a mutation of the user's account.
   //
-  // The request-init type declares the union of permitted methods, so it is
-  // stripped first -- matching it as if it were a call site would let a real POST
-  // hide behind the type's own literal.
-  it('issues no request method other than the token POST and account GETs', () => {
+  // Asserted as an invariant rather than a count. An earlier version pinned the
+  // exact number of GETs, which turned every legitimate new read into a failing
+  // test and invited raising the number without checking why -- the one habit
+  // this file exists to prevent.
+  it('issues exactly one POST, and no mutating method at all', () => {
     const callSites = CLIENT.replace(/method:\s*'GET'\s*\|\s*'POST';/g, '');
     const methods = [...callSites.matchAll(/method:\s*'([A-Z]+)'/g)].map(match => match[1]);
 
-    expect(methods.sort()).toEqual(['GET', 'GET', 'POST']);
+    expect(methods.filter(method => method === 'POST')).toHaveLength(1);
+    expect(methods.every(method => method === 'GET' || method === 'POST')).toBe(true);
+    expect(CLIENT).not.toMatch(/method:\s*'(PUT|PATCH|DELETE)'/);
   });
 
-  it('declares only the documented read paths as literals', () => {
-    const paths = [...CLIENT.matchAll(/'(\/[a-zA-Z0-9/_-]+)'/g)].map(match => match[1]);
-    expect(paths).toEqual([
+  // The single POST must be the token mint and nothing else.
+  it('uses its one POST for the access token and nothing else', () => {
+    const callSites = CLIENT.replace(/method:\s*'GET'\s*\|\s*'POST';/g, '');
+    const postIndex = callSites.indexOf("method: 'POST'");
+    // The path is the first argument to requestJson, so it sits just above the
+    // method in the same call.
+    const enclosing = callSites.slice(Math.max(0, postIndex - 600), postIndex);
+
+    expect(enclosing).toContain('ACCESS_TOKEN_PATH');
+  });
+
+  // Every path the client can reach, named explicitly. A new one has to be added
+  // here deliberately, which is the point: it forces a decision rather than
+  // letting a request path appear by accident.
+  it('reaches only the four known read paths', () => {
+    const paths = [...CLIENT.matchAll(/['`](\/userapi[a-zA-Z0-9/_${}().-]*)['`]/g)].map(match => match[1]);
+
+    expect(new Set(paths)).toEqual(new Set([
       '/userapiauthservice/personal/access-tokens',
       '/userapigateway/trading/account',
-    ]);
-    // The portfolio path is a template literal because it interpolates an account
-    // id, so it cannot appear above; pin its shape separately.
-    expect(CLIENT).toContain('/userapigateway/trading/${encodeURIComponent(accountId)}/portfolio/v2');
+      '/userapigateway/trading/${encodeURIComponent(accountId)}/portfolio/v2',
+      '/userapigateway/trading/${encodeURIComponent(accountId)}/taxlots/unrealized',
+    ]));
   });
 
-  // A future module importing the SDK or calling fetch directly would sidestep
-  // the guarantees above, so the whole directory is held to one HTTP entry point.
   it('keeps every Public request inside the client module', () => {
     const others = fs
       .readdirSync(MODULE_DIR)

@@ -25,6 +25,17 @@ interface SnapshotAccount extends AccountLike {
     available?: number | null;
     iso_currency_code?: string | null;
   };
+  /**
+   * The balance is a sum of this account's positions, not a total the
+   * institution reported, so any uninvested cash it holds is invisible to it.
+   *
+   * The mirror image of a holdings-coverage gap. There, the reported balance
+   * exceeds the itemized positions and the remainder is recorded as unclassified.
+   * Here the two are equal *by construction*, so that check can never fire and
+   * the account looks fully explained while the cash quietly goes missing from
+   * net worth.
+   */
+  balanceDerivedFromPositions?: boolean;
 }
 
 interface SnapshotHolding {
@@ -504,6 +515,26 @@ function buildSourceObservations(
       asOf,
       maxAgeMs: investmentMaxAgeMs,
       error: asOf ? null : 'Holding price timestamp is unavailable',
+    });
+  });
+
+  accounts.forEach((account, index) => {
+    if (account?.balanceDerivedFromPositions !== true) return;
+    if (!classifyAccount(account).isInvestment) return;
+    observations.push({
+      id: `account:${accountId(account, index)}:balance-derived`,
+      // Not required, on the same reasoning as a holdings-coverage gap: the value
+      // is the best one available and is already in the total, so nothing the
+      // snapshot can see is missing. What this records is that the total is a
+      // floor rather than a figure the institution stands behind -- which asset
+      // allocation, retirement analytics and Ask Linc all read.
+      required: false,
+      status: 'unavailable',
+      asOf: null,
+      maxAgeMs: investmentMaxAgeMs,
+      error:
+        'Account balance is the sum of its itemized positions rather than a total ' +
+        'the institution reported; any uninvested cash it holds is not included',
     });
   });
 

@@ -308,6 +308,12 @@
   background-color: #f0f0e8;
 }
 .authenticated-site .bg-gray-600 { background-color: #e5e7de; }
+/* 800 belongs here as much as the rest: the unprefixed `.bg-gray-800` is
+   remapped above, but a state-prefixed utility is a different selector and was
+   left on Tailwind's near-black. Text this file has already remapped to a dark
+   ink then sat on it — dark on dark, on hover only, which is why it survived
+   review of the static page. Same failure the bg-*-950 note below describes. */
+.authenticated-site .hover\:bg-gray-800:hover,
 .authenticated-site .hover\:bg-gray-750:hover,
 .authenticated-site .hover\:bg-gray-700:hover,
 .authenticated-site .hover\:bg-gray-600:hover,

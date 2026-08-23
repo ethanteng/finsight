@@ -481,11 +481,9 @@ export const setupPlaidRoutes = (app: any) => {
         shouldPersistTransactions: false // ✅ Display-only: don't persist transactions
       });
 
-      // ✅ Filter to ONLY Plaid accounts (exclude SnapTrade accounts)
-      // SnapTrade accounts have account_id starting with "snaptrade-"
-      const plaidOnlyAccounts = financialData.accounts.filter(account =>
-        account.source === 'plaid' || !account.account_id.toString().startsWith('snaptrade-')
-      );
+      // ✅ Filter to ONLY Plaid accounts — this list is labelled "(Plaid)".
+      const { filterPlaidOnlyAccounts } = await import('./services/plaid-account-scope');
+      const plaidOnlyAccounts = filterPlaidOnlyAccounts(financialData.accounts);
 
       console.log(`🔍 Found ${plaidOnlyAccounts.length} Plaid accounts from FinancialDataService (out of ${financialData.accounts.length} total accounts)`);
 

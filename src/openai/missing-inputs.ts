@@ -113,11 +113,19 @@ export function collectMissingInputAsks(
   //    derived from it. Stale sources are deliberately not raised here — the
   //    figures are still real, just older than our refresh window, and no user
   //    action (including refresh) can clear that.
+  //
+  // Advisory account annotations (`:holdings-coverage`, `:balance-derived`) are
+  // also excluded: the balance is present; reconnecting cannot change them, and
+  // telling the user a connection "stopped reporting" would be false.
   const quality = snapshot.financialSummary?.quality;
-  const unavailableSources = new Set([
-    ...(quality?.requiredUnavailableSourceIds || []),
-    ...(quality?.unavailableSourceIds || []),
-  ]);
+  const isConnectionGap = (id: string) =>
+    !id.endsWith(':holdings-coverage') && !id.endsWith(':balance-derived');
+  const unavailableSources = new Set(
+    [
+      ...(quality?.requiredUnavailableSourceIds || []),
+      ...(quality?.unavailableSourceIds || []),
+    ].filter(isConnectionGap),
+  );
   if (unavailableSources.size > 0) {
     const count = unavailableSources.size;
     asks.push({

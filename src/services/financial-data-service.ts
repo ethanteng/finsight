@@ -94,6 +94,15 @@ export interface Account {
   snapshotTimestamp?: string;
   lastSyncedAt?: string;
   liabilityDetails?: PlaidLiabilityDetails[];
+  /**
+   * The balance is a sum of this account's positions rather than a total the
+   * institution reported, so any uninvested cash it holds is not in it.
+   *
+   * Declared here rather than left as an undeclared extra on the object: the
+   * canonical snapshot reads it to record that the account's total is a floor,
+   * and a field nothing declares is a field a refactor drops without noticing.
+   */
+  balanceDerivedFromPositions?: boolean;
   syncStatus?: unknown;
   /** Undefined when the provider's connection status could not be read. */
   connectionDisabled?: boolean;
