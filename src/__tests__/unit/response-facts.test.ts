@@ -500,6 +500,30 @@ describe('rounded canonical values', () => {
     expect(salvaged.insights?.join(' ')).not.toContain('expenses already counted');
   });
 
+  it('lets a boundary through when a bracket opens but never closes', () => {
+    // A lone "(" must not suppress every sentence boundary after it, or the
+    // bracket guard causes the same over-merge it exists to prevent.
+    const response = {
+      summary: 'Your cash is $75,038.94.',
+      insights: ['Your cash is $75,038.94 (rounded. A $412,000 windfall would change that.'],
+    };
+    const salvaged = salvageUngroundedResponse(response, pack, validateResponseFacts(response, pack));
+
+    expect(salvaged.insights).toEqual(['Your cash is $75,038.94 (rounded.']);
+  });
+
+  it('does not let a mismatched bracket close a parenthetical', () => {
+    // "]" must not close "(": the period after "trust" is still inside the
+    // parenthetical, and splitting there would strand the ")".
+    const response = {
+      summary: 'Your cash is $75,038.94.',
+      insights: ['Your cash covers your spending (it excludes [$412,000 in a trust. Held separately) so the gap is smaller.'],
+    };
+    const salvaged = salvageUngroundedResponse(response, pack, validateResponseFacts(response, pack));
+
+    expect(salvaged.insights).toEqual([]);
+  });
+
   it('still splits a takeaway that really is two sentences', () => {
     const response = {
       summary: 'Your cash is $75,038.94.',

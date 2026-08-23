@@ -367,19 +367,39 @@ function isAbbreviationPeriod(text: string, index: number, punctuation: string):
   return word !== undefined && NEVER_SENTENCE_FINAL_ABBREVIATIONS.has(word.toLowerCase());
 }
 
+const BRACKET_CLOSERS: Record<string, string> = { '(': ')', '[': ']' };
+
 /**
- * True while the punctuation at `index` sits inside a bracket that opened
- * earlier in the text. "(average income of $9,000 vs. expenses of $12,000)"
+ * True when the punctuation at `index` sits inside a bracket that opens before
+ * it and closes after it. "(average income of $9,000 vs. expenses of $12,000)"
  * is one parenthetical: cutting it in half leaves a stray ")" behind.
+ *
+ * Both halves of the pair have to be there, and they have to match. An opener
+ * that never closes -- a lone "(" the model forgot about -- would otherwise
+ * swallow every sentence boundary in the rest of the answer, and a "]" would
+ * close a "(" if the two shared one depth counter. Either way the guard would
+ * cause the over-merge it exists to prevent.
  */
 function isInsideBrackets(text: string, index: number): boolean {
-  let depth = 0;
-  for (let i = 0; i < index; i++) {
+  const open: { closer: string; at: number }[] = [];
+  for (let i = 0; i < text.length; i++) {
     const character = text[i];
-    if (character === '(' || character === '[') depth++;
-    else if ((character === ')' || character === ']') && depth > 0) depth--;
+    const closer = BRACKET_CLOSERS[character];
+    if (closer) {
+      open.push({ closer, at: i });
+      continue;
+    }
+    if (character !== ')' && character !== ']') continue;
+    // A closer matches its nearest unclosed opener of the same kind. Anything
+    // still open inside that pair never closed and is discarded with it, so a
+    // stray "[" cannot stop a "(" from closing.
+    let matched = open.length - 1;
+    while (matched >= 0 && open[matched].closer !== character) matched--;
+    if (matched < 0) continue;
+    if (open[matched].at < index && i > index) return true;
+    open.length = matched;
   }
-  return depth > 0;
+  return false;
 }
 
 /**
