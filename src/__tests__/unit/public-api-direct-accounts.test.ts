@@ -1,9 +1,12 @@
 const findFirstSnapshot = jest.fn();
 const getStatusMock = jest.fn();
 
+const findManyAccount = jest.fn();
+
 jest.mock('../../prisma-client', () => ({
   getPrismaClient: () => ({
     financialSummarySnapshot: { findFirst: findFirstSnapshot },
+    account: { findMany: findManyAccount },
   }),
 }));
 jest.mock('../../services/public-api/credential-store', () => ({
@@ -35,6 +38,7 @@ describe('substituteDirectPublicAccounts', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     getStatusMock.mockResolvedValue({ configured: true, lastVerifiedAt: new Date(), lastError: null });
+    findManyAccount.mockResolvedValue([]);
     findFirstSnapshot.mockResolvedValue({
       accounts: [
         { id: 'snaptrade-f1', source: 'snaptrade', institution: 'Fidelity' },
@@ -124,6 +128,35 @@ describe('substituteDirectPublicAccounts', () => {
 
     expect(cash.balance).toBeNull();
     expect(cash.balance).not.toBe(0);
+  });
+
+  it('honours a rename stored against the direct account', async () => {
+    // Renames are keyed on the account's own id, and direct rows are persisted
+    // under that same `public-` id, so this is an exact match.
+    findManyAccount.mockResolvedValue([
+      { plaidAccountId: 'public-3CR13857', name: 'Emergency Ladder' },
+    ]);
+
+    const result = await substituteDirectPublicAccounts('user-1', [publicTreasuryViaSnapTrade]);
+
+    expect(result.accounts.find(a => a.id === 'public-3CR13857')!.name).toBe('Emergency Ladder');
+  });
+
+  it('leaves the provider label when nothing was renamed', async () => {
+    const result = await substituteDirectPublicAccounts('user-1', [publicTreasuryViaSnapTrade]);
+    expect(result.accounts.find(a => a.id === 'public-3CR13857')!.name).toBe('Treasury Account');
+  });
+
+  it('does not carry a rename across from the superseded SnapTrade id', async () => {
+    // Two providers, no shared identifier: matching them would put one account's
+    // name on another's balance. An unmatched rename is the safe failure.
+    findManyAccount.mockResolvedValue([
+      { plaidAccountId: 'public-somewhere-else', name: 'Wrong Account' },
+    ]);
+
+    const result = await substituteDirectPublicAccounts('user-1', [publicTreasuryViaSnapTrade]);
+
+    expect(result.accounts.find(a => a.id === 'public-3CR13857')!.name).toBe('Treasury Account');
   });
 
   it('does not mistake a brokerage merely named like Public for one', async () => {

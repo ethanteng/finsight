@@ -50,10 +50,20 @@ function finiteNumber(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
 
-function toConnectionListAccount(snapshotAccount: any): ConnectionListAccount {
+function toConnectionListAccount(
+  snapshotAccount: any,
+  customNames: Map<string, string>,
+): ConnectionListAccount {
+  const id = String(snapshotAccount?.id || snapshotAccount?.account_id || '');
   return {
-    id: String(snapshotAccount?.id || snapshotAccount?.account_id || ''),
-    name: String(snapshotAccount?.name || 'Public Account'),
+    id,
+    // A rename is stored against the account's own id, and direct Public rows are
+    // persisted under that same `public-` id — so this is an exact match, not a
+    // guess across providers. A rename made under the old `snaptrade-` id stays
+    // unmatched: pairing accounts across two providers with no shared identifier
+    // is the same near-miss supersedeSnapTradePublicAccounts() refuses to make,
+    // and here it would put one account's name on another's balance.
+    name: customNames.get(id) || String(snapshotAccount?.name || 'Public Account'),
     type: String(snapshotAccount?.type || 'investment'),
     subtype: snapshotAccount?.subtype ? String(snapshotAccount.subtype) : undefined,
     institution: snapshotAccount?.institution ? String(snapshotAccount.institution) : 'Public',
@@ -85,13 +95,20 @@ export async function substituteDirectPublicAccounts(
   // accounts, and they are then the only accounts there are to show.
 
   const prisma = getPrismaClient();
-  const [status, snapshot] = await Promise.all([
+  const [status, snapshot, renamedRows] = await Promise.all([
     getStatus(userId),
     prisma.financialSummarySnapshot.findFirst({
       where: { userId },
       select: { accounts: true },
     }),
+    prisma.account.findMany({
+      where: { userId, plaidAccountId: { startsWith: 'public-' } },
+      select: { plaidAccountId: true, name: true },
+    }),
   ]);
+  const customNames = new Map<string, string>(
+    (renamedRows || []).map(row => [row.plaidAccountId, row.name] as const),
+  );
 
   // No direct credential means SnapTrade is still the only source for Public.
   if (!status.configured) {
@@ -112,7 +129,7 @@ export async function substituteDirectPublicAccounts(
   const snapshotAccounts = Array.isArray(snapshot?.accounts) ? (snapshot!.accounts as any[]) : [];
   const directAccounts = snapshotAccounts
     .filter(account => account?.source === 'public')
-    .map(toConnectionListAccount)
+    .map(account => toConnectionListAccount(account, customNames))
     .filter(account => accountKey(account).length > 0);
 
   // A configured secret that has not yet produced any account is not a reason to
