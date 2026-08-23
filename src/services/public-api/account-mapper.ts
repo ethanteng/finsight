@@ -126,8 +126,13 @@ export interface MappedPublicAccount {
   /**
    * True when the balance is a sum of tax-lot positions rather than a total
    * Public reported. Cannot see uninvested cash, so it may understate.
+   *
+   * Named for what it means to every consumer rather than for where it came
+   * from: the canonical snapshot reads this to record that the account's total
+   * is a floor, and nothing downstream should have to know Public has a tax-lot
+   * endpoint to understand that.
    */
-  valuedFromTaxLots?: boolean;
+  balanceDerivedFromPositions?: boolean;
 }
 
 /**
@@ -170,7 +175,7 @@ export function mapPublicAccount(portfolio: PublicPortfolio, fetchedAt: string):
     snapshotTimestamp: observedAt,
     lastSyncedAt: observedAt,
     publicAccountType: portfolio.accountType,
-    valuedFromTaxLots: portfolio.valuedFromTaxLots === true,
+    balanceDerivedFromPositions: portfolio.valuedFromTaxLots === true,
   };
 }
 

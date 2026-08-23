@@ -160,7 +160,7 @@ describe('observation time for a tax-lot valuation', () => {
       '2026-08-22T23:00:00.000Z',
     );
 
-    expect(account.valuedFromTaxLots).toBe(true);
+    expect(account.balanceDerivedFromPositions).toBe(true);
     expect(account.lastSyncedAt).toBe('2026-08-21T12:00:00.000Z');
   });
 });

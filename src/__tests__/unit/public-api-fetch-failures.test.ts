@@ -129,7 +129,7 @@ describe('Public fetch failure handling', () => {
 
     expect(getTaxLotHoldings).toHaveBeenCalledWith('tok', '3CR23334');
     expect(result!.accounts[0].balance.current).toBe(227261.16);
-    expect(result!.accounts[0].valuedFromTaxLots).toBe(true);
+    expect(result!.accounts[0].balanceDerivedFromPositions).toBe(true);
     expect(result!.errors).toEqual([]);
     expect(result!.observed).toBe(true);
   });
