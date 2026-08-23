@@ -343,8 +343,9 @@ function snapshotHome(snapshot: FinancesSnapshotLike, currentHome?: FinancesHome
 
 /**
  * Top-level account observation ids are `account:{id}`. Compound ids such as
- * `account:{id}:holdings-coverage` or `account:{id}:balance` are separate
- * signals and must not be treated as the account's own observation.
+ * `account:{id}:holdings-coverage`, `account:{id}:balance-derived`, or
+ * `account:{id}:balance` are separate signals and must not be treated as the
+ * account's own observation.
  */
 function accountIdFromSourceId(sourceId: string): string | null {
   if (!sourceId.startsWith(ACCOUNT_SOURCE_PREFIX)) return null;
@@ -477,12 +478,17 @@ export function buildFinancesOverview(input: FinancesOverviewInput): FinancesOve
   const unavailableSourceIds: string[] = Array.isArray(quality.unavailableSourceIds)
     ? quality.unavailableSourceIds.filter((id: unknown): id is string => typeof id === 'string')
     : [];
-  // A holdings-coverage gap is not a missing source: the account's reported balance is in
-  // the totals either way. It changes what the allocation can say, not what anything is
-  // worth, so it gets its own note instead of being counted as unavailable data.
+  // Advisory account annotations are not missing sources: the balance is already in
+  // the totals. Holdings-coverage means the institution reported more than its
+  // itemized positions explain; balance-derived is the mirror image — the total is
+  // the sum of positions (a floor) rather than a figure the institution stood behind.
+  // Each gets its own note instead of being counted as unavailable data.
   const coverageGapCount = unavailableSourceIds
     .filter(id => id.endsWith(':holdings-coverage')).length;
-  const unavailableSources = unavailableSourceIds.length - coverageGapCount;
+  const derivedBalanceCount = unavailableSourceIds
+    .filter(id => id.endsWith(':balance-derived')).length;
+  const unavailableSources =
+    unavailableSourceIds.length - coverageGapCount - derivedBalanceCount;
   // 'partial' and 'unavailable' already say a source is missing; anything else must not
   // swallow this, or a stale snapshot would hide the only note explaining a missing value.
   if (unavailableSources > 0 && status !== 'partial' && status !== 'unavailable') {
@@ -492,6 +498,12 @@ export function buildFinancesOverview(input: FinancesOverviewInput): FinancesOve
     warnings.push({
       code: 'incomplete-holdings-coverage',
       message: `${coverageGapCount} investment account${coverageGapCount === 1 ? '' : 's'} report${coverageGapCount === 1 ? 's' : ''} a balance its listed holdings do not fully account for. Totals use the balance the institution reports; the remainder appears as Not itemized in your allocation.`,
+    });
+  }
+  if (derivedBalanceCount > 0) {
+    warnings.push({
+      code: 'derived-account-balance',
+      message: `${derivedBalanceCount} investment account${derivedBalanceCount === 1 ? '' : 's'} ${derivedBalanceCount === 1 ? 'has a balance' : 'have balances'} derived from listed positions rather than reported by the institution. Totals may understate if uninvested cash sits in ${derivedBalanceCount === 1 ? 'that account' : 'those accounts'}.`,
     });
   }
 

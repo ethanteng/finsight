@@ -132,6 +132,19 @@ describe('finances overview contract', () => {
     expect(codes).not.toContain('optional-sources-unavailable');
   });
 
+  it('explains a position-derived balance without calling data unavailable', () => {
+    const overview = buildFinancesOverview({
+      snapshot: {
+        ...snapshot,
+        quality: { unavailableSourceIds: ['account:public-3CR23334:balance-derived'] },
+      },
+    });
+
+    const codes = overview.warnings.map(warning => warning.code);
+    expect(codes).toContain('derived-account-balance');
+    expect(codes).not.toContain('optional-sources-unavailable');
+  });
+
   it('still counts genuinely unavailable sources alongside a coverage gap', () => {
     const overview = buildFinancesOverview({
       snapshot: {
@@ -142,6 +155,26 @@ describe('finances overview contract', () => {
 
     expect(overview.warnings.find(warning => warning.code === 'optional-sources-unavailable')?.message)
       .toContain('1 optional data source');
+  });
+
+  it('still counts genuinely unavailable sources alongside a derived balance', () => {
+    const overview = buildFinancesOverview({
+      snapshot: {
+        ...snapshot,
+        quality: {
+          unavailableSourceIds: [
+            'account:public-3CR23334:balance-derived',
+            'account:public-3CT47684:balance-derived',
+            'home-value',
+          ],
+        },
+      },
+    });
+
+    expect(overview.warnings.find(warning => warning.code === 'optional-sources-unavailable')?.message)
+      .toContain('1 optional data source');
+    expect(overview.warnings.find(warning => warning.code === 'derived-account-balance')?.message)
+      .toContain('2 investment accounts');
   });
 
   it('backfills display balances from holdings for a legacy snapshot', () => {
