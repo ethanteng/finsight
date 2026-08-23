@@ -176,6 +176,40 @@ describe('missing input asks', () => {
     expect(asks[0].message).not.toContain('plaid');
   });
 
+  it('does not treat advisory account annotations as broken connections', () => {
+    // Holdings-coverage and balance-derived mean the balance is present but
+    // imperfectly explained — reconnecting cannot fix either, and claiming a
+    // connection "stopped reporting" would be false.
+    expect(ids({
+      financialSummary: {
+        quality: {
+          unavailableSourceIds: [
+            'account:401k:holdings-coverage',
+            'account:public-3CR23334:balance-derived',
+          ],
+        },
+      },
+    })).toEqual([]);
+  });
+
+  it('still flags a real gap when advisory annotations are also present', () => {
+    const asks = collectMissingInputAsks(
+      {
+        financialSummary: {
+          quality: {
+            unavailableSourceIds: [
+              'account:public-3CR23334:balance-derived',
+              'plaid:item-1',
+            ],
+          },
+        },
+      } as any,
+      NO_NEEDS
+    );
+
+    expect(asks[0].message).toContain('One of your account connections is');
+  });
+
   it('counts distinct broken connections without repeating one', () => {
     const asks = collectMissingInputAsks(
       {
