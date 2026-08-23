@@ -551,6 +551,206 @@ describe('rounded canonical values', () => {
     expect(removals.sentences).toHaveLength(2);
   });
 
+  it('does not cut a sentence in half at an abbreviation period', () => {
+    // Reported from production: the takeaway rendered as "expenses of $9,848),
+    // which means..." because "vs." was read as the end of a sentence, so the
+    // unsupported figure took the front half of the sentence with it.
+    const response = {
+      summary: 'Your cash is $75,038.94.',
+      insights: [
+        "You're running a monthly gap of about -$3,000 (average income of $10,844 vs. expenses of $9,848), " +
+        "which means before even considering a new mortgage payment, you're already spending more than you bring in.",
+      ],
+    };
+    const salvaged = salvageUngroundedResponse(response, pack, validateResponseFacts(response, pack));
+
+    expect(salvaged.insights).toEqual([]);
+    expect(salvaged.insights?.join(' ')).not.toContain('expenses of');
+  });
+
+  it('does not cut a sentence in half inside a parenthetical', () => {
+    // Splitting between "trust." and "Held" would leave the user a takeaway
+    // that opens mid-clause and closes a parenthesis it never opened.
+    const response = {
+      summary: 'Your cash is $75,038.94.',
+      insights: ['Your cash covers your spending (it excludes $412,000 in a trust. Held separately) so the gap is smaller than it looks.'],
+    };
+    const salvaged = salvageUngroundedResponse(response, pack, validateResponseFacts(response, pack));
+
+    expect(salvaged.insights).toEqual([]);
+  });
+
+  it('treats a period followed by a lowercase word as mid-sentence', () => {
+    // The abbreviation list cannot enumerate every shortening a model writes,
+    // so a lowercase continuation is the general backstop.
+    const response = {
+      summary: 'Your cash is $75,038.94.',
+      insights: ['You owe $88,888 in interest per mo. against debt of $350,095.40.'],
+    };
+    const salvaged = salvageUngroundedResponse(response, pack, validateResponseFacts(response, pack));
+
+    expect(salvaged.insights).toEqual([]);
+  });
+
+  it('splits when a company suffix really does end the sentence', () => {
+    // "Inc." is not in the abbreviation list for exactly this reason: when it
+    // ends a sentence, merging would delete the grounded sentence in front of
+    // the unsupported one.
+    const response = {
+      summary: 'Your cash is $75,038.94.',
+      insights: ['Your cash is held at Acme Inc. A transfer could cost $88,888.'],
+    };
+    const salvaged = salvageUngroundedResponse(response, pack, validateResponseFacts(response, pack));
+
+    expect(salvaged.insights).toEqual(['Your cash is held at Acme Inc.']);
+  });
+
+  it('splits before a fund name that is styled lowercase', () => {
+    // "iShares" opens a sentence despite the lowercase first letter, so the
+    // lowercase backstop must not swallow the boundary in front of it.
+    const response = {
+      summary: 'Your cash is $75,038.94.',
+      insights: ['Your cash is $75,038.94. iShares positions could cost $88,888 to unwind.'],
+    };
+    const salvaged = salvageUngroundedResponse(response, pack, validateResponseFacts(response, pack));
+
+    expect(salvaged.insights).toEqual(['Your cash is $75,038.94.']);
+  });
+
+  it('does not cut a sentence in half at incl. before a dollar amount', () => {
+    // continuesInLowercase only catches letter continuations; financial prose
+    // often writes "incl. $X", which that backstop misses. Without incl/excl on
+    // the abbreviation list, salvage would keep the grounded tail as an orphan.
+    const response = {
+      summary: 'Your cash is $75,038.94.',
+      insights: [
+        "You're running a monthly gap of about -$3,000 incl. $9,848 of expenses already counted.",
+      ],
+    };
+    const salvaged = salvageUngroundedResponse(response, pack, validateResponseFacts(response, pack));
+
+    expect(salvaged.insights).toEqual([]);
+    expect(salvaged.insights?.join(' ')).not.toContain('expenses already counted');
+  });
+
+  it('lets a boundary through when a bracket opens but never closes', () => {
+    // A lone "(" must not suppress every sentence boundary after it, or the
+    // bracket guard causes the same over-merge it exists to prevent.
+    const response = {
+      summary: 'Your cash is $75,038.94.',
+      insights: ['Your cash is $75,038.94 (rounded. A $412,000 windfall would change that.'],
+    };
+    const salvaged = salvageUngroundedResponse(response, pack, validateResponseFacts(response, pack));
+
+    expect(salvaged.insights).toEqual(['Your cash is $75,038.94 (rounded.']);
+  });
+
+  it('does not let a mismatched bracket close a parenthetical', () => {
+    // "]" must not close "(": the period after "trust" is still inside the
+    // parenthetical, and splitting there would strand the ")".
+    const response = {
+      summary: 'Your cash is $75,038.94.',
+      insights: ['Your cash covers your spending (it excludes [$412,000 in a trust. Held separately) so the gap is smaller.'],
+    };
+    const salvaged = salvageUngroundedResponse(response, pack, validateResponseFacts(response, pack));
+
+    expect(salvaged.insights).toEqual([]);
+  });
+
+  it('rejoins a boundary made at an abbreviation nobody enumerated', () => {
+    // The point of the check: "amt." is on no list, and does not need to be.
+    // What follows it cannot open a sentence, so the boundary goes back and the
+    // grounded front half is never stranded as "Total owed, amt."
+    const response = {
+      summary: 'Your cash is $75,038.94.',
+      insights: ['Total owed, amt. $88,888, sits against debt of $350,095.40.'],
+    };
+    const salvaged = salvageUngroundedResponse(response, pack, validateResponseFacts(response, pack));
+
+    expect(salvaged.insights).toEqual([]);
+    expect(salvaged.insights?.join(' ')).not.toContain('amt.');
+  });
+
+  it('rejoins a sentence that really does open on an amount', () => {
+    // The cost of not trusting a leading figure, pinned deliberately: this is
+    // two sentences, and salvage removes both. Over-removal on the salvage path
+    // is the trade for never handing the reader half a sentence.
+    const response = {
+      summary: 'Your cash is $75,038.94.',
+      insights: ['Your cash is $75,038.94. $412,000 more would cover the gap.'],
+    };
+    const salvaged = salvageUngroundedResponse(response, pack, validateResponseFacts(response, pack));
+
+    expect(salvaged.insights).toEqual([]);
+  });
+
+  it.each([
+    ['USD', 'Your holdings are priced in USD.'],
+    ['IRA', 'Your cash is $75,038.94 in an IRA.'],
+    ['VTI', 'Your largest position is VTI.'],
+    ['ETF', 'Your cash is $75,038.94 outside the ETF.'],
+    ['CD', 'Your cash is $75,038.94 outside the CD.'],
+  ])('keeps a grounded sentence that ends in %s', (_label, grounded) => {
+    // A short capitalized ending is this product's own vocabulary far more
+    // often than an abbreviation. Rejoining on shape rather than on the word
+    // itself deletes the grounded half along with the unsupported one -- the
+    // mirror check's own failure mode, pointed backwards.
+    const response = {
+      summary: 'Your cash is $75,038.94.',
+      insights: [`${grounded} A transfer could cost $88,888.`],
+    };
+    const salvaged = salvageUngroundedResponse(response, pack, validateResponseFacts(response, pack));
+
+    expect(salvaged.insights).toEqual([grounded]);
+  });
+
+  it('still splits a takeaway that really is two sentences', () => {
+    const response = {
+      summary: 'Your cash is $75,038.94.',
+      insights: ['Your cash is $75,038.94. A $412,000 windfall would change that.'],
+    };
+    const salvaged = salvageUngroundedResponse(response, pack, validateResponseFacts(response, pack));
+
+    expect(salvaged.insights).toEqual(['Your cash is $75,038.94.']);
+  });
+
+  it('does not ship an orphan ending in an unlisted abbreviation before a capital', () => {
+    // Mirror case the following-segment check cannot see: "No." is on no list,
+    // the next segment opens like a sentence, and without rejoining on the
+    // prior ending salvage would keep the stranded front half.
+    const response = {
+      summary: 'Your cash is $75,038.94.',
+      insights: ['See item No. Transfers could cost $88,888 against cash of $75,038.94.'],
+    };
+    const salvaged = salvageUngroundedResponse(response, pack, validateResponseFacts(response, pack));
+
+    expect(salvaged.insights).toEqual([]);
+    expect(salvaged.insights?.join(' ')).not.toContain('See item No.');
+  });
+
+  it('does not ship an orphan ending in a lowercase abbreviation before a capital', () => {
+    const response = {
+      summary: 'Your cash is $75,038.94.',
+      insights: ['Owed wt. Treasury debt of $350,095.40 after a gap of -$3,000.'],
+    };
+    const salvaged = salvageUngroundedResponse(response, pack, validateResponseFacts(response, pack));
+
+    expect(salvaged.insights).toEqual([]);
+    expect(salvaged.insights?.join(' ')).not.toContain('Owed wt.');
+  });
+
+  it('keeps a grounded sentence that ends in U.S. before a new sentence', () => {
+    // Single-letter initialisms must not suppress a real boundary when the
+    // following text already reads as its own sentence.
+    const response = {
+      summary: 'Your cash is $75,038.94.',
+      insights: ['Your cash is $75,038.94 in the U.S. A transfer could cost $88,888.'],
+    };
+    const salvaged = salvageUngroundedResponse(response, pack, validateResponseFacts(response, pack));
+
+    expect(salvaged.insights).toEqual(['Your cash is $75,038.94 in the U.S.']);
+  });
+
   it('keeps a verified answer when only a key number was miscited', () => {
     const response = {
       summary: 'Your portfolio is worth $1.92 million.',

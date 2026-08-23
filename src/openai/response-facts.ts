@@ -382,14 +382,169 @@ export function validateResponseFacts(
   };
 }
 
-/** "U.S." and "e.g." end in a single letter; a real sentence rarely does. */
-function isAbbreviationPeriod(text: string, index: number, punctuation: string): boolean {
-  return punctuation === '.' && /(?:^|[^A-Za-z])[A-Za-z]$/.test(text.slice(0, index));
+/**
+ * Multi-letter abbreviations that are never the last word of a sentence.
+ *
+ * Single-letter initialisms ("U.S.", "e.g.") are caught by the letter test in
+ * `isAbbreviationPeriod`; these are the ones that survive it.
+ *
+ * The bar for membership is narrow on purpose. An entry here suppresses a
+ * boundary outright, so it may only hold shortenings that always govern
+ * something after them: "vs. Treasury bills", "incl. fees", "Ms. Chen".
+ * Shortenings that can close a sentence -- "etc.", "Acme Inc.", "$40,000 est."
+ * -- are deliberately absent; `rejoinFalseBoundaries` handles those when the
+ * following segment cannot stand alone, and `endsWithLikelyAbbreviation`
+ * handles the mirror case when it can.
+ *
+ * Suppressing a boundary is skipped when the following text already reads as
+ * its own sentence (so "U.S. A transfer…" keeps the real boundary).
+ */
+const NEVER_SENTENCE_FINAL_ABBREVIATIONS = new Set([
+  'cf', 'dr', 'excl', 'incl', 'mr', 'mrs', 'ms', 'vs',
+]);
+
+const BRACKET_CLOSERS: Record<string, string> = { '(': ')', '[': ']' };
+
+/** Every bracket this text opens, it also closes -- and closes with its own kind. */
+function bracketsBalanced(text: string): boolean {
+  const open: string[] = [];
+  for (const character of text) {
+    const closer = BRACKET_CLOSERS[character];
+    if (closer) {
+      open.push(closer);
+      continue;
+    }
+    if (character !== ')' && character !== ']') continue;
+    // A closer matches its nearest unclosed opener of the same kind. Anything
+    // still open inside that pair never closed and is discarded with it, so a
+    // stray "[" cannot stop a "(" from closing.
+    let matched = open.length - 1;
+    while (matched >= 0 && open[matched] !== character) matched--;
+    if (matched < 0) return false;
+    open.length = matched;
+  }
+  return open.length === 0;
 }
 
 /**
- * Split on sentence punctuation that ends a sentence. A period inside "$1.92"
- * is followed by a digit, so decimals stay intact.
+ * How a sentence begins: a capital, a name styled lowercase ("iShares",
+ * "eBay"), or an opening bracket or quote.
+ *
+ * An amount is deliberately not on the list. "$9,848 of expenses" reads as a
+ * sentence to a regular expression and never does to a person -- the amount
+ * was governed by whatever stood in front of it. Treating it as a boundary is
+ * what leaves the front of a sentence stranded, so a real sentence opening on
+ * a figure is rejoined to the one before it instead. That costs a clause on
+ * the salvage path; the alternative costs the reader a fragment.
+ */
+const SENTENCE_START = /^(?:[A-Z]|[a-z][A-Za-z'\u2019]*[A-Z]|["'\u201C\u2018([])/;
+
+/** A segment that can stand on its own: it opens like a sentence and closes its brackets. */
+function readsAsSentence(segment: string): boolean {
+  const trimmed = segment.trim();
+  return SENTENCE_START.test(trimmed) && bracketsBalanced(trimmed);
+}
+
+/**
+ * "U.S." / "e.g." / "vs." look like sentence endings to the punctuation pass.
+ * Suppress that boundary only when what follows cannot stand as a sentence --
+ * otherwise "Held in the U.S. A transfer…" would glue an unsupported claim onto
+ * a grounded one and delete both.
+ */
+function isAbbreviationPeriod(text: string, index: number, punctuation: string): boolean {
+  if (punctuation !== '.') return false;
+  const before = text.slice(0, index);
+  const singleLetter = /(?:^|[^A-Za-z])[A-Za-z]$/.test(before);
+  const word = /([A-Za-z]+)$/.exec(before)?.[1];
+  const knownMulti =
+    word !== undefined && NEVER_SENTENCE_FINAL_ABBREVIATIONS.has(word.toLowerCase());
+  if (!singleLetter && !knownMulti) return false;
+  const after = text.slice(index + punctuation.length);
+  if (readsAsSentence(after)) return false;
+  return true;
+}
+
+/**
+ * Abbreviations that strand a front half when the next segment opens like a
+ * sentence ("...yield vs. Treasury…", "See item No. Transfers…"). Includes the
+ * never-final set plus shortenings too common in financial prose to ignore,
+ * and deliberately includes "etc." / "est." / "approx." -- rejoining those
+ * over-removes rather than shipping a fragment.
+ *
+ * Do not replace this with a length heuristic: "million.", "cash.", and
+ * "year." are ordinary sentence endings.
+ */
+const MIRROR_ABBREVIATIONS = new Set([
+  ...NEVER_SENTENCE_FINAL_ABBREVIATIONS,
+  'al', 'approx', 'est', 'etc', 'amt', 'fig', 'mo', 'vol', 'wt', 'yr',
+  'jan', 'feb', 'mar', 'apr', 'jun', 'jul', 'aug', 'sep', 'sept', 'oct', 'nov', 'dec',
+]);
+
+/**
+ * Ordinary words in lowercase, shortenings only when capitalized: "See item
+ * No." abbreviates "number", while "the answer is no." ends a sentence.
+ */
+const CAPITALIZED_MIRROR_ABBREVIATIONS = new Set(['No', 'Nos']);
+
+/**
+ * The stranded-front half of a false split: "...yield vs." / "See item No." /
+ * "Per Smith et al." when the next segment opens like a real sentence.
+ *
+ * Membership is enumerated, and stays enumerated. Neither length nor
+ * capitalization generalizes here: a short capitalized ending is far more
+ * often this product's own vocabulary than an abbreviation -- "priced in
+ * USD.", "held in an IRA.", "your largest position is VTI.", "outside the
+ * CD." all end sentences, and rejoining them would delete the grounded half
+ * along with whatever follows. That is the failure this function exists to
+ * prevent, pointed the other way.
+ *
+ * Single-letter endings are left alone so "U.S. A transfer…" stays split;
+ * "e.g. Cash of $75,038.94…" is the residual that buys it.
+ */
+function endsWithLikelyAbbreviation(segment: string): boolean {
+  const word = /\b([A-Za-z]+)\.\s*$/.exec(segment.trim())?.[1];
+  if (!word || word.length === 1) return false;
+  if (CAPITALIZED_MIRROR_ABBREVIATIONS.has(word)) return true;
+  return MIRROR_ABBREVIATIONS.has(word.toLowerCase());
+}
+
+/**
+ * Put back any boundary the split should not have made.
+ *
+ * Punctuation alone cannot say where a sentence ends: an abbreviation, an
+ * amount, a bracket or a styled name will always be able to fool it, and the
+ * list of ways grows every time someone looks. So the split is a proposal and
+ * this is the check on it -- a segment that cannot stand on its own, or that
+ * follows a segment ending in a likely abbreviation, rejoins the one before it.
+ *
+ * What that buys is a bound on the damage. These segments are the unit
+ * grounding removes, so a boundary restored here costs a clause that would
+ * have survived, while a bad boundary left standing ships the back half of a
+ * sentence whose subject was just deleted. The proposal being wrong is now a
+ * question of how much text survives, not of what the reader is handed.
+ */
+function rejoinFalseBoundaries(segments: string[]): string[] {
+  const joined: string[] = [];
+  for (const segment of segments) {
+    if (
+      joined.length > 0 &&
+      (!readsAsSentence(segment) || endsWithLikelyAbbreviation(joined[joined.length - 1]))
+    ) {
+      joined[joined.length - 1] += segment;
+      continue;
+    }
+    joined.push(segment);
+  }
+  return joined;
+}
+
+/**
+ * Split into the units grounding may remove. A period inside "$1.92" is
+ * followed by a digit, so decimals stay intact.
+ *
+ * Punctuation proposes the boundaries and `rejoinFalseBoundaries` decides which
+ * of them survive, so this half does not have to be right about every
+ * abbreviation, bracket or amount in the language -- only cheap.
  */
 function splitSentences(text: string): string[] {
   const sentences: string[] = [];
@@ -402,7 +557,7 @@ function splitSentences(text: string): string[] {
     start = end;
   }
   if (start < text.length) sentences.push(text.slice(start));
-  return sentences;
+  return rejoinFalseBoundaries(sentences);
 }
 
 /** Guards against a stray fragment ("U.S.") passing for a surviving answer. */
