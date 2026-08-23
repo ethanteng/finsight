@@ -2,6 +2,7 @@ import type { SearchResult } from '../orchestrator';
 import type { SearchFreshness } from '../search-types';
 import {
   discardResponseBody,
+  exhaustedWindowResets,
   fetchWithBoundedRetry,
   type BoundedFetchOptions,
   type ProviderRequestInit,
@@ -36,16 +37,33 @@ interface SearchProviderClientOptions {
   maxRetryDelayMs?: number;
   rateLimiter?: {
     waitForNextCall(): Promise<void>;
-    observeResponse?(headers: Headers): void;
+    observeResponse?(response: Response): void;
   };
 }
 
+const DEFAULT_MIN_REQUEST_INTERVAL_MS = 1_100;
+
+function braveMinRequestIntervalMs(): number {
+  const configured = Number.parseInt(process.env.BRAVE_MIN_REQUEST_INTERVAL_MS ?? '', 10);
+  return Number.isFinite(configured) && configured >= 0 ? configured : DEFAULT_MIN_REQUEST_INTERVAL_MS;
+}
+
 // Global rate limiter for Brave Search API calls
-class BraveSearchRateLimiter {
+export class BraveSearchRateLimiter {
   private static instance: BraveSearchRateLimiter;
   private lastCallTime: number = 0;
-  private readonly MIN_INTERVAL = 1100; // 1.1 seconds between calls
+  // Brave's per-second allowance is plan-specific: 1/s on the free tier, 50/s
+  // on the paid Search plan. Pacing every deployment at the free-tier rate
+  // serialises retrieval for no reason, so the floor is configurable.
+  private readonly MIN_INTERVAL = braveMinRequestIntervalMs();
   private readonly MAX_SERVER_WAIT_MS = 2_000;
+  /**
+   * Backstop on how long one response may park the provider. Brave's monthly
+   * Reset counts down to the end of the calendar month, so an unbounded block
+   * can take search offline for over a week; re-probing and being refused
+   * again is strictly better than going dark on a stale reading.
+   */
+  private readonly MAX_SERVER_BLOCK_MS = 60_000;
   private serverBlockedUntil = 0;
 
   static getInstance(): BraveSearchRateLimiter {
@@ -71,26 +89,18 @@ class BraveSearchRateLimiter {
     this.lastCallTime = Date.now();
   }
 
-  observeResponse(headers: Headers): void {
-    const remaining = this.headerNumbers(headers.get('x-ratelimit-remaining'));
-    const resets = this.headerNumbers(headers.get('x-ratelimit-reset'));
-    if (remaining.length === 0 || resets.length === 0) return;
-    const exhaustedResets = resets.filter((_, index) => remaining[index] !== undefined && remaining[index] < 1);
-    if (exhaustedResets.length === 0) return;
+  observeResponse(response: Response): void {
+    // Only a refusal is backpressure. A served response says the request was
+    // allowed, and its Remaining counters describe windows we are not being
+    // refused on, so nothing about it should stop the next call.
+    if (response.status !== 429) return;
+
+    const blockingResets = exhaustedWindowResets(response);
+    if (blockingResets.length === 0) return;
     // Multiple windows can be exhausted at once. Respect the longest reset;
     // waitForNextCall fails fast when that exceeds an interactive request budget.
-    this.serverBlockedUntil = Math.max(
-      this.serverBlockedUntil,
-      Date.now() + Math.max(...exhaustedResets) * 1_000,
-    );
-  }
-
-  private headerNumbers(value: string | null): number[] {
-    if (!value) return [];
-    return value.split(',').flatMap(part => {
-      const parsed = Number.parseFloat(part.trim());
-      return Number.isFinite(parsed) && parsed >= 0 ? [parsed] : [];
-    });
+    const blockMs = Math.min(Math.max(...blockingResets) * 1_000, this.MAX_SERVER_BLOCK_MS);
+    this.serverBlockedUntil = Math.max(this.serverBlockedUntil, Date.now() + blockMs);
   }
 }
 
@@ -100,7 +110,7 @@ export class SearchProvider {
   private readonly DEFAULT_MAX_RESULTS = 10;
   private rateLimiter: {
     waitForNextCall(): Promise<void>;
-    observeResponse?(headers: Headers): void;
+    observeResponse?(response: Response): void;
   };
   private readonly clientOptions: SearchProviderClientOptions;
 
@@ -356,7 +366,7 @@ export class SearchProvider {
       maxRetryDelayMs: this.clientOptions.maxRetryDelayMs,
       beforeAttempt: rateLimited ? () => this.rateLimiter.waitForNextCall() : undefined,
     });
-    if (rateLimited) this.rateLimiter.observeResponse?.(response.headers);
+    if (rateLimited) this.rateLimiter.observeResponse?.(response);
     return response;
   }
 
