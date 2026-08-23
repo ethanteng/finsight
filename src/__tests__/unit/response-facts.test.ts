@@ -418,6 +418,57 @@ describe('rounded canonical values', () => {
     expect(removals.sentences).toHaveLength(2);
   });
 
+  it('does not cut a sentence in half at an abbreviation period', () => {
+    // Reported from production: the takeaway rendered as "expenses of $9,848),
+    // which means..." because "vs." was read as the end of a sentence, so the
+    // unsupported figure took the front half of the sentence with it.
+    const response = {
+      summary: 'Your cash is $75,038.94.',
+      insights: [
+        "You're running a monthly gap of about -$3,000 (average income of $10,844 vs. expenses of $9,848), " +
+        "which means before even considering a new mortgage payment, you're already spending more than you bring in.",
+      ],
+    };
+    const salvaged = salvageUngroundedResponse(response, pack, validateResponseFacts(response, pack));
+
+    expect(salvaged.insights).toEqual([]);
+    expect(salvaged.insights?.join(' ')).not.toContain('expenses of');
+  });
+
+  it('does not cut a sentence in half inside a parenthetical', () => {
+    // Splitting between "trust." and "Held" would leave the user a takeaway
+    // that opens mid-clause and closes a parenthesis it never opened.
+    const response = {
+      summary: 'Your cash is $75,038.94.',
+      insights: ['Your cash covers your spending (it excludes $412,000 in a trust. Held separately) so the gap is smaller than it looks.'],
+    };
+    const salvaged = salvageUngroundedResponse(response, pack, validateResponseFacts(response, pack));
+
+    expect(salvaged.insights).toEqual([]);
+  });
+
+  it('treats a period followed by a lowercase word as mid-sentence', () => {
+    // The abbreviation list cannot enumerate every shortening a model writes,
+    // so a lowercase continuation is the general backstop.
+    const response = {
+      summary: 'Your cash is $75,038.94.',
+      insights: ['You owe $88,888 more than expected, incl. fees, against debt of $350,095.40.'],
+    };
+    const salvaged = salvageUngroundedResponse(response, pack, validateResponseFacts(response, pack));
+
+    expect(salvaged.insights).toEqual([]);
+  });
+
+  it('still splits a takeaway that really is two sentences', () => {
+    const response = {
+      summary: 'Your cash is $75,038.94.',
+      insights: ['Your cash is $75,038.94. A $412,000 windfall would change that.'],
+    };
+    const salvaged = salvageUngroundedResponse(response, pack, validateResponseFacts(response, pack));
+
+    expect(salvaged.insights).toEqual(['Your cash is $75,038.94.']);
+  });
+
   it('keeps a verified answer when only a key number was miscited', () => {
     const response = {
       summary: 'Your portfolio is worth $1.92 million.',

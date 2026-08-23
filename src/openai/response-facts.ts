@@ -340,14 +340,60 @@ export function validateResponseFacts(
   };
 }
 
+/**
+ * Multi-letter abbreviations that end in a period without ending a sentence.
+ *
+ * Single-letter initialisms ("U.S.", "e.g.") are caught by the letter test in
+ * `isAbbreviationPeriod`; these are the ones that survive it. Words that can
+ * legitimately close a sentence ("no", "st") are left out: splitting one
+ * sentence too many costs less than gluing two together.
+ */
+const SENTENCE_SAFE_ABBREVIATIONS = new Set([
+  'approx', 'avg', 'cf', 'co', 'corp', 'dept', 'dr', 'est', 'etc', 'fig',
+  'inc', 'jr', 'ltd', 'mr', 'mrs', 'ms', 'sr', 'vs',
+]);
+
 /** "U.S." and "e.g." end in a single letter; a real sentence rarely does. */
 function isAbbreviationPeriod(text: string, index: number, punctuation: string): boolean {
-  return punctuation === '.' && /(?:^|[^A-Za-z])[A-Za-z]$/.test(text.slice(0, index));
+  if (punctuation !== '.') return false;
+  const before = text.slice(0, index);
+  if (/(?:^|[^A-Za-z])[A-Za-z]$/.test(before)) return true;
+  const word = /([A-Za-z]+)$/.exec(before)?.[1];
+  return word !== undefined && SENTENCE_SAFE_ABBREVIATIONS.has(word.toLowerCase());
+}
+
+/**
+ * True while the punctuation at `index` sits inside a bracket that opened
+ * earlier in the text. "(average income of $9,000 vs. expenses of $12,000)"
+ * is one parenthetical: cutting it in half leaves a stray ")" behind.
+ */
+function isInsideBrackets(text: string, index: number): boolean {
+  let depth = 0;
+  for (let i = 0; i < index; i++) {
+    const character = text[i];
+    if (character === '(' || character === '[') depth++;
+    else if ((character === ')' || character === ']') && depth > 0) depth--;
+  }
+  return depth > 0;
+}
+
+/**
+ * A sentence starts with a capital, a digit, or a symbol — never a lowercase
+ * word. When the text after the punctuation continues in lowercase, the period
+ * belonged to an abbreviation this module has not enumerated.
+ */
+function continuesInLowercase(text: string, end: number): boolean {
+  return /^\s+[a-z]/.test(text.slice(end));
 }
 
 /**
  * Split on sentence punctuation that ends a sentence. A period inside "$1.92"
  * is followed by a digit, so decimals stay intact.
+ *
+ * Every test here errs toward keeping text together, because these sentences
+ * are the unit that grounding removes: an over-eager split hands the user the
+ * back half of a sentence whose subject was just deleted, while an under-eager
+ * one only removes a clause that would have survived on its own.
  */
 function splitSentences(text: string): string[] {
   const sentences: string[] = [];
@@ -355,7 +401,9 @@ function splitSentences(text: string): string[] {
   for (const match of text.matchAll(/[.!?]+(?=\s|$)/g)) {
     const index = match.index ?? 0;
     if (isAbbreviationPeriod(text, index, match[0])) continue;
+    if (isInsideBrackets(text, index)) continue;
     const end = index + match[0].length;
+    if (continuesInLowercase(text, end)) continue;
     sentences.push(text.slice(start, end));
     start = end;
   }
