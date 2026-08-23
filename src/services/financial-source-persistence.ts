@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client';
 import { getPrismaClient } from '../prisma-client';
+import { isNonPlaidAccountId } from './plaid-account-scope';
 import { TokenStatus, type PlaidTokenHealth } from './token-validation-service';
 
 const prisma = getPrismaClient();
@@ -66,12 +67,13 @@ export async function loadPersistedPlaidData(
         if (record.accessTokenId && supersededTokenIds.has(record.accessTokenId)) {
           return false;
         }
-        if (record.plaidAccountId.startsWith('snaptrade-')) {
-          return false;
-        }
-        // Exclude manual accounts - they come from ManualAccount table via fetchManualAccounts.
-        // If Account table has legacy manual records, including them would duplicate with fetchManualAccounts.
-        if (record.plaidAccountId.startsWith('manual-')) {
+        // Everything this loader returns is stamped `source: 'plaid'` below, so a
+        // row from another provider does not just duplicate that provider's own
+        // fetch — it is relabelled as a Plaid account, and a stale persisted copy
+        // can win the merge against a live read. Drop every non-Plaid namespace:
+        // SnapTrade and Public are fetched live by their own services, and manual
+        // accounts come from the ManualAccount table via fetchManualAccounts().
+        if (isNonPlaidAccountId(record.plaidAccountId)) {
           return false;
         }
         return true;
