@@ -7,6 +7,7 @@ import {
   type PublicAccountSummary,
   type PublicPortfolio,
 } from './client';
+import { withExpectedProviderStatuses } from '../../observability/external-provider-monitoring';
 import {
   mapPublicAccount,
   mapPublicHoldings,
@@ -138,7 +139,15 @@ async function readAccount(
   summary: PublicAccountSummary,
 ): Promise<PublicPortfolio> {
   try {
-    return await getPortfolio(accessToken, summary.accountId);
+    // The 404 caught below is this function's own control flow, not a provider
+    // fault, and it fires once per managed-yield account on every ingestion pass.
+    // Suppressed here rather than left to alert, so it cannot bury a real Public
+    // outage. Scoped to this call alone: a 404 from `listAccounts` or the token
+    // mint still means something is genuinely wrong and still reports.
+    return await withExpectedProviderStatuses(
+      [{ provider: 'public.com', status: 404 }],
+      () => getPortfolio(accessToken, summary.accountId),
+    );
   } catch (error) {
     if (!(error instanceof PublicApiError) || error.status !== 404) throw error;
 
