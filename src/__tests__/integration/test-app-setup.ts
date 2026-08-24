@@ -146,43 +146,6 @@ export function createTestApp() {
     });
   });
 
-  app.get('/plaid/liabilities', testAuthMiddleware, (req: any, res) => {
-    res.json({
-      liabilities: [{
-        accounts: [
-          {
-            account_id: 'acc1',
-            name: 'Credit Card',
-            type: 'credit',
-            subtype: 'credit card',
-            balances: {
-              current: 2500,
-              available: 7500,
-              limit: 10000
-            },
-            mask: '1234',
-            institution_id: 'inst1'
-          },
-          {
-            account_id: 'acc2',
-            name: 'Student Loan',
-            type: 'loan',
-            subtype: 'student',
-            balances: {
-              current: 15000,
-              available: null,
-              limit: null
-            },
-            mask: '5678',
-            institution_id: 'inst2'
-          }
-        ],
-        item: { item_id: 'item1' },
-        request_id: 'req1'
-      }]
-    });
-  });
-
   app.post('/plaid/enrich/transactions', (req, res) => {
     const { transaction_ids, account_type } = req.body;
 

@@ -2,7 +2,7 @@
 
 /**
  * Test script to verify the new enhanced Plaid endpoints work
- * This script tests the new /investments/holdings, /investments/transactions, /liabilities, and /enrich/transactions endpoints
+ * This script tests the new /investments/holdings, /investments/transactions, and /enrich/transactions endpoints
  */
 
 const axios = require('axios');
@@ -71,12 +71,8 @@ async function testEnhancedPlaidEndpoints() {
   log('\n2. Testing /plaid/investments/transactions', 'yellow');
   await testEndpoint('/plaid/investments/transactions', 'GET');
   
-  // Test 3: Liabilities endpoint
-  log('\n3. Testing /plaid/liabilities', 'yellow');
-  await testEndpoint('/plaid/liabilities', 'GET');
-  
-  // Test 4: Transaction enrichment endpoint
-  log('\n4. Testing /plaid/enrich/transactions', 'yellow');
+  // Test 3: Transaction enrichment endpoint
+  log('\n3. Testing /plaid/enrich/transactions', 'yellow');
   await testEndpoint('/plaid/enrich/transactions', 'POST', {
     transaction_ids: ['test_transaction_1', 'test_transaction_2'],
     account_type: 'depository'

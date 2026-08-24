@@ -851,19 +851,6 @@ export const setupPlaidRoutes = (app: any) => {
             }
           }
 
-          // For credit/loan accounts, get liabilities
-          if (accountType === 'credit' || accountType === 'loan') {
-            console.log('Credit/Loan account detected - fetching liabilities');
-            try {
-              const liabilitiesResponse = await plaidClient.liabilitiesGet({
-                access_token: access_token,
-              });
-              console.log(`Retrieved ${liabilitiesResponse.data.accounts?.length || 0} liability accounts`);
-            } catch (error: any) {
-              console.log('Liability data not available for this account:', error.message);
-            }
-          }
-
           // For standard deposit accounts, get transactions
           if (accountType === 'depository') {
             console.log('Depository account detected - fetching transactions');
@@ -1754,66 +1741,6 @@ export const setupPlaidRoutes = (app: any) => {
     }
   });
 
-  // Get liability information (automatically available for all connected accounts)
-  app.get('/plaid/liabilities', async (req: any, res: any) => {
-    try {
-
-
-      // 🔒 CRITICAL SECURITY: Require authentication for real user data
-      if (!req.user?.id) {
-        return res.status(401).json({ error: 'Authentication required for accessing liability data' });
-      }
-
-      const accessTokens = await getPrismaClient().accessToken.findMany({
-        where: { userId: req.user.id }
-      });
-
-      const allLiabilities: any[] = [];
-
-      for (const tokenRecord of accessTokens) {
-        try {
-          const liabilitiesResponse = await plaidClient.liabilitiesGet({
-            access_token: tokenRecord.token,
-          });
-
-          // Get institution information
-          let institutionName = 'Unknown Institution';
-          try {
-            if (liabilitiesResponse.data.item?.institution_id) {
-              const institutionResponse = await plaidClient.institutionsGetById({
-                institution_id: liabilitiesResponse.data.item.institution_id,
-                country_codes: [CountryCode.Us]
-              });
-              institutionName = institutionResponse.data.institution.name;
-            }
-          } catch (institutionError) {
-            console.log('Could not fetch institution name for liabilities, using default');
-          }
-
-          // Add institution information to accounts
-          const accountsWithInstitution = liabilitiesResponse.data.accounts.map((account: any) => ({
-            ...account,
-            institution: institutionName
-          }));
-
-          allLiabilities.push({
-            accounts: accountsWithInstitution,
-            item: liabilitiesResponse.data.item,
-            request_id: liabilitiesResponse.data.request_id
-          });
-
-        } catch (error) {
-          console.error(`Error fetching liabilities for token ${tokenRecord.id}:`, error);
-        }
-      }
-
-      res.json({ liabilities: allLiabilities });
-    } catch (error) {
-      const errorResponse = handlePlaidError(error, 'get liabilities');
-      res.status(500).json(errorResponse);
-    }
-  });
-
   // Enrich transactions with merchant data (now automatic in /transactions endpoint)
   app.post('/plaid/enrich/transactions', async (req: any, res: any) => {
     try {
@@ -1972,7 +1899,6 @@ export const setupPlaidRoutes = (app: any) => {
 
       // Quick feature detection
       const hasInvestment = accounts.some((a: any) => a.type === 'investment');
-      const hasCreditOrLoan = accounts.some((a: any) => a.type === 'credit' || a.type === 'loan');
       const hasDepository = accounts.some((a: any) => a.type === 'depository');
 
       const result: any = {
@@ -2006,19 +1932,6 @@ export const setupPlaidRoutes = (app: any) => {
         } catch (error: any) {
           console.log('Investment data not available:', error.message);
           result.investments = { error: 'Investment data not available' };
-        }
-      }
-
-      // Liabilities (credit cards, student loans, mortgages)
-      if (hasCreditOrLoan) {
-        console.log('Credit/Loan accounts detected - fetching liabilities');
-        try {
-          const liab = await plaidClient.liabilitiesGet({ access_token: accessToken });
-          result.liabilities = liab.data.liabilities;
-          console.log(`Retrieved ${liab.data.accounts?.length || 0} liability accounts`);
-        } catch (error: any) {
-          console.log('Liability data not available:', error.message);
-          result.liabilities = { error: 'Liability data not available' };
         }
       }
 

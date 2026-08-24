@@ -6,7 +6,7 @@ This specification outlines the integration of enhanced Plaid API endpoints into
 - **`/investments`** - **NEW**: Comprehensive investment overview (holdings + transactions combined)
 - **`/investments/holdings`** - Investment holdings and portfolio analysis
 - **`/investments/transactions`** - Investment transaction history and activity analysis
-- **`/liabilities`** - Debt and liability information  
+- **`/liabilities`** - Debt and liability information (route since removed — see section 4)  
 - **`/enrich`** - Transaction enrichment with merchant data
 
 These endpoints enhance the platform's financial analysis capabilities by providing deeper insights into users' investment portfolios, debt obligations, and transaction categorization. **The comprehensive `/investments` endpoint provides a unified view combining both holdings and transactions for efficient portfolio analysis.**
@@ -180,14 +180,13 @@ PLAID_SECRET_PROD=your_production_secret
   - Supports query parameters for date ranges and count limits
 
 ### **4. Liabilities Endpoint**
-- **Status**: ✅ **FULLY IMPLEMENTED**
-- **Location**: `src/plaid.ts` lines 1452-1480
-- **Endpoint**: `GET /plaid/liabilities`
-- **Features**:
-  - Fetches liability information from all connected accounts
-  - Returns debt and credit information
-  - Implements proper error handling and user isolation
-  - Ready for integration with debt analysis functions
+- **Status**: ❌ **REMOVED** — the route never gained a caller and was deleted from `src/plaid.ts`.
+- **Endpoint**: `GET /plaid/liabilities` (now 404s)
+- **Replaced by**: `FinancialDataService.getUserFinancialData({ includeLiabilities: true })`,
+  which calls Plaid `/liabilities/get` during canonical snapshot ingestion and normalizes the
+  result into `account.liabilityDetails`. Those details reach the AI pipeline through the
+  account-details context pack and the canonical fact pack used for response grounding.
+  Liability data is therefore still fetched and used — just not through a dedicated route.
 
 ### **5. Transaction Enrichment Endpoint**
 - **Status**: ✅ **FULLY IMPLEMENTED**
