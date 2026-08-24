@@ -4,6 +4,7 @@ import {
   createExternalProviderMonitoringFetch,
   instrumentExternalProviderAxios,
   reportExternalProviderHttpStatus,
+  withExpectedProviderStatuses,
 } from '../../observability/external-provider-monitoring';
 
 const mockScope = {
@@ -162,5 +163,164 @@ describe('external provider monitoring', () => {
       'External provider stripe returned HTTP 500',
     );
     expect(JSON.stringify(mockScope.setContext.mock.calls)).not.toContain('cus_private_identifier');
+  });
+  describe('expected provider statuses', () => {
+    const publicPortfolio404 = [{ provider: 'public.com', status: 404 }];
+
+    function fetchReturning(status: number): typeof fetch {
+      const baseFetch = jest.fn(async () => new Response('{}', { status })) as unknown as typeof fetch;
+      return createExternalProviderMonitoringFetch(baseFetch);
+    }
+
+    it('suppresses a status the surrounding scope expects', async () => {
+      const monitoredFetch = fetchReturning(404);
+
+      const response = await withExpectedProviderStatuses(
+        publicPortfolio404,
+        () => monitoredFetch('https://api.public.com/userapigateway/trading/abc/portfolio/v2'),
+      );
+
+      expect(response.status).toBe(404);
+      expect(Sentry.withScope).not.toHaveBeenCalled();
+      expect(Sentry.captureMessage).not.toHaveBeenCalled();
+    });
+
+    it('still reports a different status from the same provider inside the scope', async () => {
+      const monitoredFetch = fetchReturning(500);
+
+      await withExpectedProviderStatuses(
+        publicPortfolio404,
+        () => monitoredFetch('https://api.public.com/userapigateway/trading/abc/portfolio/v2'),
+      );
+
+      expect(Sentry.captureMessage).toHaveBeenCalledWith(
+        'External provider public.com returned HTTP 500',
+      );
+    });
+
+    it('still reports the expected status from a different provider inside the scope', async () => {
+      const monitoredFetch = fetchReturning(404);
+
+      await withExpectedProviderStatuses(
+        publicPortfolio404,
+        () => monitoredFetch('https://api.tiingo.com/iex/AAPL'),
+      );
+
+      expect(Sentry.captureMessage).toHaveBeenCalledWith(
+        'External provider tiingo returned HTTP 404',
+      );
+    });
+
+    it('stops suppressing once the scope has exited', async () => {
+      const monitoredFetch = fetchReturning(404);
+      const url = 'https://api.public.com/userapigateway/trading/account';
+
+      await withExpectedProviderStatuses(publicPortfolio404, async () => {});
+      await monitoredFetch(url);
+
+      expect(Sentry.captureMessage).toHaveBeenCalledWith(
+        'External provider public.com returned HTTP 404',
+      );
+    });
+
+    it('does not suppress network failures inside the scope', async () => {
+      const failure = new TypeError('fetch failed');
+      const baseFetch = jest.fn(async () => {
+        throw failure;
+      }) as unknown as typeof fetch;
+      const monitoredFetch = createExternalProviderMonitoringFetch(baseFetch);
+
+      await expect(withExpectedProviderStatuses(
+        publicPortfolio404,
+        () => monitoredFetch('https://api.public.com/userapigateway/trading/abc/portfolio/v2'),
+      )).rejects.toBe(failure);
+
+      expect(Sentry.captureMessage).toHaveBeenCalledWith(
+        'External provider public.com request failed (network)',
+      );
+    });
+
+    it('suppresses across the Axios path used by provider SDKs', async () => {
+      const client = axios.create({
+        adapter: async config => ({
+          data: {},
+          status: 425,
+          statusText: 'Too Early',
+          headers: {},
+          config,
+        }),
+        validateStatus: () => true,
+      });
+      instrumentExternalProviderAxios(client);
+
+      const response = await withExpectedProviderStatuses(
+        [{ provider: 'snaptrade', status: 425 }],
+        () => client.get('https://api.snaptrade.com/api/v1/accounts/abc/holdings'),
+      );
+
+      expect(response.status).toBe(425);
+      expect(Sentry.captureMessage).not.toHaveBeenCalled();
+    });
+
+    it('suppresses across the Axios error path a live 425 takes', async () => {
+      // The success-interceptor case above passes `validateStatus: () => true`,
+      // which is not how a provider SDK is configured: a real SnapTrade 425
+      // rejects and reaches the error interceptor instead. Report once unscoped
+      // first, so this cannot pass by silently exercising nothing at all.
+      const client = axios.create({
+        adapter: async config => {
+          throw new axios.AxiosError(
+            'Request failed with status code 425',
+            'ERR_BAD_REQUEST',
+            config,
+            undefined,
+            { data: {}, status: 425, statusText: 'Too Early', headers: {}, config } as any,
+          );
+        },
+      });
+      instrumentExternalProviderAxios(client);
+      const url = 'https://api.snaptrade.com/api/v1/accounts/abc/holdings';
+
+      await expect(client.get(url)).rejects.toMatchObject({ code: 'ERR_BAD_REQUEST' });
+      expect(Sentry.captureMessage).toHaveBeenCalledWith(
+        'External provider snaptrade returned HTTP 425',
+      );
+
+      jest.clearAllMocks();
+
+      await expect(withExpectedProviderStatuses(
+        [{ provider: 'snaptrade', status: 425 }],
+        () => client.get(url),
+      )).rejects.toMatchObject({ code: 'ERR_BAD_REQUEST' });
+      expect(Sentry.captureMessage).not.toHaveBeenCalled();
+    });
+
+    it('inherits outer expectations when scopes nest', async () => {
+      const monitoredFetch = fetchReturning(404);
+
+      await withExpectedProviderStatuses(publicPortfolio404, () =>
+        withExpectedProviderStatuses(
+          [{ provider: 'snaptrade', status: 425 }],
+          () => monitoredFetch('https://api.public.com/userapigateway/trading/abc/portfolio/v2'),
+        ),
+      );
+
+      expect(Sentry.captureMessage).not.toHaveBeenCalled();
+    });
+
+    it('does not leak suppression into a concurrent unscoped call', async () => {
+      const monitoredFetch = fetchReturning(404);
+      const url = 'https://api.public.com/userapigateway/trading/abc/portfolio/v2';
+
+      await Promise.all([
+        withExpectedProviderStatuses(publicPortfolio404, () => monitoredFetch(url)),
+        monitoredFetch(url),
+      ]);
+
+      expect(Sentry.captureMessage).toHaveBeenCalledTimes(1);
+      expect(Sentry.captureMessage).toHaveBeenCalledWith(
+        'External provider public.com returned HTTP 404',
+      );
+    });
   });
 });

@@ -6,6 +6,7 @@ import {
   type ProviderRetryOptions,
   withTransientProviderRetry,
 } from './services/provider-request-policy';
+import { withExpectedProviderStatuses } from './observability/external-provider-monitoring';
 
 // Initialize Prisma client lazily to avoid import issues during ts-node startup
 let prisma: PrismaClient | null = null;
@@ -609,11 +610,20 @@ export class SnapTradeService {
         accountsResult.data.accounts,
         SNAPTRADE_HOLDINGS_CONCURRENCY,
         async (account: any) => {
-          const response = await this.read(() => this.client.accountInformation.getUserHoldings({
-            accountId: account.id,
-            userId,
-            userSecret,
-          }));
+          // SnapTrade answers a holdings read with 425 until that account's
+          // initial sync completes -- indefinitely for Public's managed-yield
+          // accounts, which is the whole reason the direct Public feed exists.
+          // The rejection is collected per account just below and the user's
+          // other accounts still load, so this is a handled outcome rather than
+          // a fault worth alerting on. Other statuses still report.
+          const response = await withExpectedProviderStatuses(
+            [{ provider: 'snaptrade', status: 425 }],
+            () => this.read(() => this.client.accountInformation.getUserHoldings({
+              accountId: account.id,
+              userId,
+              userSecret,
+            })),
+          );
           return {
             ...response.data,
             account: {

@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import * as Sentry from '@sentry/node';
 import axios, { AxiosInstance, AxiosRequestConfig } from 'axios';
 
@@ -33,6 +34,11 @@ const PROVIDERS_BY_HOST: Record<string, string> = {
   'development.plaid.com': 'plaid',
   'sandbox.plaid.com': 'plaid',
   'api.snaptrade.com': 'snaptrade',
+  // Pinned even though `providerForHost` already derives 'public.com' by
+  // stripping the `api.` prefix. Call sites name this id verbatim when they
+  // declare an expected status, so leaving it implicit means a later remap here
+  // would silently stop those suppressions matching rather than fail loudly.
+  'api.public.com': 'public.com',
   'api.stripe.com': 'stripe',
   'api.resend.com': 'resend',
 };
@@ -91,11 +97,62 @@ function requestMetadata(input: FetchInput, init?: FetchInit): ExternalRequestMe
   return urlMetadata(requestUrl, init?.method ?? requestMethod);
 }
 
+/**
+ * Provider statuses the surrounding call path treats as an ordinary outcome.
+ *
+ * Some provider "failures" are load-bearing control flow rather than faults:
+ * Public's managed-yield accounts answer `portfolio/v2` with 404 so the caller
+ * knows to read tax lots instead, and SnapTrade answers a holdings read with 425
+ * until that account's initial sync completes. Both are handled, both leave the
+ * user's request succeeding, and both were burying genuine provider failures in
+ * Sentry by sheer volume.
+ *
+ * Scoped to an async region rather than declared as a static (provider, status)
+ * allowlist because the fingerprint's operation is deliberately coarse -- the
+ * first two path segments -- so a static rule for Public's 404 would also
+ * silence a 404 on `/userapigateway/trading/account`, which means the account
+ * genuinely is not there. A scope names the one call whose 404 is expected and
+ * leaves every other call on the same host reporting normally.
+ */
+interface ExpectedProviderStatus {
+  provider: string;
+  status: number;
+}
+
+const expectedProviderStatuses = new AsyncLocalStorage<ExpectedProviderStatus[]>();
+
+function isExpectedProviderStatus(provider: string, status: number): boolean {
+  const expected = expectedProviderStatuses.getStore();
+  if (!expected) return false;
+  return expected.some(entry => entry.provider === provider && entry.status === status);
+}
+
+/**
+ * Run `operation` with `expected` provider statuses suppressed from Sentry.
+ *
+ * Suppression covers HTTP status reporting only. Network and timeout failures
+ * still report, because "this endpoint answers 404 by design" says nothing about
+ * the provider being unreachable.
+ *
+ * Nested scopes compose rather than replace: an inner region inherits the outer
+ * expectations, so wrapping a narrow call inside an already-scoped pass cannot
+ * silently widen or drop what the outer scope allowed.
+ */
+export function withExpectedProviderStatuses<T>(
+  expected: ExpectedProviderStatus[],
+  operation: () => Promise<T>,
+): Promise<T> {
+  const inherited = expectedProviderStatuses.getStore() ?? [];
+  return expectedProviderStatuses.run([...inherited, ...expected], operation);
+}
+
 function reportHttpFailure(
   metadata: ExternalRequestMetadata,
   status: number,
   durationMs: number,
 ): void {
+  if (isExpectedProviderStatus(metadata.provider, status)) return;
+
   const statusClass = `${Math.floor(status / 100)}xx`;
   const retryable = status === 408 || status === 429 || status >= 500;
 
