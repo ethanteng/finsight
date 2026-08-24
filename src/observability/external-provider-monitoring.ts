@@ -34,6 +34,11 @@ const PROVIDERS_BY_HOST: Record<string, string> = {
   'development.plaid.com': 'plaid',
   'sandbox.plaid.com': 'plaid',
   'api.snaptrade.com': 'snaptrade',
+  // Pinned even though `providerForHost` already derives 'public.com' by
+  // stripping the `api.` prefix. Call sites name this id verbatim when they
+  // declare an expected status, so leaving it implicit means a later remap here
+  // would silently stop those suppressions matching rather than fail loudly.
+  'api.public.com': 'public.com',
   'api.stripe.com': 'stripe',
   'api.resend.com': 'resend',
 };

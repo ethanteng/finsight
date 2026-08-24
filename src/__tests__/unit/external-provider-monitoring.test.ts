@@ -262,6 +262,39 @@ describe('external provider monitoring', () => {
       expect(Sentry.captureMessage).not.toHaveBeenCalled();
     });
 
+    it('suppresses across the Axios error path a live 425 takes', async () => {
+      // The success-interceptor case above passes `validateStatus: () => true`,
+      // which is not how a provider SDK is configured: a real SnapTrade 425
+      // rejects and reaches the error interceptor instead. Report once unscoped
+      // first, so this cannot pass by silently exercising nothing at all.
+      const client = axios.create({
+        adapter: async config => {
+          throw new axios.AxiosError(
+            'Request failed with status code 425',
+            'ERR_BAD_REQUEST',
+            config,
+            undefined,
+            { data: {}, status: 425, statusText: 'Too Early', headers: {}, config } as any,
+          );
+        },
+      });
+      instrumentExternalProviderAxios(client);
+      const url = 'https://api.snaptrade.com/api/v1/accounts/abc/holdings';
+
+      await expect(client.get(url)).rejects.toMatchObject({ code: 'ERR_BAD_REQUEST' });
+      expect(Sentry.captureMessage).toHaveBeenCalledWith(
+        'External provider snaptrade returned HTTP 425',
+      );
+
+      jest.clearAllMocks();
+
+      await expect(withExpectedProviderStatuses(
+        [{ provider: 'snaptrade', status: 425 }],
+        () => client.get(url),
+      )).rejects.toMatchObject({ code: 'ERR_BAD_REQUEST' });
+      expect(Sentry.captureMessage).not.toHaveBeenCalled();
+    });
+
     it('inherits outer expectations when scopes nest', async () => {
       const monitoredFetch = fetchReturning(404);
 
