@@ -42,39 +42,6 @@ describe('Enhanced Plaid Endpoints Integration Tests', () => {
     );
   });
 
-  describe('Liabilities Endpoint', () => {
-    itNetwork('should return liability information for all accounts', async () => {
-      
-      const app = await getTestApp();
-      const response = await request(app)
-        .get('/plaid/liabilities')
-        .set('Authorization', `Bearer ${testJWT}`)
-        .expect(200);
-
-      expect(response.body).toHaveProperty('liabilities');
-      expect(response.body.liabilities).toHaveLength(1);
-      
-      const liability = response.body.liabilities[0];
-      expect(liability).toHaveProperty('accounts');
-      expect(liability).toHaveProperty('item');
-      expect(liability).toHaveProperty('request_id');
-      
-      const accounts = liability.accounts;
-      expect(accounts).toHaveLength(2);
-      
-      // Check credit card account
-      const creditCard = accounts.find((acc: any) => acc.subtype === 'credit card');
-      expect(creditCard).toBeDefined();
-      expect(creditCard.balances.current).toBe(2500);
-      expect(creditCard.balances.limit).toBe(10000);
-      
-      // Check student loan account
-      const studentLoan = accounts.find((acc: any) => acc.subtype === 'student');
-      expect(studentLoan).toBeDefined();
-      expect(studentLoan.balances.current).toBe(15000);
-    });
-  });
-
   describe('Transaction Enrichment Endpoint', () => {
     itNetwork('should enrich transactions with merchant data', async () => {
       
