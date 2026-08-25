@@ -48,14 +48,14 @@ additional_consented_products: [
 ### New Endpoints
 - `POST /plaid/sync` - Comprehensive data sync based on account types
 - Enhanced `/plaid/create_link_token` - Seamless approach
-- Enhanced `/plaid/exchange_public_token` - Auto-detection
+- Enhanced `/plaid/exchange_public_token` - Account reconciliation only (product data via ingestion)
 
 ### Testing
 1. Navigate to `/profile`
 2. Click "Connect More Accounts" button
 3. Verify Plaid Link opens with minimal selection
 4. Connect test institution
-5. Verify automatic data detection
+5. Verify accounts appear and a later snapshot/ingestion path loads product data
 
 ### Documentation
 - **This summary**: `docs/features/PLAID_IMPLEMENTATION_SUMMARY.md`
