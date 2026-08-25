@@ -639,18 +639,20 @@ export const setupPlaidRoutes = (app: any) => {
 
       console.log(`Token stored with userId: ${req.user?.id || 'NO USER'}`);
 
-      // INTELLIGENT ACCOUNT DETECTION: After successful linking, detect what's available
-      // and call appropriate endpoints based on account types
+      // POST-LINK ACCOUNT RECONCILIATION: read the new Item's accounts and reconcile them
+      // against what the user already has. Nothing here fetches product data: holdings,
+      // transactions and liabilities are pulled by snapshot ingestion, which is the only
+      // path that stores what it reads.
       try {
-        console.log('Starting intelligent account detection...');
+        console.log('Starting post-link account reconciliation...');
 
-        // Get accounts to see what types we have
+        // Get the new Item's accounts; reconciliation below matches them against existing rows.
         const accountsResponse = await plaidClient.accountsGet({
           access_token: access_token,
         });
 
         const accounts = accountsResponse.data.accounts;
-        console.log(`Found ${accounts.length} accounts to analyze`);
+        console.log(`Found ${accounts.length} accounts to reconcile`);
 
         // RELINK RECONCILIATION: A fresh Link flow always mints a new Plaid Item, even when the
         // user is re-connecting an institution they already have. Without reconciliation the old
@@ -659,7 +661,6 @@ export const setupPlaidRoutes = (app: any) => {
         //   2. New Item - a separate active token exists for the same institution.
         // Both use the same matcher, which only supersedes when the new Item fully covers the old.
         if (req.user?.id && accounts.length > 0) {
-          let reconciliationChanged = false;
           try {
             const itemResponse = await plaidClient.itemGet({ access_token: access_token });
             const institutionId = itemResponse.data.item.institution_id;
@@ -775,7 +776,6 @@ export const setupPlaidRoutes = (app: any) => {
                         await tx.account.delete({ where: { id: match.previous.id } });
                       }
                     });
-                    reconciliationChanged = true;
                   }
                   for (const orphan of unmatchedPrevious) {
                     console.warn(`   Keeping ${orphan.name} (${orphan.type}/${orphan.subtype}) - no match in the new Item, preserving it and its history`);
@@ -795,7 +795,9 @@ export const setupPlaidRoutes = (app: any) => {
                   log: message => console.log(message)
                 });
                 if (supersedeReport.superseded.length > 0) {
-                  reconciliationChanged = true;
+                  console.log(
+                    `   Superseded ${supersedeReport.superseded.length} duplicate ${institutionName} connection(s)`
+                  );
                 }
               } else {
                 console.warn(
@@ -806,72 +808,52 @@ export const setupPlaidRoutes = (app: any) => {
               }
             }
 
-            if (reconciliationChanged) {
-              const { FinancialRevisionService } = await import('./services/financial-revision-service');
-              FinancialRevisionService.schedule(
-                req.user.id,
-                {
-                  categorize: false,
-                  history: { kind: 'material', reason: 'account-sync' },
-                },
-                'exchange_public_token'
-              );
-            }
           } catch (cleanupErr: any) {
             console.warn('Relink reconciliation failed (non-critical):', cleanupErr?.message);
           }
         }
 
-        // Analyze each account and call appropriate endpoints
-        for (const account of accounts) {
-          const accountType = account.type;
-          const accountSubtype = account.subtype;
+        console.log('Post-link account reconciliation completed successfully');
+      } catch (reconciliationError: any) {
+        // Don't fail the token exchange if reconciliation fails
+        console.log('Post-link account reconciliation failed (non-critical):', reconciliationError.message);
+      }
 
-          console.log(`Analyzing account: ${account.name} (${accountType}/${accountSubtype})`);
-
-          // For investment accounts, get holdings and transactions
-          if (accountType === 'investment') {
-            console.log('Investment account detected - fetching holdings and transactions');
-            try {
-              // Get investment holdings
-              const holdingsResponse = await plaidClient.investmentsHoldingsGet({
-                access_token: access_token,
-              });
-              console.log(`Retrieved ${holdingsResponse.data.holdings?.length || 0} investment holdings`);
-
-              // Get investment transactions
-              const transactionsResponse = await plaidClient.investmentsTransactionsGet({
-                access_token: access_token,
-                start_date: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // Last 90 days
-                end_date: new Date().toISOString().split('T')[0],
-              });
-              console.log(`Retrieved ${transactionsResponse.data.investment_transactions?.length || 0} investment transactions`);
-            } catch (error: any) {
-              console.log('Investment data not available for this account:', error.message);
-            }
-          }
-
-          // For standard deposit accounts, get transactions
-          if (accountType === 'depository') {
-            console.log('Depository account detected - fetching transactions');
-            try {
-              const transactionsResponse = await plaidClient.transactionsSync({
-                access_token: access_token,
-                options: {
-                  include_personal_finance_category: true
-                }
-              });
-              console.log(`Retrieved ${transactionsResponse.data.added?.length || 0} transactions`);
-            } catch (error: any) {
-              console.log('Transaction data not available for this account:', error.message);
-            }
-          }
+      // A link adds accounts no existing snapshot has seen, and nothing else schedules a
+      // revision for an ordinary new connection. Without this the new accounts wait for
+      // cron: recomputeIfStale serves a 'current' snapshot as-is until it expires, so a
+      // user who already had one would not see the accounts they just connected.
+      //
+      // It also gives the products consented through additional_consented_products
+      // (Investments, Liabilities) their first real call, which is what adds them to the
+      // Item. Ingestion stores what it reads, so unlike the probes this removed, the
+      // initial pull it starts is one whose result is kept.
+      //
+      // Fire-and-forget by design: schedule() defers to setImmediate, so it never delays
+      // the token-exchange response, and it coalesces per user, so overlapping links
+      // collapse into a single revision rather than stacking provider load.
+      //
+      // Non-fatal like disconnect: the token (and usually the reconciled accounts) are
+      // already stored. Failing the HTTP response after a successful link would make the
+      // frontend report an exchange failure while the Item is live, and cron/Ask still
+      // pick the connection up even if this schedule cannot be queued.
+      if (req.user?.id) {
+        try {
+          const { FinancialRevisionService } = await import('./services/financial-revision-service');
+          FinancialRevisionService.schedule(
+            req.user.id,
+            {
+              categorize: false,
+              history: { kind: 'material', reason: 'account-sync' },
+            },
+            'exchange_public_token'
+          );
+        } catch (scheduleErr: any) {
+          console.warn(
+            'Post-link revision schedule failed (non-critical):',
+            scheduleErr?.message || scheduleErr
+          );
         }
-
-        console.log('Intelligent account detection completed successfully');
-      } catch (detectionError: any) {
-        // Don't fail the token exchange if detection fails
-        console.log('Account detection failed (non-critical):', detectionError.message);
       }
 
       res.json({ access_token });

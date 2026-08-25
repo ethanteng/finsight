@@ -6,7 +6,7 @@
 - **Seamless user experience** - no upfront product selection
 - **Maximum institution coverage** - starts with `["transactions"]` only
 - **Future-proof consent** - collects consent for all products upfront
-- **Intelligent data detection** - automatically fetches what's available
+- **Product data on the ingestion path** - holdings, transactions and liabilities are fetched by snapshot ingestion, not at link time
 - **Simple UI** - just a "Connect More Accounts" button and account list
 
 ### Key Files Changed
@@ -25,16 +25,18 @@ additional_consented_products: [
   Products.Auth,         // Future access
 ],
 
-// Intelligent detection after linking
-if (account.type === 'investment') {
-  // Auto-fetch holdings and transactions
-}
-if (account.type === 'credit' || account.type === 'loan') {
-  // Auto-fetch liabilities
-}
-if (account.type === 'depository') {
-  // Auto-fetch transactions via /transactions/sync
-}
+// After linking, exchange_public_token reads accounts, reconciles them against
+// existing rows, and schedules a snapshot revision. It no longer probes product
+// endpoints: those calls discarded every response, so they cost a Plaid request
+// and stored nothing.
+//
+// The scheduled revision is what loads product data, through the only path that
+// persists what it reads:
+//   FinancialDataService.getUserFinancialData({
+//     includeInvestments: true,   // -> /investments/holdings/get, /investments/transactions/get
+//     includeLiabilities: true,   // -> /liabilities/get
+//     includeTransactions: true,  // -> /transactions/sync
+//   })
 ```
 
 ### Frontend Implementation
@@ -46,14 +48,14 @@ if (account.type === 'depository') {
 ### New Endpoints
 - `POST /plaid/sync` - Comprehensive data sync based on account types
 - Enhanced `/plaid/create_link_token` - Seamless approach
-- Enhanced `/plaid/exchange_public_token` - Auto-detection
+- Enhanced `/plaid/exchange_public_token` - Account reconciliation, then schedules a revision (product data via ingestion)
 
 ### Testing
 1. Navigate to `/profile`
 2. Click "Connect More Accounts" button
 3. Verify Plaid Link opens with minimal selection
 4. Connect test institution
-5. Verify automatic data detection
+5. Verify accounts appear and the revision scheduled by the link loads product data
 
 ### Documentation
 - **This summary**: `docs/features/PLAID_IMPLEMENTATION_SUMMARY.md`
