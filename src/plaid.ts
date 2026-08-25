@@ -661,7 +661,6 @@ export const setupPlaidRoutes = (app: any) => {
         //   2. New Item - a separate active token exists for the same institution.
         // Both use the same matcher, which only supersedes when the new Item fully covers the old.
         if (req.user?.id && accounts.length > 0) {
-          let reconciliationChanged = false;
           try {
             const itemResponse = await plaidClient.itemGet({ access_token: access_token });
             const institutionId = itemResponse.data.item.institution_id;
@@ -777,7 +776,6 @@ export const setupPlaidRoutes = (app: any) => {
                         await tx.account.delete({ where: { id: match.previous.id } });
                       }
                     });
-                    reconciliationChanged = true;
                   }
                   for (const orphan of unmatchedPrevious) {
                     console.warn(`   Keeping ${orphan.name} (${orphan.type}/${orphan.subtype}) - no match in the new Item, preserving it and its history`);
@@ -797,7 +795,9 @@ export const setupPlaidRoutes = (app: any) => {
                   log: message => console.log(message)
                 });
                 if (supersedeReport.superseded.length > 0) {
-                  reconciliationChanged = true;
+                  console.log(
+                    `   Superseded ${supersedeReport.superseded.length} duplicate ${institutionName} connection(s)`
+                  );
                 }
               } else {
                 console.warn(
@@ -808,17 +808,6 @@ export const setupPlaidRoutes = (app: any) => {
               }
             }
 
-            if (reconciliationChanged) {
-              const { FinancialRevisionService } = await import('./services/financial-revision-service');
-              FinancialRevisionService.schedule(
-                req.user.id,
-                {
-                  categorize: false,
-                  history: { kind: 'material', reason: 'account-sync' },
-                },
-                'exchange_public_token'
-              );
-            }
           } catch (cleanupErr: any) {
             console.warn('Relink reconciliation failed (non-critical):', cleanupErr?.message);
           }
@@ -828,6 +817,31 @@ export const setupPlaidRoutes = (app: any) => {
       } catch (reconciliationError: any) {
         // Don't fail the token exchange if reconciliation fails
         console.log('Post-link account reconciliation failed (non-critical):', reconciliationError.message);
+      }
+
+      // A link adds accounts no existing snapshot has seen, and nothing else schedules a
+      // revision for an ordinary new connection. Without this the new accounts wait for
+      // cron: recomputeIfStale serves a 'current' snapshot as-is until it expires, so a
+      // user who already had one would not see the accounts they just connected.
+      //
+      // It also gives the products consented through additional_consented_products
+      // (Investments, Liabilities) their first real call, which is what adds them to the
+      // Item. Ingestion stores what it reads, so unlike the probes this removed, the
+      // initial pull it starts is one whose result is kept.
+      //
+      // Fire-and-forget by design: schedule() defers to setImmediate, so it never delays
+      // the token-exchange response, and it coalesces per user, so overlapping links
+      // collapse into a single revision rather than stacking provider load.
+      if (req.user?.id) {
+        const { FinancialRevisionService } = await import('./services/financial-revision-service');
+        FinancialRevisionService.schedule(
+          req.user.id,
+          {
+            categorize: false,
+            history: { kind: 'material', reason: 'account-sync' },
+          },
+          'exchange_public_token'
+        );
       }
 
       res.json({ access_token });
