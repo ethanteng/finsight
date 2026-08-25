@@ -25,13 +25,13 @@ additional_consented_products: [
   Products.Auth,         // Future access
 ],
 
-// After linking, exchange_public_token only reads accounts and reconciles
-// them against existing rows. It no longer probes product endpoints: those
-// calls discarded every response, so they cost a Plaid request and stored
-// nothing.
+// After linking, exchange_public_token reads accounts, reconciles them against
+// existing rows, and schedules a snapshot revision. It no longer probes product
+// endpoints: those calls discarded every response, so they cost a Plaid request
+// and stored nothing.
 //
-// Product data is fetched by snapshot ingestion instead, which is the only
-// path that persists what it reads:
+// The scheduled revision is what loads product data, through the only path that
+// persists what it reads:
 //   FinancialDataService.getUserFinancialData({
 //     includeInvestments: true,   // -> /investments/holdings/get, /investments/transactions/get
 //     includeLiabilities: true,   // -> /liabilities/get
@@ -48,14 +48,14 @@ additional_consented_products: [
 ### New Endpoints
 - `POST /plaid/sync` - Comprehensive data sync based on account types
 - Enhanced `/plaid/create_link_token` - Seamless approach
-- Enhanced `/plaid/exchange_public_token` - Account reconciliation only (product data via ingestion)
+- Enhanced `/plaid/exchange_public_token` - Account reconciliation, then schedules a revision (product data via ingestion)
 
 ### Testing
 1. Navigate to `/profile`
 2. Click "Connect More Accounts" button
 3. Verify Plaid Link opens with minimal selection
 4. Connect test institution
-5. Verify accounts appear and a later snapshot/ingestion path loads product data
+5. Verify accounts appear and the revision scheduled by the link loads product data
 
 ### Documentation
 - **This summary**: `docs/features/PLAID_IMPLEMENTATION_SUMMARY.md`
