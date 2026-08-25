@@ -6,7 +6,7 @@
 - **Seamless user experience** - no upfront product selection
 - **Maximum institution coverage** - starts with `["transactions"]` only
 - **Future-proof consent** - collects consent for all products upfront
-- **Intelligent data detection** - automatically fetches what's available
+- **Product data on the ingestion path** - holdings, transactions and liabilities are fetched by snapshot ingestion, not at link time
 - **Simple UI** - just a "Connect More Accounts" button and account list
 
 ### Key Files Changed
@@ -25,16 +25,18 @@ additional_consented_products: [
   Products.Auth,         // Future access
 ],
 
-// Intelligent detection after linking
-if (account.type === 'investment') {
-  // Auto-fetch holdings and transactions
-}
-if (account.type === 'credit' || account.type === 'loan') {
-  // Auto-fetch liabilities
-}
-if (account.type === 'depository') {
-  // Auto-fetch transactions via /transactions/sync
-}
+// After linking, exchange_public_token only reads accounts and reconciles
+// them against existing rows. It no longer probes product endpoints: those
+// calls discarded every response, so they cost a Plaid request and stored
+// nothing.
+//
+// Product data is fetched by snapshot ingestion instead, which is the only
+// path that persists what it reads:
+//   FinancialDataService.getUserFinancialData({
+//     includeInvestments: true,   // -> /investments/holdings/get, /investments/transactions/get
+//     includeLiabilities: true,   // -> /liabilities/get
+//     includeTransactions: true,  // -> /transactions/sync
+//   })
 ```
 
 ### Frontend Implementation
