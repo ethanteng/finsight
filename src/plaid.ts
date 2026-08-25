@@ -832,16 +832,28 @@ export const setupPlaidRoutes = (app: any) => {
       // Fire-and-forget by design: schedule() defers to setImmediate, so it never delays
       // the token-exchange response, and it coalesces per user, so overlapping links
       // collapse into a single revision rather than stacking provider load.
+      //
+      // Non-fatal like disconnect: the token (and usually the reconciled accounts) are
+      // already stored. Failing the HTTP response after a successful link would make the
+      // frontend report an exchange failure while the Item is live, and cron/Ask still
+      // pick the connection up even if this schedule cannot be queued.
       if (req.user?.id) {
-        const { FinancialRevisionService } = await import('./services/financial-revision-service');
-        FinancialRevisionService.schedule(
-          req.user.id,
-          {
-            categorize: false,
-            history: { kind: 'material', reason: 'account-sync' },
-          },
-          'exchange_public_token'
-        );
+        try {
+          const { FinancialRevisionService } = await import('./services/financial-revision-service');
+          FinancialRevisionService.schedule(
+            req.user.id,
+            {
+              categorize: false,
+              history: { kind: 'material', reason: 'account-sync' },
+            },
+            'exchange_public_token'
+          );
+        } catch (scheduleErr: any) {
+          console.warn(
+            'Post-link revision schedule failed (non-critical):',
+            scheduleErr?.message || scheduleErr
+          );
+        }
       }
 
       res.json({ access_token });
