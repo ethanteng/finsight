@@ -52,6 +52,9 @@ setupPlaidRoutes(app);
 describe('POST /plaid/exchange_public_token', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    // clearAllMocks resets recorded calls but keeps implementations, so the throwing
+    // schedule below would otherwise leak into every test declared after it.
+    schedule.mockReset();
     itemPublicTokenExchange.mockResolvedValue({
       data: { access_token: 'access-sandbox-1', item_id: 'item-1' },
     });
@@ -77,6 +80,23 @@ describe('POST /plaid/exchange_public_token', () => {
       { categorize: false, history: { kind: 'material', reason: 'account-sync' } },
       'exchange_public_token'
     );
+  });
+
+  // The token is already stored by the time the revision is scheduled, so a failure
+  // here must not fail the response: the frontend would report a link failure for an
+  // Item that is live, and cron still picks the connection up regardless.
+  it('still succeeds when scheduling the revision throws', async () => {
+    schedule.mockImplementation(() => {
+      throw new Error('queue unavailable');
+    });
+
+    const response = await request(app)
+      .post('/plaid/exchange_public_token')
+      .send({ public_token: 'public-sandbox-1' })
+      .expect(200);
+
+    expect(response.body).toEqual({ access_token: 'access-sandbox-1' });
+    expect(schedule).toHaveBeenCalledTimes(1);
   });
 
   // Ingestion is the only path that stores what it reads. Link-time calls to the
