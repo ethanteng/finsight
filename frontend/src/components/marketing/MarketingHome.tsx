@@ -41,7 +41,7 @@ export default function Home() {
           <div className="hero-actions">
             <MarketingGetStartedButton className="button button-primary" />
           </div>
-          <p className="microcopy">1 month free, then $9/month. Cancel anytime.</p>
+          <p className="microcopy"><strong>1 month free</strong>, then $9/month. Cancel anytime.</p>
         </div>
 
         <div className="answer-wrap" id="answer">
@@ -357,6 +357,7 @@ export default function Home() {
             <p className="section-kicker">SIMPLE PRICING</p>
             <h2>Planning help before<br />the decision gets expensive.</h2>
             <p>No asset minimum. No percentage of your wealth. No sales call.</p>
+            <p className="compare-label">Compare this price to:</p>
             <div className="advisor-compare">
               <span>A 1% advisor fee on $500K</span><strong>$5,000<small>/year</small></strong>
               <i>Illustrative comparison</i>
