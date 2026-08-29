@@ -101,7 +101,7 @@ export default function Home() {
         <div className="shell proof-grid">
           <p><strong>Your real context</strong><span>accounts, goals, spending, debt, and investments</span></p>
           <p><strong>Read-only</strong><span>Linc can&apos;t move your money</span></p>
-          <p><strong>Inspectable answers</strong><span>see the assumptions and calculations</span></p>
+          <p><Link href="/trust"><strong>Inspectable answers</strong><span>see the assumptions and calculations</span></Link></p>
           <p><strong>Never training data</strong><span>no opt-out or settings required</span></p>
         </div>
       </section>
