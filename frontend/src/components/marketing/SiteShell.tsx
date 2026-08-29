@@ -63,6 +63,7 @@ export function SiteFooter() {
         </div>
         <div className="footer-column">
           <b>TRUST</b>
+          <Link href="/trust">How Answers Are Verified</Link>
           <Link href="/how-we-protect-your-data">Privacy &amp; Security</Link>
           <Link href="/privacy">Privacy Policy</Link>
           <Link href="/terms">Terms</Link>
