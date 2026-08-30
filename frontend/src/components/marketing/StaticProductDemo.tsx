@@ -314,7 +314,6 @@ function FinancesView({ onOpenAccounts }: { onOpenAccounts: () => void }) {
       <section className="demo-net-worth-card">
         <span>NET WORTH</span><strong>$3,668,349</strong><p>Assets, investments, and property less connected debt.</p><small>Source data as of 8/30/2026 · Snapshot computed 8/30/2026</small>
       </section>
-      <div className="demo-data-warning">1 investment account reports a balance its listed holdings do not fully account for. The remainder appears as Not itemized.</div>
       <section className="demo-chart-card">
         <div className="demo-chart-heading"><h3>Financial Metrics Over Time</h3><div><button type="button" className={chartMode === "assets" ? "active" : ""} onClick={() => setChartMode("assets")}>Assets &amp; Net Worth</button><button type="button" className={chartMode === "debt" ? "active" : ""} onClick={() => setChartMode("debt")}>Debt</button></div></div>
         <svg viewBox="0 0 820 235" role="img" aria-label={chartMode === "assets" ? "Net worth and assets over time" : "Debt over time"}>

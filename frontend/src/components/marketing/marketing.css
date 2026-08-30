@@ -1551,7 +1551,6 @@ footer { padding-block: 55px 28px; background: #0a1912; color: white; }.footer-i
 .demo-net-worth-card > strong { display: block; margin-top: 14px; font-family: var(--font-display); font-size: 40px; }
 .demo-net-worth-card > p { margin: 9px 0 19px; color: #aebbb3; font-size: 12px; }
 .demo-net-worth-card > small { display: block; padding-top: 13px; border-top: 1px solid rgba(255,255,255,.13); color: #8fa097; font-size: 9px; }
-.demo-data-warning { margin-top: 12px; padding: 12px 14px; border: 1px solid #dec27b; border-radius: 8px; background: #fff2cb; color: #6f4b13; font-size: 11px; line-height: 1.45; }
 .demo-chart-card { margin-top: 14px; padding: 17px; border: 1px solid #d0d4cc; border-radius: 14px; background: #fffdf5; }
 .demo-chart-heading { display: flex; gap: 14px; align-items: center; justify-content: space-between; }
 .demo-chart-heading h3 { margin: 0; font-family: var(--font-display); font-size: 17px; }
