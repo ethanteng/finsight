@@ -77,7 +77,7 @@ describe("marketing review fixes", () => {
     render(<MarketingHome />);
 
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
-      "Ask hard money questions. Get answers you can check.",
+      "Ask hard questions about your money. Get answers you can check.",
     );
     expect(screen.getByText(/connect your accounts and ask in your own words/i)).toBeInTheDocument();
     expect(screen.getByText(/stop trusting financial advice you can't verify/i)).toBeInTheDocument();
@@ -126,7 +126,7 @@ describe("marketing review fixes", () => {
     expect(screen.getByRole("heading", { name: /real answers, not generic advice/i })).toBeInTheDocument();
     expect(screen.getByText("A GENERAL CHATBOT")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /no accounts.*general guidance/i })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: /your accounts.*answer you can check/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /all your accounts.*answers you can check/i })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /facts behind the answer/i })).toBeInTheDocument();
     ["Plaid", "SnapTrade", "RentCast", "FRED", "FMP", "Tiingo"].forEach((provider) => {
       expect(screen.getByText(provider)).toBeInTheDocument();

@@ -35,7 +35,7 @@ export default function Home() {
       <section className="hero shell" id="top">
         <div className="hero-copy">
           <div className="eyebrow"><span className="pulse" /> STOP TRUSTING FINANCIAL ADVICE YOU CAN&apos;T VERIFY</div>
-          <h1>Ask hard money questions. <em>Get answers you can check.</em></h1>
+          <h1>Ask hard questions about your money. <em>Get answers you can check.</em></h1>
           <p className="hero-subhead">
             Connect your accounts and ask in your own words. Linc runs the numbers on your
             actual accounts and shows every assumption, every step, and where each figure came from.
@@ -80,7 +80,7 @@ export default function Home() {
             </article>
             <article>
               <span>ASK LINC</span>
-              <h3>Your accounts. An answer you can check.</h3>
+              <h3>All your accounts. Answers you can check.</h3>
             </article>
           </div>
           <StaticProductDemo />
