@@ -3,7 +3,7 @@ import MarketingSubpage from '../../components/marketing/MarketingSubpage';
 
 export const metadata: Metadata = {
   title: 'How We Protect Your Data | Ask Linc Security & Privacy',
-  description: 'Learn about Ask Linc\'s comprehensive data protection measures. Discover our encryption standards, security protocols, and commitment to keeping your financial information safe and private.',
+  description: 'See what Ask Linc can access, what AI sees, how account connections work, and how you can disconnect or delete your data.',
 };
 
 export default function DataProtectionPage() {

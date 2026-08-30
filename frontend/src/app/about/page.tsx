@@ -4,7 +4,7 @@ import MarketingSubpage from '../../components/marketing/MarketingSubpage';
 export const metadata: Metadata = {
   title: 'About | Ask Linc — Founded by Ethan Teng',
   description:
-    'Why Ethan Teng built Ask Linc to help people plan a home, family, career change, and retirement using their real accounts and calculations they can inspect.',
+    'Why Ethan Teng built Ask Linc to help people plan a home, family, career change, and retirement using their real accounts and math they can check.',
   alternates: {
     canonical: 'https://asklinc.com/about',
   },

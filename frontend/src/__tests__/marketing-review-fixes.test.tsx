@@ -20,7 +20,7 @@ describe("marketing review fixes", () => {
     render(<SiteHeader />);
 
     const signInLink = screen.getByRole("link", { name: "Sign in" });
-    const answersLink = screen.getByRole("link", { name: "Answers" });
+    const answersLink = screen.getByRole("link", { name: "Retirement" });
     const compareLink = screen.getByRole("link", { name: "Compare" });
     expect(signInLink).toHaveAttribute("href", "/login");
     expect(signInLink.closest(".nav-actions")).not.toBeNull();
@@ -43,8 +43,8 @@ describe("marketing review fixes", () => {
     expect(screen.getByRole("button", { name: "Close menu" })).toHaveAttribute("aria-expanded", "true");
     const mobileMenu = screen.getByLabelText("Mobile navigation");
     expect(within(mobileMenu).getByRole("link", { name: "Features" })).toHaveAttribute("href", "/features");
-    expect(within(mobileMenu).getByRole("link", { name: "Use Cases" })).toHaveAttribute("href", "/use-cases");
-    expect(within(mobileMenu).getByRole("link", { name: "Answers" })).toHaveAttribute("href", "/retirement-answers");
+    expect(within(mobileMenu).getByRole("link", { name: "What You Can Ask" })).toHaveAttribute("href", "/use-cases");
+    expect(within(mobileMenu).getByRole("link", { name: "Retirement" })).toHaveAttribute("href", "/retirement-answers");
     expect(within(mobileMenu).getByRole("link", { name: "Compare" })).toHaveAttribute("href", "/vs");
     expect(within(mobileMenu).getByRole("link", { name: "Pricing" })).toHaveAttribute("href", "/pricing");
     expect(within(mobileMenu).getByRole("link", { name: "About" })).toHaveAttribute("href", "/about");
@@ -56,82 +56,83 @@ describe("marketing review fixes", () => {
     expect(screen.queryByRole("link", { name: "Sign in to Ask Linc" })).not.toBeInTheDocument();
   });
 
-  it("grounds the homepage in recognizable life decisions", () => {
+  it("leads with checkable financial answers and recognizable life decisions", () => {
     render(<MarketingHome />);
 
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
-      "See what a big decision changes. Before you make it.",
+      "Ask hard money questions. Get answers you can check.",
     );
-    expect(screen.getByText(/buying a home, growing your family, changing jobs/i)).toBeInTheDocument();
-    expect(screen.getByText(/grounds each answer in your financial picture, goals, and real-life context/i)).toBeInTheDocument();
-    expect(screen.getByText(/stay in control of what you connect and share/i)).toBeInTheDocument();
+    expect(screen.getByText(/connect your accounts and ask in your own words/i)).toBeInTheDocument();
+    expect(screen.getByText(/stop trusting financial advice you can't verify/i)).toBeInTheDocument();
+    expect(screen.getByText(/pasted bank statements into chatgpt and regretted it/i)).toBeInTheDocument();
     expect(USE_CASE_LINKS).toContainEqual({
       href: "/use-cases/family-planning",
       label: "Growing a Family",
     });
   });
 
-  it("turns a natural-language question into a grounded decision path", () => {
+  it("shows real product proof and compresses the supporting story", () => {
     render(<MarketingHome />);
 
-    expect(screen.getByRole("heading", { name: /same question.*a very different answer/i })).toBeInTheDocument();
-    const generalPanel = screen.getByRole("heading", { name: "Without Ask Linc connected" }).closest("article");
-    const groundedPanel = screen.getByRole("heading", { name: "With Ask Linc connected" }).closest("article");
-    expect(generalPanel).not.toBeNull();
-    expect(groundedPanel).not.toBeNull();
-    expect(screen.getAllByText(/should i use my \$30k bonus to pay down the mortgage/i)).toHaveLength(2);
-    expect(within(generalPanel as HTMLElement).getByText("GENERAL ANSWER")).toBeInTheDocument();
-    expect(within(generalPanel as HTMLElement).getByText("WHAT THIS ANSWER DOESN'T KNOW")).toBeInTheDocument();
-    expect(within(groundedPanel as HTMLElement).getByText("GROUNDED ANSWER")).toBeInTheDocument();
-    expect(within(groundedPanel as HTMLElement).getByText("YOUR DECISION INPUTS")).toBeInTheDocument();
-    expect(within(groundedPanel as HTMLElement).getByText("LINC'S TAKE")).toBeInTheDocument();
-    expect(within(groundedPanel as HTMLElement).getByText("NEXT STEP")).toBeInTheDocument();
-    expect(screen.getByText(/latest available data and shows the source date/i)).toBeInTheDocument();
-    expect(screen.getByText(/money shapes where you live, how you care for family/i)).toBeInTheDocument();
-    expect(screen.getByText(/learning from real questions, improving it carefully/i)).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: /your financial ecosystem is already here/i })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Accounts + cash flow" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Investments, looked through" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Home value, with a range" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Rates, markets + history" })).toBeInTheDocument();
-    expect(screen.getByText(/fund fees, sector and country exposure/i)).toBeInTheDocument();
-    expect(screen.getByText(/does not throw the whole data stack at every answer/i)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /explore the data ecosystem/i })).toHaveAttribute("href", "/integrations");
+    expect(screen.getByRole("heading", { name: "See how every answer was worked out." })).toBeInTheDocument();
+    expect(screen.getByText("Your numbers")).toBeInTheDocument();
+    expect(screen.getByText("What Linc assumed")).toBeInTheDocument();
+    expect(screen.getByText("Step-by-step math")).toBeInTheDocument();
+    expect(screen.getByText("Built-in checks")).toBeInTheDocument();
+    expect(screen.getByText("Up-to-date sources")).toBeInTheDocument();
+    expect(screen.getByAltText(/show the math view/i)).toHaveAttribute("src", expect.stringContaining("show-the-math.png"));
+    expect(screen.getByAltText(/sources view/i)).toHaveAttribute("src", expect.stringContaining("sources-evidence.png"));
+    expect(screen.getByAltText(/retirement scenario answer/i)).toHaveAttribute("src", expect.stringContaining("decision-answer.png"));
+    expect(screen.getByAltText(/net worth history/i)).toHaveAttribute("src", expect.stringContaining("net-worth-history.png"));
+    expect(screen.getByAltText(/investment portfolio/i)).toHaveAttribute("src", expect.stringContaining("portfolio-overview.png"));
+    expect(screen.getAllByText("Real product output. Account balances and identifying details changed.")).toHaveLength(1);
+    expect(screen.queryByText(/calculation engine does the math/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /real answers, not generic advice/i })).toBeInTheDocument();
+    expect(screen.getByText("A GENERAL CHATBOT")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /no accounts.*general guidance/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /your accounts.*answer you can check/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /facts behind the answer/i })).toBeInTheDocument();
+    ["Plaid", "SnapTrade", "RentCast", "FRED", "FMP", "Tiingo"].forEach((provider) => {
+      expect(screen.getByText(provider)).toBeInTheDocument();
+    });
+    expect(screen.getByRole("link", { name: /see what ask linc can connect/i })).toHaveAttribute("href", "/integrations");
     expect(screen.getByRole("heading", { name: /financial data is never used to train ai models/i })).toBeInTheDocument();
     expect(screen.getByText(/no toggle.*no opt-out.*financial data stays yours/i)).toBeInTheDocument();
+    expect(screen.queryByText("THE DIFFERENCE")).not.toBeInTheDocument();
+    expect(screen.queryByText("LINC'S REASONING")).not.toBeInTheDocument();
   });
 
-  it("explains the data ecosystem on the features page without exposing a raw provider dump", async () => {
+  it("explains the connected financial picture on the features page without exposing a raw provider dump", async () => {
     const page = await MarketingSubpage({ params: Promise.resolve({ slug: ["features"] }) });
     render(page);
 
-    expect(screen.getByRole("heading", { name: /a financial ecosystem built for the question/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /bring the whole money picture into one answer/i })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Accounts and cash flow" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Brokerage and portfolio detail" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Investments and retirement accounts" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Property value" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Rates and the economy" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Long-view planning history" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Current public evidence" })).toBeInTheDocument();
-    expect(screen.getByText(/up to 20 comparables/i)).toBeInTheDocument();
-    expect(screen.getByText(/fund fees plus sector and country exposure/i)).toBeInTheDocument();
-    expect(screen.getByText(/important numbers stay tied to facts/i)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /explore everything linc can connect and use/i })).toHaveAttribute("href", "/integrations");
+    expect(screen.getByRole("heading", { name: "Long-term market history" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Current rules and news" })).toBeInTheDocument();
+    expect(screen.getByText(/nearby comparable homes/i)).toBeInTheDocument();
+    expect(screen.getByText(/fund fees and where your money is invested/i)).toBeInTheDocument();
+    expect(screen.getByText(/important numbers stay tied to their sources/i)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /see what linc can connect and use/i })).toHaveAttribute("href", "/integrations");
   });
 
-  it("presents integrations as a user-facing financial ecosystem", () => {
+  it("presents integrations as a user-facing money picture", () => {
     render(<IntegrationsPage />);
 
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
       "Your finances live in many places. Your answer shouldn't.",
     );
     expect(screen.getByRole("heading", { name: "Cash flow, cards, and loans" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Your portfolio, looked through" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "See what you own and where the risk is" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "The parts that do not live at a bank" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Rates and borrowing costs" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Long-run planning history" })).toBeInTheDocument();
-    expect(screen.getByText(/dated home-value estimate and 85% range/i)).toBeInTheDocument();
-    expect(screen.getByText(/fund fees plus sector and country exposure/i)).toBeInTheDocument();
-    expect(screen.getByText(/does not pile every available data point into every answer/i)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Long-term market history" })).toBeInTheDocument();
+    expect(screen.getByText(/dated home-value estimate and range/i)).toBeInTheDocument();
+    expect(screen.getByText(/fund fees and where each fund invests/i)).toBeInTheDocument();
+    expect(screen.getByText(/does not use every available data point just because it can/i)).toBeInTheDocument();
     const integrationsTable = screen.getByRole("table", {
       name: /ask linc integrations, the financial data used from each source, and example questions/i,
     });

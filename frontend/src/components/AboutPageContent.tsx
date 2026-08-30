@@ -8,6 +8,7 @@ import SiteFooter from "./SiteFooter";
 import { Button } from "./ui/button";
 import { pushBeginCheckout } from "@/lib/dataLayer";
 import { useDialog } from '@/components/ui/dialog';
+import { TRIAL_PRICE_LINE } from '@/config/pricing';
 
 export default function AboutPageContent() {
   const [isLoading, setIsLoading] = useState(false);
@@ -79,7 +80,7 @@ export default function AboutPageContent() {
                   ChatGPT — and immediately regretted it. General-purpose AI fails
                   at money math. I built Ask Linc so households planning retirement
                   get decision-ready answers from their real accounts, live market
-                  data, and calculations you can inspect — not another dashboard,
+                  data, and math you can check — not another dashboard,
                   and not a black box.
                 </p>
                 <div className="flex flex-wrap gap-4 text-sm">
@@ -114,7 +115,7 @@ export default function AboutPageContent() {
                 — and private.
               </p>
               <p className="text-muted-foreground leading-relaxed">
-                1 month free, then $9/month flat. Cancel anytime.
+                {TRIAL_PRICE_LINE}
               </p>
             </div>
 

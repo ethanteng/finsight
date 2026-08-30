@@ -16,12 +16,12 @@ describe("comparison pages", () => {
       ],
     });
     expect(chatgpt?.rows.map((row) => row.dimension)).toEqual([
-      "AI approach",
       "Show the Math",
-      "Financial ecosystem",
-      "Privacy and security",
-      "Purpose",
+      "Never used for training",
+      "Best for",
+      "How the math works",
       "Price",
+      "Connected financial information",
     ]);
     expect(chatgpt?.faqs).toHaveLength(6);
     expect(generateStaticParams()).toContainEqual({ slug: "chatgpt" });
@@ -29,7 +29,7 @@ describe("comparison pages", () => {
     await expect(
       generateMetadata({ params: Promise.resolve({ slug: "chatgpt" }) }),
     ).resolves.toMatchObject({
-      title: "Ask Linc vs ChatGPT | Purpose-Built Financial AI vs General AI",
+      title: "Ask Linc vs ChatGPT | Your Financial Accounts vs General AI",
       alternates: { canonical: "https://asklinc.com/vs/chatgpt" },
       openGraph: { url: "https://asklinc.com/vs/chatgpt" },
       robots: { index: true, follow: true },
@@ -45,10 +45,12 @@ describe("comparison pages", () => {
 
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Ask Linc vs ChatGPT");
     const comparison = screen.getByRole("table");
-    expect(within(comparison).getByText("AI approach")).toBeInTheDocument();
     expect(within(comparison).getByText("Show the Math")).toBeInTheDocument();
-    expect(within(comparison).getByText(/step-by-step calculations, validation checks/i)).toBeInTheDocument();
-    expect(within(comparison).getByText(/never used to train AI models/i)).toBeInTheDocument();
+    expect(within(comparison).getByText(/numbers used, what linc assumed, the math, the checks/i)).toBeInTheDocument();
+    expect(within(comparison).getByText(/financial data is never used to train models/i)).toBeInTheDocument();
+    expect(within(comparison).getByText("How the math works")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /choose chatgpt for breadth.*check the work/i })).toBeInTheDocument();
+    expect(screen.getByText(/keep chatgpt for general work\. use ask linc when a money answer needs/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "See how Show the Math works" })).toHaveAttribute(
       "href",
       "/blog/show-the-math-how-ask-linc-makes-ai-financial-analysis-transparent",
@@ -95,7 +97,7 @@ describe("comparison pages", () => {
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Ask Linc vs Boldin");
     const comparison = screen.getByRole("table");
     expect(within(comparison).getByText("Planning experience")).toBeInTheDocument();
-    expect(within(comparison).getByText(/PlannerPlus is \$144\/year/i)).toBeInTheDocument();
+    expect(within(comparison).getByText(/offers free and paid planner options/i)).toBeInTheDocument();
     expect(screen.getByText("Is Ask Linc a Boldin alternative?")).toBeInTheDocument();
 
     const otherComparisons = container.querySelector(".other-comparisons");

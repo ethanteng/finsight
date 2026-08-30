@@ -4,22 +4,22 @@ import { useState } from "react";
 
 const outcomes = {
   58: {
-    headline: "Possible—with less room for a prolonged downturn.",
+    headline: "Possible—with less room if markets stay down.",
     surplus: "+$640K projected cushion",
     range: "68–76%",
-    note: "The plan works, but the first five years carry more sequence risk.",
+    note: "The plan works, but a market drop in the first five years would hurt more.",
   },
   60: {
     headline: "Yes—with room to spare.",
     surplus: "+$1.7M projected cushion",
     range: "75–85%",
-    note: "This is the strongest balance of time, lifestyle, and resilience.",
+    note: "This gives you the strongest balance of time, lifestyle, and cushion.",
   },
   62: {
     headline: "Yes—with more cushion than the plan appears to need.",
     surplus: "+$2.8M projected cushion",
     range: "86–92%",
-    note: "Waiting adds resilience, but may trade away time you value more.",
+    note: "Waiting adds more cushion, but may trade away time you value more.",
   },
 } as const;
 
@@ -34,7 +34,7 @@ export function FeatureScenario() {
       <div className="feature-scenario-copy">
         <span className="card-index">01 / EXPLORE</span>
         <h2>Change the assumption, not the spreadsheet.</h2>
-        <p>Move the retirement date and watch the recommendation change. Linc keeps the rest of the financial picture connected while you explore the tradeoff.</p>
+        <p>Move the retirement date and watch the answer change. Linc keeps the rest of your money in view while you compare the tradeoff.</p>
       </div>
       <div className="feature-scenario-panel">
         <div className="scenario-pills" role="group" aria-label="Choose a retirement age">

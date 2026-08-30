@@ -39,7 +39,7 @@ const websiteSchema = {
   "@type": "WebSite",
   "name": "Ask Linc",
   "url": "https://asklinc.com",
-  "description": "Plan a home purchase, a growing family, a career change, and retirement using your real accounts and calculations you can inspect."
+  "description": "Plan a home purchase, a growing family, a career change, and retirement using your real accounts and math you can check."
 };
 
 export const metadata: Metadata = {

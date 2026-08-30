@@ -3,12 +3,12 @@ import StructuredData from "@/components/StructuredData";
 import TrustPage, { TRUST_FAQS } from "@/components/marketing/TrustPage";
 
 export const metadata: Metadata = {
-  title: "AI Financial Analysis You Can Verify | Ask Linc",
+  title: "See the Math Behind Every Answer | Ask Linc",
   description:
-    "See how Ask Linc grounds financial answers in your real data, uses repeatable calculations, validates results, and shows the math so you can verify the answer yourself.",
+    "See how Ask Linc starts with your real accounts, uses dedicated tools for important math, checks the result, and shows you the work.",
   keywords: [
     "verifiable financial AI",
-    "deterministic financial analysis",
+    "financial math you can check",
     "AI financial calculations",
     "transparent financial analysis",
     "Show the Math",
@@ -19,7 +19,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "Don’t Trust the Answer. Check It. | Ask Linc",
     description:
-      "Financial AI grounded in real data, repeatable calculations, validation, and math you can inspect.",
+      "Ask Linc starts with your real accounts, uses the same math every time, checks the result, and shows you the work.",
     type: "website",
     url: "https://asklinc.com/trust",
     siteName: "Ask Linc",
@@ -28,7 +28,7 @@ export const metadata: Metadata = {
         url: "https://asklinc.com/og-image.jpg",
         width: 1200,
         height: 630,
-        alt: "Ask Linc financial analysis with inspectable calculations",
+        alt: "Ask Linc answer with the numbers and math shown",
       },
     ],
   },
@@ -36,7 +36,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Don’t Trust the Answer. Check It. | Ask Linc",
     description:
-      "See the inputs, assumptions, calculations, validation, and sources behind an Ask Linc answer.",
+      "See the numbers, assumptions, math, checks, and sources behind an Ask Linc answer.",
     images: ["https://asklinc.com/og-image.jpg"],
   },
   robots: {

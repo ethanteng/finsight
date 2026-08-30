@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import StructuredData from "@/components/StructuredData";
 import { PageCta, SiteFooter, SiteHeader } from "@/components/marketing/SiteShell";
+import { RetirementDecisionCrossSell } from "@/components/marketing/RetirementDecisionCrossSell";
 import {
   canIRetireAt55,
   canIRetireAt60,
@@ -13,7 +14,7 @@ import {
 
 const canonical = "https://asklinc.com/retirement-answers";
 const description =
-  "Explore clear, calculation-first answers about retiring at different ages and with different portfolio balances, then test the same questions with your own finances.";
+  "Explore clear retirement guides for different ages and savings balances, then try the same questions with your own finances.";
 
 const balanceAnswers = [
   canIRetireWithOneMillion,
@@ -24,20 +25,20 @@ const ageAnswers = [canIRetireAt55, canIRetireAt60];
 const allAnswers = [...balanceAnswers, ...ageAnswers];
 
 export const metadata: Metadata = {
-  title: "Retirement Answers: Can I Retire? | Ask Linc",
+  title: "Retirement: Can I Retire? | Ask Linc",
   description,
   alternates: { canonical },
   openGraph: {
-    title: "Retirement Answers | Ask Linc",
+    title: "Retirement | Ask Linc",
     description,
     type: "website",
     url: canonical,
     siteName: "Ask Linc",
-    images: [{ url: "https://asklinc.com/og-image.jpg", width: 1200, height: 630, alt: "Ask Linc retirement answers" }],
+    images: [{ url: "https://asklinc.com/og-image.jpg", width: 1200, height: 630, alt: "Ask Linc retirement planning" }],
   },
   twitter: {
     card: "summary_large_image",
-    title: "Retirement Answers | Ask Linc",
+    title: "Retirement | Ask Linc",
     description,
     images: ["https://asklinc.com/og-image.jpg"],
   },
@@ -60,7 +61,7 @@ function balanceLabel(page: AnswerPageData) {
 const collectionSchema = {
   "@context": "https://schema.org",
   "@type": "CollectionPage",
-  name: "Retirement Answers",
+  name: "Retirement",
   description,
   url: canonical,
   mainEntity: {
@@ -80,7 +81,7 @@ const breadcrumbSchema = {
   "@type": "BreadcrumbList",
   itemListElement: [
     { "@type": "ListItem", position: 1, name: "Home", item: "https://asklinc.com/" },
-    { "@type": "ListItem", position: 2, name: "Retirement answers", item: canonical },
+    { "@type": "ListItem", position: 2, name: "Retirement", item: canonical },
   ],
 };
 
@@ -94,28 +95,28 @@ export default function RetirementAnswersPage() {
       <nav className="answer-breadcrumbs shell" aria-label="Breadcrumb">
         <ol>
           <li><Link href="/">Home</Link><i aria-hidden="true">/</i></li>
-          <li><span aria-current="page">Retirement answers</span></li>
+          <li><span aria-current="page">Retirement</span></li>
         </ol>
       </nav>
 
       <section className="answer-hub-hero shell">
         <div>
-          <p className="section-kicker">RETIREMENT ANSWERS</p>
+          <p className="section-kicker">RETIREMENT</p>
           <h1>Start with the math. <em>Then test the whole plan.</em></h1>
           <p className="answer-hub-standfirst">
             A portfolio balance or retirement age is only the opening question. These guides show the first-year math, the assumptions that change the result, and the next questions worth testing.
           </p>
           <div className="answer-hub-hero-links">
-            <a className="button button-dark" href="#by-portfolio">Explore the answers <span aria-hidden="true">↓</span></a>
+            <a className="button button-dark" href="#by-portfolio">Explore the guides <span aria-hidden="true">↓</span></a>
             <Link className="text-link" href="/use-cases/retirement">See how Ask Linc plans retirement</Link>
           </div>
         </div>
-        <aside className="answer-hub-method-card" aria-label="How to use these retirement answers">
-          <span>THE SHARED METHOD</span>
+        <aside className="answer-hub-method-card" aria-label="How to use these retirement guides">
+          <span>HOW TO START</span>
           <ol>
             <li><b>01</b><div><strong>Set the spending need</strong><small>Include taxes, healthcare, and irregular costs.</small></div></li>
             <li><b>02</b><div><strong>Subtract other income</strong><small>Time Social Security, pensions, and work by year.</small></div></li>
-            <li><b>03</b><div><strong>Stress-test the gap</strong><small>Change returns, inflation, timing, and flexibility.</small></div></li>
+            <li><b>03</b><div><strong>Try a few what-ifs</strong><small>Change returns, inflation, timing, and flexibility.</small></div></li>
           </ol>
         </aside>
       </section>
@@ -124,7 +125,7 @@ export default function RetirementAnswersPage() {
         <div className="shell">
           <div><span>Portfolio questions</span><strong>3 balances</strong><small>$1 million, $2 million, and $3 million</small></div>
           <div><span>Timing questions</span><strong>2 ages</strong><small>Retiring at 55 and retiring at 60</small></div>
-          <div><span>Planning approach</span><strong>1 method</strong><small>Transparent calculations with stated assumptions</small></div>
+          <div><span>Planning approach</span><strong>1 method</strong><small>Clear math with stated assumptions</small></div>
         </div>
       </section>
 
@@ -170,7 +171,7 @@ export default function RetirementAnswersPage() {
         <div className="shell">
           <div className="answer-hub-section-head">
             <div><p className="section-kicker">BY RETIREMENT AGE</p><h2 id="age-heading">What must the early years bridge?</h2></div>
-            <p>Retiring before Medicare or Social Security changes the sequence of the plan. Start with the benefits and tax milestones that arrive after work stops.</p>
+            <p>Retiring before Medicare or Social Security changes what your plan needs to cover first. Start with the benefits and tax milestones that arrive after work stops.</p>
           </div>
           <div className="answer-hub-age-grid" aria-labelledby="age-heading">
             {ageAnswers.map((page) => (
@@ -193,7 +194,7 @@ export default function RetirementAnswersPage() {
           <div>
             <p className="section-kicker light">SOURCES &amp; METHODOLOGY</p>
             <h2>Useful estimates. Explicit limits.</h2>
-            <p>Every answer separates deterministic calculations from planning judgments. Withdrawal examples are simple starting-balance math. They do not predict returns or guarantee how long a portfolio will last.</p>
+            <p>Every answer separates the math from the judgment calls. Withdrawal examples use simple starting-balance math. They do not predict returns or guarantee how long a portfolio will last.</p>
           </div>
           <ol>
             <li><span>01</span><div><strong>Show the calculation</strong><p>Rates, amounts, income gaps, and assumptions stay visible.</p></div></li>
@@ -207,6 +208,7 @@ export default function RetirementAnswersPage() {
         </div>
       </section>
 
+      <RetirementDecisionCrossSell />
       <PageCta title="Replace the examples with your accounts, spending, income, and goals." />
       <SiteFooter />
     </main>

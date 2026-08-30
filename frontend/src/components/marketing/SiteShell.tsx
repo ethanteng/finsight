@@ -41,18 +41,18 @@ export function SiteFooter() {
         <div className="footer-column">
           <b>PRODUCT</b>
           <Link href="/features">Features</Link>
-          <Link href="/integrations">Integrations</Link>
-          <Link href="/use-cases">Use Cases</Link>
+          <Link href="/integrations">Accounts &amp; Data</Link>
+          <Link href="/use-cases">What You Can Ask</Link>
           <Link href="/pricing">Pricing</Link>
           <Link href="/faq">FAQ</Link>
-          <Link href="/retirement-answers">Retirement Answers</Link>
+          <Link href="/retirement-answers">Retirement</Link>
         </div>
         <div className="footer-column">
           <b>COMPARE</b>
-          <Link href="/vs/chatgpt">vs ChatGPT</Link>
-          <Link href="/vs/origin">vs Origin</Link>
-          <Link href="/vs/portfoliopilot">vs PortfolioPilot</Link>
           <Link href="/vs/monarch">vs Monarch</Link>
+          <Link href="/vs/origin">vs Origin</Link>
+          <Link href="/vs/chatgpt">vs ChatGPT</Link>
+          <Link href="/vs/portfoliopilot">vs PortfolioPilot</Link>
           <Link href="/vs/boldin">vs Boldin</Link>
         </div>
         <div className="footer-column">
@@ -63,7 +63,7 @@ export function SiteFooter() {
         </div>
         <div className="footer-column">
           <b>TRUST</b>
-          <Link href="/trust">How Answers Are Verified</Link>
+          <Link href="/trust">How Answers Are Checked</Link>
           <Link href="/how-we-protect-your-data">Privacy &amp; Security</Link>
           <Link href="/privacy">Privacy Policy</Link>
           <Link href="/terms">Terms</Link>

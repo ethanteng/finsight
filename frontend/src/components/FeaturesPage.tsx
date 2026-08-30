@@ -8,6 +8,7 @@ import RealMathCallout from './RealMathCallout';
 import SiteFooter from './SiteFooter';
 import SiteHeader from './SiteHeader';
 import { useDialog } from '@/components/ui/dialog';
+import { TRIAL_PRICE_LINE } from '@/config/pricing';
 
 
 const FeaturesPage = () => {
@@ -402,7 +403,7 @@ const FeaturesPage = () => {
               {isLoading === 'premium' ? 'Creating...' : 'Get started'}
             </Button>
             <p className="text-[1.0625rem] font-medium text-white">
-              <span className="text-primary">1 month free, then $9/month</span>. Cancel anytime.
+              <span className="text-primary">{TRIAL_PRICE_LINE}</span>
             </p>
           </div>
         </div>

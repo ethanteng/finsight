@@ -7,7 +7,7 @@ import TrustPage, { TRUST_FAQS } from "@/components/marketing/TrustPage";
 describe("trust page", () => {
   it("publishes indexable metadata for the evergreen route", () => {
     expect(metadata).toMatchObject({
-      title: "AI Financial Analysis You Can Verify | Ask Linc",
+      title: "See the Math Behind Every Answer | Ask Linc",
       alternates: { canonical: "https://asklinc.com/trust" },
       openGraph: { url: "https://asklinc.com/trust" },
       robots: { index: true, follow: true },
@@ -20,14 +20,14 @@ describe("trust page", () => {
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
       "Don’t trust the answer. Check it.",
     );
-    expect(screen.getByRole("heading", { name: /ai reasons.*financial engines calculate/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /ai explains.*dedicated tools do the math/i })).toBeInTheDocument();
     expect(screen.getByText("Same inputs. Same calculation. Same result.")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /you don’t have to take linc’s word for it/i })).toBeInTheDocument();
-    expect(screen.getByText(/no system is infallible/i)).toBeInTheDocument();
-    expect(screen.getByText(/financial intelligence you can verify/i)).toBeInTheDocument();
+    expect(screen.getByText(/no product is perfect/i)).toBeInTheDocument();
+    expect(screen.getByText(/check the answer instead of taking it on faith/i)).toBeInTheDocument();
 
-    const answerCheck = screen.getByLabelText("Illustrative verified Ask Linc answer");
-    ["Inputs", "Assumptions", "Calculations", "Validation", "Sources"].forEach((label) => {
+    const answerCheck = screen.getByLabelText("Illustrative Ask Linc answer with checks");
+    ["Your numbers", "Assumptions", "Math", "Checks", "Sources"].forEach((label) => {
       expect(within(answerCheck).getByText(label)).toBeInTheDocument();
     });
   });
@@ -42,7 +42,7 @@ describe("trust page", () => {
       "href",
       "/how-we-protect-your-data",
     );
-    expect(screen.getByRole("link", { name: /why determinism matters/i })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: /why the same numbers should produce the same result/i })).toHaveAttribute(
       "href",
       "/blog/why-determinism-matters-in-ai-financial-analysis",
     );
@@ -50,10 +50,10 @@ describe("trust page", () => {
 
   it("links existing trust and verification copy back to the evergreen page", async () => {
     const { unmount } = render(<MarketingHome />);
-    expect(screen.getByRole("link", { name: /inspectable answers/i })).toHaveAttribute("href", "/trust");
+    expect(screen.getByRole("link", { name: /show the math.*your numbers, math, and sources/i })).toHaveAttribute("href", "/trust");
     unmount();
 
     render(await MarketingSubpage({ params: Promise.resolve({ slug: ["features"] }) }));
-    expect(screen.getAllByRole("link", { name: /how answers are verified/i })[0]).toHaveAttribute("href", "/trust");
+    expect(screen.getAllByRole("link", { name: /how answers are checked/i })[0]).toHaveAttribute("href", "/trust");
   });
 });

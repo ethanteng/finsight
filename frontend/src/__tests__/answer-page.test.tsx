@@ -10,7 +10,7 @@ describe("evergreen answer page", () => {
       "Can I retire with $2 million?Start with what it needs to support.",
     );
     expect(screen.getByRole("navigation", { name: "Breadcrumb" })).toHaveTextContent(
-      "Home/Retirement answers/Can I retire with $2 million?",
+      "Home/Retirement/Can I retire with $2 million?",
     );
 
     const withdrawalTable = screen.getByRole("table", {
@@ -24,10 +24,9 @@ describe("evergreen answer page", () => {
       "href",
       "https://www.ssa.gov/prepare/get-benefits-estimate",
     );
-    expect(screen.getByRole("link", { name: "Retirement Answers" })).toHaveAttribute(
-      "href",
-      "/retirement-answers",
-    );
+    expect(screen.getAllByRole("link", { name: "Retirement" }).every(
+      (link) => link.getAttribute("href") === "/retirement-answers",
+    )).toBe(true);
   });
 
   it("builds Article, breadcrumb, and FAQ structured data for the canonical route", () => {
@@ -129,10 +128,9 @@ describe("evergreen answer page", () => {
       "href",
       "https://www.irs.gov/taxtopics/tc558",
     );
-    expect(screen.getByRole("link", { name: "Retirement Answers" })).toHaveAttribute(
-      "href",
-      "/retirement-answers",
-    );
+    expect(screen.getAllByRole("link", { name: "Retirement" }).every(
+      (link) => link.getAttribute("href") === "/retirement-answers",
+    )).toBe(true);
 
     const schemas = buildAnswerPageSchemas(canIRetireAt55);
     expect(schemas.article).toMatchObject({
@@ -163,10 +161,9 @@ describe("evergreen answer page", () => {
       "href",
       "https://www.ssa.gov/benefits/retirement/planner/applying2.html",
     );
-    expect(screen.getByRole("link", { name: "Retirement Answers" })).toHaveAttribute(
-      "href",
-      "/retirement-answers",
-    );
+    expect(screen.getAllByRole("link", { name: "Retirement" }).every(
+      (link) => link.getAttribute("href") === "/retirement-answers",
+    )).toBe(true);
 
     const schemas = buildAnswerPageSchemas(canIRetireAt60);
     expect(schemas.article).toMatchObject({
@@ -192,10 +189,9 @@ describe("evergreen answer page", () => {
       "href",
       "https://www.ssa.gov/benefits/medicare/medicare-premiums.html",
     );
-    expect(screen.getByRole("link", { name: "Retirement Answers" })).toHaveAttribute(
-      "href",
-      "/retirement-answers",
-    );
+    expect(screen.getAllByRole("link", { name: "Retirement" }).every(
+      (link) => link.getAttribute("href") === "/retirement-answers",
+    )).toBe(true);
 
     const schemas = buildAnswerPageSchemas(canIRetireWithThreeMillion);
     expect(schemas.article).toMatchObject({

@@ -12,6 +12,7 @@ import Link from 'next/link';
 import { pushBeginCheckout } from '@/lib/dataLayer';
 import SiteFooter from './SiteFooter';
 import { useDialog } from '@/components/ui/dialog';
+import { MONTHLY_PRICE_DOLLARS, TRIAL_PRICE_LINE } from '@/config/pricing';
 
 const RETIREMENT_QUESTIONS = [
   "Analyze my current portfolio and show me how likely I will be able to retire by 50, 55, 60, and 62. Explain in detail why a scenario(s) is or not likely.",
@@ -342,7 +343,7 @@ const RetirementReadinessPage = () => {
                   >
                     Get started
                   </Button>
-                  <p className="text-[0.7875rem]">1 month free, then $9/month. Cancel anytime.</p>
+                  <p className="text-[0.7875rem]">{TRIAL_PRICE_LINE}</p>
                 </div>
               </div>
             </div>
@@ -516,7 +517,7 @@ const RetirementReadinessPage = () => {
               <div className="text-center space-y-4 mb-8">
                 <h3 className="text-2xl font-bold">Ask Linc</h3>
                 <div className="flex items-baseline justify-center space-x-1">
-                  <span className="text-5xl font-bold gradient-text">$9</span>
+                  <span className="text-5xl font-bold gradient-text">{MONTHLY_PRICE_DOLLARS}</span>
                   <span className="text-muted-foreground text-xl">/ month</span>
                 </div>
                 <p className="text-muted-foreground text-lg">
@@ -634,7 +635,7 @@ const RetirementReadinessPage = () => {
               >
                 {isLoading === 'premium' ? 'Creating...' : 'Get started'}
               </Button>
-              <p className="text-[1.00625rem] text-primary font-medium">1 month free, then $9/month. Cancel anytime.</p>
+              <p className="text-[1.00625rem] text-primary font-medium">{TRIAL_PRICE_LINE}</p>
             </div>
           </div>
         </div>

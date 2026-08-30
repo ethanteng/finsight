@@ -8,10 +8,10 @@ export async function generateMetadata({ searchParams }: { searchParams: Promise
   const params = await searchParams;
   const ref = params.ref;
   
-  let description = 'Ask money questions in your own words and get decision-ready answers grounded in your real accounts, inspectable calculations, and relevant market context.';
+  let description = 'Ask money questions in your own words and get clear answers based on your real accounts, current information, and math you can check.';
   
   if (ref === 'blog.asklinc.com') {
-    description = 'Ask Linc turns your real accounts, goals, and relevant market context into clear answers, tradeoffs, and next steps for life’s big financial decisions.';
+    description = 'Ask Linc turns your real accounts and goals into clear answers, tradeoffs, and next steps for life’s big money decisions.';
   }
   
   return {
