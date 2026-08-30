@@ -35,7 +35,7 @@ export default function Home() {
       <section className="hero shell" id="top">
         <div className="hero-copy">
           <div className="eyebrow"><span className="pulse" /> STOP TRUSTING FINANCIAL ADVICE YOU CAN&apos;T VERIFY</div>
-          <h1>Ask hard questions about your money. <em>Get answers you can check.</em></h1>
+          <h1>Ask questions about your money. <em>Get answers you can check.</em></h1>
           <p className="hero-subhead">
             Connect your accounts and ask in your own words. Linc runs the numbers on your
             actual accounts and shows every assumption, every step, and where each figure came from.
@@ -49,7 +49,7 @@ export default function Home() {
         <aside className="hero-audit-card" aria-label="How Ask Linc turns your accounts into a clear answer">
           <span>FROM YOUR ACCOUNTS TO AN ANSWER</span>
           <div><i>01</i><p><small>START WITH</small><strong>Your financial accounts</strong></p></div>
-          <div><i>02</i><p><small>ASK</small><strong>Your question about your money</strong></p></div>
+          <div><i>02</i><p><small>ASK</small><strong>Your money question</strong></p></div>
           <div className="active"><i>03</i><p><small>OPEN</small><strong>The answer and its math</strong></p></div>
           <footer>Your numbers · What Linc assumed · Math · Checks · Sources</footer>
         </aside>

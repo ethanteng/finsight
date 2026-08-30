@@ -77,12 +77,12 @@ describe("marketing review fixes", () => {
     render(<MarketingHome />);
 
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
-      "Ask hard questions about your money. Get answers you can check.",
+      "Ask questions about your money. Get answers you can check.",
     );
     expect(screen.getByText(/connect your accounts and ask in your own words/i)).toBeInTheDocument();
     expect(screen.getByText(/stop trusting financial advice you can't verify/i)).toBeInTheDocument();
     expect(screen.getByText("Your financial accounts")).toBeInTheDocument();
-    expect(screen.getByText("Your question about your money")).toBeInTheDocument();
+    expect(screen.getByText("Your money question")).toBeInTheDocument();
     expect(screen.getByText("The answer and its math")).toBeInTheDocument();
     expect(screen.getByText(/pasted bank statements into chatgpt and regretted it/i)).toBeInTheDocument();
     expect(USE_CASE_LINKS).toContainEqual({
