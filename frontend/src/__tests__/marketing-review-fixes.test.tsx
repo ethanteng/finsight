@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MarketingContactForm } from "@/components/marketing/MarketingContactForm";
@@ -14,6 +16,21 @@ describe("marketing review fixes", () => {
 
   afterEach(() => {
     jest.restoreAllMocks();
+  });
+
+  it("keeps marketing text at or above the 12px readability floor", () => {
+    const css = readFileSync(
+      join(process.cwd(), "src/components/marketing/marketing.css"),
+      "utf8",
+    );
+    const declarations = css.match(/font-size:[^;]+;/g) ?? [];
+    const undersized = declarations.filter((declaration) =>
+      [...declaration.matchAll(/(\d+(?:\.\d+)?)px/g)].some(
+        ([, size]) => Number(size) < 12,
+      ),
+    );
+
+    expect(undersized).toEqual([]);
   });
 
   it("keeps the desktop sign-in link outside the primary navigation links", () => {
