@@ -114,6 +114,12 @@ describe("marketing review fixes", () => {
     ["Plaid", "SnapTrade", "RentCast", "FRED", "FMP", "Tiingo"].forEach((provider) => {
       expect(screen.getByText(provider)).toBeInTheDocument();
     });
+    expect(screen.getByText("Bank balances, cards, loans, and transactions")).toBeInTheDocument();
+    expect(screen.getByText("Brokerage and retirement holdings, balances, and trades")).toBeInTheDocument();
+    expect(screen.getByText("Home values and local property data")).toBeInTheDocument();
+    expect(screen.getByText("Inflation, interest rates, and other economic data")).toBeInTheDocument();
+    expect(screen.getByText("Company financials, stock prices, and market data")).toBeInTheDocument();
+    expect(screen.getByText("Current and historical prices for stocks and funds")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /see what ask linc can connect/i })).toHaveAttribute("href", "/integrations");
     expect(screen.getByRole("heading", { name: /financial data is never used to train ai models/i })).toBeInTheDocument();
     expect(screen.getByText(/no toggle.*no opt-out.*financial data stays yours/i)).toBeInTheDocument();

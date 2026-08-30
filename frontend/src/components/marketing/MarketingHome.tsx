@@ -18,7 +18,14 @@ const scenarios = [
   "Can we retire two years sooner?",
 ];
 
-const providers = ["Plaid", "SnapTrade", "RentCast", "FRED", "FMP", "Tiingo"];
+const providers = [
+  { name: "Plaid", detail: "Bank balances, cards, loans, and transactions" },
+  { name: "SnapTrade", detail: "Brokerage and retirement holdings, balances, and trades" },
+  { name: "RentCast", detail: "Home values and local property data" },
+  { name: "FRED", detail: "Inflation, interest rates, and other economic data" },
+  { name: "FMP", detail: "Company financials, stock prices, and market data" },
+  { name: "Tiingo", detail: "Current and historical prices for stocks and funds" },
+];
 
 export default function Home() {
   return (
@@ -113,7 +120,12 @@ export default function Home() {
             <h2>The facts behind the answer.</h2>
           </div>
           <div className="provider-logo-row" aria-label="Data providers that power Ask Linc">
-            {providers.map((provider) => <span key={provider}>{provider}</span>)}
+            {providers.map((provider) => (
+              <article key={provider.name}>
+                <strong>{provider.name}</strong>
+                <small>{provider.detail}</small>
+              </article>
+            ))}
           </div>
           <p>Banking, investments, property, and market data—pulled only when the question needs it.</p>
           <Link href="/integrations">See what Ask Linc can connect <span>→</span></Link>
