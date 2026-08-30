@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MarketingContactForm } from "@/components/marketing/MarketingContactForm";
 import MarketingHome from "@/components/marketing/MarketingHome";
@@ -145,6 +145,53 @@ describe("marketing review fixes", () => {
     expect(screen.getByText(/no toggle.*no opt-out.*financial data stays yours/i)).toBeInTheDocument();
     expect(screen.queryByText("THE DIFFERENCE")).not.toBeInTheDocument();
     expect(screen.queryByText("LINC'S REASONING")).not.toBeInTheDocument();
+  });
+
+  it("cycles the decision demo tabs and stops after a visitor takes control", () => {
+    const OriginalIntersectionObserver = global.IntersectionObserver;
+    global.IntersectionObserver = class VisibleIntersectionObserver {
+      readonly root = null;
+      readonly rootMargin = "0px";
+      readonly thresholds = [0.35];
+      constructor(private readonly callback: IntersectionObserverCallback) {}
+      observe(target: Element) {
+        this.callback(
+          [{ isIntersecting: true, intersectionRatio: 1, target } as IntersectionObserverEntry],
+          this as unknown as IntersectionObserver,
+        );
+      }
+      disconnect() {}
+      unobserve() {}
+      takeRecords() { return []; }
+    } as typeof IntersectionObserver;
+    jest.useFakeTimers();
+
+    try {
+      render(<MarketingHome />);
+      const demo = screen.getByLabelText("Interactive Ask Linc product demo");
+      const answerTab = within(demo).getByRole("tab", { name: "answer" });
+      const mathTab = within(demo).getByRole("tab", { name: "math" });
+      const sourcesTab = within(demo).getByRole("tab", { name: "sources" });
+
+      act(() => jest.advanceTimersByTime(4300));
+      expect(mathTab).toHaveAttribute("data-auto-click", "true");
+
+      act(() => jest.advanceTimersByTime(260));
+      expect(mathTab).toHaveAttribute("aria-selected", "true");
+
+      act(() => jest.advanceTimersByTime(460));
+      act(() => jest.advanceTimersByTime(4300));
+      expect(sourcesTab).toHaveAttribute("data-auto-click", "true");
+      act(() => jest.advanceTimersByTime(260));
+      expect(sourcesTab).toHaveAttribute("aria-selected", "true");
+
+      fireEvent.click(answerTab);
+      act(() => jest.advanceTimersByTime(10000));
+      expect(answerTab).toHaveAttribute("aria-selected", "true");
+    } finally {
+      jest.useRealTimers();
+      global.IntersectionObserver = OriginalIntersectionObserver;
+    }
   });
 
   it("explains the connected financial picture on the features page without exposing a raw provider dump", async () => {

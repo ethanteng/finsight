@@ -1,10 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 type DemoView = "decisions" | "finances" | "accounts";
 type DecisionTab = "answer" | "math" | "sources";
 type PortfolioTab = "overview" | "holdings" | "transactions";
+
+const decisionTabs: DecisionTab[] = ["answer", "math", "sources"];
+const autoTabDelay = 4300;
+const autoClickLead = 260;
+const autoClickDuration = 720;
 
 type DemoDecision = {
   id: string;
@@ -253,16 +258,75 @@ function DecisionsView({ onOpenFinances }: { onOpenFinances: () => void }) {
   const [decisionId, setDecisionId] = useState(decisions[0].id);
   const [tab, setTab] = useState<DecisionTab>("answer");
   const [askNotice, setAskNotice] = useState(false);
+  const [autoPlay, setAutoPlay] = useState(true);
+  const [autoClickTab, setAutoClickTab] = useState<DecisionTab | null>(null);
+  const [isVisible, setIsVisible] = useState(false);
+  const [reduceMotion, setReduceMotion] = useState(false);
+  const demoRef = useRef<HTMLDivElement>(null);
   const decision = decisions.find((item) => item.id === decisionId) ?? decisions[0];
 
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const updateMotionPreference = () => setReduceMotion(mediaQuery.matches);
+    updateMotionPreference();
+    mediaQuery.addEventListener("change", updateMotionPreference);
+    return () => mediaQuery.removeEventListener("change", updateMotionPreference);
+  }, []);
+
+  useEffect(() => {
+    const demo = demoRef.current;
+    if (!demo) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => setIsVisible(entry.isIntersecting && entry.intersectionRatio >= 0.35),
+      { threshold: [0.35] },
+    );
+    observer.observe(demo);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (!autoPlay || !isVisible || reduceMotion || autoClickTab) return;
+    const nextTab = decisionTabs[(decisionTabs.indexOf(tab) + 1) % decisionTabs.length];
+    const timer = window.setTimeout(() => setAutoClickTab(nextTab), autoTabDelay);
+    return () => window.clearTimeout(timer);
+  }, [autoClickTab, autoPlay, isVisible, reduceMotion, tab]);
+
+  useEffect(() => {
+    if (!autoClickTab) return;
+    const selectTimer = window.setTimeout(() => setTab(autoClickTab), autoClickLead);
+    const clearTimer = window.setTimeout(() => setAutoClickTab(null), autoClickDuration);
+    return () => {
+      window.clearTimeout(selectTimer);
+      window.clearTimeout(clearTimer);
+    };
+  }, [autoClickTab]);
+
+  function stopAutoPlay() {
+    setAutoPlay(false);
+    setAutoClickTab(null);
+  }
+
   function chooseDecision(id: string) {
+    stopAutoPlay();
     setDecisionId(id);
     setTab("answer");
     setAskNotice(false);
   }
 
+  function chooseTab(nextTab: DecisionTab) {
+    stopAutoPlay();
+    setTab(nextTab);
+  }
+
   return (
-    <div className="demo-decisions-view">
+    <div
+      className="demo-decisions-view"
+      ref={demoRef}
+      onFocusCapture={stopAutoPlay}
+      onPointerDownCapture={stopAutoPlay}
+      onKeyDownCapture={stopAutoPlay}
+    >
       <aside className="demo-recent-decisions" aria-label="Demo recent decisions">
         <div><span>Recent decisions</span><b>{decisions.length}</b></div>
         {decisions.map((item) => (
@@ -283,7 +347,18 @@ function DecisionsView({ onOpenFinances }: { onOpenFinances: () => void }) {
           <button type="button" className="demo-ask-button" onClick={() => setAskNotice(true)}>Ask follow-up <span>↑</span></button>
           {askNotice ? <div className="demo-ask-notice" role="status">Question asking is disabled in this demo. Start a free trial to ask your own.</div> : null}
           <div className="demo-tabs" role="tablist" aria-label="Demo decision details">
-            {(["answer", "math", "sources"] as const).map((item) => <button type="button" role="tab" aria-selected={tab === item} key={item} onClick={() => setTab(item)}>{item}</button>)}
+            {decisionTabs.map((item) => (
+              <button
+                type="button"
+                role="tab"
+                aria-selected={tab === item}
+                data-auto-click={autoClickTab === item ? "true" : undefined}
+                key={item}
+                onClick={() => chooseTab(item)}
+              >
+                {item}
+              </button>
+            ))}
           </div>
           <div className="demo-decision-layout">
             <div className="demo-tab-content">
