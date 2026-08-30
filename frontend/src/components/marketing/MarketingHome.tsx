@@ -9,6 +9,7 @@ import {
 } from "@/config/pricing";
 import { SiteFooter, SiteHeader } from "./SiteShell";
 import { MarketingGetStartedButton } from "./MarketingGetStartedButton";
+import StaticProductDemo from "./StaticProductDemo";
 
 const scenarios = [
   "Can we afford a home?",
@@ -75,17 +76,7 @@ export default function Home() {
               <h3>Your accounts. An answer you can check.</h3>
             </article>
           </div>
-          <figure className="answer-product-shot">
-            <Image
-              src="/images/product/decision-answer.png"
-              alt="A real Ask Linc retirement scenario answer grounded in connected accounts"
-              width={1370}
-              height={1662}
-              sizes="(max-width: 980px) calc(100vw - 48px), 720px"
-              unoptimized
-            />
-            <figcaption>Real product output. Account balances and identifying details changed.</figcaption>
-          </figure>
+          <StaticProductDemo />
         </div>
       </section>
 
@@ -104,28 +95,7 @@ export default function Home() {
               <li>Up-to-date sources</li>
             </ul>
           </div>
-          <div className="math-shot-grid">
-            <figure className="product-shot-frame math-product-shot">
-              <Image
-                src="/images/product/show-the-math.png"
-                alt="Ask Linc Show the Math view with the numbers, math, and checks behind an answer"
-                width={1248}
-                height={1580}
-                sizes="(max-width: 640px) calc(100vw - 48px), 590px"
-                unoptimized
-              />
-            </figure>
-            <figure className="product-shot-frame math-product-shot">
-              <Image
-                src="/images/product/sources-evidence.png"
-                alt="Ask Linc Sources view with supporting evidence expanded"
-                width={1232}
-                height={1364}
-                sizes="(max-width: 640px) calc(100vw - 48px), 590px"
-                unoptimized
-              />
-            </figure>
-          </div>
+          <a className="home-demo-link" href="#product-demo">Open Math and Sources in the interactive demo <span>↑</span></a>
         </div>
       </section>
 
@@ -157,29 +127,13 @@ export default function Home() {
             <h2>See all your money in one place.</h2>
             <p>Know what you own, what you owe, and how it is changing.</p>
           </div>
-          <div className="connected-picture-grid">
-            <figure>
-              <Image
-                className="product-shot"
-                src="/images/product/net-worth-history.png"
-                alt="Ask Linc net worth history with connected assets and debt"
-                width={1206}
-                height={1508}
-                sizes="(max-width: 640px) calc(100vw - 48px), 590px"
-                unoptimized
-              />
-            </figure>
-            <figure>
-              <Image
-                className="product-shot"
-                src="/images/product/portfolio-overview.png"
-                alt="Ask Linc investment portfolio and asset allocation overview"
-                width={1638}
-                height={1582}
-                sizes="(max-width: 640px) calc(100vw - 48px), 590px"
-                unoptimized
-              />
-            </figure>
+          <div className="connected-picture-preview" aria-label="Connected financial overview">
+            <div><span>Net Worth</span><strong>$3,668,349</strong></div>
+            <div><span>Total Cash</span><strong>$82,651</strong></div>
+            <div><span>Total Debt</span><strong>$350,305</strong></div>
+            <div><span>Total Investments</span><strong>$2,291,203</strong></div>
+            <div><span>Home Value</span><strong>$1,644,800</strong></div>
+            <a href="#product-demo">Explore Finances and Accounts in the demo <span>↑</span></a>
           </div>
         </div>
       </section>

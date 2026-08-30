@@ -71,7 +71,8 @@ describe("marketing review fixes", () => {
     });
   });
 
-  it("shows real product proof and compresses the supporting story", () => {
+  it("shows a read-only product demo visitors can click through", async () => {
+    const user = userEvent.setup();
     render(<MarketingHome />);
 
     expect(screen.getByRole("heading", { name: "See how every answer was worked out." })).toBeInTheDocument();
@@ -80,12 +81,30 @@ describe("marketing review fixes", () => {
     expect(screen.getByText("Step-by-step math")).toBeInTheDocument();
     expect(screen.getByText("Built-in checks")).toBeInTheDocument();
     expect(screen.getByText("Up-to-date sources")).toBeInTheDocument();
-    expect(screen.getByAltText(/show the math view/i)).toHaveAttribute("src", expect.stringContaining("show-the-math.png"));
-    expect(screen.getByAltText(/sources view/i)).toHaveAttribute("src", expect.stringContaining("sources-evidence.png"));
-    expect(screen.getByAltText(/retirement scenario answer/i)).toHaveAttribute("src", expect.stringContaining("decision-answer.png"));
-    expect(screen.getByAltText(/net worth history/i)).toHaveAttribute("src", expect.stringContaining("net-worth-history.png"));
-    expect(screen.getByAltText(/investment portfolio/i)).toHaveAttribute("src", expect.stringContaining("portfolio-overview.png"));
-    expect(screen.getAllByText("Real product output. Account balances and identifying details changed.")).toHaveLength(1);
+    const demo = screen.getByLabelText("Interactive Ask Linc product demo");
+    expect(within(demo).queryByRole("img")).not.toBeInTheDocument();
+    expect(within(demo).getByText("Interactive demo using real product output. Identifying details removed.")).toBeInTheDocument();
+    expect(within(demo).getByRole("tab", { name: "answer" })).toHaveAttribute("aria-selected", "true");
+
+    await user.click(within(demo).getByRole("tab", { name: "math" }));
+    expect(within(demo).getByRole("heading", { name: "Calculations and pipeline" })).toBeInTheDocument();
+    expect(within(demo).getByRole("button", { name: "Canonical facts and provenance −" })).toHaveAttribute("aria-expanded", "true");
+
+    await user.click(within(demo).getByRole("tab", { name: "sources" }));
+    expect(within(demo).getByRole("heading", { name: "Supporting evidence" })).toBeInTheDocument();
+    await user.click(within(demo).getByRole("button", { name: /market news history/i }));
+    expect(within(demo).getByText("Current inflation and market context")).toBeInTheDocument();
+
+    await user.click(within(demo).getByRole("button", { name: "Finances" }));
+    expect(within(demo).getByRole("heading", { name: "Your finances" })).toBeInTheDocument();
+    await user.click(within(demo).getByRole("button", { name: "Accounts & context" }));
+    expect(within(demo).getByRole("heading", { name: "Investment Portfolio" })).toBeInTheDocument();
+    await user.click(within(demo).getByRole("tab", { name: "Holdings" }));
+    expect(within(demo).getByRole("heading", { name: "Holdings by category" })).toBeInTheDocument();
+
+    await user.click(within(demo).getByRole("button", { name: "Decisions" }));
+    await user.click(within(demo).getByRole("button", { name: /ask follow-up/i }));
+    expect(within(demo).getByText(/question asking is disabled in this demo/i)).toBeInTheDocument();
     expect(screen.queryByText(/calculation engine does the math/i)).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /real answers, not generic advice/i })).toBeInTheDocument();
     expect(screen.getByText("A GENERAL CHATBOT")).toBeInTheDocument();
