@@ -1568,12 +1568,12 @@ footer { padding-block: 55px 28px; background: #0a1912; color: white; }.footer-i
 .demo-section-title span,.demo-context-card > div > span { color: #4d755d; font-size: 9px; font-weight: 850; letter-spacing: .13em; }
 .demo-section-title h3,.demo-context-card h3 { margin: 6px 0 0; font-family: var(--font-display); font-size: 19px; }
 .demo-account-groups > div:not(.demo-section-title) { border-top: 1px solid #dedfd8; }
-.demo-account-groups > div > button { display: grid; grid-template-columns: 21px 1fr 90px 100px; gap: 8px; align-items: center; width: 100%; min-height: 48px; padding: 0; border: 0; background: transparent; color: var(--ink); text-align: left; cursor: pointer; }
-.demo-account-groups > div > button > span { display: grid; width: 18px; height: 18px; place-items: center; border: 1px solid #c4ccc3; border-radius: 50%; font-size: 7px; }
-.demo-account-groups > div > button strong { font-size: 12px; }
-.demo-account-groups > div > button small { color: #6f7d74; font-size: 10px; }
-.demo-account-groups > div > button b { font-family: var(--font-display); font-size: 13px; text-align: right; }
-.demo-account-groups > div > p { margin: -2px 0 14px 29px; color: #66756c; font-size: 11px; }
+.demo-account-groups > div:not(.demo-section-title) > button { display: grid; grid-template-columns: 21px 1fr 90px 100px; gap: 8px; align-items: center; width: 100%; min-height: 48px; padding: 0; border: 0; background: transparent; color: var(--ink); text-align: left; cursor: pointer; }
+.demo-account-groups > div:not(.demo-section-title) > button > span { display: grid; width: 18px; height: 18px; place-items: center; border: 1px solid #c4ccc3; border-radius: 50%; font-size: 7px; }
+.demo-account-groups > div:not(.demo-section-title) > button strong { font-size: 12px; }
+.demo-account-groups > div:not(.demo-section-title) > button small { color: #6f7d74; font-size: 10px; }
+.demo-account-groups > div:not(.demo-section-title) > button b { font-family: var(--font-display); font-size: 13px; text-align: right; }
+.demo-account-groups > div:not(.demo-section-title) > p { margin: -2px 0 14px 29px; color: #66756c; font-size: 11px; }
 .demo-context-card { display: grid; grid-template-columns: .65fr 1.35fr; gap: 20px; }
 .demo-context-card dl { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 0; }
 .demo-context-card dl > div { padding: 10px; border-radius: 8px; background: #f0efe7; }
@@ -1666,8 +1666,8 @@ footer { padding-block: 55px 28px; background: #0a1912; color: white; }.footer-i
   .demo-chart-heading { align-items: flex-start; flex-direction: column; }
   .demo-finance-metrics { grid-template-columns: 1fr; }
   .demo-section-title { align-items: flex-start; flex-direction: column; }
-  .demo-account-groups > div > button { grid-template-columns: 21px 1fr auto; }
-  .demo-account-groups > div > button small { display: none; }
+  .demo-account-groups > div:not(.demo-section-title) > button { grid-template-columns: 21px 1fr auto; }
+  .demo-account-groups > div:not(.demo-section-title) > button small { display: none; }
   .demo-context-card { grid-template-columns: 1fr; }
   .demo-connected-summary > div:last-child,.demo-portfolio-heading > div { grid-template-columns: 1fr 1fr; }
   .demo-allocation > div { grid-template-columns: 1fr auto 80px 32px; }
