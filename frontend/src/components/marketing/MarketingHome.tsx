@@ -48,8 +48,8 @@ export default function Home() {
 
         <aside className="hero-audit-card" aria-label="How Ask Linc turns your accounts into a clear answer">
           <span>FROM YOUR ACCOUNTS TO AN ANSWER</span>
-          <div><i>01</i><p><small>START WITH</small><strong>Your accounts</strong></p></div>
-          <div><i>02</i><p><small>ASK</small><strong>Your real question</strong></p></div>
+          <div><i>01</i><p><small>START WITH</small><strong>Your financial accounts</strong></p></div>
+          <div><i>02</i><p><small>ASK</small><strong>Your question about your money</strong></p></div>
           <div className="active"><i>03</i><p><small>OPEN</small><strong>The answer and its math</strong></p></div>
           <footer>Your numbers · What Linc assumed · Math · Checks · Sources</footer>
         </aside>

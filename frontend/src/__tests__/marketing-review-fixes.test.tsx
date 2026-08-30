@@ -81,6 +81,9 @@ describe("marketing review fixes", () => {
     );
     expect(screen.getByText(/connect your accounts and ask in your own words/i)).toBeInTheDocument();
     expect(screen.getByText(/stop trusting financial advice you can't verify/i)).toBeInTheDocument();
+    expect(screen.getByText("Your financial accounts")).toBeInTheDocument();
+    expect(screen.getByText("Your question about your money")).toBeInTheDocument();
+    expect(screen.getByText("The answer and its math")).toBeInTheDocument();
     expect(screen.getByText(/pasted bank statements into chatgpt and regretted it/i)).toBeInTheDocument();
     expect(USE_CASE_LINKS).toContainEqual({
       href: "/use-cases/family-planning",
