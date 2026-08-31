@@ -227,7 +227,7 @@ function LoginFormContent() {
             <span className="grid h-9 w-9 place-items-center rounded-full bg-[#123c2f] text-[#c9f46b]"><Brain size={20} /></span>
             <span className="text-xl">Ask Linc</span>
           </Link>
-          <button type="button" onClick={() => handleBuyClick('premium')} disabled={isCheckoutLoading} className="hidden items-center gap-2 text-sm font-semibold text-[#34594e] hover:text-[#123c2f] sm:inline-flex disabled:opacity-50">{isCheckoutLoading ? 'Loading...' : 'Get started'}</button>
+          <button type="button" data-cs-override-id="cta-start-free-trial-login-nav" onClick={() => handleBuyClick('premium')} disabled={isCheckoutLoading} className="hidden items-center gap-2 text-sm font-semibold text-[#34594e] hover:text-[#123c2f] sm:inline-flex disabled:opacity-50">{isCheckoutLoading ? 'Loading...' : 'Get started'}</button>
         </div>
       </header>
 
@@ -258,7 +258,7 @@ function LoginFormContent() {
               {subscriptionExpired ? (
                 <div className="rounded-3xl border border-[#d49c3b]/30 bg-[#fff8e8] p-6">
                   <div className="flex gap-3"><CircleAlert className="mt-0.5 shrink-0 text-[#a96d0f]" /><div><h2 className="font-semibold text-[#764c0d]">Subscription expired</h2><p className="mt-2 text-sm leading-6 text-[#765c32]">Renew your subscription to continue using your Ask Linc workspace.</p></div></div>
-                  <button type="button" onClick={() => handleBuyClick('premium', lapsedToken)} disabled={isCheckoutLoading} className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-full bg-[#123c2f] px-5 py-3 text-sm font-semibold text-white hover:bg-[#1a5140] disabled:cursor-not-allowed disabled:opacity-60">{isCheckoutLoading ? <><LoaderCircle className="animate-spin" size={17} />Opening checkout…</> : <>Start a new subscription <ArrowRight size={17} /></>}</button>
+                  <button type="button" data-cs-override-id="cta-start-free-trial-login-renew" onClick={() => handleBuyClick('premium', lapsedToken)} disabled={isCheckoutLoading} className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-full bg-[#123c2f] px-5 py-3 text-sm font-semibold text-white hover:bg-[#1a5140] disabled:cursor-not-allowed disabled:opacity-60">{isCheckoutLoading ? <><LoaderCircle className="animate-spin" size={17} />Opening checkout…</> : <>Start a new subscription <ArrowRight size={17} /></>}</button>
                   <a href={process.env.NEXT_PUBLIC_STRIPE_CUSTOMER_PORTAL_URL || '#'} target="_blank" rel="noopener noreferrer" className="mt-3 inline-flex w-full items-center justify-center rounded-full border border-[#123c2f]/20 px-5 py-3 text-sm font-semibold text-[#123c2f] hover:bg-[#123c2f]/5">Manage billing</a>
                   <p className="mt-4 text-center text-sm text-[#765c32]">Need help? <Link href="/contact" className="font-semibold underline">Contact us</Link>.</p>
                 </div>
@@ -276,12 +276,12 @@ function LoginFormContent() {
                       <div className="mb-2 flex items-center justify-between"><label htmlFor="password" className="text-sm font-semibold text-[#29483f]">Password</label><Link href="/forgot-password" className="text-sm font-semibold text-[#175cce] hover:underline">Forgot password?</Link></div>
                       <div className="relative"><LockKeyhole className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[#71857f]" size={18} /><input id="password" type="password" autoComplete="current-password" value={password} onChange={event => setPassword(event.target.value)} required className="h-13 w-full rounded-xl border border-[#123c2f]/20 bg-[#fffdf7] py-3 pl-11 pr-4 text-[#123c2f] shadow-sm outline-none placeholder:text-[#8a9b95] focus:border-[#123c2f] focus:ring-4 focus:ring-[#123c2f]/10" placeholder="Enter your password" /></div>
                     </div>
-                    <button type="submit" disabled={isLoading} className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-[#123c2f] px-5 py-3.5 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(18,60,47,.16)] transition hover:bg-[#1a5140] disabled:cursor-not-allowed disabled:opacity-60">{isLoading ? <><LoaderCircle className="animate-spin" size={17} />Signing in…</> : <>Sign in to your workspace <ArrowRight size={17} /></>}</button>
+                    <button type="submit" data-cs-override-id="form-submit-sign-in" disabled={isLoading} className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-[#123c2f] px-5 py-3.5 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(18,60,47,.16)] transition hover:bg-[#1a5140] disabled:cursor-not-allowed disabled:opacity-60">{isLoading ? <><LoaderCircle className="animate-spin" size={17} />Signing in…</> : <>Sign in to your workspace <ArrowRight size={17} /></>}</button>
                   </form>
 
                   <div className="mt-7 border-t border-[#123c2f]/10 pt-6 text-center">
-                    <p className="text-sm text-[#607b72]">New to Ask Linc? <button onClick={() => handleBuyClick('premium')} disabled={isCheckoutLoading} className="font-semibold text-[#123c2f] underline decoration-[#9bc444] decoration-2 underline-offset-4 disabled:opacity-50">{isCheckoutLoading ? 'Opening checkout…' : 'Get started'}</button></p>
-                    <button type="button" onClick={() => handleBuyClick('premium')} disabled={isCheckoutLoading} className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-[#175cce] hover:underline sm:hidden disabled:opacity-50">{isCheckoutLoading ? 'Loading...' : 'Get started'}</button>
+                    <p className="text-sm text-[#607b72]">New to Ask Linc? <button data-cs-override-id="cta-start-free-trial-login-inline" onClick={() => handleBuyClick('premium')} disabled={isCheckoutLoading} className="font-semibold text-[#123c2f] underline decoration-[#9bc444] decoration-2 underline-offset-4 disabled:opacity-50">{isCheckoutLoading ? 'Opening checkout…' : 'Get started'}</button></p>
+                    <button type="button" data-cs-override-id="cta-start-free-trial-login-inline-mobile" onClick={() => handleBuyClick('premium')} disabled={isCheckoutLoading} className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-[#175cce] hover:underline sm:hidden disabled:opacity-50">{isCheckoutLoading ? 'Loading...' : 'Get started'}</button>
                   </div>
                   <div className="mt-8 flex items-center justify-center gap-2 text-xs text-[#71857f]"><ShieldCheck size={16} />Encrypted access. Your financial data stays protected.</div>
                 </>

@@ -7,11 +7,25 @@ import { useDialog } from "@/components/ui/dialog";
 type MarketingGetStartedButtonProps = {
   className?: string;
   trackingLocation?: string;
+  /**
+   * Contentsquare element identity, e.g. `cta-start-free-trial-hero`.
+   *
+   * Required, and deliberately not defaulted: Contentsquare otherwise binds
+   * click goals and heatmap zones to an element's HTML path, so any markup
+   * change silently unbinds them and the goal reports zero forever. Every
+   * call site has to name its own placement, and no two may share a value —
+   * a shared value merges the two placements' data.
+   *
+   * These are a stable contract with the Contentsquare workspace. Do not
+   * rename one during a refactor.
+   */
+  csOverrideId: string;
 };
 
 export function MarketingGetStartedButton({
   className = "button button-small button-dark",
   trackingLocation = "marketing_cta",
+  csOverrideId,
 }: MarketingGetStartedButtonProps) {
   const [isLoading, setIsLoading] = useState(false);
   const { showError, dialog } = useDialog();
@@ -50,7 +64,13 @@ export function MarketingGetStartedButton({
 
   return (
     <>
-      <button className={className} type="button" onClick={handleClick} disabled={isLoading}>
+      <button
+        className={className}
+        type="button"
+        data-cs-override-id={csOverrideId}
+        onClick={handleClick}
+        disabled={isLoading}
+      >
         {isLoading ? "Loading..." : "Start free trial"}
       </button>
       {dialog}

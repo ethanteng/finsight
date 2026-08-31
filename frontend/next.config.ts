@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { buildContentSecurityPolicy } from "./src/lib/csp";
 
 // Injected content by Sentry CLI
 const { withSentryConfig } = require("@sentry/nextjs");
@@ -12,26 +13,9 @@ const nextConfig: NextConfig = {
         headers: [
           {
             key: "Content-Security-Policy",
-            value: [
-              "default-src 'self'",
-              "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.googletagmanager.com https://t.contentsquare.net https://googleads.g.doubleclick.net https://cdn.plaid.com",
-              "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-              // No blanket `https:`. An answer is rendered as Markdown, so an
-              // image URL that reached the model through a search snippet or a
-              // transaction description would otherwise load on sight and take
-              // whatever is in its query string with it. Hosts here are the
-              // ones the app actually renders: next/image remotePatterns, the
-              // Plaid merchant logos on transaction rows, institution logos,
-              // and analytics pixels.
-              "img-src 'self' data: blob: https://logo.clearbit.com https://*.plaid.com https://images.ghost.io https://static.ghost.org https://blog.asklinc.com https://*.ghost.io https://images.unsplash.com https://www.google-analytics.com https://www.googletagmanager.com https://googleads.g.doubleclick.net https://*.contentsquare.net",
-              "font-src 'self' data: https://fonts.gstatic.com",
-              "connect-src 'self' http://localhost:3000 http://localhost:3001 https://*.sentry.io https://www.google-analytics.com https://www.google.com https://www.googletagmanager.com https://*.asklinc.com wss://*.asklinc.com https://*.onrender.com https://production.plaid.com https://cdn.plaid.com https://*.contentsquare.net https://*.ghost.io https://blog.asklinc.com https://images.ghost.io https://static.ghost.org",
-              "frame-src 'self' https://*.plaid.com https://cdn.plaid.com https://www.googletagmanager.com https://app.snaptrade.com https://*.snaptrade.com",
-              "worker-src 'self' blob:",
-              "object-src 'none'",
-              "base-uri 'self'",
-              "form-action 'self'",
-            ].join("; "),
+            value: buildContentSecurityPolicy({
+              isDevelopment: process.env.NODE_ENV !== "production",
+            }),
           },
         ],
       },

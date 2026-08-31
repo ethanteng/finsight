@@ -54,7 +54,13 @@ export function MarketingMobileMenu() {
       {isOpen && (
         <div className="mobile-menu-panel" id={menuId} aria-label="Mobile navigation">
           {PRIMARY_NAV_LINKS.map((item) => (
-            <Link className="mobile-menu-link" href={item.href} key={item.href} onClick={closeMenu}>
+            <Link
+              className="mobile-menu-link"
+              href={item.href}
+              key={item.href}
+              data-cs-override-id={`${item.csOverrideId}-mobile`}
+              onClick={closeMenu}
+            >
               {item.label}
               <span aria-hidden="true">→</span>
             </Link>
@@ -62,6 +68,7 @@ export function MarketingMobileMenu() {
           <Link
             aria-label="Sign in to Ask Linc"
             className="mobile-menu-link mobile-menu-sign-in"
+            data-cs-override-id="nav-sign-in-mobile"
             href="/login"
             onClick={closeMenu}
           >

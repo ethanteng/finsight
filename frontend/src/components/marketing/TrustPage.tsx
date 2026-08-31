@@ -139,7 +139,7 @@ export default function TrustPage() {
             See the numbers Linc used, what it assumed, the math, the checks, and the sources.
           </p>
           <div className="hero-actions">
-            <MarketingGetStartedButton className="button button-primary" trackingLocation="trust_hero" />
+            <MarketingGetStartedButton className="button button-primary" trackingLocation="trust_hero" csOverrideId="cta-start-free-trial-hero" />
             <Link className="text-link" href="#how-it-works">See how it works ↓</Link>
           </div>
           <p className="microcopy"><TrialPriceLine /></p>
@@ -360,7 +360,7 @@ export default function TrustPage() {
         </div>
       </section>
 
-      <PageCta title="A financial answer should earn your trust." />
+      <PageCta title="A financial answer should earn your trust." csOverrideId="cta-start-free-trial-mid" />
       <SiteFooter />
     </main>
   );

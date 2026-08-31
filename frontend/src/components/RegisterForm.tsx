@@ -219,6 +219,7 @@ function RegisterFormContent() {
 
           <button
             type="submit"
+            data-cs-override-id="form-submit-register"
             disabled={isLoading}
             className="w-full bg-primary hover:bg-primary/90 disabled:opacity-50 text-white font-medium py-2 px-4 rounded-md transition-colors"
           >
@@ -238,6 +239,7 @@ function RegisterFormContent() {
         <div className="text-center">
           <button
             type="button"
+            data-cs-override-id="cta-start-free-trial-register-inline"
             onClick={handleBuyClick}
             disabled={isCheckoutLoading}
             className="text-gray-400 hover:text-white text-sm disabled:opacity-50"

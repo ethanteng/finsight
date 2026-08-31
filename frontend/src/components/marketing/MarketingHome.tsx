@@ -38,7 +38,7 @@ export default function Home() {
             actual accounts and shows every assumption, every step, and where each figure came from.
           </p>
           <div className="hero-actions">
-            <MarketingGetStartedButton className="button button-primary" />
+            <MarketingGetStartedButton className="button button-primary" csOverrideId="cta-start-free-trial-hero" />
           </div>
           <p className="microcopy">{pricing.trialLine}</p>
         </div>
@@ -186,7 +186,7 @@ export default function Home() {
             <p>One subscription. No commissions, fees based on your balance, or sales calls.</p>
             <p className="pricing-terms">No minimum. Cancel anytime.</p>
           </div>
-          <article className="price-card">
+          <article className="price-card" data-cs-override-id="pricing-card-premium">
             <div className="price-card-top"><span>ONE PLAN. EVERYTHING INCLUDED.</span><b>MOST POPULAR</b></div>
             <div className="price"><sup>{pricing.symbol}</sup>{pricing.amountText}<span>/{pricing.intervalLabel}</span></div>
             <p>First month free. Full access. Cancel anytime.</p>
@@ -197,7 +197,7 @@ export default function Home() {
               <li>Current rates and market information</li>
               <li>Show the Math on every answer</li>
             </ul>
-            <MarketingGetStartedButton className="button button-primary price-button" />
+            <MarketingGetStartedButton className="button button-primary price-button" csOverrideId="cta-start-free-trial-pricing-premium" />
           </article>
         </div>
       </section>
@@ -206,7 +206,7 @@ export default function Home() {
         <div className="shell final-cta-inner">
           <p className="section-kicker light">YOUR NEXT DECISION STARTS HERE</p>
           <h2>Ask the money question you actually need answered.</h2>
-          <MarketingGetStartedButton className="button button-primary" />
+          <MarketingGetStartedButton className="button button-primary" csOverrideId="cta-start-free-trial-mid" />
         </div>
       </section>
 
