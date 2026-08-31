@@ -37,7 +37,7 @@ export default function PromptsIndexPage() {
           </Link>
         ))}
       </section>
-      <PageCta title="Try a question with your own numbers." />
+      <PageCta title="Try a question with your own numbers." csOverrideId="cta-start-free-trial-mid" />
       <SiteFooter />
     </main>
   );

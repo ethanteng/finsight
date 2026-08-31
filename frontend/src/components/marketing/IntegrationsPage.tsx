@@ -244,7 +244,7 @@ export default function IntegrationsPage() {
           <h1>Your finances live in many places. <em>Your answer shouldn&apos;t.</em></h1>
           <p className="subhero-copy">Connect your accounts, add anything that cannot be linked, and Ask Linc will bring together the numbers that matter for your question.</p>
           <div className="hero-actions">
-            <MarketingGetStartedButton className="button button-primary" trackingLocation="integrations_hero" />
+            <MarketingGetStartedButton className="button button-primary" trackingLocation="integrations_hero" csOverrideId="cta-start-free-trial-hero" />
             <Link className="text-link" href="/features">See how Linc reaches an answer</Link>
           </div>
         </div>
@@ -391,7 +391,7 @@ export default function IntegrationsPage() {
         </div>
       </section>
 
-      <PageCta title="Bring the whole picture to your next financial question." />
+      <PageCta title="Bring the whole picture to your next financial question." csOverrideId="cta-start-free-trial-mid" />
       <SiteFooter />
     </main>
   );

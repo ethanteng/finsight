@@ -1,10 +1,18 @@
+/**
+ * `csOverrideId` is the Contentsquare `data-cs-override-id` for the link.
+ * It pins the element's identity independent of its position in the DOM, so
+ * a markup change cannot silently unbind the goal or heatmap zone attached
+ * to it. The desktop nav and the mobile menu render this list twice, so the
+ * mobile copies get their own suffixed values — one value per placement,
+ * never shared, or the two placements' data merges.
+ */
 export const PRIMARY_NAV_LINKS = [
-  { href: '/features', label: 'Features' },
-  { href: '/use-cases', label: 'What You Can Ask' },
-  { href: '/retirement-answers', label: 'Retirement' },
-  { href: '/vs', label: 'Compare' },
-  { href: '/pricing', label: 'Pricing' },
-  { href: '/about', label: 'About' },
+  { href: '/features', label: 'Features', csOverrideId: 'nav-features' },
+  { href: '/use-cases', label: 'What You Can Ask', csOverrideId: 'nav-what-you-can-ask' },
+  { href: '/retirement-answers', label: 'Retirement', csOverrideId: 'nav-retirement' },
+  { href: '/vs', label: 'Compare', csOverrideId: 'nav-compare' },
+  { href: '/pricing', label: 'Pricing', csOverrideId: 'nav-pricing' },
+  { href: '/about', label: 'About', csOverrideId: 'nav-about' },
 ];
 
 export const USE_CASE_LINKS = [

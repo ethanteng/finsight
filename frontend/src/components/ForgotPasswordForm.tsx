@@ -89,6 +89,7 @@ export default function ForgotPasswordForm() {
 
           <button
             type="submit"
+            data-cs-override-id="form-submit-forgot-password"
             disabled={isLoading}
             className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-[#123c2f] px-5 py-3.5 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(18,60,47,.16)] transition hover:bg-[#1a5140] disabled:cursor-not-allowed disabled:opacity-60"
           >

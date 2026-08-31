@@ -62,7 +62,7 @@ export default function PromptExamplePage({
         <Link href={useCaseHref} className="prompt-use-case-link">See how this use case works <b>→</b></Link>
       </section>
       {useCaseHref === "/use-cases/retirement" && <RetirementDecisionCrossSell />}
-      <PageCta title="Try a question like this with your own numbers." />
+      <PageCta title="Try a question like this with your own numbers." csOverrideId="cta-start-free-trial-mid" />
       <SiteFooter />
     </main>
   );

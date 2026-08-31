@@ -141,7 +141,7 @@ export function MarketingContactForm() {
         />
       </label>
       {error && <p className="contact-form-error" role="alert">{error}</p>}
-      <button className="button button-primary" type="submit" disabled={isSubmitting}>
+      <button className="button button-primary" type="submit" data-cs-override-id="form-submit-contact" disabled={isSubmitting}>
         {isSubmitting ? <><span className="button-spinner" aria-hidden="true" />Sending…</> : <>Send message <span aria-hidden="true">→</span></>}
       </button>
       <small>By sending this form, you agree that Ask Linc may reply to your email.</small>

@@ -204,7 +204,7 @@ function FeaturesPage() {
   return (
     <StandardPage className="features-page">
       <section className="subhero shell split-subhero">
-        <div><p className="section-kicker">HOW ASK LINC WORKS</p><h1>See how one decision changes <em>the rest of your plan.</em></h1><p className="subhero-copy">Connect your accounts, ask a question in your own words, and get a clear answer with the numbers shown.</p><div className="hero-actions"><MarketingGetStartedButton className="button button-primary" /><a className="text-link" href="#system">See what goes into an answer ↓</a></div></div>
+        <div><p className="section-kicker">HOW ASK LINC WORKS</p><h1>See how one decision changes <em>the rest of your plan.</em></h1><p className="subhero-copy">Connect your accounts, ask a question in your own words, and get a clear answer with the numbers shown.</p><div className="hero-actions"><MarketingGetStartedButton className="button button-primary" csOverrideId="cta-start-free-trial-hero" /><a className="text-link" href="#system">See what goes into an answer ↓</a></div></div>
         <DecisionMiniature />
       </section>
       <section className="page-section shell" id="system">
@@ -287,7 +287,7 @@ function FeaturesPage() {
           </div>
         </div>
       </section>
-      <PageCta />
+      <PageCta csOverrideId="cta-start-free-trial-mid" />
     </StandardPage>
   );
 }
@@ -298,7 +298,7 @@ function UseCasesPage() {
       <section className="subhero centered-subhero shell"><p className="section-kicker">WHAT YOU CAN ASK</p><h1>Start with what you&apos;re <em>trying to decide.</em></h1><p className="subhero-copy">Ask a question about a home, a growing family, work, investments, or retirement. Linc checks it against the rest of your financial life.</p></section>
       <section className="use-case-index shell">{Object.values(useCases).map((item)=><Link href={`/use-cases/${item.slug}`} className={`use-case-tile ${item.tone}`} key={item.slug}><span>{item.number} / {item.label}</span><h2>{item.title}</h2><div className="use-case-question"><small>ASK LINC</small><b>“{item.question}”</b></div><strong>Explore this decision <i>→</i></strong></Link>)}</section>
       <section className="use-case-bridge"><div className="shell"><p className="section-kicker">WHY THE WHOLE PLAN MATTERS</p><h2>A home, a child, a career change, and retirement share the same money.</h2><p>Linc checks how one choice affects cash flow, savings, debt, and the goals that come after it.</p></div></section>
-      <PageCta />
+      <PageCta csOverrideId="cta-start-free-trial-mid" />
     </StandardPage>
   );
 }
@@ -307,12 +307,12 @@ function UseCasePage({ useCase }: { useCase: UseCaseKey }) {
   const item = useCases[useCase];
   return (
     <StandardPage className={`use-case-page ${item.tone}`}>
-      <section className="subhero shell use-case-hero"><div><Link href="/use-cases" className="back-link">← All questions</Link><p className="section-kicker">{item.number} / {item.label}</p><h1>{item.title}</h1><p className="subhero-copy">Ask the question in your own words. Linc checks your accounts, goals, and the things that could change the answer.</p><MarketingGetStartedButton className="button button-primary" /></div><article className="use-case-answer"><div className="miniature-top"><span className="brand-mark small">L</span><b>SAMPLE DECISION</b><span>ILLUSTRATIVE</span></div><p>{item.question}</p><div className="use-case-verdict"><small>THE SHORT ANSWER</small><h2>{item.answer}</h2><span>{item.summary}</span></div><div className="use-case-metrics">{item.metrics.map(([label,value])=><span key={label}><small>{label}</small><b>{value}</b></span>)}</div><div className="use-case-check">∑ &nbsp;Open Show the Math to see the numbers behind the answer.</div></article></section>
+      <section className="subhero shell use-case-hero"><div><Link href="/use-cases" className="back-link">← All questions</Link><p className="section-kicker">{item.number} / {item.label}</p><h1>{item.title}</h1><p className="subhero-copy">Ask the question in your own words. Linc checks your accounts, goals, and the things that could change the answer.</p><MarketingGetStartedButton className="button button-primary" csOverrideId="cta-start-free-trial-hero" /></div><article className="use-case-answer"><div className="miniature-top"><span className="brand-mark small">L</span><b>SAMPLE DECISION</b><span>ILLUSTRATIVE</span></div><p>{item.question}</p><div className="use-case-verdict"><small>THE SHORT ANSWER</small><h2>{item.answer}</h2><span>{item.summary}</span></div><div className="use-case-metrics">{item.metrics.map(([label,value])=><span key={label}><small>{label}</small><b>{value}</b></span>)}</div><div className="use-case-check">∑ &nbsp;Open Show the Math to see the numbers behind the answer.</div></article></section>
       <section className="decision-levers shell"><div className="editorial-heading"><p className="section-kicker">WHAT MOVES THE ANSWER</p><h2>Change one thing. See what happens.</h2></div><div className="lever-grid">{item.levers.map(([title,copy],index)=><article key={title}><span>0{index+1}</span><h3>{title}</h3><p>{copy}</p></article>)}</div></section>
       <section className="case-context dark-band"><div className="shell case-context-inner"><div><p className="section-kicker light">WHAT LINC CHECKS FIRST</p><h2>The numbers that can change the answer.</h2></div><RotatingContextChips items={item.context} /></div></section>
       <section className="other-cases shell"><span>EXPLORE ANOTHER DECISION</span>{Object.values(useCases).filter((candidate)=>candidate.slug!==item.slug).map((candidate)=><Link href={`/use-cases/${candidate.slug}`} key={candidate.slug}>{candidate.label}<b>→</b></Link>)}</section>
       {useCase === "retirement" && <RetirementDecisionCrossSell />}
-      <PageCta title={`Bring your ${item.label.toLowerCase()} question to Linc.`} />
+      <PageCta title={`Bring your ${item.label.toLowerCase()} question to Linc.`} csOverrideId="cta-start-free-trial-mid" />
     </StandardPage>
   );
 }
@@ -324,10 +324,10 @@ function PricingPage({ pricing }: { pricing: Pricing }) {
       <section className="subhero centered-subhero shell"><p className="section-kicker">SIMPLE PRICING</p><h1>One month free. Then <em>{pricing.dollars} a {pricing.intervalLabel}.</em></h1><p className="subhero-copy">Ask as many questions as you need, connect your accounts, and compare what-if scenarios. Cancel anytime.</p></section>
       <section className="pricing-stage shell">
         <div className="price-argument"><p className="section-kicker">A FLAT MONTHLY PRICE</p><h2>Planning help before the decision gets expensive.</h2><p>No minimum balance. No annual contract. No sales call.</p><div className="cost-comparison"><span><small>ASK LINC</small><b>{pricing.label}</b><i>after first month free</i></span><span className="versus">VS</span><span><small>1% OF A $500K PORTFOLIO</small><b>$5,000</b><i>per year · illustrative</i></span></div></div>
-        <article className="sub-price-card"><div className="price-card-top"><span>ASK LINC</span><b>EVERYTHING INCLUDED</b></div><div className="price"><sup>{pricing.symbol}</sup>{pricing.amountText}<span>/{pricing.intervalLabel}</span></div><p>First month free. Cancel anytime.</p><ul><li>Unlimited questions and follow-ups</li><li>Unlimited connected accounts</li><li>What-if scenarios</li><li>Current rates and market data when needed</li><li>Retirement and investment what-ifs</li><li>Show the math on every answer</li><li>Your financial data is never used to train AI</li></ul><MarketingGetStartedButton className="button button-primary price-button" /></article>
+        <article className="sub-price-card" data-cs-override-id="pricing-card-premium"><div className="price-card-top"><span>ASK LINC</span><b>EVERYTHING INCLUDED</b></div><div className="price"><sup>{pricing.symbol}</sup>{pricing.amountText}<span>/{pricing.intervalLabel}</span></div><p>First month free. Cancel anytime.</p><ul><li>Unlimited questions and follow-ups</li><li>Unlimited connected accounts</li><li>What-if scenarios</li><li>Current rates and market data when needed</li><li>Retirement and investment what-ifs</li><li>Show the math on every answer</li><li>Your financial data is never used to train AI</li></ul><MarketingGetStartedButton className="button button-primary price-button" csOverrideId="cta-start-free-trial-pricing-premium" /></article>
       </section>
       <section className="page-section shell compact-faq"><div><p className="section-kicker">PRICING QUESTIONS</p><h2>No tiers to decode.</h2></div><div>{faqs.slice(0,4).map(([q,a])=><details key={q}><summary>{q}<span>+</span></summary><p>{a}</p></details>)}</div></section>
-      <PageCta title="Bring your hardest money question to Linc." />
+      <PageCta title="Bring your hardest money question to Linc." csOverrideId="cta-start-free-trial-mid" />
     </StandardPage>
   );
 }
@@ -338,7 +338,7 @@ function AboutPage() {
       <section className="subhero shell about-hero"><div><p className="section-kicker">WHY ASK LINC EXISTS</p><h1>A money answer should be <em>easy to check.</em></h1></div><p className="about-lede">Especially before a big decision. Ask Linc starts with your actual accounts, shows what it assumed, works out the numbers the same way each time, and explains what could change the result.</p></section>
       <section className="founder-origin shell"><div className="founder-portrait"><span className="founder-portrait-photo"><Image src="/images/ethan-teng-cartoon.webp" alt="Cartoon portrait of Ethan Teng" fill sizes="150px" priority /></span><div><b>Ethan Teng</b><small>FOUNDER · ASK LINC</small><a className="founder-linkedin" href="https://www.linkedin.com/in/ethanteng/" target="_blank" rel="noopener noreferrer"><Image src="/logos/linkedin.png" alt="" width={16} height={16} /><span>Connect on LinkedIn</span></a></div></div><div className="origin-copy"><p className="section-kicker">THE ORIGIN</p><h2>It started with a layoff—and a bad idea.</h2><p className="lead-paragraph">After getting laid off, I pasted my own bank statements into ChatGPT to answer some tough money questions—and immediately regretted it.</p><p>The responses sounded polished, but the chatbot did not know my full financial picture. It could mix up facts and guesses, make bad math sound certain, and give me no easy way to check the answer.</p><p>So I built Ask Linc to answer a specific question using the accounts, goals, and numbers that actually affect it.</p><div className="signature-line"><span><Image src="/images/ethan-teng-cartoon.webp" alt="" fill sizes="41px" /></span><div><b>Ethan Teng</b><small>Builder, user, and first skeptic</small></div></div></div></section>
       <section className="page-section values-band"><div className="shell"><div className="editorial-heading"><p className="section-kicker">HOW WE BUILD</p><h2>You should be able to see why an answer changed.</h2></div><div className="belief-grid"><article><span>01</span><h3>Start with the decision</h3><p>Show the numbers that help someone choose, not another screen of charts to interpret.</p></article><article><span>02</span><h3>Use the same math every time</h3><p>The same numbers should produce the same result, and you should be able to see the work.</p><Link className="belief-link" href="/trust">How answers are checked →</Link></article><article><span>03</span><h3>Remove personal details</h3><p>Replace sensitive labels before your financial information reaches AI.</p></article><article><span>04</span><h3>Show ranges and tradeoffs</h3><p>The future is uncertain. A useful answer says what could change and how much it matters.</p></article></div></div></section>
-      <PageCta title="Make the next hard question easier to answer." />
+      <PageCta title="Make the next hard question easier to answer." csOverrideId="cta-start-free-trial-mid" />
     </StandardPage>
   );
 }
@@ -350,7 +350,7 @@ function FaqPage({ pricing }: { pricing: Pricing }) {
       <section className="subhero centered-subhero shell"><p className="section-kicker">THE QUESTIONS BEHIND THE QUESTIONS</p><h1>Good skepticism is <em>welcome here.</em></h1><p className="subhero-copy">What Ask Linc does, how it reaches an answer, and what happens to your data.</p></section>
       <section className="faq-layout shell"><aside><span>JUMP TO</span><a href="#product">Product</a><a href="#accuracy">Accuracy</a><a href="#privacy-faq">Privacy</a><a href="#billing">Billing</a></aside><div className="faq-list"><p className="faq-group" id="product">PRODUCT</p>{faqs.slice(0,2).map(([q,a])=><details key={q} open={q===faqs[0][0]}><summary>{q}<span>+</span></summary><p>{a}</p></details>)}<p className="faq-group" id="accuracy">ACCURACY &amp; SCOPE</p>{faqs.slice(2,4).map(([q,a])=><details key={q}><summary>{q}<span>+</span></summary><p>{a}</p></details>)}<p className="faq-group" id="privacy-faq">PRIVACY &amp; DATA</p>{faqs.slice(4,8).map(([q,a])=><details key={q}><summary>{q}<span>+</span></summary><p>{a}</p></details>)}<p className="faq-group" id="billing">BILLING</p><details><summary>What does {pricing.label} include?<span>+</span></summary><p>Your first month is free. After that, {pricing.label} includes unlimited questions, connected accounts, follow-ups, what-if scenarios, current rates and market data, and Show the Math. Cancel anytime.</p></details></div></section>
       <section className="human-help shell"><div><span>STILL WONDERING?</span><h2>Ask the human who built it.</h2></div><Link className="button button-dark" href="/contact">Contact Ethan →</Link></section>
-      <PageCta />
+      <PageCta csOverrideId="cta-start-free-trial-mid" />
     </StandardPage>
   );
 }
@@ -363,7 +363,7 @@ function SecurityPage() {
       <section className="page-section shell"><div className="editorial-heading"><p className="section-kicker">HOW PROTECTION WORKS</p><h2>Six promises, built into the product.</h2></div><div className="security-grid">{securitySections.map(([n,t,d])=><article key={n}><span>{n}</span><h3>{t}</h3><p>{d}</p></article>)}</div></section>
       <section className="token-section"><div className="shell token-grid"><div><p className="section-kicker">WHAT AI SEES</p><h2>Useful numbers in.<br/>Personal details left out.</h2><p>Before AI sees your financial information, sensitive names are replaced with generic labels. The useful financial details remain; your identity does not.</p></div><div className="token-card"><span><del>Bank of America Checking</del><b>Account_1</b></span><span><del>Chase Sapphire Preferred</del><b>Card_2</b></span><span><del>Trader Joe’s</del><b>Merchant_12</b></span><small>PERSONAL DETAILS ARE REMOVED BEFORE AI SEES THEM</small></div></div></section>
       <section className="security-contact shell"><div><p className="section-kicker">A HUMAN IS RESPONSIBLE</p><h2>Have a privacy question? Ask the person who built the system.</h2></div><div><p>If you have a question, concern, or deletion request, email the founder directly.</p><a className="text-link" href="mailto:hello@asklinc.com">hello@asklinc.com →</a></div></section>
-      <PageCta />
+      <PageCta csOverrideId="cta-start-free-trial-mid" />
     </StandardPage>
   );
 }
@@ -393,7 +393,7 @@ function CompareIndexPage() {
           </Link>
         ))}
       </section>
-      <PageCta title="Start with the financial decision in front of you." />
+      <PageCta title="Start with the financial decision in front of you." csOverrideId="cta-start-free-trial-mid" />
     </StandardPage>
   );
 }
@@ -405,13 +405,13 @@ function ComparisonPage({ product, pricing }: { product: keyof typeof comparison
 
   return (
     <StandardPage className="comparison-page">
-      <section className="subhero shell comparison-hero"><div><p className="section-kicker">{design.eyebrow}</p><h1>Ask Linc <em>vs {page.competitorName}</em></h1><p className="subhero-copy">{page.summary}</p><div className="hero-actions"><MarketingGetStartedButton className="button button-primary" />{page.relatedLinks?.length ? <div className="comparison-reading-links" aria-label="Related reading">{page.relatedLinks.map((link)=><Link className="text-link" href={link.href} key={link.href}>{link.label}</Link>)}</div> : <Link className="text-link" href="/pricing">View free-trial pricing</Link>}</div></div><div className="versus-mark"><span className="brand-mark">L</span><b>VS</b><span>{page.competitorName.slice(0,2).toUpperCase()}</span></div></section>
+      <section className="subhero shell comparison-hero"><div><p className="section-kicker">{design.eyebrow}</p><h1>Ask Linc <em>vs {page.competitorName}</em></h1><p className="subhero-copy">{page.summary}</p><div className="hero-actions"><MarketingGetStartedButton className="button button-primary" csOverrideId="cta-start-free-trial-hero" />{page.relatedLinks?.length ? <div className="comparison-reading-links" aria-label="Related reading">{page.relatedLinks.map((link)=><Link className="text-link" href={link.href} key={link.href}>{link.label}</Link>)}</div> : <Link className="text-link" href="/pricing">View free-trial pricing</Link>}</div></div><div className="versus-mark"><span className="brand-mark">L</span><b>VS</b><span>{page.competitorName.slice(0,2).toUpperCase()}</span></div></section>
       <section className="comparison-strip"><div className="shell"><span>ASK LINC</span><i>Different tools for different jobs</i><span>{page.competitorName.toUpperCase()}</span></div></section>
       <section className="page-section shell comparison-section"><div className="editorial-heading"><p className="section-kicker">THE SHORT VERSION</p><h2>Start with the job you need done.</h2></div><div className="comparison-table" role="table"><div className="comparison-row comparison-head" role="row"><span>DIMENSION</span><b>ASK LINC</b><b>{page.competitorName.toUpperCase()}</b></div>{page.rows.map(({ dimension, askLinc, competitor })=><div className="comparison-row" role="row" key={dimension}><span className="comparison-dimension" role="rowheader">{dimension}</span><div className="comparison-value" role="cell"><small>ASK LINC</small><b>{askLinc}</b></div><div className="comparison-value" role="cell"><small>{page.competitorName.toUpperCase()}</small><b>{competitor}</b></div></div>)}</div></section>
       <section className="fit-section"><div className="shell"><p className="section-kicker">OUR HONEST TAKE</p><h2>{design.fit}</h2><p>{page.honestTake ?? "Ask Linc does not replace a budget app, investment platform, dedicated retirement planner, or human professional. It helps you compare options and see how the answer was worked out."}</p></div></section>
       <section className="page-section shell compact-faq comparison-faq"><div><p className="section-kicker">BEFORE YOU CHOOSE</p><h2>The questions people actually ask.</h2></div><div>{page.faqs.map((faq)=><details key={faq.question}><summary>{faq.question}<span>+</span></summary><p>{faq.answer}</p></details>)}</div></section>
       <section className="other-comparisons shell"><span>COMPARE ASK LINC WITH</span>{Object.keys(comparisonData).filter((key)=>key!==product).map((key)=>{ const other = getComparison(key, pricing); return other ? <Link href={`/vs/${key}`} key={key}>{other.competitorName} <b>→</b></Link> : null; })}</section>
-      <PageCta title="See which experience answers your question." />
+      <PageCta title="See which experience answers your question." csOverrideId="cta-start-free-trial-mid" />
     </StandardPage>
   );
 }
@@ -436,7 +436,7 @@ function LegalPage({ type }: { type: "privacy" | "terms" }) {
     ["7. Contact", "Questions, complaints, or requests can be sent to hello@asklinc.com."],
   ];
   return (
-    <StandardPage className="legal-page"><section className="legal-hero shell"><p className="section-kicker">THE PLAIN-LANGUAGE VERSION</p><h1>{privacy ? "Privacy Policy" : "Terms of Service"}</h1><div><span>Effective July 29, 2025</span><span>Operated by Ethan Teng Consulting LLC</span></div></section><section className="legal-layout shell"><aside><b>IN THIS DOCUMENT</b>{sections.map(([title])=><a href={`#${title.slice(0,1)}`} key={title}>{title}</a>)}</aside><article><div className="legal-note"><b>{privacy ? "The short version" : "Before you continue"}</b><p>{privacy ? "We collect the minimum, never sell your data, and give you control over deletion." : "Ask Linc is decision-support software—not personalized financial, tax, or legal advice."}</p></div>{sections.map(([title,body])=><section id={title.slice(0,1)} key={title}><h2>{title}</h2><p>{body}</p></section>)}</article></section><PageCta title="Questions about the fine print? Ask a human." /></StandardPage>
+    <StandardPage className="legal-page"><section className="legal-hero shell"><p className="section-kicker">THE PLAIN-LANGUAGE VERSION</p><h1>{privacy ? "Privacy Policy" : "Terms of Service"}</h1><div><span>Effective July 29, 2025</span><span>Operated by Ethan Teng Consulting LLC</span></div></section><section className="legal-layout shell"><aside><b>IN THIS DOCUMENT</b>{sections.map(([title])=><a href={`#${title.slice(0,1)}`} key={title}>{title}</a>)}</aside><article><div className="legal-note"><b>{privacy ? "The short version" : "Before you continue"}</b><p>{privacy ? "We collect the minimum, never sell your data, and give you control over deletion." : "Ask Linc is decision-support software—not personalized financial, tax, or legal advice."}</p></div>{sections.map(([title,body])=><section id={title.slice(0,1)} key={title}><h2>{title}</h2><p>{body}</p></section>)}</article></section><PageCta title="Questions about the fine print? Ask a human." csOverrideId="cta-start-free-trial-mid" /></StandardPage>
   );
 }
 
@@ -498,7 +498,7 @@ export function MarketingBlogPage({ ghostPosts }: { ghostPosts: GhostPost[] }) {
       ) : (
         <section className="not-found shell"><span>BLOG</span><h2>New field notes are on the way.</h2></section>
       )}
-      <PageCta title="Turn the reading into a real decision." />
+      <PageCta title="Turn the reading into a real decision." csOverrideId="blog-cta-end" />
     </StandardPage>
   );
 }
@@ -520,8 +520,8 @@ export function MarketingArticlePage({ post, processedHtml }: { post: GhostPost;
         <aside><span>ASK LINC BLOG</span><Link href="/features">See how Linc works</Link><Link href="/use-cases">Explore use cases</Link></aside>
         <article className="marketing-article-body ghost-content" dangerouslySetInnerHTML={{ __html: processedHtml }} />
       </section>
-      <section className="next-reading shell"><span>KEEP EXPLORING</span><h2>Bring the question back to your own numbers.</h2><MarketingGetStartedButton className="button button-primary" /></section>
-      <PageCta title="Try a real question with your own numbers." />
+      <section className="next-reading shell"><span>KEEP EXPLORING</span><h2>Bring the question back to your own numbers.</h2><MarketingGetStartedButton className="button button-primary" csOverrideId="blog-cta-inline" /></section>
+      <PageCta title="Try a real question with your own numbers." csOverrideId="blog-cta-end" />
     </StandardPage>
   );
 }

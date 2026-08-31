@@ -13,12 +13,12 @@ export function SiteHeader() {
         </Link>
         <div className="nav-links">
           {PRIMARY_NAV_LINKS.map((item) => (
-            <Link href={item.href} key={item.href}>{item.label}</Link>
+            <Link href={item.href} key={item.href} data-cs-override-id={item.csOverrideId}>{item.label}</Link>
           ))}
         </div>
         <div className="nav-actions">
-          <Link className="nav-sign-in" href="/login">Sign in</Link>
-          <MarketingGetStartedButton trackingLocation="header" />
+          <Link className="nav-sign-in" href="/login" data-cs-override-id="nav-sign-in">Sign in</Link>
+          <MarketingGetStartedButton trackingLocation="header" csOverrideId="cta-start-free-trial-nav" />
           <MarketingMobileMenu />
         </div>
       </nav>
@@ -36,7 +36,7 @@ export function SiteFooter() {
             <span>Ask Linc</span>
           </Link>
           <p>Plan a home, a growing family, a career change, and retirement using your real numbers.</p>
-          <MarketingGetStartedButton className="footer-cta-link" trackingLocation="footer" />
+          <MarketingGetStartedButton className="footer-cta-link" trackingLocation="footer" csOverrideId="cta-start-free-trial-footer" />
         </div>
         <div className="footer-column">
           <b>PRODUCT</b>
@@ -77,13 +77,24 @@ export function SiteFooter() {
   );
 }
 
-export function PageCta({ title = "See what your next decision means for the rest of your plan." }: { title?: string }) {
+/**
+ * `csOverrideId` is required so every page names the placement itself: this
+ * section is shared, and a single hardcoded value would merge the CTA data
+ * of every page that renders it.
+ */
+export function PageCta({
+  title = "See what your next decision means for the rest of your plan.",
+  csOverrideId,
+}: {
+  title?: string;
+  csOverrideId: string;
+}) {
   return (
     <section className="page-cta">
       <div className="page-cta-inner shell">
         <p className="section-kicker light">TRY IT WITH YOUR OWN NUMBERS</p>
         <h2>{title}</h2>
-        <MarketingGetStartedButton className="button button-primary" trackingLocation="page_cta" />
+        <MarketingGetStartedButton className="button button-primary" trackingLocation="page_cta" csOverrideId={csOverrideId} />
       </div>
     </section>
   );

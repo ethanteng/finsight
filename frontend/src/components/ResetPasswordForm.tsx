@@ -152,6 +152,7 @@ function ResetPasswordFormContent() {
 
           <button
             type="submit"
+            data-cs-override-id="form-submit-reset-password"
             disabled={isLoading}
             className="w-full bg-primary hover:bg-primary/90 disabled:opacity-50 text-white font-medium py-2 px-4 rounded-md transition-colors"
           >
