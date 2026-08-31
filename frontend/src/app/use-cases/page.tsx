@@ -26,29 +26,29 @@ export const metadata: Metadata = {
 
 const useCases = [
   {
-    number: '01', label: 'BUYING A HOME', tone: 'blue', href: '/use-cases/home-buying',
-    title: 'Find the price that fits the rest of your life.',
-    question: 'Can we afford this house without becoming house poor?',
-  },
-  {
-    number: '02', label: 'GROWING A FAMILY', tone: 'sand', href: '/use-cases/family-planning',
-    title: 'See what changes before the baby arrives.',
-    question: 'Can one of us take leave and still afford childcare?',
-  },
-  {
-    number: '03', label: 'CAREER CHANGE & TIME OFF', tone: 'mint', href: '/use-cases/career-change',
-    title: 'Know what stepping away from work really changes.',
-    question: 'Can I take a year off without setting retirement back?',
-  },
-  {
-    number: '04', label: 'RETIREMENT', tone: 'mint', href: '/use-cases/retirement',
+    number: '01', label: 'RETIREMENT', tone: 'mint', href: '/use-cases/retirement',
     title: 'Know what makes retirement work before you pick the date.',
     question: 'Could we retire two years earlier without making the plan too tight?',
   },
   {
-    number: '05', label: 'INVESTMENTS', tone: 'lime', href: '/use-cases/portfolio-analysis',
+    number: '02', label: 'BUYING A HOME', tone: 'blue', href: '/use-cases/home-buying',
+    title: 'Find the price that fits the rest of your life.',
+    question: 'Can we afford this house without becoming house poor?',
+  },
+  {
+    number: '03', label: 'GROWING A FAMILY', tone: 'sand', href: '/use-cases/family-planning',
+    title: 'See what changes before the baby arrives.',
+    question: 'Can one of us take leave and still afford childcare?',
+  },
+  {
+    number: '04', label: 'INVESTMENTS', tone: 'lime', href: '/use-cases/portfolio-analysis',
     title: 'Make sure your portfolio fits the plan.',
     question: 'Are we taking more investment risk than we actually need?',
+  },
+  {
+    number: '05', label: 'CAREER CHANGE & TIME OFF', tone: 'mint', href: '/use-cases/career-change',
+    title: 'Know what stepping away from work really changes.',
+    question: 'Can I take a year off without setting retirement back?',
   },
 ] as const;
 
