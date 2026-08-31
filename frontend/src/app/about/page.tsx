@@ -41,7 +41,7 @@ export default function AboutPage() {
         <div className="origin-copy">
           <p className="section-kicker">THE ORIGIN</p>
           <h2>It started with a layoff—<em>and a bad idea.</em></h2>
-          <p className="origin-story-lead">After a layoff, I pasted my bank statements into ChatGPT to figure out <strong>what I could afford to do next.</strong></p>
+          <p className="origin-story-lead">After I got laid off, I pasted my bank statements to figure out <strong>how long my money would last.</strong></p>
           <div className="origin-story-beats">
             <article className="origin-story-problem">
               <small>WHERE IT BROKE</small>
