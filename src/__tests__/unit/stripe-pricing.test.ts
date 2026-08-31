@@ -4,6 +4,10 @@
  * fallback that keeps checkout working when Stripe is unreachable.
  */
 
+// Marks this file as a module. Without it TypeScript treats it as a global
+// script and its top-level declarations collide with other test files'.
+export {};
+
 const retrieveMock = jest.fn();
 
 jest.mock('../../config/stripe', () => ({
