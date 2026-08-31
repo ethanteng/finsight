@@ -33,6 +33,40 @@ describe("marketing review fixes", () => {
     expect(undersized).toEqual([]);
   });
 
+  it("keeps substantive marketing copy readable at normal zoom", () => {
+    const css = ["marketing.css", "marketing-responsive.css"]
+      .map((file) => readFileSync(join(process.cwd(), "src/components/marketing", file), "utf8"))
+      .join("\n");
+    const finalFontSize = (selector: string) => {
+      let size: number | undefined;
+
+      for (const match of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+        const selectors = match[1].split(",").map((value) => value.trim());
+        if (!selectors.includes(selector)) continue;
+        const declaration = match[2].match(/font-size:\s*(\d+)px(?:\s*!important)?/);
+        if (declaration) size = Number(declaration[1]);
+      }
+
+      return size;
+    };
+
+    const representativeBodyCopy = [
+      ".feature-bento p",
+      ".integration-principles small",
+      ".trust-pipeline-grid p",
+      ".belief-grid p",
+      ".comparison-row b",
+      ".post-grid > article > p",
+      ".answer-hub-card > p",
+      ".demo-answer-list li",
+      ".footer-inner > div:first-child p",
+    ];
+
+    for (const selector of representativeBodyCopy) {
+      expect(finalFontSize(selector)).toBeGreaterThanOrEqual(14);
+    }
+  });
+
   it("keeps the desktop sign-in link outside the primary navigation links", () => {
     render(<SiteHeader />);
 

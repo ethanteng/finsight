@@ -706,6 +706,14 @@
     .integration-principles span:last-child {
       border-bottom: 0;
     }
+
+    .belief-grid article {
+      padding-block: 24px;
+    }
+
+    .belief-grid h3 {
+      margin-top: 34px;
+    }
   }
 
   @media (max-width: 480px) {
@@ -783,5 +791,152 @@
     .footer-brand {
       grid-column: auto;
     }
+  }
+
+  /* Normal-zoom readability: reserve 12px for short labels and metadata.
+     Explanatory copy, card descriptions, tables, and working product output
+     need a larger floor to remain comfortably readable at 100% zoom. */
+  .answer-summary,
+  .microcopy,
+  .trust-hero .microcopy,
+  .proof-grid span,
+  .recommendation p,
+  .generic-response-list p,
+  .generic-response-caveat p,
+  .grounded-next-step p,
+  .signal-note,
+  .ecosystem-grid p,
+  .privacy-training-promise span,
+  .price-card > p,
+  .price-card li,
+  .footer-inner > div:first-child p,
+  .miniature-take p,
+  .feature-trust li,
+  .verification-stack span,
+  .feature-outcome > p,
+  .coverage-card > p,
+  .coverage-card li,
+  .fact-routing-steps p,
+  .trust-signal-strip small,
+  .trust-audit-footer b,
+  .trust-audit-layers small,
+  .trust-role-grid li,
+  .trust-math-panel > p,
+  .trust-uncertainty-card li,
+  .connected-understands li,
+  .outside-context-grid p,
+  .integration-context-note small,
+  .integration-principles small,
+  .integration-table li,
+  .integration-table-note,
+  .integration-answer-flow p,
+  .use-case-verdict span,
+  .use-case-check,
+  .lever-grid p,
+  .sub-price-card > p,
+  .sub-price-card li,
+  .security-promises span,
+  .security-grid p,
+  .response-note p,
+  .article-callout li,
+  .prompt-detail-grid li,
+  .answer-toc a,
+  .answer-number-strip small,
+  .answer-timeline article p,
+  .answer-table,
+  .answer-equation > div,
+  .answer-calculation-body > small,
+  .answer-factor-grid p,
+  .answer-checklist-section li,
+  .answer-sources li p,
+  .answer-hub-method-card small,
+  .answer-hub-card > p,
+  .answer-hub-table-note,
+  .answer-hub-age-grid li small,
+  .answer-hub-methodology li p,
+  .answer-hub-method-links a,
+  .home-math-heading li,
+  .math-product-shot figcaption,
+  .general-chat-mockup > figcaption,
+  .general-chat-response li,
+  .general-chat-response .general-chat-limit,
+  .answer-product-shot figcaption,
+  .provider-logo-row small,
+  .retirement-cross-sell-grid p,
+  .static-product-demo > figcaption,
+  .demo-question-main p,
+  .demo-ask-notice,
+  .demo-answer-summary,
+  .demo-answer-list li,
+  .demo-panel-heading p,
+  .demo-accordion table,
+  .demo-source-detail table,
+  .demo-holdings-table table,
+  .demo-check-grid span,
+  .demo-validation p,
+  .demo-source-cards span,
+  .demo-market-source p,
+  .demo-net-worth-card > p,
+  .demo-account-groups > div:not(.demo-section-title) > p,
+  .demo-allocation > div {
+    font-size: 14px;
+  }
+
+  .system-flow p,
+  .feature-bento p,
+  .feature-proof-card > p,
+  .fact-routing-copy > p:not(.section-kicker),
+  .trust-pipeline-grid p,
+  .trust-uncertainty-card p,
+  .trust-privacy-bridge p:last-child,
+  .trust-faq-list details p,
+  .connected-source-card > p,
+  .belief-grid p,
+  .compare-index-card p,
+  .post-grid > article > p,
+  .answer-note p,
+  .answer-checklist-section > div > p:last-child,
+  .answer-product-bridge p:last-child,
+  .answer-sources > .shell > div > p:not(.section-kicker),
+  .answer-hub-age-grid article > p,
+  .answer-hub-methodology .shell > div:first-child > p:last-child,
+  .hero-founder-line p,
+  .demo-page-heading p {
+    font-size: 15px;
+  }
+
+  .table-footnote {
+    font-size: 14px !important;
+  }
+
+  .answer-product-bridge p:last-child {
+    font-size: 15px !important;
+  }
+
+  .footer-links,
+  .footer-column,
+  .light-link,
+  .section-cta-link,
+  .miniature-math-link,
+  .feature-trust-link,
+  .belief-link,
+  .home-demo-link,
+  .ecosystem-compact-shell > a,
+  .connected-picture-preview > a,
+  .trust-privacy-bridge > a,
+  .answer-hub-card > a,
+  .answer-hub-age-grid article > a,
+  .related-answer-card i {
+    font-size: 14px;
+  }
+
+  .comparison-row b,
+  .comparison-value b {
+    font-size: 14px;
+  }
+
+  :scope.features-page .fact-routing-steps p,
+  .integration-inventory-section .coverage-card > p {
+    font-size: 14px;
   }
 }
