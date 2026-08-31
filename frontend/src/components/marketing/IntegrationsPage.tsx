@@ -144,8 +144,9 @@ export default function IntegrationsPage() {
             ))}
           </div>
           <div className="fact-routing-links">
-            <Link className="text-link" href="/trust">See how the answer is checked →</Link>
-            <Link className="text-link" href="/how-we-protect-your-data">See how your data is protected →</Link>
+            <Link className="section-cta-link" href="/trust">
+              See how the answer is checked <span aria-hidden="true">→</span>
+            </Link>
           </div>
         </div>
       </section>

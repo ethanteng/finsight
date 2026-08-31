@@ -84,8 +84,9 @@ export default function FeaturesPageRoute() {
             <article className="coverage-card"><div className="coverage-card-top"><span>03</span><small>WHAT IS TRUE NOW</small></div><h3>Rates, rules, and markets</h3><p>Current information is added when it can materially change the answer.</p></article>
           </div>
           <div className="fact-routing-links">
-            <Link className="light-link" href="/integrations">Explore accounts &amp; data →</Link>
-            <Link className="light-link" href="/trust">See how answers are checked →</Link>
+            <Link className="section-cta-link section-cta-link-on-dark" href="/integrations">
+              Explore accounts &amp; data <span aria-hidden="true">→</span>
+            </Link>
           </div>
         </div>
       </section>

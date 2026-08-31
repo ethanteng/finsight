@@ -55,6 +55,230 @@
     max-width: 100%;
   }
 
+  /* Density pass: keep the editorial rhythm, but let content determine the
+     height instead of stretching short sections and cards toward a full
+     viewport. These overrides are shared so the same spacing language holds
+     across the homepage and every marketing subpage. */
+  :where(.section, .page-section) {
+    padding-block: 96px;
+  }
+
+  .subhero {
+    padding-block: 82px 92px;
+  }
+
+  :where(
+    .context-section,
+    .ecosystem-section,
+    .privacy-section,
+    .integration-owned-section,
+    .integration-context-section,
+    .integration-inventory-section,
+    .integration-answer-section,
+    .trust-pipeline-section,
+    .trust-math-section,
+    .trust-category-section,
+    .token-section,
+    .answer-sources,
+    .answer-hub-methodology
+  ) {
+    padding-block: 94px;
+  }
+
+  :where(
+    .use-case-bridge,
+    .decision-levers,
+    .case-context,
+    .founder-origin,
+    .security-contact,
+    .fit-section,
+    .retirement-cross-sell
+  ) {
+    padding-block: 88px;
+  }
+
+  .page-cta,
+  .final-cta {
+    padding-block: 92px;
+  }
+
+  .integration-hero,
+  .trust-hero {
+    padding-block: 78px 92px;
+  }
+
+  .split-heading,
+  .integration-section-heading,
+  .ecosystem-detail-heading {
+    margin-bottom: 44px;
+  }
+
+  .use-case-index {
+    padding-bottom: 92px;
+  }
+
+  .question-to-answer-section .use-case-index {
+    padding-bottom: 0;
+  }
+
+  .use-case-tile {
+    min-height: 410px;
+    padding: 30px;
+  }
+
+  .question-to-answer-section .use-case-tile {
+    min-height: 360px;
+  }
+
+  .question-to-answer-section .use-case-tile h2 {
+    margin-top: 44px;
+  }
+
+  .compare-index-card {
+    min-height: 360px;
+  }
+
+  .connected-source-card {
+    min-height: 340px;
+  }
+
+  .connected-source-card > p {
+    min-height: 0;
+  }
+
+  .connection-tags {
+    margin-bottom: 0;
+  }
+
+  .coverage-card {
+    min-height: 270px;
+  }
+
+  .outside-context-grid article {
+    min-height: 280px;
+  }
+
+  .trust-pipeline-grid article {
+    min-height: 320px;
+    padding: 30px;
+  }
+
+  .trust-pipeline-grid h3 {
+    margin-top: 44px;
+  }
+
+  .trust-question-grid {
+    margin-top: 58px;
+  }
+
+  .trust-privacy-bridge {
+    margin-block: 74px;
+    padding: 42px;
+  }
+
+  .founder-statement {
+    min-height: 410px;
+    padding: 42px;
+  }
+
+  .retirement-cross-sell-grid > a {
+    min-height: 250px;
+  }
+
+  /* The five steps previously reused dark-band colors on a light section,
+     leaving the labels nearly invisible. The compact desktop flow also cuts
+     a long vertical list down to one scannable row. */
+  :scope.features-page .fact-routing-steps {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    border-block: 1px solid #b7c1b5;
+    border-top-color: #b7c1b5;
+  }
+
+  :scope.features-page .fact-routing-steps li {
+    display: flex;
+    min-height: 230px;
+    flex-direction: column;
+    gap: 0;
+    padding: 26px 22px;
+    border-right: 1px solid #c5cdc2;
+    border-bottom: 0;
+  }
+
+  :scope.features-page .fact-routing-steps li:last-child {
+    border-right: 0;
+  }
+
+  :scope.features-page .fact-routing-steps li > span {
+    padding-top: 0;
+    color: #397052;
+  }
+
+  :scope.features-page .fact-routing-steps strong {
+    margin-top: 54px;
+    color: var(--ink);
+    line-height: 1.25;
+  }
+
+  :scope.features-page .fact-routing-steps p {
+    margin-top: 10px;
+    color: #59675e;
+    font-size: 13px;
+  }
+
+  /* A single, visible next step replaces pairs of understated text links. */
+  .fact-routing-links,
+  .trust-math-links {
+    align-items: flex-start;
+    margin-top: 28px;
+  }
+
+  .section-cta-link {
+    display: flex;
+    width: min(100%, 430px);
+    min-height: 58px;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+    padding: 16px 20px;
+    border: 1px solid #9fac9f;
+    border-radius: 999px;
+    background: var(--ink);
+    color: white;
+    font-size: 13px;
+    font-weight: 800;
+    transition: border-color .2s, background .2s, color .2s;
+  }
+
+  .section-cta-link span {
+    color: var(--lime);
+    font-size: 18px;
+  }
+
+  .section-cta-link:hover {
+    background: #234c38;
+  }
+
+  .section-cta-link-on-dark {
+    border-color: rgba(255, 255, 255, .28);
+    background: rgba(255, 255, 255, .06);
+    color: #eef4f0;
+  }
+
+  .section-cta-link-on-dark:hover {
+    border-color: var(--lime);
+    background: rgba(217, 255, 111, .08);
+    color: var(--lime);
+  }
+
+  .home-math-details > p {
+    max-width: 650px;
+    margin: 0 0 20px;
+    color: #aab8af;
+    font-size: 14px;
+    line-height: 1.7;
+  }
+
   /* The provider cards are reused on the dark How It Works band and the
      light Accounts & Data page. Scope a light treatment here so dark-band
      typography never leaks onto the light inventory section. */
@@ -142,6 +366,36 @@
   }
 
   @media (max-width: 980px) {
+    .connected-source-card,
+    .coverage-card {
+      min-height: auto;
+    }
+
+    :scope.features-page .fact-routing-steps {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    :scope.features-page .fact-routing-steps li {
+      min-height: 180px;
+      border-right: 1px solid #c5cdc2;
+      border-bottom: 1px solid #c5cdc2;
+    }
+
+    :scope.features-page .fact-routing-steps li:nth-child(2n) {
+      border-right: 0;
+    }
+
+    :scope.features-page .fact-routing-steps li:last-child {
+      grid-column: 1 / -1;
+      min-height: 155px;
+      border-right: 0;
+      border-bottom: 0;
+    }
+
+    :scope.features-page .fact-routing-steps strong {
+      margin-top: 34px;
+    }
+
     .integration-inventory-section .coverage-grid {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
@@ -195,13 +449,65 @@
     .decision-levers,
     .case-context,
     .fit-section {
-      padding-block: 72px;
+      padding-block: 64px;
+    }
+
+    .subhero,
+    .integration-hero,
+    .trust-hero {
+      padding-block: 62px 72px;
+    }
+
+    .context-section,
+    .ecosystem-section,
+    .privacy-section,
+    .trust-pipeline-section,
+    .trust-math-section,
+    .trust-category-section,
+    .page-cta,
+    .final-cta,
+    .token-section,
+    .answer-sources,
+    .answer-hub-methodology,
+    .use-case-bridge,
+    .founder-origin,
+    .security-contact,
+    .retirement-cross-sell {
+      padding-block: 68px;
     }
 
     .integration-section-heading,
     .split-heading,
     .editorial-heading {
-      margin-bottom: 34px;
+      margin-bottom: 30px;
+    }
+
+    :scope.features-page .fact-routing-steps {
+      grid-template-columns: 1fr;
+    }
+
+    :scope.features-page .fact-routing-steps li,
+    :scope.features-page .fact-routing-steps li:nth-child(2n),
+    :scope.features-page .fact-routing-steps li:last-child {
+      display: grid;
+      grid-column: auto;
+      grid-template-columns: 42px minmax(0, 1fr);
+      min-height: auto;
+      padding: 20px 0;
+      border-right: 0;
+      border-bottom: 1px solid #c5cdc2;
+    }
+
+    :scope.features-page .fact-routing-steps li:last-child {
+      border-bottom: 0;
+    }
+
+    :scope.features-page .fact-routing-steps strong {
+      margin-top: 0;
+    }
+
+    :scope.features-page .fact-routing-steps p {
+      margin-top: 7px;
     }
 
     .integration-inventory-section .coverage-grid {
@@ -211,6 +517,33 @@
     .integration-inventory-section .coverage-card {
       min-height: auto;
       padding: 24px;
+    }
+
+    .coverage-card,
+    .trust-pipeline-grid article {
+      min-height: auto;
+    }
+
+    .connected-source-card {
+      min-height: auto;
+    }
+
+    .question-to-answer-section .use-case-tile {
+      min-height: 300px;
+    }
+
+    .trust-privacy-bridge {
+      margin-block: 58px;
+      padding: 28px 22px;
+    }
+
+    .founder-statement {
+      min-height: 360px;
+      padding: 34px 28px;
+    }
+
+    .section-cta-link {
+      width: 100%;
     }
 
     .integration-inventory-section .coverage-card h3 {
@@ -316,11 +649,14 @@
     }
 
     .expanded-footer {
-      grid-template-columns: 1fr;
-      gap: 32px;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 32px 22px;
     }
 
-    .footer-brand,
+    .footer-brand {
+      grid-column: 1 / -1;
+    }
+
     .expanded-footer .footer-column:last-child {
       grid-column: auto;
     }
@@ -358,6 +694,16 @@
 
     .static-product-demo figcaption {
       padding-inline: 12px;
+    }
+  }
+
+  @media (max-width: 340px) {
+    .expanded-footer {
+      grid-template-columns: 1fr;
+    }
+
+    .footer-brand {
+      grid-column: auto;
     }
   }
 }

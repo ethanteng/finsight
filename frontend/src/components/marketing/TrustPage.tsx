@@ -106,7 +106,11 @@ export default function TrustPage() {
             <p className="section-kicker light">∑ SHOW THE MATH</p>
             <h2>You do not have to take Linc&apos;s word for it.</h2>
             <p>Open the work behind the conclusion, change an assumption, and see why the answer changes with it.</p>
-            <div className="trust-math-links"><Link className="light-link" href="/features">See how Ask Linc works →</Link><Link className="light-link" href="/blog/show-the-math-how-ask-linc-makes-ai-financial-analysis-transparent">Read about Show the Math →</Link></div>
+            <div className="trust-math-links">
+              <Link className="section-cta-link section-cta-link-on-dark" href="/features">
+                See how Ask Linc works <span aria-hidden="true">→</span>
+              </Link>
+            </div>
           </div>
           <article className="trust-math-panel" aria-label="What Show the Math includes">
             <div className="trust-math-panel-top"><span>ANSWER</span><b>SHOW THE MATH</b><small>5 LAYERS</small></div>

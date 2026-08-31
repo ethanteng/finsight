@@ -91,31 +91,20 @@ export default function Home() {
           <div className="home-math-heading">
             <div>
               <p className="section-kicker light">HOW IT WORKS</p>
-              <h2>Ask the question. Linc builds the analysis around it.</h2>
+              <h2>Ask the question. Linc brings in the numbers that could change the answer.</h2>
             </div>
-            <ul aria-label="How Ask Linc works">
-              <li>Ask in your own words</li>
-              <li>Pull in what could change the answer</li>
-              <li>Compare the tradeoffs</li>
-              <li>See the recommendation</li>
-              <li>Check the work</li>
-            </ul>
+            <div className="home-math-details">
+              <p>Your accounts provide the facts. Linc brings in cash, spending, debt, investments, property, goals, rates, and market context only when they matter to the decision.</p>
+              <ul aria-label="How Ask Linc works">
+                <li>Ask in your own words</li>
+                <li>Pull in what could change the answer</li>
+                <li>Compare the tradeoffs</li>
+                <li>See the recommendation</li>
+                <li>Check the work</li>
+              </ul>
+            </div>
           </div>
           <Link className="home-demo-link" href="/features">See how Ask Linc works <span>→</span></Link>
-        </div>
-      </section>
-
-      <section className="ecosystem-section ecosystem-compact">
-        <div className="shell ecosystem-compact-shell">
-          <div>
-            <p className="section-kicker light">CONNECTED DATA IS ONLY THE BEGINNING</p>
-            <h2>The right numbers for this decision.</h2>
-          </div>
-          <p>
-            Your accounts provide the facts. Linc brings in cash, spending, debt, investments, property, goals,
-            rates, and market context only when they could change the answer.
-          </p>
-          <Link href="/integrations">Explore accounts &amp; data <span>→</span></Link>
         </div>
       </section>
 

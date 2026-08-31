@@ -84,6 +84,8 @@ describe("marketing review fixes", () => {
     expect(screen.getAllByText("Show the Math").length).toBeGreaterThan(0);
     expect(screen.getByText("Can we afford this house without becoming house poor?")).toBeInTheDocument();
     expect(screen.getByText("Can I take a year off without setting retirement back?")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /linc brings in the numbers that could change the answer/i })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "The right numbers for this decision." })).not.toBeInTheDocument();
     expect(USE_CASE_LINKS).toContainEqual({
       href: "/use-cases/career-change",
       label: "Career Change & Time Off",
@@ -182,6 +184,8 @@ describe("marketing review fixes", () => {
     expect(screen.getByRole("heading", { name: "Cash, spending, and debt" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Investments, property, and goals" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Rates, rules, and markets" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /explore accounts & data/i })).toHaveAttribute("href", "/integrations");
+    expect(screen.queryByRole("link", { name: /see how answers are checked/i })).not.toBeInTheDocument();
   });
 
   it("presents accounts and data as inputs to the decision instead of a provider catalog", () => {
@@ -200,7 +204,8 @@ describe("marketing review fixes", () => {
     ["Plaid", "SnapTrade", "RentCast", "FRED + Massive", "FMP + Tiingo", "Kenneth French + Robert Shiller"].forEach((source) => {
       expect(screen.getByRole("heading", { name: source })).toBeInTheDocument();
     });
-    expect(screen.getByRole("link", { name: /see how your data is protected/i })).toHaveAttribute("href", "/how-we-protect-your-data");
+    expect(screen.getByRole("link", { name: /see how the answer is checked/i })).toHaveAttribute("href", "/trust");
+    expect(screen.queryByRole("link", { name: /see how your data is protected/i })).not.toBeInTheDocument();
   });
 
   it("keeps light provider cards readable and responsive", () => {
