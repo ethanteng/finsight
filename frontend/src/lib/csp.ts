@@ -9,6 +9,13 @@
 // while every capture script was refused, so heatmaps silently never built.
 const CONTENTSQUARE = "https://*.contentsquare.net";
 
+// Contentsquare also serves capture scripts from its .com domain (app.), a
+// separate registrable domain the .net wildcard cannot cover. Wildcarded for
+// the same reason as above: pinning one host is what broke this originally.
+// Scripts only — the .com domain is deliberately not added to any other
+// directive.
+const CONTENTSQUARE_APP = "https://*.contentsquare.com";
+
 // The dev frontend talks to a backend on localhost; production never should,
 // and listing it there would let a compromised page beacon to a local port.
 const LOCAL_API_ORIGINS = ["http://localhost:3000", "http://localhost:3001"];
@@ -35,7 +42,7 @@ export function buildContentSecurityPolicy({ isDevelopment }: { isDevelopment: b
 
   return [
     "default-src 'self'",
-    `script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.googletagmanager.com ${CONTENTSQUARE} https://googleads.g.doubleclick.net https://cdn.plaid.com`,
+    `script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.googletagmanager.com ${CONTENTSQUARE} ${CONTENTSQUARE_APP} https://googleads.g.doubleclick.net https://cdn.plaid.com`,
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     // No blanket `https:`. An answer is rendered as Markdown, so an
     // image URL that reached the model through a search snippet or a

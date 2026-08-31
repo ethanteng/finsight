@@ -31,9 +31,16 @@ describe("Contentsquare content security policy", () => {
 
   it("allows every Contentsquare host to serve scripts", () => {
     // The capture toolbar that builds heatmaps loads from sibling hosts
-    // (d., c., app.), not just the tracking tag's t. host.
+    // (d., c. on .net, app. on .com), not just the tracking tag's t. host.
     expect(directive(production, "script-src")).toContain("https://*.contentsquare.net");
+    expect(directive(production, "script-src")).toContain("https://*.contentsquare.com");
     expect(directive(production, "script-src")).not.toContain("https://t.contentsquare.net");
+  });
+
+  it("keeps the Contentsquare .com domain to scripts only", () => {
+    for (const name of ["frame-src", "connect-src", "img-src", "default-src"]) {
+      expect(directive(production, name)).not.toContain("contentsquare.com");
+    }
   });
 
   it("lets Contentsquare capture embed a frame", () => {
