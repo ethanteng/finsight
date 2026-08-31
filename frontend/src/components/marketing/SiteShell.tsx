@@ -35,14 +35,14 @@ export function SiteFooter() {
             <span className="brand-mark" aria-hidden="true">L</span>
             <span>Ask Linc</span>
           </Link>
-          <p>Plan a home, a growing family, a career change, and retirement using your real numbers.</p>
+          <p>Financial planning that starts with the decision you&apos;re trying to make.</p>
           <MarketingGetStartedButton className="footer-cta-link" trackingLocation="footer" csOverrideId="cta-start-free-trial-footer" />
         </div>
         <div className="footer-column">
           <b>PRODUCT</b>
-          <Link href="/features">Features</Link>
-          <Link href="/integrations">Accounts &amp; Data</Link>
+          <Link href="/features">How It Works</Link>
           <Link href="/use-cases">What You Can Ask</Link>
+          <Link href="/integrations">Accounts &amp; Data</Link>
           <Link href="/pricing">Pricing</Link>
           <Link href="/faq">FAQ</Link>
           <Link href="/retirement-answers">Retirement</Link>
@@ -63,7 +63,7 @@ export function SiteFooter() {
         </div>
         <div className="footer-column">
           <b>TRUST</b>
-          <Link href="/trust">How Answers Are Checked</Link>
+          <Link href="/trust">Show the Math</Link>
           <Link href="/how-we-protect-your-data">Privacy &amp; Security</Link>
           <Link href="/privacy">Privacy Policy</Link>
           <Link href="/terms">Terms</Link>
@@ -77,13 +77,8 @@ export function SiteFooter() {
   );
 }
 
-/**
- * `csOverrideId` is required so every page names the placement itself: this
- * section is shared, and a single hardcoded value would merge the CTA data
- * of every page that renders it.
- */
 export function PageCta({
-  title = "See what your next decision means for the rest of your plan.",
+  title = "What are you trying to figure out?",
   csOverrideId,
 }: {
   title?: string;
@@ -92,7 +87,7 @@ export function PageCta({
   return (
     <section className="page-cta">
       <div className="page-cta-inner shell">
-        <p className="section-kicker light">TRY IT WITH YOUR OWN NUMBERS</p>
+        <p className="section-kicker light">START WITH THE DECISION</p>
         <h2>{title}</h2>
         <MarketingGetStartedButton className="button button-primary" trackingLocation="page_cta" csOverrideId={csOverrideId} />
       </div>
