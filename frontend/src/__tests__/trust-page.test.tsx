@@ -22,6 +22,9 @@ describe("trust page", () => {
     );
     expect(screen.getByRole("heading", { name: /from the decision to the numbers to the recommendation/i })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /you do not have to take linc's word for it/i })).toBeInTheDocument();
+    const openingHeading = screen.getByRole("heading", { name: /accounts provide the facts.*good decisions need more/i });
+    expect(openingHeading.querySelector("em")).toHaveTextContent("Good decisions need more.");
+    expect(document.querySelectorAll(".trust-question-card")).toHaveLength(4);
     expect(screen.getByText(/no product is perfect/i)).toBeInTheDocument();
     expect(screen.getByText(/purpose-built tools handle supported financial math/i)).toBeInTheDocument();
 

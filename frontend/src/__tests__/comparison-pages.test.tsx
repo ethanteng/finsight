@@ -110,4 +110,27 @@ describe("comparison pages", () => {
       );
     });
   });
+
+  it("visually separates Ask Linc from the competitor in either recommendation order", async () => {
+    const monarchRender = render(
+      await MarketingSubpage({ params: Promise.resolve({ slug: ["vs", "monarch"] }) }),
+    );
+    const monarchTake = screen.getByText("OUR HONEST TAKE").closest("section");
+    expect(monarchTake).not.toBeNull();
+    const monarchHeading = within(monarchTake as HTMLElement).getByRole("heading");
+    expect(monarchHeading.children[0]).toHaveTextContent("Choose Monarch");
+    expect(monarchHeading.children[0].tagName).toBe("SPAN");
+    expect(monarchHeading.children[1]).toHaveTextContent("Choose Ask Linc");
+    expect(monarchHeading.children[1].tagName).toBe("EM");
+    monarchRender.unmount();
+
+    render(await MarketingSubpage({ params: Promise.resolve({ slug: ["vs", "origin"] }) }));
+    const originTake = screen.getByText("OUR HONEST TAKE").closest("section");
+    expect(originTake).not.toBeNull();
+    const originHeading = within(originTake as HTMLElement).getByRole("heading");
+    expect(originHeading.children[0]).toHaveTextContent("Choose Ask Linc");
+    expect(originHeading.children[0].tagName).toBe("EM");
+    expect(originHeading.children[1]).toHaveTextContent("Choose Origin");
+    expect(originHeading.children[1].tagName).toBe("SPAN");
+  });
 });

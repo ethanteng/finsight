@@ -196,7 +196,7 @@
   }
 
   .trust-question-grid {
-    margin-top: 58px;
+    margin-top: 42px;
   }
 
   .trust-privacy-bridge {
@@ -412,6 +412,14 @@
       min-height: auto;
     }
 
+    .trust-question-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .trust-question-card {
+      min-height: 140px;
+    }
+
     :scope.features-page .fact-routing-steps {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
@@ -497,6 +505,22 @@
     .integration-hero,
     .trust-hero {
       padding-block: 62px 72px;
+    }
+
+    .trust-question-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 34px;
+    }
+
+    .trust-question-grid .trust-question-card:nth-child(n) {
+      min-height: 155px;
+      padding: 16px;
+    }
+
+    .trust-question-card p {
+      margin-top: 16px;
+      font-size: 16px;
     }
 
     .context-section,
@@ -739,6 +763,19 @@
   }
 
   @media (max-width: 340px) {
+    .trust-question-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .trust-question-grid .trust-question-card:nth-child(n) {
+      min-height: 108px;
+      padding: 20px;
+    }
+
+    .trust-question-card p {
+      font-size: 18px;
+    }
+
     .expanded-footer {
       grid-template-columns: 1fr;
     }

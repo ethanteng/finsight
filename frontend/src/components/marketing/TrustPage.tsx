@@ -18,6 +18,13 @@ const pipelineSteps = [
   ["04", "Check and explain the result", "Linc checks the work, explains the tradeoffs, and keeps the evidence attached to the answer."],
 ] as const;
 
+const trustQuestions = [
+  ["HOME", "Can we afford this house without becoming house poor?", "mint"],
+  ["WORK", "Can I take a year off without setting retirement back?", "blue"],
+  ["RETIREMENT", "Could we retire two years earlier?", "sand"],
+  ["INVESTING", "Are we taking more investment risk than we need?", "lime"],
+] as const;
+
 export const TRUST_FAQS = [
   {
     question: "Can AI get financial numbers wrong?",
@@ -74,17 +81,16 @@ export default function TrustPage() {
 
       <section className="trust-opening page-section shell">
         <div className="trust-opening-heading">
-          <div><p className="section-kicker">CONNECTED DATA IS ONLY THE BEGINNING</p><h2>The accounts can provide the facts. They cannot make the decision for you.</h2></div>
+          <div><p className="section-kicker">CONNECTED DATA IS ONLY THE BEGINNING</p><h2>Accounts provide the facts. <em>Good decisions need more.</em></h2></div>
           <div>
-            <p>A useful answer still has to decide which numbers matter, separate facts from assumptions, run the right calculations, compare the tradeoffs, and explain what could change the result.</p>
-            <strong>That is the standard Ask Linc is built around.</strong>
+            <p>Facts are only the start. Linc separates what is known from what is assumed, runs the calculations, and shows what could change the result.</p>
+            <strong>That is the standard behind every answer.</strong>
           </div>
         </div>
         <div className="trust-question-grid" aria-label="Financial questions where verifiability matters">
-          <blockquote>Can we afford this house without becoming house poor?</blockquote>
-          <blockquote>Can I take a year off without setting retirement back?</blockquote>
-          <blockquote>Could we retire two years earlier?</blockquote>
-          <blockquote>Are we taking more investment risk than we need?</blockquote>
+          {trustQuestions.map(([label, question, tone]) => (
+            <blockquote className={`trust-question-card ${tone}`} key={label}><small>{label}</small><p>{question}</p></blockquote>
+          ))}
         </div>
       </section>
 
