@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import StructuredData from '../../components/StructuredData';
-import { buildFaqItems, buildFaqPageSchema, buildProductOfferSchema } from '../../data/faq';
+import { buildProductOfferSchema } from '../../data/faq';
 import { getPricing } from '../../lib/pricing';
 import { MarketingGetStartedButton } from '@/components/marketing/MarketingGetStartedButton';
 import { PageCta, SiteFooter, SiteHeader } from '@/components/marketing/SiteShell';
@@ -20,7 +20,6 @@ export default async function PricingPage() {
   return (
     <>
       <StructuredData data={buildProductOfferSchema(pricing)} />
-      <StructuredData data={buildFaqPageSchema(buildFaqItems(pricing))} />
       <main className="marketing-site subpage pricing-page">
         <SiteHeader />
         <section className="subhero centered-subhero shell">
