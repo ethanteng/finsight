@@ -31,7 +31,7 @@ export default function AboutPage() {
 
       <section className="founder-origin shell">
         <div className="founder-portrait">
-          <span className="founder-portrait-photo"><Image src="/images/ethan-teng-cartoon.webp" alt="Portrait of Ethan Teng" fill sizes="150px" priority /></span>
+          <span className="founder-portrait-photo"><Image src="/ethan-teng.jpg" alt="Ethan Teng, founder of Ask Linc" fill sizes="150px" priority /></span>
           <div>
             <b>Ethan Teng</b>
             <small>FOUNDER · ASK LINC</small>
