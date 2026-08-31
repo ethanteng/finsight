@@ -153,7 +153,7 @@ export default function Home() {
           <blockquote>The answers sounded convincing. That wasn&apos;t enough for a real financial decision.</blockquote>
           <div className="founder-signature">
             <div className="founder-avatar">
-              <Image src="/images/ethan-teng-cartoon.webp" alt="" fill sizes="42px" />
+              <Image src="/ethan-teng.jpg" alt="Ethan Teng, founder of Ask Linc" fill sizes="42px" />
             </div>
             <div><b>Ethan Teng</b><span>Founder, Ask Linc</span></div>
           </div>
