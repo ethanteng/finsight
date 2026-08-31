@@ -164,6 +164,7 @@ router.get('/payment-success', async (req, res) => {
           );
         } else {
           loginParams.set('subscription', 'success');
+          loginParams.set('checkout', 'success');
           loginParams.set('tier', tierName);
           if (!linked) {
             loginParams.set(
@@ -188,6 +189,7 @@ router.get('/payment-success', async (req, res) => {
         // Build query parameters, only including email if it exists
         const queryParams = new URLSearchParams({
           subscription: 'success',
+          checkout: 'success',
           tier: tierName,
           session_id: session_id as string
         });
