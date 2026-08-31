@@ -3,14 +3,14 @@ import MarketingSubpage from '../../components/marketing/MarketingSubpage';
 
 export const metadata: Metadata = {
   title: 'How Ask Linc Works — Connected Data and Clear Math',
-  description: 'See how Ask Linc combines connected accounts with portfolio, property, economic, market, and historical data to answer financial questions with inspectable math.',
+  description: 'See how Ask Linc uses your connected accounts, property, current rates, markets, and history to answer money questions and show the math.',
   keywords: ['financial data integrations', 'AI financial tools', 'connected financial accounts', 'financial analysis tools', 'investment data'],
   alternates: {
     canonical: 'https://asklinc.com/features',
   },
   openGraph: {
     title: 'How Ask Linc Works — Connected Data and Clear Math',
-    description: 'See how Ask Linc combines connected accounts with portfolio, property, economic, market, and historical data to answer financial questions with inspectable math.',
+    description: 'See how Ask Linc uses your connected accounts, property, current rates, markets, and history to answer money questions and show the math.',
     type: 'website',
     url: 'https://asklinc.com/features',
     siteName: 'Ask Linc',
@@ -26,7 +26,7 @@ export const metadata: Metadata = {
   twitter: {
     card: 'summary_large_image',
     title: 'How Ask Linc Works — Connected Data and Clear Math',
-    description: 'See how Ask Linc combines connected accounts with portfolio, property, economic, market, and historical data to answer financial questions with inspectable math.',
+    description: 'See how Ask Linc uses your connected accounts, property, current rates, markets, and history to answer money questions and show the math.',
     images: ['https://asklinc.com/og-image.jpg'],
   },
   robots: {

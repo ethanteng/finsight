@@ -11,6 +11,7 @@ import { pushBeginCheckout } from '@/lib/dataLayer';
 import { FAQ_ITEMS } from '@/data/faq';
 import { PricingValueBadge } from './PricingOfferCallouts';
 import { useDialog } from '@/components/ui/dialog';
+import { MONTHLY_PRICE_DOLLARS, TRIAL_PRICE_LINE } from '@/config/pricing';
 
 export default function PricingPageContent() {
   const [isLoading, setIsLoading] = useState(false);
@@ -57,7 +58,7 @@ export default function PricingPageContent() {
                 One plan. <span className="gradient-text">Full access.</span>
               </h1>
               <p className="text-slate-300">
-                Start with 1 month free, then $9/month. Cancel anytime.
+                {TRIAL_PRICE_LINE}
               </p>
             </div>
 
@@ -66,7 +67,7 @@ export default function PricingPageContent() {
                 <div className="text-center space-y-4 mb-8">
                   <h2 className="text-2xl font-bold">Ask Linc</h2>
                   <div className="flex items-baseline justify-center space-x-1">
-                    <span className="text-5xl font-bold gradient-text">$9</span>
+                    <span className="text-5xl font-bold gradient-text">{MONTHLY_PRICE_DOLLARS}</span>
                     <span className="text-muted-foreground text-xl">/ month</span>
                   </div>
                   <PricingValueBadge />
@@ -102,7 +103,7 @@ export default function PricingPageContent() {
                     {isLoading ? 'Creating...' : 'Start free trial'}
                   </Button>
                   <p className="text-center text-xs text-muted-foreground">
-                    1 month free, then $9/month. Cancel anytime.
+                    {TRIAL_PRICE_LINE}
                   </p>
                 </div>
               </CardContent>

@@ -3,7 +3,7 @@ import MarketingSubpage from '../../components/marketing/MarketingSubpage';
 
 export const metadata: Metadata = {
   title: 'Get Help & Support | Ask Linc Customer Service',
-  description: 'Need help with Ask Linc? Our support team is here to assist you. Get answers to your questions, share feedback, or report any issues with our AI financial platform.',
+  description: 'Need help with Ask Linc? Ask a question, share feedback, request data deletion, or report something that is not working.',
   keywords: ['customer support', 'help center', 'contact Ask Linc', 'customer service', 'support'],
   alternates: {
     canonical: 'https://asklinc.com/contact',

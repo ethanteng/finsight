@@ -3,7 +3,7 @@ import MarketingSubpage from '../../../components/marketing/MarketingSubpage';
 
 export const metadata: Metadata = {
   title: 'Retirement Planning — Use Cases | Ask Linc',
-  description: 'See how Ask Linc analyzes retirement readiness, withdrawal rates, and portfolio sustainability.',
+  description: 'See whether you are on track for retirement, how much your investments may need to provide, and what could change the answer.',
   alternates: {
     canonical: 'https://asklinc.com/use-cases/retirement',
   },

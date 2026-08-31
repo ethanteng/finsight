@@ -1,3 +1,5 @@
+import { MONTHLY_PRICE, MONTHLY_PRICE_LABEL } from "@/config/pricing";
+
 export type FaqItem = {
   question: string;
   answer: string;
@@ -12,7 +14,7 @@ export const FAQ_ITEMS: FaqItem[] = [
   {
     question: "Is there a free plan or trial?",
     answer:
-      "Yes. Start with a free 1-month trial, then Ask Linc is $9/month for full access with your own accounts. Cancel anytime.",
+      `Yes. Start with a free 1-month trial, then Ask Linc is ${MONTHLY_PRICE_LABEL} for full access with your own accounts. Cancel anytime.`,
   },
   {
     question: "I don't want to give AI companies all my financial data...",
@@ -65,11 +67,11 @@ export const PRODUCT_OFFER_SCHEMA = {
   image: "https://asklinc.com/og-image.jpg",
   offers: {
     "@type": "Offer",
-    price: "9.00",
+    price: MONTHLY_PRICE.toFixed(2),
     priceCurrency: "USD",
     availability: "https://schema.org/InStock",
     url: "https://asklinc.com/pricing",
     priceValidUntil: "2027-12-31",
-    description: "Free for 1 month, then $9/month for unlimited questions, connected accounts, what-if scenarios, and calculations you can inspect.",
+    description: `Free for 1 month, then ${MONTHLY_PRICE_LABEL} for unlimited questions, connected accounts, what-if scenarios, and math you can check.`,
   },
 };

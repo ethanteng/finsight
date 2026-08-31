@@ -4,6 +4,7 @@ import { pushBeginCheckout } from '@/lib/dataLayer';
 import { CheckCircle } from "lucide-react";
 import { useState } from "react";
 import { useDialog } from '@/components/ui/dialog';
+import { MONTHLY_PRICE_DOLLARS, TRIAL_PRICE_LINE } from '@/config/pricing';
 
 export const Pricing = () => {
   const [isLoading, setIsLoading] = useState(false);
@@ -59,11 +60,11 @@ export const Pricing = () => {
             <div className="text-center space-y-4 mb-8">
               <h3 className="text-2xl font-bold text-navy">Ask Linc</h3>
               <div className="flex items-baseline justify-center space-x-1">
-                <span className="text-5xl font-bold text-navy">$9</span>
+                <span className="text-5xl font-bold text-navy">{MONTHLY_PRICE_DOLLARS}</span>
                 <span className="text-muted-foreground text-xl">/ month</span>
               </div>
               <p className="text-muted-foreground text-base max-w-md mx-auto">
-                1 month free, then $9/month flat — vs the 1-2% of your wealth a human advisor charges every year.
+                {TRIAL_PRICE_LINE} Compare that with a percentage-of-assets advisor fee.
               </p>
             </div>
             

@@ -9,7 +9,7 @@ describe("retirement answer library", () => {
       "Start with the math. Then test the whole plan.",
     );
     expect(screen.getByRole("navigation", { name: "Breadcrumb" })).toHaveTextContent(
-      "Home/Retirement answers",
+      "Home/Retirement",
     );
 
     [
@@ -26,6 +26,12 @@ describe("retirement answer library", () => {
       name: "First-year portfolio withdrawals at three illustrative starting rates",
     });
     expect(within(comparison).getByRole("row", { name: /\$2M portfolio \$60K \/ year \$70K \/ year \$80K \/ year/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /retirement starts with the decisions before it/i })).toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: /explore the decision/i }).map((link) => link.getAttribute("href"))).toEqual([
+      "/use-cases/home-buying",
+      "/use-cases/family-planning",
+      "/use-cases/financial-stress-testing",
+    ]);
 
     const schemas = Array.from(container.querySelectorAll('script[type="application/ld+json"]')).map(
       (script) => JSON.parse(script.textContent || "{}"),
@@ -41,7 +47,7 @@ describe("retirement answer library", () => {
 
   it("publishes canonical and social metadata", () => {
     expect(metadata).toMatchObject({
-      title: "Retirement Answers: Can I Retire? | Ask Linc",
+      title: "Retirement: Can I Retire? | Ask Linc",
       alternates: { canonical: "https://asklinc.com/retirement-answers" },
       openGraph: { url: "https://asklinc.com/retirement-answers" },
       robots: { index: true, follow: true },

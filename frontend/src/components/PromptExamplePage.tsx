@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { PageCta, SiteFooter, SiteHeader } from "./marketing/SiteShell";
 import type { PromptExample } from "@/lib/promptExamples";
+import { RetirementDecisionCrossSell } from "./marketing/RetirementDecisionCrossSell";
 
 interface PromptExamplePageProps {
   title: string;
@@ -60,6 +61,7 @@ export default function PromptExamplePage({
         </div>
         <Link href={useCaseHref} className="prompt-use-case-link">See how this use case works <b>→</b></Link>
       </section>
+      {useCaseHref === "/use-cases/retirement" && <RetirementDecisionCrossSell />}
       <PageCta title="Try a question like this with your own numbers." />
       <SiteFooter />
     </main>

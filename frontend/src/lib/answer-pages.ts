@@ -1,3 +1,5 @@
+import { TRIAL_PRICE_LINE } from "@/config/pricing";
+
 export type AnswerBreadcrumb = {
   label: string;
   href?: string;
@@ -118,7 +120,7 @@ export const canIRetireWithTwoMillion: AnswerPageData = {
   readTime: "10 min read",
   breadcrumbs: [
     { label: "Home", href: "/" },
-    { label: "Retirement answers", href: "/retirement-answers" },
+    { label: "Retirement", href: "/retirement-answers" },
     { label: "Can I retire with $2 million?" },
   ],
   directAnswer:
@@ -185,7 +187,7 @@ export const canIRetireWithTwoMillion: AnswerPageData = {
   productBridge: {
     heading: "$2 million is a number. Retirement is a connected plan.",
     body: "Ask Linc can use your accounts, spending, income, and goals to compare retirement dates and show the assumptions and calculations behind the result.",
-    priceNote: "1 month free, then $9/month. Cancel anytime.",
+    priceNote: TRIAL_PRICE_LINE,
   },
   faqs: [
     { question: "How much income can $2 million generate in retirement?", answer: "A $2 million portfolio equals $60,000 of first-year withdrawals at 3%, $70,000 at 3.5%, $80,000 at 4%, or $100,000 at 5%, before tax. Those are planning illustrations, not promised returns or guaranteed lifetime income." },
@@ -223,7 +225,7 @@ export const canIRetireWithThreeMillion: AnswerPageData = {
   readTime: "10 min read",
   breadcrumbs: [
     { label: "Home", href: "/" },
-    { label: "Retirement answers", href: "/retirement-answers" },
+    { label: "Retirement", href: "/retirement-answers" },
     { label: "Can I retire with $3 million?" },
   ],
   directAnswer:
@@ -293,7 +295,7 @@ export const canIRetireWithThreeMillion: AnswerPageData = {
     heading: "$3 million is a balance. Retirement is an after-tax cash-flow plan.",
     body:
       "Ask Linc can use your accounts, spending, income, and goals to compare retirement dates and show the assumptions and calculations behind the result.",
-    priceNote: "1 month free, then $9/month. Cancel anytime.",
+    priceNote: TRIAL_PRICE_LINE,
   },
   faqs: [
     { question: "How much income can $3 million generate in retirement?", answer: "A $3 million portfolio equals $90,000 of first-year withdrawals at 3%, $105,000 at 3.5%, $120,000 at 4%, or $150,000 at 5%, before tax. These are planning illustrations, not promised returns or guaranteed lifetime income." },
@@ -332,7 +334,7 @@ export const canIRetireWithOneMillion: AnswerPageData = {
   readTime: "9 min read",
   breadcrumbs: [
     { label: "Home", href: "/" },
-    { label: "Retirement answers", href: "/retirement-answers" },
+    { label: "Retirement", href: "/retirement-answers" },
     { label: "Can I retire with $1 million?" },
   ],
   directAnswer:
@@ -399,7 +401,7 @@ export const canIRetireWithOneMillion: AnswerPageData = {
   productBridge: {
     heading: "$1 million is a milestone. Retirement is a connected plan.",
     body: "Ask Linc can use your accounts, spending, income, and goals to compare retirement dates and show the assumptions and calculations behind the result.",
-    priceNote: "1 month free, then $9/month. Cancel anytime.",
+    priceNote: TRIAL_PRICE_LINE,
   },
   faqs: [
     { question: "How much income can $1 million generate in retirement?", answer: "A $1 million portfolio equals $30,000 of first-year withdrawals at 3%, $35,000 at 3.5%, $40,000 at 4%, or $50,000 at 5%, before tax. These are planning illustrations, not promised returns or guaranteed lifetime income." },
@@ -436,7 +438,7 @@ export const canIRetireAt55: AnswerPageData = {
   readTime: "11 min read",
   breadcrumbs: [
     { label: "Home", href: "/" },
-    { label: "Retirement answers", href: "/retirement-answers" },
+    { label: "Retirement", href: "/retirement-answers" },
     { label: "Can I retire at 55?" },
   ],
   directAnswer:
@@ -536,7 +538,7 @@ export const canIRetireAt55: AnswerPageData = {
     heading: "Age 55 is a date. Retirement is a connected timeline.",
     body:
       "Ask Linc can use your accounts, spending, income, and goals to compare retirement dates and show the assumptions and calculations behind the result.",
-    priceNote: "1 month free, then $9/month. Cancel anytime.",
+    priceNote: TRIAL_PRICE_LINE,
   },
   faqs: [
     { question: "How much money do I need to retire at 55?", answer: "There is no single balance. As a simple illustration, $60,000 of first-year portfolio withdrawals equals a $2 million portfolio at 3%, about $1.71 million at 3.5%, or $1.5 million at 4%, before tax and other income. A plan should also model future benefits, healthcare, inflation, fees, and market risk." },
@@ -559,7 +561,7 @@ export const canIRetireAt55: AnswerPageData = {
     { title: "Get started with Medicare", publisher: "Medicare.gov", href: "https://www.medicare.gov/basics/get-started-with-medicare", use: "Medicare eligibility and enrollment context around age 65." },
   ],
   methodology: [
-    "This page uses deterministic arithmetic to illustrate first-year portfolio needs: annual spending divided by an initial withdrawal rate. It does not assume a guaranteed return or label any rate “safe.” Dollar examples are nominal, before fees, and before tax unless stated otherwise.",
+    "This page uses simple math to illustrate first-year portfolio needs: annual spending divided by an initial withdrawal rate. It does not assume a guaranteed return or label any rate “safe.” Dollar examples are before fees and taxes unless stated otherwise.",
     "The age timeline summarizes general federal rules for U.S. retirement accounts, Social Security, and Medicare. Individual eligibility, employer-plan terms, state taxes, and health coverage vary. Confirm current information with the linked agencies and consider qualified tax, legal, healthcare, or investment guidance before acting.",
   ],
 };
@@ -576,7 +578,7 @@ export const canIRetireAt60: AnswerPageData = {
   readTime: "11 min read",
   breadcrumbs: [
     { label: "Home", href: "/" },
-    { label: "Retirement answers", href: "/retirement-answers" },
+    { label: "Retirement", href: "/retirement-answers" },
     { label: "Can I retire at 60?" },
   ],
   directAnswer:
@@ -676,14 +678,14 @@ export const canIRetireAt60: AnswerPageData = {
     heading: "Age 60 is a starting point. Retirement is a connected timeline.",
     body:
       "Ask Linc can use your accounts, spending, income, and goals to compare retirement dates and show the assumptions and calculations behind the result.",
-    priceNote: "1 month free, then $9/month. Cancel anytime.",
+    priceNote: TRIAL_PRICE_LINE,
   },
   faqs: [
     { question: "How much money do I need to retire at 60?", answer: "There is no single balance. As a simple illustration, $60,000 of first-year portfolio withdrawals equals $2 million at 3%, about $1.71 million at 3.5%, or $1.5 million at 4%, before tax and other income. Your plan should also model future benefits, healthcare, inflation, fees, and market risk." },
     { question: "Can I withdraw from my 401(k) or IRA at 60?", answer: "Generally, distributions after age 59½ are not subject to the 10% additional tax for early distributions, though ordinary income tax may still apply. Workplace plans can have their own distribution terms, and Roth distributions have additional qualification rules." },
     { question: "Can I collect Social Security at 60?", answer: "No. Social Security retirement benefits can begin as early as age 62. Starting before full retirement age generally reduces the monthly benefit, while delaying can increase it through age 70." },
     { question: "How do I pay for healthcare if I retire at 60?", answer: "Possible coverage sources include a spouse's employer plan, COBRA, an ACA Marketplace plan, retiree coverage, or private insurance. Most people first become eligible for Medicare around 65, so plan for roughly five years of premiums and out-of-pocket costs." },
-    { question: "Is $1.5 million enough to retire at 60?", answer: "It may be. A $1.5 million portfolio equals $45,000 of first-year withdrawals at 3%, $52,500 at 3.5%, or $60,000 at 4%, before tax. Social Security, pensions, healthcare, taxes, investment returns, and spending flexibility can materially change the result." },
+    { question: "Is $1.5 million enough to retire at 60?", answer: "It may be. A $1.5 million portfolio equals $45,000 of first-year withdrawals at 3%, $52,500 at 3.5%, or $60,000 at 4%, before tax. Social Security, pensions, healthcare, taxes, investment returns, and spending flexibility can change the result." },
   ],
   relatedAnswers: [
     { question: "Can I retire at 55?", eyebrow: "Answer page", href: "/can-i-retire-at-55" },
@@ -700,7 +702,7 @@ export const canIRetireAt60: AnswerPageData = {
     { title: "Get started with Medicare", publisher: "Medicare.gov", href: "https://www.medicare.gov/basics/get-started-with-medicare", use: "Medicare eligibility and enrollment context around age 65." },
   ],
   methodology: [
-    "This page uses deterministic arithmetic to illustrate first-year portfolio needs and how withdrawals might change after an illustrative benefit begins. It does not assume a guaranteed return or label any withdrawal rate “safe.” Dollar examples are nominal, before fees, and before tax unless stated otherwise.",
+    "This page uses simple math to illustrate first-year portfolio needs and how withdrawals might change after an example benefit begins. It does not assume a guaranteed return or label any withdrawal rate “safe.” Dollar examples are before fees and taxes unless stated otherwise.",
     "The age timeline summarizes general federal rules for U.S. retirement accounts, Social Security, and Medicare. Individual eligibility, employer-plan terms, state taxes, benefit amounts, and health coverage vary. Confirm current information with the linked agencies and consider qualified tax, legal, healthcare, or investment guidance before acting.",
   ],
 };

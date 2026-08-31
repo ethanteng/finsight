@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { AnswerPageData, RetirementMilestone, RetirementScenario, WithdrawalScenario } from "@/lib/answer-pages";
 import { MarketingGetStartedButton } from "./MarketingGetStartedButton";
 import { SiteFooter, SiteHeader } from "./SiteShell";
+import { RetirementDecisionCrossSell } from "./RetirementDecisionCrossSell";
 
 export function AnswerBreadcrumbs({ items }: { items: AnswerPageData["breadcrumbs"] }) {
   return (
@@ -142,7 +143,7 @@ export default function AnswerPage({ page }: { page: AnswerPageData }) {
     intro: "A useful retirement model follows cash flow over time and makes uncertainty visible. It should show which assumption moved the answer and what you could change.",
   };
   const methodology = page.methodology ?? [
-    "This page uses simple, deterministic arithmetic to illustrate first-year withdrawals. It does not assume a guaranteed return or label any withdrawal rate “safe.” Dollar examples are nominal, before fees, and before tax unless stated otherwise.",
+    "This page uses simple math to illustrate first-year withdrawals. It does not assume a guaranteed return or label any withdrawal rate “safe.” Dollar examples are before fees and taxes unless stated otherwise.",
     "Official rules and benefit amounts can change. Confirm current information with the linked agencies and consider a qualified professional for tax, legal, or investment advice.",
   ];
 
@@ -267,6 +268,7 @@ export default function AnswerPage({ page }: { page: AnswerPageData }) {
         </div>
       </section>
 
+      <RetirementDecisionCrossSell />
       <SiteFooter />
     </main>
   );

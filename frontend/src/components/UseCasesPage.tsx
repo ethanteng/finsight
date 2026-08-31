@@ -7,6 +7,7 @@ import SiteFooter from "./SiteFooter";
 import SiteHeader from "./SiteHeader";
 import { pushBeginCheckout } from "@/lib/dataLayer";
 import { useDialog } from '@/components/ui/dialog';
+import { TRIAL_PRICE_LINE } from '@/config/pricing';
 
 const USE_CASES = [
   { href: "/use-cases/retirement", label: "Retirement Planning", description: "See how Ask Linc analyzes retirement readiness, withdrawal rates, and portfolio sustainability.", icon: PiggyBank },
@@ -100,7 +101,7 @@ export default function UseCasesPage() {
                 {isLoading ? "Loading..." : "Get started"}
               </Button>
               <p className="text-center text-sm text-muted-foreground">
-                1 month free, then $9/month. Cancel anytime.
+                {TRIAL_PRICE_LINE}
               </p>
             </div>
           </div>

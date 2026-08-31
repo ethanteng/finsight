@@ -11,7 +11,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: 'Compare Ask Linc With Other Money Tools',
     description:
-      'See how purpose-built financial decision software differs from general AI, broad money management, budgeting, portfolio analytics, and retirement planning.',
+      'See how Ask Linc differs from ChatGPT, all-in-one money apps, budget trackers, investment tools, and retirement planners.',
     type: 'website',
     url: 'https://asklinc.com/vs',
     siteName: 'Ask Linc',

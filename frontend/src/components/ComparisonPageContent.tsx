@@ -9,6 +9,7 @@ import type { ComparisonPage } from "@/lib/comparisons";
 import { COMPARISONS } from "@/lib/comparisons";
 import { pushBeginCheckout } from "@/lib/dataLayer";
 import { useDialog } from '@/components/ui/dialog';
+import { MONTHLY_PRICE_LABEL } from '@/config/pricing';
 
 export default function ComparisonPageContent({ page }: { page: ComparisonPage }) {
   const [isLoading, setIsLoading] = useState(false);
@@ -64,7 +65,7 @@ export default function ComparisonPageContent({ page }: { page: ComparisonPage }
                   {isLoading ? "Loading..." : "Get started"}
                 </Button>
                 <Button variant="outline" size="lg" asChild>
-                  <Link href="/pricing">1 month free, then $9/month</Link>
+                  <Link href="/pricing">1 month free, then {MONTHLY_PRICE_LABEL}</Link>
                 </Button>
               </div>
             </div>

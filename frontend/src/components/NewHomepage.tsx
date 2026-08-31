@@ -15,6 +15,7 @@ import { USE_CASE_LINKS, COMPARE_LINKS } from '@/lib/site-nav';
 import { PricingValueBadge } from './PricingOfferCallouts';
 import SiteFooter from './SiteFooter';
 import { useDialog } from '@/components/ui/dialog';
+import { MONTHLY_PRICE_DOLLARS, TRIAL_PRICE_LINE } from '@/config/pricing';
 
 const HOW_LINC_STEPS = [
   { title: "Connect once", description: "Link your financial accounts securely via Plaid", icon: Target },
@@ -350,7 +351,7 @@ const NewHomepage = () => {
                   >
                     {isLoading === 'premium' ? 'Loading...' : 'Get started'}
                   </Button>
-                  <p className="text-[0.7875rem]">1 month free, then $9/month. Cancel anytime.</p>
+                  <p className="text-[0.7875rem]">{TRIAL_PRICE_LINE}</p>
               </div>
             </div>
       </div>
@@ -553,7 +554,7 @@ const NewHomepage = () => {
               <div className="text-center space-y-4 mb-8">
                 <h3 className="text-2xl font-bold">Ask Linc</h3>
                 <div className="flex items-baseline justify-center space-x-1">
-                  <span className="text-5xl font-bold gradient-text">$9</span>
+                  <span className="text-5xl font-bold gradient-text">{MONTHLY_PRICE_DOLLARS}</span>
                   <span className="text-muted-foreground text-xl">/ month</span>
                 </div>
                 <PricingValueBadge />
@@ -682,7 +683,7 @@ const NewHomepage = () => {
               >
                 {isLoading === 'premium' ? 'Creating...' : 'Get started'}
               </Button>
-              <p className="text-[1.00625rem] text-primary font-medium">1 month free, then $9/month. Cancel anytime.</p>
+              <p className="text-[1.00625rem] text-primary font-medium">{TRIAL_PRICE_LINE}</p>
             </div>
           </div>
         </div>
