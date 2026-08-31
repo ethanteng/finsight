@@ -12,11 +12,11 @@ beforeEach(() => {
   
   process.env = { ...originalEnv };
   
-  // Set test environment variables - single-tier pricing: all tiers use the same price ID
-  const singlePriceId = 'price_single_tier_test';
-  process.env.STRIPE_PRICE_STARTER = singlePriceId;
-  process.env.STRIPE_PRICE_STANDARD = singlePriceId;
-  process.env.STRIPE_PRICE_PREMIUM = singlePriceId;
+  // Single-tier pricing: one configured price ID backs every tier.
+  process.env.STRIPE_PRICE_DEFAULT = 'price_single_tier_test';
+  delete process.env.STRIPE_PRICE_STARTER;
+  delete process.env.STRIPE_PRICE_STANDARD;
+  delete process.env.STRIPE_PRICE_PREMIUM;
 });
 
 afterEach(() => {
@@ -25,7 +25,6 @@ afterEach(() => {
 
 describe('Stripe Configuration', () => {
   // Dynamically import modules after env vars are set
-  let SUBSCRIPTION_PLANS: any;
   let TIER_ACCESS: any;
   let getStripePriceId: any;
   let getTierFromPriceId: any;
@@ -34,44 +33,46 @@ describe('Stripe Configuration', () => {
     // Import modules after env vars are set in beforeEach
     const stripeTypes = require('../../types/stripe');
     const stripeConfig = require('../../config/stripe');
-    SUBSCRIPTION_PLANS = stripeTypes.SUBSCRIPTION_PLANS;
     TIER_ACCESS = stripeTypes.TIER_ACCESS;
     getStripePriceId = stripeConfig.getStripePriceId;
     getTierFromPriceId = stripeConfig.getTierFromPriceId;
   });
 
-  describe('SUBSCRIPTION_PLANS', () => {
+  describe('getSubscriptionPlans', () => {
     it('should have all three subscription tiers', () => {
-      const plans = require('../../types/stripe').SUBSCRIPTION_PLANS;
+      const plans = require('../../types/stripe').getSubscriptionPlans();
       expect(plans).toHaveProperty('starter');
       expect(plans).toHaveProperty('standard');
       expect(plans).toHaveProperty('premium');
     });
 
-    it('should have correct pricing for each tier', () => {
-      // Single-tier pricing: all tiers use the same price ($9/month)
-      const plans = require('../../types/stripe').SUBSCRIPTION_PLANS;
-      expect(plans.starter.price).toBe(9);
-      expect(plans.standard.price).toBe(9);
-      expect(plans.premium.price).toBe(9);
+    it('should fall back to the advertised price for each tier', () => {
+      // Single-tier pricing: every tier bills the same price. The amount here is
+      // only the offline fallback; live amounts come from getLiveSubscriptionPlans.
+      const { getSubscriptionPlans, FALLBACK_MONTHLY_PRICE } = require('../../types/stripe');
+      const plans = getSubscriptionPlans();
+      expect(FALLBACK_MONTHLY_PRICE).toBe(19);
+      expect(plans.starter.price).toBe(FALLBACK_MONTHLY_PRICE);
+      expect(plans.standard.price).toBe(FALLBACK_MONTHLY_PRICE);
+      expect(plans.premium.price).toBe(FALLBACK_MONTHLY_PRICE);
     });
 
     it('should have monthly billing interval', () => {
-      const plans = require('../../types/stripe').SUBSCRIPTION_PLANS;
+      const plans = require('../../types/stripe').getSubscriptionPlans();
       Object.values(plans).forEach((plan: any) => {
         expect(plan.interval).toBe('month');
       });
     });
 
     it('should have USD currency', () => {
-      const plans = require('../../types/stripe').SUBSCRIPTION_PLANS;
+      const plans = require('../../types/stripe').getSubscriptionPlans();
       Object.values(plans).forEach((plan: any) => {
         expect(plan.currency).toBe('usd');
       });
     });
 
     it('should have features for each tier', () => {
-      const plans = require('../../types/stripe').SUBSCRIPTION_PLANS;
+      const plans = require('../../types/stripe').getSubscriptionPlans();
       Object.values(plans).forEach((plan: any) => {
         expect(plan.features).toBeInstanceOf(Array);
         expect(plan.features.length).toBeGreaterThan(0);
@@ -159,7 +160,7 @@ describe('Stripe Configuration', () => {
 
 describe('Subscription Plan Features', () => {
   it('should have starter tier with basic features', () => {
-    const plans = require('../../types/stripe').SUBSCRIPTION_PLANS;
+    const plans = require('../../types/stripe').getSubscriptionPlans();
     const starter = plans.starter;
     expect(starter.features).toContain('Basic financial analysis');
     expect(starter.features).toContain('Account balances');
@@ -167,14 +168,14 @@ describe('Subscription Plan Features', () => {
   });
 
   it('should have standard tier with enhanced features', () => {
-    const plans = require('../../types/stripe').SUBSCRIPTION_PLANS;
+    const plans = require('../../types/stripe').getSubscriptionPlans();
     const standard = plans.standard;
     expect(standard.features).toContain('Economic indicators');
     expect(standard.features).toContain('RAG system access');
   });
 
   it('should have premium tier with all features', () => {
-    const plans = require('../../types/stripe').SUBSCRIPTION_PLANS;
+    const plans = require('../../types/stripe').getSubscriptionPlans();
     const premium = plans.premium;
     expect(premium.features).toContain('Advanced market context');
     expect(premium.features).toContain('Advanced analytics');

@@ -1,41 +1,45 @@
 import type { Metadata } from 'next';
 import MarketingSubpage from '../../components/marketing/MarketingSubpage';
 import StructuredData from '../../components/StructuredData';
-import { buildFaqPageSchema, PRODUCT_OFFER_SCHEMA } from '../../data/faq';
-import { MONTHLY_PRICE_DOLLARS, MONTHLY_PRICE_LABEL } from '../../config/pricing';
+import { buildFaqItems, buildFaqPageSchema, buildProductOfferSchema } from '../../data/faq';
+import { getPricing } from '../../lib/pricing';
 
-export const metadata: Metadata = {
-  title: `Ask Linc Pricing — 1 Month Free, Then ${MONTHLY_PRICE_LABEL}`,
+export async function generateMetadata(): Promise<Metadata> {
+  const pricing = await getPricing();
+  return {
+  title: `Ask Linc Pricing — 1 Month Free, Then ${pricing.label}`,
   description:
-    `Start with 1 month free, then pay ${MONTHLY_PRICE_LABEL} for unlimited questions, connected accounts, what-if scenarios, and math you can check. Cancel anytime.`,
+    `Start with 1 month free, then pay ${pricing.label} for unlimited questions, connected accounts, what-if scenarios, and math you can check. Cancel anytime.`,
   keywords: [
     'Ask Linc pricing',
     'AI financial advisor cost',
     'affordable financial planning',
-    `${MONTHLY_PRICE_DOLLARS} financial AI`,
+    `${pricing.dollars} financial AI`,
   ],
   alternates: {
     canonical: 'https://asklinc.com/pricing',
   },
   openGraph: {
-    title: `Pricing | Ask Linc — 1 Month Free, Then ${MONTHLY_PRICE_LABEL}`,
+    title: `Pricing | Ask Linc — 1 Month Free, Then ${pricing.label}`,
     description:
-      `Start with 1 month free, then pay ${MONTHLY_PRICE_LABEL} for unlimited questions, connected accounts, what-if scenarios, and math you can check. Cancel anytime.`,
+      `Start with 1 month free, then pay ${pricing.label} for unlimited questions, connected accounts, what-if scenarios, and math you can check. Cancel anytime.`,
     type: 'website',
     url: 'https://asklinc.com/pricing',
     siteName: 'Ask Linc',
   },
-  robots: {
-    index: true,
-    follow: true,
-  },
-};
+    robots: {
+      index: true,
+      follow: true,
+    },
+  };
+}
 
-export default function PricingPage() {
+export default async function PricingPage() {
+  const pricing = await getPricing();
   return (
     <>
-      <StructuredData data={PRODUCT_OFFER_SCHEMA} />
-      <StructuredData data={buildFaqPageSchema()} />
+      <StructuredData data={buildProductOfferSchema(pricing)} />
+      <StructuredData data={buildFaqPageSchema(buildFaqItems(pricing))} />
       <MarketingSubpage params={Promise.resolve({ slug: ['pricing'] })} />
     </>
   );

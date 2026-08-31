@@ -15,7 +15,7 @@ async function createTestCheckout() {
 
     // Test checkout session data - using real Stripe price IDs
     const checkoutData = {
-      priceId: process.env.STRIPE_PRICE_STANDARD || 'price_standard', // Use environment variable or fallback
+      priceId: process.env.STRIPE_PRICE_DEFAULT || process.env.STRIPE_PRICE_STANDARD || 'price_standard',
       customerEmail: 'ethanteng+test17@gmail.com',
       successUrl: `${baseUrl}/api/stripe/payment-success?session_id={CHECKOUT_SESSION_ID}&tier=standard`,
       cancelUrl: `${baseUrl}/pricing`
@@ -73,7 +73,7 @@ async function createTestCheckout() {
           console.log('   The price ID is not valid. You need to:');
           console.log('   1. Create real Stripe products and prices in your Stripe dashboard');
           console.log('   2. Set environment variables:');
-          console.log('      export STRIPE_PRICE_STARTER=price_1ABC123...');
+          console.log('      export STRIPE_PRICE_DEFAULT=price_1ABC123...');
           console.log('      export STRIPE_PRICE_STANDARD=price_1DEF456...');
           console.log('      export STRIPE_PRICE_PREMIUM=price_1GHI789...');
           console.log('   3. Or use Stripe test price IDs from your test dashboard');

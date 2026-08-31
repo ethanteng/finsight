@@ -7,7 +7,7 @@ import SiteFooter from "./SiteFooter";
 import SiteHeader from "./SiteHeader";
 import { pushBeginCheckout } from "@/lib/dataLayer";
 import { useDialog } from '@/components/ui/dialog';
-import { TRIAL_PRICE_LINE } from '@/config/pricing';
+import { usePricing } from '@/components/PricingProvider';
 
 const USE_CASES = [
   { href: "/use-cases/retirement", label: "Retirement Planning", description: "See how Ask Linc analyzes retirement readiness, withdrawal rates, and portfolio sustainability.", icon: PiggyBank },
@@ -17,6 +17,7 @@ const USE_CASES = [
 ];
 
 export default function UseCasesPage() {
+  const pricing = usePricing();
   const [isLoading, setIsLoading] = useState(false);
   const { showError, dialog } = useDialog();
 
@@ -101,7 +102,7 @@ export default function UseCasesPage() {
                 {isLoading ? "Loading..." : "Get started"}
               </Button>
               <p className="text-center text-sm text-muted-foreground">
-                {TRIAL_PRICE_LINE}
+                {pricing.trialLine}
               </p>
             </div>
           </div>

@@ -7,7 +7,6 @@ const connectedPicture = [
     number: "01",
     label: "BANKING + BORROWING",
     title: "Cash flow, cards, and loans",
-    source: "Connected with Plaid · manual accounts supported",
     description: "Bring checking, savings, credit cards, loans, and other balances into one view of the money moving through your life.",
     examples: ["Checking + savings", "Credit cards", "Loans + debt", "Manual balances"],
     understands: [
@@ -21,7 +20,6 @@ const connectedPicture = [
     number: "02",
     label: "INVESTMENTS",
     title: "See what you own and where the risk is",
-    source: "Connected with SnapTrade · enriched by FMP + Tiingo",
     description: "See brokerage accounts, investment positions, and cash alongside the details that make those holdings meaningful to a plan.",
     examples: ["Brokerage accounts", "Retirement accounts", "Positions + cash", "Funds + ETFs"],
     understands: [
@@ -35,7 +33,6 @@ const connectedPicture = [
     number: "03",
     label: "PROPERTY + THE REST",
     title: "The parts that do not live at a bank",
-    source: "Property estimates from RentCast · add other assets manually",
     description: "Round out net worth with a home value and the accounts or assets that cannot be linked automatically.",
     examples: ["Primary home", "Other property", "Cash on hand", "Other assets"],
     understands: [
@@ -275,7 +272,7 @@ export default function IntegrationsPage() {
         <div className="connected-source-grid" aria-label="Financial accounts and information you can use with Ask Linc">
           {connectedPicture.map((item) => (
             <article className="connected-source-card" key={item.number}>
-              <div className="connected-source-top"><span>{item.number} / {item.label}</span><small>{item.source}</small></div>
+              <div className="connected-source-top"><span>{item.number} / {item.label}</span></div>
               <h3>{item.title}</h3>
               <p>{item.description}</p>
               <div className="connection-tags" aria-label={`Examples for ${item.title}`}>{item.examples.map((example) => <span key={example}>{example}</span>)}</div>

@@ -3,11 +3,13 @@ require('dotenv').config({ path: '.env.local' });
 
 const prisma = new PrismaClient();
 
-// Environment-aware price to tier mapping
+// Single-tier pricing: the configured price maps to premium. The legacy
+// per-tier variables stay as a fallback for environments not yet migrated.
 const PRICE_TO_TIER = {
   [process.env.STRIPE_PRICE_STARTER || 'price_starter']: 'starter',
   [process.env.STRIPE_PRICE_STANDARD || 'price_standard']: 'standard',
-  [process.env.STRIPE_PRICE_PREMIUM || 'price_premium']: 'premium'
+  [process.env.STRIPE_PRICE_PREMIUM || 'price_premium']: 'premium',
+  [process.env.STRIPE_PRICE_DEFAULT || 'price_default']: 'premium'
 };
 
 async function syncSubscription(subscriptionId) {

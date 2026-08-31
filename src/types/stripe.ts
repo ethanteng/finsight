@@ -1,5 +1,12 @@
 // Stripe Subscription Types and Interfaces
 
+import {
+  FALLBACK_PRICE_CURRENCY,
+  FALLBACK_PRICE_UNIT_AMOUNT,
+  getDefaultStripePriceId,
+  minorToMajor,
+} from '../config/stripe-pricing';
+
 export interface StripeSubscription {
   id: string;
   customerId: string;
@@ -130,27 +137,35 @@ export interface SubscriptionPlan {
   stripePriceId: string;
 }
 
-// Single price ID for all tiers (single-tier pricing model)
-// Product ID: prod_SraoEdrNSHuQ1W
-// Price ID: price_1SyeXEBDHiWEJZBMAu9P57zI ($9/month)
-// Use STRIPE_PRICE_PREMIUM env var if set, otherwise fallback to hardcoded correct value
-const SINGLE_PRICE_ID = process.env.STRIPE_PRICE_PREMIUM || 'price_1SyeXEBDHiWEJZBMAu9P57zI';
+// Single price ID for all tiers (single-tier pricing model).
+// The ID comes from STRIPE_PRICE_DEFAULT; nothing is hardcoded, so the price we
+// charge follows the environment rather than a literal in this file.
+function singlePriceId(): string {
+  return getDefaultStripePriceId();
+}
+
+// Only used when Stripe cannot be reached. Real amounts come from
+// getLiveSubscriptionPlans(), which reads them back from the Stripe price.
+export const FALLBACK_MONTHLY_PRICE = minorToMajor(
+  FALLBACK_PRICE_UNIT_AMOUNT,
+  FALLBACK_PRICE_CURRENCY
+);
 
 export function getSubscriptionPlans(): Record<SubscriptionTier, SubscriptionPlan> {
   return {
     starter: {
       id: 'starter',
       name: 'Starter',
-      price: 9.00,
+      price: FALLBACK_MONTHLY_PRICE,
       currency: 'usd',
       interval: 'month',
       features: ['Basic financial analysis', 'Account balances', 'Transaction history'],
-      stripePriceId: SINGLE_PRICE_ID
+      stripePriceId: singlePriceId()
     },
     standard: {
       id: 'standard',
       name: 'Standard',
-      price: 9.00,
+      price: FALLBACK_MONTHLY_PRICE,
       currency: 'usd',
       interval: 'month',
       features: [
@@ -160,12 +175,12 @@ export function getSubscriptionPlans(): Record<SubscriptionTier, SubscriptionPla
         'Economic indicators',
         'RAG system access'
       ],
-      stripePriceId: SINGLE_PRICE_ID
+      stripePriceId: singlePriceId()
     },
     premium: {
       id: 'premium',
       name: 'Premium',
-      price: 9.00,
+      price: FALLBACK_MONTHLY_PRICE,
       currency: 'usd',
       interval: 'month',
       features: [
@@ -177,57 +192,37 @@ export function getSubscriptionPlans(): Record<SubscriptionTier, SubscriptionPla
         'Advanced market context',
         'Advanced analytics'
       ],
-      stripePriceId: SINGLE_PRICE_ID
+      stripePriceId: singlePriceId()
     }
   };
 }
 
-export const SUBSCRIPTION_PLANS = getSubscriptionPlans();
 
-// Single-tier pricing configuration
-// Product ID: prod_SraoEdrNSHuQ1W
-// Price ID: price_1SyeXEBDHiWEJZBMAu9P57zI ($9/month)
-// All subscription tiers (starter/standard/premium) use the same price ID
-// Use STRIPE_PRICE_PREMIUM env var if set, otherwise fallback to hardcoded correct value
-export const SINGLE_TIER_PRICE_ID = process.env.STRIPE_PRICE_PREMIUM || 'price_1SyeXEBDHiWEJZBMAu9P57zI';
-export const SINGLE_TIER_PRODUCT_ID = 'prod_SraoEdrNSHuQ1W';
+// Single-tier pricing configuration.
+// All subscription tiers (starter/standard/premium) resolve to the same price,
+// read from STRIPE_PRICE_DEFAULT at call time so a price change needs no deploy.
+export function getSingleTierPriceId(): string | null {
+  return getDefaultStripePriceId();
+}
 
-// Function to fetch live pricing from Stripe API
+// Fetch live pricing from Stripe. Every tier resolves to the same price, so
+// this reads it once through the shared cache instead of once per tier.
 export async function getLiveSubscriptionPlans(): Promise<Record<SubscriptionTier, SubscriptionPlan>> {
-  try {
-    // Import Stripe client dynamically to avoid circular dependencies
-    const { stripe } = await import('../config/stripe');
-    
-    const plans = getSubscriptionPlans();
-    const livePlans: Record<SubscriptionTier, SubscriptionPlan> = {} as Record<SubscriptionTier, SubscriptionPlan>;
-    
-    // Fetch live pricing for each plan
-    for (const [tier, plan] of Object.entries(plans)) {
-      try {
-        if (plan.stripePriceId && plan.stripePriceId.startsWith('price_')) {
-          const price = await stripe.client.prices.retrieve(plan.stripePriceId);
-          
-          livePlans[tier as SubscriptionTier] = {
-            ...plan,
-            price: (price.unit_amount || 0) / 100, // Convert from cents
-            currency: price.currency,
-            interval: price.recurring?.interval || 'month'
-          };
-        } else {
-          // Fallback to static plan if no valid Stripe price ID
-          livePlans[tier as SubscriptionTier] = plan;
-        }
-      } catch (error) {
-        console.warn(`Failed to fetch live pricing for ${tier}:`, error);
-        // Fallback to static plan
-        livePlans[tier as SubscriptionTier] = plan;
-      }
-    }
-    
-    return livePlans;
-  } catch (error) {
-    console.error('Failed to fetch live subscription plans:', error);
-    // Fallback to static plans
-    return getSubscriptionPlans();
+  const plans = getSubscriptionPlans();
+
+  // Never throws: falls back to the advertised default when Stripe is down.
+  const { getDefaultPrice } = await import('../config/stripe-pricing');
+  const resolved = await getDefaultPrice();
+
+  const livePlans = {} as Record<SubscriptionTier, SubscriptionPlan>;
+  for (const [tier, plan] of Object.entries(plans)) {
+    livePlans[tier as SubscriptionTier] = {
+      ...plan,
+      price: resolved.amount,
+      currency: resolved.currency,
+      interval: resolved.interval,
+      stripePriceId: resolved.priceId,
+    };
   }
+  return livePlans;
 }

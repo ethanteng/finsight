@@ -1,6 +1,7 @@
 import MarketingHome from '../components/marketing/MarketingHome';
 import StructuredData from '../components/StructuredData';
-import { buildFaqPageSchema, PRODUCT_OFFER_SCHEMA } from '../data/faq';
+import { buildFaqItems, buildFaqPageSchema, buildProductOfferSchema } from '../data/faq';
+import { getPricing } from '../lib/pricing';
 import type { Metadata } from 'next';
 
 // Dynamic metadata generation based on query parameters
@@ -56,11 +57,12 @@ export async function generateMetadata({ searchParams }: { searchParams: Promise
   };
 }
 
-export default function Home() {
+export default async function Home() {
+  const pricing = await getPricing();
   return (
     <>
-      <StructuredData data={PRODUCT_OFFER_SCHEMA} />
-      <StructuredData data={buildFaqPageSchema()} />
+      <StructuredData data={buildProductOfferSchema(pricing)} />
+      <StructuredData data={buildFaqPageSchema(buildFaqItems(pricing))} />
       <MarketingHome />
     </>
   );

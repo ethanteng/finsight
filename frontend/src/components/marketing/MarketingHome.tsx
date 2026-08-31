@@ -2,11 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import {
-  MONTHLY_PRICE,
-  MONTHLY_PRICE_DOLLARS,
-  TRIAL_PRICE_LINE,
-} from "@/config/pricing";
+import { usePricing } from "@/components/PricingProvider";
 import { SiteFooter, SiteHeader } from "./SiteShell";
 import { MarketingGetStartedButton } from "./MarketingGetStartedButton";
 import AnswerProofComparison from "./AnswerProofComparison";
@@ -28,6 +24,7 @@ const providers = [
 ];
 
 export default function Home() {
+  const pricing = usePricing();
   return (
     <main className="marketing-site">
       <SiteHeader />
@@ -43,7 +40,7 @@ export default function Home() {
           <div className="hero-actions">
             <MarketingGetStartedButton className="button button-primary" />
           </div>
-          <p className="microcopy">{TRIAL_PRICE_LINE}</p>
+          <p className="microcopy">{pricing.trialLine}</p>
         </div>
 
         <aside className="hero-audit-card" aria-label="How Ask Linc turns your accounts into a clear answer">
@@ -185,13 +182,13 @@ export default function Home() {
         <div className="shell pricing-shell">
           <div className="pricing-copy">
             <p className="section-kicker">SIMPLE PRICING</p>
-            <h2>{MONTHLY_PRICE_DOLLARS}/month. No advisor fees.</h2>
+            <h2>{pricing.label}. No advisor fees.</h2>
             <p>One subscription. No commissions, fees based on your balance, or sales calls.</p>
             <p className="pricing-terms">No minimum. Cancel anytime.</p>
           </div>
           <article className="price-card">
             <div className="price-card-top"><span>ONE PLAN. EVERYTHING INCLUDED.</span><b>MOST POPULAR</b></div>
-            <div className="price"><sup>$</sup>{MONTHLY_PRICE}<span>/month</span></div>
+            <div className="price"><sup>{pricing.symbol}</sup>{pricing.amountText}<span>/{pricing.intervalLabel}</span></div>
             <p>First month free. Full access. Cancel anytime.</p>
             <ul>
               <li>Unlimited questions &amp; follow-ups</li>

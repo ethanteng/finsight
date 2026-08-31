@@ -8,10 +8,11 @@ import RealMathCallout from './RealMathCallout';
 import SiteFooter from './SiteFooter';
 import SiteHeader from './SiteHeader';
 import { useDialog } from '@/components/ui/dialog';
-import { TRIAL_PRICE_LINE } from '@/config/pricing';
+import { usePricing } from '@/components/PricingProvider';
 
 
 const FeaturesPage = () => {
+  const pricing = usePricing();
   const [isLoading, setIsLoading] = useState<string | null>(null);
   const { showError, dialog } = useDialog();
 
@@ -403,7 +404,7 @@ const FeaturesPage = () => {
               {isLoading === 'premium' ? 'Creating...' : 'Get started'}
             </Button>
             <p className="text-[1.0625rem] font-medium text-white">
-              <span className="text-primary">{TRIAL_PRICE_LINE}</span>
+              <span className="text-primary">{pricing.trialLine}</span>
             </p>
           </div>
         </div>

@@ -9,8 +9,12 @@ module.exports = {
   // Stripe Price ID to Tier Mapping
   // Single-tier pricing: all price IDs map to 'premium' tier (the single plan is the old premium plan)
   priceToTierMap: {
-    'price_1SyeXEBDHiWEJZBMAu9P57zI': 'premium',  // Single price for all tiers ($9/month, prod_SraoEdrNSHuQ1W)
-    // Legacy price IDs - map to premium for backward compatibility
+    // The price we currently charge. Read from the environment so this follows
+    // STRIPE_PRICE_DEFAULT instead of drifting when the price changes.
+    [process.env.STRIPE_PRICE_DEFAULT || process.env.STRIPE_PRICE_PREMIUM || 'price_default']: 'premium',
+    // Historical price IDs that existing subscriptions still reference. These
+    // are deliberately literal: they identify subscriptions already sold.
+    'price_1SyeXEBDHiWEJZBMAu9P57zI': 'premium',
     'price_1RwzrlBDHiWEJZBMbLKSPb3N': 'premium',
     'price_1RwzscBDHiWEJZBMZGIIztNB': 'premium',
     'price_1RwzpgBDHiWEJZBMLFM6vTwr': 'premium'

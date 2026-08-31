@@ -1,5 +1,10 @@
 import Stripe from 'stripe';
 import { getSubscriptionPlans, SubscriptionTier } from '../types/stripe';
+import {
+  getDefaultStripePriceId,
+  isLikelyStripePriceId,
+  requireDefaultStripePriceId,
+} from './stripe-pricing';
 import { reportExternalProviderHttpStatus } from '../observability/external-provider-monitoring';
 
 // Lazy initialization of Stripe client to avoid issues in test environments
@@ -91,14 +96,17 @@ export const STRIPE_CONFIG = {
   },
 };
 
-// Get Stripe price ID for a given tier
+// Get Stripe price ID for a given tier. Under single-tier pricing every tier
+// bills the STRIPE_PRICE_DEFAULT price; the tier only selects feature access.
 export function getStripePriceId(tier: SubscriptionTier): string {
   const plans = getSubscriptionPlans();
   const plan = plans[tier];
   if (!plan) {
     throw new Error(`Invalid subscription tier: ${tier}`);
   }
-  return plan.stripePriceId;
+  // Read the env var here rather than trusting the snapshot the plan was built
+  // from, so checkout always charges the currently configured price.
+  return requireDefaultStripePriceId();
 }
 
 // Get subscription tier from Stripe price ID
@@ -113,10 +121,9 @@ export function getTierFromPriceId(priceId: string): SubscriptionTier | null {
     }
   }
   
-  // If not found in static plans, check if it's our single price ID
-  // Use STRIPE_PRICE_PREMIUM env var if set, otherwise fallback to hardcoded correct value
-  const singlePriceId = process.env.STRIPE_PRICE_PREMIUM || 'price_1SyeXEBDHiWEJZBMAu9P57zI';
-  if (priceId === singlePriceId || priceId.startsWith('price_')) {
+  // If not found in static plans, check if it's the configured default price
+  const singlePriceId = getDefaultStripePriceId();
+  if (priceId === singlePriceId || isLikelyStripePriceId(priceId)) {
     // With single-tier pricing model, default to 'premium' for any valid price ID
     return 'premium';
   }

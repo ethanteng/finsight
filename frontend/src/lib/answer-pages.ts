@@ -1,4 +1,3 @@
-import { TRIAL_PRICE_LINE } from "@/config/pricing";
 
 export type AnswerBreadcrumb = {
   label: string;
@@ -100,7 +99,6 @@ export type AnswerPageData = {
   productBridge: {
     heading: string;
     body: string;
-    priceNote: string;
   };
   faqs: Array<{ question: string; answer: string }>;
   relatedAnswers: RelatedAnswer[];
@@ -187,7 +185,6 @@ export const canIRetireWithTwoMillion: AnswerPageData = {
   productBridge: {
     heading: "$2 million is a number. Retirement is a connected plan.",
     body: "Ask Linc can use your accounts, spending, income, and goals to compare retirement dates and show the assumptions and calculations behind the result.",
-    priceNote: TRIAL_PRICE_LINE,
   },
   faqs: [
     { question: "How much income can $2 million generate in retirement?", answer: "A $2 million portfolio equals $60,000 of first-year withdrawals at 3%, $70,000 at 3.5%, $80,000 at 4%, or $100,000 at 5%, before tax. Those are planning illustrations, not promised returns or guaranteed lifetime income." },
@@ -295,7 +292,6 @@ export const canIRetireWithThreeMillion: AnswerPageData = {
     heading: "$3 million is a balance. Retirement is an after-tax cash-flow plan.",
     body:
       "Ask Linc can use your accounts, spending, income, and goals to compare retirement dates and show the assumptions and calculations behind the result.",
-    priceNote: TRIAL_PRICE_LINE,
   },
   faqs: [
     { question: "How much income can $3 million generate in retirement?", answer: "A $3 million portfolio equals $90,000 of first-year withdrawals at 3%, $105,000 at 3.5%, $120,000 at 4%, or $150,000 at 5%, before tax. These are planning illustrations, not promised returns or guaranteed lifetime income." },
@@ -401,7 +397,6 @@ export const canIRetireWithOneMillion: AnswerPageData = {
   productBridge: {
     heading: "$1 million is a milestone. Retirement is a connected plan.",
     body: "Ask Linc can use your accounts, spending, income, and goals to compare retirement dates and show the assumptions and calculations behind the result.",
-    priceNote: TRIAL_PRICE_LINE,
   },
   faqs: [
     { question: "How much income can $1 million generate in retirement?", answer: "A $1 million portfolio equals $30,000 of first-year withdrawals at 3%, $35,000 at 3.5%, $40,000 at 4%, or $50,000 at 5%, before tax. These are planning illustrations, not promised returns or guaranteed lifetime income." },
@@ -538,7 +533,6 @@ export const canIRetireAt55: AnswerPageData = {
     heading: "Age 55 is a date. Retirement is a connected timeline.",
     body:
       "Ask Linc can use your accounts, spending, income, and goals to compare retirement dates and show the assumptions and calculations behind the result.",
-    priceNote: TRIAL_PRICE_LINE,
   },
   faqs: [
     { question: "How much money do I need to retire at 55?", answer: "There is no single balance. As a simple illustration, $60,000 of first-year portfolio withdrawals equals a $2 million portfolio at 3%, about $1.71 million at 3.5%, or $1.5 million at 4%, before tax and other income. A plan should also model future benefits, healthcare, inflation, fees, and market risk." },
@@ -678,7 +672,6 @@ export const canIRetireAt60: AnswerPageData = {
     heading: "Age 60 is a starting point. Retirement is a connected timeline.",
     body:
       "Ask Linc can use your accounts, spending, income, and goals to compare retirement dates and show the assumptions and calculations behind the result.",
-    priceNote: TRIAL_PRICE_LINE,
   },
   faqs: [
     { question: "How much money do I need to retire at 60?", answer: "There is no single balance. As a simple illustration, $60,000 of first-year portfolio withdrawals equals $2 million at 3%, about $1.71 million at 3.5%, or $1.5 million at 4%, before tax and other income. Your plan should also model future benefits, healthcare, inflation, fees, and market risk." },

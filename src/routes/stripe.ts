@@ -1,10 +1,11 @@
 import express from 'express';
 import { stripeService } from '../services/stripe';
 import { constructWebhookEvent } from '../config/stripe';
-import { CreateCheckoutSessionRequest, CreatePortalSessionRequest, SubscriptionTier } from '../types/stripe';
+import { CreateCheckoutSessionRequest, CreatePortalSessionRequest } from '../types/stripe';
 import { getPrismaClient } from '../prisma-client';
 import { stripe } from '../config/stripe'; // Added for payment success endpoint
 import { requireAuth, requireAuthAllowLapsedSubscription } from '../auth/middleware';
+import { getDefaultPrice } from '../config/stripe-pricing';
 
 const router = express.Router();
 
@@ -33,17 +34,10 @@ router.get('/payment-success', async (req, res) => {
       });
     }
 
-    // Helper function to get Google Ads conversion value based on tier
-    // Maps internal tier names to conversion values: starter=$9, standard=$19, premium=$29
-    // Note: With single-tier pricing, all users are on the premium plan ($9/month)
-    const getTierValue = (tierName: string | undefined): number => {
-      const tierLower = (tierName || 'premium').toLowerCase() as SubscriptionTier;
-      // Match exact internal tier names: 'starter', 'standard', 'premium'
-      if (tierLower === 'starter') return 9;
-      if (tierLower === 'standard') return 19;
-      if (tierLower === 'premium') return 29;
-      return 29; // default to premium (single plan is the former premium plan)
-    };
+    // Google Ads conversion value. Single-tier pricing means every subscriber is
+    // worth the configured price, read from Stripe rather than a hardcoded
+    // per-tier table that drifts every time the price changes.
+    const resolvedPrice = await getDefaultPrice();
 
     // Verify the session with Stripe to ensure it's legitimate
     try {
@@ -72,9 +66,10 @@ router.get('/payment-success', async (req, res) => {
         : undefined;
       console.log('Customer email from session:', customerEmail);
 
-      // Determine tier and value for Google Ads tracking
+      // Determine tier and value for Google Ads tracking. A trial checkout has
+      // amount_total 0, so the recurring price is the meaningful signup value.
       const tierName = (tier as string) || 'premium';
-      const conversionValue = getTierValue(tierName);
+      const conversionValue = resolvedPrice.amount;
 
       // Check if user already exists
       const prisma = getPrismaClient();
@@ -92,7 +87,7 @@ router.get('/payment-success', async (req, res) => {
         paid: isPaid,
         trialing: isTrial,
         amount: conversionValue,
-        currency: 'USD',
+        currency: resolvedPrice.currency.toUpperCase(),
         session_id: session_id as string,
         tier: tierName
       };
@@ -443,6 +438,30 @@ router.post('/create-portal-session', requireAuthAllowLapsedSubscription, async 
     console.error('Error creating portal session:', error);
     res.status(500).json({
       error: 'Failed to create portal session',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+/**
+ * GET /api/stripe/price
+ * Public: the single subscription price we charge, resolved live from Stripe
+ * using STRIPE_PRICE_DEFAULT. The marketing site reads this so displayed and
+ * charged prices can never disagree.
+ */
+router.get('/price', async (req, res) => {
+  try {
+    // Never throws: returns the fallback price when Stripe is unreachable.
+    const price = await getDefaultPrice();
+    // Short-lived shared cache: a price change should show up quickly, but a
+    // burst of marketing traffic should not become a burst of Stripe calls.
+    res.set('Cache-Control', 'public, max-age=60, stale-while-revalidate=600');
+    res.json({ success: true, price });
+  } catch (error) {
+    console.error('Error resolving default Stripe price:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to resolve subscription price',
       details: error instanceof Error ? error.message : 'Unknown error'
     });
   }

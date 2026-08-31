@@ -8,12 +8,14 @@ import Link from 'next/link';
 import SiteHeader from './SiteHeader';
 import SiteFooter from './SiteFooter';
 import { pushBeginCheckout } from '@/lib/dataLayer';
-import { FAQ_ITEMS } from '@/data/faq';
+import { buildFaqItems } from '@/data/faq';
 import { PricingValueBadge } from './PricingOfferCallouts';
 import { useDialog } from '@/components/ui/dialog';
-import { MONTHLY_PRICE_DOLLARS, TRIAL_PRICE_LINE } from '@/config/pricing';
+import { usePricing } from '@/components/PricingProvider';
 
 export default function PricingPageContent() {
+  const pricing = usePricing();
+  const faqItems = buildFaqItems(pricing);
   const [isLoading, setIsLoading] = useState(false);
   const { showError, dialog } = useDialog();
 
@@ -58,7 +60,7 @@ export default function PricingPageContent() {
                 One plan. <span className="gradient-text">Full access.</span>
               </h1>
               <p className="text-slate-300">
-                {TRIAL_PRICE_LINE}
+                {pricing.trialLine}
               </p>
             </div>
 
@@ -67,7 +69,7 @@ export default function PricingPageContent() {
                 <div className="text-center space-y-4 mb-8">
                   <h2 className="text-2xl font-bold">Ask Linc</h2>
                   <div className="flex items-baseline justify-center space-x-1">
-                    <span className="text-5xl font-bold gradient-text">{MONTHLY_PRICE_DOLLARS}</span>
+                    <span className="text-5xl font-bold gradient-text">{pricing.dollars}</span>
                     <span className="text-muted-foreground text-xl">/ month</span>
                   </div>
                   <PricingValueBadge />
@@ -103,7 +105,7 @@ export default function PricingPageContent() {
                     {isLoading ? 'Creating...' : 'Start free trial'}
                   </Button>
                   <p className="text-center text-xs text-muted-foreground">
-                    {TRIAL_PRICE_LINE}
+                    {pricing.trialLine}
                   </p>
                 </div>
               </CardContent>
@@ -115,7 +117,7 @@ export default function PricingPageContent() {
           <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
             <h2 className="text-2xl font-bold text-center">Pricing questions</h2>
             <div className="space-y-4">
-              {FAQ_ITEMS.filter((item) =>
+              {faqItems.filter((item) =>
                 /free|trial|wrong|budget|delete/i.test(item.question)
               ).map((faq) => (
                 <div key={faq.question} className="rounded-lg border border-border/60 bg-background p-5">

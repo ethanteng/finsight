@@ -8,9 +8,10 @@ import SiteFooter from "./SiteFooter";
 import { Button } from "./ui/button";
 import { pushBeginCheckout } from "@/lib/dataLayer";
 import { useDialog } from '@/components/ui/dialog';
-import { TRIAL_PRICE_LINE } from '@/config/pricing';
+import { usePricing } from '@/components/PricingProvider';
 
 export default function AboutPageContent() {
+  const pricing = usePricing();
   const [isLoading, setIsLoading] = useState(false);
   const { showError, dialog } = useDialog();
 
@@ -115,7 +116,7 @@ export default function AboutPageContent() {
                 — and private.
               </p>
               <p className="text-muted-foreground leading-relaxed">
-                {TRIAL_PRICE_LINE}
+                {pricing.trialLine}
               </p>
             </div>
 

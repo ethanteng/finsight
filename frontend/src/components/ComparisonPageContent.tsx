@@ -6,12 +6,14 @@ import SiteHeader from "./SiteHeader";
 import SiteFooter from "./SiteFooter";
 import { Button } from "./ui/button";
 import type { ComparisonPage } from "@/lib/comparisons";
-import { COMPARISONS } from "@/lib/comparisons";
+import { buildComparisons } from "@/lib/comparisons";
 import { pushBeginCheckout } from "@/lib/dataLayer";
 import { useDialog } from '@/components/ui/dialog';
-import { MONTHLY_PRICE_LABEL } from '@/config/pricing';
+import { usePricing } from '@/components/PricingProvider';
 
 export default function ComparisonPageContent({ page }: { page: ComparisonPage }) {
+  const pricing = usePricing();
+  const comparisons = buildComparisons(pricing);
   const [isLoading, setIsLoading] = useState(false);
   const { showError, dialog } = useDialog();
 
@@ -65,7 +67,7 @@ export default function ComparisonPageContent({ page }: { page: ComparisonPage }
                   {isLoading ? "Loading..." : "Get started"}
                 </Button>
                 <Button variant="outline" size="lg" asChild>
-                  <Link href="/pricing">1 month free, then {MONTHLY_PRICE_LABEL}</Link>
+                  <Link href="/pricing">1 month free, then {pricing.label}</Link>
                 </Button>
               </div>
             </div>
@@ -104,7 +106,7 @@ export default function ComparisonPageContent({ page }: { page: ComparisonPage }
             <div className="text-center space-y-3 pt-4">
               <p className="text-sm text-muted-foreground">Other comparisons</p>
               <div className="flex flex-wrap justify-center gap-4 text-sm">
-                {COMPARISONS.filter((c) => c.slug !== page.slug).map((c) => (
+                {comparisons.filter((c) => c.slug !== page.slug).map((c) => (
                   <Link
                     key={c.slug}
                     href={`/vs/${c.slug}`}

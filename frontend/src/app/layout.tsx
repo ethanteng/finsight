@@ -4,6 +4,8 @@ import '../components/marketing/marketing.css'
 import StructuredData from '../components/StructuredData'
 import type { Metadata } from 'next'
 import { SpeedInsights } from '@vercel/speed-insights/next'
+import { PricingProvider } from '../components/PricingProvider'
+import { getPricing } from '../lib/pricing'
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -50,11 +52,15 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
+  // Resolved once per render pass and shared with every client component, so
+  // the price on screen always matches the price Stripe will charge.
+  const pricing = await getPricing()
+
   return (
     <html lang="en" className="light">
       <head>
@@ -108,7 +114,7 @@ export default function RootLayout({
           />
         </noscript>
         {/* End Google Tag Manager (noscript) */}
-        {children}
+        <PricingProvider pricing={pricing}>{children}</PricingProvider>
         <SpeedInsights />
       </body>
     </html>
