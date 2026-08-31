@@ -42,6 +42,17 @@ export default function AboutPage() {
           <p className="section-kicker">THE ORIGIN</p>
           <h2>It started with a layoff—<em>and a bad idea.</em></h2>
           <p className="origin-story-lead">After I got laid off, I pasted my bank statements into ChatGPT to figure out <strong>how long my savings would last without a job.</strong></p>
+          <Link className="origin-story-proof" href="/blog/ai-financial-calculator">
+            <span>
+              <b>35%</b>
+              <small>of 100 ChatGPT Search answers were incomplete, misleading, or wrong</small>
+            </span>
+            <span>
+              <b>$500K+</b>
+              <small>short in a retirement plan reviewed by a CFP® professional</small>
+            </span>
+            <i>Read the analysis <span aria-hidden="true">→</span></i>
+          </Link>
           <div className="origin-story-beats">
             <article className="origin-story-problem">
               <small>WHERE IT BROKE</small>
