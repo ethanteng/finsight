@@ -228,15 +228,19 @@ router.post('/create-checkout-session', async (req, res) => {
       });
     }
 
-    // Get the Stripe price ID for the tier
+    // Validate the tier, then charge the same price ID the marketing site
+    // advertises (live Stripe lookup, or the paired $19 fallback). Using the
+    // env price ID here while /api/stripe/price served the fallback amount
+    // would let checkout charge a different price than the page showed.
     const { getStripePriceId } = await import('../config/stripe');
-    const priceId = getStripePriceId(tier as any);
-    
-    if (!priceId) {
+    try {
+      getStripePriceId(tier as any);
+    } catch {
       return res.status(400).json({
         error: `Invalid tier: ${tier}`
       });
     }
+    const priceId = (await getDefaultPrice()).priceId;
 
     // Create checkout session request
     const checkoutRequest: CreateCheckoutSessionRequest = {

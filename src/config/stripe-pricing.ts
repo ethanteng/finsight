@@ -92,7 +92,10 @@ export function requireDefaultStripePriceId(): string {
 export function getFallbackPrice(): ResolvedPrice {
   const formattedAmount = formatPriceAmount(FALLBACK_PRICE_UNIT_AMOUNT, FALLBACK_PRICE_CURRENCY);
   return {
-    priceId: getDefaultStripePriceId(),
+    // Always the built-in fallback ID — never the configured STRIPE_PRICE_DEFAULT.
+    // Pairing a live price ID with this $19 amount would advertise one price while
+    // checkout still charged another.
+    priceId: FALLBACK_PRICE_ID,
     unitAmount: FALLBACK_PRICE_UNIT_AMOUNT,
     amount: minorToMajor(FALLBACK_PRICE_UNIT_AMOUNT, FALLBACK_PRICE_CURRENCY),
     currency: FALLBACK_PRICE_CURRENCY,
@@ -183,6 +186,10 @@ export async function getDefaultPrice(options: { forceRefresh?: boolean } = {}):
     return cache.value;
   }
 
+  // Keep a prior live result so a transient Stripe failure can keep serving the
+  // last known-good price instead of flipping to the unrelated $19 fallback.
+  const previousLive = cache?.value.live ? cache.value : null;
+
   try {
     const resolved = await fetchLivePrice();
     cache = { expiresAt: now + SUCCESS_TTL_MS, value: resolved };
@@ -192,6 +199,11 @@ export async function getDefaultPrice(options: { forceRefresh?: boolean } = {}):
       'Falling back to the default advertised Stripe price:',
       error instanceof Error ? error.message : error
     );
+    if (previousLive) {
+      // Brief TTL so we retry Stripe soon, without advertising a mismatched amount.
+      cache = { expiresAt: now + FAILURE_TTL_MS, value: previousLive };
+      return previousLive;
+    }
     // Cache the fallback briefly too, so a Stripe outage cannot turn one page
     // view into one API call per render.
     const fallback = getFallbackPrice();

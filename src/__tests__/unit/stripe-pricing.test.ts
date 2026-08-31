@@ -135,20 +135,45 @@ describe('getDefaultPrice', () => {
     expect(retrieveMock).toHaveBeenCalledTimes(2);
   });
 
-  it('falls back to $19/month when Stripe is unreachable', async () => {
+  it('falls back to the paired $19 fallback price ID when Stripe is unreachable', async () => {
     process.env.STRIPE_PRICE_DEFAULT = 'price_default';
     retrieveMock.mockRejectedValue(new Error('Stripe is down'));
 
-    const price = await loadModule().getDefaultPrice();
+    const mod = loadModule();
+    const price = await mod.getDefaultPrice();
 
     expect(price).toMatchObject({
-      priceId: 'price_default',
+      priceId: mod.FALLBACK_PRICE_ID,
       amount: 19,
       currency: 'usd',
       interval: 'month',
       formattedAmount: '$19',
       label: '$19/month',
       live: false,
+    });
+  });
+
+  it('keeps the last live price through a brief Stripe outage', async () => {
+    process.env.STRIPE_PRICE_DEFAULT = 'price_default';
+    retrieveMock.mockResolvedValueOnce({
+      id: 'price_default',
+      unit_amount: 2500,
+      currency: 'usd',
+      recurring: { interval: 'month', interval_count: 1 },
+    });
+
+    const mod = loadModule();
+    const live = await mod.getDefaultPrice();
+    expect(live.amount).toBe(25);
+    expect(live.live).toBe(true);
+
+    retrieveMock.mockRejectedValueOnce(new Error('Stripe is down'));
+    const stale = await mod.getDefaultPrice({ forceRefresh: true });
+
+    expect(stale).toMatchObject({
+      priceId: 'price_default',
+      amount: 25,
+      live: true,
     });
   });
 
@@ -162,8 +187,10 @@ describe('getDefaultPrice', () => {
       recurring: { interval: 'month', interval_count: 1 },
     });
 
-    const price = await loadModule().getDefaultPrice();
+    const mod = loadModule();
+    const price = await mod.getDefaultPrice();
     expect(price.live).toBe(false);
     expect(price.amount).toBe(19);
+    expect(price.priceId).toBe(mod.FALLBACK_PRICE_ID);
   });
 });
