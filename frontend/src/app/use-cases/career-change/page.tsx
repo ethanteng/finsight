@@ -72,7 +72,7 @@ export default function CareerChangeUseCaseRoute() {
             <p className="section-kicker light">WHAT COULD CHANGE THE ANSWER?</p>
             <h2>The parts of the plan that move with your job.</h2>
           </div>
-          <div className="context-chip-row" aria-label="Career change planning inputs">
+          <div className="context-chips" aria-label="Career change planning inputs">
             {['Cash reserve', 'Monthly spending', 'Income + benefits', 'Health insurance', 'Retirement contributions'].map((item) => <span key={item}>{item}</span>)}
           </div>
         </div>
