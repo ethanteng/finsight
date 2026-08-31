@@ -101,6 +101,14 @@ describe("marketing review fixes", () => {
     expect(screen.getByText("Step-by-step math")).toBeInTheDocument();
     expect(screen.getByText("Built-in checks")).toBeInTheDocument();
     expect(screen.getByText("Up-to-date sources")).toBeInTheDocument();
+    const comparison = screen.getByLabelText("Compare a general chatbot answer with Ask Linc");
+    const generalDemo = within(comparison).getByLabelText("General-purpose AI answers without connected accounts");
+    expect(within(generalDemo).getByText(/retirement planning usually starts/i)).toBeInTheDocument();
+    await user.click(within(generalDemo).getByRole("button", { name: /what if inflation stays high/i }));
+    expect(within(generalDemo).getByText(/high inflation can raise future spending/i)).toBeInTheDocument();
+    await user.click(within(generalDemo).getByRole("button", { name: /how much card debt do i have/i }));
+    expect(within(generalDemo).getByText(/list every balance, interest rate, minimum payment/i)).toBeInTheDocument();
+    await user.click(within(comparison).getByRole("tab", { name: /ask linc.*all your accounts/i }));
     const demo = screen.getByLabelText("Interactive Ask Linc product demo");
     expect(within(demo).queryByRole("img")).not.toBeInTheDocument();
     expect(within(demo).getByText("Interactive demo using real product output. Identifying details removed.")).toBeInTheDocument();
@@ -168,6 +176,7 @@ describe("marketing review fixes", () => {
 
     try {
       render(<MarketingHome />);
+      fireEvent.click(screen.getByRole("tab", { name: /ask linc.*all your accounts/i }));
       const demo = screen.getByLabelText("Interactive Ask Linc product demo");
       const answerTab = within(demo).getByRole("tab", { name: "answer" });
       const mathTab = within(demo).getByRole("tab", { name: "math" });
@@ -188,6 +197,47 @@ describe("marketing review fixes", () => {
       fireEvent.click(answerTab);
       act(() => jest.advanceTimersByTime(10000));
       expect(answerTab).toHaveAttribute("aria-selected", "true");
+    } finally {
+      jest.useRealTimers();
+      global.IntersectionObserver = OriginalIntersectionObserver;
+    }
+  });
+
+  it("advances from general advice to the Ask Linc demo and yields to manual selection", () => {
+    const OriginalIntersectionObserver = global.IntersectionObserver;
+    global.IntersectionObserver = class VisibleComparisonObserver {
+      readonly root = null;
+      readonly rootMargin = "0px";
+      readonly thresholds = [0.35];
+      constructor(private readonly callback: IntersectionObserverCallback) {}
+      observe(target: Element) {
+        this.callback(
+          [{ isIntersecting: true, intersectionRatio: 1, target } as IntersectionObserverEntry],
+          this as unknown as IntersectionObserver,
+        );
+      }
+      disconnect() {}
+      unobserve() {}
+      takeRecords() { return []; }
+    } as typeof IntersectionObserver;
+    jest.useFakeTimers();
+
+    try {
+      render(<MarketingHome />);
+      const comparison = screen.getByLabelText("Compare a general chatbot answer with Ask Linc");
+      const generalTab = within(comparison).getByRole("tab", { name: /general chatbot.*no accounts/i });
+      const lincTab = within(comparison).getByRole("tab", { name: /ask linc.*all your accounts/i });
+      expect(generalTab).toHaveAttribute("aria-selected", "true");
+
+      act(() => jest.advanceTimersByTime(5200));
+      expect(lincTab).toHaveAttribute("data-auto-click", "true");
+      act(() => jest.advanceTimersByTime(260));
+      expect(lincTab).toHaveAttribute("aria-selected", "true");
+      expect(within(comparison).getByLabelText("Interactive Ask Linc product demo")).toBeInTheDocument();
+
+      fireEvent.click(generalTab);
+      act(() => jest.advanceTimersByTime(10000));
+      expect(generalTab).toHaveAttribute("aria-selected", "true");
     } finally {
       jest.useRealTimers();
       global.IntersectionObserver = OriginalIntersectionObserver;

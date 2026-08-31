@@ -103,6 +103,8 @@ const decisions: DemoDecision[] = [
   },
 ];
 
+export { decisions as DEMO_DECISIONS };
+
 const overviewMetrics = [
   ["Net Worth", "$3,668,349"],
   ["Total Cash", "$82,651"],
@@ -430,10 +432,10 @@ function AccountsView() {
   );
 }
 
-export default function StaticProductDemo() {
+export default function StaticProductDemo({ anchorId = "product-demo" }: { anchorId?: string | null } = {}) {
   const [view, setView] = useState<DemoView>("decisions");
   return (
-    <figure className="static-product-demo" id="product-demo" aria-label="Interactive Ask Linc product demo">
+    <figure className="static-product-demo" id={anchorId ?? undefined} aria-label="Interactive Ask Linc product demo">
       <div className="demo-browser-bar"><div aria-hidden="true"><span/><span/><span/></div><p><i>⌁</i> asklinc.com/demo</p><strong>INTERACTIVE DEMO</strong></div>
       <div className="demo-app-shell">
         <aside className="demo-app-nav">

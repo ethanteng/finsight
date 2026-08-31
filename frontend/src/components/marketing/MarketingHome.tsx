@@ -9,7 +9,7 @@ import {
 } from "@/config/pricing";
 import { SiteFooter, SiteHeader } from "./SiteShell";
 import { MarketingGetStartedButton } from "./MarketingGetStartedButton";
-import StaticProductDemo from "./StaticProductDemo";
+import AnswerProofComparison from "./AnswerProofComparison";
 
 const scenarios = [
   "Can we afford a home?",
@@ -72,19 +72,7 @@ export default function Home() {
           <p>Ask the same question. Linc answers with your accounts, clear math, and up-to-date information.</p>
         </div>
 
-        <div className="answer-proof-grid">
-          <div className="answer-proof-contrast">
-            <article>
-              <span>A GENERAL CHATBOT</span>
-              <h3>No accounts. General guidance.</h3>
-            </article>
-            <article>
-              <span>ASK LINC</span>
-              <h3>All your accounts. Answers you can check.</h3>
-            </article>
-          </div>
-          <StaticProductDemo />
-        </div>
+        <AnswerProofComparison />
       </section>
 
       <section className="section home-math-section" id="show-the-math">
