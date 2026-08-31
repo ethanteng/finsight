@@ -74,8 +74,8 @@ export default function AnswerProofComparison() {
     const comparison = comparisonRef.current;
     if (!comparison) return;
     const observer = new IntersectionObserver(
-      ([entry]) => setIsVisible(entry.isIntersecting && entry.intersectionRatio >= 0.35),
-      { threshold: [0.35] },
+      ([entry]) => setIsVisible(entry.isIntersecting && entry.intersectionRatio >= 0.15),
+      { threshold: [0.15] },
     );
     observer.observe(comparison);
     return () => observer.disconnect();
@@ -107,9 +107,13 @@ export default function AnswerProofComparison() {
     setView(nextView);
   }
 
+  const isAdvancingToLinc = autoClickView === "linc";
+  const isLeavingGeneric = isAdvancingToLinc && view === "general";
+
   return (
     <div
       className="answer-proof-grid"
+      data-transitioning={isAdvancingToLinc ? "true" : undefined}
       id="product-demo"
       ref={comparisonRef}
       aria-label="Compare a general chatbot answer with Ask Linc"
@@ -139,7 +143,7 @@ export default function AnswerProofComparison() {
         </div>
       </div>
       <div className="answer-proof-stage" role="tabpanel" id="answer-proof-panel" aria-labelledby={view === "general" ? "answer-proof-general-tab" : "answer-proof-linc-tab"}>
-        <div className="answer-proof-panel" key={view}>
+        <div className="answer-proof-panel" data-view={view} data-leaving={isLeavingGeneric ? "true" : undefined} key={view}>
           {view === "general" ? <GeneralChatMockup /> : <StaticProductDemo anchorId={null} />}
         </div>
       </div>

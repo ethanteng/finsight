@@ -1321,6 +1321,7 @@ footer { padding-block: 55px 28px; background: #0a1912; color: white; }.footer-i
 .answer-proof-intro { display: grid; gap: 18px; }
 .answer-proof-sequence { margin: 0; color: #657269; font-size: 15px; font-weight: 650; line-height: 1.5; text-align: center; }
 .answer-proof-sequence span { display: inline-block; margin-inline: 7px; color: #47775a; font-size: 18px; }
+.answer-proof-grid[data-transitioning="true"] .answer-proof-sequence span { animation: answer-proof-arrow-travel .72s cubic-bezier(.2,.75,.25,1) both; }
 .answer-proof-contrast { display: grid; width: min(100%,680px); grid-template-columns: .62fr 1.38fr; gap: 14px; align-items: center; margin-inline: auto; }
 .answer-proof-contrast button { position: relative; min-height: 210px; padding: 28px; border: 1px solid #b7c1b5; border-radius: 20px; background: #e9ebe3; color: var(--ink); text-align: left; cursor: pointer; }
 .answer-proof-contrast button:first-child { width: 82%; min-height: 108px; justify-self: center; padding: 15px 17px; border-color: #ccd2c9; background: rgba(233,235,227,.38); color: #6a766e; }
@@ -1334,10 +1335,15 @@ footer { padding-block: 55px 28px; background: #0a1912; color: white; }.footer-i
 .answer-proof-contrast button:first-child span { color: #8a948c; font-size: 12px; font-weight: 750; }
 .answer-proof-contrast button:first-child h3 { max-width: 230px; margin-top: 18px; font-size: 16px; font-weight: 550; line-height: 1.3; }
 .answer-proof-stage { min-width: 0; }
-.answer-proof-panel { animation: answer-proof-panel-enter .55s cubic-bezier(.2,.75,.25,1) both; }
+.answer-proof-panel[data-view="general"] { animation: answer-proof-panel-enter-general .42s cubic-bezier(.2,.75,.25,1) both; }
+.answer-proof-panel[data-view="linc"] { animation: answer-proof-panel-enter-linc .62s cubic-bezier(.16,.78,.25,1) both; }
+.answer-proof-panel[data-leaving="true"] { animation: answer-proof-panel-exit-general .26s cubic-bezier(.55,.05,.75,.35) both; }
 @keyframes answer-proof-control-press { 0%,100% { transform: translateY(0); } 32%,52% { transform: translateY(2px); } }
 @keyframes answer-proof-click-pulse { 0% { opacity: 0; transform: scale(.55); } 20% { opacity: .85; } 48% { box-shadow: 0 0 0 9px rgba(23,62,45,.12); transform: scale(.9); } 100% { box-shadow: 0 0 0 14px rgba(23,62,45,0); opacity: 0; transform: scale(1); } }
-@keyframes answer-proof-panel-enter { from { opacity: .35; transform: translateY(22px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes answer-proof-arrow-travel { 0% { opacity: .65; transform: translateX(0); } 38% { opacity: 1; transform: translateX(7px); } 100% { opacity: .8; transform: translateX(0); } }
+@keyframes answer-proof-panel-enter-general { from { opacity: .35; transform: translateY(18px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes answer-proof-panel-exit-general { from { filter: blur(0); opacity: 1; transform: translateX(0) scale(1); } to { filter: blur(2px); opacity: 0; transform: translateX(-28px) scale(.985); } }
+@keyframes answer-proof-panel-enter-linc { from { filter: blur(2px); opacity: 0; transform: translateX(34px) scale(.985); } to { filter: blur(0); opacity: 1; transform: translateX(0) scale(1); } }
 .general-chat-mockup { width: min(100%,860px); margin-inline: auto; overflow: hidden; border: 1px solid #aab2aa; border-radius: 24px; background: #f4f4ef; box-shadow: 0 28px 65px rgba(38,49,43,.12); }
 .general-chat-mockup > figcaption { padding: 15px 22px; border-top: 1px solid #cfd3cc; background: #e9ebe6; color: #667068; font-size: 12px; line-height: 1.5; }
 .general-chat-browser-bar { display: grid; grid-template-columns: 150px 1fr 210px; align-items: center; min-height: 50px; padding-inline: 18px; border-bottom: 1px solid #c8cec7; background: #e8eae5; }
@@ -1694,7 +1700,7 @@ footer { padding-block: 55px 28px; background: #0a1912; color: white; }.footer-i
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .answer-proof-contrast button[data-auto-click="true"],.answer-proof-panel { animation: none; }
+  .answer-proof-contrast button[data-auto-click="true"],.answer-proof-panel,.answer-proof-panel[data-leaving="true"],.answer-proof-grid[data-transitioning="true"] .answer-proof-sequence span { animation: none; }
   .answer-proof-contrast button[data-auto-click="true"]::after { display: none; animation: none; }
   .demo-tabs button[data-auto-click="true"] { animation: none; }
   .demo-tabs button[data-auto-click="true"]::after { display: none; animation: none; }

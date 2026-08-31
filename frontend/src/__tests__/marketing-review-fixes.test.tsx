@@ -160,7 +160,7 @@ describe("marketing review fixes", () => {
     global.IntersectionObserver = class VisibleIntersectionObserver {
       readonly root = null;
       readonly rootMargin = "0px";
-      readonly thresholds = [0.35];
+      readonly thresholds = [0.15];
       constructor(private readonly callback: IntersectionObserverCallback) {}
       observe(target: Element) {
         this.callback(
@@ -208,7 +208,7 @@ describe("marketing review fixes", () => {
     global.IntersectionObserver = class VisibleComparisonObserver {
       readonly root = null;
       readonly rootMargin = "0px";
-      readonly thresholds = [0.35];
+      readonly thresholds = [0.15];
       constructor(private readonly callback: IntersectionObserverCallback) {}
       observe(target: Element) {
         this.callback(
@@ -231,8 +231,11 @@ describe("marketing review fixes", () => {
 
       act(() => jest.advanceTimersByTime(2000));
       expect(lincTab).toHaveAttribute("data-auto-click", "true");
+      expect(comparison.querySelector(".answer-proof-panel")).toHaveAttribute("data-leaving", "true");
       act(() => jest.advanceTimersByTime(260));
       expect(lincTab).toHaveAttribute("aria-selected", "true");
+      expect(comparison.querySelector(".answer-proof-panel")).toHaveAttribute("data-view", "linc");
+      expect(comparison.querySelector(".answer-proof-panel")).not.toHaveAttribute("data-leaving");
       expect(within(comparison).getByLabelText("Interactive Ask Linc product demo")).toBeInTheDocument();
 
       fireEvent.click(generalTab);
