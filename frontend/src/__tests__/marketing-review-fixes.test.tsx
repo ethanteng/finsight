@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import AboutPageRoute from "@/app/about/page";
 import FeaturesPageRoute from "@/app/features/page";
 import { MarketingContactForm } from "@/components/marketing/MarketingContactForm";
 import MarketingHome from "@/components/marketing/MarketingHome";
@@ -90,6 +91,14 @@ describe("marketing review fixes", () => {
       href: "/use-cases/career-change",
       label: "Career Change & Time Off",
     });
+  });
+
+  it("uses the stylized founder portrait on the About page", () => {
+    render(<AboutPageRoute />);
+
+    const portrait = screen.getByRole("img", { name: "Stylized portrait of Ethan Teng" });
+    expect(portrait).toHaveAttribute("src", expect.stringContaining("ethan-teng-cartoon.webp"));
+    expect(portrait).not.toHaveAttribute("src", expect.stringContaining("ethan-teng.jpg"));
   });
 
   it("shows the interactive static product demo directly on the homepage", async () => {
