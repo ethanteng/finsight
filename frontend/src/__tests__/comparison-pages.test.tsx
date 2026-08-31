@@ -1,7 +1,7 @@
 import { render, screen, within } from "@testing-library/react";
 import { generateMetadata, generateStaticParams } from "@/app/vs/[slug]/page";
 import MarketingSubpage from "@/components/marketing/MarketingSubpage";
-import { COMPARISONS, getComparison } from "@/lib/comparisons";
+import { buildComparisons, getComparison } from "@/lib/comparisons";
 
 describe("comparison pages", () => {
   it("publishes the ChatGPT comparison model and route metadata", async () => {
@@ -102,7 +102,7 @@ describe("comparison pages", () => {
 
     const otherComparisons = container.querySelector(".other-comparisons");
     expect(otherComparisons).not.toBeNull();
-    COMPARISONS.filter(({ slug }) => slug !== "boldin").forEach(({ slug, competitorName }) => {
+    buildComparisons().filter(({ slug }) => slug !== "boldin").forEach(({ slug, competitorName }) => {
       expect(within(otherComparisons as HTMLElement).getByRole("link", { name: new RegExp(competitorName) })).toHaveAttribute(
         "href",
         `/vs/${slug}`,

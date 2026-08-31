@@ -12,7 +12,7 @@ import Link from 'next/link';
 import { pushBeginCheckout } from '@/lib/dataLayer';
 import SiteFooter from './SiteFooter';
 import { useDialog } from '@/components/ui/dialog';
-import { MONTHLY_PRICE_DOLLARS, TRIAL_PRICE_LINE } from '@/config/pricing';
+import { usePricing } from '@/components/PricingProvider';
 
 const HOW_LINC_STEPS = [
   { title: "Connect your accounts", description: "Link your financial accounts securely via Plaid", icon: Target },
@@ -28,6 +28,7 @@ const USE_CASE_LINKS = [
 ];
 
 const BuyingAHousePage = () => {
+  const pricing = usePricing();
   const [isLoading, setIsLoading] = useState<string | null>(null);
   const { showError, dialog } = useDialog();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -317,7 +318,7 @@ const BuyingAHousePage = () => {
                   >
                     Get started
                   </Button>
-                  <p className="text-[0.7875rem]">{TRIAL_PRICE_LINE}</p>
+                  <p className="text-[0.7875rem]">{pricing.trialLine}</p>
                 </div>
               </div>
             </div>
@@ -436,8 +437,8 @@ const BuyingAHousePage = () => {
               <div className="text-center space-y-4 mb-8">
                 <h3 className="text-2xl font-bold">Ask Linc</h3>
                 <div className="flex items-baseline justify-center space-x-1">
-                  <span className="text-5xl font-bold gradient-text">{MONTHLY_PRICE_DOLLARS}</span>
-                  <span className="text-muted-foreground text-xl">/ month</span>
+                  <span className="text-5xl font-bold gradient-text">{pricing.dollars}</span>
+                  <span className="text-muted-foreground text-xl">/ {pricing.intervalLabel}</span>
                 </div>
                 <p className="text-muted-foreground text-lg">
                   Full access to Ask Linc's financial reasoning platform.
@@ -554,7 +555,7 @@ const BuyingAHousePage = () => {
               >
                 {isLoading === 'premium' ? 'Creating...' : 'Get started'}
               </Button>
-              <p className="text-[1.00625rem] text-primary font-medium">{TRIAL_PRICE_LINE}</p>
+              <p className="text-[1.00625rem] text-primary font-medium">{pricing.trialLine}</p>
             </div>
           </div>
         </div>

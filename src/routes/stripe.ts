@@ -1,10 +1,11 @@
 import express from 'express';
 import { stripeService } from '../services/stripe';
 import { constructWebhookEvent } from '../config/stripe';
-import { CreateCheckoutSessionRequest, CreatePortalSessionRequest, SubscriptionTier } from '../types/stripe';
+import { CreateCheckoutSessionRequest, CreatePortalSessionRequest } from '../types/stripe';
 import { getPrismaClient } from '../prisma-client';
 import { stripe } from '../config/stripe'; // Added for payment success endpoint
 import { requireAuth, requireAuthAllowLapsedSubscription } from '../auth/middleware';
+import { getDefaultPrice, minorToMajor } from '../config/stripe-pricing';
 
 const router = express.Router();
 
@@ -33,22 +34,18 @@ router.get('/payment-success', async (req, res) => {
       });
     }
 
-    // Helper function to get Google Ads conversion value based on tier
-    // Maps internal tier names to conversion values: starter=$9, standard=$19, premium=$29
-    // Note: With single-tier pricing, all users are on the premium plan ($9/month)
-    const getTierValue = (tierName: string | undefined): number => {
-      const tierLower = (tierName || 'premium').toLowerCase() as SubscriptionTier;
-      // Match exact internal tier names: 'starter', 'standard', 'premium'
-      if (tierLower === 'starter') return 9;
-      if (tierLower === 'standard') return 19;
-      if (tierLower === 'premium') return 29;
-      return 29; // default to premium (single plan is the former premium plan)
-    };
+    // Catalog price, used as the last resort for the Google Ads conversion value
+    // when the session itself does not carry an amount.
+    const resolvedPrice = await getDefaultPrice();
 
-    // Verify the session with Stripe to ensure it's legitimate
+    // Verify the session with Stripe to ensure it's legitimate. line_items is
+    // expanded so the conversion value can come from what this session actually
+    // sold rather than from the current catalog price.
     try {
-      const session = await stripe.client.checkout.sessions.retrieve(session_id as string);
-      
+      const session = await stripe.client.checkout.sessions.retrieve(session_id as string, {
+        expand: ['line_items']
+      });
+
       const isPaid = session.payment_status === 'paid';
       const isTrial = session.payment_status === 'no_payment_required' && session.status === 'complete';
 
@@ -72,9 +69,24 @@ router.get('/payment-success', async (req, res) => {
         : undefined;
       console.log('Customer email from session:', customerEmail);
 
-      // Determine tier and value for Google Ads tracking
+      // Determine tier and value for Google Ads tracking. Prefer what this
+      // session sold: the subscription line item, then the amount actually
+      // charged. A trial charges 0 up front, so fall through to the recurring
+      // price rather than reporting a 0-value signup; the catalog price is the
+      // last resort, and can differ from what this customer was sold.
       const tierName = (tier as string) || 'premium';
-      const conversionValue = getTierValue(tierName);
+      const soldUnitAmount = session.line_items?.data?.[0]?.price?.unit_amount;
+      const soldCurrency = session.line_items?.data?.[0]?.price?.currency || session.currency;
+      const conversionCurrency = soldCurrency || resolvedPrice.currency;
+
+      let conversionValue: number;
+      if (typeof soldUnitAmount === 'number' && soldUnitAmount > 0) {
+        conversionValue = minorToMajor(soldUnitAmount, conversionCurrency);
+      } else if (typeof session.amount_total === 'number' && session.amount_total > 0) {
+        conversionValue = minorToMajor(session.amount_total, conversionCurrency);
+      } else {
+        conversionValue = resolvedPrice.amount;
+      }
 
       // Check if user already exists
       const prisma = getPrismaClient();
@@ -92,7 +104,7 @@ router.get('/payment-success', async (req, res) => {
         paid: isPaid,
         trialing: isTrial,
         amount: conversionValue,
-        currency: 'USD',
+        currency: conversionCurrency.toUpperCase(),
         session_id: session_id as string,
         tier: tierName
       };
@@ -233,15 +245,19 @@ router.post('/create-checkout-session', async (req, res) => {
       });
     }
 
-    // Get the Stripe price ID for the tier
+    // Validate the tier, then charge the same price ID the marketing site
+    // advertises (live Stripe lookup, or the paired $19 fallback). Using the
+    // env price ID here while /api/stripe/price served the fallback amount
+    // would let checkout charge a different price than the page showed.
     const { getStripePriceId } = await import('../config/stripe');
-    const priceId = getStripePriceId(tier as any);
-    
-    if (!priceId) {
+    try {
+      getStripePriceId(tier as any);
+    } catch {
       return res.status(400).json({
         error: `Invalid tier: ${tier}`
       });
     }
+    const priceId = (await getDefaultPrice()).priceId;
 
     // Create checkout session request
     const checkoutRequest: CreateCheckoutSessionRequest = {
@@ -443,6 +459,30 @@ router.post('/create-portal-session', requireAuthAllowLapsedSubscription, async 
     console.error('Error creating portal session:', error);
     res.status(500).json({
       error: 'Failed to create portal session',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+/**
+ * GET /api/stripe/price
+ * Public: the single subscription price we charge, resolved live from Stripe
+ * using STRIPE_PRICE_DEFAULT. The marketing site reads this so displayed and
+ * charged prices can never disagree.
+ */
+router.get('/price', async (req, res) => {
+  try {
+    // Never throws: returns the fallback price when Stripe is unreachable.
+    const price = await getDefaultPrice();
+    // Short-lived shared cache: a price change should show up quickly, but a
+    // burst of marketing traffic should not become a burst of Stripe calls.
+    res.set('Cache-Control', 'public, max-age=60, stale-while-revalidate=600');
+    res.json({ success: true, price });
+  } catch (error) {
+    console.error('Error resolving default Stripe price:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to resolve subscription price',
       details: error instanceof Error ? error.message : 'Unknown error'
     });
   }

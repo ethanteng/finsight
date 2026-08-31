@@ -2,17 +2,20 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import MarketingSubpage from '../../../components/marketing/MarketingSubpage';
 import StructuredData from '../../../components/StructuredData';
-import { COMPARISONS, getComparison } from '../../../lib/comparisons';
+import { COMPARISON_SLUGS, getComparison } from '../../../lib/comparisons';
+import { getPricing } from '../../../lib/pricing';
 
 type Props = { params: Promise<{ slug: string }> };
 
 export function generateStaticParams() {
-  return COMPARISONS.map((c) => ({ slug: c.slug }));
+  return COMPARISON_SLUGS.map((slug) => ({ slug }));
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
-  const page = getComparison(slug);
+  // Titles and descriptions do not quote the price, but the lookup builds the
+  // whole page, so resolve it once and reuse it.
+  const page = getComparison(slug, await getPricing());
   if (!page) return {};
   return {
     title: page.title,
@@ -36,7 +39,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function VsPage({ params }: Props) {
   const { slug } = await params;
-  const page = getComparison(slug);
+  const page = getComparison(slug, await getPricing());
   if (!page) notFound();
 
   const faqSchema = {

@@ -248,6 +248,7 @@ jobs:
           ENABLE_TIER_ENFORCEMENT: "true"
           ADMIN_EMAILS: "admin@example.com,test@example.com"
           RESEND_API_KEY: test-resend-key
+          STRIPE_PRICE_DEFAULT: price_default_test
           STRIPE_PRICE_STARTER: price_starter_test
           STRIPE_PRICE_STANDARD: price_standard_test
           STRIPE_PRICE_PREMIUM: price_premium_test
@@ -393,6 +394,7 @@ jobs:
           ENABLE_TIER_ENFORCEMENT: "true"
           ADMIN_EMAILS: "admin@example.com,test@example.com"
           RESEND_API_KEY: test-resend-key
+          STRIPE_PRICE_DEFAULT: price_default_test
           STRIPE_PRICE_STARTER: price_starter_test
           STRIPE_PRICE_STANDARD: price_standard_test
           STRIPE_PRICE_PREMIUM: price_premium_test
@@ -502,6 +504,7 @@ jobs:
           ENABLE_TIER_ENFORCEMENT: "true"
           ADMIN_EMAILS: "admin@example.com,test@example.com"
           RESEND_API_KEY: test-resend-key
+          STRIPE_PRICE_DEFAULT: price_default_test
           STRIPE_PRICE_STARTER: price_starter_test
           STRIPE_PRICE_STANDARD: price_standard_test
           STRIPE_PRICE_PREMIUM: price_premium_test
@@ -532,6 +535,7 @@ jobs:
           ENABLE_TIER_ENFORCEMENT: "true"
           ADMIN_EMAILS: "admin@example.com,test@example.com"
           RESEND_API_KEY: test-resend-key
+          STRIPE_PRICE_DEFAULT: price_default_test
           STRIPE_PRICE_STARTER: price_starter_test
           STRIPE_PRICE_STANDARD: price_standard_test
           STRIPE_PRICE_PREMIUM: price_premium_test

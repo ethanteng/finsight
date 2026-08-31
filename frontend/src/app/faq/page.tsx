@@ -1,7 +1,8 @@
 import type { Metadata } from 'next';
 import MarketingSubpage from '../../components/marketing/MarketingSubpage';
 import StructuredData from '../../components/StructuredData';
-import { buildFaqPageSchema } from '../../data/faq';
+import { buildFaqItems, buildFaqPageSchema } from '../../data/faq';
+import { getPricing } from '../../lib/pricing';
 
 export const metadata: Metadata = {
   title: 'FAQ | Frequently Asked Questions | Ask Linc',
@@ -23,10 +24,11 @@ export const metadata: Metadata = {
   },
 };
 
-export default function FaqPage() {
+export default async function FaqPage() {
+  const pricing = await getPricing();
   return (
     <>
-      <StructuredData data={buildFaqPageSchema()} />
+      <StructuredData data={buildFaqPageSchema(buildFaqItems(pricing))} />
       <MarketingSubpage params={Promise.resolve({ slug: ['faq'] })} />
     </>
   );

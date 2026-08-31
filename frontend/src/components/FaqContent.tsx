@@ -2,9 +2,11 @@
 import { Card, CardContent } from './ui/card';
 import SiteHeader from './SiteHeader';
 import SiteFooter from './SiteFooter';
-import { FAQ_ITEMS } from '@/data/faq';
+import { buildFaqItems } from '@/data/faq';
+import { usePricing } from '@/components/PricingProvider';
 
 export default function FaqContent() {
+  const faqItems = buildFaqItems(usePricing());
   return (
     <div className="min-h-screen bg-background">
       <SiteHeader />
@@ -31,7 +33,7 @@ export default function FaqContent() {
         <section className="py-20 bg-muted/30">
           <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="space-y-6">
-              {FAQ_ITEMS.map((faq, index) => (
+              {faqItems.map((faq, index) => (
                 <Card key={index} className="glass-card hover:shadow-lg transition-all duration-300">
                   <CardContent className="p-6">
                     <div className="space-y-4">

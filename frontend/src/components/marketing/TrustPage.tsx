@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { MarketingGetStartedButton } from "./MarketingGetStartedButton";
-import { TRIAL_PRICE_LINE } from "@/config/pricing";
+import { TrialPriceLine } from "./TrialPriceLine";
 import { PageCta, SiteFooter, SiteHeader } from "./SiteShell";
 
 const answerLayers = [
@@ -142,7 +142,7 @@ export default function TrustPage() {
             <MarketingGetStartedButton className="button button-primary" trackingLocation="trust_hero" />
             <Link className="text-link" href="#how-it-works">See how it works ↓</Link>
           </div>
-          <p className="microcopy">{TRIAL_PRICE_LINE}</p>
+          <p className="microcopy"><TrialPriceLine /></p>
         </div>
 
         <article className="trust-audit-card" aria-label="Illustrative Ask Linc answer with checks">

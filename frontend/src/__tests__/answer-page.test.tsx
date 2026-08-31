@@ -1,5 +1,6 @@
 import { render, screen, within } from "@testing-library/react";
 import AnswerPage from "@/components/marketing/AnswerPage";
+import { FALLBACK_PRICING } from "@/config/pricing";
 import { buildAnswerPageSchemas, canIRetireAt55, canIRetireAt60, canIRetireWithOneMillion, canIRetireWithThreeMillion, canIRetireWithTwoMillion } from "@/lib/answer-pages";
 
 describe("evergreen answer page", () => {
@@ -88,7 +89,6 @@ describe("evergreen answer page", () => {
       productBridge: {
         heading: "Custom product bridge heading",
         body: "Custom product bridge body",
-        priceNote: "Custom price note",
       },
     };
 
@@ -103,7 +103,8 @@ describe("evergreen answer page", () => {
     expect(screen.getByRole("table", { name: "Custom income scenario caption" })).toBeInTheDocument();
     expect(screen.getByText("Custom income scenario footnote")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Custom product bridge heading" })).toBeInTheDocument();
-    expect(screen.getByText("Custom price note")).toBeInTheDocument();
+    // The price line comes from the live subscription price, not the page data.
+    expect(screen.getByText(FALLBACK_PRICING.trialLine)).toBeInTheDocument();
   });
 
   it("renders the age-55 timeline, planning scenarios, and official sources", () => {
