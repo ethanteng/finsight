@@ -8,10 +8,10 @@ import { MarketingGetStartedButton } from "./MarketingGetStartedButton";
 import StaticProductDemo from "./StaticProductDemo";
 
 const decisions = [
-  { label: "BUY A HOME", question: "Can we afford this house without becoming house poor?", href: "/use-cases/home-buying" },
-  { label: "TAKE TIME OFF", question: "Can I take a year off without setting retirement back?", href: "/use-cases/career-change" },
-  { label: "GROW A FAMILY", question: "Can one of us take leave and still afford childcare?", href: "/use-cases/family-planning" },
-  { label: "RETIRE", question: "Could we retire two years earlier without making the plan too tight?", href: "/use-cases/retirement" },
+  { label: "BUY A HOME", question: "Can we afford this home without becoming house poor?", lead: "Can we afford this home?", accent: "Without becoming house poor.", tone: "mint", href: "/use-cases/home-buying" },
+  { label: "TAKE TIME OFF", question: "Can I take a year off without setting retirement back?", lead: "Can I take a year off?", accent: "Without setting retirement back.", tone: "blue", href: "/use-cases/career-change" },
+  { label: "GROW A FAMILY", question: "Can one of us take leave and still afford childcare?", lead: "Can one of us take leave?", accent: "And still afford childcare.", tone: "sand", href: "/use-cases/family-planning" },
+  { label: "RETIRE", question: "Could we retire two years sooner without making the plan too tight?", lead: "Could we retire two years sooner?", accent: "Without making the plan too tight.", tone: "lime", href: "/use-cases/retirement" },
 ];
 
 export default function Home() {
@@ -68,15 +68,15 @@ export default function Home() {
         <div className="section-heading split-heading">
           <div>
             <p className="section-kicker">START WITH THE DECISION, NOT THE DASHBOARD</p>
-            <h2>Your money is connected. Your decisions should be too.</h2>
+            <h2>Your money is connected. <em>Your decisions should be too.</em></h2>
           </div>
-          <p>A home affects retirement. Time away from work changes cash flow and savings. Childcare changes what fits the budget. Linc keeps the rest of your financial life in the picture.</p>
+          <p>One decision can ripple through the rest of your plan. Linc keeps cash, work, family costs, and retirement in the same picture.</p>
         </div>
         <div className="use-case-index">
           {decisions.map((item, index) => (
-            <Link href={item.href} className="use-case-tile" key={item.label}>
+            <Link href={item.href} className={`use-case-tile ${item.tone}`} key={item.label}>
               <span>{String(index + 1).padStart(2, "0")} / {item.label}</span>
-              <h2>{item.question}</h2>
+              <h2 aria-label={item.question}><span>{item.lead}</span><em>{item.accent}</em></h2>
               <strong>Explore this decision <i>→</i></strong>
             </Link>
           ))}
@@ -91,15 +91,15 @@ export default function Home() {
           <div className="home-math-heading">
             <div>
               <p className="section-kicker light">HOW IT WORKS</p>
-              <h2>Ask the question. Linc brings in the numbers that could change the answer.</h2>
+              <h2>Ask the question. <em>Linc finds what could change the answer.</em></h2>
             </div>
             <div className="home-math-details">
-              <p>Your accounts provide the facts. Linc brings in cash, spending, debt, investments, property, goals, rates, and market context only when they matter to the decision.</p>
+              <p>Your accounts provide the facts. Linc adds only the cash, debt, investments, rates, or market context that could change the decision.</p>
               <ul aria-label="How Ask Linc works">
                 <li>Ask in your own words</li>
-                <li>Pull in what could change the answer</li>
+                <li>Bring in what matters</li>
                 <li>Compare the tradeoffs</li>
-                <li>See the recommendation</li>
+                <li>Get a recommendation</li>
                 <li>Check the work</li>
               </ul>
             </div>

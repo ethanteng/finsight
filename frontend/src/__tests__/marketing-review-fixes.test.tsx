@@ -82,9 +82,9 @@ describe("marketing review fixes", () => {
     expect(screen.getByText("Start with the decision")).toBeInTheDocument();
     expect(screen.getByText("Your whole financial picture")).toBeInTheDocument();
     expect(screen.getAllByText("Show the Math").length).toBeGreaterThan(0);
-    expect(screen.getByText("Can we afford this house without becoming house poor?")).toBeInTheDocument();
-    expect(screen.getByText("Can I take a year off without setting retirement back?")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: /linc brings in the numbers that could change the answer/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Can we afford this home without becoming house poor?" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Can I take a year off without setting retirement back?" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /linc finds what could change the answer/i })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "The right numbers for this decision." })).not.toBeInTheDocument();
     expect(USE_CASE_LINKS).toContainEqual({
       href: "/use-cases/career-change",
@@ -181,6 +181,9 @@ describe("marketing review fixes", () => {
     expect(screen.getByText("Compare the tradeoffs")).toBeInTheDocument();
     expect(screen.getByText("Get the recommendation")).toBeInTheDocument();
     expect(screen.getByText("Check the work")).toBeInTheDocument();
+    const sampleAnswer = screen.getByText(/can we afford a \$700k home without pausing retirement savings/i).closest("article");
+    expect(sampleAnswer).not.toBeNull();
+    expect(within(sampleAnswer as HTMLElement).getByRole("link", { name: /show the math/i })).toHaveClass("miniature-math-link");
     expect(screen.getByRole("heading", { name: "Cash, spending, and debt" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Investments, property, and goals" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Rates, rules, and markets" })).toBeInTheDocument();
