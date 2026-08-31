@@ -40,11 +40,19 @@ export default function AboutPage() {
         </div>
         <div className="origin-copy">
           <p className="section-kicker">THE ORIGIN</p>
-          <h2>It started with a layoff—and a bad idea.</h2>
-          <p className="lead-paragraph">After getting laid off, I pasted my own bank statements into ChatGPT to figure out what I could afford to do next.</p>
-          <p>The answers sounded convincing. But I could not tell which numbers were facts, which were assumptions, or whether the math actually held together.</p>
-          <p>I did not want another place to watch my money. I wanted to ask the hard question in front of me, have the rest of my financial life brought into the answer, and be able to inspect the work.</p>
-          <p>So I built Ask Linc.</p>
+          <h2>It started with a layoff—<em>and a bad idea.</em></h2>
+          <p className="origin-story-lead">After a layoff, I pasted my bank statements into ChatGPT to figure out <strong>what I could afford to do next.</strong></p>
+          <div className="origin-story-beats">
+            <article className="origin-story-problem">
+              <small>WHERE IT BROKE</small>
+              <p>The answers sounded convincing. But facts, assumptions, and shaky math all blurred together.</p>
+            </article>
+            <article className="origin-story-need">
+              <small>WHAT I NEEDED</small>
+              <p>Not another dashboard. I needed my whole financial picture in one answer—and a way to inspect the work.</p>
+            </article>
+          </div>
+          <p className="origin-story-ending"><small>THE RESULT</small><strong>So I built Ask Linc.</strong></p>
         </div>
       </section>
 

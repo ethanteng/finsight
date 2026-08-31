@@ -99,6 +99,11 @@ describe("marketing review fixes", () => {
     const portrait = screen.getByRole("img", { name: "Stylized portrait of Ethan Teng" });
     expect(portrait).toHaveAttribute("src", expect.stringContaining("ethan-teng-cartoon.webp"));
     expect(portrait).not.toHaveAttribute("src", expect.stringContaining("ethan-teng.jpg"));
+    expect(screen.getByRole("heading", { name: /it started with a layoff.*and a bad idea/i })).toBeInTheDocument();
+    expect(screen.getByText("WHERE IT BROKE")).toBeInTheDocument();
+    expect(screen.getByText("WHAT I NEEDED")).toBeInTheDocument();
+    expect(screen.getByText("THE RESULT")).toBeInTheDocument();
+    expect(screen.getByText("So I built Ask Linc.")).toBeInTheDocument();
   });
 
   it("shows the interactive static product demo directly on the homepage", async () => {
