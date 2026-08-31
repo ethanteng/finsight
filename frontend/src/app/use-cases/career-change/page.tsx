@@ -29,7 +29,7 @@ export default function CareerChangeUseCaseRoute() {
       <section className="subhero shell use-case-hero">
         <div>
           <Link href="/use-cases" className="back-link">← All questions</Link>
-          <p className="section-kicker">03 / CAREER CHANGE &amp; TIME OFF</p>
+          <p className="section-kicker">05 / CAREER CHANGE &amp; TIME OFF</p>
           <h1>Know what stepping away from work really changes.</h1>
           <p className="subhero-copy">
             Changing jobs, taking a sabbatical, or going down to one income affects more than your paycheck.
