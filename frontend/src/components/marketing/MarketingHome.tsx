@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePricing } from "@/components/PricingProvider";
 import { SiteFooter, SiteHeader } from "./SiteShell";
 import { MarketingGetStartedButton } from "./MarketingGetStartedButton";
+import StaticProductDemo from "./StaticProductDemo";
 
 const decisions = [
   { label: "BUY A HOME", question: "Can we afford this house without becoming house poor?", href: "/use-cases/home-buying" },
@@ -30,6 +31,7 @@ export default function Home() {
           </p>
           <div className="hero-actions">
             <MarketingGetStartedButton className="button button-primary" csOverrideId="cta-start-free-trial-hero" />
+            <a className="text-link" href="#product-demo">Explore the demo ↓</a>
           </div>
           <p className="microcopy">{pricing.trialLine}</p>
         </div>
@@ -49,6 +51,17 @@ export default function Home() {
           <p><strong>Your whole financial picture</strong><span>cash, debt, investments, property, and goals</span></p>
           <p><Link href="/trust"><strong>Show the Math</strong><span>see the numbers behind every answer</span></Link></p>
         </div>
+      </section>
+
+      <section className="section shell" id="product-demo">
+        <div className="section-heading split-heading">
+          <div>
+            <p className="section-kicker">SEE ASK LINC IN ACTION</p>
+            <h2>Start with a real question. Follow the answer.</h2>
+          </div>
+          <p>Explore a real product example with identifying details removed—from the decision itself to connected finances, Show the Math, and the sources behind the answer.</p>
+        </div>
+        <StaticProductDemo anchorId={null} />
       </section>
 
       <section className="section shell question-to-answer-section" id="decisions">
@@ -153,7 +166,7 @@ export default function Home() {
           <blockquote>The answers sounded convincing. That wasn&apos;t enough for a real financial decision.</blockquote>
           <div className="founder-signature">
             <div className="founder-avatar">
-              <Image src="/ethan-teng.jpg" alt="Ethan Teng, founder of Ask Linc" fill sizes="42px" />
+              <Image src="/ethan-teng.jpg" alt="" fill sizes="42px" />
             </div>
             <div><b>Ethan Teng</b><span>Founder, Ask Linc</span></div>
           </div>
