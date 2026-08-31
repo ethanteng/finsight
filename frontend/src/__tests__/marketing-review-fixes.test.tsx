@@ -103,11 +103,10 @@ describe("marketing review fixes", () => {
     expect(screen.getByText("Up-to-date sources")).toBeInTheDocument();
     const comparison = screen.getByLabelText("Compare a general chatbot answer with Ask Linc");
     const generalDemo = within(comparison).getByLabelText("General-purpose AI answers without connected accounts");
+    expect(within(generalDemo).getByText("What are the key factors I need to consider when planning for retirement?")).toBeInTheDocument();
     expect(within(generalDemo).getByText(/retirement planning usually starts/i)).toBeInTheDocument();
-    await user.click(within(generalDemo).getByRole("button", { name: /what if inflation stays high/i }));
-    expect(within(generalDemo).getByText(/high inflation can raise future spending/i)).toBeInTheDocument();
-    await user.click(within(generalDemo).getByRole("button", { name: /how much card debt do i have/i }));
-    expect(within(generalDemo).getByText(/list every balance, interest rate, minimum payment/i)).toBeInTheDocument();
+    expect(within(generalDemo).getByText(/this is general guidance—not a personal answer/i)).toBeInTheDocument();
+    expect(within(generalDemo).queryByRole("button")).not.toBeInTheDocument();
     await user.click(within(comparison).getByRole("tab", { name: /ask linc.*all your accounts/i }));
     const demo = screen.getByLabelText("Interactive Ask Linc product demo");
     expect(within(demo).queryByRole("img")).not.toBeInTheDocument();

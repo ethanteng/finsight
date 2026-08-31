@@ -9,43 +9,19 @@ const autoAdvanceDelay = 5200;
 const autoClickLead = 260;
 const autoClickDuration = 720;
 
-const genericAdvice: Record<string, { summary: string; steps: string[] }> = {
-  retirement: {
-    summary:
-      "Retirement planning usually starts with your expected spending, savings, other income, and the number of years your money may need to last.",
-    steps: [
-      "Estimate annual retirement spending.",
-      "Add up savings, investments, pensions, and Social Security.",
-      "Plan for health care, taxes, and inflation.",
-      "Test whether your savings could last through retirement.",
-    ],
-  },
-  inflation: {
-    summary:
-      "High inflation can raise future spending while weak markets reduce portfolio growth, especially early in retirement.",
-    steps: [
-      "Test higher spending and lower investment returns.",
-      "Review how much of the portfolio is in stocks.",
-      "Keep enough cash to avoid selling after a market drop.",
-      "Revisit the plan as inflation and markets change.",
-    ],
-  },
-  "credit-cards": {
-    summary:
-      "To understand credit-card debt, list every balance, interest rate, minimum payment, and due date.",
-    steps: [
-      "Keep every minimum payment current.",
-      "Usually pay the highest-rate balance first.",
-      "Avoid adding new charges while paying balances down.",
-      "Compare a lower-rate option if repayment will take time.",
-    ],
-  },
+const genericAdvice = {
+  summary:
+    "Retirement planning usually starts with your expected spending, savings, other income, and the number of years your money may need to last.",
+  steps: [
+    "Estimate annual retirement spending.",
+    "Add up savings, investments, pensions, and Social Security.",
+    "Plan for health care, taxes, and inflation.",
+    "Test whether your savings could last through retirement.",
+  ],
 };
 
 function GeneralChatMockup() {
-  const [decisionId, setDecisionId] = useState(DEMO_DECISIONS[0].id);
-  const decision = DEMO_DECISIONS.find((item) => item.id === decisionId) ?? DEMO_DECISIONS[0];
-  const advice = genericAdvice[decision.id];
+  const decision = DEMO_DECISIONS[0];
 
   return (
     <figure className="general-chat-mockup" aria-label="General-purpose AI answers without connected accounts">
@@ -55,36 +31,18 @@ function GeneralChatMockup() {
         <strong>NO ACCOUNTS CONNECTED</strong>
       </div>
       <div className="general-chat-shell">
-        <nav className="general-chat-questions" aria-label="General AI example questions">
-          <div><span>Same questions</span><b>{DEMO_DECISIONS.length}</b></div>
-          {DEMO_DECISIONS.map((item) => (
-            <button
-              type="button"
-              key={item.id}
-              className={item.id === decision.id ? "active" : ""}
-              aria-current={item.id === decision.id ? "true" : undefined}
-              onClick={() => setDecisionId(item.id)}
-            >
-              <strong>{item.shortTitle}</strong>
-              <small>{item.date}</small>
-            </button>
-          ))}
-        </nav>
         <div className="general-chat-conversation">
           <div className="general-chat-question">
             <span>YOU</span>
             <p>{decision.question}</p>
           </div>
           <article className="general-chat-response" aria-live="polite">
-            <div className="general-chat-response-heading"><i aria-hidden="true">✦</i><span>GENERAL GUIDANCE</span></div>
-            <p>{advice.summary}</p>
-            <ol>
-              {advice.steps.map((step) => <li key={step}>{step}</li>)}
-            </ol>
-            <aside>
-              <span>WHAT I CAN’T CHECK</span>
-              <p>I can’t see your accounts, balances, rates, or goals, so this is a general checklist—not a personal answer.</p>
-            </aside>
+            <div className="general-chat-response-heading"><i aria-hidden="true">✦</i><span>CHATBOT</span></div>
+            <p>{genericAdvice.summary}</p>
+            <ul>
+              {genericAdvice.steps.map((step) => <li key={step}>{step}</li>)}
+            </ul>
+            <p className="general-chat-limit">I can’t see your accounts, balances, rates, or goals, so this is general guidance—not a personal answer.</p>
           </article>
         </div>
       </div>
