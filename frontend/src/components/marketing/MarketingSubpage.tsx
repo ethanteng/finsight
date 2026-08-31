@@ -90,23 +90,23 @@ const factRoutingSteps = [
 const comparisonData = {
   chatgpt: {
     eyebrow: "A MONEY TOOL VS A GENERAL CHATBOT",
-    fit: "Choose ChatGPT for breadth. Choose Ask Linc when you need to check the work.",
+    fit: { competitor: "Choose ChatGPT for breadth.", askLinc: "Choose Ask Linc when you need to check the work.", order: "competitor-first" },
   },
   origin: {
     eyebrow: "ONE BIG DECISION VS ALL-IN-ONE MONEY MANAGEMENT",
-    fit: "Choose Ask Linc when you need help with a specific decision. Choose Origin when you want broader day-to-day money management.",
+    fit: { competitor: "Choose Origin when you want broader day-to-day money management.", askLinc: "Choose Ask Linc when you need help with a specific decision.", order: "ask-linc-first" },
   },
   portfoliopilot: {
     eyebrow: "YOUR WHOLE MONEY PICTURE VS YOUR INVESTMENTS",
-    fit: "Choose Ask Linc when the question involves your whole household. Choose PortfolioPilot when analyzing investments is the main job.",
+    fit: { competitor: "Choose PortfolioPilot when analyzing investments is the main job.", askLinc: "Choose Ask Linc when the question involves your whole household.", order: "ask-linc-first" },
   },
   monarch: {
     eyebrow: "WHAT TO DO NEXT VS TRACKING WHAT HAPPENED",
-    fit: "Choose Monarch when shared budgeting and tracking are the priority. Choose Ask Linc when you need to turn your numbers into a decision.",
+    fit: { competitor: "Choose Monarch when shared budgeting and tracking are the priority.", askLinc: "Choose Ask Linc when you need to turn your numbers into a decision.", order: "competitor-first" },
   },
   boldin: {
     eyebrow: "A CONNECTED MONEY QUESTION VS A DETAILED RETIREMENT PLAN",
-    fit: "Choose Boldin when you want to build and maintain a detailed retirement model. Choose Ask Linc when retirement is one part of a connected household decision.",
+    fit: { competitor: "Choose Boldin when you want to build and maintain a detailed retirement model.", askLinc: "Choose Ask Linc when retirement is one part of a connected household decision.", order: "competitor-first" },
   },
 } as const;
 
@@ -408,7 +408,7 @@ function ComparisonPage({ product, pricing }: { product: keyof typeof comparison
       <section className="subhero shell comparison-hero"><div><p className="section-kicker">{design.eyebrow}</p><h1>Ask Linc <em>vs {page.competitorName}</em></h1><p className="subhero-copy">{page.summary}</p><div className="hero-actions"><MarketingGetStartedButton className="button button-primary" csOverrideId="cta-start-free-trial-hero" />{page.relatedLinks?.length ? <div className="comparison-reading-links" aria-label="Related reading">{page.relatedLinks.map((link)=><Link className="text-link" href={link.href} key={link.href}>{link.label}</Link>)}</div> : <Link className="text-link" href="/pricing">View free-trial pricing</Link>}</div></div><div className="versus-mark"><span className="brand-mark">L</span><b>VS</b><span>{page.competitorName.slice(0,2).toUpperCase()}</span></div></section>
       <section className="comparison-strip"><div className="shell"><span>ASK LINC</span><i>Different tools for different jobs</i><span>{page.competitorName.toUpperCase()}</span></div></section>
       <section className="page-section shell comparison-section"><div className="editorial-heading"><p className="section-kicker">THE SHORT VERSION</p><h2>Start with the job you need done.</h2></div><div className="comparison-table" role="table"><div className="comparison-row comparison-head" role="row"><span>DIMENSION</span><b>ASK LINC</b><b>{page.competitorName.toUpperCase()}</b></div>{page.rows.map(({ dimension, askLinc, competitor })=><div className="comparison-row" role="row" key={dimension}><span className="comparison-dimension" role="rowheader">{dimension}</span><div className="comparison-value" role="cell"><small>ASK LINC</small><b>{askLinc}</b></div><div className="comparison-value" role="cell"><small>{page.competitorName.toUpperCase()}</small><b>{competitor}</b></div></div>)}</div></section>
-      <section className="fit-section"><div className="shell"><p className="section-kicker">OUR HONEST TAKE</p><h2>{design.fit}</h2><p>{page.honestTake ?? "Ask Linc does not replace a budget app, investment platform, dedicated retirement planner, or human professional. It helps you compare options and see how the answer was worked out."}</p></div></section>
+      <section className="fit-section"><div className="shell"><p className="section-kicker">OUR HONEST TAKE</p><h2>{design.fit.order === "competitor-first" ? <><span>{design.fit.competitor}</span>{" "}<em>{design.fit.askLinc}</em></> : <><em>{design.fit.askLinc}</em>{" "}<span>{design.fit.competitor}</span></>}</h2><p>{page.honestTake ?? "Ask Linc does not replace a budget app, investment platform, dedicated retirement planner, or human professional. It helps you compare options and see how the answer was worked out."}</p></div></section>
       <section className="page-section shell compact-faq comparison-faq"><div><p className="section-kicker">BEFORE YOU CHOOSE</p><h2>The questions people actually ask.</h2></div><div>{page.faqs.map((faq)=><details key={faq.question}><summary>{faq.question}<span>+</span></summary><p>{faq.answer}</p></details>)}</div></section>
       <section className="other-comparisons shell"><span>COMPARE ASK LINC WITH</span>{Object.keys(comparisonData).filter((key)=>key!==product).map((key)=>{ const other = getComparison(key, pricing); return other ? <Link href={`/vs/${key}`} key={key}>{other.competitorName} <b>→</b></Link> : null; })}</section>
       <PageCta title="See which experience answers your question." csOverrideId="cta-start-free-trial-mid" />

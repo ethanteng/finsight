@@ -11,25 +11,25 @@ describe("comparison pages", () => {
       competitorName: "ChatGPT",
       headline: "Ask Linc vs ChatGPT",
       relatedLinks: [
-        { href: "/blog/show-the-math-how-ask-linc-makes-ai-financial-analysis-transparent" },
-        { href: "/blog/why-ai-apps-should-stop-using-a-single-model" },
+        { href: "/trust" },
+        { href: "/use-cases" },
       ],
     });
     expect(chatgpt?.rows.map((row) => row.dimension)).toEqual([
-      "Show the Math",
-      "Never used for training",
       "Best for",
-      "How the math works",
+      "Starting point",
+      "Financial context",
+      "How the answer is checked",
+      "Important calculations",
       "Price",
-      "Connected financial information",
     ]);
-    expect(chatgpt?.faqs).toHaveLength(6);
+    expect(chatgpt?.faqs).toHaveLength(5);
     expect(generateStaticParams()).toContainEqual({ slug: "chatgpt" });
 
     await expect(
       generateMetadata({ params: Promise.resolve({ slug: "chatgpt" }) }),
     ).resolves.toMatchObject({
-      title: "Ask Linc vs ChatGPT | Your Financial Accounts vs General AI",
+      title: "Ask Linc vs ChatGPT | Financial Decisions vs General AI",
       alternates: { canonical: "https://asklinc.com/vs/chatgpt" },
       openGraph: { url: "https://asklinc.com/vs/chatgpt" },
       robots: { index: true, follow: true },
@@ -45,19 +45,19 @@ describe("comparison pages", () => {
 
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Ask Linc vs ChatGPT");
     const comparison = screen.getByRole("table");
-    expect(within(comparison).getByText("Show the Math")).toBeInTheDocument();
-    expect(within(comparison).getByText(/numbers used, what linc assumed, the math, the checks/i)).toBeInTheDocument();
-    expect(within(comparison).getByText(/financial data is never used to train models/i)).toBeInTheDocument();
-    expect(within(comparison).getByText("How the math works")).toBeInTheDocument();
+    expect(within(comparison).getByText("How the answer is checked")).toBeInTheDocument();
+    expect(within(comparison).getByText(/show the math keeps your numbers, assumptions, calculations, checks, and sources/i)).toBeInTheDocument();
+    expect(screen.getByText(/financial data is never used to train ai models/i)).toBeInTheDocument();
+    expect(within(comparison).getByText("Important calculations")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /choose chatgpt for breadth.*check the work/i })).toBeInTheDocument();
-    expect(screen.getByText(/keep chatgpt for general work\. use ask linc when a money answer needs/i)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "See how Show the Math works" })).toHaveAttribute(
+    expect(screen.getByText(/keep chatgpt for general work\. use ask linc when the question is a consequential financial decision/i)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "See how Ask Linc checks an answer" })).toHaveAttribute(
       "href",
-      "/blog/show-the-math-how-ask-linc-makes-ai-financial-analysis-transparent",
+      "/trust",
     );
-    expect(screen.getByRole("link", { name: "Why Ask Linc uses multiple models" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "See the decisions Ask Linc is built for" })).toHaveAttribute(
       "href",
-      "/blog/why-ai-apps-should-stop-using-a-single-model",
+      "/use-cases",
     );
   });
 
@@ -69,18 +69,19 @@ describe("comparison pages", () => {
       headline: "Ask Linc vs Boldin",
     });
     expect(boldin?.rows.map((row) => row.dimension)).toEqual([
+      "Best for",
+      "Starting point",
+      "Retirement",
+      "Math and scenarios",
       "Price",
-      "Planning experience",
-      "Scope",
-      "AI and privacy",
     ]);
-    expect(boldin?.faqs).toHaveLength(4);
+    expect(boldin?.faqs).toHaveLength(3);
     expect(generateStaticParams()).toContainEqual({ slug: "boldin" });
 
     await expect(
       generateMetadata({ params: Promise.resolve({ slug: "boldin" }) }),
     ).resolves.toMatchObject({
-      title: "Ask Linc vs Boldin | Connected Decisions vs Retirement Planning",
+      title: "Ask Linc vs Boldin | Life Decisions vs Deep Retirement Planning",
       alternates: { canonical: "https://asklinc.com/vs/boldin" },
       openGraph: { url: "https://asklinc.com/vs/boldin" },
       robots: { index: true, follow: true },
@@ -96,7 +97,7 @@ describe("comparison pages", () => {
 
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Ask Linc vs Boldin");
     const comparison = screen.getByRole("table");
-    expect(within(comparison).getByText("Planning experience")).toBeInTheDocument();
+    expect(within(comparison).getByText("Math and scenarios")).toBeInTheDocument();
     expect(within(comparison).getByText(/offers free and paid planner options/i)).toBeInTheDocument();
     expect(screen.getByText("Is Ask Linc a Boldin alternative?")).toBeInTheDocument();
 
@@ -108,5 +109,28 @@ describe("comparison pages", () => {
         `/vs/${slug}`,
       );
     });
+  });
+
+  it("visually separates Ask Linc from the competitor in either recommendation order", async () => {
+    const monarchRender = render(
+      await MarketingSubpage({ params: Promise.resolve({ slug: ["vs", "monarch"] }) }),
+    );
+    const monarchTake = screen.getByText("OUR HONEST TAKE").closest("section");
+    expect(monarchTake).not.toBeNull();
+    const monarchHeading = within(monarchTake as HTMLElement).getByRole("heading");
+    expect(monarchHeading.children[0]).toHaveTextContent("Choose Monarch");
+    expect(monarchHeading.children[0].tagName).toBe("SPAN");
+    expect(monarchHeading.children[1]).toHaveTextContent("Choose Ask Linc");
+    expect(monarchHeading.children[1].tagName).toBe("EM");
+    monarchRender.unmount();
+
+    render(await MarketingSubpage({ params: Promise.resolve({ slug: ["vs", "origin"] }) }));
+    const originTake = screen.getByText("OUR HONEST TAKE").closest("section");
+    expect(originTake).not.toBeNull();
+    const originHeading = within(originTake as HTMLElement).getByRole("heading");
+    expect(originHeading.children[0]).toHaveTextContent("Choose Ask Linc");
+    expect(originHeading.children[0].tagName).toBe("EM");
+    expect(originHeading.children[1]).toHaveTextContent("Choose Origin");
+    expect(originHeading.children[1].tagName).toBe("SPAN");
   });
 });

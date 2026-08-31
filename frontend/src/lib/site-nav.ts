@@ -7,20 +7,19 @@
  * never shared, or the two placements' data merges.
  */
 export const PRIMARY_NAV_LINKS = [
-  { href: '/features', label: 'Features', csOverrideId: 'nav-features' },
+  { href: '/features', label: 'How It Works', csOverrideId: 'nav-features' },
   { href: '/use-cases', label: 'What You Can Ask', csOverrideId: 'nav-what-you-can-ask' },
   { href: '/retirement-answers', label: 'Retirement', csOverrideId: 'nav-retirement' },
   { href: '/vs', label: 'Compare', csOverrideId: 'nav-compare' },
   { href: '/pricing', label: 'Pricing', csOverrideId: 'nav-pricing' },
-  { href: '/about', label: 'About', csOverrideId: 'nav-about' },
 ];
 
 export const USE_CASE_LINKS = [
-  { href: '/use-cases/retirement', label: 'Retirement Planning' },
   { href: '/use-cases/home-buying', label: 'Buying a Home' },
   { href: '/use-cases/family-planning', label: 'Growing a Family' },
-  { href: '/use-cases/portfolio-analysis', label: 'Investment Risk' },
-  { href: '/use-cases/financial-stress-testing', label: 'Market What-Ifs' },
+  { href: '/use-cases/career-change', label: 'Career Change & Time Off' },
+  { href: '/use-cases/retirement', label: 'Retirement' },
+  { href: '/use-cases/portfolio-analysis', label: 'Investments' },
 ];
 
 export const COMPARE_LINKS = [

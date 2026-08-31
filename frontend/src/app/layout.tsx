@@ -1,6 +1,7 @@
 import { Inter } from 'next/font/google'
 import './globals.css'
 import '../components/marketing/marketing.css'
+import '../components/marketing/marketing-responsive.css'
 import StructuredData from '../components/StructuredData'
 import type { Metadata } from 'next'
 import { SpeedInsights } from '@vercel/speed-insights/next'
