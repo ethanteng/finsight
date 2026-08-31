@@ -62,7 +62,7 @@ export const Pricing = () => {
               <h3 className="text-2xl font-bold text-navy">Ask Linc</h3>
               <div className="flex items-baseline justify-center space-x-1">
                 <span className="text-5xl font-bold text-navy">{pricing.dollars}</span>
-                <span className="text-muted-foreground text-xl">/ month</span>
+                <span className="text-muted-foreground text-xl">/ {pricing.intervalLabel}</span>
               </div>
               <p className="text-muted-foreground text-base max-w-md mx-auto">
                 {pricing.trialLine} Compare that with a percentage-of-assets advisor fee.

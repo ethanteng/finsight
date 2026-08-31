@@ -519,7 +519,7 @@ const RetirementReadinessPage = () => {
                 <h3 className="text-2xl font-bold">Ask Linc</h3>
                 <div className="flex items-baseline justify-center space-x-1">
                   <span className="text-5xl font-bold gradient-text">{pricing.dollars}</span>
-                  <span className="text-muted-foreground text-xl">/ month</span>
+                  <span className="text-muted-foreground text-xl">/ {pricing.intervalLabel}</span>
                 </div>
                 <p className="text-muted-foreground text-lg">
                   Full access to Ask Linc's financial reasoning platform.

@@ -5,7 +5,7 @@ import { CreateCheckoutSessionRequest, CreatePortalSessionRequest } from '../typ
 import { getPrismaClient } from '../prisma-client';
 import { stripe } from '../config/stripe'; // Added for payment success endpoint
 import { requireAuth, requireAuthAllowLapsedSubscription } from '../auth/middleware';
-import { getDefaultPrice } from '../config/stripe-pricing';
+import { getDefaultPrice, minorToMajor } from '../config/stripe-pricing';
 
 const router = express.Router();
 
@@ -34,15 +34,18 @@ router.get('/payment-success', async (req, res) => {
       });
     }
 
-    // Google Ads conversion value. Single-tier pricing means every subscriber is
-    // worth the configured price, read from Stripe rather than a hardcoded
-    // per-tier table that drifts every time the price changes.
+    // Catalog price, used as the last resort for the Google Ads conversion value
+    // when the session itself does not carry an amount.
     const resolvedPrice = await getDefaultPrice();
 
-    // Verify the session with Stripe to ensure it's legitimate
+    // Verify the session with Stripe to ensure it's legitimate. line_items is
+    // expanded so the conversion value can come from what this session actually
+    // sold rather than from the current catalog price.
     try {
-      const session = await stripe.client.checkout.sessions.retrieve(session_id as string);
-      
+      const session = await stripe.client.checkout.sessions.retrieve(session_id as string, {
+        expand: ['line_items']
+      });
+
       const isPaid = session.payment_status === 'paid';
       const isTrial = session.payment_status === 'no_payment_required' && session.status === 'complete';
 
@@ -66,10 +69,24 @@ router.get('/payment-success', async (req, res) => {
         : undefined;
       console.log('Customer email from session:', customerEmail);
 
-      // Determine tier and value for Google Ads tracking. A trial checkout has
-      // amount_total 0, so the recurring price is the meaningful signup value.
+      // Determine tier and value for Google Ads tracking. Prefer what this
+      // session sold: the subscription line item, then the amount actually
+      // charged. A trial charges 0 up front, so fall through to the recurring
+      // price rather than reporting a 0-value signup; the catalog price is the
+      // last resort, and can differ from what this customer was sold.
       const tierName = (tier as string) || 'premium';
-      const conversionValue = resolvedPrice.amount;
+      const soldUnitAmount = session.line_items?.data?.[0]?.price?.unit_amount;
+      const soldCurrency = session.line_items?.data?.[0]?.price?.currency || session.currency;
+      const conversionCurrency = soldCurrency || resolvedPrice.currency;
+
+      let conversionValue: number;
+      if (typeof soldUnitAmount === 'number' && soldUnitAmount > 0) {
+        conversionValue = minorToMajor(soldUnitAmount, conversionCurrency);
+      } else if (typeof session.amount_total === 'number' && session.amount_total > 0) {
+        conversionValue = minorToMajor(session.amount_total, conversionCurrency);
+      } else {
+        conversionValue = resolvedPrice.amount;
+      }
 
       // Check if user already exists
       const prisma = getPrismaClient();
@@ -87,7 +104,7 @@ router.get('/payment-success', async (req, res) => {
         paid: isPaid,
         trialing: isTrial,
         amount: conversionValue,
-        currency: resolvedPrice.currency.toUpperCase(),
+        currency: conversionCurrency.toUpperCase(),
         session_id: session_id as string,
         tier: tierName
       };

@@ -70,7 +70,7 @@ export default function PricingPageContent() {
                   <h2 className="text-2xl font-bold">Ask Linc</h2>
                   <div className="flex items-baseline justify-center space-x-1">
                     <span className="text-5xl font-bold gradient-text">{pricing.dollars}</span>
-                    <span className="text-muted-foreground text-xl">/ month</span>
+                    <span className="text-muted-foreground text-xl">/ {pricing.intervalLabel}</span>
                   </div>
                   <PricingValueBadge />
                   <p className="text-muted-foreground text-sm mx-auto max-w-xs sm:max-w-sm text-balance">
