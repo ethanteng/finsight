@@ -103,8 +103,7 @@ describe("marketing review fixes", () => {
     expect(screen.getByText(/after i got laid off, i pasted my bank statements into chatgpt to figure out/i)).toHaveTextContent("how long my savings would last without a job.");
     expect(screen.getByText("WHERE IT BROKE")).toBeInTheDocument();
     expect(screen.getByText("WHAT I NEEDED")).toBeInTheDocument();
-    expect(screen.getByText("35%")).toBeInTheDocument();
-    expect(screen.getByText("$500K+")).toBeInTheDocument();
+    expect(screen.getByText(/35 of 100 ChatGPT Search finance answers/i)).toHaveTextContent("more than $500K short");
     expect(screen.getByRole("link", { name: /read the analysis/i })).toHaveAttribute("href", "/blog/ai-financial-calculator");
     expect(screen.getByText("THE RESULT")).toBeInTheDocument();
     expect(screen.getByText("So I built Ask Linc.")).toBeInTheDocument();
