@@ -134,7 +134,8 @@ describe("marketing review fixes", () => {
     expect(within(demo).getByText(/question asking is disabled in this demo/i)).toBeInTheDocument();
     expect(screen.queryByText(/calculation engine does the math/i)).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /real answers, not generic advice/i })).toBeInTheDocument();
-    expect(screen.getByText("A GENERAL CHATBOT")).toBeInTheDocument();
+    expect(screen.getByText("01 · GENERIC CHATBOT")).toBeInTheDocument();
+    expect(screen.getByText(/same question.*first without your accounts.*then with them/i)).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /no accounts.*general guidance/i })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /all your accounts.*answers you can check/i })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /facts behind the answer/i })).toBeInTheDocument();
@@ -224,11 +225,11 @@ describe("marketing review fixes", () => {
     try {
       render(<MarketingHome />);
       const comparison = screen.getByLabelText("Compare a general chatbot answer with Ask Linc");
-      const generalTab = within(comparison).getByRole("tab", { name: /general chatbot.*no accounts/i });
+      const generalTab = within(comparison).getByRole("tab", { name: /generic chatbot.*no accounts/i });
       const lincTab = within(comparison).getByRole("tab", { name: /ask linc.*all your accounts/i });
       expect(generalTab).toHaveAttribute("aria-selected", "true");
 
-      act(() => jest.advanceTimersByTime(5200));
+      act(() => jest.advanceTimersByTime(2000));
       expect(lincTab).toHaveAttribute("data-auto-click", "true");
       act(() => jest.advanceTimersByTime(260));
       expect(lincTab).toHaveAttribute("aria-selected", "true");

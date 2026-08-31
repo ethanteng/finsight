@@ -1318,6 +1318,9 @@ footer { padding-block: 55px 28px; background: #0a1912; color: white; }.footer-i
 .math-product-shot { overflow: hidden; border: 1px solid rgba(255,255,255,.2); border-radius: 22px; background: #f4f6f2; box-shadow: 10px 10px 0 rgba(217,255,111,.15); }
 .math-product-shot figcaption { padding: 16px 20px; border-top: 1px solid rgba(16,35,25,.13); background: #e6ebe3; color: #516259; font-size: 12px; line-height: 1.45; }
 .answer-proof-grid { display: grid; grid-template-columns: 1fr; gap: 48px; align-items: start; }
+.answer-proof-intro { display: grid; gap: 18px; }
+.answer-proof-sequence { margin: 0; color: #657269; font-size: 15px; font-weight: 650; line-height: 1.5; text-align: center; }
+.answer-proof-sequence span { display: inline-block; margin-inline: 7px; color: #47775a; font-size: 18px; }
 .answer-proof-contrast { display: grid; width: min(100%,680px); grid-template-columns: .62fr 1.38fr; gap: 14px; align-items: center; margin-inline: auto; }
 .answer-proof-contrast button { position: relative; min-height: 210px; padding: 28px; border: 1px solid #b7c1b5; border-radius: 20px; background: #e9ebe3; color: var(--ink); text-align: left; cursor: pointer; }
 .answer-proof-contrast button:first-child { width: 82%; min-height: 108px; justify-self: center; padding: 15px 17px; border-color: #ccd2c9; background: rgba(233,235,227,.38); color: #6a766e; }

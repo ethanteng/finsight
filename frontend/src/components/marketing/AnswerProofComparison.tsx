@@ -5,7 +5,7 @@ import StaticProductDemo, { DEMO_DECISIONS } from "./StaticProductDemo";
 
 type ComparisonView = "general" | "linc";
 
-const autoAdvanceDelay = 5200;
+const autoAdvanceDelay = 2000;
 const autoClickLead = 260;
 const autoClickDuration = 720;
 
@@ -117,23 +117,26 @@ export default function AnswerProofComparison() {
       onPointerDownCapture={stopAutoPlay}
       onKeyDownCapture={stopAutoPlay}
     >
-      <div className="answer-proof-contrast" role="tablist" aria-label="Choose an answer type">
-        <button type="button" role="tab" id="answer-proof-general-tab" aria-controls="answer-proof-panel" aria-selected={view === "general"} onClick={() => chooseView("general")}>
-          <span>A GENERAL CHATBOT</span>
-          <h3>No accounts. General guidance.</h3>
-        </button>
-        <button
-          type="button"
-          role="tab"
-          id="answer-proof-linc-tab"
-          aria-controls="answer-proof-panel"
-          aria-selected={view === "linc"}
-          data-auto-click={autoClickView === "linc" ? "true" : undefined}
-          onClick={() => chooseView("linc")}
-        >
-          <span>ASK LINC</span>
-          <h3>All your accounts. Answers you can check.</h3>
-        </button>
+      <div className="answer-proof-intro">
+        <p className="answer-proof-sequence">Same question. First without your accounts <span aria-hidden="true">→</span> then with them.</p>
+        <div className="answer-proof-contrast" role="tablist" aria-label="Choose an answer type">
+          <button type="button" role="tab" id="answer-proof-general-tab" aria-controls="answer-proof-panel" aria-selected={view === "general"} onClick={() => chooseView("general")}>
+            <span>01 · GENERIC CHATBOT</span>
+            <h3>No accounts. General guidance.</h3>
+          </button>
+          <button
+            type="button"
+            role="tab"
+            id="answer-proof-linc-tab"
+            aria-controls="answer-proof-panel"
+            aria-selected={view === "linc"}
+            data-auto-click={autoClickView === "linc" ? "true" : undefined}
+            onClick={() => chooseView("linc")}
+          >
+            <span>02 · ASK LINC</span>
+            <h3>All your accounts. Answers you can check.</h3>
+          </button>
+        </div>
       </div>
       <div className="answer-proof-stage" role="tabpanel" id="answer-proof-panel" aria-labelledby={view === "general" ? "answer-proof-general-tab" : "answer-proof-linc-tab"}>
         <div className="answer-proof-panel" key={view}>
