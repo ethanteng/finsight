@@ -142,7 +142,7 @@ describe("marketing review fixes", () => {
       expect(screen.getByText(provider)).toBeInTheDocument();
     });
     expect(screen.getByText("Bank balances, cards, loans, and transactions")).toBeInTheDocument();
-    expect(screen.getByText("Brokerage and retirement holdings, balances, and trades")).toBeInTheDocument();
+    expect(screen.getByText("Investment accounts, holdings, and trades")).toBeInTheDocument();
     expect(screen.getByText("Home values and local property data")).toBeInTheDocument();
     expect(screen.getByText("Inflation, interest rates, and other economic data")).toBeInTheDocument();
     expect(screen.getByText("Company financials, stock prices, and market data")).toBeInTheDocument();

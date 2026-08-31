@@ -20,7 +20,7 @@ const scenarios = [
 
 const providers = [
   { name: "Plaid", detail: "Bank balances, cards, loans, and transactions" },
-  { name: "SnapTrade", detail: "Brokerage and retirement holdings, balances, and trades" },
+  { name: "SnapTrade", detail: "Investment accounts, holdings, and trades" },
   { name: "RentCast", detail: "Home values and local property data" },
   { name: "FRED", detail: "Inflation, interest rates, and other economic data" },
   { name: "FMP", detail: "Company financials, stock prices, and market data" },
