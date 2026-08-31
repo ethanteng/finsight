@@ -100,7 +100,7 @@ describe("marketing review fixes", () => {
     expect(portrait).toHaveAttribute("src", expect.stringContaining("ethan-teng-cartoon.webp"));
     expect(portrait).not.toHaveAttribute("src", expect.stringContaining("ethan-teng.jpg"));
     expect(screen.getByRole("heading", { name: /it started with a layoff.*and a bad idea/i })).toBeInTheDocument();
-    expect(screen.getByText(/after i got laid off, i pasted my bank statements to figure out/i)).toHaveTextContent("how long my money would last.");
+    expect(screen.getByText(/after i got laid off, i pasted my bank statements into chatgpt out of desperation/i)).toHaveTextContent("how long my savings would last without a job.");
     expect(screen.getByText("WHERE IT BROKE")).toBeInTheDocument();
     expect(screen.getByText("WHAT I NEEDED")).toBeInTheDocument();
     expect(screen.getByText("THE RESULT")).toBeInTheDocument();
