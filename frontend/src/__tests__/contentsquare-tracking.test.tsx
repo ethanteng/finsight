@@ -99,6 +99,16 @@ describe("Contentsquare element ids", () => {
     },
   );
 
+  it("identifies the footer About link, which is no longer in the header nav", () => {
+    const { container } = render(<MarketingHome />);
+
+    const about = container.querySelector('[data-cs-override-id="nav-about-footer"]');
+    expect(about).not.toBeNull();
+    expect(about).toHaveAttribute("href", "/about");
+    // The header nav dropped /about, so the old value must not linger anywhere.
+    expect(overrideIds(container)).not.toContain("nav-about");
+  });
+
   it("identifies every start-free-trial button on the homepage", () => {
     const { container } = render(<MarketingHome />);
 

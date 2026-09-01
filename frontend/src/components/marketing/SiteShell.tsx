@@ -57,7 +57,7 @@ export function SiteFooter() {
         </div>
         <div className="footer-column">
           <b>COMPANY</b>
-          <Link href="/about">About</Link>
+          <Link href="/about" data-cs-override-id="nav-about-footer">About</Link>
           <Link href="/blog">Blog</Link>
           <Link href="/contact">Contact</Link>
         </div>
