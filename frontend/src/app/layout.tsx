@@ -7,6 +7,12 @@ import type { Metadata } from 'next'
 import { SpeedInsights } from '@vercel/speed-insights/next'
 import { PricingProvider } from '../components/PricingProvider'
 import { getPricing } from '../lib/pricing'
+import {
+  buildGoogleTagManagerSnippet,
+  shouldRenderNoscriptFallback,
+} from '../lib/analytics-host'
+
+const GTM_CONTAINER_ID = 'GTM-PL362L36'
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -69,16 +75,12 @@ export default async function RootLayout({
         <StructuredData data={organizationSchema} />
         <StructuredData data={websiteSchema} />
         
-        {/* Google Tag Manager */}
+        {/* Google Tag Manager — self-gated to the production hostname, so dev
+            servers and preview deploys never record into the production
+            analytics project. See src/lib/analytics-host.ts. */}
         <script
           dangerouslySetInnerHTML={{
-            __html: `
-              (function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
-              new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
-              j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
-              'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
-              })(window,document,'script','dataLayer','GTM-PL362L36');
-            `,
+            __html: buildGoogleTagManagerSnippet(GTM_CONTAINER_ID),
           }}
         />
         {/* End Google Tag Manager */}
@@ -105,15 +107,19 @@ export default async function RootLayout({
         */}
       </head>
       <body className={inter.className}>
-        {/* Google Tag Manager (noscript) */}
-        <noscript>
-          <iframe 
-            src="https://www.googletagmanager.com/ns.html?id=GTM-PL362L36"
-            height="0" 
-            width="0" 
-            style={{display:'none',visibility:'hidden'}}
-          />
-        </noscript>
+        {/* Google Tag Manager (noscript) — gated on the build environment
+            rather than the hostname, since a noscript fallback cannot run the
+            hostname check. */}
+        {shouldRenderNoscriptFallback(process.env.VERCEL_ENV) && (
+          <noscript>
+            <iframe
+              src={`https://www.googletagmanager.com/ns.html?id=${GTM_CONTAINER_ID}`}
+              height="0"
+              width="0"
+              style={{display:'none',visibility:'hidden'}}
+            />
+          </noscript>
+        )}
         {/* End Google Tag Manager (noscript) */}
         <PricingProvider pricing={pricing}>{children}</PricingProvider>
         <SpeedInsights />
