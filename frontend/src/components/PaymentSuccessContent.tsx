@@ -3,19 +3,7 @@ import { useEffect, useState, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import SiteFooter from './SiteFooter';
-
-// TypeScript declaration for Google Ads dataLayer
-declare global {
-  interface Window {
-    dataLayer?: Array<{
-      event: string;
-      value?: number;
-      currency?: string;
-      transaction_id?: string;
-      [key: string]: string | number | boolean | undefined;
-    }>;
-  }
-}
+import { pushPurchase } from '@/lib/dataLayer';
 
 function PaymentSuccessContentInner() {
   const [error, setError] = useState<string | null>(null);
@@ -54,27 +42,20 @@ function PaymentSuccessContentInner() {
           // trial-start tracking requires a separately configured analytics event.
           // Also skip when checkout was deliberately not attached to the account —
           // that payment is an orphaned duplicate, not a successful subscription.
-          if (
-            data.paid &&
-            !skippedExisting &&
-            !sessionStorage.getItem('purchase_event_fired')
-          ) {
-            window.dataLayer = window.dataLayer || [];
-            window.dataLayer.push({
-              event: 'purchase',
-              transaction_id: data.session_id,
+          //
+          // Every field comes from the API response, which is built from the
+          // Stripe session the backend just verified, rather than from the query
+          // string anyone can edit on the way back from checkout.
+          if (data.paid && !skippedExisting) {
+            const reported = pushPurchase({
+              transactionId: data.session_id,
               value: data.amount,
               currency: data.currency,
-              tier: tier || 'premium'
-            });            
-
-            sessionStorage.setItem('purchase_event_fired', 'true');
-            console.log('Purchase event fired:', {
-              transaction_id: data.session_id,
-              value: data.amount,
-              currency: data.currency,
-              tier: tier || 'premium'
+              tier: data.tier,
             });
+            if (reported) {
+              console.log('Purchase event fired:', data.session_id);
+            }
           }
 
           // Use redirect or redirectUrl (support both for backwards compatibility)
