@@ -72,6 +72,15 @@ describe("purchase analytics", () => {
       value: 19,
       // GA4 expects an uppercase ISO code; the API can report either case.
       currency: "USD",
+      // Same shape the server sends for a trial conversion, so the two paths
+      // do not disagree about the sale they describe.
+      items: [{
+        item_id: "subscription_premium",
+        item_name: "Ask Linc premium",
+        item_category: "subscription",
+        price: 19,
+        quantity: 1,
+      }],
     }]);
   });
 

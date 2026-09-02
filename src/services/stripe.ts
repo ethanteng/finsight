@@ -1003,40 +1003,66 @@ export class StripeService {
 
       // Renewals are not new conversions, and this marker is what stops month
       // two from reporting one.
-      if (subscription?.metadata?.ga_purchase_reported) return;
-
-      const clientId = subscription?.metadata?.ga_client_id;
-      const currency = (invoice.currency || 'usd') as string;
-      const priceId = subscription?.items?.data?.[0]?.price?.id;
+      const metadata = subscription?.metadata || {};
+      if (metadata.ga_purchase_reported) return;
 
       const { sendGa4PurchaseEvent } = await import('./ga4-measurement-protocol');
       const { minorToMajor } = await import('../config/stripe-pricing');
       const { getTierFromPriceId } = await import('../config/stripe');
 
+      // A conversion that failed to send is snapshotted on the subscription, so
+      // the invoice that retries it reports what the customer was actually
+      // charged the first time rather than overwriting it with the renewal's
+      // amount. GA4 will still stamp the event when it arrives — the
+      // Measurement Protocol only backdates 72 hours — so a recovered
+      // conversion is late, but it is no longer also wrong about revenue.
+      const pendingValue = Number(metadata.ga_purchase_pending_value);
+      const hasPending = Number.isFinite(pendingValue) && metadata.ga_purchase_pending_transaction_id;
+
+      const currency = hasPending
+        ? metadata.ga_purchase_pending_currency || 'usd'
+        : ((invoice.currency || 'usd') as string);
+      const value = hasPending ? pendingValue : minorToMajor(amountPaid, currency);
+      const transactionId = hasPending
+        ? metadata.ga_purchase_pending_transaction_id
+        : await this.getCheckoutSessionIdForSubscription(subscription.id);
+
+      const priceId = subscription?.items?.data?.[0]?.price?.id;
       const result = await sendGa4PurchaseEvent({
-        clientId,
-        transactionId: await this.getCheckoutSessionIdForSubscription(subscription.id),
-        value: minorToMajor(amountPaid, currency),
+        clientId: metadata.ga_client_id,
+        transactionId,
+        value,
         currency,
-        tier: (priceId && getTierFromPriceId(priceId)) || subscription?.metadata?.tier || 'premium',
+        tier: (priceId && getTierFromPriceId(priceId)) || metadata.tier || 'premium',
       });
 
       // Mark it reported once it lands, and also when the event can never be
       // valid — a subscription with no client id will not grow one, and
-      // retrying it every month would only repeat the same warning.
-      //
-      // A transport failure stays unmarked so a later invoice retries. The
-      // sender already retries immediately, so reaching here means Google was
-      // down for both attempts; the alternative is dropping the sale entirely.
-      // The retry carries the later invoice's amount and timestamp, so a
-      // conversion recovered this way is dated to the renewal rather than the
-      // original charge — worth it for revenue that would otherwise vanish, and
-      // GA4 dedupes on the transaction id so it cannot double-count.
+      // retrying it every month would only repeat the same warning. Either way
+      // the pending snapshot is cleared; Stripe unsets a metadata key when it
+      // is given an empty value.
       if (result.sent || result.reason === 'invalid_event') {
         await stripe.client.subscriptions.update(subscription.id, {
           metadata: {
-            ...(subscription.metadata || {}),
+            ...metadata,
             ga_purchase_reported: new Date().toISOString(),
+            ga_purchase_pending_value: '',
+            ga_purchase_pending_currency: '',
+            ga_purchase_pending_transaction_id: '',
+          }
+        });
+        return;
+      }
+
+      // Delivery failed after the sender's own retries, so leave it unmarked
+      // for the next invoice and record what that retry should report.
+      if (!hasPending) {
+        await stripe.client.subscriptions.update(subscription.id, {
+          metadata: {
+            ...metadata,
+            ga_purchase_pending_value: String(value),
+            ga_purchase_pending_currency: currency,
+            ga_purchase_pending_transaction_id: transactionId,
           }
         });
       }

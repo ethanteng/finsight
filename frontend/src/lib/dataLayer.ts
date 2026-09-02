@@ -126,10 +126,11 @@ export function pushPurchase({ transactionId, value, currency, tier }: PurchaseE
   if (typeof transactionId !== 'string' || !transactionId) return false;
   if (hasFired(transactionId)) return false;
 
+  const normalizedTier = normalizeTier(tier);
   const payload: Record<string, unknown> = {
     event: 'purchase',
     transaction_id: transactionId,
-    tier: normalizeTier(tier),
+    tier: normalizedTier,
   };
 
   // Revenue is reported only when both halves are usable. GA4 discards a value
@@ -138,6 +139,18 @@ export function pushPurchase({ transactionId, value, currency, tier }: PurchaseE
   if (typeof value === 'number' && Number.isFinite(value) && value >= 0 && typeof currency === 'string' && currency) {
     payload.value = value;
     payload.currency = currency.toUpperCase();
+    // Matches what the server-side Measurement Protocol sends for a trial
+    // conversion, so the two paths describe the same sale the same way. Inert
+    // until the GA4 tag in GTM maps ecommerce items.
+    payload.items = [
+      {
+        item_id: `subscription_${normalizedTier}`,
+        item_name: `Ask Linc ${normalizedTier}`,
+        item_category: 'subscription',
+        price: value,
+        quantity: 1,
+      },
+    ];
   } else {
     console.warn('Purchase event is missing a usable value/currency pair', { value, currency });
   }

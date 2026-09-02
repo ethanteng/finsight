@@ -113,13 +113,75 @@ describe('reporting a trial conversion to GA4', () => {
     expect(mockStripe.stripe.client.subscriptions.update).toHaveBeenCalled();
   });
 
-  it('leaves a transport failure unmarked so a later invoice retries', async () => {
+  it('snapshots the conversion when delivery fails, leaving it unreported', async () => {
     sendGa4PurchaseEvent.mockResolvedValue({ sent: false, reason: 'request_failed' });
 
     await report(paidInvoice, subscriptionWith({ ga_client_id: '111.222' }));
 
-    // GA4 dedupes on the transaction id, so the retry cannot double-count.
+    const [, update] = mockStripe.stripe.client.subscriptions.update.mock.calls[0];
+    // Not marked reported, so a later invoice retries...
+    expect(update.metadata.ga_purchase_reported).toBeUndefined();
+    // ...and this is what that retry must report, rather than the renewal's.
+    expect(update.metadata).toMatchObject({
+      ga_purchase_pending_value: '29',
+      ga_purchase_pending_currency: 'usd',
+      ga_purchase_pending_transaction_id: 'cs_test_original'
+    });
+  });
+
+  it('retries with the original amount, not the renewal it arrives on', async () => {
+    // The first charge was $29 and failed to send. A month later the renewal
+    // invoice carries its own amount, and reporting that would rewrite the
+    // conversion's revenue.
+    await report(
+      { amount_paid: 4900, currency: 'eur' },
+      subscriptionWith({
+        ga_client_id: '111.222',
+        ga_purchase_pending_value: '29',
+        ga_purchase_pending_currency: 'usd',
+        ga_purchase_pending_transaction_id: 'cs_test_original'
+      })
+    );
+
+    expect(sendGa4PurchaseEvent).toHaveBeenCalledWith(expect.objectContaining({
+      value: 29,
+      currency: 'usd',
+      transactionId: 'cs_test_original'
+    }));
+  });
+
+  it('does not overwrite an existing snapshot when the retry also fails', async () => {
+    sendGa4PurchaseEvent.mockResolvedValue({ sent: false, reason: 'request_failed' });
+
+    await report(
+      { amount_paid: 4900, currency: 'eur' },
+      subscriptionWith({
+        ga_client_id: '111.222',
+        ga_purchase_pending_value: '29',
+        ga_purchase_pending_currency: 'usd',
+        ga_purchase_pending_transaction_id: 'cs_test_original'
+      })
+    );
+
     expect(mockStripe.stripe.client.subscriptions.update).not.toHaveBeenCalled();
+  });
+
+  it('clears the snapshot once the conversion lands', async () => {
+    await report(paidInvoice, subscriptionWith({
+      ga_client_id: '111.222',
+      ga_purchase_pending_value: '29',
+      ga_purchase_pending_currency: 'usd',
+      ga_purchase_pending_transaction_id: 'cs_test_original'
+    }));
+
+    const [, update] = mockStripe.stripe.client.subscriptions.update.mock.calls[0];
+    // Stripe unsets a metadata key given an empty value.
+    expect(update.metadata).toMatchObject({
+      ga_purchase_pending_value: '',
+      ga_purchase_pending_currency: '',
+      ga_purchase_pending_transaction_id: ''
+    });
+    expect(update.metadata.ga_purchase_reported).toEqual(expect.any(String));
   });
 
   it('falls back to the subscription id when no checkout session is found', async () => {
