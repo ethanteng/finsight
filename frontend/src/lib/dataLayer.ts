@@ -37,27 +37,19 @@ export function pushBeginCheckout(ctaLocation = 'marketing_cta'): void {
 }
 
 export function pushViewExamples(): void {
-  const payload = {
+  if (typeof window === 'undefined') return;
+
+  pushToDataLayer({
     event: 'view_examples',
     source_page: window.location.pathname,
-  };
-  pushToDataLayer(payload);
-
-  // GA4 via gtag (when loaded directly, e.g. NEXT_PUBLIC_GA_ID)
-  if (typeof window !== 'undefined' && typeof (window as Window & { gtag?: unknown }).gtag === 'function') {
-    (window as Window & { gtag: (c: 'event', e: string, p?: Record<string, unknown>) => void }).gtag('event', 'view_examples', { source_page: window.location.pathname });
-  }
+  });
 }
 
 export function pushViewMoreExamples(): void {
-  const payload = {
+  if (typeof window === 'undefined') return;
+
+  pushToDataLayer({
     event: 'view_more_examples',
     source_page: window.location.pathname,
-  };
-  pushToDataLayer(payload);
-
-  // GA4 via gtag (when loaded directly)
-  if (typeof window !== 'undefined' && typeof (window as Window & { gtag?: unknown }).gtag === 'function') {
-    (window as Window & { gtag: (c: 'event', e: string, p?: Record<string, unknown>) => void }).gtag('event', 'view_more_examples', { source_page: window.location.pathname });
-  }
+  });
 }
