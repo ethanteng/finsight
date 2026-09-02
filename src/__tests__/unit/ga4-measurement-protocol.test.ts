@@ -42,7 +42,7 @@ describe('sendGa4PurchaseEvent', () => {
 
     const body = JSON.parse(init.body);
     expect(body.client_id).toBe('1234567890.1700000000');
-    expect(body.events).toEqual([{
+    expect(body.events[0]).toMatchObject({
       name: 'purchase',
       params: {
         transaction_id: 'cs_test_123',
@@ -50,7 +50,23 @@ describe('sendGa4PurchaseEvent', () => {
         currency: 'USD',
         tier: 'premium'
       }
-    }]);
+    });
+  });
+
+  it('describes the sale as an item so ecommerce reports are populated', () => {
+    // collect answers 2xx whether or not items is present, so an omitted array
+    // would leave the ecommerce reports empty with nothing to show for it.
+    return sendGa4PurchaseEvent(validEvent).then(() => {
+      const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+
+      expect(body.events[0].params.items).toEqual([{
+        item_id: 'subscription_premium',
+        item_name: 'Ask Linc premium',
+        item_category: 'subscription',
+        price: 29,
+        quantity: 1
+      }]);
+    });
   });
 
   it('does nothing when the credential is not configured', async () => {
@@ -73,13 +89,38 @@ describe('sendGa4PurchaseEvent', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('reports a non-2xx response as a failure rather than throwing', async () => {
+  it('reports a persistent server error as a failure rather than throwing', async () => {
     fetchMock.mockResolvedValue({ ok: false, status: 500 });
 
     expect(await sendGa4PurchaseEvent(validEvent)).toEqual({ sent: false, reason: 'request_failed' });
   });
 
-  it('swallows a transport error so the webhook still completes', async () => {
+  it('retries a server error, since the alternative is reporting a month late', async () => {
+    fetchMock
+      .mockResolvedValueOnce({ ok: false, status: 503 })
+      .mockResolvedValueOnce({ ok: true, status: 200 });
+
+    expect(await sendGa4PurchaseEvent(validEvent)).toEqual({ sent: true });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('retries a transport error too', async () => {
+    fetchMock
+      .mockRejectedValueOnce(new Error('network down'))
+      .mockResolvedValueOnce({ ok: true, status: 200 });
+
+    expect(await sendGa4PurchaseEvent(validEvent)).toEqual({ sent: true });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not retry a 4xx, which would fail identically', async () => {
+    fetchMock.mockResolvedValue({ ok: false, status: 400 });
+
+    expect(await sendGa4PurchaseEvent(validEvent)).toEqual({ sent: false, reason: 'request_failed' });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('swallows a persistent transport error so the webhook still completes', async () => {
     fetchMock.mockRejectedValue(new Error('network down'));
 
     await expect(sendGa4PurchaseEvent(validEvent)).resolves.toEqual({

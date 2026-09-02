@@ -917,6 +917,22 @@ export class StripeService {
         console.log(
           `Subscription ${subscriptionId} not found in database yet; skipping payment succeeded update`
         );
+
+        // There is nothing to provision, but Stripe may still have collected
+        // money: a buyer who finished Checkout and abandoned registration has no
+        // local row, and their trial still converts 30 days later. Reporting it
+        // is the only record that the sale happened.
+        //
+        // Gated on the amount so the far more common case — a $0 trial invoice
+        // for a subscription we do not track — costs no Stripe call at all.
+        if (typeof invoice?.amount_paid === 'number' && invoice.amount_paid > 0) {
+          try {
+            const unlinkedSubscription = await stripe.client.subscriptions.retrieve(subscriptionId);
+            await this.reportPaidConversionToGa4(invoice, unlinkedSubscription);
+          } catch (error) {
+            console.warn(`Could not report the conversion for untracked subscription ${subscriptionId}:`, error);
+          }
+        }
         return;
       }
 
@@ -1007,9 +1023,15 @@ export class StripeService {
 
       // Mark it reported once it lands, and also when the event can never be
       // valid — a subscription with no client id will not grow one, and
-      // retrying it every month would only repeat the same warning. A transport
-      // failure stays unmarked so a later invoice can retry; GA4 dedupes on the
-      // transaction id, so that retry cannot double-count.
+      // retrying it every month would only repeat the same warning.
+      //
+      // A transport failure stays unmarked so a later invoice retries. The
+      // sender already retries immediately, so reaching here means Google was
+      // down for both attempts; the alternative is dropping the sale entirely.
+      // The retry carries the later invoice's amount and timestamp, so a
+      // conversion recovered this way is dated to the renewal rather than the
+      // original charge — worth it for revenue that would otherwise vanish, and
+      // GA4 dedupes on the transaction id so it cannot double-count.
       if (result.sent || result.reason === 'invalid_event') {
         await stripe.client.subscriptions.update(subscription.id, {
           metadata: {

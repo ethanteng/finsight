@@ -140,3 +140,52 @@ describe('reporting a trial conversion to GA4', () => {
     ).resolves.toBeUndefined();
   });
 });
+
+describe('a paid conversion on a subscription with no local row', () => {
+  let mockPrisma: any;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    sendGa4PurchaseEvent.mockResolvedValue({ sent: true });
+    mockStripe.getTierFromPriceId.mockReturnValue('premium');
+    mockStripe.stripe.client.checkout.sessions.list.mockResolvedValue({
+      data: [{ id: 'cs_abandoned' }]
+    });
+    mockStripe.stripe.client.subscriptions.update.mockResolvedValue({});
+    mockStripe.stripe.client.subscriptions.retrieve.mockResolvedValue(
+      subscriptionWith({ ga_client_id: '333.444' })
+    );
+    // A buyer who finished Checkout but abandoned registration has no user, so
+    // handleSubscriptionCreated never wrote a subscription row.
+    mockPrisma = { subscription: { findUnique: jest.fn().mockResolvedValue(null) } };
+    (getPrismaClient as jest.Mock).mockReturnValue(mockPrisma);
+    jest.spyOn(console, 'log').mockImplementation(() => {});
+    jest.spyOn(console, 'warn').mockImplementation(() => {});
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  const handlePaymentSucceeded = (invoice: any) =>
+    (stripeService as any).handlePaymentSucceeded({ object: invoice });
+
+  it('still reports the sale Stripe collected', async () => {
+    await handlePaymentSucceeded({ subscription: 'sub_123', amount_paid: 2900, currency: 'usd' });
+
+    expect(sendGa4PurchaseEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ clientId: '333.444', transactionId: 'cs_abandoned', value: 29 })
+    );
+  });
+
+  it('reports nothing for the $0 invoice that opens the trial', async () => {
+    await handlePaymentSucceeded({ subscription: 'sub_123', amount_paid: 0, currency: 'usd' });
+
+    expect(sendGa4PurchaseEvent).not.toHaveBeenCalled();
+  });
+
+  it('does not throw when the subscription cannot be fetched', async () => {
+    mockStripe.stripe.client.subscriptions.retrieve.mockRejectedValue(new Error('stripe down'));
+
+    await expect(
+      handlePaymentSucceeded({ subscription: 'sub_123', amount_paid: 2900, currency: 'usd' })
+    ).resolves.toBeUndefined();
+  });
+});

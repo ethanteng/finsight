@@ -18,6 +18,9 @@ const MEASUREMENT_PROTOCOL_URL = 'https://www.google-analytics.com/mp/collect';
 /** How long to wait on Google before giving up and letting the webhook finish. */
 const REQUEST_TIMEOUT_MS = 3000;
 
+/** Total attempts per conversion. Worst case stays far inside Stripe's timeout. */
+const MAX_ATTEMPTS = 2;
+
 export interface Ga4PurchaseEvent {
   /** GA4 client id captured in the browser, e.g. "1234567890.1700000000". */
   clientId: string;
@@ -74,6 +77,7 @@ export async function sendGa4PurchaseEvent(event: Ga4PurchaseEvent): Promise<Ga4
   const url = `${MEASUREMENT_PROTOCOL_URL}?measurement_id=${encodeURIComponent(measurementId)}` +
     `&api_secret=${encodeURIComponent(apiSecret)}`;
 
+  const currency = event.currency.toUpperCase();
   const body = {
     client_id: event.clientId,
     // Without this the event lands at "now" but is attributed to a fresh
@@ -85,14 +89,31 @@ export async function sendGa4PurchaseEvent(event: Ga4PurchaseEvent): Promise<Ga4
         params: {
           transaction_id: event.transactionId,
           value: event.value,
-          currency: event.currency.toUpperCase(),
+          currency,
           tier: event.tier,
+          // GA4's recommended purchase event specifies items. Revenue does
+          // register without it — the browser path has been reporting through
+          // GTM with only transaction-level params — but the ecommerce reports
+          // stay empty, and the collect endpoint answers 2xx either way, so a
+          // missing items array fails silently.
+          items: [
+            {
+              item_id: `subscription_${event.tier}`,
+              item_name: `Ask Linc ${event.tier}`,
+              item_category: 'subscription',
+              price: event.value,
+              quantity: 1,
+            },
+          ],
         },
       },
     ],
   };
 
-  try {
+  // A failure here is not retried until the next monthly invoice, which would
+  // report the conversion a month late, so it is worth a couple of immediate
+  // attempts to ride out a blip. Bounded well inside Stripe's webhook timeout.
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
@@ -106,18 +127,25 @@ export async function sendGa4PurchaseEvent(event: Ga4PurchaseEvent): Promise<Ga4
 
       // The collect endpoint answers 2xx for anything it accepts and does not
       // report per-event validation errors; those need the /debug endpoint.
-      if (!response.ok) {
-        console.error(`GA4 Measurement Protocol responded ${response.status} for ${event.transactionId}`);
-        return { sent: false, reason: 'request_failed' };
+      if (response.ok) {
+        console.log(`GA4 purchase reported for transaction ${event.transactionId}`);
+        return { sent: true };
       }
 
-      console.log(`GA4 purchase reported for transaction ${event.transactionId}`);
-      return { sent: true };
+      console.error(
+        `GA4 Measurement Protocol responded ${response.status} for ${event.transactionId} (attempt ${attempt})`
+      );
+      // 4xx means the request itself is wrong; repeating it changes nothing.
+      if (response.status < 500) return { sent: false, reason: 'request_failed' };
+    } catch (error) {
+      console.error(
+        `Failed to send the GA4 purchase event (attempt ${attempt}):`,
+        error instanceof Error ? error.message : error
+      );
     } finally {
       clearTimeout(timeout);
     }
-  } catch (error) {
-    console.error('Failed to send the GA4 purchase event:', error instanceof Error ? error.message : error);
-    return { sent: false, reason: 'request_failed' };
   }
+
+  return { sent: false, reason: 'request_failed' };
 }
