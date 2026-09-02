@@ -11,10 +11,6 @@ interface DataLayerWindow {
   dataLayer?: Array<Record<string, unknown> | unknown[]>;
 }
 
-type GtagWindow = Window & {
-  gtag?: (command: 'event', event: string, params?: Record<string, unknown>) => void;
-};
-
 function pushToDataLayer(payload: Record<string, unknown>): void {
   if (typeof window === 'undefined') return;
   const win = window as unknown as DataLayerWindow;
@@ -40,35 +36,24 @@ export function pushBeginCheckout(ctaLocation = 'marketing_cta'): void {
     content_type: contentType,
   };
   pushToDataLayer(payload);
-
-  const analyticsWindow = window as GtagWindow;
-  analyticsWindow.gtag?.('event', 'begin_checkout', payload);
 }
 
 export function pushViewExamples(): void {
-  const payload = {
+  if (typeof window === 'undefined') return;
+
+  pushToDataLayer({
     event: 'view_examples',
     source_page: window.location.pathname,
-  };
-  pushToDataLayer(payload);
-
-  // GA4 via gtag (when loaded directly, e.g. NEXT_PUBLIC_GA_ID)
-  if (typeof window !== 'undefined' && typeof (window as Window & { gtag?: unknown }).gtag === 'function') {
-    (window as Window & { gtag: (c: 'event', e: string, p?: Record<string, unknown>) => void }).gtag('event', 'view_examples', { source_page: window.location.pathname });
-  }
+  });
 }
 
 export function pushViewMoreExamples(): void {
-  const payload = {
+  if (typeof window === 'undefined') return;
+
+  pushToDataLayer({
     event: 'view_more_examples',
     source_page: window.location.pathname,
-  };
-  pushToDataLayer(payload);
-
-  // GA4 via gtag (when loaded directly)
-  if (typeof window !== 'undefined' && typeof (window as Window & { gtag?: unknown }).gtag === 'function') {
-    (window as Window & { gtag: (c: 'event', e: string, p?: Record<string, unknown>) => void }).gtag('event', 'view_more_examples', { source_page: window.location.pathname });
-  }
+  });
 }
 
 /**

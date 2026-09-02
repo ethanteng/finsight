@@ -1,4 +1,4 @@
-import { pushBeginCheckout, pushPurchase } from "@/lib/dataLayer";
+import { pushBeginCheckout, pushPurchase, pushViewExamples, pushViewMoreExamples } from "@/lib/dataLayer";
 
 type AnalyticsWindow = Window & typeof globalThis & {
   dataLayer?: Array<Record<string, unknown> | unknown[]>;
@@ -18,7 +18,7 @@ describe("begin_checkout analytics", () => {
     delete analyticsWindow.gtag;
   });
 
-  it("attributes answer-page CTA intent across configured analytics providers", () => {
+  it("attributes answer-page CTA intent once through the GTM data layer", () => {
     pushBeginCheckout("answer_product_bridge");
 
     const event = {
@@ -28,7 +28,8 @@ describe("begin_checkout analytics", () => {
       content_type: "retirement_answer",
     };
     expect(analyticsWindow.dataLayer).toContainEqual(event);
-    expect(analyticsWindow.gtag).toHaveBeenCalledWith("event", "begin_checkout", event);
+    expect(analyticsWindow.dataLayer).toHaveLength(1);
+    expect(analyticsWindow.gtag).not.toHaveBeenCalled();
   });
 
   it("classifies the library separately from individual answers", () => {
@@ -160,5 +161,32 @@ describe("purchase analytics", () => {
 
     expect(pushPurchase({ transactionId: "cs_blocked", value: 19, currency: "USD", tier: "premium" })).toBe(true);
     expect(analyticsWindow.dataLayer).toHaveLength(1);
+  });
+});
+
+describe("example-view analytics", () => {
+  const analyticsWindow = window as AnalyticsWindow;
+
+  beforeEach(() => {
+    window.history.replaceState({}, "", "/");
+    analyticsWindow.dataLayer = [];
+    analyticsWindow.gtag = jest.fn();
+  });
+
+  afterEach(() => {
+    delete analyticsWindow.gtag;
+  });
+
+  // Same duplicate-emission shape begin_checkout had: these pushed to the data
+  // layer and then called gtag directly, so a GA4 tag in GTM plus a directly
+  // loaded gtag would each count the same interaction.
+  it.each([
+    ["view_examples", pushViewExamples],
+    ["view_more_examples", pushViewMoreExamples],
+  ])("sends %s once, through the data layer only", (event, push) => {
+    push();
+
+    expect(analyticsWindow.dataLayer).toEqual([{ event, source_page: "/" }]);
+    expect(analyticsWindow.gtag).not.toHaveBeenCalled();
   });
 });
