@@ -131,6 +131,34 @@ export function getTierFromPriceId(priceId: string): SubscriptionTier | null {
   return null;
 }
 
+const KNOWN_CHECKOUT_TIERS: ReadonlySet<string> = new Set(['starter', 'standard', 'premium']);
+
+/**
+ * Tier for payment-success responses (analytics + redirects). Prefer the
+ * verified Checkout Session metadata written at session creation; fall back to
+ * the line-item price mapping. Never trust the return-URL query string — callers
+ * can omit or edit it, and a missing value previously got a misleading default.
+ */
+export function resolveCheckoutSessionTier(session: {
+  metadata?: { [key: string]: string } | null;
+  line_items?: {
+    data?: Array<{ price?: { id?: string } | string | null } | null>;
+  } | null;
+}): SubscriptionTier {
+  const raw = session.metadata?.tier?.trim().toLowerCase();
+  if (raw && KNOWN_CHECKOUT_TIERS.has(raw)) {
+    return raw as SubscriptionTier;
+  }
+
+  const price = session.line_items?.data?.[0]?.price;
+  const priceId = typeof price === 'string' ? price : price?.id;
+  if (priceId) {
+    return getTierFromPriceId(priceId) ?? 'premium';
+  }
+
+  return 'premium';
+}
+
 // Validate Stripe webhook signature
 export function constructWebhookEvent(
   payload: string | Buffer,

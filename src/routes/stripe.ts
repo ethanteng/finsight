@@ -1,9 +1,8 @@
 import express from 'express';
 import { stripeService } from '../services/stripe';
-import { constructWebhookEvent } from '../config/stripe';
+import { constructWebhookEvent, resolveCheckoutSessionTier, stripe } from '../config/stripe';
 import { CreateCheckoutSessionRequest, CreatePortalSessionRequest } from '../types/stripe';
 import { getPrismaClient } from '../prisma-client';
-import { stripe } from '../config/stripe'; // Added for payment success endpoint
 import { requireAuth, requireAuthAllowLapsedSubscription } from '../auth/middleware';
 import { getDefaultPrice, minorToMajor } from '../config/stripe-pricing';
 
@@ -69,12 +68,11 @@ router.get('/payment-success', async (req, res) => {
         : undefined;
       console.log('Customer email from session:', customerEmail);
 
-      // Determine tier and value for Google Ads tracking. Prefer what this
-      // session sold: the subscription line item, then the amount actually
-      // charged. A trial charges 0 up front, so fall through to the recurring
-      // price rather than reporting a 0-value signup; the catalog price is the
-      // last resort, and can differ from what this customer was sold.
-      const tierName = (tier as string) || 'premium';
+      // Determine tier and value for Google Ads / GA4 tracking. Amount prefers
+      // what this session sold (line item, then amount charged, then catalog).
+      // Tier comes from the verified session (metadata, then price id) — never
+      // from the return-URL query string, which callers can omit or edit.
+      const tierName = resolveCheckoutSessionTier(session);
       const soldUnitAmount = session.line_items?.data?.[0]?.price?.unit_amount;
       const soldCurrency = session.line_items?.data?.[0]?.price?.currency || session.currency;
       const conversionCurrency = soldCurrency || resolvedPrice.currency;

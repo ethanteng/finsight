@@ -156,6 +156,32 @@ describe('Stripe Configuration', () => {
       expect(getTierFromPriceIdFn('not_a_price')).toBeNull();
     });
   });
+
+  describe('resolveCheckoutSessionTier', () => {
+    it('prefers verified session metadata over line-item price', () => {
+      const resolveCheckoutSessionTier = require('../../config/stripe').resolveCheckoutSessionTier;
+      expect(resolveCheckoutSessionTier({
+        metadata: { tier: ' Standard ' },
+        line_items: { data: [{ price: { id: 'price_any_valid_id' } }] },
+      })).toBe('standard');
+    });
+
+    it('falls back to the line-item price when metadata is missing', () => {
+      const resolveCheckoutSessionTier = require('../../config/stripe').resolveCheckoutSessionTier;
+      expect(resolveCheckoutSessionTier({
+        metadata: {},
+        line_items: { data: [{ price: { id: 'price_any_valid_id' } }] },
+      })).toBe('premium');
+    });
+
+    it('ignores unknown metadata and defaults to premium with no price', () => {
+      const resolveCheckoutSessionTier = require('../../config/stripe').resolveCheckoutSessionTier;
+      expect(resolveCheckoutSessionTier({
+        metadata: { tier: 'enterprise' },
+        line_items: { data: [] },
+      })).toBe('premium');
+    });
+  });
 });
 
 describe('Subscription Plan Features', () => {

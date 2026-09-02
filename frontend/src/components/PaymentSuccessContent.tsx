@@ -16,7 +16,6 @@ function PaymentSuccessContentInner() {
     const processPaymentSuccess = async () => {
       try {
         const sessionId = searchParams.get('session_id');
-        const tier = searchParams.get('tier');
         const customerEmail = searchParams.get('customer_email');
 
         if (!sessionId) {
@@ -24,12 +23,17 @@ function PaymentSuccessContentInner() {
           return;
         }
 
-        console.log('Processing payment success:', { sessionId, tier, customerEmail });
+        console.log('Processing payment success:', { sessionId, customerEmail });
 
-        // Call the backend payment success endpoint
+        // Call the backend payment success endpoint. Do not forward URL `tier`:
+        // payment-success derives it from the verified Stripe session, and a
+        // missing/edited query value used to skew purchase attribution.
         const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
-        const response = await fetch(`${API_URL}/api/stripe/payment-success?` + 
-          `session_id=${sessionId}&tier=${tier || 'standard'}&customer_email=${customerEmail || ''}`);
+        const params = new URLSearchParams({ session_id: sessionId });
+        if (customerEmail) {
+          params.set('customer_email', customerEmail);
+        }
+        const response = await fetch(`${API_URL}/api/stripe/payment-success?${params.toString()}`);
 
         if (response.ok) {
           // Parse the JSON response to get the redirect URL
