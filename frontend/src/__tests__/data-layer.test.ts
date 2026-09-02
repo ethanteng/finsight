@@ -18,7 +18,7 @@ describe("begin_checkout analytics", () => {
     delete analyticsWindow.gtag;
   });
 
-  it("attributes answer-page CTA intent across configured analytics providers", () => {
+  it("attributes answer-page CTA intent once through the GTM data layer", () => {
     pushBeginCheckout("answer_product_bridge");
 
     const event = {
@@ -28,7 +28,8 @@ describe("begin_checkout analytics", () => {
       content_type: "retirement_answer",
     };
     expect(analyticsWindow.dataLayer).toContainEqual(event);
-    expect(analyticsWindow.gtag).toHaveBeenCalledWith("event", "begin_checkout", event);
+    expect(analyticsWindow.dataLayer).toHaveLength(1);
+    expect(analyticsWindow.gtag).not.toHaveBeenCalled();
   });
 
   it("classifies the library separately from individual answers", () => {

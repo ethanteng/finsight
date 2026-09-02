@@ -1,5 +1,5 @@
 /**
- * Analytics event tracking (dataLayer, gtag).
+ * Analytics event tracking through the dataLayer and GTM.
  *
  * For Google Analytics via GTM: dataLayer pushes require GTM configuration.
  * In GTM, create Custom Event triggers for "view_examples" and "view_more_examples",
@@ -8,10 +8,6 @@
 interface DataLayerWindow {
   dataLayer?: Array<Record<string, unknown> | unknown[]>;
 }
-
-type GtagWindow = Window & {
-  gtag?: (command: 'event', event: string, params?: Record<string, unknown>) => void;
-};
 
 function pushToDataLayer(payload: Record<string, unknown>): void {
   if (typeof window === 'undefined') return;
@@ -38,9 +34,6 @@ export function pushBeginCheckout(ctaLocation = 'marketing_cta'): void {
     content_type: contentType,
   };
   pushToDataLayer(payload);
-
-  const analyticsWindow = window as GtagWindow;
-  analyticsWindow.gtag?.('event', 'begin_checkout', payload);
 }
 
 export function pushViewExamples(): void {
