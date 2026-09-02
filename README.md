@@ -250,6 +250,14 @@ STRIPE_PORTAL_UPDATE_RETURN_URL="..."  # Optional
 STRIPE_ACCOUNT_REFRESH_URL="..."       # Optional
 STRIPE_ACCOUNT_RETURN_URL="..."        # Optional
 
+# GA4 Measurement Protocol (server-side conversion reporting)
+# Every new customer starts a 30-day trial, so the browser sees no purchase at
+# checkout; the conversion is the first invoice Stripe charges a month later,
+# in a webhook with no browser to push to the data layer. These let that webhook
+# report it. Leave unset outside production: reporting is then skipped, never failed.
+GA4_MEASUREMENT_ID="G-..."             # GA4 data stream measurement ID
+GA4_API_SECRET="..."                   # GA4 Admin -> Data Streams -> Measurement Protocol API secrets
+
 # Email (Resend)
 RESEND_API_KEY="re_..."
 ADMIN_EMAILS="admin@example.com,other@example.com"  # Comma-separated for admin access

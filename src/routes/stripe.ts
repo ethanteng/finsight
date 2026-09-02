@@ -5,6 +5,7 @@ import { CreateCheckoutSessionRequest, CreatePortalSessionRequest } from '../typ
 import { getPrismaClient } from '../prisma-client';
 import { requireAuth, requireAuthAllowLapsedSubscription } from '../auth/middleware';
 import { getDefaultPrice, minorToMajor } from '../config/stripe-pricing';
+import { isGaClientId } from '../analytics/ga-client-id';
 
 const router = express.Router();
 
@@ -15,7 +16,7 @@ const router = express.Router();
  */
 router.get('/payment-success', async (req, res) => {
   try {
-    const { session_id, subscription_id, customer_email, tier } = req.query;
+    const { session_id, subscription_id, customer_email, tier, ga_client_id } = req.query;
     
     console.log('🎉 Payment success callback received:', {
       sessionId: session_id,
@@ -84,6 +85,25 @@ router.get('/payment-success', async (req, res) => {
         conversionValue = minorToMajor(session.amount_total, conversionCurrency);
       } else {
         conversionValue = resolvedPrice.amount;
+      }
+
+      // A trial converts a month from now, in a webhook with no browser. Park
+      // the GA4 client id on the subscription while the browser is still here,
+      // so that conversion can be attributed to the session that earned it
+      // instead of landing under (direct)/(none). Never let this fail checkout:
+      // an unattributed conversion is a reporting gap, a thrown error is a paid
+      // customer who does not get provisioned.
+      const subscriptionId = typeof session.subscription === 'string'
+        ? session.subscription
+        : session.subscription?.id;
+      if (subscriptionId && isGaClientId(ga_client_id)) {
+        try {
+          await stripe.client.subscriptions.update(subscriptionId, {
+            metadata: { ga_client_id: ga_client_id as string }
+          });
+        } catch (metadataError) {
+          console.warn('Could not store the GA4 client id on the subscription:', metadataError);
+        }
       }
 
       // Check if user already exists

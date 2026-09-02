@@ -4,6 +4,7 @@ import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import SiteFooter from './SiteFooter';
 import { pushPurchase } from '@/lib/dataLayer';
+import { readGaClientId } from '@/lib/ga-client-id';
 
 function PaymentSuccessContentInner() {
   const [error, setError] = useState<string | null>(null);
@@ -32,6 +33,14 @@ function PaymentSuccessContentInner() {
         const params = new URLSearchParams({ session_id: sessionId });
         if (customerEmail) {
           params.set('customer_email', customerEmail);
+        }
+        // A trial charges nothing today and converts a month from now, in a
+        // webhook with no browser. Hand over this browser's GA4 client id so
+        // that conversion can be credited to the session that earned it rather
+        // than to (direct)/(none).
+        const gaClientId = readGaClientId();
+        if (gaClientId) {
+          params.set('ga_client_id', gaClientId);
         }
         const response = await fetch(`${API_URL}/api/stripe/payment-success?${params.toString()}`);
 

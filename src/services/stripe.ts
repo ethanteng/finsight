@@ -958,6 +958,87 @@ export class StripeService {
           );
         }
       }
+
+      // Provisioning is done; analytics comes last so it can never delay or
+      // break it.
+      await this.reportPaidConversionToGa4(invoice, stripeSubscription);
+    }
+  }
+
+  /**
+   * Report the first real charge on a subscription to GA4.
+   *
+   * Every new customer starts a 30-day trial, so Checkout returns
+   * `no_payment_required` and the success page rightly does not call that a
+   * purchase. Without this, the conversion that follows a month later is never
+   * reported at all, and GA4 sees almost no revenue.
+   *
+   * Fires once per subscription, on the first invoice that actually collects
+   * money. The transaction id is the checkout session id rather than the
+   * invoice id, so this and the browser-side purchase on a no-trial checkout
+   * are the same transaction to GA4 and dedupe against each other instead of
+   * double-counting.
+   */
+  private async reportPaidConversionToGa4(invoice: any, subscription: any): Promise<void> {
+    try {
+      const amountPaid = invoice?.amount_paid;
+      // The $0 invoice that opens a trial is not a conversion.
+      if (typeof amountPaid !== 'number' || amountPaid <= 0) return;
+
+      // Renewals are not new conversions, and this marker is what stops month
+      // two from reporting one.
+      if (subscription?.metadata?.ga_purchase_reported) return;
+
+      const clientId = subscription?.metadata?.ga_client_id;
+      const currency = (invoice.currency || 'usd') as string;
+      const priceId = subscription?.items?.data?.[0]?.price?.id;
+
+      const { sendGa4PurchaseEvent } = await import('./ga4-measurement-protocol');
+      const { minorToMajor } = await import('../config/stripe-pricing');
+      const { getTierFromPriceId } = await import('../config/stripe');
+
+      const result = await sendGa4PurchaseEvent({
+        clientId,
+        transactionId: await this.getCheckoutSessionIdForSubscription(subscription.id),
+        value: minorToMajor(amountPaid, currency),
+        currency,
+        tier: (priceId && getTierFromPriceId(priceId)) || subscription?.metadata?.tier || 'premium',
+      });
+
+      // Mark it reported once it lands, and also when the event can never be
+      // valid — a subscription with no client id will not grow one, and
+      // retrying it every month would only repeat the same warning. A transport
+      // failure stays unmarked so a later invoice can retry; GA4 dedupes on the
+      // transaction id, so that retry cannot double-count.
+      if (result.sent || result.reason === 'invalid_event') {
+        await stripe.client.subscriptions.update(subscription.id, {
+          metadata: {
+            ...(subscription.metadata || {}),
+            ga_purchase_reported: new Date().toISOString(),
+          }
+        });
+      }
+    } catch (error) {
+      // Analytics must never fail a billing webhook.
+      console.error('Failed to report the paid conversion to GA4:', error);
+    }
+  }
+
+  /**
+   * The checkout session that created a subscription, used as the GA4
+   * transaction id so the browser and webhook paths agree on one identity.
+   * Falls back to the subscription id, which is still stable per customer.
+   */
+  private async getCheckoutSessionIdForSubscription(subscriptionId: string): Promise<string> {
+    try {
+      const sessions = await stripe.client.checkout.sessions.list({
+        subscription: subscriptionId,
+        limit: 1,
+      });
+      return sessions.data[0]?.id || subscriptionId;
+    } catch (error) {
+      console.warn('Could not resolve the checkout session for', subscriptionId, error);
+      return subscriptionId;
     }
   }
 
