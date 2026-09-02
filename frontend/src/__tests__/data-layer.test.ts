@@ -131,6 +131,23 @@ describe("purchase analytics", () => {
     }]);
   });
 
+  it("reports once when two concurrent callers race on the same transaction", async () => {
+    // React Strict Mode double-invokes effects in development, so the success
+    // page can run its fetch twice. The check and the write in pushPurchase are
+    // synchronous with no await between them, so whichever call lands first
+    // marks the transaction before the other can be entered. This test fails if
+    // pushPurchase is ever made async or the write is deferred.
+    const fire = async () => {
+      await Promise.resolve();
+      return pushPurchase({ transactionId: "cs_race", value: 19, currency: "USD", tier: "premium" });
+    };
+
+    const [first, second] = await Promise.all([fire(), fire()]);
+
+    expect([first, second].filter(Boolean)).toHaveLength(1);
+    expect(analyticsWindow.dataLayer).toHaveLength(1);
+  });
+
   it("reports the purchase when session storage is unavailable", () => {
     // Safari private browsing and cookie-blocking extensions throw here. Losing
     // a conversion is worse than a duplicate, which GA4 dedupes on transaction_id.
