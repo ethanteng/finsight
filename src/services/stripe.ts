@@ -917,6 +917,22 @@ export class StripeService {
         console.log(
           `Subscription ${subscriptionId} not found in database yet; skipping payment succeeded update`
         );
+
+        // There is nothing to provision, but Stripe may still have collected
+        // money: a buyer who finished Checkout and abandoned registration has no
+        // local row, and their trial still converts 30 days later. Reporting it
+        // is the only record that the sale happened.
+        //
+        // Gated on the amount so the far more common case — a $0 trial invoice
+        // for a subscription we do not track — costs no Stripe call at all.
+        if (typeof invoice?.amount_paid === 'number' && invoice.amount_paid > 0) {
+          try {
+            const unlinkedSubscription = await stripe.client.subscriptions.retrieve(subscriptionId);
+            await this.reportPaidConversionToGa4(invoice, unlinkedSubscription);
+          } catch (error) {
+            console.warn(`Could not report the conversion for untracked subscription ${subscriptionId}:`, error);
+          }
+        }
         return;
       }
 
@@ -958,6 +974,119 @@ export class StripeService {
           );
         }
       }
+
+      // Provisioning is done; analytics comes last so it can never delay or
+      // break it.
+      await this.reportPaidConversionToGa4(invoice, stripeSubscription);
+    }
+  }
+
+  /**
+   * Report the first real charge on a subscription to GA4.
+   *
+   * Every new customer starts a 30-day trial, so Checkout returns
+   * `no_payment_required` and the success page rightly does not call that a
+   * purchase. Without this, the conversion that follows a month later is never
+   * reported at all, and GA4 sees almost no revenue.
+   *
+   * Fires once per subscription, on the first invoice that actually collects
+   * money. The transaction id is the checkout session id rather than the
+   * invoice id, so this and the browser-side purchase on a no-trial checkout
+   * are the same transaction to GA4 and dedupe against each other instead of
+   * double-counting.
+   */
+  private async reportPaidConversionToGa4(invoice: any, subscription: any): Promise<void> {
+    try {
+      const amountPaid = invoice?.amount_paid;
+      // The $0 invoice that opens a trial is not a conversion.
+      if (typeof amountPaid !== 'number' || amountPaid <= 0) return;
+
+      // Renewals are not new conversions, and this marker is what stops month
+      // two from reporting one.
+      const metadata = subscription?.metadata || {};
+      if (metadata.ga_purchase_reported) return;
+
+      const { sendGa4PurchaseEvent } = await import('./ga4-measurement-protocol');
+      const { minorToMajor } = await import('../config/stripe-pricing');
+      const { getTierFromPriceId } = await import('../config/stripe');
+
+      // A conversion that failed to send is snapshotted on the subscription, so
+      // the invoice that retries it reports what the customer was actually
+      // charged the first time rather than overwriting it with the renewal's
+      // amount. GA4 will still stamp the event when it arrives — the
+      // Measurement Protocol only backdates 72 hours — so a recovered
+      // conversion is late, but it is no longer also wrong about revenue.
+      const pendingValue = Number(metadata.ga_purchase_pending_value);
+      const hasPending = Number.isFinite(pendingValue) && metadata.ga_purchase_pending_transaction_id;
+
+      const currency = hasPending
+        ? metadata.ga_purchase_pending_currency || 'usd'
+        : ((invoice.currency || 'usd') as string);
+      const value = hasPending ? pendingValue : minorToMajor(amountPaid, currency);
+      const transactionId = hasPending
+        ? metadata.ga_purchase_pending_transaction_id
+        : await this.getCheckoutSessionIdForSubscription(subscription.id);
+
+      const priceId = subscription?.items?.data?.[0]?.price?.id;
+      const result = await sendGa4PurchaseEvent({
+        clientId: metadata.ga_client_id,
+        transactionId,
+        value,
+        currency,
+        tier: (priceId && getTierFromPriceId(priceId)) || metadata.tier || 'premium',
+      });
+
+      // Mark it reported once it lands, and also when the event can never be
+      // valid — a subscription with no client id will not grow one, and
+      // retrying it every month would only repeat the same warning. Either way
+      // the pending snapshot is cleared; Stripe unsets a metadata key when it
+      // is given an empty value.
+      if (result.sent || result.reason === 'invalid_event') {
+        await stripe.client.subscriptions.update(subscription.id, {
+          metadata: {
+            ...metadata,
+            ga_purchase_reported: new Date().toISOString(),
+            ga_purchase_pending_value: '',
+            ga_purchase_pending_currency: '',
+            ga_purchase_pending_transaction_id: '',
+          }
+        });
+        return;
+      }
+
+      // Delivery failed after the sender's own retries, so leave it unmarked
+      // for the next invoice and record what that retry should report.
+      if (!hasPending) {
+        await stripe.client.subscriptions.update(subscription.id, {
+          metadata: {
+            ...metadata,
+            ga_purchase_pending_value: String(value),
+            ga_purchase_pending_currency: currency,
+            ga_purchase_pending_transaction_id: transactionId,
+          }
+        });
+      }
+    } catch (error) {
+      // Analytics must never fail a billing webhook.
+      console.error('Failed to report the paid conversion to GA4:', error);
+    }
+  }
+
+  /**
+   * The checkout session that created a subscription, used as the GA4
+   * transaction id so the browser and webhook paths agree on one identity.
+   * Falls back to the subscription id, which is still stable per customer.
+   */
+  private async getCheckoutSessionIdForSubscription(subscriptionId: string): Promise<string> {
+    try {
+      const sessions = await stripe.client.checkout.sessions.list({
+        subscription: subscriptionId,
+        limit: 1,
+      });
+      return sessions.data[0]?.id || subscriptionId;
+    } catch (error) {
+      console.warn('Could not resolve the checkout session for', subscriptionId, error);
+      return subscriptionId;
     }
   }
 
