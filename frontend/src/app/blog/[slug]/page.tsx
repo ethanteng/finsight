@@ -23,8 +23,11 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
 
   const postUrl = `https://asklinc.com/blog/${slug}`;
   const description = post.excerpt || `Read ${post.title} on Ask Linc's financial blog.`;
+  const searchTitle = slug === 'average-american-savings' && post.meta_title
+    ? post.meta_title
+    : `${post.title} | Ask Linc`;
   return {
-    title: `${post.title} | Ask Linc`,
+    title: searchTitle,
     description,
     alternates: { canonical: postUrl },
     openGraph: {
