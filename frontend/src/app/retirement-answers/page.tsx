@@ -132,7 +132,7 @@ export default function RetirementAnswersPage() {
       <section className="answer-hub-section shell" id="by-portfolio" aria-labelledby="portfolio-heading">
         <div className="answer-hub-section-head">
           <div><p className="section-kicker">BY PORTFOLIO BALANCE</p><h2 id="portfolio-heading">What could your savings support?</h2></div>
-          <p>Compare the same 3%, 3.5%, and 4% starting-withdrawal illustrations across three balances. Each guide then adds income, spending, tax, and risk context.</p>
+          <p>Compare the same 3%, 3.5%, and 4% starting-withdrawal illustrations across three balances. Each guide then adds income, spending, tax, and risk context. For a broader benchmark, see <Link href="/blog/average-american-savings">how much Americans have in savings by age</Link>.</p>
         </div>
         <div className="answer-hub-card-grid">
           {balanceAnswers.map((page) => (
