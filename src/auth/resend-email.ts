@@ -203,8 +203,8 @@ export async function sendContactEmail(
         <p style="color: #1a1a1a; line-height: 1.6; white-space: pre-wrap;">${message}</p>
       </div>
 
-      <div style="text-align: center;">
-        <a href="${baseUrl}/contact" class="cta-button" style="color: #0f766e; background-color: #ffffff; border: 2px solid #0f766e; text-decoration: none; padding: 12px 24px; border-radius: 4px; font-weight: 600; display: inline-block;">
+      <div class="button-wrap" style="margin: 28px 0; text-align: center;">
+        <a href="${baseUrl}/contact" class="cta-button" style="display: inline-block; padding: 14px 26px; border: 1px solid #123c2f; border-radius: 999px; background-color: #123c2f; color: #ffffff; text-decoration: none; font-size: 15px; font-weight: 700;">
           Contact support
         </a>
       </div>
@@ -293,8 +293,8 @@ export async function sendAdminNotification(
         <p style="color: #4b5563; margin-bottom: 0;"><strong>Timestamp:</strong> ${timestamp}</p>
       </div>
 
-      <div style="text-align: center;">
-        <a href="${baseUrl}/admin" class="cta-button" style="color: #0f766e; background-color: #ffffff; border: 2px solid #0f766e; text-decoration: none; padding: 12px 24px; border-radius: 4px; font-weight: 600; display: inline-block;">
+      <div class="button-wrap" style="margin: 28px 0; text-align: center;">
+        <a href="${baseUrl}/admin" class="cta-button" style="display: inline-block; padding: 14px 26px; border: 1px solid #123c2f; border-radius: 999px; background-color: #123c2f; color: #ffffff; text-decoration: none; font-size: 15px; font-weight: 700;">
           View admin dashboard
         </a>
       </div>
