@@ -465,7 +465,7 @@ export function MarketingBlogPage({ ghostPosts }: { ghostPosts: GhostPost[] }) {
     <StandardPage className="blog-page">
       <section className="blog-hero shell">
         <div><p className="section-kicker">THE ASK LINC BLOG</p><h1>Better thinking about <em>money and machines.</em></h1></div>
-        <p>Field notes on intelligent finance, retirement decisions, product transparency, and the systems that make AI worth trusting.</p>
+        <p>Field notes on intelligent finance, retirement decisions, product transparency, and the systems that make AI worth trusting. Start with <Link href="/blog/average-american-savings">what Americans actually have in savings</Link>.</p>
       </section>
       {featured ? (
         <>
