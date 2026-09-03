@@ -16,6 +16,7 @@ export type GhostPost = {
   id: string;
   uuid?: string;
   title?: string | null;
+  meta_title?: string | null;
   slug?: string | null;
   url?: string | null;
   html?: string | null;
