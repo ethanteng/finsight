@@ -53,6 +53,14 @@ describe("Contentsquare content security policy", () => {
     expect(directive(development, "connect-src")).toContain("http://localhost:3001");
   });
 
+  it("lets Google Ads conversion beacons connect", () => {
+    // /ccm/s/collect is an XHR, so img-src is not enough; connect-src has to
+    // name the DoubleClick host or the conversion is silently dropped.
+    expect(directive(production, "connect-src")).toContain("https://ad.doubleclick.net");
+    expect(directive(production, "connect-src")).toContain("https://googleads.g.doubleclick.net");
+    expect(directive(production, "connect-src")).toContain("https://www.googleadservices.com");
+  });
+
   it("does not loosen any other directive between environments", () => {
     const withoutConnect = (policy: string) =>
       policy.split("; ").filter((entry) => !entry.startsWith("connect-src"));

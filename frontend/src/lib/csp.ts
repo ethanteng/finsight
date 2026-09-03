@@ -28,6 +28,13 @@ export function buildContentSecurityPolicy({ isDevelopment }: { isDevelopment: b
     "https://www.google-analytics.com",
     "https://www.google.com",
     "https://www.googletagmanager.com",
+    // Google Ads conversion tags (loaded via GTM) beacon over XHR. script-src
+    // and img-src already allow googleads.g.doubleclick.net; without these,
+    // the browser blocks https://ad.doubleclick.net/ccm/s/collect and the
+    // conversion never registers.
+    "https://ad.doubleclick.net",
+    "https://googleads.g.doubleclick.net",
+    "https://www.googleadservices.com",
     "https://*.asklinc.com",
     "wss://*.asklinc.com",
     "https://*.onrender.com",
