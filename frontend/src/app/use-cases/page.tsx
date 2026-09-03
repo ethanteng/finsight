@@ -75,7 +75,7 @@ export default function UseCasesRoute() {
         <div className="shell">
           <p className="section-kicker">WHY THE WHOLE PLAN MATTERS</p>
           <h2>A home, a child, a career change, and retirement share the same money.</h2>
-          <p>One decision can change cash, spending, debt, investments, and the goals that come after it. Linc keeps those consequences in the same answer.</p>
+          <p>One decision can change cash, spending, debt, investments, and the goals that come after it. Linc keeps those consequences in the same answer. Before testing a decision, compare <Link href="/blog/average-american-savings">how much Americans actually have in savings</Link>.</p>
         </div>
       </section>
       <PageCta title="What are you trying to figure out?" csOverrideId="cta-start-free-trial-mid" />
