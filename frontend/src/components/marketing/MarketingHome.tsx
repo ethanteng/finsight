@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePricing } from "@/components/PricingProvider";
 import { SiteFooter, SiteHeader } from "./SiteShell";
 import { MarketingGetStartedButton } from "./MarketingGetStartedButton";
+import RotatingHeroExamples from "./RotatingHeroExamples";
 import StaticProductDemo from "./StaticProductDemo";
 
 const decisions = [
@@ -36,13 +37,7 @@ export default function Home() {
           <p className="microcopy">{pricing.trialLine}</p>
         </div>
 
-        <aside className="hero-audit-card" aria-label="Sample Ask Linc decision">
-          <span>ASK LINC · SAMPLE DECISION</span>
-          <div><i>01</i><p><small>QUESTION</small><strong>Can we afford a $700K home without pausing retirement savings?</strong></p></div>
-          <div><i>02</i><p><small>SHORT ANSWER</small><strong>Yes—if you put 15% down and keep at least $45K in cash.</strong></p></div>
-          <div className="active"><i>03</i><p><small>LINC&apos;S TAKE</small><strong>Keep both 401(k) contributions unchanged and cap total housing costs at $4,800/month.</strong></p></div>
-          <footer>Your numbers · Assumptions · Math · Checks · Sources</footer>
-        </aside>
+        <RotatingHeroExamples />
       </section>
 
       <section className="proof-strip" aria-label="Product trust signals">

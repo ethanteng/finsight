@@ -127,6 +127,45 @@ describe("marketing review fixes", () => {
     });
   });
 
+  it("rotates realistic hero answers and lets visitors choose an example", () => {
+    const OriginalIntersectionObserver = global.IntersectionObserver;
+    global.IntersectionObserver = class VisibleHeroObserver {
+      readonly root = null;
+      readonly rootMargin = "0px";
+      readonly thresholds = [0.25];
+      constructor(private readonly callback: IntersectionObserverCallback) {}
+      observe(target: Element) {
+        this.callback(
+          [{ isIntersecting: true, intersectionRatio: 1, target } as IntersectionObserverEntry],
+          this as unknown as IntersectionObserver,
+        );
+      }
+      disconnect() {}
+      unobserve() {}
+      takeRecords() { return []; }
+    } as typeof IntersectionObserver;
+    jest.useFakeTimers();
+
+    try {
+      render(<MarketingHome />);
+      const examples = screen.getByLabelText("Realistic Ask Linc answer examples");
+      expect(within(examples).getByText(/stress-tested 49 overlapping historical 37-year windows/i)).toBeInTheDocument();
+
+      act(() => jest.advanceTimersByTime(9000));
+      expect(within(examples).getByText(/a 15% down payment is \$105K/i)).toBeInTheDocument();
+
+      act(() => {
+        within(examples).getByRole("button", { name: "Show Family leave example" }).click();
+      });
+      expect(within(examples).getByText(/the gap is about \$3,750 a month/i)).toBeInTheDocument();
+      expect(within(examples).getByRole("button", { name: "Show Family leave example" })).toHaveAttribute("aria-current", "true");
+      expect(examples).toHaveAttribute("data-paused", "true");
+    } finally {
+      jest.useRealTimers();
+      global.IntersectionObserver = OriginalIntersectionObserver;
+    }
+  });
+
   it("uses the stylized founder portrait on the About page", () => {
     render(<AboutPageRoute />);
 
