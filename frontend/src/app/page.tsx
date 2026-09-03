@@ -9,21 +9,23 @@ export async function generateMetadata({ searchParams }: { searchParams: Promise
   const params = await searchParams;
   const ref = params.ref;
   
-  let description = 'Ask money questions in your own words and get clear answers based on your real accounts, current information, and math you can check.';
+  let description = 'AI financial planning powered by your real financial data. Connect your accounts for clear answers on retirement, spending, investing, and more.';
   
   if (ref === 'blog.asklinc.com') {
-    description = 'Ask Linc turns your real accounts and goals into clear answers, tradeoffs, and next steps for life’s big money decisions.';
+    description = 'AI financial planning powered by your real financial data. Connect your accounts for clear answers on retirement, spending, investing, and more.';
   }
+
+  const title = 'AI Financial Planning | Ask Linc';
   
   return {
-    title: 'Ask Linc — Plan Big Financial Decisions With Your Real Numbers',
+    title,
     description: description,
     keywords: ['financial planning', 'AI financial assistant', 'natural language financial planning', 'home affordability planning', 'retirement planning', 'personal finance AI'],
     alternates: {
       canonical: 'https://asklinc.com',
     },
     openGraph: {
-      title: 'Ask Linc — Plan Big Financial Decisions With Your Real Numbers',
+      title,
       description: description,
       type: 'website',
       url: 'https://asklinc.com',
@@ -39,7 +41,7 @@ export async function generateMetadata({ searchParams }: { searchParams: Promise
     },
     twitter: {
       card: 'summary_large_image',
-      title: 'Ask Linc — Plan Big Financial Decisions With Your Real Numbers',
+      title,
       description: description,
       images: ['https://asklinc.com/og-image.jpg'],
     },
