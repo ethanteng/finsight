@@ -5,7 +5,7 @@
  * GTM container (GTM-PL362L36) is what turns it into a GA4 hit. For each event
  * name below, GTM needs a Custom Event trigger plus a GA4 Event tag bound to it
  * — and for "purchase", the tag must map transaction_id, value, currency and
- * tier, and the event must be marked as a key event in GA4 Admin.
+ * tier. Conversion events must also be marked as key events in GA4 Admin.
  */
 interface DataLayerWindow {
   dataLayer?: Array<Record<string, unknown> | unknown[]>;
@@ -70,6 +70,7 @@ const DEFAULT_TIER: PurchaseTier = 'premium';
  * reports, while a reload of the same success page does not double-count.
  */
 const PURCHASE_FIRED_KEY_PREFIX = 'purchase_event_fired:';
+const TRIAL_STARTED_FIRED_KEY_PREFIX = 'trial_started_verified_event_fired:';
 
 export interface PurchaseEvent {
   /** The Stripe checkout session id. GA4 dedupes purchases on this. */
@@ -93,23 +94,62 @@ function normalizeTier(tier: unknown): PurchaseTier {
 /**
  * sessionStorage throws rather than no-ops when storage is blocked (Safari
  * private browsing, cookie-blocking extensions). Treat any failure as "not
- * fired yet": GA4 dedupes on transaction_id, so a repeat push is recoverable
- * where a dropped conversion is not.
+ * fired yet": a possible later duplicate is preferable to dropping the
+ * current conversion.
  */
-function hasFired(transactionId: string): boolean {
+function hasFired(storageKey: string): boolean {
   try {
-    return window.sessionStorage.getItem(PURCHASE_FIRED_KEY_PREFIX + transactionId) !== null;
+    return window.sessionStorage.getItem(storageKey) !== null;
   } catch {
     return false;
   }
 }
 
-function markFired(transactionId: string): void {
+function markFired(storageKey: string): void {
   try {
-    window.sessionStorage.setItem(PURCHASE_FIRED_KEY_PREFIX + transactionId, 'true');
+    window.sessionStorage.setItem(storageKey, 'true');
   } catch {
-    // Nothing to do: the push already happened, and GA4 will dedupe a repeat.
+    // Nothing to do: the data-layer push already happened.
   }
+}
+
+export interface TrialStartedEvent {
+  /** The Stripe checkout session id, used to suppress retries in this tab. */
+  transactionId: unknown;
+  /** Tier returned by the backend after it verifies the Stripe session. */
+  tier: unknown;
+  /** The account-setup destination selected by the verified callback. */
+  signupPath: unknown;
+}
+
+/**
+ * Report a verified free-trial start as soon as the Stripe callback succeeds.
+ *
+ * GTM currently infers this event from a later page view whose URL contains
+ * `checkout=success`. This explicit event lets GTM move to a Custom Event
+ * trigger without depending on the visitor waiting for that redirect. Until
+ * the GTM trigger is migrated, this data-layer push is intentionally inert.
+ */
+export function pushTrialStartedVerified({ transactionId, tier, signupPath }: TrialStartedEvent): boolean {
+  if (typeof window === 'undefined') return false;
+  if (typeof transactionId !== 'string' || !transactionId) return false;
+
+  const storageKey = TRIAL_STARTED_FIRED_KEY_PREFIX + transactionId;
+  if (hasFired(storageKey)) return false;
+
+  const payload: Record<string, unknown> = {
+    event: 'trial_started_verified',
+    transaction_id: transactionId,
+    tier: normalizeTier(tier),
+  };
+
+  if (typeof signupPath === 'string' && signupPath.startsWith('/')) {
+    payload.signup_path = signupPath;
+  }
+
+  pushToDataLayer(payload);
+  markFired(storageKey);
+  return true;
 }
 
 /**
@@ -124,7 +164,8 @@ export function pushPurchase({ transactionId, value, currency, tier }: PurchaseE
 
   // Without a transaction id there is no way to dedupe, in this tab or in GA4.
   if (typeof transactionId !== 'string' || !transactionId) return false;
-  if (hasFired(transactionId)) return false;
+  const storageKey = PURCHASE_FIRED_KEY_PREFIX + transactionId;
+  if (hasFired(storageKey)) return false;
 
   const normalizedTier = normalizeTier(tier);
   const payload: Record<string, unknown> = {
@@ -156,6 +197,6 @@ export function pushPurchase({ transactionId, value, currency, tier }: PurchaseE
   }
 
   pushToDataLayer(payload);
-  markFired(transactionId);
+  markFired(storageKey);
   return true;
 }

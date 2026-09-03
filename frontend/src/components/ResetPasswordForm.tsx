@@ -2,7 +2,17 @@
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import SiteFooter from './SiteFooter';
+import { ArrowLeft, ArrowRight, CircleAlert, CircleCheck, LoaderCircle, LockKeyhole } from 'lucide-react';
+import AuthFlowShell from './auth/AuthFlowShell';
+
+const RESET_BENEFITS = [
+  'Reset links expire automatically after one hour',
+  'Your existing financial connections remain protected',
+  'Only the account owner can create a new password',
+];
+
+const inputClasses =
+  'w-full rounded-xl border border-[#123c2f]/20 bg-[#fffdf7] py-3 pl-11 pr-4 text-[#123c2f] shadow-sm outline-none placeholder:text-[#8a9b95] focus:border-[#123c2f] focus:ring-4 focus:ring-[#123c2f]/10';
 
 function ResetPasswordFormContent() {
   const [password, setPassword] = useState('');
@@ -68,127 +78,137 @@ function ResetPasswordFormContent() {
 
   if (!token) {
     return (
-      <div className="min-h-screen bg-gray-900 text-white flex flex-col">
-      <div className="flex-1 flex items-center justify-center">
-        <div className="max-w-md w-full space-y-8 p-8">
-          <div className="text-center">
-            <h1 className="text-3xl font-bold">Invalid Reset Link</h1>
-            <p className="text-gray-400 mt-2">This reset link is invalid or has expired</p>
-          </div>
-
-          <div className="text-center">
-            <Link 
-              href="/forgot-password" 
-              className="bg-primary hover:bg-primary/90 text-white font-medium py-2 px-4 rounded-md transition-colors"
-            >
-              Request New Reset Link
-            </Link>
-          </div>
-
-          <div className="text-center">
-            <Link href="/login" className="text-gray-400 hover:text-white text-sm">
-              Back to Sign In
-            </Link>
-          </div>
+      <AuthFlowShell
+        eyebrow="Account recovery"
+        title="This link is no longer valid."
+        description="Reset links expire after one hour and can only be used once. Request a new one and we’ll email it to you."
+        asideTitle="Get back to the decisions that matter."
+        asideDescription="Your account recovery is designed to be simple, secure, and private."
+        benefits={RESET_BENEFITS}
+      >
+        <div className="flex gap-3 rounded-2xl border border-[#d49c3b]/30 bg-[#fff8e8] p-4 text-sm leading-6 text-[#765c32]">
+          <CircleAlert className="mt-0.5 shrink-0 text-[#a96d0f]" size={18} />
+          <span>This reset link is invalid or has expired.</span>
         </div>
-      </div>
-      <SiteFooter />
-    </div>
+
+        <Link
+          href="/forgot-password"
+          className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-full bg-[#123c2f] px-5 py-3.5 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(18,60,47,.16)] transition hover:bg-[#1a5140]"
+        >
+          Request a new reset link <ArrowRight size={17} />
+        </Link>
+
+        <div className="mt-7 border-t border-[#123c2f]/10 pt-6 text-center">
+          <Link href="/login" className="inline-flex items-center gap-2 text-sm font-semibold text-[#34594e] hover:text-[#123c2f]">
+            <ArrowLeft size={16} /> Back to sign in
+          </Link>
+        </div>
+      </AuthFlowShell>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white flex flex-col">
-      <div className="flex-1 flex items-center justify-center">
-      <div className="max-w-md w-full space-y-8 p-8">
-        <div className="text-center">
-          <h1 className="text-3xl font-bold">Reset Password</h1>
-          <p className="text-gray-400 mt-2">Enter your new password</p>
-        </div>
+    <AuthFlowShell
+      eyebrow="Account recovery"
+      title="Choose a new password."
+      description="Pick a password you don’t use anywhere else. You’ll sign in with it right after."
+      asideTitle="Get back to the decisions that matter."
+      asideDescription="Your account recovery is designed to be simple, secure, and private."
+      benefits={RESET_BENEFITS}
+    >
+      <form onSubmit={handleSubmit} className="space-y-5">
+        {error && (
+          <div role="alert" className="flex gap-3 rounded-2xl border border-[#b84a3d]/25 bg-[#fff2ed] p-4 text-sm leading-6 text-[#8b3027]">
+            <CircleAlert className="mt-0.5 shrink-0" size={18} />
+            <span>{error}</span>
+          </div>
+        )}
 
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {error && (
-            <div className="bg-red-500/10 border border-red-500/20 rounded-md p-3 text-red-400 text-sm">
-              {error}
-            </div>
-          )}
+        {success && (
+          <div role="status" className="flex gap-3 rounded-2xl border border-[#719632]/25 bg-[#eaf5d5] p-4 text-sm leading-6 text-[#34551c]">
+            <CircleCheck className="mt-0.5 shrink-0" size={18} />
+            <span>{success}</span>
+          </div>
+        )}
 
-          {success && (
-            <div className="bg-green-500/10 border border-green-500/20 rounded-md p-3 text-green-400 text-sm">
-              {success}
-            </div>
-          )}
-
-          <div>
-            <label htmlFor="password" className="block text-sm font-medium text-gray-300 mb-2">
-              New Password
-            </label>
+        <div>
+          <label htmlFor="password" className="mb-2 block text-sm font-semibold text-[#29483f]">
+            New password
+          </label>
+          <div className="relative">
+            <LockKeyhole className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[#71857f]" size={18} />
             <input
               id="password"
               type="password"
+              autoComplete="new-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
               minLength={8}
-              className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-              placeholder="Enter your new password (min 8 characters)"
+              className={inputClasses}
+              placeholder="At least 8 characters"
             />
           </div>
+        </div>
 
-          <div>
-            <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-300 mb-2">
-              Confirm New Password
-            </label>
+        <div>
+          <label htmlFor="confirmPassword" className="mb-2 block text-sm font-semibold text-[#29483f]">
+            Confirm new password
+          </label>
+          <div className="relative">
+            <LockKeyhole className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[#71857f]" size={18} />
             <input
               id="confirmPassword"
               type="password"
+              autoComplete="new-password"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               required
-              className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-              placeholder="Confirm your new password"
+              className={inputClasses}
+              placeholder="Re-enter your new password"
             />
           </div>
-
-          <button
-            type="submit"
-            data-cs-override-id="form-submit-reset-password"
-            disabled={isLoading}
-            className="w-full bg-primary hover:bg-primary/90 disabled:opacity-50 text-white font-medium py-2 px-4 rounded-md transition-colors"
-          >
-            {isLoading ? 'Resetting...' : 'Reset Password'}
-          </button>
-        </form>
-
-        <div className="text-center">
-          <Link href="/login" className="text-gray-400 hover:text-white text-sm">
-            Back to Sign In
-          </Link>
         </div>
+
+        <button
+          type="submit"
+          data-cs-override-id="form-submit-reset-password"
+          disabled={isLoading}
+          className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-[#123c2f] px-5 py-3.5 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(18,60,47,.16)] transition hover:bg-[#1a5140] disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {isLoading ? <><LoaderCircle className="animate-spin" size={17} />Resetting…</> : <>Reset password <ArrowRight size={17} /></>}
+        </button>
+      </form>
+
+      <div className="mt-7 border-t border-[#123c2f]/10 pt-6 text-center">
+        <Link href="/login" className="inline-flex items-center gap-2 text-sm font-semibold text-[#34594e] hover:text-[#123c2f]">
+          <ArrowLeft size={16} /> Back to sign in
+        </Link>
       </div>
-      </div>
-      <SiteFooter />
-    </div>
+    </AuthFlowShell>
   );
 }
 
 export default function ResetPasswordForm() {
   return (
-    <Suspense fallback={
-      <div className="min-h-screen bg-gray-900 text-white flex flex-col">
-      <div className="flex-1 flex items-center justify-center">
-        <div className="max-w-md w-full space-y-8 p-8">
-          <div className="text-center">
-            <h1 className="text-3xl font-bold">Loading...</h1>
-            <p className="text-gray-400 mt-2">Please wait while we load the reset page</p>
+    <Suspense
+      fallback={
+        <AuthFlowShell
+          eyebrow="Account recovery"
+          title="Loading your reset link…"
+          description="One moment while we check the link you followed."
+          asideTitle="Get back to the decisions that matter."
+          asideDescription="Your account recovery is designed to be simple, secure, and private."
+          benefits={RESET_BENEFITS}
+        >
+          <div className="flex items-center gap-3 rounded-2xl border border-[#123c2f]/15 bg-[#fffdf7] p-4 text-sm text-[#607b72]">
+            <LoaderCircle className="animate-spin" size={18} />
+            Please wait…
           </div>
-        </div>
-      </div>
-      <SiteFooter />
-    </div>
-    }>
+        </AuthFlowShell>
+      }
+    >
       <ResetPasswordFormContent />
     </Suspense>
   );
 }
-

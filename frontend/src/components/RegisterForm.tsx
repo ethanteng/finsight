@@ -3,7 +3,8 @@ import { useState, useEffect, Suspense } from 'react';
 import { getBrowserTimeZone, setStoredUserTimeZone } from '@/lib/browser-time-zone';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import SiteFooter from './SiteFooter';
+import { ArrowRight, Check, CircleAlert, LoaderCircle, LockKeyhole, Mail } from 'lucide-react';
+import AuthFlowShell from './auth/AuthFlowShell';
 import { pushBeginCheckout } from '@/lib/dataLayer';
 import { useDialog } from '@/components/ui/dialog';
 
@@ -12,6 +13,9 @@ interface SubscriptionContext {
   tier: string;
   sessionId: string | null;
 }
+
+const inputClasses =
+  'w-full rounded-xl border border-[#123c2f]/20 bg-[#fffdf7] py-3 pl-11 pr-4 text-[#123c2f] shadow-sm outline-none placeholder:text-[#8a9b95] focus:border-[#123c2f] focus:ring-4 focus:ring-[#123c2f]/10';
 
 function RegisterFormContent() {
   const [email, setEmail] = useState('');
@@ -90,7 +94,7 @@ function RegisterFormContent() {
 
     try {
       const API_URL = process.env.NEXT_PUBLIC_API_URL;
-      
+
       // Prepare registration data
       const registrationData: {
         email: string;
@@ -99,7 +103,7 @@ function RegisterFormContent() {
         stripeSessionId?: string;
         timeZone: string;
       } = { email, password, timeZone: getBrowserTimeZone() };
-      
+
       // If coming from successful subscription, include tier and session info
       if (subscriptionContext) {
         registrationData.tier = subscriptionContext.tier;
@@ -107,7 +111,7 @@ function RegisterFormContent() {
           registrationData.stripeSessionId = subscriptionContext.sessionId;
         }
       }
-      
+
       const res = await fetch(`${API_URL}/auth/register`, {
         method: 'POST',
         headers: {
@@ -145,113 +149,143 @@ function RegisterFormContent() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white flex flex-col">
-      <div className="flex-1 flex items-center justify-center">
-      <div className="max-w-md w-full space-y-8 p-8">
-        <div className="text-center">
-          <h1 className="text-3xl font-bold">Create Account</h1>
-          <p className="text-gray-400 mt-2">Join Ask Linc to get started</p>
-          
-          {subscriptionContext && (
-            <div className="mt-4 p-3 bg-green-500/10 border border-green-500/20 rounded-md">
-              <p className="text-green-400 text-sm">
-                🎉 Welcome! Your subscription is ready.
-              </p>
-              <p className="text-green-400 text-xs mt-1">
-                Complete registration and verify your email to activate your subscription.
-              </p>
-            </div>
-          )}
-        </div>
-
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {error && (
-            <div className="bg-red-500/10 border border-red-500/20 rounded-md p-3 text-red-400 text-sm">
-              {error}
-            </div>
-          )}
-
+    <AuthFlowShell
+      eyebrow={subscriptionContext ? 'Finish setting up' : 'Create your account'}
+      title={subscriptionContext ? 'Your subscription is ready.' : 'Create your account.'}
+      description={
+        subscriptionContext
+          ? 'Set a password to open your workspace. Verifying your email activates your subscription.'
+          : 'Join Ask Linc and start working through your financial decisions with your own data.'
+      }
+      asideTitle="Start every answer with your full context."
+      asideDescription="Connect your accounts once, and every question you ask is answered against your real balances, holdings, and history."
+      benefits={[
+        'Decision-ready answers grounded in your data',
+        'Calculations and supporting evidence one click away',
+        'Private, protected access to your financial context',
+      ]}
+    >
+      {subscriptionContext && (
+        <div
+          role="status"
+          className="mb-6 flex gap-3 rounded-2xl border border-[#719632]/25 bg-[#eaf5d5] p-4 text-sm text-[#34551c]"
+        >
+          <Check className="mt-0.5 shrink-0" size={18} />
           <div>
-            <label htmlFor="email" className="block text-sm font-medium text-gray-300 mb-2">
-              Email
-            </label>
+            <strong className="block">Payment received.</strong>
+            <span className="mt-1 block text-[#4d6a35]">
+              Complete registration and verify your email to activate your subscription.
+            </span>
+          </div>
+        </div>
+      )}
+
+      <form onSubmit={handleSubmit} className="space-y-5">
+        {error && (
+          <div role="alert" className="flex gap-3 rounded-2xl border border-[#b84a3d]/25 bg-[#fff2ed] p-4 text-sm leading-6 text-[#8b3027]">
+            <CircleAlert className="mt-0.5 shrink-0" size={18} />
+            <span>{error}</span>
+          </div>
+        )}
+
+        <div>
+          <label htmlFor="email" className="mb-2 block text-sm font-semibold text-[#29483f]">
+            Email address
+          </label>
+          <div className="relative">
+            <Mail className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[#71857f]" size={18} />
             <input
               id="email"
               type="email"
+              autoComplete="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-              placeholder="Enter your email"
+              className={inputClasses}
+              placeholder="you@example.com"
             />
           </div>
+        </div>
 
-          <div>
-            <label htmlFor="password" className="block text-sm font-medium text-gray-300 mb-2">
-              Password
-            </label>
+        <div>
+          <label htmlFor="password" className="mb-2 block text-sm font-semibold text-[#29483f]">
+            Password
+          </label>
+          <div className="relative">
+            <LockKeyhole className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[#71857f]" size={18} />
             <input
               id="password"
               type="password"
+              autoComplete="new-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
               minLength={8}
-              className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-              placeholder="Enter your password (min 8 characters)"
+              className={inputClasses}
+              placeholder="At least 8 characters"
             />
           </div>
+        </div>
 
-          <div>
-            <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-300 mb-2">
-              Confirm Password
-            </label>
+        <div>
+          <label htmlFor="confirmPassword" className="mb-2 block text-sm font-semibold text-[#29483f]">
+            Confirm password
+          </label>
+          <div className="relative">
+            <LockKeyhole className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[#71857f]" size={18} />
             <input
               id="confirmPassword"
               type="password"
+              autoComplete="new-password"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               required
-              className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-              placeholder="Confirm your password"
+              className={inputClasses}
+              placeholder="Re-enter your password"
             />
           </div>
-
-          <button
-            type="submit"
-            data-cs-override-id="form-submit-register"
-            disabled={isLoading}
-            className="w-full bg-primary hover:bg-primary/90 disabled:opacity-50 text-white font-medium py-2 px-4 rounded-md transition-colors"
-          >
-            {isLoading ? 'Creating account...' : 'Create Account'}
-          </button>
-        </form>
-
-        <div className="text-center">
-          <p className="text-gray-400 text-sm">
-            Already have an account?{' '}
-            <Link href="/login" className="text-primary hover:text-primary/80">
-              Sign in
-            </Link>
-          </p>
         </div>
 
-        <div className="text-center">
+        <button
+          type="submit"
+          data-cs-override-id="form-submit-register"
+          disabled={isLoading}
+          className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-[#123c2f] px-5 py-3.5 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(18,60,47,.16)] transition hover:bg-[#1a5140] disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {isLoading ? (
+            <><LoaderCircle className="animate-spin" size={17} />Creating account…</>
+          ) : (
+            <>{subscriptionContext ? 'Create account and continue' : 'Create your account'} <ArrowRight size={17} /></>
+          )}
+        </button>
+      </form>
+
+      <div className="mt-7 border-t border-[#123c2f]/10 pt-6 text-center">
+        <p className="text-sm text-[#607b72]">
+          Already have an account?{' '}
+          <Link
+            href="/login"
+            className="font-semibold text-[#123c2f] underline decoration-[#9bc444] decoration-2 underline-offset-4"
+          >
+            Sign in
+          </Link>
+        </p>
+        {/* Someone who arrived from Stripe has already paid; a second checkout
+            link would only let them buy the same subscription twice. */}
+        {!subscriptionContext && (
           <button
             type="button"
             data-cs-override-id="cta-start-free-trial-register-inline"
             onClick={handleBuyClick}
             disabled={isCheckoutLoading}
-            className="text-gray-400 hover:text-white text-sm disabled:opacity-50"
+            className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-[#175cce] hover:underline disabled:opacity-50"
           >
-            {isCheckoutLoading ? 'Loading...' : 'Get started'}
+            {isCheckoutLoading ? 'Opening checkout…' : 'Get started'}
           </button>
-        </div>
+        )}
       </div>
-      </div>
-      <SiteFooter />
       {dialog}
-    </div>
+    </AuthFlowShell>
   );
 }
 

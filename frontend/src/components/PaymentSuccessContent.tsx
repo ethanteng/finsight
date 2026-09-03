@@ -3,7 +3,7 @@ import { useEffect, useState, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import SiteFooter from './SiteFooter';
-import { pushPurchase } from '@/lib/dataLayer';
+import { pushPurchase, pushTrialStartedVerified } from '@/lib/dataLayer';
 import { readGaClientId } from '@/lib/ga-client-id';
 
 function PaymentSuccessContentInner() {
@@ -50,6 +50,28 @@ function PaymentSuccessContentInner() {
           const skippedExisting = data.code === 'ACCOUNT_ALREADY_SUBSCRIBED';
           setIsTrialing(Boolean(data.trialing) && !skippedExisting);
           setAlreadySubscribed(skippedExisting);
+          // Use redirect or redirectUrl (support both for backwards compatibility)
+          const redirectDestination = data.redirect || data.redirectUrl;
+
+          // Report the verified trial immediately. The existing GTM tag still
+          // fires from the downstream `checkout=success` page view; this push
+          // becomes the source of truth when that tag is migrated to a Custom
+          // Event trigger, eliminating the redirect-timing blind spot.
+          if (data.success && data.trialing && !skippedExisting) {
+            let signupPath: string | undefined;
+            if (typeof redirectDestination === 'string') {
+              try {
+                signupPath = new URL(redirectDestination, window.location.origin).pathname;
+              } catch {
+                // The event is still useful without the optional path.
+              }
+            }
+            pushTrialStartedVerified({
+              transactionId: data.session_id,
+              tier: data.tier,
+              signupPath,
+            });
+          }
           
           // A free trial is not a purchase. Keep this conversion paid-only;
           // trial-start tracking requires a separately configured analytics event.
@@ -71,9 +93,6 @@ function PaymentSuccessContentInner() {
             }
           }
 
-          // Use redirect or redirectUrl (support both for backwards compatibility)
-          const redirectDestination = data.redirect || data.redirectUrl;
-          
           if (data.success && redirectDestination) {
             setRedirectUrl(redirectDestination);
             // Redirect after a brief delay to show success message
