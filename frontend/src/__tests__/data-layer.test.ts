@@ -1,4 +1,10 @@
-import { pushBeginCheckout, pushPurchase, pushViewExamples, pushViewMoreExamples } from "@/lib/dataLayer";
+import {
+  pushBeginCheckout,
+  pushPurchase,
+  pushTrialStartedVerified,
+  pushViewExamples,
+  pushViewMoreExamples,
+} from "@/lib/dataLayer";
 
 type AnalyticsWindow = Window & typeof globalThis & {
   dataLayer?: Array<Record<string, unknown> | unknown[]>;
@@ -170,6 +176,49 @@ describe("purchase analytics", () => {
 
     expect(pushPurchase({ transactionId: "cs_blocked", value: 19, currency: "USD", tier: "premium" })).toBe(true);
     expect(analyticsWindow.dataLayer).toHaveLength(1);
+  });
+});
+
+describe("trial-start analytics", () => {
+  const analyticsWindow = window as AnalyticsWindow;
+
+  beforeEach(() => {
+    analyticsWindow.dataLayer = [];
+    window.sessionStorage.clear();
+  });
+
+  it("reports the verified trial with checkout identity and setup path", () => {
+    expect(pushTrialStartedVerified({
+      transactionId: "cs_trial_123",
+      tier: "premium",
+      signupPath: "/register",
+    })).toBe(true);
+
+    expect(analyticsWindow.dataLayer).toEqual([{
+      event: "trial_started_verified",
+      transaction_id: "cs_trial_123",
+      tier: "premium",
+      signup_path: "/register",
+    }]);
+  });
+
+  it("reports a checkout once and keeps separate trials distinct", () => {
+    expect(pushTrialStartedVerified({ transactionId: "cs_trial_a", tier: "premium", signupPath: "/register" })).toBe(true);
+    expect(pushTrialStartedVerified({ transactionId: "cs_trial_a", tier: "premium", signupPath: "/register" })).toBe(false);
+    expect(pushTrialStartedVerified({ transactionId: "cs_trial_b", tier: "premium", signupPath: "/register" })).toBe(true);
+
+    expect(analyticsWindow.dataLayer).toHaveLength(2);
+  });
+
+  it("drops an invalid checkout id and an invalid optional path", () => {
+    expect(pushTrialStartedVerified({ transactionId: "", tier: "premium", signupPath: "/register" })).toBe(false);
+    expect(pushTrialStartedVerified({ transactionId: "cs_trial_path", tier: "enterprise", signupPath: "register" })).toBe(true);
+
+    expect(analyticsWindow.dataLayer).toEqual([{
+      event: "trial_started_verified",
+      transaction_id: "cs_trial_path",
+      tier: "premium",
+    }]);
   });
 });
 
