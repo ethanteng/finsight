@@ -35,7 +35,8 @@ GHOST_CONTENT_KEY=your_content_api_key_here
 
 ### Individual Blog Post (`/blog/[slug]`)
 - Full post content with proper HTML rendering
-- Branded article artwork, with the Ghost feature image used in social metadata
+- Ghost feature image in the article header and social metadata
+- Branded article artwork as a fallback when the post has no feature image
 - Author information and metadata
 - Tags display
 - Back to blog navigation

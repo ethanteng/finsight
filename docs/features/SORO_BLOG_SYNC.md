@@ -86,8 +86,9 @@ Ghost would otherwise append `-2` and quietly break the canonical URL.
 **Images.** Featured images are copied from Soro's Supabase bucket into Ghost's
 own storage, so the OpenGraph and schema.org image URLs stay valid if Soro
 rotates the original. The blog index renders each post's `feature_image` in its
-card, while `MarketingArticlePage` continues to use its decorative article
-block. A failed upload falls back to the Soro URL and does not fail the import.
+card, and `MarketingArticlePage` renders it in the article header. Both retain
+the branded artwork as a fallback. A failed upload falls back to the Soro URL
+and does not fail the import.
 
 ## Social copy
 

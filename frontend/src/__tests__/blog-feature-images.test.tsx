@@ -1,5 +1,5 @@
 import { render, screen, within } from "@testing-library/react";
-import { MarketingBlogPage } from "@/components/marketing/MarketingSubpage";
+import { MarketingArticlePage, MarketingBlogPage } from "@/components/marketing/MarketingSubpage";
 import type { GhostPost } from "@/lib/ghost";
 
 const posts: GhostPost[] = [
@@ -42,5 +42,31 @@ describe("blog feature images", () => {
     expect(within(fallbackLink).queryByRole("img")).not.toBeInTheDocument();
     expect(within(fallbackLink).getByText("02")).toBeInTheDocument();
     expect(within(fallbackLink).getByText("RETIREMENT")).toBeInTheDocument();
+  });
+
+  it("uses the Ghost feature image in an article header", () => {
+    const { container } = render(
+      <MarketingArticlePage post={posts[0]} processedHtml="<p>Article body</p>" />,
+    );
+
+    const headerArtwork = container.querySelector(".article-art");
+    const featureImage = screen.getByRole("img", {
+      name: "A chart showing the featured analysis",
+    });
+    expect(headerArtwork).toHaveClass("article-art-image");
+    expect(featureImage).toHaveClass("article-feature-image");
+    expect(featureImage).toHaveAttribute("src", expect.stringContaining("storage.ghost.io"));
+  });
+
+  it("keeps the branded article artwork when Ghost has no feature image", () => {
+    const { container } = render(
+      <MarketingArticlePage post={posts[1]} processedHtml="<p>Article body</p>" />,
+    );
+
+    const headerArtwork = container.querySelector(".article-art");
+    expect(headerArtwork).toHaveClass("blue");
+    expect(headerArtwork).not.toHaveClass("article-art-image");
+    expect(within(headerArtwork as HTMLElement).queryByRole("img")).not.toBeInTheDocument();
+    expect(within(headerArtwork as HTMLElement).getByText("ASK LINC / FIELD NOTE")).toBeInTheDocument();
   });
 });

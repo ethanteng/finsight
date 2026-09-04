@@ -532,6 +532,7 @@ export function MarketingBlogPage({ ghostPosts }: { ghostPosts: GhostPost[] }) {
 
 export function MarketingArticlePage({ post, processedHtml }: { post: GhostPost; processedHtml: string }) {
   const author = post.authors?.[0]?.name || "Ethan Teng";
+  const featureImage = post.feature_image?.trim();
 
   return (
     <StandardPage className="article-page">
@@ -542,7 +543,20 @@ export function MarketingArticlePage({ post, processedHtml }: { post: GhostPost;
         {post.excerpt && <p>{post.excerpt}</p>}
         <div className="article-byline"><span><Image src="/images/ethan-teng-cartoon.webp" alt={`Portrait of ${author}`} fill sizes="38px" /></span><p><b>{author}</b><small>Published {formatPostDate(post.published_at)} · {post.reading_time || 5} min read</small></p></div>
       </section>
-      <div className="article-art post-art blue"><span>ASK LINC / FIELD NOTE</span><b>{postCategory(post)}</b><i>∑</i></div>
+      {featureImage ? (
+        <div className="article-art post-art article-art-image">
+          <Image
+            src={featureImage}
+            alt={post.feature_image_alt || post.title || "Ask Linc blog post"}
+            fill
+            sizes="(max-width: 640px) calc(100vw - 30px), (max-width: 1148px) calc(100vw - 48px), 1100px"
+            className="article-feature-image"
+            priority
+          />
+        </div>
+      ) : (
+        <div className="article-art post-art blue"><span>ASK LINC / FIELD NOTE</span><b>{postCategory(post)}</b><i>∑</i></div>
+      )}
       <section className="article-layout shell marketing-article-layout">
         <aside><span>ASK LINC BLOG</span><Link href="/features">See how Linc works</Link><Link href="/use-cases">Explore use cases</Link></aside>
         <article className="marketing-article-body ghost-content" dangerouslySetInnerHTML={{ __html: processedHtml }} />
