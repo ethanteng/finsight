@@ -540,7 +540,7 @@ export function MarketingArticlePage({ post, processedHtml }: { post: GhostPost;
         <span className="post-category">{postCategory(post)}</span>
         <h1>{post.title}</h1>
         {post.excerpt && <p>{post.excerpt}</p>}
-        <div className="article-byline"><span><Image src="/images/ethan-teng-cartoon.webp" alt="" fill sizes="38px" /></span><p><b>{author}</b><small>Published {formatPostDate(post.published_at)} · {post.reading_time || 5} min read</small></p></div>
+        <div className="article-byline"><span><Image src="/images/ethan-teng-cartoon.webp" alt={`Portrait of ${author}`} fill sizes="38px" /></span><p><b>{author}</b><small>Published {formatPostDate(post.published_at)} · {post.reading_time || 5} min read</small></p></div>
       </section>
       <div className="article-art post-art blue"><span>ASK LINC / FIELD NOTE</span><b>{postCategory(post)}</b><i>∑</i></div>
       <section className="article-layout shell marketing-article-layout">
