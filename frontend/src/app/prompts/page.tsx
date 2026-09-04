@@ -2,19 +2,15 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { PageCta, SiteFooter, SiteHeader } from "@/components/marketing/SiteShell";
 import { PROMPT_PAGES } from "@/lib/promptExamples";
+import { buildMarketingMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = buildMarketingMetadata({
   title: "Example Financial Planning Questions | Ask Linc",
   description:
     "See illustrative questions and answers about retirement, home buying, investments, and financial stress testing.",
-  alternates: {
-    canonical: "https://asklinc.com/prompts",
-  },
-  robots: {
-    index: true,
-    follow: true,
-  },
-};
+  path: "/prompts",
+  imageAlt: "Example Ask Linc financial planning questions",
+});
 
 export default function PromptsIndexPage() {
   return (

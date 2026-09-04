@@ -48,7 +48,7 @@ export function buildComparisons(pricing: Pricing = FALLBACK_PRICING): Compariso
     {
       slug: 'origin',
       competitorName: 'Origin',
-      title: 'Ask Linc vs Origin | Decision-First Planning vs an All-in-One Financial Platform',
+      title: 'Ask Linc vs Origin | Focused vs All-in-One Planning',
       description: 'Compare Ask Linc and Origin by the job each product is built to do: focused financial decisions versus a broad financial platform and AI advisor.',
       headline: 'Ask Linc vs Origin',
       summary: 'Origin is a broad financial platform with tracking, planning, investing, and AI guidance. Ask Linc is narrower on purpose: start with the decision in front of you and test it against the rest of your financial life.',
@@ -69,7 +69,7 @@ export function buildComparisons(pricing: Pricing = FALLBACK_PRICING): Compariso
     {
       slug: 'portfoliopilot',
       competitorName: 'PortfolioPilot',
-      title: 'Ask Linc vs PortfolioPilot | Household Decisions vs Investment-First Advice',
+      title: 'Ask Linc vs PortfolioPilot | Planning vs Investing',
       description: 'Compare Ask Linc and PortfolioPilot by the job each is built to do: cross-household financial decisions versus investment-first analysis and advice.',
       headline: 'Ask Linc vs PortfolioPilot',
       summary: 'PortfolioPilot starts with your investments. Ask Linc starts with the decision—and brings investments into the answer when they matter.',

@@ -29,6 +29,13 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       type: 'website',
       url: `https://asklinc.com/vs/${page.slug}`,
       siteName: 'Ask Linc',
+      images: [{ url: 'https://asklinc.com/og-image.jpg', width: 1200, height: 630, alt: `${page.headline} comparison` }],
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title: page.title,
+      description: page.description,
+      images: ['https://asklinc.com/og-image.jpg'],
     },
     robots: {
       index: true,

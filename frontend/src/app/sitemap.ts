@@ -59,9 +59,6 @@ const STATIC_ROUTES: StaticRoute[] = [
   { path: '/prompts/geopolitical-retirement', changeFrequency: 'monthly', priority: 0.7 },
 
   // Standalone tools / high-intent landing pages
-  { path: '/retirement-readiness', changeFrequency: 'monthly', priority: 0.9 },
-  { path: '/buying-a-house', changeFrequency: 'monthly', priority: 0.9 },
-
   // Evergreen answer pages (top-level routes, separate from Ghost)
   { path: '/retirement-answers', changeFrequency: 'monthly', priority: 0.9 },
   { path: '/can-i-retire-at-55', changeFrequency: 'monthly', priority: 0.9 },
@@ -116,11 +113,8 @@ async function getBlogEntries(): Promise<MetadataRoute.Sitemap> {
 }
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const now = new Date();
-
   const staticEntries: MetadataRoute.Sitemap = STATIC_ROUTES.map((route) => ({
     url: `${BASE_URL}${route.path}`,
-    lastModified: now,
     changeFrequency: route.changeFrequency,
     priority: route.priority,
   }));

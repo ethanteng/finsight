@@ -17,6 +17,13 @@ export const metadata: Metadata = {
     type: 'website',
     url: 'https://asklinc.com/faq',
     siteName: 'Ask Linc',
+    images: [{ url: 'https://asklinc.com/og-image.jpg', width: 1200, height: 630, alt: 'Ask Linc frequently asked questions' }],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'FAQ | Frequently Asked Questions | Ask Linc',
+    description: 'Common questions about Ask Linc, including accounts, pricing, privacy, and how answers are checked.',
+    images: ['https://asklinc.com/og-image.jpg'],
   },
   robots: {
     index: true,
