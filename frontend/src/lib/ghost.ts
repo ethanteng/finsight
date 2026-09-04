@@ -21,6 +21,7 @@ export type GhostPost = {
   url?: string | null;
   html?: string | null;
   feature_image?: string | null;
+  feature_image_alt?: string | null;
   excerpt?: string | null;
   reading_time?: number | null;
   published_at?: string | null;
