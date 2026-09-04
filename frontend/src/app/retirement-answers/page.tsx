@@ -203,7 +203,7 @@ export default function RetirementAnswersPage() {
           </ol>
           <div className="answer-hub-method-links">
             <Link href="/use-cases/retirement">Explore retirement planning <span aria-hidden="true">→</span></Link>
-            <Link href="/retirement-readiness">Check retirement readiness <span aria-hidden="true">→</span></Link>
+            <Link href="/use-cases/retirement">Check retirement readiness <span aria-hidden="true">→</span></Link>
           </div>
         </div>
       </section>

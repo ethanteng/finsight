@@ -195,7 +195,7 @@ export const canIRetireWithTwoMillion: AnswerPageData = {
   ],
   relatedAnswers: [
     { question: "How Ask Linc tests a retirement decision", eyebrow: "See the product", href: "/use-cases/retirement" },
-    { question: "Check your retirement readiness", eyebrow: "Use your details", href: "/retirement-readiness" },
+    { question: "Check your retirement readiness", eyebrow: "Use your details", href: "/use-cases/retirement" },
     { question: "Questions to ask before retiring", eyebrow: "Explore prompts", href: "/prompts/retirement" },
     { question: "Can I retire with $1 million?", eyebrow: "Answer page", href: "/can-i-retire-with-1-million" },
     { question: "Can I retire with $3 million?", eyebrow: "Answer page", href: "/can-i-retire-with-3-million" },
@@ -306,7 +306,7 @@ export const canIRetireWithThreeMillion: AnswerPageData = {
     { question: "Can I retire with $2 million?", eyebrow: "Answer page", href: "/can-i-retire-with-2-million" },
     { question: "Can I retire at 55?", eyebrow: "Answer page", href: "/can-i-retire-at-55" },
     { question: "Can I retire at 60?", eyebrow: "Answer page", href: "/can-i-retire-at-60" },
-    { question: "Check your retirement readiness", eyebrow: "Use your details", href: "/retirement-readiness" },
+    { question: "Check your retirement readiness", eyebrow: "Use your details", href: "/use-cases/retirement" },
     { question: "How Ask Linc tests a retirement decision", eyebrow: "See the product", href: "/use-cases/retirement" },
   ],
   sources: [
@@ -408,7 +408,7 @@ export const canIRetireWithOneMillion: AnswerPageData = {
   relatedAnswers: [
     { question: "Can I retire with $2 million?", eyebrow: "Answer page", href: "/can-i-retire-with-2-million" },
     { question: "How Ask Linc tests a retirement decision", eyebrow: "See the product", href: "/use-cases/retirement" },
-    { question: "Check your retirement readiness", eyebrow: "Use your details", href: "/retirement-readiness" },
+    { question: "Check your retirement readiness", eyebrow: "Use your details", href: "/use-cases/retirement" },
     { question: "Questions to ask before retiring", eyebrow: "Explore prompts", href: "/prompts/retirement" },
     { question: "Can I retire at 55?", eyebrow: "Answer page", href: "/can-i-retire-at-55" },
     { question: "Can I retire at 60?", eyebrow: "Answer page", href: "/can-i-retire-at-60" },
@@ -544,7 +544,7 @@ export const canIRetireAt55: AnswerPageData = {
   relatedAnswers: [
     { question: "Can I retire with $1 million?", eyebrow: "Answer page", href: "/can-i-retire-with-1-million" },
     { question: "Can I retire with $2 million?", eyebrow: "Answer page", href: "/can-i-retire-with-2-million" },
-    { question: "Check your retirement readiness", eyebrow: "Use your details", href: "/retirement-readiness" },
+    { question: "Check your retirement readiness", eyebrow: "Use your details", href: "/use-cases/retirement" },
     { question: "How Ask Linc tests a retirement decision", eyebrow: "See the product", href: "/use-cases/retirement" },
     { question: "Can I retire at 60?", eyebrow: "Answer page", href: "/can-i-retire-at-60" },
   ],
@@ -684,7 +684,7 @@ export const canIRetireAt60: AnswerPageData = {
     { question: "Can I retire at 55?", eyebrow: "Answer page", href: "/can-i-retire-at-55" },
     { question: "Can I retire with $1 million?", eyebrow: "Answer page", href: "/can-i-retire-with-1-million" },
     { question: "Can I retire with $2 million?", eyebrow: "Answer page", href: "/can-i-retire-with-2-million" },
-    { question: "Check your retirement readiness", eyebrow: "Use your details", href: "/retirement-readiness" },
+    { question: "Check your retirement readiness", eyebrow: "Use your details", href: "/use-cases/retirement" },
     { question: "How Ask Linc tests a retirement decision", eyebrow: "See the product", href: "/use-cases/retirement" },
     { question: "Can I retire with $3 million?", eyebrow: "Answer page", href: "/can-i-retire-with-3-million" },
   ],
