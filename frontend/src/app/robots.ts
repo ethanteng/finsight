@@ -5,9 +5,9 @@ const BASE_URL = 'https://asklinc.com';
 /**
  * robots.txt
  *
- * Note: `Allow` directives are only meaningful as exceptions to a `Disallow`.
- * With `Allow: /` as the base rule, listing individual public pages is a no-op,
- * so those have been removed.
+ * Search engines need access to Next.js assets in order to render public pages.
+ * HTML utility routes are crawlable but carry noindex directives, which bots
+ * can only process when robots.txt permits the request.
  *
  * AI crawlers (GPTBot, PerplexityBot, ClaudeBot, Google-Extended, etc.) are
  * intentionally NOT blocked — they fall under `User-agent: *` and are permitted.
@@ -19,18 +19,7 @@ export default function robots(): MetadataRoute.Robots {
       {
         userAgent: '*',
         allow: '/',
-        disallow: [
-          '/admin',
-          '/api/',
-          '/_next/',
-          '/static/',
-          '/profile',
-          '/payment-success',
-          '/reset-password',
-          '/verify-email',
-          '/forgot-password',
-          '/sentry-test',
-        ],
+        disallow: ['/api/'],
       },
     ],
     sitemap: `${BASE_URL}/sitemap.xml`,

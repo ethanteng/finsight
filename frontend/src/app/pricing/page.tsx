@@ -4,15 +4,16 @@ import { buildProductOfferSchema } from '../../data/faq';
 import { getPricing } from '../../lib/pricing';
 import { MarketingGetStartedButton } from '@/components/marketing/MarketingGetStartedButton';
 import { PageCta, SiteFooter, SiteHeader } from '@/components/marketing/SiteShell';
+import { buildMarketingMetadata } from '@/lib/seo';
 
 export async function generateMetadata(): Promise<Metadata> {
   const pricing = await getPricing();
-  return {
+  return buildMarketingMetadata({
     title: `Ask Linc Pricing — 1 Month Free, Then ${pricing.label}`,
     description: `One plan. Start with 1 month free, then pay ${pricing.label} for unlimited questions, connected accounts, what-if scenarios, and Show the Math. Cancel anytime.`,
-    alternates: { canonical: 'https://asklinc.com/pricing' },
-    robots: { index: true, follow: true },
-  };
+    path: '/pricing',
+    imageAlt: 'Ask Linc pricing',
+  });
 }
 
 export default async function PricingPage() {

@@ -4,6 +4,27 @@ import { buildContentSecurityPolicy } from "./src/lib/csp";
 // Injected content by Sentry CLI
 const { withSentryConfig } = require("@sentry/nextjs");
 
+const noindexRoutes = [
+  "/admin/:path*",
+  "/app/:path*",
+  "/finances/:path*",
+  "/forgot-password/:path*",
+  "/login/:path*",
+  "/payment-success/:path*",
+  "/profile/:path*",
+  "/register/:path*",
+  "/reset-password/:path*",
+  "/transactions/:path*",
+  "/verify-email/:path*",
+];
+
+const noindexHeaders = [
+  {
+    key: "X-Robots-Tag",
+    value: "noindex, nofollow",
+  },
+];
+
 const nextConfig: NextConfig = {
   outputFileTracingRoot: require("path").join(__dirname),
   async headers() {
@@ -18,6 +39,46 @@ const nextConfig: NextConfig = {
             }),
           },
         ],
+      },
+      ...noindexRoutes.map((source) => ({ source, headers: noindexHeaders })),
+    ];
+  },
+  async redirects() {
+    return [
+      {
+        source: "/buying-a-house",
+        destination: "/use-cases/home-buying",
+        permanent: true,
+      },
+      {
+        source: "/retirement-readiness",
+        destination: "/use-cases/retirement",
+        permanent: true,
+      },
+      {
+        source: "/privacy-policy",
+        destination: "/privacy",
+        permanent: true,
+      },
+      {
+        source: "/blog/standard-tier-welcome-to-the-juggle",
+        destination: "/pricing",
+        permanent: true,
+      },
+      {
+        source: "/blog/today-in-markets-money-retirement-math-in-a-4-world",
+        destination: "/blog/treasury-yields-5-percent-what-it-means-for-your-money",
+        permanent: true,
+      },
+      {
+        source: "/blog/why-ask-linc-is-not-just-chatgpt-for-your-bank",
+        destination: "/vs/chatgpt",
+        permanent: true,
+      },
+      {
+        source: "/blog/the-feds-stuck-in-rate-limbo-cut-or-nah",
+        destination: "/blog/treasury-yields-5-percent-what-it-means-for-your-money",
+        permanent: true,
       },
     ];
   },

@@ -2,18 +2,14 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { MarketingGetStartedButton } from '@/components/marketing/MarketingGetStartedButton';
 import { PageCta, SiteFooter, SiteHeader } from '@/components/marketing/SiteShell';
+import { buildMarketingMetadata } from '@/lib/seo';
 
-export const metadata: Metadata = {
+export const metadata: Metadata = buildMarketingMetadata({
   title: 'Career Change & Time Off — Use Cases | Ask Linc',
   description: 'See what a sabbatical, lower-paying job, layoff, or move to one income could change across cash, benefits, savings, and retirement.',
-  alternates: {
-    canonical: 'https://asklinc.com/use-cases/career-change',
-  },
-  robots: {
-    index: true,
-    follow: true,
-  },
-};
+  path: '/use-cases/career-change',
+  imageAlt: 'Ask Linc career change planning',
+});
 
 const levers = [
   ['Time away from work', 'Compare three months, six months, or a full year away and see how much cash the plan needs.'],

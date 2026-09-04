@@ -4,15 +4,22 @@ import Link from 'next/link';
 import { PageCta, SiteFooter, SiteHeader } from '@/components/marketing/SiteShell';
 
 export const metadata: Metadata = {
-  title: 'About | Why Ask Linc Exists',
+  title: 'About Ask Linc | Why We Built a Financial Planning Assistant',
   description: 'Ask Linc was built to help people answer consequential money questions using their real financial picture—and inspect the work behind the answer.',
   alternates: { canonical: 'https://asklinc.com/about' },
   openGraph: {
-    title: 'About | Why Ask Linc Exists',
+    title: 'About Ask Linc | Why We Built a Financial Planning Assistant',
     description: 'Financial planning that starts with the decision you are trying to make.',
     type: 'website',
     url: 'https://asklinc.com/about',
     siteName: 'Ask Linc',
+    images: [{ url: 'https://asklinc.com/og-image.jpg', width: 1200, height: 630, alt: 'Why Ask Linc exists' }],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'About Ask Linc | Why We Built a Financial Planning Assistant',
+    description: 'Financial planning that starts with the decision you are trying to make.',
+    images: ['https://asklinc.com/og-image.jpg'],
   },
   robots: { index: true, follow: true },
 };

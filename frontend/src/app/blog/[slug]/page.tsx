@@ -22,10 +22,8 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   if (!post?.title) return { title: 'Blog Post | Ask Linc', alternates: { canonical: `https://asklinc.com/blog/${slug}` } };
 
   const postUrl = `https://asklinc.com/blog/${slug}`;
-  const description = post.excerpt || `Read ${post.title} on Ask Linc's financial blog.`;
-  const searchTitle = slug === 'average-american-savings' && post.meta_title
-    ? post.meta_title
-    : `${post.title} | Ask Linc`;
+  const description = post.meta_description || post.excerpt || `Read ${post.title} on Ask Linc's financial blog.`;
+  const searchTitle = post.meta_title || `${post.title} | Ask Linc`;
   return {
     title: searchTitle,
     description,

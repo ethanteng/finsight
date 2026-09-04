@@ -4,12 +4,12 @@ import { MarketingGetStartedButton } from '@/components/marketing/MarketingGetSt
 import { PageCta, SiteFooter, SiteHeader } from '@/components/marketing/SiteShell';
 
 export const metadata: Metadata = {
-  title: 'How Ask Linc Works | Financial Planning That Starts With Your Question',
+  title: 'How Ask Linc Works | Question-First Financial Planning',
   description: 'Ask a financial question, bring in the parts of your financial life that matter, compare the tradeoffs, and see the math behind the answer.',
   keywords: ['financial planning', 'financial decisions', 'what-if planning', 'connected financial accounts', 'show the math'],
   alternates: { canonical: 'https://asklinc.com/features' },
   openGraph: {
-    title: 'How Ask Linc Works | Financial Planning That Starts With Your Question',
+    title: 'How Ask Linc Works | Question-First Financial Planning',
     description: 'Start with the decision, not the dashboard. See how Ask Linc builds the analysis around your question.',
     type: 'website',
     url: 'https://asklinc.com/features',

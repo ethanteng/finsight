@@ -17,6 +17,7 @@ export type GhostPost = {
   uuid?: string;
   title?: string | null;
   meta_title?: string | null;
+  meta_description?: string | null;
   slug?: string | null;
   url?: string | null;
   html?: string | null;
@@ -105,6 +106,9 @@ export function processGhostHtml(html: string): string {
     // Fix absolute links from Ghost domains
     .replace(/https:\/\/[^\/]+\.ghost\.io\//g, '/blog/')
     .replace(/https:\/\/blog\.asklinc\.com\//g, '/blog/')
+    // Ghost's Content API can append its source marker to rendered links.
+    // Keep internal links on their clean canonical URLs.
+    .replace(/\?ref=blog\.asklinc\.com(?=["'#\s<])/g, '')
     // Preserve Ghost's original formatting classes
     .replace(/class="kg-/g, 'class="ghost-kg-')
     // Ensure proper spacing for Ghost's content blocks

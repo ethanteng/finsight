@@ -15,6 +15,13 @@ export const metadata: Metadata = {
     type: 'website',
     url: 'https://asklinc.com/vs',
     siteName: 'Ask Linc',
+    images: [{ url: 'https://asklinc.com/og-image.jpg', width: 1200, height: 630, alt: 'Compare Ask Linc with other financial tools' }],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Compare Ask Linc With Other Money Tools',
+    description: 'Compare financial tools by the job each product is built to do.',
+    images: ['https://asklinc.com/og-image.jpg'],
   },
   robots: {
     index: true,
