@@ -3,8 +3,8 @@ import Link from 'next/link';
 import { PageCta, SiteFooter, SiteHeader } from '@/components/marketing/SiteShell';
 
 export const metadata: Metadata = {
-  title: 'What You Can Ask | Ask Linc',
-  description: 'Start with the financial decision you are trying to make: a home, growing family, career change, investments, or retirement.',
+  title: 'Financial Planning Use Cases for Life Decisions | Ask Linc',
+  description: 'Explore financial planning use cases for buying a home, growing a family, changing careers, investing, and retiring—all tested against your real numbers.',
   keywords: ['financial planning', 'retirement planning', 'home buying', 'career change', 'parental leave planning', 'portfolio analysis'],
   alternates: { canonical: 'https://asklinc.com/use-cases' },
   openGraph: {
