@@ -26,7 +26,8 @@ GHOST_CONTENT_KEY=your_content_api_key_here
 ## Features
 
 ### Blog Index Page (`/blog`)
-- Displays a grid of blog posts with feature images
+- Displays a grid of blog posts using each post's Ghost `feature_image`
+- Preserves the branded card artwork as a fallback when a post has no feature image
 - Shows post metadata (title, excerpt, author, reading time, publish date)
 - Responsive design with hover effects
 - Tags display
@@ -34,7 +35,7 @@ GHOST_CONTENT_KEY=your_content_api_key_here
 
 ### Individual Blog Post (`/blog/[slug]`)
 - Full post content with proper HTML rendering
-- Feature image display
+- Branded article artwork, with the Ghost feature image used in social metadata
 - Author information and metadata
 - Tags display
 - Back to blog navigation
@@ -68,6 +69,7 @@ src/lib/
 
 ### Image Domains
 The following domains are allowed for images:
+- `storage.ghost.io`
 - `images.ghost.io`
 - `static.ghost.org`
 - `ask-linc-blog.ghost.io`

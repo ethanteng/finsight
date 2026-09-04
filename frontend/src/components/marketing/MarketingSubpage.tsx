@@ -457,6 +457,37 @@ function postCategory(post: GhostPost) {
   return post.tags?.[0]?.name?.toUpperCase() || "ASK LINC BLOG";
 }
 
+function PostArtwork({ post, position, featured = false }: { post: GhostPost; position: number; featured?: boolean }) {
+  const featureImage = post.feature_image?.trim();
+  const fallbackTone = featured ? "lime" : postTones[(position - 2) % postTones.length];
+  const imageSizes = featured
+    ? "(max-width: 1024px) 100vw, 53vw"
+    : "(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw";
+
+  return (
+    <Link
+      href={`/blog/${post.slug}`}
+      className={`post-art ${featureImage ? "post-art-image" : fallbackTone}`}
+      aria-label={`Read ${post.title || "this Ask Linc post"}`}
+    >
+      {featureImage ? (
+        <Image
+          src={featureImage}
+          alt={post.feature_image_alt || post.title || "Ask Linc blog post"}
+          fill
+          sizes={imageSizes}
+          className="post-feature-image"
+          priority={featured}
+        />
+      ) : featured ? (
+        <><span>∑</span><i>{postCategory(post)}</i><b>01</b></>
+      ) : (
+        <><span>{String(position).padStart(2, "0")}</span><b>{postCategory(post).split(" ")[0]}</b><i>↗</i></>
+      )}
+    </Link>
+  );
+}
+
 export function MarketingBlogPage({ ghostPosts }: { ghostPosts: GhostPost[] }) {
   const publishedPosts = ghostPosts.filter((post) => post.slug && post.title);
   const featured = publishedPosts[0];
@@ -470,9 +501,7 @@ export function MarketingBlogPage({ ghostPosts }: { ghostPosts: GhostPost[] }) {
       {featured ? (
         <>
           <section className="featured-post shell">
-            <Link href={`/blog/${featured.slug}`} className="post-art lime">
-              <span>∑</span><i>{postCategory(featured)}</i><b>01</b>
-            </Link>
+            <PostArtwork post={featured} position={1} featured />
             <div>
               <span className="post-category">{postCategory(featured)}</span>
               <h2>{featured.title}</h2>
@@ -484,9 +513,7 @@ export function MarketingBlogPage({ ghostPosts }: { ghostPosts: GhostPost[] }) {
           <section className="post-grid shell">
             {publishedPosts.slice(1).map((post, index) => (
               <article key={post.id}>
-                <Link href={`/blog/${post.slug}`} className={`post-art ${postTones[index % postTones.length]}`}>
-                  <span>{String(index + 2).padStart(2, "0")}</span><b>{postCategory(post).split(" ")[0]}</b><i>↗</i>
-                </Link>
+                <PostArtwork post={post} position={index + 2} />
                 <span className="post-category">{postCategory(post)}</span>
                 <h3><Link href={`/blog/${post.slug}`}>{post.title}</Link></h3>
                 <p>{post.excerpt}</p>
