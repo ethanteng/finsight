@@ -507,6 +507,33 @@
       padding-block: 62px 72px;
     }
 
+    .stress-test-hero {
+      gap: 42px;
+      padding-top: 38px;
+    }
+
+    .stress-test-hero .back-link {
+      margin-bottom: 24px;
+    }
+
+    .stress-test-hero-actions {
+      align-items: stretch;
+      flex-direction: column;
+      gap: 11px;
+      margin-top: 20px;
+    }
+
+    .use-case-hero .stress-test-hero-actions .button {
+      width: 100%;
+      min-height: 54px;
+      justify-content: center;
+    }
+
+    .stress-test-cta-proof {
+      max-width: none;
+      text-align: center;
+    }
+
     .trust-question-grid {
       grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 10px;

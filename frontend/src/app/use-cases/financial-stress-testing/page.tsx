@@ -3,8 +3,8 @@ import MarketingSubpage from '../../../components/marketing/MarketingSubpage';
 import { buildMarketingMetadata } from '@/lib/seo';
 
 export const metadata: Metadata = buildMarketingMetadata({
-  title: 'Financial Stress Testing — Use Cases | Ask Linc',
-  description: 'Stress test your portfolio, assess withdrawal sustainability, and model the impact of geopolitical events on your retirement plans.',
+  title: 'Retirement Stress Test | Ask Linc',
+  description: 'Stress-test your retirement plan against market drops, inflation, spending changes, and different retirement dates using your accounts and historical returns.',
   path: '/use-cases/financial-stress-testing',
   imageAlt: 'Ask Linc financial stress testing',
 });

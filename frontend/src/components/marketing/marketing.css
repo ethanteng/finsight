@@ -787,6 +787,13 @@ footer { padding-block: 55px 28px; background: #0a1912; color: white; }.footer-i
 .use-case-hero { display: grid; grid-template-columns: .88fr 1.12fr; gap: 85px; align-items: center; }
 .use-case-hero .back-link { display: block; margin-bottom: 48px; }.use-case-hero h1 { max-width: 650px; font-size: clamp(50px,5.6vw,76px); }
 .use-case-hero .button { margin-top: 28px; }
+.stress-test-benefits { display: grid; gap: 8px; margin: 24px 0 0; padding: 0; list-style: none; }
+.stress-test-benefits li { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid rgba(16,35,25,.14); border-radius: 11px; background: rgba(255,255,255,.36); color: #334b3d; font-size: 14px; font-weight: 700; line-height: 1.35; }
+.stress-test-benefits li::before { display: grid; flex: 0 0 21px; width: 21px; height: 21px; place-items: center; border-radius: 50%; background: var(--ink); color: var(--lime); content: "✓"; font-size: 12px; font-weight: 900; }
+.stress-test-hero-actions { display: flex; align-items: center; gap: 18px; margin-top: 24px; }
+.use-case-hero .stress-test-hero-actions .button { flex: 0 0 auto; margin-top: 0; }
+.stress-test-cta-proof { display: flex; max-width: 330px; flex-direction: column; gap: 4px; margin: 0; color: #59685f; font-size: 12px; line-height: 1.45; }
+.stress-test-cta-proof strong { color: var(--ink); font-size: 13px; }
 .use-case-answer { overflow: hidden; border: 1px solid #a8b5a7; border-radius: 24px; background: var(--cream); box-shadow: 12px 12px 0 #c9d6c8; transform: rotate(1deg); }
 .use-case-page.blue .use-case-answer { box-shadow: 12px 12px 0 var(--blue); }.use-case-page.lime .use-case-answer { box-shadow: 12px 12px 0 #cfe967; }.use-case-page.sand .use-case-answer { box-shadow: 12px 12px 0 #dfc8a6; }
 .use-case-answer > p { margin: 0; padding: 22px 25px; background: #ecebe3; font-family: var(--font-display); font-size: 17px; font-weight: 750; }

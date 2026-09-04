@@ -5,6 +5,7 @@ import { FeatureScenario } from "./FeatureScenario";
 import { MarketingContactForm } from "./MarketingContactForm";
 import { MarketingGetStartedButton } from "./MarketingGetStartedButton";
 import { RotatingContextChips } from "./RotatingContextChips";
+import { TrialPriceLine } from "./TrialPriceLine";
 import type { GhostPost } from "@/lib/ghost";
 import { getComparison } from "@/lib/comparisons";
 import type { Pricing } from "@/config/pricing";
@@ -168,15 +169,15 @@ const useCases = {
   market: {
     slug: "financial-stress-testing",
     number: "05",
-    label: "WHAT-IF PLANNING",
-    title: "Try the bad what-ifs before they happen.",
-    question: "What if stocks fall 25% and inflation stays high?",
+    label: "RETIREMENT STRESS TEST",
+    title: "Stress-test your retirement plan before the market tests it.",
+    question: "What if stocks fall 25% early in retirement and inflation stays high?",
     answer: "The plan still works—but the margin gets much thinner.",
-    summary: "The biggest risk is having to sell while markets are down. More cash and fewer big stock bets make the plan safer.",
+    summary: "The biggest risk is selling investments while markets are down. More cash and fewer concentrated bets make the retirement plan safer.",
     metrics: [["MARKET DROP", "−25%"], ["CASH BUFFER", "14 mo"], ["PLAN RESULT", "Still works"]],
-    levers: [["Interest rates", "See how changing rates affect your debt, savings, and investments."], ["Inflation", "See how higher prices change what you can spend in retirement."], ["Market moves", "Measure what a downturn means for what you own and when you need the money."],
+    levers: [["Market downturns", "See what an early market drop does to withdrawals and how long the plan lasts."], ["Inflation and spending", "Test how higher prices and different spending levels change the retirement margin."], ["Retirement date", "Compare retiring earlier or later without rebuilding the plan from scratch."],
     ],
-    context: ["Federal Reserve data", "Rates + yields", "Market prices", "Financial news", "Your holdings"],
+    context: ["Connected accounts", "Retirement spending", "Rates + inflation", "Historical returns", "Your holdings"],
     tone: "sand",
   },
 } as const;
@@ -305,9 +306,50 @@ function UseCasesPage() {
 
 function UseCasePage({ useCase }: { useCase: UseCaseKey }) {
   const item = useCases[useCase];
+  const isRetirementStressTest = useCase === "market";
   return (
     <StandardPage className={`use-case-page ${item.tone}`}>
-      <section className="subhero shell use-case-hero"><div><Link href="/use-cases" className="back-link">← All questions</Link><p className="section-kicker">{item.number} / {item.label}</p><h1>{item.title}</h1><p className="subhero-copy">Ask the question in your own words. Linc checks your accounts, goals, and the things that could change the answer.</p><MarketingGetStartedButton className="button button-primary" csOverrideId="cta-start-free-trial-hero" /></div><article className="use-case-answer"><div className="miniature-top"><span className="brand-mark small">L</span><b>SAMPLE DECISION</b><span>ILLUSTRATIVE</span></div><p>{item.question}</p><div className="use-case-verdict"><small>THE SHORT ANSWER</small><h2>{item.answer}</h2><span>{item.summary}</span></div><div className="use-case-metrics">{item.metrics.map(([label,value])=><span key={label}><small>{label}</small><b>{value}</b></span>)}</div><div className="use-case-check">∑ &nbsp;Open Show the Math to see the numbers behind the answer.</div></article></section>
+      <section className={`subhero shell use-case-hero${isRetirementStressTest ? " stress-test-hero" : ""}`}>
+        <div>
+          <Link href="/use-cases" className="back-link">← All questions</Link>
+          <p className="section-kicker">{item.number} / {item.label}</p>
+          <h1>{item.title}</h1>
+          <p className="subhero-copy">
+            {isRetirementStressTest
+              ? "See how market drops, inflation, spending, and different retirement dates change your plan—using your accounts and historical returns."
+              : "Ask the question in your own words. Linc checks your accounts, goals, and the things that could change the answer."}
+          </p>
+          {isRetirementStressTest ? (
+            <>
+              <ul className="stress-test-benefits" aria-label="What you can test in your retirement plan">
+                <li>Model an early market drop</li>
+                <li>Change inflation and spending</li>
+                <li>Try different retirement dates</li>
+              </ul>
+              <div className="stress-test-hero-actions">
+                <MarketingGetStartedButton
+                  className="button button-primary"
+                  trackingLocation="retirement_stress_test_hero"
+                  csOverrideId="cta-start-free-trial-hero"
+                />
+                <p className="stress-test-cta-proof">
+                  <strong><TrialPriceLine /></strong>
+                  <span>Read-only connections. Your financial data is never used to train AI.</span>
+                </p>
+              </div>
+            </>
+          ) : (
+            <MarketingGetStartedButton className="button button-primary" csOverrideId="cta-start-free-trial-hero" />
+          )}
+        </div>
+        <article className="use-case-answer">
+          <div className="miniature-top"><span className="brand-mark small">L</span><b>SAMPLE DECISION</b><span>ILLUSTRATIVE</span></div>
+          <p>{item.question}</p>
+          <div className="use-case-verdict"><small>THE SHORT ANSWER</small><h2>{item.answer}</h2><span>{item.summary}</span></div>
+          <div className="use-case-metrics">{item.metrics.map(([label,value])=><span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
+          <div className="use-case-check">∑ &nbsp;Open Show the Math to see the numbers behind the answer.</div>
+        </article>
+      </section>
       <section className="decision-levers shell"><div className="editorial-heading"><p className="section-kicker">WHAT MOVES THE ANSWER</p><h2>Change one thing. See what happens.</h2></div><div className="lever-grid">{item.levers.map(([title,copy],index)=><article key={title}><span>0{index+1}</span><h3>{title}</h3><p>{copy}</p></article>)}</div></section>
       <section className="case-context dark-band"><div className="shell case-context-inner"><div><p className="section-kicker light">WHAT LINC CHECKS FIRST</p><h2>The numbers that can change the answer.</h2></div><RotatingContextChips items={item.context} /></div></section>
       <section className="other-cases shell"><span>EXPLORE ANOTHER DECISION</span>{Object.values(useCases).filter((candidate)=>candidate.slug!==item.slug).map((candidate)=><Link href={`/use-cases/${candidate.slug}`} key={candidate.slug}>{candidate.label}<b>→</b></Link>)}</section>
