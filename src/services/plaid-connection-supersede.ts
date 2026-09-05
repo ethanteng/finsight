@@ -13,6 +13,15 @@
  * means the two Items are genuinely different logins at the same institution (e.g. personal and
  * business at the same bank), and both are left active.
  *
+ * The signals have to survive an institution re-labelling its own accounts between Items, which
+ * Betterment does on nearly every relink: the same goal came back as
+ * "Retirement - Roth IRA" under one Item and "Retirement - Tax-Coordinated Portfolio - Roth IRA"
+ * under the next, with a mask where the old Item had none and a subtype of `brokerage` where the
+ * old Item said `ira`. Nothing in an exact-match cascade sees through that, so a containment pass
+ * matches a name that is the other with words inserted - guarded by mutual exclusivity, by a
+ * corroboration rule, and by insisting that containment-only coverage be a complete swap in both
+ * directions, so a lone, ambiguous, or absorbed pairing is dropped rather than guessed.
+ *
  * Superseding DROPS the previous connection's transactions rather than migrating them. Plaid
  * transaction IDs are Item-scoped, so the replacement Item re-imports the same history under new
  * `plaidTransactionId`s on its first cursor-less `transactionsSync`. Persistence dedupes only on
@@ -22,7 +31,7 @@
  * history older than the replacement Item's available window is not carried over.
  */
 
-export type MatchStrategy = 'persistent-id' | 'mask' | 'name' | 'balance';
+export type MatchStrategy = 'persistent-id' | 'mask' | 'name' | 'name-containment' | 'balance';
 
 export type ConnectionAccount = {
   /** Caller-owned handle (database id for persisted accounts). */
@@ -89,6 +98,68 @@ export function normalizeAccountName(raw: string | null | undefined): string {
 
 function typeKey(account: ConnectionAccount): string {
   return `${(account.type || '').trim().toLowerCase()}|${(account.subtype || '').trim().toLowerCase()}`;
+}
+
+/**
+ * Type without subtype. Subtype is not stable across Items - Betterment reported the same goal as
+ * `ira` under one Item and `brokerage` under its replacement - so the containment pass scopes on
+ * the coarser value. Type itself does stay put, and it is what keeps a checking account from being
+ * matched against an investment account.
+ */
+function baseTypeKey(account: ConnectionAccount): string {
+  return (account.type || '').trim().toLowerCase();
+}
+
+/**
+ * The words of an account name that carry meaning. Separator-only tokens ('-', '&') are dropped, and
+ * leading/trailing punctuation is stripped from each token, so punctuation drift between two Items
+ * ("Retirement - Roth IRA" vs "Retirement Roth IRA", or "$325K" vs "($325K)") is not mistaken for
+ * a difference in the name. Interior hyphens stay put so "tax-coordinated" remains one token.
+ */
+function contentWords(name: string | null | undefined): string[] {
+  return normalizeAccountName(name)
+    .split(' ')
+    .map(word => word.replace(/^[^a-z0-9]+|[^a-z0-9]+$/g, ''))
+    .filter(word => word.length > 0);
+}
+
+/** Greedy subsequence test - `shorter` appears inside `longer` in order, gaps allowed. */
+function isWordSubsequence(shorter: string[], longer: string[]): boolean {
+  let index = 0;
+  for (const word of longer) {
+    if (index < shorter.length && shorter[index] === word) index += 1;
+  }
+  return index === shorter.length;
+}
+
+/**
+ * How many meaningful words the shorter name must have before containment counts as evidence. A
+ * one-word name ("Checking", "Savings") is contained by half the account names a bank issues, and
+ * matching on it would let a second, genuinely separate login look like a rename of the first.
+ */
+const MIN_CONTAINMENT_WORDS = 2;
+
+/**
+ * How many containment pairings a connection must show before they count toward coverage, absent a
+ * match from a stronger pass. Two is the point at which the same re-labelling has to hold twice
+ * over, which a coincidence of names does not survive - and it puts a single-account connection out
+ * of containment's reach entirely, since it can never produce a second pairing.
+ */
+const CONTAINMENT_CORROBORATION = 2;
+
+/**
+ * True when one name is the other with extra words inserted - the shape institutions produce when
+ * they re-label accounts between Items. Betterment's September relink turned
+ * "Retirement - Roth IRA" into "Retirement - Tax-Coordinated Portfolio - Roth IRA" and appended
+ * " - Joint Automated Investing" to every goal, which no exact-name comparison can see through.
+ */
+function namesContainOneAnother(a: ConnectionAccount, b: ConnectionAccount): boolean {
+  const aWords = contentWords(a.name);
+  const bWords = contentWords(b.name);
+  if (aWords.length < MIN_CONTAINMENT_WORDS || bWords.length < MIN_CONTAINMENT_WORDS) return false;
+  return aWords.length <= bWords.length
+    ? isWordSubsequence(aWords, bWords)
+    : isWordSubsequence(bWords, aWords);
 }
 
 function distinctPersistentId(account: ConnectionAccount): string {
@@ -171,6 +242,60 @@ function matchByKey(
   }
 }
 
+/**
+ * Pairwise pass for names that are not equal but contain one another. Unlike `matchByKey` there is
+ * no key to bucket on, so ambiguity is ruled out by requiring the pairing to be mutually exclusive:
+ * the previous account must contain-or-be-contained-by exactly one candidate on the current side,
+ * and that candidate must have exactly one candidate back. Anything less is left unmatched, which
+ * costs the user a duplicate connection to remove by hand - the cheap failure. Guessing costs a
+ * real account and its history.
+ *
+ * Mutual exclusivity is vacuous when either side holds a single account, so it is not on its own
+ * enough to authorize deletion - see CONTAINMENT_CORROBORATION in the caller.
+ */
+function matchByNameContainment(
+  previous: ConnectionAccount[],
+  current: ConnectionAccount[],
+  claimed: { previous: Set<string>; current: Set<string> },
+  matches: AccountMatch[]
+): void {
+  const eligible = (accounts: ConnectionAccount[], claimedIds: Set<string>) =>
+    accounts.filter(
+      account =>
+        !claimedIds.has(account.id) && contentWords(account.name).length >= MIN_CONTAINMENT_WORDS
+    );
+
+  const previousPool = eligible(previous, claimed.previous);
+  const currentPool = eligible(current, claimed.current);
+
+  const currentCandidates = new Map<string, ConnectionAccount[]>();
+  const previousCandidates = new Map<string, ConnectionAccount[]>();
+
+  for (const previousAccount of previousPool) {
+    for (const currentAccount of currentPool) {
+      if (baseTypeKey(previousAccount) !== baseTypeKey(currentAccount)) continue;
+      if (hasConflictingStableIdentifier(previousAccount, currentAccount)) continue;
+      if (!namesContainOneAnother(previousAccount, currentAccount)) continue;
+
+      if (!currentCandidates.has(previousAccount.id)) currentCandidates.set(previousAccount.id, []);
+      currentCandidates.get(previousAccount.id)!.push(currentAccount);
+      if (!previousCandidates.has(currentAccount.id)) previousCandidates.set(currentAccount.id, []);
+      previousCandidates.get(currentAccount.id)!.push(previousAccount);
+    }
+  }
+
+  for (const previousAccount of previousPool) {
+    const candidates = currentCandidates.get(previousAccount.id);
+    if (!candidates || candidates.length !== 1) continue;
+    const currentAccount = candidates[0];
+    if ((previousCandidates.get(currentAccount.id) || []).length !== 1) continue;
+
+    matches.push({ previous: previousAccount, current: currentAccount, strategy: 'name-containment' });
+    claimed.previous.add(previousAccount.id);
+    claimed.current.add(currentAccount.id);
+  }
+}
+
 export function matchAccountsAcrossConnections(
   previous: ConnectionAccount[],
   current: ConnectionAccount[]
@@ -197,7 +322,39 @@ export function matchAccountsAcrossConnections(
     return name ? `name:${typeKey(account)}|${name}` : null;
   }, claimed, matches);
 
-  // 4. Exact balance, scoped by account type. Sound only when both sides were observed together,
+  // 4. One name contained in the other, scoped by account type only. This is what survives an
+  //    institution re-labelling its accounts between Items, which is otherwise invisible: the
+  //    replacement reports no shared mask, no persistent id, and (days later) a drifted balance.
+  //
+  //    Held to a corroboration rule, because containment on its own is weak evidence and the
+  //    mutual-exclusivity guard inside the pass cannot see that: where a connection holds one
+  //    account, the single candidate is trivially the only one. An old "Individual Brokerage
+  //    Account" and a second login's "Individual Taxable Brokerage Account", neither reporting a
+  //    mask, would otherwise pair off, read as fully covered, and take the older login's account
+  //    and history with them.
+  //
+  //    A re-labelling by an institution is systematic - it lands on every account the connection
+  //    holds - so containment is only trusted where the connection shows it happening more than
+  //    once, or where a stronger pass has already tied the two connections together. A lone
+  //    containment pairing is a coincidence of names until something else agrees, so it is dropped
+  //    and the accounts are left for the balance pass to try.
+  const containmentMatches: AccountMatch[] = [];
+  const containmentClaimed = {
+    previous: new Set(claimed.previous),
+    current: new Set(claimed.current)
+  };
+  matchByNameContainment(previous, current, containmentClaimed, containmentMatches);
+  const corroborated =
+    containmentMatches.length >= CONTAINMENT_CORROBORATION || (containmentMatches.length > 0 && matches.length > 0);
+  if (corroborated) {
+    for (const match of containmentMatches) {
+      matches.push(match);
+      claimed.previous.add(match.previous.id);
+      claimed.current.add(match.current.id);
+    }
+  }
+
+  // 5. Exact balance, scoped by account type. Sound only when both sides were observed together,
   //    so the same logical account reports the same balance to the cent - see balancesComparable.
   matchByKey(previous, current, 'balance', account => {
     const balance = account.currentBalance;
@@ -208,11 +365,27 @@ export function matchAccountsAcrossConnections(
   const unmatchedPrevious = previous.filter(account => !claimed.previous.has(account.id));
   const unmatchedCurrent = current.filter(account => !claimed.current.has(account.id));
 
+  // Coverage normally ignores accounts left over on the current side: a replacement Item may
+  // legitimately expose more than the connection it replaces. Containment on its own cannot afford
+  // that latitude. A smaller login's short names sit inside a larger login's longer ones, so a
+  // three-goal connection reads as fully covered by a four-goal connection at the same institution
+  // that has nothing to do with it - the subset direction of the same failure the corroboration
+  // rule closes for a single account. Where containment is the only thing tying the two
+  // connections together, insist they be a complete swap: everything on the previous side matched,
+  // and nothing left over on the current side. A relink replaces a connection wholesale; an
+  // absorption does not.
+  const containmentOnly =
+    matches.length > 0 && matches.every(match => match.strategy === 'name-containment');
+  const fullyCovered =
+    previous.length > 0
+    && unmatchedPrevious.length === 0
+    && !(containmentOnly && unmatchedCurrent.length > 0);
+
   return {
     matches,
     unmatchedPrevious,
     unmatchedCurrent,
-    fullyCovered: previous.length > 0 && unmatchedPrevious.length === 0
+    fullyCovered
   };
 }
 

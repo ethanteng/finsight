@@ -53,9 +53,10 @@ describe('matchAccountsAcrossConnections', () => {
     expect(result.fullyCovered).toBe(true);
   });
 
-  it('resolves the real Betterment relink: names via name pass, renamed goals via balance', () => {
+  it('resolves the August Betterment relink: unchanged names exactly, shortened goals by containment', () => {
     // Production timestamps: both tokens sync in the same sweep, ~0.6s apart, so the balance pass
-    // stays available to the offline cleanup script.
+    // stays available to the offline cleanup script - though the containment pass now settles the
+    // three shortened goal names first, on the name rather than on a balance that merely agrees.
     const oldSync = '2026-08-15T06:06:38.376Z';
     const newSync = '2026-08-15T06:06:37.976Z';
     // Old Item: masks present, names carry a registration suffix, ampersand HTML-escaped.
@@ -83,6 +84,238 @@ describe('matchAccountsAcrossConnections', () => {
     expect(result.matches).toHaveLength(6);
     const pairs = Object.fromEntries(result.matches.map(m => [m.previous.id, m.current.id]));
     expect(pairs).toEqual({ p1: 'c1', p2: 'c2', p3: 'c3', p4: 'c4', p5: 'c5', p6: 'c6' });
+  });
+
+  it('resolves the September Betterment relink: re-labelled goals via the containment pass', () => {
+    // Production rows (user cmm..., Betterment items 54Yo... and z8nJ...). The old Item was last
+    // balanced on Aug 30 and the new one on Sep 3, so the balance pass is correctly unavailable -
+    // and the balances had moved with the market anyway. The old Item reports no masks, the new one
+    // does, so the mask pass never fires. Every name was re-labelled, so the exact-name pass finds
+    // nothing. Containment is the only signal left, and it has to carry all six.
+    const oldObserved = '2026-08-30T11:05:48.512Z';
+    const newObserved = '2026-09-03T15:22:01.918Z';
+    const previous = [
+      account({ id: 'p1', name: 'Mortgage Payoff Fund ($325K by 2035)', subtype: 'brokerage', mask: null, currentBalance: 6453.44, balanceObservedAt: oldObserved }),
+      account({ id: 'p2', name: 'Retirement Bridge Fund ($325K by 2043)', subtype: 'ira', mask: null, currentBalance: 24514.8, balanceObservedAt: oldObserved }),
+      account({ id: 'p3', name: 'Retirement - Roth IRA', subtype: 'roth', mask: null, currentBalance: 56529.42, balanceObservedAt: oldObserved }),
+      account({ id: 'p4', name: 'Retirement - Taxable', subtype: 'brokerage', mask: null, currentBalance: 0, balanceObservedAt: oldObserved }),
+      account({ id: 'p5', name: 'Retirement - Traditional IRA', subtype: 'ira', mask: null, currentBalance: 659719.27, balanceObservedAt: oldObserved }),
+      account({ id: 'p6', name: 'Travel & Healthcare Bridge Fund ($80K by 2031)', subtype: 'brokerage', mask: null, currentBalance: 54971.76, balanceObservedAt: oldObserved })
+    ];
+    const current = [
+      account({ id: 'c1', name: 'Mortgage Payoff Fund ($325K by 2035) - Joint Automated Investing', subtype: 'brokerage', mask: '5608', currentBalance: 6471.89, balanceObservedAt: newObserved }),
+      // Note the subtype: `ira` on the old Item, `brokerage` on the new one. Scoping the
+      // containment pass on subtype as well as type would strand exactly this account.
+      account({ id: 'c2', name: 'Retirement Bridge Fund ($325K by 2043) - Automated Investing', subtype: 'brokerage', mask: '6294', currentBalance: 24642.03, balanceObservedAt: newObserved }),
+      account({ id: 'c3', name: 'Retirement - Tax-Coordinated Portfolio - Roth IRA', subtype: 'roth', mask: '6810', currentBalance: 56800.04, balanceObservedAt: newObserved }),
+      account({ id: 'c4', name: 'Retirement - Tax-Coordinated Portfolio - Individual Taxable', subtype: 'brokerage', mask: '6580', currentBalance: 0, balanceObservedAt: newObserved }),
+      account({ id: 'c5', name: 'Retirement - Tax-Coordinated Portfolio - Traditional IRA', subtype: 'ira', mask: '6282', currentBalance: 663639.35, balanceObservedAt: newObserved }),
+      account({ id: 'c6', name: 'Travel &amp; Healthcare Bridge Fund ($80K by 2031) - Joint Automated Investing', subtype: 'brokerage', mask: '2877', currentBalance: 54946.05, balanceObservedAt: newObserved })
+    ];
+
+    const result = matchAccountsAcrossConnections(previous, current);
+
+    expect(result.fullyCovered).toBe(true);
+    const pairs = Object.fromEntries(result.matches.map(m => [m.previous.id, m.current.id]));
+    expect(pairs).toEqual({ p1: 'c1', p2: 'c2', p3: 'c3', p4: 'c4', p5: 'c5', p6: 'c6' });
+    expect(new Set(result.matches.map(m => m.strategy))).toEqual(new Set(['name-containment']));
+  });
+
+  it('will not supersede a one-account connection on containment alone', () => {
+    // Reported by review on this change. Two genuinely separate logins at one brokerage, neither
+    // reporting a mask: the newer account's name is a superset of the older one's, the pairing is
+    // trivially mutually exclusive because there is nothing else to pair with, and acting on it
+    // would delete a real account and its history. Containment needs corroboration it cannot get
+    // from a single account.
+    const previous = [account({ id: 'p1', name: 'Individual Brokerage Account' })];
+    const current = [account({ id: 'c1', name: 'Individual Taxable Brokerage Account' })];
+
+    const result = matchAccountsAcrossConnections(previous, current);
+
+    expect(result.matches).toHaveLength(0);
+    expect(result.fullyCovered).toBe(false);
+  });
+
+  it('will not supersede a one-account connection whose subtype merely moved', () => {
+    // Same rule, benign case: the name did not change at all, only the subtype, so the exact-name
+    // pass (scoped by type AND subtype) misses it and containment is the only pass left. One
+    // account cannot corroborate itself, so the duplicate stays visible for the user to remove.
+    const previous = [account({ id: 'p1', name: 'Retirement Bridge Fund', subtype: 'ira' })];
+    const current = [account({ id: 'c1', name: 'Retirement Bridge Fund', subtype: 'brokerage' })];
+
+    expect(matchAccountsAcrossConnections(previous, current).fullyCovered).toBe(false);
+  });
+
+  it('accepts a lone containment pairing once a stronger pass ties the connections together', () => {
+    // A relink where the institution re-labelled one account and left the other alone. The exact
+    // name match is the corroboration the containment pairing needs.
+    const previous = [
+      account({ id: 'p1', name: 'Retirement - Roth IRA', subtype: 'roth' }),
+      account({ id: 'p2', name: 'Retirement Bridge Fund', subtype: 'brokerage' })
+    ];
+    const current = [
+      account({ id: 'c1', name: 'Retirement - Roth IRA', subtype: 'roth' }),
+      account({ id: 'c2', name: 'Retirement Bridge Fund - Automated Investing', subtype: 'brokerage' })
+    ];
+
+    const result = matchAccountsAcrossConnections(previous, current);
+
+    expect(result.fullyCovered).toBe(true);
+    expect(result.matches.map(m => m.strategy).sort()).toEqual(['name', 'name-containment']);
+  });
+
+  it('accepts containment pairings that corroborate one another', () => {
+    // Neither account matches any stronger pass, but the same suffix landing on both is the shape
+    // of an institution re-labelling a connection rather than two names coinciding.
+    const previous = [
+      account({ id: 'p1', name: 'Retirement Bridge Fund', subtype: 'brokerage' }),
+      account({ id: 'p2', name: 'Mortgage Payoff Fund', subtype: 'brokerage' })
+    ];
+    const current = [
+      account({ id: 'c1', name: 'Retirement Bridge Fund - Automated Investing', subtype: 'brokerage' }),
+      account({ id: 'c2', name: 'Mortgage Payoff Fund - Automated Investing', subtype: 'brokerage' })
+    ];
+
+    expect(matchAccountsAcrossConnections(previous, current).fullyCovered).toBe(true);
+  });
+
+  it('leaves a dropped containment pairing available to the balance pass', () => {
+    // Discarding an uncorroborated containment match must not claim the accounts on the way out -
+    // a same-sweep balance is stronger evidence and still has to be able to reach them.
+    const previous = [account({ id: 'p1', name: 'Individual Brokerage Account', currentBalance: 250 })];
+    const current = [account({ id: 'c1', name: 'Individual Taxable Brokerage Account', currentBalance: 250 })];
+
+    const result = matchAccountsAcrossConnections(previous, current);
+
+    expect(result.fullyCovered).toBe(true);
+    expect(result.matches[0].strategy).toBe('balance');
+  });
+
+  it('will not absorb a smaller login into a larger one on containment alone', () => {
+    // Reported by review on this change. `fullyCovered` tolerates leftovers on the current side, so
+    // a three-goal login's short names sit inside a four-goal login's longer ones and the smaller,
+    // unrelated connection reads as covered. Containment-only coverage has to be a complete swap.
+    const previous = [
+      account({ id: 'p1', name: 'Retirement - Roth IRA' }),
+      account({ id: 'p2', name: 'Retirement - Traditional IRA' }),
+      account({ id: 'p3', name: 'Retirement - Taxable' })
+    ];
+    const current = [
+      account({ id: 'c1', name: 'Retirement - Tax-Coordinated Portfolio - Roth IRA' }),
+      account({ id: 'c2', name: 'Retirement - Tax-Coordinated Portfolio - Traditional IRA' }),
+      account({ id: 'c3', name: 'Retirement - Tax-Coordinated Portfolio - Individual Taxable' }),
+      account({ id: 'c4', name: 'Mortgage Payoff Fund ($325K by 2035) - Joint Automated Investing' })
+    ];
+
+    const result = matchAccountsAcrossConnections(previous, current);
+
+    expect(result.unmatchedCurrent).toHaveLength(1);
+    expect(result.fullyCovered).toBe(false);
+  });
+
+  it('allows leftovers on the current side once a stronger pass corroborates the swap', () => {
+    // The complete-swap rule is scoped to containment-only coverage. A relink that also carries a
+    // mask match is tied to the previous connection by something firmer, so a goal the replacement
+    // Item added since is not held against it.
+    const previous = [
+      account({ id: 'p1', name: 'Retirement - Roth IRA', mask: '0337' }),
+      account({ id: 'p2', name: 'Retirement Bridge Fund' })
+    ];
+    const current = [
+      account({ id: 'c1', name: 'Retirement - Tax-Coordinated Portfolio - Roth IRA', mask: '0337' }),
+      account({ id: 'c2', name: 'Retirement Bridge Fund - Automated Investing' }),
+      account({ id: 'c3', name: 'Travel Fund - Joint Automated Investing' })
+    ];
+
+    const result = matchAccountsAcrossConnections(previous, current);
+
+    expect(result.unmatchedCurrent).toHaveLength(1);
+    expect(result.fullyCovered).toBe(true);
+  });
+
+  it('does not contain-match across account types', () => {
+    const previous = [account({ id: 'p1', type: 'depository', subtype: 'checking', name: 'Joint Checking' })];
+    const current = [account({ id: 'c1', type: 'investment', subtype: 'brokerage', name: 'Joint Checking Sweep' })];
+
+    expect(matchAccountsAcrossConnections(previous, current).fullyCovered).toBe(false);
+  });
+
+  it('contain-matches through leading/trailing punctuation drift on the same tokens', () => {
+    // Institutions sometimes wrap goal amounts in parentheses on one Item and not the other.
+    // Stripping edge punctuation keeps "$325K" / "($325K)" / "2035)" aligned so containment can
+    // still see the rename; leaving those marks attached would leave a duplicate connection.
+    // Two goals rather than one, so the pairings corroborate each other and the punctuation
+    // handling is what the assertion actually turns on.
+    const previous = [
+      account({ id: 'p1', name: 'Mortgage Payoff Fund $325K by 2035' }),
+      account({ id: 'p2', name: 'Retirement Bridge Fund $325K by 2043' })
+    ];
+    const current = [
+      account({ id: 'c1', name: 'Mortgage Payoff Fund ($325K by 2035) - Joint Automated Investing' }),
+      account({ id: 'c2', name: 'Retirement Bridge Fund ($325K by 2043) - Automated Investing' })
+    ];
+
+    const result = matchAccountsAcrossConnections(previous, current);
+
+    expect(result.fullyCovered).toBe(true);
+    expect(Object.fromEntries(result.matches.map(m => [m.previous.id, m.current.id])))
+      .toEqual({ p1: 'c1', p2: 'c2' });
+    expect(new Set(result.matches.map(m => m.strategy))).toEqual(new Set(['name-containment']));
+  });
+
+  it('refuses a containment match on a one-word name', () => {
+    // "Savings" is contained by most names a bank issues. Treating that as identity would let a
+    // second, genuinely separate login look like a rename of the first.
+    const previous = [account({ id: 'p1', type: 'depository', subtype: 'savings', name: 'Savings' })];
+    const current = [account({ id: 'c1', type: 'depository', subtype: 'savings', name: 'Business Savings Account' })];
+
+    expect(matchAccountsAcrossConnections(previous, current).fullyCovered).toBe(false);
+  });
+
+  it('refuses a containment match when two current accounts contain the same previous name', () => {
+    const previous = [account({ id: 'p1', name: 'Retirement Fund' })];
+    const current = [
+      account({ id: 'c1', name: 'Retirement Fund - Roth' }),
+      account({ id: 'c2', name: 'Retirement Fund - Traditional' })
+    ];
+
+    const result = matchAccountsAcrossConnections(previous, current);
+
+    expect(result.matches).toHaveLength(0);
+    expect(result.fullyCovered).toBe(false);
+  });
+
+  it('refuses a containment match when two previous accounts are contained by one current account', () => {
+    const previous = [
+      account({ id: 'p1', name: 'Retirement Fund' }),
+      account({ id: 'p2', name: 'Retirement Roth' })
+    ];
+    const current = [account({ id: 'c1', name: 'Retirement Fund Roth' })];
+
+    expect(matchAccountsAcrossConnections(previous, current).matches).toHaveLength(0);
+  });
+
+  it('refuses a containment match when the two accounts report different masks', () => {
+    // Two logins at one brokerage, the second a superset name of the first. The masks say they are
+    // different accounts, and that outranks the name.
+    const previous = [account({ id: 'p1', name: 'Brokerage Account', mask: '1111' })];
+    const current = [account({ id: 'c1', name: 'Individual Brokerage Account', mask: '2222' })];
+
+    expect(matchAccountsAcrossConnections(previous, current).fullyCovered).toBe(false);
+  });
+
+  it('prefers the exact-name pass over containment when both would fire', () => {
+    const previous = [account({ id: 'p1', name: 'Retirement - Roth IRA', subtype: 'roth' })];
+    const current = [
+      account({ id: 'c1', name: 'Retirement - Tax-Coordinated Portfolio - Roth IRA', subtype: 'roth' }),
+      account({ id: 'c2', name: 'Retirement - Roth IRA', subtype: 'roth' })
+    ];
+
+    const result = matchAccountsAcrossConnections(previous, current);
+
+    expect(result.matches).toHaveLength(1);
+    expect(result.matches[0].current.id).toBe('c2');
+    expect(result.matches[0].strategy).toBe('name');
   });
 
   it('does not match when a key is ambiguous on either side', () => {
