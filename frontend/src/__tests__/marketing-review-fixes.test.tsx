@@ -335,8 +335,10 @@ describe("marketing review fixes", () => {
     render(<FeaturesPageRoute />);
 
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
-      "Financial planning that starts with your question.",
+      "From your question to the math behind it.",
     );
+    // The homepage owns the "starts with your question" opener; this page does not repeat it.
+    expect(screen.getByRole("heading", { level: 1 })).not.toHaveTextContent("starts with your question");
     expect(screen.getByRole("heading", { name: "One question. Five clear steps." })).toBeInTheDocument();
     expect(screen.getByText("Ask the question")).toBeInTheDocument();
     expect(screen.getByText("Linc pulls in what matters")).toBeInTheDocument();
