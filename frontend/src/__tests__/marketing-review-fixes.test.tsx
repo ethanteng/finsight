@@ -166,14 +166,28 @@ describe("marketing review fixes", () => {
       act(() => jest.advanceTimersByTime(4500));
       expect(within(shots).getByText(/cash, investments, property, and debt/i)).toBeInTheDocument();
 
-      // No slide controls: pointing at the card is what holds a slide.
-      expect(within(shots).queryAllByRole("button")).toHaveLength(0);
+      // Pointing at the card holds the current slide.
       fireEvent.pointerEnter(shots);
       expect(shots).toHaveAttribute("data-paused", "true");
       act(() => jest.advanceTimersByTime(9000));
       expect(within(shots).getByText(/cash, investments, property, and debt/i)).toBeInTheDocument();
 
       fireEvent.pointerLeave(shots);
+      expect(shots).not.toHaveAttribute("data-paused");
+
+      // The stop control is the pointer-free way to hold it, and it survives
+      // the pointer leaving.
+      const toggle = within(shots).getByRole("button", { name: "Pause" });
+      expect(toggle).toHaveAttribute("aria-pressed", "false");
+      act(() => toggle.click());
+      expect(within(shots).getByRole("button", { name: "Play" })).toHaveAttribute("aria-pressed", "true");
+      fireEvent.pointerEnter(shots);
+      fireEvent.pointerLeave(shots);
+      expect(shots).toHaveAttribute("data-paused", "true");
+      act(() => jest.advanceTimersByTime(9000));
+      expect(within(shots).getByText(/cash, investments, property, and debt/i)).toBeInTheDocument();
+
+      act(() => within(shots).getByRole("button", { name: "Play" }).click());
       expect(shots).not.toHaveAttribute("data-paused");
     } finally {
       jest.useRealTimers();

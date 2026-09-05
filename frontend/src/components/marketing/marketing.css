@@ -1351,6 +1351,11 @@ footer { padding-block: 55px 28px; background: #0a1912; color: white; }.footer-i
   100% { transform: scale(var(--hero-shot-zoom,1.5)) translateX(var(--hero-shot-to,-33%)); }
 }
 .hero-shot-caption { margin: 0; padding: 18px 25px; color: #4f5e55; font-size: 15px; line-height: 1.5; }
+/* Quiet, keyboard-reachable stop control — the header meta row is the only
+   chrome left, so it lives there rather than in a bar of its own. */
+.hero-shot-toggle { flex: 0 0 auto; min-height: 30px; padding: 5px 12px; border: 1px solid #c3cdc4; border-radius: 999px; background: transparent; color: #52705f; font-size: 12px; font-weight: 800; letter-spacing: .08em; cursor: pointer; }
+.hero-shot-toggle:hover { border-color: #7d9384; color: var(--ink); }
+.hero-shot-toggle:focus-visible { outline: 2px solid #4f765e; outline-offset: 2px; }
 .hero-founder-line { display: grid; grid-template-columns: 34px 1fr; gap: 12px; align-items: center; max-width: 570px; margin-top: 25px; }
 .hero-founder-line > span { position: relative; width: 34px; height: 34px; overflow: hidden; border-radius: 50%; background: #d8e4d4; }
 .hero-founder-line > span img { object-fit: cover; object-position: center 18%; }

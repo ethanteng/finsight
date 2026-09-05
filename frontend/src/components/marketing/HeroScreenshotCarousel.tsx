@@ -79,10 +79,12 @@ function panStyle(shot: (typeof HERO_SHOTS)[number]): CSSProperties {
 export default function HeroScreenshotCarousel() {
   const [activeIndex, setActiveIndex] = useState(0);
   const [isVisible, setIsVisible] = useState(false);
-  const [isPaused, setIsPaused] = useState(false);
+  const [isHeld, setIsHeld] = useState(false);
+  const [isStopped, setIsStopped] = useState(false);
   const [reduceMotion, setReduceMotion] = useState(false);
   const cardRef = useRef<HTMLElement>(null);
   const activeShot = HERO_SHOTS[activeIndex];
+  const isPaused = isHeld || isStopped;
 
   useEffect(() => {
     const mediaQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -120,17 +122,25 @@ export default function HeroScreenshotCarousel() {
       data-paused={isPaused ? "true" : undefined}
       style={{ "--hero-shot-duration": `${ROTATION_MS}ms` } as CSSProperties}
       ref={cardRef}
-      onPointerEnter={() => setIsPaused(true)}
-      onPointerLeave={() => setIsPaused(false)}
-      onFocusCapture={() => setIsPaused(true)}
+      onPointerEnter={() => setIsHeld(true)}
+      onPointerLeave={() => setIsHeld(false)}
+      onFocusCapture={() => setIsHeld(true)}
       onBlurCapture={(event) => {
         const nextTarget = event.relatedTarget as Node | null;
-        if (!nextTarget || !event.currentTarget.contains(nextTarget)) setIsPaused(false);
+        if (!nextTarget || !event.currentTarget.contains(nextTarget)) setIsHeld(false);
       }}
     >
       <span className="hero-example-header">
         <b>ASK LINC · {activeShot.label}</b>
         <em>{String(activeIndex + 1).padStart(2, "0")} OF {String(HERO_SHOTS.length).padStart(2, "0")}</em>
+        <button
+          className="hero-shot-toggle"
+          type="button"
+          aria-pressed={isStopped}
+          onClick={() => setIsStopped((stopped) => !stopped)}
+        >
+          {isStopped ? "Play" : "Pause"}
+        </button>
       </span>
       <div className="hero-shot-frame" key={activeShot.id}>
         {HERO_SHOTS.map((shot, index) => (
