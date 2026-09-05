@@ -191,6 +191,48 @@ describe('matchAccountsAcrossConnections', () => {
     expect(result.matches[0].strategy).toBe('balance');
   });
 
+  it('will not absorb a smaller login into a larger one on containment alone', () => {
+    // Reported by review on this change. `fullyCovered` tolerates leftovers on the current side, so
+    // a three-goal login's short names sit inside a four-goal login's longer ones and the smaller,
+    // unrelated connection reads as covered. Containment-only coverage has to be a complete swap.
+    const previous = [
+      account({ id: 'p1', name: 'Retirement - Roth IRA' }),
+      account({ id: 'p2', name: 'Retirement - Traditional IRA' }),
+      account({ id: 'p3', name: 'Retirement - Taxable' })
+    ];
+    const current = [
+      account({ id: 'c1', name: 'Retirement - Tax-Coordinated Portfolio - Roth IRA' }),
+      account({ id: 'c2', name: 'Retirement - Tax-Coordinated Portfolio - Traditional IRA' }),
+      account({ id: 'c3', name: 'Retirement - Tax-Coordinated Portfolio - Individual Taxable' }),
+      account({ id: 'c4', name: 'Mortgage Payoff Fund ($325K by 2035) - Joint Automated Investing' })
+    ];
+
+    const result = matchAccountsAcrossConnections(previous, current);
+
+    expect(result.unmatchedCurrent).toHaveLength(1);
+    expect(result.fullyCovered).toBe(false);
+  });
+
+  it('allows leftovers on the current side once a stronger pass corroborates the swap', () => {
+    // The complete-swap rule is scoped to containment-only coverage. A relink that also carries a
+    // mask match is tied to the previous connection by something firmer, so a goal the replacement
+    // Item added since is not held against it.
+    const previous = [
+      account({ id: 'p1', name: 'Retirement - Roth IRA', mask: '0337' }),
+      account({ id: 'p2', name: 'Retirement Bridge Fund' })
+    ];
+    const current = [
+      account({ id: 'c1', name: 'Retirement - Tax-Coordinated Portfolio - Roth IRA', mask: '0337' }),
+      account({ id: 'c2', name: 'Retirement Bridge Fund - Automated Investing' }),
+      account({ id: 'c3', name: 'Travel Fund - Joint Automated Investing' })
+    ];
+
+    const result = matchAccountsAcrossConnections(previous, current);
+
+    expect(result.unmatchedCurrent).toHaveLength(1);
+    expect(result.fullyCovered).toBe(true);
+  });
+
   it('does not contain-match across account types', () => {
     const previous = [account({ id: 'p1', type: 'depository', subtype: 'checking', name: 'Joint Checking' })];
     const current = [account({ id: 'c1', type: 'investment', subtype: 'brokerage', name: 'Joint Checking Sweep' })];

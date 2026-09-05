@@ -18,8 +18,9 @@
  * "Retirement - Roth IRA" under one Item and "Retirement - Tax-Coordinated Portfolio - Roth IRA"
  * under the next, with a mask where the old Item had none and a subtype of `brokerage` where the
  * old Item said `ira`. Nothing in an exact-match cascade sees through that, so a containment pass
- * matches a name that is the other with words inserted - guarded by mutual exclusivity and by a
- * corroboration rule, so a lone or ambiguous pairing is dropped rather than guessed.
+ * matches a name that is the other with words inserted - guarded by mutual exclusivity, by a
+ * corroboration rule, and by insisting that containment-only coverage be a complete swap in both
+ * directions, so a lone, ambiguous, or absorbed pairing is dropped rather than guessed.
  *
  * Superseding DROPS the previous connection's transactions rather than migrating them. Plaid
  * transaction IDs are Item-scoped, so the replacement Item re-imports the same history under new
@@ -364,11 +365,27 @@ export function matchAccountsAcrossConnections(
   const unmatchedPrevious = previous.filter(account => !claimed.previous.has(account.id));
   const unmatchedCurrent = current.filter(account => !claimed.current.has(account.id));
 
+  // Coverage normally ignores accounts left over on the current side: a replacement Item may
+  // legitimately expose more than the connection it replaces. Containment on its own cannot afford
+  // that latitude. A smaller login's short names sit inside a larger login's longer ones, so a
+  // three-goal connection reads as fully covered by a four-goal connection at the same institution
+  // that has nothing to do with it - the subset direction of the same failure the corroboration
+  // rule closes for a single account. Where containment is the only thing tying the two
+  // connections together, insist they be a complete swap: everything on the previous side matched,
+  // and nothing left over on the current side. A relink replaces a connection wholesale; an
+  // absorption does not.
+  const containmentOnly =
+    matches.length > 0 && matches.every(match => match.strategy === 'name-containment');
+  const fullyCovered =
+    previous.length > 0
+    && unmatchedPrevious.length === 0
+    && !(containmentOnly && unmatchedCurrent.length > 0);
+
   return {
     matches,
     unmatchedPrevious,
     unmatchedCurrent,
-    fullyCovered: previous.length > 0 && unmatchedPrevious.length === 0
+    fullyCovered
   };
 }
 
