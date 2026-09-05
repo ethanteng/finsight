@@ -110,14 +110,16 @@ function baseTypeKey(account: ConnectionAccount): string {
 }
 
 /**
- * The words of an account name that carry meaning. Separator-only tokens ('-', '&') are dropped so
- * that punctuation drift between two Items ("Retirement - Roth IRA" vs "Retirement Roth IRA") is
- * not mistaken for a difference in the name.
+ * The words of an account name that carry meaning. Separator-only tokens ('-', '&') are dropped, and
+ * leading/trailing punctuation is stripped from each token, so punctuation drift between two Items
+ * ("Retirement - Roth IRA" vs "Retirement Roth IRA", or "$325K" vs "($325K)") is not mistaken for
+ * a difference in the name. Interior hyphens stay put so "tax-coordinated" remains one token.
  */
 function contentWords(name: string | null | undefined): string[] {
   return normalizeAccountName(name)
     .split(' ')
-    .filter(word => /[a-z0-9]/.test(word));
+    .map(word => word.replace(/^[^a-z0-9]+|[^a-z0-9]+$/g, ''))
+    .filter(word => word.length > 0);
 }
 
 /** Greedy subsequence test - `shorter` appears inside `longer` in order, gaps allowed. */

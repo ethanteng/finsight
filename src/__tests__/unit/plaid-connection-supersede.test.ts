@@ -140,6 +140,19 @@ describe('matchAccountsAcrossConnections', () => {
     expect(matchAccountsAcrossConnections(previous, current).fullyCovered).toBe(false);
   });
 
+  it('contain-matches through leading/trailing punctuation drift on the same tokens', () => {
+    // Institutions sometimes wrap goal amounts in parentheses on one Item and not the other.
+    // Stripping edge punctuation keeps "$325K" / "($325K)" / "2035)" aligned so containment can
+    // still see the rename; leaving those marks attached would leave a duplicate connection.
+    const previous = [account({ id: 'p1', name: 'Mortgage Payoff Fund $325K by 2035' })];
+    const current = [account({ id: 'c1', name: 'Mortgage Payoff Fund ($325K by 2035) - Joint Automated Investing' })];
+
+    const result = matchAccountsAcrossConnections(previous, current);
+
+    expect(result.fullyCovered).toBe(true);
+    expect(result.matches[0].strategy).toBe('name-containment');
+  });
+
   it('refuses a containment match on a one-word name', () => {
     // "Savings" is contained by most names a bank issues. Treating that as identity would let a
     // second, genuinely separate login look like a rename of the first.
