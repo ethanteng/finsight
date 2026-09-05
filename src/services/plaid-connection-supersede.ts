@@ -18,8 +18,8 @@
  * "Retirement - Roth IRA" under one Item and "Retirement - Tax-Coordinated Portfolio - Roth IRA"
  * under the next, with a mask where the old Item had none and a subtype of `brokerage` where the
  * old Item said `ira`. Nothing in an exact-match cascade sees through that, so a containment pass
- * matches a name that is the other with words inserted - guarded by mutual exclusivity, so an
- * ambiguous pairing is dropped rather than guessed.
+ * matches a name that is the other with words inserted - guarded by mutual exclusivity and by a
+ * corroboration rule, so a lone or ambiguous pairing is dropped rather than guessed.
  *
  * Superseding DROPS the previous connection's transactions rather than migrating them. Plaid
  * transaction IDs are Item-scoped, so the replacement Item re-imports the same history under new
@@ -139,6 +139,14 @@ function isWordSubsequence(shorter: string[], longer: string[]): boolean {
 const MIN_CONTAINMENT_WORDS = 2;
 
 /**
+ * How many containment pairings a connection must show before they count toward coverage, absent a
+ * match from a stronger pass. Two is the point at which the same re-labelling has to hold twice
+ * over, which a coincidence of names does not survive - and it puts a single-account connection out
+ * of containment's reach entirely, since it can never produce a second pairing.
+ */
+const CONTAINMENT_CORROBORATION = 2;
+
+/**
  * True when one name is the other with extra words inserted - the shape institutions produce when
  * they re-label accounts between Items. Betterment's September relink turned
  * "Retirement - Roth IRA" into "Retirement - Tax-Coordinated Portfolio - Roth IRA" and appended
@@ -240,6 +248,9 @@ function matchByKey(
  * and that candidate must have exactly one candidate back. Anything less is left unmatched, which
  * costs the user a duplicate connection to remove by hand - the cheap failure. Guessing costs a
  * real account and its history.
+ *
+ * Mutual exclusivity is vacuous when either side holds a single account, so it is not on its own
+ * enough to authorize deletion - see CONTAINMENT_CORROBORATION in the caller.
  */
 function matchByNameContainment(
   previous: ConnectionAccount[],
@@ -313,7 +324,34 @@ export function matchAccountsAcrossConnections(
   // 4. One name contained in the other, scoped by account type only. This is what survives an
   //    institution re-labelling its accounts between Items, which is otherwise invisible: the
   //    replacement reports no shared mask, no persistent id, and (days later) a drifted balance.
-  matchByNameContainment(previous, current, claimed, matches);
+  //
+  //    Held to a corroboration rule, because containment on its own is weak evidence and the
+  //    mutual-exclusivity guard inside the pass cannot see that: where a connection holds one
+  //    account, the single candidate is trivially the only one. An old "Individual Brokerage
+  //    Account" and a second login's "Individual Taxable Brokerage Account", neither reporting a
+  //    mask, would otherwise pair off, read as fully covered, and take the older login's account
+  //    and history with them.
+  //
+  //    A re-labelling by an institution is systematic - it lands on every account the connection
+  //    holds - so containment is only trusted where the connection shows it happening more than
+  //    once, or where a stronger pass has already tied the two connections together. A lone
+  //    containment pairing is a coincidence of names until something else agrees, so it is dropped
+  //    and the accounts are left for the balance pass to try.
+  const containmentMatches: AccountMatch[] = [];
+  const containmentClaimed = {
+    previous: new Set(claimed.previous),
+    current: new Set(claimed.current)
+  };
+  matchByNameContainment(previous, current, containmentClaimed, containmentMatches);
+  const corroborated =
+    containmentMatches.length >= CONTAINMENT_CORROBORATION || (containmentMatches.length > 0 && matches.length > 0);
+  if (corroborated) {
+    for (const match of containmentMatches) {
+      matches.push(match);
+      claimed.previous.add(match.previous.id);
+      claimed.current.add(match.current.id);
+    }
+  }
 
   // 5. Exact balance, scoped by account type. Sound only when both sides were observed together,
   //    so the same logical account reports the same balance to the cent - see balancesComparable.

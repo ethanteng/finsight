@@ -121,16 +121,74 @@ describe('matchAccountsAcrossConnections', () => {
     expect(new Set(result.matches.map(m => m.strategy))).toEqual(new Set(['name-containment']));
   });
 
-  it('matches an unchanged name whose subtype the new Item reclassified', () => {
-    // The exact-name pass is scoped by type AND subtype, so a reclassified account slips past it
-    // even when nothing about the name moved. Containment is scoped on type alone and catches it.
+  it('will not supersede a one-account connection on containment alone', () => {
+    // Reported by review on this change. Two genuinely separate logins at one brokerage, neither
+    // reporting a mask: the newer account's name is a superset of the older one's, the pairing is
+    // trivially mutually exclusive because there is nothing else to pair with, and acting on it
+    // would delete a real account and its history. Containment needs corroboration it cannot get
+    // from a single account.
+    const previous = [account({ id: 'p1', name: 'Individual Brokerage Account' })];
+    const current = [account({ id: 'c1', name: 'Individual Taxable Brokerage Account' })];
+
+    const result = matchAccountsAcrossConnections(previous, current);
+
+    expect(result.matches).toHaveLength(0);
+    expect(result.fullyCovered).toBe(false);
+  });
+
+  it('will not supersede a one-account connection whose subtype merely moved', () => {
+    // Same rule, benign case: the name did not change at all, only the subtype, so the exact-name
+    // pass (scoped by type AND subtype) misses it and containment is the only pass left. One
+    // account cannot corroborate itself, so the duplicate stays visible for the user to remove.
     const previous = [account({ id: 'p1', name: 'Retirement Bridge Fund', subtype: 'ira' })];
     const current = [account({ id: 'c1', name: 'Retirement Bridge Fund', subtype: 'brokerage' })];
+
+    expect(matchAccountsAcrossConnections(previous, current).fullyCovered).toBe(false);
+  });
+
+  it('accepts a lone containment pairing once a stronger pass ties the connections together', () => {
+    // A relink where the institution re-labelled one account and left the other alone. The exact
+    // name match is the corroboration the containment pairing needs.
+    const previous = [
+      account({ id: 'p1', name: 'Retirement - Roth IRA', subtype: 'roth' }),
+      account({ id: 'p2', name: 'Retirement Bridge Fund', subtype: 'brokerage' })
+    ];
+    const current = [
+      account({ id: 'c1', name: 'Retirement - Roth IRA', subtype: 'roth' }),
+      account({ id: 'c2', name: 'Retirement Bridge Fund - Automated Investing', subtype: 'brokerage' })
+    ];
 
     const result = matchAccountsAcrossConnections(previous, current);
 
     expect(result.fullyCovered).toBe(true);
-    expect(result.matches[0].strategy).toBe('name-containment');
+    expect(result.matches.map(m => m.strategy).sort()).toEqual(['name', 'name-containment']);
+  });
+
+  it('accepts containment pairings that corroborate one another', () => {
+    // Neither account matches any stronger pass, but the same suffix landing on both is the shape
+    // of an institution re-labelling a connection rather than two names coinciding.
+    const previous = [
+      account({ id: 'p1', name: 'Retirement Bridge Fund', subtype: 'brokerage' }),
+      account({ id: 'p2', name: 'Mortgage Payoff Fund', subtype: 'brokerage' })
+    ];
+    const current = [
+      account({ id: 'c1', name: 'Retirement Bridge Fund - Automated Investing', subtype: 'brokerage' }),
+      account({ id: 'c2', name: 'Mortgage Payoff Fund - Automated Investing', subtype: 'brokerage' })
+    ];
+
+    expect(matchAccountsAcrossConnections(previous, current).fullyCovered).toBe(true);
+  });
+
+  it('leaves a dropped containment pairing available to the balance pass', () => {
+    // Discarding an uncorroborated containment match must not claim the accounts on the way out -
+    // a same-sweep balance is stronger evidence and still has to be able to reach them.
+    const previous = [account({ id: 'p1', name: 'Individual Brokerage Account', currentBalance: 250 })];
+    const current = [account({ id: 'c1', name: 'Individual Taxable Brokerage Account', currentBalance: 250 })];
+
+    const result = matchAccountsAcrossConnections(previous, current);
+
+    expect(result.fullyCovered).toBe(true);
+    expect(result.matches[0].strategy).toBe('balance');
   });
 
   it('does not contain-match across account types', () => {
