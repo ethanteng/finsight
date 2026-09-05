@@ -107,14 +107,15 @@ describe("marketing review fixes", () => {
     expect(screen.queryByRole("link", { name: "Sign in to Ask Linc" })).not.toBeInTheDocument();
   });
 
-  it("leads with the decision-first positioning and recognizable life decisions", () => {
+  it("leads with account-based answers and keeps search questions as examples", () => {
     render(<MarketingHome />);
 
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
-      "See what a big money decision changes. Before you make it.",
+      "Answers to big money questions, based on your actual finances.",
     );
-    expect(screen.getByText(/linc tests the decision against the rest of your financial life/i)).toBeInTheDocument();
-    expect(screen.getByText("Start with the decision")).toBeInTheDocument();
+    expect(screen.getByText(/connect your financial accounts and ask Linc about retirement/i)).toHaveTextContent("See the numbers and assumptions behind every answer.");
+    expect(screen.getByText(/Try asking:.*Can I retire early.*How much house can I afford/)).toBeInTheDocument();
+    expect(screen.getByText("Ask in plain English")).toBeInTheDocument();
     expect(screen.getByText("Your whole financial picture")).toBeInTheDocument();
     expect(screen.getAllByText("Show the Math").length).toBeGreaterThan(0);
     expect(screen.getByRole("heading", { name: "Can we afford this home without becoming house poor?" })).toBeInTheDocument();
@@ -182,11 +183,15 @@ describe("marketing review fixes", () => {
     expect(screen.getByText("So I built Ask Linc.")).toBeInTheDocument();
   });
 
-  it("shows the interactive static product demo directly on the homepage", async () => {
+  it("lets visitors expand the full product demo on the homepage", async () => {
     const user = userEvent.setup();
     render(<MarketingHome />);
 
-    expect(screen.getByRole("heading", { name: "Start with a real question. Follow the answer." })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "See an example before you start." })).toBeInTheDocument();
+    const disclosure = screen.getByText("Explore the interactive example").closest("details");
+    expect(disclosure).not.toHaveAttribute("open");
+    await user.click(screen.getByText("Explore the interactive example"));
+    expect(disclosure).toHaveAttribute("open");
     const demo = screen.getByLabelText("Interactive Ask Linc product demo");
     expect(within(demo).getByText("Interactive demo using real product output. Identifying details removed.")).toBeInTheDocument();
     expect(within(demo).getByRole("tab", { name: "answer" })).toHaveAttribute("aria-selected", "true");

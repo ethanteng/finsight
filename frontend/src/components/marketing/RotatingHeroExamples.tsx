@@ -9,6 +9,7 @@ const HERO_EXAMPLES = [
     id: "retirement",
     label: "RETIREMENT STRESS TEST",
     controlLabel: "Retirement",
+    shortAnswer: "In this example, early market losses and rising spending are the main risks. See how the withdrawal rate and cash savings affect the plan.",
     question:
       "If inflation stays high and the market underperforms for the next 5 years, what impacts would that have on our retirement plan?",
     answer:
@@ -18,6 +19,7 @@ const HERO_EXAMPLES = [
     id: "home",
     label: "HOME PURCHASE",
     controlLabel: "Home",
+    shortAnswer: "In this example, buying a $700K home would leave too little cash. A lower price, smaller down payment, or more savings would help.",
     question:
       "Can we afford a $700K home next year without pausing retirement contributions or leaving ourselves short on cash?",
     answer:
@@ -27,6 +29,7 @@ const HERO_EXAMPLES = [
     id: "leave",
     label: "PARENTAL LEAVE",
     controlLabel: "Family leave",
+    shortAnswer: "In this example, six months of leave costs about $22,500 in savings. Cash can cover it, with money left for an emergency fund.",
     question:
       "Can one of us take six months off when the baby arrives without selling investments?",
     answer:
@@ -94,7 +97,12 @@ export default function RotatingHeroExamples() {
       </div>
       <div className="active hero-example-answer" key={`${activeExample.id}-answer`}>
         <i>02</i>
-        <p><small>ASK LINC&apos;S ANSWER</small><strong>{activeExample.answer}</strong></p>
+        <div><small>EXAMPLE ANSWER</small><p>{activeExample.shortAnswer}</p>
+          <details className="answer-details" key={activeExample.id}>
+            <summary>See the numbers</summary>
+            <p>{activeExample.answer}</p>
+          </details>
+        </div>
       </div>
       <nav className="hero-example-controls" aria-label="Choose a sample answer">
         {HERO_EXAMPLES.map((example, index) => (

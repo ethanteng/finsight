@@ -128,6 +128,7 @@ describe("Contentsquare element ids", () => {
     expect(ctas.map((cta) => cta.getAttribute("data-cs-override-id"))).toEqual([
       "cta-start-free-trial-nav",
       "cta-start-free-trial-hero",
+      "cta-start-free-trial-demo",
       "cta-start-free-trial-pricing-premium",
       "cta-start-free-trial-mid",
       "cta-start-free-trial-footer",

@@ -19,22 +19,23 @@ export default function Home() {
   const pricing = usePricing();
 
   return (
-    <main className="marketing-site">
+    <main className="marketing-site conversion-home">
       <SiteHeader />
 
       <section className="hero shell" id="top">
         <div className="hero-copy">
-          <div className="eyebrow"><span className="pulse" /> FINANCIAL PLANNING FOR REAL LIFE</div>
-          <h1>See what a big money decision changes. <em>Before you make it.</em></h1>
+          <div className="eyebrow"><span className="pulse" /> AI FINANCIAL PLANNING</div>
+          <h1>Answers to big money questions, <em>based on your actual finances.</em></h1>
           <p className="hero-subhead">
-            Buying a home, taking time off, growing your family, or planning retirement? Ask in your own words.
-            Linc tests the decision against the rest of your financial life—then shows you the math.
+            Connect your financial accounts and ask Linc about retirement, buying a home, or other money decisions.
+            See the numbers and assumptions behind every answer.
           </p>
           <div className="hero-actions">
-            <MarketingGetStartedButton className="button button-primary" csOverrideId="cta-start-free-trial-hero" />
-            <a className="text-link" href="#product-demo">Explore the demo ↓</a>
+            <MarketingGetStartedButton className="button button-primary" trackingLocation="homepage_hero" csOverrideId="cta-start-free-trial-hero" />
           </div>
           <p className="microcopy">{pricing.trialLine}</p>
+          <p className="hero-reassurance">Read-only connections. Your financial data is never used to train AI.</p>
+          <p className="hero-search-examples">Try asking: “Can I retire early?” or “How much house can I afford?”</p>
         </div>
 
         <RotatingHeroExamples />
@@ -42,7 +43,7 @@ export default function Home() {
 
       <section className="proof-strip" aria-label="Product trust signals">
         <div className="shell proof-grid">
-          <p><strong>Start with the decision</strong><span>not another dashboard to interpret</span></p>
+          <p><strong>Ask in plain English</strong><span>about retirement, buying a home, or taking time off</span></p>
           <p><strong>Your whole financial picture</strong><span>cash, debt, investments, property, and goals</span></p>
           <p><Link href="/trust"><strong>Show the Math</strong><span>see the numbers behind every answer</span></Link></p>
         </div>
@@ -52,11 +53,17 @@ export default function Home() {
         <div className="section-heading split-heading">
           <div>
             <p className="section-kicker">SEE ASK LINC IN ACTION</p>
-            <h2>Start with a real question. Follow the answer.</h2>
+            <h2>See an example before you start.</h2>
           </div>
           <p>Explore a real product example with identifying details removed—from the decision itself to connected finances, Show the Math, and the sources behind the answer.</p>
         </div>
-        <StaticProductDemo anchorId={null} />
+        <details className="product-demo-disclosure">
+          <summary>Explore the interactive example</summary>
+          <StaticProductDemo anchorId={null} />
+        </details>
+        <div className="hero-actions">
+          <MarketingGetStartedButton className="button button-primary" trackingLocation="homepage_demo" csOverrideId="cta-start-free-trial-demo" />
+        </div>
       </section>
 
       <section className="section shell question-to-answer-section" id="decisions">
