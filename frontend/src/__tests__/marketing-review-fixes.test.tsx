@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { act, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import AboutPageRoute from "@/app/about/page";
 import FeaturesPageRoute from "@/app/features/page";
@@ -162,12 +162,18 @@ describe("marketing review fixes", () => {
       act(() => jest.advanceTimersByTime(4500));
       expect(within(shots).getByText(/what the numbers mean for you/i)).toBeInTheDocument();
 
-      act(() => {
-        within(shots).getByRole("button", { name: "Show Portfolio screenshot" }).click();
-      });
-      expect(within(shots).getByText(/holdings and allocation across every connected investment account/i)).toBeInTheDocument();
-      expect(within(shots).getByRole("button", { name: "Show Portfolio screenshot" })).toHaveAttribute("aria-current", "true");
+      act(() => jest.advanceTimersByTime(4500));
+      expect(within(shots).getByText(/cash, investments, property, and debt/i)).toBeInTheDocument();
+
+      // No slide controls: pointing at the card is what holds a slide.
+      expect(within(shots).queryAllByRole("button")).toHaveLength(0);
+      fireEvent.pointerEnter(shots);
       expect(shots).toHaveAttribute("data-paused", "true");
+      act(() => jest.advanceTimersByTime(9000));
+      expect(within(shots).getByText(/cash, investments, property, and debt/i)).toBeInTheDocument();
+
+      fireEvent.pointerLeave(shots);
+      expect(shots).not.toHaveAttribute("data-paused");
     } finally {
       jest.useRealTimers();
       global.IntersectionObserver = OriginalIntersectionObserver;
