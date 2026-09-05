@@ -61,6 +61,30 @@ describe("Contentsquare content security policy", () => {
     expect(directive(production, "connect-src")).toContain("https://www.googleadservices.com");
   });
 
+  it("allows every Google Analytics and Ads collection endpoint used by GTM", () => {
+    const scriptSrc = directive(production, "script-src");
+    const imageSrc = directive(production, "img-src");
+    const connectSrc = directive(production, "connect-src");
+
+    // GA4 may route collection through regional hosts, so the www-only
+    // allowlist is insufficient for a production audience.
+    expect(imageSrc).toContain("https://*.google-analytics.com");
+    expect(connectSrc).toContain("https://*.google-analytics.com");
+    expect(connectSrc).toContain("https://*.analytics.google.com");
+
+    // These are the documented endpoints used by linked Google Ads features.
+    for (const origin of [
+      "https://www.googleadservices.com",
+      "https://www.google.com",
+      "https://pagead2.googlesyndication.com",
+    ]) {
+      expect(scriptSrc).toContain(origin);
+    }
+    expect(imageSrc).toContain("https://*.g.doubleclick.net");
+    expect(connectSrc).toContain("https://*.g.doubleclick.net");
+    expect(connectSrc).toContain("https://pagead2.googlesyndication.com");
+  });
+
   it("does not loosen any other directive between environments", () => {
     const withoutConnect = (policy: string) =>
       policy.split("; ").filter((entry) => !entry.startsWith("connect-src"));

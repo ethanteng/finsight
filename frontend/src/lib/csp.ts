@@ -25,8 +25,13 @@ export function buildContentSecurityPolicy({ isDevelopment }: { isDevelopment: b
     "connect-src 'self'",
     ...(isDevelopment ? LOCAL_API_ORIGINS : []),
     "https://*.sentry.io",
-    "https://www.google-analytics.com",
+    // GA4 can select regional collection hosts. Allowing only the www host
+    // drops those requests for some visitors and creates attribution gaps.
+    "https://*.google-analytics.com",
+    "https://*.analytics.google.com",
+    "https://google.com",
     "https://www.google.com",
+    "https://*.google.com",
     "https://www.googletagmanager.com",
     // Google Ads conversion tags (loaded via GTM) beacon over XHR. script-src
     // and img-src already allow googleads.g.doubleclick.net; without these,
@@ -34,7 +39,9 @@ export function buildContentSecurityPolicy({ isDevelopment }: { isDevelopment: b
     // conversion never registers.
     "https://ad.doubleclick.net",
     "https://googleads.g.doubleclick.net",
+    "https://*.g.doubleclick.net",
     "https://www.googleadservices.com",
+    "https://pagead2.googlesyndication.com",
     "https://*.asklinc.com",
     "wss://*.asklinc.com",
     "https://*.onrender.com",
@@ -49,7 +56,7 @@ export function buildContentSecurityPolicy({ isDevelopment }: { isDevelopment: b
 
   return [
     "default-src 'self'",
-    `script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.googletagmanager.com ${CONTENTSQUARE} ${CONTENTSQUARE_APP} https://googleads.g.doubleclick.net https://cdn.plaid.com`,
+    `script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.googletagmanager.com https://www.googleadservices.com https://www.google.com https://pagead2.googlesyndication.com ${CONTENTSQUARE} ${CONTENTSQUARE_APP} https://googleads.g.doubleclick.net https://cdn.plaid.com`,
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     // No blanket `https:`. An answer is rendered as Markdown, so an
     // image URL that reached the model through a search snippet or a
@@ -58,7 +65,7 @@ export function buildContentSecurityPolicy({ isDevelopment }: { isDevelopment: b
     // ones the app actually renders: next/image remotePatterns, the
     // Plaid merchant logos on transaction rows, institution logos,
     // and analytics pixels.
-    `img-src 'self' data: blob: https://logo.clearbit.com https://*.plaid.com https://images.ghost.io https://static.ghost.org https://blog.asklinc.com https://*.ghost.io https://images.unsplash.com https://www.google-analytics.com https://www.googletagmanager.com https://googleads.g.doubleclick.net ${CONTENTSQUARE}`,
+    `img-src 'self' data: blob: https://logo.clearbit.com https://*.plaid.com https://images.ghost.io https://static.ghost.org https://blog.asklinc.com https://*.ghost.io https://images.unsplash.com https://*.google-analytics.com https://www.googletagmanager.com https://*.g.doubleclick.net https://google.com https://www.google.com https://*.google.com https://pagead2.googlesyndication.com https://www.googleadservices.com ${CONTENTSQUARE}`,
     "font-src 'self' data: https://fonts.gstatic.com",
     connectSrc,
     `frame-src 'self' https://*.plaid.com https://cdn.plaid.com https://www.googletagmanager.com https://app.snaptrade.com https://*.snaptrade.com ${CONTENTSQUARE}`,
