@@ -9,7 +9,6 @@ const HERO_EXAMPLES = [
     id: "retirement",
     label: "RETIREMENT STRESS TEST",
     controlLabel: "Retirement",
-    shortAnswer: "In this example, early market losses and rising spending are the main risks. See how the withdrawal rate and cash savings affect the plan.",
     question:
       "If inflation stays high and the market underperforms for the next 5 years, what impacts would that have on our retirement plan?",
     answer:
@@ -19,7 +18,6 @@ const HERO_EXAMPLES = [
     id: "home",
     label: "HOME PURCHASE",
     controlLabel: "Home",
-    shortAnswer: "In this example, buying a $700K home would leave too little cash. A lower price, smaller down payment, or more savings would help.",
     question:
       "Can we afford a $700K home next year without pausing retirement contributions or leaving ourselves short on cash?",
     answer:
@@ -29,7 +27,6 @@ const HERO_EXAMPLES = [
     id: "leave",
     label: "PARENTAL LEAVE",
     controlLabel: "Family leave",
-    shortAnswer: "In this example, six months of leave costs about $22,500 in savings. Cash can cover it, with money left for an emergency fund.",
     question:
       "Can one of us take six months off when the baby arrives without selling investments?",
     answer:
@@ -88,20 +85,31 @@ export default function RotatingHeroExamples() {
       }}
     >
       <span className="hero-example-header">
-        <b>ASK LINC · {activeExample.label}</b>
+        <span className="hero-example-stack">
+          {HERO_EXAMPLES.map((example, index) => (
+            <b data-active={index === activeIndex ? "true" : undefined} key={example.id}>ASK LINC · {example.label}</b>
+          ))}
+        </span>
         <em>{String(activeIndex + 1).padStart(2, "0")} OF {String(HERO_EXAMPLES.length).padStart(2, "0")}</em>
       </span>
       <div className="hero-example-question" key={`${activeExample.id}-question`}>
         <i>01</i>
-        <p><small>YOUR QUESTION</small><strong>{activeExample.question}</strong></p>
+        <p><small>YOUR QUESTION</small>
+          <span className="hero-example-stack">
+            {HERO_EXAMPLES.map((example, index) => (
+              <strong data-active={index === activeIndex ? "true" : undefined} key={example.id}>{example.question}</strong>
+            ))}
+          </span>
+        </p>
       </div>
       <div className="active hero-example-answer" key={`${activeExample.id}-answer`}>
         <i>02</i>
-        <div><small>EXAMPLE ANSWER</small><p>{activeExample.shortAnswer}</p>
-          <details className="answer-details" key={activeExample.id}>
-            <summary>See the numbers</summary>
-            <p>{activeExample.answer}</p>
-          </details>
+        <div><small>EXAMPLE ANSWER</small>
+          <span className="hero-example-stack">
+            {HERO_EXAMPLES.map((example, index) => (
+              <p data-active={index === activeIndex ? "true" : undefined} key={example.id}>{example.answer}</p>
+            ))}
+          </span>
         </div>
       </div>
       <nav className="hero-example-controls" aria-label="Choose a sample answer">
