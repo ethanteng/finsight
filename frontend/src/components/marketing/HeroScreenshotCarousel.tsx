@@ -7,44 +7,36 @@ const ROTATION_MS = 7000;
 
 const HERO_SHOTS = [
   {
-    id: "answer",
-    label: "THE ANSWER",
-    controlLabel: "Answer",
-    caption: "A direct answer with the key metrics it rests on, computed from your connected accounts.",
-    src: "/images/product/decision-answer.png",
-    width: 1370,
-    height: 1662,
-    alt: "Ask Linc answering a retirement planning question, with key metrics for net worth, total debt, savings rate, and total investments alongside a connected-account overview.",
+    id: "decision",
+    label: "DECISION WORKSPACE",
+    controlLabel: "Decision",
+    caption: "Ask what you are trying to decide. Linc answers with the metrics and accounts behind it.",
+    src: "/images/hero/screenshot_1.png",
+    alt: "The Ask Linc decision workspace answering a question about high inflation and weak markets, with key metrics for survival rate, withdrawal rate, and CPI inflation next to a connected financial overview.",
   },
   {
-    id: "math",
-    label: "SHOW THE MATH",
-    controlLabel: "Math",
-    caption: "Every figure traced back to its source, calculation, and validation check.",
-    src: "/images/product/show-the-math.png",
-    width: 1248,
-    height: 1580,
-    alt: "The Math tab of an Ask Linc answer, showing canonical facts and provenance, context planning, deterministic validation, and the snapshot behind the answer.",
+    id: "takeaways",
+    label: "TAKEAWAYS & NEXT STEPS",
+    controlLabel: "Takeaways",
+    caption: "What the numbers mean for you, and what to do about them.",
+    src: "/images/hero/screenshot_2.png",
+    alt: "Takeaways and action items from an Ask Linc answer, explaining portfolio concentration, inflation against the spending target, and what to model next.",
   },
   {
     id: "net-worth",
     label: "YOUR FINANCIAL PICTURE",
     controlLabel: "Net worth",
     caption: "Cash, investments, property, and debt tracked together over time.",
-    src: "/images/product/net-worth-history.png",
-    width: 1206,
-    height: 1508,
-    alt: "An Ask Linc net worth summary with a Financial Metrics Over Time chart plotting net worth, cash, investments, and home value.",
+    src: "/images/hero/screenshot_3.png",
+    alt: "An Ask Linc Financial Metrics Over Time chart plotting net worth, total cash, total investments, and home value, with summary tiles beneath it.",
   },
   {
     id: "portfolio",
     label: "INVESTMENT PORTFOLIO",
     controlLabel: "Portfolio",
     caption: "Holdings and allocation across every connected investment account.",
-    src: "/images/product/portfolio-overview.png",
-    width: 1638,
-    height: 1582,
-    alt: "An Ask Linc investment portfolio overview with total portfolio value, holdings count, and asset allocation broken down by ETF, target date fund, equity, and mutual fund.",
+    src: "/images/hero/screenshot_4.png",
+    alt: "An Ask Linc investment portfolio overview with total portfolio value, holdings and securities counts, and asset allocation across ETFs, target date funds, equities, and mutual funds.",
   },
 ] as const;
 
@@ -108,8 +100,7 @@ export default function HeroScreenshotCarousel() {
             className="hero-shot-image"
             src={shot.src}
             alt={shot.alt}
-            width={shot.width}
-            height={shot.height}
+            fill
             quality={95}
             sizes="(max-width: 980px) 100vw, 640px"
             priority={index === 0}

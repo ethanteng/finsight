@@ -156,11 +156,11 @@ describe("marketing review fixes", () => {
     try {
       render(<MarketingHome />);
       const shots = screen.getByLabelText("Ask Linc product screenshots");
-      expect(within(shots).getByText("ASK LINC ·", { exact: false })).toHaveTextContent("THE ANSWER");
-      expect(within(shots).getByText(/a direct answer with the key metrics it rests on/i)).toBeInTheDocument();
+      expect(within(shots).getByText("ASK LINC ·", { exact: false })).toHaveTextContent("DECISION WORKSPACE");
+      expect(within(shots).getByText(/ask what you are trying to decide/i)).toBeInTheDocument();
 
       act(() => jest.advanceTimersByTime(7000));
-      expect(within(shots).getByText(/every figure traced back to its source/i)).toBeInTheDocument();
+      expect(within(shots).getByText(/what the numbers mean for you/i)).toBeInTheDocument();
 
       act(() => {
         within(shots).getByRole("button", { name: "Show Portfolio screenshot" }).click();
