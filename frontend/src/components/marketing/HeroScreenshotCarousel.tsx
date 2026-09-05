@@ -10,7 +10,7 @@ const HERO_SHOTS = [
   {
     id: "decision",
     ratio: 3448 / 1904,
-    zoom: 1.7,
+    zoom: 1.45,
     pan: "vertical",
     label: "DECISION WORKSPACE",
     controlLabel: "Decision",
@@ -56,19 +56,27 @@ const HERO_SHOTS = [
 // Must match .hero-shot-frame's aspect-ratio in marketing.css.
 const FRAME_RATIO = 16 / 10;
 
-// object-fit: contain letterboxes a shot along whichever axis is not the
-// limiting one, so it does not necessarily fill the frame along the axis it
-// travels. `extent` is how much of the frame the unzoomed shot covers on that
-// axis; at zoom Z it covers extent * Z, and the pan has to move the overflow.
-// The translate happens after the scale, so it is divided by Z. Stop just
-// short of the far edge rather than slamming into it.
+// Work out where the zoomed shot has to sit at each end of its travel.
+//
+// object-fit: contain fits the shot inside the frame and centres it, so along
+// the axis it travels the shot covers `extent` of the frame and is padded by a
+// `band` of empty frame at each end. Both scale with the zoom. The travel runs
+// from the shot's leading edge flush with the frame's, to its trailing edge
+// flush with the other — the way scrolling a page ends with its last line
+// against the bottom of the viewport.
+//
+// Offsets are a percentage of the *unzoomed* element, because the translate is
+// applied after the scale and so is multiplied by it. A shot that fills the
+// frame on this axis has extent 1 and band 0, which reduces to a start of 0 and
+// an end of -(Z - 1) / Z.
 function panStyle(shot: (typeof HERO_SHOTS)[number]): CSSProperties {
   const { zoom, pan, ratio } = shot;
   const extent = pan === "vertical" ? Math.min(1, FRAME_RATIO / ratio) : Math.min(1, ratio / FRAME_RATIO);
-  const overflow = Math.max(0, extent - 1 / zoom);
+  const band = (1 - extent) / 2;
   return {
     "--hero-shot-zoom": zoom,
-    "--hero-shot-travel": `${-overflow * 92}%`,
+    "--hero-shot-from": `${-band * 100}%`,
+    "--hero-shot-to": `${Math.min(-band, 1 / zoom - band - extent) * 100}%`,
   } as CSSProperties;
 }
 

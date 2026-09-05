@@ -1342,13 +1342,13 @@ footer { padding-block: 55px 28px; background: #0a1912; color: white; }.footer-i
 .hero-shot-carousel .hero-shot-image[data-pan="horizontal"]:not([hidden]) { animation: hero-shot-pan-x var(--hero-shot-duration, 4500ms) both; }
 @keyframes hero-shot-pan-y {
   0% { transform: scale(1) translateY(0); animation-timing-function: cubic-bezier(.22,.68,.3,1); }
-  22% { transform: scale(var(--hero-shot-zoom,1.75)) translateY(0); animation-timing-function: linear; }
-  100% { transform: scale(var(--hero-shot-zoom,1.75)) translateY(var(--hero-shot-travel,-39%)); }
+  22% { transform: scale(var(--hero-shot-zoom,1.5)) translateY(var(--hero-shot-from,0)); animation-timing-function: linear; }
+  100% { transform: scale(var(--hero-shot-zoom,1.5)) translateY(var(--hero-shot-to,-33%)); }
 }
 @keyframes hero-shot-pan-x {
   0% { transform: scale(1) translateX(0); animation-timing-function: cubic-bezier(.22,.68,.3,1); }
-  22% { transform: scale(var(--hero-shot-zoom,1.75)) translateX(0); animation-timing-function: linear; }
-  100% { transform: scale(var(--hero-shot-zoom,1.75)) translateX(var(--hero-shot-travel,-39%)); }
+  22% { transform: scale(var(--hero-shot-zoom,1.5)) translateX(var(--hero-shot-from,0)); animation-timing-function: linear; }
+  100% { transform: scale(var(--hero-shot-zoom,1.5)) translateX(var(--hero-shot-to,-33%)); }
 }
 .hero-shot-caption { margin: 0; padding: 18px 25px; border-bottom: 1px solid #d8ddd4; color: #4f5e55; font-size: 15px; line-height: 1.5; }
 .hero-shot-controls { grid-template-columns: repeat(4,1fr); }
