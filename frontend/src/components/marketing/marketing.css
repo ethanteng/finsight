@@ -1310,7 +1310,8 @@ footer { padding-block: 55px 28px; background: #0a1912; color: white; }.footer-i
 .hero-audit-card > div.active i { border-color: var(--lime); background: var(--lime); color: var(--ink); }
 .hero-audit-card > div.active small { color: var(--lime); }
 .hero-audit-card footer { display: block; padding: 20px 25px; background: var(--lime); color: var(--ink); font-size: 12px; font-weight: 800; letter-spacing: .035em; text-align: center; }
-.rotating-hero-card > .hero-example-header { display: flex; align-items: center; justify-content: space-between; gap: 18px; }
+.rotating-hero-card > .hero-example-header,
+.hero-shot-carousel > .hero-example-header { display: flex; align-items: center; justify-content: space-between; gap: 18px; }
 .hero-example-header b { font-size: inherit; }
 .hero-example-header em { color: #74847a; font-size: 12px; font-style: normal; letter-spacing: .08em; white-space: nowrap; }
 .rotating-hero-card > .hero-example-question { min-height: 145px; animation: hero-example-enter .52s cubic-bezier(.2,.75,.25,1) both; }
@@ -1326,6 +1327,31 @@ footer { padding-block: 55px 28px; background: #0a1912; color: white; }.footer-i
 .hero-example-controls button[aria-current="true"]::after { position: absolute; right: 12px; bottom: 0; left: 12px; height: 2px; background: #4f765e; content: ""; }
 .hero-example-controls span { color: #4f765e; font-size: 12px; letter-spacing: .08em; }
 @keyframes hero-example-enter { from { opacity: 0; transform: translateX(18px); } to { opacity: 1; transform: translateX(0); } }
+
+/* Homepage hero screenshot carousel: same card frame as the rotating answer
+   card, with a fixed-ratio window that crops each product shot from the top. */
+.hero-shot-carousel > .hero-shot-frame { position: relative; display: block; overflow: hidden; min-height: 0; padding: 16px; background: #f1f0e7; aspect-ratio: 16 / 10; animation: hero-example-enter .5s cubic-bezier(.2,.75,.25,1) both; }
+.hero-shot-image { object-fit: contain; object-position: center; }
+/* Each shot opens whole, snaps in to 2x, then travels across itself for the
+   rest of the rotation — far enough in to read the type, along whichever
+   axis the screen actually runs. The zoom anchors where the travel starts,
+   so vertical slides pin to the top edge and horizontal ones to the left. */
+.hero-shot-image[data-pan="vertical"] { transform-origin: center top; }
+.hero-shot-image[data-pan="horizontal"] { transform-origin: left center; }
+.hero-shot-carousel .hero-shot-image[data-pan="vertical"]:not([hidden]) { animation: hero-shot-pan-y var(--hero-shot-duration, 4500ms) both; }
+.hero-shot-carousel .hero-shot-image[data-pan="horizontal"]:not([hidden]) { animation: hero-shot-pan-x var(--hero-shot-duration, 4500ms) both; }
+@keyframes hero-shot-pan-y {
+  0% { transform: scale(1) translateY(0); animation-timing-function: cubic-bezier(.22,.68,.3,1); }
+  22% { transform: scale(var(--hero-shot-zoom,1.5)) translateY(var(--hero-shot-from,0)); animation-timing-function: linear; }
+  100% { transform: scale(var(--hero-shot-zoom,1.5)) translateY(var(--hero-shot-to,-33%)); }
+}
+@keyframes hero-shot-pan-x {
+  0% { transform: scale(1) translateX(0); animation-timing-function: cubic-bezier(.22,.68,.3,1); }
+  22% { transform: scale(var(--hero-shot-zoom,1.5)) translateX(var(--hero-shot-from,0)); animation-timing-function: linear; }
+  100% { transform: scale(var(--hero-shot-zoom,1.5)) translateX(var(--hero-shot-to,-33%)); }
+}
+.hero-shot-caption { margin: 0; padding: 18px 25px; border-bottom: 1px solid #d8ddd4; color: #4f5e55; font-size: 15px; line-height: 1.5; }
+.hero-shot-controls { grid-template-columns: repeat(4,1fr); }
 .hero-founder-line { display: grid; grid-template-columns: 34px 1fr; gap: 12px; align-items: center; max-width: 570px; margin-top: 25px; }
 .hero-founder-line > span { position: relative; width: 34px; height: 34px; overflow: hidden; border-radius: 50%; background: #d8e4d4; }
 .hero-founder-line > span img { object-fit: cover; object-position: center 18%; }
@@ -1470,6 +1496,11 @@ footer { padding-block: 55px 28px; background: #0a1912; color: white; }.footer-i
   .hero-audit-card > span,.hero-audit-card footer { padding-inline: 18px; }
   .rotating-hero-card > .hero-example-question { min-height: 125px; }
   .rotating-hero-card > .hero-example-answer { min-height: 350px; padding-block: 22px; }
+  .hero-shot-carousel > .hero-shot-frame { padding: 10px; }
+  .hero-shot-caption { padding: 15px 18px; font-size: 14px; }
+  .hero-shot-controls { grid-template-columns: repeat(2,1fr); }
+  .hero-shot-controls button:nth-child(2) { border-right: 0; }
+  .hero-shot-controls button:nth-child(-n+2) { border-bottom: 1px solid #d8ddd4; }
   .rotating-hero-card > .hero-example-question strong { font-size: 18px; }
   .rotating-hero-card > .hero-example-answer strong { font-size: 15px; line-height: 1.55; }
   .hero-example-controls button { min-height: 50px; padding-inline: 7px; }
@@ -1506,6 +1537,8 @@ footer { padding-block: 55px 28px; background: #0a1912; color: white; }.footer-i
 
 @media (prefers-reduced-motion: reduce) {
   .rotating-hero-card > .hero-example-question,.rotating-hero-card > .hero-example-answer { animation: none; }
+  .hero-shot-carousel > .hero-shot-frame { animation: none; }
+  .hero-shot-carousel .hero-shot-image:not([hidden]) { transform: none; animation: none; }
 }
 
 /* Read-only interactive product demo. */

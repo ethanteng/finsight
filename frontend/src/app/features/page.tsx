@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { MarketingGetStartedButton } from '@/components/marketing/MarketingGetStartedButton';
+import RotatingHeroExamples from '@/components/marketing/RotatingHeroExamples';
 import { PageCta, SiteFooter, SiteHeader } from '@/components/marketing/SiteShell';
 
 export const metadata: Metadata = {
@@ -47,14 +48,7 @@ export default function FeaturesPageRoute() {
             <Link className="text-link" href="/use-cases">See what you can ask →</Link>
           </div>
         </div>
-        <article className="decision-miniature">
-          <div className="miniature-top"><span className="brand-mark small">L</span><b>ASK LINC · SAMPLE ANSWER</b><span>ILLUSTRATIVE</span></div>
-          <p className="miniature-question">Can we afford a $700K home without pausing retirement savings?</p>
-          <div className="miniature-verdict"><i>✓</i><div><span>THE SHORT ANSWER</span><strong>Yes—if you put 15% down and keep at least $45K in cash.</strong></div></div>
-          <div className="miniature-numbers"><span><small>DOWN PAYMENT</small><b>$105K</b></span><span><small>CASH LEFT</small><b>$48K</b></span><span><small>RETIREMENT</small><b>On track</b></span></div>
-          <div className="miniature-take"><span>LINC’S TAKE</span><p>Cap total housing costs at $4,800 a month and keep both 401(k) contributions unchanged.</p></div>
-          <Link className="miniature-math-link" href="/trust">∑ &nbsp;Show the math <span>→</span></Link>
-        </article>
+        <RotatingHeroExamples />
       </section>
 
       <section className="page-section shell" id="system">
@@ -86,6 +80,9 @@ export default function FeaturesPageRoute() {
           <div className="fact-routing-links">
             <Link className="section-cta-link section-cta-link-on-dark" href="/integrations">
               Explore accounts &amp; data <span aria-hidden="true">→</span>
+            </Link>
+            <Link className="section-cta-link section-cta-link-on-dark" href="/trust">
+              Show the math <span aria-hidden="true">→</span>
             </Link>
           </div>
         </div>

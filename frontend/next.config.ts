@@ -83,6 +83,9 @@ const nextConfig: NextConfig = {
     ];
   },
   images: {
+    // The hero product screenshots are dense UI captures, so they are served at a
+    // higher quality than the default to keep small type legible.
+    qualities: [75, 95],
     remotePatterns: [
       {
         protocol: 'https',

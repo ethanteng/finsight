@@ -134,7 +134,7 @@ describe("marketing review fixes", () => {
     });
   });
 
-  it("rotates realistic hero answers and lets visitors choose an example", () => {
+  it("rotates product screenshots in the homepage hero and lets visitors choose one", () => {
     const OriginalIntersectionObserver = global.IntersectionObserver;
     global.IntersectionObserver = class VisibleHeroObserver {
       readonly root = null;
@@ -155,6 +155,46 @@ describe("marketing review fixes", () => {
 
     try {
       render(<MarketingHome />);
+      const shots = screen.getByLabelText("Ask Linc product screenshots");
+      expect(within(shots).getByText("ASK LINC ·", { exact: false })).toHaveTextContent("DECISION WORKSPACE");
+      expect(within(shots).getByText(/ask what you are trying to decide/i)).toBeInTheDocument();
+
+      act(() => jest.advanceTimersByTime(4500));
+      expect(within(shots).getByText(/what the numbers mean for you/i)).toBeInTheDocument();
+
+      act(() => {
+        within(shots).getByRole("button", { name: "Show Portfolio screenshot" }).click();
+      });
+      expect(within(shots).getByText(/holdings and allocation across every connected investment account/i)).toBeInTheDocument();
+      expect(within(shots).getByRole("button", { name: "Show Portfolio screenshot" })).toHaveAttribute("aria-current", "true");
+      expect(shots).toHaveAttribute("data-paused", "true");
+    } finally {
+      jest.useRealTimers();
+      global.IntersectionObserver = OriginalIntersectionObserver;
+    }
+  });
+
+  it("rotates realistic hero answers on the How It Works page and lets visitors choose an example", () => {
+    const OriginalIntersectionObserver = global.IntersectionObserver;
+    global.IntersectionObserver = class VisibleHeroObserver {
+      readonly root = null;
+      readonly rootMargin = "0px";
+      readonly thresholds = [0.25];
+      constructor(private readonly callback: IntersectionObserverCallback) {}
+      observe(target: Element) {
+        this.callback(
+          [{ isIntersecting: true, intersectionRatio: 1, target } as IntersectionObserverEntry],
+          this as unknown as IntersectionObserver,
+        );
+      }
+      disconnect() {}
+      unobserve() {}
+      takeRecords() { return []; }
+    } as typeof IntersectionObserver;
+    jest.useFakeTimers();
+
+    try {
+      render(<FeaturesPageRoute />);
       const examples = screen.getByLabelText("Realistic Ask Linc answer examples");
       expect(within(examples).getByText(/stress-tested 49 overlapping historical 37-year windows/i)).toBeInTheDocument();
 
@@ -282,9 +322,6 @@ describe("marketing review fixes", () => {
     expect(screen.getByText("Compare the tradeoffs")).toBeInTheDocument();
     expect(screen.getByText("Get the recommendation")).toBeInTheDocument();
     expect(screen.getByText("Check the work")).toBeInTheDocument();
-    const sampleAnswer = screen.getByText(/can we afford a \$700k home without pausing retirement savings/i).closest("article");
-    expect(sampleAnswer).not.toBeNull();
-    expect(within(sampleAnswer as HTMLElement).getByRole("link", { name: /show the math/i })).toHaveClass("miniature-math-link");
     expect(screen.getByRole("heading", { name: "Cash, spending, and debt" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Investments, property, and goals" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Rates, rules, and markets" })).toBeInTheDocument();
