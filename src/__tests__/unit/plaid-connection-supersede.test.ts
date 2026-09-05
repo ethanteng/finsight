@@ -202,13 +202,23 @@ describe('matchAccountsAcrossConnections', () => {
     // Institutions sometimes wrap goal amounts in parentheses on one Item and not the other.
     // Stripping edge punctuation keeps "$325K" / "($325K)" / "2035)" aligned so containment can
     // still see the rename; leaving those marks attached would leave a duplicate connection.
-    const previous = [account({ id: 'p1', name: 'Mortgage Payoff Fund $325K by 2035' })];
-    const current = [account({ id: 'c1', name: 'Mortgage Payoff Fund ($325K by 2035) - Joint Automated Investing' })];
+    // Two goals rather than one, so the pairings corroborate each other and the punctuation
+    // handling is what the assertion actually turns on.
+    const previous = [
+      account({ id: 'p1', name: 'Mortgage Payoff Fund $325K by 2035' }),
+      account({ id: 'p2', name: 'Retirement Bridge Fund $325K by 2043' })
+    ];
+    const current = [
+      account({ id: 'c1', name: 'Mortgage Payoff Fund ($325K by 2035) - Joint Automated Investing' }),
+      account({ id: 'c2', name: 'Retirement Bridge Fund ($325K by 2043) - Automated Investing' })
+    ];
 
     const result = matchAccountsAcrossConnections(previous, current);
 
     expect(result.fullyCovered).toBe(true);
-    expect(result.matches[0].strategy).toBe('name-containment');
+    expect(Object.fromEntries(result.matches.map(m => [m.previous.id, m.current.id])))
+      .toEqual({ p1: 'c1', p2: 'c2' });
+    expect(new Set(result.matches.map(m => m.strategy))).toEqual(new Set(['name-containment']));
   });
 
   it('refuses a containment match on a one-word name', () => {
