@@ -550,10 +550,6 @@ export function MarketingBlogPage({ ghostPosts }: { ghostPosts: GhostPost[] }) {
         <div><p className="section-kicker">THE ASK LINC BLOG</p><h1>Better thinking about <em>money and machines.</em></h1></div>
         <p>Field notes on intelligent finance, retirement decisions, product transparency, and the systems that make AI worth trusting. Start with <Link href="/blog/average-american-savings">what Americans actually have in savings</Link>.</p>
       </section>
-      <section className="blog-trial-bridge shell" aria-label="Try Ask Linc">
-        <div><h2>What does this mean for your money?</h2><p>Ask a question using your own accounts. See the assumptions and math behind the answer.</p><p><TrialPriceLine /></p></div>
-        <MarketingGetStartedButton className="button button-primary" trackingLocation="blog_intro" csOverrideId="cta-start-free-trial-blog-intro" />
-      </section>
       {featured ? (
         <>
           <section className="featured-post shell">

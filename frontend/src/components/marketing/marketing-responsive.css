@@ -19,10 +19,6 @@
   .product-demo-disclosure { border-block: 1px solid #ccd1c4; }
   .related-decisions { padding-block: 20px; }
   .related-decisions .other-cases { width: 100%; }
-  .blog-trial-bridge { display: flex; gap: 24px; align-items: center; justify-content: space-between; padding: 24px; margin-bottom: 40px; background: #c9f2df; border-radius: 16px; }
-  .blog-trial-bridge h2 { font-size: 28px; }
-  .blog-trial-bridge p { max-width: 620px; font-size: 16px; line-height: 1.5; }
-  .blog-trial-bridge .button { flex-shrink: 0; }
   :is(.conversion-home, .use-case-page) .site-header { position: sticky; top: 0; z-index: 30; background: #f3f2e9; }
   .use-case-hero .back-link { margin-bottom: 18px; font-size: 14px; }
   .case-trial-actions .microcopy { margin-top: 12px; }
@@ -56,8 +52,6 @@
     .use-case-page .use-case-verdict h2 { font-size: 25px; }
     .use-case-page .use-case-metrics { gap: 8px; }
     .use-case-page .use-case-metrics b { font-size: 22px; overflow-wrap: anywhere; }
-    .blog-trial-bridge { flex-direction: column; align-items: stretch; }
-    .blog-trial-bridge .button { justify-content: center; min-height: 52px; }
     :scope.use-case-page .stress-test-benefits { display: none; }
   }
   /* Grid/flex children must be allowed to shrink. Long headings and URLs
@@ -82,7 +76,8 @@
     .ecosystem-compact-shell,
     .feature-proof-grid,
     .fact-routing,
-    .static-product-demo
+    .static-product-demo,
+    .article-layout
   ) > * {
     min-width: 0;
   }
@@ -684,8 +679,9 @@
     }
 
     .founder-statement {
-      min-height: 360px;
-      padding: 34px 28px;
+      min-height: 0;
+      gap: 30px;
+      padding: 30px 26px;
     }
 
     .section-cta-link {
