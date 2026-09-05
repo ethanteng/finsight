@@ -14,7 +14,7 @@
   .answer-details p { font-size: 16px; line-height: 1.6; font-weight: 400; }
   .rotating-hero-card > .hero-example-answer { min-height: 0; }
   .rotating-hero-card > .hero-example-answer > div { min-width: 0; }
-  .rotating-hero-card > .hero-example-answer > div > p { margin-block: 10px; font-size: 17px; line-height: 1.5; }
+  .rotating-hero-card > .hero-example-answer > div p { margin-block: 10px; font-size: 17px; line-height: 1.5; }
   .rotating-hero-card > .hero-example-answer small { font-size: 12px; font-weight: 700; }
   .product-demo-disclosure { border-block: 1px solid #ccd1c4; }
   .related-decisions { padding-block: 20px; }

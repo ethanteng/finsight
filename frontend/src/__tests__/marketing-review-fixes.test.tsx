@@ -217,15 +217,22 @@ describe("marketing review fixes", () => {
     try {
       render(<FeaturesPageRoute />);
       const examples = screen.getByLabelText("Realistic Ask Linc answer examples");
-      expect(within(examples).getByText(/stress-tested 49 overlapping historical 37-year windows/i)).toBeInTheDocument();
+      // Every example stays in the DOM so the card reserves the tallest one and
+      // does not resize as it rotates, so asserting presence would pass even if
+      // rotation broke. data-active is what actually shows.
+      const shown = () =>
+        [...examples.querySelectorAll('.hero-example-stack > p')]
+          .find((p) => p.getAttribute("data-active") === "true")?.textContent ?? "";
+
+      expect(shown()).toMatch(/stress-tested 49 overlapping historical 37-year windows/i);
 
       act(() => jest.advanceTimersByTime(9000));
-      expect(within(examples).getByText(/a 15% down payment is \$105K/i)).toBeInTheDocument();
+      expect(shown()).toMatch(/a 15% down payment is \$105K/i);
 
       act(() => {
         within(examples).getByRole("button", { name: "Show Family leave example" }).click();
       });
-      expect(within(examples).getByText(/the gap is about \$3,750 a month/i)).toBeInTheDocument();
+      expect(shown()).toMatch(/the gap is about \$3,750 a month/i);
       expect(within(examples).getByRole("button", { name: "Show Family leave example" })).toHaveAttribute("aria-current", "true");
       expect(examples).toHaveAttribute("data-paused", "true");
     } finally {
@@ -335,7 +342,7 @@ describe("marketing review fixes", () => {
     render(<FeaturesPageRoute />);
 
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
-      "From your question to the math behind it.",
+      "From your question to the math behind the answer.",
     );
     // The homepage owns the "starts with your question" opener; this page does not repeat it.
     expect(screen.getByRole("heading", { level: 1 })).not.toHaveTextContent("starts with your question");
