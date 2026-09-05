@@ -118,5 +118,10 @@ export function processGhostHtml(html: string): string {
     // Preserve Ghost's gallery layouts
     .replace(/class="kg-gallery/g, 'class="ghost-gallery')
     // Preserve Ghost's card layouts
-    .replace(/class="kg-card/g, 'class="ghost-card');
+    .replace(/class="kg-card/g, 'class="ghost-card')
+    // Give tables a wrapper to scroll inside. A wide comparison table has a
+    // min-content width that no amount of `width: 100%` will shrink, and
+    // without this it drags the whole article past the viewport on a phone.
+    .replace(/<table\b/g, '<div class="ghost-table-wrap"><table')
+    .replace(/<\/table>/g, '</table></div>');
 }

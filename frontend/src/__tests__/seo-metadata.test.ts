@@ -25,6 +25,25 @@ describe('SEO metadata', () => {
     });
   });
 
+  it('wraps tables so a wide one scrolls instead of stretching the article', () => {
+    const processed = processGhostHtml('<p>Intro</p><table><tr><td>Ask Linc</td></tr></table><p>Outro</p>');
+
+    expect(processed).toContain('<div class="ghost-table-wrap"><table>');
+    expect(processed).toContain('</table></div>');
+    // A grid item sized by its widest child drags the whole column past the
+    // viewport, so the wrapper has to be there for every table.
+    expect(processed.match(/ghost-table-wrap/g)).toHaveLength(1);
+    expect(processed).toContain('<p>Intro</p>');
+  });
+
+  it('wraps tables that carry attributes', () => {
+    const processed = processGhostHtml('<table class="kg-table" data-x="1"><tr><td>a</td></tr></table>');
+
+    // kg- is rewritten to ghost-kg- earlier in the same chain.
+    expect(processed).toContain('<div class="ghost-table-wrap"><table class="ghost-kg-table" data-x="1">');
+    expect(processed).toContain('</table></div>');
+  });
+
   it('keeps rendered Ghost links on clean canonical URLs', () => {
     const html = [
       '<a href="https://blog.asklinc.com/first-post/">Legacy</a>',

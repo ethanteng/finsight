@@ -893,7 +893,8 @@ footer { padding-block: 55px 28px; background: #0a1912; color: white; }.footer-i
 .marketing-article-body figure { margin: 35px 0; }.marketing-article-body figcaption { margin-top: -20px; color: #728078; font: 10px var(--font-body); text-align: center; }
 .marketing-article-body blockquote { margin: 42px 0; padding: 30px; border-left: 4px solid #557d65; background: #e1eadf; color: var(--ink); font-family: var(--font-display); font-size: 25px; font-weight: 750; line-height: 1.35; }
 .marketing-article-body pre { overflow-x: auto; padding: 22px; border-radius: 14px; background: var(--ink); color: white; font: 13px/1.6 monospace; }
-.marketing-article-body table { width: 100%; margin-block: 30px; border-collapse: collapse; font: 13px var(--font-body); }.marketing-article-body th,.marketing-article-body td { padding: 13px; border: 1px solid #bac3b8; text-align: left; }
+.marketing-article-body .ghost-table-wrap { max-width: 100%; margin-block: 30px; overflow-x: auto; }
+.marketing-article-body table { width: 100%; border-collapse: collapse; font: 13px var(--font-body); }.marketing-article-body th,.marketing-article-body td { padding: 13px; border: 1px solid #bac3b8; text-align: left; }
 .next-reading { display: grid; grid-template-columns: .35fr 1fr auto; gap: 40px; align-items: center; margin-bottom: 110px; padding: 35px; border-block: 1px solid #afbbad; }.next-reading span { color: #397052; font-size: 12px; font-weight: 850; letter-spacing: .13em; }.next-reading h2 { font-size: 29px; }.next-reading a { font-size: 12px; font-weight: 800; }
 .not-found { display: flex; min-height: 70vh; flex-direction: column; align-items: center; justify-content: center; text-align: center; }.not-found > span { color: #397052; font-size: 12px; letter-spacing: .15em; }.not-found .button { margin-top: 25px; }
 
