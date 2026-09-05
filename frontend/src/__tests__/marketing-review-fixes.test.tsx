@@ -159,7 +159,7 @@ describe("marketing review fixes", () => {
       expect(within(shots).getByText("ASK LINC ·", { exact: false })).toHaveTextContent("DECISION WORKSPACE");
       expect(within(shots).getByText(/ask what you are trying to decide/i)).toBeInTheDocument();
 
-      act(() => jest.advanceTimersByTime(7000));
+      act(() => jest.advanceTimersByTime(4500));
       expect(within(shots).getByText(/what the numbers mean for you/i)).toBeInTheDocument();
 
       act(() => {

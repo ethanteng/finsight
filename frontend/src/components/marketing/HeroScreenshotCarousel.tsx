@@ -4,11 +4,13 @@ import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 
-const ROTATION_MS = 7000;
+const ROTATION_MS = 4500;
 
 const HERO_SHOTS = [
   {
     id: "decision",
+    zoom: 2,
+    pan: "horizontal",
     label: "DECISION WORKSPACE",
     controlLabel: "Decision",
     caption: "Ask what you are trying to decide. Linc answers with the metrics and accounts behind it.",
@@ -17,6 +19,8 @@ const HERO_SHOTS = [
   },
   {
     id: "takeaways",
+    zoom: 1.3,
+    pan: "vertical",
     label: "TAKEAWAYS & NEXT STEPS",
     controlLabel: "Takeaways",
     caption: "What the numbers mean for you, and what to do about them.",
@@ -25,6 +29,8 @@ const HERO_SHOTS = [
   },
   {
     id: "net-worth",
+    zoom: 1.85,
+    pan: "horizontal",
     label: "YOUR FINANCIAL PICTURE",
     controlLabel: "Net worth",
     caption: "Cash, investments, property, and debt tracked together over time.",
@@ -33,6 +39,8 @@ const HERO_SHOTS = [
   },
   {
     id: "portfolio",
+    zoom: 1.5,
+    pan: "vertical",
     label: "INVESTMENT PORTFOLIO",
     controlLabel: "Portfolio",
     caption: "Holdings and allocation across every connected investment account.",
@@ -40,6 +48,16 @@ const HERO_SHOTS = [
     alt: "An Ask Linc investment portfolio overview with total portfolio value, holdings and securities counts, and asset allocation across ETFs, target date funds, equities, and mutual funds.",
   },
 ] as const;
+
+// At zoom Z the image is Z times the frame along its travel axis, so scrolling
+// from one end to the other covers (Z - 1) / Z of it. Stop just short of the
+// far edge so the pan never slams into it.
+function panStyle(zoom: number): CSSProperties {
+  return {
+    "--hero-shot-zoom": zoom,
+    "--hero-shot-travel": `${-((zoom - 1) / zoom) * 92}%`,
+  } as CSSProperties;
+}
 
 export default function HeroScreenshotCarousel() {
   const [activeIndex, setActiveIndex] = useState(0);
@@ -104,7 +122,9 @@ export default function HeroScreenshotCarousel() {
             alt={shot.alt}
             fill
             quality={95}
-            sizes="(max-width: 980px) 100vw, 640px"
+            sizes="(max-width: 980px) 200vw, 1280px"
+            data-pan={shot.pan}
+            style={panStyle(shot.zoom)}
             priority={index === 0}
             hidden={index !== activeIndex}
             key={shot.id}
