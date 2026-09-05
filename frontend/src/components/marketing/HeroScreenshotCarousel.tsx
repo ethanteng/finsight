@@ -9,8 +9,9 @@ const ROTATION_MS = 4500;
 const HERO_SHOTS = [
   {
     id: "decision",
-    zoom: 2,
-    pan: "horizontal",
+    ratio: 3448 / 1904,
+    zoom: 1.7,
+    pan: "vertical",
     label: "DECISION WORKSPACE",
     controlLabel: "Decision",
     caption: "Ask what you are trying to decide. Linc answers with the metrics and accounts behind it.",
@@ -19,6 +20,7 @@ const HERO_SHOTS = [
   },
   {
     id: "takeaways",
+    ratio: 2000 / 1394,
     zoom: 1.3,
     pan: "vertical",
     label: "TAKEAWAYS & NEXT STEPS",
@@ -29,6 +31,7 @@ const HERO_SHOTS = [
   },
   {
     id: "net-worth",
+    ratio: 2352 / 1394,
     zoom: 1.85,
     pan: "horizontal",
     label: "YOUR FINANCIAL PICTURE",
@@ -39,6 +42,7 @@ const HERO_SHOTS = [
   },
   {
     id: "portfolio",
+    ratio: 1626 / 1568,
     zoom: 1.5,
     pan: "vertical",
     label: "INVESTMENT PORTFOLIO",
@@ -49,13 +53,22 @@ const HERO_SHOTS = [
   },
 ] as const;
 
-// At zoom Z the image is Z times the frame along its travel axis, so scrolling
-// from one end to the other covers (Z - 1) / Z of it. Stop just short of the
-// far edge so the pan never slams into it.
-function panStyle(zoom: number): CSSProperties {
+// Must match .hero-shot-frame's aspect-ratio in marketing.css.
+const FRAME_RATIO = 16 / 10;
+
+// object-fit: contain letterboxes a shot along whichever axis is not the
+// limiting one, so it does not necessarily fill the frame along the axis it
+// travels. `extent` is how much of the frame the unzoomed shot covers on that
+// axis; at zoom Z it covers extent * Z, and the pan has to move the overflow.
+// The translate happens after the scale, so it is divided by Z. Stop just
+// short of the far edge rather than slamming into it.
+function panStyle(shot: (typeof HERO_SHOTS)[number]): CSSProperties {
+  const { zoom, pan, ratio } = shot;
+  const extent = pan === "vertical" ? Math.min(1, FRAME_RATIO / ratio) : Math.min(1, ratio / FRAME_RATIO);
+  const overflow = Math.max(0, extent - 1 / zoom);
   return {
     "--hero-shot-zoom": zoom,
-    "--hero-shot-travel": `${-((zoom - 1) / zoom) * 92}%`,
+    "--hero-shot-travel": `${-overflow * 92}%`,
   } as CSSProperties;
 }
 
@@ -124,7 +137,7 @@ export default function HeroScreenshotCarousel() {
             quality={95}
             sizes="(max-width: 980px) 200vw, 1280px"
             data-pan={shot.pan}
-            style={panStyle(shot.zoom)}
+            style={panStyle(shot)}
             priority={index === 0}
             hidden={index !== activeIndex}
             key={shot.id}
