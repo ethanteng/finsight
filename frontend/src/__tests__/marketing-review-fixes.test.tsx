@@ -107,14 +107,20 @@ describe("marketing review fixes", () => {
     expect(screen.queryByRole("link", { name: "Sign in to Ask Linc" })).not.toBeInTheDocument();
   });
 
-  it("leads with account-based answers and keeps search questions as examples", () => {
+  it("separates the account explanation from the answer promise without extra hero copy", () => {
     render(<MarketingHome />);
 
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
-      "Answers to big money questions, based on your actual finances.",
+      "Financial planning that starts with your question.",
     );
-    expect(screen.getByText(/connect your financial accounts and ask Linc about retirement/i)).toHaveTextContent("See the numbers and assumptions behind every answer.");
-    expect(screen.getByText(/Try asking:.*Can I retire early.*How much house can I afford/)).toBeInTheDocument();
+    const explanation = screen.getByText("Ask Linc what you’re trying to decide. It uses your connected financial accounts to work out the answer.");
+    const promise = screen.getByText("See the numbers and assumptions behind every answer.");
+    expect(explanation.tagName).toBe("P");
+    expect(promise.tagName).toBe("P");
+    expect(explanation).not.toContainElement(promise);
+    expect(promise).toHaveClass("hero-answer-promise");
+    expect(screen.queryByText(/Try asking:.*Can I retire early.*How much house can I afford/)).not.toBeInTheDocument();
+    expect(screen.queryByText("Read-only connections. Your financial data is never used to train AI.")).not.toBeInTheDocument();
     expect(screen.getByText("Ask in plain English")).toBeInTheDocument();
     expect(screen.getByText("Your whole financial picture")).toBeInTheDocument();
     expect(screen.getAllByText("Show the Math").length).toBeGreaterThan(0);
