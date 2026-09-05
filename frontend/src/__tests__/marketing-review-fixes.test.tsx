@@ -6,6 +6,7 @@ import AboutPageRoute from "@/app/about/page";
 import FeaturesPageRoute from "@/app/features/page";
 import { MarketingContactForm } from "@/components/marketing/MarketingContactForm";
 import MarketingHome from "@/components/marketing/MarketingHome";
+import { FALLBACK_PRICING } from "@/config/pricing";
 import IntegrationsPage from "@/components/marketing/IntegrationsPage";
 import { SiteHeader } from "@/components/marketing/SiteShell";
 import { USE_CASE_LINKS } from "@/lib/site-nav";
@@ -107,18 +108,18 @@ describe("marketing review fixes", () => {
     expect(screen.queryByRole("link", { name: "Sign in to Ask Linc" })).not.toBeInTheDocument();
   });
 
-  it("separates the account explanation from the answer promise without extra hero copy", () => {
+  it("keeps the hero copy to the account explanation and the trial line", () => {
     render(<MarketingHome />);
 
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
       "Financial planning that starts with your question.",
     );
     const explanation = screen.getByText("Ask Linc what you’re trying to decide. It uses your connected financial accounts to work out the answer.");
-    const promise = screen.getByText("See the numbers and assumptions behind every answer.");
     expect(explanation.tagName).toBe("P");
-    expect(promise.tagName).toBe("P");
-    expect(explanation).not.toContainElement(promise);
-    expect(promise).toHaveClass("hero-answer-promise");
+    expect(screen.queryByText("See the numbers and assumptions behind every answer.")).not.toBeInTheDocument();
+    // The hero drops the cancellation clause; the rest of the site keeps it.
+    expect(screen.getByText(FALLBACK_PRICING.trialLineShort)).toBeInTheDocument();
+    expect(screen.queryByText(FALLBACK_PRICING.trialLine)).not.toBeInTheDocument();
     expect(screen.queryByText(/Try asking:.*Can I retire early.*How much house can I afford/)).not.toBeInTheDocument();
     expect(screen.queryByText("Read-only connections. Your financial data is never used to train AI.")).not.toBeInTheDocument();
     expect(screen.getByText("Ask in plain English")).toBeInTheDocument();

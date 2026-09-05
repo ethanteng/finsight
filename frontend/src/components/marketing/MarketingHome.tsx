@@ -29,11 +29,10 @@ export default function Home() {
           <p className="hero-subhead">
             Ask Linc what you’re trying to decide. It uses your connected financial accounts to work out the answer.
           </p>
-          <p className="hero-answer-promise">See the numbers and assumptions behind every answer.</p>
           <div className="hero-actions">
             <MarketingGetStartedButton className="button button-primary" trackingLocation="homepage_hero" csOverrideId="cta-start-free-trial-hero" />
           </div>
-          <p className="microcopy">{pricing.trialLine}</p>
+          <p className="microcopy">{pricing.trialLineShort}</p>
         </div>
 
         <HeroScreenshotCarousel />

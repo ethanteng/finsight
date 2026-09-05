@@ -44,7 +44,7 @@ button { font: inherit; }
 .button-dark { background: var(--ink); color: white; }
 .button-primary { background: var(--lime); color: var(--ink); padding: 17px 25px; box-shadow: 0 8px 0 rgba(16,35,25,.1); }
 
-.hero { min-height: 710px; display: grid; grid-template-columns: minmax(0,500px) minmax(0,1fr); align-items: center; gap: 44px; padding-block: 68px 76px; }
+.hero { min-height: 710px; display: grid; grid-template-columns: minmax(0,480px) minmax(0,1fr); align-items: center; gap: 44px; padding-block: 68px 76px; }
 .eyebrow { display: flex; align-items: center; gap: 9px; width: fit-content; padding: 8px 13px; border: 1px solid rgba(16,35,25,.18); border-radius: 999px; font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; background: rgba(255,255,255,.38); }
 .pulse { width: 8px; height: 8px; border-radius: 50%; background: #2b8f5d; box-shadow: 0 0 0 4px rgba(43,143,93,.12); }
 h1 { margin: 24px 0 22px; max-width: 600px; font-family: var(--font-display); font-size: clamp(54px, 5.1vw, 79px); line-height: .98; letter-spacing: -.065em; font-weight: 650; }
