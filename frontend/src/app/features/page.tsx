@@ -41,7 +41,7 @@ export default function FeaturesPageRoute() {
       <section className="subhero shell split-subhero">
         <div>
           <p className="section-kicker">HOW ASK LINC WORKS</p>
-          <h1>Financial planning that starts with <em>your question.</em></h1>
+          <h1>From your question <em>to the math behind it.</em></h1>
           <p className="subhero-copy">You should not have to build the financial model before you can ask the question. Tell Linc what you are trying to decide; it builds the analysis around it.</p>
           <div className="hero-actions">
             <MarketingGetStartedButton className="button button-primary" csOverrideId="cta-start-free-trial-hero" />

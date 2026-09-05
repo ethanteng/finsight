@@ -29,11 +29,10 @@ export default function Home() {
           <p className="hero-subhead">
             Ask Linc what you’re trying to decide. It uses your connected financial accounts to work out the answer.
           </p>
-          <p className="hero-answer-promise">See the numbers and assumptions behind every answer.</p>
           <div className="hero-actions">
             <MarketingGetStartedButton className="button button-primary" trackingLocation="homepage_hero" csOverrideId="cta-start-free-trial-hero" />
           </div>
-          <p className="microcopy">{pricing.trialLine}</p>
+          <p className="microcopy">{pricing.trialLineShort}</p>
         </div>
 
         <HeroScreenshotCarousel />
@@ -61,6 +60,29 @@ export default function Home() {
         </details>
         <div className="hero-actions">
           <MarketingGetStartedButton className="button button-primary" trackingLocation="homepage_demo" csOverrideId="cta-start-free-trial-demo" />
+        </div>
+      </section>
+
+      <section className="section pricing-section" id="pricing">
+        <div className="shell pricing-shell">
+          <div className="pricing-copy">
+            <p className="section-kicker">SIMPLE PRICING</p>
+            <h2>One month free. Then {pricing.label}.</h2>
+            <p>One plan. Full access. Cancel anytime.</p>
+          </div>
+          <article className="price-card" data-cs-override-id="pricing-card-premium">
+            <div className="price-card-top"><span>ONE PLAN. EVERYTHING INCLUDED.</span></div>
+            <div className="price"><sup>{pricing.symbol}</sup>{pricing.amountText}<span>/{pricing.intervalLabel}</span></div>
+            <p>First month free. Full access. Cancel anytime.</p>
+            <ul>
+              <li>Unlimited questions &amp; follow-ups</li>
+              <li>Unlimited connected accounts</li>
+              <li>What-if scenarios</li>
+              <li>Current rates and market context</li>
+              <li>Show the Math on every answer</li>
+            </ul>
+            <MarketingGetStartedButton className="button button-primary price-button" csOverrideId="cta-start-free-trial-pricing-premium" />
+          </article>
         </div>
       </section>
 
@@ -141,11 +163,6 @@ export default function Home() {
             <span className="flow-arrow">→</span>
             <div className="privacy-node"><span className="privacy-icon">L</span><b>Your answer</b><small>Only what is needed</small></div>
           </div>
-          <div className="privacy-points">
-            <span><i>✓</i> Read-only access</span>
-            <span><i>✓</i> Never used for training</span>
-            <span><i>✓</i> Disconnect anytime</span>
-          </div>
         </div>
       </section>
 
@@ -168,28 +185,6 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="section pricing-section" id="pricing">
-        <div className="shell pricing-shell">
-          <div className="pricing-copy">
-            <p className="section-kicker">SIMPLE PRICING</p>
-            <h2>One month free. Then {pricing.label}.</h2>
-            <p>One plan. Full access. Cancel anytime.</p>
-          </div>
-          <article className="price-card" data-cs-override-id="pricing-card-premium">
-            <div className="price-card-top"><span>ONE PLAN. EVERYTHING INCLUDED.</span></div>
-            <div className="price"><sup>{pricing.symbol}</sup>{pricing.amountText}<span>/{pricing.intervalLabel}</span></div>
-            <p>First month free. Full access. Cancel anytime.</p>
-            <ul>
-              <li>Unlimited questions &amp; follow-ups</li>
-              <li>Unlimited connected accounts</li>
-              <li>What-if scenarios</li>
-              <li>Current rates and market context</li>
-              <li>Show the Math on every answer</li>
-            </ul>
-            <MarketingGetStartedButton className="button button-primary price-button" csOverrideId="cta-start-free-trial-pricing-premium" />
-          </article>
-        </div>
-      </section>
 
       <section className="final-cta">
         <div className="shell final-cta-inner">

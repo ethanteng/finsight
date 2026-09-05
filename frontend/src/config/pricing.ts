@@ -25,6 +25,8 @@ export interface Pricing {
   label: string;
   /** e.g. "1 month free, then $19/month. Cancel anytime." */
   trialLine: string;
+  /** trialLine without the cancellation clause, e.g. "1 month free, then $19/month." */
+  trialLineShort: string;
   /** Amount formatted for schema.org offers, e.g. "19.00". */
   schemaPrice: string;
   /** False when this came from the fallback rather than from Stripe. */
@@ -109,6 +111,7 @@ export function buildPricing(input: {
     intervalLabel,
     label,
     trialLine: `1 month free, then ${label}. Cancel anytime.`,
+    trialLineShort: `1 month free, then ${label}.`,
     schemaPrice: input.amount.toFixed(decimals),
     live: input.live ?? false,
   };

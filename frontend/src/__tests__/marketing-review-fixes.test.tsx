@@ -1,11 +1,12 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { act, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import AboutPageRoute from "@/app/about/page";
 import FeaturesPageRoute from "@/app/features/page";
 import { MarketingContactForm } from "@/components/marketing/MarketingContactForm";
 import MarketingHome from "@/components/marketing/MarketingHome";
+import { FALLBACK_PRICING } from "@/config/pricing";
 import IntegrationsPage from "@/components/marketing/IntegrationsPage";
 import { SiteHeader } from "@/components/marketing/SiteShell";
 import { USE_CASE_LINKS } from "@/lib/site-nav";
@@ -107,18 +108,18 @@ describe("marketing review fixes", () => {
     expect(screen.queryByRole("link", { name: "Sign in to Ask Linc" })).not.toBeInTheDocument();
   });
 
-  it("separates the account explanation from the answer promise without extra hero copy", () => {
+  it("keeps the hero copy to the account explanation and the trial line", () => {
     render(<MarketingHome />);
 
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
       "Financial planning that starts with your question.",
     );
     const explanation = screen.getByText("Ask Linc what you’re trying to decide. It uses your connected financial accounts to work out the answer.");
-    const promise = screen.getByText("See the numbers and assumptions behind every answer.");
     expect(explanation.tagName).toBe("P");
-    expect(promise.tagName).toBe("P");
-    expect(explanation).not.toContainElement(promise);
-    expect(promise).toHaveClass("hero-answer-promise");
+    expect(screen.queryByText("See the numbers and assumptions behind every answer.")).not.toBeInTheDocument();
+    // The hero drops the cancellation clause; the rest of the site keeps it.
+    expect(screen.getByText(FALLBACK_PRICING.trialLineShort)).toBeInTheDocument();
+    expect(screen.queryByText(FALLBACK_PRICING.trialLine)).not.toBeInTheDocument();
     expect(screen.queryByText(/Try asking:.*Can I retire early.*How much house can I afford/)).not.toBeInTheDocument();
     expect(screen.queryByText("Read-only connections. Your financial data is never used to train AI.")).not.toBeInTheDocument();
     expect(screen.getByText("Ask in plain English")).toBeInTheDocument();
@@ -162,12 +163,32 @@ describe("marketing review fixes", () => {
       act(() => jest.advanceTimersByTime(4500));
       expect(within(shots).getByText(/what the numbers mean for you/i)).toBeInTheDocument();
 
-      act(() => {
-        within(shots).getByRole("button", { name: "Show Portfolio screenshot" }).click();
-      });
-      expect(within(shots).getByText(/holdings and allocation across every connected investment account/i)).toBeInTheDocument();
-      expect(within(shots).getByRole("button", { name: "Show Portfolio screenshot" })).toHaveAttribute("aria-current", "true");
+      act(() => jest.advanceTimersByTime(4500));
+      expect(within(shots).getByText(/cash, investments, property, and debt/i)).toBeInTheDocument();
+
+      // Pointing at the card holds the current slide.
+      fireEvent.pointerEnter(shots);
       expect(shots).toHaveAttribute("data-paused", "true");
+      act(() => jest.advanceTimersByTime(9000));
+      expect(within(shots).getByText(/cash, investments, property, and debt/i)).toBeInTheDocument();
+
+      fireEvent.pointerLeave(shots);
+      expect(shots).not.toHaveAttribute("data-paused");
+
+      // The stop control is the pointer-free way to hold it, and it survives
+      // the pointer leaving.
+      const toggle = within(shots).getByRole("button", { name: "Pause" });
+      expect(toggle).toHaveAttribute("aria-pressed", "false");
+      act(() => toggle.click());
+      expect(within(shots).getByRole("button", { name: "Play" })).toHaveAttribute("aria-pressed", "true");
+      fireEvent.pointerEnter(shots);
+      fireEvent.pointerLeave(shots);
+      expect(shots).toHaveAttribute("data-paused", "true");
+      act(() => jest.advanceTimersByTime(9000));
+      expect(within(shots).getByText(/cash, investments, property, and debt/i)).toBeInTheDocument();
+
+      act(() => within(shots).getByRole("button", { name: "Play" }).click());
+      expect(shots).not.toHaveAttribute("data-paused");
     } finally {
       jest.useRealTimers();
       global.IntersectionObserver = OriginalIntersectionObserver;
@@ -314,8 +335,10 @@ describe("marketing review fixes", () => {
     render(<FeaturesPageRoute />);
 
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
-      "Financial planning that starts with your question.",
+      "From your question to the math behind it.",
     );
+    // The homepage owns the "starts with your question" opener; this page does not repeat it.
+    expect(screen.getByRole("heading", { level: 1 })).not.toHaveTextContent("starts with your question");
     expect(screen.getByRole("heading", { name: "One question. Five clear steps." })).toBeInTheDocument();
     expect(screen.getByText("Ask the question")).toBeInTheDocument();
     expect(screen.getByText("Linc pulls in what matters")).toBeInTheDocument();

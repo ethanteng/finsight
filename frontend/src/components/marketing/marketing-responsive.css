@@ -8,7 +8,6 @@
 @scope (.marketing-site) {
   /* One responsive URL per page keeps content and canonicals consistent. */
   .hero-reassurance { max-width: 540px; margin: 10px 0 0; font-size: 14px; line-height: 1.5; color: #4f5e55; }
-  .hero-answer-promise { max-width: 540px; margin: 18px 0 0; font-size: 18px; line-height: 1.5; font-weight: 600; }
   .answer-details summary, .product-demo-disclosure summary, .related-decisions > summary {
     min-height: 44px; padding-block: 12px; cursor: pointer; font-size: 15px; font-weight: 700;
   }
@@ -44,7 +43,6 @@
     .subhero.use-case-hero h1 { font-size: clamp(30px, 7.5vw, 44px); line-height: 1.12; margin-block: 14px; }
     :scope.conversion-home .hero h1 { margin-block: 14px; }
     :scope.conversion-home .hero-subhead, .use-case-hero .subhero-copy { font-size: 16px; line-height: 1.5; margin-block: 12px; }
-    :scope.conversion-home .hero-answer-promise { font-size: 16px; margin-top: 16px; }
     :scope.conversion-home .hero-actions { margin-top: 20px; }
     :scope.conversion-home .hero-actions .button, .case-trial-actions .button { width: 100%; min-height: 52px; justify-content: center; }
     .case-trial-actions .button { margin-top: 16px; }
@@ -754,7 +752,7 @@
     }
 
     .price {
-      font-size: clamp(58px, 20vw, 76px);
+      font-size: clamp(48px, 16vw, 62px);
     }
 
     .sub-price-card,
