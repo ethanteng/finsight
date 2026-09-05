@@ -32,6 +32,7 @@ describe("financial stress testing landing page", () => {
       "Stress-test your retirement plan before the market tests it.",
     );
     expect(screen.getByText(/market drops, inflation, spending, and different retirement dates/i)).toBeInTheDocument();
+    expect(screen.getByText(/connect your financial accounts and ask Linc/i)).toHaveTextContent("See the numbers and assumptions behind every answer.");
 
     const benefits = screen.getByRole("list", { name: "What you can test in your retirement plan" });
     expect(within(benefits).getByText("Model an early market drop")).toBeInTheDocument();

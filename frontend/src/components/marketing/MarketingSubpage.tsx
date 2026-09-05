@@ -116,7 +116,7 @@ const useCases = {
     slug: "retirement",
     number: "01",
     label: "RETIREMENT PLANNING",
-    title: "Know what makes retirement work—before you pick the date.",
+    title: "How long will my money last in retirement?",
     question: "Are we saving enough to retire at 60 without cutting our lifestyle?",
     answer: "You are close. Saving $600 more each month puts the plan on track.",
     summary: "At the current pace, the plan is short by about $110K. A small monthly increase closes most of the gap without changing the retirement date.",
@@ -129,7 +129,7 @@ const useCases = {
     slug: "home-buying",
     number: "02",
     label: "HOME BUYING",
-    title: "Find the price that fits the rest of your life.",
+    title: "How much house can I afford?",
     question: "Can we afford a $700K home without pausing retirement savings?",
     answer: "Yes—if you put 15% down and keep at least $45K in cash.",
     summary: "That keeps a six-month emergency fund and leaves both retirement contributions unchanged. A 20% down payment would stretch cash too thin.",
@@ -311,13 +311,16 @@ function UseCasePage({ useCase }: { useCase: UseCaseKey }) {
     <StandardPage className={`use-case-page ${item.tone}`}>
       <section className={`subhero shell use-case-hero${isRetirementStressTest ? " stress-test-hero" : ""}`}>
         <div>
-          <Link href="/use-cases" className="back-link">← All questions</Link>
           <p className="section-kicker">{item.number} / {item.label}</p>
           <h1>{item.title}</h1>
           <p className="subhero-copy">
             {isRetirementStressTest
-              ? "See how market drops, inflation, spending, and different retirement dates change your plan—using your accounts and historical returns."
-              : "Ask the question in your own words. Linc checks your accounts, goals, and the things that could change the answer."}
+              ? "Connect your financial accounts and ask Linc how market drops, inflation, spending, and different retirement dates change your plan. See the numbers and assumptions behind every answer."
+              : useCase === "retirement"
+                ? "Connect your financial accounts and ask Linc when you could retire and how long your money could last. See the numbers and assumptions behind every answer."
+                : useCase === "home"
+                  ? "Connect your financial accounts and ask Linc how much house you can afford while keeping cash on hand and saving for retirement. See the numbers and assumptions behind every answer."
+                  : "Connect your financial accounts and ask Linc your money questions in plain English. See the numbers and assumptions behind every answer."}
           </p>
           {isRetirementStressTest ? (
             <>
@@ -339,22 +342,29 @@ function UseCasePage({ useCase }: { useCase: UseCaseKey }) {
               </div>
             </>
           ) : (
-            <MarketingGetStartedButton className="button button-primary" csOverrideId="cta-start-free-trial-hero" />
+            <div className="case-trial-actions">
+              <MarketingGetStartedButton className="button button-primary" trackingLocation={`${item.slug}_hero`} csOverrideId="cta-start-free-trial-hero" />
+              <p className="microcopy"><TrialPriceLine /></p>
+              <p className="hero-reassurance">Read-only connections. Your financial data is never used to train AI.</p>
+            </div>
           )}
         </div>
         <article className="use-case-answer">
           <div className="miniature-top"><span className="brand-mark small">L</span><b>SAMPLE DECISION</b><span>ILLUSTRATIVE</span></div>
           <p>{item.question}</p>
-          <div className="use-case-verdict"><small>THE SHORT ANSWER</small><h2>{item.answer}</h2><span>{item.summary}</span></div>
+          <div className="use-case-verdict"><small>THE SHORT ANSWER</small><h2>{item.answer}</h2><details className="answer-details"><summary>See the assumptions</summary><p>{item.summary}</p></details></div>
           <div className="use-case-metrics">{item.metrics.map(([label,value])=><span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
           <div className="use-case-check">∑ &nbsp;Open Show the Math to see the numbers behind the answer.</div>
         </article>
       </section>
       <section className="decision-levers shell"><div className="editorial-heading"><p className="section-kicker">WHAT MOVES THE ANSWER</p><h2>Change one thing. See what happens.</h2></div><div className="lever-grid">{item.levers.map(([title,copy],index)=><article key={title}><span>0{index+1}</span><h3>{title}</h3><p>{copy}</p></article>)}</div></section>
       <section className="case-context dark-band"><div className="shell case-context-inner"><div><p className="section-kicker light">WHAT LINC CHECKS FIRST</p><h2>The numbers that can change the answer.</h2></div><RotatingContextChips items={item.context} /></div></section>
-      <section className="other-cases shell"><span>EXPLORE ANOTHER DECISION</span>{Object.values(useCases).filter((candidate)=>candidate.slug!==item.slug).map((candidate)=><Link href={`/use-cases/${candidate.slug}`} key={candidate.slug}>{candidate.label}<b>→</b></Link>)}</section>
-      {useCase === "retirement" && <RetirementDecisionCrossSell />}
       <PageCta title={`Bring your ${item.label.toLowerCase()} question to Linc.`} csOverrideId="cta-start-free-trial-mid" />
+      <details className="related-decisions shell"><summary>More financial planning questions</summary>
+        <Link href="/use-cases" className="back-link">See all questions →</Link>
+        <section className="other-cases"><span>EXPLORE ANOTHER DECISION</span>{Object.values(useCases).filter((candidate)=>candidate.slug!==item.slug).map((candidate)=><Link href={`/use-cases/${candidate.slug}`} key={candidate.slug}>{candidate.label}<b>→</b></Link>)}</section>
+        {useCase === "retirement" && <RetirementDecisionCrossSell />}
+      </details>
     </StandardPage>
   );
 }
@@ -539,6 +549,10 @@ export function MarketingBlogPage({ ghostPosts }: { ghostPosts: GhostPost[] }) {
       <section className="blog-hero shell">
         <div><p className="section-kicker">THE ASK LINC BLOG</p><h1>Better thinking about <em>money and machines.</em></h1></div>
         <p>Field notes on intelligent finance, retirement decisions, product transparency, and the systems that make AI worth trusting. Start with <Link href="/blog/average-american-savings">what Americans actually have in savings</Link>.</p>
+      </section>
+      <section className="blog-trial-bridge shell" aria-label="Try Ask Linc">
+        <div><h2>What does this mean for your money?</h2><p>Ask a question using your own accounts. See the assumptions and math behind the answer.</p><p><TrialPriceLine /></p></div>
+        <MarketingGetStartedButton className="button button-primary" trackingLocation="blog_intro" csOverrideId="cta-start-free-trial-blog-intro" />
       </section>
       {featured ? (
         <>

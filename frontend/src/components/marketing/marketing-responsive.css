@@ -6,6 +6,53 @@
  * remains unchanged.
  */
 @scope (.marketing-site) {
+  /* One responsive URL per page keeps content and canonicals consistent. */
+  .hero-reassurance { max-width: 540px; margin: 10px 0 0; font-size: 14px; line-height: 1.5; color: #4f5e55; }
+  .hero-search-examples { max-width: 540px; margin: 16px 0 0; font-size: 14px; line-height: 1.5; color: #4f5e55; }
+  .answer-details summary, .product-demo-disclosure summary, .related-decisions > summary {
+    min-height: 44px; padding-block: 12px; cursor: pointer; font-size: 15px; font-weight: 700;
+  }
+  .answer-details p { font-size: 16px; line-height: 1.6; font-weight: 400; }
+  .rotating-hero-card > .hero-example-answer { min-height: 0; }
+  .rotating-hero-card > .hero-example-answer > div { min-width: 0; }
+  .rotating-hero-card > .hero-example-answer > div > p { margin-block: 10px; font-size: 17px; line-height: 1.5; }
+  .rotating-hero-card > .hero-example-answer small { font-size: 12px; font-weight: 700; }
+  .product-demo-disclosure { border-block: 1px solid #ccd1c4; }
+  .related-decisions { padding-block: 20px; }
+  .related-decisions .other-cases { width: 100%; }
+  .blog-trial-bridge { display: flex; gap: 24px; align-items: center; justify-content: space-between; padding: 24px; margin-bottom: 40px; background: #c9f2df; border-radius: 16px; }
+  .blog-trial-bridge h2 { font-size: 28px; }
+  .blog-trial-bridge p { max-width: 620px; font-size: 16px; line-height: 1.5; }
+  .blog-trial-bridge .button { flex-shrink: 0; }
+  :is(.conversion-home, .use-case-page) .site-header { position: sticky; top: 0; z-index: 30; background: #f3f2e9; }
+  .use-case-hero .back-link { margin-bottom: 18px; font-size: 14px; }
+  .case-trial-actions .microcopy { margin-top: 12px; }
+  @media (min-width: 761px) {
+    :scope.conversion-home .hero h1 { font-size: clamp(44px, 4.1vw, 62px); line-height: 1.08; }
+  }
+  @media (max-width: 760px) {
+    :is(.conversion-home, .use-case-page) .nav { height: 68px; }
+    :is(.conversion-home, .use-case-page) .nav-actions .button { min-height: 44px; padding-inline: 12px; font-size: 14px; }
+    :is(.conversion-home, .use-case-page) .brand { font-size: 17px; gap: 6px; }
+    :is(.conversion-home, .use-case-page) .shell { width: calc(100% - 32px); }
+    :scope.conversion-home .hero, .subhero.use-case-hero { padding-block: 28px 36px; gap: 28px; }
+    :scope.conversion-home .hero h1, .subhero.use-case-hero h1 { font-size: clamp(30px, 7.5vw, 44px); line-height: 1.12; margin-block: 14px; }
+    :scope.conversion-home .hero-subhead, .use-case-hero .subhero-copy { font-size: 16px; line-height: 1.5; margin-block: 12px; }
+    :scope.conversion-home .hero-actions { margin-top: 20px; }
+    :scope.conversion-home .hero-actions .button, .case-trial-actions .button { width: 100%; min-height: 52px; justify-content: center; }
+    .case-trial-actions .button { margin-top: 16px; }
+    :scope.conversion-home .hero-actions { display: block; }
+    :scope.conversion-home .rotating-hero-card > .hero-example-question { min-height: 0; }
+    :scope.conversion-home .rotating-hero-card > .hero-example-answer { min-height: 0; padding-block: 16px; }
+    :scope.conversion-home .section, :scope.use-case-page .decision-levers, :scope.use-case-page .case-context { padding-block: 40px; }
+    .use-case-page .use-case-answer { padding: 20px; }
+    .use-case-page .use-case-verdict h2 { font-size: 25px; }
+    .use-case-page .use-case-metrics { gap: 8px; }
+    .use-case-page .use-case-metrics b { font-size: 22px; overflow-wrap: anywhere; }
+    .blog-trial-bridge { flex-direction: column; align-items: stretch; }
+    .blog-trial-bridge .button { justify-content: center; min-height: 52px; }
+    :scope.use-case-page .stress-test-benefits { display: none; }
+  }
   /* Grid/flex children must be allowed to shrink. Long headings and URLs
      should wrap instead of forcing a page wider than the viewport. */
   :where(
