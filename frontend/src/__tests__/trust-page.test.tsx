@@ -56,8 +56,13 @@ describe("trust page", () => {
     unmount();
 
     render(<FeaturesPageRoute />);
-    const sampleAnswer = screen.getByText(/can we afford a \$700k home without pausing retirement savings/i).closest("article");
-    expect(sampleAnswer).not.toBeNull();
-    expect(within(sampleAnswer as HTMLElement).getByRole("link", { name: /show the math/i })).toHaveAttribute("href", "/trust");
+    const coverageSection = screen
+      .getByRole("heading", { name: /your whole financial picture stays connected to the answer/i })
+      .closest("section");
+    expect(coverageSection).not.toBeNull();
+    expect(within(coverageSection as HTMLElement).getByRole("link", { name: /show the math/i })).toHaveAttribute(
+      "href",
+      "/trust",
+    );
   });
 });

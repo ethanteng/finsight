@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePricing } from "@/components/PricingProvider";
 import { SiteFooter, SiteHeader } from "./SiteShell";
 import { MarketingGetStartedButton } from "./MarketingGetStartedButton";
-import RotatingHeroExamples from "./RotatingHeroExamples";
+import HeroScreenshotCarousel from "./HeroScreenshotCarousel";
 import StaticProductDemo from "./StaticProductDemo";
 
 const decisions = [
@@ -25,7 +25,7 @@ export default function Home() {
       <section className="hero shell" id="top">
         <div className="hero-copy">
           <div className="eyebrow"><span className="pulse" /> AI FINANCIAL PLANNING</div>
-          <h1>Financial planning that starts <em>with your question.</em></h1>
+          <h1>Financial planning that starts with <em>your question.</em></h1>
           <p className="hero-subhead">
             Ask Linc what you’re trying to decide. It uses your connected financial accounts to work out the answer.
           </p>
@@ -36,7 +36,7 @@ export default function Home() {
           <p className="microcopy">{pricing.trialLine}</p>
         </div>
 
-        <RotatingHeroExamples />
+        <HeroScreenshotCarousel />
       </section>
 
       <section className="proof-strip" aria-label="Product trust signals">

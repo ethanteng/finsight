@@ -27,8 +27,13 @@
   :is(.conversion-home, .use-case-page) .site-header { position: sticky; top: 0; z-index: 30; background: #f3f2e9; }
   .use-case-hero .back-link { margin-bottom: 18px; font-size: 14px; }
   .case-trial-actions .microcopy { margin-top: 12px; }
-  @media (min-width: 761px) {
-    :scope.conversion-home .hero h1 { font-size: clamp(44px, 4.1vw, 62px); line-height: 1.08; }
+  /* The homepage hero headline uses the same type scale as the /features
+     subhero so the two entry points read as one page family. */
+  @media (min-width: 641px) {
+    :scope.conversion-home .hero h1 { font-size: clamp(55px, 6.2vw, 86px); line-height: .98; letter-spacing: -.065em; }
+  }
+  @media (max-width: 640px) {
+    :scope.conversion-home .hero h1 { font-size: clamp(36px, 10.5vw, 42px); line-height: 1.04; letter-spacing: -.052em; }
   }
   @media (max-width: 760px) {
     :is(.conversion-home, .use-case-page) .nav { height: 68px; }
@@ -36,15 +41,18 @@
     :is(.conversion-home, .use-case-page) .brand { font-size: 17px; gap: 6px; }
     :is(.conversion-home, .use-case-page) .shell { width: calc(100% - 32px); }
     :scope.conversion-home .hero, .subhero.use-case-hero { padding-block: 28px 36px; gap: 28px; }
-    :scope.conversion-home .hero h1, .subhero.use-case-hero h1 { font-size: clamp(30px, 7.5vw, 44px); line-height: 1.12; margin-block: 14px; }
+    .subhero.use-case-hero h1 { font-size: clamp(30px, 7.5vw, 44px); line-height: 1.12; margin-block: 14px; }
+    :scope.conversion-home .hero h1 { margin-block: 14px; }
     :scope.conversion-home .hero-subhead, .use-case-hero .subhero-copy { font-size: 16px; line-height: 1.5; margin-block: 12px; }
     :scope.conversion-home .hero-answer-promise { font-size: 16px; margin-top: 16px; }
     :scope.conversion-home .hero-actions { margin-top: 20px; }
     :scope.conversion-home .hero-actions .button, .case-trial-actions .button { width: 100%; min-height: 52px; justify-content: center; }
     .case-trial-actions .button { margin-top: 16px; }
     :scope.conversion-home .hero-actions { display: block; }
-    :scope.conversion-home .rotating-hero-card > .hero-example-question { min-height: 0; }
-    :scope.conversion-home .rotating-hero-card > .hero-example-answer { min-height: 0; padding-block: 16px; }
+    :scope.conversion-home .rotating-hero-card > .hero-example-question,
+    :scope.features-page .rotating-hero-card > .hero-example-question { min-height: 0; }
+    :scope.conversion-home .rotating-hero-card > .hero-example-answer,
+    :scope.features-page .rotating-hero-card > .hero-example-answer { min-height: 0; padding-block: 16px; }
     :scope.conversion-home .section, :scope.use-case-page .decision-levers, :scope.use-case-page .case-context { padding-block: 40px; }
     .use-case-page .use-case-answer { padding: 20px; }
     .use-case-page .use-case-verdict h2 { font-size: 25px; }
