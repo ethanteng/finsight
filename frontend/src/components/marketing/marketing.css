@@ -241,7 +241,9 @@ h2 { margin: 0; font-family: var(--font-display); font-size: clamp(42px, 5vw, 65
 .privacy-node b { font-size: 12px; }.privacy-node small { margin-top: 5px; color: #92a197; font-size: 12px; }.flow-arrow { color: var(--lime); }
 .founder-section { display: grid; grid-template-columns: 1fr 1fr; gap: 110px; align-items: center; }
 .founder-statement { position: relative; min-height: 470px; display: flex; flex-direction: column; justify-content: space-between; padding: 50px; border-radius: 28px; background: #cedcfa; }
-.quote-mark { position: absolute; top: 20px; right: 35px; color: rgba(16,35,25,.13); font-family: Georgia,serif; font-size: 150px; line-height: 1; }
+.quote-mark { position: absolute; color: rgba(16,35,25,.13); font-family: Georgia,serif; font-size: 120px; line-height: 1; pointer-events: none; user-select: none; }
+.quote-mark-open { top: 4px; left: 22px; }
+.quote-mark-close { right: 28px; bottom: 0; }
 .founder-statement blockquote { position: relative; margin: 0; max-width: 500px; font-family: Georgia,serif; font-size: 38px; line-height: 1.16; letter-spacing: -.035em; }
 .founder-signature { display: flex; align-items: center; gap: 13px; }
 .founder-avatar { position: relative; display: grid; place-items: center; width: 42px; height: 42px; overflow: hidden; border: 2px solid rgba(16,35,25,.18); border-radius: 50%; background: var(--ink); }
@@ -1316,6 +1318,14 @@ footer { padding-block: 55px 28px; background: #0a1912; color: white; }.footer-i
 .rotating-hero-card > .hero-example-answer { min-height: 330px; align-items: start; padding-block: 27px; animation: hero-example-enter .55s .07s cubic-bezier(.2,.75,.25,1) both; }
 .rotating-hero-card > .hero-example-question strong { font-size: 21px; line-height: 1.28; }
 .rotating-hero-card > .hero-example-answer strong { font-family: var(--font-body); font-size: 17px; font-weight: 600; letter-spacing: -.012em; line-height: 1.58; }
+/* Every question and answer is laid out in the same grid cell, so each block
+   reserves the height of its longest example and the card stops resizing as it
+   rotates. visibility keeps the hidden ones in layout while taking them out of
+   the accessibility tree. A fixed min-height cannot do this: the height needed
+   depends on how the text wraps, which changes with viewport width. */
+.hero-example-stack { display: grid; }
+.hero-example-stack > * { grid-area: 1 / 1; visibility: hidden; }
+.hero-example-stack > [data-active="true"] { visibility: visible; }
 .hero-example-controls { display: grid; grid-template-columns: repeat(3,1fr); border-bottom: 1px solid #d8ddd4; background: #eef0ea; }
 .hero-example-controls button { position: relative; display: flex; min-height: 54px; align-items: center; justify-content: center; gap: 8px; padding: 10px 12px; border: 0; border-right: 1px solid #d1d7ce; background: transparent; color: #68756d; font: inherit; font-size: 12px; font-weight: 750; cursor: pointer; }
 .hero-example-controls button:last-child { border-right: 0; }

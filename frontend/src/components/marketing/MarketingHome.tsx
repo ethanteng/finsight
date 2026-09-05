@@ -168,8 +168,9 @@ export default function Home() {
 
       <section className="section shell founder-section">
         <div className="founder-statement">
-          <span className="quote-mark">“</span>
+          <span className="quote-mark quote-mark-open" aria-hidden="true">“</span>
           <blockquote>The answers sounded convincing. That wasn&apos;t enough for a real financial decision.</blockquote>
+          <span className="quote-mark quote-mark-close" aria-hidden="true">”</span>
           <div className="founder-signature">
             <div className="founder-avatar">
               <Image src="/ethan-teng.jpg" alt="" fill sizes="42px" />
