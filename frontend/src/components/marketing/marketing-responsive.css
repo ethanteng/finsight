@@ -684,8 +684,9 @@
     }
 
     .founder-statement {
-      min-height: 360px;
-      padding: 34px 28px;
+      min-height: 0;
+      gap: 30px;
+      padding: 30px 26px;
     }
 
     .section-cta-link {

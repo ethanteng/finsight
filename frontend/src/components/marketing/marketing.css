@@ -246,7 +246,7 @@ h2 { margin: 0; font-family: var(--font-display); font-size: clamp(42px, 5vw, 65
 .founder-signature { display: flex; align-items: center; gap: 13px; }
 .founder-avatar { position: relative; display: grid; place-items: center; width: 42px; height: 42px; overflow: hidden; border: 2px solid rgba(16,35,25,.18); border-radius: 50%; background: var(--ink); }
 .founder-signature div:last-child { display: flex; flex-direction: column; font-size: 12px; }.founder-signature span { margin-top: 3px; color: #53665b; }
-.founder-story h2 { font-size: clamp(40px,4vw,58px); }.founder-story > p:not(.section-kicker) { color: #5d6a62; font-size: 16px; line-height: 1.65; }.founder-story .text-link { display: inline-block; margin-top: 13px; }
+.founder-story h2 { font-size: clamp(40px,4vw,58px); }.founder-story > p:not(.section-kicker) { max-width: 460px; margin: 22px 0 0; color: #5d6a62; font-size: 17px; line-height: 1.68; }.founder-story .text-link { display: inline-block; margin-top: 22px; }
 
 .pricing-section { max-width: none; padding-block: 76px; background: #e5e4db; }
 .pricing-shell { display: grid; grid-template-columns: .9fr 1.1fr; gap: 110px; align-items: center; }
