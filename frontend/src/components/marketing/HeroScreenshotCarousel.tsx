@@ -21,7 +21,7 @@ const HERO_SHOTS = [
   {
     id: "takeaways",
     ratio: 2000 / 1394,
-    zoom: 1.3,
+    zoom: 1.15,
     pan: "vertical",
     label: "TAKEAWAYS & NEXT STEPS",
     controlLabel: "Takeaways",
