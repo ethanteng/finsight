@@ -345,7 +345,7 @@ footer { padding-block: 55px 28px; background: #0a1912; color: white; }.footer-i
   .orbit-item { min-width: 104px; }.orbit-a { left: -4px; }.orbit-b { right: -4px; }.orbit-c { left: -4px; }.orbit-d { right: -4px; }
   .scenario-tabs { width: 100%; }.scenario-tabs button { flex: 1; padding-inline: 7px; }
   .scenario-chart { margin-inline: 18px; }.scenario-result { grid-template-columns: 1fr; }.scenario-result div:first-child { border-right: 0; border-bottom: 1px solid #d5dbd2; }
-  .privacy-training-promise { align-items: flex-start; flex-direction: column; gap: 7px; }.privacy-flow { flex-direction: column; gap: 10px; padding: 24px 20px; }.privacy-node { width: 100%; padding: 15px 10px; }.flow-arrow { transform: rotate(90deg); }
+  .privacy-training-promise { align-items: flex-start; flex-direction: column; gap: 7px; }.privacy-flow { align-items: stretch; gap: 6px; padding: 18px 11px; }.privacy-node { width: auto; min-width: 0; flex: 1 1 0; padding: 14px 6px; }.privacy-node b,.privacy-node small { overflow-wrap: anywhere; }.flow-arrow { flex: 0 0 auto; align-self: center; }
   .founder-statement { min-height: 420px; padding: 35px 28px; }.founder-statement blockquote { font-size: 32px; }
   .advisor-compare { width: 100%; }.pricing-copy > p.compare-label { width: 100%; font-size: 19px; }.price-card { padding-inline: 25px; box-shadow: 6px 6px 0 var(--ink); }.price-card-top { margin-inline: -25px; }.price { font-size: 70px; }
   .footer-inner { grid-template-columns: 1fr; }.footer-meta { grid-column: auto; }
