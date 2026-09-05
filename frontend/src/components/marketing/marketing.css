@@ -227,7 +227,7 @@ h2 { margin: 0; font-family: var(--font-display); font-size: clamp(42px, 5vw, 65
 .scenario-result span { color: #78837b; font-size: 12px; text-transform: uppercase; }.scenario-result b { font-family: var(--font-display); font-size: 20px; }
 .scenario-note { display: flex; gap: 9px; align-items: center; margin: 18px 28px 25px; color: #52635a; font-size: 12px; }.scenario-note span { display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: var(--mint); color: #176840; }
 
-.privacy-section { padding-block: 115px; background: #10271c; color: white; }
+.privacy-section { padding-block: 78px; background: #10271c; color: white; }
 .privacy-shell { display: grid; grid-template-columns: .8fr 1.2fr; gap: 100px; align-items: center; }
 .privacy-copy h2 { max-width: 520px; }.privacy-copy > p:not(.section-kicker) { max-width: 510px; color: #b4c1b9; font-size: 17px; line-height: 1.65; }
 .privacy-training-promise { display: flex; max-width: 510px; align-items: center; gap: 15px; margin-top: 24px; padding: 16px 18px; border: 1px solid var(--lime); border-radius: 12px; background: rgba(217,255,111,.07); }
@@ -239,9 +239,6 @@ h2 { margin: 0; font-family: var(--font-display); font-size: clamp(42px, 5vw, 65
 .privacy-node.shield-node { border-color: var(--lime); background: rgba(217,255,111,.08); }
 .privacy-icon { display: grid; place-items: center; width: 38px; height: 38px; margin-bottom: 14px; border-radius: 11px; background: var(--lime); color: var(--ink); font-family: var(--font-display); font-weight: 850; }
 .privacy-node b { font-size: 12px; }.privacy-node small { margin-top: 5px; color: #92a197; font-size: 12px; }.flow-arrow { color: var(--lime); }
-.privacy-points { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3,1fr); margin-top: 15px; border-top: 1px solid rgba(255,255,255,.15); }
-.privacy-points span { padding-top: 27px; font-size: 12px; }.privacy-points i { display: inline-grid; place-items: center; width: 19px; height: 19px; margin-right: 8px; border-radius: 50%; background: var(--lime); color: var(--ink); font-size: 12px; font-style: normal; }
-
 .founder-section { display: grid; grid-template-columns: 1fr 1fr; gap: 110px; align-items: center; }
 .founder-statement { position: relative; min-height: 470px; display: flex; flex-direction: column; justify-content: space-between; padding: 50px; border-radius: 28px; background: #cedcfa; }
 .quote-mark { position: absolute; top: 20px; right: 35px; color: rgba(16,35,25,.13); font-family: Georgia,serif; font-size: 150px; line-height: 1; }
@@ -294,7 +291,7 @@ footer { padding-block: 55px 28px; background: #0a1912; color: white; }.footer-i
   .ecosystem-grid article:nth-child(2) { border-right: 0; }
   .ecosystem-grid article:nth-child(n+3) { border-bottom: 0; }
   .ecosystem-grid article:nth-child(3) { padding-left: 0; }
-  .privacy-points { grid-column: auto; }.privacy-shell { grid-template-columns: 1fr; }
+  .privacy-shell { grid-template-columns: 1fr; }
   .privacy-flow { max-width: 680px; }.footer-inner { grid-template-columns: 1fr 1fr; }.footer-meta { grid-column: 1 / -1; flex-direction: row; }
 }
 
@@ -348,7 +345,7 @@ footer { padding-block: 55px 28px; background: #0a1912; color: white; }.footer-i
   .orbit-item { min-width: 104px; }.orbit-a { left: -4px; }.orbit-b { right: -4px; }.orbit-c { left: -4px; }.orbit-d { right: -4px; }
   .scenario-tabs { width: 100%; }.scenario-tabs button { flex: 1; padding-inline: 7px; }
   .scenario-chart { margin-inline: 18px; }.scenario-result { grid-template-columns: 1fr; }.scenario-result div:first-child { border-right: 0; border-bottom: 1px solid #d5dbd2; }
-  .privacy-training-promise { align-items: flex-start; flex-direction: column; gap: 7px; }.privacy-flow { flex-direction: column; }.flow-arrow { transform: rotate(90deg); }.privacy-points { grid-template-columns: 1fr; gap: 0; }.privacy-points span { padding-bottom: 17px; }
+  .privacy-training-promise { align-items: flex-start; flex-direction: column; gap: 7px; }.privacy-flow { flex-direction: column; gap: 10px; padding: 24px 20px; }.privacy-node { width: 100%; padding: 15px 10px; }.flow-arrow { transform: rotate(90deg); }
   .founder-statement { min-height: 420px; padding: 35px 28px; }.founder-statement blockquote { font-size: 32px; }
   .advisor-compare { width: 100%; }.pricing-copy > p.compare-label { width: 100%; font-size: 19px; }.price-card { padding-inline: 25px; box-shadow: 6px 6px 0 var(--ink); }.price-card-top { margin-inline: -25px; }.price { font-size: 70px; }
   .footer-inner { grid-template-columns: 1fr; }.footer-meta { grid-column: auto; }

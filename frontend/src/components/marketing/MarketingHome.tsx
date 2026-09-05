@@ -140,11 +140,6 @@ export default function Home() {
             <span className="flow-arrow">→</span>
             <div className="privacy-node"><span className="privacy-icon">L</span><b>Your answer</b><small>Only what is needed</small></div>
           </div>
-          <div className="privacy-points">
-            <span><i>✓</i> Read-only access</span>
-            <span><i>✓</i> Never used for training</span>
-            <span><i>✓</i> Disconnect anytime</span>
-          </div>
         </div>
       </section>
 
