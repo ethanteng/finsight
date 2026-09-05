@@ -63,6 +63,29 @@ export default function Home() {
         </div>
       </section>
 
+      <section className="section pricing-section" id="pricing">
+        <div className="shell pricing-shell">
+          <div className="pricing-copy">
+            <p className="section-kicker">SIMPLE PRICING</p>
+            <h2>One month free. Then {pricing.label}.</h2>
+            <p>One plan. Full access. Cancel anytime.</p>
+          </div>
+          <article className="price-card" data-cs-override-id="pricing-card-premium">
+            <div className="price-card-top"><span>ONE PLAN. EVERYTHING INCLUDED.</span></div>
+            <div className="price"><sup>{pricing.symbol}</sup>{pricing.amountText}<span>/{pricing.intervalLabel}</span></div>
+            <p>First month free. Full access. Cancel anytime.</p>
+            <ul>
+              <li>Unlimited questions &amp; follow-ups</li>
+              <li>Unlimited connected accounts</li>
+              <li>What-if scenarios</li>
+              <li>Current rates and market context</li>
+              <li>Show the Math on every answer</li>
+            </ul>
+            <MarketingGetStartedButton className="button button-primary price-button" csOverrideId="cta-start-free-trial-pricing-premium" />
+          </article>
+        </div>
+      </section>
+
       <section className="section shell question-to-answer-section" id="decisions">
         <div className="section-heading split-heading">
           <div>
@@ -162,28 +185,6 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="section pricing-section" id="pricing">
-        <div className="shell pricing-shell">
-          <div className="pricing-copy">
-            <p className="section-kicker">SIMPLE PRICING</p>
-            <h2>One month free. Then {pricing.label}.</h2>
-            <p>One plan. Full access. Cancel anytime.</p>
-          </div>
-          <article className="price-card" data-cs-override-id="pricing-card-premium">
-            <div className="price-card-top"><span>ONE PLAN. EVERYTHING INCLUDED.</span></div>
-            <div className="price"><sup>{pricing.symbol}</sup>{pricing.amountText}<span>/{pricing.intervalLabel}</span></div>
-            <p>First month free. Full access. Cancel anytime.</p>
-            <ul>
-              <li>Unlimited questions &amp; follow-ups</li>
-              <li>Unlimited connected accounts</li>
-              <li>What-if scenarios</li>
-              <li>Current rates and market context</li>
-              <li>Show the Math on every answer</li>
-            </ul>
-            <MarketingGetStartedButton className="button button-primary price-button" csOverrideId="cta-start-free-trial-pricing-premium" />
-          </article>
-        </div>
-      </section>
 
       <section className="final-cta">
         <div className="shell final-cta-inner">

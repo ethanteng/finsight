@@ -752,7 +752,7 @@
     }
 
     .price {
-      font-size: clamp(58px, 20vw, 76px);
+      font-size: clamp(48px, 16vw, 62px);
     }
 
     .sub-price-card,
