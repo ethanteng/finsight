@@ -680,8 +680,16 @@
 
     .founder-statement {
       min-height: 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-start;
+      align-items: stretch;
       gap: 30px;
       padding: 30px 26px;
+    }
+
+    .founder-signature {
+      align-self: start;
     }
 
     .section-cta-link {
