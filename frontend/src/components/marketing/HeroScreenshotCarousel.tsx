@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
+import type { CSSProperties } from "react";
 
 const ROTATION_MS = 7000;
 
@@ -82,6 +83,7 @@ export default function HeroScreenshotCarousel() {
       aria-label="Ask Linc product screenshots"
       aria-roledescription="carousel"
       data-paused={isPaused ? "true" : undefined}
+      style={{ "--hero-shot-duration": `${ROTATION_MS}ms` } as CSSProperties}
       ref={cardRef}
       onPointerDown={() => setIsPaused(true)}
       onFocusCapture={() => setIsPaused(true)}
