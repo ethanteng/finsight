@@ -87,15 +87,18 @@ export function pushSignUp({ signupFlow }: SignUpEvent): void {
 
 /**
  * Fired when a visitor runs the retirement model on /retirement-calculator.
- * GTM needs a Custom Event trigger on `retirement_model_run` plus a GA4 tag;
- * without them this push goes nowhere.
+ * GTM needs a Custom Event trigger on `retirement_model_run` plus a GA4 tag
+ * mapping retirement_age and content_type; without them this push goes
+ * nowhere.
  */
 export function pushRetirementModelRun(retirementAge: number): void {
   if (typeof window === 'undefined') return;
 
+  const sourcePage = window.location.pathname;
   pushToDataLayer({
     event: 'retirement_model_run',
-    source_page: window.location.pathname,
+    source_page: sourcePage,
+    content_type: getContentType(sourcePage),
     retirement_age: retirementAge,
   });
 }

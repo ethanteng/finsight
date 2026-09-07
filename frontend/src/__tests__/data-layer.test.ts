@@ -1,6 +1,7 @@
 import {
   pushBeginCheckout,
   pushPurchase,
+  pushRetirementModelRun,
   pushSignUp,
   pushStartFreeClick,
   pushTrialStartedVerified,
@@ -63,6 +64,19 @@ describe("begin_checkout analytics", () => {
       cta_location: "quickplan_cross_sell",
       content_type: "retirement_calculator",
     }));
+  });
+
+  it("classifies the model run the same way the CTA that follows it is classified", () => {
+    window.history.replaceState({}, "", "/retirement-calculator");
+
+    pushRetirementModelRun(62);
+
+    expect(analyticsWindow.dataLayer).toContainEqual({
+      event: "retirement_model_run",
+      source_page: "/retirement-calculator",
+      content_type: "retirement_calculator",
+      retirement_age: 62,
+    });
   });
 });
 
