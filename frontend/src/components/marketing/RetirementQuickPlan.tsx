@@ -10,7 +10,7 @@
  * the page, because that gap is the reason to connect real accounts.
  */
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Bar,
   BarChart,
@@ -86,11 +86,66 @@ interface QuickPlanResult {
   limitations: string[];
 }
 
-const ALLOCATIONS: Array<{ id: AllocationId; label: string; description: string }> = [
+interface AllocationOption {
+  id: AllocationId;
+  label: string;
+  description: string;
+}
+
+/**
+ * Rendered immediately so the form is complete in the first paint — an ad
+ * landing page cannot afford a spinner where its inputs go. `GET /options` is
+ * the authority, though, and `useAllocations` replaces these as soon as it
+ * answers, so a preset changed on the server cannot silently drift from the
+ * form the visitor fills in.
+ */
+const FALLBACK_ALLOCATIONS: AllocationOption[] = [
   { id: "conservative", label: "Conservative", description: "40% US stocks · 50% bonds · 10% cash" },
   { id: "balanced", label: "Balanced", description: "60% US stocks · 35% bonds · 5% cash" },
   { id: "growth", label: "Growth", description: "80% US stocks · 18% bonds · 2% cash" },
 ];
+
+const ALLOCATION_IDS = new Set<string>(FALLBACK_ALLOCATIONS.map((option) => option.id));
+
+function useAllocations(): AllocationOption[] {
+  const [allocations, setAllocations] = useState(FALLBACK_ALLOCATIONS);
+
+  useEffect(() => {
+    // A missing fetch throws synchronously, which no `.catch` on the chain
+    // would see. The fallback presets are already rendered, so there is
+    // nothing to recover.
+    if (typeof fetch !== "function") return;
+
+    let cancelled = false;
+
+    fetch(`${API_URL}/api/retirement-quickplan/options`)
+      .then((response) => (response.ok ? response.json() : null))
+      .then((payload) => {
+        const served = payload?.allocations;
+        if (cancelled || !Array.isArray(served) || served.length === 0) return;
+
+        // The server's own wording, but only for presets this form knows how to
+        // submit — an unrecognised id would render an option the request would
+        // then be rejected for.
+        const usable = served.filter(
+          (option): option is AllocationOption =>
+            typeof option?.id === 'string' &&
+            ALLOCATION_IDS.has(option.id) &&
+            typeof option?.label === 'string' &&
+            typeof option?.description === 'string'
+        );
+        if (usable.length > 0) setAllocations(usable);
+      })
+      // A failed lookup leaves the fallback in place; the form still works.
+      .catch(() => undefined);
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return allocations;
+}
 
 const SOCIAL_SECURITY_AGES = [62, 63, 64, 65, 66, 67, 68, 69, 70];
 
@@ -194,6 +249,7 @@ export function RetirementQuickPlan({
   const [result, setResult] = useState<QuickPlanResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isRunning, setIsRunning] = useState(false);
+  const allocations = useAllocations();
   const resultsRef = useRef<HTMLDivElement | null>(null);
 
   const setField = (field: keyof FormState) => (value: string) =>
@@ -346,7 +402,7 @@ export function RetirementQuickPlan({
               <span>We don&apos;t know what you actually own, and sequence risk depends on it. Pick the closest.</span>
             </legend>
             <div className="qp-allocation-options">
-              {ALLOCATIONS.map((allocation) => (
+              {allocations.map((allocation) => (
                 <label
                   key={allocation.id}
                   className={`qp-allocation-option${form.allocation === allocation.id ? " is-selected" : ""}`}

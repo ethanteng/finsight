@@ -125,3 +125,22 @@ Two consequences worth knowing:
   would stall every other request behind it.
 - Analytics: the page pushes a `retirement_model_run` dataLayer event. GTM needs
   a Custom Event trigger and a GA4 tag for it, or the push goes nowhere.
+- The form's asset-mix presets come from `GET /api/retirement-quickplan/options`
+  at mount, with a hardcoded copy rendered first so an ad landing page never
+  shows a spinner where its inputs go. The server is the authority; a preset
+  changed there cannot silently drift from the form. A failed lookup, or a
+  preset id this form cannot submit, leaves the fallback in place.
+
+## Known ceiling
+
+Every request runs up to four full historical simulations on the shared event
+loop. The rate limit, the result cache and the `setImmediate` yield between
+variants keep that from monopolising the process at landing-page traffic, and
+each simulation is a few hundred milliseconds rather than seconds.
+
+That is adequate for an experiment and not adequate for a promoted page. If
+this graduates from a test — a real ad budget, or a link from the homepage —
+the durable fix is to move the simulation off the request path: a worker thread
+or a small job queue, with the endpoint returning a handle the page polls.
+Doing that now would be building for traffic this page has not yet earned, so
+it is written down rather than built.

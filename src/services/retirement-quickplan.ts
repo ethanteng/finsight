@@ -409,6 +409,20 @@ function buildLimitations(
       'spending is held constant in real terms.',
     'Home equity, rental income, pensions other than the income you entered, and inheritances are not included.',
   ];
+  // Claiming before retiring is unusual but reachable from the form, and the
+  // simulation neither spends nor banks the benefit in those years: it offsets
+  // a withdrawal, and there is no withdrawal yet. Say so rather than let a
+  // visitor assume those payments landed somewhere.
+  if (inputs.socialSecurityAnnual > 0 && inputs.socialSecurityStartAge < inputs.retirementAge) {
+    const earlyYears = inputs.retirementAge - inputs.socialSecurityStartAge;
+    limitations.push(
+      `You claim Social Security at ${inputs.socialSecurityStartAge}, before retiring at ` +
+        `${inputs.retirementAge}. The ${earlyYears === 1 ? 'benefit for that year is' : `benefits for those ${earlyYears} years are`} ` +
+        'not added to the portfolio — this model only uses the benefit to reduce a withdrawal, and no ' +
+        'withdrawals happen before you retire.'
+    );
+  }
+
   const gapYears = inputs.socialSecurityStartAge - inputs.retirementAge;
   if (gapYears > 0) {
     limitations.push(
