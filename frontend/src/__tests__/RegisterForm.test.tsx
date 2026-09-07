@@ -102,6 +102,22 @@ describe('RegisterForm', () => {
       expect(push).not.toHaveBeenCalled();
     });
 
+    it('rejects passwords that fail the advertised complexity rules without calling the API', async () => {
+      global.fetch = jest.fn();
+
+      render(<RegisterForm variant="trial" />);
+      fillForm('password');
+      fireEvent.click(screen.getByRole('button', { name: /Start free trial/i }));
+
+      await waitFor(() =>
+        expect(screen.getByRole('alert')).toHaveTextContent(
+          'Password must be at least 8 characters and include an uppercase letter, a lowercase letter, and a number.',
+        ),
+      );
+      expect(global.fetch).not.toHaveBeenCalled();
+      expect(push).not.toHaveBeenCalled();
+    });
+
     it('surfaces a rejected registration instead of routing onward', async () => {
       global.fetch = jest.fn().mockResolvedValue({
         ok: false,

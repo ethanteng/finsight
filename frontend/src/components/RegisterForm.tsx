@@ -143,6 +143,19 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
       return;
     }
 
+    // Mirror validatePassword() in src/auth/utils.ts so weak passwords fail
+    // before the round-trip — same rules the help text advertises.
+    if (
+      password.length < 8 ||
+      !/[a-z]/.test(password) ||
+      !/[A-Z]/.test(password) ||
+      !/\d/.test(password)
+    ) {
+      setError('Password must be at least 8 characters and include an uppercase letter, a lowercase letter, and a number.');
+      setIsLoading(false);
+      return;
+    }
+
     try {
       const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
