@@ -2,56 +2,71 @@ import type { Metadata } from "next";
 import StructuredData from "@/components/StructuredData";
 import { RetirementQuickPlan } from "@/components/marketing/RetirementQuickPlan";
 import "@/components/marketing/retirement-quickplan.css";
+import {
+  readRetirementAge,
+  retirementHeadline,
+  type RetirementLandingParams,
+} from "@/lib/retirement-landing";
 
 const canonical = "https://asklinc.com/retirement-calculator";
 const description =
   "Answer six questions and run them through Ask Linc's deterministic retirement engine: a century of month-by-month market history, real inflation, and real sequence risk. No chat, no guesswork.";
 
-export const metadata: Metadata = {
-  title: "Can I Retire at 60? Run the Real Model | Ask Linc",
-  description,
-  keywords: [
-    "retirement calculator",
-    "can I retire at 60",
-    "safe withdrawal rate calculator",
-    "sequence of returns risk",
-    "historical retirement simulation",
-    "retirement stress test",
-  ],
-  alternates: { canonical },
-  openGraph: {
-    title: "Can I Retire at 60? Run the Real Model",
+export async function generateMetadata(
+  { searchParams }: { searchParams: Promise<RetirementLandingParams> }
+): Promise<Metadata> {
+  const age = readRetirementAge(await searchParams);
+  const title = `${retirementHeadline(age)} Run the Real Model | Ask Linc`;
+  const socialTitle = `${retirementHeadline(age)} Run the Real Model`;
+
+  return {
+    title,
     description,
-    type: "website",
-    url: canonical,
-    siteName: "Ask Linc",
-    images: [
-      {
-        url: "https://asklinc.com/og-image.jpg",
-        width: 1200,
-        height: 630,
-        alt: "Ask Linc retirement model",
-      },
+    keywords: [
+      "retirement calculator",
+      age === null ? "when can I retire" : `can I retire at ${age}`,
+      "safe withdrawal rate calculator",
+      "sequence of returns risk",
+      "historical retirement simulation",
+      "retirement stress test",
     ],
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: "Can I Retire at 60? Run the Real Model",
-    description,
-    images: ["https://asklinc.com/og-image.jpg"],
-  },
-  robots: {
-    index: true,
-    follow: true,
-    googleBot: {
+    // Every ad variant is the same page with a different question on it, so
+    // they all point at the bare URL rather than splitting its ranking.
+    alternates: { canonical },
+    openGraph: {
+      title: socialTitle,
+      description,
+      type: "website",
+      url: canonical,
+      siteName: "Ask Linc",
+      images: [
+        {
+          url: "https://asklinc.com/og-image.jpg",
+          width: 1200,
+          height: 630,
+          alt: "Ask Linc retirement model",
+        },
+      ],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: socialTitle,
+      description,
+      images: ["https://asklinc.com/og-image.jpg"],
+    },
+    robots: {
       index: true,
       follow: true,
-      "max-video-preview": -1,
-      "max-image-preview": "large",
-      "max-snippet": -1,
+      googleBot: {
+        index: true,
+        follow: true,
+        "max-video-preview": -1,
+        "max-image-preview": "large",
+        "max-snippet": -1,
+      },
     },
-  },
-};
+  };
+}
 
 const applicationSchema = {
   "@context": "https://schema.org",
@@ -80,12 +95,16 @@ const breadcrumbSchema = {
   ],
 };
 
-export default function RetirementCalculatorPage() {
+export default async function RetirementCalculatorPage(
+  { searchParams }: { searchParams: Promise<RetirementLandingParams> }
+) {
+  const age = readRetirementAge(await searchParams);
+
   return (
     <>
       <StructuredData data={applicationSchema} />
       <StructuredData data={breadcrumbSchema} />
-      <RetirementQuickPlan />
+      <RetirementQuickPlan headline={retirementHeadline(age)} initialRetirementAge={age} />
     </>
   );
 }

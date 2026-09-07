@@ -5,23 +5,27 @@ import request from 'supertest';
 const ROUTE_MODULE = '../../routes/retirement-quickplan';
 
 /**
- * The limit is read once at module load, so a test that wants a different one
- * has to reload the module with the environment already set.
+ * Both settings are read once at module load, so a test that wants different
+ * ones has to reload the module with the environment already in place.
  */
-function buildApp(rateLimit?: string) {
-  const previous = process.env.RETIREMENT_QUICKPLAN_RATE_LIMIT;
-  if (rateLimit === undefined) {
-    delete process.env.RETIREMENT_QUICKPLAN_RATE_LIMIT;
-  } else {
-    process.env.RETIREMENT_QUICKPLAN_RATE_LIMIT = rateLimit;
-  }
+function buildApp(rateLimit?: string, trustedProxies?: string) {
+  const previousLimit = process.env.RETIREMENT_QUICKPLAN_RATE_LIMIT;
+  const previousProxies = process.env.RETIREMENT_QUICKPLAN_TRUSTED_PROXIES;
+  const apply = (name: string, value?: string) => {
+    if (value === undefined) delete process.env[name];
+    else process.env[name] = value;
+  };
+
+  apply('RETIREMENT_QUICKPLAN_RATE_LIMIT', rateLimit);
+  apply('RETIREMENT_QUICKPLAN_TRUSTED_PROXIES', trustedProxies);
 
   let router: express.Router;
   jest.isolateModules(() => {
     router = require(ROUTE_MODULE).default;
   });
 
-  process.env.RETIREMENT_QUICKPLAN_RATE_LIMIT = previous;
+  apply('RETIREMENT_QUICKPLAN_RATE_LIMIT', previousLimit);
+  apply('RETIREMENT_QUICKPLAN_TRUSTED_PROXIES', previousProxies);
 
   const app = express();
   app.use(express.json());
@@ -99,6 +103,71 @@ describe('retirement quick plan route', () => {
     expect(second.status).toBe(429);
     expect(second.body.error).toMatch(/Too many requests/);
     expect(second.headers['x-ratelimit-remaining']).toBe('0');
+  });
+
+  it('ignores a caller-supplied X-Forwarded-For prefix', async () => {
+    const limited = buildApp('1');
+
+    // One trusted hop: supertest's own connection is that hop, so the entry it
+    // appends is the caller. A spoofed prefix must not mint a second window.
+    const first = await request(limited)
+      .post('/api/retirement-quickplan')
+      .set('X-Forwarded-For', '9.9.9.9, 203.0.113.7')
+      .send({});
+    const second = await request(limited)
+      .post('/api/retirement-quickplan')
+      .set('X-Forwarded-For', '1.1.1.1, 203.0.113.7')
+      .send({});
+
+    expect(first.status).toBe(400);
+    expect(second.status).toBe(429);
+  });
+
+  it('separates callers the trusted proxy reports as different', async () => {
+    const limited = buildApp('1');
+
+    const first = await request(limited)
+      .post('/api/retirement-quickplan')
+      .set('X-Forwarded-For', '203.0.113.7')
+      .send({});
+    const second = await request(limited)
+      .post('/api/retirement-quickplan')
+      .set('X-Forwarded-For', '198.51.100.4')
+      .send({});
+
+    expect(first.status).toBe(400);
+    expect(second.status).toBe(400);
+  });
+
+  it('falls back to the socket address when the header is shorter than the proxy chain', async () => {
+    // Two trusted hops declared, one entry supplied: the expected chain did not
+    // write this header, so it is not evidence about the caller.
+    const strict = buildApp('1', '2');
+
+    const first = await request(strict)
+      .post('/api/retirement-quickplan')
+      .set('X-Forwarded-For', '9.9.9.9')
+      .send({});
+    const second = await request(strict)
+      .post('/api/retirement-quickplan')
+      .set('X-Forwarded-For', '1.1.1.1')
+      .send({});
+
+    expect(first.status).toBe(400);
+    // Both collapse onto the same socket address rather than each getting a window.
+    expect(second.status).toBe(429);
+  });
+
+  it('keeps the default limit when the environment value is malformed', async () => {
+    // NaN would make every "over the limit" comparison false and quietly leave
+    // the endpoint unmetered.
+    const misconfigured = buildApp('not-a-number');
+
+    const response = await request(misconfigured)
+      .post('/api/retirement-quickplan')
+      .send({ ...SHORT_PLAN, investableAssets: 0 });
+
+    expect(response.headers['x-ratelimit-limit']).toBe('20');
   });
 
   it('does not rate limit the options endpoint', async () => {

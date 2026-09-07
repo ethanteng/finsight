@@ -162,19 +162,35 @@ interface FormState {
   allocation: AllocationId;
 }
 
-const INITIAL_FORM: FormState = {
-  currentAge: "",
-  retirementAge: "60",
-  investableAssets: "",
-  annualSpending: "",
-  annualContributions: "",
-  socialSecurityAnnual: "",
-  socialSecurityStartAge: "67",
-  allocation: "balanced",
-};
+/**
+ * Retirement age is the one field left blank by default. It is the question the
+ * page is asking, and a paid-search visitor arrives with it already answered by
+ * the ad they clicked (`?retirement_age=62`), so prefilling a number nobody
+ * chose would either contradict the headline or quietly become the default
+ * answer for everyone who did not.
+ */
+function initialForm(retirementAge: number | null): FormState {
+  return {
+    currentAge: "",
+    retirementAge: retirementAge === null ? "" : String(retirementAge),
+    investableAssets: "",
+    annualSpending: "",
+    annualContributions: "",
+    socialSecurityAnnual: "",
+    socialSecurityStartAge: "67",
+    allocation: "balanced",
+  };
+}
 
-export function RetirementQuickPlan() {
-  const [form, setForm] = useState<FormState>(INITIAL_FORM);
+export function RetirementQuickPlan({
+  headline,
+  initialRetirementAge,
+}: {
+  /** Resolved on the server from the ad's retirement age, so it is in the first paint. */
+  headline: string;
+  initialRetirementAge: number | null;
+}) {
+  const [form, setForm] = useState<FormState>(() => initialForm(initialRetirementAge));
   const [result, setResult] = useState<QuickPlanResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isRunning, setIsRunning] = useState(false);
@@ -229,7 +245,7 @@ export function RetirementQuickPlan() {
 
       <section className="shell qp-hero">
         <p className="eyebrow"><span className="pulse" aria-hidden="true" /> Retirement model · no account needed</p>
-        <h1>Can I retire at 60?</h1>
+        <h1>{headline}</h1>
         <p className="qp-hero-sub">
           Enter six numbers. We run them through the same deterministic retirement engine Ask Linc
           uses on real accounts — a century of month-by-month market history, real inflation, real
@@ -542,13 +558,31 @@ function QuickPlanResults({ result }: { result: QuickPlanResult }) {
 
       <section className="shell qp-chart-block">
         <div className="qp-chart-copy">
-          <p className="section-kicker">WHAT THIS PORTFOLIO SUPPORTED</p>
+          <p className="section-kicker">WHAT THE PORTFOLIO ALONE SUPPORTED</p>
           <h3>Spending history was willing to fund</h3>
           <p>
             The engine solves, for each level of confidence, the constant inflation-adjusted spending
-            this mix sustained for {inputs.lifeExpectancy - inputs.retirementAge} years. Your plan needs{" "}
-            <strong>{money(primary.firstYearPortfolioWithdrawal)}</strong> a year from the portfolio.
+            this mix sustained for {inputs.lifeExpectancy - inputs.retirementAge} years{" "}
+            <strong>with no other income</strong>. Your plan draws{" "}
+            <strong>{money(primary.firstYearPortfolioWithdrawal)}</strong> from the portfolio in its
+            first year.
           </p>
+          {claimsAfterRetiring ? (
+            <p className="qp-chart-caveat">
+              Social Security is not in this chart, and it is the reason these bars and the survival
+              figure above can look like they disagree. Your plan draws that{" "}
+              {money(primary.firstYearPortfolioWithdrawal)} only until age {inputs.socialSecurityStartAge};
+              after that the portfolio covers{" "}
+              {money(Math.max(0, inputs.annualSpending - inputs.socialSecurityAnnual))}. A flat line
+              across the whole retirement is a harder test than your plan actually faces — the
+              survival figure above is the one that counts your benefit.
+            </p>
+          ) : (
+            <p className="qp-chart-caveat">
+              Your Social Security has already started at this retirement age, so that draw is what
+              the portfolio funds for the whole retirement and this comparison is like for like.
+            </p>
+          )}
           <p className="qp-chart-caveat">
             The solver searches between {percent(sustainableSpending.solverFloorRate)} and{" "}
             {percent(sustainableSpending.solverCeilingRate)} of the portfolio, so a bar at the top of
@@ -576,7 +610,7 @@ function QuickPlanResults({ result }: { result: QuickPlanResult }) {
                 y={primary.firstYearPortfolioWithdrawal}
                 stroke="#b4352b"
                 strokeDasharray="5 4"
-                label={{ value: "your plan", position: "right", fill: "#b4352b", fontSize: 11 }}
+                label={{ value: "first year", position: "right", fill: "#b4352b", fontSize: 11 }}
               />
               <Bar dataKey="value" radius={[6, 6, 0, 0]} isAnimationActive={false}>
                 {sustainableData.map((entry) => (

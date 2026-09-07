@@ -22,7 +22,40 @@ import {
 const router = express.Router();
 
 const WINDOW_MS = 60 * 1000;
-const REQUESTS_PER_WINDOW = parseInt(process.env.RETIREMENT_QUICKPLAN_RATE_LIMIT || '20', 10);
+
+/**
+ * Read a positive integer from the environment, falling back to the default
+ * for anything else. A misconfigured value must not silently disable the
+ * limit: `parseInt` on a typo yields NaN, and every `count > NaN` comparison
+ * is false, so the endpoint would run unmetered with no error anywhere.
+ */
+function positiveIntFromEnv(name: string, fallback: number): number {
+  const parsed = parseInt(process.env[name] ?? '', 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+const REQUESTS_PER_WINDOW = positiveIntFromEnv('RETIREMENT_QUICKPLAN_RATE_LIMIT', 20);
+
+/**
+ * How many proxies sit between a visitor and this process. On Render that is
+ * the platform's single edge; behind an additional CDN it would be two.
+ *
+ * It decides which entry of `X-Forwarded-For` is the caller. The header is a
+ * list the client writes the start of and each proxy appends to, so the
+ * *leftmost* entry is whatever the caller typed and the last `TRUSTED_HOPS`
+ * entries are the ones proxies added. Reading the leftmost would let a caller
+ * mint a fresh rate-limit window per request just by rotating a header value
+ * -- and, on an endpoint that runs several simulations per call, that is the
+ * whole limit defeated.
+ */
+const TRUSTED_HOPS = positiveIntFromEnv('RETIREMENT_QUICKPLAN_TRUSTED_PROXIES', 1);
+
+/**
+ * Ceiling on tracked windows. Distinct source addresses in a minute are far
+ * fewer than this in practice, so the cap only binds under abuse -- and there
+ * it bounds memory instead of letting the map grow with every new key.
+ */
+const MAX_TRACKED_WINDOWS = 10_000;
 
 interface WindowEntry {
   count: number;
@@ -32,26 +65,36 @@ interface WindowEntry {
 const windows = new Map<string, WindowEntry>();
 
 function clientKey(req: Request): string {
+  const socketAddress = req.ip || req.socket?.remoteAddress || 'unknown';
   const forwarded = req.headers['x-forwarded-for'];
-  if (typeof forwarded === 'string' && forwarded.length > 0) {
-    return forwarded.split(',')[0].trim();
+  const header = Array.isArray(forwarded) ? forwarded.join(',') : forwarded;
+  if (typeof header !== 'string' || header.length === 0) {
+    return socketAddress;
   }
-  return req.ip || req.socket?.remoteAddress || 'unknown';
+
+  const hops = header.split(',').map((hop) => hop.trim()).filter(Boolean);
+  // The socket peer is the last trusted hop, so the caller is `TRUSTED_HOPS`
+  // from the right of the list. A header too short for that many hops was not
+  // written by the expected proxy chain, so fall back to the socket address
+  // rather than believe it.
+  const index = hops.length - TRUSTED_HOPS;
+  return index >= 0 && index < hops.length ? hops[index] : socketAddress;
 }
 
 /**
- * Fixed window per IP, with expired entries dropped on the way through so an
- * open endpoint cannot grow the map without bound.
+ * Fixed window per caller. Expired entries are dropped lazily rather than by
+ * sweeping the whole map on every request: a full scan per request is itself
+ * quadratic work under exactly the flood it is meant to survive.
  */
 export function quickPlanRateLimit(req: Request, res: Response, next: express.NextFunction): void {
   const now = Date.now();
-  for (const [key, entry] of windows) {
-    if (now >= entry.resetAt) windows.delete(key);
-  }
 
   const key = clientKey(req);
   let entry = windows.get(key);
   if (!entry || now >= entry.resetAt) {
+    if (!entry && windows.size >= MAX_TRACKED_WINDOWS) {
+      pruneWindows(now);
+    }
     entry = { count: 0, resetAt: now + WINDOW_MS };
     windows.set(key, entry);
   }
@@ -66,6 +109,26 @@ export function quickPlanRateLimit(req: Request, res: Response, next: express.Ne
     return;
   }
   next();
+}
+
+/**
+ * Drop expired windows, and if every window is still live, drop the oldest
+ * ones by reset time. Map preserves insertion order, so the entries created
+ * first are the ones nearest expiry.
+ */
+function pruneWindows(now: number): void {
+  for (const [key, entry] of windows) {
+    if (now >= entry.resetAt) windows.delete(key);
+  }
+  if (windows.size < MAX_TRACKED_WINDOWS) return;
+
+  const overflow = windows.size - Math.floor(MAX_TRACKED_WINDOWS / 2);
+  let dropped = 0;
+  for (const key of windows.keys()) {
+    if (dropped >= overflow) break;
+    windows.delete(key);
+    dropped += 1;
+  }
 }
 
 /** Everything the form needs to render without hardcoding the model's bounds. */

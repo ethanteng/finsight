@@ -18,9 +18,10 @@ list of everything the model had to assume on their behalf.
 | Page | `frontend/src/app/retirement-calculator/page.tsx` |
 | Client component | `frontend/src/components/marketing/RetirementQuickPlan.tsx` |
 | Styles | `frontend/src/components/marketing/retirement-quickplan.css` |
+| Ad-variant helpers | `frontend/src/lib/retirement-landing.ts` |
 | Service | `src/services/retirement-quickplan.ts` |
 | Route | `src/routes/retirement-quickplan.ts` (mounted at `/api/retirement-quickplan`) |
-| Tests | `src/__tests__/unit/retirement-quickplan.test.ts` |
+| Tests | `src/__tests__/unit/retirement-quickplan.test.ts`, `src/__tests__/unit/retirement-quickplan-route.test.ts`, `frontend/src/__tests__/retirement-landing.test.tsx` |
 
 ## What it runs
 
@@ -72,10 +73,50 @@ service drops it.
 on a dark section directly under the charts, because the gap between six numbers
 and real accounts is the reason to connect real accounts.
 
+## Paid-search variants
+
+Google Ads runs a separate ad group per retirement age, so the ad's final URL
+carries the age it was bought on:
+
+```
+https://asklinc.com/retirement-calculator?retirement_age=62
+```
+
+That age becomes the page's `<h1>` and `<title>` (`Can I retire at 62?`) and
+prefills the Retirement age field. With no parameter the page asks the open
+question — `When can I retire?` — and leaves the field blank; a prefilled age
+nobody chose would either contradict the headline or quietly become everyone
+else's default answer. `utm_retirement_age` is accepted as an alias, because a
+campaign built with the utm_ prefix would otherwise fail silently into the
+generic headline.
+
+Anything outside the model's own accepted range (30-95), or anything that is
+not a plain integer, is treated as absent rather than echoed into the page.
+
+Two consequences worth knowing:
+
+- The page is server-rendered per request rather than statically generated.
+  That is deliberate: the headline has to be right in the first paint, both for
+  the visitor and for ad-relevance scoring.
+- Every variant declares the same canonical URL, so ad traffic does not split
+  the page's ranking across parameter permutations.
+
 ## Operational notes
 
-- Rate limited per IP: `RETIREMENT_QUICKPLAN_RATE_LIMIT` requests per minute
-  (default 20).
+- Rate limited per caller: `RETIREMENT_QUICKPLAN_RATE_LIMIT` requests per
+  minute (default 20). A malformed value falls back to the default rather than
+  parsing to NaN, which would make every over-limit comparison false and leave
+  the endpoint unmetered.
+- The caller's address is read from the *right* of `X-Forwarded-For`, not the
+  left. `RETIREMENT_QUICKPLAN_TRUSTED_PROXIES` (default 1) says how many proxies
+  sit in front of this process; raise it if a CDN is added ahead of Render. The
+  leftmost entry is whatever the caller typed, so reading it would let anyone
+  mint a fresh window per request by rotating a header — on an endpoint that
+  runs several simulations per call, that is the whole limit defeated. A header
+  too short for the declared chain falls back to the socket address.
+- Tracked windows are capped (`MAX_TRACKED_WINDOWS`) and pruned only when the
+  cap is reached, rather than sweeping the whole map on every request — a full
+  scan per request is itself quadratic under the flood it exists to survive.
 - Results are deterministic given the normalized inputs and the checked-in
   dataset, so they are cached in-process (bounded at 500 entries, cleared on
   restart — which is also when a new dataset would ship).
