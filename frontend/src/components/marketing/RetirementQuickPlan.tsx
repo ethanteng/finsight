@@ -520,7 +520,9 @@ function QuickPlanResults({ result }: { result: QuickPlanResult }) {
             note={
               claimsAfterRetiring
                 ? `All of it from the portfolio — Social Security starts at ${inputs.socialSecurityStartAge}`
-                : `Your spending less ${money(inputs.socialSecurityAnnual)} of Social Security`
+                : inputs.socialSecurityAnnual > 0
+                  ? `Your spending less ${money(inputs.socialSecurityAnnual)} of Social Security`
+                  : "No Social Security offset in the first year"
             }
           />
           <Stat
