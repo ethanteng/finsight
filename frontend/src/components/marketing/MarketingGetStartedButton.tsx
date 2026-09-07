@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { pushStartFreeClick } from "@/lib/dataLayer";
+import { GET_STARTED_HREF } from "@/lib/site-nav";
 
 /**
  * The primary "Start free" call to action.
@@ -11,8 +12,6 @@ import { pushStartFreeClick } from "@/lib/dataLayer";
  * with no payment details at all — so the "no credit card required" promise in
  * the surrounding copy holds wherever this CTA appears.
  */
-
-export const GET_STARTED_HREF = "/getstarted";
 
 type MarketingGetStartedButtonProps = {
   className?: string;

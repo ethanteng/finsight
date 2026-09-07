@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import MarketingSubpage from "@/components/marketing/MarketingSubpage";
 import { FALLBACK_PRICING } from "@/config/pricing";
 import { TRIAL_CTA_MICROCOPY } from "@/components/marketing/trial-copy";
+import { GET_STARTED_HREF } from "@/lib/site-nav";
 
 describe("financial stress testing landing page", () => {
   beforeEach(() => {
@@ -59,7 +60,7 @@ describe("financial stress testing landing page", () => {
       expect.objectContaining({
         event: "start_free_click",
         cta_location: "retirement_stress_test_hero",
-        destination_page: "/getstarted",
+        destination_page: GET_STARTED_HREF,
       }),
     );
   });

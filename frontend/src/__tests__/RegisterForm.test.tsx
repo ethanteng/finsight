@@ -174,5 +174,27 @@ describe('RegisterForm', () => {
       );
       expect(mockPushSignUp).toHaveBeenCalledWith({ signupFlow: 'paid_checkout' });
     });
+
+    it('attributes a plain /register success as a direct signup', async () => {
+      global.fetch = jest.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          token: 'direct-token',
+          user: { email: 'new@example.com', timeZone: 'America/New_York' },
+        }),
+      });
+
+      render(<RegisterForm />);
+      fillForm();
+      fireEvent.click(screen.getByRole('button', { name: /Create your account/i }));
+
+      await waitFor(() => expect(push).toHaveBeenCalledWith('/verify-email'));
+
+      const body = JSON.parse((global.fetch as jest.Mock).mock.calls[0][1].body as string);
+      expect(body.email).toBe('new@example.com');
+      expect(body).not.toHaveProperty('tier');
+      expect(body).not.toHaveProperty('stripeSessionId');
+      expect(mockPushSignUp).toHaveBeenCalledWith({ signupFlow: 'direct' });
+    });
   });
 });

@@ -7,6 +7,8 @@
  * — and for "purchase", the tag must map transaction_id, value, currency and
  * tier. Conversion events must also be marked as key events in GA4 Admin.
  */
+import { GET_STARTED_HREF } from './site-nav';
+
 interface DataLayerWindow {
   dataLayer?: Array<Record<string, unknown> | unknown[]>;
 }
@@ -52,7 +54,7 @@ export function pushStartFreeClick(ctaLocation = 'marketing_cta'): void {
     source_page: sourcePage,
     cta_location: ctaLocation,
     content_type: getContentType(sourcePage),
-    destination_page: '/getstarted',
+    destination_page: GET_STARTED_HREF,
   });
 }
 

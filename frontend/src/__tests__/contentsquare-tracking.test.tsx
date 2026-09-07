@@ -5,6 +5,7 @@ import MarketingSubpage from "@/components/marketing/MarketingSubpage";
 import IntegrationsPage from "@/components/marketing/IntegrationsPage";
 import TrustPage from "@/components/marketing/TrustPage";
 import { SiteHeader } from "@/components/marketing/SiteShell";
+import { GET_STARTED_HREF } from "@/lib/site-nav";
 
 function directive(policy: string, name: string): string {
   const found = policy
@@ -160,6 +161,6 @@ describe("Contentsquare element ids", () => {
       "cta-start-free-trial-mid",
       "cta-start-free-trial-footer",
     ]);
-    ctas.forEach((cta) => expect(cta).toHaveAttribute("href", "/getstarted"));
+    ctas.forEach((cta) => expect(cta).toHaveAttribute("href", GET_STARTED_HREF));
   });
 });
