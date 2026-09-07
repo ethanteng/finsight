@@ -78,7 +78,7 @@ describe("marketing review fixes", () => {
     expect(signInLink).toHaveAttribute("href", "/login");
     expect(signInLink.closest(".nav-actions")).not.toBeNull();
     expect(signInLink.closest(".nav-links")).toBeNull();
-    expect(retirementLink).toHaveAttribute("href", "/retirement-answers");
+    expect(retirementLink).toHaveAttribute("href", "/retirement-calculator");
     expect(retirementLink.closest(".nav-links")).not.toBeNull();
     expect(compareLink).toHaveAttribute("href", "/vs");
     expect(compareLink.closest(".nav-links")).not.toBeNull();
@@ -97,7 +97,7 @@ describe("marketing review fixes", () => {
     const mobileMenu = screen.getByLabelText("Mobile navigation");
     expect(within(mobileMenu).getByRole("link", { name: "How It Works" })).toHaveAttribute("href", "/features");
     expect(within(mobileMenu).getByRole("link", { name: "What You Can Ask" })).toHaveAttribute("href", "/use-cases");
-    expect(within(mobileMenu).getByRole("link", { name: "Retirement" })).toHaveAttribute("href", "/retirement-answers");
+    expect(within(mobileMenu).getByRole("link", { name: "Retirement" })).toHaveAttribute("href", "/retirement-calculator");
     expect(within(mobileMenu).getByRole("link", { name: "Compare" })).toHaveAttribute("href", "/vs");
     expect(within(mobileMenu).getByRole("link", { name: "Pricing" })).toHaveAttribute("href", "/pricing");
     expect(within(mobileMenu).queryByRole("link", { name: "About" })).not.toBeInTheDocument();
