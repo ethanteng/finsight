@@ -41,9 +41,10 @@ describe("financial stress testing landing page", () => {
     expect(within(benefits).getByText("Try different retirement dates")).toBeInTheDocument();
 
     expect(screen.getByText(TRIAL_CTA_MICROCOPY)).toBeInTheDocument();
-    // The CTA no longer promises a subscription that bills itself.
+    // The CTA carries the trial promise alone now: no reassurance line beneath
+    // it, and no claim that the trial bills itself when it ends.
+    expect(screen.queryByText(/read-only connections.*never used to train ai/i)).not.toBeInTheDocument();
     expect(screen.queryByText(FALLBACK_PRICING.trialLine)).not.toBeInTheDocument();
-    expect(screen.getByText(/read-only connections.*never used to train ai/i)).toBeInTheDocument();
     const heroCta = container.querySelector<HTMLButtonElement>(
       '[data-cs-override-id="cta-start-free-trial-hero"]',
     );

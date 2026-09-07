@@ -337,7 +337,6 @@ function UseCasePage({ useCase }: { useCase: UseCaseKey }) {
                 />
                 <p className="stress-test-cta-proof">
                   <strong>{TRIAL_CTA_MICROCOPY}</strong>
-                  <span>Read-only connections. Your financial data is never used to train AI.</span>
                 </p>
               </div>
             </>
@@ -345,7 +344,6 @@ function UseCasePage({ useCase }: { useCase: UseCaseKey }) {
             <div className="case-trial-actions">
               <MarketingGetStartedButton className="button button-primary" trackingLocation={`${item.slug}_hero`} csOverrideId="cta-start-free-trial-hero" />
               <p className="microcopy">{TRIAL_CTA_MICROCOPY}</p>
-              <p className="hero-reassurance">Read-only connections. Your financial data is never used to train AI.</p>
             </div>
           )}
         </div>

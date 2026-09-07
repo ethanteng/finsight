@@ -7,7 +7,6 @@
  */
 @scope (.marketing-site) {
   /* One responsive URL per page keeps content and canonicals consistent. */
-  .hero-reassurance { max-width: 540px; margin: 10px 0 0; font-size: 14px; line-height: 1.5; color: #4f5e55; }
   .answer-details summary, .product-demo-disclosure summary, .related-decisions > summary {
     min-height: 44px; padding-block: 12px; cursor: pointer; font-size: 15px; font-weight: 700;
   }
