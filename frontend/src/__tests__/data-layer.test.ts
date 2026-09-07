@@ -52,6 +52,18 @@ describe("begin_checkout analytics", () => {
       content_type: "retirement_answers_hub",
     }));
   });
+
+  it("classifies the calculator separately from the guides it sits beside", () => {
+    window.history.replaceState({}, "", "/retirement-calculator");
+
+    pushBeginCheckout("quickplan_cross_sell");
+
+    expect(analyticsWindow.dataLayer).toContainEqual(expect.objectContaining({
+      source_page: "/retirement-calculator",
+      cta_location: "quickplan_cross_sell",
+      content_type: "retirement_calculator",
+    }));
+  });
 });
 
 describe("free-signup funnel analytics", () => {

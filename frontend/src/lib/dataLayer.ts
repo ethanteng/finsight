@@ -22,6 +22,10 @@ function pushToDataLayer(payload: Record<string, unknown>): void {
 
 function getContentType(pathname: string): string {
   if (pathname === '/retirement-answers') return 'retirement_answers_hub';
+  // Its own type rather than the generic bucket: this is the page the header's
+  // Retirement link and paid search both land on, and a CTA taken after running
+  // the model is a different visitor from one who read a guide.
+  if (pathname === '/retirement-calculator') return 'retirement_calculator';
   if (/^\/can-i-retire-(at|with)-/.test(pathname)) return 'retirement_answer';
   return 'marketing_page';
 }
