@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import GetStartedForm from '../../components/GetStartedForm';
+import RegisterForm from '../../components/RegisterForm';
 
 export const metadata: Metadata = {
   title: 'Start Your Free Trial | Ask Linc',
@@ -11,5 +11,5 @@ export const metadata: Metadata = {
 };
 
 export default function GetStartedPage() {
-  return <GetStartedForm />;
+  return <RegisterForm variant="trial" />;
 }
