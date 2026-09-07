@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePricing } from "@/components/PricingProvider";
 import { SiteFooter, SiteHeader } from "./SiteShell";
-import { MarketingGetStartedButton } from "./MarketingGetStartedButton";
+import { MarketingGetStartedButton, TRIAL_CTA_MICROCOPY } from "./MarketingGetStartedButton";
 import HeroScreenshotCarousel from "./HeroScreenshotCarousel";
 import StaticProductDemo from "./StaticProductDemo";
 
@@ -32,7 +32,7 @@ export default function Home() {
           <div className="hero-actions">
             <MarketingGetStartedButton className="button button-primary" trackingLocation="homepage_hero" csOverrideId="cta-start-free-trial-hero" />
           </div>
-          <p className="microcopy">{pricing.trialLineShort}</p>
+          <p className="microcopy">{TRIAL_CTA_MICROCOPY}</p>
         </div>
 
         <HeroScreenshotCarousel />
