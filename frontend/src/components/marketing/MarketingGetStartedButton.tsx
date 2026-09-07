@@ -13,7 +13,7 @@ import { pushBeginCheckout } from "@/lib/dataLayer";
  */
 
 /** Copy that belongs next to this CTA, so every placement makes the same promise. */
-export const TRIAL_CTA_MICROCOPY = "Try Ask Linc free for 30 days. No credit card required.";
+export const TRIAL_CTA_MICROCOPY = "Try free for 30 days. No credit card required.";
 
 export const GET_STARTED_HREF = "/getstarted";
 
