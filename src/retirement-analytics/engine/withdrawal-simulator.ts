@@ -30,6 +30,16 @@ export interface WithdrawalSimulationOptions {
   withdrawalPolicy?: WithdrawalPolicy;
   /** Annual contribution in today's dollars, applied monthly before withdrawals begin. */
   annualContributionAmount?: number;
+  /**
+   * A COLA-indexed income (Social Security, a pension) that pays the household
+   * directly and so reduces the portfolio withdrawal from `startMonth` onward.
+   * `annualAmount` is in today's dollars and is indexed by the sequence's own
+   * CPI, exactly like the withdrawal it offsets. Income above that month's
+   * spending is dropped rather than reinvested -- the portfolio withdrawal is
+   * floored at zero -- because a saved surplus is an assumption the caller has
+   * not made.
+   */
+  incomeOffset?: { annualAmount: number; startMonth: number };
 }
 
 function validateWithdrawalPolicy(policy: WithdrawalPolicy): void {
@@ -63,6 +73,16 @@ export function simulateWithdrawals(
   if (!Number.isFinite(annualContributionAmount) || annualContributionAmount < 0) {
     throw new Error('Annual contributions must be a finite, non-negative amount');
   }
+  const incomeOffset = options.incomeOffset;
+  if (incomeOffset) {
+    if (!Number.isFinite(incomeOffset.annualAmount) || incomeOffset.annualAmount < 0) {
+      throw new Error('Retirement income must be a finite, non-negative amount');
+    }
+    if (!Number.isFinite(incomeOffset.startMonth) || incomeOffset.startMonth < 0) {
+      throw new Error('Retirement income start month must be a finite, non-negative number of months');
+    }
+  }
+  const incomeStartMonth = incomeOffset ? Math.round(incomeOffset.startMonth) : 0;
   let usEquity = initialPortfolioValue * w.usEquityWeight;
   let intlEquity = initialPortfolioValue * w.internationalEquityWeight;
   let bonds = initialPortfolioValue * w.nominalBondsWeight;
@@ -132,7 +152,16 @@ export function simulateWithdrawals(
         ? portfolioValue / cumulativeInflation
         : portfolioValue;
     }
-    const withdrawalThisMonth = withdrawing ? monthlyWithdrawal : 0;
+    // Income indexed on the same cumulative CPI as the withdrawal it offsets, so
+    // the two stay in the same real units for the whole sequence. It only
+    // applies while withdrawing: before that the household is not drawing on
+    // the portfolio, and this simulation does not bank the difference.
+    const incomeThisMonth = incomeOffset && month >= incomeStartMonth
+      ? (incomeOffset.annualAmount / 12) * cumulativeInflation
+      : 0;
+    const withdrawalThisMonth = withdrawing
+      ? Math.max(0, monthlyWithdrawal - incomeThisMonth)
+      : 0;
     portfolioValue = Math.max(0, portfolioValue - withdrawalThisMonth);
 
     if (portfolioValue <= 0) {

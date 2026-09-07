@@ -14,6 +14,7 @@ import stripeRoutes from './routes/stripe';
 import aiRoutes from './routes/ai';
 import aiPerformanceRoutes from './routes/ai-performance';
 import askRoutes from './routes/ask';
+import retirementQuickPlanRoutes from './routes/retirement-quickplan';
 import { optionalAuth, requireAuth, adminAuth } from './auth/middleware';
 import { assertJwtSecretConfigured } from './auth/utils';
 import { UserTier } from './data/types';
@@ -347,6 +348,10 @@ app.use('/api/finances', financesRoutes);
 app.use('/api/ai', aiRoutes);
 app.use('/ai/performance', aiPerformanceRoutes);
 app.use(askRoutes);
+
+// Public retirement quick-plan calculator for the marketing landing page.
+// Unauthenticated on purpose; it reads no user data and is rate limited per IP.
+app.use('/api/retirement-quickplan', retirementQuickPlanRoutes);
 
 // Setup Stripe routes (webhook route already registered above)
 app.use('/api/stripe', stripeRoutes);
