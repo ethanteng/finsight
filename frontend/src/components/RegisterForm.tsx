@@ -137,7 +137,9 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
     setIsLoading(true);
     setError('');
 
-    if (password !== confirmPassword) {
+    // The trial form drops the confirmation field to shorten signup, so there
+    // is nothing to compare against there.
+    if (!isTrial && password !== confirmPassword) {
       setError('Passwords do not match');
       setIsLoading(false);
       return;
@@ -318,24 +320,26 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
           </p>
         </div>
 
-        <div>
-          <label htmlFor="confirmPassword" className="mb-2 block text-sm font-semibold text-[#29483f]">
-            Confirm password
-          </label>
-          <div className="relative">
-            <LockKeyhole className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[#71857f]" size={18} />
-            <input
-              id="confirmPassword"
-              type="password"
-              autoComplete="new-password"
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              required
-              className={inputClasses}
-              placeholder="Re-enter your password"
-            />
+        {!isTrial && (
+          <div>
+            <label htmlFor="confirmPassword" className="mb-2 block text-sm font-semibold text-[#29483f]">
+              Confirm password
+            </label>
+            <div className="relative">
+              <LockKeyhole className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[#71857f]" size={18} />
+              <input
+                id="confirmPassword"
+                type="password"
+                autoComplete="new-password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                required
+                className={inputClasses}
+                placeholder="Re-enter your password"
+              />
+            </div>
           </div>
-        </div>
+        )}
 
         <button
           type="submit"

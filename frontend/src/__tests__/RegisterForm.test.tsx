@@ -14,7 +14,11 @@ jest.mock('@/lib/dataLayer', () => ({ pushBeginCheckout: jest.fn() }));
 function fillForm(password = 'Password1', confirm = password) {
   fireEvent.change(screen.getByLabelText('Email address'), { target: { value: 'new@example.com' } });
   fireEvent.change(screen.getByLabelText('Password'), { target: { value: password } });
-  fireEvent.change(screen.getByLabelText('Confirm password'), { target: { value: confirm } });
+  // Only the checkout variant asks for confirmation.
+  const confirmField = screen.queryByLabelText('Confirm password');
+  if (confirmField) {
+    fireEvent.change(confirmField, { target: { value: confirm } });
+  }
 }
 
 describe('RegisterForm', () => {
@@ -90,16 +94,20 @@ describe('RegisterForm', () => {
       expect(body).not.toHaveProperty('stripeSessionId');
     });
 
-    it('does not submit mismatched passwords', async () => {
-      global.fetch = jest.fn();
+    it('asks for the password once, with no confirmation field', async () => {
+      global.fetch = jest.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ token: 'trial-token', user: { email: 'new@example.com' } }),
+      });
 
       render(<RegisterForm variant="trial" />);
-      fillForm('Password1', 'Password2');
+      expect(screen.queryByLabelText('Confirm password')).not.toBeInTheDocument();
+
+      // A single password field is still enough to submit.
+      fillForm();
       fireEvent.click(screen.getByRole('button', { name: /Start free trial/i }));
 
-      await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Passwords do not match'));
-      expect(global.fetch).not.toHaveBeenCalled();
-      expect(push).not.toHaveBeenCalled();
+      await waitFor(() => expect(push).toHaveBeenCalledWith('/verify-email'));
     });
 
     it('rejects passwords that fail the advertised complexity rules without calling the API', async () => {
@@ -137,6 +145,20 @@ describe('RegisterForm', () => {
   });
 
   describe('checkout variant (/register)', () => {
+    it('still confirms the password, and blocks a mismatch', async () => {
+      global.fetch = jest.fn();
+
+      render(<RegisterForm />);
+      expect(screen.getByLabelText('Confirm password')).toBeInTheDocument();
+
+      fillForm('Password1', 'Password2');
+      fireEvent.click(screen.getByRole('button', { name: /Create your account/i }));
+
+      await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Passwords do not match'));
+      expect(global.fetch).not.toHaveBeenCalled();
+      expect(push).not.toHaveBeenCalled();
+    });
+
     it('keeps the plain account-creation framing by default', () => {
       render(<RegisterForm />);
 
