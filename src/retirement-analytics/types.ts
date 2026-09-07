@@ -20,6 +20,24 @@ export type WithdrawalPolicy =
 
 export const DEFAULT_WITHDRAWAL_POLICY: WithdrawalPolicy = { type: 'historical_cpi' };
 
+/**
+ * A level real income stream that reduces what the portfolio must fund once it
+ * begins -- Social Security, or a pension with a full cost-of-living
+ * adjustment.
+ *
+ * The amount is stated in today's dollars and indexed by each historical
+ * sequence's own CPI, which is how Social Security's COLA behaves. Income in
+ * excess of that year's spending is not reinvested: the simulation floors the
+ * portfolio withdrawal at zero rather than crediting a surplus it has no basis
+ * to assume the household saves.
+ */
+export interface RetirementIncomeStream {
+  /** Annual amount in today's dollars. Must be finite and non-negative. */
+  annualAmount: number;
+  /** Age at which the income begins. Earlier than `currentAge` means already receiving it. */
+  startAge: number;
+}
+
 // ============================================================================
 // Input Types (Section 2.1)
 // ============================================================================
@@ -40,6 +58,18 @@ export interface RetirementAnalysisInput {
   withdrawalPolicy?: WithdrawalPolicy; // defaults to historical CPI (constant real spending)
   /** Annual pre-withdrawal contribution in today's dollars; defaults to zero. */
   annualContributionAmount?: number;
+
+  /**
+   * Social Security or an equivalent COLA-indexed income that offsets
+   * withdrawals from its own start age. Omitted means the portfolio funds all
+   * retirement spending on its own.
+   *
+   * When this is supplied, `annualWithdrawalAmount` is the household's whole
+   * spending, and `WithdrawalSustainabilityMetrics.withdrawalRate` /
+   * `yearsOfExpenses` continue to describe that gross figure against the
+   * portfolio -- they are not the net draw once this income starts.
+   */
+  retirementIncome?: RetirementIncomeStream;
   
   /**
    * Investment value deliberately left out of this projection because its

@@ -59,6 +59,8 @@ const STATIC_ROUTES: StaticRoute[] = [
   { path: '/prompts/geopolitical-retirement', changeFrequency: 'monthly', priority: 0.7 },
 
   // Standalone tools / high-intent landing pages
+  { path: '/retirement-calculator', changeFrequency: 'monthly', priority: 0.9 },
+
   // Evergreen answer pages (top-level routes, separate from Ghost)
   { path: '/retirement-answers', changeFrequency: 'monthly', priority: 0.9 },
   { path: '/can-i-retire-at-55', changeFrequency: 'monthly', priority: 0.9 },

@@ -135,6 +135,25 @@ export async function analyzeRetirementPortfolio(
         : `Retirement spending rises ${withdrawalPolicy.annualRate * 100}% on each withdrawal anniversary`
   );
 
+  // A COLA-indexed income the household receives directly. It never adds to the
+  // portfolio; it only reduces what the portfolio has to pay out once it starts,
+  // which is why it is expressed to the simulator as a month offset from today.
+  const retirementIncome = input.retirementIncome;
+  if (retirementIncome) {
+    if (!Number.isFinite(retirementIncome.annualAmount) || retirementIncome.annualAmount < 0) {
+      throw new Error('Retirement income must be a finite, non-negative amount');
+    }
+    if (!Number.isFinite(retirementIncome.startAge)) {
+      throw new Error('Retirement income start age must be a finite age');
+    }
+  }
+  const incomeOffset = retirementIncome && retirementIncome.annualAmount > 0
+    ? {
+        annualAmount: retirementIncome.annualAmount,
+        startMonth: Math.max(0, Math.round((retirementIncome.startAge - input.currentAge) * 12)),
+      }
+    : undefined;
+
   // Model the full path from today through life expectancy, including explicit
   // pre-withdrawal contributions when the scenario supplies them.
   const timeline = buildRetirementTimeline(input);
@@ -146,6 +165,15 @@ export async function analyzeRetirementPortfolio(
         : `Portfolio grows for ${yearsToWithdrawalStart} years before withdrawals begin; no additional contributions are assumed`
     );
   }
+  if (incomeOffset) {
+    const startAge = Math.max(input.currentAge, retirementIncome!.startAge);
+    assumptions.push(
+      `$${Math.round(incomeOffset.annualAmount).toLocaleString('en-US')} of annual retirement income begins at age ${startAge}, ` +
+      'rises with each historical sequence\'s CPI, and reduces that year\'s portfolio withdrawal; ' +
+      'income above that year\'s spending is not reinvested'
+    );
+  }
+
   const timelineBucket = snapToHorizonBucket(withdrawalYears);
   const timelineBucketNote = yearsToWithdrawalStart > 0
     ? annualContributionAmount > 0
@@ -188,7 +216,7 @@ export async function analyzeRetirementPortfolio(
       modeledValue,
       sequence,
       input.annualWithdrawalAmount,
-      { withdrawalDelayMonths, withdrawalPolicy, annualContributionAmount }
+      { withdrawalDelayMonths, withdrawalPolicy, annualContributionAmount, incomeOffset }
     )
   );
 
