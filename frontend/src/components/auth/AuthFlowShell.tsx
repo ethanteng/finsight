@@ -6,6 +6,8 @@ interface AuthFlowShellProps {
   eyebrow: string;
   title: string;
   description: string;
+  /** Kicker above the dark panel headline. Signup flows override the default. */
+  asideEyebrow?: string;
   asideTitle: string;
   asideDescription: string;
   benefits: string[];
@@ -16,6 +18,7 @@ export default function AuthFlowShell({
   eyebrow,
   title,
   description,
+  asideEyebrow = 'Secure account access',
   asideTitle,
   asideDescription,
   benefits,
@@ -41,7 +44,7 @@ export default function AuthFlowShell({
             <div className="absolute -right-28 -top-28 h-80 w-80 rounded-full border border-[#cfff68]/20" />
             <div className="absolute -right-10 top-10 h-80 w-80 rounded-full border border-[#cfff68]/10" />
             <div className="relative max-w-xl">
-              <p className="mb-6 text-xs font-bold uppercase tracking-[0.2em] text-[#cfff68]">Secure account access</p>
+              <p className="mb-6 text-xs font-bold uppercase tracking-[0.2em] text-[#cfff68]">{asideEyebrow}</p>
               <h2 className="text-5xl font-semibold leading-[1.04] tracking-[-0.045em]">{asideTitle}</h2>
               <p className="mt-6 max-w-lg text-lg leading-8 text-white/65">{asideDescription}</p>
             </div>
