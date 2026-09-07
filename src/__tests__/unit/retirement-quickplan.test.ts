@@ -129,6 +129,16 @@ describe('quick plan input validation', () => {
     expect(inputs.allocation).toBe('balanced');
   });
 
+  it('extends the default horizon when retirement age meets the usual life expectancy', () => {
+    const inputs = normalizeQuickPlanRequest({
+      ...BASE_REQUEST,
+      currentAge: 90,
+      retirementAge: 95,
+    });
+
+    expect(inputs.lifeExpectancy).toBe(96);
+  });
+
   it('accepts formatted currency strings from the form', () => {
     const inputs = normalizeQuickPlanRequest({
       ...BASE_REQUEST,

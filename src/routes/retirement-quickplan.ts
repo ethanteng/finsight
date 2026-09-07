@@ -64,6 +64,17 @@ interface WindowEntry {
 
 const windows = new Map<string, WindowEntry>();
 
+/**
+ * Identify the caller for the per-window count.
+ *
+ * Reads the hop the trusted proxy chain appended, never the leftmost entry:
+ * when a reverse proxy appends the real peer, everything to the left of it is
+ * whatever the client typed, and believing it lets an attacker rotate
+ * identities around a CPU-heavy unauthenticated endpoint. An over-long value
+ * is rejected too, so a junk header cannot bloat the window map with one
+ * enormous key.
+ */
+const MAX_KEY_LENGTH = 64;
 function clientKey(req: Request): string {
   const socketAddress = req.ip || req.socket?.remoteAddress || 'unknown';
   const forwarded = req.headers['x-forwarded-for'];
@@ -78,7 +89,9 @@ function clientKey(req: Request): string {
   // written by the expected proxy chain, so fall back to the socket address
   // rather than believe it.
   const index = hops.length - TRUSTED_HOPS;
-  return index >= 0 && index < hops.length ? hops[index] : socketAddress;
+  if (index < 0 || index >= hops.length) return socketAddress;
+  const caller = hops[index];
+  return caller.length <= MAX_KEY_LENGTH ? caller : socketAddress;
 }
 
 /**

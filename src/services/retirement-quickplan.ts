@@ -236,8 +236,11 @@ export function normalizeQuickPlanRequest(raw: unknown): RetirementQuickPlanResu
     );
   }
 
+  // The landing-page form does not expose life expectancy, so when it is
+  // omitted we must still clear retirementAge (whose max is 95) rather than
+  // default to 95 and then reject retiring at 95.
   const lifeExpectancy = body.lifeExpectancy == null
-    ? DEFAULT_LIFE_EXPECTANCY
+    ? Math.max(DEFAULT_LIFE_EXPECTANCY, retirementAge + 1)
     : requireNumber('lifeExpectancy', body.lifeExpectancy);
   if (lifeExpectancy <= retirementAge) {
     throw new QuickPlanValidationError(
