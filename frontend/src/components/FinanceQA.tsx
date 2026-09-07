@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { ArrowUp, Calculator, CheckCircle2, Database, Download, FileText, Lightbulb, ListChecks, LoaderCircle, MessageSquarePlus, Sparkles } from 'lucide-react';
 import MarkdownRenderer from './MarkdownRenderer';
 import { useAnalytics } from './Analytics';
+import { trackContentsquareEvent } from '@/lib/contentsquare';
 import Feedback from './Feedback';
 import { ShowTheMathContent, DatabaseSourceSection, downloadShowTheMathAsText, type ShowTheMathData } from './ShowTheMathModal';
 import { formatKeyNumberValue, formatProvenance, type DisplayKeyNumber } from '@/lib/formatKeyNumber';
@@ -270,6 +271,7 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, newDecisionNonc
                   if (data.threadId) setThreadId(data.threadId);
                   if (onNewAnswer) onNewAnswer(questionToAsk, data.answer);
                   trackEvent('answer_received', { answer_length: data.answer.length, user_tier: userTier });
+                  trackContentsquareEvent('answer_received');
                 } else {
                   setError('No answer returned.');
                   trackEvent('question_error', { error: 'No answer returned', user_tier: userTier });
@@ -319,6 +321,7 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, newDecisionNonc
           if (data.threadId) setThreadId(data.threadId);
           if (onNewAnswer) onNewAnswer(questionToAsk, data.answer);
           trackEvent('answer_received', { answer_length: data.answer.length, user_tier: userTier });
+          trackContentsquareEvent('answer_received');
         } else {
           setError('No answer returned.');
           trackEvent('question_error', { error: 'No answer returned', user_tier: userTier });

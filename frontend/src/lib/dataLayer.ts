@@ -7,6 +7,9 @@
  * — and for "purchase", the tag must map transaction_id, value, currency and
  * tier. Conversion events must also be marked as key events in GA4 Admin.
  */
+import { GET_STARTED_HREF } from './site-nav';
+import { trackContentsquareEvent } from './contentsquare';
+
 interface DataLayerWindow {
   dataLayer?: Array<Record<string, unknown> | unknown[]>;
 }
@@ -20,6 +23,10 @@ function pushToDataLayer(payload: Record<string, unknown>): void {
 
 function getContentType(pathname: string): string {
   if (pathname === '/retirement-answers') return 'retirement_answers_hub';
+  // Its own type rather than the generic bucket: this is the page the header's
+  // Retirement link and paid search both land on, and a CTA taken after running
+  // the model is a different visitor from one who read a guide.
+  if (pathname === '/retirement-calculator') return 'retirement_calculator';
   if (/^\/can-i-retire-(at|with)-/.test(pathname)) return 'retirement_answer';
   return 'marketing_page';
 }
@@ -36,6 +43,69 @@ export function pushBeginCheckout(ctaLocation = 'marketing_cta'): void {
     content_type: contentType,
   };
   pushToDataLayer(payload);
+}
+
+/**
+ * Fired when the primary no-card "Start free" CTA sends a visitor into the
+ * account-creation funnel. This is deliberately separate from begin_checkout:
+ * /getstarted does not open Stripe or collect payment details.
+ */
+export function pushStartFreeClick(ctaLocation = 'marketing_cta'): void {
+  if (typeof window === 'undefined') return;
+  trackContentsquareEvent('start_free_click');
+
+  const sourcePage = window.location.pathname;
+  pushToDataLayer({
+    event: 'start_free_click',
+    source_page: sourcePage,
+    cta_location: ctaLocation,
+    content_type: getContentType(sourcePage),
+    destination_page: GET_STARTED_HREF,
+  });
+}
+
+const SIGNUP_FLOWS = ['free_trial', 'paid_checkout', 'direct'] as const;
+export type SignupFlow = (typeof SIGNUP_FLOWS)[number];
+
+export interface SignUpEvent {
+  signupFlow: SignupFlow;
+}
+
+/**
+ * Fired only after /auth/register confirms that an account was created.
+ * `sign_up` is GA4's recommended account-registration event; no user id or
+ * email is included in the analytics payload.
+ */
+export function pushSignUp({ signupFlow }: SignUpEvent): void {
+  if (typeof window === 'undefined') return;
+  trackContentsquareEvent('sign_up');
+  if (signupFlow === 'free_trial') trackContentsquareEvent('sign_up_free_trial');
+
+  pushToDataLayer({
+    event: 'sign_up',
+    method: 'email',
+    source_page: window.location.pathname,
+    signup_flow: signupFlow,
+  });
+}
+
+/**
+ * Fired when a visitor runs the retirement model on /retirement-calculator.
+ * GTM needs a Custom Event trigger on `retirement_model_run` plus a GA4 tag
+ * mapping retirement_age and content_type; without them this push goes
+ * nowhere.
+ */
+export function pushRetirementModelRun(retirementAge: number): void {
+  if (typeof window === 'undefined') return;
+  trackContentsquareEvent('retirement_model_run');
+
+  const sourcePage = window.location.pathname;
+  pushToDataLayer({
+    event: 'retirement_model_run',
+    source_page: sourcePage,
+    content_type: getContentType(sourcePage),
+    retirement_age: retirementAge,
+  });
 }
 
 export function pushViewExamples(): void {

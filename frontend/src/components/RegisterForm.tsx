@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowRight, Check, CircleAlert, CreditCard, LoaderCircle, LockKeyhole, Mail } from 'lucide-react';
 import AuthFlowShell from './auth/AuthFlowShell';
-import { pushBeginCheckout } from '@/lib/dataLayer';
+import { pushBeginCheckout, pushSignUp } from '@/lib/dataLayer';
 import { useDialog } from '@/components/ui/dialog';
 
 interface SubscriptionContext {
@@ -189,6 +189,15 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
       const data = await res.json();
 
       if (res.ok && data.token) {
+        // Registration is the conversion boundary: a form submit or an API
+        // error is intent, but only this response confirms a new account.
+        pushSignUp({
+          signupFlow: isTrial
+            ? 'free_trial'
+            : subscriptionContext
+              ? 'paid_checkout'
+              : 'direct',
+        });
         localStorage.setItem('auth_token', data.token);
         if (data.user) {
           if (data.user.timeZone) {

@@ -1,10 +1,14 @@
 import {
   pushBeginCheckout,
   pushPurchase,
+  pushRetirementModelRun,
+  pushSignUp,
+  pushStartFreeClick,
   pushTrialStartedVerified,
   pushViewExamples,
   pushViewMoreExamples,
 } from "@/lib/dataLayer";
+import { GET_STARTED_HREF } from "@/lib/site-nav";
 
 type AnalyticsWindow = Window & typeof globalThis & {
   dataLayer?: Array<Record<string, unknown> | unknown[]>;
@@ -48,6 +52,65 @@ describe("begin_checkout analytics", () => {
       cta_location: "page_cta",
       content_type: "retirement_answers_hub",
     }));
+  });
+
+  it("classifies the calculator separately from the guides it sits beside", () => {
+    window.history.replaceState({}, "", "/retirement-calculator");
+
+    pushBeginCheckout("quickplan_cross_sell");
+
+    expect(analyticsWindow.dataLayer).toContainEqual(expect.objectContaining({
+      source_page: "/retirement-calculator",
+      cta_location: "quickplan_cross_sell",
+      content_type: "retirement_calculator",
+    }));
+  });
+
+  it("classifies the model run the same way the CTA that follows it is classified", () => {
+    window.history.replaceState({}, "", "/retirement-calculator");
+
+    pushRetirementModelRun(62);
+
+    expect(analyticsWindow.dataLayer).toContainEqual({
+      event: "retirement_model_run",
+      source_page: "/retirement-calculator",
+      content_type: "retirement_calculator",
+      retirement_age: 62,
+    });
+  });
+});
+
+describe("free-signup funnel analytics", () => {
+  const analyticsWindow = window as AnalyticsWindow;
+
+  beforeEach(() => {
+    analyticsWindow.dataLayer = [];
+    window.history.replaceState({}, "", "/can-i-retire-at-60");
+  });
+
+  it("tracks Start free CTA intent without calling it a checkout", () => {
+    pushStartFreeClick("answer_product_bridge");
+
+    expect(analyticsWindow.dataLayer).toEqual([{
+      event: "start_free_click",
+      source_page: "/can-i-retire-at-60",
+      cta_location: "answer_product_bridge",
+      content_type: "retirement_answer",
+      destination_page: GET_STARTED_HREF,
+    }]);
+  });
+
+  it("uses GA4's recommended event after email account creation", () => {
+    window.history.replaceState({}, "", GET_STARTED_HREF);
+
+    pushSignUp({ signupFlow: "free_trial" });
+
+    expect(analyticsWindow.dataLayer).toEqual([{
+      event: "sign_up",
+      method: "email",
+      source_page: GET_STARTED_HREF,
+      signup_flow: "free_trial",
+    }]);
   });
 });
 

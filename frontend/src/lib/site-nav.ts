@@ -1,4 +1,10 @@
 /**
+ * Destination of the primary "Start free" CTA. Kept here so the marketing
+ * button href and the start_free_click analytics payload cannot drift.
+ */
+export const GET_STARTED_HREF = '/getstarted';
+
+/**
  * `csOverrideId` is the Contentsquare `data-cs-override-id` for the link.
  * It pins the element's identity independent of its position in the DOM, so
  * a markup change cannot silently unbind the goal or heatmap zone attached
@@ -9,7 +15,7 @@
 export const PRIMARY_NAV_LINKS = [
   { href: '/features', label: 'How It Works', csOverrideId: 'nav-features' },
   { href: '/use-cases', label: 'What You Can Ask', csOverrideId: 'nav-what-you-can-ask' },
-  { href: '/retirement-answers', label: 'Retirement', csOverrideId: 'nav-retirement' },
+  { href: '/retirement-calculator', label: 'Retirement', csOverrideId: 'nav-retirement' },
   { href: '/vs', label: 'Compare', csOverrideId: 'nav-compare' },
   { href: '/pricing', label: 'Pricing', csOverrideId: 'nav-pricing' },
 ];
