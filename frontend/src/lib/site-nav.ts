@@ -15,7 +15,7 @@ export const GET_STARTED_HREF = '/getstarted';
 export const PRIMARY_NAV_LINKS = [
   { href: '/features', label: 'How It Works', csOverrideId: 'nav-features' },
   { href: '/use-cases', label: 'What You Can Ask', csOverrideId: 'nav-what-you-can-ask' },
-  { href: '/retirement-answers', label: 'Retirement', csOverrideId: 'nav-retirement' },
+  { href: '/retirement-calculator', label: 'Retirement', csOverrideId: 'nav-retirement' },
   { href: '/vs', label: 'Compare', csOverrideId: 'nav-compare' },
   { href: '/pricing', label: 'Pricing', csOverrideId: 'nav-pricing' },
 ];

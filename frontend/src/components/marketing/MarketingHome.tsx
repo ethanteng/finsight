@@ -13,7 +13,7 @@ const decisions = [
   { label: "BUY A HOME", question: "Can we afford this home without becoming house poor?", lead: "Can we afford this home?", accent: "Without becoming house poor.", tone: "mint", href: "/use-cases/home-buying" },
   { label: "TAKE TIME OFF", question: "Can I take a year off without setting retirement back?", lead: "Can I take a year off?", accent: "Without setting retirement back.", tone: "blue", href: "/use-cases/career-change" },
   { label: "GROW A FAMILY", question: "Can one of us take leave and still afford childcare?", lead: "Can one of us take leave?", accent: "And still afford childcare.", tone: "sand", href: "/use-cases/family-planning" },
-  { label: "RETIRE", question: "Could we retire two years sooner without making the plan too tight?", lead: "Could we retire two years sooner?", accent: "Without making the plan too tight.", tone: "lime", href: "/use-cases/retirement" },
+  { label: "RETIRE", question: "Could we retire two years sooner without making the plan too tight?", lead: "Could we retire two years sooner?", accent: "Without making the plan too tight.", tone: "lime", href: "/retirement-calculator" },
 ];
 
 export default function Home() {

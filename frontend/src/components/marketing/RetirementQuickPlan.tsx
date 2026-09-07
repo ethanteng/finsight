@@ -10,7 +10,7 @@
  * the page, because that gap is the reason to connect real accounts.
  */
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   Bar,
   BarChart,
@@ -241,10 +241,17 @@ function initialForm(retirementAge: number | null): FormState {
 export function RetirementQuickPlan({
   headline,
   initialRetirementAge,
+  children,
 }: {
   /** Resolved on the server from the ad's retirement age, so it is in the first paint. */
   headline: string;
   initialRetirementAge: number | null;
+  /**
+   * Server-rendered evergreen content for the page — the explainer, FAQ and
+   * cluster links. Passed in rather than written here so it stays out of this
+   * client bundle and is in the HTML whether or not the model has been run.
+   */
+  children?: ReactNode;
 }) {
   const [form, setForm] = useState<FormState>(() => initialForm(initialRetirementAge));
   const [result, setResult] = useState<QuickPlanResult | null>(null);
@@ -484,6 +491,8 @@ export function RetirementQuickPlan({
           />
         </div>
       </section>
+
+      {children}
 
       <SiteFooter />
     </main>

@@ -26,9 +26,10 @@ describe("evergreen answer page", () => {
       "href",
       "https://www.ssa.gov/prepare/get-benefits-estimate",
     );
-    expect(screen.getAllByRole("link", { name: "Retirement" }).every(
-      (link) => link.getAttribute("href") === "/retirement-answers",
-    )).toBe(true);
+    // The hub is this page's parent, so its own crumb points there. The header's
+    // "Retirement" link is a separate decision and points at the calculator.
+    expect(within(screen.getByRole("navigation", { name: "Breadcrumb" }))
+      .getByRole("link", { name: "Retirement" })).toHaveAttribute("href", "/retirement-answers");
   });
 
   it("builds Article, breadcrumb, and FAQ structured data for the canonical route", () => {
@@ -132,9 +133,10 @@ describe("evergreen answer page", () => {
       "href",
       "https://www.irs.gov/taxtopics/tc558",
     );
-    expect(screen.getAllByRole("link", { name: "Retirement" }).every(
-      (link) => link.getAttribute("href") === "/retirement-answers",
-    )).toBe(true);
+    // The hub is this page's parent, so its own crumb points there. The header's
+    // "Retirement" link is a separate decision and points at the calculator.
+    expect(within(screen.getByRole("navigation", { name: "Breadcrumb" }))
+      .getByRole("link", { name: "Retirement" })).toHaveAttribute("href", "/retirement-answers");
 
     const schemas = buildAnswerPageSchemas(canIRetireAt55);
     expect(schemas.article).toMatchObject({
@@ -165,9 +167,10 @@ describe("evergreen answer page", () => {
       "href",
       "https://www.ssa.gov/benefits/retirement/planner/applying2.html",
     );
-    expect(screen.getAllByRole("link", { name: "Retirement" }).every(
-      (link) => link.getAttribute("href") === "/retirement-answers",
-    )).toBe(true);
+    // The hub is this page's parent, so its own crumb points there. The header's
+    // "Retirement" link is a separate decision and points at the calculator.
+    expect(within(screen.getByRole("navigation", { name: "Breadcrumb" }))
+      .getByRole("link", { name: "Retirement" })).toHaveAttribute("href", "/retirement-answers");
 
     const schemas = buildAnswerPageSchemas(canIRetireAt60);
     expect(schemas.article).toMatchObject({
@@ -193,9 +196,10 @@ describe("evergreen answer page", () => {
       "href",
       "https://www.ssa.gov/benefits/medicare/medicare-premiums.html",
     );
-    expect(screen.getAllByRole("link", { name: "Retirement" }).every(
-      (link) => link.getAttribute("href") === "/retirement-answers",
-    )).toBe(true);
+    // The hub is this page's parent, so its own crumb points there. The header's
+    // "Retirement" link is a separate decision and points at the calculator.
+    expect(within(screen.getByRole("navigation", { name: "Breadcrumb" }))
+      .getByRole("link", { name: "Retirement" })).toHaveAttribute("href", "/retirement-answers");
 
     const schemas = buildAnswerPageSchemas(canIRetireWithThreeMillion);
     expect(schemas.article).toMatchObject({

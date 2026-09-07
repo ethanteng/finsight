@@ -800,3 +800,226 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* ------------------------------------------------- evergreen page content */
+/*
+ * The explainer, FAQ and cluster links below the cross-sell. These are always
+ * in the HTML, unlike the results, so they carry the page's crawlable content.
+ */
+
+.quickplan-page .qp-explainer {
+  padding-block: 84px 0;
+  max-width: 900px;
+}
+
+.quickplan-page .qp-explainer h2,
+.quickplan-page .qp-tests h2,
+.quickplan-page .qp-faq h2,
+.quickplan-page .qp-related h2 {
+  margin: 14px 0 18px;
+  font-family: var(--font-display);
+  font-size: clamp(30px, 3.4vw, 42px);
+  font-weight: 660;
+  line-height: 1.1;
+  letter-spacing: -0.045em;
+}
+
+.quickplan-page .qp-explainer-lede {
+  max-width: 680px;
+  margin: 0;
+  color: #4f5e55;
+  font-size: 17px;
+  line-height: 1.68;
+}
+
+.quickplan-page .qp-explainer-steps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 20px;
+  margin: 36px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.quickplan-page .qp-explainer-steps li {
+  padding: 22px 24px;
+  border: 1px solid #d9ddd3;
+  border-radius: 18px;
+  background: var(--cream);
+}
+
+.quickplan-page .qp-explainer-steps b {
+  display: block;
+  margin-bottom: 12px;
+  color: #8a9488;
+  font-family: var(--font-display);
+  font-size: 13px;
+  letter-spacing: 0.08em;
+}
+
+.quickplan-page .qp-explainer-steps strong {
+  display: block;
+  margin-bottom: 8px;
+  font-family: var(--font-display);
+  font-size: 19px;
+  font-weight: 750;
+  letter-spacing: -0.02em;
+}
+
+.quickplan-page .qp-explainer-steps p {
+  margin: 0;
+  color: #55635a;
+  font-size: 14.5px;
+  line-height: 1.65;
+}
+
+.quickplan-page .qp-tests {
+  padding-block: 72px 0;
+  max-width: 900px;
+}
+
+.quickplan-page .qp-tests-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+  margin: 26px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.quickplan-page .qp-tests-list li {
+  padding: 20px 22px;
+  border: 1px solid #e0e3da;
+  border-radius: 16px;
+  background: #f6f5ec;
+}
+
+.quickplan-page .qp-tests-list strong {
+  display: block;
+  margin-bottom: 7px;
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 750;
+  letter-spacing: -0.02em;
+}
+
+.quickplan-page .qp-tests-list p {
+  margin: 0;
+  color: #55635a;
+  font-size: 14.5px;
+  line-height: 1.65;
+}
+
+.quickplan-page .qp-tests-note {
+  margin: 20px 0 0;
+  color: #74807a;
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.quickplan-page .qp-faq {
+  padding-block: 72px 0;
+  max-width: 900px;
+}
+
+.quickplan-page .qp-faq-list {
+  margin-top: 24px;
+  border-top: 1px solid #d9ddd3;
+}
+
+.quickplan-page .qp-faq-list details {
+  border-bottom: 1px solid #d9ddd3;
+}
+
+.quickplan-page .qp-faq-list summary {
+  padding: 20px 0;
+  cursor: pointer;
+  list-style: none;
+}
+
+.quickplan-page .qp-faq-list summary::-webkit-details-marker {
+  display: none;
+}
+
+.quickplan-page .qp-faq-list summary h3 {
+  display: inline;
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 19px;
+  font-weight: 750;
+  letter-spacing: -0.025em;
+}
+
+.quickplan-page .qp-faq-list summary::after {
+  content: "+";
+  float: right;
+  margin-left: 16px;
+  color: #8a9488;
+  font-size: 20px;
+  line-height: 1;
+}
+
+.quickplan-page .qp-faq-list details[open] summary::after {
+  content: "–";
+}
+
+.quickplan-page .qp-faq-list details p {
+  max-width: 720px;
+  margin: 0 0 22px;
+  color: #55635a;
+  font-size: 15.5px;
+  line-height: 1.7;
+}
+
+.quickplan-page .qp-related {
+  padding-block: 72px 96px;
+  max-width: 900px;
+}
+
+.quickplan-page .qp-related-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin: 24px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.quickplan-page .qp-related-list a {
+  display: block;
+  padding: 18px 20px;
+  border: 1px solid #d9ddd3;
+  border-radius: 14px;
+  background: var(--cream);
+  color: inherit;
+  text-decoration: none;
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+
+.quickplan-page .qp-related-list a:hover {
+  border-color: #8a9488;
+  transform: translateY(-2px);
+}
+
+.quickplan-page .qp-related-list strong {
+  display: block;
+  margin-bottom: 5px;
+  font-family: var(--font-display);
+  font-size: 16.5px;
+  font-weight: 750;
+  letter-spacing: -0.02em;
+}
+
+.quickplan-page .qp-related-list span {
+  color: #55635a;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+@media (max-width: 900px) {
+  .quickplan-page .qp-explainer-steps,
+  .quickplan-page .qp-tests-list,
+  .quickplan-page .qp-related-list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
