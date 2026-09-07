@@ -2,6 +2,7 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import MarketingSubpage from "@/components/marketing/MarketingSubpage";
 import { FALLBACK_PRICING } from "@/config/pricing";
+import { TRIAL_CTA_MICROCOPY } from "@/components/marketing/trial-copy";
 
 describe("financial stress testing landing page", () => {
   beforeEach(() => {
@@ -39,7 +40,9 @@ describe("financial stress testing landing page", () => {
     expect(within(benefits).getByText("Change inflation and spending")).toBeInTheDocument();
     expect(within(benefits).getByText("Try different retirement dates")).toBeInTheDocument();
 
-    expect(screen.getByText(FALLBACK_PRICING.trialLine)).toBeInTheDocument();
+    expect(screen.getByText(TRIAL_CTA_MICROCOPY)).toBeInTheDocument();
+    // The CTA no longer promises a subscription that bills itself.
+    expect(screen.queryByText(FALLBACK_PRICING.trialLine)).not.toBeInTheDocument();
     expect(screen.getByText(/read-only connections.*never used to train ai/i)).toBeInTheDocument();
     const heroCta = container.querySelector<HTMLButtonElement>(
       '[data-cs-override-id="cta-start-free-trial-hero"]',

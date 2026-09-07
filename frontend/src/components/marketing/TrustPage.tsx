@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { MarketingGetStartedButton } from "./MarketingGetStartedButton";
-import { TrialPriceLine } from "./TrialPriceLine";
+import { TRIAL_CTA_MICROCOPY } from "./trial-copy";
 import { PageCta, SiteFooter, SiteHeader } from "./SiteShell";
 
 const answerLayers = [
@@ -65,7 +65,7 @@ export default function TrustPage() {
             <MarketingGetStartedButton className="button button-primary" trackingLocation="trust_hero" csOverrideId="cta-start-free-trial-hero" />
             <Link className="text-link" href="#how-it-works">See how an answer is built ↓</Link>
           </div>
-          <p className="microcopy"><TrialPriceLine /></p>
+          <p className="microcopy">{TRIAL_CTA_MICROCOPY}</p>
         </div>
 
         <article className="trust-audit-card" aria-label="Illustrative Ask Linc answer with checks">

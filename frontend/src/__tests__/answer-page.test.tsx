@@ -1,6 +1,7 @@
 import { render, screen, within } from "@testing-library/react";
 import AnswerPage from "@/components/marketing/AnswerPage";
 import { FALLBACK_PRICING } from "@/config/pricing";
+import { TRIAL_CTA_MICROCOPY } from "@/components/marketing/trial-copy";
 import { buildAnswerPageSchemas, canIRetireAt55, canIRetireAt60, canIRetireWithOneMillion, canIRetireWithThreeMillion, canIRetireWithTwoMillion } from "@/lib/answer-pages";
 
 describe("evergreen answer page", () => {
@@ -104,7 +105,9 @@ describe("evergreen answer page", () => {
     expect(screen.getByText("Custom income scenario footnote")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Custom product bridge heading" })).toBeInTheDocument();
     // The price line comes from the live subscription price, not the page data.
-    expect(screen.getByText(FALLBACK_PRICING.trialLine)).toBeInTheDocument();
+    expect(screen.getByText(TRIAL_CTA_MICROCOPY)).toBeInTheDocument();
+    // The CTA no longer promises a subscription that bills itself.
+    expect(screen.queryByText(FALLBACK_PRICING.trialLine)).not.toBeInTheDocument();
   });
 
   it("renders the age-55 timeline, planning scenarios, and official sources", () => {

@@ -4,7 +4,8 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePricing } from "@/components/PricingProvider";
 import { SiteFooter, SiteHeader } from "./SiteShell";
-import { MarketingGetStartedButton, TRIAL_CTA_MICROCOPY } from "./MarketingGetStartedButton";
+import { MarketingGetStartedButton } from "./MarketingGetStartedButton";
+import { TRIAL_CTA_MICROCOPY } from "./trial-copy";
 import HeroScreenshotCarousel from "./HeroScreenshotCarousel";
 import StaticProductDemo from "./StaticProductDemo";
 

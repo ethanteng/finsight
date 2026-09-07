@@ -12,9 +12,6 @@ import { pushBeginCheckout } from "@/lib/dataLayer";
  * the surrounding copy holds wherever this CTA appears.
  */
 
-/** Copy that belongs next to this CTA, so every placement makes the same promise. */
-export const TRIAL_CTA_MICROCOPY = "Try free for 30 days. No credit card required.";
-
 export const GET_STARTED_HREF = "/getstarted";
 
 type MarketingGetStartedButtonProps = {

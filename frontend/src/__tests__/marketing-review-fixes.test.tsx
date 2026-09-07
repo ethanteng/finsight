@@ -7,7 +7,7 @@ import FeaturesPageRoute from "@/app/features/page";
 import { MarketingContactForm } from "@/components/marketing/MarketingContactForm";
 import MarketingHome from "@/components/marketing/MarketingHome";
 import { FALLBACK_PRICING } from "@/config/pricing";
-import { TRIAL_CTA_MICROCOPY } from "@/components/marketing/MarketingGetStartedButton";
+import { TRIAL_CTA_MICROCOPY } from "@/components/marketing/trial-copy";
 import IntegrationsPage from "@/components/marketing/IntegrationsPage";
 import { SiteHeader } from "@/components/marketing/SiteShell";
 import { USE_CASE_LINKS } from "@/lib/site-nav";
