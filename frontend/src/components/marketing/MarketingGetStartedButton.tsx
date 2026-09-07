@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { pushBeginCheckout } from "@/lib/dataLayer";
+import { pushStartFreeClick } from "@/lib/dataLayer";
+import { GET_STARTED_HREF } from "@/lib/site-nav";
 
 /**
  * The primary "Start free" call to action.
@@ -11,8 +12,6 @@ import { pushBeginCheckout } from "@/lib/dataLayer";
  * with no payment details at all — so the "no credit card required" promise in
  * the surrounding copy holds wherever this CTA appears.
  */
-
-export const GET_STARTED_HREF = "/getstarted";
 
 type MarketingGetStartedButtonProps = {
   className?: string;
@@ -42,10 +41,7 @@ export function MarketingGetStartedButton({
       className={className}
       href={GET_STARTED_HREF}
       data-cs-override-id={csOverrideId}
-      // Still reported as begin_checkout so the existing GTM triggers and GA4
-      // key events keep measuring this step of the funnel. The click no longer
-      // opens Stripe, so the event name now reads as "entered signup".
-      onClick={() => pushBeginCheckout(trackingLocation)}
+      onClick={() => pushStartFreeClick(trackingLocation)}
     >
       Start free
     </Link>

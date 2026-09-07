@@ -1,4 +1,10 @@
 /**
+ * Destination of the primary "Start free" CTA. Kept here so the marketing
+ * button href and the start_free_click analytics payload cannot drift.
+ */
+export const GET_STARTED_HREF = '/getstarted';
+
+/**
  * `csOverrideId` is the Contentsquare `data-cs-override-id` for the link.
  * It pins the element's identity independent of its position in the DOM, so
  * a markup change cannot silently unbind the goal or heatmap zone attached

@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import RegisterForm from '@/components/RegisterForm';
 import { USER_TIME_ZONE_KEY } from '@/lib/browser-time-zone';
+import { pushSignUp } from '@/lib/dataLayer';
 
 const push = jest.fn();
 let searchParams = new URLSearchParams();
@@ -9,7 +10,9 @@ jest.mock('next/navigation', () => ({
   useRouter: () => ({ push }),
   useSearchParams: () => searchParams,
 }));
-jest.mock('@/lib/dataLayer', () => ({ pushBeginCheckout: jest.fn() }));
+jest.mock('@/lib/dataLayer', () => ({ pushBeginCheckout: jest.fn(), pushSignUp: jest.fn() }));
+
+const mockPushSignUp = jest.mocked(pushSignUp);
 
 function fillForm(password = 'Password1', confirm = password) {
   fireEvent.change(screen.getByLabelText('Email address'), { target: { value: 'new@example.com' } });
@@ -70,6 +73,7 @@ describe('RegisterForm', () => {
 
       expect(localStorage.getItem('auth_token')).toBe('trial-token');
       expect(localStorage.getItem(USER_TIME_ZONE_KEY)).toBe('America/New_York');
+      expect(mockPushSignUp).toHaveBeenCalledWith({ signupFlow: 'free_trial' });
     });
 
     it('ignores checkout context on the URL rather than quietly charging a trial signup', async () => {
@@ -133,6 +137,7 @@ describe('RegisterForm', () => {
       );
       expect(push).not.toHaveBeenCalled();
       expect(localStorage.getItem('auth_token')).toBeNull();
+      expect(mockPushSignUp).not.toHaveBeenCalled();
     });
   });
 
@@ -167,6 +172,29 @@ describe('RegisterForm', () => {
       await waitFor(() =>
         expect(push).toHaveBeenCalledWith(expect.stringContaining('/verify-email?subscription=active')),
       );
+      expect(mockPushSignUp).toHaveBeenCalledWith({ signupFlow: 'paid_checkout' });
+    });
+
+    it('attributes a plain /register success as a direct signup', async () => {
+      global.fetch = jest.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          token: 'direct-token',
+          user: { email: 'new@example.com', timeZone: 'America/New_York' },
+        }),
+      });
+
+      render(<RegisterForm />);
+      fillForm();
+      fireEvent.click(screen.getByRole('button', { name: /Create your account/i }));
+
+      await waitFor(() => expect(push).toHaveBeenCalledWith('/verify-email'));
+
+      const body = JSON.parse((global.fetch as jest.Mock).mock.calls[0][1].body as string);
+      expect(body.email).toBe('new@example.com');
+      expect(body).not.toHaveProperty('tier');
+      expect(body).not.toHaveProperty('stripeSessionId');
+      expect(mockPushSignUp).toHaveBeenCalledWith({ signupFlow: 'direct' });
     });
   });
 });
