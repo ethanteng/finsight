@@ -101,6 +101,29 @@ describe('retirement quick plan route', () => {
     expect(second.headers['x-ratelimit-remaining']).toBe('0');
   });
 
+  it('rate-limits on the rightmost X-Forwarded-For hop, not a spoofed leftmost one', async () => {
+    const limited = buildApp('1');
+
+    const first = await request(limited)
+      .post('/api/retirement-quickplan')
+      .set('X-Forwarded-For', '203.0.113.10, 198.51.100.20')
+      .send({});
+    // Same rightmost hop, different spoofed leftmost identity — still one window.
+    const second = await request(limited)
+      .post('/api/retirement-quickplan')
+      .set('X-Forwarded-For', '203.0.113.99, 198.51.100.20')
+      .send({});
+    // A different rightmost hop gets its own window.
+    const third = await request(limited)
+      .post('/api/retirement-quickplan')
+      .set('X-Forwarded-For', '203.0.113.10, 198.51.100.30')
+      .send({});
+
+    expect(first.status).toBe(400);
+    expect(second.status).toBe(429);
+    expect(third.status).toBe(400);
+  });
+
   it('does not rate limit the options endpoint', async () => {
     const limited = buildApp('1');
 

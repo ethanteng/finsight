@@ -22,7 +22,9 @@ import {
 const router = express.Router();
 
 const WINDOW_MS = 60 * 1000;
-const REQUESTS_PER_WINDOW = parseInt(process.env.RETIREMENT_QUICKPLAN_RATE_LIMIT || '20', 10);
+const parsedRateLimit = parseInt(process.env.RETIREMENT_QUICKPLAN_RATE_LIMIT || '20', 10);
+const REQUESTS_PER_WINDOW =
+  Number.isFinite(parsedRateLimit) && parsedRateLimit > 0 ? parsedRateLimit : 20;
 
 interface WindowEntry {
   count: number;
@@ -31,10 +33,22 @@ interface WindowEntry {
 
 const windows = new Map<string, WindowEntry>();
 
+/**
+ * Identify the caller for the per-IP window.
+ *
+ * Prefer the rightmost X-Forwarded-For hop: when a reverse proxy appends the
+ * real peer, the leftmost entries are client-spoofable and would let an
+ * attacker rotate identities around a CPU-heavy unauthenticated endpoint.
+ * Cap length so a junk header cannot bloat the window map.
+ */
 function clientKey(req: Request): string {
   const forwarded = req.headers['x-forwarded-for'];
   if (typeof forwarded === 'string' && forwarded.length > 0) {
-    return forwarded.split(',')[0].trim();
+    const parts = forwarded.split(',');
+    for (let i = parts.length - 1; i >= 0; i -= 1) {
+      const candidate = parts[i].trim();
+      if (candidate && candidate.length <= 64) return candidate;
+    }
   }
   return req.ip || req.socket?.remoteAddress || 'unknown';
 }
