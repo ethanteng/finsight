@@ -26,7 +26,7 @@ export const metadata: Metadata = {
 
 const useCases = [
   {
-    number: '01', label: 'RETIREMENT', tone: 'mint', href: '/use-cases/retirement',
+    number: '01', label: 'RETIREMENT', tone: 'mint', href: '/retirement-calculator',
     title: 'Know what makes retirement work before you pick the date.',
     question: 'Could we retire two years earlier without making the plan too tight?',
   },
