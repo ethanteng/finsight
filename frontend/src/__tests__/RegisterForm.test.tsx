@@ -28,7 +28,7 @@ describe('RegisterForm', () => {
     it('frames the page around starting a free trial rather than signing back in', () => {
       render(<RegisterForm variant="trial" />);
 
-      expect(screen.getByRole('heading', { name: 'Try Ask Linc free for 30 days.' })).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'Try free for 30 days.' })).toBeInTheDocument();
       expect(screen.getByText('No credit card required')).toBeInTheDocument();
       expect(screen.queryByText('Welcome back.')).not.toBeInTheDocument();
       // Both the header and the form footer offer the existing-account escape hatch.

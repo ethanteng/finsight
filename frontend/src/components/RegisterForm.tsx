@@ -36,7 +36,7 @@ const inputClasses =
 
 const TRIAL_COPY = {
   eyebrow: 'Start your free trial',
-  title: 'Try Ask Linc free for 30 days.',
+  title: 'Try free for 30 days.',
   description: 'Connect your accounts. Ask real questions. Get answers using your actual financial picture.',
   asideEyebrow: 'Your financial decision workspace',
   asideTitle: 'Bring a real decision. Leave with a real answer.',
