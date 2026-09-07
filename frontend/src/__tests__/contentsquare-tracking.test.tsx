@@ -141,11 +141,14 @@ describe("Contentsquare element ids", () => {
     expect(overrideIds(container)).not.toContain("nav-about");
   });
 
-  it("identifies every start-free-trial button on the homepage", () => {
+  it("identifies every start-free CTA on the homepage", () => {
     const { container } = render(<MarketingHome />);
 
-    const ctas = Array.from(container.querySelectorAll("button")).filter((button) =>
-      button.textContent?.includes("Start free trial"),
+    // The CTA is an anchor to /getstarted now, not a button that opened Stripe.
+    // The override ids stay as they are: they are a contract with the
+    // Contentsquare workspace, and renaming one zeroes the goal bound to it.
+    const ctas = Array.from(container.querySelectorAll("a")).filter((cta) =>
+      cta.textContent?.includes("Start free"),
     );
 
     expect(ctas.length).toBeGreaterThan(0);
@@ -157,5 +160,6 @@ describe("Contentsquare element ids", () => {
       "cta-start-free-trial-mid",
       "cta-start-free-trial-footer",
     ]);
+    ctas.forEach((cta) => expect(cta).toHaveAttribute("href", "/getstarted"));
   });
 });

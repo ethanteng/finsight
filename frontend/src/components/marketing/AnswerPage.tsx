@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { AnswerPageData, RetirementMilestone, RetirementScenario, WithdrawalScenario } from "@/lib/answer-pages";
 import { MarketingGetStartedButton } from "./MarketingGetStartedButton";
-import { TrialPriceLine } from "./TrialPriceLine";
+import { TRIAL_CTA_MICROCOPY } from "./trial-copy";
 import { SiteFooter, SiteHeader } from "./SiteShell";
 import { RetirementDecisionCrossSell } from "./RetirementDecisionCrossSell";
 
@@ -234,7 +234,7 @@ export default function AnswerPage({ page }: { page: AnswerPageData }) {
               <h2>{page.productBridge.heading}</h2>
               <p>{page.productBridge.body}</p>
             </div>
-            <div><MarketingGetStartedButton className="button button-primary" trackingLocation="answer_product_bridge" csOverrideId="cta-start-free-trial-mid" /><small><TrialPriceLine /></small></div>
+            <div><MarketingGetStartedButton className="button button-primary" trackingLocation="answer_product_bridge" csOverrideId="cta-start-free-trial-mid" /><small>{TRIAL_CTA_MICROCOPY}</small></div>
           </section>
 
           <section className="answer-faq" aria-labelledby="faq-heading">

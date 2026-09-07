@@ -30,7 +30,7 @@ export function buildComparisons(pricing: Pricing = FALLBACK_PRICING): Compariso
         { dimension: 'Financial context', askLinc: 'Connects the parts of your financial life that could change the decision.', competitor: 'Can use connected financial data, but financial planning is one of many jobs the product supports.' },
         { dimension: 'How the answer is checked', askLinc: 'Show the Math keeps your numbers, assumptions, calculations, checks, and sources attached to the answer.', competitor: 'Can explain reasoning and cite sources, but is not organized around Ask Linc’s financial decision record.' },
         { dimension: 'Important calculations', askLinc: 'Purpose-built financial tools calculate supported scenarios; AI helps understand and explain them.', competitor: 'A general AI environment with tools that vary by task and product surface.' },
-        { dimension: 'Price', askLinc: `${pricing.trialLine} Full product.`, competitor: 'Check ChatGPT for current plans and feature availability.' },
+        { dimension: 'Price', askLinc: `${pricing.trialThenPriceLine} Full product.`, competitor: 'Check ChatGPT for current plans and feature availability.' },
       ],
       relatedLinks: [
         { href: '/trust', label: 'See how Ask Linc checks an answer' },
@@ -57,7 +57,7 @@ export function buildComparisons(pricing: Pricing = FALLBACK_PRICING): Compariso
         { dimension: 'Starting point', askLinc: 'A question: “Can I take a year off without setting retirement back?”', competitor: 'A full financial platform and ongoing advisory experience.' },
         { dimension: 'Planning style', askLinc: 'Pull in only the parts of your financial life that could change the answer, then compare the tradeoffs.', competitor: 'Maintain a broader financial picture and use planning and AI features across the platform.' },
         { dimension: 'Trust model', askLinc: 'Show the numbers, assumptions, calculations, checks, and sources so you can inspect the work.', competitor: 'Purpose-built financial AI with its own computation, advisor, and compliance approach.' },
-        { dimension: 'Price', askLinc: pricing.trialLine, competitor: 'Check Origin for current plans and feature limits.' },
+        { dimension: 'Price', askLinc: pricing.trialThenPriceLine, competitor: 'Check Origin for current plans and feature limits.' },
       ],
       honestTake: 'Choose Origin if you want a broad financial platform. Choose Ask Linc if you want a focused place to answer the consequential question in front of you without first building or maintaining a full financial model.',
       faqs: [
@@ -78,7 +78,7 @@ export function buildComparisons(pricing: Pricing = FALLBACK_PRICING): Compariso
         { dimension: 'Starting point', askLinc: '“What are we trying to decide?”', competitor: '“How should this portfolio be managed or improved?”' },
         { dimension: 'Scope', askLinc: 'The whole financial picture needed for the decision.', competitor: 'Investment-first, with broader planning capabilities around the portfolio.' },
         { dimension: 'Output', askLinc: 'A recommendation, the tradeoffs, what could change the answer, and the math behind it.', competitor: 'Portfolio analysis, investment guidance, and investor-oriented recommendations.' },
-        { dimension: 'Price', askLinc: pricing.trialLine, competitor: 'Check PortfolioPilot for current plans and feature limits.' },
+        { dimension: 'Price', askLinc: pricing.trialThenPriceLine, competitor: 'Check PortfolioPilot for current plans and feature limits.' },
       ],
       honestTake: 'Choose PortfolioPilot when the portfolio itself is the job. Choose Ask Linc when the investment question is one part of a bigger household decision.',
       faqs: [
@@ -98,7 +98,7 @@ export function buildComparisons(pricing: Pricing = FALLBACK_PRICING): Compariso
         { dimension: 'Starting point', askLinc: '“Can we afford this house without becoming house poor?”', competitor: '“Where does our money stand and where is it going?”' },
         { dimension: 'Connected accounts', askLinc: 'Used as inputs to the decision.', competitor: 'Used to organize and manage the household financial picture.' },
         { dimension: 'Output', askLinc: 'What looks workable, what is tight, what could break the plan, and what Linc would change.', competitor: 'Budgets, spending trends, goals, net worth, and a shared view of household finances.' },
-        { dimension: 'Price', askLinc: `${pricing.trialLine} Unlimited questions and accounts.`, competitor: 'Check Monarch for current pricing and promotions.' },
+        { dimension: 'Price', askLinc: `${pricing.trialThenPriceLine} Unlimited questions and accounts.`, competitor: 'Check Monarch for current pricing and promotions.' },
       ],
       honestTake: 'Keep Monarch if tracking and budgeting are the main job. Use Ask Linc when the question changes from “where did the money go?” to “what should we do next?”',
       faqs: [
@@ -118,7 +118,7 @@ export function buildComparisons(pricing: Pricing = FALLBACK_PRICING): Compariso
         { dimension: 'Starting point', askLinc: 'Ask the question first; Linc gathers the relevant context around it.', competitor: 'Build a detailed retirement plan, then explore and compare scenarios within it.' },
         { dimension: 'Retirement', askLinc: 'Retirement stays connected to decisions happening before and around it.', competitor: 'Retirement is the central planning model and product focus.' },
         { dimension: 'Math and scenarios', askLinc: 'Purpose-built calculations and Show the Math make supported scenarios inspectable.', competitor: 'A financial modeling engine supports retirement scenarios and conversational AI guidance.' },
-        { dimension: 'Price', askLinc: pricing.trialLine, competitor: 'Boldin offers free and paid planner options. Check Boldin for current pricing and feature limits.' },
+        { dimension: 'Price', askLinc: pricing.trialThenPriceLine, competitor: 'Boldin offers free and paid planner options. Check Boldin for current pricing and feature limits.' },
       ],
       honestTake: 'Choose Boldin when you want the deepest retirement-planning workspace. Choose Ask Linc when retirement is one consequence of a broader life decision you are trying to make now.',
       faqs: [

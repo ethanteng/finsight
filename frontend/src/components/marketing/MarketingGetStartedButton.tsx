@@ -1,8 +1,18 @@
 "use client";
 
-import { useState } from "react";
+import Link from "next/link";
 import { pushBeginCheckout } from "@/lib/dataLayer";
-import { useDialog } from "@/components/ui/dialog";
+
+/**
+ * The primary "Start free" call to action.
+ *
+ * This used to POST straight to Stripe Checkout, which asked for a card before
+ * the trial began. It now links to /getstarted, where an account is created
+ * with no payment details at all — so the "no credit card required" promise in
+ * the surrounding copy holds wherever this CTA appears.
+ */
+
+export const GET_STARTED_HREF = "/getstarted";
 
 type MarketingGetStartedButtonProps = {
   className?: string;
@@ -27,53 +37,17 @@ export function MarketingGetStartedButton({
   trackingLocation = "marketing_cta",
   csOverrideId,
 }: MarketingGetStartedButtonProps) {
-  const [isLoading, setIsLoading] = useState(false);
-  const { showError, dialog } = useDialog();
-
-  const handleClick = async () => {
-    pushBeginCheckout(trackingLocation);
-    setIsLoading(true);
-
-    try {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
-      const response = await fetch(`${API_URL}/api/stripe/create-checkout-session`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          tier: "premium",
-          successUrl: `${window.location.origin}/payment-success?session_id={CHECKOUT_SESSION_ID}&tier=premium`,
-          cancelUrl: `${window.location.origin}/`,
-        }),
-      });
-
-      if (response.ok) {
-        const { url } = await response.json();
-        window.location.href = url;
-        return;
-      }
-
-      const err = await response.json();
-      void showError(err.error || "Failed to create checkout session. Please try again.");
-    } catch (error) {
-      console.error("Error creating checkout session:", error);
-      void showError("An error occurred. Please try again.");
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   return (
-    <>
-      <button
-        className={className}
-        type="button"
-        data-cs-override-id={csOverrideId}
-        onClick={handleClick}
-        disabled={isLoading}
-      >
-        {isLoading ? "Loading..." : "Start free trial"}
-      </button>
-      {dialog}
-    </>
+    <Link
+      className={className}
+      href={GET_STARTED_HREF}
+      data-cs-override-id={csOverrideId}
+      // Still reported as begin_checkout so the existing GTM triggers and GA4
+      // key events keep measuring this step of the funnel. The click no longer
+      // opens Stripe, so the event name now reads as "entered signup".
+      onClick={() => pushBeginCheckout(trackingLocation)}
+    >
+      Start free
+    </Link>
   );
 }

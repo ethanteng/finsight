@@ -9,6 +9,7 @@ const noindexRoutes = [
   "/app/:path*",
   "/finances/:path*",
   "/forgot-password/:path*",
+  "/getstarted/:path*",
   "/login/:path*",
   "/payment-success/:path*",
   "/profile/:path*",

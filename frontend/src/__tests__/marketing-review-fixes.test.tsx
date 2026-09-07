@@ -7,6 +7,7 @@ import FeaturesPageRoute from "@/app/features/page";
 import { MarketingContactForm } from "@/components/marketing/MarketingContactForm";
 import MarketingHome from "@/components/marketing/MarketingHome";
 import { FALLBACK_PRICING } from "@/config/pricing";
+import { TRIAL_CTA_MICROCOPY } from "@/components/marketing/trial-copy";
 import IntegrationsPage from "@/components/marketing/IntegrationsPage";
 import { SiteHeader } from "@/components/marketing/SiteShell";
 import { USE_CASE_LINKS } from "@/lib/site-nav";
@@ -117,8 +118,10 @@ describe("marketing review fixes", () => {
     const explanation = screen.getByText("Ask Linc what you’re trying to decide. It uses your connected financial accounts to work out the answer.");
     expect(explanation.tagName).toBe("P");
     expect(screen.queryByText("See the numbers and assumptions behind every answer.")).not.toBeInTheDocument();
-    // The hero drops the cancellation clause; the rest of the site keeps it.
-    expect(screen.getByText(FALLBACK_PRICING.trialLineShort)).toBeInTheDocument();
+    // The hero now leads with the card-free trial rather than the price, so
+    // neither priced trial line belongs in it.
+    expect(screen.getByText(TRIAL_CTA_MICROCOPY)).toBeInTheDocument();
+    expect(screen.queryByText(FALLBACK_PRICING.trialLineShort)).not.toBeInTheDocument();
     expect(screen.queryByText(FALLBACK_PRICING.trialLine)).not.toBeInTheDocument();
     expect(screen.queryByText(/Try asking:.*Can I retire early.*How much house can I afford/)).not.toBeInTheDocument();
     expect(screen.queryByText("Read-only connections. Your financial data is never used to train AI.")).not.toBeInTheDocument();

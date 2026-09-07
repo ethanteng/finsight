@@ -16,9 +16,9 @@ type StaticRoute = {
  * Public, indexable marketing pages only.
  *
  * Deliberately EXCLUDED:
- *  - Auth/utility routes (/login, /register, /forgot-password, /reset-password,
- *    /verify-email, /payment-success, /profile) — no search value, and they
- *    dilute crawl budget.
+ *  - Auth/utility routes (/login, /register, /getstarted, /forgot-password,
+ *    /reset-password, /verify-email, /payment-success, /profile) — no search
+ *    value, and they dilute crawl budget.
  *  - Authenticated app routes (/app, /finances, /transactions) — gated content.
  *  - /admin and /sentry-test — internal.
  *  - /privacy-policy — duplicate of /privacy, which carries the canonical.

@@ -23,9 +23,23 @@ export interface Pricing {
   intervalLabel: string;
   /** e.g. "$19/month" */
   label: string;
-  /** e.g. "1 month free, then $19/month. Cancel anytime." */
+  /**
+   * The trial framed alongside the price, e.g.
+   * "Try free for 30 days, no credit card. Then $19/month."
+   *
+   * For places that have to quote the price — a pricing card, a comparison
+   * table's Price row. Plain CTA microcopy uses TRIAL_CTA_MICROCOPY instead,
+   * which carries no price at all.
+   */
+  trialThenPriceLine: string;
+  /**
+   * @deprecated Claims the trial converts to a paid subscription on its own.
+   * The trial no longer collects a card, so nothing auto-bills when it ends.
+   * Only unrouted legacy components still read these; use trialThenPriceLine
+   * or TRIAL_CTA_MICROCOPY.
+   */
   trialLine: string;
-  /** trialLine without the cancellation clause, e.g. "1 month free, then $19/month." */
+  /** @deprecated See trialLine. */
   trialLineShort: string;
   /** Amount formatted for schema.org offers, e.g. "19.00". */
   schemaPrice: string;
@@ -110,6 +124,7 @@ export function buildPricing(input: {
     amountText,
     intervalLabel,
     label,
+    trialThenPriceLine: `Try free for 30 days, no credit card. Then ${label}.`,
     trialLine: `1 month free, then ${label}. Cancel anytime.`,
     trialLineShort: `1 month free, then ${label}.`,
     schemaPrice: input.amount.toFixed(decimals),

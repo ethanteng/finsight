@@ -5,7 +5,7 @@ import { FeatureScenario } from "./FeatureScenario";
 import { MarketingContactForm } from "./MarketingContactForm";
 import { MarketingGetStartedButton } from "./MarketingGetStartedButton";
 import { RotatingContextChips } from "./RotatingContextChips";
-import { TrialPriceLine } from "./TrialPriceLine";
+import { TRIAL_CTA_MICROCOPY } from "./trial-copy";
 import type { GhostPost } from "@/lib/ghost";
 import { getComparison } from "@/lib/comparisons";
 import type { Pricing } from "@/config/pricing";
@@ -336,16 +336,14 @@ function UseCasePage({ useCase }: { useCase: UseCaseKey }) {
                   csOverrideId="cta-start-free-trial-hero"
                 />
                 <p className="stress-test-cta-proof">
-                  <strong><TrialPriceLine /></strong>
-                  <span>Read-only connections. Your financial data is never used to train AI.</span>
+                  <strong>{TRIAL_CTA_MICROCOPY}</strong>
                 </p>
               </div>
             </>
           ) : (
             <div className="case-trial-actions">
               <MarketingGetStartedButton className="button button-primary" trackingLocation={`${item.slug}_hero`} csOverrideId="cta-start-free-trial-hero" />
-              <p className="microcopy"><TrialPriceLine /></p>
-              <p className="hero-reassurance">Read-only connections. Your financial data is never used to train AI.</p>
+              <p className="microcopy">{TRIAL_CTA_MICROCOPY}</p>
             </div>
           )}
         </div>
