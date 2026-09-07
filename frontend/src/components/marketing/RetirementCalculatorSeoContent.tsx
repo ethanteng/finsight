@@ -63,8 +63,9 @@ export function RetirementCalculatorSeoContent() {
           <li>
             <strong>Sequence-of-returns risk</strong>
             <p>
-              Every overlapping window the record can cover, including the 1929, 1966 and 1973
-              starts that define what a bad retirement looks like.
+              Every overlapping window the record can cover, beginning in 1926. A window has to
+              have complete data for your whole plan, so a longer horizon reaches fewer start
+              dates — each result names the first and last it actually tested.
             </p>
           </li>
           <li>

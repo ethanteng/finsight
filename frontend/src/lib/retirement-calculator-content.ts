@@ -34,7 +34,7 @@ export const RETIREMENT_CALCULATOR_FAQ: RetirementCalculatorFaq[] = [
   {
     question: 'What is sequence-of-returns risk?',
     answer:
-      'Two retirements with the same average return can end very differently depending on when the bad years arrive. Withdrawals taken during a decline sell more shares and leave less invested to recover, so an early crash does lasting damage that a late one does not. That is why this calculator replays overlapping windows of real market history from 1926 onward instead of applying one average return: the 1929 crash and the 1966 and 1973 starts are in the record.',
+      'Two retirements with the same average return can end very differently depending on when the bad years arrive. Withdrawals taken during a decline sell more shares and leave less invested to recover, so an early crash does lasting damage that a late one does not. That is why this calculator replays overlapping windows of real market history from 1926 onward instead of applying one average return. Every window has to cover your whole plan with complete data, so how far forward the start dates reach depends on your horizon, and the result names the first and last it tested.',
   },
   {
     question: 'Is this a Monte Carlo retirement simulation?',
