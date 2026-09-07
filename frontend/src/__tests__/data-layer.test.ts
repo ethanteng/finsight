@@ -1,6 +1,8 @@
 import {
   pushBeginCheckout,
   pushPurchase,
+  pushSignUp,
+  pushStartFreeClick,
   pushTrialStartedVerified,
   pushViewExamples,
   pushViewMoreExamples,
@@ -48,6 +50,40 @@ describe("begin_checkout analytics", () => {
       cta_location: "page_cta",
       content_type: "retirement_answers_hub",
     }));
+  });
+});
+
+describe("free-signup funnel analytics", () => {
+  const analyticsWindow = window as AnalyticsWindow;
+
+  beforeEach(() => {
+    analyticsWindow.dataLayer = [];
+    window.history.replaceState({}, "", "/can-i-retire-at-60");
+  });
+
+  it("tracks Start free CTA intent without calling it a checkout", () => {
+    pushStartFreeClick("answer_product_bridge");
+
+    expect(analyticsWindow.dataLayer).toEqual([{
+      event: "start_free_click",
+      source_page: "/can-i-retire-at-60",
+      cta_location: "answer_product_bridge",
+      content_type: "retirement_answer",
+      destination_page: "/getstarted",
+    }]);
+  });
+
+  it("uses GA4's recommended event after email account creation", () => {
+    window.history.replaceState({}, "", "/getstarted");
+
+    pushSignUp({ signupFlow: "free_trial" });
+
+    expect(analyticsWindow.dataLayer).toEqual([{
+      event: "sign_up",
+      method: "email",
+      source_page: "/getstarted",
+      signup_flow: "free_trial",
+    }]);
   });
 });
 

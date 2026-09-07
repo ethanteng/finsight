@@ -45,22 +45,21 @@ describe("financial stress testing landing page", () => {
     // it, and no claim that the trial bills itself when it ends.
     expect(screen.queryByText(/read-only connections.*never used to train ai/i)).not.toBeInTheDocument();
     expect(screen.queryByText(FALLBACK_PRICING.trialLine)).not.toBeInTheDocument();
-    const heroCta = container.querySelector<HTMLButtonElement>(
+    const heroCta = container.querySelector<HTMLAnchorElement>(
       '[data-cs-override-id="cta-start-free-trial-hero"]',
     );
     expect(heroCta).not.toBeNull();
 
     (window as typeof window & { dataLayer: Array<Record<string, unknown>> }).dataLayer = [];
-    (global.fetch as jest.Mock).mockResolvedValue({
-      ok: false,
-      json: async () => ({ error: "Checkout unavailable in this test" }),
-    });
-    await userEvent.setup().click(heroCta as HTMLButtonElement);
+    // Keep jsdom on this page while still exercising the Link's click handler.
+    heroCta?.addEventListener("click", (event) => event.preventDefault());
+    await userEvent.setup().click(heroCta as HTMLAnchorElement);
 
     expect((window as typeof window & { dataLayer: Array<Record<string, unknown>> }).dataLayer).toContainEqual(
       expect.objectContaining({
-        event: "begin_checkout",
+        event: "start_free_click",
         cta_location: "retirement_stress_test_hero",
+        destination_page: "/getstarted",
       }),
     );
   });

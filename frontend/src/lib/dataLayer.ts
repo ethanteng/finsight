@@ -38,6 +38,47 @@ export function pushBeginCheckout(ctaLocation = 'marketing_cta'): void {
   pushToDataLayer(payload);
 }
 
+/**
+ * Fired when the primary no-card "Start free" CTA sends a visitor into the
+ * account-creation funnel. This is deliberately separate from begin_checkout:
+ * /getstarted does not open Stripe or collect payment details.
+ */
+export function pushStartFreeClick(ctaLocation = 'marketing_cta'): void {
+  if (typeof window === 'undefined') return;
+
+  const sourcePage = window.location.pathname;
+  pushToDataLayer({
+    event: 'start_free_click',
+    source_page: sourcePage,
+    cta_location: ctaLocation,
+    content_type: getContentType(sourcePage),
+    destination_page: '/getstarted',
+  });
+}
+
+const SIGNUP_FLOWS = ['free_trial', 'paid_checkout', 'direct'] as const;
+export type SignupFlow = (typeof SIGNUP_FLOWS)[number];
+
+export interface SignUpEvent {
+  signupFlow: SignupFlow;
+}
+
+/**
+ * Fired only after /auth/register confirms that an account was created.
+ * `sign_up` is GA4's recommended account-registration event; no user id or
+ * email is included in the analytics payload.
+ */
+export function pushSignUp({ signupFlow }: SignUpEvent): void {
+  if (typeof window === 'undefined') return;
+
+  pushToDataLayer({
+    event: 'sign_up',
+    method: 'email',
+    source_page: window.location.pathname,
+    signup_flow: signupFlow,
+  });
+}
+
 export function pushViewExamples(): void {
   if (typeof window === 'undefined') return;
 
