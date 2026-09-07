@@ -8,6 +8,7 @@
  * tier. Conversion events must also be marked as key events in GA4 Admin.
  */
 import { GET_STARTED_HREF } from './site-nav';
+import { trackContentsquareEvent } from './contentsquare';
 
 interface DataLayerWindow {
   dataLayer?: Array<Record<string, unknown> | unknown[]>;
@@ -21,6 +22,7 @@ function pushToDataLayer(payload: Record<string, unknown>): void {
 }
 
 function getContentType(pathname: string): string {
+  if (pathname === '/retirement-calculator') return 'retirement_calculator';
   if (pathname === '/retirement-answers') return 'retirement_answers_hub';
   if (/^\/can-i-retire-(at|with)-/.test(pathname)) return 'retirement_answer';
   return 'marketing_page';
@@ -47,6 +49,7 @@ export function pushBeginCheckout(ctaLocation = 'marketing_cta'): void {
  */
 export function pushStartFreeClick(ctaLocation = 'marketing_cta'): void {
   if (typeof window === 'undefined') return;
+  trackContentsquareEvent('start_free_click');
 
   const sourcePage = window.location.pathname;
   pushToDataLayer({
@@ -72,6 +75,8 @@ export interface SignUpEvent {
  */
 export function pushSignUp({ signupFlow }: SignUpEvent): void {
   if (typeof window === 'undefined') return;
+  trackContentsquareEvent('sign_up');
+  if (signupFlow === 'free_trial') trackContentsquareEvent('sign_up_free_trial');
 
   pushToDataLayer({
     event: 'sign_up',
@@ -88,11 +93,13 @@ export function pushSignUp({ signupFlow }: SignUpEvent): void {
  */
 export function pushRetirementModelRun(retirementAge: number): void {
   if (typeof window === 'undefined') return;
+  trackContentsquareEvent('retirement_model_run');
 
   pushToDataLayer({
     event: 'retirement_model_run',
     source_page: window.location.pathname,
     retirement_age: retirementAge,
+    content_type: getContentType(window.location.pathname),
   });
 }
 

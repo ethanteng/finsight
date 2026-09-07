@@ -1,5 +1,6 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { trackContentsquareEvent } from '@/lib/contentsquare';
 import { RetirementQuickPlan } from '@/components/marketing/RetirementQuickPlan';
 import {
   MAX_RETIREMENT_AGE,
@@ -7,6 +8,8 @@ import {
   readRetirementAge,
   retirementHeadline,
 } from '@/lib/retirement-landing';
+
+jest.mock('@/lib/contentsquare', () => ({ trackContentsquareEvent: jest.fn() }));
 
 jest.mock('recharts', () => ({
   BarChart: ({ children }: { children?: React.ReactNode }) => <div>{children}</div>,
@@ -62,6 +65,67 @@ describe('retirement landing page', () => {
 
   afterEach(() => {
     global.fetch = originalFetch;
+    jest.clearAllMocks();
+  });
+
+  it('counts one start and deduplicates per-field validation errors', () => {
+    const { container } = render(<RetirementQuickPlan headline="When can I retire?" initialRetirementAge={null} />);
+    fireEvent.change(screen.getByLabelText('Current age'), { target: { value: '50' } });
+    fireEvent.change(screen.getByLabelText('Current age'), { target: { value: '51' } });
+    fireEvent.invalid(screen.getByLabelText('Retirement age'));
+    fireEvent.invalid(screen.getByLabelText('Investment assets today'));
+    expect(trackContentsquareEvent).toHaveBeenNthCalledWith(1, 'retirement_calculator_started');
+    expect(trackContentsquareEvent).toHaveBeenNthCalledWith(2, 'retirement_validation_error');
+    expect(trackContentsquareEvent).toHaveBeenCalledTimes(2);
+    expect(container.querySelector('.qp-results')).toBeNull();
+  });
+
+  it.each(['api', 'network'] as const)('does not count a %s failure as a successful result', async (failure) => {
+    global.fetch = jest.fn().mockImplementation((_url, init) => {
+      if (!init?.method) return Promise.resolve({ ok: true, json: async () => ({ allocations: [] }) });
+      return failure === 'api'
+        ? Promise.resolve({ ok: false, json: async () => ({ error: 'Test failure' }) })
+        : Promise.reject(new Error('offline'));
+    });
+    const { container } = render(<RetirementQuickPlan headline="When can I retire?" initialRetirementAge={60} />);
+    fireEvent.submit(container.querySelector('form')!);
+    await screen.findByRole('alert');
+    expect(trackContentsquareEvent).toHaveBeenCalledWith('retirement_model_requested');
+    expect(trackContentsquareEvent).toHaveBeenCalledWith(failure === 'api' ? 'retirement_api_error' : 'retirement_request_error');
+    expect(trackContentsquareEvent).not.toHaveBeenCalledWith('retirement_model_run');
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Run the model' })).toBeEnabled());
+  });
+
+  it('counts each committed result once, including a deliberate rerun, under Strict Mode', async () => {
+    const result = {
+      inputs: { retirementAge: 60, socialSecurityStartAge: 67, socialSecurityAnnual: 20000, annualSpending: 50000, lifeExpectancy: 95 },
+      allocation: { label: 'Balanced' },
+      history: { firstMonth: '1926-01', lastMonth: '2025-12', firstStartMonth: '1926-01', horizonYears: 45, sequencesTested: 100 },
+      primary: {
+        id: 'primary', label: 'Your plan', survivalRate: 0.9, sequencesTested: 100, sequencesSurvived: 90,
+        projectedPortfolioAtRetirement: 1000000, firstYearPortfolioWithdrawal: 50000, firstYearWithdrawalRate: 0.05,
+        primaryObservation: 'Example', tradeoffs: { upside: 'Example', downside: 'Example' }, characteristics: {},
+      },
+      alternatives: [], sustainableSpending: { p10: 30000, p25: 40000, p50: 50000, p75: 60000, p90: 70000, solverFloorRate: 0.01, solverCeilingRate: 0.15 },
+      limitations: [], assumptions: [],
+    };
+    global.fetch = jest.fn().mockImplementation((_url, init) => Promise.resolve({
+      ok: true, json: async () => init?.method ? { ...result } : { allocations: [] },
+    }));
+    const originalScroll = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = jest.fn();
+    try {
+      const { container } = render(<React.StrictMode><RetirementQuickPlan headline="When can I retire?" initialRetirementAge={60} /></React.StrictMode>);
+      expect(trackContentsquareEvent).not.toHaveBeenCalledWith('retirement_model_run');
+      fireEvent.submit(container.querySelector('form')!);
+      await screen.findByText(/Based on the numbers you entered/);
+      const successes = () => jest.mocked(trackContentsquareEvent).mock.calls.filter(([event]) => event === 'retirement_model_run');
+      await waitFor(() => expect(successes()).toHaveLength(1));
+      fireEvent.submit(container.querySelector('form')!);
+      await waitFor(() => expect(successes()).toHaveLength(2));
+    } finally {
+      Element.prototype.scrollIntoView = originalScroll;
+    }
   });
 
   it('shows the ad\'s question and prefills the age it was bought on', () => {

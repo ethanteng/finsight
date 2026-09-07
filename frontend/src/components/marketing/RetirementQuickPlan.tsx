@@ -24,6 +24,7 @@ import {
 import { MarketingGetStartedButton } from "./MarketingGetStartedButton";
 import { SiteFooter, SiteHeader } from "./SiteShell";
 import { pushRetirementModelRun } from "@/lib/dataLayer";
+import { trackContentsquareEvent } from "@/lib/contentsquare";
 
 type AllocationId = "conservative" | "balanced" | "growth";
 
@@ -251,12 +252,26 @@ export function RetirementQuickPlan({
   const [isRunning, setIsRunning] = useState(false);
   const allocations = useAllocations();
   const resultsRef = useRef<HTMLDivElement | null>(null);
+  const startedRef = useRef(false);
+  const validationReportedRef = useRef(false);
+  const requestInFlightRef = useRef(false);
+
+  function trackStarted() {
+    if (startedRef.current) return;
+    startedRef.current = true;
+    trackContentsquareEvent('retirement_calculator_started');
+  }
 
   const setField = (field: keyof FormState) => (value: string) =>
     setForm((current) => ({ ...current, [field]: value }));
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
+    if (requestInFlightRef.current) return;
+    requestInFlightRef.current = true;
+    validationReportedRef.current = false;
+    trackStarted();
+    trackContentsquareEvent('retirement_model_requested');
     setError(null);
     setIsRunning(true);
 
@@ -278,19 +293,21 @@ export function RetirementQuickPlan({
 
       const payload = await response.json();
       if (!response.ok) {
+        trackContentsquareEvent('retirement_api_error');
         setError(payload?.error || "Could not run this plan. Please check the numbers and try again.");
         return;
       }
 
       setResult(payload as QuickPlanResult);
-      pushRetirementModelRun(Number(digitsOnly(form.retirementAge)));
       // Let the results render before scrolling to them.
       requestAnimationFrame(() => {
         resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
       });
     } catch {
+      trackContentsquareEvent('retirement_request_error');
       setError("Could not reach the model. Please try again in a moment.");
     } finally {
+      requestInFlightRef.current = false;
       setIsRunning(false);
     }
   }
@@ -314,7 +331,16 @@ export function RetirementQuickPlan({
       </section>
 
       <section className="shell qp-form-section">
-        <form className="qp-form" onSubmit={handleSubmit}>
+        <form className="qp-form" onSubmit={handleSubmit}
+          onChange={() => { trackStarted(); validationReportedRef.current = false; }}
+          onInvalid={() => {
+            trackStarted();
+            // The browser can emit one invalid event for every empty field.
+            if (!validationReportedRef.current) {
+              validationReportedRef.current = true;
+              trackContentsquareEvent('retirement_validation_error');
+            }
+          }}>
           <div className="qp-form-head">
             <p className="section-kicker">SIX NUMBERS</p>
             <h2>Your plan</h2>
@@ -527,6 +553,13 @@ function MoneyField({
 
 function QuickPlanResults({ result }: { result: QuickPlanResult }) {
   const { primary, alternatives, history, inputs, allocation, sustainableSpending } = result;
+  const reportedResultRef = useRef<QuickPlanResult | null>(null);
+  useEffect(() => {
+    if (reportedResultRef.current === result) return;
+    reportedResultRef.current = result;
+    // Count success only after the results commit to the page, not on a click.
+    pushRetirementModelRun(result.inputs.retirementAge);
+  }, [result]);
 
   const sustainableData = useMemo(
     () =>
