@@ -3,6 +3,7 @@ import {
   CONTEXT_PLAN_JSON_SCHEMA,
   fallbackContextPlan,
   parseContextPlan,
+  retirementInputsFromScenarioPlan,
 } from '../../openai/context-planner';
 import { CONTEXT_PACK_IDS } from '../../openai/context-packs';
 import { validateSearchPlan } from '../../openai/search-query-plan';
@@ -356,12 +357,8 @@ describe('context planner', () => {
 
   it('does not let hypothetical inputs rebuild the baseline they are meant to compare with', () => {
     const raw = rawPlan(['retirement_analysis']);
-    raw.retirementInputs.retirementAge = 65;
-    raw.retirementInputs.annualWithdrawalAmount = 50_000;
-    raw.retirementInputs.withdrawalStartAge = 65;
-    raw.retirementInputs.sources.retirementAge = 'retire at 65';
-    raw.retirementInputs.sources.annualWithdrawalAmount = 'spend $50,000';
-    raw.retirementInputs.sources.withdrawalStartAge = 'retire at 65';
+    // The plan on record is retiring at 62 on $120,000; the scenario asks about
+    // a different age and a different spend, so neither belongs in the baseline.
     raw.scenarios.retirement = {
       requested: true,
       primary: {
@@ -397,5 +394,145 @@ describe('context planner', () => {
       retirementAge: 65,
       withdrawalStartAge: 65,
     });
+  });
+
+  it('keeps the stated plan in the baseline when a variant only restates it', () => {
+    const raw = rawPlan(['retirement_analysis']);
+    raw.retirementInputs.retirementAge = 58;
+    raw.retirementInputs.annualWithdrawalAmount = 150_000;
+    raw.retirementInputs.withdrawalStartAge = 58;
+    raw.retirementInputs.sources.retirementAge = 'retire by 58';
+    raw.retirementInputs.sources.annualWithdrawalAmount = 'spend $150K per year';
+    raw.retirementInputs.sources.withdrawalStartAge = 'withdrawing at age 58';
+    // One sentence, read twice: the same numbers arrive as inputs and as a
+    // variant. Stripping them left nothing to project, so the answer asked for
+    // values the user had just given and the scenario reported no baseline.
+    raw.scenarios.retirement = {
+      requested: true,
+      primary: {
+        type: 'historical_cpi',
+        annualRate: null,
+        source: null,
+        overrides: {
+          annualWithdrawalAmount: 150_000,
+          annualContributionAmount: null,
+          retirementAge: 58,
+          withdrawalStartAge: 58,
+          lifeExpectancy: null,
+          sources: {
+            annualWithdrawalAmount: 'spend $150K per year',
+            annualContributionAmount: null,
+            retirementAge: 'retire by 58',
+            withdrawalStartAge: 'withdrawing at age 58',
+            lifeExpectancy: null,
+          },
+        },
+      },
+      comparison: { type: 'none', annualRate: null, source: null, overrides: {} },
+    };
+
+    const plan = parseContextPlan(raw);
+
+    expect(plan.retirementInputs).toMatchObject({
+      currentAge: 45,
+      retirementAge: 58,
+      annualWithdrawalAmount: 150_000,
+      withdrawalStartAge: 58,
+    });
+  });
+
+  it('withholds only the fields a variant actually changes', () => {
+    const raw = rawPlan(['retirement_analysis']);
+    raw.retirementInputs.withdrawalStartAge = 62;
+    raw.retirementInputs.sources.withdrawalStartAge = 'retire at 62';
+    raw.scenarios.retirement = {
+      requested: true,
+      primary: {
+        type: 'historical_cpi',
+        annualRate: null,
+        source: null,
+        overrides: {
+          // Same spending target as the plan; only the age moves.
+          annualWithdrawalAmount: 120_000,
+          annualContributionAmount: null,
+          retirementAge: 67,
+          withdrawalStartAge: null,
+          lifeExpectancy: null,
+          sources: {
+            annualWithdrawalAmount: '$10,000 each month in retirement',
+            annualContributionAmount: null,
+            retirementAge: 'what about 67',
+            withdrawalStartAge: null,
+            lifeExpectancy: null,
+          },
+        },
+      },
+      comparison: { type: 'none', annualRate: null, source: null, overrides: {} },
+    };
+
+    const plan = parseContextPlan(raw);
+
+    expect(plan.retirementInputs).toEqual({
+      currentAge: 45,
+      annualWithdrawalAmount: 120_000,
+      sources: {
+        currentAge: 'I am 45',
+        annualWithdrawalAmount: '$10,000 each month in retirement',
+      },
+    });
+  });
+
+  it('falls back to the variant values when the baseline has nothing to run on', () => {
+    const scenario: any = {
+      requested: true,
+      primary: {
+        type: 'historical_cpi',
+        overrides: {
+          annualWithdrawalAmount: 150_000,
+          retirementAge: 58,
+          withdrawalStartAge: 58,
+          sources: {
+            annualWithdrawalAmount: 'spend $150K per year',
+            retirementAge: 'retire by 58',
+            withdrawalStartAge: 'withdrawing at age 58',
+          },
+        },
+      },
+    };
+
+    expect(retirementInputsFromScenarioPlan({ currentAge: 48, sources: {} }, scenario)).toEqual({
+      currentAge: 48,
+      retirementAge: 58,
+      annualWithdrawalAmount: 150_000,
+      withdrawalStartAge: 58,
+      sources: {
+        retirementAge: 'retire by 58',
+        annualWithdrawalAmount: 'spend $150K per year',
+        withdrawalStartAge: 'withdrawing at age 58',
+      },
+    });
+  });
+
+  it('leaves a baseline that can already run untouched', () => {
+    const inputs = {
+      currentAge: 48,
+      retirementAge: 58,
+      annualWithdrawalAmount: 150_000,
+      withdrawalStartAge: 58,
+      sources: {},
+    };
+    const scenario: any = {
+      requested: true,
+      primary: {
+        type: 'historical_cpi',
+        overrides: {
+          retirementAge: 62,
+          withdrawalStartAge: 62,
+          sources: { retirementAge: 'what about 62' },
+        },
+      },
+    };
+
+    expect(retirementInputsFromScenarioPlan(inputs, scenario)).toBe(inputs);
   });
 });

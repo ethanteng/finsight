@@ -79,6 +79,13 @@ const SCENARIO_OVERRIDE_INPUT_FIELDS = [
  * semantic pass extracts both shapes, so without this boundary an age or
  * spending override can rebuild the baseline before the scenario runner sees
  * it and erase the comparison the user requested.
+ *
+ * A variant that restates the plan the user just described is not a deviation
+ * from it -- one sentence produced both readings, and the value is the same on
+ * each side. Stripping those fields left the baseline with nothing to run on,
+ * so the projection asked the user for numbers they had already given and the
+ * scenario then reported that it needed a completed baseline. Only a value that
+ * actually differs from the stated plan is withheld from the baseline.
  */
 export function retirementInputsForBaseline(
   inputs: ExtractedRetirementInputs | undefined,
@@ -89,7 +96,10 @@ export function retirementInputsForBaseline(
   const variants = [scenario.primary, scenario.comparison].filter(Boolean);
   const overridden = new Set(
     SCENARIO_OVERRIDE_INPUT_FIELDS.filter((field) =>
-      variants.some((variant) => variant?.overrides?.[field] !== undefined)
+      variants.some((variant) => {
+        const value = variant?.overrides?.[field];
+        return value !== undefined && value !== inputs[field];
+      })
     )
   );
   if (overridden.size === 0) return inputs;
@@ -105,6 +115,45 @@ export function retirementInputsForBaseline(
     if (inputs.sources[field]) baseline.sources[field] = inputs.sources[field];
   }
   return baseline;
+}
+
+/**
+ * Baseline inputs of last resort, for a scenario that no baseline can support.
+ *
+ * A variant is a comparison only when there is something to compare against.
+ * When the planner reads the user's stated plan as the scenario alone, the
+ * baseline holds none of those values, the projection cannot run, and the
+ * answer asks for numbers the user has already given while the scenario
+ * reports that it needs a completed baseline. Neither side can move.
+ *
+ * Fold the primary variant's values into the fields the baseline is still
+ * missing so the projection runs on what the user said. The values are already
+ * range-checked and carry the user's own wording, and the scenario runner then
+ * reuses the baseline for that variant instead of inventing a comparison.
+ * Fields the baseline already has are left alone, so a real what-if keeps its
+ * comparison.
+ */
+export function retirementInputsFromScenarioPlan(
+  inputs: ExtractedRetirementInputs | undefined,
+  scenario: RetirementScenarioPlan | undefined
+): ExtractedRetirementInputs | undefined {
+  const overrides = scenario?.primary?.overrides;
+  if (!overrides) return inputs;
+
+  const merged: ExtractedRetirementInputs = {
+    ...(inputs ?? {}),
+    sources: { ...(inputs?.sources ?? {}) },
+  };
+  let folded = false;
+  for (const field of SCENARIO_OVERRIDE_INPUT_FIELDS) {
+    const value = overrides[field];
+    if (value === undefined || merged[field] !== undefined) continue;
+    merged[field] = value;
+    const source = overrides.sources?.[field];
+    if (source) merged.sources[field] = source;
+    folded = true;
+  }
+  return folded ? merged : inputs;
 }
 
 const PACK_PROPERTIES = Object.fromEntries(
