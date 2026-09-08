@@ -6,57 +6,17 @@ import { RETIREMENT_CALCULATOR_FAQ } from "@/lib/retirement-calculator-content";
  *
  * Rendered on the server and passed into the client calculator, so it costs
  * nothing in the client bundle and is in the HTML whether or not anyone runs
- * the model. It carries the page's explanatory copy, the FAQ that the page's
- * FAQPage structured data is generated from, and the links out to the rest of
- * the retirement cluster.
+ * the model. It carries what the model tests, the FAQ that the page's FAQPage
+ * structured data is generated from, and the links out to the rest of the
+ * retirement cluster.
+ *
+ * The step-by-step "how this calculator works" explainer that used to open it
+ * was removed: the form is three fields and a preset, directly above, and a
+ * numbered walkthrough of it pushed the actual result further down the page.
  */
 export function RetirementCalculatorSeoContent() {
   return (
     <>
-      <section className="shell qp-explainer">
-        <p className="section-kicker">HOW THIS RETIREMENT CALCULATOR WORKS</p>
-        <h2>Real history, not an average return.</h2>
-        <p className="qp-explainer-lede">
-          Most retirement calculators grow your savings at one assumed rate and show you a smooth
-          curve. Markets have never delivered one. This one replays what actually happened —
-          month by month, from 1926 onward — and reports how your plan would have fared in each
-          of those retirements.
-        </p>
-        <ol className="qp-explainer-steps">
-          <li>
-            <b>01</b>
-            <div>
-              <strong>Enter six numbers</strong>
-              <p>
-                Your age, the age you want to retire, what you have invested, what you expect to
-                spend each year, what you still add each year, and your Social Security estimate.
-              </p>
-            </div>
-          </li>
-          <li>
-            <b>02</b>
-            <div>
-              <strong>Pick the closest asset mix</strong>
-              <p>
-                Conservative, balanced or growth. Sequence risk depends on what you hold, and a
-                preset is an assumption — the page names it as one in every result.
-              </p>
-            </div>
-          </li>
-          <li>
-            <b>03</b>
-            <div>
-              <strong>Read what history did to that plan</strong>
-              <p>
-                The share of overlapping historical retirements the portfolio outlasted, the
-                spending the record was willing to fund, and the two levers that change the
-                answer most.
-              </p>
-            </div>
-          </li>
-        </ol>
-      </section>
-
       <section className="shell qp-tests">
         <h2>What the model actually tests</h2>
         <ul className="qp-tests-list">

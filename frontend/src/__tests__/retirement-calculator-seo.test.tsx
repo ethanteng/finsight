@@ -48,12 +48,21 @@ describe('retirement calculator SEO', () => {
     }
   });
 
-  it('keeps the explainer content in the markup without running the model', () => {
+  it('keeps the crawlable content in the markup without running the model', () => {
     const { container } = render(<RetirementCalculatorSeoContent />);
 
-    expect(screen.getByRole('heading', { name: /real history, not an average return/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /what the model actually tests/i })).toBeInTheDocument();
     // One h1 belongs to the page, not this block.
     expect(container.querySelector('h1')).toBeNull();
+  });
+
+  it('does not re-narrate the form that sits directly above it', () => {
+    // The numbered "how this calculator works" walkthrough was removed: it
+    // described three fields and a preset the visitor can already see, and it
+    // pushed what the model tests further down the page.
+    render(<RetirementCalculatorSeoContent />);
+
+    expect(screen.queryByText(/real history, not an average return/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Enter six numbers/i)).not.toBeInTheDocument();
   });
 });

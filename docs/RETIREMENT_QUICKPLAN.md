@@ -73,9 +73,14 @@ figures. `stressTest.worstSequences.byDrawdown` measures the portfolio path
 page with no room to explain that it would read as a market crash, so the
 service drops it.
 
-**The limitations list is content, not fine print.** It is rendered full-width
-on a dark section directly under the charts, because the gap between six numbers
-and real accounts is the reason to connect real accounts.
+**The endpoint still returns `limitations`; the page no longer renders them.**
+They had a full-width dark section under the charts. It came out when the
+result was reordered so the methodology follows the scenarios directly, on the
+grounds that the connected-accounts panel below now *demonstrates* the same gap
+— a real book, with the part the engine would not model priced in dollars —
+where the list only asserted it. The field stays on the response: it is part of
+the API contract and is still covered by `buildLimitations` tests, and a caller
+other than this page may want it.
 
 ## The connected-accounts example
 
@@ -137,6 +142,20 @@ looked materially safer in the authenticated product than on this page, and the
 difference was data availability rather than insight. `ShortSeriesPolicy` now
 extends the short series with a documented proxy instead, and the panel states
 which months of the window that covers.
+
+## Page order
+
+Hero, form, result (verdict → sustainable-spending chart → scenarios →
+methodology and the assumptions disclosure), then the connected-accounts panel,
+the cross-sell, and the always-present crawlable body.
+
+The methodology block sits directly under the scenarios because it explains the
+numbers immediately above it. Three pieces that used to sit between or around
+them are gone: the dark limitations section, the numbered "how this calculator
+works" explainer (it walked through a form the visitor can already see), and the
+hero's "no chat box" line. Everything the page removed was copy about the
+product; nothing the engine computed was dropped except the limitations list
+above.
 
 ## Paid-search variants
 

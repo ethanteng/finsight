@@ -84,6 +84,13 @@ interface QuickPlanResult {
     solverCeilingRate: number;
   };
   assumptions: string[];
+  /**
+   * Still returned by the endpoint, no longer rendered: the page dropped the
+   * dark "what this model did not know" section. Kept on the type because it
+   * mirrors the API response, and because the same gaps are what the
+   * connected-accounts panel below the form now demonstrates instead of
+   * asserting.
+   */
   limitations: string[];
 }
 
@@ -339,9 +346,6 @@ export function RetirementQuickPlan({
           uses on real accounts — a century of month-by-month market history, real inflation, real
           sequence risk — and show you what your plan would have done in every one of those
           retirements.
-        </p>
-        <p className="qp-hero-note">
-          No chat box. No AI guessing at arithmetic. The same calculation, every time.
         </p>
       </section>
 
@@ -762,24 +766,6 @@ function QuickPlanResults({ result }: { result: QuickPlanResult }) {
             </li>
           ))}
         </ul>
-      </section>
-
-      <section className="qp-honesty">
-        <div className="shell qp-honesty-inner">
-          <div>
-            <p className="section-kicker light">WHAT THIS MODEL DID NOT KNOW</p>
-            <h3>Six numbers is a real calculation. It is not your finances.</h3>
-            <p className="qp-honesty-lede">
-              These are the gaps between this answer and the one your actual accounts would produce.
-              We would rather print them than let the chart imply precision it does not have.
-            </p>
-          </div>
-          <ul className="qp-limitations">
-            {result.limitations.map((limitation) => (
-              <li key={limitation}>{limitation}</li>
-            ))}
-          </ul>
-        </div>
       </section>
 
       <section className="shell qp-methodology">
