@@ -24,7 +24,7 @@ export const RETIREMENT_CALCULATOR_EXAMPLE = {
     "socialSecurityStartAge": 67
   },
   "portfolio": {
-    "accountCount": 9,
+    "accountCount": 6,
     "holdingCount": 12,
     "totalInvestments": 2273872
   },

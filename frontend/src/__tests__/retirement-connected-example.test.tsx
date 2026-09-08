@@ -32,6 +32,22 @@ describe('connected-accounts example data', () => {
     expect(EXAMPLE.result.firstMonth).toMatch(/^\d{4}-\d{2}$/);
   });
 
+  it('keeps international and TIPS as subsets of the lines that contain them', () => {
+    // `internationalAllocation` is part of `equityAllocation`, and
+    // `fixedIncomeAllocation` already counts `tipsAllocation`. Treated as
+    // siblings, the mix adds up past the portfolio.
+    expect(EXAMPLE.allocation.international).toBeLessThanOrEqual(EXAMPLE.allocation.equity);
+    expect(EXAMPLE.allocation.tips).toBeLessThanOrEqual(EXAMPLE.allocation.fixedIncome);
+    expect(
+      EXAMPLE.allocation.equity + EXAMPLE.allocation.fixedIncome + EXAMPLE.allocation.cash
+    ).toBeLessThanOrEqual(100.0001);
+  });
+
+  it('counts accounts from the book rather than asserting a number', () => {
+    expect(EXAMPLE.portfolio.accountCount).toBeGreaterThan(1);
+    expect(EXAMPLE.portfolio.accountCount).toBeLessThanOrEqual(EXAMPLE.portfolio.holdingCount);
+  });
+
   it('describes a plan the landing-page form could have submitted', () => {
     const { plan } = EXAMPLE;
 
@@ -51,6 +67,13 @@ describe('connected-accounts example panel', () => {
     for (const label of [...EXAMPLE.coverage.unresolved, ...EXAMPLE.coverage.unsupported]) {
       expect(screen.getByText(label)).toBeInTheDocument();
     }
+  });
+
+  it('labels the subset rows as subsets, not as separate sleeves', () => {
+    render(<RetirementConnectedExample />);
+
+    expect(screen.getByText('of which international')).toBeInTheDocument();
+    expect(screen.getByText('of which TIPS')).toBeInTheDocument();
   });
 
   it('shows the coverage and confidence the engine reported', () => {

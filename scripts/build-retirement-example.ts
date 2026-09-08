@@ -36,22 +36,28 @@ const OUTPUT_PATH = join(
   'retirement-calculator-example.generated.ts'
 );
 
-/** [id, security name, declared type, market value] */
-type BookEntry = [string, string, string, number];
+/**
+ * [id, account, security name, declared type, market value]
+ *
+ * The account column is not decoration. The panel says how many accounts the
+ * model read, and that number is counted from these rather than asserted, so a
+ * book split across fewer accounts cannot leave the page claiming more.
+ */
+type BookEntry = [string, string, string, string, number];
 
 const EXAMPLE_BOOK: BookEntry[] = [
-  ['tsm', 'Vanguard Total Stock Market Index Fund', 'equity', 486_000],
-  ['sp500', 'Fidelity S&P 500 Index Fund', 'equity', 312_400],
-  ['smid', 'Russell 2000 Small Cap Index', 'equity', 96_800],
-  ['intl', 'International Developed Markets Index Fund', 'equity', 241_500],
-  ['em', 'Emerging Markets Stock Index Fund', 'equity', 88_300],
-  ['agg', 'US Aggregate Bond Index Fund', 'fixed income', 402_100],
-  ['gov', 'Intermediate Term Government Bond Fund', 'fixed income', 118_600],
-  ['tips', 'Inflation Protected Securities Fund (TIPS)', 'fixed income', 94_700],
-  ['corp', 'Investment Grade Corporate Bond Fund', 'fixed income', 76_200],
-  ['cash', 'Money Market Cash Reserves', 'cash', 63_900],
-  ['emp', 'Employer Stock Units', 'equity', 45_200],
-  ['misc', 'Brokerage Holdings Not Itemized', 'unknown', 248_172],
+  ['tsm', '401k-current', 'Vanguard Total Stock Market Index Fund', 'equity', 486_000],
+  ['sp500', '401k-current', 'Fidelity S&P 500 Index Fund', 'equity', 312_400],
+  ['agg', '401k-current', 'US Aggregate Bond Index Fund', 'fixed income', 402_100],
+  ['smid', 'rollover-ira', 'Russell 2000 Small Cap Index', 'equity', 96_800],
+  ['intl', 'rollover-ira', 'International Developed Markets Index Fund', 'equity', 241_500],
+  ['em', 'rollover-ira', 'Emerging Markets Stock Index Fund', 'equity', 88_300],
+  ['gov', 'roth-ira', 'Intermediate Term Government Bond Fund', 'fixed income', 118_600],
+  ['tips', 'roth-ira', 'Inflation Protected Securities Fund (TIPS)', 'fixed income', 94_700],
+  ['corp', 'taxable-brokerage', 'Investment Grade Corporate Bond Fund', 'fixed income', 76_200],
+  ['cash', 'taxable-brokerage', 'Money Market Cash Reserves', 'cash', 63_900],
+  ['emp', 'employer-equity', 'Employer Stock Units', 'equity', 45_200],
+  ['misc', 'legacy-brokerage', 'Brokerage Holdings Not Itemized', 'unknown', 248_172],
 ];
 
 /** The same shape of plan the landing-page form collects. */
@@ -63,14 +69,12 @@ const EXAMPLE_PLAN = {
   annualContributions: 48_000,
   socialSecurityAnnual: 41_400,
   socialSecurityStartAge: 67,
-  /** Accounts behind the holdings, for the panel's "what it read" line. */
-  accountCount: 9,
 };
 
 function buildPortfolio(book: BookEntry[]) {
-  const holdings: Holding[] = book.map(([id, name, type, value]) => ({
+  const holdings: Holding[] = book.map(([id, account, name, type, value]) => ({
     id,
-    account_id: 'example',
+    account_id: account,
     security_id: id,
     institution_value: value,
     institution_price: null,
@@ -81,7 +85,7 @@ function buildPortfolio(book: BookEntry[]) {
     security_name: name,
     security_type: type,
   }));
-  const securities: Security[] = book.map(([id, name, type]) => ({
+  const securities: Security[] = book.map(([id, , name, type]) => ({
     security_id: id,
     name,
     type,
@@ -92,7 +96,8 @@ function buildPortfolio(book: BookEntry[]) {
 
 async function main() {
   const { holdings, securities } = buildPortfolio(EXAMPLE_BOOK);
-  const totalInvestments = EXAMPLE_BOOK.reduce((sum, [, , , value]) => sum + value, 0);
+  const totalInvestments = EXAMPLE_BOOK.reduce((sum, [, , , , value]) => sum + value, 0);
+  const accountCount = new Set(EXAMPLE_BOOK.map(([, account]) => account)).size;
 
   const analysis = await analyzeRetirementPortfolio({
     holdings,
@@ -123,10 +128,14 @@ async function main() {
       socialSecurityStartAge: EXAMPLE_PLAN.socialSecurityStartAge,
     },
     portfolio: {
-      accountCount: EXAMPLE_PLAN.accountCount,
+      accountCount,
       holdingCount: EXAMPLE_BOOK.length,
       totalInvestments,
     },
+    // Two of these are subsets, not siblings: `international` is part of
+    // `equity`, and `fixedIncome` already counts `tips` (plus any credit and
+    // international bonds) — see `portfolio-analyzer.ts`. The panel has to
+    // render them as subsets or the column adds up to a mix nobody holds.
     allocation: {
       equity: metrics.equityAllocation,
       international: metrics.internationalAllocation ?? 0,

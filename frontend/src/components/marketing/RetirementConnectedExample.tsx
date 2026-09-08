@@ -59,11 +59,17 @@ export function RetirementConnectedExample() {
         <div className="qp-example-grid">
           <article className="qp-example-card">
             <h3>It found the actual mix</h3>
+            {/*
+              International is part of the stock line and TIPS is part of the bond
+              line — the engine's `internationalAllocation` and `tipsAllocation`
+              are subsets of `equityAllocation` and `fixedIncomeAllocation`, not
+              siblings. Rendered as siblings the column sums past the portfolio.
+            */}
             <dl className="qp-example-mix">
               <div><dt>Stocks</dt><dd>{percent(allocation.equity)}</dd></div>
               <div><dt>of which international</dt><dd>{percent(allocation.international)}</dd></div>
               <div><dt>Bonds</dt><dd>{percent(allocation.fixedIncome)}</dd></div>
-              <div><dt>TIPS</dt><dd>{percent(allocation.tips)}</dd></div>
+              <div><dt>of which TIPS</dt><dd>{percent(allocation.tips)}</dd></div>
               <div><dt>Cash</dt><dd>{percent(allocation.cash)}</dd></div>
             </dl>
             <p>
@@ -83,9 +89,9 @@ export function RetirementConnectedExample() {
               {unmodeled.map((label) => <li key={label}>{label}</li>)}
             </ul>
             <p>
-              Two have no resolvable asset class; two have one the engine has no return series for.
-              The six-number version above had nothing to disclose here, because it invented the
-              whole portfolio.
+              Two have no resolvable asset class or equity geography; two have a class the engine
+              has no return series for. The six-number version above had nothing to disclose here,
+              because it invented the whole portfolio.
             </p>
           </article>
 
