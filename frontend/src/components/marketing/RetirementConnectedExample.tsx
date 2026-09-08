@@ -153,22 +153,16 @@ export function RetirementConnectedExample() {
           <p className="section-kicker light">WHAT CHANGES WHEN YOU CONNECT YOUR ACCOUNTS</p>
           <h2>A far more realistic answer, because it stops guessing what you own.</h2>
           <p className="qp-example-lede">
-            To answer your six numbers, the model had to guess what you own. You gave it a total and
-            picked one of three ready-made mixes, and it assumed the rest.
+            Your six numbers don&apos;t say what you own, so the model had to guess: a total, and one
+            of three ready-made mixes. That guess does a lot of the work — money in
+            inflation-protected bonds comes through a bad decade very differently from money in one
+            company&apos;s stock.
           </p>
           <p className="qp-example-lede">
-            That guess does a lot of the work. Two people with the same savings, the same spending
-            and the same retirement date can get very different answers depending on what they
-            actually hold — money in inflation-protected bonds comes through a bad decade very
-            differently from money in one company&apos;s stock.
-          </p>
-          <p className="qp-example-lede">
-            Below is that same question for someone whose accounts are connected:{" "}
+            Below is the same question for someone whose accounts are connected:{" "}
             {portfolio.holdingCount} real holdings across {portfolio.accountCount} accounts, worth{" "}
-            {money(portfolio.totalInvestments)}, retiring at {plan.retirementAge} on{" "}
-            {money(plan.annualSpending)} a year. Same model, same century of history. The difference
-            is that nothing about the portfolio is assumed — and where the model still can&apos;t see
-            something, it says so instead of quietly averaging it in.
+            {money(portfolio.totalInvestments)}. Same model, same century of history — nothing about
+            the portfolio assumed.
           </p>
         </div>
 

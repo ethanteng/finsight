@@ -926,6 +926,26 @@
   color: #dfe8e0;
 }
 
+/*
+ * The kicker is the label on the page's pitch, so it is a lime badge rather
+ * than the small lime caption `.section-kicker.light` gives it elsewhere. On
+ * the forest panel this is the highest-contrast element in the section, which
+ * is the point: it is what tells a visitor scrolling past what the block is
+ * for before they read a word of the headline.
+ */
+.quickplan-page .qp-example-head .section-kicker {
+  display: inline-block;
+  margin: 0 0 26px;
+  padding: 11px 18px;
+  border-radius: 999px;
+  background: var(--lime);
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 850;
+  letter-spacing: 0.12em;
+  line-height: 1.25;
+}
+
 .quickplan-page .qp-example-head h2 {
   max-width: 20ch;
   margin: 0 0 22px;
@@ -1235,6 +1255,16 @@
   .quickplan-page .qp-example-head {
     padding: 32px 22px 30px;
     border-radius: 18px;
+  }
+
+  /* The label wraps to two lines at this width; a stadium radius around two
+     lines reads as a mistake, so it becomes a tag instead. */
+  .quickplan-page .qp-example-head .section-kicker {
+    margin-bottom: 22px;
+    padding: 10px 14px;
+    border-radius: 14px;
+    font-size: 13px;
+    letter-spacing: 0.1em;
   }
 
   .quickplan-page .qp-example-answer {

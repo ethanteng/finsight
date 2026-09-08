@@ -117,10 +117,14 @@ disclose because it invented the whole portfolio.
 **Its header is the page's pitch, so it is styled as one.** The section head is
 an inset dark panel rather than a dark full-bleed band: the cross-sell directly
 below is already full-bleed dark, and two of those in a row read as one block.
-The copy in it is deliberately non-technical — what the six-number answer had to
-assume, why that assumption changes the answer, and what connecting accounts
-replaces it with — because it is the one part of this page addressed to someone
-who has not decided to care yet. It claims the model stops guessing *what you
+Its kicker is a lime badge rather than the small caption `.section-kicker.light`
+gives it elsewhere, because it is what names the block for someone scrolling
+past before they read a word of the headline; it becomes a squarer tag on
+narrow screens, where it wraps to two lines and a stadium radius would read as
+a mistake. The copy is deliberately non-technical and deliberately short — what
+the six-number answer had to assume, why that assumption changes the answer, and
+what connecting accounts replaces it with — because it is the one part of this
+page addressed to someone who has not decided to care yet. It claims the model stops guessing *what you
 own*, never that nothing is assumed: the panel's own middle card prices what the
 model still cannot see.
 
