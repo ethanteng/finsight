@@ -23,6 +23,7 @@ import {
 } from "recharts";
 import { MarketingGetStartedButton } from "./MarketingGetStartedButton";
 import { SiteFooter, SiteHeader } from "./SiteShell";
+import { RetirementConnectedExample } from "./RetirementConnectedExample";
 import { pushRetirementModelRun } from "@/lib/dataLayer";
 import { trackContentsquareEvent } from "@/lib/contentsquare";
 
@@ -479,6 +480,8 @@ export function RetirementQuickPlan({
       <div ref={resultsRef}>
         {result && <QuickPlanResults result={result} />}
       </div>
+
+      <RetirementConnectedExample />
 
       <section className="qp-cross-sell">
         <div className="shell qp-cross-sell-inner">

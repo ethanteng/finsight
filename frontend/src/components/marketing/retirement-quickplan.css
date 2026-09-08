@@ -1023,3 +1023,218 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* ------------------------------------------- connected-accounts example */
+
+.quickplan-page .qp-example {
+  padding-block: 72px;
+  border-top: 1px solid rgba(16, 35, 25, 0.12);
+  background: #eceadf;
+}
+
+.quickplan-page .qp-example-head {
+  max-width: 820px;
+  margin-bottom: 36px;
+}
+
+.quickplan-page .qp-example-head h2 {
+  margin: 0 0 16px;
+  font-family: var(--font-display);
+  font-size: clamp(32px, 3.6vw, 46px);
+  font-weight: 680;
+  line-height: 1.12;
+  letter-spacing: -0.045em;
+}
+
+.quickplan-page .qp-example-lede {
+  margin: 0;
+  color: #55635a;
+  font-size: 16px;
+  line-height: 1.7;
+}
+
+.quickplan-page .qp-example-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.quickplan-page .qp-example-card {
+  display: flex;
+  flex-direction: column;
+  padding: 24px;
+  border: 1px solid #d3d8cd;
+  border-radius: 18px;
+  background: var(--cream);
+}
+
+.quickplan-page .qp-example-card-flag {
+  border-color: #c9b28a;
+  background: #fdf8ec;
+}
+
+.quickplan-page .qp-example-card h3 {
+  margin: 0 0 16px;
+  font-family: var(--font-display);
+  font-size: 19px;
+  font-weight: 750;
+  letter-spacing: -0.03em;
+}
+
+.quickplan-page .qp-example-card p {
+  margin: 16px 0 0;
+  color: #5b6960;
+  font-size: 13.5px;
+  line-height: 1.65;
+}
+
+.quickplan-page .qp-example-card p:last-child {
+  margin-top: auto;
+  padding-top: 16px;
+}
+
+.quickplan-page .qp-example-mix {
+  margin: 0;
+}
+
+.quickplan-page .qp-example-mix div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(16, 35, 25, 0.09);
+}
+
+.quickplan-page .qp-example-mix dt {
+  color: #6b7871;
+  font-size: 13px;
+}
+
+.quickplan-page .qp-example-mix dd {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 760;
+  letter-spacing: -0.03em;
+}
+
+.quickplan-page .qp-example-low {
+  text-transform: capitalize;
+  color: #97600f;
+}
+
+.quickplan-page .qp-example-figure {
+  margin: 0 !important;
+  color: #8a5a12 !important;
+  font-family: var(--font-display);
+  font-size: 34px !important;
+  font-weight: 780;
+  letter-spacing: -0.05em;
+}
+
+.quickplan-page .qp-example-figure-note {
+  margin-top: 6px !important;
+  font-size: 13px !important;
+}
+
+.quickplan-page .qp-example-unmodeled {
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.quickplan-page .qp-example-unmodeled li {
+  padding: 7px 0 7px 18px;
+  border-bottom: 1px solid rgba(16, 35, 25, 0.08);
+  color: #4a564e;
+  font-size: 13px;
+  position: relative;
+}
+
+.quickplan-page .qp-example-unmodeled li::before {
+  content: "";
+  position: absolute;
+  top: 14px;
+  left: 2px;
+  width: 6px;
+  height: 6px;
+  border-radius: 2px;
+  background: #c08a2e;
+}
+
+.quickplan-page .qp-example-result {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: 18px;
+  border: 1px solid #d3d8cd;
+  border-radius: 18px;
+  overflow: hidden;
+  background: var(--cream);
+}
+
+.quickplan-page .qp-example-result > div {
+  display: flex;
+  flex-direction: column;
+  padding: 20px 24px;
+  border-right: 1px solid #d3d8cd;
+}
+
+.quickplan-page .qp-example-result > div:last-child {
+  border-right: 0;
+}
+
+.quickplan-page .qp-example-result span {
+  color: #778178;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.quickplan-page .qp-example-result strong {
+  margin-top: 8px;
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 760;
+  line-height: 1.15;
+  letter-spacing: -0.04em;
+}
+
+.quickplan-page .qp-example-result small {
+  margin-top: 8px;
+  color: #6f7c75;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.quickplan-page .qp-example-footnote {
+  margin: 20px 0 0;
+  color: #74807a;
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.quickplan-page .qp-example-footnote code {
+  font-size: 12px;
+}
+
+@media (max-width: 900px) {
+  .quickplan-page .qp-example-grid,
+  .quickplan-page .qp-example-result {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .quickplan-page .qp-example-result > div {
+    border-right: 0;
+    border-bottom: 1px solid #d3d8cd;
+  }
+
+  .quickplan-page .qp-example-result > div:last-child {
+    border-bottom: 0;
+  }
+
+  .quickplan-page .qp-example-card p:last-child {
+    margin-top: 16px;
+  }
+}

@@ -19,6 +19,9 @@ list of everything the model had to assume on their behalf.
 | Client component | `frontend/src/components/marketing/RetirementQuickPlan.tsx` |
 | Styles | `frontend/src/components/marketing/retirement-quickplan.css` |
 | Ad-variant helpers | `frontend/src/lib/retirement-landing.ts` |
+| Connected-accounts example | `frontend/src/components/marketing/RetirementConnectedExample.tsx` |
+| Example data (generated) | `frontend/src/lib/retirement-calculator-example.generated.ts` |
+| Example generator | `scripts/build-retirement-example.ts` (`npm run build:retirement-example`) |
 | Service | `src/services/retirement-quickplan.ts` |
 | Route | `src/routes/retirement-quickplan.ts` (mounted at `/api/retirement-quickplan`) |
 | Tests | `src/__tests__/unit/retirement-quickplan.test.ts`, `src/__tests__/unit/retirement-quickplan-route.test.ts`, `frontend/src/__tests__/retirement-landing.test.tsx` |
@@ -72,6 +75,44 @@ service drops it.
 **The limitations list is content, not fine print.** It is rendered full-width
 on a dark section directly under the charts, because the gap between six numbers
 and real accounts is the reason to connect real accounts.
+
+## The connected-accounts example
+
+The page's own result is computed live from six numbers, and the CTA under it
+promised something better without showing it. `RetirementConnectedExample`
+is that something: the same shape of plan, run by the same engine, against a
+portfolio it actually read.
+
+It has to be static — a marketing page cannot hold someone's portfolio — but
+static is not invented. `npm run build:retirement-example` runs the real
+`analyzeRetirementPortfolio` against the book in
+`scripts/build-retirement-example.ts` and writes
+`frontend/src/lib/retirement-calculator-example.generated.ts`. The page imports
+that file and nothing else. To publish a different profile — a real account's
+holdings — edit the script and re-run it; never edit the generated file, since
+the panel's claim that these are engine outputs is only true while it is
+generated.
+
+The example book is deliberately awkward in the ways real feeds are: a
+single-stock position with no resolvable geography, a chunk the custodian never
+itemised, and two sleeves the engine has no return series for. Those produce the
+panel's centrepiece — the share of the money left out of the simulation rather
+than guessed at, which the six-number version has no way to disclose because it
+invented the whole portfolio.
+
+The panel deliberately does not lead with its survival rate, and says outright
+that the figure is not comparable to the one the visitor just got. The two runs
+cover different stretches of history, for a reason worth knowing:
+
+**A real portfolio holding international funds is tested against a shorter and
+much kinder record.** The engine builds sequences only over months where every
+series it needs exists, and the international series starts in 1975. So the
+free calculator's US-only presets are stress-tested from 1926 — including 1929,
+1966 and 1973 — while a connected account with an international sleeve is tested
+only from 1975 onward. The same plan will look materially safer in the
+authenticated product than on this page, and the difference is data
+availability, not insight. Worth resolving at the source rather than papering
+over in the copy.
 
 ## Paid-search variants
 
