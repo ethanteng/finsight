@@ -63,7 +63,7 @@ export function RetirementConnectedExample() {
               <div><dt>Stocks</dt><dd>{percent(allocation.equity)}</dd></div>
               <div><dt>of which international</dt><dd>{percent(allocation.international)}</dd></div>
               <div><dt>Bonds</dt><dd>{percent(allocation.fixedIncome)}</dd></div>
-              <div><dt>TIPS</dt><dd>{percent(allocation.tips)}</dd></div>
+              <div><dt>of which TIPS</dt><dd>{percent(allocation.tips)}</dd></div>
               <div><dt>Cash</dt><dd>{percent(allocation.cash)}</dd></div>
             </dl>
             <p>

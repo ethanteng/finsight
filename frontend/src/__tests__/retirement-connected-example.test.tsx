@@ -62,6 +62,15 @@ describe('connected-accounts example panel', () => {
     expect(screen.getByText(EXAMPLE.coverage.confidence)).toBeInTheDocument();
   });
 
+  it('nests TIPS under bonds the way international nests under stocks', () => {
+    render(<RetirementConnectedExample />);
+
+    // fixedIncomeAllocation already includes tipsAllocation; a sibling "TIPS"
+    // row would double-count and make the mix sum past 100% of the book.
+    expect(screen.getByText('of which TIPS')).toBeInTheDocument();
+    expect(screen.queryByText(/^TIPS$/)).not.toBeInTheDocument();
+  });
+
   it('refuses to let its survival figure be read against the one above it', () => {
     render(<RetirementConnectedExample />);
 
