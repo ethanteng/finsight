@@ -154,6 +154,17 @@ export function RetirementConnectedExample() {
 
   return (
     <section className="qp-example" id={CONNECTED_EXAMPLE_ID}>
+      {/*
+        * The seam between the visitor's own result and this one. A rule would
+        * just end the section above; this hands over to it. "Without the
+        * guesswork" rather than "a real answer" on purpose — the six-number
+        * result above is a real calculation, and the thing it lacks is
+        * knowledge of the portfolio, not realness.
+        */}
+      <div className="qp-example-transition">
+        <span>Now, without the guesswork</span>
+      </div>
+
       <div className="shell">
         <div className="qp-example-head">
           <p className="section-kicker light">WHAT CHANGES WHEN YOU CONNECT YOUR ACCOUNTS</p>

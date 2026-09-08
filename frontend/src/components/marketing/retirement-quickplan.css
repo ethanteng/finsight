@@ -957,9 +957,61 @@
 
 .quickplan-page .qp-example {
   scroll-margin-top: 18px;
-  padding-block: 88px 84px;
-  border-top: 4px solid var(--forest);
+  padding-block: 0 84px;
   background: #eceadf;
+}
+
+/*
+ * The handover, in place of a border.
+ *
+ * A rule between these two sections just stops the one above. This carries the
+ * page's own background down into the section's, with the line broken by the
+ * sentence that says what the next block is for — so the seam reads as a turn
+ * in the argument rather than a boundary between two boxes.
+ */
+.quickplan-page .qp-example-transition {
+  display: grid;
+  place-items: center;
+  padding: 78px 24px 30px;
+  background: linear-gradient(180deg, var(--paper) 0%, #f0eee2 46%, #eceadf 100%);
+}
+
+.quickplan-page .qp-example-transition span {
+  display: flex;
+  align-items: center;
+  gap: clamp(14px, 3vw, 28px);
+  color: #55635a;
+  font-family: var(--font-display);
+  font-size: clamp(19px, 2.2vw, 28px);
+  font-weight: 640;
+  letter-spacing: -0.035em;
+  text-align: center;
+}
+
+.quickplan-page .qp-example-transition span::before,
+.quickplan-page .qp-example-transition span::after {
+  content: "";
+  flex: 0 0 auto;
+  width: clamp(40px, 13vw, 200px);
+  height: 1px;
+  background: linear-gradient(90deg, rgba(23, 60, 44, 0) 0%, rgba(23, 60, 44, 0.32) 100%);
+}
+
+.quickplan-page .qp-example-transition span::after {
+  background: linear-gradient(90deg, rgba(23, 60, 44, 0.32) 0%, rgba(23, 60, 44, 0) 100%);
+}
+
+/* The phrase wraps here, and rules centred against two lines read as a
+   mis-drawn box. The gradient alone carries the handover at this width. */
+@media (max-width: 620px) {
+  .quickplan-page .qp-example-transition {
+    padding-top: 62px;
+  }
+
+  .quickplan-page .qp-example-transition span::before,
+  .quickplan-page .qp-example-transition span::after {
+    display: none;
+  }
 }
 
 /*

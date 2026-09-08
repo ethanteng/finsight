@@ -263,6 +263,15 @@ describe('connected-accounts example panel', () => {
     });
   });
 
+  it('hands over from the result above rather than ruling a line under it', () => {
+    render(<RetirementConnectedExample />);
+
+    // "Without the guesswork", not "a real answer": the six-number result above
+    // is a real calculation, and what it lacks is knowledge of the portfolio.
+    expect(screen.getByText(/Now, without the guesswork/i)).toBeInTheDocument();
+    expect(screen.queryByText(/a real answer/i)).not.toBeInTheDocument();
+  });
+
   it('says plainly that the profile is an example rather than a customer', () => {
     render(<RetirementConnectedExample />);
 

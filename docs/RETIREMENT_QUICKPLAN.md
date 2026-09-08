@@ -114,6 +114,14 @@ of the panel's two centrepieces — the share of the money left out of the
 simulation rather than guessed at, which the six-number version has no way to
 disclose because it invented the whole portfolio.
 
+**The seam is a handover, not a rule.** The section opens with a gradient that
+carries the page's background down into its own, broken by the line "Now,
+without the guesswork" — so the join reads as a turn in the argument rather than
+a boundary between two boxes. Not "a real answer": the six-number result above
+is a real calculation, and what it lacks is knowledge of the portfolio. The
+flanking rules are dropped under 620px, where the phrase wraps and rules centred
+against two lines read as a mis-drawn box.
+
 **A jump link sits under the live result.** The connected-accounts section is
 four blocks below the answer — past two charts and the methodology — so a
 visitor who reads their result and stops never reaches the argument for
