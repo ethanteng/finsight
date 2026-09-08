@@ -52,6 +52,14 @@ export interface ContextPlan {
   questionNeeds: QuestionNeeds;
   needsSecondaryValidation: boolean;
   searchQueries: PlannedSearchQuery[];
+  /**
+   * Inputs the planner extracted from the user's words, before scenario
+   * overrides are removed for the baseline. Recovery must start here so a
+   * genuine what-if can restore a withheld field instead of adopting the
+   * hypothetical value that caused the withhold.
+   */
+  statedRetirementInputs?: ExtractedRetirementInputs;
+  /** Baseline gather inputs after differing scenario overrides are removed. */
   retirementInputs?: ExtractedRetirementInputs;
   scenarioPlans: ScenarioPlanRecord;
   /** @deprecated Compatibility mirror for admin clients that still read retirementScenario. */
@@ -79,6 +87,14 @@ const SCENARIO_OVERRIDE_INPUT_FIELDS = [
  * semantic pass extracts both shapes, so without this boundary an age or
  * spending override can rebuild the baseline before the scenario runner sees
  * it and erase the comparison the user requested.
+ *
+ * Equality between a variant and a stated input does not make the variant a
+ * restatement: "what if I retire at 58 instead" reaches the planner as both,
+ * and admitting it would rebuild the baseline on the hypothetical and dedupe
+ * the requested case against its own default comparison. Every mentioned field
+ * is withheld here. Whether the baseline can be built without them is decided
+ * further down, where the stored plan and the profile are in hand, and
+ * `statedRetirementInputs` keeps the user's words available for that.
  */
 export function retirementInputsForBaseline(
   inputs: ExtractedRetirementInputs | undefined,
@@ -105,6 +121,52 @@ export function retirementInputsForBaseline(
     if (inputs.sources[field]) baseline.sources[field] = inputs.sources[field];
   }
   return baseline;
+}
+
+/**
+ * Baseline inputs of last resort, for a scenario that no baseline can support.
+ *
+ * A variant is a comparison only when there is something to compare against.
+ * When the user states a plan for the first time and the planner reads that
+ * one sentence as the scenario too, its values are withheld from the baseline
+ * and nothing else supplies them: no stored plan, no profile. The projection
+ * cannot run, so the answer asks for numbers the user has already given while
+ * the scenario reports that it needs a completed baseline. Neither side can
+ * move, and restating the numbers reproduces both messages.
+ *
+ * Fold the primary variant's values into the fields the baseline is still
+ * missing so the projection runs on what the user said. The values are already
+ * range-checked and carry the user's own wording, and the scenario runner then
+ * reuses the baseline for that variant instead of inventing a comparison.
+ * Fields the caller already has are left alone, so a real what-if keeps its
+ * comparison — pass the stated plan (pre-withhold), not the stripped baseline.
+ *
+ * This is reached only after the baseline has failed on its own evidence, so a
+ * user with a plan on file never arrives here: their stored inputs build the
+ * baseline and the variant is compared against it, which is the whole point of
+ * withholding it.
+ */
+export function retirementInputsFromScenarioPlan(
+  inputs: ExtractedRetirementInputs | undefined,
+  scenario: RetirementScenarioPlan | undefined
+): ExtractedRetirementInputs | undefined {
+  const overrides = scenario?.primary?.overrides;
+  if (!overrides) return inputs;
+
+  const merged: ExtractedRetirementInputs = {
+    ...(inputs ?? {}),
+    sources: { ...(inputs?.sources ?? {}) },
+  };
+  let folded = false;
+  for (const field of SCENARIO_OVERRIDE_INPUT_FIELDS) {
+    const value = overrides[field];
+    if (value === undefined || merged[field] !== undefined) continue;
+    merged[field] = value;
+    const source = overrides.sources?.[field];
+    if (source) merged.sources[field] = source;
+    folded = true;
+  }
+  return folded ? merged : inputs;
 }
 
 const PACK_PROPERTIES = Object.fromEntries(
@@ -251,8 +313,9 @@ export function parseContextPlan(raw: unknown, durationMs = 0, model?: string): 
     ...scenarioCalculatorRegistry.requiredPacksForPlans(scenarioPlans),
   ]);
   const needsSecondaryValidation = record.needsSecondaryValidation === true;
+  const statedRetirementInputs = validateExtractedInputs(record.retirementInputs);
   const retirementInputs = retirementInputsForBaseline(
-    validateExtractedInputs(record.retirementInputs),
+    statedRetirementInputs,
     retirementScenario
   );
   const summary = typeof record.summary === 'string'
@@ -265,6 +328,7 @@ export function parseContextPlan(raw: unknown, durationMs = 0, model?: string): 
     questionNeeds: questionNeedsFromPacks(selectedPacks, needsSecondaryValidation),
     needsSecondaryValidation,
     searchQueries,
+    ...(statedRetirementInputs && { statedRetirementInputs }),
     retirementInputs,
     scenarioPlans,
     ...(retirementScenario && { retirementScenario }),

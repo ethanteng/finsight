@@ -383,6 +383,236 @@ describe('runAskLincAnalysis validation routing', () => {
     });
   });
 
+  it('leaves a baseline the stored plan can build alone', async () => {
+    const plan = contextPlan(['retirement_analysis'], true);
+    plan.statedRetirementInputs = {
+      currentAge: 48,
+      retirementAge: 58,
+      sources: { currentAge: 'I am 48', retirementAge: 'retire at 58 instead' },
+    };
+    plan.retirementInputs = { currentAge: 48, sources: { currentAge: 'I am 48' } };
+    plan.scenarioPlans.retirement = {
+      requested: true,
+      primary: {
+        type: 'historical_cpi',
+        overrides: {
+          retirementAge: 58,
+          withdrawalStartAge: 58,
+          sources: { retirementAge: 'retire at 58 instead', withdrawalStartAge: 'retire at 58 instead' },
+        },
+      },
+    };
+    mockedPlanContext.mockResolvedValue(plan);
+    // The plan on file builds the baseline, so the hypothetical 58 is never
+    // folded in and the comparison against it survives.
+    mockedCompleteRetirement.mockImplementation(async (current) => ({
+      ...current,
+      retirementAnalysis: cachedRetirementAnalysis() as any,
+    }));
+    mockedAskClaude.mockResolvedValue(JSON.stringify({ summary: 'Here is the comparison.' }));
+
+    await runAskLincAnalysis({
+      question: 'What if I retire at 58 instead?',
+      userId: 'user-1',
+    });
+
+    expect(mockedCompleteRetirement).toHaveBeenCalledTimes(1);
+    expect(mockedCompleteRetirement.mock.calls[0][1].plannedRetirementInputs).toEqual({
+      currentAge: 48,
+      sources: { currentAge: 'I am 48' },
+    });
+  });
+
+  it('rebuilds a stalled baseline from the plan stated in the same message', async () => {
+    const plan = contextPlan(['retirement_analysis'], true);
+    // The planner read the whole message as a scenario, so every stated value
+    // was withheld and the baseline was left with nothing to run on.
+    plan.statedRetirementInputs = {
+      currentAge: 48,
+      retirementAge: 58,
+      annualWithdrawalAmount: 150_000,
+      withdrawalStartAge: 58,
+      sources: {
+        currentAge: 'I am 48',
+        retirementAge: 'retire by 58',
+        annualWithdrawalAmount: 'spend $150K per year',
+        withdrawalStartAge: 'start withdrawing at age 58',
+      },
+    };
+    plan.retirementInputs = { currentAge: 48, sources: { currentAge: 'I am 48' } };
+    plan.scenarioPlans.retirement = {
+      requested: true,
+      primary: {
+        type: 'historical_cpi',
+        overrides: {
+          retirementAge: 58,
+          annualWithdrawalAmount: 150_000,
+          withdrawalStartAge: 58,
+          sources: {
+            retirementAge: 'retire by 58',
+            annualWithdrawalAmount: 'spend $150K per year',
+            withdrawalStartAge: 'start withdrawing at age 58',
+          },
+        },
+      },
+    };
+    mockedPlanContext.mockResolvedValue(plan);
+    mockedCompleteRetirement
+      .mockImplementationOnce(async (current) => ({
+        ...current,
+        retirementAnalysisNeedsInfo: {
+          missingParams: ['retirementAge', 'annualWithdrawalAmount', 'withdrawalStartAge'],
+          detectedParams: {},
+        },
+      } as any))
+      .mockImplementationOnce(async (current) => ({
+        ...current,
+        retirementAnalysis: cachedRetirementAnalysis() as any,
+      }));
+    mockedAskClaude.mockResolvedValue(JSON.stringify({ summary: 'Here is the projection.' }));
+
+    const result = await runAskLincAnalysis({
+      question: 'Run the retirement projection. I plan to retire by 58 and spend $150K per year.',
+      userId: 'user-1',
+    });
+
+    expect(mockedCompleteRetirement).toHaveBeenCalledTimes(2);
+    expect(mockedCompleteRetirement.mock.calls[1][1].plannedRetirementInputs).toEqual({
+      currentAge: 48,
+      retirementAge: 58,
+      annualWithdrawalAmount: 150_000,
+      withdrawalStartAge: 58,
+      sources: {
+        currentAge: 'I am 48',
+        retirementAge: 'retire by 58',
+        annualWithdrawalAmount: 'spend $150K per year',
+        withdrawalStartAge: 'start withdrawing at age 58',
+      },
+    });
+    expect(result.displayText).not.toContain('I could not run a retirement projection');
+  });
+
+  it('restores a withheld what-if field from the stated plan, not the scenario age', async () => {
+    const plan = contextPlan(['retirement_analysis'], true);
+    const statedPlan = {
+      currentAge: 45,
+      retirementAge: 62,
+      annualWithdrawalAmount: 120_000,
+      withdrawalStartAge: 62,
+      sources: {
+        currentAge: 'I am 45',
+        retirementAge: 'retire at 62',
+        annualWithdrawalAmount: 'spend $120,000',
+        withdrawalStartAge: 'retire at 62',
+      },
+    };
+    // Stated plan keeps 62; baseline gather already withheld it because the
+    // variant asks about 67. Recovery must restore 62, not adopt 67.
+    plan.statedRetirementInputs = { ...statedPlan };
+    plan.retirementInputs = {
+      currentAge: 45,
+      annualWithdrawalAmount: 120_000,
+      sources: {
+        currentAge: 'I am 45',
+        annualWithdrawalAmount: 'spend $120,000',
+      },
+    };
+    plan.scenarioPlans.retirement = {
+      requested: true,
+      primary: {
+        type: 'historical_cpi',
+        overrides: {
+          retirementAge: 67,
+          withdrawalStartAge: 67,
+          sources: {
+            retirementAge: 'what about 67',
+            withdrawalStartAge: 'what about 67',
+          },
+        },
+      },
+    };
+    mockedPlanContext.mockResolvedValue(plan);
+    mockedCompleteRetirement
+      .mockImplementationOnce(async (current) => ({
+        ...current,
+        retirementAnalysisNeedsInfo: {
+          missingParams: ['retirementAge', 'withdrawalStartAge'],
+          detectedParams: {},
+        },
+      } as any))
+      .mockImplementationOnce(async (current) => ({
+        ...current,
+        retirementAnalysis: cachedRetirementAnalysis() as any,
+      }));
+    mockedAskClaude.mockResolvedValue(JSON.stringify({ summary: 'Here is the comparison.' }));
+
+    await runAskLincAnalysis({
+      question: 'I plan to retire at 62 and spend $120,000. What about 67?',
+      userId: 'user-1',
+    });
+
+    expect(mockedCompleteRetirement).toHaveBeenCalledTimes(2);
+    expect(mockedCompleteRetirement.mock.calls[1][1].plannedRetirementInputs).toEqual(statedPlan);
+  });
+
+  it('keeps the first answer when the variant cannot fill the gap either', async () => {
+    const plan = contextPlan(['retirement_analysis'], true);
+    plan.retirementInputs = { currentAge: 48, sources: { currentAge: 'I am 48' } };
+    plan.scenarioPlans.retirement = {
+      requested: true,
+      primary: { type: 'flat_nominal', source: 'in flat dollars' },
+    };
+    mockedPlanContext.mockResolvedValue(plan);
+    mockedCompleteRetirement.mockImplementation(async (current) => ({
+      ...current,
+      retirementAnalysisNeedsInfo: {
+        missingParams: ['annualWithdrawalAmount'],
+        detectedParams: {},
+      },
+    } as any));
+    mockedAskClaude.mockResolvedValue(JSON.stringify({ summary: 'I need one more number.' }));
+
+    await runAskLincAnalysis({
+      question: 'Run my retirement projection in flat dollars.',
+      userId: 'user-1',
+    });
+
+    expect(mockedCompleteRetirement).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not retry when the variant leaves a gap the baseline still needs', async () => {
+    const plan = contextPlan(['retirement_analysis'], true);
+    plan.retirementInputs = { sources: {} };
+    plan.scenarioPlans.retirement = {
+      requested: true,
+      primary: {
+        type: 'historical_cpi',
+        overrides: {
+          retirementAge: 58,
+          withdrawalStartAge: 58,
+          sources: { retirementAge: 'retire by 58', withdrawalStartAge: 'retire by 58' },
+        },
+      },
+    };
+    mockedPlanContext.mockResolvedValue(plan);
+    // No age on file anywhere, and no variant can supply one.
+    mockedCompleteRetirement.mockImplementation(async (current) => ({
+      ...current,
+      retirementAnalysisNeedsInfo: {
+        missingParams: ['currentAge', 'annualWithdrawalAmount'],
+        detectedParams: {},
+      },
+    } as any));
+    mockedAskClaude.mockResolvedValue(JSON.stringify({ summary: 'I need your age.' }));
+
+    await runAskLincAnalysis({
+      question: 'Can I retire by 58?',
+      userId: 'user-1',
+    });
+
+    expect(mockedCompleteRetirement).toHaveBeenCalledTimes(1);
+  });
+
   it('waits for the primary audit to refine semantic queries before retrieving search evidence', async () => {
     const preflight = contextPlan(['search_context']);
     preflight.searchQueries = [{

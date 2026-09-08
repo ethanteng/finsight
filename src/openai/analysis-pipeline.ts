@@ -50,6 +50,7 @@ import {
   planContext,
   buildPlannerTranscript,
   retirementInputsForBaseline,
+  retirementInputsFromScenarioPlan,
   type ContextPlan,
 } from './context-planner';
 import {
@@ -242,8 +243,12 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
     RETIREMENT_CALCULATOR_ID
   );
   let finalSearchQueries = [...contextPlan.searchQueries];
+  // Prefer the stated plan so a later audit that only changes the scenario can
+  // re-withhold against the user's words, not against an already-stripped copy.
+  const statedRetirementInputs =
+    contextPlan.statedRetirementInputs ?? contextPlan.retirementInputs;
   let retirementBaselineInputs = retirementInputsForBaseline(
-    contextPlan.retirementInputs,
+    statedRetirementInputs,
     retirementScenarioPlan
   );
   // The primary audit can discover a scenario the preflight missed. Delay any
@@ -311,7 +316,7 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
         RETIREMENT_CALCULATOR_ID
       );
       retirementBaselineInputs = retirementInputsForBaseline(
-        contextPlan.retirementInputs,
+        statedRetirementInputs,
         retirementScenarioPlan
       );
       const widenedPacks = normalizeContextPacks([
@@ -421,6 +426,56 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
           onProgress,
         });
         contextGatherMs += Date.now() - completionStartedAt;
+
+        // The baseline stopped for want of planning inputs that the requested
+        // scenario is itself carrying. Asking the user for them would repeat a
+        // question they have already answered -- in the scenario the planner
+        // read out of the same sentence -- and the scenario cannot run without
+        // a baseline either. Retry once with those values folded in, so the
+        // deadlock resolves into the projection the user asked for.
+        //
+        // Start from the stated plan (pre-withhold), not the stripped baseline.
+        // Folding into the stripped copy would adopt a genuine what-if override
+        // (retire at 62; what about 67?) as the baseline and erase the comparison.
+        const missingBaselineInputs = snapshot.retirementAnalysisNeedsInfo?.missingParams ?? [];
+        if (retirementScenarioPlan && missingBaselineInputs.length > 0) {
+          const recoveredInputs = retirementInputsFromScenarioPlan(
+            statedRetirementInputs,
+            retirementScenarioPlan
+          );
+          // Only retry when recovery actually closes every gap relative to the
+          // inputs already tried. A second pass that would stop on the same
+          // missing number costs a database read and an engine run to arrive at
+          // the answer already in hand.
+          const recoveryIsComplete = recoveredInputs !== retirementBaselineInputs &&
+            missingBaselineInputs.every((param) => recoveredInputs?.[param] !== undefined);
+          if (recoveryIsComplete) {
+            const retryStartedAt = Date.now();
+            const recovered = await completeRetirementAnalysis(
+              { ...snapshot, retirementAnalysis: undefined, retirementAnalysisNeedsInfo: undefined },
+              {
+                userId,
+                question,
+                questionNeeds,
+                recentTurns,
+                plannedRetirementInputs: recoveredInputs,
+                useExistingRetirementBaseline: Boolean(retirementScenarioPlan),
+                onProgress,
+              }
+            );
+            contextGatherMs += Date.now() - retryStartedAt;
+            // Keep the original result when the retry did not actually produce
+            // a baseline: its needsInfo describes the same gap, and the first
+            // one was resolved against the inputs the user really stated.
+            if (recovered.retirementAnalysis) {
+              snapshot = recovered;
+              retirementBaselineInputs = retirementInputsForBaseline(
+                recoveredInputs,
+                retirementScenarioPlan
+              );
+            }
+          }
+        }
       } catch (completionError) {
         console.error('Ask Linc: Deferred retirement analysis could not be completed:', completionError);
       }
