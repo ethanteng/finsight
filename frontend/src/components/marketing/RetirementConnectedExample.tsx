@@ -81,25 +81,26 @@ function countWord(n: number): string {
  * The unresolved/unsupported lists come from the generated engine output; do not
  * hardcode "two / two" here or a regeneration with a different book will lie.
  *
- * "asset class or equity geography" is the engine's own wording for
- * `unmappedHoldings`, and both halves matter: a declared-equity position with
- * no resolvable country is dropped for the geography alone. Saying only
- * "asset class" misstates why the engine excluded it.
+ * Both halves of "what they hold or where" matter: `unmappedHoldings` is the
+ * engine's list of positions whose asset class *or* equity geography it could
+ * not resolve, so a position it knows is stock but cannot place in a country is
+ * excluded for the geography alone. Saying only "what they hold" would misstate
+ * why the engine left it out.
  */
 function unmodeledGapCopy(unresolvedCount: number, unsupportedCount: number): string | null {
   const parts: string[] = [];
   if (unresolvedCount > 0) {
     parts.push(
       unresolvedCount === 1
-        ? "One has no resolvable asset class or equity geography"
-        : `${countWord(unresolvedCount).replace(/^./, (c) => c.toUpperCase())} have no resolvable asset class or equity geography`
+        ? "One does not say clearly enough what it holds or where"
+        : `${countWord(unresolvedCount).replace(/^./, (c) => c.toUpperCase())} do not say clearly enough what they hold or where`
     );
   }
   if (unsupportedCount > 0) {
     parts.push(
       unsupportedCount === 1
-        ? "one has a class the engine has no return series for"
-        : `${countWord(unsupportedCount)} have one the engine has no return series for`
+        ? "one is a kind of investment with no century of history to test it against"
+        : `${countWord(unsupportedCount)} are kinds of investment with no century of history to test them against`
     );
   }
   if (parts.length === 0) return null;
@@ -149,16 +150,25 @@ export function RetirementConnectedExample() {
     <section className="qp-example">
       <div className="shell">
         <div className="qp-example-head">
-          <p className="section-kicker">THE SAME QUESTION, WITH THE ACCOUNTS CONNECTED</p>
-          <h2>What the model says when it doesn&apos;t have to guess</h2>
+          <p className="section-kicker light">WHAT CHANGES WHEN YOU CONNECT YOUR ACCOUNTS</p>
+          <h2>A far more realistic answer, because it stops guessing what you own.</h2>
           <p className="qp-example-lede">
-            An example profile, run through the same engine. The plan is the same shape the form
-            above asks for — retiring at {plan.retirementAge}, spending{" "}
-            {money(plan.annualSpending)} a year, {money(plan.annualContributions)} a year saved until
-            then, {money(plan.socialSecurityAnnual)} of Social Security from{" "}
-            {plan.socialSecurityStartAge}. What changed is that the model read{" "}
-            {portfolio.holdingCount} holdings across {portfolio.accountCount} accounts worth{" "}
-            {money(portfolio.totalInvestments)}, instead of assuming a preset.
+            To answer your six numbers, the model had to guess what you own. You gave it a total and
+            picked one of three ready-made mixes, and it assumed the rest.
+          </p>
+          <p className="qp-example-lede">
+            That guess does a lot of the work. Two people with the same savings, the same spending
+            and the same retirement date can get very different answers depending on what they
+            actually hold — money in inflation-protected bonds comes through a bad decade very
+            differently from money in one company&apos;s stock.
+          </p>
+          <p className="qp-example-lede">
+            Below is that same question for someone whose accounts are connected:{" "}
+            {portfolio.holdingCount} real holdings across {portfolio.accountCount} accounts, worth{" "}
+            {money(portfolio.totalInvestments)}, retiring at {plan.retirementAge} on{" "}
+            {money(plan.annualSpending)} a year. Same model, same century of history. The difference
+            is that nothing about the portfolio is assumed — and where the model still can&apos;t see
+            something, it says so instead of quietly averaging it in.
           </p>
         </div>
 
@@ -213,7 +223,7 @@ export function RetirementConnectedExample() {
 
         <div className="qp-example-grid">
           <article className="qp-example-card">
-            <h3>It found the actual mix</h3>
+            <h3>It knows exactly what they own</h3>
             <dl className="qp-example-mix">
               <div><dt>Stocks</dt><dd>{percent(allocation.equity)}</dd></div>
               <div><dt>of which international</dt><dd>{percent(allocation.international)}</dd></div>
@@ -222,32 +232,33 @@ export function RetirementConnectedExample() {
               <div><dt>Cash</dt><dd>{percent(allocation.cash)}</dd></div>
             </dl>
             <p>
-              No preset would have guessed the inflation-protected sleeve or the international
-              weight, and both change how this plan behaves in a bad decade. These are what the
-              mapper classified, not what it simulated — the TIPS and corporate-bond sleeves sit
-              inside the bond line and also in the list next door.
+              No ready-made mix would have guessed the inflation-protected bonds or how much of this
+              money is invested overseas, and both change how the plan comes through a bad decade.
+              These percentages are what the model could identify, not all of what it could run —
+              the inflation-protected and corporate bonds counted on the bond line also appear in
+              the list next door.
             </p>
           </article>
 
           <article className="qp-example-card qp-example-card-flag">
-            <h3>And told you what it still couldn&apos;t model</h3>
+            <h3>It says what it cannot see</h3>
             <p className="qp-example-figure">{money(coverage.unmodeledValue)}</p>
             <p className="qp-example-figure-note">
               of {money(portfolio.totalInvestments)} — {percent((1 - coverage.valueCoverage) * 100, 1)} of the
-              money — left out of the simulation rather than guessed at:
+              money — left out of the test rather than guessed at:
             </p>
             <ul className="qp-example-unmodeled">
               {unmodeled.map((label) => <li key={label}>{label}</li>)}
             </ul>
             <p>
               {gapCopy ? `${gapCopy} ` : null}
-              The six-number version above had nothing to disclose here, because it invented the
-              whole portfolio.
+              The six-number answer above had nothing to admit here, because it made the whole
+              portfolio up.
             </p>
           </article>
 
           <article className="qp-example-card">
-            <h3>Then said how much to trust it</h3>
+            <h3>It shows how much to trust the answer</h3>
             <dl className="qp-example-mix">
               <div><dt>Money modeled</dt><dd>{percent(coverage.valueCoverage * 100)}</dd></div>
               <div><dt>Mapping confidence</dt><dd className="qp-example-low">{coverage.confidence}</dd></div>
@@ -255,18 +266,19 @@ export function RetirementConnectedExample() {
             </dl>
             {proxied ? (
               <p>
-                Real holdings also bring their own gaps. For {proxied.months} of the{" "}
+                Real holdings bring their own gaps too. For {proxied.months} of the{" "}
                 {proxied.windowMonths} months tested —{" "}
                 {proxied.ranges
                   .map((range) => `${monthLabel(range.firstMonth)} to ${monthLabel(range.lastMonth)}`)
                   .join(", and ")}{" "}
-                — the international series has no returns of its own, so that sleeve carries the US
-                market return rather than its own. The plan is still checked against the whole
-                record; those months simply hold no distinct international behaviour.
+                — nobody recorded what overseas markets did, so those months use the US market
+                return instead. The plan is still checked against the whole record; those months
+                just cannot tell you anything about holding money abroad.
               </p>
             ) : (
               <p>
-                Every sleeve in this portfolio has its own returns for the whole tested window.
+                Every part of this portfolio has its own recorded returns for the whole tested
+                window.
               </p>
             )}
           </article>
@@ -294,9 +306,8 @@ export function RetirementConnectedExample() {
         </div>
 
         <p className="qp-example-footnote">
-          Example profile, not a customer. Every number above is output from the same
-          <code> analyzeRetirementPortfolio </code>
-          this page runs on your six numbers — regenerated from the engine, never written by hand.
+          Example profile, not a customer. Every number above came out of the same model this page
+          just ran on your six numbers — generated straight from it, never written by hand.
         </p>
       </div>
     </section>

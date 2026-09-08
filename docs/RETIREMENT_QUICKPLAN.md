@@ -114,6 +114,16 @@ of the panel's two centrepieces — the share of the money left out of the
 simulation rather than guessed at, which the six-number version has no way to
 disclose because it invented the whole portfolio.
 
+**Its header is the page's pitch, so it is styled as one.** The section head is
+an inset dark panel rather than a dark full-bleed band: the cross-sell directly
+below is already full-bleed dark, and two of those in a row read as one block.
+The copy in it is deliberately non-technical — what the six-number answer had to
+assume, why that assumption changes the answer, and what connecting accounts
+replaces it with — because it is the one part of this page addressed to someone
+who has not decided to care yet. It claims the model stops guessing *what you
+own*, never that nothing is assumed: the panel's own middle card prices what the
+model still cannot see.
+
 **The panel answers the question before it shows its work.** It leads with the
 result at the plan's own retirement age and a band of the same plan at each age
 in `RETIREMENT_AGE_LADDER` — a separate engine run apiece, identical in every

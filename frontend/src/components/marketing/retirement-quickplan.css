@@ -904,30 +904,50 @@
 /* ------------------------------------------- connected-accounts example */
 
 .quickplan-page .qp-example {
-  padding-block: 72px;
-  border-top: 1px solid rgba(16, 35, 25, 0.12);
+  padding-block: 88px 84px;
+  border-top: 4px solid var(--forest);
   background: #eceadf;
 }
 
+/*
+ * The section head is a dark panel rather than the section itself.
+ *
+ * This block is the page's pitch and has to be unmissable against the cream
+ * result above it — but the cross-sell immediately below is already a dark
+ * full-bleed band, and two of those in a row read as one thing. An inset dark
+ * header gives the contrast without the collision, and the light cards under it
+ * keep the two dark blocks apart.
+ */
 .quickplan-page .qp-example-head {
-  max-width: 820px;
-  margin-bottom: 36px;
+  margin-bottom: 24px;
+  padding: 44px 46px 40px;
+  border-radius: 24px;
+  background: var(--forest);
+  color: #dfe8e0;
 }
 
 .quickplan-page .qp-example-head h2 {
-  margin: 0 0 16px;
+  max-width: 20ch;
+  margin: 0 0 22px;
+  color: white;
   font-family: var(--font-display);
-  font-size: clamp(32px, 3.6vw, 46px);
+  font-size: clamp(34px, 4.2vw, 54px);
   font-weight: 680;
-  line-height: 1.12;
-  letter-spacing: -0.045em;
+  line-height: 1.08;
+  letter-spacing: -0.048em;
 }
 
 .quickplan-page .qp-example-lede {
-  margin: 0;
-  color: #55635a;
+  max-width: 700px;
+  margin: 0 0 14px;
+  color: #adc2b1;
   font-size: 16px;
-  line-height: 1.7;
+  line-height: 1.72;
+}
+
+.quickplan-page .qp-example-lede:last-child {
+  margin-bottom: 0;
+  color: #cddbcf;
 }
 
 /* The answer, before the evidence for it. Sits on a card of its own so a
@@ -1210,6 +1230,11 @@
   .quickplan-page .qp-example-grid,
   .quickplan-page .qp-example-result {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .quickplan-page .qp-example-head {
+    padding: 32px 22px 30px;
+    border-radius: 18px;
   }
 
   .quickplan-page .qp-example-answer {
