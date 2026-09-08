@@ -22,6 +22,7 @@ import {
   YAxis,
 } from "recharts";
 import { MarketingGetStartedButton } from "./MarketingGetStartedButton";
+import { TRIAL_CTA_MICROCOPY } from "./trial-copy";
 import { SiteFooter, SiteHeader } from "./SiteShell";
 import { CONNECTED_EXAMPLE_ID, RetirementConnectedExample } from "./RetirementConnectedExample";
 import { pushRetirementInteraction, pushRetirementModelRun } from "@/lib/dataLayer";
@@ -492,18 +493,19 @@ export function RetirementQuickPlan({
           <h2>
             {result
               ? "This analysis used six numbers."
-              : "Six numbers gets you a real calculation. Your accounts get you a real answer."}
+              : "Six numbers, or everything you actually own."}
           </h2>
           <p>
-            Ask Linc can replace those estimates with your actual accounts, spending, investments,
-            debts and income — every holding, every fee, your real allocation, your real cash flow —
-            and run this same model against them.
+            Ask Linc runs this same model on your real accounts — every holding, every fee, your
+            actual spending and income.
           </p>
           <MarketingGetStartedButton
             className="button button-primary"
             trackingLocation="quickplan_cross_sell"
             csOverrideId="cta-start-free-trial-quickplan"
           />
+          {/* The same promise every CTA on the site makes; kept in one place. */}
+          <p className="microcopy">{TRIAL_CTA_MICROCOPY}</p>
         </div>
       </section>
 

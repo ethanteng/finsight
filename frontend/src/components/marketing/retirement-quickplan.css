@@ -720,6 +720,13 @@
   cursor: pointer;
 }
 
+/* `.microcopy` is coloured for a light section; this one sits on ink. */
+.quickplan-page .qp-cross-sell .microcopy {
+  margin: 18px 0 0;
+  color: #94a69a;
+  font-size: 13px;
+}
+
 /* ------------------------------------------------------------- responsive */
 
 @media (max-width: 900px) {

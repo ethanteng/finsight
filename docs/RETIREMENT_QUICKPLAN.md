@@ -180,9 +180,11 @@ which months of the window that covers.
 
 ## Page order
 
-Hero, form, result (verdict → sustainable-spending chart → scenarios →
-methodology and the assumptions disclosure), then the connected-accounts panel,
-the cross-sell, and the always-present crawlable body.
+Hero, form, result (verdict → jump link → sustainable-spending chart →
+scenarios → methodology and the assumptions disclosure), then the
+connected-accounts panel, the cross-sell, and the always-present crawlable body
+— now just the FAQ ("Retirement FAQs") and the cluster links ("Read more about
+retirement").
 
 The methodology block sits directly under the scenarios because it explains the
 numbers immediately above it. Four pieces that used to sit between or around
@@ -197,6 +199,14 @@ the link to `/trust` — left with the "what the model actually tests" block. Th
 same sourcing is still in the assumptions disclosure, which a visitor only
 reaches by running the model, so the page no longer credits its data sources to
 someone who reads it without running anything.
+
+## The closing CTA
+
+One kicker, one line, one sentence, the button, and `TRIAL_CTA_MICROCOPY` —
+the same card-free-trial promise every other CTA on the site makes, imported
+rather than retyped so the page cannot drift from it. The headline changes with
+state: "This analysis used six numbers" once a visitor has run one, and "Six
+numbers, or everything you actually own" before that.
 
 ## Paid-search variants
 

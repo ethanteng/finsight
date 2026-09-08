@@ -36,7 +36,7 @@ export function RetirementCalculatorSeoContent() {
       </section>
 
       <section className="shell qp-related">
-        <h2>Keep going</h2>
+        <h2>Read more about retirement</h2>
         <ul className="qp-related-list">
           <li>
             <Link href="/retirement-answers">
