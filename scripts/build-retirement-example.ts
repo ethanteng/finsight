@@ -36,22 +36,27 @@ const OUTPUT_PATH = join(
   'retirement-calculator-example.generated.ts'
 );
 
-/** [id, security name, declared type, market value] */
-type BookEntry = [string, string, string, number];
+/** [id, security name, declared type, market value, account id] */
+type BookEntry = [string, string, string, number, string];
 
+/**
+ * Holdings are split across a few custodial accounts the way a real feed is.
+ * `accountCount` on the panel is derived from these ids — never typed by hand —
+ * so the "N accounts" claim stays as honest as the dollar figures.
+ */
 const EXAMPLE_BOOK: BookEntry[] = [
-  ['tsm', 'Vanguard Total Stock Market Index Fund', 'equity', 486_000],
-  ['sp500', 'Fidelity S&P 500 Index Fund', 'equity', 312_400],
-  ['smid', 'Russell 2000 Small Cap Index', 'equity', 96_800],
-  ['intl', 'International Developed Markets Index Fund', 'equity', 241_500],
-  ['em', 'Emerging Markets Stock Index Fund', 'equity', 88_300],
-  ['agg', 'US Aggregate Bond Index Fund', 'fixed income', 402_100],
-  ['gov', 'Intermediate Term Government Bond Fund', 'fixed income', 118_600],
-  ['tips', 'Inflation Protected Securities Fund (TIPS)', 'fixed income', 94_700],
-  ['corp', 'Investment Grade Corporate Bond Fund', 'fixed income', 76_200],
-  ['cash', 'Money Market Cash Reserves', 'cash', 63_900],
-  ['emp', 'Employer Stock Units', 'equity', 45_200],
-  ['misc', 'Brokerage Holdings Not Itemized', 'unknown', 248_172],
+  ['tsm', 'Vanguard Total Stock Market Index Fund', 'equity', 486_000, 'traditional-ira'],
+  ['intl', 'International Developed Markets Index Fund', 'equity', 241_500, 'traditional-ira'],
+  ['agg', 'US Aggregate Bond Index Fund', 'fixed income', 402_100, 'traditional-ira'],
+  ['sp500', 'Fidelity S&P 500 Index Fund', 'equity', 312_400, 'roth-ira'],
+  ['tips', 'Inflation Protected Securities Fund (TIPS)', 'fixed income', 94_700, 'roth-ira'],
+  ['cash', 'Money Market Cash Reserves', 'cash', 63_900, 'roth-ira'],
+  ['smid', 'Russell 2000 Small Cap Index', 'equity', 96_800, '401k'],
+  ['em', 'Emerging Markets Stock Index Fund', 'equity', 88_300, '401k'],
+  ['gov', 'Intermediate Term Government Bond Fund', 'fixed income', 118_600, '401k'],
+  ['corp', 'Investment Grade Corporate Bond Fund', 'fixed income', 76_200, '401k'],
+  ['emp', 'Employer Stock Units', 'equity', 45_200, 'taxable-brokerage'],
+  ['misc', 'Brokerage Holdings Not Itemized', 'unknown', 248_172, 'taxable-brokerage'],
 ];
 
 /** The same shape of plan the landing-page form collects. */
@@ -63,14 +68,12 @@ const EXAMPLE_PLAN = {
   annualContributions: 48_000,
   socialSecurityAnnual: 41_400,
   socialSecurityStartAge: 67,
-  /** Accounts behind the holdings, for the panel's "what it read" line. */
-  accountCount: 9,
 };
 
 function buildPortfolio(book: BookEntry[]) {
-  const holdings: Holding[] = book.map(([id, name, type, value]) => ({
+  const holdings: Holding[] = book.map(([id, name, type, value, accountId]) => ({
     id,
-    account_id: 'example',
+    account_id: accountId,
     security_id: id,
     institution_value: value,
     institution_price: null,
@@ -123,7 +126,7 @@ async function main() {
       socialSecurityStartAge: EXAMPLE_PLAN.socialSecurityStartAge,
     },
     portfolio: {
-      accountCount: EXAMPLE_PLAN.accountCount,
+      accountCount: new Set(EXAMPLE_BOOK.map(([, , , , accountId]) => accountId)).size,
       holdingCount: EXAMPLE_BOOK.length,
       totalInvestments,
     },
