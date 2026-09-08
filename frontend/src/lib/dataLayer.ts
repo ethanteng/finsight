@@ -14,6 +14,26 @@ interface DataLayerWindow {
   dataLayer?: Array<Record<string, unknown> | unknown[]>;
 }
 
+export type RetirementInteractionEvent =
+  | 'retirement_calculator_started'
+  | 'retirement_calculator_field_edited'
+  | 'retirement_model_clicked'
+  | 'retirement_model_requested'
+  | 'retirement_validation_error'
+  | 'retirement_api_error'
+  | 'retirement_request_error';
+
+/** One event per destination; no financial inputs. GTM forwards these to GA4. */
+export function pushRetirementInteraction(event: RetirementInteractionEvent): void {
+  if (typeof window === 'undefined') return;
+  trackContentsquareEvent(event);
+  pushToDataLayer({
+    event,
+    source_page: window.location.pathname,
+    content_type: 'retirement_calculator',
+  });
+}
+
 function pushToDataLayer(payload: Record<string, unknown>): void {
   if (typeof window === 'undefined') return;
   const win = window as unknown as DataLayerWindow;
