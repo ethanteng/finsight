@@ -344,6 +344,58 @@
   text-shadow: 0 1px 2px rgba(16, 35, 25, 0.35);
 }
 
+/*
+ * The jump from the result to the connect-accounts section.
+ *
+ * It animates because it has to compete with a chart the visitor is already
+ * reading: a slow bob on the arrow and a breathing ring on the pill, both
+ * cheap (transform and box-shadow only, no layout) and both off under
+ * prefers-reduced-motion, where the link still reads as a link.
+ */
+.quickplan-page .qp-jump {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 26px;
+  padding: 15px 24px;
+  border-radius: 999px;
+  background: var(--lime);
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  animation: qp-jump-ring 2.6s ease-in-out infinite;
+}
+
+.quickplan-page .qp-jump:hover {
+  animation-play-state: paused;
+  box-shadow: 0 0 0 6px rgba(120, 175, 60, 0.22);
+}
+
+.quickplan-page .qp-jump-arrow {
+  font-size: 17px;
+  line-height: 1;
+  animation: qp-jump-bob 1.5s ease-in-out infinite;
+}
+
+@keyframes qp-jump-ring {
+  0%, 68%, 100% { box-shadow: 0 0 0 0 rgba(120, 175, 60, 0); }
+  20% { box-shadow: 0 0 0 9px rgba(120, 175, 60, 0.26); }
+  46% { box-shadow: 0 0 0 16px rgba(120, 175, 60, 0); }
+}
+
+@keyframes qp-jump-bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(4px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .quickplan-page .qp-jump,
+  .quickplan-page .qp-jump-arrow {
+    animation: none;
+  }
+}
+
 .quickplan-page .qp-stats {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -904,6 +956,7 @@
 /* ------------------------------------------- connected-accounts example */
 
 .quickplan-page .qp-example {
+  scroll-margin-top: 18px;
   padding-block: 88px 84px;
   border-top: 4px solid var(--forest);
   background: #eceadf;

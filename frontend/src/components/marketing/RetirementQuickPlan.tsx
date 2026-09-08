@@ -23,7 +23,7 @@ import {
 } from "recharts";
 import { MarketingGetStartedButton } from "./MarketingGetStartedButton";
 import { SiteFooter, SiteHeader } from "./SiteShell";
-import { RetirementConnectedExample } from "./RetirementConnectedExample";
+import { CONNECTED_EXAMPLE_ID, RetirementConnectedExample } from "./RetirementConnectedExample";
 import { pushRetirementInteraction, pushRetirementModelRun } from "@/lib/dataLayer";
 
 type AllocationId = "conservative" | "balanced" | "growth";
@@ -669,6 +669,18 @@ function QuickPlanResults({ result }: { result: QuickPlanResult }) {
             }
           />
         </div>
+
+        {/*
+          * The answer above is the page's payoff, and the section that argues
+          * for connecting accounts is four blocks further down — past two
+          * charts and the methodology. Someone who reads their result and
+          * stops never sees it. This is the shortcut, placed the moment they
+          * have an answer to compare against.
+          */}
+        <a className="qp-jump" href={`#${CONNECTED_EXAMPLE_ID}`}>
+          <span>See this same answer with real accounts connected</span>
+          <span className="qp-jump-arrow" aria-hidden="true">↓</span>
+        </a>
       </section>
 
       <section className="shell qp-chart-block">

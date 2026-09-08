@@ -138,6 +138,12 @@ function ladderCopy(read: ReturnType<typeof readLadder>, sequencesTested: number
   return parts.join(" ");
 }
 
+/**
+ * Anchor target for the jump link under the live result. Exported so the two
+ * cannot drift: a link to an id nothing carries fails silently.
+ */
+export const CONNECTED_EXAMPLE_ID = "connect-accounts";
+
 export function RetirementConnectedExample() {
   const { plan, portfolio, allocation, coverage, result } = EXAMPLE;
   const unmodeled = [...coverage.unresolved, ...coverage.unsupported];
@@ -147,17 +153,11 @@ export function RetirementConnectedExample() {
   const band = outcomeBand(result.survivalRate);
 
   return (
-    <section className="qp-example">
+    <section className="qp-example" id={CONNECTED_EXAMPLE_ID}>
       <div className="shell">
         <div className="qp-example-head">
           <p className="section-kicker light">WHAT CHANGES WHEN YOU CONNECT YOUR ACCOUNTS</p>
           <h2>A far more realistic answer, because it stops guessing what you own.</h2>
-          <p className="qp-example-lede">
-            Your six numbers don&apos;t say what you own, so the model had to guess: a total, and one
-            of three ready-made mixes. That guess does a lot of the work — money in
-            inflation-protected bonds comes through a bad decade very differently from money in one
-            company&apos;s stock.
-          </p>
           <p className="qp-example-lede">
             Below is the same question for someone whose accounts are connected:{" "}
             {portfolio.holdingCount} real holdings across {portfolio.accountCount} accounts, worth{" "}

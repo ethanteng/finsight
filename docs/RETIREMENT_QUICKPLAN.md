@@ -114,6 +114,16 @@ of the panel's two centrepieces — the share of the money left out of the
 simulation rather than guessed at, which the six-number version has no way to
 disclose because it invented the whole portfolio.
 
+**A jump link sits under the live result.** The connected-accounts section is
+four blocks below the answer — past two charts and the methodology — so a
+visitor who reads their result and stops never reaches the argument for
+connecting anything. The link appears the moment they have an answer to compare
+against. It animates (a bob on the arrow, a breathing ring on the pill) because
+it competes with a chart already in view; both animations are transform and
+box-shadow only, and both are off under `prefers-reduced-motion`. The anchor id
+is exported as `CONNECTED_EXAMPLE_ID` and imported by both sides, because a link
+to an id nothing carries fails silently.
+
 **Its header is the page's pitch, so it is styled as one.** The section head is
 an inset dark panel rather than a dark full-bleed band: the cross-sell directly
 below is already full-bleed dark, and two of those in a row read as one block.
@@ -124,7 +134,10 @@ narrow screens, where it wraps to two lines and a stadium radius would read as
 a mistake. The copy is deliberately non-technical and deliberately short — what
 the six-number answer had to assume, why that assumption changes the answer, and
 what connecting accounts replaces it with — because it is the one part of this
-page addressed to someone who has not decided to care yet. It claims the model stops guessing *what you
+page addressed to someone who has not decided to care yet. The headline carries
+the argument on its own; the lede under it is one sentence naming the profile,
+because everything else it used to say is either in that headline or in the
+cards below it. It claims the model stops guessing *what you
 own*, never that nothing is assumed: the panel's own middle card prices what the
 model still cannot see.
 
