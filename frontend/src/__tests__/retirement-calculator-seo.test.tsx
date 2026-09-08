@@ -51,18 +51,26 @@ describe('retirement calculator SEO', () => {
   it('keeps the crawlable content in the markup without running the model', () => {
     const { container } = render(<RetirementCalculatorSeoContent />);
 
-    expect(screen.getByRole('heading', { name: /what the model actually tests/i })).toBeInTheDocument();
+    // The FAQ is what carries this block now, and it is what the page's
+    // FAQPage structured data is generated from.
+    expect(screen.getByRole('heading', { name: /retirement faqs/i })).toBeInTheDocument();
     // One h1 belongs to the page, not this block.
     expect(container.querySelector('h1')).toBeNull();
   });
 
-  it('does not re-narrate the form that sits directly above it', () => {
-    // The numbered "how this calculator works" walkthrough was removed: it
-    // described three fields and a preset the visitor can already see, and it
-    // pushed what the model tests further down the page.
+  it('does not explain in prose what the model itself now shows', () => {
+    // Two blocks were removed: the numbered "how this calculator works"
+    // walkthrough, which described three fields and a preset the visitor can
+    // already see, and the "what the model actually tests" list, which the
+    // result, the assumptions disclosure and the connected-accounts panel each
+    // demonstrate rather than assert.
     render(<RetirementCalculatorSeoContent />);
 
     expect(screen.queryByText(/real history, not an average return/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Enter six numbers/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/what the model actually tests/i)).not.toBeInTheDocument();
+    // Not a bare "sequence-of-returns risk": the FAQ asks about it, and should.
+    expect(screen.queryByText(/Contributions before you retire/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Every overlapping window the record can cover/i)).not.toBeInTheDocument();
   });
 });

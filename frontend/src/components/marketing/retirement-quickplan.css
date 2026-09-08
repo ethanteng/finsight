@@ -787,12 +787,11 @@
 
 /* ------------------------------------------------- evergreen page content */
 /*
- * What the model tests, the FAQ and the cluster links below the cross-sell.
- * These are always in the HTML, unlike the results, so they carry the page's
- * crawlable content.
+ * The FAQ and the cluster links below the cross-sell. These are always in the
+ * HTML, unlike the results, so they carry the page's crawlable content.
  */
 
-.quickplan-page .qp-tests h2,
+.quickplan-page .qp-faq h2,
 .quickplan-page .qp-faq h2,
 .quickplan-page .qp-related h2 {
   margin: 14px 0 18px;
@@ -801,50 +800,6 @@
   font-weight: 660;
   line-height: 1.1;
   letter-spacing: -0.045em;
-}
-
-.quickplan-page .qp-tests {
-  padding-block: 72px 0;
-  max-width: 900px;
-}
-
-.quickplan-page .qp-tests-list {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 18px;
-  margin: 26px 0 0;
-  padding: 0;
-  list-style: none;
-}
-
-.quickplan-page .qp-tests-list li {
-  padding: 20px 22px;
-  border: 1px solid #e0e3da;
-  border-radius: 16px;
-  background: #f6f5ec;
-}
-
-.quickplan-page .qp-tests-list strong {
-  display: block;
-  margin-bottom: 7px;
-  font-family: var(--font-display);
-  font-size: 17px;
-  font-weight: 750;
-  letter-spacing: -0.02em;
-}
-
-.quickplan-page .qp-tests-list p {
-  margin: 0;
-  color: #55635a;
-  font-size: 14.5px;
-  line-height: 1.65;
-}
-
-.quickplan-page .qp-tests-note {
-  margin: 20px 0 0;
-  color: #74807a;
-  font-size: 13px;
-  line-height: 1.65;
 }
 
 .quickplan-page .qp-faq {
@@ -947,7 +902,6 @@
 }
 
 @media (max-width: 900px) {
-  .quickplan-page .qp-tests-list,
   .quickplan-page .qp-related-list {
     grid-template-columns: minmax(0, 1fr);
   }

@@ -185,12 +185,18 @@ methodology and the assumptions disclosure), then the connected-accounts panel,
 the cross-sell, and the always-present crawlable body.
 
 The methodology block sits directly under the scenarios because it explains the
-numbers immediately above it. Three pieces that used to sit between or around
+numbers immediately above it. Four pieces that used to sit between or around
 them are gone: the dark limitations section, the numbered "how this calculator
-works" explainer (it walked through a form the visitor can already see), and the
-hero's "no chat box" line. Everything the page removed was copy about the
-product; nothing the engine computed was dropped except the limitations list
-above.
+works" explainer (it walked through a form the visitor can already see), the
+"what the model actually tests" list, and the hero's "no chat box" line.
+
+Everything removed was copy about the product; nothing the engine computes was
+dropped except the limitations list above. **One consequence worth knowing:**
+the always-present sourcing note — Kenneth R. French and Robert J. Shiller, plus
+the link to `/trust` — left with the "what the model actually tests" block. The
+same sourcing is still in the assumptions disclosure, which a visitor only
+reaches by running the model, so the page no longer credits its data sources to
+someone who reads it without running anything.
 
 ## Paid-search variants
 
