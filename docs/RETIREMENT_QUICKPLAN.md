@@ -203,10 +203,14 @@ someone who reads it without running anything.
 ## The closing CTA
 
 One kicker, one line, one sentence, the button, and `TRIAL_CTA_MICROCOPY` —
+with the button sized past the site's hero button, since everything above it on
+this page is an argument for pressing it, and full-width under 900px —
 the same card-free-trial promise every other CTA on the site makes, imported
 rather than retyped so the page cannot drift from it. The headline changes with
-state: "This analysis used six numbers" once a visitor has run one, and "Six
-numbers, or everything you actually own" before that.
+state: "This analysis used six numbers" once a visitor has run one — which only
+means something to someone holding that result — and "Get answers based on your
+actual finances" before that, for a visitor who has run nothing and needs the
+offer stated plainly.
 
 ## Paid-search variants
 

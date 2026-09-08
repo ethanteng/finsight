@@ -720,6 +720,18 @@
   cursor: pointer;
 }
 
+/*
+ * The page's one conversion button, and the last thing on it before the FAQ.
+ * Sized past the site's hero button rather than matching it: everything above
+ * this point is an argument for pressing it.
+ */
+.quickplan-page .qp-cross-sell .button-primary {
+  padding: 26px 48px;
+  font-size: 21px;
+  letter-spacing: -0.02em;
+  box-shadow: 0 10px 0 rgba(16, 35, 25, 0.22);
+}
+
 /* `.microcopy` is coloured for a light section; this one sits on ink. */
 .quickplan-page .qp-cross-sell .microcopy {
   margin: 18px 0 0;
@@ -1321,6 +1333,13 @@
   .quickplan-page .qp-example-head {
     padding: 32px 22px 30px;
     border-radius: 18px;
+  }
+
+  /* Full width here rather than a pill floating in a narrow column. */
+  .quickplan-page .qp-cross-sell .button-primary {
+    width: 100%;
+    padding: 22px 28px;
+    font-size: 19px;
   }
 
   /* The label wraps to two lines at this width; a stadium radius around two

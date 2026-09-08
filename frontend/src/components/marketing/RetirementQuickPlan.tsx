@@ -493,7 +493,7 @@ export function RetirementQuickPlan({
           <h2>
             {result
               ? "This analysis used six numbers."
-              : "Six numbers, or everything you actually own."}
+              : "Get answers based on your actual finances."}
           </h2>
           <p>
             Ask Linc runs this same model on your real accounts — every holding, every fee, your
