@@ -180,6 +180,18 @@ async function main() {
       lastMonth: historicalData?.lastMonth ?? 'unknown',
       primaryObservation: summary.primaryObservation,
       confidence: summary.confidence,
+      /**
+       * Months of the tested window where a sleeve was represented by a
+       * stand-in. The panel states this itself rather than describing it in
+       * prose, so a dataset that later covers those months removes the claim
+       * instead of leaving it stale.
+       */
+      proxiedSeries: (historicalData?.proxiedSeries ?? []).map(proxied => ({
+        description: proxied.description,
+        months: proxied.months,
+        windowMonths: proxied.windowMonths,
+        ranges: proxied.ranges,
+      })),
     },
   };
 

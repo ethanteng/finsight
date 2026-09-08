@@ -47,14 +47,14 @@ no database and no external API; the historical returns are a checked-in CSV.
 A request is pure CPU.
 
 **US-only presets.** Every preset is US stocks, US government bonds and cash,
-with no international sleeve. The engine only builds sequences over months where
-every series it needs exists, and this dataset's international series starts in
-1975 — so an international sleeve limits the test to retirements beginning
-between 1975 and the early 1980s, which returns a near-100% survival rate for
-almost any plan. Dropping it buys back 1926 onward, including the 1929, 1937,
-1966 and 1973 starts. For a portfolio the visitor has not actually told us
-about, the longer and harsher record is the more useful one. The page states
-this trade in its limitations list.
+with no international sleeve. This once existed because an international sleeve
+truncated the tested record to 1975 onward; the engine no longer does that (see
+`ShortSeriesPolicy`), so the reason is now that the sleeve would add nothing.
+Before 1975 the engine represents international with the US market return,
+which is what these presets already hold, so the visitor would get a disclosure
+in exchange for no extra information about a portfolio they have not described.
+Connecting real accounts is what gets real international holdings modeled
+against their own series — which is the difference the page is selling.
 
 **Social Security is modeled, not netted.** `RetirementAnalysisInput` gained an
 optional `retirementIncome` stream, wired through `simulateWithdrawals` as an
@@ -109,19 +109,18 @@ panel's centrepiece — the share of the money left out of the simulation rather
 than guessed at, which the six-number version has no way to disclose because it
 invented the whole portfolio.
 
-The panel deliberately does not lead with its survival rate, and says outright
-that the figure is not comparable to the one the visitor just got. The two runs
-cover different stretches of history, for a reason worth knowing:
+The panel deliberately does not lead with its survival rate, but it no longer
+has to disclaim the comparison either: both runs now cover the same record.
 
-**A real portfolio holding international funds is tested against a shorter and
-much kinder record.** The engine builds sequences only over months where every
-series it needs exists, and the international series starts in 1975. So the
-free calculator's US-only presets are stress-tested from 1926 — including 1929,
-1966 and 1973 — while a connected account with an international sleeve is tested
-only from 1975 onward. The same plan will look materially safer in the
-authenticated product than on this page, and the difference is data
-availability, not insight. Worth resolving at the source rather than papering
-over in the copy.
+That used to be false, and the fix is in the engine rather than the copy. The
+international series starts in 1975, and the engine used to restrict every
+window to months where all active series existed — so a portfolio holding any
+international at all was tested only against retirements beginning between 1975
+and the early 1980s, the most favourable stretch of the record. The same plan
+looked materially safer in the authenticated product than on this page, and the
+difference was data availability rather than insight. `ShortSeriesPolicy` now
+extends the short series with a documented proxy instead, and the panel states
+which months of the window that covers.
 
 ## Paid-search variants
 

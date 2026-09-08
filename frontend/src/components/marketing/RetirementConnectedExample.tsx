@@ -75,6 +75,7 @@ export function RetirementConnectedExample() {
   const { plan, portfolio, allocation, coverage, result } = EXAMPLE;
   const unmodeled = [...coverage.unresolved, ...coverage.unsupported];
   const gapCopy = unmodeledGapCopy(coverage.unresolved.length, coverage.unsupported.length);
+  const [proxied] = result.proxiedSeries;
 
   return (
     <section className="qp-example">
@@ -135,12 +136,22 @@ export function RetirementConnectedExample() {
               <div><dt>Mapping confidence</dt><dd className="qp-example-low">{coverage.confidence}</dd></div>
               <div><dt>History tested</dt><dd>{result.sequencesTested} windows</dd></div>
             </dl>
-            <p>
-              Real holdings can also narrow what is testable: the international funds only have
-              returns from {monthLabel(result.firstMonth)}, so this plan was checked against{" "}
-              {result.sequencesTested} windows starting after that, not the century the presets
-              above get. That is a cost of the richer answer, not a bonus.
-            </p>
+            {proxied ? (
+              <p>
+                Real holdings also bring their own gaps. For {proxied.months} of the{" "}
+                {proxied.windowMonths} months tested —{" "}
+                {proxied.ranges
+                  .map((range) => `${monthLabel(range.firstMonth)} to ${monthLabel(range.lastMonth)}`)
+                  .join(", and ")}{" "}
+                — the international series has no returns of its own, so that sleeve carries the US
+                market return rather than its own. The plan is still checked against the whole
+                record; those months simply hold no distinct international behaviour.
+              </p>
+            ) : (
+              <p>
+                Every sleeve in this portfolio has its own returns for the whole tested window.
+              </p>
+            )}
           </article>
         </div>
 
@@ -154,7 +165,8 @@ export function RetirementConnectedExample() {
             <span>Sequences survived</span>
             <strong>{result.sequencesSurvived} of {result.sequencesTested}</strong>
             <small>
-              Not comparable to the figure above: a different, shorter and kinder stretch of history
+              Same record as the result above — {monthLabel(result.firstMonth)} onward — so the two
+              are read against the same history
             </small>
           </div>
           <div>

@@ -140,13 +140,23 @@ describe('connected-accounts example panel', () => {
     ).toBeInTheDocument();
   });
 
-  it('refuses to let its survival figure be read against the one above it', () => {
+  it('says the two results are read against the same record', () => {
     render(<RetirementConnectedExample />);
 
-    // The two runs cover different stretches of history, so an unqualified
-    // comparison would be exactly the error the rest of the page avoids.
-    expect(screen.getByText(/Not comparable to the figure above/i)).toBeInTheDocument();
-    expect(screen.getByText(/cost of the richer answer, not a bonus/i)).toBeInTheDocument();
+    // They are, now that an international sleeve no longer truncates the window
+    // to 1975. Before that fix this panel had to disclaim the comparison.
+    expect(screen.getByText(/Same record as the result above/i)).toBeInTheDocument();
+    expect(EXAMPLE.result.firstMonth.startsWith('1926')).toBe(true);
+  });
+
+  it('discloses any sleeve represented by a stand-in for part of the window', () => {
+    render(<RetirementConnectedExample />);
+
+    const [proxied] = EXAMPLE.result.proxiedSeries;
+    expect(proxied).toBeDefined();
+    expect(proxied.months).toBeGreaterThan(0);
+    expect(proxied.months).toBeLessThan(proxied.windowMonths);
+    expect(screen.getByText(/carries the US market return rather than its own/i)).toBeInTheDocument();
   });
 
   it('says plainly that the profile is an example rather than a customer', () => {

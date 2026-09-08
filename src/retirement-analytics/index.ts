@@ -1,7 +1,11 @@
 // Retirement Portfolio Analysis Module - Main Entry Point
 // Orchestrates Phases 1-6
 
-import { RetirementAnalysisInput, RetirementAnalysisOutput } from './types';
+import {
+  DEFAULT_SHORT_SERIES_POLICY,
+  RetirementAnalysisInput,
+  RetirementAnalysisOutput,
+} from './types';
 import { analyzePortfolio } from './engine/portfolio-analyzer';
 import {
   mapPortfolioToAssetBasket,
@@ -189,13 +193,26 @@ export async function analyzeRetirementPortfolio(
   } = await generateRollingSequences(
     totalAnalysisYears,
     portfolioMapping,
-    50 // minHistoryYears
+    50, // minHistoryYears
+    input.shortSeriesPolicy ?? DEFAULT_SHORT_SERIES_POLICY
   );
   if (historicalData) {
     assumptions.push(
       `Historical simulation uses ${historicalData.firstMonth} through ${historicalData.lastMonth}; ` +
       'monthly rolling start windows overlap and are not statistically independent observations'
     );
+    // A substituted sleeve is an assumption about the tested window, so it is
+    // stated alongside the window rather than left in the structured output for
+    // a caller to find.
+    for (const proxied of historicalData.proxiedSeries ?? []) {
+      const periods = proxied.ranges
+        .map(range => (range.months === 1 ? range.firstMonth : `${range.firstMonth} through ${range.lastMonth}`))
+        .join(' and ');
+      assumptions.push(
+        `${proxied.description} — ${periods} (${proxied.months} of ` +
+        `${proxied.windowMonths} months tested)`
+      );
+    }
   }
 
   // Phase 3b: Compute historical withdrawal rate distribution (before user scenario)

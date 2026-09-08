@@ -2,6 +2,7 @@ import { describe, expect, it, beforeAll } from '@jest/globals';
 import { simulateWithdrawals } from '../../retirement-analytics/engine/withdrawal-simulator';
 import { summarizeHoldingExposures } from '../../retirement-analytics/engine/portfolio-mapper';
 import type { HistoricalSequence } from '../../retirement-analytics/types';
+import { analyzeRetirementPortfolio } from '../../retirement-analytics';
 import {
   clearQuickPlanCache,
   normalizeQuickPlanRequest,
@@ -273,6 +274,93 @@ describe('quick plan results', () => {
  * model moves, not the size of the move, and a 15-year window costs a fraction
  * of a full retirement to simulate.
  */
+/**
+ * The engine-level guard for the fix. An international sleeve used to truncate
+ * the tested record to 1975 onward, which quietly removed every bad starting
+ * point from the sample and made the same plan look materially safer.
+ */
+describe('short-series policy', () => {
+  const withInternational = [
+    { id: 'us', name: 'US Total Stock Market Index', type: 'equity', value: 600_000 },
+    { id: 'intl', name: 'International Developed Markets Index Fund', type: 'equity', value: 150_000 },
+    { id: 'bond', name: 'US Government Bond Index', type: 'fixed income', value: 200_000 },
+    { id: 'cash', name: 'Cash and Cash Equivalents', type: 'cash', value: 50_000 },
+  ];
+
+  const run = (policy?: 'proxy' | 'truncate') => {
+    const holdings = withInternational.map(entry => ({
+      id: entry.id,
+      account_id: 'a',
+      security_id: entry.id,
+      institution_value: entry.value,
+      institution_price: null,
+      institution_price_as_of: '2026-09-01',
+      cost_basis: null,
+      quantity: null,
+      iso_currency_code: 'USD',
+      security_name: entry.name,
+      security_type: entry.type,
+    }));
+    const securities = withInternational.map(entry => ({
+      security_id: entry.id,
+      name: entry.name,
+      type: entry.type,
+      iso_currency_code: 'USD',
+    }));
+
+    return analyzeRetirementPortfolio({
+      holdings,
+      securities,
+      currentAge: 60,
+      retirementAge: 60,
+      withdrawalStartAge: 60,
+      lifeExpectancy: 90,
+      annualWithdrawalAmount: 45_000,
+      asOfDate: '2026-09-01',
+      ...(policy ? { shortSeriesPolicy: policy } : {}),
+    });
+  };
+
+  it('tests an international portfolio against the whole record by default', async () => {
+    const [byDefault, truncated] = await Promise.all([run(), run('truncate')]);
+
+    expect(byDefault.historicalData?.firstMonth).toBe('1926-07');
+    expect(truncated.historicalData?.firstMonth).toBe('1975-01');
+    expect(byDefault.stressTest.totalSequences).toBeGreaterThan(
+      truncated.stressTest.totalSequences * 2
+    );
+  }, 300_000);
+
+  it('removes the optimism the truncated window was producing', async () => {
+    const [byDefault, truncated] = await Promise.all([run(), run('truncate')]);
+
+    // The 1975-onward window excluded 1929, 1937, 1966 and 1973, so it reported
+    // a sustainable rate far above what the literature or the full record
+    // supports. This is the substance of the fix, not a cosmetic difference.
+    expect(byDefault.metrics.historicalWithdrawalRates.p10).toBeLessThan(
+      truncated.metrics.historicalWithdrawalRates.p10
+    );
+    expect(byDefault.metrics.historicalWithdrawalRates.p10).toBeLessThan(0.055);
+    expect(truncated.metrics.historicalWithdrawalRates.p10).toBeGreaterThan(0.06);
+  }, 300_000);
+
+  it('discloses the substituted months rather than absorbing them silently', async () => {
+    const byDefault = await run();
+    const [proxied] = byDefault.historicalData?.proxiedSeries ?? [];
+
+    expect(proxied).toBeDefined();
+    expect(proxied.series).toBe('intl_equity');
+    expect(proxied.proxy).toBe('us_equity');
+    expect(proxied.months).toBeGreaterThan(0);
+    expect(proxied.months).toBeLessThan(proxied.windowMonths);
+    expect(
+      byDefault.dataQuality.assumptions.some(line =>
+        line.includes('use the US market return') && line.includes('1926-07')
+      )
+    ).toBe(true);
+  }, 300_000);
+});
+
 describe('quick plan sensitivity to Social Security', () => {
   const SHORT = {
     currentAge: 68,

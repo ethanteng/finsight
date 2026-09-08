@@ -50,13 +50,32 @@ export const RETIREMENT_CALCULATOR_EXAMPLE = {
     ]
   },
   "result": {
-    "survivalRate": 1,
-    "sequencesTested": 121,
-    "sequencesSurvived": 121,
-    "projectedPortfolioAtRetirement": 3536157.3479028703,
-    "firstMonth": "1975-01",
-    "lastMonth": "2025-12",
+    "survivalRate": 0.923836389280677,
+    "sequencesTested": 709,
+    "sequencesSurvived": 655,
+    "projectedPortfolioAtRetirement": 2786161.0276904893,
+    "firstMonth": "1926-07",
+    "lastMonth": "2026-06",
     "primaryObservation": "Balanced allocation pattern with moderate characteristics",
-    "confidence": "low"
+    "confidence": "low",
+    "proxiedSeries": [
+      {
+        "description": "International equity returns outside the series's own span use the US market return; those months carry no distinct international behaviour",
+        "months": 588,
+        "windowMonths": 1200,
+        "ranges": [
+          {
+            "firstMonth": "1926-07",
+            "lastMonth": "1974-12",
+            "months": 582
+          },
+          {
+            "firstMonth": "2026-01",
+            "lastMonth": "2026-06",
+            "months": 6
+          }
+        ]
+      }
+    ]
   }
 } as const;
