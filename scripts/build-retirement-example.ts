@@ -27,7 +27,7 @@ import { join } from 'path';
 import { analyzeRetirementPortfolio } from '../src/retirement-analytics';
 import type { Holding, Security } from '../src/services/financial-data-service';
 
-const OUTPUT_PATH = join(
+const DEFAULT_OUTPUT_PATH = join(
   __dirname,
   '..',
   'frontend',
@@ -35,6 +35,13 @@ const OUTPUT_PATH = join(
   'lib',
   'retirement-calculator-example.generated.ts'
 );
+
+/**
+ * Overridable so the drift check can generate somewhere harmless and compare.
+ * A verifier that wrote over the file it is checking would repair the very
+ * staleness it exists to report.
+ */
+const OUTPUT_PATH = process.env.RETIREMENT_EXAMPLE_OUT || DEFAULT_OUTPUT_PATH;
 
 /** [id, security name, declared type, market value, account id] */
 type BookEntry = [string, string, string, number, string];
@@ -59,6 +66,18 @@ const EXAMPLE_BOOK: BookEntry[] = [
   ['misc', 'Brokerage Holdings Not Itemized', 'unknown', 248_172, 'taxable-brokerage'],
 ];
 
+/**
+ * Pinned so the run is reproducible.
+ *
+ * The output has to be a pure function of this book, the engine and the
+ * checked-in return dataset, or `npm run verify:retirement-example` cannot tell
+ * a stale file from a clock tick. It is also what makes the drift check
+ * meaningful: the file changes when the model's answer changes, and at no other
+ * time. The engine otherwise defaults this to today, and uses it to pick the
+ * newest target-date allocation already published as of that date.
+ */
+const AS_OF_DATE = '2026-09-01';
+
 /** The same shape of plan the landing-page form collects. */
 const EXAMPLE_PLAN = {
   currentAge: 54,
@@ -77,7 +96,7 @@ function buildPortfolio(book: BookEntry[]) {
     security_id: id,
     institution_value: value,
     institution_price: null,
-    institution_price_as_of: new Date().toISOString().slice(0, 10),
+    institution_price_as_of: AS_OF_DATE,
     cost_basis: null,
     quantity: null,
     iso_currency_code: 'USD',
@@ -110,12 +129,13 @@ async function main() {
       annualAmount: EXAMPLE_PLAN.socialSecurityAnnual,
       startAge: EXAMPLE_PLAN.socialSecurityStartAge,
     },
+    asOfDate: AS_OF_DATE,
   });
 
   const { dataQuality, metrics, stressTest, summary, historicalData } = analysis;
 
   const example = {
-    generatedAt: new Date().toISOString().slice(0, 10),
+    asOfDate: AS_OF_DATE,
     plan: {
       currentAge: EXAMPLE_PLAN.currentAge,
       retirementAge: EXAMPLE_PLAN.retirementAge,

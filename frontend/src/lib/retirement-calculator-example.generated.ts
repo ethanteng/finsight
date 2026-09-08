@@ -13,7 +13,7 @@
 export type RetirementCalculatorExample = typeof RETIREMENT_CALCULATOR_EXAMPLE;
 
 export const RETIREMENT_CALCULATOR_EXAMPLE = {
-  "generatedAt": "2026-09-08",
+  "asOfDate": "2026-09-01",
   "plan": {
     "currentAge": 54,
     "retirementAge": 60,

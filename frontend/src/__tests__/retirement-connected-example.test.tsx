@@ -57,6 +57,13 @@ describe('connected-accounts example data', () => {
     expect(EXAMPLE.portfolio.accountCount).toBeLessThanOrEqual(EXAMPLE.portfolio.holdingCount);
   });
 
+  it('carries no clock in its output, so the drift check means what it says', () => {
+    // A regeneration timestamp would make every run a diff and the CI drift
+    // check unable to tell a stale file from a passing day.
+    expect(EXAMPLE).not.toHaveProperty('generatedAt');
+    expect(EXAMPLE.asOfDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+
   it('describes a plan the landing-page form could have submitted', () => {
     const { plan } = EXAMPLE;
 

@@ -97,6 +97,14 @@ jobs:
           done
           cd ${{ github.workspace }}
 
+      # The /retirement-calculator example panel presents its figures as the
+      # engine's own output. This is what keeps that true: a hand edit, or a
+      # change to the engine or the return dataset, makes the committed file
+      # disagree with a fresh run and fails here rather than shipping a page
+      # that quietly misstates where its numbers came from.
+      - name: Verify retirement example is engine output
+        run: npm run verify:retirement-example
+
       - name: Lint backend
         run: |
           # Ensure we're in the root directory

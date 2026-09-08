@@ -22,6 +22,7 @@ list of everything the model had to assume on their behalf.
 | Connected-accounts example | `frontend/src/components/marketing/RetirementConnectedExample.tsx` |
 | Example data (generated) | `frontend/src/lib/retirement-calculator-example.generated.ts` |
 | Example generator | `scripts/build-retirement-example.ts` (`npm run build:retirement-example`) |
+| Example drift check | `scripts/verify-retirement-example.sh` (`npm run verify:retirement-example`) |
 | Service | `src/services/retirement-quickplan.ts` |
 | Route | `src/routes/retirement-quickplan.ts` (mounted at `/api/retirement-quickplan`) |
 | Tests | `src/__tests__/unit/retirement-quickplan.test.ts`, `src/__tests__/unit/retirement-quickplan-route.test.ts`, `frontend/src/__tests__/retirement-landing.test.tsx` |
@@ -92,6 +93,14 @@ that file and nothing else. To publish a different profile — a real account's
 holdings — edit the script and re-run it; never edit the generated file, since
 the panel's claim that these are engine outputs is only true while it is
 generated.
+
+CI runs `npm run verify:retirement-example` on every push. It regenerates to a
+temporary file and diffs, so a hand edit is reported rather than repaired, and
+a change to the engine or the return dataset that moves the answer fails the
+build instead of leaving the page presenting stale figures as current ones.
+That check is only meaningful because the generator is deterministic: the
+as-of date is pinned and there is no timestamp in the output, so the file
+changes when the model's answer changes and at no other time.
 
 The example book is deliberately awkward in the ways real feeds are: a
 single-stock position with no resolvable geography, a chunk the custodian never
