@@ -260,6 +260,7 @@ export function RetirementQuickPlan({
   const allocations = useAllocations();
   const resultsRef = useRef<HTMLDivElement | null>(null);
   const startedRef = useRef(false);
+  const fieldEditedRef = useRef(false);
   const validationReportedRef = useRef(false);
   const requestInFlightRef = useRef(false);
 
@@ -269,8 +270,15 @@ export function RetirementQuickPlan({
     trackContentsquareEvent('retirement_calculator_started');
   }
 
-  const setField = (field: keyof FormState) => (value: string) =>
+  const setField = (field: keyof FormState) => (value: string) => {
+    // Count actual user changes, not prefills, focus, validation, or submission.
+    // Keep analytics outside the state updater (which React may replay).
+    if (value !== form[field] && !fieldEditedRef.current) {
+      fieldEditedRef.current = true;
+      trackContentsquareEvent('retirement_calculator_field_edited');
+    }
     setForm((current) => ({ ...current, [field]: value }));
+  };
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -457,7 +465,8 @@ export function RetirementQuickPlan({
           {error && <p className="qp-error" role="alert">{error}</p>}
 
           <div className="qp-submit-row">
-            <button className="button button-primary" type="submit" disabled={isRunning} data-cs-override-id="quickplan-run-model">
+            <button className="button button-primary" type="submit" disabled={isRunning} data-cs-override-id="quickplan-run-model"
+              onClick={() => trackContentsquareEvent('retirement_model_clicked')}>
               {isRunning ? "Running the model…" : "Run the model"}
             </button>
             <p className="qp-submit-note">

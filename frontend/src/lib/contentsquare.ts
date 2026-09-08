@@ -7,6 +7,8 @@ export type ContentsquareEvent =
   | 'sign_up_free_trial'
   | 'answer_received'
   | 'retirement_calculator_started'
+  | 'retirement_calculator_field_edited'
+  | 'retirement_model_clicked'
   | 'retirement_model_requested'
   | 'retirement_model_run'
   | 'retirement_validation_error'

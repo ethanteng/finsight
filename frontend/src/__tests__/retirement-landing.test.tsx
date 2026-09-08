@@ -74,10 +74,29 @@ describe('retirement landing page', () => {
     fireEvent.change(screen.getByLabelText('Current age'), { target: { value: '51' } });
     fireEvent.invalid(screen.getByLabelText('Retirement age'));
     fireEvent.invalid(screen.getByLabelText('Investment assets today'));
-    expect(trackContentsquareEvent).toHaveBeenNthCalledWith(1, 'retirement_calculator_started');
-    expect(trackContentsquareEvent).toHaveBeenNthCalledWith(2, 'retirement_validation_error');
-    expect(trackContentsquareEvent).toHaveBeenCalledTimes(2);
+    expect(trackContentsquareEvent).toHaveBeenNthCalledWith(1, 'retirement_calculator_field_edited');
+    expect(trackContentsquareEvent).toHaveBeenNthCalledWith(2, 'retirement_calculator_started');
+    expect(trackContentsquareEvent).toHaveBeenNthCalledWith(3, 'retirement_validation_error');
+    expect(trackContentsquareEvent).toHaveBeenCalledTimes(3);
     expect(container.querySelector('.qp-results')).toBeNull();
+  });
+
+  it('does not count prefills, focus or an invalid Run click as a field edit', () => {
+    render(<RetirementQuickPlan headline="When can I retire?" initialRetirementAge={60} />);
+    fireEvent.focus(screen.getByLabelText('Current age'));
+    fireEvent.click(screen.getByRole('button', { name: 'Run the model' }));
+    expect(trackContentsquareEvent).toHaveBeenCalledWith('retirement_model_clicked');
+    expect(trackContentsquareEvent).not.toHaveBeenCalledWith('retirement_calculator_field_edited');
+    expect(trackContentsquareEvent).not.toHaveBeenCalledWith('retirement_model_requested');
+  });
+
+  it('counts select and allocation edits once per mount, without sending values', () => {
+    const { rerender } = render(<React.StrictMode><RetirementQuickPlan headline="When can I retire?" initialRetirementAge={60} /></React.StrictMode>);
+    fireEvent.change(screen.getByLabelText('starting at'), { target: { value: '62' } });
+    fireEvent.click(screen.getByRole('radio', { name: /Growth/ }));
+    rerender(<React.StrictMode><RetirementQuickPlan headline="Updated headline" initialRetirementAge={60} /></React.StrictMode>);
+    const edits = jest.mocked(trackContentsquareEvent).mock.calls.filter(([event]) => event === 'retirement_calculator_field_edited');
+    expect(edits).toEqual([['retirement_calculator_field_edited']]);
   });
 
   it.each(['api', 'network'] as const)('does not count a %s failure as a successful result', async (failure) => {
@@ -91,6 +110,7 @@ describe('retirement landing page', () => {
     fireEvent.submit(container.querySelector('form')!);
     await screen.findByRole('alert');
     expect(trackContentsquareEvent).toHaveBeenCalledWith('retirement_model_requested');
+    expect(trackContentsquareEvent).not.toHaveBeenCalledWith('retirement_calculator_field_edited');
     expect(trackContentsquareEvent).toHaveBeenCalledWith(failure === 'api' ? 'retirement_api_error' : 'retirement_request_error');
     expect(trackContentsquareEvent).not.toHaveBeenCalledWith('retirement_model_run');
     await waitFor(() => expect(screen.getByRole('button', { name: 'Run the model' })).toBeEnabled());
