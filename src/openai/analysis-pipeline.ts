@@ -243,8 +243,12 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
     RETIREMENT_CALCULATOR_ID
   );
   let finalSearchQueries = [...contextPlan.searchQueries];
+  // Prefer the stated plan so a later audit that only changes the scenario can
+  // re-withhold against the user's words, not against an already-stripped copy.
+  const statedRetirementInputs =
+    contextPlan.statedRetirementInputs ?? contextPlan.retirementInputs;
   let retirementBaselineInputs = retirementInputsForBaseline(
-    contextPlan.retirementInputs,
+    statedRetirementInputs,
     retirementScenarioPlan
   );
   // The primary audit can discover a scenario the preflight missed. Delay any
@@ -312,7 +316,7 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
         RETIREMENT_CALCULATOR_ID
       );
       retirementBaselineInputs = retirementInputsForBaseline(
-        contextPlan.retirementInputs,
+        statedRetirementInputs,
         retirementScenarioPlan
       );
       const widenedPacks = normalizeContextPacks([
@@ -429,15 +433,20 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
         // read out of the same sentence -- and the scenario cannot run without
         // a baseline either. Retry once with those values folded in, so the
         // deadlock resolves into the projection the user asked for.
+        //
+        // Start from the stated plan (pre-withhold), not the stripped baseline.
+        // Folding into the stripped copy would adopt a genuine what-if override
+        // (retire at 62; what about 67?) as the baseline and erase the comparison.
         const missingBaselineInputs = snapshot.retirementAnalysisNeedsInfo?.missingParams ?? [];
         if (retirementScenarioPlan && missingBaselineInputs.length > 0) {
           const recoveredInputs = retirementInputsFromScenarioPlan(
-            retirementBaselineInputs,
+            statedRetirementInputs,
             retirementScenarioPlan
           );
-          // Only retry when the scenario actually closes every gap. A second
-          // pass that would stop on the same missing number costs a database
-          // read and an engine run to arrive at the answer already in hand.
+          // Only retry when recovery actually closes every gap relative to the
+          // inputs already tried. A second pass that would stop on the same
+          // missing number costs a database read and an engine run to arrive at
+          // the answer already in hand.
           const recoveryIsComplete = recoveredInputs !== retirementBaselineInputs &&
             missingBaselineInputs.every((param) => recoveredInputs?.[param] !== undefined);
           if (recoveryIsComplete) {
@@ -460,7 +469,10 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
             // one was resolved against the inputs the user really stated.
             if (recovered.retirementAnalysis) {
               snapshot = recovered;
-              retirementBaselineInputs = recoveredInputs;
+              retirementBaselineInputs = retirementInputsForBaseline(
+                recoveredInputs,
+                retirementScenarioPlan
+              );
             }
           }
         }

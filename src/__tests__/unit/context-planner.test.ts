@@ -472,6 +472,12 @@ describe('context planner', () => {
 
     const plan = parseContextPlan(raw);
 
+    expect(plan.statedRetirementInputs).toMatchObject({
+      currentAge: 45,
+      retirementAge: 62,
+      annualWithdrawalAmount: 120_000,
+      withdrawalStartAge: 62,
+    });
     expect(plan.retirementInputs).toEqual({
       currentAge: 45,
       annualWithdrawalAmount: 120_000,
@@ -511,6 +517,29 @@ describe('context planner', () => {
         withdrawalStartAge: 'withdrawing at age 58',
       },
     });
+  });
+
+  it('does not adopt a differing scenario age when the stated plan already has one', () => {
+    const stated = {
+      currentAge: 45,
+      retirementAge: 62,
+      annualWithdrawalAmount: 120_000,
+      withdrawalStartAge: 62,
+      sources: {},
+    };
+    const scenario: any = {
+      requested: true,
+      primary: {
+        type: 'historical_cpi',
+        overrides: {
+          retirementAge: 67,
+          withdrawalStartAge: 67,
+          sources: { retirementAge: 'what about 67', withdrawalStartAge: 'what about 67' },
+        },
+      },
+    };
+
+    expect(retirementInputsFromScenarioPlan(stated, scenario)).toBe(stated);
   });
 
   it('leaves a baseline that can already run untouched', () => {

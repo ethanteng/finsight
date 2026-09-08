@@ -52,6 +52,14 @@ export interface ContextPlan {
   questionNeeds: QuestionNeeds;
   needsSecondaryValidation: boolean;
   searchQueries: PlannedSearchQuery[];
+  /**
+   * Inputs the planner extracted from the user's words, before scenario
+   * overrides are removed for the baseline. Recovery must start here so a
+   * genuine what-if can restore a withheld field instead of adopting the
+   * hypothetical value that caused the withhold.
+   */
+  statedRetirementInputs?: ExtractedRetirementInputs;
+  /** Baseline gather inputs after differing scenario overrides are removed. */
   retirementInputs?: ExtractedRetirementInputs;
   scenarioPlans: ScenarioPlanRecord;
   /** @deprecated Compatibility mirror for admin clients that still read retirementScenario. */
@@ -130,8 +138,8 @@ export function retirementInputsForBaseline(
  * missing so the projection runs on what the user said. The values are already
  * range-checked and carry the user's own wording, and the scenario runner then
  * reuses the baseline for that variant instead of inventing a comparison.
- * Fields the baseline already has are left alone, so a real what-if keeps its
- * comparison.
+ * Fields the caller already has are left alone, so a real what-if keeps its
+ * comparison — pass the stated plan (pre-withhold), not the stripped baseline.
  */
 export function retirementInputsFromScenarioPlan(
   inputs: ExtractedRetirementInputs | undefined,
@@ -300,8 +308,9 @@ export function parseContextPlan(raw: unknown, durationMs = 0, model?: string): 
     ...scenarioCalculatorRegistry.requiredPacksForPlans(scenarioPlans),
   ]);
   const needsSecondaryValidation = record.needsSecondaryValidation === true;
+  const statedRetirementInputs = validateExtractedInputs(record.retirementInputs);
   const retirementInputs = retirementInputsForBaseline(
-    validateExtractedInputs(record.retirementInputs),
+    statedRetirementInputs,
     retirementScenario
   );
   const summary = typeof record.summary === 'string'
@@ -314,6 +323,7 @@ export function parseContextPlan(raw: unknown, durationMs = 0, model?: string): 
     questionNeeds: questionNeedsFromPacks(selectedPacks, needsSecondaryValidation),
     needsSecondaryValidation,
     searchQueries,
+    ...(statedRetirementInputs && { statedRetirementInputs }),
     retirementInputs,
     scenarioPlans,
     ...(retirementScenario && { retirementScenario }),
