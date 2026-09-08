@@ -40,6 +40,12 @@ describe('connected-accounts example data', () => {
     expect(plan.annualSpending).toBeGreaterThan(0);
   });
 
+  it('reports a real account count rather than an invented one', () => {
+    // The generator derives this from distinct account_ids on the book.
+    // A hand-typed count would break the panel's "engine output, not invented" claim.
+    expect(EXAMPLE.portfolio.accountCount).toBeGreaterThan(1);
+    expect(EXAMPLE.portfolio.accountCount).toBeLessThanOrEqual(EXAMPLE.portfolio.holdingCount);
+  });
 });
 
 describe('connected-accounts example panel', () => {
