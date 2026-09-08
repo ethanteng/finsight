@@ -1,6 +1,6 @@
 import { trackContentsquareEvent } from '@/lib/contentsquare';
 import { isAnalyticsHost } from '@/lib/analytics-host';
-import { pushRetirementModelRun, pushSignUp, pushStartFreeClick } from '@/lib/dataLayer';
+import { pushRetirementInteraction, pushRetirementModelRun, pushSignUp, pushStartFreeClick } from '@/lib/dataLayer';
 
 jest.mock('@/lib/analytics-host', () => ({ isAnalyticsHost: jest.fn() }));
 const hostAllowed = jest.mocked(isAnalyticsHost);
@@ -16,6 +16,16 @@ beforeEach(() => {
 it('queues events before the Contentsquare tag loads, without extra pageviews', () => {
   trackContentsquareEvent('retirement_calculator_started');
   expect(win._uxa).toEqual([['trackPageEvent', 'retirement_calculator_started']]);
+});
+
+it.each([
+  'retirement_calculator_started', 'retirement_calculator_field_edited',
+  'retirement_model_clicked', 'retirement_model_requested',
+  'retirement_validation_error', 'retirement_api_error', 'retirement_request_error',
+] as const)('sends %s once to each analytics destination', event => {
+  pushRetirementInteraction(event);
+  expect(win._uxa).toEqual([['trackPageEvent', event]]);
+  expect(win.dataLayer).toEqual([{ event, source_page: '/retirement-calculator', content_type: 'retirement_calculator' }]);
 });
 
 it('does not queue production analytics on dev or preview hosts', () => {
