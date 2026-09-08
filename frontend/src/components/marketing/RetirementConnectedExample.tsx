@@ -35,9 +35,46 @@ function monthLabel(month: string): string {
   return `${names[Number(match[2]) - 1]} ${match[1]}`;
 }
 
+/** Spell small counts the way the panel's prose already does; fall back to digits. */
+function countWord(n: number): string {
+  if (n === 1) return "one";
+  if (n === 2) return "two";
+  return String(n);
+}
+
+/**
+ * The unresolved/unsupported lists come from the generated engine output; do not
+ * hardcode "two / two" here or a regeneration with a different book will lie.
+ *
+ * "asset class or equity geography" is the engine's own wording for
+ * `unmappedHoldings`, and both halves matter: a declared-equity position with
+ * no resolvable country is dropped for the geography alone. Saying only
+ * "asset class" misstates why the engine excluded it.
+ */
+function unmodeledGapCopy(unresolvedCount: number, unsupportedCount: number): string | null {
+  const parts: string[] = [];
+  if (unresolvedCount > 0) {
+    parts.push(
+      unresolvedCount === 1
+        ? "One has no resolvable asset class or equity geography"
+        : `${countWord(unresolvedCount).replace(/^./, (c) => c.toUpperCase())} have no resolvable asset class or equity geography`
+    );
+  }
+  if (unsupportedCount > 0) {
+    parts.push(
+      unsupportedCount === 1
+        ? "one has a class the engine has no return series for"
+        : `${countWord(unsupportedCount)} have one the engine has no return series for`
+    );
+  }
+  if (parts.length === 0) return null;
+  return `${parts.join("; ")}.`;
+}
+
 export function RetirementConnectedExample() {
   const { plan, portfolio, allocation, coverage, result } = EXAMPLE;
   const unmodeled = [...coverage.unresolved, ...coverage.unsupported];
+  const gapCopy = unmodeledGapCopy(coverage.unresolved.length, coverage.unsupported.length);
 
   return (
     <section className="qp-example">
@@ -59,12 +96,6 @@ export function RetirementConnectedExample() {
         <div className="qp-example-grid">
           <article className="qp-example-card">
             <h3>It found the actual mix</h3>
-            {/*
-              International is part of the stock line and TIPS is part of the bond
-              line — the engine's `internationalAllocation` and `tipsAllocation`
-              are subsets of `equityAllocation` and `fixedIncomeAllocation`, not
-              siblings. Rendered as siblings the column sums past the portfolio.
-            */}
             <dl className="qp-example-mix">
               <div><dt>Stocks</dt><dd>{percent(allocation.equity)}</dd></div>
               <div><dt>of which international</dt><dd>{percent(allocation.international)}</dd></div>
@@ -89,9 +120,9 @@ export function RetirementConnectedExample() {
               {unmodeled.map((label) => <li key={label}>{label}</li>)}
             </ul>
             <p>
-              Two have no resolvable asset class or equity geography; two have a class the engine
-              has no return series for. The six-number version above had nothing to disclose here,
-              because it invented the whole portfolio.
+              {gapCopy ? `${gapCopy} ` : null}
+              The six-number version above had nothing to disclose here, because it invented the
+              whole portfolio.
             </p>
           </article>
 
