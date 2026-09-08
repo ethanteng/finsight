@@ -43,6 +43,15 @@ describe('connected-accounts example data', () => {
     ).toBeLessThanOrEqual(100.0001);
   });
 
+  it('stores the survivor count as an integer rather than a rate to re-derive', () => {
+    // Reconstructing it in the render is a rounding decision made in the wrong
+    // place, and can disagree with the rate by one.
+    expect(Number.isInteger(EXAMPLE.result.sequencesSurvived)).toBe(true);
+    expect(EXAMPLE.result.sequencesSurvived).toBeLessThanOrEqual(EXAMPLE.result.sequencesTested);
+    expect(EXAMPLE.result.sequencesSurvived / EXAMPLE.result.sequencesTested)
+      .toBeCloseTo(EXAMPLE.result.survivalRate, 6);
+  });
+
   it('counts accounts from the book rather than asserting a number', () => {
     expect(EXAMPLE.portfolio.accountCount).toBeGreaterThan(1);
     expect(EXAMPLE.portfolio.accountCount).toBeLessThanOrEqual(EXAMPLE.portfolio.holdingCount);
@@ -81,6 +90,13 @@ describe('connected-accounts example panel', () => {
 
     expect(screen.getByText('of which international')).toBeInTheDocument();
     expect(screen.getByText('of which TIPS')).toBeInTheDocument();
+  });
+
+  it('says the bond line is what was classified, not what was simulated', () => {
+    render(<RetirementConnectedExample />);
+
+    // Part of that percentage is also in the "could not model" list next to it.
+    expect(screen.getByText(/what the\s+mapper classified, not what it simulated/i)).toBeInTheDocument();
   });
 
   it('shows the coverage and confidence the engine reported', () => {

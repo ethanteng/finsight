@@ -105,7 +105,9 @@ export function RetirementConnectedExample() {
             </dl>
             <p>
               No preset would have guessed the inflation-protected sleeve or the international
-              weight, and both change how this plan behaves in a bad decade.
+              weight, and both change how this plan behaves in a bad decade. These are what the
+              mapper classified, not what it simulated — the TIPS and corporate-bond sleeves sit
+              inside the bond line and also in the list next door.
             </p>
           </article>
 
@@ -150,7 +152,7 @@ export function RetirementConnectedExample() {
           </div>
           <div>
             <span>Sequences survived</span>
-            <strong>{Math.round(result.survivalRate * result.sequencesTested)} of {result.sequencesTested}</strong>
+            <strong>{result.sequencesSurvived} of {result.sequencesTested}</strong>
             <small>
               Not comparable to the figure above: a different, shorter and kinder stretch of history
             </small>

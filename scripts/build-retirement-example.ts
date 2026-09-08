@@ -150,6 +150,11 @@ async function main() {
     result: {
       survivalRate: stressTest.survivalRate,
       sequencesTested: stressTest.totalSequences,
+      // Stored as an integer so the panel prints a count rather than
+      // reconstructing one. The engine reports survivors as a rate, and
+      // multiplying it back out in the render is a rounding decision made in
+      // the wrong place — settle it once, here, next to its source.
+      sequencesSurvived: Math.round(stressTest.survivalRate * stressTest.totalSequences),
       projectedPortfolioAtRetirement: metrics.projectedPortfolioAtWithdrawalStart,
       firstMonth: historicalData?.firstMonth ?? 'unknown',
       lastMonth: historicalData?.lastMonth ?? 'unknown',

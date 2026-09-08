@@ -52,6 +52,7 @@ export const RETIREMENT_CALCULATOR_EXAMPLE = {
   "result": {
     "survivalRate": 1,
     "sequencesTested": 121,
+    "sequencesSurvived": 121,
     "projectedPortfolioAtRetirement": 3536157.3479028703,
     "firstMonth": "1975-01",
     "lastMonth": "2025-12",
