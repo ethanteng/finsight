@@ -89,6 +89,21 @@ const EXAMPLE_PLAN = {
   socialSecurityStartAge: 67,
 };
 
+/**
+ * Retirement ages the panel reports a survival rate for.
+ *
+ * The page asks "can I retire at 60?" and its sibling "when can I retire?".
+ * One survival rate answers neither on its own: 92% at 60 only means something
+ * next to what the same portfolio does at 58 and at 65. Each age is a separate
+ * engine run against the same book, the same record and the same spending —
+ * only the date moves — so the spread between them is the answer to the "when"
+ * question rather than a rule of thumb about working longer.
+ *
+ * Every age is tested over the same window (today through age 95), so the
+ * denominators match and the rates are directly comparable.
+ */
+const RETIREMENT_AGE_LADDER = [56, 58, 60, 62];
+
 function buildPortfolio(book: BookEntry[]) {
   const holdings: Holding[] = book.map(([id, name, type, value, accountId]) => ({
     id,
@@ -112,16 +127,23 @@ function buildPortfolio(book: BookEntry[]) {
   return { holdings, securities };
 }
 
-async function main() {
-  const { holdings, securities } = buildPortfolio(EXAMPLE_BOOK);
-  const totalInvestments = EXAMPLE_BOOK.reduce((sum, [, , , value]) => sum + value, 0);
-
-  const analysis = await analyzeRetirementPortfolio({
+/**
+ * One run of the real engine at a given retirement age. Everything else — the
+ * book, the spending, the Social Security stream, the as-of date — is held
+ * fixed, so a difference between two of these is the retirement date and
+ * nothing else.
+ */
+function runAtRetirementAge(
+  holdings: Holding[],
+  securities: Security[],
+  retirementAge: number
+) {
+  return analyzeRetirementPortfolio({
     holdings,
     securities,
     currentAge: EXAMPLE_PLAN.currentAge,
-    retirementAge: EXAMPLE_PLAN.retirementAge,
-    withdrawalStartAge: EXAMPLE_PLAN.retirementAge,
+    retirementAge,
+    withdrawalStartAge: retirementAge,
     lifeExpectancy: EXAMPLE_PLAN.lifeExpectancy,
     annualWithdrawalAmount: EXAMPLE_PLAN.annualSpending,
     annualContributionAmount: EXAMPLE_PLAN.annualContributions,
@@ -131,7 +153,30 @@ async function main() {
     },
     asOfDate: AS_OF_DATE,
   });
+}
 
+async function main() {
+  const { holdings, securities } = buildPortfolio(EXAMPLE_BOOK);
+  const totalInvestments = EXAMPLE_BOOK.reduce((sum, [, , , value]) => sum + value, 0);
+
+  if (!RETIREMENT_AGE_LADDER.includes(EXAMPLE_PLAN.retirementAge)) {
+    throw new Error(
+      `RETIREMENT_AGE_LADDER must contain the plan's own retirement age (${EXAMPLE_PLAN.retirementAge}); ` +
+        'the panel reads the headline result out of the ladder.'
+    );
+  }
+  if (RETIREMENT_AGE_LADDER.some(age => age <= EXAMPLE_PLAN.currentAge)) {
+    throw new Error('RETIREMENT_AGE_LADDER ages must all be later than the plan\'s current age.');
+  }
+
+  // Sequential rather than concurrent: each run is several seconds of straight
+  // CPU, and this also runs as the CI drift check.
+  const ladder: Array<{ age: number; analysis: Awaited<ReturnType<typeof runAtRetirementAge>> }> = [];
+  for (const age of [...RETIREMENT_AGE_LADDER].sort((a, b) => a - b)) {
+    ladder.push({ age, analysis: await runAtRetirementAge(holdings, securities, age) });
+  }
+
+  const analysis = ladder.find(entry => entry.age === EXAMPLE_PLAN.retirementAge)!.analysis;
   const { dataQuality, metrics, stressTest, summary, historicalData } = analysis;
 
   const example = {
@@ -193,6 +238,21 @@ async function main() {
         ranges: proxied.ranges,
       })),
     },
+    /**
+     * The same plan at each retirement age in the ladder. This is what turns
+     * the panel from a description of the engine into an answer: a visitor who
+     * asked "can I retire at 60?" can see what the same portfolio does if the
+     * date moves, and one who asked "when can I retire?" can read the age off
+     * the band. Each entry carries its own denominator so the panel never has
+     * to assume the windows matched.
+     */
+    byRetirementAge: ladder.map(({ age, analysis: run }) => ({
+      age,
+      survivalRate: run.stressTest.survivalRate,
+      sequencesTested: run.stressTest.totalSequences,
+      sequencesSurvived: Math.round(run.stressTest.survivalRate * run.stressTest.totalSequences),
+      projectedPortfolioAtRetirement: run.metrics.projectedPortfolioAtWithdrawalStart,
+    })),
   };
 
   const file = `/**
@@ -217,8 +277,12 @@ export const RETIREMENT_CALCULATOR_EXAMPLE = ${JSON.stringify(example, null, 2)}
   console.log(
     `  ${EXAMPLE_BOOK.length} holdings · $${totalInvestments.toLocaleString('en-US')} invested · ` +
       `${(example.coverage.valueCoverage * 100).toFixed(1)}% modeled · ` +
-      `${example.result.sequencesTested} sequences · ` +
-      `${(example.result.survivalRate * 100).toFixed(1)}% survived`
+      `${example.result.sequencesTested} sequences`
+  );
+  console.log(
+    `  ${example.byRetirementAge
+      .map(entry => `retire at ${entry.age}: ${(entry.survivalRate * 100).toFixed(1)}%`)
+      .join(' · ')}`
   );
 }
 

@@ -77,5 +77,35 @@ export const RETIREMENT_CALCULATOR_EXAMPLE = {
         ]
       }
     ]
-  }
+  },
+  "byRetirementAge": [
+    {
+      "age": 56,
+      "survivalRate": 0.6008462623413258,
+      "sequencesTested": 709,
+      "sequencesSurvived": 426,
+      "projectedPortfolioAtRetirement": 2113562.192130349
+    },
+    {
+      "age": 58,
+      "survivalRate": 0.8124118476727785,
+      "sequencesTested": 709,
+      "sequencesSurvived": 576,
+      "projectedPortfolioAtRetirement": 2440316.520176432
+    },
+    {
+      "age": 60,
+      "survivalRate": 0.923836389280677,
+      "sequencesTested": 709,
+      "sequencesSurvived": 655,
+      "projectedPortfolioAtRetirement": 2786161.0276904893
+    },
+    {
+      "age": 62,
+      "survivalRate": 1,
+      "sequencesTested": 709,
+      "sequencesSurvived": 709,
+      "projectedPortfolioAtRetirement": 3256858.95411862
+    }
+  ]
 } as const;

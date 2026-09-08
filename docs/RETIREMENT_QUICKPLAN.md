@@ -104,13 +104,29 @@ changes when the model's answer changes and at no other time.
 
 The example book is deliberately awkward in the ways real feeds are: a
 single-stock position with no resolvable geography, a chunk the custodian never
-itemised, and two sleeves the engine has no return series for. Those produce the
-panel's centrepiece — the share of the money left out of the simulation rather
-than guessed at, which the six-number version has no way to disclose because it
-invented the whole portfolio.
+itemised, and two sleeves the engine has no return series for. Those produce one
+of the panel's two centrepieces — the share of the money left out of the
+simulation rather than guessed at, which the six-number version has no way to
+disclose because it invented the whole portfolio.
 
-The panel deliberately does not lead with its survival rate, but it no longer
-has to disclaim the comparison either: both runs now cover the same record.
+**The panel answers the question before it shows its work.** It leads with the
+result at the plan's own retirement age and a band of the same plan at each age
+in `RETIREMENT_AGE_LADDER` — a separate engine run apiece, identical in every
+respect but the date. One rate answers "can I retire at 60?" and says nothing
+about "when can I retire?", and the page is bought against both headlines, so
+the band is the answer to the second. Every age is tested over the same window
+(today through life expectancy), so the denominators match and the rates are
+directly comparable; each rung carries its own count anyway, so the panel never
+has to assume that.
+
+The "when" sentence under the band is derived from the band rather than written
+about it — the earliest age tested, the earliest that cleared nine in ten, and
+the earliest where nothing ran out at all. A regeneration that moves those ages
+moves the prose with them. "Nothing ran out" is stated as a fact about
+overlapping stretches of one country's record, not as a guarantee.
+
+The panel does not disclaim the comparison with the six-number result above:
+both runs now cover the same record.
 
 That used to be false, and the fix is in the engine rather than the copy. The
 international series starts in 1975, and the engine used to restrict every

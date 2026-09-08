@@ -11,10 +11,15 @@
  * typed by hand, which is what lets the section claim these are the engine's
  * outputs.
  *
- * The panel deliberately leads with what the model could *not* do — the
- * $464,272 it declined to simulate, the 79.6% coverage, its own low confidence
- * rating. A richer answer that hid its gaps would be a worse advertisement for
- * this particular product than one that prints them.
+ * The panel answers the page's question first and shows its work second. The
+ * three cards below it are the reasons to believe the answer — the mix it
+ * found, the $464,272 it declined to simulate, its own low confidence rating —
+ * but a visitor who reads only the first line should still learn whether this
+ * plan retires at 60, and at which age it stops being a close call.
+ *
+ * That answer is a band across retirement ages rather than a single rate,
+ * because a single rate answers "can I retire at 60?" and says nothing about
+ * "when can I retire?" — and the page is bought against both.
  */
 
 import { RETIREMENT_CALCULATOR_EXAMPLE as EXAMPLE } from "@/lib/retirement-calculator-example.generated";
@@ -33,6 +38,36 @@ function monthLabel(month: string): string {
   const names = ["January", "February", "March", "April", "May", "June",
     "July", "August", "September", "October", "November", "December"];
   return `${names[Number(match[2]) - 1]} ${match[1]}`;
+}
+
+/**
+ * Colour the answer by what it actually says, the same thresholds the live
+ * result above uses. A 60% survival rate rendered in the same confident green
+ * as a 100% one is a lie of presentation.
+ */
+function outcomeBand(survivalRate: number): "strong" | "mixed" | "weak" {
+  if (survivalRate >= 0.9) return "strong";
+  if (survivalRate >= 0.7) return "mixed";
+  return "weak";
+}
+
+/**
+ * Read the "when" answer out of the ladder rather than writing it down.
+ *
+ * The ages, and which of them clear the bar, are engine output; a regeneration
+ * with a different book or a changed dataset has to move this prose with it.
+ * `clearedEvery` is the first tested age where no history ran out at all —
+ * stated separately from the 90% mark because "every one lasted" and "nine in
+ * ten lasted" are different claims and the panel should not blur them.
+ */
+function readLadder<T extends { age: number; survivalRate: number }>(ladder: readonly T[]) {
+  const ordered = [...ladder].sort((a, b) => a.age - b.age);
+  return {
+    ordered,
+    earliestStrong: ordered.find((entry) => entry.survivalRate >= 0.9) ?? null,
+    clearedEvery: ordered.find((entry) => entry.survivalRate >= 1) ?? null,
+    earliest: ordered[0] ?? null,
+  };
 }
 
 /** Spell small counts the way the panel's prose already does; fall back to digits. */
@@ -71,11 +106,44 @@ function unmodeledGapCopy(unresolvedCount: number, unsupportedCount: number): st
   return `${parts.join("; ")}.`;
 }
 
+/**
+ * The "when can I retire?" sentence, written from the ladder rather than about
+ * it. Every branch has to stay true of whatever the engine last produced —
+ * including the unhappy one where no tested age clears nine in ten, which is a
+ * real answer and not a case to hide.
+ */
+function ladderCopy(read: ReturnType<typeof readLadder>, sequencesTested: number): string {
+  const parts = [
+    `Same holdings, same spending, the same ${sequencesTested.toLocaleString("en-US")} stretches of ` +
+      "market history — only the retirement date moves.",
+  ];
+  if (read.earliest) {
+    parts.push(
+      `At ${read.earliest.age} it lasted in ${percent(read.earliest.survivalRate * 100)} of them.`
+    );
+  }
+  if (read.clearedEvery) {
+    parts.push(
+      `From ${read.clearedEvery.age} on, none of them ran out — which is a statement about ` +
+        "overlapping stretches of one country's history, not a guarantee."
+    );
+  } else if (read.earliestStrong) {
+    parts.push(
+      `${read.earliestStrong.age} is the earliest age tested where at least nine in ten lasted.`
+    );
+  } else {
+    parts.push("No age tested here reached nine in ten, which is itself the answer.");
+  }
+  return parts.join(" ");
+}
+
 export function RetirementConnectedExample() {
   const { plan, portfolio, allocation, coverage, result } = EXAMPLE;
   const unmodeled = [...coverage.unresolved, ...coverage.unsupported];
   const gapCopy = unmodeledGapCopy(coverage.unresolved.length, coverage.unsupported.length);
   const [proxied] = result.proxiedSeries;
+  const ladder = readLadder(EXAMPLE.byRetirementAge);
+  const band = outcomeBand(result.survivalRate);
 
   return (
     <section className="qp-example">
@@ -91,6 +159,55 @@ export function RetirementConnectedExample() {
             {plan.socialSecurityStartAge}. What changed is that the model read{" "}
             {portfolio.holdingCount} holdings across {portfolio.accountCount} accounts worth{" "}
             {money(portfolio.totalInvestments)}, instead of assuming a preset.
+          </p>
+        </div>
+
+        <div className="qp-example-answer" data-outcome={band}>
+          <p className="qp-example-answer-verdict">
+            Retiring at {plan.retirementAge} lasted in{" "}
+            <strong>
+              {result.sequencesSurvived.toLocaleString("en-US")} of the{" "}
+              {result.sequencesTested.toLocaleString("en-US")}
+            </strong>{" "}
+            retirements in market history this portfolio could be tested against —{" "}
+            {percent(result.survivalRate * 100)}.
+          </p>
+
+          <ol className="qp-example-ladder">
+            {ladder.ordered.map((entry) => (
+              <li
+                key={entry.age}
+                data-outcome={outcomeBand(entry.survivalRate)}
+                data-primary={entry.age === plan.retirementAge ? "true" : undefined}
+              >
+                <span className="qp-ladder-age">
+                  <span>Retire at {entry.age}</span>
+                  {entry.age === plan.retirementAge ? (
+                    <em className="qp-ladder-tag">this plan</em>
+                  ) : null}
+                </span>
+                <span
+                  className="qp-ladder-track"
+                  role="img"
+                  aria-label={`${percent(entry.survivalRate * 100)} of tested histories lasted`}
+                >
+                  <span
+                    className="qp-ladder-fill"
+                    style={{ width: `${entry.survivalRate * 100}%` }}
+                  />
+                </span>
+                <b className="qp-ladder-rate">{percent(entry.survivalRate * 100)}</b>
+                <small className="qp-ladder-count">
+                  {entry.sequencesSurvived.toLocaleString("en-US")} of{" "}
+                  {entry.sequencesTested.toLocaleString("en-US")} lasted
+                </small>
+              </li>
+            ))}
+          </ol>
+
+          <p className="qp-example-answer-note">
+            {ladderCopy(ladder, result.sequencesTested)} Which age you can name depends on what you
+            actually hold, which is the rest of this panel.
           </p>
         </div>
 
@@ -162,15 +279,15 @@ export function RetirementConnectedExample() {
             <small>Median across tested histories, in today&apos;s dollars</small>
           </div>
           <div>
-            <span>Sequences survived</span>
-            <strong>{result.sequencesSurvived} of {result.sequencesTested}</strong>
+            <span>Tested against</span>
+            <strong>{monthLabel(result.firstMonth)} onward</strong>
             <small>
-              Same record as the result above — {monthLabel(result.firstMonth)} onward — so the two
-              are read against the same history
+              Same record as the result above, in {result.sequencesTested} overlapping windows, so
+              the two are read against the same history
             </small>
           </div>
           <div>
-            <span>Engine&apos;s own read</span>
+            <span>How it reads the mix</span>
             <strong>{result.primaryObservation}</strong>
             <small>Stated at {result.confidence} confidence, for the reasons in this panel</small>
           </div>

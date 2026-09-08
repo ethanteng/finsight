@@ -67,6 +67,41 @@ describe('connected-accounts example data', () => {
     expect(EXAMPLE.asOfDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });
 
+  it('carries a run for every retirement age the panel bands, on one denominator', () => {
+    const ladder = EXAMPLE.byRetirementAge;
+
+    expect(ladder.length).toBeGreaterThan(1);
+    expect(ladder.map((entry) => entry.age)).toContain(EXAMPLE.plan.retirementAge);
+
+    const ages = ladder.map((entry) => entry.age);
+    expect([...ages].sort((a, b) => a - b)).toEqual(ages);
+    expect(new Set(ages).size).toBe(ages.length);
+
+    for (const entry of ladder) {
+      expect(entry.age).toBeGreaterThan(EXAMPLE.plan.currentAge);
+      expect(entry.survivalRate).toBeGreaterThanOrEqual(0);
+      expect(entry.survivalRate).toBeLessThanOrEqual(1);
+      expect(Number.isInteger(entry.sequencesSurvived)).toBe(true);
+      expect(entry.sequencesSurvived).toBeLessThanOrEqual(entry.sequencesTested);
+      // Retirement age moves the withdrawal start inside a window that always
+      // runs from today to life expectancy, so the bars share a denominator and
+      // the rates are comparable. A mismatch would make the band misleading.
+      expect(entry.sequencesTested).toBe(EXAMPLE.result.sequencesTested);
+    }
+  });
+
+  it('agrees with the headline result at the plan\'s own retirement age', () => {
+    const atPlan = EXAMPLE.byRetirementAge.find((entry) => entry.age === EXAMPLE.plan.retirementAge);
+
+    expect(atPlan).toBeDefined();
+    expect(atPlan!.survivalRate).toBeCloseTo(EXAMPLE.result.survivalRate, 9);
+    expect(atPlan!.sequencesSurvived).toBe(EXAMPLE.result.sequencesSurvived);
+    expect(atPlan!.projectedPortfolioAtRetirement).toBeCloseTo(
+      EXAMPLE.result.projectedPortfolioAtRetirement,
+      6
+    );
+  });
+
   it('describes a plan the landing-page form could have submitted', () => {
     const { plan } = EXAMPLE;
 
@@ -149,6 +184,77 @@ describe('connected-accounts example panel', () => {
     expect(proxied.months).toBeGreaterThan(0);
     expect(proxied.months).toBeLessThan(proxied.windowMonths);
     expect(screen.getByText(/carries the US market return rather than its own/i)).toBeInTheDocument();
+  });
+
+  it('answers the page\'s question before showing its work', () => {
+    render(<RetirementConnectedExample />);
+
+    // The section used to open with the asset mix and close with a sentence
+    // about "balanced allocation characteristics" — machinery, never an answer
+    // to "can I retire at 60?".
+    const survived = EXAMPLE.result.sequencesSurvived.toLocaleString('en-US');
+    const tested = EXAMPLE.result.sequencesTested.toLocaleString('en-US');
+
+    expect(
+      screen.getByText(new RegExp(`Retiring at ${EXAMPLE.plan.retirementAge} lasted in`, 'i'))
+    ).toBeInTheDocument();
+    expect(screen.getByText(`${survived} of the ${tested}`)).toBeInTheDocument();
+    expect(screen.queryByText(/Engine's own read/i)).not.toBeInTheDocument();
+  });
+
+  it('bands the answer across retirement ages, each with its own count', () => {
+    render(<RetirementConnectedExample />);
+
+    for (const entry of EXAMPLE.byRetirementAge) {
+      expect(screen.getByText(`Retire at ${entry.age}`)).toBeInTheDocument();
+      expect(
+        screen.getByText(
+          `${entry.sequencesSurvived.toLocaleString('en-US')} of ${entry.sequencesTested.toLocaleString('en-US')} lasted`
+        )
+      ).toBeInTheDocument();
+    }
+  });
+
+  it('reads the "when" sentence off the band rather than asserting an age', () => {
+    render(<RetirementConnectedExample />);
+
+    const ordered = [...EXAMPLE.byRetirementAge].sort((a, b) => a.age - b.age);
+    const clearedEvery = ordered.find((entry) => entry.survivalRate >= 1);
+    const earliestStrong = ordered.find((entry) => entry.survivalRate >= 0.9);
+
+    expect(
+      screen.getByText(new RegExp(`At ${ordered[0].age} it lasted in`, 'i'))
+    ).toBeInTheDocument();
+
+    if (clearedEvery) {
+      expect(
+        screen.getByText(new RegExp(`From ${clearedEvery.age} on, none of them ran out`, 'i'))
+      ).toBeInTheDocument();
+      // "None ran out" is a claim about this record, not about the future.
+      expect(screen.getByText(/not a guarantee/i)).toBeInTheDocument();
+    } else if (earliestStrong) {
+      expect(
+        screen.getByText(
+          new RegExp(`${earliestStrong.age} is the earliest age tested where at least nine in ten`, 'i')
+        )
+      ).toBeInTheDocument();
+    } else {
+      expect(screen.getByText(/No age tested here reached nine in ten/i)).toBeInTheDocument();
+    }
+  });
+
+  it('colours each rung by what it says, not uniformly', () => {
+    const { container } = render(<RetirementConnectedExample />);
+
+    const rungs = container.querySelectorAll('.qp-example-ladder li');
+    expect(rungs).toHaveLength(EXAMPLE.byRetirementAge.length);
+
+    const ordered = [...EXAMPLE.byRetirementAge].sort((a, b) => a.age - b.age);
+    rungs.forEach((rung, index) => {
+      const rate = ordered[index].survivalRate;
+      const expected = rate >= 0.9 ? 'strong' : rate >= 0.7 ? 'mixed' : 'weak';
+      expect(rung.getAttribute('data-outcome')).toBe(expected);
+    });
   });
 
   it('says plainly that the profile is an example rather than a customer', () => {
