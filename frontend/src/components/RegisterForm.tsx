@@ -3,7 +3,7 @@ import { useState, useEffect, Suspense } from 'react';
 import { getBrowserTimeZone, setStoredUserTimeZone } from '@/lib/browser-time-zone';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowRight, Check, CircleAlert, CreditCard, LoaderCircle, LockKeyhole, Mail } from 'lucide-react';
+import { ArrowRight, Check, CircleAlert, CreditCard, Eye, EyeOff, LoaderCircle, LockKeyhole, Mail } from 'lucide-react';
 import AuthFlowShell from './auth/AuthFlowShell';
 import { pushBeginCheckout, pushSignUp } from '@/lib/dataLayer';
 import { useDialog } from '@/components/ui/dialog';
@@ -31,8 +31,12 @@ interface SubscriptionContext {
  */
 export type RegisterFormVariant = 'checkout' | 'trial';
 
-const inputClasses =
-  'w-full rounded-xl border border-[#123c2f]/20 bg-[#fffdf7] py-3 pl-11 pr-4 text-[#123c2f] shadow-sm outline-none placeholder:text-[#8a9b95] focus:border-[#123c2f] focus:ring-4 focus:ring-[#123c2f]/10';
+const inputBaseClasses =
+  'w-full rounded-xl border border-[#123c2f]/20 bg-[#fffdf7] py-3 pl-11 text-[#123c2f] shadow-sm outline-none placeholder:text-[#8a9b95] focus:border-[#123c2f] focus:ring-4 focus:ring-[#123c2f]/10';
+
+const inputClasses = `${inputBaseClasses} pr-4`;
+/** Wider right padding so typed characters clear the show/hide button. */
+const passwordInputClasses = `${inputBaseClasses} pr-12`;
 
 const TRIAL_COPY = {
   eyebrow: 'Start your free trial',
@@ -67,6 +71,9 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  // The trial form asks for the password once, so revealing it is the only
+  // way to catch a typo before it becomes an account you cannot sign into.
+  const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const { showError, dialog } = useDialog();
   const [isCheckoutLoading, setIsCheckoutLoading] = useState(false);
@@ -311,16 +318,25 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
             <LockKeyhole className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[#71857f]" size={18} />
             <input
               id="password"
-              type="password"
+              type={showPassword ? 'text' : 'password'}
               autoComplete="new-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
               minLength={8}
               aria-describedby="password-requirements"
-              className={inputClasses}
+              className={passwordInputClasses}
               placeholder="Create a password"
             />
+            <button
+              type="button"
+              onClick={() => setShowPassword((shown) => !shown)}
+              aria-label={showPassword ? 'Hide password' : 'Show password'}
+              aria-pressed={showPassword}
+              className="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg p-1.5 text-[#71857f] transition hover:text-[#123c2f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#123c2f]/30"
+            >
+              {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+            </button>
           </div>
           {/* Mirrors validatePassword() in src/auth/utils.ts, so the rules are
               visible before the server rejects the form. */}

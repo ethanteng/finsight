@@ -114,6 +114,25 @@ describe('RegisterForm', () => {
       await waitFor(() => expect(push).toHaveBeenCalledWith('/verify-email'));
     });
 
+    it('reveals the password on request, so a typo is catchable without a confirm field', () => {
+      global.fetch = jest.fn();
+
+      render(<RegisterForm variant="trial" />);
+      const field = screen.getByLabelText('Password');
+      expect(field).toHaveAttribute('type', 'password');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Show password' }));
+      expect(field).toHaveAttribute('type', 'text');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Hide password' }));
+      expect(field).toHaveAttribute('type', 'password');
+
+      // A bare <button> inside a form defaults to type="submit"; toggling
+      // visibility must not fire the registration request.
+      expect(global.fetch).not.toHaveBeenCalled();
+      expect(push).not.toHaveBeenCalled();
+    });
+
     it('rejects passwords that fail the advertised complexity rules without calling the API', async () => {
       global.fetch = jest.fn();
 
