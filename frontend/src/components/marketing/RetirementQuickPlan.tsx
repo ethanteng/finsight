@@ -22,8 +22,9 @@ import {
   YAxis,
 } from "recharts";
 import { MarketingGetStartedButton } from "./MarketingGetStartedButton";
+import { TRIAL_CTA_MICROCOPY } from "./trial-copy";
 import { SiteFooter, SiteHeader } from "./SiteShell";
-import { RetirementConnectedExample } from "./RetirementConnectedExample";
+import { CONNECTED_EXAMPLE_ID, RetirementConnectedExample } from "./RetirementConnectedExample";
 import { pushRetirementInteraction, pushRetirementModelRun } from "@/lib/dataLayer";
 
 type AllocationId = "conservative" | "balanced" | "growth";
@@ -84,6 +85,13 @@ interface QuickPlanResult {
     solverCeilingRate: number;
   };
   assumptions: string[];
+  /**
+   * Still returned by the endpoint, no longer rendered: the page dropped the
+   * dark "what this model did not know" section. Kept on the type because it
+   * mirrors the API response, and because the same gaps are what the
+   * connected-accounts panel below the form now demonstrates instead of
+   * asserting.
+   */
   limitations: string[];
 }
 
@@ -340,9 +348,6 @@ export function RetirementQuickPlan({
           sequence risk — and show you what your plan would have done in every one of those
           retirements.
         </p>
-        <p className="qp-hero-note">
-          No chat box. No AI guessing at arithmetic. The same calculation, every time.
-        </p>
       </section>
 
       <section className="shell qp-form-section">
@@ -488,18 +493,19 @@ export function RetirementQuickPlan({
           <h2>
             {result
               ? "This analysis used six numbers."
-              : "Six numbers gets you a real calculation. Your accounts get you a real answer."}
+              : "Get answers based on your actual finances."}
           </h2>
           <p>
-            Ask Linc can replace those estimates with your actual accounts, spending, investments,
-            debts and income — every holding, every fee, your real allocation, your real cash flow —
-            and run this same model against them.
+            Ask Linc runs this same model on your real accounts — every holding, every fee, your
+            actual spending and income.
           </p>
           <MarketingGetStartedButton
             className="button button-primary"
             trackingLocation="quickplan_cross_sell"
             csOverrideId="cta-start-free-trial-quickplan"
           />
+          {/* The same promise every CTA on the site makes; kept in one place. */}
+          <p className="microcopy">{TRIAL_CTA_MICROCOPY}</p>
         </div>
       </section>
 
@@ -665,6 +671,18 @@ function QuickPlanResults({ result }: { result: QuickPlanResult }) {
             }
           />
         </div>
+
+        {/*
+          * The answer above is the page's payoff, and the section that argues
+          * for connecting accounts is four blocks further down — past two
+          * charts and the methodology. Someone who reads their result and
+          * stops never sees it. This is the shortcut, placed the moment they
+          * have an answer to compare against.
+          */}
+        <a className="qp-jump" href={`#${CONNECTED_EXAMPLE_ID}`}>
+          <span>See this same answer with real accounts connected</span>
+          <span className="qp-jump-arrow" aria-hidden="true">↓</span>
+        </a>
       </section>
 
       <section className="shell qp-chart-block">
@@ -762,24 +780,6 @@ function QuickPlanResults({ result }: { result: QuickPlanResult }) {
             </li>
           ))}
         </ul>
-      </section>
-
-      <section className="qp-honesty">
-        <div className="shell qp-honesty-inner">
-          <div>
-            <p className="section-kicker light">WHAT THIS MODEL DID NOT KNOW</p>
-            <h3>Six numbers is a real calculation. It is not your finances.</h3>
-            <p className="qp-honesty-lede">
-              These are the gaps between this answer and the one your actual accounts would produce.
-              We would rather print them than let the chart imply precision it does not have.
-            </p>
-          </div>
-          <ul className="qp-limitations">
-            {result.limitations.map((limitation) => (
-              <li key={limitation}>{limitation}</li>
-            ))}
-          </ul>
-        </div>
       </section>
 
       <section className="shell qp-methodology">

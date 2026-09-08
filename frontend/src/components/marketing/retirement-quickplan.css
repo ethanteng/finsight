@@ -25,13 +25,6 @@
   line-height: 1.6;
 }
 
-.quickplan-page .qp-hero-note {
-  margin: 18px 0 0;
-  color: #3f4d45;
-  font-size: 15px;
-  font-weight: 700;
-}
-
 /* ---------------------------------------------------------------- the form */
 
 .quickplan-page .qp-form-section {
@@ -351,6 +344,58 @@
   text-shadow: 0 1px 2px rgba(16, 35, 25, 0.35);
 }
 
+/*
+ * The jump from the result to the connect-accounts section.
+ *
+ * It animates because it has to compete with a chart the visitor is already
+ * reading: a slow bob on the arrow and a breathing ring on the pill, both
+ * cheap (transform and box-shadow only, no layout) and both off under
+ * prefers-reduced-motion, where the link still reads as a link.
+ */
+.quickplan-page .qp-jump {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 26px;
+  padding: 15px 24px;
+  border-radius: 999px;
+  background: var(--lime);
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  animation: qp-jump-ring 2.6s ease-in-out infinite;
+}
+
+.quickplan-page .qp-jump:hover {
+  animation-play-state: paused;
+  box-shadow: 0 0 0 6px rgba(120, 175, 60, 0.22);
+}
+
+.quickplan-page .qp-jump-arrow {
+  font-size: 17px;
+  line-height: 1;
+  animation: qp-jump-bob 1.5s ease-in-out infinite;
+}
+
+@keyframes qp-jump-ring {
+  0%, 68%, 100% { box-shadow: 0 0 0 0 rgba(120, 175, 60, 0); }
+  20% { box-shadow: 0 0 0 9px rgba(120, 175, 60, 0.26); }
+  46% { box-shadow: 0 0 0 16px rgba(120, 175, 60, 0); }
+}
+
+@keyframes qp-jump-bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(4px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .quickplan-page .qp-jump,
+  .quickplan-page .qp-jump-arrow {
+    animation: none;
+  }
+}
+
 .quickplan-page .qp-stats {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -530,66 +575,6 @@
   text-align: right;
 }
 
-/* -------------------------------------------------------- honesty section */
-
-.quickplan-page .qp-honesty {
-  margin-top: 32px;
-  padding-block: 66px;
-  background: var(--forest);
-  color: #e9efe9;
-}
-
-.quickplan-page .qp-honesty-inner {
-  display: grid;
-  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
-  gap: 70px;
-}
-
-.quickplan-page .qp-honesty h3 {
-  max-width: 460px;
-  margin: 0 0 18px;
-  color: white;
-  font-family: var(--font-display);
-  font-size: 36px;
-  font-weight: 680;
-  line-height: 1.15;
-  letter-spacing: -0.045em;
-}
-
-.quickplan-page .qp-honesty-lede {
-  max-width: 440px;
-  margin: 0;
-  color: #a8bcae;
-  font-size: 14.5px;
-  line-height: 1.7;
-}
-
-.quickplan-page .qp-limitations {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.quickplan-page .qp-limitations li {
-  padding: 14px 0 14px 26px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.14);
-  color: #d7e2d8;
-  font-size: 14px;
-  line-height: 1.65;
-  position: relative;
-}
-
-.quickplan-page .qp-limitations li::before {
-  content: "";
-  position: absolute;
-  top: 22px;
-  left: 2px;
-  width: 8px;
-  height: 8px;
-  border-radius: 2px;
-  background: var(--lime);
-}
-
 /* ------------------------------------------------------------ methodology */
 
 .quickplan-page .qp-methodology {
@@ -735,6 +720,25 @@
   cursor: pointer;
 }
 
+/*
+ * The page's one conversion button, and the last thing on it before the FAQ.
+ * Sized past the site's hero button rather than matching it: everything above
+ * this point is an argument for pressing it.
+ */
+.quickplan-page .qp-cross-sell .button-primary {
+  padding: 26px 48px;
+  font-size: 21px;
+  letter-spacing: -0.02em;
+  box-shadow: 0 10px 0 rgba(16, 35, 25, 0.22);
+}
+
+/* `.microcopy` is coloured for a light section; this one sits on ink. */
+.quickplan-page .qp-cross-sell .microcopy {
+  margin: 18px 0 0;
+  color: #94a69a;
+  font-size: 13px;
+}
+
 /* ------------------------------------------------------------- responsive */
 
 @media (max-width: 900px) {
@@ -758,8 +762,7 @@
   }
 
   .quickplan-page .qp-chart-block,
-  .quickplan-page .qp-scenarios,
-  .quickplan-page .qp-honesty-inner {
+  .quickplan-page .qp-scenarios {
     grid-template-columns: minmax(0, 1fr);
     gap: 30px;
   }
@@ -803,17 +806,11 @@
 
 /* ------------------------------------------------- evergreen page content */
 /*
- * The explainer, FAQ and cluster links below the cross-sell. These are always
- * in the HTML, unlike the results, so they carry the page's crawlable content.
+ * The FAQ and the cluster links below the cross-sell. These are always in the
+ * HTML, unlike the results, so they carry the page's crawlable content.
  */
 
-.quickplan-page .qp-explainer {
-  padding-block: 84px 0;
-  max-width: 900px;
-}
-
-.quickplan-page .qp-explainer h2,
-.quickplan-page .qp-tests h2,
+.quickplan-page .qp-faq h2,
 .quickplan-page .qp-faq h2,
 .quickplan-page .qp-related h2 {
   margin: 14px 0 18px;
@@ -822,99 +819,6 @@
   font-weight: 660;
   line-height: 1.1;
   letter-spacing: -0.045em;
-}
-
-.quickplan-page .qp-explainer-lede {
-  max-width: 680px;
-  margin: 0;
-  color: #4f5e55;
-  font-size: 17px;
-  line-height: 1.68;
-}
-
-.quickplan-page .qp-explainer-steps {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 20px;
-  margin: 36px 0 0;
-  padding: 0;
-  list-style: none;
-}
-
-.quickplan-page .qp-explainer-steps li {
-  padding: 22px 24px;
-  border: 1px solid #d9ddd3;
-  border-radius: 18px;
-  background: var(--cream);
-}
-
-.quickplan-page .qp-explainer-steps b {
-  display: block;
-  margin-bottom: 12px;
-  color: #8a9488;
-  font-family: var(--font-display);
-  font-size: 13px;
-  letter-spacing: 0.08em;
-}
-
-.quickplan-page .qp-explainer-steps strong {
-  display: block;
-  margin-bottom: 8px;
-  font-family: var(--font-display);
-  font-size: 19px;
-  font-weight: 750;
-  letter-spacing: -0.02em;
-}
-
-.quickplan-page .qp-explainer-steps p {
-  margin: 0;
-  color: #55635a;
-  font-size: 14.5px;
-  line-height: 1.65;
-}
-
-.quickplan-page .qp-tests {
-  padding-block: 72px 0;
-  max-width: 900px;
-}
-
-.quickplan-page .qp-tests-list {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 18px;
-  margin: 26px 0 0;
-  padding: 0;
-  list-style: none;
-}
-
-.quickplan-page .qp-tests-list li {
-  padding: 20px 22px;
-  border: 1px solid #e0e3da;
-  border-radius: 16px;
-  background: #f6f5ec;
-}
-
-.quickplan-page .qp-tests-list strong {
-  display: block;
-  margin-bottom: 7px;
-  font-family: var(--font-display);
-  font-size: 17px;
-  font-weight: 750;
-  letter-spacing: -0.02em;
-}
-
-.quickplan-page .qp-tests-list p {
-  margin: 0;
-  color: #55635a;
-  font-size: 14.5px;
-  line-height: 1.65;
-}
-
-.quickplan-page .qp-tests-note {
-  margin: 20px 0 0;
-  color: #74807a;
-  font-size: 13px;
-  line-height: 1.65;
 }
 
 .quickplan-page .qp-faq {
@@ -1017,8 +921,6 @@
 }
 
 @media (max-width: 900px) {
-  .quickplan-page .qp-explainer-steps,
-  .quickplan-page .qp-tests-list,
   .quickplan-page .qp-related-list {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -1027,30 +929,123 @@
 /* ------------------------------------------- connected-accounts example */
 
 .quickplan-page .qp-example {
-  padding-block: 72px;
-  border-top: 1px solid rgba(16, 35, 25, 0.12);
+  scroll-margin-top: 18px;
+  padding-block: 0 84px;
   background: #eceadf;
 }
 
+/*
+ * The handover, in place of a border.
+ *
+ * A rule between these two sections just stops the one above. This carries the
+ * page's own background down into the section's, with the line broken by the
+ * sentence that says what the next block is for — so the seam reads as a turn
+ * in the argument rather than a boundary between two boxes.
+ */
+.quickplan-page .qp-example-transition {
+  display: grid;
+  place-items: center;
+  padding: 78px 24px 30px;
+  background: linear-gradient(180deg, var(--paper) 0%, #f0eee2 46%, #eceadf 100%);
+}
+
+.quickplan-page .qp-example-transition span {
+  display: flex;
+  align-items: center;
+  gap: clamp(14px, 3vw, 28px);
+  color: #55635a;
+  font-family: var(--font-display);
+  font-size: clamp(19px, 2.2vw, 28px);
+  font-weight: 640;
+  letter-spacing: -0.035em;
+  text-align: center;
+}
+
+.quickplan-page .qp-example-transition span::before,
+.quickplan-page .qp-example-transition span::after {
+  content: "";
+  flex: 0 0 auto;
+  width: clamp(40px, 13vw, 200px);
+  height: 1px;
+  background: linear-gradient(90deg, rgba(23, 60, 44, 0) 0%, rgba(23, 60, 44, 0.32) 100%);
+}
+
+.quickplan-page .qp-example-transition span::after {
+  background: linear-gradient(90deg, rgba(23, 60, 44, 0.32) 0%, rgba(23, 60, 44, 0) 100%);
+}
+
+/* The phrase wraps here, and rules centred against two lines read as a
+   mis-drawn box. The gradient alone carries the handover at this width. */
+@media (max-width: 620px) {
+  .quickplan-page .qp-example-transition {
+    padding-top: 62px;
+  }
+
+  .quickplan-page .qp-example-transition span::before,
+  .quickplan-page .qp-example-transition span::after {
+    display: none;
+  }
+}
+
+/*
+ * The section head is a dark panel rather than the section itself.
+ *
+ * This block is the page's pitch and has to be unmissable against the cream
+ * result above it — but the cross-sell immediately below is already a dark
+ * full-bleed band, and two of those in a row read as one thing. An inset dark
+ * header gives the contrast without the collision, and the light cards under it
+ * keep the two dark blocks apart.
+ */
 .quickplan-page .qp-example-head {
-  max-width: 820px;
-  margin-bottom: 36px;
+  margin-bottom: 24px;
+  padding: 44px 46px 40px;
+  border-radius: 24px;
+  background: var(--forest);
+  color: #dfe8e0;
+}
+
+/*
+ * The kicker is the label on the page's pitch, so it is a lime badge rather
+ * than the small lime caption `.section-kicker.light` gives it elsewhere. On
+ * the forest panel this is the highest-contrast element in the section, which
+ * is the point: it is what tells a visitor scrolling past what the block is
+ * for before they read a word of the headline.
+ */
+.quickplan-page .qp-example-head .section-kicker {
+  display: inline-block;
+  margin: 0 0 26px;
+  padding: 11px 18px;
+  border-radius: 999px;
+  background: var(--lime);
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 850;
+  letter-spacing: 0.12em;
+  line-height: 1.25;
 }
 
 .quickplan-page .qp-example-head h2 {
-  margin: 0 0 16px;
+  max-width: 20ch;
+  margin: 0 0 22px;
+  color: white;
   font-family: var(--font-display);
-  font-size: clamp(32px, 3.6vw, 46px);
+  font-size: clamp(34px, 4.2vw, 54px);
   font-weight: 680;
-  line-height: 1.12;
-  letter-spacing: -0.045em;
+  line-height: 1.08;
+  letter-spacing: -0.048em;
 }
 
 .quickplan-page .qp-example-lede {
-  margin: 0;
-  color: #55635a;
+  max-width: 700px;
+  margin: 0 0 14px;
+  color: #adc2b1;
   font-size: 16px;
-  line-height: 1.7;
+  line-height: 1.72;
+}
+
+.quickplan-page .qp-example-lede:last-child {
+  margin-bottom: 0;
+  color: #cddbcf;
 }
 
 /* The answer, before the evidence for it. Sits on a card of its own so a
@@ -1333,6 +1328,28 @@
   .quickplan-page .qp-example-grid,
   .quickplan-page .qp-example-result {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .quickplan-page .qp-example-head {
+    padding: 32px 22px 30px;
+    border-radius: 18px;
+  }
+
+  /* Full width here rather than a pill floating in a narrow column. */
+  .quickplan-page .qp-cross-sell .button-primary {
+    width: 100%;
+    padding: 22px 28px;
+    font-size: 19px;
+  }
+
+  /* The label wraps to two lines at this width; a stadium radius around two
+     lines reads as a mistake, so it becomes a tag instead. */
+  .quickplan-page .qp-example-head .section-kicker {
+    margin-bottom: 22px;
+    padding: 10px 14px;
+    border-radius: 14px;
+    font-size: 13px;
+    letter-spacing: 0.1em;
   }
 
   .quickplan-page .qp-example-answer {

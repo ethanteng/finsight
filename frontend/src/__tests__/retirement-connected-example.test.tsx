@@ -135,11 +135,13 @@ describe('connected-accounts example panel', () => {
     expect(screen.queryByText(/^International$/)).not.toBeInTheDocument();
   });
 
-  it('says the bond line is what was classified, not what was simulated', () => {
+  it('says the bond line is what was identified, not all of what was run', () => {
     render(<RetirementConnectedExample />);
 
-    // Part of that percentage is also in the "could not model" list next to it.
-    expect(screen.getByText(/what the\s+mapper classified, not what it simulated/i)).toBeInTheDocument();
+    // Part of that percentage is also in the "cannot see" list next to it.
+    expect(
+      screen.getByText(/what the model could identify, not all of what it could run/i)
+    ).toBeInTheDocument();
   });
 
   it('shows the coverage and confidence the engine reported', () => {
@@ -160,10 +162,14 @@ describe('connected-accounts example panel', () => {
     expect(unsupported).toBeGreaterThan(0);
 
     expect(
-      screen.getByText(new RegExp(`${unresolved === 2 ? 'Two' : unresolved} have no resolvable asset class`, 'i'))
+      screen.getByText(
+        new RegExp(`${unresolved === 2 ? 'Two' : unresolved} do not say clearly enough what they hold or where`, 'i')
+      )
     ).toBeInTheDocument();
     expect(
-      screen.getByText(new RegExp(`${unsupported === 2 ? 'two' : unsupported} have one the engine has no return series for`, 'i'))
+      screen.getByText(
+        new RegExp(`${unsupported === 2 ? 'two' : unsupported} are kinds of investment with no century of history`, 'i')
+      )
     ).toBeInTheDocument();
   });
 
@@ -183,7 +189,7 @@ describe('connected-accounts example panel', () => {
     expect(proxied).toBeDefined();
     expect(proxied.months).toBeGreaterThan(0);
     expect(proxied.months).toBeLessThan(proxied.windowMonths);
-    expect(screen.getByText(/carries the US market return rather than its own/i)).toBeInTheDocument();
+    expect(screen.getByText(/those months use the US market return instead/i)).toBeInTheDocument();
   });
 
   it('answers the page\'s question before showing its work', () => {
@@ -255,6 +261,15 @@ describe('connected-accounts example panel', () => {
       const expected = rate >= 0.9 ? 'strong' : rate >= 0.7 ? 'mixed' : 'weak';
       expect(rung.getAttribute('data-outcome')).toBe(expected);
     });
+  });
+
+  it('hands over from the result above rather than ruling a line under it', () => {
+    render(<RetirementConnectedExample />);
+
+    // "Without the guesswork", not "a real answer": the six-number result above
+    // is a real calculation, and what it lacks is knowledge of the portfolio.
+    expect(screen.getByText(/Now, without the guesswork/i)).toBeInTheDocument();
+    expect(screen.queryByText(/a real answer/i)).not.toBeInTheDocument();
   });
 
   it('says plainly that the profile is an example rather than a customer', () => {

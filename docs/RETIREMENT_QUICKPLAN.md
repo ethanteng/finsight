@@ -73,9 +73,14 @@ figures. `stressTest.worstSequences.byDrawdown` measures the portfolio path
 page with no room to explain that it would read as a market crash, so the
 service drops it.
 
-**The limitations list is content, not fine print.** It is rendered full-width
-on a dark section directly under the charts, because the gap between six numbers
-and real accounts is the reason to connect real accounts.
+**The endpoint still returns `limitations`; the page no longer renders them.**
+They had a full-width dark section under the charts. It came out when the
+result was reordered so the methodology follows the scenarios directly, on the
+grounds that the connected-accounts panel below now *demonstrates* the same gap
+— a real book, with the part the engine would not model priced in dollars —
+where the list only asserted it. The field stays on the response: it is part of
+the API contract and is still covered by `buildLimitations` tests, and a caller
+other than this page may want it.
 
 ## The connected-accounts example
 
@@ -109,6 +114,41 @@ of the panel's two centrepieces — the share of the money left out of the
 simulation rather than guessed at, which the six-number version has no way to
 disclose because it invented the whole portfolio.
 
+**The seam is a handover, not a rule.** The section opens with a gradient that
+carries the page's background down into its own, broken by the line "Now,
+without the guesswork" — so the join reads as a turn in the argument rather than
+a boundary between two boxes. Not "a real answer": the six-number result above
+is a real calculation, and what it lacks is knowledge of the portfolio. The
+flanking rules are dropped under 620px, where the phrase wraps and rules centred
+against two lines read as a mis-drawn box.
+
+**A jump link sits under the live result.** The connected-accounts section is
+four blocks below the answer — past two charts and the methodology — so a
+visitor who reads their result and stops never reaches the argument for
+connecting anything. The link appears the moment they have an answer to compare
+against. It animates (a bob on the arrow, a breathing ring on the pill) because
+it competes with a chart already in view; both animations are transform and
+box-shadow only, and both are off under `prefers-reduced-motion`. The anchor id
+is exported as `CONNECTED_EXAMPLE_ID` and imported by both sides, because a link
+to an id nothing carries fails silently.
+
+**Its header is the page's pitch, so it is styled as one.** The section head is
+an inset dark panel rather than a dark full-bleed band: the cross-sell directly
+below is already full-bleed dark, and two of those in a row read as one block.
+Its kicker is a lime badge rather than the small caption `.section-kicker.light`
+gives it elsewhere, because it is what names the block for someone scrolling
+past before they read a word of the headline; it becomes a squarer tag on
+narrow screens, where it wraps to two lines and a stadium radius would read as
+a mistake. The copy is deliberately non-technical and deliberately short — what
+the six-number answer had to assume, why that assumption changes the answer, and
+what connecting accounts replaces it with — because it is the one part of this
+page addressed to someone who has not decided to care yet. The headline carries
+the argument on its own; the lede under it is one sentence naming the profile,
+because everything else it used to say is either in that headline or in the
+cards below it. It claims the model stops guessing *what you
+own*, never that nothing is assumed: the panel's own middle card prices what the
+model still cannot see.
+
 **The panel answers the question before it shows its work.** It leads with the
 result at the plan's own retirement age and a band of the same plan at each age
 in `RETIREMENT_AGE_LADDER` — a separate engine run apiece, identical in every
@@ -137,6 +177,40 @@ looked materially safer in the authenticated product than on this page, and the
 difference was data availability rather than insight. `ShortSeriesPolicy` now
 extends the short series with a documented proxy instead, and the panel states
 which months of the window that covers.
+
+## Page order
+
+Hero, form, result (verdict → jump link → sustainable-spending chart →
+scenarios → methodology and the assumptions disclosure), then the
+connected-accounts panel, the cross-sell, and the always-present crawlable body
+— now just the FAQ ("Retirement FAQs") and the cluster links ("Read more about
+retirement").
+
+The methodology block sits directly under the scenarios because it explains the
+numbers immediately above it. Four pieces that used to sit between or around
+them are gone: the dark limitations section, the numbered "how this calculator
+works" explainer (it walked through a form the visitor can already see), the
+"what the model actually tests" list, and the hero's "no chat box" line.
+
+Everything removed was copy about the product; nothing the engine computes was
+dropped except the limitations list above. **One consequence worth knowing:**
+the always-present sourcing note — Kenneth R. French and Robert J. Shiller, plus
+the link to `/trust` — left with the "what the model actually tests" block. The
+same sourcing is still in the assumptions disclosure, which a visitor only
+reaches by running the model, so the page no longer credits its data sources to
+someone who reads it without running anything.
+
+## The closing CTA
+
+One kicker, one line, one sentence, the button, and `TRIAL_CTA_MICROCOPY` —
+with the button sized past the site's hero button, since everything above it on
+this page is an argument for pressing it, and full-width under 900px —
+the same card-free-trial promise every other CTA on the site makes, imported
+rather than retyped so the page cannot drift from it. The headline changes with
+state: "This analysis used six numbers" once a visitor has run one — which only
+means something to someone holding that result — and "Get answers based on your
+actual finances" before that, for a visitor who has run nothing and needs the
+offer stated plainly.
 
 ## Paid-search variants
 
