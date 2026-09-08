@@ -53,6 +53,9 @@ describe('connected-accounts example data', () => {
   });
 
   it('counts accounts from the book rather than asserting a number', () => {
+    // Derived from the distinct account ids on the book. A hand-typed count
+    // would break the panel's "engine output, not invented" claim, which is the
+    // only reason the number is on the page at all.
     expect(EXAMPLE.portfolio.accountCount).toBeGreaterThan(1);
     expect(EXAMPLE.portfolio.accountCount).toBeLessThanOrEqual(EXAMPLE.portfolio.holdingCount);
   });
@@ -71,13 +74,6 @@ describe('connected-accounts example data', () => {
     expect(plan.lifeExpectancy).toBeGreaterThan(plan.retirementAge);
     expect(plan.annualSpending).toBeGreaterThan(0);
   });
-
-  it('reports a real account count rather than an invented one', () => {
-    // The generator derives this from distinct account_ids on the book.
-    // A hand-typed count would break the panel's "engine output, not invented" claim.
-    expect(EXAMPLE.portfolio.accountCount).toBeGreaterThan(1);
-    expect(EXAMPLE.portfolio.accountCount).toBeLessThanOrEqual(EXAMPLE.portfolio.holdingCount);
-  });
 });
 
 describe('connected-accounts example panel', () => {
@@ -95,8 +91,13 @@ describe('connected-accounts example panel', () => {
   it('labels the subset rows as subsets, not as separate sleeves', () => {
     render(<RetirementConnectedExample />);
 
+    // `internationalAllocation` is inside `equityAllocation` and
+    // `tipsAllocation` is inside `fixedIncomeAllocation`. A bare "TIPS" row
+    // would double-count and push the mix past 100% of the book.
     expect(screen.getByText('of which international')).toBeInTheDocument();
     expect(screen.getByText('of which TIPS')).toBeInTheDocument();
+    expect(screen.queryByText(/^TIPS$/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/^International$/)).not.toBeInTheDocument();
   });
 
   it('says the bond line is what was classified, not what was simulated', () => {
@@ -113,15 +114,6 @@ describe('connected-accounts example panel', () => {
       screen.getByText(`${(EXAMPLE.coverage.valueCoverage * 100).toFixed(1)}%`)
     ).toBeInTheDocument();
     expect(screen.getByText(EXAMPLE.coverage.confidence)).toBeInTheDocument();
-  });
-
-  it('nests TIPS under bonds the way international nests under stocks', () => {
-    render(<RetirementConnectedExample />);
-
-    // fixedIncomeAllocation already includes tipsAllocation; a sibling "TIPS"
-    // row would double-count and make the mix sum past 100% of the book.
-    expect(screen.getByText('of which TIPS')).toBeInTheDocument();
-    expect(screen.queryByText(/^TIPS$/)).not.toBeInTheDocument();
   });
 
   it('describes unmodeled gaps from the generated counts, not hardcoded copy', () => {
