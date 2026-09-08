@@ -39,6 +39,7 @@ describe('connected-accounts example data', () => {
     expect(plan.lifeExpectancy).toBeGreaterThan(plan.retirementAge);
     expect(plan.annualSpending).toBeGreaterThan(0);
   });
+
 });
 
 describe('connected-accounts example panel', () => {
@@ -69,6 +70,22 @@ describe('connected-accounts example panel', () => {
     // row would double-count and make the mix sum past 100% of the book.
     expect(screen.getByText('of which TIPS')).toBeInTheDocument();
     expect(screen.queryByText(/^TIPS$/)).not.toBeInTheDocument();
+  });
+
+  it('describes unmodeled gaps from the generated counts, not hardcoded copy', () => {
+    render(<RetirementConnectedExample />);
+
+    const unresolved = EXAMPLE.coverage.unresolved.length;
+    const unsupported = EXAMPLE.coverage.unsupported.length;
+    expect(unresolved).toBeGreaterThan(0);
+    expect(unsupported).toBeGreaterThan(0);
+
+    expect(
+      screen.getByText(new RegExp(`${unresolved === 2 ? 'Two' : unresolved} have no resolvable asset class`, 'i'))
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(new RegExp(`${unsupported === 2 ? 'two' : unsupported} have one the engine has no return series for`, 'i'))
+    ).toBeInTheDocument();
   });
 
   it('refuses to let its survival figure be read against the one above it', () => {

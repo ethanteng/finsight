@@ -35,9 +35,41 @@ function monthLabel(month: string): string {
   return `${names[Number(match[2]) - 1]} ${match[1]}`;
 }
 
+/** Spell small counts the way the panel's prose already does; fall back to digits. */
+function countWord(n: number): string {
+  if (n === 1) return "one";
+  if (n === 2) return "two";
+  return String(n);
+}
+
+/**
+ * The unresolved/unsupported lists come from the generated engine output; do not
+ * hardcode "two / two" here or a regeneration with a different book will lie.
+ */
+function unmodeledGapCopy(unresolvedCount: number, unsupportedCount: number): string | null {
+  const parts: string[] = [];
+  if (unresolvedCount > 0) {
+    parts.push(
+      unresolvedCount === 1
+        ? "One has no resolvable asset class"
+        : `${countWord(unresolvedCount).replace(/^./, (c) => c.toUpperCase())} have no resolvable asset class`
+    );
+  }
+  if (unsupportedCount > 0) {
+    parts.push(
+      unsupportedCount === 1
+        ? "one has a class the engine has no return series for"
+        : `${countWord(unsupportedCount)} have one the engine has no return series for`
+    );
+  }
+  if (parts.length === 0) return null;
+  return `${parts.join("; ")}.`;
+}
+
 export function RetirementConnectedExample() {
   const { plan, portfolio, allocation, coverage, result } = EXAMPLE;
   const unmodeled = [...coverage.unresolved, ...coverage.unsupported];
+  const gapCopy = unmodeledGapCopy(coverage.unresolved.length, coverage.unsupported.length);
 
   return (
     <section className="qp-example">
@@ -83,7 +115,7 @@ export function RetirementConnectedExample() {
               {unmodeled.map((label) => <li key={label}>{label}</li>)}
             </ul>
             <p>
-              Two have no resolvable asset class; two have one the engine has no return series for.
+              {gapCopy ? `${gapCopy} ` : null}
               The six-number version above had nothing to disclose here, because it invented the
               whole portfolio.
             </p>
