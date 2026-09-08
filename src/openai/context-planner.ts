@@ -88,12 +88,13 @@ const SCENARIO_OVERRIDE_INPUT_FIELDS = [
  * spending override can rebuild the baseline before the scenario runner sees
  * it and erase the comparison the user requested.
  *
- * A variant that restates the plan the user just described is not a deviation
- * from it -- one sentence produced both readings, and the value is the same on
- * each side. Stripping those fields left the baseline with nothing to run on,
- * so the projection asked the user for numbers they had already given and the
- * scenario then reported that it needed a completed baseline. Only a value that
- * actually differs from the stated plan is withheld from the baseline.
+ * Equality between a variant and a stated input does not make the variant a
+ * restatement: "what if I retire at 58 instead" reaches the planner as both,
+ * and admitting it would rebuild the baseline on the hypothetical and dedupe
+ * the requested case against its own default comparison. Every mentioned field
+ * is withheld here. Whether the baseline can be built without them is decided
+ * further down, where the stored plan and the profile are in hand, and
+ * `statedRetirementInputs` keeps the user's words available for that.
  */
 export function retirementInputsForBaseline(
   inputs: ExtractedRetirementInputs | undefined,
@@ -104,10 +105,7 @@ export function retirementInputsForBaseline(
   const variants = [scenario.primary, scenario.comparison].filter(Boolean);
   const overridden = new Set(
     SCENARIO_OVERRIDE_INPUT_FIELDS.filter((field) =>
-      variants.some((variant) => {
-        const value = variant?.overrides?.[field];
-        return value !== undefined && value !== inputs[field];
-      })
+      variants.some((variant) => variant?.overrides?.[field] !== undefined)
     )
   );
   if (overridden.size === 0) return inputs;
@@ -129,10 +127,12 @@ export function retirementInputsForBaseline(
  * Baseline inputs of last resort, for a scenario that no baseline can support.
  *
  * A variant is a comparison only when there is something to compare against.
- * When the planner reads the user's stated plan as the scenario alone, the
- * baseline holds none of those values, the projection cannot run, and the
- * answer asks for numbers the user has already given while the scenario
- * reports that it needs a completed baseline. Neither side can move.
+ * When the user states a plan for the first time and the planner reads that
+ * one sentence as the scenario too, its values are withheld from the baseline
+ * and nothing else supplies them: no stored plan, no profile. The projection
+ * cannot run, so the answer asks for numbers the user has already given while
+ * the scenario reports that it needs a completed baseline. Neither side can
+ * move, and restating the numbers reproduces both messages.
  *
  * Fold the primary variant's values into the fields the baseline is still
  * missing so the projection runs on what the user said. The values are already
@@ -140,6 +140,11 @@ export function retirementInputsForBaseline(
  * reuses the baseline for that variant instead of inventing a comparison.
  * Fields the caller already has are left alone, so a real what-if keeps its
  * comparison — pass the stated plan (pre-withhold), not the stripped baseline.
+ *
+ * This is reached only after the baseline has failed on its own evidence, so a
+ * user with a plan on file never arrives here: their stored inputs build the
+ * baseline and the variant is compared against it, which is the whole point of
+ * withholding it.
  */
 export function retirementInputsFromScenarioPlan(
   inputs: ExtractedRetirementInputs | undefined,

@@ -357,8 +357,12 @@ describe('context planner', () => {
 
   it('does not let hypothetical inputs rebuild the baseline they are meant to compare with', () => {
     const raw = rawPlan(['retirement_analysis']);
-    // The plan on record is retiring at 62 on $120,000; the scenario asks about
-    // a different age and a different spend, so neither belongs in the baseline.
+    raw.retirementInputs.retirementAge = 65;
+    raw.retirementInputs.annualWithdrawalAmount = 50_000;
+    raw.retirementInputs.withdrawalStartAge = 65;
+    raw.retirementInputs.sources.retirementAge = 'retire at 65';
+    raw.retirementInputs.sources.annualWithdrawalAmount = 'spend $50,000';
+    raw.retirementInputs.sources.withdrawalStartAge = 'retire at 65';
     raw.scenarios.retirement = {
       requested: true,
       primary: {
@@ -396,17 +400,13 @@ describe('context planner', () => {
     });
   });
 
-  it('keeps the stated plan in the baseline when a variant only restates it', () => {
+  it('withholds a variant value that matches an input the same message stated', () => {
     const raw = rawPlan(['retirement_analysis']);
     raw.retirementInputs.retirementAge = 58;
-    raw.retirementInputs.annualWithdrawalAmount = 150_000;
-    raw.retirementInputs.withdrawalStartAge = 58;
-    raw.retirementInputs.sources.retirementAge = 'retire by 58';
-    raw.retirementInputs.sources.annualWithdrawalAmount = 'spend $150K per year';
-    raw.retirementInputs.sources.withdrawalStartAge = 'withdrawing at age 58';
-    // One sentence, read twice: the same numbers arrive as inputs and as a
-    // variant. Stripping them left nothing to project, so the answer asked for
-    // values the user had just given and the scenario reported no baseline.
+    raw.retirementInputs.sources.retirementAge = 'retire at 58 instead';
+    // "What if I retire at 58 instead" reaches the planner as both a stated
+    // input and a variant. Equality does not make it the plan on file, so it
+    // stays out of the baseline the comparison is measured against.
     raw.scenarios.retirement = {
       requested: true,
       primary: {
@@ -414,16 +414,16 @@ describe('context planner', () => {
         annualRate: null,
         source: null,
         overrides: {
-          annualWithdrawalAmount: 150_000,
+          annualWithdrawalAmount: null,
           annualContributionAmount: null,
           retirementAge: 58,
-          withdrawalStartAge: 58,
+          withdrawalStartAge: null,
           lifeExpectancy: null,
           sources: {
-            annualWithdrawalAmount: 'spend $150K per year',
+            annualWithdrawalAmount: null,
             annualContributionAmount: null,
-            retirementAge: 'retire by 58',
-            withdrawalStartAge: 'withdrawing at age 58',
+            retirementAge: 'retire at 58 instead',
+            withdrawalStartAge: null,
             lifeExpectancy: null,
           },
         },
@@ -433,15 +433,12 @@ describe('context planner', () => {
 
     const plan = parseContextPlan(raw);
 
-    expect(plan.retirementInputs).toMatchObject({
-      currentAge: 45,
-      retirementAge: 58,
-      annualWithdrawalAmount: 150_000,
-      withdrawalStartAge: 58,
-    });
+    expect(plan.retirementInputs?.retirementAge).toBeUndefined();
+    expect(plan.retirementInputs?.withdrawalStartAge).toBeUndefined();
+    expect(plan.statedRetirementInputs).toMatchObject({ retirementAge: 58 });
   });
 
-  it('withholds only the fields a variant actually changes', () => {
+  it('withholds only the fields a variant mentions', () => {
     const raw = rawPlan(['retirement_analysis']);
     raw.retirementInputs.withdrawalStartAge = 62;
     raw.retirementInputs.sources.withdrawalStartAge = 'retire at 62';
@@ -452,14 +449,15 @@ describe('context planner', () => {
         annualRate: null,
         source: null,
         overrides: {
-          // Same spending target as the plan; only the age moves.
-          annualWithdrawalAmount: 120_000,
+          // The variant moves the age and says nothing about spending, so the
+          // stated spending target stays in the baseline.
+          annualWithdrawalAmount: null,
           annualContributionAmount: null,
           retirementAge: 67,
           withdrawalStartAge: null,
           lifeExpectancy: null,
           sources: {
-            annualWithdrawalAmount: '$10,000 each month in retirement',
+            annualWithdrawalAmount: null,
             annualContributionAmount: null,
             retirementAge: 'what about 67',
             withdrawalStartAge: null,

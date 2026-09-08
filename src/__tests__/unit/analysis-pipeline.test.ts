@@ -320,18 +320,16 @@ describe('runAskLincAnalysis validation routing', () => {
 
   it('keeps preflight scenario overrides out of the baseline gather and focused completion', async () => {
     const plan = contextPlan(['retirement_analysis'], true);
-    // The plan on record is retiring at 62 on $120,000. The question asks about
-    // a different age and a different spend, so those belong to the variant.
     plan.retirementInputs = {
       currentAge: 50,
-      retirementAge: 62,
-      annualWithdrawalAmount: 120_000,
-      withdrawalStartAge: 62,
+      retirementAge: 65,
+      annualWithdrawalAmount: 50_000,
+      withdrawalStartAge: 65,
       sources: {
         currentAge: 'I am 50',
-        retirementAge: 'retire at 62',
-        annualWithdrawalAmount: 'spend $120,000',
-        withdrawalStartAge: 'retire at 62',
+        retirementAge: 'retire at 65',
+        annualWithdrawalAmount: 'spend $50,000',
+        withdrawalStartAge: 'retire at 65',
       },
     };
     plan.scenarioPlans.retirement = {
@@ -385,9 +383,51 @@ describe('runAskLincAnalysis validation routing', () => {
     });
   });
 
-  it('runs the projection on a plan the variant only restates', async () => {
+  it('leaves a baseline the stored plan can build alone', async () => {
     const plan = contextPlan(['retirement_analysis'], true);
-    const statedPlan = {
+    plan.statedRetirementInputs = {
+      currentAge: 48,
+      retirementAge: 58,
+      sources: { currentAge: 'I am 48', retirementAge: 'retire at 58 instead' },
+    };
+    plan.retirementInputs = { currentAge: 48, sources: { currentAge: 'I am 48' } };
+    plan.scenarioPlans.retirement = {
+      requested: true,
+      primary: {
+        type: 'historical_cpi',
+        overrides: {
+          retirementAge: 58,
+          withdrawalStartAge: 58,
+          sources: { retirementAge: 'retire at 58 instead', withdrawalStartAge: 'retire at 58 instead' },
+        },
+      },
+    };
+    mockedPlanContext.mockResolvedValue(plan);
+    // The plan on file builds the baseline, so the hypothetical 58 is never
+    // folded in and the comparison against it survives.
+    mockedCompleteRetirement.mockImplementation(async (current) => ({
+      ...current,
+      retirementAnalysis: cachedRetirementAnalysis() as any,
+    }));
+    mockedAskClaude.mockResolvedValue(JSON.stringify({ summary: 'Here is the comparison.' }));
+
+    await runAskLincAnalysis({
+      question: 'What if I retire at 58 instead?',
+      userId: 'user-1',
+    });
+
+    expect(mockedCompleteRetirement).toHaveBeenCalledTimes(1);
+    expect(mockedCompleteRetirement.mock.calls[0][1].plannedRetirementInputs).toEqual({
+      currentAge: 48,
+      sources: { currentAge: 'I am 48' },
+    });
+  });
+
+  it('rebuilds a stalled baseline from the plan stated in the same message', async () => {
+    const plan = contextPlan(['retirement_analysis'], true);
+    // The planner read the whole message as a scenario, so every stated value
+    // was withheld and the baseline was left with nothing to run on.
+    plan.statedRetirementInputs = {
       currentAge: 48,
       retirementAge: 58,
       annualWithdrawalAmount: 150_000,
@@ -399,39 +439,6 @@ describe('runAskLincAnalysis validation routing', () => {
         withdrawalStartAge: 'start withdrawing at age 58',
       },
     };
-    plan.retirementInputs = { ...statedPlan };
-    plan.scenarioPlans.retirement = {
-      requested: true,
-      primary: {
-        type: 'historical_cpi',
-        overrides: {
-          retirementAge: 58,
-          annualWithdrawalAmount: 150_000,
-          withdrawalStartAge: 58,
-          sources: {
-            retirementAge: 'retire by 58',
-            annualWithdrawalAmount: 'spend $150K per year',
-            withdrawalStartAge: 'start withdrawing at age 58',
-          },
-        },
-      },
-    };
-    mockedPlanContext.mockResolvedValue(plan);
-    mockedAskClaude.mockResolvedValue(JSON.stringify({ summary: 'Here is the projection.' }));
-
-    await runAskLincAnalysis({
-      question: 'Run the retirement projection. I plan to retire by 58 and spend $150K per year.',
-      userId: 'user-1',
-    });
-
-    expect(mockedCompleteRetirement).toHaveBeenCalledTimes(1);
-    expect(mockedCompleteRetirement.mock.calls[0][1].plannedRetirementInputs).toEqual(statedPlan);
-  });
-
-  it('rebuilds a stalled baseline from the variant that carries the same inputs', async () => {
-    const plan = contextPlan(['retirement_analysis'], true);
-    // The planner read the whole message as a scenario, so the baseline was
-    // left with nothing to run on.
     plan.retirementInputs = { currentAge: 48, sources: { currentAge: 'I am 48' } };
     plan.scenarioPlans.retirement = {
       requested: true,
