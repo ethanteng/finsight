@@ -19,6 +19,10 @@ list of everything the model had to assume on their behalf.
 | Client component | `frontend/src/components/marketing/RetirementQuickPlan.tsx` |
 | Styles | `frontend/src/components/marketing/retirement-quickplan.css` |
 | Ad-variant helpers | `frontend/src/lib/retirement-landing.ts` |
+| Connected-accounts example | `frontend/src/components/marketing/RetirementConnectedExample.tsx` |
+| Example data (generated) | `frontend/src/lib/retirement-calculator-example.generated.ts` |
+| Example generator | `scripts/build-retirement-example.ts` (`npm run build:retirement-example`) |
+| Example drift check | `scripts/verify-retirement-example.sh` (`npm run verify:retirement-example`) |
 | Service | `src/services/retirement-quickplan.ts` |
 | Route | `src/routes/retirement-quickplan.ts` (mounted at `/api/retirement-quickplan`) |
 | Tests | `src/__tests__/unit/retirement-quickplan.test.ts`, `src/__tests__/unit/retirement-quickplan-route.test.ts`, `frontend/src/__tests__/retirement-landing.test.tsx` |
@@ -43,14 +47,14 @@ no database and no external API; the historical returns are a checked-in CSV.
 A request is pure CPU.
 
 **US-only presets.** Every preset is US stocks, US government bonds and cash,
-with no international sleeve. The engine only builds sequences over months where
-every series it needs exists, and this dataset's international series starts in
-1975 — so an international sleeve limits the test to retirements beginning
-between 1975 and the early 1980s, which returns a near-100% survival rate for
-almost any plan. Dropping it buys back 1926 onward, including the 1929, 1937,
-1966 and 1973 starts. For a portfolio the visitor has not actually told us
-about, the longer and harsher record is the more useful one. The page states
-this trade in its limitations list.
+with no international sleeve. This once existed because an international sleeve
+truncated the tested record to 1975 onward; the engine no longer does that (see
+`ShortSeriesPolicy`), so the reason is now that the sleeve would add nothing.
+Before 1975 the engine represents international with the US market return,
+which is what these presets already hold, so the visitor would get a disclosure
+in exchange for no extra information about a portfolio they have not described.
+Connecting real accounts is what gets real international holdings modeled
+against their own series — which is the difference the page is selling.
 
 **Social Security is modeled, not netted.** `RetirementAnalysisInput` gained an
 optional `retirementIncome` stream, wired through `simulateWithdrawals` as an
@@ -72,6 +76,67 @@ service drops it.
 **The limitations list is content, not fine print.** It is rendered full-width
 on a dark section directly under the charts, because the gap between six numbers
 and real accounts is the reason to connect real accounts.
+
+## The connected-accounts example
+
+The page's own result is computed live from six numbers, and the CTA under it
+promised something better without showing it. `RetirementConnectedExample`
+is that something: the same shape of plan, run by the same engine, against a
+portfolio it actually read.
+
+It has to be static — a marketing page cannot hold someone's portfolio — but
+static is not invented. `npm run build:retirement-example` runs the real
+`analyzeRetirementPortfolio` against the book in
+`scripts/build-retirement-example.ts` and writes
+`frontend/src/lib/retirement-calculator-example.generated.ts`. The page imports
+that file and nothing else. To publish a different profile — a real account's
+holdings — edit the script and re-run it; never edit the generated file, since
+the panel's claim that these are engine outputs is only true while it is
+generated.
+
+CI runs `npm run verify:retirement-example` on every push. It regenerates to a
+temporary file and diffs, so a hand edit is reported rather than repaired, and
+a change to the engine or the return dataset that moves the answer fails the
+build instead of leaving the page presenting stale figures as current ones.
+That check is only meaningful because the generator is deterministic: the
+as-of date is pinned and there is no timestamp in the output, so the file
+changes when the model's answer changes and at no other time.
+
+The example book is deliberately awkward in the ways real feeds are: a
+single-stock position with no resolvable geography, a chunk the custodian never
+itemised, and two sleeves the engine has no return series for. Those produce one
+of the panel's two centrepieces — the share of the money left out of the
+simulation rather than guessed at, which the six-number version has no way to
+disclose because it invented the whole portfolio.
+
+**The panel answers the question before it shows its work.** It leads with the
+result at the plan's own retirement age and a band of the same plan at each age
+in `RETIREMENT_AGE_LADDER` — a separate engine run apiece, identical in every
+respect but the date. One rate answers "can I retire at 60?" and says nothing
+about "when can I retire?", and the page is bought against both headlines, so
+the band is the answer to the second. Every age is tested over the same window
+(today through life expectancy), so the denominators match and the rates are
+directly comparable; each rung carries its own count anyway, so the panel never
+has to assume that.
+
+The "when" sentence under the band is derived from the band rather than written
+about it — the earliest age tested, the earliest that cleared nine in ten, and
+the earliest where nothing ran out at all. A regeneration that moves those ages
+moves the prose with them. "Nothing ran out" is stated as a fact about
+overlapping stretches of one country's record, not as a guarantee.
+
+The panel does not disclaim the comparison with the six-number result above:
+both runs now cover the same record.
+
+That used to be false, and the fix is in the engine rather than the copy. The
+international series starts in 1975, and the engine used to restrict every
+window to months where all active series existed — so a portfolio holding any
+international at all was tested only against retirements beginning between 1975
+and the early 1980s, the most favourable stretch of the record. The same plan
+looked materially safer in the authenticated product than on this page, and the
+difference was data availability rather than insight. `ShortSeriesPolicy` now
+extends the short series with a documented proxy instead, and the panel states
+which months of the window that covers.
 
 ## Paid-search variants
 

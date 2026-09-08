@@ -1021,10 +1021,10 @@ describe('retirement correctness contracts', () => {
     expect(history.bondReturns[historyIndex]).toBeCloseTo(januaryForwardBondGross - 1, 6);
   });
 
-  it('selects source history based on active sleeves', async () => {
+  it('restricts the window to the shortest active series under the truncate policy', async () => {
     const usOnly = { ...balancedMapping, usEquityWeight: 1, internationalEquityWeight: 0, nominalBondsWeight: 0 };
-    const usResult = await generateRollingSequences(30, usOnly);
-    const internationalResult = await generateRollingSequences(30, balancedMapping);
+    const usResult = await generateRollingSequences(30, usOnly, 50, 'truncate');
+    const internationalResult = await generateRollingSequences(30, balancedMapping, 50, 'truncate');
 
     expect(usResult.sequences).toHaveLength(841);
     expect(usResult.historicalData?.firstMonth).toBe('1926-07');
@@ -1033,10 +1033,67 @@ describe('retirement correctness contracts', () => {
     expect(internationalResult.historicalData?.lastMonth).toBe('2025-12');
   });
 
-  it('rejects a horizon longer than the active-sleeve history', async () => {
-    await expect(generateRollingSequences(60, balancedMapping)).rejects.toBeInstanceOf(
+  it('keeps the whole record for an international sleeve by default', async () => {
+    const usOnly = { ...balancedMapping, usEquityWeight: 1, internationalEquityWeight: 0, nominalBondsWeight: 0 };
+    const usResult = await generateRollingSequences(30, usOnly);
+    const internationalResult = await generateRollingSequences(30, balancedMapping);
+
+    // Truncating to the 1975 international start removed the 1929, 1937, 1966
+    // and 1973 retirements — the ones that decide whether a plan is safe — from
+    // every portfolio holding any international at all.
+    expect(internationalResult.sequences).toHaveLength(usResult.sequences.length);
+    expect(internationalResult.historicalData?.firstMonth).toBe('1926-07');
+    expect(internationalResult.historicalData?.lastMonth).toBe('2026-06');
+  });
+
+  it('reports which months of the window the international sleeve did not cover', async () => {
+    const { historicalData } = await generateRollingSequences(30, balancedMapping);
+    const [proxied] = historicalData?.proxiedSeries ?? [];
+
+    expect(proxied).toBeDefined();
+    expect(proxied.series).toBe('intl_equity');
+    expect(proxied.proxy).toBe('us_equity');
+    // Leading months before the series starts, and the trailing months where it
+    // ends earlier than the rest of the record.
+    expect(proxied.ranges).toEqual([
+      { firstMonth: '1926-07', lastMonth: '1974-12', months: 582 },
+      { firstMonth: '2026-01', lastMonth: '2026-06', months: 6 },
+    ]);
+    expect(proxied.months).toBe(588);
+    expect(proxied.windowMonths).toBe(1200);
+  });
+
+  it('substitutes the US market return for the months it reports as proxied', async () => {
+    const { sequences } = await generateRollingSequences(30, balancedMapping);
+    const earliest = sequences[0];
+
+    // Every month of a sequence starting in 1926 predates the international
+    // series, so the sleeve must carry exactly the US return — not a zero, and
+    // not a silently dropped observation.
+    expect(earliest.sequenceId.startsWith('1926-07')).toBe(true);
+    expect(earliest.assetBasketReturns.internationalEquity).toEqual(
+      earliest.assetBasketReturns.usEquity
+    );
+    expect(earliest.assetBasketReturns.internationalEquity.some(value => value !== 0)).toBe(true);
+  });
+
+  it('leaves a portfolio without international exposure untouched', async () => {
+    const usOnly = { ...balancedMapping, usEquityWeight: 1, internationalEquityWeight: 0, nominalBondsWeight: 0 };
+    const { historicalData } = await generateRollingSequences(30, usOnly);
+
+    expect(historicalData?.proxiedSeries).toBeUndefined();
+  });
+
+  it('rejects a horizon longer than the active-sleeve history under the truncate policy', async () => {
+    await expect(generateRollingSequences(60, balancedMapping, 50, 'truncate')).rejects.toBeInstanceOf(
       InsufficientHistoricalDataError
     );
+  });
+
+  it('accepts that same horizon by default, because the record now covers it', async () => {
+    const { sequences } = await generateRollingSequences(60, balancedMapping);
+
+    expect(sequences.length).toBeGreaterThan(0);
   });
 
   const rejectionOf = async (
@@ -1052,7 +1109,7 @@ describe('retirement correctness contracts', () => {
   };
 
   it('reports the longest horizon it could model, and what shortened it', async () => {
-    const error = await rejectionOf(generateRollingSequences(60, balancedMapping));
+    const error = await rejectionOf(generateRollingSequences(60, balancedMapping, 50, 'truncate'));
 
     expect(error.maxTimelineYears).toBe(51);
     expect(error.limitedByInternationalHistory).toBe(true);
@@ -1062,7 +1119,7 @@ describe('retirement correctness contracts', () => {
 
   it('offers no horizon at all when the record is below the engine minimum', async () => {
     // A 60-year floor is longer than the international record, so nothing works.
-    const error = await rejectionOf(generateRollingSequences(30, balancedMapping, 60));
+    const error = await rejectionOf(generateRollingSequences(30, balancedMapping, 60, 'truncate'));
 
     expect(error.maxTimelineYears).toBe(0);
   });

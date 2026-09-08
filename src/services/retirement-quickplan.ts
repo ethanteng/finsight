@@ -48,16 +48,21 @@ export interface QuickPlanAllocation {
  * the whole exercise does not have.
  *
  * All three are US stocks, US government bonds and cash, with no international
- * sleeve. That is a deliberate trade, not an oversight. The engine only builds
- * sequences over months where every series it needs exists, and this dataset's
- * international return series starts in 1975. A mix holding international
- * stocks can therefore only be tested against retirements beginning between
- * 1975 and the early 1980s -- the single most favourable stretch in the record,
- * which returns a near-100% survival rate for almost any plan. Dropping the
- * international sleeve buys back 1926 onward: the 1929 crash, the 1937 relapse,
- * and the 1966 and 1973 starts that define what a bad retirement looks like.
- * For a portfolio the visitor has not actually told us about, the longer and
- * harsher record is the more useful one.
+ * sleeve.
+ *
+ * This once existed because an international sleeve truncated the tested record
+ * to 1975 onward. It no longer does -- the engine now extends the short series
+ * with a documented proxy and keeps the whole record either way -- so the
+ * reason is now simply that the sleeve would add nothing. Before 1975 the
+ * engine would represent it with the US market return, which is what these
+ * presets already hold, so half the record would be unchanged and the visitor
+ * would be handed a disclosure in exchange for no extra information about a
+ * portfolio they have not described.
+ *
+ * A visitor who connects real accounts gets their actual international holdings
+ * modeled against the real series wherever it exists. That is the difference
+ * this page is selling, and inventing an international weight here would blur
+ * it.
  */
 export const QUICKPLAN_ALLOCATIONS: Record<QuickPlanAllocationId, QuickPlanAllocation> = {
   conservative: {
@@ -399,8 +404,8 @@ function buildLimitations(
       `${readableMonth(history.lastStartMonth)} — ` +
       `the ${history.sequencesTested} overlapping ${history.horizonYears}-year windows the record is long enough to cover. ` +
       'Overlapping windows share most of their history, so they are not independent trials.',
-    'This mix holds no international stocks. The international return series in this dataset starts in 1975, and ' +
-      'including it would have limited the test to retirements beginning in the strongest stretch of the record.',
+    'This mix holds no international stocks. Your real portfolio probably does, and connecting it is what ' +
+      'gets those holdings modeled against their own returns rather than left out of the assumption.',
     `Your asset mix is the "${allocation.label}" preset (${allocation.description}), not your actual holdings. ` +
       'Sequence risk depends heavily on the real mix.',
     'Fund fees are not modeled. A portfolio paying 0.75% a year keeps materially less than one paying 0.05%.',

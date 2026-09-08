@@ -21,6 +21,49 @@ export type WithdrawalPolicy =
 export const DEFAULT_WITHDRAWAL_POLICY: WithdrawalPolicy = { type: 'historical_cpi' };
 
 /**
+ * What to do when an active sleeve's return series is shorter than the record.
+ *
+ * The dataset's international series begins in 1975 while every other series
+ * begins in 1926. Under `truncate` a portfolio holding any international at
+ * all is tested only over months where that series exists — which is not a
+ * neutral restriction. Retirements beginning between 1975 and the early 1980s
+ * are the most favourable stretch in the record, so the shortened window
+ * silently removes the 1929, 1937, 1966 and 1973 starts that define what a bad
+ * sequence looks like, and returns a markedly safer answer for the same plan.
+ *
+ * Under `proxy` the short series is extended with a documented stand-in
+ * outside its own span, and the whole record stays testable. The stand-in is
+ * an assumption and is reported as one: the affected months carry no distinct
+ * international behaviour. That is a smaller distortion than throwing away
+ * half a century of history for the rest of the portfolio.
+ */
+export type ShortSeriesPolicy = 'proxy' | 'truncate';
+
+export const DEFAULT_SHORT_SERIES_POLICY: ShortSeriesPolicy = 'proxy';
+
+/** A contiguous stretch of months a sleeve was represented by a stand-in. */
+export interface ProxiedSeriesRange {
+  firstMonth: string;
+  lastMonth: string;
+  months: number;
+}
+
+/** What stood in for a sleeve, where, and for how long. */
+export interface ProxiedSeriesReport {
+  /** Dataset column with no observations for these months. */
+  series: string;
+  /** Dataset column used in its place. */
+  proxy: string;
+  /** Disclosure-ready wording naming both. */
+  description: string;
+  ranges: ProxiedSeriesRange[];
+  /** Total proxied months inside the tested window. */
+  months: number;
+  /** Months in the tested window, so a reader can size the substitution. */
+  windowMonths: number;
+}
+
+/**
  * A level real income stream that reduces what the portfolio must fund once it
  * begins -- Social Security, or a pension with a full cost-of-living
  * adjustment.
@@ -86,6 +129,13 @@ export interface RetirementAnalysisInput {
   asOfDate?: string;
   /** Legacy direct-caller fallback. Production callers should use asOfDate. */
   asOfYear?: number;
+
+  /**
+   * How to handle a sleeve whose return series is shorter than the record.
+   * Defaults to `proxy`; see `ShortSeriesPolicy` for why that is the default
+   * rather than restricting every window to the shortest series.
+   */
+  shortSeriesPolicy?: ShortSeriesPolicy;
 
   // Optional overrides
   inflationAssumption?: number; // override FRED data
@@ -424,6 +474,12 @@ export interface HistoricalDataSummary {
   lastMonth: string;
   sourceRetrievedAt: string;
   monthlyStartWindowsOverlap: true;
+  /**
+   * Sleeves represented by a stand-in outside their own span, so a reader can
+   * see which months of the tested window are not that sleeve's own history.
+   * Absent when every active sleeve covered the window on its own.
+   */
+  proxiedSeries?: ProxiedSeriesReport[];
   series: Record<string, {
     source: string;
     description: string;
