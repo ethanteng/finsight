@@ -82,7 +82,7 @@ ambiguous `unknown` sessions. It excludes:
 - any session containing an `/admin` page;
 - known crawler/render browser names;
 - the verified unknown-device, one-page, zero-engagement automation signature;
-- hostnames outside `GA4_ALLOWED_HOSTNAMES`.
+- hostnames outside `GA4_ALLOWED_HOSTNAMES` (each allowlist entry also covers its subdomains, matching the frontend production-host gate).
 
 The dashboard shows raw, included, and excluded counts, classification totals,
 and exclusion-reason totals. Admins can inspect a classification or include

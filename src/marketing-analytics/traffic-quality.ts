@@ -34,6 +34,23 @@ function normalizeHostname(hostname: string): string {
   return hostname.trim().toLowerCase().replace(/\.$/, '').split(':')[0];
 }
 
+/**
+ * Match the frontend production-host rule: an allowlist entry permits that
+ * exact host and any subdomain beneath it. So `asklinc.com` covers
+ * `www.asklinc.com`, `blog.asklinc.com`, and `app.asklinc.com`, while still
+ * rejecting lookalikes like `notasklinc.com`.
+ */
+export function isAllowedAnalyticsHostname(
+  hostname: string,
+  allowedHostnames = configuredAnalyticsHostnames(),
+): boolean {
+  const normalized = normalizeHostname(hostname);
+  if (!normalized) return false;
+  return allowedHostnames.some(
+    allowed => normalized === allowed || normalized.endsWith(`.${allowed}`),
+  );
+}
+
 function hasMeaningfulEvent(eventCounts: Record<string, number>): boolean {
   return Object.entries(eventCounts).some(([event, count]) => event !== 'scroll' && count > 0);
 }
@@ -65,7 +82,7 @@ export function assessTrafficQuality(
   if (KNOWN_AUTOMATION.test(`${browser} ${operatingSystem}`)) {
     return { quality: 'bot', exclusionReasons: [`known_automation:${browser || operatingSystem || 'unknown'}`] };
   }
-  if (hostname && !allowedHostnames.includes(hostname)) {
+  if (hostname && !isAllowedAnalyticsHostname(hostname, allowedHostnames)) {
     return { quality: 'synthetic', exclusionReasons: [`non_production_hostname:${hostname}`] };
   }
   if (

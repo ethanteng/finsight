@@ -1,5 +1,5 @@
 import { buildQuery } from '../../marketing-analytics/adapters/ga4-bigquery';
-import { assessTrafficQuality, isIncludedByDefault } from '../../marketing-analytics/traffic-quality';
+import { assessTrafficQuality, isAllowedAnalyticsHostname, isIncludedByDefault } from '../../marketing-analytics/traffic-quality';
 
 const base = {
   hostname: 'asklinc.com',
@@ -53,6 +53,16 @@ describe('marketing traffic quality', () => {
     expect(isIncludedByDefault('synthetic')).toBe(false);
   });
 
+  it('treats production subdomains as allowed, matching the frontend host gate', () => {
+    expect(isAllowedAnalyticsHostname('asklinc.com')).toBe(true);
+    expect(isAllowedAnalyticsHostname('www.asklinc.com')).toBe(true);
+    expect(isAllowedAnalyticsHostname('blog.asklinc.com')).toBe(true);
+    expect(isAllowedAnalyticsHostname('app.asklinc.com')).toBe(true);
+    expect(isAllowedAnalyticsHostname('notasklinc.com')).toBe(false);
+    expect(assessTrafficQuality({ ...base, hostname: 'blog.asklinc.com' }).quality).toBe('human');
+    expect(assessTrafficQuality({ ...base, hostname: 'app.asklinc.com' }).quality).toBe('human');
+  });
+
   it('does not discard a real conversion merely because its device is unknown', () => {
     expect(assessTrafficQuality({
       ...base,
@@ -90,5 +100,7 @@ describe('GA4 session query', () => {
     expect(query).toContain("key = 'traffic_type'");
     expect(query).toContain('AS has_admin_page');
     expect(query).toContain('COUNT(*) AS event_count');
+    expect(query).toContain("ARRAY_AGG(NULLIF(hostname, '') IGNORE NULLS ORDER BY event_timestamp LIMIT 1)[SAFE_OFFSET(0)] AS session_hostname");
+    expect(query).toContain("COALESCE(landing.hostname, NET.HOST(landing.page_location), session_hostname, '') AS hostname");
   });
 });
