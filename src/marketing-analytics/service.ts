@@ -79,7 +79,9 @@ function aggregateBreakdown(
   const groups = new Map<string, AnalyticsSession[]>();
   for (const session of sessions) {
     const key = keyFor(session) || '(not set)';
-    groups.set(key, [...(groups.get(key) || []), session]);
+    const bucket = groups.get(key);
+    if (bucket) bucket.push(session);
+    else groups.set(key, [session]);
   }
   return [...groups.entries()].map(([key, rows]) => ({
     key,
@@ -99,10 +101,14 @@ function aggregateIntents(sessions: AnalyticsSession[], conversionCoverageComple
   const groups = new Map<IntentCohortId, AnalyticsSession[]>();
   for (const session of sessions) {
     const intent = classifyIntent(session.acquisition).id;
-    groups.set(intent, [...(groups.get(intent) || []), session]);
+    const bucket = groups.get(intent);
+    if (bucket) bucket.push(session);
+    else groups.set(intent, [session]);
   }
   return [...groups.entries()].map(([intent, rows]) => {
     const label = classifyIntent(rows[0]?.acquisition || {}).label;
+    const qualified = conversionCoverageComplete ? aggregateTrialFunnel(rows, 'complete') : null;
+    const stepCount = (event: FunnelEventName) => qualified?.find(step => step.event === event)?.sessions ?? 0;
     return {
       intent,
       key: intent,
@@ -111,9 +117,9 @@ function aggregateIntents(sessions: AnalyticsSession[], conversionCoverageComple
       users: new Set(rows.map(row => row.userId)).size,
       engagedRate: ratio(rows.filter(row => row.engaged).length, rows.length),
       ctaRate: ratio(countSessionEvents(rows, 'start_free_click'), rows.length),
-      signupStartRate: conversionCoverageComplete ? ratio(countSessionEvents(rows, 'trial_signup_started'), rows.length) : null,
-      accountCreatedRate: conversionCoverageComplete ? ratio(countSessionEvents(rows, 'sign_up'), rows.length) : null,
-      trialCompleteRate: conversionCoverageComplete ? ratio(countSessionEvents(rows, 'trial_login_success'), rows.length) : null,
+      signupStartRate: qualified ? ratio(stepCount('trial_signup_started'), rows.length) : null,
+      accountCreatedRate: qualified ? ratio(stepCount('sign_up'), rows.length) : null,
+      trialCompleteRate: qualified ? ratio(stepCount('trial_login_success'), rows.length) : null,
       // First-party user ids are intentionally not sent to GA4, so there is no
       // honest join for activation yet. Null means unavailable; zero would
       // incorrectly claim nobody activated.
@@ -221,12 +227,19 @@ export async function getMarketingDashboard(filters: MarketingFilters): Promise<
   const previousFunnelSessions = previous.filter(session => session.sessionDate >= TRACKING_STARTED_AT);
   const previousFunnelCovered = period.previousStart >= TRACKING_STARTED_AT;
   const funnel = hasLiveGa4 ? aggregateTrialFunnel(funnelSessions, funnelCoverage) : emptyFunnel();
-  const completed = countSessionEvents(funnelSessions, 'trial_login_success');
-  const previousCompleted = previousFunnelCovered ? countSessionEvents(previousFunnelSessions, 'trial_login_success') : null;
+  const previousFunnel = hasLiveGa4 && previousFunnelCovered
+    ? aggregateTrialFunnel(previousFunnelSessions, 'complete')
+    : null;
+  const funnelStepCount = (steps: MarketingDashboardReport['funnel'], event: FunnelEventName) =>
+    steps.find(step => step.event === event)?.sessions ?? 0;
+  const completed = hasLiveGa4 ? funnelStepCount(funnel, 'trial_login_success') : null;
+  const previousCompleted = previousFunnel ? funnelStepCount(previousFunnel, 'trial_login_success') : null;
   const clicks = countEvents(current, 'start_free_click');
   const previousClicks = countEvents(previous, 'start_free_click');
-  const funnelClicks = countSessionEvents(funnelSessions, 'start_free_click');
-  const previousFunnelClicks = previousFunnelCovered ? countSessionEvents(previousFunnelSessions, 'start_free_click') : null;
+  const funnelClicks = hasLiveGa4 ? funnelStepCount(funnel, 'start_free_click') : null;
+  const previousFunnelClicks = previousFunnel ? funnelStepCount(previousFunnel, 'start_free_click') : null;
+  const signupStarts = hasLiveGa4 ? funnelStepCount(funnel, 'trial_signup_started') : null;
+  const previousSignupStarts = previousFunnel ? funnelStepCount(previousFunnel, 'trial_signup_started') : null;
   const acquisition = hasLiveGa4
     ? aggregateBreakdown(current, session => `${session.acquisition.source} / ${session.acquisition.medium}`)
       .map(row => ({ ...row, raw: current.find(session => `${session.acquisition.source} / ${session.acquisition.medium}` === row.key)?.acquisition }))
@@ -241,7 +254,7 @@ export async function getMarketingDashboard(filters: MarketingFilters): Promise<
   const devices = hasLiveGa4 ? aggregateBreakdown(current, session => session.device) : canUseSnapshot ? SNAPSHOT_DEVICES : [];
   const visitorTypes = hasLiveGa4 ? aggregateBreakdown(current, session => session.visitorType) : canUseSnapshot ? SNAPSHOT_VISITORS : [];
   const intents = hasLiveGa4 ? aggregateIntents(current, funnelCoverage === 'complete') : [];
-  const rankedIntents = funnelCoverage === 'complete' && completed > 0 ? intents.filter(row => row.sessions >= 10) : [];
+  const rankedIntents = funnelCoverage === 'complete' && (completed || 0) > 0 ? intents.filter(row => row.sessions >= 10) : [];
   const topConverting = [...rankedIntents].sort((a, b) => (b.trialCompleteRate || 0) - (a.trialCompleteRate || 0))[0];
   const worstHighVolume = [...rankedIntents].sort((a, b) => (a.trialCompleteRate || 0) - (b.trialCompleteRate || 0))[0];
 
@@ -305,9 +318,9 @@ export async function getMarketingDashboard(filters: MarketingFilters): Promise<
       sessions: metric(hasLiveGa4 ? current.length : canUseSnapshot ? VERIFIED_SNAPSHOT.contentsquare.sessions : null, hasLiveGa4 ? previous.length : canUseSnapshot ? VERIFIED_SNAPSHOT.contentsquare.previousSessions : null, 'count', hasLiveGa4 ? 'GA4 BigQuery' : canUseSnapshot ? 'Contentsquare snapshot' : 'Unavailable'),
       engagedSessionRate: metric(hasLiveGa4 ? ratio(current.filter(session => session.engaged).length, current.length) : canUseSnapshot ? 1 - VERIFIED_SNAPSHOT.contentsquare.bounceRate : null, hasLiveGa4 ? ratio(previous.filter(session => session.engaged).length, previous.length) : canUseSnapshot ? 1 - VERIFIED_SNAPSHOT.contentsquare.previousBounceRate : null, 'percent', hasLiveGa4 ? 'GA4 BigQuery' : canUseSnapshot ? 'Contentsquare inverse bounce rate' : 'Unavailable'),
       ctaClicks: metric(hasLiveGa4 ? clicks : null, hasLiveGa4 ? previousClicks : null, 'count', hasLiveGa4 ? 'GA4 BigQuery' : 'Collecting', 'Uses the deployed start_free_click event, not signup-page reach.'),
-      signupStarts: metric(hasLiveGa4 ? countSessionEvents(funnelSessions, 'trial_signup_started') : null, hasLiveGa4 && previousFunnelCovered ? countSessionEvents(previousFunnelSessions, 'trial_signup_started') : null, 'count', hasLiveGa4 ? 'GA4 BigQuery · post-instrumentation only' : 'Collecting'),
-      trialsCompleted: metric(hasLiveGa4 ? completed : null, hasLiveGa4 ? previousCompleted : null, 'count', hasLiveGa4 ? 'GA4 BigQuery · post-instrumentation only' : 'Collecting', 'A completed no-card path is trial_login_success.'),
-      clickToTrialRate: metric(hasLiveGa4 ? ratio(completed, funnelClicks) : null, hasLiveGa4 && previousCompleted !== null && previousFunnelClicks !== null ? ratio(previousCompleted, previousFunnelClicks) : null, 'percent', hasLiveGa4 ? 'GA4 BigQuery · matched coverage' : 'Collecting'),
+      signupStarts: metric(signupStarts, previousSignupStarts, 'count', hasLiveGa4 ? 'GA4 BigQuery · post-instrumentation only' : 'Collecting', 'Strict same-session funnel reach for trial_signup_started.'),
+      trialsCompleted: metric(completed, previousCompleted, 'count', hasLiveGa4 ? 'GA4 BigQuery · post-instrumentation only' : 'Collecting', 'A completed no-card path is a qualified trial_login_success after every earlier step in the same session.'),
+      clickToTrialRate: metric(hasLiveGa4 && funnelClicks !== null ? ratio(completed || 0, funnelClicks) : null, hasLiveGa4 && previousCompleted !== null && previousFunnelClicks !== null ? ratio(previousCompleted, previousFunnelClicks) : null, 'percent', hasLiveGa4 ? 'GA4 BigQuery · matched coverage' : 'Collecting'),
       paidSpend: metric(null, null, 'currency', 'Unavailable', 'No Google Ads spend connector is available to the runtime.'),
       cac: metric(null, null, 'currency', 'Unavailable', 'Requires paid spend plus an agreed acquisition boundary.'),
     },
@@ -352,14 +365,16 @@ export async function getMarketingDashboard(filters: MarketingFilters): Promise<
       { id: 'google_ads', name: 'Google Ads', state: 'unavailable', freshness: null, detail: 'Campaign event instrumentation exists, but spend, campaign and creative reporting are not connected to this backend.' },
     ],
     warnings,
+    // Snapshot rows are not filterable; exposing options would blank the KPIs
+    // with no indication that Contentsquare slices are unsupported.
     filterOptions: hasLiveGa4 ? filterOptions(ga4.sessions) : {
-      sources: SNAPSHOT_ACQUISITION.map(row => row.raw?.source || row.label),
-      channels: [...new Set(SNAPSHOT_ACQUISITION.map(row => row.raw?.channel || 'Other'))],
+      sources: [],
+      channels: [],
       campaigns: [],
-      landingPages: SNAPSHOT_PAGES.map(row => row.page),
-      devices: SNAPSHOT_DEVICES.map(row => row.key),
-      visitorTypes: ['new', 'returning'],
-      intents: [...INTENT_COHORT_IDS],
+      landingPages: [],
+      devices: [],
+      visitorTypes: [],
+      intents: [],
     },
   };
 }
