@@ -198,7 +198,7 @@ WITH raw AS (
 SELECT * FROM session_rows
 WHERE session_date BETWEEN '${dates.previousStart}' AND '${dates.end}'
 ORDER BY session_date DESC
-LIMIT 100000`;
+LIMIT 100001`;
 }
 
 function rowsToObjects(response: BigQueryResponse): Record<string, string>[] {
@@ -208,23 +208,28 @@ function rowsToObjects(response: BigQueryResponse): Record<string, string>[] {
 
 async function runQuery(projectId: string, location: string, token: string, query: string): Promise<{ rows: Record<string, string>[]; truncated: boolean }> {
   const endpoint = `https://bigquery.googleapis.com/bigquery/v2/projects/${encodeURIComponent(projectId)}/queries`;
+  // Fetch one sentinel row past the 100k safety cap so totalRows/pageToken can
+  // distinguish "exactly 100k" from "hit the limit and silently truncated".
+  const maxResults = 100_001;
   const response = await fetch(endpoint, {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ query, useLegacySql: false, location, timeoutMs: 20_000, maxResults: 100_000 }),
+    body: JSON.stringify({ query, useLegacySql: false, location, timeoutMs: 20_000, maxResults }),
   });
   let body = await response.json() as BigQueryResponse;
   if (!response.ok || body.error) throw new Error(body.error?.message || body.errors?.[0]?.message || `BigQuery request failed (${response.status})`);
   if (!body.jobComplete) {
     const jobId = body.jobReference?.jobId;
     if (!jobId) throw new Error('BigQuery did not return a job id');
-    const poll = await fetch(`${endpoint}/${encodeURIComponent(jobId)}?location=${encodeURIComponent(location)}&timeoutMs=20000&maxResults=100000`, {
+    const poll = await fetch(`${endpoint}/${encodeURIComponent(jobId)}?location=${encodeURIComponent(location)}&timeoutMs=20000&maxResults=${maxResults}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     body = await poll.json() as BigQueryResponse;
     if (!poll.ok || body.error || !body.jobComplete) throw new Error(body.error?.message || body.errors?.[0]?.message || 'BigQuery job did not complete');
   }
-  return { rows: rowsToObjects(body), truncated: Number(body.totalRows || 0) > 100_000 || Boolean(body.pageToken) };
+  const rows = rowsToObjects(body);
+  const truncated = rows.length > 100_000 || Number(body.totalRows || 0) > 100_000 || Boolean(body.pageToken);
+  return { rows: truncated ? rows.slice(0, 100_000) : rows, truncated };
 }
 
 function toSession(row: Record<string, string>): AnalyticsSession {
