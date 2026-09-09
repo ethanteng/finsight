@@ -9,6 +9,7 @@
  */
 import { GET_STARTED_HREF } from './site-nav';
 import { trackContentsquareEvent } from './contentsquare';
+import { isInternalAnalyticsBrowser } from './internal-analytics';
 
 interface DataLayerWindow {
   dataLayer?: Array<Record<string, unknown> | unknown[]>;
@@ -35,7 +36,7 @@ export function pushRetirementInteraction(event: RetirementInteractionEvent): vo
 }
 
 function pushToDataLayer(payload: Record<string, unknown>): void {
-  if (typeof window === 'undefined') return;
+  if (typeof window === 'undefined' || isInternalAnalyticsBrowser()) return;
   const win = window as unknown as DataLayerWindow;
   win.dataLayer = win.dataLayer || [];
   win.dataLayer.push(payload);

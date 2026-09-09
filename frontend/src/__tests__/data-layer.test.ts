@@ -22,6 +22,7 @@ import {
   pushViewMoreExamples,
 } from "@/lib/dataLayer";
 import { GET_STARTED_HREF } from "@/lib/site-nav";
+import { INTERNAL_ANALYTICS_BROWSER_KEY } from "@/lib/internal-analytics";
 
 type AnalyticsWindow = Window & typeof globalThis & {
   dataLayer?: Array<Record<string, unknown> | unknown[]>;
@@ -53,6 +54,16 @@ describe("begin_checkout analytics", () => {
     expect(analyticsWindow.dataLayer).toContainEqual(event);
     expect(analyticsWindow.dataLayer).toHaveLength(1);
     expect(analyticsWindow.gtag).not.toHaveBeenCalled();
+  });
+
+  it("does not queue events from a browser marked as internal", () => {
+    window.localStorage.setItem(INTERNAL_ANALYTICS_BROWSER_KEY, '1');
+    try {
+      pushBeginCheckout('internal_check');
+      expect(analyticsWindow.dataLayer).toEqual([]);
+    } finally {
+      window.localStorage.removeItem(INTERNAL_ANALYTICS_BROWSER_KEY);
+    }
   });
 
   it("classifies the library separately from individual answers", () => {

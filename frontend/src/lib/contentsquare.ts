@@ -1,4 +1,5 @@
 import { isAnalyticsHost } from './analytics-host';
+import { isInternalAnalyticsBrowser } from './internal-analytics';
 
 /** Fixed names only: never send form values, answers, or error messages. */
 export type ContentsquareEvent =
@@ -30,7 +31,11 @@ export type ContentsquareEvent =
 
 /** Custom page events do not create artificial pageviews or alter bounce rates. */
 export function trackContentsquareEvent(event: ContentsquareEvent): void {
-  if (typeof window === 'undefined' || !isAnalyticsHost(window.location.hostname)) return;
+  if (
+    typeof window === 'undefined'
+    || !isAnalyticsHost(window.location.hostname)
+    || isInternalAnalyticsBrowser()
+  ) return;
   try {
     const win = window as unknown as { _uxa?: { push: (command: unknown[]) => unknown } };
     const queue = win._uxa || ([] as unknown[][]);

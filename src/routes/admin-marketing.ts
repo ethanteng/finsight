@@ -1,6 +1,6 @@
 import { Router, type Request, type Response } from 'express';
 import { adminAuth } from '../auth/middleware';
-import { INTENT_COHORT_IDS, type MarketingFilters } from '../marketing-analytics/types';
+import { INTENT_COHORT_IDS, TRAFFIC_QUALITY_VALUES, type MarketingFilters } from '../marketing-analytics/types';
 import { getMarketingDashboard } from '../marketing-analytics/service';
 
 const router = Router();
@@ -21,6 +21,10 @@ router.get('/', async (req: Request, res: Response) => {
   if (intent && !INTENT_COHORT_IDS.includes(intent as MarketingFilters['intent'] & string)) {
     return res.status(400).json({ error: 'Unknown intent cohort' });
   }
+  const trafficQuality = optional(req.query.trafficQuality);
+  if (trafficQuality && !TRAFFIC_QUALITY_VALUES.includes(trafficQuality as MarketingFilters['trafficQuality'] & string)) {
+    return res.status(400).json({ error: 'Unknown traffic-quality classification' });
+  }
   const filters: MarketingFilters = {
     days: days as MarketingFilters['days'],
     compare: req.query.compare !== 'false',
@@ -30,6 +34,8 @@ router.get('/', async (req: Request, res: Response) => {
     landingPage: optional(req.query.landingPage),
     device: optional(req.query.device),
     visitorType: visitorType as MarketingFilters['visitorType'],
+    trafficQuality: trafficQuality as MarketingFilters['trafficQuality'],
+    includeExcluded: req.query.includeExcluded === 'true',
     intent: intent as MarketingFilters['intent'],
   };
   try {

@@ -1,3 +1,5 @@
+import { INTERNAL_ANALYTICS_BROWSER_KEY } from './internal-analytics';
+
 /**
  * Analytics is production-only.
  *
@@ -34,13 +36,14 @@ export function isAnalyticsHost(hostname: string): boolean {
  */
 export function buildGoogleTagManagerSnippet(containerId: string): string {
   return `
-(function(w,d,s,l,i,h){
+(function(w,d,s,l,i,h,k){
 var n=w.location.hostname;if(n!==h&&!n.endsWith('.'+h))return;
+try{if(w.localStorage&&w.localStorage.getItem(k)==='1')return;}catch(e){}
 w[l]=w[l]||[];w[l].push({'gtm.start':new Date().getTime(),event:'gtm.js'});
 var f=d.getElementsByTagName(s)[0],j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';
 j.async=true;j.src='https://www.googletagmanager.com/gtm.js?id='+i+dl;
 f.parentNode.insertBefore(j,f);
-})(window,document,'script','dataLayer',${JSON.stringify(containerId)},${JSON.stringify(ANALYTICS_DOMAIN)});
+})(window,document,'script','dataLayer',${JSON.stringify(containerId)},${JSON.stringify(ANALYTICS_DOMAIN)},${JSON.stringify(INTERNAL_ANALYTICS_BROWSER_KEY)});
 `.trim();
 }
 

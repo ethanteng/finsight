@@ -2,9 +2,11 @@ import { getPrismaClient } from '../prisma-client';
 import { aggregateTrialFunnel } from './funnel';
 import { classifyIntent } from './intent-rules';
 import { loadGa4Sessions } from './adapters/ga4-bigquery';
+import { isIncludedByDefault } from './traffic-quality';
 import {
   INTENT_COHORT_IDS,
   FUNNEL_EVENT_NAMES,
+  TRAFFIC_QUALITY_VALUES,
   type AnalyticsSession,
   type BreakdownRow,
   type FirstPartySummary,
@@ -16,11 +18,7 @@ import {
   type MetricValue,
 } from './types';
 import {
-  SNAPSHOT_ACQUISITION,
-  SNAPSHOT_DEVICES,
-  SNAPSHOT_PAGES,
   SNAPSHOT_SEO_KEYWORDS,
-  SNAPSHOT_VISITORS,
   VERIFIED_SNAPSHOT,
 } from './verified-snapshot';
 
@@ -47,6 +45,16 @@ const ratio = (numerator: number, denominator: number): number | null => denomin
 const countEvents = (sessions: AnalyticsSession[], event: string) => sessions.reduce((sum, session) => sum + (session.eventCounts[event] || 0), 0);
 const countSessionEvents = (sessions: AnalyticsSession[], event: string) => sessions.filter(session => (session.eventCounts[event] || 0) > 0).length;
 
+function percentile(values: number[], quantile: number): number | null {
+  if (!values.length) return null;
+  const ordered = [...values].sort((a, b) => a - b);
+  const position = (ordered.length - 1) * quantile;
+  const lower = Math.floor(position);
+  const upper = Math.ceil(position);
+  if (lower === upper) return ordered[lower];
+  return ordered[lower] + (ordered[upper] - ordered[lower]) * (position - lower);
+}
+
 function metric(value: number | null, previous: number | null, unit: MetricValue['unit'], source: string, note?: string): MetricValue {
   return { value, previous, unit, source, ...(note ? { note } : {}) };
 }
@@ -70,6 +78,12 @@ function sessionMatches(session: AnalyticsSession, filters: MarketingFilters): b
   return true;
 }
 
+function sessionMatchesTrafficQuality(session: AnalyticsSession, filters: MarketingFilters): boolean {
+  if (filters.trafficQuality) return session.trafficQuality === filters.trafficQuality;
+  if (filters.includeExcluded) return true;
+  return isIncludedByDefault(session.trafficQuality);
+}
+
 function aggregateBreakdown(
   sessions: AnalyticsSession[],
   keyFor: (session: AnalyticsSession) => string,
@@ -81,7 +95,9 @@ function aggregateBreakdown(
     if (bucket) bucket.push(session);
     else groups.set(key, [session]);
   }
-  return [...groups.entries()].map(([key, rows]) => ({
+  return [...groups.entries()].map(([key, rows]) => {
+    const engagementValues = rows.map(row => row.engagementSeconds);
+    return {
     key,
     label: key,
     sessions: rows.length,
@@ -91,8 +107,39 @@ function aggregateBreakdown(
     bounceRate: ratio(rows.filter(row => !row.engaged).length, rows.length),
     pageViewsPerSession: ratio(rows.reduce((sum, row) => sum + row.pageViews, 0), rows.length),
     engagementSeconds: ratio(rows.reduce((sum, row) => sum + row.engagementSeconds, 0), rows.length),
+    medianEngagementSeconds: percentile(engagementValues, 0.5),
+    p75EngagementSeconds: percentile(engagementValues, 0.75),
     share: ratio(rows.length, sessions.length),
-  })).sort((a, b) => b.sessions - a.sessions);
+    };
+  }).sort((a, b) => b.sessions - a.sessions);
+}
+
+function summarizeTrafficQuality(
+  population: AnalyticsSession[],
+): MarketingDashboardReport['trafficQuality'] {
+  const included = population.filter(session => isIncludedByDefault(session.trafficQuality));
+  const reasons = new Map<string, number>();
+  for (const session of population.filter(row => !isIncludedByDefault(row.trafficQuality))) {
+    for (const reason of session.exclusionReasons) reasons.set(reason, (reasons.get(reason) || 0) + 1);
+  }
+  const engagement = included.map(session => session.engagementSeconds);
+  return {
+    rawSessions: population.length,
+    includedSessions: included.length,
+    excludedSessions: population.length - population.filter(session => isIncludedByDefault(session.trafficQuality)).length,
+    averageEngagementSeconds: ratio(engagement.reduce((sum, value) => sum + value, 0), engagement.length),
+    medianEngagementSeconds: percentile(engagement, 0.5),
+    p75EngagementSeconds: percentile(engagement, 0.75),
+    byQuality: TRAFFIC_QUALITY_VALUES.map(quality => ({
+      quality,
+      sessions: population.filter(session => session.trafficQuality === quality).length,
+      includedByDefault: isIncludedByDefault(quality),
+    })).filter(row => row.sessions > 0),
+    exclusionReasons: [...reasons.entries()]
+      .map(([reason, sessions]) => ({ reason, sessions }))
+      .sort((a, b) => b.sessions - a.sessions),
+    note: 'Headline metrics exclude confirmed bots, internal/developer traffic, and non-production hostnames. Ambiguous sessions remain included as unknown and visible for audit.',
+  };
 }
 
 function aggregateIntents(sessions: AnalyticsSession[], conversionCoverageComplete: boolean): IntentPerformanceRow[] {
@@ -181,6 +228,7 @@ function filterOptions(sessions: AnalyticsSession[]): MarketingDashboardReport['
     landingPages: unique(sessions.map(session => session.acquisition.landingPage)),
     devices: unique(sessions.map(session => session.device)),
     visitorTypes: unique(sessions.map(session => session.visitorType)),
+    trafficQualities: [...TRAFFIC_QUALITY_VALUES],
     intents: [...INTENT_COHORT_IDS],
   };
 }
@@ -191,12 +239,15 @@ export async function getMarketingDashboard(filters: MarketingFilters): Promise<
   const hasLiveGa4 = ga4.state === 'live';
   if (hasLiveGa4 && ga4.reportEnd) period = periodEnding(ga4.reportEnd, filters.days);
   const split = splitPeriods(ga4.sessions, period);
-  const current = split.current.filter(session => sessionMatches(session, filters));
-  const previous = split.previous.filter(session => sessionMatches(session, filters));
+  const currentPopulation = split.current.filter(session => sessionMatches(session, filters));
+  const previousPopulation = split.previous.filter(session => sessionMatches(session, filters));
+  const current = currentPopulation.filter(session => sessionMatchesTrafficQuality(session, filters));
+  const previous = previousPopulation.filter(session => sessionMatchesTrafficQuality(session, filters));
   const canUseSnapshot = !hasLiveGa4
     && filters.days === 28
     && !filters.source && !filters.channel && !filters.campaign && !filters.landingPage
-    && !filters.device && !filters.visitorType && !filters.intent;
+    && !filters.device && !filters.visitorType && !filters.trafficQuality
+    && !filters.includeExcluded && !filters.intent;
   const displayedPeriod = canUseSnapshot ? {
     start: VERIFIED_SNAPSHOT.period.start,
     end: VERIFIED_SNAPSHOT.period.end,
@@ -249,16 +300,46 @@ export async function getMarketingDashboard(filters: MarketingFilters): Promise<
   const acquisition = hasLiveGa4
     ? aggregateBreakdown(current, session => `${session.acquisition.source} / ${session.acquisition.medium}`)
       .map(row => ({ ...row, raw: current.find(session => `${session.acquisition.source} / ${session.acquisition.medium}` === row.key)?.acquisition }))
-    : canUseSnapshot ? SNAPSHOT_ACQUISITION : [];
+    : [];
   const landingPages = hasLiveGa4
     ? aggregateBreakdown(current, session => session.acquisition.landingPage).map(row => ({
       page: row.label, sessions: row.sessions, activityRate: row.engagedRate,
       bounceRate: row.bounceRate ?? null, exitRate: null, scrollReach: null,
       interactionSeconds: row.engagementSeconds ?? null, lcpP75Seconds: null,
     }))
-    : canUseSnapshot ? SNAPSHOT_PAGES : [];
-  const devices = hasLiveGa4 ? aggregateBreakdown(current, session => session.device) : canUseSnapshot ? SNAPSHOT_DEVICES : [];
-  const visitorTypes = hasLiveGa4 ? aggregateBreakdown(current, session => session.visitorType) : canUseSnapshot ? SNAPSHOT_VISITORS : [];
+    : [];
+  const devices = hasLiveGa4 ? aggregateBreakdown(current, session => session.device) : [];
+  const visitorTypes = hasLiveGa4 ? aggregateBreakdown(current, session => session.visitorType) : [];
+  const trafficQuality = hasLiveGa4
+    ? summarizeTrafficQuality(currentPopulation)
+    : canUseSnapshot ? {
+      rawSessions: VERIFIED_SNAPSHOT.contentsquare.raw.sessions,
+      includedSessions: VERIFIED_SNAPSHOT.contentsquare.reportingPopulation.sessions,
+      excludedSessions: VERIFIED_SNAPSHOT.contentsquare.exclusions.total,
+      averageEngagementSeconds: VERIFIED_SNAPSHOT.contentsquare.reportingPopulation.engagementSeconds,
+      medianEngagementSeconds: null,
+      p75EngagementSeconds: null,
+      byQuality: [
+        { quality: 'human' as const, sessions: VERIFIED_SNAPSHOT.contentsquare.reportingPopulation.sessions, includedByDefault: true },
+        { quality: 'bot' as const, sessions: VERIFIED_SNAPSHOT.contentsquare.exclusions.contentsquareFlaggedBots + VERIFIED_SNAPSHOT.contentsquare.exclusions.additionalKnownAutomation, includedByDefault: false },
+        { quality: 'internal' as const, sessions: VERIFIED_SNAPSHOT.contentsquare.exclusions.confirmedInternal, includedByDefault: false },
+      ],
+      exclusionReasons: [
+        { reason: 'contentsquare_bot_or_known_automation', sessions: VERIFIED_SNAPSHOT.contentsquare.exclusions.contentsquareFlaggedBots + VERIFIED_SNAPSHOT.contentsquare.exclusions.additionalKnownAutomation },
+        { reason: 'owner_confirmed_internal', sessions: VERIFIED_SNAPSHOT.contentsquare.exclusions.confirmedInternal },
+      ],
+      note: 'The verified snapshot excludes 291 automated sessions and 84 owner-confirmed internal sessions. Clean percentile duration requires a new session-level export.',
+    } : {
+      rawSessions: 0,
+      includedSessions: 0,
+      excludedSessions: 0,
+      averageEngagementSeconds: null,
+      medianEngagementSeconds: null,
+      p75EngagementSeconds: null,
+      byQuality: [],
+      exclusionReasons: [],
+      note: 'Traffic quality is unavailable for this unpopulated reporting window.',
+    };
   const intents = hasLiveGa4 ? aggregateIntents(current, funnelCoverageComplete) : [];
   const rankedIntents = funnelCoverageComplete && (completed || 0) > 0 ? intents.filter(row => row.sessions >= 10) : [];
   const topConverting = [...rankedIntents].sort((a, b) => (b.trialCompleteRate || 0) - (a.trialCompleteRate || 0))[0];
@@ -268,7 +349,8 @@ export async function getMarketingDashboard(filters: MarketingFilters): Promise<
     ? [`Strict no-card funnel coverage begins ${trackingStartedAt}. Earlier event absence is not abandonment and cannot be backfilled.`]
     : ['Strict funnel coverage is unavailable until GA4_FIRST_FULL_TRACKING_DATE is set to the first verified, fully instrumented calendar day.'];
   warnings.push(`GA4 daily export uses a ${ga4.reportingLagDays}-day settling lag; newer dates are intentionally excluded from strict funnel reporting.`);
-  if (canUseSnapshot) warnings.push('Top-line web behavior is a connector-verified Contentsquare snapshot for August 12–September 8, not a live runtime feed.');
+  if (canUseSnapshot) warnings.push('Top-line web behavior is a connector-verified Contentsquare snapshot for August 12–September 8. It excludes 291 automated sessions and 84 owner-confirmed internal sessions; no contaminated prior-period comparison is shown.');
+  if (hasLiveGa4 && trafficQuality.excludedSessions > 0) warnings.push(`${trafficQuality.excludedSessions} bot, internal/developer, or non-production sessions are excluded from headline metrics and remain visible in Traffic quality.`);
   if (ga4.truncated) warnings.push('The GA4 query reached its 100,000-session safety cap. Narrow the date range before interpreting totals.');
   if (hasLiveGa4 && funnel.some(step => (step.rawEventSessions || 0) > (step.sessions || 0))) {
     warnings.push('Some downstream funnel events occurred without every earlier event in the same session. Treat these as re-entry or instrumentation gaps, not drop-off.');
@@ -279,34 +361,22 @@ export async function getMarketingDashboard(filters: MarketingFilters): Promise<
   }
   const snapshotFindings: MarketingDashboardReport['findings'] = canUseSnapshot ? [
     {
-      severity: 'critical',
-      title: 'Acquisition is mostly unattributed',
-      detail: '694 of 944 recent visits (73.5%) had no referrer, while 25 more were Ask Linc self-referrals. That makes channel and cohort conversion look blurrier than it is.',
-      action: 'Preserve UTMs through signup redirects, fix cross-domain/referral exclusions, and audit consent-mode loss before reallocating spend.',
-    },
-    {
-      severity: 'critical',
-      title: 'Signup load time is the clearest friction signal',
-      detail: 'Contentsquare measured 14.7s p75 LCP on the signup page. The sample is only three visits, so treat it as a high-priority investigation rather than a settled benchmark.',
-      action: 'Inspect those sessions and rerun performance measurement after traffic grows; alert if p75 stays above 4s.',
+      severity: 'info',
+      title: 'Historical traffic quality is corrected',
+      detail: 'The reporting population is 569 sessions after excluding 291 automated sessions and all 84 owner-confirmed internal sessions.',
+      action: 'Use the included count for headline behavior; the raw and excluded counts remain visible for audit.',
     },
     {
       severity: 'warning',
-      title: 'Informational traffic is not crossing into product intent',
-      detail: 'Blog posts drove 254 visits with 94.1% bounce. Google organic delivered 158 visits at 90.5% bounce, while the strongest ranking queries are savings benchmarks.',
-      action: 'Add article-specific next steps and compare CTA rate by intent rather than measuring every organic visit against the same signup expectation.',
+      title: 'Acquisition awaits GA4 session attribution',
+      detail: 'The old Contentsquare referring-page table has been removed from Acquisition. A blank HTTP referrer is not evidence of a direct or unattributed acquisition session.',
+      action: 'Use GA4 session source, medium, channel and campaign once the settled BigQuery export is available.',
     },
     {
       severity: 'opportunity',
-      title: 'The retirement calculator is used, then abandoned',
-      detail: 'Its 21 visits showed 56.5s elapsed time and 12.2s interaction, yet 95.2% bounced and 91.3% exited. That pattern suggests value consumption without a strong bridge to the trial.',
-      action: 'Use the new edit → Run → result → Start free events to isolate whether loss happens before the result, at the CTA, or after landing on signup.',
-    },
-    {
-      severity: 'warning',
-      title: 'A bot/internal-traffic pocket is distorting the top line',
-      detail: '103 unknown-device visits were 100% bounce, one page, and 2.4 seconds. Returning-session duration is also implausibly high.',
-      action: 'Apply the verified human segment and exclude known internal traffic before using engagement deltas in decisions.',
+      title: 'Clean session-level behavior is collecting',
+      detail: 'Historical page, device and visitor-type rows could not be exactly recomputed after the exclusions, so they are withheld rather than presented as clean.',
+      action: 'Use the live filtered GA4 breakdowns and median/p75 engagement as the new reporting window fills.',
     },
   ] : [];
 
@@ -321,8 +391,8 @@ export async function getMarketingDashboard(filters: MarketingFilters): Promise<
     },
     summary: {
       users: metric(hasLiveGa4 ? new Set(current.map(session => session.userId)).size : null, hasLiveGa4 ? new Set(previous.map(session => session.userId)).size : null, 'count', hasLiveGa4 ? 'GA4' : 'Unavailable', canUseSnapshot ? 'Contentsquare does not expose a comparable de-duplicated user total here.' : undefined),
-      sessions: metric(hasLiveGa4 ? current.length : canUseSnapshot ? VERIFIED_SNAPSHOT.contentsquare.sessions : null, hasLiveGa4 ? previous.length : canUseSnapshot ? VERIFIED_SNAPSHOT.contentsquare.previousSessions : null, 'count', hasLiveGa4 ? 'GA4 BigQuery' : canUseSnapshot ? 'Contentsquare snapshot' : 'Unavailable'),
-      engagedSessionRate: metric(hasLiveGa4 ? ratio(current.filter(session => session.engaged).length, current.length) : canUseSnapshot ? 1 - VERIFIED_SNAPSHOT.contentsquare.bounceRate : null, hasLiveGa4 ? ratio(previous.filter(session => session.engaged).length, previous.length) : canUseSnapshot ? 1 - VERIFIED_SNAPSHOT.contentsquare.previousBounceRate : null, 'percent', hasLiveGa4 ? 'GA4 BigQuery' : canUseSnapshot ? 'Contentsquare inverse bounce rate' : 'Unavailable'),
+      sessions: metric(hasLiveGa4 ? current.length : canUseSnapshot ? VERIFIED_SNAPSHOT.contentsquare.reportingPopulation.sessions : null, hasLiveGa4 ? previous.length : null, 'count', hasLiveGa4 ? 'GA4 BigQuery · quality filtered' : canUseSnapshot ? 'Contentsquare snapshot · quality filtered' : 'Unavailable'),
+      engagedSessionRate: metric(hasLiveGa4 ? ratio(current.filter(session => session.engaged).length, current.length) : canUseSnapshot ? 1 - VERIFIED_SNAPSHOT.contentsquare.reportingPopulation.bounceRate : null, hasLiveGa4 ? ratio(previous.filter(session => session.engaged).length, previous.length) : null, 'percent', hasLiveGa4 ? 'GA4 BigQuery · quality filtered' : canUseSnapshot ? 'Contentsquare inverse bounce rate · quality filtered' : 'Unavailable'),
       ctaClicks: metric(hasLiveGa4 ? clicks : null, hasLiveGa4 ? previousClicks : null, 'count', hasLiveGa4 ? 'GA4 BigQuery' : 'Collecting', 'Uses the deployed start_free_click event, not signup-page reach.'),
       signupStarts: metric(signupStarts, previousSignupStarts, 'count', hasLiveGa4 ? 'GA4 BigQuery · post-instrumentation only' : 'Collecting', 'Strict same-session funnel reach for trial_signup_started.'),
       trialsCompleted: metric(completed, previousCompleted, 'count', hasLiveGa4 ? 'GA4 BigQuery · post-instrumentation only' : 'Collecting', 'A completed no-card path is a qualified trial_login_success after every earlier step in the same session.'),
@@ -342,6 +412,7 @@ export async function getMarketingDashboard(filters: MarketingFilters): Promise<
     landingPages,
     devices,
     visitorTypes,
+    trafficQuality,
     intents,
     seo: {
       ...VERIFIED_SNAPSHOT.ubersuggest,
@@ -380,6 +451,7 @@ export async function getMarketingDashboard(filters: MarketingFilters): Promise<
       landingPages: [],
       devices: [],
       visitorTypes: [],
+      trafficQualities: [],
       intents: [],
     },
   };

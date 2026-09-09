@@ -5,6 +5,7 @@ import {
   isAnalyticsHost,
   shouldRenderNoscriptFallback,
 } from "@/lib/analytics-host";
+import { INTERNAL_ANALYTICS_BROWSER_KEY } from "@/lib/internal-analytics";
 
 describe("isAnalyticsHost", () => {
   it.each(["asklinc.com", "www.asklinc.com", "blog.asklinc.com", "app.asklinc.com"])(
@@ -34,7 +35,7 @@ describe("isAnalyticsHost", () => {
  * the function parameters, so the assertions are about shipped behaviour
  * rather than a reimplementation of it.
  */
-function runSnippet(hostname: string) {
+function runSnippet(hostname: string, internal = false) {
   const inserted: Array<{ src?: string; async?: boolean }> = [];
   const firstScript = {
     parentNode: { insertBefore: (node: { src?: string }) => inserted.push(node) },
@@ -43,8 +44,9 @@ function runSnippet(hostname: string) {
     getElementsByTagName: () => [firstScript],
     createElement: () => ({} as { src?: string }),
   };
-  const win: { location: { hostname: string }; dataLayer?: unknown[] } = {
+  const win: { location: { hostname: string }; dataLayer?: unknown[]; localStorage: { getItem: (key: string) => string | null } } = {
     location: { hostname },
+    localStorage: { getItem: key => internal && key === INTERNAL_ANALYTICS_BROWSER_KEY ? '1' : null },
   };
 
   new Function("window", "document", buildGoogleTagManagerSnippet("GTM-PL362L36"))(win, doc);
@@ -63,6 +65,12 @@ describe("Google Tag Manager snippet", () => {
 
   it("loads GTM on a production subdomain", () => {
     expect(runSnippet("www.asklinc.com").inserted).toHaveLength(1);
+  });
+
+  it("loads nothing for a browser marked by the authenticated admin dashboard", () => {
+    const { inserted, dataLayer } = runSnippet('asklinc.com', true);
+    expect(inserted).toEqual([]);
+    expect(dataLayer).toBeUndefined();
   });
 
   it.each(["localhost", "127.0.0.1", "finsight-abc123.vercel.app", "notasklinc.com"])(
