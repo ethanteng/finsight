@@ -24,8 +24,15 @@ export interface Ga4LoadResult {
   state: 'live' | 'collecting' | 'needs_configuration' | 'error';
   sessions: AnalyticsSession[];
   reportEnd: string | null;
+  firstFullTrackingDate: string | null;
+  reportingLagDays: number;
   detail: string;
   truncated: boolean;
+}
+
+export interface FirstFullTrackingDateConfig {
+  date: string | null;
+  error: string | null;
 }
 
 const FUNNEL_EVENTS: FunnelEventName[] = [
@@ -110,9 +117,31 @@ function subtractDays(value: string, days: number): string {
   return dateOnly(date);
 }
 
-function reportDates(days: number) {
+/**
+ * The configured date is a coverage boundary, not a deployment timestamp. It
+ * must be the first complete reporting-calendar day with the full event chain.
+ */
+export function parseFirstFullTrackingDate(raw: string | undefined): FirstFullTrackingDateConfig {
+  const value = raw?.trim();
+  if (!value) return { date: null, error: null };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return { date: null, error: 'GA4_FIRST_FULL_TRACKING_DATE must use YYYY-MM-DD.' };
+  }
+  const [year, month, day] = value.split('-').map(Number);
+  const parsed = new Date(Date.UTC(year, month - 1, day));
+  if (parsed.getUTCFullYear() !== year || parsed.getUTCMonth() !== month - 1 || parsed.getUTCDate() !== day) {
+    return { date: null, error: 'GA4_FIRST_FULL_TRACKING_DATE must be a real calendar date.' };
+  }
+  return { date: value, error: null };
+}
+
+function reportingLagDays(): number {
   const configuredLag = Number(process.env.GA4_REPORTING_LAG_DAYS || 3);
-  const lagDays = Number.isFinite(configuredLag) ? Math.max(0, Math.floor(configuredLag)) : 3;
+  return Number.isFinite(configuredLag) ? Math.max(0, Math.floor(configuredLag)) : 3;
+}
+
+function reportDates(days: number) {
+  const lagDays = reportingLagDays();
   const end = subtractDays(todayInReportingTimeZone(), lagDays);
   const start = subtractDays(end, days - 1);
   const previousEnd = subtractDays(start, 1);
@@ -272,20 +301,31 @@ function toSession(row: Record<string, string>): AnalyticsSession {
 
 export async function loadGa4Sessions(filters: MarketingFilters): Promise<Ga4LoadResult> {
   const credentials = parseCredentials();
-  const firstFullTrackingDate = process.env.GA4_FIRST_FULL_TRACKING_DATE?.trim();
-  if (!credentials) {
-    return { state: 'needs_configuration', sessions: [], reportEnd: null, truncated: false, detail: 'Add a read-only BigQuery service account to the backend environment.' };
+  const coverage = parseFirstFullTrackingDate(process.env.GA4_FIRST_FULL_TRACKING_DATE);
+  const lagDays = reportingLagDays();
+  const base = {
+    sessions: [] as AnalyticsSession[],
+    reportEnd: null,
+    firstFullTrackingDate: coverage.date,
+    reportingLagDays: lagDays,
+    truncated: false,
+  };
+  if (coverage.error) {
+    return { ...base, state: 'needs_configuration', detail: coverage.error };
   }
-  if (!firstFullTrackingDate) {
-    return { state: 'collecting', sessions: [], reportEnd: null, truncated: false, detail: 'The export is connected, but the first complete verified tracking date has not been set.' };
+  if (!credentials) {
+    return { ...base, state: 'needs_configuration', detail: 'Add a read-only BigQuery service account to the backend environment.' };
+  }
+  if (!coverage.date) {
+    return { ...base, state: 'collecting', detail: 'The export is connected, but the first complete verified tracking date has not been set.' };
   }
   const projectId = process.env.GA4_BIGQUERY_PROJECT_ID?.trim() || credentials.project_id;
   if (!projectId) {
-    return { state: 'needs_configuration', sessions: [], reportEnd: null, truncated: false, detail: 'Set the BigQuery project ID in the backend environment or service-account JSON.' };
+    return { ...base, state: 'needs_configuration', detail: 'Set the BigQuery project ID in the backend environment or service-account JSON.' };
   }
   const dates = reportDates(filters.days);
-  if (dates.end < firstFullTrackingDate) {
-    return { state: 'collecting', sessions: [], reportEnd: dates.end, truncated: false, detail: 'The selected period ends before the first complete day of the new funnel tracking.' };
+  if (dates.end < coverage.date) {
+    return { ...base, state: 'collecting', reportEnd: dates.end, detail: 'The settled reporting window ends before the first complete day of the new funnel tracking.' };
   }
   const datasetId = process.env.GA4_BIGQUERY_DATASET_ID?.trim() || 'analytics_519498279';
   const location = process.env.GA4_BIGQUERY_LOCATION?.trim() || 'US';
@@ -296,12 +336,14 @@ export async function loadGa4Sessions(filters: MarketingFilters): Promise<Ga4Loa
       state: 'live',
       sessions: result.rows.map(toSession),
       reportEnd: dates.end,
+      firstFullTrackingDate: coverage.date,
+      reportingLagDays: lagDays,
       truncated: result.truncated,
-      detail: `GA4 daily export through ${dates.end}; three-day settling lag applied.`,
+      detail: `GA4 daily export through ${dates.end}; ${lagDays}-day settling lag applied.`,
     };
   } catch (error) {
     return {
-      state: 'error', sessions: [], reportEnd: dates.end, truncated: false,
+      ...base, state: 'error', reportEnd: dates.end,
       detail: error instanceof Error ? error.message : 'Unable to query the GA4 BigQuery export.',
     };
   }

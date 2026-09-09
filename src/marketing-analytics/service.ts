@@ -24,8 +24,6 @@ import {
   VERIFIED_SNAPSHOT,
 } from './verified-snapshot';
 
-const TRACKING_STARTED_AT = '2026-09-09';
-
 function dateOnly(date: Date): string { return date.toISOString().slice(0, 10); }
 function addDays(value: string, amount: number): string {
   const date = new Date(`${value}T12:00:00Z`);
@@ -222,11 +220,19 @@ export async function getMarketingDashboard(filters: MarketingFilters): Promise<
       note: 'The first-party account store could not be read. These values are unavailable, not zero.',
     };
   }
-  const funnelCoverage = period.start >= TRACKING_STARTED_AT ? 'complete' : 'partial';
-  const funnelSessions = current.filter(session => session.sessionDate >= TRACKING_STARTED_AT);
-  const previousFunnelSessions = previous.filter(session => session.sessionDate >= TRACKING_STARTED_AT);
-  const previousFunnelCovered = period.previousStart >= TRACKING_STARTED_AT;
-  const funnel = hasLiveGa4 ? aggregateTrialFunnel(funnelSessions, funnelCoverage) : emptyFunnel();
+  const trackingStartedAt = ga4.firstFullTrackingDate;
+  const funnelCoverageComplete = Boolean(trackingStartedAt && period.start >= trackingStartedAt);
+  const funnelCoverage = funnelCoverageComplete ? 'complete' : 'partial';
+  const funnelSessions = trackingStartedAt
+    ? current.filter(session => session.sessionDate >= trackingStartedAt)
+    : [];
+  const previousFunnelSessions = trackingStartedAt
+    ? previous.filter(session => session.sessionDate >= trackingStartedAt)
+    : [];
+  const previousFunnelCovered = Boolean(trackingStartedAt && period.previousStart >= trackingStartedAt);
+  const funnel = hasLiveGa4 && trackingStartedAt
+    ? aggregateTrialFunnel(funnelSessions, funnelCoverage)
+    : emptyFunnel();
   const previousFunnel = hasLiveGa4 && previousFunnelCovered
     ? aggregateTrialFunnel(previousFunnelSessions, 'complete')
     : null;
@@ -253,22 +259,22 @@ export async function getMarketingDashboard(filters: MarketingFilters): Promise<
     : canUseSnapshot ? SNAPSHOT_PAGES : [];
   const devices = hasLiveGa4 ? aggregateBreakdown(current, session => session.device) : canUseSnapshot ? SNAPSHOT_DEVICES : [];
   const visitorTypes = hasLiveGa4 ? aggregateBreakdown(current, session => session.visitorType) : canUseSnapshot ? SNAPSHOT_VISITORS : [];
-  const intents = hasLiveGa4 ? aggregateIntents(current, funnelCoverage === 'complete') : [];
-  const rankedIntents = funnelCoverage === 'complete' && (completed || 0) > 0 ? intents.filter(row => row.sessions >= 10) : [];
+  const intents = hasLiveGa4 ? aggregateIntents(current, funnelCoverageComplete) : [];
+  const rankedIntents = funnelCoverageComplete && (completed || 0) > 0 ? intents.filter(row => row.sessions >= 10) : [];
   const topConverting = [...rankedIntents].sort((a, b) => (b.trialCompleteRate || 0) - (a.trialCompleteRate || 0))[0];
   const worstHighVolume = [...rankedIntents].sort((a, b) => (a.trialCompleteRate || 0) - (b.trialCompleteRate || 0))[0];
 
-  const warnings = [
-    'New no-card funnel events began on September 9, 2026 and cannot be backfilled. Pre-launch absence is not abandonment.',
-    'GA4 daily export uses a three-day settling lag; today and the prior three days are intentionally excluded from strict funnel reporting.',
-  ];
+  const warnings = trackingStartedAt
+    ? [`Strict no-card funnel coverage begins ${trackingStartedAt}. Earlier event absence is not abandonment and cannot be backfilled.`]
+    : ['Strict funnel coverage is unavailable until GA4_FIRST_FULL_TRACKING_DATE is set to the first verified, fully instrumented calendar day.'];
+  warnings.push(`GA4 daily export uses a ${ga4.reportingLagDays}-day settling lag; newer dates are intentionally excluded from strict funnel reporting.`);
   if (canUseSnapshot) warnings.push('Top-line web behavior is a connector-verified Contentsquare snapshot for August 12–September 8, not a live runtime feed.');
   if (ga4.truncated) warnings.push('The GA4 query reached its 100,000-session safety cap. Narrow the date range before interpreting totals.');
   if (hasLiveGa4 && funnel.some(step => (step.rawEventSessions || 0) > (step.sessions || 0))) {
     warnings.push('Some downstream funnel events occurred without every earlier event in the same session. Treat these as re-entry or instrumentation gaps, not drop-off.');
   }
   const ga4FreeTrialAccounts = countSessionEvents(funnelSessions, 'sign_up');
-  if (hasLiveGa4 && funnelCoverage === 'complete' && firstParty.accountsCreated !== null && firstParty.accountsCreated > ga4FreeTrialAccounts) {
+  if (hasLiveGa4 && funnelCoverageComplete && firstParty.accountsCreated !== null && firstParty.accountsCreated > ga4FreeTrialAccounts) {
     warnings.push(`First-party records show ${firstParty.accountsCreated} accounts created in this window while GA4 observed ${ga4FreeTrialAccounts} free-trial sign_up sessions. Check flow mix, consent coverage and event delivery before calling the difference abandonment.`);
   }
   const snapshotFindings: MarketingDashboardReport['findings'] = canUseSnapshot ? [
@@ -309,7 +315,7 @@ export async function getMarketingDashboard(filters: MarketingFilters): Promise<
     requested: filters,
     period: displayedPeriod,
     coverage: {
-      eventTrackingStartedAt: TRACKING_STARTED_AT,
+      eventTrackingStartedAt: trackingStartedAt,
       fullyObservedThrough: ga4.reportEnd,
       usesFallbackSnapshot: canUseSnapshot,
     },
