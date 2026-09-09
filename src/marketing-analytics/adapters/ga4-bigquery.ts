@@ -255,6 +255,7 @@ WITH raw AS (
       IF(event_name = 'page_view', STRUCT(event_timestamp, page_location, page_referrer, hostname), NULL)
       IGNORE NULLS ORDER BY event_timestamp LIMIT 1
     )[SAFE_OFFSET(0)] AS landing,
+    ARRAY_AGG(NULLIF(hostname, '') IGNORE NULLS ORDER BY event_timestamp LIMIT 1)[SAFE_OFFSET(0)] AS session_hostname,
     MIN(session_number) AS session_number,
     MAX(IF(session_engaged = '1', 1, 0)) AS engaged,
     SUM(engagement_ms) AS engagement_ms,
@@ -266,8 +267,8 @@ WITH raw AS (
   GROUP BY user_pseudo_id, session_id
 ), session_output AS (
   SELECT
-    * EXCEPT(landing),
-    COALESCE(landing.hostname, NET.HOST(landing.page_location), '') AS hostname,
+    * EXCEPT(landing, session_hostname),
+    COALESCE(landing.hostname, NET.HOST(landing.page_location), session_hostname, '') AS hostname,
     landing.page_location AS landing_page,
     landing.page_referrer AS referrer
   FROM session_rows
