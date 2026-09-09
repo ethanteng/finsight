@@ -15,6 +15,7 @@ import aiRoutes from './routes/ai';
 import aiPerformanceRoutes from './routes/ai-performance';
 import askRoutes from './routes/ask';
 import retirementQuickPlanRoutes from './routes/retirement-quickplan';
+import adminMarketingRoutes from './routes/admin-marketing';
 import { optionalAuth, requireAuth, adminAuth } from './auth/middleware';
 import { assertJwtSecretConfigured } from './auth/utils';
 import { UserTier } from './data/types';
@@ -355,6 +356,10 @@ app.use('/api/retirement-quickplan', retirementQuickPlanRoutes);
 
 // Setup Stripe routes (webhook route already registered above)
 app.use('/api/stripe', stripeRoutes);
+
+// Authenticated marketing analytics. Vendor adapters remain server-side so no
+// GA4, BigQuery, Contentsquare or advertising credentials reach the browser.
+app.use('/admin/marketing', adminMarketingRoutes);
 
 // Get tier information and upgrade suggestions
 app.get('/tier-info', async (req: Request, res: Response) => {
