@@ -29,4 +29,29 @@ describe('marketing intent classification', () => {
       landingPage: '/retirement-calculator',
     }).id).toBe('retirement_high_intent');
   });
+
+  it('does not treat GA placeholder creative or bare search campaigns as paid', () => {
+    expect(classifyIntent({
+      source: 'google',
+      medium: 'organic',
+      campaign: '(not set)',
+      creative: '(not set)',
+      adId: '',
+      landingPage: '/features',
+    }).id).toBe('unknown');
+
+    expect(classifyIntent({
+      source: 'google',
+      medium: 'organic',
+      campaign: 'brand_search_seo',
+      landingPage: '/features',
+    }).id).toBe('unknown');
+
+    expect(classifyIntent({
+      source: 'google',
+      medium: 'referral',
+      campaign: 'pmax_prospecting',
+      landingPage: '/features',
+    }).id).toBe('paid_nonbrand');
+  });
 });

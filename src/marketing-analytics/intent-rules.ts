@@ -17,11 +17,26 @@ const normalizedHaystack = (input: IntentRuleInput) => Object.values(input)
   .join(' ')
   .toLowerCase();
 
+/** GA4 fills missing dimensions with placeholders; those must not count as evidence. */
+const hasAcquisitionSignal = (value?: string) => {
+  if (!value) return false;
+  const normalized = value.trim().toLowerCase();
+  return normalized !== ''
+    && normalized !== '(not set)'
+    && normalized !== '(none)'
+    && normalized !== '(direct)'
+    && normalized !== '(data not available)';
+};
+
 const isPaid = (input: IntentRuleInput) => {
   const medium = input.medium?.toLowerCase() ?? '';
   return /(^|[^a-z])(cpc|ppc|paid|display|affiliate)([^a-z]|$)/.test(medium)
-    || Boolean(input.adId || input.creative)
-    || Boolean(input.campaign && /paid|search|pmax|retarget/i.test(input.campaign));
+    || hasAcquisitionSignal(input.adId)
+    || hasAcquisitionSignal(input.creative)
+    // Campaign names alone are a weak signal; require an explicit paid marker.
+    // Bare "search" matches too many organic UTMs (e.g. brand_search_seo).
+    || (hasAcquisitionSignal(input.campaign)
+      && /(^|[^a-z])(paid|pmax|retarget|cpc|ppc)([^a-z]|$)/i.test(input.campaign!));
 };
 
 /**
