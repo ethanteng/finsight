@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect, useCallback } from 'react';
+import Link from 'next/link';
 import MarkdownRenderer from '../../components/MarkdownRenderer';
 import PageMeta from '../../components/PageMeta';
 import AuthenticatedPageHeader from '../../components/authenticated/AuthenticatedPageHeader';
@@ -1989,6 +1990,12 @@ export default function AdminPage() {
 
         {/* Tab Navigation */}
         <div className="mb-8 grid grid-cols-2 gap-1 rounded-xl border border-[#102319]/10 bg-[#e9eee5] p-1 sm:flex sm:overflow-x-auto">
+          <Link
+            href="/admin/marketing"
+            className="flex min-h-12 min-w-0 items-center justify-center rounded bg-[#d8ff71] px-3 py-2 text-center text-sm font-bold leading-tight text-[#102319] transition-colors hover:bg-[#c9ef65] sm:flex-1 sm:px-4"
+          >
+            Marketing
+          </Link>
           <button
             onClick={() => setActiveTab('production')}
             className={`min-h-12 min-w-0 rounded px-3 py-2 text-sm font-medium leading-tight transition-colors sm:flex-1 sm:px-4 ${
