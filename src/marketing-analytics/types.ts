@@ -190,7 +190,7 @@ export interface MarketingDashboardReport {
   requested: MarketingFilters;
   period: { start: string; end: string; previousStart: string; previousEnd: string };
   coverage: {
-    eventTrackingStartedAt: string;
+    eventTrackingStartedAt: string | null;
     fullyObservedThrough: string | null;
     usesFallbackSnapshot: boolean;
   };

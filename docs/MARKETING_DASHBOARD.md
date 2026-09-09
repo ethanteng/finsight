@@ -38,11 +38,22 @@ GA4_FIRST_FULL_TRACKING_DATE=YYYY-MM-DD
 GA4_REPORTING_LAG_DAYS=3
 ```
 
+`GA4_FIRST_FULL_TRACKING_DATE` is the first reporting-calendar day when the
+frontend events and GTM forwarding were live for the entire day. It is not the
+GTM publish timestamp, the BigQuery connection date, or a value that advances
+each day. For example, if the frontend event bridge went live partway through
+September 9, use `2026-09-10`; if it went live partway through September 12,
+use `2026-09-13`. Leave it unset until that day's complete daily export has
+been inspected. The configured value is the dashboard's single source of truth
+for funnel filtering, comparison coverage, warnings, and the visible coverage
+badge.
+
 Grant the service account only the permissions needed to run query jobs and
 read the GA4 export dataset. Never add this JSON to the frontend or a
 `NEXT_PUBLIC_` variable. Set `GA4_FIRST_FULL_TRACKING_DATE` only after every
 new event has been observed without sensitive parameters in GA4 and the first
-complete daily export exists. Until then, the dashboard shows **Collecting**
+complete daily export exists. Invalid or impossible date values are reported
+as configuration errors. Until then, the dashboard shows **Collecting**
 instead of zeros.
 
 The adapter fetches at most 100,000 sessions for the selected current and
