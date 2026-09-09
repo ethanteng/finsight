@@ -1,5 +1,6 @@
 import { createSign } from 'crypto';
 import type { AnalyticsSession, FunnelEventName, MarketingFilters } from '../types';
+import { assessTrafficQuality } from '../traffic-quality';
 
 interface ServiceAccountCredentials {
   client_email: string;
@@ -170,7 +171,7 @@ function channelFor(source: string, medium: string, hasAdId: boolean): string {
   return 'Other';
 }
 
-function buildQuery(projectId: string, datasetId: string, dates: ReturnType<typeof reportDates>): string {
+export function buildQuery(projectId: string, datasetId: string, dates: ReturnType<typeof reportDates>): string {
   const eventColumns = [...FUNNEL_EVENTS, ...DIAGNOSTIC_EVENTS].map(event => {
     const signupGuard = event === 'sign_up' ? " AND signup_flow = 'free_trial'" : '';
     return `COUNTIF(event_name = '${event}'${signupGuard}) AS count_${event}, MIN(IF(event_name = '${event}'${signupGuard}, event_timestamp, NULL)) AS first_${event}`;
@@ -189,14 +190,38 @@ WITH raw AS (
     (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'page_referrer') AS page_referrer,
     (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'source_page') AS source_page,
     (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'signup_flow') AS signup_flow,
+    (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'traffic_type') AS traffic_type,
+    COALESCE(
+      CAST((SELECT value.int_value FROM UNNEST(event_params) WHERE key = 'debug_mode') AS STRING),
+      (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'debug_mode')
+    ) AS debug_mode,
     (SELECT value.int_value FROM UNNEST(event_params) WHERE key = 'ga_session_number') AS session_number,
     device.category AS device,
-    COALESCE(session_traffic_source_last_click.cross_channel_campaign.source, collected_traffic_source.manual_source, '(direct)') AS source,
-    COALESCE(session_traffic_source_last_click.cross_channel_campaign.medium, collected_traffic_source.manual_medium, '(none)') AS medium,
-    COALESCE(session_traffic_source_last_click.cross_channel_campaign.campaign_name, collected_traffic_source.manual_campaign_name, '(not set)') AS campaign,
-    COALESCE(collected_traffic_source.manual_term, '(not set)') AS search_term,
-    COALESCE(collected_traffic_source.manual_content, '(not set)') AS creative,
-    COALESCE(collected_traffic_source.gclid, collected_traffic_source.dclid, '') AS ad_id
+    device.web_info.hostname AS hostname,
+    device.web_info.browser AS browser,
+    device.operating_system AS operating_system,
+    geo.country AS country,
+    geo.region AS region,
+    geo.city AS city,
+    COALESCE(
+      session_traffic_source_last_click.cross_channel_campaign.source,
+      session_traffic_source_last_click.manual_campaign.source,
+      collected_traffic_source.manual_source
+    ) AS source,
+    COALESCE(
+      session_traffic_source_last_click.cross_channel_campaign.medium,
+      session_traffic_source_last_click.manual_campaign.medium,
+      collected_traffic_source.manual_medium
+    ) AS medium,
+    COALESCE(
+      session_traffic_source_last_click.cross_channel_campaign.campaign_name,
+      session_traffic_source_last_click.google_ads_campaign.campaign_name,
+      session_traffic_source_last_click.manual_campaign.campaign_name,
+      collected_traffic_source.manual_campaign_name
+    ) AS campaign,
+    COALESCE(session_traffic_source_last_click.manual_campaign.term, collected_traffic_source.manual_term) AS search_term,
+    COALESCE(session_traffic_source_last_click.manual_campaign.content, collected_traffic_source.manual_content) AS creative,
+    COALESCE(collected_traffic_source.gclid, collected_traffic_source.dclid) AS ad_id
   FROM \`${projectId}.${datasetId}.events_*\`
   WHERE _TABLE_SUFFIX BETWEEN FORMAT_DATE('%Y%m%d', DATE_SUB(DATE '${dates.previousStart}', INTERVAL 1 DAY))
     AND FORMAT_DATE('%Y%m%d', DATE_ADD(DATE '${dates.end}', INTERVAL 1 DAY))
@@ -206,25 +231,48 @@ WITH raw AS (
     user_pseudo_id,
     session_id,
     FORMAT_DATE('%F', DATE(TIMESTAMP_SECONDS(session_id), 'America/Los_Angeles')) AS session_date,
-    ARRAY_AGG(source IGNORE NULLS ORDER BY event_timestamp LIMIT 1)[SAFE_OFFSET(0)] AS source,
-    ARRAY_AGG(medium IGNORE NULLS ORDER BY event_timestamp LIMIT 1)[SAFE_OFFSET(0)] AS medium,
-    ARRAY_AGG(campaign IGNORE NULLS ORDER BY event_timestamp LIMIT 1)[SAFE_OFFSET(0)] AS campaign,
-    ARRAY_AGG(search_term IGNORE NULLS ORDER BY event_timestamp LIMIT 1)[SAFE_OFFSET(0)] AS search_term,
-    ARRAY_AGG(creative IGNORE NULLS ORDER BY event_timestamp LIMIT 1)[SAFE_OFFSET(0)] AS creative,
-    ARRAY_AGG(ad_id IGNORE NULLS ORDER BY event_timestamp LIMIT 1)[SAFE_OFFSET(0)] AS ad_id,
-    ARRAY_AGG(device IGNORE NULLS ORDER BY event_timestamp LIMIT 1)[SAFE_OFFSET(0)] AS device,
-    ARRAY_AGG(page_referrer IGNORE NULLS ORDER BY event_timestamp LIMIT 1)[SAFE_OFFSET(0)] AS referrer,
-    ARRAY_AGG(IF(event_name = 'page_view', page_location, NULL) IGNORE NULLS ORDER BY event_timestamp LIMIT 1)[SAFE_OFFSET(0)] AS landing_page,
+    COALESCE(ARRAY_AGG(NULLIF(source, '') IGNORE NULLS ORDER BY event_timestamp LIMIT 1)[SAFE_OFFSET(0)], '(direct)') AS source,
+    COALESCE(ARRAY_AGG(NULLIF(medium, '') IGNORE NULLS ORDER BY event_timestamp LIMIT 1)[SAFE_OFFSET(0)], '(none)') AS medium,
+    COALESCE(ARRAY_AGG(NULLIF(campaign, '') IGNORE NULLS ORDER BY event_timestamp LIMIT 1)[SAFE_OFFSET(0)], '(not set)') AS campaign,
+    COALESCE(ARRAY_AGG(NULLIF(search_term, '') IGNORE NULLS ORDER BY event_timestamp LIMIT 1)[SAFE_OFFSET(0)], '(not set)') AS search_term,
+    COALESCE(ARRAY_AGG(NULLIF(creative, '') IGNORE NULLS ORDER BY event_timestamp LIMIT 1)[SAFE_OFFSET(0)], '(not set)') AS creative,
+    COALESCE(ARRAY_AGG(NULLIF(ad_id, '') IGNORE NULLS ORDER BY event_timestamp LIMIT 1)[SAFE_OFFSET(0)], '') AS ad_id,
+    ARRAY_AGG(NULLIF(device, '') IGNORE NULLS ORDER BY event_timestamp LIMIT 1)[SAFE_OFFSET(0)] AS device,
+    ARRAY_AGG(NULLIF(browser, '') IGNORE NULLS ORDER BY event_timestamp LIMIT 1)[SAFE_OFFSET(0)] AS browser,
+    ARRAY_AGG(NULLIF(operating_system, '') IGNORE NULLS ORDER BY event_timestamp LIMIT 1)[SAFE_OFFSET(0)] AS operating_system,
+    ARRAY_AGG(NULLIF(country, '') IGNORE NULLS ORDER BY event_timestamp LIMIT 1)[SAFE_OFFSET(0)] AS country,
+    ARRAY_AGG(NULLIF(region, '') IGNORE NULLS ORDER BY event_timestamp LIMIT 1)[SAFE_OFFSET(0)] AS region,
+    ARRAY_AGG(NULLIF(city, '') IGNORE NULLS ORDER BY event_timestamp LIMIT 1)[SAFE_OFFSET(0)] AS city,
+    ARRAY_AGG(NULLIF(traffic_type, '') IGNORE NULLS ORDER BY event_timestamp LIMIT 1)[SAFE_OFFSET(0)] AS traffic_type,
+    MAX(IF(LOWER(COALESCE(debug_mode, '')) IN ('1', 'true'), 1, 0)) AS debug_mode,
+    MAX(IF(
+      event_name = 'page_view'
+      AND REGEXP_CONTAINS(COALESCE(page_location, ''), r'^https?://[^/]+/admin(?:/|[?#]|$)'),
+      1,
+      0
+    )) AS has_admin_page,
+    ARRAY_AGG(
+      IF(event_name = 'page_view', STRUCT(event_timestamp, page_location, page_referrer, hostname), NULL)
+      IGNORE NULLS ORDER BY event_timestamp LIMIT 1
+    )[SAFE_OFFSET(0)] AS landing,
     MIN(session_number) AS session_number,
     MAX(IF(session_engaged = '1', 1, 0)) AS engaged,
     SUM(engagement_ms) AS engagement_ms,
     COUNTIF(event_name = 'page_view') AS page_views,
+    COUNT(*) AS event_count,
     ${eventColumns}
   FROM raw
   WHERE user_pseudo_id IS NOT NULL AND session_id IS NOT NULL
   GROUP BY user_pseudo_id, session_id
+), session_output AS (
+  SELECT
+    * EXCEPT(landing),
+    COALESCE(landing.hostname, NET.HOST(landing.page_location), '') AS hostname,
+    landing.page_location AS landing_page,
+    landing.page_referrer AS referrer
+  FROM session_rows
 )
-SELECT * FROM session_rows
+SELECT * FROM session_output
 WHERE session_date BETWEEN '${dates.previousStart}' AND '${dates.end}'
 ORDER BY session_date DESC
 LIMIT 100001`;
@@ -262,9 +310,9 @@ async function runQuery(projectId: string, location: string, token: string, quer
 }
 
 function toSession(row: Record<string, string>): AnalyticsSession {
-  const source = row.source || '(direct)';
-  const medium = row.medium || '(none)';
   const adId = row.ad_id || '';
+  const source = adId && (!row.source || row.source === '(direct)') ? 'google' : row.source || '(direct)';
+  const medium = adId && (!row.medium || row.medium === '(none)') ? 'cpc' : row.medium || '(none)';
   const eventCounts: Record<string, number> = {};
   const firstEventAt: AnalyticsSession['firstEventAt'] = {};
   for (const event of [...FUNNEL_EVENTS, ...DIAGNOSTIC_EVENTS]) {
@@ -273,6 +321,26 @@ function toSession(row: Record<string, string>): AnalyticsSession {
       firstEventAt[event as FunnelEventName] = Number(row[`first_${event}`]);
     }
   }
+  const hostname = row.hostname || '';
+  const device = row.device || 'unknown';
+  const browser = row.browser || '';
+  const operatingSystem = row.operating_system || '';
+  const landingPage = cleanPath(row.landing_page);
+  const engagementSeconds = Number(row.engagement_ms || 0) / 1000;
+  const pageViews = Number(row.page_views || 0);
+  const assessment = assessTrafficQuality({
+    hostname,
+    landingPage,
+    browser,
+    operatingSystem,
+    device,
+    trafficType: row.traffic_type || '',
+    debugMode: row.debug_mode === '1' || row.debug_mode === 'true',
+    hasAdminPage: row.has_admin_page === '1',
+    pageViews,
+    engagementSeconds,
+    eventCounts,
+  });
   return {
     id: `${row.user_pseudo_id}.${row.session_id}`,
     userId: row.user_pseudo_id,
@@ -282,17 +350,26 @@ function toSession(row: Record<string, string>): AnalyticsSession {
       medium,
       channel: channelFor(source, medium, Boolean(adId)),
       campaign: row.campaign || '(not set)',
-      landingPage: cleanPath(row.landing_page),
+      landingPage,
       searchTerm: row.search_term || '(not set)',
       creative: row.creative || '(not set)',
       adId,
       referrer: row.referrer || '',
     },
-    device: row.device || 'unknown',
+    hostname,
+    device,
+    browser,
+    operatingSystem,
+    country: row.country || '',
+    region: row.region || '',
+    city: row.city || '',
     visitorType: Number(row.session_number) === 1 ? 'new' : Number(row.session_number) > 1 ? 'returning' : 'unknown',
+    trafficQuality: assessment.quality,
+    exclusionReasons: assessment.exclusionReasons,
     engaged: row.engaged === '1',
-    engagementSeconds: Number(row.engagement_ms || 0) / 1000,
-    pageViews: Number(row.page_views || 0),
+    engagementSeconds,
+    pageViews,
+    eventCount: Number(row.event_count || 0),
     scrollEvents: Number(row.count_scroll || 0),
     eventCounts,
     firstEventAt,

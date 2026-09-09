@@ -28,6 +28,16 @@ export const FUNNEL_EVENT_NAMES = [
 
 export type FunnelEventName = (typeof FUNNEL_EVENT_NAMES)[number];
 
+export const TRAFFIC_QUALITY_VALUES = [
+  'human',
+  'bot',
+  'internal',
+  'synthetic',
+  'unknown',
+] as const;
+
+export type TrafficQuality = (typeof TRAFFIC_QUALITY_VALUES)[number];
+
 export interface AcquisitionFields {
   source: string;
   medium: string;
@@ -69,11 +79,20 @@ export interface AnalyticsSession {
   userId: string;
   sessionDate: string;
   acquisition: AcquisitionFields;
+  hostname: string;
   device: string;
+  browser: string;
+  operatingSystem: string;
+  country: string;
+  region: string;
+  city: string;
   visitorType: 'new' | 'returning' | 'unknown';
+  trafficQuality: TrafficQuality;
+  exclusionReasons: string[];
   engaged: boolean;
   engagementSeconds: number;
   pageViews: number;
+  eventCount: number;
   scrollEvents: number;
   eventCounts: Record<string, number>;
   firstEventAt: Partial<Record<FunnelEventName, number>>;
@@ -88,6 +107,8 @@ export interface MarketingFilters {
   landingPage?: string;
   device?: string;
   visitorType?: 'new' | 'returning';
+  trafficQuality?: TrafficQuality;
+  includeExcluded?: boolean;
   intent?: IntentCohortId;
 }
 
@@ -139,6 +160,8 @@ export interface BreakdownRow {
   bounceRate?: number | null;
   pageViewsPerSession?: number | null;
   engagementSeconds?: number | null;
+  medianEngagementSeconds?: number | null;
+  p75EngagementSeconds?: number | null;
   share?: number | null;
   raw?: Partial<AcquisitionFields>;
 }
@@ -212,6 +235,17 @@ export interface MarketingDashboardReport {
   landingPages: PageExperienceRow[];
   devices: BreakdownRow[];
   visitorTypes: BreakdownRow[];
+  trafficQuality: {
+    rawSessions: number;
+    includedSessions: number;
+    excludedSessions: number;
+    averageEngagementSeconds: number | null;
+    medianEngagementSeconds: number | null;
+    p75EngagementSeconds: number | null;
+    byQuality: Array<{ quality: TrafficQuality; sessions: number; includedByDefault: boolean }>;
+    exclusionReasons: Array<{ reason: string; sessions: number }>;
+    note: string;
+  };
   intents: IntentPerformanceRow[];
   seo: {
     rankingKeywords: number;
@@ -234,6 +268,7 @@ export interface MarketingDashboardReport {
     landingPages: string[];
     devices: string[];
     visitorTypes: string[];
+    trafficQualities: TrafficQuality[];
     intents: IntentCohortId[];
   };
 }

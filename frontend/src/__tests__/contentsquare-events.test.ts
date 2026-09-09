@@ -1,5 +1,6 @@
 import { trackContentsquareEvent } from '@/lib/contentsquare';
 import { isAnalyticsHost } from '@/lib/analytics-host';
+import { INTERNAL_ANALYTICS_BROWSER_KEY } from '@/lib/internal-analytics';
 import {
   pushRetirementInteraction,
   pushRetirementModelRun,
@@ -25,10 +26,17 @@ const hostAllowed = jest.mocked(isAnalyticsHost);
 const win = window as unknown as { _uxa?: unknown[][]; dataLayer?: unknown[] };
 
 beforeEach(() => {
+  window.localStorage.removeItem(INTERNAL_ANALYTICS_BROWSER_KEY);
   hostAllowed.mockReturnValue(true);
   delete win._uxa;
   win.dataLayer = [];
   window.history.replaceState({}, '', '/retirement-calculator');
+});
+
+it('does not queue Contentsquare events from an internal browser', () => {
+  window.localStorage.setItem(INTERNAL_ANALYTICS_BROWSER_KEY, '1');
+  trackContentsquareEvent('sign_up');
+  expect(win._uxa).toBeUndefined();
 });
 
 it('queues events before the Contentsquare tag loads, without extra pageviews', () => {
