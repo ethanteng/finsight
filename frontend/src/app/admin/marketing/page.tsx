@@ -164,7 +164,7 @@ export default function MarketingDashboardPage() {
 
   useEffect(() => { void load(); }, [load]);
   const hasFilters = useMemo(() => Object.entries(filters).some(([key, value]) => !['days', 'compare'].includes(key) && Boolean(value)), [filters]);
-  const update = <K extends keyof Filters>(key: K, value: Filters[K]) => setFilters(previous => ({ ...previous, [key]: value || undefined }));
+  const update = <K extends keyof Filters>(key: K, value: Filters[K]) => setFilters(previous => ({ ...previous, [key]: value === false || value === 0 ? value : (value || undefined) }));
 
   return <><PageMeta title="Marketing performance | Ask Linc" description="Authenticated acquisition, behavior, intent, and trial conversion diagnostics for Ask Linc." /><div className="authenticated-site min-h-screen bg-[#f2f1e8] text-[#102319]"><AuthenticatedPageHeader activePage="admin" eyebrow="Growth intelligence" title="Marketing performance" /><main className="mx-auto max-w-[1320px] px-4 pb-20 pt-7 sm:px-6">
     <div className="mb-6 flex flex-wrap items-center justify-between gap-4"><Link href="/admin" className="inline-flex items-center gap-2 text-sm font-bold text-[#486657] hover:text-[#102319]"><ArrowLeft size={15} /> Back to administration</Link><button type="button" onClick={() => void load()} disabled={loading} className="admin-button-secondary gap-2"><RefreshCw size={14} className={loading ? 'animate-spin' : ''} /> Refresh</button></div>
