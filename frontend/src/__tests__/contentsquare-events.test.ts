@@ -1,6 +1,24 @@
 import { trackContentsquareEvent } from '@/lib/contentsquare';
 import { isAnalyticsHost } from '@/lib/analytics-host';
-import { pushRetirementInteraction, pushRetirementModelRun, pushSignUp, pushStartFreeClick } from '@/lib/dataLayer';
+import {
+  pushRetirementInteraction,
+  pushRetirementModelRun,
+  pushSignUp,
+  pushStartFreeClick,
+  pushTrialLoginError,
+  pushTrialLoginSubmit,
+  pushTrialLoginSuccess,
+  pushTrialLoginViewed,
+  pushTrialSignupRegistrationError,
+  pushTrialSignupStarted,
+  pushTrialSignupSubmit,
+  pushTrialSignupValidationError,
+  pushTrialSignupViewed,
+  pushTrialVerifyError,
+  pushTrialVerifySubmit,
+  pushTrialVerifySuccess,
+  pushTrialVerifyViewed,
+} from '@/lib/dataLayer';
 
 jest.mock('@/lib/analytics-host', () => ({ isAnalyticsHost: jest.fn() }));
 const hostAllowed = jest.mocked(isAnalyticsHost);
@@ -54,6 +72,39 @@ it('keeps intent, successful model results, and registration distinct', () => {
 it('does not classify paid or direct registrations as the no-card flow', () => {
   pushSignUp({ signupFlow: 'paid_checkout' });
   expect(win._uxa).toEqual([['trackPageEvent', 'sign_up']]);
+});
+
+it('sends every no-card funnel boundary to Contentsquare by fixed event name only', () => {
+  pushTrialSignupViewed();
+  pushTrialSignupStarted();
+  pushTrialSignupSubmit();
+  pushTrialSignupValidationError();
+  pushTrialSignupRegistrationError('server_rejected');
+  pushTrialVerifyViewed();
+  pushTrialVerifySubmit();
+  pushTrialVerifyError('network_error');
+  pushTrialVerifySuccess();
+  pushTrialLoginViewed();
+  pushTrialLoginSubmit();
+  pushTrialLoginError('unknown');
+  pushTrialLoginSuccess();
+
+  expect(win._uxa).toEqual([
+    'trial_signup_viewed',
+    'trial_signup_started',
+    'trial_signup_submit',
+    'trial_signup_validation_error',
+    'trial_signup_registration_error',
+    'trial_verify_viewed',
+    'trial_verify_submit',
+    'trial_verify_error',
+    'trial_verify_success',
+    'trial_login_viewed',
+    'trial_login_submit',
+    'trial_login_error',
+    'trial_login_success',
+  ].map(event => ['trackPageEvent', event]));
+  expect(JSON.stringify(win._uxa)).not.toMatch(/server_rejected|network_error|unknown/);
 });
 
 it('never breaks the product when the analytics queue throws', () => {

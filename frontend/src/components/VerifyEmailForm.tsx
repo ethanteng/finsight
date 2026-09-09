@@ -1,9 +1,19 @@
 "use client";
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, useRef, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowRight, CircleAlert, CircleCheck, LoaderCircle, MailCheck, RefreshCw } from 'lucide-react';
 import AuthFlowShell from './auth/AuthFlowShell';
+import {
+  pushTrialVerifyError,
+  pushTrialVerifySubmit,
+  pushTrialVerifySuccess,
+  pushTrialVerifyViewed,
+} from '@/lib/dataLayer';
+import {
+  isFreeTrialSignupContinuation,
+  withFreeTrialSignupFlow,
+} from '@/lib/trial-signup-flow';
 
 interface SubscriptionContext {
   subscription: string;
@@ -19,11 +29,20 @@ function VerifyEmailFormContent() {
   const [success, setSuccess] = useState('');
   const [isResending, setIsResending] = useState(false);
   const [subscriptionContext, setSubscriptionContext] = useState<SubscriptionContext | null>(null);
+  const [isFreeTrialFlow, setIsFreeTrialFlow] = useState(false);
+  const trialViewedRef = useRef(false);
   const router = useRouter();
   const searchParams = useSearchParams();
 
   // Check if user came from subscription context
   useEffect(() => {
+    const trialContinuation = isFreeTrialSignupContinuation(searchParams);
+    setIsFreeTrialFlow(trialContinuation);
+    if (trialContinuation && !trialViewedRef.current) {
+      trialViewedRef.current = true;
+      pushTrialVerifyViewed();
+    }
+
     const subscriptionParam = searchParams.get('subscription');
     const tierParam = searchParams.get('tier');
     const emailParam = searchParams.get('email');
@@ -41,15 +60,16 @@ function VerifyEmailFormContent() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isFreeTrialFlow) pushTrialVerifySubmit();
     setIsLoading(true);
     setError('');
     setSuccess('');
 
+    const API_URL = process.env.NEXT_PUBLIC_API_URL;
+    const token = localStorage.getItem('auth_token');
+    let res: Response;
     try {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL;
-      const token = localStorage.getItem('auth_token');
-      
-      const res = await fetch(`${API_URL}/auth/verify-email`, {
+      res = await fetch(`${API_URL}/auth/verify-email`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -57,33 +77,44 @@ function VerifyEmailFormContent() {
         },
         body: JSON.stringify({ code: code }),
       });
-
-      const data = await res.json();
-
-      if (res.ok) {
-        setSuccess('Email verified successfully! Redirecting to login...');
-        
-        // Clear the auth token
-        localStorage.removeItem('auth_token');
-        
-        // Always redirect to login after email verification
-        // Users must authenticate properly to access the app
-        setTimeout(() => {
-          if (subscriptionContext) {
-            const loginUrl = `/login?subscription=${subscriptionContext.subscription}&tier=${subscriptionContext.tier}&email=${encodeURIComponent(subscriptionContext.email || '')}&session_id=${subscriptionContext.sessionId || ''}`;
-            router.push(loginUrl);
-          } else {
-            router.push('/login');
-          }
-        }, 2000);
-      } else {
-        setError(data.error || 'Failed to verify email');
-      }
-    } catch (_error) {
+    } catch {
+      if (isFreeTrialFlow) pushTrialVerifyError('network_error');
       setError('Network error. Please try again.');
-    } finally {
       setIsLoading(false);
+      return;
     }
+
+    const data = await res.json().catch(() => ({})) as { error?: string };
+
+    if (res.ok) {
+      if (isFreeTrialFlow) pushTrialVerifySuccess();
+      setSuccess('Email verified successfully! Redirecting to login...');
+
+      // Clear the auth token. A storage failure must not turn a confirmed
+      // verification into an analytics error or suppress the redirect.
+      try {
+        localStorage.removeItem('auth_token');
+      } catch {
+        // The backend confirmation is authoritative; continue to login.
+      }
+
+      // Always redirect to login after email verification. Users must
+      // authenticate properly to access the app.
+      setTimeout(() => {
+        if (isFreeTrialFlow) {
+          router.push(withFreeTrialSignupFlow('/login'));
+        } else if (subscriptionContext) {
+          const loginUrl = `/login?subscription=${subscriptionContext.subscription}&tier=${subscriptionContext.tier}&email=${encodeURIComponent(subscriptionContext.email || '')}&session_id=${subscriptionContext.sessionId || ''}`;
+          router.push(loginUrl);
+        } else {
+          router.push('/login');
+        }
+      }, 2000);
+    } else {
+      if (isFreeTrialFlow) pushTrialVerifyError('server_rejected');
+      setError(data.error || 'Failed to verify email');
+    }
+    setIsLoading(false);
   };
 
   const handleResendCode = async () => {
@@ -241,7 +272,10 @@ function VerifyEmailFormContent() {
         </div>
 
         <div className="mt-5 text-center">
-          <Link href="/login" className="text-sm text-[#71857f] hover:text-[#123c2f]">
+          <Link
+            href={isFreeTrialFlow ? withFreeTrialSignupFlow('/login') : '/login'}
+            className="text-sm text-[#71857f] hover:text-[#123c2f]"
+          >
             Skip for now
           </Link>
         </div>

@@ -1,12 +1,22 @@
 "use client";
-import { useState, useEffect, Suspense } from 'react';
-import { pushBeginCheckout } from '@/lib/dataLayer';
+import { useState, useEffect, useRef, Suspense } from 'react';
+import {
+  pushBeginCheckout,
+  pushTrialLoginError,
+  pushTrialLoginSubmit,
+  pushTrialLoginSuccess,
+  pushTrialLoginViewed,
+} from '@/lib/dataLayer';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowRight, Brain, Check, CircleAlert, LoaderCircle, LockKeyhole, ShieldCheck } from 'lucide-react';
 import SiteFooter from './SiteFooter';
 import { getBrowserTimeZone, setStoredUserTimeZone } from '@/lib/browser-time-zone';
 import { useDialog } from '@/components/ui/dialog';
+import {
+  completeFreeTrialSignupFlow,
+  isFreeTrialSignupContinuation,
+} from '@/lib/trial-signup-flow';
 
 interface SubscriptionContext {
   subscription: string;
@@ -24,6 +34,8 @@ function LoginFormContent() {
   const [error, setError] = useState('');
   const [subscriptionContext, setSubscriptionContext] = useState<SubscriptionContext | null>(null);
   const [subscriptionExpired, setSubscriptionExpired] = useState(false);
+  const [isFreeTrialFlow, setIsFreeTrialFlow] = useState(false);
+  const trialViewedRef = useRef(false);
   // Kept in memory (never in localStorage) purely so a lapsed subscriber can
   // start checkout as themselves: the backend reuses their existing Stripe
   // customer instead of creating a second one for the same person.
@@ -94,6 +106,13 @@ function LoginFormContent() {
       window.history.replaceState({}, '', url.toString());
     }
 
+    const trialContinuation = isFreeTrialSignupContinuation(searchParams);
+    setIsFreeTrialFlow(trialContinuation);
+    if (trialContinuation && !trialViewedRef.current) {
+      trialViewedRef.current = true;
+      pushTrialLoginViewed();
+    }
+
   }, [searchParams]);
 
   // Helper function to detect payment-related errors
@@ -156,45 +175,76 @@ function LoginFormContent() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isFreeTrialFlow) pushTrialLoginSubmit();
     setIsLoading(true);
     setError('');
 
     try {
       const API_URL = process.env.NEXT_PUBLIC_API_URL;
-      const res = await fetch(`${API_URL}/auth/login`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ email, password, timeZone: getBrowserTimeZone() }),
-      });
+      let res: Response;
+      try {
+        res = await fetch(`${API_URL}/auth/login`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ email, password, timeZone: getBrowserTimeZone() }),
+        });
+      } catch {
+        if (isFreeTrialFlow) pushTrialLoginError('network_error');
+        setError('Network error. Please try again.');
+        return;
+      }
 
-      const data = await res.json();
+      let data: { token?: string; user?: { timeZone?: string }; error?: string };
+      try {
+        data = await res.json();
+      } catch {
+        if (isFreeTrialFlow) pushTrialLoginError('unknown');
+        setError('Login failed. Please try again.');
+        return;
+      }
 
       if (res.ok && data.token) {
         // Check subscription status before redirecting - show expiry message immediately if needed
-        const API_URL = process.env.NEXT_PUBLIC_API_URL;
-        const statusRes = await fetch(`${API_URL}/api/stripe/subscription-status`, {
-          headers: { 'Authorization': `Bearer ${data.token}` }
-        });
+        let statusRes: Response;
+        try {
+          statusRes = await fetch(`${API_URL}/api/stripe/subscription-status`, {
+            headers: { 'Authorization': `Bearer ${data.token}` }
+          });
+        } catch {
+          if (isFreeTrialFlow) pushTrialLoginError('network_error');
+          setError('Network error. Please try again.');
+          return;
+        }
 
         if (statusRes.status === 401) {
           const errorData = await statusRes.json().catch(() => ({}));
           const errorMessage = errorData.error || '';
           if (errorMessage.toLowerCase().includes('subscription') && errorMessage.toLowerCase().includes('expired')) {
+            if (isFreeTrialFlow) pushTrialLoginError('server_rejected');
             setLapsedToken(data.token);
             setSubscriptionExpired(true);
             setError('');
             return;
           }
+          if (isFreeTrialFlow) pushTrialLoginError('server_rejected');
           setError(errorMessage || 'Your session could not be verified.');
           return;
         }
 
         if (statusRes.ok) {
-          const statusData = await statusRes.json();
+          let statusData: { status?: string; accessLevel?: string };
+          try {
+            statusData = await statusRes.json();
+          } catch {
+            if (isFreeTrialFlow) pushTrialLoginError('unknown');
+            setError('Your session could not be verified.');
+            return;
+          }
           // Only show subscription expired for canceled subscriptions, not inactive (e.g. admin-created accounts)
           if (statusData.status === 'canceled' && statusData.accessLevel !== 'full') {
+            if (isFreeTrialFlow) pushTrialLoginError('server_rejected');
             setLapsedToken(data.token);
             setSubscriptionExpired(true);
             setError('');
@@ -202,18 +252,30 @@ function LoginFormContent() {
           }
         }
 
-        localStorage.setItem('auth_token', data.token);
-        if (data.user) {
-          if (data.user.timeZone) {
+        try {
+          localStorage.setItem('auth_token', data.token);
+          if (data.user?.timeZone) {
             setStoredUserTimeZone(data.user.timeZone);
           }
+        } catch {
+          if (isFreeTrialFlow) pushTrialLoginError('unknown');
+          setError('Your session could not be saved. Please try again.');
+          return;
+        }
+        if (isFreeTrialFlow) {
+          pushTrialLoginSuccess();
+          completeFreeTrialSignupFlow();
         }
         router.push('/app');
       } else {
+        if (isFreeTrialFlow) {
+          pushTrialLoginError(res.ok ? 'unknown' : 'server_rejected');
+        }
         setError(data.error || 'Login failed');
       }
-    } catch (_error) {
-      setError('Network error. Please try again.');
+    } catch {
+      if (isFreeTrialFlow) pushTrialLoginError('unknown');
+      setError('Login failed. Please try again.');
     } finally {
       setIsLoading(false);
     }

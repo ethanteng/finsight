@@ -1,7 +1,18 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import RegisterForm from '@/components/RegisterForm';
 import { USER_TIME_ZONE_KEY } from '@/lib/browser-time-zone';
-import { pushSignUp } from '@/lib/dataLayer';
+import {
+  pushSignUp,
+  pushTrialSignupRegistrationError,
+  pushTrialSignupStarted,
+  pushTrialSignupSubmit,
+  pushTrialSignupValidationError,
+  pushTrialSignupViewed,
+} from '@/lib/dataLayer';
+import {
+  RETIREMENT_SIGNUP_SOURCE,
+  storeRetirementSignupContext,
+} from '@/lib/retirement-signup-context';
 
 const push = jest.fn();
 let searchParams = new URLSearchParams();
@@ -10,9 +21,22 @@ jest.mock('next/navigation', () => ({
   useRouter: () => ({ push }),
   useSearchParams: () => searchParams,
 }));
-jest.mock('@/lib/dataLayer', () => ({ pushBeginCheckout: jest.fn(), pushSignUp: jest.fn() }));
+jest.mock('@/lib/dataLayer', () => ({
+  pushBeginCheckout: jest.fn(),
+  pushSignUp: jest.fn(),
+  pushTrialSignupRegistrationError: jest.fn(),
+  pushTrialSignupStarted: jest.fn(),
+  pushTrialSignupSubmit: jest.fn(),
+  pushTrialSignupValidationError: jest.fn(),
+  pushTrialSignupViewed: jest.fn(),
+}));
 
 const mockPushSignUp = jest.mocked(pushSignUp);
+const mockPushTrialSignupRegistrationError = jest.mocked(pushTrialSignupRegistrationError);
+const mockPushTrialSignupStarted = jest.mocked(pushTrialSignupStarted);
+const mockPushTrialSignupSubmit = jest.mocked(pushTrialSignupSubmit);
+const mockPushTrialSignupValidationError = jest.mocked(pushTrialSignupValidationError);
+const mockPushTrialSignupViewed = jest.mocked(pushTrialSignupViewed);
 
 function fillForm(password = 'Password1', confirm = password) {
   fireEvent.change(screen.getByLabelText('Email address'), { target: { value: 'new@example.com' } });
@@ -28,6 +52,7 @@ describe('RegisterForm', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     localStorage.clear();
+    sessionStorage.clear();
     searchParams = new URLSearchParams();
   });
 
@@ -42,6 +67,69 @@ describe('RegisterForm', () => {
       const signIn = screen.getAllByRole('link', { name: 'Sign in' });
       expect(signIn).toHaveLength(2);
       signIn.forEach((link) => expect(link).toHaveAttribute('href', '/login'));
+      expect(mockPushTrialSignupViewed).toHaveBeenCalledTimes(1);
+    });
+
+    it('tracks the first meaningful form edit once without identifying the field or value', () => {
+      const { rerender } = render(<RegisterForm variant="trial" />);
+
+      fireEvent.change(screen.getByLabelText('Email address'), { target: { value: 'new@example.com' } });
+      fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'Password1' } });
+      rerender(<RegisterForm variant="trial" />);
+
+      expect(mockPushTrialSignupViewed).toHaveBeenCalledTimes(1);
+      expect(mockPushTrialSignupStarted).toHaveBeenCalledTimes(1);
+      expect(mockPushTrialSignupStarted).toHaveBeenCalledWith();
+    });
+
+    it('continues a valid retirement scenario without exposing its values to Contentsquare', async () => {
+      searchParams = new URLSearchParams(`source=${RETIREMENT_SIGNUP_SOURCE}`);
+      expect(storeRetirementSignupContext({
+        currentAge: 48,
+        retirementAge: 60,
+        investableAssets: 1_200_000,
+        annualSpending: 95_000,
+        annualContributions: 35_000,
+        socialSecurityAnnual: 36_000,
+        socialSecurityStartAge: 67,
+        lifeExpectancy: 95,
+        allocation: 'balanced',
+      })).toBe(true);
+
+      render(<RegisterForm variant="trial" />);
+
+      expect(await screen.findByRole('heading', {
+        name: 'Let’s make your retirement analysis more accurate.',
+      })).toBeInTheDocument();
+      expect(screen.queryByRole('heading', { name: 'Try free for 30 days.' })).not.toBeInTheDocument();
+
+      const summary = screen.getByRole('region', { name: 'Your modeled retirement scenario' });
+      expect(summary).toHaveAttribute('data-cs-mask');
+      expect(within(summary).getByText('60')).toBeInTheDocument();
+      expect(within(summary).getByText('$1.2M')).toBeInTheDocument();
+      expect(within(summary).getByText('$95K')).toBeInTheDocument();
+      expect(screen.getByText('No credit card required')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Create account and continue/i })).toBeInTheDocument();
+    });
+
+    it('keeps generic /getstarted unchanged when the retirement source or scenario is missing', async () => {
+      storeRetirementSignupContext({
+        currentAge: 48,
+        retirementAge: 60,
+        investableAssets: 1_200_000,
+        annualSpending: 95_000,
+        annualContributions: 35_000,
+        socialSecurityAnnual: 36_000,
+        socialSecurityStartAge: 67,
+        lifeExpectancy: 95,
+        allocation: 'balanced',
+      });
+
+      render(<RegisterForm variant="trial" />);
+
+      expect(screen.getByRole('heading', { name: 'Try free for 30 days.' })).toBeInTheDocument();
+      expect(screen.queryByRole('region', { name: 'Your modeled retirement scenario' })).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Start free trial/i })).toBeInTheDocument();
     });
 
     it('offers no route to Stripe checkout', () => {
@@ -63,7 +151,7 @@ describe('RegisterForm', () => {
       fillForm();
       fireEvent.click(screen.getByRole('button', { name: /Start free trial/i }));
 
-      await waitFor(() => expect(push).toHaveBeenCalledWith('/verify-email'));
+      await waitFor(() => expect(push).toHaveBeenCalledWith('/verify-email?signup_flow=free_trial'));
 
       const [url, init] = (global.fetch as jest.Mock).mock.calls[0];
       expect(url).toContain('/auth/register');
@@ -78,6 +166,8 @@ describe('RegisterForm', () => {
       expect(localStorage.getItem('auth_token')).toBe('trial-token');
       expect(localStorage.getItem(USER_TIME_ZONE_KEY)).toBe('America/New_York');
       expect(mockPushSignUp).toHaveBeenCalledWith({ signupFlow: 'free_trial' });
+      expect(mockPushTrialSignupSubmit).toHaveBeenCalledTimes(1);
+      expect(mockPushTrialSignupRegistrationError).not.toHaveBeenCalled();
     });
 
     it('ignores checkout context on the URL rather than quietly charging a trial signup', async () => {
@@ -93,7 +183,7 @@ describe('RegisterForm', () => {
       fillForm();
       fireEvent.click(screen.getByRole('button', { name: /Start free trial/i }));
 
-      await waitFor(() => expect(push).toHaveBeenCalledWith('/verify-email'));
+      await waitFor(() => expect(push).toHaveBeenCalledWith('/verify-email?signup_flow=free_trial'));
       const body = JSON.parse((global.fetch as jest.Mock).mock.calls[0][1].body as string);
       expect(body).not.toHaveProperty('stripeSessionId');
     });
@@ -111,7 +201,7 @@ describe('RegisterForm', () => {
       fillForm();
       fireEvent.click(screen.getByRole('button', { name: /Start free trial/i }));
 
-      await waitFor(() => expect(push).toHaveBeenCalledWith('/verify-email'));
+      await waitFor(() => expect(push).toHaveBeenCalledWith('/verify-email?signup_flow=free_trial'));
     });
 
     it('reveals the password on request, so a typo is catchable without a confirm field', () => {
@@ -131,6 +221,8 @@ describe('RegisterForm', () => {
       // visibility must not fire the registration request.
       expect(global.fetch).not.toHaveBeenCalled();
       expect(push).not.toHaveBeenCalled();
+      expect(mockPushTrialSignupSubmit).not.toHaveBeenCalled();
+      expect(mockPushTrialSignupValidationError).not.toHaveBeenCalled();
     });
 
     it('rejects passwords that fail the advertised complexity rules without calling the API', async () => {
@@ -147,6 +239,8 @@ describe('RegisterForm', () => {
       );
       expect(global.fetch).not.toHaveBeenCalled();
       expect(push).not.toHaveBeenCalled();
+      expect(mockPushTrialSignupSubmit).toHaveBeenCalledTimes(1);
+      expect(mockPushTrialSignupValidationError).toHaveBeenCalledTimes(1);
     });
 
     it('surfaces a rejected registration instead of routing onward', async () => {
@@ -165,6 +259,24 @@ describe('RegisterForm', () => {
       expect(push).not.toHaveBeenCalled();
       expect(localStorage.getItem('auth_token')).toBeNull();
       expect(mockPushSignUp).not.toHaveBeenCalled();
+      expect(mockPushTrialSignupSubmit).toHaveBeenCalledTimes(1);
+      expect(mockPushTrialSignupRegistrationError).toHaveBeenCalledWith('server_rejected');
+    });
+
+    it('classifies a failed registration request without exposing the thrown error', async () => {
+      global.fetch = jest.fn().mockRejectedValue(new Error('new@example.com Password1'));
+
+      render(<RegisterForm variant="trial" />);
+      fillForm();
+      fireEvent.click(screen.getByRole('button', { name: /Start free trial/i }));
+
+      await waitFor(() =>
+        expect(screen.getByRole('alert')).toHaveTextContent('Network error. Please try again.'),
+      );
+      expect(mockPushTrialSignupRegistrationError).toHaveBeenCalledWith('network_error');
+      expect(mockPushTrialSignupRegistrationError).not.toHaveBeenCalledWith(
+        expect.stringContaining('new@example.com'),
+      );
     });
   });
 

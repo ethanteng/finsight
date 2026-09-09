@@ -1,12 +1,29 @@
 "use client";
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, useRef, Suspense } from 'react';
 import { getBrowserTimeZone, setStoredUserTimeZone } from '@/lib/browser-time-zone';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowRight, Check, CircleAlert, CreditCard, Eye, EyeOff, LoaderCircle, LockKeyhole, Mail } from 'lucide-react';
 import AuthFlowShell from './auth/AuthFlowShell';
-import { pushBeginCheckout, pushSignUp } from '@/lib/dataLayer';
+import {
+  pushBeginCheckout,
+  pushSignUp,
+  pushTrialSignupRegistrationError,
+  pushTrialSignupStarted,
+  pushTrialSignupSubmit,
+  pushTrialSignupValidationError,
+  pushTrialSignupViewed,
+} from '@/lib/dataLayer';
 import { useDialog } from '@/components/ui/dialog';
+import {
+  hasRetirementSignupSource,
+  readRetirementSignupContext,
+  type RetirementSignupContext,
+} from '@/lib/retirement-signup-context';
+import {
+  beginFreeTrialSignupFlow,
+  withFreeTrialSignupFlow,
+} from '@/lib/trial-signup-flow';
 
 interface SubscriptionContext {
   subscription: string;
@@ -55,6 +72,24 @@ const TRIAL_COPY = {
   submitting: 'Starting your trial…',
 };
 
+const RETIREMENT_TRIAL_COPY = {
+  eyebrow: 'Continue your retirement plan',
+  title: 'Let’s make your retirement analysis more accurate.',
+  description:
+    'Create your account to keep this plan in view and replace the calculator’s estimates with your actual holdings, spending, and income.',
+  asideEyebrow: 'From estimates to actuals',
+  asideTitle: 'Keep the plan. Replace the assumptions.',
+  asideDescription:
+    'Connect your accounts once and Ask Linc can rerun the decision using what you actually own, earn, and spend.',
+  benefits: [
+    'Continue from the retirement scenario you just modeled',
+    'Replace estimated assets and allocation with real holdings',
+    'Full access for 30 days — no credit card',
+  ],
+  submit: 'Create account and continue',
+  submitting: 'Creating your account…',
+};
+
 const ACCOUNT_COPY = {
   asideTitle: 'Start every answer with your full context.',
   asideDescription:
@@ -79,8 +114,18 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
   const [isCheckoutLoading, setIsCheckoutLoading] = useState(false);
   const [error, setError] = useState('');
   const [subscriptionContext, setSubscriptionContext] = useState<SubscriptionContext | null>(null);
+  const [retirementContext, setRetirementContext] = useState<RetirementSignupContext | null>(null);
+  const trialViewedRef = useRef(false);
+  const trialStartedRef = useRef(false);
   const router = useRouter();
   const searchParams = useSearchParams();
+
+  useEffect(() => {
+    if (!isTrial || trialViewedRef.current) return;
+    trialViewedRef.current = true;
+    beginFreeTrialSignupFlow();
+    pushTrialSignupViewed();
+  }, [isTrial]);
 
   // Read URL parameters on component mount
   useEffect(() => {
@@ -89,10 +134,19 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
       setEmail(emailParam);
     }
 
-    // The trial page promises no payment, so it never adopts checkout context
-    // even if a stray link carries it — that would silently put the visitor on
-    // the paid path behind a "no credit card required" headline.
-    if (isTrial) return;
+    // A retirement continuation is recognized only when both pieces are
+    // present: a non-sensitive URL marker and a recent, validated scenario in
+    // this tab. Stale storage must not change a later generic /getstarted visit.
+    // Every trial path returns here, before reading checkout parameters, so a
+    // stray Stripe URL still cannot turn the no-card signup into a paid flow.
+    if (isTrial) {
+      setRetirementContext(
+        hasRetirementSignupSource(searchParams)
+          ? readRetirementSignupContext()
+          : null,
+      );
+      return;
+    }
 
     const subscriptionParam = searchParams.get('subscription');
     const tierParam = searchParams.get('tier');
@@ -106,6 +160,14 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
       });
     }
   }, [searchParams, isTrial]);
+
+  const trialCopy = retirementContext ? RETIREMENT_TRIAL_COPY : TRIAL_COPY;
+
+  const trackTrialStart = (value: string) => {
+    if (!isTrial || trialStartedRef.current || value.length === 0) return;
+    trialStartedRef.current = true;
+    pushTrialSignupStarted();
+  };
 
   const handleBuyClick = async () => {
     pushBeginCheckout();
@@ -141,6 +203,7 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isTrial) pushTrialSignupSubmit();
     setIsLoading(true);
     setError('');
 
@@ -160,104 +223,146 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
       !/[A-Z]/.test(password) ||
       !/\d/.test(password)
     ) {
+      if (isTrial) pushTrialSignupValidationError();
       setError('Password must be at least 8 characters and include an uppercase letter, a lowercase letter, and a number.');
       setIsLoading(false);
       return;
     }
 
-    try {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL;
+    const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
-      // Prepare registration data
-      const registrationData: {
-        email: string;
-        password: string;
-        tier?: string;
-        stripeSessionId?: string;
-        timeZone: string;
-      } = { email, password, timeZone: getBrowserTimeZone() };
+    // Prepare registration data. These values go only to the auth API, never
+    // to either analytics destination.
+    const registrationData: {
+      email: string;
+      password: string;
+      tier?: string;
+      stripeSessionId?: string;
+      timeZone: string;
+    } = { email, password, timeZone: getBrowserTimeZone() };
 
-      // If coming from successful subscription, include tier and session info
-      if (subscriptionContext) {
-        registrationData.tier = subscriptionContext.tier;
-        if (subscriptionContext.sessionId) {
-          registrationData.stripeSessionId = subscriptionContext.sessionId;
-        }
+    // If coming from successful subscription, include tier and session info.
+    if (subscriptionContext) {
+      registrationData.tier = subscriptionContext.tier;
+      if (subscriptionContext.sessionId) {
+        registrationData.stripeSessionId = subscriptionContext.sessionId;
       }
+    }
 
-      const res = await fetch(`${API_URL}/auth/register`, {
+    let res: Response;
+    try {
+      res = await fetch(`${API_URL}/auth/register`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(registrationData),
       });
-
-      const data = await res.json();
-
-      if (res.ok && data.token) {
-        // Registration is the conversion boundary: a form submit or an API
-        // error is intent, but only this response confirms a new account.
-        pushSignUp({
-          signupFlow: isTrial
-            ? 'free_trial'
-            : subscriptionContext
-              ? 'paid_checkout'
-              : 'direct',
-        });
-        localStorage.setItem('auth_token', data.token);
-        if (data.user) {
-          if (data.user.timeZone) {
-            setStoredUserTimeZone(data.user.timeZone);
-          }
-        }
-
-        // Always go through email verification for security
-        // The subscription context will be preserved in the URL for after verification
-        if (subscriptionContext) {
-          const verifyUrl = `/verify-email?subscription=${subscriptionContext.subscription}&tier=${subscriptionContext.tier}&email=${encodeURIComponent(email)}&session_id=${subscriptionContext.sessionId || ''}`;
-          router.push(verifyUrl);
-        } else {
-          router.push('/verify-email');
-        }
-      } else {
-        setError(data.error || 'Registration failed');
-      }
-    } catch (_error) {
+    } catch {
+      if (isTrial) pushTrialSignupRegistrationError('network_error');
       setError('Network error. Please try again.');
-    } finally {
       setIsLoading(false);
+      return;
     }
+
+    let data: {
+      token?: string;
+      user?: { timeZone?: string };
+      error?: string;
+    };
+    try {
+      data = await res.json();
+    } catch {
+      if (isTrial) {
+        pushTrialSignupRegistrationError(res.ok ? 'unknown' : 'server_rejected');
+      }
+      setError('Registration failed. Please try again.');
+      setIsLoading(false);
+      return;
+    }
+
+    if (res.ok && data.token) {
+      // Registration is the conversion boundary: a form submit or an API
+      // error is intent, but only this response confirms a new account.
+      pushSignUp({
+        signupFlow: isTrial
+          ? 'free_trial'
+          : subscriptionContext
+            ? 'paid_checkout'
+            : 'direct',
+      });
+      localStorage.setItem('auth_token', data.token);
+      if (data.user) {
+        if (data.user.timeZone) {
+          setStoredUserTimeZone(data.user.timeZone);
+        }
+      }
+
+      // Always go through email verification for security. The no-card flow
+      // carries only a fixed attribution flag; no email or form value enters
+      // its URL or analytics payload.
+      if (isTrial) {
+        router.push(withFreeTrialSignupFlow('/verify-email'));
+      } else if (subscriptionContext) {
+        const verifyUrl = `/verify-email?subscription=${subscriptionContext.subscription}&tier=${subscriptionContext.tier}&email=${encodeURIComponent(email)}&session_id=${subscriptionContext.sessionId || ''}`;
+        router.push(verifyUrl);
+      } else {
+        router.push('/verify-email');
+      }
+    } else {
+      if (isTrial) {
+        pushTrialSignupRegistrationError(res.ok ? 'unknown' : 'server_rejected');
+      }
+      setError(data.error || 'Registration failed');
+    }
+    setIsLoading(false);
   };
 
   return (
     <AuthFlowShell
       eyebrow={
         isTrial
-          ? TRIAL_COPY.eyebrow
+          ? trialCopy.eyebrow
           : subscriptionContext
             ? 'Finish setting up'
             : 'Create your account'
       }
       title={
         isTrial
-          ? TRIAL_COPY.title
+          ? trialCopy.title
           : subscriptionContext
             ? 'Your subscription is ready.'
             : 'Create your account.'
       }
       description={
         isTrial
-          ? TRIAL_COPY.description
+          ? trialCopy.description
           : subscriptionContext
             ? 'Set a password to open your workspace. Verifying your email activates your subscription.'
             : 'Join Ask Linc and start working through your financial decisions with your own data.'
       }
-      asideEyebrow={isTrial ? TRIAL_COPY.asideEyebrow : undefined}
-      asideTitle={isTrial ? TRIAL_COPY.asideTitle : ACCOUNT_COPY.asideTitle}
-      asideDescription={isTrial ? TRIAL_COPY.asideDescription : ACCOUNT_COPY.asideDescription}
-      benefits={isTrial ? TRIAL_COPY.benefits : ACCOUNT_COPY.benefits}
+      asideEyebrow={isTrial ? trialCopy.asideEyebrow : undefined}
+      asideTitle={isTrial ? trialCopy.asideTitle : ACCOUNT_COPY.asideTitle}
+      asideDescription={isTrial ? trialCopy.asideDescription : ACCOUNT_COPY.asideDescription}
+      benefits={isTrial ? trialCopy.benefits : ACCOUNT_COPY.benefits}
     >
+      {retirementContext && (
+        <section
+          aria-label="Your modeled retirement scenario"
+          data-cs-mask
+          className="mb-5 rounded-2xl border border-[#123c2f]/15 bg-[#fffdf7] p-4 shadow-sm"
+        >
+          <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#477064]">
+            Your modeled scenario
+          </p>
+          <dl className="mt-3 grid grid-cols-3 gap-2">
+            <ScenarioValue label="Retire at" value={String(retirementContext.inputs.retirementAge)} />
+            <ScenarioValue label="Assets today" value={compactMoney(retirementContext.inputs.investableAssets)} />
+            <ScenarioValue label="Annual spending" value={compactMoney(retirementContext.inputs.annualSpending)} />
+          </dl>
+        </section>
+      )}
+
       {isTrial && (
         <div
           className="mb-6 flex items-center gap-3 rounded-2xl border border-[#719632]/25 bg-[#eaf5d5] px-4 py-3 text-sm font-semibold text-[#34551c]"
@@ -302,7 +407,10 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
               type="email"
               autoComplete="email"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(e) => {
+                setEmail(e.target.value);
+                trackTrialStart(e.target.value);
+              }}
               required
               className={inputClasses}
               placeholder="you@example.com"
@@ -321,7 +429,10 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
               type={showPassword ? 'text' : 'password'}
               autoComplete="new-password"
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              onChange={(e) => {
+                setPassword(e.target.value);
+                trackTrialStart(e.target.value);
+              }}
               required
               minLength={8}
               aria-describedby="password-requirements"
@@ -373,11 +484,11 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
           className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-[#123c2f] px-5 py-3.5 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(18,60,47,.16)] transition hover:bg-[#1a5140] disabled:cursor-not-allowed disabled:opacity-60"
         >
           {isLoading ? (
-            <><LoaderCircle className="animate-spin" size={17} />{isTrial ? TRIAL_COPY.submitting : 'Creating account…'}</>
+            <><LoaderCircle className="animate-spin" size={17} />{isTrial ? trialCopy.submitting : 'Creating account…'}</>
           ) : (
             <>
               {isTrial
-                ? TRIAL_COPY.submit
+                ? trialCopy.submit
                 : subscriptionContext
                   ? 'Create account and continue'
                   : 'Create your account'}{' '}
@@ -423,6 +534,24 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
       </div>
       {dialog}
     </AuthFlowShell>
+  );
+}
+
+function compactMoney(value: number): string {
+  if (value >= 1_000_000) {
+    const millions = value / 1_000_000;
+    return `$${millions.toFixed(millions >= 10 || Number.isInteger(millions) ? 0 : 1)}M`;
+  }
+  if (value >= 1_000) return `$${Math.round(value / 1_000)}K`;
+  return `$${Math.round(value)}`;
+}
+
+function ScenarioValue({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0 rounded-xl bg-[#edf1e9] px-3 py-3">
+      <dt className="text-[11px] font-semibold leading-4 text-[#607b72]">{label}</dt>
+      <dd className="mt-1 truncate text-base font-bold text-[#123c2f]">{value}</dd>
+    </div>
   );
 }
 

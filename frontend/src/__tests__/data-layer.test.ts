@@ -4,7 +4,20 @@ import {
   pushRetirementModelRun,
   pushSignUp,
   pushStartFreeClick,
+  pushTrialLoginError,
+  pushTrialLoginSubmit,
+  pushTrialLoginSuccess,
+  pushTrialLoginViewed,
+  pushTrialSignupRegistrationError,
+  pushTrialSignupStarted,
+  pushTrialSignupSubmit,
+  pushTrialSignupValidationError,
+  pushTrialSignupViewed,
   pushTrialStartedVerified,
+  pushTrialVerifyError,
+  pushTrialVerifySubmit,
+  pushTrialVerifySuccess,
+  pushTrialVerifyViewed,
   pushViewExamples,
   pushViewMoreExamples,
 } from "@/lib/dataLayer";
@@ -111,6 +124,81 @@ describe("free-signup funnel analytics", () => {
       source_page: GET_STARTED_HREF,
       signup_flow: "free_trial",
     }]);
+  });
+
+  it("emits the complete no-card funnel with only fixed, non-sensitive parameters", () => {
+    window.history.replaceState({}, "", GET_STARTED_HREF);
+    pushTrialSignupViewed();
+    pushTrialSignupStarted();
+    pushTrialSignupSubmit();
+    pushTrialSignupValidationError();
+    pushTrialSignupRegistrationError('server_rejected');
+
+    window.history.replaceState({}, "", "/verify-email?signup_flow=free_trial");
+    pushTrialVerifyViewed();
+    pushTrialVerifySubmit();
+    pushTrialVerifyError('network_error');
+    pushTrialVerifySuccess();
+
+    window.history.replaceState({}, "", "/login?signup_flow=free_trial");
+    pushTrialLoginViewed();
+    pushTrialLoginSubmit();
+    pushTrialLoginError('unknown');
+    pushTrialLoginSuccess();
+
+    expect(analyticsWindow.dataLayer).toEqual([
+      { event: 'trial_signup_viewed', source_page: '/getstarted', signup_flow: 'free_trial' },
+      { event: 'trial_signup_started', source_page: '/getstarted', signup_flow: 'free_trial' },
+      { event: 'trial_signup_submit', source_page: '/getstarted', signup_flow: 'free_trial' },
+      {
+        event: 'trial_signup_validation_error',
+        source_page: '/getstarted',
+        signup_flow: 'free_trial',
+        validation_reason: 'password_requirements',
+      },
+      {
+        event: 'trial_signup_registration_error',
+        source_page: '/getstarted',
+        signup_flow: 'free_trial',
+        error_category: 'server_rejected',
+      },
+      { event: 'trial_verify_viewed', source_page: '/verify-email', signup_flow: 'free_trial' },
+      { event: 'trial_verify_submit', source_page: '/verify-email', signup_flow: 'free_trial' },
+      {
+        event: 'trial_verify_error',
+        source_page: '/verify-email',
+        signup_flow: 'free_trial',
+        error_category: 'network_error',
+      },
+      { event: 'trial_verify_success', source_page: '/verify-email', signup_flow: 'free_trial' },
+      { event: 'trial_login_viewed', source_page: '/login', signup_flow: 'free_trial' },
+      { event: 'trial_login_submit', source_page: '/login', signup_flow: 'free_trial' },
+      {
+        event: 'trial_login_error',
+        source_page: '/login',
+        signup_flow: 'free_trial',
+        error_category: 'unknown',
+      },
+      { event: 'trial_login_success', source_page: '/login', signup_flow: 'free_trial' },
+    ]);
+
+    const serialized = JSON.stringify(analyticsWindow.dataLayer);
+    expect(serialized).not.toMatch(/person@example\.com|Password1|123456/);
+  });
+
+  it("normalizes unexpected error input instead of forwarding raw text", () => {
+    window.history.replaceState({}, "", GET_STARTED_HREF);
+
+    pushTrialSignupRegistrationError('Account person@example.com was rejected');
+    pushTrialVerifyError({ code: '123456' });
+    pushTrialLoginError(new Error('password was wrong'));
+
+    expect(analyticsWindow.dataLayer).toEqual([
+      expect.objectContaining({ event: 'trial_signup_registration_error', error_category: 'unknown' }),
+      expect.objectContaining({ event: 'trial_verify_error', error_category: 'unknown' }),
+      expect.objectContaining({ event: 'trial_login_error', error_category: 'unknown' }),
+    ]);
+    expect(JSON.stringify(analyticsWindow.dataLayer)).not.toMatch(/person@example|123456|password was wrong/);
   });
 });
 

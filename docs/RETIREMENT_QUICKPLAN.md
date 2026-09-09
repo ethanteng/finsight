@@ -212,6 +212,23 @@ means something to someone holding that result — and "Get answers based on you
 actual finances" before that, for a visitor who has run nothing and needs the
 offer stated plainly.
 
+After a successful run, the button is a continuation rather than a generic
+trial prompt: "Run this with my actual finances." Its click writes the complete,
+server-validated calculator inputs to versioned `sessionStorage` with a two-hour
+expiry, then navigates to `/getstarted?source=retirement-calculator`. Only that
+non-sensitive source marker enters the URL; the financial values never enter
+page-location analytics, referrers, server logs, or browser history.
+
+`/getstarted` requires both the source marker and a recent valid session value
+before it adopts the retirement-specific headline and scenario summary. A bare
+`/getstarted`, a copied contextual URL in another session, malformed storage,
+or expired storage gets the existing generic trial experience. The handoff
+summary and the calculator's live result are marked `data-cs-mask`, because
+their rendered DOM contains visitor-entered and derived financial values that
+must not appear in Contentsquare replay even though the click events remain
+measurable. The CTA keeps its existing tracking location and Contentsquare
+override id so the funnel remains comparable to its earlier copy.
+
 ## Paid-search variants
 
 Google Ads runs a separate ad group per retirement age, so the ad's final URL

@@ -16,6 +16,12 @@ import { GET_STARTED_HREF } from "@/lib/site-nav";
 type MarketingGetStartedButtonProps = {
   className?: string;
   trackingLocation?: string;
+  /** Alternate copy for a decision-specific continuation. */
+  label?: string;
+  /** A non-sensitive route variant; financial values must never be put here. */
+  href?: string;
+  /** Save local handoff state before Next.js starts navigation. */
+  onBeforeNavigate?: () => void;
   /**
    * Contentsquare element identity, e.g. `cta-start-free-trial-hero`.
    *
@@ -34,16 +40,22 @@ type MarketingGetStartedButtonProps = {
 export function MarketingGetStartedButton({
   className = "button button-small button-dark",
   trackingLocation = "marketing_cta",
+  label = "Start free",
+  href = GET_STARTED_HREF,
+  onBeforeNavigate,
   csOverrideId,
 }: MarketingGetStartedButtonProps) {
   return (
     <Link
       className={className}
-      href={GET_STARTED_HREF}
+      href={href}
       data-cs-override-id={csOverrideId}
-      onClick={() => pushStartFreeClick(trackingLocation)}
+      onClick={() => {
+        onBeforeNavigate?.();
+        pushStartFreeClick(trackingLocation);
+      }}
     >
-      Start free
+      {label}
     </Link>
   );
 }

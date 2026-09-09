@@ -26,6 +26,10 @@ import { TRIAL_CTA_MICROCOPY } from "./trial-copy";
 import { SiteFooter, SiteHeader } from "./SiteShell";
 import { CONNECTED_EXAMPLE_ID, RetirementConnectedExample } from "./RetirementConnectedExample";
 import { pushRetirementInteraction, pushRetirementModelRun } from "@/lib/dataLayer";
+import {
+  RETIREMENT_SIGNUP_HREF,
+  storeRetirementSignupContext,
+} from "@/lib/retirement-signup-context";
 
 type AllocationId = "conservative" | "balanced" | "growth";
 
@@ -481,7 +485,10 @@ export function RetirementQuickPlan({
         </form>
       </section>
 
-      <div ref={resultsRef}>
+      {/* Calculator outputs repeat visitor-entered and derived financial
+          values as ordinary DOM text, so mask the complete live result from
+          Contentsquare session replay. Click events inside still report. */}
+      <div ref={resultsRef} data-cs-mask>
         {result && <QuickPlanResults result={result} />}
       </div>
 
@@ -496,13 +503,19 @@ export function RetirementQuickPlan({
               : "Get answers based on your actual finances."}
           </h2>
           <p>
-            Ask Linc runs this same model on your real accounts — every holding, every fee, your
-            actual spending and income.
+            {result
+              ? "We'll carry forward the retirement age, assets, and spending you just modeled, then replace the calculator's estimates with your actual holdings, spending, and income."
+              : "Ask Linc runs this same model on your real accounts — every holding, every fee, your actual spending and income."}
           </p>
           <MarketingGetStartedButton
             className="button button-primary"
             trackingLocation="quickplan_cross_sell"
             csOverrideId="cta-start-free-trial-quickplan"
+            label={result ? "Run this with my actual finances" : "Analyze my actual finances"}
+            href={result ? RETIREMENT_SIGNUP_HREF : undefined}
+            onBeforeNavigate={
+              result ? () => { storeRetirementSignupContext(result.inputs); } : undefined
+            }
           />
           {/* The same promise every CTA on the site makes; kept in one place. */}
           <p className="microcopy">{TRIAL_CTA_MICROCOPY}</p>

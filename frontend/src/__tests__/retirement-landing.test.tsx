@@ -9,6 +9,10 @@ import {
   readRetirementAge,
   retirementHeadline,
 } from '@/lib/retirement-landing';
+import {
+  RETIREMENT_SIGNUP_HREF,
+  readRetirementSignupContext,
+} from '@/lib/retirement-signup-context';
 
 jest.mock('@/lib/contentsquare', () => ({ trackContentsquareEvent: jest.fn() }));
 
@@ -66,6 +70,7 @@ describe('retirement landing page', () => {
 
   afterEach(() => {
     global.fetch = originalFetch;
+    window.sessionStorage.clear();
     jest.clearAllMocks();
   });
 
@@ -179,6 +184,74 @@ describe('retirement landing page', () => {
       expect(jump).not.toBeNull();
       expect(jump!.getAttribute('href')).toBe(`#${CONNECTED_EXAMPLE_ID}`);
       expect(container.querySelector(`#${CONNECTED_EXAMPLE_ID}`)).not.toBeNull();
+    } finally {
+      Element.prototype.scrollIntoView = originalScroll;
+    }
+  });
+
+  it('continues a completed model with its validated inputs and no financial analytics fields', async () => {
+    const result = {
+      inputs: {
+        currentAge: 48,
+        retirementAge: 60,
+        investableAssets: 1_200_000,
+        annualSpending: 95_000,
+        annualContributions: 35_000,
+        socialSecurityAnnual: 36_000,
+        socialSecurityStartAge: 67,
+        lifeExpectancy: 95,
+        allocation: 'balanced',
+      },
+      allocation: { id: 'balanced', label: 'Balanced', description: 'Example', equityPercent: 60 },
+      history: { firstMonth: '1926-01', lastMonth: '2025-12', firstStartMonth: '1926-01', lastStartMonth: '1980-12', horizonYears: 47, sequencesTested: 100 },
+      primary: {
+        id: 'primary', label: 'Your plan', change: null, retirementAge: 60, annualSpending: 95_000,
+        survivalRate: 0.9, sequencesTested: 100, sequencesSurvived: 90,
+        projectedPortfolioAtRetirement: 1_700_000, firstYearPortfolioWithdrawal: 95_000,
+        firstYearWithdrawalRate: 0.055, depletionYears: null, primaryObservation: 'Example',
+        tradeoffs: { upside: 'Example', downside: 'Example' }, characteristics: {},
+      },
+      alternatives: [],
+      sustainableSpending: { p10: 70_000, p25: 80_000, p50: 90_000, p75: 100_000, p90: 110_000, solverFloorRate: 0.01, solverCeilingRate: 0.15 },
+      limitations: [],
+      assumptions: [],
+    };
+    global.fetch = jest.fn().mockImplementation((_url, init) => Promise.resolve({
+      ok: true,
+      json: async () => init?.method ? result : { allocations: [] },
+    }));
+    window.history.replaceState({}, '', '/retirement-calculator');
+    const analyticsWindow = window as Window & { dataLayer?: Array<Record<string, unknown>> };
+    analyticsWindow.dataLayer = [];
+    const originalScroll = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = jest.fn();
+
+    try {
+      const { container } = render(<RetirementQuickPlan headline="When can I retire?" initialRetirementAge={60} />);
+      fireEvent.submit(container.querySelector('form')!);
+      await screen.findByText(/Based on the numbers you entered/);
+
+      expect(screen.getByText(/carry forward the retirement age, assets, and spending/i)).toBeInTheDocument();
+      const cta = screen.getByRole('link', { name: 'Run this with my actual finances' });
+      expect(cta).toHaveAttribute('href', RETIREMENT_SIGNUP_HREF);
+      expect(cta).toHaveAttribute('data-cs-override-id', 'cta-start-free-trial-quickplan');
+      expect(container.querySelector('.qp-results')?.parentElement).toHaveAttribute('data-cs-mask');
+
+      // Isolate the CTA event from the model-run events that preceded it.
+      analyticsWindow.dataLayer = [];
+      cta.addEventListener('click', (event) => event.preventDefault(), { once: true });
+      fireEvent.click(cta);
+
+      expect(readRetirementSignupContext()?.inputs).toEqual(result.inputs);
+      expect(analyticsWindow.dataLayer).toEqual([{
+        event: 'start_free_click',
+        source_page: '/retirement-calculator',
+        cta_location: 'quickplan_cross_sell',
+        content_type: 'retirement_calculator',
+        destination_page: '/getstarted',
+      }]);
+      expect(JSON.stringify(analyticsWindow.dataLayer)).not.toContain('1200000');
+      expect(JSON.stringify(analyticsWindow.dataLayer)).not.toContain('95000');
     } finally {
       Element.prototype.scrollIntoView = originalScroll;
     }

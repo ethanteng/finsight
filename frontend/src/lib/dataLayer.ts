@@ -84,11 +84,113 @@ export function pushStartFreeClick(ctaLocation = 'marketing_cta'): void {
   });
 }
 
-const SIGNUP_FLOWS = ['free_trial', 'paid_checkout', 'direct'] as const;
-export type SignupFlow = (typeof SIGNUP_FLOWS)[number];
+export type SignupFlow = 'free_trial' | 'paid_checkout' | 'direct';
 
 export interface SignUpEvent {
   signupFlow: SignupFlow;
+}
+
+export const TRIAL_FUNNEL_ERROR_CATEGORIES = [
+  'server_rejected',
+  'network_error',
+  'unknown',
+] as const;
+export type TrialFunnelErrorCategory = (typeof TRIAL_FUNNEL_ERROR_CATEGORIES)[number];
+
+type TrialFunnelEvent =
+  | 'trial_signup_viewed'
+  | 'trial_signup_started'
+  | 'trial_signup_submit'
+  | 'trial_signup_validation_error'
+  | 'trial_signup_registration_error'
+  | 'trial_verify_viewed'
+  | 'trial_verify_submit'
+  | 'trial_verify_error'
+  | 'trial_verify_success'
+  | 'trial_login_viewed'
+  | 'trial_login_submit'
+  | 'trial_login_error'
+  | 'trial_login_success';
+
+function pushTrialFunnelEvent(
+  event: TrialFunnelEvent,
+  parameters: Record<string, string> = {},
+): void {
+  if (typeof window === 'undefined') return;
+  trackContentsquareEvent(event);
+  pushToDataLayer({
+    event,
+    source_page: window.location.pathname,
+    signup_flow: 'free_trial',
+    ...parameters,
+  });
+}
+
+function normalizeTrialErrorCategory(category: unknown): TrialFunnelErrorCategory {
+  return (TRIAL_FUNNEL_ERROR_CATEGORIES as readonly unknown[]).includes(category)
+    ? category as TrialFunnelErrorCategory
+    : 'unknown';
+}
+
+export function pushTrialSignupViewed(): void {
+  pushTrialFunnelEvent('trial_signup_viewed');
+}
+
+export function pushTrialSignupStarted(): void {
+  pushTrialFunnelEvent('trial_signup_started');
+}
+
+export function pushTrialSignupSubmit(): void {
+  pushTrialFunnelEvent('trial_signup_submit');
+}
+
+/** The client currently has one allowlisted registration-validation reason. */
+export function pushTrialSignupValidationError(): void {
+  pushTrialFunnelEvent('trial_signup_validation_error', {
+    validation_reason: 'password_requirements',
+  });
+}
+
+export function pushTrialSignupRegistrationError(category: unknown): void {
+  pushTrialFunnelEvent('trial_signup_registration_error', {
+    error_category: normalizeTrialErrorCategory(category),
+  });
+}
+
+export function pushTrialVerifyViewed(): void {
+  pushTrialFunnelEvent('trial_verify_viewed');
+}
+
+export function pushTrialVerifySubmit(): void {
+  pushTrialFunnelEvent('trial_verify_submit');
+}
+
+export function pushTrialVerifyError(category: unknown): void {
+  pushTrialFunnelEvent('trial_verify_error', {
+    error_category: normalizeTrialErrorCategory(category),
+  });
+}
+
+export function pushTrialVerifySuccess(): void {
+  pushTrialFunnelEvent('trial_verify_success');
+}
+
+export function pushTrialLoginViewed(): void {
+  pushTrialFunnelEvent('trial_login_viewed');
+}
+
+export function pushTrialLoginSubmit(): void {
+  pushTrialFunnelEvent('trial_login_submit');
+}
+
+export function pushTrialLoginError(category: unknown): void {
+  pushTrialFunnelEvent('trial_login_error', {
+    error_category: normalizeTrialErrorCategory(category),
+  });
+}
+
+export function pushTrialLoginSuccess(): void {
+  pushTrialFunnelEvent('trial_login_success');
 }
 
 /**
