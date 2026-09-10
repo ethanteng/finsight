@@ -162,6 +162,22 @@ function useAllocations(): AllocationOption[] {
 
 const SOCIAL_SECURITY_AGES = [62, 63, 64, 65, 66, 67, 68, 69, 70];
 
+/**
+ * Inputs the form actually renders, so a rejection can be shown next to one.
+ * The endpoint can also reject on `lifeExpectancy` (derived from retirement age
+ * here, never entered) or on `body`; those have no box to sit under and fall
+ * back to the banner.
+ */
+const FORM_FIELD_IDS = new Set([
+  "currentAge",
+  "retirementAge",
+  "investableAssets",
+  "annualSpending",
+  "annualContributions",
+  "socialSecurityAnnual",
+  "socialSecurityStartAge",
+]);
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
 
 function digitsOnly(value: string): string {
@@ -268,19 +284,59 @@ export function RetirementQuickPlan({
   const [form, setForm] = useState<FormState>(() => initialForm(initialRetirementAge));
   const [result, setResult] = useState<QuickPlanResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  /**
+   * A rejection the model attributed to one input. Shown under that input
+   * rather than in the banner: "Annual spending must be between 1,000 and
+   * 10,000,000" is only actionable next to the box it is about, and six boxes
+   * up the page is far enough to read as "the calculator is broken".
+   */
+  const [fieldError, setFieldError] = useState<{ field: string; message: string } | null>(null);
   const [isRunning, setIsRunning] = useState(false);
   const allocations = useAllocations();
   const resultsRef = useRef<HTMLDivElement | null>(null);
+  const formRef = useRef<HTMLFormElement | null>(null);
   const startedRef = useRef(false);
   const fieldEditedRef = useRef(false);
-  const validationReportedRef = useRef(false);
   const requestInFlightRef = useRef(false);
+  const invalidFieldsRef = useRef<string[]>([]);
+  const invalidFlushRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => () => {
+    if (invalidFlushRef.current !== null) clearTimeout(invalidFlushRef.current);
+  }, []);
 
   function trackStarted() {
     if (startedRef.current) return;
     startedRef.current = true;
     pushRetirementInteraction('retirement_calculator_started');
   }
+
+  /**
+   * Name the field that blocked a submission.
+   *
+   * The browser fires one `invalid` event per failing control, and it fires
+   * them all inside the task that handled the submit. A timer callback cannot
+   * run until that task is over, so flushing on one collapses the burst into a
+   * single event: the field the browser focused, and how many were failing
+   * behind it. Reporting only that the form was invalid — which is all this
+   * page used to do — leaves the interesting half in the browser.
+   */
+  function recordInvalidField(field: string) {
+    invalidFieldsRef.current.push(field);
+    if (invalidFlushRef.current !== null) return;
+    invalidFlushRef.current = setTimeout(() => {
+      invalidFlushRef.current = null;
+      const fields = invalidFieldsRef.current;
+      invalidFieldsRef.current = [];
+      pushRetirementInteraction('retirement_validation_error', {
+        errorField: fields[0],
+        invalidFieldCount: fields.length,
+      });
+    }, 0);
+  }
+
+  const errorFor = (field: string): string | undefined =>
+    fieldError?.field === field ? fieldError.message : undefined;
 
   const setField = (field: keyof FormState) => (value: string) => {
     // Count actual user changes, not prefills, focus, validation, or submission.
@@ -289,6 +345,8 @@ export function RetirementQuickPlan({
       fieldEditedRef.current = true;
       pushRetirementInteraction('retirement_calculator_field_edited');
     }
+    // The model's verdict was about the old value; editing retires it.
+    setFieldError((current) => (current?.field === field ? null : current));
     setForm((current) => ({ ...current, [field]: value }));
   };
 
@@ -296,10 +354,10 @@ export function RetirementQuickPlan({
     event.preventDefault();
     if (requestInFlightRef.current) return;
     requestInFlightRef.current = true;
-    validationReportedRef.current = false;
     trackStarted();
     pushRetirementInteraction('retirement_model_requested');
     setError(null);
+    setFieldError(null);
     setIsRunning(true);
 
     try {
@@ -320,8 +378,23 @@ export function RetirementQuickPlan({
 
       const payload = await response.json();
       if (!response.ok) {
-        pushRetirementInteraction('retirement_api_error');
-        setError(payload?.error || "Could not run this plan. Please check the numbers and try again.");
+        // The endpoint returns the field it rejected on a 400. It was being
+        // thrown away here, which is why neither the visitor nor GA4 could see
+        // which of the six numbers the model would not accept.
+        pushRetirementInteraction('retirement_api_error', {
+          errorField: payload?.field,
+          errorStatus: response.status,
+        });
+        const message = payload?.error || "Could not run this plan. Please check the numbers and try again.";
+        const field = typeof payload?.field === 'string' ? payload.field : null;
+        if (field && FORM_FIELD_IDS.has(field)) {
+          setFieldError({ field, message });
+          const input = formRef.current?.querySelector<HTMLElement>(`#${CSS.escape(field)}`);
+          input?.focus();
+          input?.scrollIntoView({ behavior: "smooth", block: "center" });
+        } else {
+          setError(message);
+        }
         return;
       }
 
@@ -355,15 +428,13 @@ export function RetirementQuickPlan({
       </section>
 
       <section className="shell qp-form-section">
-        <form className="qp-form" onSubmit={handleSubmit}
-          onChange={() => { trackStarted(); validationReportedRef.current = false; }}
-          onInvalid={() => {
+        <form className="qp-form" ref={formRef} onSubmit={handleSubmit}
+          onChange={() => trackStarted()}
+          onInvalid={(event) => {
             trackStarted();
-            // The browser can emit one invalid event for every empty field.
-            if (!validationReportedRef.current) {
-              validationReportedRef.current = true;
-              pushRetirementInteraction('retirement_validation_error');
-            }
+            // `invalid` does not bubble natively, but React re-dispatches it up
+            // the tree from the control it fired on, so the target is the field.
+            recordInvalidField((event.target as HTMLElement).id);
           }}>
           <div className="qp-form-head">
             <p className="section-kicker">SIX NUMBERS</p>
@@ -378,6 +449,7 @@ export function RetirementQuickPlan({
               onChange={setField("currentAge")}
               placeholder="52"
               suffix="years"
+              error={errorFor("currentAge")}
             />
             <NumberField
               id="retirementAge"
@@ -386,6 +458,7 @@ export function RetirementQuickPlan({
               onChange={setField("retirementAge")}
               placeholder="60"
               suffix="years"
+              error={errorFor("retirementAge")}
             />
             <MoneyField
               id="investableAssets"
@@ -394,6 +467,7 @@ export function RetirementQuickPlan({
               value={form.investableAssets}
               onChange={setField("investableAssets")}
               placeholder="1,200,000"
+              error={errorFor("investableAssets")}
             />
             <MoneyField
               id="annualSpending"
@@ -402,16 +476,23 @@ export function RetirementQuickPlan({
               value={form.annualSpending}
               onChange={setField("annualSpending")}
               placeholder="95,000"
+              error={errorFor("annualSpending")}
             />
+            {/* Optional, because the request already sends 0 for a blank one and
+                the model accepts 0 — `required` was blocking the submit before
+                that default could ever apply, on the one field an already
+                retired visitor has nothing to put in. */}
             <MoneyField
               id="annualContributions"
               label="Annual contributions until then"
-              hint="What you add each year between now and retiring."
+              hint="What you add each year between now and retiring. Leave blank if nothing."
               value={form.annualContributions}
               onChange={setField("annualContributions")}
               placeholder="35,000"
+              error={errorFor("annualContributions")}
+              required={false}
             />
-            <div className="qp-field qp-field-split">
+            <div className={`qp-field qp-field-split${errorFor("socialSecurityAnnual") ? " has-error" : ""}`}>
               <label htmlFor="socialSecurityAnnual">Social Security estimate</label>
               <div className="qp-split-inputs">
                 <div className="qp-input-wrap">
@@ -420,7 +501,10 @@ export function RetirementQuickPlan({
                     id="socialSecurityAnnual"
                     inputMode="numeric"
                     autoComplete="off"
-                    required
+                    aria-invalid={errorFor("socialSecurityAnnual") ? true : undefined}
+                    aria-describedby={
+                      errorFor("socialSecurityAnnual") ? "socialSecurityAnnual-error" : undefined
+                    }
                     value={form.socialSecurityAnnual}
                     placeholder="36,000"
                     onChange={(event) => setField("socialSecurityAnnual")(withCommas(event.target.value))}
@@ -440,8 +524,14 @@ export function RetirementQuickPlan({
                   </select>
                 </div>
               </div>
+              {errorFor("socialSecurityAnnual") && (
+                <p className="qp-field-error" id="socialSecurityAnnual-error" role="alert">
+                  {errorFor("socialSecurityAnnual")}
+                </p>
+              )}
               <p className="qp-hint">
-                Your annual benefit from ssa.gov, and the age you plan to claim it.
+                Your annual benefit from ssa.gov, and the age you plan to claim it. Leave blank if
+                you are not counting on it.
               </p>
             </div>
           </div>
@@ -530,7 +620,7 @@ export function RetirementQuickPlan({
 }
 
 function NumberField({
-  id, label, value, onChange, placeholder, suffix, hint,
+  id, label, value, onChange, placeholder, suffix, hint, error, required = true,
 }: {
   id: string;
   label: string;
@@ -539,29 +629,35 @@ function NumberField({
   placeholder: string;
   suffix?: string;
   hint?: string;
+  /** The model's reason for rejecting this input, if it rejected this one. */
+  error?: string;
+  required?: boolean;
 }) {
   return (
-    <div className="qp-field">
+    <div className={`qp-field${error ? " has-error" : ""}`}>
       <label htmlFor={id}>{label}</label>
       <div className="qp-input-wrap">
         <input
           id={id}
           inputMode="numeric"
           autoComplete="off"
-          required
+          required={required}
+          aria-invalid={error ? true : undefined}
+          aria-describedby={error ? `${id}-error` : undefined}
           value={value}
           placeholder={placeholder}
           onChange={(event) => onChange(digitsOnly(event.target.value))}
         />
         {suffix && <span className="qp-suffix">{suffix}</span>}
       </div>
+      {error && <p className="qp-field-error" id={`${id}-error`} role="alert">{error}</p>}
       {hint && <p className="qp-hint">{hint}</p>}
     </div>
   );
 }
 
 function MoneyField({
-  id, label, value, onChange, placeholder, hint,
+  id, label, value, onChange, placeholder, hint, error, required = true,
 }: {
   id: string;
   label: string;
@@ -569,9 +665,11 @@ function MoneyField({
   onChange: (value: string) => void;
   placeholder: string;
   hint?: string;
+  error?: string;
+  required?: boolean;
 }) {
   return (
-    <div className="qp-field">
+    <div className={`qp-field${error ? " has-error" : ""}`}>
       <label htmlFor={id}>{label}</label>
       <div className="qp-input-wrap">
         <span className="qp-prefix">$</span>
@@ -579,12 +677,15 @@ function MoneyField({
           id={id}
           inputMode="numeric"
           autoComplete="off"
-          required
+          required={required}
+          aria-invalid={error ? true : undefined}
+          aria-describedby={error ? `${id}-error` : undefined}
           value={value}
           placeholder={placeholder}
           onChange={(event) => onChange(withCommas(event.target.value))}
         />
       </div>
+      {error && <p className="qp-field-error" id={`${id}-error`} role="alert">{error}</p>}
       {hint && <p className="qp-hint">{hint}</p>}
     </div>
   );

@@ -156,6 +156,20 @@ describe('quick plan input validation', () => {
       .toThrow(QuickPlanValidationError);
   });
 
+  // The engine only projects forward, so an already-retired visitor entering
+  // both of their real ages is rejected. Stating the rule leaves them stuck;
+  // the message has to name the input that models their situation.
+  it('tells an already retired visitor how to model retiring now', () => {
+    try {
+      normalizeQuickPlanRequest({ ...BASE_REQUEST, currentAge: 70, retirementAge: 62 });
+      throw new Error('expected a validation error');
+    } catch (error) {
+      expect(error).toBeInstanceOf(QuickPlanValidationError);
+      expect((error as QuickPlanValidationError).field).toBe('retirementAge');
+      expect((error as QuickPlanValidationError).message).toContain('already retired');
+    }
+  });
+
   it('rejects a horizon that ends at or before retirement', () => {
     expect(() => normalizeQuickPlanRequest({ ...BASE_REQUEST, lifeExpectancy: 60 }))
       .toThrow(/must end after your retirement age/);

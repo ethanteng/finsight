@@ -54,6 +54,38 @@ it.each([
   expect(win.dataLayer).toEqual([{ event, source_page: '/retirement-calculator', content_type: 'retirement_calculator' }]);
 });
 
+it('names the field an error was about, without carrying what was typed in it', () => {
+  pushRetirementInteraction('retirement_validation_error', {
+    errorField: 'annualSpending',
+    invalidFieldCount: 3,
+  });
+  expect(win.dataLayer).toEqual([{
+    event: 'retirement_validation_error',
+    source_page: '/retirement-calculator',
+    content_type: 'retirement_calculator',
+    error_field: 'annualSpending',
+    invalid_field_count: 3,
+  }]);
+  // Contentsquare still receives the name only.
+  expect(win._uxa).toEqual([['trackPageEvent', 'retirement_validation_error']]);
+});
+
+it('separates a rejected number from a rate-limited request', () => {
+  pushRetirementInteraction('retirement_api_error', { errorField: 'currentAge', errorStatus: 400 });
+  pushRetirementInteraction('retirement_api_error', { errorStatus: 429 });
+  expect(win.dataLayer).toEqual([
+    expect.objectContaining({ error_field: 'currentAge', error_status: 400 }),
+    // No field: the limiter rejected the request, not one of the numbers.
+    expect.not.objectContaining({ error_field: expect.anything() }),
+  ]);
+  expect(win.dataLayer?.[1]).toMatchObject({ error_status: 429 });
+});
+
+it('files a field name it does not recognise under one bucket rather than passing it through', () => {
+  pushRetirementInteraction('retirement_api_error', { errorField: 'x-injected', errorStatus: 400 });
+  expect(win.dataLayer?.[0]).toMatchObject({ error_field: 'unrecognized' });
+});
+
 it('does not queue production analytics on dev or preview hosts', () => {
   hostAllowed.mockReturnValue(false);
   trackContentsquareEvent('sign_up');

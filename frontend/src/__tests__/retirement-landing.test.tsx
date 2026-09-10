@@ -74,7 +74,10 @@ describe('retirement landing page', () => {
     jest.clearAllMocks();
   });
 
-  it('counts one start and deduplicates per-field validation errors', () => {
+  // The burst of `invalid` events is now collapsed on a timer rather than on
+  // the first one, so the single event carries the whole submission: the field
+  // the browser focused, and the count behind it.
+  it('counts one start and deduplicates per-field validation errors', async () => {
     const { container } = render(<RetirementQuickPlan headline="When can I retire?" initialRetirementAge={null} />);
     fireEvent.change(screen.getByLabelText('Current age'), { target: { value: '50' } });
     fireEvent.change(screen.getByLabelText('Current age'), { target: { value: '51' } });
@@ -82,7 +85,9 @@ describe('retirement landing page', () => {
     fireEvent.invalid(screen.getByLabelText('Investment assets today'));
     expect(trackContentsquareEvent).toHaveBeenNthCalledWith(1, 'retirement_calculator_field_edited');
     expect(trackContentsquareEvent).toHaveBeenNthCalledWith(2, 'retirement_calculator_started');
-    expect(trackContentsquareEvent).toHaveBeenNthCalledWith(3, 'retirement_validation_error');
+    await waitFor(() => {
+      expect(trackContentsquareEvent).toHaveBeenNthCalledWith(3, 'retirement_validation_error');
+    });
     expect(trackContentsquareEvent).toHaveBeenCalledTimes(3);
     expect(container.querySelector('.qp-results')).toBeNull();
   });

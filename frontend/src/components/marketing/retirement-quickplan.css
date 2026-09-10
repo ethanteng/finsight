@@ -240,6 +240,29 @@
   font-size: 12px;
 }
 
+/*
+ * A rejection the model attributed to one input, shown under that input. The
+ * banner below the form still carries everything the model could not blame on
+ * a field -- a 500, the rate limiter, an unreachable API.
+ */
+.quickplan-page .qp-field.has-error .qp-input-wrap {
+  border-color: #b4352b;
+  background: #fdf7f6;
+}
+
+.quickplan-page .qp-field.has-error .qp-input-wrap:focus-within {
+  border-color: #b4352b;
+  box-shadow: 0 0 0 3px rgba(180, 53, 43, 0.15);
+}
+
+.quickplan-page .qp-field-error {
+  margin: 7px 0 0;
+  color: #7d271f;
+  font-size: 12px;
+  line-height: 1.5;
+  font-weight: 500;
+}
+
 .quickplan-page .qp-error {
   margin: 22px 0 0;
   padding: 12px 15px;

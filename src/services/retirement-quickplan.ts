@@ -235,9 +235,13 @@ export function normalizeQuickPlanRequest(raw: unknown): RetirementQuickPlanResu
   const currentAge = requireNumber('currentAge', body.currentAge);
   const retirementAge = requireNumber('retirementAge', body.retirementAge);
   if (retirementAge < currentAge) {
+    // Someone already retired is a large share of the traffic on a page
+    // titled "can I retire", and their honest answer to both questions is
+    // rejected here. The engine only projects forward, so the message has to
+    // name the input that models their situation rather than state the rule.
     throw new QuickPlanValidationError(
       'retirementAge',
-      'Retirement age cannot be earlier than your current age.'
+      'Retirement age cannot be earlier than your current age. If you have already retired, enter your current age here to model retiring now.'
     );
   }
 

@@ -24,14 +24,66 @@ export type RetirementInteractionEvent =
   | 'retirement_api_error'
   | 'retirement_request_error';
 
-/** One event per destination; no financial inputs. GTM forwards these to GA4. */
-export function pushRetirementInteraction(event: RetirementInteractionEvent): void {
+/**
+ * Every input the calculator can blame an error on, including the two the form
+ * does not render (`lifeExpectancy` is derived server-side, `body` means the
+ * request was not a plan at all). An allowlist rather than a passthrough: the
+ * field name on an API error arrives in a server response, and analytics
+ * dimensions should not be open to whatever a response happens to contain.
+ */
+export const RETIREMENT_ERROR_FIELDS = [
+  'currentAge',
+  'retirementAge',
+  'investableAssets',
+  'annualSpending',
+  'annualContributions',
+  'socialSecurityAnnual',
+  'socialSecurityStartAge',
+  'allocation',
+  'lifeExpectancy',
+  'body',
+] as const;
+export type RetirementErrorField = (typeof RETIREMENT_ERROR_FIELDS)[number];
+
+/** Anything outside the allowlist is reported under one bucket, never dropped. */
+function normalizeRetirementErrorField(field: unknown): string {
+  return (RETIREMENT_ERROR_FIELDS as readonly unknown[]).includes(field)
+    ? field as RetirementErrorField
+    : 'unrecognized';
+}
+
+export interface RetirementInteractionDetail {
+  /** Which input the error was about. Omitted when the error names none. */
+  errorField?: unknown;
+  /** How many inputs failed together, so a one-field stumble reads differently from a blank form. */
+  invalidFieldCount?: number;
+  /** HTTP status, so a 429 from the rate limiter is not filed as a bad number. */
+  errorStatus?: number;
+}
+
+/**
+ * One event per destination; no financial inputs — only which field was at
+ * fault, never what was typed into it. GTM forwards these to GA4, where
+ * `error_field` needs registering as a custom dimension for the breakdown to
+ * appear in reports.
+ */
+export function pushRetirementInteraction(
+  event: RetirementInteractionEvent,
+  detail: RetirementInteractionDetail = {},
+): void {
   if (typeof window === 'undefined') return;
   trackContentsquareEvent(event);
   pushToDataLayer({
     event,
     source_page: window.location.pathname,
     content_type: 'retirement_calculator',
+    ...(detail.errorField === undefined
+      ? {}
+      : { error_field: normalizeRetirementErrorField(detail.errorField) }),
+    ...(detail.invalidFieldCount === undefined
+      ? {}
+      : { invalid_field_count: detail.invalidFieldCount }),
+    ...(detail.errorStatus === undefined ? {} : { error_status: detail.errorStatus }),
   });
 }
 
