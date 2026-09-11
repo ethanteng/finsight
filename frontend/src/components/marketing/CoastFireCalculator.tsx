@@ -10,7 +10,7 @@
  * split the ranking for the same query.
  */
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import {
   calculateCoastFire,
@@ -198,8 +198,13 @@ export function CoastFireCalculator({ children }: { children?: ReactNode }) {
    * runs would drop every visitor who accepts the defaults and clicks through,
    * because the scorecard counts a plan CTA only when a result is timestamped
    * ahead of it in the same session.
+   *
+   * useLayoutEffect (not useEffect) so the result timestamp is recorded before
+   * the browser paints and a fast click on the already-visible plan CTA cannot
+   * beat it. With only first-event timestamps, a CTA that lands first can never
+   * satisfy the scorecard's result-then-CTA ordering check.
    */
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (defaultResultReported.current) return;
     defaultResultReported.current = true;
     const initial = calculateCoastFire(DEFAULT_COAST_FIRE_INPUTS);
