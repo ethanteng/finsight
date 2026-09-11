@@ -413,31 +413,23 @@ function toSession(row: Record<string, string>): AnalyticsSession {
 export async function loadGa4Sessions(filters: MarketingFilters): Promise<Ga4LoadResult> {
   const credentials = parseCredentials();
   const coverage = parseFirstFullTrackingDate(process.env.GA4_FIRST_FULL_TRACKING_DATE);
+  const coverageDate = coverage.error ? null : coverage.date;
   const lagDays = reportingLagDays();
   const base = {
     sessions: [] as AnalyticsSession[],
     reportEnd: null,
-    firstFullTrackingDate: coverage.date,
+    firstFullTrackingDate: coverageDate,
     reportingLagDays: lagDays,
     truncated: false,
   };
-  if (coverage.error) {
-    return { ...base, state: 'needs_configuration', detail: coverage.error };
-  }
   if (!credentials) {
     return { ...base, state: 'needs_configuration', detail: 'Add a read-only BigQuery service account to the backend environment.' };
-  }
-  if (!coverage.date) {
-    return { ...base, state: 'collecting', detail: 'The export is connected, but the first complete verified tracking date has not been set.' };
   }
   const projectId = process.env.GA4_BIGQUERY_PROJECT_ID?.trim() || credentials.project_id;
   if (!projectId) {
     return { ...base, state: 'needs_configuration', detail: 'Set the BigQuery project ID in the backend environment or service-account JSON.' };
   }
   const dates = reportDates(filters.days);
-  if (dates.end < coverage.date) {
-    return { ...base, state: 'collecting', reportEnd: dates.end, detail: 'The settled reporting window ends before the first complete day of the new funnel tracking.' };
-  }
   const datasetId = process.env.GA4_BIGQUERY_DATASET_ID?.trim() || 'analytics_519498279';
   const location = process.env.GA4_BIGQUERY_LOCATION?.trim() || 'US';
   try {
@@ -447,10 +439,19 @@ export async function loadGa4Sessions(filters: MarketingFilters): Promise<Ga4Loa
       state: 'live',
       sessions: result.rows.map(toSession),
       reportEnd: dates.end,
-      firstFullTrackingDate: coverage.date,
+      firstFullTrackingDate: coverageDate,
       reportingLagDays: lagDays,
       truncated: result.truncated,
-      detail: `GA4 daily export through ${dates.end}; ${lagDays}-day settling lag applied.`,
+      detail: [
+        `GA4 daily export through ${dates.end}; ${lagDays}-day settling lag applied.`,
+        coverage.error
+          ? `Session and journey metrics are available, but strict trial attribution is unavailable: ${coverage.error}`
+          : !coverageDate
+            ? 'Session and journey metrics are available, but strict trial attribution remains unavailable until GA4_FIRST_FULL_TRACKING_DATE is set.'
+            : dates.end < coverageDate
+              ? `Session and journey metrics are available; strict trial attribution begins once the settled window includes ${coverageDate}.`
+              : '',
+      ].filter(Boolean).join(' '),
     };
   } catch (error) {
     return {

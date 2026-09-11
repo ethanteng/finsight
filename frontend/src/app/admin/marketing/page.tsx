@@ -60,8 +60,17 @@ interface Report {
     createdAccountsWithConversation: number | null;
     createdAccountsCurrentlyPaid: number | null;
   };
+  retirementCalculatorHealth: {
+    state: 'live' | 'error';
+    windowDays: number;
+    submissions: number | null;
+    answered: number | null;
+    rejected: number | null;
+    answerRate: number | null;
+    note: string;
+  };
   beachhead: {
-    state: 'prelaunch' | 'collecting' | 'measuring';
+    state: 'prelaunch' | 'collecting' | 'measuring' | 'needs_configuration' | 'error';
     cohortLabel: string;
     cohortDefinition: string;
     coastFireJourney: JourneyStage[];
@@ -86,6 +95,9 @@ const count = (value: number | null) => value === null
 const percent = (value: number | null) => value === null
   ? '—'
   : `${(value * 100).toFixed(value < 0.1 ? 1 : 0)}%`;
+const precisePercent = (value: number | null) => value === null
+  ? '—'
+  : `${(value * 100).toFixed(1)}%`;
 const shortDate = (value: string) => new Date(`${value}T12:00:00`).toLocaleDateString('en-US', {
   month: 'short',
   day: 'numeric',
@@ -107,12 +119,22 @@ function rateChange(current: number | null, previous: number | null): string | n
 }
 
 function StatePill({ state }: { state: Report['beachhead']['state'] }) {
-  const copy = state === 'measuring' ? 'Measuring' : state === 'prelaunch' ? 'Pre-launch baseline' : 'Data collecting';
+  const copy = state === 'measuring'
+    ? 'Measuring'
+    : state === 'prelaunch'
+      ? 'Pre-launch baseline'
+      : state === 'needs_configuration'
+        ? 'Needs configuration'
+        : state === 'error'
+          ? 'Data source error'
+          : 'Data collecting';
   const style = state === 'measuring'
     ? 'bg-[#d8ff71] text-[#102319]'
     : state === 'prelaunch'
       ? 'bg-[#f6d98f] text-[#5e3d06]'
-      : 'bg-white/12 text-white';
+      : state === 'error'
+        ? 'bg-[#f8e8e3] text-[#8b3027]'
+        : 'bg-[#f4ead0] text-[#76510f]';
   return <span className={`inline-flex rounded-full px-3 py-1.5 text-[10px] font-extrabold uppercase tracking-[.1em] ${style}`}>{copy}</span>;
 }
 
@@ -219,6 +241,15 @@ export default function MarketingDashboardPage() {
 
   useEffect(() => { void load(); }, [load]);
 
+  const ga4Diagnostic = report?.diagnostics.find(source => source.id === 'ga4');
+  const journeyUnavailableLabel = report?.beachhead.state === 'prelaunch'
+    ? 'Not launched'
+    : report?.beachhead.state === 'needs_configuration'
+      ? 'Needs configuration'
+      : report?.beachhead.state === 'error'
+        ? 'Source error'
+        : 'Collecting';
+
   return <>
     <PageMeta title="Coast FIRE GTM scorecard | Ask Linc" description="A focused scorecard for testing Ask Linc's Coast FIRE beachhead." />
     <div className="authenticated-site min-h-screen bg-[#f2f1e8] text-[#102319]">
@@ -269,7 +300,11 @@ export default function MarketingDashboardPage() {
               <strong>The experiment is not live yet.</strong> The Coast FIRE experience is still marked prelaunch in code (<code>COAST_FIRE_EXPERIMENT.live</code>). The current <code>/retirement-calculator</code> baseline remains the comparison surface; these blanks are intentional, not zero conversions.
             </div>}
 
-            <Journey stages={report.beachhead.coastFireJourney} compare={filters.compare} unavailableLabel={report.beachhead.state === 'prelaunch' ? 'Not launched' : 'Collecting'} />
+            {(report.beachhead.state === 'needs_configuration' || report.beachhead.state === 'error') && <div className="mt-6 rounded-2xl border border-[#b84a3d]/25 bg-[#f8e8e3] p-4 text-sm leading-6 text-[#7d3028]">
+              <AlertTriangle className="mr-2 inline" size={16} /><strong>{report.beachhead.state === 'error' ? 'GA4 reporting failed.' : 'GA4 reporting needs configuration.'}</strong>{' '}{ga4Diagnostic?.detail || 'Open the data-source diagnostics below for details.'}
+            </div>}
+
+            <Journey stages={report.beachhead.coastFireJourney} compare={filters.compare} unavailableLabel={journeyUnavailableLabel} />
           </section>
 
           <section className="mt-6 rounded-[24px] border border-[#102319]/10 bg-[#fffdf5] p-5 shadow-[0_18px_45px_rgba(16,35,25,.05)] sm:p-7">
@@ -284,7 +319,24 @@ export default function MarketingDashboardPage() {
               </div>
               <Link href="/admin/retirement-calculator" className="inline-flex items-center gap-2 rounded-full border border-[#102319]/10 bg-[#f8f7ef] px-3 py-2 text-xs font-bold text-[#397052] hover:border-[#397052]/35">Calculator health <ExternalLink size={12} /></Link>
             </div>
-            <Journey stages={report.beachhead.currentCalculatorBaseline} compare={filters.compare} unavailableLabel="Collecting" />
+            {report.retirementCalculatorHealth && <div className="mt-6 rounded-[18px] border border-[#102319]/10 bg-[#edf1e9] p-4 sm:p-5">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-[10px] font-extrabold uppercase tracking-[.14em] text-[#49725a]">First-party product health · last {report.retirementCalculatorHealth.windowDays} days</p>
+                  <p className="mt-1 text-xs leading-5 text-[#66736b]">{report.retirementCalculatorHealth.note}</p>
+                </div>
+                <SourcePill state={report.retirementCalculatorHealth.state} />
+              </div>
+              <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+                {[
+                  ['Submissions', count(report.retirementCalculatorHealth.submissions)],
+                  ['Answered', count(report.retirementCalculatorHealth.answered)],
+                  ['Answer rate', precisePercent(report.retirementCalculatorHealth.answerRate)],
+                  ['Rejected', count(report.retirementCalculatorHealth.rejected)],
+                ].map(([label, value]) => <div key={label} className="rounded-xl bg-[#fffdf5] px-4 py-3"><div className="text-2xl font-semibold tracking-[-.04em] tabular-nums">{value}</div><div className="mt-1 text-[11px] font-bold text-[#66736b]">{label}</div></div>)}
+              </div>
+            </div>}
+            <Journey stages={report.beachhead.currentCalculatorBaseline} compare={filters.compare} unavailableLabel={journeyUnavailableLabel} />
           </section>
 
           <section className="mt-10">

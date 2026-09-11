@@ -224,7 +224,7 @@ export interface BeachheadStageMetric {
 }
 
 export interface BeachheadScorecard {
-  state: 'prelaunch' | 'collecting' | 'measuring';
+  state: 'prelaunch' | 'collecting' | 'measuring' | 'needs_configuration' | 'error';
   cohortLabel: string;
   cohortDefinition: string;
   coastFireJourney: BeachheadStageMetric[];
@@ -235,6 +235,16 @@ export interface BeachheadScorecard {
     paidRate: MetricValue;
   };
   evidenceGaps: string[];
+}
+
+export interface RetirementCalculatorHealthSummary {
+  state: 'live' | 'error';
+  windowDays: number;
+  submissions: number | null;
+  answered: number | null;
+  rejected: number | null;
+  answerRate: number | null;
+  note: string;
 }
 
 export interface MarketingDashboardReport {
@@ -258,6 +268,12 @@ export interface MarketingDashboardReport {
     cac: MetricValue;
   };
   firstParty: FirstPartySummary;
+  /**
+   * Immediate first-party calculator-run health. These records deliberately
+   * contain no session or acquisition identifiers, so they supplement rather
+   * than populate the GA4 journey below.
+   */
+  retirementCalculatorHealth: RetirementCalculatorHealthSummary;
   beachhead: BeachheadScorecard;
   funnel: FunnelStepMetric[];
   funnelErrors: Array<{ event: string; sessions: number | null; events: number | null; rate: number | null }>;

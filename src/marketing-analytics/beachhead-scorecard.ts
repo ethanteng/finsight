@@ -176,7 +176,7 @@ function metric(
 export function buildBeachheadScorecard(args: {
   current: AnalyticsSession[];
   previous: AnalyticsSession[];
-  ga4Live: boolean;
+  ga4State: 'live' | 'collecting' | 'needs_configuration' | 'error';
   funnelCoverageComplete: boolean;
   previousFunnelCoverageComplete: boolean;
   firstParty: FirstPartySummary;
@@ -185,7 +185,7 @@ export function buildBeachheadScorecard(args: {
   const {
     current,
     previous,
-    ga4Live,
+    ga4State,
     funnelCoverageComplete,
     previousFunnelCoverageComplete,
     firstParty,
@@ -193,9 +193,10 @@ export function buildBeachheadScorecard(args: {
   } = args;
   const currentCoast = current.filter(isCoastFireSession);
   const previousCoast = previous.filter(isCoastFireSession);
+  const ga4Live = ga4State === 'live';
   const state: BeachheadScorecard['state'] = !experimentLive
     ? 'prelaunch'
-    : ga4Live ? 'measuring' : 'collecting';
+    : ga4Live ? 'measuring' : ga4State;
   const currentBaseline = current.filter(isCurrentCalculatorSession);
   const previousBaseline = previous.filter(isCurrentCalculatorSession);
   const accounts = firstParty.accountsCreated;

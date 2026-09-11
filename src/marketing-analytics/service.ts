@@ -17,6 +17,7 @@ import {
   type MarketingDashboardReport,
   type MarketingFilters,
   type MetricValue,
+  type RetirementCalculatorHealthSummary,
 } from './types';
 import {
   SNAPSHOT_SEO_KEYWORDS,
@@ -224,6 +225,30 @@ async function firstPartySummary(period: ReturnType<typeof requestedPeriod>): Pr
   };
 }
 
+async function retirementCalculatorHealth(days: number): Promise<RetirementCalculatorHealthSummary> {
+  const prisma = getPrismaClient();
+  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+  const outcomes = await prisma.retirementQuickPlanRun.groupBy({
+    by: ['outcome'],
+    where: { createdAt: { gte: since } },
+    _count: { _all: true },
+  });
+  const countByOutcome = new Map(outcomes.map(row => [row.outcome, row._count._all]));
+  const submissions = outcomes.reduce((sum, row) => sum + row._count._all, 0);
+  const answered = (countByOutcome.get('plan') || 0) + (countByOutcome.get('rates') || 0);
+  const rejected = countByOutcome.get('rejected') || 0;
+
+  return {
+    state: 'live',
+    windowDays: days,
+    submissions,
+    answered,
+    rejected,
+    answerRate: ratio(answered, submissions),
+    note: 'Live first-party calculator-run records. These totals measure product reliability, not GA4 sessions or marketing attribution.',
+  };
+}
+
 function emptyFunnel(): MarketingDashboardReport['funnel'] {
   const labels: Record<FunnelEventName, string> = {
     start_free_click: 'Start free clicked', trial_signup_viewed: 'Signup viewed',
@@ -294,6 +319,21 @@ export async function getMarketingDashboard(filters: MarketingFilters): Promise<
       note: 'The first-party account store could not be read. These values are unavailable, not zero.',
     };
   }
+  let calculatorHealth: RetirementCalculatorHealthSummary;
+  try {
+    calculatorHealth = await retirementCalculatorHealth(filters.days);
+  } catch (error) {
+    console.error('Marketing dashboard could not read retirement calculator health:', error);
+    calculatorHealth = {
+      state: 'error',
+      windowDays: filters.days,
+      submissions: null,
+      answered: null,
+      rejected: null,
+      answerRate: null,
+      note: 'The first-party calculator-run store could not be read. These values are unavailable, not zero.',
+    };
+  }
   const trackingStartedAt = ga4.firstFullTrackingDate;
   const funnelCoverageComplete = Boolean(trackingStartedAt && period.start >= trackingStartedAt);
   const funnelCoverage = funnelCoverageComplete ? 'complete' : 'partial';
@@ -307,7 +347,7 @@ export async function getMarketingDashboard(filters: MarketingFilters): Promise<
   const beachhead = buildBeachheadScorecard({
     current,
     previous,
-    ga4Live: hasLiveGa4,
+    ga4State: ga4.state,
     funnelCoverageComplete,
     previousFunnelCoverageComplete: previousFunnelCovered,
     firstParty,
@@ -432,6 +472,7 @@ export async function getMarketingDashboard(filters: MarketingFilters): Promise<
       cac: metric(null, null, 'currency', 'Unavailable', 'Requires paid spend plus an agreed acquisition boundary.'),
     },
     firstParty,
+    retirementCalculatorHealth: calculatorHealth,
     beachhead,
     funnel,
     funnelErrors: ['trial_signup_validation_error', 'trial_signup_registration_error', 'trial_verify_error', 'trial_login_error'].map(event => ({
@@ -466,7 +507,7 @@ export async function getMarketingDashboard(filters: MarketingFilters): Promise<
       }] : []),
     ],
     diagnostics: [
-      { id: 'gtm', name: 'Google Tag Manager', state: 'live', freshness: '2026-09-09', detail: 'Container GTM-PL362L36 v17 publishes the no-card funnel; v16 publishes calculator interactions.' },
+      { id: 'gtm', name: 'Google Tag Manager', state: 'live', freshness: '2026-09-11', detail: 'Container GTM-PL362L36 v19 publishes Coast FIRE calculator completion; v17 publishes the no-card funnel and v16 publishes retirement-calculator interactions.' },
       { id: 'ga4', name: 'GA4 + BigQuery', state: ga4.state, freshness: ga4.reportEnd, detail: `Property 519498279. ${ga4.detail}` },
       { id: 'contentsquare', name: 'Contentsquare', state: 'verified_snapshot', freshness: VERIFIED_SNAPSHOT.capturedAt, detail: 'Ask Linc project 530048. Runtime API credentials are not present; frustration/error APIs are outside the current account entitlement.' },
       { id: 'ubersuggest', name: 'Ubersuggest', state: 'verified_snapshot', freshness: VERIFIED_SNAPSHOT.capturedAt, detail: 'asklinc.com project verified through the connected account. Query impressions/clicks require Search Console or GA4/Search Console export.' },

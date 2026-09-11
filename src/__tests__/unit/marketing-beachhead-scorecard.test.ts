@@ -97,7 +97,7 @@ describe('Coast FIRE beachhead scorecard', () => {
         session('visit-only'),
       ],
       previous: [],
-      ga4Live: true,
+      ga4State: 'live',
       funnelCoverageComplete: true,
       previousFunnelCoverageComplete: true,
       firstParty,
@@ -123,7 +123,7 @@ describe('Coast FIRE beachhead scorecard', () => {
     const report = buildBeachheadScorecard({
       current: [completedJourney('coast-complete', 'coast_fire_plan_cta_click', true)],
       previous: [],
-      ga4Live: true,
+      ga4State: 'live',
       funnelCoverageComplete: true,
       previousFunnelCoverageComplete: true,
       firstParty,
@@ -145,7 +145,7 @@ describe('Coast FIRE beachhead scorecard', () => {
         }),
       ],
       previous: [],
-      ga4Live: true,
+      ga4State: 'live',
       funnelCoverageComplete: true,
       previousFunnelCoverageComplete: true,
       firstParty,
@@ -181,7 +181,7 @@ describe('Coast FIRE beachhead scorecard', () => {
         coastOnRetirementEvent,
       ],
       previous: [],
-      ga4Live: true,
+      ga4State: 'live',
       funnelCoverageComplete: true,
       previousFunnelCoverageComplete: true,
       firstParty,
@@ -202,7 +202,7 @@ describe('Coast FIRE beachhead scorecard', () => {
     const report = buildBeachheadScorecard({
       current: [premature],
       previous: [],
-      ga4Live: true,
+      ga4State: 'live',
       funnelCoverageComplete: true,
       previousFunnelCoverageComplete: true,
       firstParty,
@@ -222,7 +222,7 @@ describe('Coast FIRE beachhead scorecard', () => {
     const report = buildBeachheadScorecard({
       current: [convertedEarlier],
       previous: [],
-      ga4Live: true,
+      ga4State: 'live',
       funnelCoverageComplete: true,
       previousFunnelCoverageComplete: true,
       firstParty,
@@ -235,12 +235,27 @@ describe('Coast FIRE beachhead scorecard', () => {
     const report = buildBeachheadScorecard({
       current: [completedJourney('complete', 'quickplan_cross_sell_click')],
       previous: [],
-      ga4Live: true,
+      ga4State: 'live',
       funnelCoverageComplete: false,
       previousFunnelCoverageComplete: false,
       firstParty,
     });
 
     expect(report.currentCalculatorBaseline[report.currentCalculatorBaseline.length - 1]?.value).toBeNull();
+  });
+
+  it('surfaces the actual GA4 failure state instead of calling every outage collecting', () => {
+    const report = buildBeachheadScorecard({
+      current: [],
+      previous: [],
+      ga4State: 'needs_configuration',
+      funnelCoverageComplete: false,
+      previousFunnelCoverageComplete: false,
+      firstParty,
+    });
+
+    expect(report.state).toBe('needs_configuration');
+    expect(report.coastFireJourney.every(stage => stage.value === null)).toBe(true);
+    expect(report.currentCalculatorBaseline.every(stage => stage.value === null)).toBe(true);
   });
 });

@@ -14,6 +14,10 @@ Generic engagement, device, SEO, acquisition, and detailed signup diagnostics
 remain available in the normalized backend report and source tools, but are not
 promoted on this decision page. Calculator input quality, model outcomes,
 rejections, and performance live at `/admin/retirement-calculator`.
+The scorecard also repeats its headline submission, answer, answer-rate, and
+rejection totals as a clearly labeled first-party product-health reference.
+Those rows are immediate but contain no GA4 session or campaign identifier, so
+they do not populate or substitute for the acquisition journey.
 
 ## Current state and launch contract
 
@@ -84,8 +88,9 @@ marketing attribution is persisted with the first-party user.
 
 ## Data sources
 
-- GTM container `GTM-PL362L36`, production version 17, forwards the strict
-  no-card funnel in `TRIAL_SIGNUP_FUNNEL_TRACKING.md`. Version 16 forwards the
+- GTM container `GTM-PL362L36`, production version 19, forwards
+  `coast_fire_calculated`. Version 17 forwards the strict no-card funnel in
+  `TRIAL_SIGNUP_FUNNEL_TRACKING.md`; version 16 forwards the retirement
   calculator events in `CALCULATOR_ABANDONMENT_TRACKING.md`.
 - GA4 property `519498279` (`G-0QBF34C7VK`) and its BigQuery export supply
   session acquisition, the journey-specific events, and the strict funnel.
@@ -94,7 +99,9 @@ marketing attribution is persisted with the first-party user.
 - Contentsquare and Ubersuggest remain visible in the collapsed diagnostics as
   verified snapshots. They do not drive the beachhead scorecard.
 
-Live GA4 requires these backend-only environment variables:
+Session reporting uses these backend-only environment variables. The service
+account and project/dataset settings connect the export;
+`GA4_FIRST_FULL_TRACKING_DATE` is required only for strict trial attribution:
 
 ```text
 GA4_BIGQUERY_SERVICE_ACCOUNT_JSON={...single-line service account JSON...}
@@ -111,7 +118,9 @@ complete signup event chain and GTM forwarding were live for the entire day.
 It is a fixed coverage boundary, not a launch date and not a value that moves.
 If tracking went live partway through September 9, use `2026-09-10` after that
 complete daily export has been inspected. Until then, leave it unset; the
-scorecard reports the trial-completion stage as unavailable instead of zero.
+scorecard still reports settled GA4 session, calculator-result, and plan-CTA
+metrics, but reports strict trial completion as unavailable instead of zero.
+The coverage date never blocks the underlying session query.
 
 The BigQuery service account needs only query-job and dataset-read permissions.
 Its JSON must never be exposed to the frontend or a `NEXT_PUBLIC_` variable.
@@ -129,8 +138,7 @@ Known gaps that affect the beachhead decision:
 - original campaign/cohort and a privacy-safe analytics join key are not stored
   on the user, so first-party connection, activation, and payment are not yet
   attributable to Coast FIRE;
-- the Coast FIRE page and treatment-specific CTA have not launched, so their
-  historical events cannot be backfilled;
+- Coast FIRE events from before GTM version 19 cannot be backfilled;
 - paid conversion matures after the 30-day trial, so the initial 4–6 week test
   needs cohort-age context; and
 - Search Console and Google Ads spend are not connected. They may improve
