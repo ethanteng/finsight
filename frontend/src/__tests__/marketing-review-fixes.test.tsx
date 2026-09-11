@@ -62,9 +62,9 @@ describe("marketing review fixes", () => {
       ".answer-hub-card > p",
       ".demo-answer-list li",
       ".footer-inner > div:first-child p",
-      ".cf-landing-lead",
-      ".cf-decision-grid p",
-      ".cf-form-heading > p:last-child",
+      ".coast-fire-page .cf-hero-sub",
+      ".coast-fire-page .cf-form-note",
+      ".coast-fire-page .cf-faq details > p",
     ];
 
     for (const selector of representativeBodyCopy) {
@@ -81,7 +81,7 @@ describe("marketing review fixes", () => {
     expect(signInLink).toHaveAttribute("href", "/login");
     expect(signInLink.closest(".nav-actions")).not.toBeNull();
     expect(signInLink.closest(".nav-links")).toBeNull();
-    expect(coastFireLink).toHaveAttribute("href", "/coast-fire");
+    expect(coastFireLink).toHaveAttribute("href", "/coast-fire-calculator");
     expect(coastFireLink.closest(".nav-links")).not.toBeNull();
     expect(compareLink).toHaveAttribute("href", "/vs");
     expect(compareLink.closest(".nav-links")).not.toBeNull();
@@ -100,7 +100,7 @@ describe("marketing review fixes", () => {
     const mobileMenu = screen.getByLabelText("Mobile navigation");
     expect(within(mobileMenu).getByRole("link", { name: "How It Works" })).toHaveAttribute("href", "/features");
     expect(within(mobileMenu).getByRole("link", { name: "What You Can Ask" })).toHaveAttribute("href", "/use-cases");
-    expect(within(mobileMenu).getByRole("link", { name: "Coast FIRE" })).toHaveAttribute("href", "/coast-fire");
+    expect(within(mobileMenu).getByRole("link", { name: "Coast FIRE" })).toHaveAttribute("href", "/coast-fire-calculator");
     expect(within(mobileMenu).getByRole("link", { name: "Compare" })).toHaveAttribute("href", "/vs");
     expect(within(mobileMenu).getByRole("link", { name: "Pricing" })).toHaveAttribute("href", "/pricing");
     expect(within(mobileMenu).queryByRole("link", { name: "About" })).not.toBeInTheDocument();

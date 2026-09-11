@@ -6,8 +6,15 @@ import { COAST_FIRE_FAQ } from "@/lib/coast-fire";
 import "@/components/marketing/coast-fire.css";
 
 const canonical = "https://asklinc.com/coast-fire-calculator";
+
+// Kept under ~155 characters: past that a search result truncates the sentence
+// mid-claim, and the claim is the reason to click.
 const description =
-  "Free Coast FIRE calculator. Find the retirement savings you need today, test return assumptions, and see whether you can stop contributing.";
+  "Free Coast FIRE calculator. Find what you need invested today to retire without adding another dollar, and see every assumption behind the answer.";
+
+// The longer version, for the schema description, which is not snippet-length.
+const applicationDescription =
+  "Enter seven numbers and get your Coast FIRE number in today's dollars, your retirement target, what your savings reach with no further contributions, and how much the answer moves when the return assumption does.";
 
 export const metadata: Metadata = {
   title: "Free Coast FIRE Calculator | Ask Linc",
@@ -18,6 +25,7 @@ export const metadata: Metadata = {
     "Coast FIRE by age",
     "Coast FIRE with Social Security",
     "financial independence calculator",
+    "when can I stop contributing to retirement",
   ],
   alternates: { canonical },
   openGraph: {
@@ -26,10 +34,32 @@ export const metadata: Metadata = {
     type: "website",
     url: canonical,
     siteName: "Ask Linc",
-    images: [{ url: "https://asklinc.com/og-image.jpg", width: 1200, height: 630, alt: "Ask Linc Coast FIRE calculator" }],
+    images: [
+      {
+        url: "https://asklinc.com/og-image.jpg",
+        width: 1200,
+        height: 630,
+        alt: "Ask Linc Coast FIRE calculator",
+      },
+    ],
   },
-  twitter: { card: "summary_large_image", title: "Have I Reached Coast FIRE?", description, images: ["https://asklinc.com/og-image.jpg"] },
-  robots: { index: true, follow: true },
+  twitter: {
+    card: "summary_large_image",
+    title: "Have I Reached Coast FIRE?",
+    description,
+    images: ["https://asklinc.com/og-image.jpg"],
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-video-preview": -1,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+    },
+  },
 };
 
 const applicationSchema = {
@@ -39,7 +69,7 @@ const applicationSchema = {
   applicationCategory: "FinanceApplication",
   operatingSystem: "Web",
   url: canonical,
-  description,
+  description: applicationDescription,
   isAccessibleForFree: true,
   provider: { "@type": "Organization", name: "Ask Linc", url: "https://asklinc.com" },
   offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
@@ -51,6 +81,9 @@ const applicationSchema = {
   ],
 };
 
+// Generated from the same array the page renders: Google drops FAQ rich results
+// when the marked-up answer is not the answer on the page, and a second copy of
+// the text is exactly how that drift happens.
 const faqSchema = {
   "@context": "https://schema.org",
   "@type": "FAQPage",
@@ -66,7 +99,7 @@ const breadcrumbSchema = {
   "@type": "BreadcrumbList",
   itemListElement: [
     { "@type": "ListItem", position: 1, name: "Ask Linc", item: "https://asklinc.com" },
-    { "@type": "ListItem", position: 2, name: "Coast FIRE", item: "https://asklinc.com/coast-fire" },
+    { "@type": "ListItem", position: 2, name: "Retirement", item: "https://asklinc.com/retirement-answers" },
     { "@type": "ListItem", position: 3, name: "Coast FIRE calculator", item: canonical },
   ],
 };
@@ -77,7 +110,9 @@ export default function CoastFireCalculatorPage() {
       <StructuredData data={applicationSchema} />
       <StructuredData data={faqSchema} />
       <StructuredData data={breadcrumbSchema} />
-      <CoastFireCalculator><CoastFireCalculatorSeoContent /></CoastFireCalculator>
+      <CoastFireCalculator>
+        <CoastFireCalculatorSeoContent />
+      </CoastFireCalculator>
     </>
   );
 }

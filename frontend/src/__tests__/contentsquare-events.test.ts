@@ -3,7 +3,6 @@ import { isAnalyticsHost } from '@/lib/analytics-host';
 import { INTERNAL_ANALYTICS_BROWSER_KEY } from '@/lib/internal-analytics';
 import {
   pushCoastFireCalculated,
-  pushCoastFireCalculatorClick,
   pushRetirementInteraction,
   pushRetirementModelRun,
   pushSignUp,
@@ -111,16 +110,11 @@ it('keeps intent, successful model results, and registration distinct', () => {
   expect(JSON.stringify(win._uxa)).not.toContain('62');
 });
 
-it('sends Coast FIRE funnel boundaries as fixed event names only', () => {
-  window.history.replaceState({}, '', '/coast-fire');
-  pushCoastFireCalculatorClick('coast_fire_hero');
+it('sends the Coast FIRE outcome as a fixed event name only', () => {
   window.history.replaceState({}, '', '/coast-fire-calculator');
   pushCoastFireCalculated('not_yet', 31);
 
-  expect(win._uxa).toEqual([
-    ['trackPageEvent', 'coast_fire_calculator_click'],
-    ['trackPageEvent', 'coast_fire_calculated'],
-  ]);
+  expect(win._uxa).toEqual([['trackPageEvent', 'coast_fire_calculated']]);
   expect(JSON.stringify(win._uxa)).not.toContain('31');
 });
 

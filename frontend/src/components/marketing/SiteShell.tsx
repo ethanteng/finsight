@@ -45,8 +45,8 @@ export function SiteFooter() {
           <Link href="/integrations">Accounts &amp; Data</Link>
           <Link href="/pricing">Pricing</Link>
           <Link href="/faq">FAQ</Link>
-          <Link href="/coast-fire">Coast FIRE</Link>
-          <Link href="/coast-fire-calculator">Coast FIRE Calculator</Link>
+          <Link href="/coast-fire-calculator">Coast FIRE</Link>
+          <Link href="/retirement-calculator">Retirement</Link>
         </div>
         <div className="footer-column">
           <b>COMPARE</b>

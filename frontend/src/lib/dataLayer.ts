@@ -97,11 +97,10 @@ function pushToDataLayer(payload: Record<string, unknown>): void {
 }
 
 function getContentType(pathname: string): string {
-  if (pathname === '/coast-fire') return 'coast_fire_landing';
-  if (pathname === '/coast-fire-calculator') return 'coast_fire_calculator';
   if (pathname === '/retirement-answers') return 'retirement_answers_hub';
-  // Reserved before the beachhead page launches so its traffic cannot be
-  // silently folded into the generic retirement baseline.
+  // Its own type so the beachhead page's traffic cannot be silently folded
+  // into the generic retirement baseline. Matched by prefix, which also keeps
+  // any later /coast-fire-* variant out of the generic bucket by default.
   if (pathname.startsWith('/coast-fire')) return 'coast_fire_calculator';
   // Its own type rather than the generic bucket: this is the page the header's
   // Retirement link and paid search both land on, and a CTA taken after running
@@ -109,19 +108,6 @@ function getContentType(pathname: string): string {
   if (pathname === '/retirement-calculator') return 'retirement_calculator';
   if (/^\/can-i-retire-(at|with)-/.test(pathname)) return 'retirement_answer';
   return 'marketing_page';
-}
-
-/** Track the landing-to-calculator handoff without including any financial values. */
-export function pushCoastFireCalculatorClick(ctaLocation: string): void {
-  if (typeof window === 'undefined') return;
-  trackContentsquareEvent('coast_fire_calculator_click');
-  pushToDataLayer({
-    event: 'coast_fire_calculator_click',
-    source_page: window.location.pathname,
-    cta_location: ctaLocation,
-    content_type: getContentType(window.location.pathname),
-    destination_page: '/coast-fire-calculator',
-  });
 }
 
 /** Record the calculator outcome as a funnel event, never the figures used to reach it. */

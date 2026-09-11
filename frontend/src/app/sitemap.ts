@@ -59,8 +59,7 @@ const STATIC_ROUTES: StaticRoute[] = [
   { path: '/prompts/geopolitical-retirement', changeFrequency: 'monthly', priority: 0.7 },
 
   // Standalone tools / high-intent landing pages
-  { path: '/coast-fire', changeFrequency: 'monthly', priority: 1.0 },
-  { path: '/coast-fire-calculator', changeFrequency: 'monthly', priority: 1.0 },
+  { path: '/coast-fire-calculator', changeFrequency: 'monthly', priority: 0.9 },
   { path: '/retirement-calculator', changeFrequency: 'monthly', priority: 0.9 },
 
   // Evergreen answer pages (top-level routes, separate from Ghost)

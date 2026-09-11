@@ -1,5 +1,15 @@
 "use client";
 
+/**
+ * The Coast FIRE decision page: seven numbers in, the simple formula's answer
+ * back, then the reason the simple formula is not the decision.
+ *
+ * Deliberately one page, mirroring /retirement-calculator. An earlier draft
+ * split the pitch onto /coast-fire and the tool onto /coast-fire-calculator,
+ * which put a click between the search term and the answer it promised and
+ * split the ranking for the same query.
+ */
+
 import { useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import {
@@ -23,6 +33,15 @@ const INITIAL_FORM: FormState = Object.fromEntries(
   Object.entries(DEFAULT_COAST_FIRE_INPUTS).map(([key, value]) => [key, String(value)]),
 ) as FormState;
 
+/** The decisions a Coast FIRE number raises but cannot answer. */
+const DECISIONS = [
+  "Can I stop maxing my 401(k)?",
+  "Could I take a $30K pay cut?",
+  "Could one of us stop working?",
+  "What if returns are worse than this?",
+  "Can I spend $20K more a year?",
+];
+
 function dollars(value: number): string {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
@@ -37,17 +56,21 @@ function percent(value: number): string {
 }
 
 function parseForm(form: FormState): CoastFireInputs {
-  const parsed = Object.fromEntries(
+  return Object.fromEntries(
     Object.entries(form).map(([key, value]) => [key, Number(value)]),
   ) as unknown as CoastFireInputs;
-  return parsed;
 }
 
+/**
+ * The handoff into signup. `investableAssets` is floored at the $1,000 the
+ * stored context validates against, so a visitor who models $0 saved still
+ * carries their ages and spending across instead of silently losing all of it.
+ */
 function signupContext(result: CoastFireResult) {
   return {
     currentAge: result.currentAge,
     retirementAge: result.retirementAge,
-    investableAssets: result.currentSavings,
+    investableAssets: Math.max(1_000, result.currentSavings),
     annualSpending: result.annualRetirementSpending,
     annualContributions: 0,
     socialSecurityAnnual: Math.min(result.annualRetirementIncome, 250_000),
@@ -73,16 +96,16 @@ function ResultPanel({ result }: { result: CoastFireResult }) {
       <h2>{result.hasReachedCoastFire ? "You’ve reached Coast FIRE." : "You’re still building your coast."}</h2>
       <p className="cf-result-lead">
         {result.portfolioSpendingNeed === 0
-          ? "The retirement income you entered covers your planned spending, so this simple formula does not require an investment target."
+          ? "The retirement income you entered covers your planned spending, so this formula asks nothing of your portfolio."
           : result.hasReachedCoastFire
-            ? `Your current savings are ${dollars(result.differenceToday)} above the amount this formula says you need today.`
+            ? `You are ${dollars(result.differenceToday)} above the amount this formula says you need invested today.`
             : `You are ${dollars(Math.abs(result.differenceToday))} short of your Coast FIRE number today.`}
       </p>
 
       <div className="cf-number-block">
         <span>Your Coast FIRE number</span>
         <strong>{dollars(result.coastFireNumber)}</strong>
-        <small>in today&apos;s dollars</small>
+        <small>in today’s dollars</small>
       </div>
 
       <div className="cf-progress-label">
@@ -109,7 +132,8 @@ function ResultPanel({ result }: { result: CoastFireResult }) {
         </div>
       </dl>
       <p className="cf-result-note">
-        Assumes {result.realReturnRate}% annual growth after inflation for {result.yearsToRetirement} years and a {result.withdrawalRate}% starting withdrawal rate.
+        Assumes {result.realReturnRate}% annual growth after inflation for {result.yearsToRetirement} years
+        and a {result.withdrawalRate}% starting withdrawal rate.
       </p>
     </aside>
   );
@@ -202,24 +226,26 @@ export function CoastFireCalculator({ children }: { children?: ReactNode }) {
   }
 
   return (
-    <main className="marketing-site coast-fire-page coast-fire-calculator-page">
+    <main className="marketing-site subpage coast-fire-page">
       <SiteHeader />
 
-      <section className="shell cf-calculator-intro">
+      <section className="shell cf-hero">
         <p className="eyebrow"><span className="pulse" aria-hidden="true" /> Free calculator · no account needed</p>
         <h1>Have I reached <em>Coast FIRE?</em></h1>
-        <p>
-          Find the amount you need invested today for retirement—if you never add another dollar.
-          Then see how much the answer moves when your assumptions do.
+        <p className="cf-hero-sub">
+          Find what you need invested today to reach retirement without adding another dollar.
+          Then see what that answer actually lets you change.
         </p>
       </section>
 
-      <section className="shell cf-calculator-shell" id="coast-calculator">
+      <section className="shell cf-calculator" id="coast-calculator">
         <form className="cf-form" onSubmit={handleSubmit}>
-          <div className="cf-form-heading">
-            <p className="section-kicker">YOUR NUMBERS</p>
-            <h2>Calculate your coast.</h2>
-            <p>Use today&apos;s dollars throughout. Retirement income should only include money available from the day you retire.</p>
+          <div className="cf-form-head">
+            <p className="section-kicker">SEVEN NUMBERS</p>
+            <h2>Your coast</h2>
+            <p className="cf-form-note">
+              Use today’s dollars throughout. Count only income that starts the day you retire.
+            </p>
           </div>
 
           <div className="cf-form-grid">
@@ -227,9 +253,9 @@ export function CoastFireCalculator({ children }: { children?: ReactNode }) {
             <CalculatorField id="retirementAge" label="Retirement age" value={form.retirementAge} onChange={setField("retirementAge")} suffix="years" min={30} max={95} />
             <CalculatorField id="currentSavings" label="Retirement savings today" value={form.currentSavings} onChange={setField("currentSavings")} prefix="$" min={0} max={100_000_000} />
             <CalculatorField id="annualRetirementSpending" label="Annual spending in retirement" value={form.annualRetirementSpending} onChange={setField("annualRetirementSpending")} prefix="$" min={1_000} max={10_000_000} hint="Whole household, after tax." />
-            <CalculatorField id="annualRetirementIncome" label="Annual income available at retirement" value={form.annualRetirementIncome} onChange={setField("annualRetirementIncome")} prefix="$" min={0} max={10_000_000} hint="Social Security, pension, or other reliable income available from your retirement date." />
+            <CalculatorField id="annualRetirementIncome" label="Annual income available at retirement" value={form.annualRetirementIncome} onChange={setField("annualRetirementIncome")} prefix="$" min={0} max={10_000_000} hint="Social Security, a pension, or other reliable income that starts on your retirement date." />
             <CalculatorField id="realReturnRate" label="Expected real return" value={form.realReturnRate} onChange={setField("realReturnRate")} suffix="%" min={0} max={12} step="0.1" hint="Growth after inflation." />
-            <CalculatorField id="withdrawalRate" label="Withdrawal rate" value={form.withdrawalRate} onChange={setField("withdrawalRate")} suffix="%" min={2} max={8} step="0.1" hint="The share of your retirement portfolio spent in year one." />
+            <CalculatorField id="withdrawalRate" label="Withdrawal rate" value={form.withdrawalRate} onChange={setField("withdrawalRate")} suffix="%" min={2} max={8} step="0.1" hint="The share of the portfolio you spend in year one." />
           </div>
 
           {error && <p className="cf-form-error" role="alert">{error}</p>}
@@ -244,37 +270,13 @@ export function CoastFireCalculator({ children }: { children?: ReactNode }) {
         </div>
       </section>
 
-      <section className="cf-after-number">
-        <div className="shell cf-after-grid">
-          <div>
-            <p className="section-kicker light">THE NUMBER IS THE EASY PART</p>
-            <h2>But does this mean you should actually stop contributing?</h2>
-          </div>
-          <div className="cf-after-copy">
-            <p>
-              A Coast FIRE number is a useful threshold, not a financial plan. Ask Linc can replace
-              the flat return and withdrawal assumptions with your actual holdings, spending,
-              income, and the life change you are considering.
-            </p>
-            <MarketingGetStartedButton
-              className="button button-primary"
-              trackingLocation="coast_fire_calculator_result"
-              csOverrideId="cta-stress-test-coast-fire-calculator"
-              label="Stress-test my Coast FIRE plan"
-              href={RETIREMENT_SIGNUP_HREF}
-              onBeforeNavigate={() => storeRetirementSignupContext(signupContext(result))}
-            />
-            <p className="microcopy">{TRIAL_CTA_MICROCOPY}</p>
-          </div>
-        </div>
-      </section>
-
       <section className="shell cf-sensitivity">
-        <div className="cf-section-heading">
+        <div className="cf-section-head">
           <p className="section-kicker">SEE WHAT CHANGES</p>
-          <h2>Your return assumption does a lot of work.</h2>
+          <h2>Your return assumption does most of the work.</h2>
           <p>
-            A one-point change compounds for {result.yearsToRetirement} years. That is why a single green badge should never be the end of the decision.
+            One point either way compounds for {result.yearsToRetirement} years. A single green badge
+            should never be the end of the decision.
           </p>
         </div>
         <div className="cf-sensitivity-table" role="table" aria-label="Coast FIRE number by real return assumption" data-cs-mask>
@@ -297,9 +299,9 @@ export function CoastFireCalculator({ children }: { children?: ReactNode }) {
       </section>
 
       <section className="shell cf-assumptions">
-        <div>
+        <div className="cf-section-head">
           <p className="section-kicker">WHAT THIS RESULT ASSUMES</p>
-          <h2>Simple enough to inspect.</h2>
+          <h2>Simple enough to check.</h2>
         </div>
         <ul>
           <li><strong>Constant real growth</strong><span>Your portfolio earns the same after-inflation return every year until retirement.</span></li>
@@ -314,12 +316,38 @@ export function CoastFireCalculator({ children }: { children?: ReactNode }) {
         </p>
       </section>
 
+      <section className="cf-cross-sell">
+        <div className="shell cf-cross-sell-inner">
+          <p className="section-kicker light">THE NUMBER IS THE EASY PART</p>
+          <h2>Reaching it doesn’t tell you what to change.</h2>
+          <p>
+            Ask Linc replaces the flat return and withdrawal rate above with your actual holdings,
+            spending, income, and taxes, then runs the change you are considering against a century
+            of real market history.
+          </p>
+          <ul className="cf-decision-list">
+            {DECISIONS.map((question) => <li key={question}>{question}</li>)}
+          </ul>
+          <MarketingGetStartedButton
+            className="button button-primary"
+            trackingLocation="coast_fire_cross_sell"
+            csOverrideId="cta-stress-test-coast-fire"
+            label="Stress-test my Coast FIRE plan"
+            href={RETIREMENT_SIGNUP_HREF}
+            onBeforeNavigate={() => storeRetirementSignupContext(signupContext(result))}
+          />
+          <p className="microcopy">{TRIAL_CTA_MICROCOPY}</p>
+        </div>
+      </section>
+
       {children}
 
       <section className="shell cf-related">
         <span>NEED THE FULL RETIREMENT MODEL?</span>
         <p>Test contributions, retirement dates, Social Security timing, and real historical market sequences.</p>
-        <Link href="/retirement-calculator">Open the retirement calculator →</Link>
+        <Link href="/retirement-calculator" data-cs-override-id="coast-fire-to-retirement-calculator">
+          Open the retirement calculator →
+        </Link>
       </section>
 
       <SiteFooter />

@@ -1,9 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { CoastFireCalculator } from "@/components/marketing/CoastFireCalculator";
 import { CoastFireCalculatorSeoContent } from "@/components/marketing/CoastFireCalculatorSeoContent";
-import { CoastFireLanding } from "@/components/marketing/CoastFireLanding";
 import { metadata as calculatorMetadata } from "@/app/coast-fire-calculator/page";
-import { metadata as landingMetadata } from "@/app/coast-fire/page";
 import {
   calculateCoastFire,
   COAST_FIRE_FAQ,
@@ -17,7 +15,6 @@ import {
 
 jest.mock("@/lib/dataLayer", () => ({
   pushCoastFireCalculated: jest.fn(),
-  pushCoastFireCalculatorClick: jest.fn(),
   pushStartFreeClick: jest.fn(),
 }));
 
@@ -101,6 +98,20 @@ describe("Coast FIRE calculator page", () => {
     expect(JSON.stringify(jest.mocked(pushCoastFireCalculated).mock.calls)).not.toContain("100000");
   });
 
+  /*
+   * The whole pitch lives on this page now, so the decisions a Coast FIRE
+   * number raises but cannot answer have to be reachable without a second
+   * click. An earlier draft put them on a separate /coast-fire landing page.
+   */
+  it("carries the paid job onto the same page as the free number", () => {
+    render(<CoastFireCalculator />);
+
+    expect(screen.getByRole("heading", { name: /doesn’t tell you what to change/i })).toBeInTheDocument();
+    expect(screen.getByText("Could I take a $30K pay cut?")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Open the retirement calculator/ }))
+      .toHaveAttribute("href", "/retirement-calculator");
+  });
+
   it("carries the simple scenario into the retirement signup flow", () => {
     render(<CoastFireCalculator />);
 
@@ -119,6 +130,36 @@ describe("Coast FIRE calculator page", () => {
     });
   });
 
+  /*
+   * The stored context rejects assets under $1,000, so an unfloored $0 would
+   * drop the visitor's ages and spending along with it.
+   */
+  it("still carries the scenario when no savings were entered", () => {
+    const { container } = render(<CoastFireCalculator />);
+
+    fireEvent.change(screen.getByLabelText("Retirement savings today"), { target: { value: "0" } });
+    fireEvent.submit(container.querySelector("form")!);
+
+    const cta = screen.getByRole("link", { name: "Stress-test my Coast FIRE plan" });
+    cta.addEventListener("click", (event) => event.preventDefault(), { once: true });
+    fireEvent.click(cta);
+
+    expect(readRetirementSignupContext()?.inputs).toMatchObject({
+      currentAge: 40,
+      annualSpending: 80_000,
+      investableAssets: 1_000,
+    });
+  });
+
+  it("keeps each measured call to action uniquely identifiable", () => {
+    const { container } = render(<CoastFireCalculator />);
+    const ids = Array.from(container.querySelectorAll("[data-cs-override-id]"))
+      .map((element) => element.getAttribute("data-cs-override-id"));
+
+    expect(ids.length).toBeGreaterThan(0);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
   it("renders the same FAQ copy used by structured data", () => {
     render(<CoastFireCalculatorSeoContent />);
 
@@ -127,30 +168,8 @@ describe("Coast FIRE calculator page", () => {
       expect(screen.getByText(item.answer)).toBeInTheDocument();
     }
   });
-});
 
-describe("Coast FIRE landing page", () => {
-  it("leads with optionality and links into the calculator", () => {
-    render(<CoastFireLanding />);
-
-    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Know what your money lets you do next.");
-    expect(screen.getByRole("heading", { name: /The point isn’t to stop working/i })).toBeInTheDocument();
-    const calculatorLinks = screen.getAllByRole("link", { name: /Check my Coast FIRE number|Calculate my number/ });
-    expect(calculatorLinks.length).toBeGreaterThanOrEqual(3);
-    calculatorLinks.forEach((link) => expect(link).toHaveAttribute("href", "/coast-fire-calculator"));
-    expect(screen.getByText("Could I take a $30K pay cut?")).toBeInTheDocument();
-  });
-
-  it("keeps each measured call to action uniquely identifiable", () => {
-    const { container } = render(<CoastFireLanding />);
-    const ids = Array.from(container.querySelectorAll("[data-cs-override-id]"))
-      .map((element) => element.getAttribute("data-cs-override-id"));
-
-    expect(new Set(ids).size).toBe(ids.length);
-  });
-
-  it("publishes focused, canonical metadata for both routes", () => {
-    expect(landingMetadata.alternates?.canonical).toBe("https://asklinc.com/coast-fire");
+  it("publishes one canonical, snippet-length metadata set", () => {
     expect(calculatorMetadata.alternates?.canonical).toBe("https://asklinc.com/coast-fire-calculator");
     expect(String(calculatorMetadata.title)).toMatch(/Coast FIRE Calculator/i);
     expect(String(calculatorMetadata.description).length).toBeLessThanOrEqual(160);

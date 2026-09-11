@@ -1,7 +1,6 @@
 import {
   pushBeginCheckout,
   pushCoastFireCalculated,
-  pushCoastFireCalculatorClick,
   pushPurchase,
   pushRetirementModelRun,
   pushSignUp,
@@ -106,21 +105,11 @@ describe("begin_checkout analytics", () => {
   });
 
   it("keeps the Coast FIRE acquisition path distinct without recording financial values", () => {
-    window.history.replaceState({}, "", "/coast-fire");
-    pushCoastFireCalculatorClick("coast_fire_hero");
-
     window.history.replaceState({}, "", "/coast-fire-calculator");
     pushCoastFireCalculated("reached", 25);
-    pushStartFreeClick("coast_fire_calculator_result");
+    pushStartFreeClick("coast_fire_cross_sell");
 
     expect(analyticsWindow.dataLayer).toEqual([
-      {
-        event: "coast_fire_calculator_click",
-        source_page: "/coast-fire",
-        cta_location: "coast_fire_hero",
-        content_type: "coast_fire_landing",
-        destination_page: "/coast-fire-calculator",
-      },
       {
         event: "coast_fire_calculated",
         source_page: "/coast-fire-calculator",
@@ -131,7 +120,7 @@ describe("begin_checkout analytics", () => {
       {
         event: "start_free_click",
         source_page: "/coast-fire-calculator",
-        cta_location: "coast_fire_calculator_result",
+        cta_location: "coast_fire_cross_sell",
         content_type: "coast_fire_calculator",
         destination_page: GET_STARTED_HREF,
       },
