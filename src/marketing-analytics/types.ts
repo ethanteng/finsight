@@ -95,7 +95,8 @@ export interface AnalyticsSession {
   eventCount: number;
   scrollEvents: number;
   eventCounts: Record<string, number>;
-  firstEventAt: Partial<Record<FunnelEventName, number>>;
+  /** First timestamp per event name, including journey CTAs keyed outside the strict funnel. */
+  firstEventAt: Partial<Record<string, number>>;
 }
 
 export interface MarketingFilters {

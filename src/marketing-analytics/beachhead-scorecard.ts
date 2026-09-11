@@ -59,6 +59,15 @@ function completedTrialSessions(sessions: AnalyticsSession[], coverageComplete: 
     .find(step => step.event === 'trial_login_success')?.sessions ?? 0;
 }
 
+function hasResultThenPlanCta(session: AnalyticsSession, ctaEvent: string): boolean {
+  if (!hasEvent(session, 'retirement_model_run') || !hasEvent(session, ctaEvent)) return false;
+  const resultAt = session.firstEventAt.retirement_model_run;
+  const ctaAt = session.firstEventAt[ctaEvent];
+  // Without both timestamps we cannot prove the advertised handoff order.
+  if (resultAt === undefined || ctaAt === undefined) return false;
+  return ctaAt > resultAt;
+}
+
 function buildJourney(
   current: AnalyticsSession[],
   previous: AnalyticsSession[],
@@ -68,9 +77,9 @@ function buildJourney(
 ): BeachheadStageMetric[] {
   const values = (sessions: AnalyticsSession[], hasCoverage: boolean) => {
     const results = sessions.filter(session => hasEvent(session, 'retirement_model_run'));
-    // A CTA click only proves the calculator-to-plan handoff when the result was
-    // shown in the same session. The cross-sell can also be clicked before a run.
-    const planCtas = results.filter(session => hasEvent(session, ctaEvent));
+    // Count only CTAs that follow a result in the same session. The cross-sell is
+    // rendered before a run, so co-occurrence alone overstates the handoff.
+    const planCtas = results.filter(session => hasResultThenPlanCta(session, ctaEvent));
     return [
       sessions.length,
       results.length,
@@ -83,7 +92,7 @@ function buildJourney(
   const labels = [
     ['qualified_visit', 'Qualified visits', 'Sessions with an explicit page, campaign, query, or tracking signal for this journey.'],
     ['calculator_result', 'Result shown', 'Sessions that reached retirement_model_run. Calculator reliability lives in the separate calculator dashboard.'],
-    ['plan_cta', 'Actual-plan CTA', 'Result sessions that clicked the journey-specific plan CTA in the same session.'],
+    ['plan_cta', 'Actual-plan CTA', 'Result sessions that clicked the journey-specific plan CTA after the result in the same session.'],
     ['trial_complete', 'Trial completed', 'CTA sessions that completed every tracked signup, verification, and first-login step in order.'],
   ] as const;
 

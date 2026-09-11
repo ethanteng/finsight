@@ -178,7 +178,9 @@ export function buildQuery(projectId: string, datasetId: string, dates: ReturnTy
   }).join(',\n    ');
   const journeyColumns = [
     "COUNTIF(event_name = 'start_free_click' AND cta_location = 'quickplan_cross_sell') AS count_quickplan_cross_sell_click",
+    "MIN(IF(event_name = 'start_free_click' AND cta_location = 'quickplan_cross_sell', event_timestamp, NULL)) AS first_quickplan_cross_sell_click",
     "COUNTIF(event_name = 'start_free_click' AND cta_location = 'coast_fire_plan_cta') AS count_coast_fire_plan_cta_click",
+    "MIN(IF(event_name = 'start_free_click' AND cta_location = 'coast_fire_plan_cta', event_timestamp, NULL)) AS first_coast_fire_plan_cta_click",
     "COUNTIF(content_type = 'coast_fire_calculator' OR REGEXP_CONTAINS(LOWER(COALESCE(page_location, source_page, '')), r'/coast[-_]fire')) AS count_coast_fire_touch",
   ].join(',\n    ');
 
@@ -326,13 +328,24 @@ function toSession(row: Record<string, string>): AnalyticsSession {
   const firstEventAt: AnalyticsSession['firstEventAt'] = {};
   for (const event of [...FUNNEL_EVENTS, ...DIAGNOSTIC_EVENTS]) {
     eventCounts[event] = Number(row[`count_${event}`] || 0);
-    if (FUNNEL_EVENTS.includes(event as FunnelEventName) && row[`first_${event}`]) {
-      firstEventAt[event as FunnelEventName] = Number(row[`first_${event}`]);
+    // Funnel steps need ordered timestamps for the strict path. Calculator-result
+    // timing is also required so beachhead plan-CTA handoffs can prove ordering.
+    if (
+      (FUNNEL_EVENTS.includes(event as FunnelEventName) || event === 'retirement_model_run')
+      && row[`first_${event}`]
+    ) {
+      firstEventAt[event] = Number(row[`first_${event}`]);
     }
   }
   eventCounts.quickplan_cross_sell_click = Number(row.count_quickplan_cross_sell_click || 0);
   eventCounts.coast_fire_plan_cta_click = Number(row.count_coast_fire_plan_cta_click || 0);
   eventCounts.coast_fire_touch = Number(row.count_coast_fire_touch || 0);
+  if (row.first_quickplan_cross_sell_click) {
+    firstEventAt.quickplan_cross_sell_click = Number(row.first_quickplan_cross_sell_click);
+  }
+  if (row.first_coast_fire_plan_cta_click) {
+    firstEventAt.coast_fire_plan_cta_click = Number(row.first_coast_fire_plan_cta_click);
+  }
   const hostname = row.hostname || '';
   const device = row.device || 'unknown';
   const browser = row.browser || '';

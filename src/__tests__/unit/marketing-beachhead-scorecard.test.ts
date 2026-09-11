@@ -44,7 +44,12 @@ function session(id: string, overrides: Partial<AnalyticsSession> = {}): Analyti
 }
 
 function completedJourney(id: string, ctaEvent: string, coast = false): AnalyticsSession {
-  const firstEventAt = Object.fromEntries(FUNNEL_EVENT_NAMES.map((event, index) => [event, (index + 1) * 1_000_000]));
+  const firstEventAt: Record<string, number> = Object.fromEntries(
+    FUNNEL_EVENT_NAMES.map((event, index) => [event, (index + 1) * 1_000_000]),
+  );
+  // Result must precede the plan CTA; the cross-sell is visible before a run.
+  firstEventAt.retirement_model_run = 50_000_000;
+  firstEventAt[ctaEvent] = 60_000_000;
   return session(id, {
     acquisition: {
       source: 'newsletter', medium: 'email', channel: 'Other', campaign: coast ? 'coast fire launch' : '(not set)',
@@ -115,6 +120,22 @@ describe('Coast FIRE beachhead scorecard', () => {
     expect(report.state).toBe('measuring');
     expect(report.coastFireJourney.map(stage => stage.value)).toEqual([2, 1, 1, 1]);
     expect(report.currentCalculatorBaseline.map(stage => stage.value)).toEqual([0, 0, 0, 0]);
+  });
+
+  it('does not count a plan CTA that precedes the calculator result', () => {
+    const premature = completedJourney('premature', 'quickplan_cross_sell_click');
+    premature.firstEventAt.retirement_model_run = 80_000_000;
+    premature.firstEventAt.quickplan_cross_sell_click = 20_000_000;
+    const report = buildBeachheadScorecard({
+      current: [premature],
+      previous: [],
+      ga4Live: true,
+      funnelCoverageComplete: true,
+      previousFunnelCoverageComplete: true,
+      firstParty,
+    });
+
+    expect(report.currentCalculatorBaseline.map(stage => stage.value)).toEqual([1, 1, 0, 0]);
   });
 
   it('does not call an uncovered trial completion zero', () => {

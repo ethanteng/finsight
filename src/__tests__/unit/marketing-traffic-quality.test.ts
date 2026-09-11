@@ -109,5 +109,7 @@ describe('GA4 session query', () => {
     expect(query).toContain("cta_location = 'quickplan_cross_sell'");
     expect(query).toContain("cta_location = 'coast_fire_plan_cta'");
     expect(query).toContain("content_type = 'coast_fire_calculator'");
+    expect(query).toContain('AS first_quickplan_cross_sell_click');
+    expect(query).toContain('AS first_coast_fire_plan_cta_click');
   });
 });
