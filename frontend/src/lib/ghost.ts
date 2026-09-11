@@ -106,6 +106,14 @@ export function processGhostHtml(html: string): string {
     // Fix absolute links from Ghost domains
     .replace(/https:\/\/[^\/]+\.ghost\.io\//g, '/blog/')
     .replace(/https:\/\/blog\.asklinc\.com\//g, '/blog/')
+    .replace(/https:\/\/asklinc\.com\/blog\//g, '/blog/')
+    // Next.js serves article canonicals without a trailing slash. Normalize
+    // internal article links so they do not take an unnecessary 308 hop.
+    // Leave the /blog/ index alone and preserve query strings/fragments.
+    .replace(
+      /href=(["'])(\/blog\/[^"'?#]+?)\/(?=([?#][^"']*)?\1)/g,
+      'href=$1$2'
+    )
     // Ghost's Content API can append its source marker to rendered links.
     // Keep internal links on their clean canonical URLs.
     .replace(/\?ref=blog\.asklinc\.com(?=["'#\s<])/g, '')

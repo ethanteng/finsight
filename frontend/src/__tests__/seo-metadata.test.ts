@@ -48,13 +48,19 @@ describe('SEO metadata', () => {
     const html = [
       '<a href="https://blog.asklinc.com/first-post/">Legacy</a>',
       '<a href="https://asklinc.com/blog/second-post?ref=blog.asklinc.com">Current</a>',
+      '<a href="https://asklinc.com/blog/third-post/?view=full">Query</a>',
+      '<a href="https://blog.asklinc.com/fourth-post/#example">Fragment</a>',
+      '<a href="https://blog.asklinc.com/">Blog index</a>',
       '<a href="https://asklinc.com/?utm_source=ghost&amp;utm_medium=blog">Campaign</a>',
     ].join('');
 
     const processed = processGhostHtml(html);
 
-    expect(processed).toContain('href="/blog/first-post/"');
-    expect(processed).toContain('href="https://asklinc.com/blog/second-post"');
+    expect(processed).toContain('href="/blog/first-post"');
+    expect(processed).toContain('href="/blog/second-post"');
+    expect(processed).toContain('href="/blog/third-post?view=full"');
+    expect(processed).toContain('href="/blog/fourth-post#example"');
+    expect(processed).toContain('href="/blog/"');
     expect(processed).not.toContain('?ref=blog.asklinc.com');
     expect(processed).toContain('utm_source=ghost');
   });
