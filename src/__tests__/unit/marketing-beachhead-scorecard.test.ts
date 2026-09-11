@@ -1,4 +1,4 @@
-import { buildBeachheadScorecard, isCoastFireSession } from '../../marketing-analytics/beachhead-scorecard';
+import { buildBeachheadScorecard, COAST_FIRE_EXPERIMENT, isCoastFireSession } from '../../marketing-analytics/beachhead-scorecard';
 import { FUNNEL_EVENT_NAMES, type AnalyticsSession, type FirstPartySummary } from '../../marketing-analytics/types';
 
 const firstParty: FirstPartySummary = {
@@ -87,7 +87,10 @@ describe('Coast FIRE beachhead scorecard', () => {
     expect(isCoastFireSession(session('touch', { eventCounts: { coast_fire_touch: 1 } }))).toBe(true);
   });
 
-  it('shows a measured current-calculator baseline but keeps the unlaunched Coast journey blank', () => {
+  // The experiment ships live, so this path needs the flag passed explicitly.
+  // It stays covered because turning the flag off is how the scorecard should
+  // read if the page is ever pulled.
+  it('shows a measured current-calculator baseline but keeps an unlaunched Coast journey blank', () => {
     const report = buildBeachheadScorecard({
       current: [
         completedJourney('complete', 'quickplan_cross_sell_click'),
@@ -98,6 +101,7 @@ describe('Coast FIRE beachhead scorecard', () => {
       funnelCoverageComplete: true,
       previousFunnelCoverageComplete: true,
       firstParty,
+      experimentLive: false,
     });
 
     expect(report.state).toBe('prelaunch');
@@ -106,6 +110,27 @@ describe('Coast FIRE beachhead scorecard', () => {
     expect(report.downstream.financialConnectionRate.value).toBe(0.5);
     expect(report.downstream.activationRate.value).toBe(0.4);
     expect(report.downstream.paidRate.value).toBe(0.2);
+  });
+
+  /*
+   * The default is the shipped state. A caller that passes nothing must get the
+   * launched journey, or the dashboard would keep showing a prelaunch banner
+   * over a page that is public.
+   */
+  it('treats the Coast FIRE experiment as launched by default', () => {
+    expect(COAST_FIRE_EXPERIMENT.live).toBe(true);
+
+    const report = buildBeachheadScorecard({
+      current: [completedJourney('coast-complete', 'coast_fire_plan_cta_click', true)],
+      previous: [],
+      ga4Live: true,
+      funnelCoverageComplete: true,
+      previousFunnelCoverageComplete: true,
+      firstParty,
+    });
+
+    expect(report.state).toBe('measuring');
+    expect(report.coastFireJourney.map(stage => stage.value)).toEqual([1, 1, 1, 1]);
   });
 
   it('measures the Coast journey once a dedicated signal is observed', () => {

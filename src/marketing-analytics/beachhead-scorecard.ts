@@ -10,12 +10,17 @@ import type {
 const COAST_FIRE_PATTERN = /\bcoast\s*fire\b/i;
 
 /**
- * Flip this only in the change that launches the dedicated experience. Keeping
- * launch state explicit makes zero qualified visits meaningful after launch
- * and prevents a stray campaign name from turning the experiment on early.
+ * Launched: /coast-fire-calculator is public, in the sitemap, and in the
+ * primary nav. Keeping launch state explicit is what makes zero qualified
+ * visits meaningful now rather than ambiguous, and is what kept a stray
+ * campaign name from turning the experiment on before the page existed.
+ *
+ * Setting this back to false does not unpublish anything. It only returns the
+ * scorecard to a blank prelaunch journey, which is the honest reading if the
+ * page is pulled.
  */
 export const COAST_FIRE_EXPERIMENT = {
-  live: false,
+  live: true,
   pagePrefix: '/coast-fire',
   contentType: 'coast_fire_calculator',
   planCtaLocation: 'coast_fire_plan_cta',
@@ -248,7 +253,7 @@ export function buildBeachheadScorecard(args: {
     },
     evidenceGaps: [
       ...(state === 'prelaunch'
-        ? ['The dedicated Coast FIRE experience is marked prelaunch. Ship the experience and set COAST_FIRE_EXPERIMENT.live to true in the launch change; until then this journey is intentionally blank, not zero.']
+        ? ['This journey is reported as prelaunch, so it is intentionally blank rather than zero. The Coast FIRE experience has shipped, so reaching this state means COAST_FIRE_EXPERIMENT.live was set back to false or a caller passed experimentLive: false.']
         : []),
       'Marketing attribution is not persisted on the first-party user record, so financial connection, activation, and payment cannot yet be joined back to the Coast FIRE cohort.',
       'A paid conversion matures after the 30-day trial. Read paid rate only for cohorts old enough to have been charged.',
