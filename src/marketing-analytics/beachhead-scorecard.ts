@@ -9,6 +9,18 @@ import type {
 
 const COAST_FIRE_PATTERN = /\bcoast\s*fire\b/i;
 
+/**
+ * Flip this only in the change that launches the dedicated experience. Keeping
+ * launch state explicit makes zero qualified visits meaningful after launch
+ * and prevents a stray campaign name from turning the experiment on early.
+ */
+export const COAST_FIRE_EXPERIMENT = {
+  live: false,
+  pagePrefix: '/coast-fire',
+  contentType: 'coast_fire_calculator',
+  planCtaLocation: 'coast_fire_plan_cta',
+} as const;
+
 function ratio(numerator: number, denominator: number): number | null {
   return denominator > 0 ? numerator / denominator : null;
 }
@@ -111,6 +123,7 @@ export function buildBeachheadScorecard(args: {
   funnelCoverageComplete: boolean;
   previousFunnelCoverageComplete: boolean;
   firstParty: FirstPartySummary;
+  experimentLive?: boolean;
 }): BeachheadScorecard {
   const {
     current,
@@ -119,13 +132,13 @@ export function buildBeachheadScorecard(args: {
     funnelCoverageComplete,
     previousFunnelCoverageComplete,
     firstParty,
+    experimentLive = COAST_FIRE_EXPERIMENT.live,
   } = args;
   const currentCoast = current.filter(isCoastFireSession);
   const previousCoast = previous.filter(isCoastFireSession);
-  const coastSignalObserved = currentCoast.length > 0 || previousCoast.length > 0;
-  const state: BeachheadScorecard['state'] = !ga4Live
-    ? 'collecting'
-    : coastSignalObserved ? 'measuring' : 'prelaunch';
+  const state: BeachheadScorecard['state'] = !experimentLive
+    ? 'prelaunch'
+    : ga4Live ? 'measuring' : 'collecting';
   const currentBaseline = current.filter(isCurrentCalculatorSession);
   const previousBaseline = previous.filter(isCurrentCalculatorSession);
   const accounts = firstParty.accountsCreated;

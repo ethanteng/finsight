@@ -1,38 +1,87 @@
-# Marketing performance dashboard
+# Coast FIRE go-to-market scorecard
 
-The authenticated dashboard lives at `/admin/marketing`. It uses the existing
+The authenticated scorecard lives at `/admin/marketing`. It uses the existing
 `ADMIN_EMAILS`/JWT admin boundary through `GET /admin/marketing`.
 
-## Source of truth
+The page is deliberately narrow. It tests the beachhead thesis in this order:
 
-- GTM container `GTM-PL362L36`, production version 17, forwards the exact
-  no-card funnel in `TRIAL_SIGNUP_FUNNEL_TRACKING.md` to GA4 property
-  `519498279` (`G-0QBF34C7VK`). Version 16 forwards the calculator interaction
-  events in `CALCULATOR_ABANDONMENT_TRACKING.md`.
-- GA4 BigQuery session data is the only source used for acquisition, strict
-  funnel, behavior breakdowns, and intent-cohort rates. Acquisition uses
-  session-scoped source/medium/campaign fields; a blank HTTP referrer is never
-  substituted as `Direct` or `unattributed`.
-- PostgreSQL supplies live first-party account, verification, latest-login,
-  subscription, and conversation state. These are shown as a reality check,
-  not joined to marketing attribution because the user records do not store a
-  GA4 pseudonymous id or original acquisition fields.
-- Contentsquare project `530048` and the asklinc.com Ubersuggest project have a
-  connector-verified snapshot captured September 9, 2026. It is explicitly
-  labeled as a snapshot. Its headline population is corrected from 944 raw
-  sessions to 569 after excluding 291 automated sessions and 84
-  owner-confirmed internal sessions. Historical acquisition, page, device, and
-  visitor-type breakdowns are withheld because they cannot be exactly rebuilt
-  from the aggregate snapshot after those exclusions.
+1. explicit Coast FIRE positioning attracts qualified visits;
+2. a calculator result creates demand for a plan using actual finances;
+3. that intent survives the complete no-card signup path; and
+4. new accounts connect financial data, ask a planning question, and pay.
 
-`trial_login_success` is displayed as **Trial path completed**. It is the end
-of the newly instrumented no-card signup path; there is no separate
-`trial_completed` browser event. Current first-party trial/subscription state
-is displayed separately so those meanings cannot be conflated.
+Generic engagement, device, SEO, acquisition, and detailed signup diagnostics
+remain available in the normalized backend report and source tools, but are not
+promoted on this decision page. Calculator input quality, model outcomes,
+rejections, and performance live at `/admin/retirement-calculator`.
 
-## Enabling live GA4 data
+## Current state and launch contract
 
-Add these backend-only environment variables on Render:
+The existing `/retirement-calculator` is the comparison baseline. It measures:
+
+```text
+retirement-calculator session
+  -> retirement_model_run
+  -> start_free_click with cta_location=quickplan_cross_sell
+  -> strict trial_login_success
+```
+
+The Coast FIRE journey remains blank until the experiment is explicitly marked
+live. It does not relabel generic retirement traffic. Once live, a session
+enters the Coast FIRE cohort only through one of these auditable signals:
+
+- page activity under `/coast-fire*`;
+- `content_type=coast_fire_calculator`; or
+- “Coast FIRE” in campaign, keyword, or creative metadata.
+
+The dedicated Coast FIRE result-to-plan CTA must use:
+
+```text
+event=start_free_click
+cta_location=coast_fire_plan_cta
+```
+
+The launch state is explicit in `COAST_FIRE_EXPERIMENT` in
+`src/marketing-analytics/beachhead-scorecard.ts`. The page-launch change must
+flip `live` to `true`. Until then, the UI says **Pre-launch baseline** and shows
+unavailable values rather than misleading zero conversions. After the flag is
+on, a real zero remains zero and is no longer confused with “not launched.”
+
+## Metric definitions
+
+- **Qualified visits:** quality-filtered sessions in the selected journey.
+- **Result shown:** sessions with `retirement_model_run`.
+- **Actual-plan CTA:** result sessions that also fire the journey-specific CTA
+  in the same session. Clicking the cross-sell before a result does not count.
+- **Trial completed:** CTA sessions that contain every published signup,
+  verification, and first-login step in order, ending at
+  `trial_login_success`.
+- **Financial data observed:** accounts created in the selected window that now
+  have an active Plaid token, an external account in their financial snapshot,
+  or a verified Public credential.
+- **Activated:** accounts created in the selected window that have asked at
+  least one Ask Linc question.
+- **Paid now:** accounts created in the selected window whose current
+  `subscriptionStatus` is `active`. A cohort younger than the 30-day trial has
+  not matured and should not be judged on this metric.
+
+The three downstream metrics currently cover all accounts created in the
+window. They cannot honestly be attributed to Coast FIRE until original
+marketing attribution is persisted with the first-party user.
+
+## Data sources
+
+- GTM container `GTM-PL362L36`, production version 17, forwards the strict
+  no-card funnel in `TRIAL_SIGNUP_FUNNEL_TRACKING.md`. Version 16 forwards the
+  calculator events in `CALCULATOR_ABANDONMENT_TRACKING.md`.
+- GA4 property `519498279` (`G-0QBF34C7VK`) and its BigQuery export supply
+  session acquisition, the journey-specific events, and the strict funnel.
+- PostgreSQL supplies account creation, observed financial connections,
+  conversations, and current subscription state.
+- Contentsquare and Ubersuggest remain visible in the collapsed diagnostics as
+  verified snapshots. They do not drive the beachhead scorecard.
+
+Live GA4 requires these backend-only environment variables:
 
 ```text
 GA4_BIGQUERY_SERVICE_ACCOUNT_JSON={...single-line service account JSON...}
@@ -45,86 +94,32 @@ GA4_ALLOWED_HOSTNAMES=asklinc.com,www.asklinc.com
 ```
 
 `GA4_FIRST_FULL_TRACKING_DATE` is the first reporting-calendar day when the
-frontend events and GTM forwarding were live for the entire day. It is not the
-GTM publish timestamp, the BigQuery connection date, or a value that advances
-each day. For example, if the frontend event bridge went live partway through
-September 9, use `2026-09-10`; if it went live partway through September 12,
-use `2026-09-13`. Leave it unset until that day's complete daily export has
-been inspected. The configured value is the dashboard's single source of truth
-for funnel filtering, comparison coverage, warnings, and the visible coverage
-badge.
+complete signup event chain and GTM forwarding were live for the entire day.
+It is a fixed coverage boundary, not a launch date and not a value that moves.
+If tracking went live partway through September 9, use `2026-09-10` after that
+complete daily export has been inspected. Until then, leave it unset; the
+scorecard reports the trial-completion stage as unavailable instead of zero.
 
-Grant the service account only the permissions needed to run query jobs and
-read the GA4 export dataset. Never add this JSON to the frontend or a
-`NEXT_PUBLIC_` variable. Set `GA4_FIRST_FULL_TRACKING_DATE` only after every
-new event has been observed without sensitive parameters in GA4 and the first
-complete daily export exists. Invalid or impossible date values are reported
-as configuration errors. Until then, the dashboard shows **Collecting**
-instead of zeros.
+The BigQuery service account needs only query-job and dataset-read permissions.
+Its JSON must never be exposed to the frontend or a `NEXT_PUBLIC_` variable.
 
-The adapter fetches at most 100,000 sessions for the selected current and
-comparison windows. If the cap is reached, the UI emits a warning and the
-range should be narrowed. The strict funnel requires every earlier step in
-order within the same session; raw downstream reach is retained separately to
-surface re-entry and missing-upstream instrumentation.
+## Quality and known gaps
 
-## Traffic quality
+The scorecard uses the same default reporting population as the normalized
+marketing service: human and ambiguous sessions are included; confirmed bots,
+internal/debug traffic, admin sessions, preview hosts, and known automation are
+excluded. Loading the authenticated marketing dashboard marks that browser as
+internal for future analytics loads.
 
-Every live GA4 session is classified as `human`, `bot`, `internal`,
-`synthetic`, or `unknown` before headline metrics, funnels, acquisition,
-landing pages, devices, visitor types, and intent cohorts are calculated.
+Known gaps that affect the beachhead decision:
 
-The default reporting population includes `human` and deliberately retains
-ambiguous `unknown` sessions. It excludes:
-
-- GA4 `traffic_type` values for internal, developer, or test traffic;
-- GA4 debug-mode sessions;
-- any session containing an `/admin` page;
-- known crawler/render browser names;
-- the verified unknown-device, one-page, zero-engagement automation signature;
-- hostnames outside `GA4_ALLOWED_HOSTNAMES` (each allowlist entry also covers its subdomains, matching the frontend production-host gate).
-
-The dashboard shows raw, included, and excluded counts, classification totals,
-and exclusion-reason totals. Admins can inspect a classification or include
-excluded traffic without changing the default KPI population. Engagement is
-shown as average, median, and p75 so a long-lived tab cannot silently dominate
-the only duration statistic.
-
-After a browser successfully loads `/admin/marketing`, the frontend stores a
-local internal-browser marker. Future full page loads on that browser do not
-load GTM or Contentsquare, and custom client events also stop immediately.
-Clearing site storage removes the marker; visiting the authenticated marketing
-dashboard restores it. This prevents the owner's ordinary browsing from
-recreating the confirmed internal-session distortion without using a broad
-Firefox or geography exclusion.
-
-## Intent rules
-
-Rules are ordered in `src/marketing-analytics/intent-rules.ts`. The current
-priority is:
-
-1. retirement/calculator;
-2. competitor/comparison;
-3. paid brand;
-4. paid nonbrand;
-5. savings/net worth;
-6. generic AI financial planning;
-7. brand/direct;
-8. blog/informational SEO; and
-9. Unknown.
-
-The first match wins. Raw source, medium, campaign, landing page, keyword,
-creative/ad id, and referrer remain on the normalized session record for
-auditing. Unknown is mandatory and last.
-
-## Known gaps
-
-- Search Console query impressions, clicks, CTR and average position are not
-  connected. Ubersuggest volume/ranking data remains separate.
-- Google Ads spend and creative reporting are not connected, so CAC is blank.
-- Contentsquare error/frustration APIs are not included in the current account
-  entitlement. Historical page activity, bounce, exit, scroll, interaction,
-  and LCP aggregates are not shown in `/admin/marketing` because the available
-  snapshot cannot apply the verified traffic-quality exclusions exactly.
-- Historical no-card funnel events cannot be backfilled. A pre-September 9
-  absence is not abandonment.
+- original campaign/cohort and a privacy-safe analytics join key are not stored
+  on the user, so first-party connection, activation, and payment are not yet
+  attributable to Coast FIRE;
+- the Coast FIRE page and treatment-specific CTA have not launched, so their
+  historical events cannot be backfilled;
+- paid conversion matures after the 30-day trial, so the initial 4–6 week test
+  needs cohort-age context; and
+- Search Console and Google Ads spend are not connected. They may improve
+  channel optimization later, but are not required to decide whether the
+  calculator-to-plan proposition converts.

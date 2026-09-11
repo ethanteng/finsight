@@ -191,8 +191,8 @@ async function firstPartySummary(period: ReturnType<typeof requestedPeriod>): Pr
         select: { id: true },
         take: 1,
       },
-      snapTradeUser: { select: { id: true } },
-      publicApiCredential: { select: { id: true } },
+      publicApiCredential: { select: { lastVerifiedAt: true } },
+      financialSummarySnapshot: { select: { accounts: true } },
       _count: { select: { conversations: true } },
     },
   });
@@ -200,18 +200,27 @@ async function firstPartySummary(period: ReturnType<typeof requestedPeriod>): Pr
     where: { createdAt: { gte: start, lt: endExclusive } },
   });
   const activatedUserIds = new Set(users.filter(user => user._count.conversations > 0).map(user => user.id));
+  const usersWithObservedFinancialData = users.filter(user => {
+    const snapshotAccounts = user.financialSummarySnapshot?.accounts;
+    const hasExternalSnapshotAccount = Array.isArray(snapshotAccounts) && snapshotAccounts.some(account => {
+      if (!account || typeof account !== 'object' || Array.isArray(account)) return false;
+      const source = String((account as Record<string, unknown>).source || '').toLowerCase();
+      return source === 'plaid' || source === 'snaptrade' || source === 'public';
+    });
+    return user.accessTokens.length > 0
+      || hasExternalSnapshotAccount
+      || Boolean(user.publicApiCredential?.lastVerifiedAt);
+  });
   return {
       accountsCreated: users.length,
       accountsCurrentlyVerified: users.filter(user => user.emailVerified).length,
       createdAccountsWithLogin: users.filter(user => user.lastLoginAt !== null).length,
       createdAccountsWithConversation: activatedUserIds.size,
-      createdAccountsWithFinancialConnection: users.filter(user =>
-        user.accessTokens.length > 0 || user.snapTradeUser !== null || user.publicApiCredential !== null
-      ).length,
+      createdAccountsWithFinancialConnection: usersWithObservedFinancialData.length,
       createdAccountsCurrentlyPaid: users.filter(user => user.subscriptionStatus === 'active').length,
       subscriptionsCreated,
       currentlyTrialingAccounts: users.filter(user => user.subscriptionStatus === 'trialing').length,
-    note: 'Live database counts for accounts created in the selected window. Financial connection means an active Plaid connection, SnapTrade registration, or verified Public credential. Verification, latest-login, and current subscription state may have changed later.',
+    note: 'Live database counts for accounts created in the selected window. Financial connection means an active Plaid token, an external account observed in the financial snapshot, or a verified Public credential. Verification, latest-login, and current subscription state may have changed later.',
   };
 }
 

@@ -109,6 +109,7 @@ describe('Coast FIRE beachhead scorecard', () => {
       funnelCoverageComplete: true,
       previousFunnelCoverageComplete: true,
       firstParty,
+      experimentLive: true,
     });
 
     expect(report.state).toBe('measuring');
