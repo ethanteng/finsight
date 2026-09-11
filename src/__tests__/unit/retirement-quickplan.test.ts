@@ -447,6 +447,20 @@ describe('quick plan with inputs left blank', () => {
     expect(result.primary).toBeNull();
   }, 120_000);
 
+  it('describes no Social Security rather than when a benefit of zero starts', async () => {
+    const result = await runRetirementQuickPlan({
+      currentAge: 68, retirementAge: 70, investableAssets: 500_000,
+      annualSpending: 40_000, lifeExpectancy: 85,
+    });
+    const limitations = result.limitations.join(' ');
+
+    // The claiming age defaults to 67 and means nothing without a benefit;
+    // narrating when it starts would describe income this plan does not have.
+    expect(limitations).toContain('No Social Security is included');
+    expect(limitations).not.toContain('between retiring and claiming');
+    expect(limitations).not.toContain('an amount you actually receive');
+  }, 120_000);
+
   it('treats a blank contribution or benefit as zero, not as a rejection', () => {
     const resolved = resolveQuickPlanRequest({
       currentAge: 60, retirementAge: 65, investableAssets: 800_000, annualSpending: 50_000,

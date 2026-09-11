@@ -605,19 +605,30 @@ function buildLimitations(
     );
   }
 
-  const gapYears = inputs.socialSecurityStartAge - inputs.retirementAge;
-  if (gapYears > 0) {
+  // Everything below describes an income the engine only models when there is
+  // an amount to model. A claiming age with no benefit behind it is just the
+  // form's default, and describing when "your Social Security" starts would be
+  // narrating money this plan does not contain.
+  if (inputs.socialSecurityAnnual > 0) {
+    const gapYears = inputs.socialSecurityStartAge - inputs.retirementAge;
+    if (gapYears > 0) {
+      limitations.push(
+        `Social Security is modeled as starting at age ${inputs.socialSecurityStartAge}, so the portfolio funds ` +
+          (gapYears === 1
+            ? 'the whole year between retiring and claiming on its own.'
+            : `all ${gapYears} years between retiring and claiming on its own.`)
+      );
+    }
     limitations.push(
-      `Social Security is modeled as starting at age ${inputs.socialSecurityStartAge}, so the portfolio funds ` +
-        (gapYears === 1
-          ? 'the whole year between retiring and claiming on its own.'
-          : `all ${gapYears} years between retiring and claiming on its own.`)
+      'Social Security is treated as a fixed, inflation-adjusted amount you actually receive; no benefit-formula ' +
+        'or policy-change modeling is applied.'
+    );
+  } else {
+    limitations.push(
+      'No Social Security is included, so the portfolio funds every year of this retirement on its own. ' +
+        'Adding your benefit from ssa.gov is the single largest change most plans can make to this answer.'
     );
   }
-  limitations.push(
-    'Social Security is treated as a fixed, inflation-adjusted amount you actually receive; no benefit-formula ' +
-      'or policy-change modeling is applied.'
-  );
   return limitations;
 }
 

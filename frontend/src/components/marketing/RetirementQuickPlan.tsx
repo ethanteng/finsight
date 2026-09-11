@@ -793,7 +793,12 @@ function QuickPlanResults({ result, primary }: { result: QuickPlanResult; primar
 
   const ranOut = primary.sequencesTested - primary.sequencesSurvived;
   const band = outcomeBand(primary.survivalRate);
-  const claimsAfterRetiring = inputs.socialSecurityStartAge > inputs.retirementAge;
+  // A claiming age says nothing on its own: with no benefit entered there is
+  // no Social Security to start, and copy about when it starts describes
+  // income the engine never modeled. Leaving it blank is now the ordinary
+  // path, so both timing branches have to answer to the amount first.
+  const hasSocialSecurity = inputs.socialSecurityAnnual > 0;
+  const claimsAfterRetiring = hasSocialSecurity && inputs.socialSecurityStartAge > inputs.retirementAge;
 
   return (
     <>
@@ -835,7 +840,7 @@ function QuickPlanResults({ result, primary }: { result: QuickPlanResult; primar
             note={
               claimsAfterRetiring
                 ? `All of it from the portfolio — Social Security starts at ${inputs.socialSecurityStartAge}`
-                : inputs.socialSecurityAnnual > 0
+                : hasSocialSecurity
                   ? `Your spending less ${money(inputs.socialSecurityAnnual)} of Social Security`
                   : "No Social Security offset in the first year"
             }
@@ -890,10 +895,15 @@ function QuickPlanResults({ result, primary }: { result: QuickPlanResult; primar
               across the whole retirement is a harder test than your plan actually faces — the
               survival figure above is the one that counts your benefit.
             </p>
-          ) : (
+          ) : hasSocialSecurity ? (
             <p className="qp-chart-caveat">
               Your Social Security has already started at this retirement age, so that draw is what
               the portfolio funds for the whole retirement and this comparison is like for like.
+            </p>
+          ) : (
+            <p className="qp-chart-caveat">
+              This plan counts no Social Security, so the portfolio funds all of your spending for
+              the whole retirement and this comparison is like for like.
             </p>
           )}
           <p className="qp-chart-caveat">

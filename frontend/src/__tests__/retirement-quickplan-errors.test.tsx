@@ -77,6 +77,29 @@ const RATES_RESULT = {
   limitations: [],
 };
 
+/** A completed plan, for the copy that only a plan-mode result renders. */
+const PLAN_RESULT = {
+  ...RATES_RESULT,
+  mode: 'plan',
+  assumed: [],
+  missing: [],
+  primary: {
+    id: 'as-entered', label: 'Retire at 60', change: null, retirementAge: 60, annualSpending: 40_000,
+    survivalRate: 0.92, sequencesTested: 800, sequencesSurvived: 736,
+    projectedPortfolioAtRetirement: 1_000_000, firstYearPortfolioWithdrawal: 40_000,
+    firstYearWithdrawalRate: 0.04, depletionYears: null, primaryObservation: 'Example',
+    tradeoffs: { upside: 'Example', downside: 'Example' },
+    characteristics: {
+      growthPotential: 'Example', drawdownResistance: 'Example',
+      withdrawalFragility: 'Example', inflationProtection: 'Example',
+    },
+  },
+  sustainableSpending: {
+    p10: 31_000, p25: 36_000, p50: 40_000, p75: 47_000, p90: 55_000,
+    solverFloorRate: 0.02, solverCeilingRate: 0.08,
+  },
+};
+
 beforeEach(() => {
   window.sessionStorage.clear();
   interaction.mockClear();
@@ -154,6 +177,31 @@ it('answers in rates, names what it assumed, and invents no dollar figure', asyn
   // The notional portfolio the run was normalized against must never surface.
   expect(panel.textContent).not.toContain('1,000,000');
   expect(panel.textContent).not.toContain('$');
+});
+
+it('does not describe when a Social Security benefit of zero starts', async () => {
+  // The claiming age defaults to 67, so a plan retiring at 60 with no benefit
+  // used to be told its Social Security "starts at 67" and that the survival
+  // figure counted it. Leaving the box blank is the ordinary path now.
+  const noBenefit = {
+    ...PLAN_RESULT,
+    inputs: { ...PLAN_RESULT.inputs, socialSecurityAnnual: 0, socialSecurityStartAge: 67, retirementAge: 60 },
+  };
+  (global.fetch as jest.Mock).mockImplementation((url: string, init?: RequestInit) =>
+    Promise.resolve(init?.method
+      ? { ok: true, json: async () => noBenefit }
+      : { ok: true, json: async () => ({ allocations: [] })})
+  );
+
+  renderPage();
+  fireEvent.submit(screen.getByRole('button', { name: /run the model/i }).closest('form')!);
+  await screen.findByText(/the model's answer/i);
+
+  expect(screen.getByText(/No Social Security offset in the first year/i)).toBeInTheDocument();
+  expect(screen.getByText(/This plan counts no Social Security/i)).toBeInTheDocument();
+  expect(screen.queryByText(/Social Security starts at 67/i)).toBeNull();
+  expect(screen.queryByText(/has already started at this retirement age/i)).toBeNull();
+  expect(screen.queryByText(/counts your benefit/i)).toBeNull();
 });
 
 it('does not carry a notional portfolio into the signup handoff', async () => {
