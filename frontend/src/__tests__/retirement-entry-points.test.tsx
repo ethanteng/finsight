@@ -27,11 +27,13 @@ describe("retirement entry points", () => {
     jest.restoreAllMocks();
   });
 
-  it("sends both site-wide Retirement links to the calculator", () => {
-    expect(PRIMARY_NAV_LINKS.find((link) => link.label === "Retirement")?.href)
-      .toBe("/retirement-calculator");
+  it("sends every site-wide Coast FIRE link to the one calculator page", () => {
+    expect(PRIMARY_NAV_LINKS.find((link) => link.label === "Coast FIRE")?.href)
+      .toBe("/coast-fire-calculator");
 
     render(<SiteFooter />);
+    expect(screen.getByRole("link", { name: "Coast FIRE" }))
+      .toHaveAttribute("href", "/coast-fire-calculator");
     expect(screen.getByRole("link", { name: "Retirement" }))
       .toHaveAttribute("href", "/retirement-calculator");
   });

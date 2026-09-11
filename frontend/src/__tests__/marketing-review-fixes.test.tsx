@@ -22,7 +22,7 @@ describe("marketing review fixes", () => {
   });
 
   it("keeps marketing text at or above the 12px readability floor", () => {
-    const css = ["marketing.css", "marketing-responsive.css"]
+    const css = ["marketing.css", "marketing-responsive.css", "coast-fire.css"]
       .map((file) => readFileSync(join(process.cwd(), "src/components/marketing", file), "utf8"))
       .join("\n");
     const declarations = css.match(/font-size:[^;]+;/g) ?? [];
@@ -36,7 +36,7 @@ describe("marketing review fixes", () => {
   });
 
   it("keeps substantive marketing copy readable at normal zoom", () => {
-    const css = ["marketing.css", "marketing-responsive.css"]
+    const css = ["marketing.css", "marketing-responsive.css", "coast-fire.css"]
       .map((file) => readFileSync(join(process.cwd(), "src/components/marketing", file), "utf8"))
       .join("\n");
     const finalFontSize = (selector: string) => {
@@ -62,6 +62,9 @@ describe("marketing review fixes", () => {
       ".answer-hub-card > p",
       ".demo-answer-list li",
       ".footer-inner > div:first-child p",
+      ".coast-fire-page .cf-hero-sub",
+      ".coast-fire-page .cf-form-note",
+      ".coast-fire-page .cf-faq details > p",
     ];
 
     for (const selector of representativeBodyCopy) {
@@ -73,13 +76,13 @@ describe("marketing review fixes", () => {
     render(<SiteHeader />);
 
     const signInLink = screen.getByRole("link", { name: "Sign in" });
-    const retirementLink = screen.getByRole("link", { name: "Retirement" });
+    const coastFireLink = screen.getByRole("link", { name: "Coast FIRE" });
     const compareLink = screen.getByRole("link", { name: "Compare" });
     expect(signInLink).toHaveAttribute("href", "/login");
     expect(signInLink.closest(".nav-actions")).not.toBeNull();
     expect(signInLink.closest(".nav-links")).toBeNull();
-    expect(retirementLink).toHaveAttribute("href", "/retirement-calculator");
-    expect(retirementLink.closest(".nav-links")).not.toBeNull();
+    expect(coastFireLink).toHaveAttribute("href", "/coast-fire-calculator");
+    expect(coastFireLink.closest(".nav-links")).not.toBeNull();
     expect(compareLink).toHaveAttribute("href", "/vs");
     expect(compareLink.closest(".nav-links")).not.toBeNull();
   });
@@ -97,7 +100,7 @@ describe("marketing review fixes", () => {
     const mobileMenu = screen.getByLabelText("Mobile navigation");
     expect(within(mobileMenu).getByRole("link", { name: "How It Works" })).toHaveAttribute("href", "/features");
     expect(within(mobileMenu).getByRole("link", { name: "What You Can Ask" })).toHaveAttribute("href", "/use-cases");
-    expect(within(mobileMenu).getByRole("link", { name: "Retirement" })).toHaveAttribute("href", "/retirement-calculator");
+    expect(within(mobileMenu).getByRole("link", { name: "Coast FIRE" })).toHaveAttribute("href", "/coast-fire-calculator");
     expect(within(mobileMenu).getByRole("link", { name: "Compare" })).toHaveAttribute("href", "/vs");
     expect(within(mobileMenu).getByRole("link", { name: "Pricing" })).toHaveAttribute("href", "/pricing");
     expect(within(mobileMenu).queryByRole("link", { name: "About" })).not.toBeInTheDocument();

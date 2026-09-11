@@ -27,7 +27,8 @@ export type ContentsquareEvent =
   | 'retirement_model_run'
   | 'retirement_validation_error'
   | 'retirement_api_error'
-  | 'retirement_request_error';
+  | 'retirement_request_error'
+  | 'coast_fire_calculated';
 
 /** Custom page events do not create artificial pageviews or alter bounce rates. */
 export function trackContentsquareEvent(event: ContentsquareEvent): void {

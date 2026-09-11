@@ -1,5 +1,6 @@
 import {
   pushBeginCheckout,
+  pushCoastFireCalculated,
   pushPurchase,
   pushRetirementModelRun,
   pushSignUp,
@@ -101,6 +102,39 @@ describe("begin_checkout analytics", () => {
       content_type: "retirement_calculator",
       retirement_age: 62,
     });
+  });
+
+  it("keeps the Coast FIRE acquisition path distinct without recording financial values", () => {
+    window.history.replaceState({}, "", "/coast-fire-calculator");
+    pushCoastFireCalculated("reached", 25, "default");
+    pushCoastFireCalculated("reached", 25);
+    pushStartFreeClick("coast_fire_plan_cta");
+
+    expect(analyticsWindow.dataLayer).toEqual([
+      {
+        event: "coast_fire_calculated",
+        source_page: "/coast-fire-calculator",
+        content_type: "coast_fire_calculator",
+        coast_fire_status: "reached",
+        calculation_trigger: "default",
+        years_to_retirement: 25,
+      },
+      {
+        event: "coast_fire_calculated",
+        source_page: "/coast-fire-calculator",
+        content_type: "coast_fire_calculator",
+        coast_fire_status: "reached",
+        calculation_trigger: "submitted",
+        years_to_retirement: 25,
+      },
+      {
+        event: "start_free_click",
+        source_page: "/coast-fire-calculator",
+        cta_location: "coast_fire_plan_cta",
+        content_type: "coast_fire_calculator",
+        destination_page: GET_STARTED_HREF,
+      },
+    ]);
   });
 });
 

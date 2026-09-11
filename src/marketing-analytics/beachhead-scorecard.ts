@@ -10,16 +10,32 @@ import type {
 const COAST_FIRE_PATTERN = /\bcoast\s*fire\b/i;
 
 /**
- * Flip this only in the change that launches the dedicated experience. Keeping
- * launch state explicit makes zero qualified visits meaningful after launch
- * and prevents a stray campaign name from turning the experiment on early.
+ * Launched: /coast-fire-calculator is public, in the sitemap, and in the
+ * primary nav. Keeping launch state explicit is what makes zero qualified
+ * visits meaningful now rather than ambiguous, and is what kept a stray
+ * campaign name from turning the experiment on before the page existed.
+ *
+ * Setting this back to false does not unpublish anything. It only returns the
+ * scorecard to a blank prelaunch journey, which is the honest reading if the
+ * page is pulled.
  */
 export const COAST_FIRE_EXPERIMENT = {
-  live: false,
+  live: true,
   pagePrefix: '/coast-fire',
   contentType: 'coast_fire_calculator',
   planCtaLocation: 'coast_fire_plan_cta',
+  /**
+   * The Coast FIRE page runs its own formula in the browser, so it never emits
+   * `retirement_model_run`. The journey has to read its own result event or
+   * every stage below "Qualified visits" reports zero once the experiment is
+   * live, plan CTA clicks included: they are counted only among result
+   * sessions.
+   */
+  resultEvent: 'coast_fire_calculated',
 } as const;
+
+/** The retirement calculator's result event, and the baseline journey's. */
+const RETIREMENT_RESULT_EVENT = 'retirement_model_run';
 
 function ratio(numerator: number, denominator: number): number | null {
   return denominator > 0 ? numerator / denominator : null;
@@ -80,9 +96,13 @@ function completedTrialSessions(
     .find(step => step.event === 'trial_login_success')?.sessions ?? 0;
 }
 
-function hasResultThenPlanCta(session: AnalyticsSession, ctaEvent: string): boolean {
-  if (!hasEvent(session, 'retirement_model_run') || !hasEvent(session, ctaEvent)) return false;
-  const resultAt = session.firstEventAt.retirement_model_run;
+function hasResultThenPlanCta(
+  session: AnalyticsSession,
+  ctaEvent: string,
+  resultEvent: string,
+): boolean {
+  if (!hasEvent(session, resultEvent) || !hasEvent(session, ctaEvent)) return false;
+  const resultAt = session.firstEventAt[resultEvent];
   const ctaAt = session.firstEventAt[ctaEvent];
   // Without both timestamps we cannot prove the advertised handoff order.
   if (resultAt === undefined || ctaAt === undefined) return false;
@@ -93,14 +113,15 @@ function buildJourney(
   current: AnalyticsSession[],
   previous: AnalyticsSession[],
   ctaEvent: string,
+  resultEvent: string,
   coverageComplete: boolean,
   previousCoverageComplete: boolean,
 ): BeachheadStageMetric[] {
   const values = (sessions: AnalyticsSession[], hasCoverage: boolean) => {
-    const results = sessions.filter(session => hasEvent(session, 'retirement_model_run'));
+    const results = sessions.filter(session => hasEvent(session, resultEvent));
     // Count only CTAs that follow a result in the same session. The cross-sell is
     // rendered before a run, so co-occurrence alone overstates the handoff.
-    const planCtas = results.filter(session => hasResultThenPlanCta(session, ctaEvent));
+    const planCtas = results.filter(session => hasResultThenPlanCta(session, ctaEvent, resultEvent));
     return [
       sessions.length,
       results.length,
@@ -112,7 +133,7 @@ function buildJourney(
   const previousValues = values(previous, previousCoverageComplete);
   const labels = [
     ['qualified_visit', 'Qualified visits', 'Sessions with an explicit page, campaign, query, or tracking signal for this journey.'],
-    ['calculator_result', 'Result shown', 'Sessions that reached retirement_model_run. Calculator reliability lives in the separate calculator dashboard.'],
+    ['calculator_result', 'Result shown', `Sessions that reached ${resultEvent}. Calculator reliability lives in the separate calculator dashboard.`],
     ['plan_cta', 'Actual-plan CTA', 'Result sessions that clicked the journey-specific plan CTA after the result in the same session.'],
     ['trial_complete', 'Trial completed', 'CTA sessions that completed every tracked signup, verification, and first-login step in order.'],
   ] as const;
@@ -133,8 +154,14 @@ function buildJourney(
 }
 
 function unavailableJourney(): BeachheadStageMetric[] {
-  return buildJourney([], [], 'coast_fire_plan_cta_click', false, false)
-    .map(stage => ({ ...stage, value: null, previous: null }));
+  return buildJourney(
+    [],
+    [],
+    'coast_fire_plan_cta_click',
+    COAST_FIRE_EXPERIMENT.resultEvent,
+    false,
+    false,
+  ).map(stage => ({ ...stage, value: null, previous: null }));
 }
 
 function metric(
@@ -183,6 +210,7 @@ export function buildBeachheadScorecard(args: {
         currentCoast,
         previousCoast,
         'coast_fire_plan_cta_click',
+        COAST_FIRE_EXPERIMENT.resultEvent,
         funnelCoverageComplete,
         previousFunnelCoverageComplete,
       )
@@ -192,6 +220,7 @@ export function buildBeachheadScorecard(args: {
         currentBaseline,
         previousBaseline,
         'quickplan_cross_sell_click',
+        RETIREMENT_RESULT_EVENT,
         funnelCoverageComplete,
         previousFunnelCoverageComplete,
       )
@@ -224,7 +253,7 @@ export function buildBeachheadScorecard(args: {
     },
     evidenceGaps: [
       ...(state === 'prelaunch'
-        ? ['The dedicated Coast FIRE experience is marked prelaunch. Ship the experience and set COAST_FIRE_EXPERIMENT.live to true in the launch change; until then this journey is intentionally blank, not zero.']
+        ? ['This journey is reported as prelaunch, so it is intentionally blank rather than zero. The Coast FIRE experience has shipped, so reaching this state means COAST_FIRE_EXPERIMENT.live was set back to false or a caller passed experimentLive: false.']
         : []),
       'Marketing attribution is not persisted on the first-party user record, so financial connection, activation, and payment cannot yet be joined back to the Coast FIRE cohort.',
       'A paid conversion matures after the 30-day trial. Read paid rate only for cohorts old enough to have been charged.',

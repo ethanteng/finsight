@@ -48,7 +48,15 @@ const DIAGNOSTIC_EVENTS = [
   'trial_verify_error', 'trial_login_error',
   'retirement_calculator_field_edited', 'retirement_model_clicked',
   'retirement_model_requested', 'retirement_model_run', 'scroll',
+  'coast_fire_calculated',
 ] as const;
+
+/**
+ * Calculator-result events, one per beachhead journey. These need first-event
+ * timestamps as well as counts: the scorecard proves a plan-CTA handoff by
+ * showing the CTA came after the result in the same session.
+ */
+const RESULT_EVENTS: string[] = ['retirement_model_run', 'coast_fire_calculated'];
 
 let cachedAccessToken: { value: string; expiresAt: number } | null = null;
 
@@ -329,9 +337,10 @@ function toSession(row: Record<string, string>): AnalyticsSession {
   for (const event of [...FUNNEL_EVENTS, ...DIAGNOSTIC_EVENTS]) {
     eventCounts[event] = Number(row[`count_${event}`] || 0);
     // Funnel steps need ordered timestamps for the strict path. Calculator-result
-    // timing is also required so beachhead plan-CTA handoffs can prove ordering.
+    // timing is also required so beachhead plan-CTA handoffs can prove ordering,
+    // for each journey's own result event.
     if (
-      (FUNNEL_EVENTS.includes(event as FunnelEventName) || event === 'retirement_model_run')
+      (FUNNEL_EVENTS.includes(event as FunnelEventName) || RESULT_EVENTS.includes(event))
       && row[`first_${event}`]
     ) {
       firstEventAt[event] = Number(row[`first_${event}`]);

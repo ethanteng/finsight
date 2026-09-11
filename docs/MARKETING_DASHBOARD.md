@@ -26,31 +26,44 @@ retirement-calculator session
   -> strict trial_login_success
 ```
 
-The Coast FIRE journey remains blank until the experiment is explicitly marked
-live. It does not relabel generic retirement traffic. Once live, a session
-enters the Coast FIRE cohort only through one of these auditable signals:
+The Coast FIRE experiment is live (`COAST_FIRE_EXPERIMENT.live === true` in
+`src/marketing-analytics/beachhead-scorecard.ts`). It does not relabel generic
+retirement traffic. A session enters the Coast FIRE cohort only through one of
+these auditable signals:
 
 - page activity under `/coast-fire*`;
 - `content_type=coast_fire_calculator`; or
 - “Coast FIRE” in campaign, keyword, or creative metadata.
 
-The dedicated Coast FIRE result-to-plan CTA must use:
+The Coast FIRE calculator result event and plan CTA must use:
 
 ```text
+event=coast_fire_calculated
+# with calculation_trigger=default|submitted (never dollar amounts)
+
 event=start_free_click
 cta_location=coast_fire_plan_cta
 ```
 
-The launch state is explicit in `COAST_FIRE_EXPERIMENT` in
-`src/marketing-analytics/beachhead-scorecard.ts`. The page-launch change must
-flip `live` to `true`. Until then, the UI says **Pre-launch baseline** and shows
-unavailable values rather than misleading zero conversions. After the flag is
-on, a real zero remains zero and is no longer confused with “not launched.”
+GTM must forward `coast_fire_calculated` to GA4 (Custom Event trigger + GA4
+Event tag mapping `coast_fire_status`, `calculation_trigger`,
+`years_to_retirement`, `source_page`, and `content_type`). Version 16's
+calculator-interaction allowlist does not include this event; without a new
+tag, Qualified visits can move while Result shown and every stage below it stay
+at zero. The existing `start_free_click` tag is enough for the plan CTA as long
+as it passes through `cta_location`.
+
+Setting `COAST_FIRE_EXPERIMENT.live` back to `false` returns the UI to
+**Pre-launch baseline** (blank rather than zero) if the page is pulled. While
+the flag is on, a real zero remains zero and is no longer confused with “not
+launched.”
 
 ## Metric definitions
 
 - **Qualified visits:** quality-filtered sessions in the selected journey.
-- **Result shown:** sessions with `retirement_model_run`.
+- **Result shown:** sessions with that journey's result event
+  (`retirement_model_run` for the retirement calculator baseline;
+  `coast_fire_calculated` for Coast FIRE).
 - **Actual-plan CTA:** result sessions that also fire the journey-specific CTA
   in the same session. Clicking the cross-sell before a result does not count.
 - **Trial completed:** CTA sessions that contain every published signup,

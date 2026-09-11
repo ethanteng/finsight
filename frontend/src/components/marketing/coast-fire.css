@@ -1,0 +1,759 @@
+/*
+ * Styles for /coast-fire-calculator.
+ *
+ * Everything hangs off `.coast-fire-page`, which sits inside `.marketing-site`,
+ * so the palette tokens (--ink, --paper, --cream, --lime, …) defined there
+ * inherit down. Same arrangement as retirement-quickplan.css, and for the same
+ * reason: one standalone landing page, removable in one file.
+ *
+ * Not wrapped in `@scope (.marketing-site)`. An earlier draft was, and every
+ * rule targeting the page root silently stopped matching, because inside a
+ * scope the scoping root is not selectable by a descendant selector. That took
+ * the page's own colour tokens with it: `background: var(--cf-deep-green)`
+ * resolved to nothing, so the dark result card and the dark cross-sell both
+ * rendered white text on paper. Keep the selectors flat.
+ */
+
+.coast-fire-page {
+  --cf-dark: var(--ink);
+  --cf-dark-body: #b9c6bd;
+  --cf-dark-muted: #93a599;
+  --cf-dark-rule: rgba(255, 255, 255, 0.17);
+  --cf-body: #4f5e55;
+  --cf-muted: #5f6d64;
+  --cf-rule: #c8d0c6;
+  --cf-rule-strong: #aeb9ad;
+}
+
+/* --------------------------------------------------------------- the hero */
+
+.coast-fire-page .cf-hero {
+  max-width: 860px;
+  padding-block: 64px 8px;
+}
+
+.coast-fire-page .cf-hero h1 {
+  margin: 22px 0 20px;
+  font-size: clamp(44px, 5.6vw, 72px);
+}
+
+.coast-fire-page .cf-hero-sub {
+  max-width: 640px;
+  margin: 0;
+  color: var(--cf-body);
+  font-size: 19px;
+  line-height: 1.6;
+}
+
+/* --------------------------------------------------- the form and result */
+
+.coast-fire-page .cf-calculator {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(340px, 0.9fr);
+  align-items: start;
+  gap: 20px;
+  padding-block: 40px 84px;
+}
+
+.coast-fire-page .cf-form,
+.coast-fire-page .cf-result-card {
+  border: 1px solid #bfc7ba;
+  border-radius: 24px;
+  box-shadow: 0 24px 60px rgba(20, 47, 32, 0.09);
+}
+
+.coast-fire-page .cf-form {
+  padding: 34px;
+  background: var(--cream);
+}
+
+.coast-fire-page .cf-form-head {
+  padding-bottom: 25px;
+  border-bottom: 1px solid var(--line);
+}
+
+.coast-fire-page .cf-form-head h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 34px;
+  letter-spacing: -0.04em;
+}
+
+.coast-fire-page .cf-form-note {
+  max-width: 62ch;
+  margin: 12px 0 0;
+  color: var(--cf-muted);
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.coast-fire-page .cf-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 22px 24px;
+  padding-top: 28px;
+}
+
+.coast-fire-page .cf-field {
+  min-width: 0;
+}
+
+/* The one field whose hint needs a full line to stay on two rows. */
+.coast-fire-page .cf-field:nth-child(5) {
+  grid-column: 1 / -1;
+}
+
+.coast-fire-page .cf-field > label {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 14px;
+  font-weight: 750;
+}
+
+.coast-fire-page .cf-field > p {
+  margin: 7px 0 0;
+  color: #6d7a72;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.coast-fire-page .cf-input-wrap {
+  display: flex;
+  min-height: 52px;
+  align-items: center;
+  gap: 7px;
+  padding-inline: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: white;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.coast-fire-page .cf-input-wrap:focus-within {
+  border-color: #2b8f5d;
+  box-shadow: 0 0 0 3px rgba(43, 143, 93, 0.15);
+}
+
+.coast-fire-page .cf-input-wrap > span {
+  flex: 0 0 auto;
+  color: #7d8a82;
+  font-size: 15px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.coast-fire-page .cf-input-wrap input {
+  width: 100%;
+  min-width: 0;
+  padding: 13px 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--ink);
+  font-family: var(--font-display), sans-serif;
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.coast-fire-page .cf-input-wrap input::-webkit-inner-spin-button {
+  opacity: 0.3;
+}
+
+.coast-fire-page .cf-calculate-button {
+  width: 100%;
+  margin-top: 28px;
+  border: 0;
+  cursor: pointer;
+  font-size: 16px;
+}
+
+.coast-fire-page .cf-private-note {
+  margin: 14px 0 0;
+  color: #68766e;
+  font-size: 13px;
+  text-align: center;
+}
+
+.coast-fire-page .cf-form-error {
+  margin: 24px 0 0;
+  padding: 13px 15px;
+  border-left: 3px solid #b4352b;
+  border-radius: 4px 10px 10px 4px;
+  background: #fbe9e5;
+  color: #7e2d26;
+  font-size: 14px;
+}
+
+.coast-fire-page .cf-result-column {
+  position: sticky;
+  top: 18px;
+  scroll-margin-top: 18px;
+}
+
+.coast-fire-page .cf-result-card {
+  overflow: hidden;
+  padding: 30px;
+  border-color: #0b1a12;
+  background: var(--cf-dark);
+  color: white;
+}
+
+.coast-fire-page .cf-result-topline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.coast-fire-page .cf-result-topline > span {
+  color: #a6b8ac;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+}
+
+.coast-fire-page .cf-result-topline > strong,
+.coast-fire-page .cf-sensitivity-row .is-reached,
+.coast-fire-page .cf-sensitivity-row .is-building {
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.coast-fire-page .cf-result-topline .is-reached,
+.coast-fire-page .cf-sensitivity-row .is-reached {
+  background: var(--lime);
+  color: var(--ink);
+}
+
+.coast-fire-page .cf-result-topline .is-building,
+.coast-fire-page .cf-sensitivity-row .is-building {
+  background: #f7d6a0;
+  color: #533708;
+}
+
+.coast-fire-page .cf-result-card h2 {
+  margin: 26px 0 0;
+  color: white;
+  font-size: clamp(32px, 3.6vw, 44px);
+  line-height: 1.05;
+}
+
+.coast-fire-page .cf-result-lead {
+  min-height: 76px;
+  margin: 14px 0 26px;
+  color: var(--cf-dark-body);
+  font-size: 16px;
+  line-height: 1.55;
+}
+
+.coast-fire-page .cf-number-block {
+  display: grid;
+  padding: 23px;
+  border: 1px solid var(--cf-dark-rule);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.coast-fire-page .cf-number-block > span {
+  color: var(--cf-dark-body);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.coast-fire-page .cf-number-block strong {
+  margin-top: 6px;
+  color: var(--lime);
+  font-family: var(--font-display), sans-serif;
+  font-size: clamp(40px, 5vw, 56px);
+  letter-spacing: -0.055em;
+}
+
+.coast-fire-page .cf-number-block small {
+  margin-top: 2px;
+  color: var(--cf-dark-muted);
+  font-size: 12px;
+}
+
+.coast-fire-page .cf-progress-label {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 27px;
+  color: var(--cf-dark-body);
+  font-size: 13px;
+}
+
+.coast-fire-page .cf-progress-label b {
+  color: white;
+}
+
+.coast-fire-page .cf-progress {
+  overflow: hidden;
+  height: 12px;
+  margin-top: 9px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.coast-fire-page .cf-progress span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #88cda4, var(--lime));
+}
+
+.coast-fire-page .cf-current-savings {
+  display: block;
+  margin-top: 9px;
+  font-family: var(--font-display), sans-serif;
+  font-size: 19px;
+}
+
+.coast-fire-page .cf-result-metrics {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  margin: 27px 0 0;
+  border-block: 1px solid var(--cf-dark-rule);
+}
+
+.coast-fire-page .cf-result-metrics div {
+  padding: 18px 12px 18px 0;
+}
+
+.coast-fire-page .cf-result-metrics div + div {
+  padding-left: 18px;
+  border-left: 1px solid var(--cf-dark-rule);
+}
+
+.coast-fire-page .cf-result-metrics dt {
+  color: var(--cf-dark-muted);
+  font-size: 12px;
+}
+
+.coast-fire-page .cf-result-metrics dd {
+  margin: 6px 0 0;
+  font-family: var(--font-display), sans-serif;
+  font-size: 21px;
+  font-weight: 750;
+}
+
+.coast-fire-page .cf-result-note {
+  margin: 20px 0 0;
+  color: var(--cf-dark-muted);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+/* ------------------------------------------------------- section headings */
+
+/*
+ * Kicker, heading, then a supporting line beside the heading on wide screens.
+ * Stacked in normal flow rather than pulled into place with a negative margin,
+ * which is how an earlier draft overlapped the kicker with its own heading.
+ */
+.coast-fire-page .cf-section-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr);
+  align-items: end;
+  gap: 12px 80px;
+}
+
+.coast-fire-page .cf-section-head .section-kicker {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+.coast-fire-page .cf-section-head h2 {
+  max-width: 730px;
+}
+
+.coast-fire-page .cf-section-head > p:last-of-type {
+  margin: 0 0 6px;
+  color: var(--cf-muted);
+  font-size: 17px;
+  line-height: 1.65;
+}
+
+/* Only a kicker and a heading: no second column to align against. */
+.coast-fire-page .cf-assumptions .cf-section-head {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+/* ------------------------------------------------- return sensitivity table */
+
+.coast-fire-page .cf-sensitivity {
+  padding-block: 96px;
+  border-top: 1px solid var(--cf-rule);
+}
+
+.coast-fire-page .cf-sensitivity-table {
+  margin-top: 46px;
+  border-block: 1px solid var(--cf-rule-strong);
+}
+
+.coast-fire-page .cf-sensitivity-row {
+  display: grid;
+  grid-template-columns: 1fr 1.2fr 0.7fr;
+  align-items: center;
+  min-height: 74px;
+  border-bottom: 1px solid var(--cf-rule);
+}
+
+.coast-fire-page .cf-sensitivity-row:last-child {
+  border-bottom: 0;
+}
+
+.coast-fire-page .cf-sensitivity-row > * {
+  padding-inline: 18px;
+}
+
+.coast-fire-page .cf-sensitivity-row > *:first-child {
+  padding-left: 0;
+}
+
+.coast-fire-page .cf-sensitivity-row strong {
+  font-family: var(--font-display), sans-serif;
+  font-size: 22px;
+}
+
+.coast-fire-page .cf-sensitivity-row > span {
+  color: var(--cf-muted);
+  font-size: 14px;
+}
+
+.coast-fire-page .cf-sensitivity-row .is-reached,
+.coast-fire-page .cf-sensitivity-row .is-building {
+  width: fit-content;
+  justify-self: start;
+}
+
+.coast-fire-page .cf-sensitivity-head {
+  min-height: 52px;
+  color: #5c6a61;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.coast-fire-page .cf-sensitivity-row.is-selected {
+  background: rgba(217, 255, 111, 0.3);
+}
+
+/* ------------------------------------------------------------ assumptions */
+
+.coast-fire-page .cf-assumptions {
+  display: grid;
+  grid-template-columns: 0.75fr 1.25fr;
+  gap: 24px 80px;
+  padding-block: 84px 100px;
+  border-top: 1px solid var(--cf-rule);
+}
+
+.coast-fire-page .cf-assumptions h2 {
+  font-size: clamp(38px, 4.2vw, 48px);
+}
+
+.coast-fire-page .cf-assumptions ul {
+  grid-row: 1 / span 2;
+  grid-column: 2;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--cf-rule-strong);
+  list-style: none;
+}
+
+.coast-fire-page .cf-assumptions li {
+  display: grid;
+  grid-template-columns: 0.8fr 1.2fr;
+  gap: 25px;
+  padding: 22px 0;
+  border-bottom: 1px solid var(--cf-rule);
+}
+
+.coast-fire-page .cf-assumptions li strong {
+  font-family: var(--font-display), sans-serif;
+  font-size: 17px;
+}
+
+.coast-fire-page .cf-assumptions li span {
+  color: var(--cf-muted);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+/* Under the heading in column one, clear of the list it qualifies. */
+.coast-fire-page .cf-limitations {
+  grid-column: 1;
+  align-self: start;
+  margin: 0;
+  color: #67736b;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+/* ------------------------------------------------------------- cross-sell */
+
+.coast-fire-page .cf-cross-sell {
+  padding-block: 84px;
+  background: var(--cf-dark);
+  color: white;
+}
+
+.coast-fire-page .cf-cross-sell-inner {
+  max-width: 780px;
+}
+
+.coast-fire-page .cf-cross-sell h2 {
+  margin: 0 0 20px;
+  color: white;
+  font-size: clamp(34px, 4vw, 52px);
+  font-weight: 660;
+  line-height: 1.1;
+  letter-spacing: -0.05em;
+}
+
+.coast-fire-page .cf-cross-sell > .shell > p:not(.microcopy) {
+  margin: 0 0 30px;
+  color: var(--cf-dark-body);
+  font-size: 17px;
+  line-height: 1.68;
+}
+
+.coast-fire-page .cf-decision-list {
+  display: grid;
+  margin: 0 0 34px;
+  padding: 0;
+  border-top: 1px solid var(--cf-dark-rule);
+  list-style: none;
+}
+
+.coast-fire-page .cf-decision-list li {
+  padding: 16px 0;
+  border-bottom: 1px solid var(--cf-dark-rule);
+  color: white;
+  font-family: var(--font-display), sans-serif;
+  font-size: clamp(19px, 2.2vw, 25px);
+  font-weight: 700;
+  letter-spacing: -0.035em;
+}
+
+.coast-fire-page .cf-cross-sell .button {
+  border: 0;
+  cursor: pointer;
+}
+
+/* The page's one conversion button, sized past the site's hero button. */
+.coast-fire-page .cf-cross-sell .button-primary {
+  padding: 24px 44px;
+  font-size: 20px;
+  letter-spacing: -0.02em;
+  box-shadow: 0 10px 0 rgba(16, 35, 25, 0.22);
+}
+
+/* `.microcopy` is coloured for a light section; this one sits on ink. */
+.coast-fire-page .cf-cross-sell .microcopy {
+  margin: 18px 0 0;
+  color: var(--cf-dark-muted);
+  font-size: 13px;
+}
+
+/* ------------------------------------------------------------------- FAQ */
+
+.coast-fire-page .cf-faq {
+  padding-block: 92px;
+}
+
+.coast-fire-page .cf-faq-list {
+  margin-top: 46px;
+  border-top: 1px solid var(--cf-rule-strong);
+}
+
+.coast-fire-page .cf-faq details {
+  border-bottom: 1px solid var(--cf-rule);
+}
+
+.coast-fire-page .cf-faq summary {
+  display: flex;
+  min-height: 74px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.coast-fire-page .cf-faq summary::-webkit-details-marker {
+  display: none;
+}
+
+.coast-fire-page .cf-faq h3 {
+  margin: 0;
+  font-family: var(--font-display), sans-serif;
+  font-size: 21px;
+  letter-spacing: -0.025em;
+}
+
+.coast-fire-page .cf-faq summary > span {
+  flex: 0 0 auto;
+  color: #3c6b52;
+  font-size: 24px;
+  transition: transform 0.2s;
+}
+
+.coast-fire-page .cf-faq details[open] summary > span {
+  transform: rotate(45deg);
+}
+
+.coast-fire-page .cf-faq details > p {
+  max-width: 850px;
+  margin: -4px 0 27px;
+  color: var(--cf-muted);
+  font-size: 16px;
+  line-height: 1.7;
+}
+
+/* ----------------------------------------------------- retirement handoff */
+
+.coast-fire-page .cf-related {
+  display: grid;
+  grid-template-columns: 0.7fr 1.5fr auto;
+  align-items: center;
+  gap: 35px;
+  margin-bottom: 96px;
+  padding: 28px 32px;
+  border: 1px solid var(--cf-rule-strong);
+  border-radius: 18px;
+  background: var(--cream);
+}
+
+.coast-fire-page .cf-related > span {
+  color: #2f6046;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+
+.coast-fire-page .cf-related p {
+  margin: 0;
+  color: var(--cf-muted);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.coast-fire-page .cf-related a {
+  border-bottom: 1px solid currentColor;
+  font-size: 14px;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------------------- responsive */
+
+@media (max-width: 980px) {
+  .coast-fire-page .cf-calculator,
+  .coast-fire-page .cf-section-head,
+  .coast-fire-page .cf-assumptions {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .coast-fire-page .cf-result-column {
+    position: static;
+  }
+
+  .coast-fire-page .cf-assumptions ul {
+    grid-row: auto;
+    grid-column: auto;
+  }
+
+  .coast-fire-page .cf-limitations {
+    grid-column: auto;
+  }
+
+  .coast-fire-page .cf-related {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+  }
+
+  .coast-fire-page .cf-related a {
+    white-space: normal;
+  }
+}
+
+@media (max-width: 720px) {
+  .coast-fire-page .cf-hero {
+    padding-block: 44px 4px;
+  }
+
+  .coast-fire-page .cf-hero h1 {
+    font-size: 42px;
+  }
+
+  .coast-fire-page .cf-calculator {
+    padding-block: 30px 64px;
+  }
+
+  .coast-fire-page .cf-form {
+    padding: 28px 24px;
+  }
+
+  .coast-fire-page .cf-form-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .coast-fire-page .cf-field:nth-child(5) {
+    grid-column: auto;
+  }
+
+  .coast-fire-page .cf-result-card {
+    padding: 28px 24px;
+  }
+
+  .coast-fire-page .cf-result-lead {
+    min-height: 0;
+  }
+
+  .coast-fire-page .cf-sensitivity,
+  .coast-fire-page .cf-faq {
+    padding-block: 70px;
+  }
+
+  .coast-fire-page .cf-assumptions {
+    padding-block: 70px 84px;
+  }
+
+  .coast-fire-page .cf-assumptions li {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 7px;
+  }
+
+  .coast-fire-page .cf-sensitivity-row {
+    grid-template-columns: 0.85fr 1.15fr;
+  }
+
+  .coast-fire-page .cf-sensitivity-row > * {
+    padding-inline: 8px;
+  }
+
+  /* The status pill repeats what the two visible columns already say. */
+  .coast-fire-page .cf-sensitivity-row > *:nth-child(3) {
+    display: none;
+  }
+
+  .coast-fire-page .cf-cross-sell {
+    padding-block: 70px;
+  }
+
+  .coast-fire-page .cf-cross-sell .button-primary {
+    width: 100%;
+    padding: 22px 24px;
+    font-size: 18px;
+  }
+
+  .coast-fire-page .cf-related {
+    margin-bottom: 70px;
+  }
+}

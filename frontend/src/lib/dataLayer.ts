@@ -24,6 +24,15 @@ export type RetirementInteractionEvent =
   | 'retirement_api_error'
   | 'retirement_request_error';
 
+export type CoastFireStatus = 'reached' | 'not_yet';
+
+/**
+ * Whether the visitor was shown the page's default scenario or one they
+ * submitted. Both are results the page put in front of them, so both count as
+ * the scorecard's "Result shown"; the field keeps them separable in reporting.
+ */
+export type CoastFireTrigger = 'default' | 'submitted';
+
 /**
  * Every input the calculator can blame an error on, including the two the form
  * does not render (`lifeExpectancy` is derived server-side, `body` means the
@@ -96,8 +105,9 @@ function pushToDataLayer(payload: Record<string, unknown>): void {
 
 function getContentType(pathname: string): string {
   if (pathname === '/retirement-answers') return 'retirement_answers_hub';
-  // Reserved before the beachhead page launches so its traffic cannot be
-  // silently folded into the generic retirement baseline.
+  // Its own type so the beachhead page's traffic cannot be silently folded
+  // into the generic retirement baseline. Matched by prefix, which also keeps
+  // any later /coast-fire-* variant out of the generic bucket by default.
   if (pathname.startsWith('/coast-fire')) return 'coast_fire_calculator';
   // Its own type rather than the generic bucket: this is the page the header's
   // Retirement link and paid search both land on, and a CTA taken after running
@@ -105,6 +115,31 @@ function getContentType(pathname: string): string {
   if (pathname === '/retirement-calculator') return 'retirement_calculator';
   if (/^\/can-i-retire-(at|with)-/.test(pathname)) return 'retirement_answer';
   return 'marketing_page';
+}
+
+/**
+ * Record the calculator outcome as a funnel event, never the figures used to
+ * reach it. GTM needs a Custom Event trigger on `coast_fire_calculated` plus a
+ * GA4 Event tag that forwards `coast_fire_status`, `calculation_trigger`,
+ * `years_to_retirement`, `source_page`, and `content_type`; without that tag
+ * the beachhead scorecard's Result shown stage stays at zero even when the
+ * page is live and visitors are calculating.
+ */
+export function pushCoastFireCalculated(
+  status: CoastFireStatus,
+  yearsToRetirement: number,
+  trigger: CoastFireTrigger = 'submitted',
+): void {
+  if (typeof window === 'undefined') return;
+  trackContentsquareEvent('coast_fire_calculated');
+  pushToDataLayer({
+    event: 'coast_fire_calculated',
+    source_page: window.location.pathname,
+    content_type: 'coast_fire_calculator',
+    coast_fire_status: status,
+    calculation_trigger: trigger,
+    years_to_retirement: Math.max(0, Math.min(77, Math.round(yearsToRetirement))),
+  });
 }
 
 export function pushBeginCheckout(ctaLocation = 'marketing_cta'): void {
