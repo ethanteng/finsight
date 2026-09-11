@@ -204,6 +204,22 @@ it('does not describe when a Social Security benefit of zero starts', async () =
   expect(screen.queryByText(/counts your benefit/i)).toBeNull();
 });
 
+it('still renders a plan when the response omits the assumed list', async () => {
+  // FE can land before BE on a rolling deploy; an older payload has primary
+  // but no `assumed`. The page must not throw on assumed.length.
+  const { assumed: _ignored, ...legacyPlan } = PLAN_RESULT;
+  (global.fetch as jest.Mock).mockImplementation((url: string, init?: RequestInit) =>
+    Promise.resolve(init?.method
+      ? { ok: true, json: async () => legacyPlan }
+      : { ok: true, json: async () => ({ allocations: [] })})
+  );
+
+  renderPage();
+  fireEvent.submit(screen.getByRole('button', { name: /run the model/i }).closest('form')!);
+  expect(await screen.findByText(/the model's answer/i)).toBeInTheDocument();
+  expect(screen.queryByText(/the model assumed/i)).toBeNull();
+});
+
 it('does not carry a notional portfolio into the signup handoff', async () => {
   (global.fetch as jest.Mock).mockImplementation((url: string, init?: RequestInit) =>
     Promise.resolve(init?.method

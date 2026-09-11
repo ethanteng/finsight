@@ -751,8 +751,11 @@ function useReportedRun(result: QuickPlanResult) {
 }
 
 /** What the model filled in for itself, said plainly and above the answer. */
-function AssumedInputs({ assumed }: { assumed: QuickPlanResult["assumed"] }) {
-  if (assumed.length === 0) return null;
+function AssumedInputs({ assumed }: { assumed: QuickPlanResult["assumed"] | undefined }) {
+  // Tolerate a response that predates the `assumed` field (FE can roll out
+  // ahead of BE). Treating a missing list as empty keeps plan results
+  // rendering instead of throwing on `.length`.
+  if (!assumed || assumed.length === 0) return null;
   return (
     <div className="qp-assumed" role="note">
       <strong>You left {assumed.length === 1 ? "one box" : `${assumed.length} boxes`} blank, so the model assumed:</strong>
