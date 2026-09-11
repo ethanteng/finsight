@@ -266,7 +266,7 @@ export default function MarketingDashboardPage() {
             </div>
 
             {report.beachhead.state === 'prelaunch' && <div className="mt-6 rounded-2xl border border-[#9d6a16]/20 bg-[#f4ead0] p-4 text-sm leading-6 text-[#654710]">
-              <strong>The experiment is not live yet.</strong> The current <code>/retirement-calculator</code> flow remains unchanged and no <code>/coast-fire-calculator</code> signal has been observed. These blanks are the honest pre-launch state, not zero conversions.
+              <strong>The experiment is not live yet.</strong> The Coast FIRE experience is still marked prelaunch in code (<code>COAST_FIRE_EXPERIMENT.live</code>). The current <code>/retirement-calculator</code> baseline remains the comparison surface; these blanks are intentional, not zero conversions.
             </div>}
 
             <Journey stages={report.beachhead.coastFireJourney} compare={filters.compare} unavailableLabel={report.beachhead.state === 'prelaunch' ? 'Not launched' : 'Collecting'} />
