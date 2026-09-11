@@ -684,7 +684,9 @@ jobs:
           vercel-token: ${{ secrets.VERCEL_TOKEN }}
           vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
           vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
-          target: production
+          # v42 defaults to its CLI path; production must be expressed as a
+          # CLI argument. The typed `target` input only applies in API mode.
+          vercel-args: --prod
           root-directory: frontend
 
   deploy-backend:
