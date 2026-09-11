@@ -176,6 +176,11 @@ export function buildQuery(projectId: string, datasetId: string, dates: ReturnTy
     const signupGuard = event === 'sign_up' ? " AND signup_flow = 'free_trial'" : '';
     return `COUNTIF(event_name = '${event}'${signupGuard}) AS count_${event}, MIN(IF(event_name = '${event}'${signupGuard}, event_timestamp, NULL)) AS first_${event}`;
   }).join(',\n    ');
+  const journeyColumns = [
+    "COUNTIF(event_name = 'start_free_click' AND cta_location = 'quickplan_cross_sell') AS count_quickplan_cross_sell_click",
+    "COUNTIF(event_name = 'start_free_click' AND cta_location = 'coast_fire_plan_cta') AS count_coast_fire_plan_cta_click",
+    "COUNTIF(content_type = 'coast_fire_calculator' OR REGEXP_CONTAINS(LOWER(COALESCE(page_location, source_page, '')), r'/coast[-_]fire')) AS count_coast_fire_touch",
+  ].join(',\n    ');
 
   return `
 WITH raw AS (
@@ -189,6 +194,8 @@ WITH raw AS (
     (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'page_location') AS page_location,
     (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'page_referrer') AS page_referrer,
     (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'source_page') AS source_page,
+    (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'cta_location') AS cta_location,
+    (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'content_type') AS content_type,
     (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'signup_flow') AS signup_flow,
     (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'traffic_type') AS traffic_type,
     COALESCE(
@@ -261,7 +268,8 @@ WITH raw AS (
     SUM(engagement_ms) AS engagement_ms,
     COUNTIF(event_name = 'page_view') AS page_views,
     COUNT(*) AS event_count,
-    ${eventColumns}
+    ${eventColumns},
+    ${journeyColumns}
   FROM raw
   WHERE user_pseudo_id IS NOT NULL AND session_id IS NOT NULL
   GROUP BY user_pseudo_id, session_id
@@ -322,6 +330,9 @@ function toSession(row: Record<string, string>): AnalyticsSession {
       firstEventAt[event as FunnelEventName] = Number(row[`first_${event}`]);
     }
   }
+  eventCounts.quickplan_cross_sell_click = Number(row.count_quickplan_cross_sell_click || 0);
+  eventCounts.coast_fire_plan_cta_click = Number(row.count_coast_fire_plan_cta_click || 0);
+  eventCounts.coast_fire_touch = Number(row.count_coast_fire_touch || 0);
   const hostname = row.hostname || '';
   const device = row.device || 'unknown';
   const browser = row.browser || '';

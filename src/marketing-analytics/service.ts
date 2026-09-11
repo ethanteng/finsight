@@ -1,5 +1,6 @@
 import { getPrismaClient } from '../prisma-client';
 import { aggregateTrialFunnel } from './funnel';
+import { buildBeachheadScorecard } from './beachhead-scorecard';
 import { classifyIntent } from './intent-rules';
 import { loadGa4Sessions } from './adapters/ga4-bigquery';
 import { isIncludedByDefault } from './traffic-quality';
@@ -185,6 +186,13 @@ async function firstPartySummary(period: ReturnType<typeof requestedPeriod>): Pr
       emailVerified: true,
       lastLoginAt: true,
       subscriptionStatus: true,
+      accessTokens: {
+        where: { isActive: true, supersededAt: null },
+        select: { id: true },
+        take: 1,
+      },
+      snapTradeUser: { select: { id: true } },
+      publicApiCredential: { select: { id: true } },
       _count: { select: { conversations: true } },
     },
   });
@@ -197,9 +205,13 @@ async function firstPartySummary(period: ReturnType<typeof requestedPeriod>): Pr
       accountsCurrentlyVerified: users.filter(user => user.emailVerified).length,
       createdAccountsWithLogin: users.filter(user => user.lastLoginAt !== null).length,
       createdAccountsWithConversation: activatedUserIds.size,
+      createdAccountsWithFinancialConnection: users.filter(user =>
+        user.accessTokens.length > 0 || user.snapTradeUser !== null || user.publicApiCredential !== null
+      ).length,
+      createdAccountsCurrentlyPaid: users.filter(user => user.subscriptionStatus === 'active').length,
       subscriptionsCreated,
       currentlyTrialingAccounts: users.filter(user => user.subscriptionStatus === 'trialing').length,
-    note: 'Live database counts for accounts created in the selected window. Verification, latest-login, and current subscription state are not attribution events and may have changed later.',
+    note: 'Live database counts for accounts created in the selected window. Financial connection means an active Plaid connection, SnapTrade registration, or verified Public credential. Verification, latest-login, and current subscription state may have changed later.',
   };
 }
 
@@ -266,6 +278,8 @@ export async function getMarketingDashboard(filters: MarketingFilters): Promise<
       accountsCurrentlyVerified: null,
       createdAccountsWithLogin: null,
       createdAccountsWithConversation: null,
+      createdAccountsWithFinancialConnection: null,
+      createdAccountsCurrentlyPaid: null,
       subscriptionsCreated: null,
       currentlyTrialingAccounts: null,
       note: 'The first-party account store could not be read. These values are unavailable, not zero.',
@@ -281,6 +295,14 @@ export async function getMarketingDashboard(filters: MarketingFilters): Promise<
     ? previous.filter(session => session.sessionDate >= trackingStartedAt)
     : [];
   const previousFunnelCovered = Boolean(trackingStartedAt && period.previousStart >= trackingStartedAt);
+  const beachhead = buildBeachheadScorecard({
+    current,
+    previous,
+    ga4Live: hasLiveGa4,
+    funnelCoverageComplete,
+    previousFunnelCoverageComplete: previousFunnelCovered,
+    firstParty,
+  });
   const funnel = hasLiveGa4 && trackingStartedAt
     ? aggregateTrialFunnel(funnelSessions, funnelCoverage)
     : emptyFunnel();
@@ -401,6 +423,7 @@ export async function getMarketingDashboard(filters: MarketingFilters): Promise<
       cac: metric(null, null, 'currency', 'Unavailable', 'Requires paid spend plus an agreed acquisition boundary.'),
     },
     firstParty,
+    beachhead,
     funnel,
     funnelErrors: ['trial_signup_validation_error', 'trial_signup_registration_error', 'trial_verify_error', 'trial_login_error'].map(event => ({
       event,

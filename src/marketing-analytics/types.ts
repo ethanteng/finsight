@@ -203,9 +203,37 @@ export interface FirstPartySummary {
   accountsCurrentlyVerified: number | null;
   createdAccountsWithLogin: number | null;
   createdAccountsWithConversation: number | null;
+  createdAccountsWithFinancialConnection: number | null;
+  createdAccountsCurrentlyPaid: number | null;
   subscriptionsCreated: number | null;
   currentlyTrialingAccounts: number | null;
   note: string;
+}
+
+export type BeachheadStageId = 'qualified_visit' | 'calculator_result' | 'plan_cta' | 'trial_complete';
+
+export interface BeachheadStageMetric {
+  id: BeachheadStageId;
+  label: string;
+  value: number | null;
+  previous: number | null;
+  conversionRate: number | null;
+  previousConversionRate: number | null;
+  note: string;
+}
+
+export interface BeachheadScorecard {
+  state: 'prelaunch' | 'collecting' | 'measuring';
+  cohortLabel: string;
+  cohortDefinition: string;
+  coastFireJourney: BeachheadStageMetric[];
+  currentCalculatorBaseline: BeachheadStageMetric[];
+  downstream: {
+    financialConnectionRate: MetricValue;
+    activationRate: MetricValue;
+    paidRate: MetricValue;
+  };
+  evidenceGaps: string[];
 }
 
 export interface MarketingDashboardReport {
@@ -229,6 +257,7 @@ export interface MarketingDashboardReport {
     cac: MetricValue;
   };
   firstParty: FirstPartySummary;
+  beachhead: BeachheadScorecard;
   funnel: FunnelStepMetric[];
   funnelErrors: Array<{ event: string; sessions: number | null; events: number | null; rate: number | null }>;
   acquisition: BreakdownRow[];
