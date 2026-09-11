@@ -7,6 +7,7 @@
  * the field name discarded. These cover the field attribution on both paths.
  */
 
+import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { RetirementQuickPlan } from '@/components/marketing/RetirementQuickPlan';
 import { pushRetirementInteraction } from '@/lib/dataLayer';
@@ -14,6 +15,19 @@ import { pushRetirementInteraction } from '@/lib/dataLayer';
 jest.mock('@/lib/dataLayer', () => ({
   pushRetirementInteraction: jest.fn(),
   pushRetirementModelRun: jest.fn(),
+}));
+
+// Recharts needs a ResizeObserver jsdom does not provide, and these cases are
+// about the copy around the chart rather than the chart.
+jest.mock('recharts', () => ({
+  BarChart: ({ children }: { children?: React.ReactNode }) => <div>{children}</div>,
+  Bar: ({ children }: { children?: React.ReactNode }) => <div>{children}</div>,
+  Cell: () => null,
+  LabelList: () => null,
+  ReferenceLine: () => null,
+  XAxis: () => null,
+  YAxis: () => null,
+  ResponsiveContainer: ({ children }: { children?: React.ReactNode }) => <div>{children}</div>,
 }));
 
 const interaction = jest.mocked(pushRetirementInteraction);
@@ -34,8 +48,39 @@ function fillValidPlan() {
   fill(/annual spending in retirement/i, '95000');
 }
 
+/** A rates-mode response: no portfolio given, so no dollars and no verdict. */
+const RATES_RESULT = {
+  mode: 'rates',
+  assumed: [
+    { field: 'retirementAge', value: 65, note: 'Retiring at 65, the conventional planning age.' },
+    { field: 'currentAge', value: 65, note: 'Retiring now rather than saving for it, since no current age was given.' },
+  ],
+  missing: ['investableAssets', 'annualSpending'],
+  inputs: {
+    currentAge: 65, retirementAge: 65, investableAssets: 1_000_000, annualSpending: 40_000,
+    annualContributions: 0, socialSecurityAnnual: 0, socialSecurityStartAge: 67,
+    lifeExpectancy: 95, allocation: 'balanced',
+  },
+  allocation: { id: 'balanced', label: 'Balanced', description: 'Example', equityPercent: 60 },
+  history: {
+    firstMonth: '1926-07', lastMonth: '2025-12', firstStartMonth: '1926-07',
+    lastStartMonth: '1995-12', horizonYears: 30, sequencesTested: 834,
+  },
+  primary: null,
+  alternatives: [],
+  sustainableSpending: null,
+  sustainableSpendingRates: {
+    p10: 0.031, p25: 0.036, p50: 0.04, p75: 0.047, p90: 0.055,
+    solverFloorRate: 0.02, solverCeilingRate: 0.08,
+  },
+  assumptions: [],
+  limitations: [],
+};
+
 beforeEach(() => {
+  window.sessionStorage.clear();
   interaction.mockClear();
+  Element.prototype.scrollIntoView = jest.fn();
   global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({ allocations: [] }) });
 });
 
@@ -56,11 +101,75 @@ it('reports which field blocked a submission, and how many were failing', async 
   });
 });
 
-it('does not require the two numbers the model accepts as zero', () => {
+it('requires nothing, so the browser never blocks a submission', () => {
   renderPage();
-  expect(screen.getByLabelText(/annual contributions until then/i)).not.toBeRequired();
-  expect(screen.getByLabelText(/social security estimate/i)).not.toBeRequired();
-  expect(screen.getByLabelText(/current age/i)).toBeRequired();
+  for (const label of [
+    /current age/i,
+    /retirement age/i,
+    /investment assets today/i,
+    /annual spending in retirement/i,
+    /annual contributions until then/i,
+    /social security estimate/i,
+  ]) {
+    expect(screen.getByLabelText(label)).not.toBeRequired();
+  }
+});
+
+it('omits a blank field rather than posting it as zero', async () => {
+  const calls: Array<Record<string, unknown>> = [];
+  (global.fetch as jest.Mock).mockImplementation((url: string, init?: RequestInit) => {
+    if (!init?.method) return Promise.resolve({ ok: true, json: async () => ({ allocations: [] }) });
+    calls.push(JSON.parse(String(init.body)));
+    return Promise.resolve({ ok: true, json: async () => RATES_RESULT });
+  });
+
+  renderPage();
+  fill(/current age/i, '52');
+  fireEvent.submit(screen.getByRole('button', { name: /run the model/i }).closest('form')!);
+
+  await waitFor(() => expect(calls).toHaveLength(1));
+  // Zero is an answer the model would reject; absent is a blank it answers around.
+  expect(calls[0]).not.toHaveProperty('investableAssets');
+  expect(calls[0]).not.toHaveProperty('annualSpending');
+  expect(calls[0]).toMatchObject({ currentAge: 52 });
+});
+
+it('answers in rates, names what it assumed, and invents no dollar figure', async () => {
+  (global.fetch as jest.Mock).mockImplementation((url: string, init?: RequestInit) =>
+    Promise.resolve(init?.method
+      ? { ok: true, json: async () => RATES_RESULT }
+      : { ok: true, json: async () => ({ allocations: [] })})
+  );
+
+  renderPage();
+  fireEvent.submit(screen.getByRole('button', { name: /run the model/i }).closest('form')!);
+
+  const results = await screen.findByText(/what this mix sustained/i);
+  const panel = results.closest('section')!;
+  // The cautious figure leads, not the median.
+  expect(panel).toHaveTextContent(/3\.1% of the portfolio a year/);
+  expect(panel).toHaveTextContent(/4\.0%/);
+  expect(panel).toHaveTextContent(/Retiring at 65, the conventional planning age/);
+  expect(panel).toHaveTextContent(/what you have invested and what you expect to spend/);
+  // The notional portfolio the run was normalized against must never surface.
+  expect(panel.textContent).not.toContain('1,000,000');
+  expect(panel.textContent).not.toContain('$');
+});
+
+it('does not carry a notional portfolio into the signup handoff', async () => {
+  (global.fetch as jest.Mock).mockImplementation((url: string, init?: RequestInit) =>
+    Promise.resolve(init?.method
+      ? { ok: true, json: async () => RATES_RESULT }
+      : { ok: true, json: async () => ({ allocations: [] })})
+  );
+
+  renderPage();
+  fireEvent.submit(screen.getByRole('button', { name: /run the model/i }).closest('form')!);
+  await screen.findByText(/what this mix sustained/i);
+
+  // The plan-mode CTA forwards the entered scenario; a rates run has none.
+  expect(screen.queryByRole('link', { name: /run this with my actual finances/i })).toBeNull();
+  expect(window.sessionStorage.getItem('asklinc.retirement-signup-context.v1')).toBeNull();
 });
 
 it('shows a rejected number under the field it is about, and names the field to analytics', async () => {

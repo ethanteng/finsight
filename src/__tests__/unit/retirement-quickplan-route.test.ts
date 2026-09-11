@@ -46,6 +46,14 @@ const SHORT_PLAN = {
   allocation: 'balanced',
 };
 
+/**
+ * A request the limiter counts but the simulator never runs. An empty body no
+ * longer serves: blanks are assumed now, so `{}` is a valid plan and each of
+ * these tests would pay for a full run. An out-of-range figure is still a
+ * rejection, and it is rejected before any simulation.
+ */
+const REJECTED_PLAN = { ...SHORT_PLAN, investableAssets: 0 };
+
 describe('retirement quick plan route', () => {
   let app: express.Express;
 
@@ -73,7 +81,7 @@ describe('retirement quick plan route', () => {
   it('returns 400 and names the offending field for a bad plan', async () => {
     const response = await request(app)
       .post('/api/retirement-quickplan')
-      .send({ ...SHORT_PLAN, investableAssets: 0 });
+      .send(REJECTED_PLAN);
 
     expect(response.status).toBe(400);
     expect(response.body.field).toBe('investableAssets');
@@ -96,8 +104,8 @@ describe('retirement quick plan route', () => {
 
     // Rejected on validation, but the limiter runs first and still spends the
     // window — so this costs no simulation.
-    const first = await request(limited).post('/api/retirement-quickplan').send({});
-    const second = await request(limited).post('/api/retirement-quickplan').send({});
+    const first = await request(limited).post('/api/retirement-quickplan').send(REJECTED_PLAN);
+    const second = await request(limited).post('/api/retirement-quickplan').send(REJECTED_PLAN);
 
     expect(first.status).toBe(400);
     expect(second.status).toBe(429);
@@ -113,11 +121,11 @@ describe('retirement quick plan route', () => {
     const first = await request(limited)
       .post('/api/retirement-quickplan')
       .set('X-Forwarded-For', '9.9.9.9, 203.0.113.7')
-      .send({});
+      .send(REJECTED_PLAN);
     const second = await request(limited)
       .post('/api/retirement-quickplan')
       .set('X-Forwarded-For', '1.1.1.1, 203.0.113.7')
-      .send({});
+      .send(REJECTED_PLAN);
 
     expect(first.status).toBe(400);
     expect(second.status).toBe(429);
@@ -129,11 +137,11 @@ describe('retirement quick plan route', () => {
     const first = await request(limited)
       .post('/api/retirement-quickplan')
       .set('X-Forwarded-For', '203.0.113.7')
-      .send({});
+      .send(REJECTED_PLAN);
     const second = await request(limited)
       .post('/api/retirement-quickplan')
       .set('X-Forwarded-For', '198.51.100.4')
-      .send({});
+      .send(REJECTED_PLAN);
 
     expect(first.status).toBe(400);
     expect(second.status).toBe(400);
@@ -147,11 +155,11 @@ describe('retirement quick plan route', () => {
     const first = await request(strict)
       .post('/api/retirement-quickplan')
       .set('X-Forwarded-For', '9.9.9.9')
-      .send({});
+      .send(REJECTED_PLAN);
     const second = await request(strict)
       .post('/api/retirement-quickplan')
       .set('X-Forwarded-For', '1.1.1.1')
-      .send({});
+      .send(REJECTED_PLAN);
 
     expect(first.status).toBe(400);
     // Both collapse onto the same socket address rather than each getting a window.
@@ -165,7 +173,7 @@ describe('retirement quick plan route', () => {
 
     const response = await request(misconfigured)
       .post('/api/retirement-quickplan')
-      .send({ ...SHORT_PLAN, investableAssets: 0 });
+      .send(REJECTED_PLAN);
 
     expect(response.headers['x-ratelimit-limit']).toBe('20');
   });
@@ -173,7 +181,7 @@ describe('retirement quick plan route', () => {
   it('does not rate limit the options endpoint', async () => {
     const limited = buildApp('1');
 
-    await request(limited).post('/api/retirement-quickplan').send({});
+    await request(limited).post('/api/retirement-quickplan').send(REJECTED_PLAN);
     const options = await request(limited).get('/api/retirement-quickplan/options');
 
     expect(options.status).toBe(200);

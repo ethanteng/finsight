@@ -240,6 +240,62 @@
   font-size: 12px;
 }
 
+.quickplan-page .qp-form-note {
+  margin: 8px 0 0;
+  color: #74807a;
+  font-size: 13px;
+  line-height: 1.55;
+  max-width: 62ch;
+}
+
+/*
+ * What the model filled in for itself, stated above the answer rather than
+ * under it. An assumption a visitor reads after the headline number is an
+ * assumption they have already been persuaded by.
+ */
+.quickplan-page .qp-assumed {
+  margin: 0 0 20px;
+  padding: 13px 16px;
+  border-left: 3px solid #b8873f;
+  border-radius: 4px 10px 10px 4px;
+  background: #fdf6e9;
+  color: #6b4f1d;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.quickplan-page .qp-assumed strong {
+  display: block;
+  margin-bottom: 5px;
+}
+
+.quickplan-page .qp-assumed ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+/* The two figures that would turn a rate into a verdict on their own plan. */
+.quickplan-page .qp-missing {
+  margin: 24px 0 0;
+  padding: 16px 18px;
+  border: 1px solid #ccd1c4;
+  border-radius: 12px;
+  background: white;
+}
+
+.quickplan-page .qp-missing strong {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 15px;
+}
+
+.quickplan-page .qp-missing p {
+  margin: 0;
+  color: #52705f;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
 /*
  * A rejection the model attributed to one input, shown under that input. The
  * banner below the form still carries everything the model could not blame on
