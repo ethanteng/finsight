@@ -565,7 +565,7 @@ export function RetirementQuickPlan({
                   <span className="qp-prefix">$</span>
                   <input
                     id="socialSecurityAnnual"
-                    inputMode="numeric"
+                    inputMode="decimal"
                     autoComplete="off"
                     aria-invalid={errorFor("socialSecurityAnnual") ? true : undefined}
                     aria-describedby={
@@ -711,7 +711,9 @@ function NumberField({
       <div className="qp-input-wrap">
         <input
           id={id}
-          inputMode="numeric"
+          // decimal: ages still must be whole, but the point has to be typeable
+          // so the model can reject 62.5 by name instead of the keyboard hiding it.
+          inputMode="decimal"
           autoComplete="off"
           aria-invalid={error ? true : undefined}
           aria-describedby={error ? `${id}-error` : undefined}
@@ -745,7 +747,7 @@ function MoneyField({
         <span className="qp-prefix">$</span>
         <input
           id={id}
-          inputMode="numeric"
+          inputMode="decimal"
           autoComplete="off"
           aria-invalid={error ? true : undefined}
           aria-describedby={error ? `${id}-error` : undefined}
