@@ -1081,6 +1081,39 @@ app.get('/sync/status', async (req: Request, res: Response) => {
       }
     });
 
+    /**
+     * Patterns across runs of the public retirement calculator.
+     *
+     * The rows are unauthenticated visitors' submissions, so there is no user
+     * to scope by; the window is the only filter, and the report bands every
+     * figure rather than listing rows.
+     */
+    app.get('/admin/retirement-calculator', adminAuth, async (req: Request, res: Response) => {
+      try {
+        const { getPrismaClient } = await import('./prisma-client');
+        const { buildQuickPlanReport } = await import('./services/retirement-quickplan-report');
+        const prisma = getPrismaClient();
+
+        const days = Math.min(Math.max(Number(req.query.days) || 28, 1), 365);
+        const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+        const rows = await prisma.retirementQuickPlanRun.findMany({
+          where: { createdAt: { gte: since } },
+          orderBy: { createdAt: 'desc' },
+          take: 20_000,
+        });
+
+        res.json(buildQuickPlanReport(rows as never, days));
+      } catch (error) {
+        console.error('Error building retirement calculator report:', error);
+        if (error instanceof Error) {
+          Sentry.captureException(error);
+        } else {
+          Sentry.captureMessage('Unknown error in admin retirement calculator endpoint', 'error');
+        }
+        res.status(500).json({ error: 'Failed to build retirement calculator report' });
+      }
+    });
+
     app.get('/admin/production-conversations', adminAuth, async (req: Request, res: Response) => {
       try {
         const { getPrismaClient } = await import('./prisma-client');

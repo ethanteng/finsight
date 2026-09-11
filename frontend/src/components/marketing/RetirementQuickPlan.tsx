@@ -613,8 +613,13 @@ export function RetirementQuickPlan({
               onClick={() => pushRetirementInteraction('retirement_model_clicked')}>
               {isRunning ? "Running the model…" : "Run the model"}
             </button>
+            {/*
+              * This used to promise nothing was saved. The runs are now
+              * recorded so the model can be improved against what people
+              * actually ask it, so the line says what is true instead.
+              */}
             <p className="qp-submit-note">
-              Nothing is saved, and nothing is sent anywhere but the calculation.
+              No account, no email, nothing to sign. We keep the numbers to improve the model.
             </p>
           </div>
         </form>

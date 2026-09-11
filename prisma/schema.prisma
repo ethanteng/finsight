@@ -640,3 +640,54 @@ model SecurityMetadata {
 
   @@map("security_metadata")
 }
+
+/// One run of the public retirement calculator, for pattern analysis.
+///
+/// Unauthenticated visitors, so there is no user relation and nothing here
+/// identifies anyone: the figures are what was typed into six boxes, with no
+/// address, session, or device recorded alongside them.
+///
+/// Rejected submissions are recorded too, under `outcome = "rejected"` with
+/// the offending field. Those rows are the point as much as the successful
+/// ones — a calculator nobody can get an answer out of is what prompted this.
+model RetirementQuickPlanRun {
+  id String @id @default(cuid())
+
+  /// "plan" (a full verdict), "rates" (a figure was blank), or "rejected".
+  outcome String
+  /// Field the model refused, when outcome is "rejected".
+  rejectedField String?
+  /// Inputs the model filled in for itself, e.g. ["retirementAge"].
+  assumedFields String[]
+  /// Figures left blank that the model will not invent, e.g. ["annualSpending"].
+  missingFields String[]
+
+  /// As submitted. Null where the visitor left the box empty.
+  currentAge             Int?
+  retirementAge          Int?
+  investableAssets       Float?
+  annualSpending         Float?
+  annualContributions    Float?
+  socialSecurityAnnual   Float?
+  socialSecurityStartAge Int?
+  allocation             String?
+
+  /// What the model returned. Null on a rejection, and the survival figures
+  /// are null in rates mode where no verdict was claimed.
+  survivalRate                 Float?
+  projectedPortfolioAtRetiremt Float?
+  firstYearWithdrawalRate      Float?
+  sustainableRateP10           Float?
+  sustainableRateP50           Float?
+  sequencesTested              Int?
+
+  /// Server-side cost, to keep an eye on the unauthenticated CPU.
+  durationMs Int?
+  cached     Boolean @default(false)
+
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([outcome, createdAt])
+  @@map("retirement_quickplan_runs")
+}
