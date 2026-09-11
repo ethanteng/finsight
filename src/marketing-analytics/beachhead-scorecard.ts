@@ -53,9 +53,30 @@ function isCurrentCalculatorSession(session: AnalyticsSession): boolean {
   );
 }
 
-function completedTrialSessions(sessions: AnalyticsSession[], coverageComplete: boolean): number | null {
+function completedTrialSessions(
+  sessions: AnalyticsSession[],
+  ctaEvent: string,
+  coverageComplete: boolean,
+): number | null {
   if (!coverageComplete) return null;
-  return aggregateTrialFunnel(sessions, 'complete')
+
+  // The journey-specific CTA is a scoped start_free_click. Anchor the strict
+  // funnel to that timestamp so an earlier generic signup path cannot receive
+  // credit for a later calculator CTA. With only first-event timestamps, a
+  // session is counted only when the full downstream order can be proved.
+  const anchoredSessions = sessions.flatMap(session => {
+    const ctaAt = session.firstEventAt[ctaEvent];
+    if (ctaAt === undefined) return [];
+    return [{
+      ...session,
+      firstEventAt: {
+        ...session.firstEventAt,
+        start_free_click: ctaAt,
+      },
+    }];
+  });
+
+  return aggregateTrialFunnel(anchoredSessions, 'complete')
     .find(step => step.event === 'trial_login_success')?.sessions ?? 0;
 }
 
@@ -84,7 +105,7 @@ function buildJourney(
       sessions.length,
       results.length,
       planCtas.length,
-      completedTrialSessions(planCtas, hasCoverage),
+      completedTrialSessions(planCtas, ctaEvent, hasCoverage),
     ];
   };
   const currentValues = values(current, coverageComplete);
@@ -203,7 +224,7 @@ export function buildBeachheadScorecard(args: {
     },
     evidenceGaps: [
       ...(state === 'prelaunch'
-        ? ['No dedicated Coast FIRE page, campaign, or content signal has reached GA4 yet. The Coast FIRE journey is intentionally blank, not zero.']
+        ? ['The dedicated Coast FIRE experience is marked prelaunch. Ship the experience and set COAST_FIRE_EXPERIMENT.live to true in the launch change; until then this journey is intentionally blank, not zero.']
         : []),
       'Marketing attribution is not persisted on the first-party user record, so financial connection, activation, and payment cannot yet be joined back to the Coast FIRE cohort.',
       'A paid conversion matures after the 30-day trial. Read paid rate only for cohorts old enough to have been charged.',
