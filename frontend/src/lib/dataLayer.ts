@@ -27,6 +27,13 @@ export type RetirementInteractionEvent =
 export type CoastFireStatus = 'reached' | 'not_yet';
 
 /**
+ * Whether the visitor was shown the page's default scenario or one they
+ * submitted. Both are results the page put in front of them, so both count as
+ * the scorecard's "Result shown"; the field keeps them separable in reporting.
+ */
+export type CoastFireTrigger = 'default' | 'submitted';
+
+/**
  * Every input the calculator can blame an error on, including the two the form
  * does not render (`lifeExpectancy` is derived server-side, `body` means the
  * request was not a plan at all). An allowlist rather than a passthrough: the
@@ -111,7 +118,11 @@ function getContentType(pathname: string): string {
 }
 
 /** Record the calculator outcome as a funnel event, never the figures used to reach it. */
-export function pushCoastFireCalculated(status: CoastFireStatus, yearsToRetirement: number): void {
+export function pushCoastFireCalculated(
+  status: CoastFireStatus,
+  yearsToRetirement: number,
+  trigger: CoastFireTrigger = 'submitted',
+): void {
   if (typeof window === 'undefined') return;
   trackContentsquareEvent('coast_fire_calculated');
   pushToDataLayer({
@@ -119,6 +130,7 @@ export function pushCoastFireCalculated(status: CoastFireStatus, yearsToRetireme
     source_page: window.location.pathname,
     content_type: 'coast_fire_calculator',
     coast_fire_status: status,
+    calculation_trigger: trigger,
     years_to_retirement: Math.max(0, Math.min(77, Math.round(yearsToRetirement))),
   });
 }

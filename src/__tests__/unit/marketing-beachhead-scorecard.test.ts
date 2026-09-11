@@ -43,12 +43,22 @@ function session(id: string, overrides: Partial<AnalyticsSession> = {}): Analyti
   };
 }
 
+/*
+ * Each journey reports its own result event. The Coast FIRE page runs its
+ * formula in the browser and emits `coast_fire_calculated`; it never emits
+ * `retirement_model_run`, so a coast fixture must not either.
+ */
+function resultEventFor(coast: boolean): string {
+  return coast ? 'coast_fire_calculated' : 'retirement_model_run';
+}
+
 function completedJourney(id: string, ctaEvent: string, coast = false): AnalyticsSession {
+  const resultEvent = resultEventFor(coast);
   const firstEventAt: Record<string, number> = Object.fromEntries(
     FUNNEL_EVENT_NAMES.map((event, index) => [event, (index + 20) * 1_000_000]),
   );
   // Result must precede the plan CTA; the cross-sell is visible before a run.
-  firstEventAt.retirement_model_run = 10_000_000;
+  firstEventAt[resultEvent] = 10_000_000;
   firstEventAt[ctaEvent] = firstEventAt.start_free_click;
   return session(id, {
     acquisition: {
@@ -57,7 +67,7 @@ function completedJourney(id: string, ctaEvent: string, coast = false): Analytic
       searchTerm: '(not set)', creative: '(not set)', adId: '', referrer: '',
     },
     eventCounts: {
-      retirement_model_run: 1,
+      [resultEvent]: 1,
       [ctaEvent]: 1,
       ...Object.fromEntries(FUNNEL_EVENT_NAMES.map(event => [event, 1])),
     },
@@ -120,6 +130,44 @@ describe('Coast FIRE beachhead scorecard', () => {
     expect(report.state).toBe('measuring');
     expect(report.coastFireJourney.map(stage => stage.value)).toEqual([2, 1, 1, 1]);
     expect(report.currentCalculatorBaseline.map(stage => stage.value)).toEqual([0, 0, 0, 0]);
+  });
+
+  /*
+   * Each journey's result event is the whole funnel below "Qualified visits":
+   * plan CTAs are counted only among result sessions. Reading the retirement
+   * calculator's event for the Coast journey silently zeroed both stages.
+   */
+  it('reads each journey result from the event its own page emits', () => {
+    const coastOnRetirementEvent = completedJourney('coast-wrong-event', 'coast_fire_plan_cta_click', true);
+    coastOnRetirementEvent.eventCounts = {
+      ...coastOnRetirementEvent.eventCounts,
+      coast_fire_calculated: 0,
+      retirement_model_run: 1,
+    };
+    coastOnRetirementEvent.firstEventAt = {
+      ...coastOnRetirementEvent.firstEventAt,
+      retirement_model_run: coastOnRetirementEvent.firstEventAt.coast_fire_calculated,
+    };
+    delete coastOnRetirementEvent.firstEventAt.coast_fire_calculated;
+
+    const report = buildBeachheadScorecard({
+      current: [
+        completedJourney('coast-right-event', 'coast_fire_plan_cta_click', true),
+        coastOnRetirementEvent,
+      ],
+      previous: [],
+      ga4Live: true,
+      funnelCoverageComplete: true,
+      previousFunnelCoverageComplete: true,
+      firstParty,
+      experimentLive: true,
+    });
+
+    // Two qualified visits, but only the session emitting coast_fire_calculated
+    // reaches the result stage and can have its plan CTA credited.
+    expect(report.coastFireJourney.map(stage => stage.value)).toEqual([2, 1, 1, 1]);
+    expect(report.coastFireJourney.find(stage => stage.id === 'calculator_result')?.note)
+      .toContain('coast_fire_calculated');
   });
 
   it('does not count a plan CTA that precedes the calculator result', () => {

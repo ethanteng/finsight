@@ -19,7 +19,18 @@ export const COAST_FIRE_EXPERIMENT = {
   pagePrefix: '/coast-fire',
   contentType: 'coast_fire_calculator',
   planCtaLocation: 'coast_fire_plan_cta',
+  /**
+   * The Coast FIRE page runs its own formula in the browser, so it never emits
+   * `retirement_model_run`. The journey has to read its own result event or
+   * every stage below "Qualified visits" reports zero once the experiment is
+   * live, plan CTA clicks included: they are counted only among result
+   * sessions.
+   */
+  resultEvent: 'coast_fire_calculated',
 } as const;
+
+/** The retirement calculator's result event, and the baseline journey's. */
+const RETIREMENT_RESULT_EVENT = 'retirement_model_run';
 
 function ratio(numerator: number, denominator: number): number | null {
   return denominator > 0 ? numerator / denominator : null;
@@ -80,9 +91,13 @@ function completedTrialSessions(
     .find(step => step.event === 'trial_login_success')?.sessions ?? 0;
 }
 
-function hasResultThenPlanCta(session: AnalyticsSession, ctaEvent: string): boolean {
-  if (!hasEvent(session, 'retirement_model_run') || !hasEvent(session, ctaEvent)) return false;
-  const resultAt = session.firstEventAt.retirement_model_run;
+function hasResultThenPlanCta(
+  session: AnalyticsSession,
+  ctaEvent: string,
+  resultEvent: string,
+): boolean {
+  if (!hasEvent(session, resultEvent) || !hasEvent(session, ctaEvent)) return false;
+  const resultAt = session.firstEventAt[resultEvent];
   const ctaAt = session.firstEventAt[ctaEvent];
   // Without both timestamps we cannot prove the advertised handoff order.
   if (resultAt === undefined || ctaAt === undefined) return false;
@@ -93,14 +108,15 @@ function buildJourney(
   current: AnalyticsSession[],
   previous: AnalyticsSession[],
   ctaEvent: string,
+  resultEvent: string,
   coverageComplete: boolean,
   previousCoverageComplete: boolean,
 ): BeachheadStageMetric[] {
   const values = (sessions: AnalyticsSession[], hasCoverage: boolean) => {
-    const results = sessions.filter(session => hasEvent(session, 'retirement_model_run'));
+    const results = sessions.filter(session => hasEvent(session, resultEvent));
     // Count only CTAs that follow a result in the same session. The cross-sell is
     // rendered before a run, so co-occurrence alone overstates the handoff.
-    const planCtas = results.filter(session => hasResultThenPlanCta(session, ctaEvent));
+    const planCtas = results.filter(session => hasResultThenPlanCta(session, ctaEvent, resultEvent));
     return [
       sessions.length,
       results.length,
@@ -112,7 +128,7 @@ function buildJourney(
   const previousValues = values(previous, previousCoverageComplete);
   const labels = [
     ['qualified_visit', 'Qualified visits', 'Sessions with an explicit page, campaign, query, or tracking signal for this journey.'],
-    ['calculator_result', 'Result shown', 'Sessions that reached retirement_model_run. Calculator reliability lives in the separate calculator dashboard.'],
+    ['calculator_result', 'Result shown', `Sessions that reached ${resultEvent}. Calculator reliability lives in the separate calculator dashboard.`],
     ['plan_cta', 'Actual-plan CTA', 'Result sessions that clicked the journey-specific plan CTA after the result in the same session.'],
     ['trial_complete', 'Trial completed', 'CTA sessions that completed every tracked signup, verification, and first-login step in order.'],
   ] as const;
@@ -133,8 +149,14 @@ function buildJourney(
 }
 
 function unavailableJourney(): BeachheadStageMetric[] {
-  return buildJourney([], [], 'coast_fire_plan_cta_click', false, false)
-    .map(stage => ({ ...stage, value: null, previous: null }));
+  return buildJourney(
+    [],
+    [],
+    'coast_fire_plan_cta_click',
+    COAST_FIRE_EXPERIMENT.resultEvent,
+    false,
+    false,
+  ).map(stage => ({ ...stage, value: null, previous: null }));
 }
 
 function metric(
@@ -183,6 +205,7 @@ export function buildBeachheadScorecard(args: {
         currentCoast,
         previousCoast,
         'coast_fire_plan_cta_click',
+        COAST_FIRE_EXPERIMENT.resultEvent,
         funnelCoverageComplete,
         previousFunnelCoverageComplete,
       )
@@ -192,6 +215,7 @@ export function buildBeachheadScorecard(args: {
         currentBaseline,
         previousBaseline,
         'quickplan_cross_sell_click',
+        RETIREMENT_RESULT_EVENT,
         funnelCoverageComplete,
         previousFunnelCoverageComplete,
       )

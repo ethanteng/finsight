@@ -94,8 +94,19 @@ describe("Coast FIRE calculator page", () => {
 
     expect(screen.getByRole("heading", { name: "You’re still building your coast." })).toBeInTheDocument();
     expect(screen.getByText(/short of your Coast FIRE number today/i)).toBeInTheDocument();
-    expect(pushCoastFireCalculated).toHaveBeenCalledWith("not_yet", 25);
+    expect(pushCoastFireCalculated).toHaveBeenCalledWith("not_yet", 25, "submitted");
     expect(JSON.stringify(jest.mocked(pushCoastFireCalculated).mock.calls)).not.toContain("100000");
+  });
+
+  /*
+   * The scorecard counts a plan CTA only when a result is timestamped ahead of
+   * it, and this page shows its default scenario before anyone submits.
+   */
+  it("reports the default scenario it shows before any submission", () => {
+    render(<CoastFireCalculator />);
+
+    expect(pushCoastFireCalculated).toHaveBeenCalledTimes(1);
+    expect(pushCoastFireCalculated).toHaveBeenCalledWith("reached", 25, "default");
   });
 
   /*
