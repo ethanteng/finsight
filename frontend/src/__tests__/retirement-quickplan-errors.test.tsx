@@ -220,6 +220,42 @@ it('still renders a plan when the response omits the assumed list', async () => 
   expect(screen.queryByText(/the model assumed/i)).toBeNull();
 });
 
+it('keeps a typed decimal instead of deleting the point', async () => {
+  const calls: Array<Record<string, unknown>> = [];
+  (global.fetch as jest.Mock).mockImplementation((url: string, init?: RequestInit) => {
+    if (!init?.method) return Promise.resolve({ ok: true, json: async () => ({ allocations: [] }) });
+    calls.push(JSON.parse(String(init.body)));
+    return Promise.resolve({ ok: true, json: async () => RATES_RESULT });
+  });
+
+  renderPage();
+  // Someone meaning 1.2 million. The point used to vanish as it was typed,
+  // leaving 12 and a confident answer about twelve dollars.
+  fill(/investment assets today/i, '1.2');
+  fill(/current age/i, '62.5');
+  expect(screen.getByLabelText(/investment assets today/i)).toHaveValue('1.2');
+  expect(screen.getByLabelText(/current age/i)).toHaveValue('62.5');
+
+  fireEvent.submit(screen.getByRole('button', { name: /run the model/i }).closest('form')!);
+  await waitFor(() => expect(calls).toHaveLength(1));
+
+  // Sent as typed, so the model rejects it by name rather than answering it.
+  expect(calls[0]).toMatchObject({ investableAssets: 1.2, currentAge: 62.5 });
+});
+
+it('groups the whole part while a decimal is being typed', () => {
+  renderPage();
+  const assets = screen.getByLabelText(/investment assets today/i);
+
+  fill(/investment assets today/i, '1200000');
+  expect(assets).toHaveValue('1,200,000');
+  fill(/investment assets today/i, '1200.5');
+  expect(assets).toHaveValue('1,200.5');
+  // A second point is dropped rather than splitting the number.
+  fill(/investment assets today/i, '1.2.3');
+  expect(assets).toHaveValue('1.23');
+});
+
 it('does not carry a notional portfolio into the signup handoff', async () => {
   (global.fetch as jest.Mock).mockImplementation((url: string, init?: RequestInit) =>
     Promise.resolve(init?.method

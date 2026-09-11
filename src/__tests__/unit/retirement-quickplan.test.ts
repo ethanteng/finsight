@@ -479,6 +479,40 @@ describe('quick plan with inputs left blank', () => {
     expect(() => resolveQuickPlanRequest({ currentAge: 'soon' })).toThrow(QuickPlanValidationError);
   });
 
+  it('names the field for a decimal the model cannot use, rather than reading it as blank', () => {
+    // The form now sends a typed decimal through instead of deleting the
+    // point, so these have to come back as rejections naming the field.
+    try {
+      resolveQuickPlanRequest({ currentAge: 62.5, investableAssets: 500_000, annualSpending: 40_000 });
+      throw new Error('expected a validation error');
+    } catch (error) {
+      expect((error as QuickPlanValidationError).field).toBe('currentAge');
+      expect((error as QuickPlanValidationError).message).toContain('whole number');
+    }
+
+    // 1.2 typed for 1.2 million: below the floor, and said so by name.
+    try {
+      resolveQuickPlanRequest({ currentAge: 60, retirementAge: 65, investableAssets: 1.2 });
+      throw new Error('expected a validation error');
+    } catch (error) {
+      expect((error as QuickPlanValidationError).field).toBe('investableAssets');
+    }
+
+    // Money itself takes decimals; only ages have to be whole.
+    expect(resolveQuickPlanRequest({ investableAssets: 500_000.5 }).inputs.investableAssets).toBe(500_000.5);
+  });
+
+  it('serves a repeated empty form from cache rather than re-running the century', async () => {
+    clearQuickPlanCache();
+    // Every empty submission normalizes to the same run, so the open form
+    // costs one simulation however many visitors submit it untouched.
+    const first = await runRetirementQuickPlan({});
+    const second = await runRetirementQuickPlan({});
+
+    expect(first.cached).toBe(false);
+    expect(second.cached).toBe(true);
+  }, 180_000);
+
   it('does not serve a blank-age run from the cache of the same age typed in', async () => {
     const typed = await runRetirementQuickPlan({
       currentAge: 65, retirementAge: 65, investableAssets: 600_000, annualSpending: 30_000, lifeExpectancy: 85,

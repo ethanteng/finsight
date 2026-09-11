@@ -199,8 +199,19 @@ const FORM_FIELD_IDS = new Set([
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
 
-function digitsOnly(value: string): string {
-  return value.replace(/[^\d]/g, "");
+/**
+ * Digits and at most one decimal point.
+ *
+ * The point used to be deleted as it was typed, so `1.2` became `12` and
+ * `62.5` became `625`. A visitor meaning 1.2 million got a confident answer
+ * about twelve dollars, which is worse than any rejection: nothing on the
+ * page disagreed with them. Keeping the point lets the model say it cannot
+ * use the figure — money accepts decimals, ages are told they must be whole.
+ */
+function numericInput(value: string): string {
+  const cleaned = value.replace(/[^\d.]/g, "");
+  const [whole, ...fraction] = cleaned.split(".");
+  return fraction.length === 0 ? whole : `${whole}.${fraction.join("")}`;
 }
 
 /**
@@ -210,15 +221,25 @@ function digitsOnly(value: string): string {
  * "not answered" and fills from a stated convention. `Number("")` is 0, which
  * the endpoint would read as an answer of zero and reject -- the difference
  * between a blank box producing an answer and producing a dead end.
+ *
+ * Anything typed is sent as typed, even when it is not a usable number. The
+ * endpoint parses and judges it, so a stray "." comes back as a rejection
+ * naming the field rather than being silently read as a blank.
  */
-function submitted(value: string): number | undefined {
-  const digits = digitsOnly(value);
-  return digits === "" ? undefined : Number(digits);
+function submitted(value: string): number | string | undefined {
+  const cleaned = numericInput(value);
+  if (cleaned === "") return undefined;
+  const parsed = Number(cleaned);
+  return Number.isFinite(parsed) ? parsed : cleaned;
 }
 
+/** Groups the whole part while a decimal is being typed, so "1200.5" stays "1,200.5". */
 function withCommas(value: string): string {
-  const digits = digitsOnly(value);
-  return digits ? Number(digits).toLocaleString("en-US") : "";
+  const cleaned = numericInput(value);
+  if (cleaned === "") return "";
+  const [whole, fraction] = cleaned.split(".");
+  const grouped = whole === "" ? "" : Number(whole).toLocaleString("en-US");
+  return fraction === undefined ? grouped : `${grouped}.${fraction}`;
 }
 
 function money(value: number): string {
@@ -696,7 +717,7 @@ function NumberField({
           aria-describedby={error ? `${id}-error` : undefined}
           value={value}
           placeholder={placeholder}
-          onChange={(event) => onChange(digitsOnly(event.target.value))}
+          onChange={(event) => onChange(numericInput(event.target.value))}
         />
         {suffix && <span className="qp-suffix">{suffix}</span>}
       </div>
