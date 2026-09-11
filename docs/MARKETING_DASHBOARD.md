@@ -109,7 +109,7 @@ GA4_BIGQUERY_PROJECT_ID=gen-lang-client-0360308471
 GA4_BIGQUERY_DATASET_ID=analytics_519498279
 GA4_BIGQUERY_LOCATION=US
 GA4_FIRST_FULL_TRACKING_DATE=YYYY-MM-DD
-GA4_REPORTING_LAG_DAYS=3
+GA4_REPORTING_LAG_DAYS=1
 GA4_ALLOWED_HOSTNAMES=asklinc.com,www.asklinc.com
 ```
 
@@ -124,6 +124,12 @@ The coverage date never blocks the underlying session query.
 
 The BigQuery service account needs only query-job and dataset-read permissions.
 Its JSON must never be exposed to the frontend or a `NEXT_PUBLIC_` variable.
+
+The one-day reporting lag matches GA4's daily export cadence: yesterday's
+`events_YYYYMMDD` table is normally available the following day. Setting the
+lag to `0` is supported, but it will not make today's activity available unless
+GA4 streaming export is enabled and the query is extended to include intraday
+tables.
 
 ## Quality and known gaps
 

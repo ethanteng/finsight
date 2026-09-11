@@ -145,8 +145,8 @@ export function parseFirstFullTrackingDate(raw: string | undefined): FirstFullTr
 }
 
 function reportingLagDays(): number {
-  const configuredLag = Number(process.env.GA4_REPORTING_LAG_DAYS || 3);
-  return Number.isFinite(configuredLag) ? Math.max(0, Math.floor(configuredLag)) : 3;
+  const configuredLag = Number(process.env.GA4_REPORTING_LAG_DAYS || 1);
+  return Number.isFinite(configuredLag) ? Math.max(0, Math.floor(configuredLag)) : 1;
 }
 
 function reportDates(days: number) {

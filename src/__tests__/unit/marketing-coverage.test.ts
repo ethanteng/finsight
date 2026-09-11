@@ -28,6 +28,7 @@ describe('marketing funnel coverage date', () => {
   it('loads ordinary GA4 sessions before strict-funnel coverage is available', async () => {
     const originalCredentials = process.env.GA4_BIGQUERY_SERVICE_ACCOUNT_JSON;
     const originalCoverage = process.env.GA4_FIRST_FULL_TRACKING_DATE;
+    const originalReportingLag = process.env.GA4_REPORTING_LAG_DAYS;
     const originalFetch = global.fetch;
     const { privateKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
     process.env.GA4_BIGQUERY_SERVICE_ACCOUNT_JSON = JSON.stringify({
@@ -36,6 +37,7 @@ describe('marketing funnel coverage date', () => {
       project_id: 'analytics-test',
     });
     delete process.env.GA4_FIRST_FULL_TRACKING_DATE;
+    delete process.env.GA4_REPORTING_LAG_DAYS;
     global.fetch = jest.fn()
       .mockResolvedValueOnce({
         ok: true,
@@ -51,6 +53,8 @@ describe('marketing funnel coverage date', () => {
     try {
       const withoutCoverage = await loadGa4Sessions({ days: 28, compare: true });
       expect(withoutCoverage.state).toBe('live');
+      expect(withoutCoverage.reportingLagDays).toBe(1);
+      expect(withoutCoverage.detail).toContain('1-day settling lag applied');
       expect(withoutCoverage.detail).toContain('strict trial attribution remains unavailable');
 
       process.env.GA4_FIRST_FULL_TRACKING_DATE = '2999-01-01';
@@ -68,6 +72,8 @@ describe('marketing funnel coverage date', () => {
       else process.env.GA4_BIGQUERY_SERVICE_ACCOUNT_JSON = originalCredentials;
       if (originalCoverage === undefined) delete process.env.GA4_FIRST_FULL_TRACKING_DATE;
       else process.env.GA4_FIRST_FULL_TRACKING_DATE = originalCoverage;
+      if (originalReportingLag === undefined) delete process.env.GA4_REPORTING_LAG_DAYS;
+      else process.env.GA4_REPORTING_LAG_DAYS = originalReportingLag;
       global.fetch = originalFetch;
     }
   });

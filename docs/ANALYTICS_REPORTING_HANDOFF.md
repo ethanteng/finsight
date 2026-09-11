@@ -19,8 +19,8 @@
 2. After deployment, verify one GA4 event for each no-card trial boundary described in `TRIAL_SIGNUP_FUNNEL_TRACKING.md`, including each failure branch. Confirm no user-entered values appear in event parameters.
 3. Verify actual field-edit and Run-click event delivery in GA4.
 4. Wait for the first daily `analytics_519498279.events_YYYYMMDD` export. No dataset was visible at setup completion.
-5. Verify the property reporting timezone (query currently uses America/Los_Angeles), then set `first_full_tracking_date` to the first complete verified tracking day. The query intentionally refuses to report until that date is set.
-6. Run the session report after its three-day settling lag. Validate identity coverage, source paths and ordering ties before treating rates as reliable.
+5. Verify the property reporting timezone (query currently uses America/Los_Angeles), then set `first_full_tracking_date` to the first complete verified tracking day. Session and journey metrics remain available before that date; only strict trial attribution waits for verified full-chain coverage.
+6. Run the session report after its one-day settling lag. Validate identity coverage, source paths and ordering ties before treating rates as reliable.
 
 The saved query and `analytics-session-reports.sql` cover source-page click counts/rates, page-rate differences, signup dropoff, calculator landing-to-Run, any-edit-without-Run abandonment, next different tracked destination, and Run-before-CTA cohorts, all split by device. They are prepared queries, not a populated or scheduled dashboard yet. No historical field-edit data is manufactured or backfilled. All-fields-complete abandonment is not tracked.
 
