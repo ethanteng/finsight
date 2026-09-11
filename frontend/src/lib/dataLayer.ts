@@ -24,6 +24,8 @@ export type RetirementInteractionEvent =
   | 'retirement_api_error'
   | 'retirement_request_error';
 
+export type CoastFireStatus = 'reached' | 'not_yet';
+
 /**
  * Every input the calculator can blame an error on, including the two the form
  * does not render (`lifeExpectancy` is derived server-side, `body` means the
@@ -95,6 +97,8 @@ function pushToDataLayer(payload: Record<string, unknown>): void {
 }
 
 function getContentType(pathname: string): string {
+  if (pathname === '/coast-fire') return 'coast_fire_landing';
+  if (pathname === '/coast-fire-calculator') return 'coast_fire_calculator';
   if (pathname === '/retirement-answers') return 'retirement_answers_hub';
   // Reserved before the beachhead page launches so its traffic cannot be
   // silently folded into the generic retirement baseline.
@@ -105,6 +109,32 @@ function getContentType(pathname: string): string {
   if (pathname === '/retirement-calculator') return 'retirement_calculator';
   if (/^\/can-i-retire-(at|with)-/.test(pathname)) return 'retirement_answer';
   return 'marketing_page';
+}
+
+/** Track the landing-to-calculator handoff without including any financial values. */
+export function pushCoastFireCalculatorClick(ctaLocation: string): void {
+  if (typeof window === 'undefined') return;
+  trackContentsquareEvent('coast_fire_calculator_click');
+  pushToDataLayer({
+    event: 'coast_fire_calculator_click',
+    source_page: window.location.pathname,
+    cta_location: ctaLocation,
+    content_type: getContentType(window.location.pathname),
+    destination_page: '/coast-fire-calculator',
+  });
+}
+
+/** Record the calculator outcome as a funnel event, never the figures used to reach it. */
+export function pushCoastFireCalculated(status: CoastFireStatus, yearsToRetirement: number): void {
+  if (typeof window === 'undefined') return;
+  trackContentsquareEvent('coast_fire_calculated');
+  pushToDataLayer({
+    event: 'coast_fire_calculated',
+    source_page: window.location.pathname,
+    content_type: 'coast_fire_calculator',
+    coast_fire_status: status,
+    years_to_retirement: Math.max(0, Math.min(77, Math.round(yearsToRetirement))),
+  });
 }
 
 export function pushBeginCheckout(ctaLocation = 'marketing_cta'): void {
