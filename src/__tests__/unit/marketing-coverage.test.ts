@@ -54,7 +54,8 @@ describe('marketing funnel coverage date', () => {
       const withoutCoverage = await loadGa4Sessions({ days: 28, compare: true });
       expect(withoutCoverage.state).toBe('live');
       expect(withoutCoverage.reportingLagDays).toBe(1);
-      expect(withoutCoverage.detail).toContain('1-day settling lag applied');
+      expect(withoutCoverage.detail).toContain('1-day availability lag applied');
+      expect(withoutCoverage.detail).toContain('late events for up to 3 days');
       expect(withoutCoverage.detail).toContain('strict trial attribution remains unavailable');
 
       process.env.GA4_FIRST_FULL_TRACKING_DATE = '2999-01-01';

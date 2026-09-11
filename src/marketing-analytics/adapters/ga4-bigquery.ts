@@ -443,13 +443,13 @@ export async function loadGa4Sessions(filters: MarketingFilters): Promise<Ga4Loa
       reportingLagDays: lagDays,
       truncated: result.truncated,
       detail: [
-        `GA4 daily export through ${dates.end}; ${lagDays}-day settling lag applied.`,
+        `GA4 daily export through ${dates.end}; ${lagDays}-day availability lag applied. Recent daily tables can still receive late events for up to 3 days.`,
         coverage.error
           ? `Session and journey metrics are available, but strict trial attribution is unavailable: ${coverage.error}`
           : !coverageDate
             ? 'Session and journey metrics are available, but strict trial attribution remains unavailable until GA4_FIRST_FULL_TRACKING_DATE is set.'
             : dates.end < coverageDate
-              ? `Session and journey metrics are available; strict trial attribution begins once the settled window includes ${coverageDate}.`
+              ? `Session and journey metrics are available; strict trial attribution begins once the reporting window includes ${coverageDate}.`
               : '',
       ].filter(Boolean).join(' '),
     };

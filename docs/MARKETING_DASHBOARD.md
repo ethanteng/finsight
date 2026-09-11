@@ -118,7 +118,7 @@ complete signup event chain and GTM forwarding were live for the entire day.
 It is a fixed coverage boundary, not a launch date and not a value that moves.
 If tracking went live partway through September 9, use `2026-09-10` after that
 complete daily export has been inspected. Until then, leave it unset; the
-scorecard still reports settled GA4 session, calculator-result, and plan-CTA
+scorecard still reports available GA4 session, calculator-result, and plan-CTA
 metrics, but reports strict trial completion as unavailable instead of zero.
 The coverage date never blocks the underlying session query.
 
@@ -126,10 +126,11 @@ The BigQuery service account needs only query-job and dataset-read permissions.
 Its JSON must never be exposed to the frontend or a `NEXT_PUBLIC_` variable.
 
 The one-day reporting lag matches GA4's daily export cadence: yesterday's
-`events_YYYYMMDD` table is normally available the following day. Setting the
-lag to `0` is supported, but it will not make today's activity available unless
-GA4 streaming export is enabled and the query is extended to include intraday
-tables.
+`events_YYYYMMDD` table is normally available the following day. It favors
+freshness, so the newest counts are provisional: GA4 can add late-arriving
+events to a daily table for up to three days. Setting the lag to `0` is
+supported, but it will not make today's activity available unless GA4 streaming
+export is enabled and the query is extended to include intraday tables.
 
 ## Quality and known gaps
 

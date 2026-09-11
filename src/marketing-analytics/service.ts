@@ -419,7 +419,7 @@ export async function getMarketingDashboard(filters: MarketingFilters): Promise<
   const warnings = trackingStartedAt
     ? [`Strict no-card funnel coverage begins ${trackingStartedAt}. Earlier event absence is not abandonment and cannot be backfilled.`]
     : ['Strict funnel coverage is unavailable until GA4_FIRST_FULL_TRACKING_DATE is set to the first verified, fully instrumented calendar day.'];
-  warnings.push(`GA4 daily export uses a ${ga4.reportingLagDays}-day settling lag; newer dates are intentionally excluded from strict funnel reporting.`);
+  warnings.push(`GA4 daily export excludes the current day with a ${ga4.reportingLagDays}-day availability lag. The newest included tables can still receive late events for up to 3 days.`);
   if (canUseSnapshot) warnings.push('Top-line web behavior is a connector-verified Contentsquare snapshot for August 12–September 8. It excludes 291 automated sessions and 84 owner-confirmed internal sessions; no contaminated prior-period comparison is shown.');
   if (hasLiveGa4 && trafficQuality.excludedSessions > 0) warnings.push(`${trafficQuality.excludedSessions} bot, internal/developer, or non-production sessions are excluded from headline metrics and remain visible in Traffic quality.`);
   if (ga4.truncated) warnings.push('The GA4 query reached its 100,000-session safety cap. Narrow the date range before interpreting totals.');
@@ -441,7 +441,7 @@ export async function getMarketingDashboard(filters: MarketingFilters): Promise<
       severity: 'warning',
       title: 'Acquisition awaits GA4 session attribution',
       detail: 'The old Contentsquare referring-page table has been removed from Acquisition. A blank HTTP referrer is not evidence of a direct or unattributed acquisition session.',
-      action: 'Use GA4 session source, medium, channel and campaign once the settled BigQuery export is available.',
+      action: 'Use GA4 session source, medium, channel and campaign once the daily BigQuery export is available.',
     },
     {
       severity: 'opportunity',

@@ -270,7 +270,7 @@ export default function MarketingDashboardPage() {
             </div>
             <div className="self-end rounded-2xl border border-white/10 bg-white/[.06] p-5">
               <div className="text-2xl font-semibold tracking-[-.05em]">{report ? `${shortDate(report.period.start)}–${shortDate(report.period.end)}` : '—'}</div>
-              <p className="mt-2 text-xs text-white/55">Settled reporting window</p>
+              <p className="mt-2 text-xs text-white/55">Daily-export window</p>
               <div className="mt-5 flex flex-wrap gap-2">
                 {([7, 28, 90] as const).map(days => <button key={days} type="button" onClick={() => setFilters(current => ({ ...current, days }))} className={`min-h-9 rounded-full px-3 text-xs font-bold ${filters.days === days ? 'bg-[#d8ff71] text-[#102319]' : 'bg-white/10 text-white'}`}>{days}d</button>)}
               </div>
