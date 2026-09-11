@@ -7,7 +7,7 @@ import {
   COAST_FIRE_FAQ,
   DEFAULT_COAST_FIRE_INPUTS,
 } from "@/lib/coast-fire";
-import { pushCoastFireCalculated } from "@/lib/dataLayer";
+import { pushCoastFireCalculated, pushStartFreeClick } from "@/lib/dataLayer";
 import {
   readRetirementSignupContext,
   RETIREMENT_SIGNUP_HREF,
@@ -110,6 +110,20 @@ describe("Coast FIRE calculator page", () => {
     expect(screen.getByText("Could I take a $30K pay cut?")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Open the retirement calculator/ }))
       .toHaveAttribute("href", "/retirement-calculator");
+  });
+
+  /*
+   * The scorecard's last Coast FIRE funnel stage counts start_free_click with
+   * this exact cta_location, so a rename here silently zeroes that stage.
+   */
+  it("reports the plan CTA under the location the beachhead scorecard counts", () => {
+    render(<CoastFireCalculator />);
+
+    const cta = screen.getByRole("link", { name: "Stress-test my Coast FIRE plan" });
+    cta.addEventListener("click", (event) => event.preventDefault(), { once: true });
+    fireEvent.click(cta);
+
+    expect(pushStartFreeClick).toHaveBeenCalledWith("coast_fire_plan_cta");
   });
 
   it("carries the simple scenario into the retirement signup flow", () => {

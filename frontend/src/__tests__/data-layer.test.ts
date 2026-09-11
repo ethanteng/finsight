@@ -107,7 +107,7 @@ describe("begin_checkout analytics", () => {
   it("keeps the Coast FIRE acquisition path distinct without recording financial values", () => {
     window.history.replaceState({}, "", "/coast-fire-calculator");
     pushCoastFireCalculated("reached", 25);
-    pushStartFreeClick("coast_fire_cross_sell");
+    pushStartFreeClick("coast_fire_plan_cta");
 
     expect(analyticsWindow.dataLayer).toEqual([
       {
@@ -120,7 +120,7 @@ describe("begin_checkout analytics", () => {
       {
         event: "start_free_click",
         source_page: "/coast-fire-calculator",
-        cta_location: "coast_fire_cross_sell",
+        cta_location: "coast_fire_plan_cta",
         content_type: "coast_fire_calculator",
         destination_page: GET_STARTED_HREF,
       },

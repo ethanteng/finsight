@@ -328,9 +328,17 @@ export function CoastFireCalculator({ children }: { children?: ReactNode }) {
           <ul className="cf-decision-list">
             {DECISIONS.map((question) => <li key={question}>{question}</li>)}
           </ul>
+          {/*
+            * `coast_fire_plan_cta` is a contract with the beachhead scorecard,
+            * not a free-form label: its final funnel stage counts
+            * `start_free_click` with exactly this `cta_location`
+            * (COAST_FIRE_EXPERIMENT.planCtaLocation in
+            * src/marketing-analytics/beachhead-scorecard.ts). Rename it and
+            * that stage reports zero forever.
+            */}
           <MarketingGetStartedButton
             className="button button-primary"
-            trackingLocation="coast_fire_cross_sell"
+            trackingLocation="coast_fire_plan_cta"
             csOverrideId="cta-stress-test-coast-fire"
             label="Stress-test my Coast FIRE plan"
             href={RETIREMENT_SIGNUP_HREF}
