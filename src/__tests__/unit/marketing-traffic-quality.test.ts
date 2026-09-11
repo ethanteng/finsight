@@ -103,4 +103,13 @@ describe('GA4 session query', () => {
     expect(query).toContain("ARRAY_AGG(NULLIF(hostname, '') IGNORE NULLS ORDER BY event_timestamp LIMIT 1)[SAFE_OFFSET(0)] AS session_hostname");
     expect(query).toContain("COALESCE(landing.hostname, NET.HOST(landing.page_location), session_hostname, '') AS hostname");
   });
+
+  it('keeps the two calculator-to-plan CTA treatments separate', () => {
+    expect(query).toContain("key = 'cta_location'");
+    expect(query).toContain("cta_location = 'quickplan_cross_sell'");
+    expect(query).toContain("cta_location = 'coast_fire_plan_cta'");
+    expect(query).toContain("content_type = 'coast_fire_calculator'");
+    expect(query).toContain('AS first_quickplan_cross_sell_click');
+    expect(query).toContain('AS first_coast_fire_plan_cta_click');
+  });
 });

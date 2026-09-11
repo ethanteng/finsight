@@ -1,0 +1,233 @@
+import { aggregateTrialFunnel } from './funnel';
+import type {
+  AnalyticsSession,
+  BeachheadScorecard,
+  BeachheadStageMetric,
+  FirstPartySummary,
+  MetricValue,
+} from './types';
+
+const COAST_FIRE_PATTERN = /\bcoast\s*fire\b/i;
+
+/**
+ * Flip this only in the change that launches the dedicated experience. Keeping
+ * launch state explicit makes zero qualified visits meaningful after launch
+ * and prevents a stray campaign name from turning the experiment on early.
+ */
+export const COAST_FIRE_EXPERIMENT = {
+  live: false,
+  pagePrefix: '/coast-fire',
+  contentType: 'coast_fire_calculator',
+  planCtaLocation: 'coast_fire_plan_cta',
+} as const;
+
+function ratio(numerator: number, denominator: number): number | null {
+  return denominator > 0 ? numerator / denominator : null;
+}
+
+function hasEvent(session: AnalyticsSession, event: string): boolean {
+  return (session.eventCounts[event] || 0) > 0;
+}
+
+/**
+ * The classifier intentionally requires an explicit Coast FIRE signal. Generic
+ * retirement traffic belongs to the comparison baseline until the beachhead
+ * experience exists; relabeling it would make a pre-launch period look live.
+ */
+export function isCoastFireSession(session: AnalyticsSession): boolean {
+  if (hasEvent(session, 'coast_fire_touch')) return true;
+  const acquisition = session.acquisition;
+  return [
+    acquisition.landingPage,
+    acquisition.campaign,
+    acquisition.searchTerm,
+    acquisition.creative,
+  ].some(value => COAST_FIRE_PATTERN.test((value || '').replace(/[_-]+/g, ' ')));
+}
+
+function isCurrentCalculatorSession(session: AnalyticsSession): boolean {
+  return !isCoastFireSession(session) && (
+    session.acquisition.landingPage === '/retirement-calculator'
+    || hasEvent(session, 'retirement_model_run')
+    || hasEvent(session, 'quickplan_cross_sell_click')
+  );
+}
+
+function completedTrialSessions(
+  sessions: AnalyticsSession[],
+  ctaEvent: string,
+  coverageComplete: boolean,
+): number | null {
+  if (!coverageComplete) return null;
+
+  // The journey-specific CTA is a scoped start_free_click. Anchor the strict
+  // funnel to that timestamp so an earlier generic signup path cannot receive
+  // credit for a later calculator CTA. With only first-event timestamps, a
+  // session is counted only when the full downstream order can be proved.
+  const anchoredSessions = sessions.flatMap(session => {
+    const ctaAt = session.firstEventAt[ctaEvent];
+    if (ctaAt === undefined) return [];
+    return [{
+      ...session,
+      firstEventAt: {
+        ...session.firstEventAt,
+        start_free_click: ctaAt,
+      },
+    }];
+  });
+
+  return aggregateTrialFunnel(anchoredSessions, 'complete')
+    .find(step => step.event === 'trial_login_success')?.sessions ?? 0;
+}
+
+function hasResultThenPlanCta(session: AnalyticsSession, ctaEvent: string): boolean {
+  if (!hasEvent(session, 'retirement_model_run') || !hasEvent(session, ctaEvent)) return false;
+  const resultAt = session.firstEventAt.retirement_model_run;
+  const ctaAt = session.firstEventAt[ctaEvent];
+  // Without both timestamps we cannot prove the advertised handoff order.
+  if (resultAt === undefined || ctaAt === undefined) return false;
+  return ctaAt > resultAt;
+}
+
+function buildJourney(
+  current: AnalyticsSession[],
+  previous: AnalyticsSession[],
+  ctaEvent: string,
+  coverageComplete: boolean,
+  previousCoverageComplete: boolean,
+): BeachheadStageMetric[] {
+  const values = (sessions: AnalyticsSession[], hasCoverage: boolean) => {
+    const results = sessions.filter(session => hasEvent(session, 'retirement_model_run'));
+    // Count only CTAs that follow a result in the same session. The cross-sell is
+    // rendered before a run, so co-occurrence alone overstates the handoff.
+    const planCtas = results.filter(session => hasResultThenPlanCta(session, ctaEvent));
+    return [
+      sessions.length,
+      results.length,
+      planCtas.length,
+      completedTrialSessions(planCtas, ctaEvent, hasCoverage),
+    ];
+  };
+  const currentValues = values(current, coverageComplete);
+  const previousValues = values(previous, previousCoverageComplete);
+  const labels = [
+    ['qualified_visit', 'Qualified visits', 'Sessions with an explicit page, campaign, query, or tracking signal for this journey.'],
+    ['calculator_result', 'Result shown', 'Sessions that reached retirement_model_run. Calculator reliability lives in the separate calculator dashboard.'],
+    ['plan_cta', 'Actual-plan CTA', 'Result sessions that clicked the journey-specific plan CTA after the result in the same session.'],
+    ['trial_complete', 'Trial completed', 'CTA sessions that completed every tracked signup, verification, and first-login step in order.'],
+  ] as const;
+
+  return labels.map(([id, label, note], index) => ({
+    id,
+    label,
+    value: currentValues[index],
+    previous: previousValues[index],
+    conversionRate: index === 0 || currentValues[index] === null
+      ? null
+      : ratio(currentValues[index] as number, currentValues[index - 1] as number),
+    previousConversionRate: index === 0 || previousValues[index] === null
+      ? null
+      : ratio(previousValues[index] as number, previousValues[index - 1] as number),
+    note,
+  }));
+}
+
+function unavailableJourney(): BeachheadStageMetric[] {
+  return buildJourney([], [], 'coast_fire_plan_cta_click', false, false)
+    .map(stage => ({ ...stage, value: null, previous: null }));
+}
+
+function metric(
+  value: number | null,
+  unit: MetricValue['unit'],
+  source: string,
+  note: string,
+): MetricValue {
+  return { value, previous: null, unit, source, note };
+}
+
+export function buildBeachheadScorecard(args: {
+  current: AnalyticsSession[];
+  previous: AnalyticsSession[];
+  ga4Live: boolean;
+  funnelCoverageComplete: boolean;
+  previousFunnelCoverageComplete: boolean;
+  firstParty: FirstPartySummary;
+  experimentLive?: boolean;
+}): BeachheadScorecard {
+  const {
+    current,
+    previous,
+    ga4Live,
+    funnelCoverageComplete,
+    previousFunnelCoverageComplete,
+    firstParty,
+    experimentLive = COAST_FIRE_EXPERIMENT.live,
+  } = args;
+  const currentCoast = current.filter(isCoastFireSession);
+  const previousCoast = previous.filter(isCoastFireSession);
+  const state: BeachheadScorecard['state'] = !experimentLive
+    ? 'prelaunch'
+    : ga4Live ? 'measuring' : 'collecting';
+  const currentBaseline = current.filter(isCurrentCalculatorSession);
+  const previousBaseline = previous.filter(isCurrentCalculatorSession);
+  const accounts = firstParty.accountsCreated;
+  const downstreamNote = 'All accounts created in the selected window; not yet attributable to a Coast FIRE visitor.';
+
+  return {
+    state,
+    cohortLabel: 'Coast FIRE planners',
+    cohortDefinition: 'Explicit /coast-fire* page activity, a coast_fire_calculator content signal, or “Coast FIRE” in campaign, keyword, or creative metadata.',
+    coastFireJourney: state === 'measuring'
+      ? buildJourney(
+        currentCoast,
+        previousCoast,
+        'coast_fire_plan_cta_click',
+        funnelCoverageComplete,
+        previousFunnelCoverageComplete,
+      )
+      : unavailableJourney(),
+    currentCalculatorBaseline: ga4Live
+      ? buildJourney(
+        currentBaseline,
+        previousBaseline,
+        'quickplan_cross_sell_click',
+        funnelCoverageComplete,
+        previousFunnelCoverageComplete,
+      )
+      : unavailableJourney(),
+    downstream: {
+      financialConnectionRate: metric(
+        accounts === null || firstParty.createdAccountsWithFinancialConnection === null
+          ? null
+          : ratio(firstParty.createdAccountsWithFinancialConnection, accounts),
+        'percent',
+        'First-party accounts',
+        downstreamNote,
+      ),
+      activationRate: metric(
+        accounts === null || firstParty.createdAccountsWithConversation === null
+          ? null
+          : ratio(firstParty.createdAccountsWithConversation, accounts),
+        'percent',
+        'First-party accounts',
+        `${downstreamNote} Activation means the account has asked at least one question.`,
+      ),
+      paidRate: metric(
+        accounts === null || firstParty.createdAccountsCurrentlyPaid === null
+          ? null
+          : ratio(firstParty.createdAccountsCurrentlyPaid, accounts),
+        'percent',
+        'First-party accounts',
+        `${downstreamNote} Paid now means current subscriptionStatus is active; recent 30-day trial cohorts have not matured.`,
+      ),
+    },
+    evidenceGaps: [
+      ...(state === 'prelaunch'
+        ? ['The dedicated Coast FIRE experience is marked prelaunch. Ship the experience and set COAST_FIRE_EXPERIMENT.live to true in the launch change; until then this journey is intentionally blank, not zero.']
+        : []),
+      'Marketing attribution is not persisted on the first-party user record, so financial connection, activation, and payment cannot yet be joined back to the Coast FIRE cohort.',
+      'A paid conversion matures after the 30-day trial. Read paid rate only for cohorts old enough to have been charged.',
+    ],
+  };
+}
