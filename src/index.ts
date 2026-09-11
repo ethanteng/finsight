@@ -1096,13 +1096,17 @@ app.get('/sync/status', async (req: Request, res: Response) => {
 
         const days = Math.min(Math.max(Number(req.query.days) || 28, 1), 365);
         const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+        // One past the cap, so a window that overflows it can be reported as
+        // clipped rather than quietly answering for a subset.
+        const maxRows = 20_000;
         const rows = await prisma.retirementQuickPlanRun.findMany({
           where: { createdAt: { gte: since } },
           orderBy: { createdAt: 'desc' },
-          take: 20_000,
+          take: maxRows + 1,
         });
+        const truncated = rows.length > maxRows;
 
-        res.json(buildQuickPlanReport(rows as never, days));
+        res.json(buildQuickPlanReport(rows.slice(0, maxRows) as never, days, truncated));
       } catch (error) {
         console.error('Error building retirement calculator report:', error);
         if (error instanceof Error) {

@@ -38,6 +38,13 @@ export interface Band {
 export interface QuickPlanReport {
   generatedAt: string;
   windowDays: number;
+  /**
+   * Set when the window held more runs than the query would return, so every
+   * share below is computed over the most recent `totals.runs` rather than the
+   * whole window. A rate quoted from a silently clipped window is the kind of
+   * number that gets acted on and is wrong.
+   */
+  truncated: boolean;
   totals: {
     runs: number;
     /** A full verdict: the visitor gave both a portfolio and a spending level. */
@@ -150,7 +157,11 @@ function median(values: number[]): number | null {
   return sorted.length % 2 === 0 ? (sorted[middle - 1] + sorted[middle]) / 2 : sorted[middle];
 }
 
-export function buildQuickPlanReport(rows: QuickPlanRunRow[], windowDays: number): QuickPlanReport {
+export function buildQuickPlanReport(
+  rows: QuickPlanRunRow[],
+  windowDays: number,
+  truncated = false
+): QuickPlanReport {
   const rejected = rows.filter((row) => row.outcome === 'rejected');
   const withVerdict = rows.filter((row) => row.outcome === 'plan');
   const withRates = rows.filter((row) => row.outcome === 'rates');
@@ -173,6 +184,7 @@ export function buildQuickPlanReport(rows: QuickPlanRunRow[], windowDays: number
   return {
     generatedAt: new Date().toISOString(),
     windowDays,
+    truncated,
     totals: {
       runs: rows.length,
       answeredWithVerdict: withVerdict.length,

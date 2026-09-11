@@ -14,7 +14,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, BarChart3, Database, RefreshCw, ShieldAlert, SlidersHorizontal } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, BarChart3, Database, RefreshCw, ShieldAlert, SlidersHorizontal } from 'lucide-react';
 import PageMeta from '../../../components/PageMeta';
 import AuthenticatedPageHeader from '../../../components/authenticated/AuthenticatedPageHeader';
 import { markInternalAnalyticsBrowser } from '../../../lib/internal-analytics';
@@ -24,6 +24,7 @@ interface Band { label: string; count: number; share: number }
 interface Report {
   generatedAt: string;
   windowDays: number;
+  truncated: boolean;
   totals: {
     runs: number;
     answeredWithVerdict: number;
@@ -143,6 +144,21 @@ export default function RetirementCalculatorAdminPage() {
 
         {report && report.totals.runs > 0 && (
           <div className={loading ? 'pointer-events-none opacity-55 transition-opacity' : 'transition-opacity'}>
+            {report.truncated && (
+              <div className="mt-2 rounded-2xl border border-[#9d6a16]/20 bg-[#f4ead0] px-5 py-4">
+                <div className="flex gap-3">
+                  <AlertTriangle className="mt-0.5 shrink-0 text-[#76510f]" size={17} />
+                  <div>
+                    <div className="text-sm font-bold text-[#76510f]">This window is clipped</div>
+                    <p className="mt-1 text-xs leading-5 text-[#76510f]/85">
+                      More runs happened in the last {report.windowDays} days than this report
+                      reads. Every share below is over the {number(report.totals.runs)} most recent
+                      runs, not the whole window. Narrow the window for a complete picture.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
             <section className="mt-2">
               <div className="mb-4 flex items-end justify-between gap-4">
                 <div>

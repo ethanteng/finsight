@@ -109,6 +109,14 @@ describe('retirement calculator report', () => {
     ]);
   });
 
+  it('says so when the window was clipped rather than quoting a rate over a subset', () => {
+    const complete = buildQuickPlanReport([row()], 28);
+    const clipped = buildQuickPlanReport([row()], 28, true);
+
+    expect(complete.truncated).toBe(false);
+    expect(clipped.truncated).toBe(true);
+  });
+
   it('survives an empty window without dividing by zero', () => {
     const report = buildQuickPlanReport([], 7);
 
