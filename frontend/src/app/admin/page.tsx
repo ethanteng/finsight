@@ -1996,6 +1996,12 @@ export default function AdminPage() {
           >
             Marketing
           </Link>
+          <Link
+            href="/admin/retirement-calculator"
+            className="flex min-h-12 min-w-0 items-center justify-center rounded bg-[#d8ff71] px-3 py-2 text-center text-sm font-bold leading-tight text-[#102319] transition-colors hover:bg-[#c9ef65] sm:flex-1 sm:px-4"
+          >
+            Calculator
+          </Link>
           <button
             onClick={() => setActiveTab('production')}
             className={`min-h-12 min-w-0 rounded px-3 py-2 text-sm font-medium leading-tight transition-colors sm:flex-1 sm:px-4 ${

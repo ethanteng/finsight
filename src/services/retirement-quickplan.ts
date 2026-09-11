@@ -30,6 +30,52 @@ export const RETIREMENT_QUICKPLAN_VERSION = 1 as const;
 export const DEFAULT_LIFE_EXPECTANCY = 95;
 export const DEFAULT_SOCIAL_SECURITY_START_AGE = 67;
 
+/**
+ * Retirement age assumed when the visitor gave none. 65 through 95 is the
+ * conventional thirty-year horizon the withdrawal-rate literature is built on.
+ *
+ * A horizon convention is nameable and defensible in a way a portfolio is not,
+ * which is the whole basis of the split below: this module will assume how
+ * long a retirement lasts, and will never assume how much money someone has.
+ */
+export const DEFAULT_PLANNING_RETIREMENT_AGE = 65;
+
+/**
+ * Portfolio the rates-mode run is normalized against.
+ *
+ * The solver answers in withdrawal *rates* -- a ratio of the portfolio at the
+ * moment withdrawals start -- so this value cancels out of every number that
+ * reaches a visitor who did not give one. It exists only because the engine
+ * simulates dollars and needs some dollars to simulate.
+ */
+const NOTIONAL_PORTFOLIO = 1_000_000;
+
+/**
+ * Seed withdrawal for a run whose scenario outputs are discarded. The rate
+ * distribution is solved before the user scenario and does not depend on it,
+ * so this only has to be inside the solver's bounds.
+ */
+const NOTIONAL_WITHDRAWAL_RATE = 0.04;
+
+/**
+ * Which question the run could actually answer.
+ *
+ * `plan` — assets and spending were both given, so the answer is about this
+ * visitor's plan: did it survive, and how often.
+ * `rates` — one of them was missing. There is no honest substitute for
+ * someone's net worth, so the run reports what the mix and horizon sustained
+ * as a share of the portfolio, and states no survival verdict at all.
+ */
+export type QuickPlanMode = 'plan' | 'rates';
+
+/** One input the visitor left blank, and what the model put there instead. */
+export interface AssumedQuickPlanInput {
+  field: string;
+  value: number;
+  /** Why this value, in the visitor's terms. Rendered on the results. */
+  note: string;
+}
+
 export type QuickPlanAllocationId = 'conservative' | 'balanced' | 'growth';
 
 export interface QuickPlanAllocation {
@@ -142,6 +188,20 @@ export interface RetirementQuickPlanResult {
   durationMs: number;
   /** True when this exact set of inputs was already computed by this process. */
   cached: boolean;
+  /** Which question this run answered. See `QuickPlanMode`. */
+  mode: QuickPlanMode;
+  /**
+   * Inputs the visitor left blank, with what the model used instead. Empty
+   * when they filled in everything. Never contains an assumed portfolio or
+   * spending figure -- those two put the run in `rates` mode instead.
+   */
+  assumed: AssumedQuickPlanInput[];
+  /**
+   * The figures that put this run in `rates` mode: the ones the model will not
+   * invent. Empty in `plan` mode. Named so the results can point at the boxes
+   * that turn a rate into a verdict.
+   */
+  missing: Array<'investableAssets' | 'annualSpending'>;
   inputs: Required<Omit<RetirementQuickPlanRequest, 'allocation'>> & {
     allocation: QuickPlanAllocationId;
   };
@@ -161,14 +221,38 @@ export interface RetirementQuickPlanResult {
     firstStartMonth: string;
     lastStartMonth: string;
   };
-  primary: QuickPlanScenario;
+  /**
+   * The visitor's own plan, evaluated. Null in `rates` mode: a survival rate
+   * needs both a portfolio and a spending level, and inventing either would
+   * make this the most confident number on the page and the only fictional one.
+   */
+  primary: QuickPlanScenario | null;
+  /** Variants on the visitor's plan. Empty in `rates` mode, for the same reason. */
   alternatives: QuickPlanScenario[];
   /**
    * Annual spending, in today's dollars at retirement, that this asset mix
    * sustained across the tested history. The solver is bounded to 2%-8% of the
    * starting portfolio, so `p90` at the bound means "at least this", not exactly it.
+   *
+   * Null when the visitor gave no portfolio, since every figure here would be
+   * a share of a number they never entered. `sustainableSpendingRates` carries
+   * the same distribution in the form that survives not knowing it.
    */
   sustainableSpending: {
+    p10: number;
+    p25: number;
+    p50: number;
+    p75: number;
+    p90: number;
+    solverFloorRate: number;
+    solverCeilingRate: number;
+  } | null;
+  /**
+   * The same distribution as fractions of the portfolio at retirement. Always
+   * present: a rate is what the solver actually computes, and it is true
+   * whatever the portfolio turns out to be.
+   */
+  sustainableSpendingRates: {
     p10: number;
     p25: number;
     p50: number;
@@ -226,18 +310,81 @@ function requireNumber(field: keyof typeof RULES, value: unknown): number {
   return parsed;
 }
 
-export function normalizeQuickPlanRequest(raw: unknown): RetirementQuickPlanResult['inputs'] {
+/**
+ * A value the visitor did not supply, as distinct from one they supplied badly.
+ *
+ * Blank means "I did not answer this", and the model answers around it. A
+ * number outside the model's range means they did answer and the model cannot
+ * use it, which is worth saying rather than papering over -- quietly
+ * substituting a default for a figure someone deliberately typed would change
+ * their answer without telling them.
+ */
+function optionalNumber(field: keyof typeof RULES, value: unknown): number | null {
+  if (value === undefined || value === null) return null;
+  if (typeof value === 'string' && value.trim() === '') return null;
+  return requireNumber(field, value);
+}
+
+export interface NormalizedQuickPlan {
+  inputs: RetirementQuickPlanResult['inputs'];
+  assumed: AssumedQuickPlanInput[];
+  mode: QuickPlanMode;
+  /** Whether the portfolio simulated is the visitor's own or the notional one. */
+  portfolioIsReal: boolean;
+  missing: Array<'investableAssets' | 'annualSpending'>;
+}
+
+/**
+ * Turn whatever the page posted into a run, without ever refusing to answer
+ * because a box was empty.
+ *
+ * Blanks divide in two. A horizon can be assumed from a named convention, so
+ * missing ages are filled and listed in `assumed`. A portfolio and a spending
+ * level cannot be assumed from anything, so a blank in either drops the run to
+ * `rates` mode rather than putting a stranger's net worth behind a survival
+ * percentage.
+ */
+export function resolveQuickPlanRequest(raw: unknown): NormalizedQuickPlan {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
     throw new QuickPlanValidationError('body', 'Expected a JSON object of plan inputs.');
   }
   const body = raw as Record<string, unknown>;
+  const assumed: AssumedQuickPlanInput[] = [];
 
-  const currentAge = requireNumber('currentAge', body.currentAge);
-  const retirementAge = requireNumber('retirementAge', body.retirementAge);
+  const givenCurrentAge = optionalNumber('currentAge', body.currentAge);
+  const givenRetirementAge = optionalNumber('retirementAge', body.retirementAge);
+
+  // Someone who named only their current age is asking about a retirement
+  // still ahead of them, unless they are already past the conventional age.
+  const retirementAge = givenRetirementAge
+    ?? Math.max(givenCurrentAge ?? DEFAULT_PLANNING_RETIREMENT_AGE, DEFAULT_PLANNING_RETIREMENT_AGE);
+  if (givenRetirementAge === null) {
+    assumed.push({
+      field: 'retirementAge',
+      value: retirementAge,
+      note: `Retiring at ${retirementAge}, the conventional planning age.`,
+    });
+  }
+
+  // No accumulation is assumed on top of an unknown one: without a current
+  // age the run starts at retirement, so nothing grows on an assumption.
+  const currentAge = givenCurrentAge ?? retirementAge;
+  if (givenCurrentAge === null) {
+    assumed.push({
+      field: 'currentAge',
+      value: currentAge,
+      note: `Retiring now rather than saving for it, since no current age was given.`,
+    });
+  }
+
   if (retirementAge < currentAge) {
+    // Someone already retired is a large share of the traffic on a page
+    // titled "can I retire", and their honest answer to both questions is
+    // rejected here. The engine only projects forward, so the message has to
+    // name the input that models their situation rather than state the rule.
     throw new QuickPlanValidationError(
       'retirementAge',
-      'Retirement age cannot be earlier than your current age.'
+      'Retirement age cannot be earlier than your current age. If you have already retired, enter your current age here to model retiring now.'
     );
   }
 
@@ -254,12 +401,16 @@ export function normalizeQuickPlanRequest(raw: unknown): RetirementQuickPlanResu
     );
   }
 
-  const socialSecurityAnnual = requireNumber('socialSecurityAnnual', body.socialSecurityAnnual);
-  const socialSecurityStartAge = body.socialSecurityStartAge == null
-    ? DEFAULT_SOCIAL_SECURITY_START_AGE
-    : requireNumber('socialSecurityStartAge', body.socialSecurityStartAge);
+  // Zero is the honest reading of a blank here: it is a real, conservative
+  // amount the model already accepts, and the results name it either way.
+  const socialSecurityAnnual = optionalNumber('socialSecurityAnnual', body.socialSecurityAnnual) ?? 0;
+  const annualContributions = optionalNumber('annualContributions', body.annualContributions) ?? 0;
+  const socialSecurityStartAge = optionalNumber('socialSecurityStartAge', body.socialSecurityStartAge)
+    ?? DEFAULT_SOCIAL_SECURITY_START_AGE;
 
-  const allocationId = body.allocation == null ? DEFAULT_ALLOCATION_ID : body.allocation;
+  const allocationId = body.allocation == null || body.allocation === ''
+    ? DEFAULT_ALLOCATION_ID
+    : body.allocation;
   if (typeof allocationId !== 'string' || !(allocationId in QUICKPLAN_ALLOCATIONS)) {
     throw new QuickPlanValidationError(
       'allocation',
@@ -267,17 +418,43 @@ export function normalizeQuickPlanRequest(raw: unknown): RetirementQuickPlanResu
     );
   }
 
+  const givenAssets = optionalNumber('investableAssets', body.investableAssets);
+  const givenSpending = optionalNumber('annualSpending', body.annualSpending);
+  // The two the model will not invent. Either one missing means no survival
+  // rate is claimed; what the mix sustained is reported as a rate instead.
+  const missing: NormalizedQuickPlan['missing'] = [];
+  if (givenAssets === null) missing.push('investableAssets');
+  if (givenSpending === null) missing.push('annualSpending');
+  const mode: QuickPlanMode = missing.length > 0 ? 'rates' : 'plan';
+  const runPortfolio = givenAssets ?? NOTIONAL_PORTFOLIO;
+  const runSpending = givenSpending ?? runPortfolio * NOTIONAL_WITHDRAWAL_RATE;
+
   return {
-    currentAge,
-    retirementAge,
-    investableAssets: requireNumber('investableAssets', body.investableAssets),
-    annualSpending: requireNumber('annualSpending', body.annualSpending),
-    annualContributions: requireNumber('annualContributions', body.annualContributions),
-    socialSecurityAnnual,
-    socialSecurityStartAge,
-    lifeExpectancy,
-    allocation: allocationId as QuickPlanAllocationId,
+    inputs: {
+      currentAge,
+      retirementAge,
+      investableAssets: runPortfolio,
+      annualSpending: runSpending,
+      annualContributions,
+      socialSecurityAnnual,
+      socialSecurityStartAge,
+      lifeExpectancy,
+      allocation: allocationId as QuickPlanAllocationId,
+    },
+    assumed,
+    mode,
+    portfolioIsReal: givenAssets !== null,
+    missing,
   };
+}
+
+/**
+ * The inputs alone, for callers that only need a fully resolved plan. Retained
+ * as the module's original entry point; `resolveQuickPlanRequest` additionally
+ * reports what had to be assumed to get there.
+ */
+export function normalizeQuickPlanRequest(raw: unknown): RetirementQuickPlanResult['inputs'] {
+  return resolveQuickPlanRequest(raw).inputs;
 }
 
 /**
@@ -428,19 +605,30 @@ function buildLimitations(
     );
   }
 
-  const gapYears = inputs.socialSecurityStartAge - inputs.retirementAge;
-  if (gapYears > 0) {
+  // Everything below describes an income the engine only models when there is
+  // an amount to model. A claiming age with no benefit behind it is just the
+  // form's default, and describing when "your Social Security" starts would be
+  // narrating money this plan does not contain.
+  if (inputs.socialSecurityAnnual > 0) {
+    const gapYears = inputs.socialSecurityStartAge - inputs.retirementAge;
+    if (gapYears > 0) {
+      limitations.push(
+        `Social Security is modeled as starting at age ${inputs.socialSecurityStartAge}, so the portfolio funds ` +
+          (gapYears === 1
+            ? 'the whole year between retiring and claiming on its own.'
+            : `all ${gapYears} years between retiring and claiming on its own.`)
+      );
+    }
     limitations.push(
-      `Social Security is modeled as starting at age ${inputs.socialSecurityStartAge}, so the portfolio funds ` +
-        (gapYears === 1
-          ? 'the whole year between retiring and claiming on its own.'
-          : `all ${gapYears} years between retiring and claiming on its own.`)
+      'Social Security is treated as a fixed, inflation-adjusted amount you actually receive; no benefit-formula ' +
+        'or policy-change modeling is applied.'
+    );
+  } else {
+    limitations.push(
+      'No Social Security is included, so the portfolio funds every year of this retirement on its own. ' +
+        'Adding your benefit from ssa.gov is the single largest change most plans can make to this answer.'
     );
   }
-  limitations.push(
-    'Social Security is treated as a fixed, inflation-adjusted amount you actually receive; no benefit-formula ' +
-      'or policy-change modeling is applied.'
-  );
   return limitations;
 }
 
@@ -452,8 +640,9 @@ function buildLimitations(
  * showing them side by side is the difference between a verdict and an answer.
  */
 async function computeRetirementQuickPlan(
-  inputs: RetirementQuickPlanResult['inputs']
+  resolved: NormalizedQuickPlan
 ): Promise<RetirementQuickPlanResult> {
+  const { inputs, assumed, mode, missing } = resolved;
   const startedAt = Date.now();
   const allocation = QUICKPLAN_ALLOCATIONS[inputs.allocation];
   const { holdings, securities } = buildSyntheticPortfolio(allocation, inputs.investableAssets);
@@ -482,7 +671,7 @@ async function computeRetirementQuickPlan(
     retirementAge: number;
     annualSpending: number;
   }> = [];
-  for (const years of [2, 5]) {
+  for (const years of mode === 'plan' ? [2, 5] : []) {
     const age = inputs.retirementAge + years;
     if (age < inputs.lifeExpectancy && age <= RULES.retirementAge.max) {
       variantPlans.push({
@@ -495,7 +684,7 @@ async function computeRetirementQuickPlan(
     }
   }
   const reducedSpending = Math.round(inputs.annualSpending * 0.9);
-  if (reducedSpending >= RULES.annualSpending.min) {
+  if (mode === 'plan' && reducedSpending >= RULES.annualSpending.min) {
     variantPlans.push({
       id: 'spend-10-less',
       label: 'Spend 10% less',
@@ -515,7 +704,10 @@ async function computeRetirementQuickPlan(
     variantAnalyses.push(await analyze(plan.retirementAge, plan.annualSpending));
   }
 
-  const primary = toScenario(
+  // Built in both modes because the projected portfolio is needed below, then
+  // withheld in `rates` mode: every number on it is a verdict on a plan whose
+  // spending or portfolio the visitor never gave.
+  const evaluated = toScenario(
     'as-entered',
     `Retire at ${inputs.retirementAge}`,
     null,
@@ -524,6 +716,7 @@ async function computeRetirementQuickPlan(
     inputs,
     primaryAnalysis
   );
+  const primary = mode === 'plan' ? evaluated : null;
   const alternatives = variantPlans.map((plan, index) =>
     toScenario(plan.id, plan.label, plan.change, plan.retirementAge, plan.annualSpending, inputs, variantAnalyses[index])
   );
@@ -532,16 +725,29 @@ async function computeRetirementQuickPlan(
   // withdrawals begin, which is the same basis as the projected value, so both
   // stay in today's dollars.
   const rates = primaryAnalysis.metrics.historicalWithdrawalRates;
-  const atRetirement = primary.projectedPortfolioAtRetirement;
-  const sustainableSpending = {
-    p10: rates.p10 * atRetirement,
-    p25: rates.p25 * atRetirement,
-    p50: rates.p50 * atRetirement,
-    p75: rates.p75 * atRetirement,
-    p90: rates.p90 * atRetirement,
-    solverFloorRate: 0.02,
-    solverCeilingRate: 0.08,
+  const atRetirement = evaluated.projectedPortfolioAtRetirement;
+  const solverBounds = { solverFloorRate: 0.02, solverCeilingRate: 0.08 };
+  const sustainableSpendingRates = {
+    p10: rates.p10,
+    p25: rates.p25,
+    p50: rates.p50,
+    p75: rates.p75,
+    p90: rates.p90,
+    ...solverBounds,
   };
+  // Dollars need a real portfolio behind them. A visitor who gave one but not
+  // a spending level still gets them: the projection depends on the portfolio,
+  // contributions and horizon, never on what they planned to spend.
+  const sustainableSpending = resolved.portfolioIsReal
+    ? {
+        p10: rates.p10 * atRetirement,
+        p25: rates.p25 * atRetirement,
+        p50: rates.p50 * atRetirement,
+        p75: rates.p75 * atRetirement,
+        p90: rates.p90 * atRetirement,
+        ...solverBounds,
+      }
+    : null;
 
   const firstMonth = primaryAnalysis.historicalData?.firstMonth ?? 'unknown';
   const history: RetirementQuickPlanResult['history'] = {
@@ -560,6 +766,9 @@ async function computeRetirementQuickPlan(
     computedAt: new Date().toISOString(),
     durationMs: Date.now() - startedAt,
     cached: false,
+    mode,
+    assumed,
+    missing,
     inputs,
     allocation: {
       ...allocation,
@@ -569,6 +778,7 @@ async function computeRetirementQuickPlan(
     primary,
     alternatives,
     sustainableSpending,
+    sustainableSpendingRates,
     assumptions: primaryAnalysis.dataQuality.assumptions,
     limitations: buildLimitations(inputs, allocation, history),
   };
@@ -593,9 +803,15 @@ export function clearQuickPlanCache(): void {
 export async function runRetirementQuickPlan(
   request: RetirementQuickPlanRequest | unknown
 ): Promise<RetirementQuickPlanResult> {
-  const inputs = normalizeQuickPlanRequest(request);
+  const resolved = resolveQuickPlanRequest(request);
+  const { inputs } = resolved;
   const key = JSON.stringify([
     RETIREMENT_QUICKPLAN_VERSION,
+    // A blank age and the same age typed in resolve to identical inputs but
+    // to different answers, so what was assumed belongs in the key too.
+    resolved.mode,
+    resolved.portfolioIsReal,
+    resolved.assumed.map((entry) => entry.field),
     inputs.currentAge,
     inputs.retirementAge,
     inputs.investableAssets,
@@ -610,7 +826,7 @@ export async function runRetirementQuickPlan(
   const hit = planCache.get(key);
   if (hit) return { ...hit, cached: true };
 
-  const result = await computeRetirementQuickPlan(inputs);
+  const result = await computeRetirementQuickPlan(resolved);
   if (planCache.size >= MAX_CACHED_PLANS) {
     const oldest = planCache.keys().next();
     if (!oldest.done) planCache.delete(oldest.value);

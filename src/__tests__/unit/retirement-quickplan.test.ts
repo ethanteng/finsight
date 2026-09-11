@@ -10,7 +10,9 @@ import {
   QUICKPLAN_ALLOCATIONS,
   runRetirementQuickPlan,
   DEFAULT_LIFE_EXPECTANCY,
+  DEFAULT_PLANNING_RETIREMENT_AGE,
   DEFAULT_SOCIAL_SECURITY_START_AGE,
+  resolveQuickPlanRequest,
 } from '../../services/retirement-quickplan';
 
 /** An all-cash portfolio with zero returns and zero inflation: pure arithmetic. */
@@ -156,6 +158,20 @@ describe('quick plan input validation', () => {
       .toThrow(QuickPlanValidationError);
   });
 
+  // The engine only projects forward, so an already-retired visitor entering
+  // both of their real ages is rejected. Stating the rule leaves them stuck;
+  // the message has to name the input that models their situation.
+  it('tells an already retired visitor how to model retiring now', () => {
+    try {
+      normalizeQuickPlanRequest({ ...BASE_REQUEST, currentAge: 70, retirementAge: 62 });
+      throw new Error('expected a validation error');
+    } catch (error) {
+      expect(error).toBeInstanceOf(QuickPlanValidationError);
+      expect((error as QuickPlanValidationError).field).toBe('retirementAge');
+      expect((error as QuickPlanValidationError).message).toContain('already retired');
+    }
+  });
+
   it('rejects a horizon that ends at or before retirement', () => {
     expect(() => normalizeQuickPlanRequest({ ...BASE_REQUEST, lifeExpectancy: 60 }))
       .toThrow(/must end after your retirement age/);
@@ -188,11 +204,25 @@ describe('quick plan input validation', () => {
  * are deterministic, so reusing it changes nothing that is being asserted.
  */
 describe('quick plan results', () => {
-  let full: Awaited<ReturnType<typeof runRetirementQuickPlan>>;
+  type PlanResult = Awaited<ReturnType<typeof runRetirementQuickPlan>>;
+  /**
+   * `primary` and the dollar spending distribution are null in rates mode, so
+   * the type will not let them be read without a check. Every case here
+   * supplies a complete plan, and this narrows once rather than per assertion.
+   */
+  type CompletePlan = PlanResult & {
+    primary: NonNullable<PlanResult['primary']>;
+    sustainableSpending: NonNullable<PlanResult['sustainableSpending']>;
+  };
+  let full: CompletePlan;
 
   beforeAll(async () => {
     clearQuickPlanCache();
-    full = await runRetirementQuickPlan(BASE_REQUEST);
+    const result = await runRetirementQuickPlan(BASE_REQUEST);
+    if (result.mode !== 'plan' || !result.primary || !result.sustainableSpending) {
+      throw new Error('a complete request must produce a plan-mode result');
+    }
+    full = result as CompletePlan;
   }, 120_000);
 
   it('runs the engine against the full record, not just the post-1975 window', () => {
@@ -361,6 +391,152 @@ describe('short-series policy', () => {
   }, 300_000);
 });
 
+/**
+ * Answering with what is missing.
+ *
+ * The page must never dead-end on a blank box, and must never invent one of
+ * the two figures it has no basis for. These pin both halves: a horizon comes
+ * from a stated convention, a portfolio never comes from anywhere.
+ */
+describe('quick plan with inputs left blank', () => {
+  const AGES_ONLY = { currentAge: 68, retirementAge: 70, lifeExpectancy: 85 };
+
+  it('answers an entirely empty request rather than rejecting it', async () => {
+    const result = await runRetirementQuickPlan({ lifeExpectancy: 85 });
+
+    expect(result.mode).toBe('rates');
+    expect(result.sustainableSpendingRates.p50).toBeGreaterThan(0);
+    expect(result.history.sequencesTested).toBeGreaterThan(0);
+  }, 120_000);
+
+  it('assumes the conventional horizon and says so, when no age is given', () => {
+    const resolved = resolveQuickPlanRequest({ investableAssets: 500_000, annualSpending: 40_000 });
+
+    expect(resolved.inputs.retirementAge).toBe(DEFAULT_PLANNING_RETIREMENT_AGE);
+    // No accumulation is invented on top of an unknown current age.
+    expect(resolved.inputs.currentAge).toBe(DEFAULT_PLANNING_RETIREMENT_AGE);
+    expect(resolved.assumed.map((entry) => entry.field)).toEqual(['retirementAge', 'currentAge']);
+    expect(resolved.assumed.every((entry) => entry.note.length > 0)).toBe(true);
+  });
+
+  it('keeps a retirement still ahead of a visitor who gave only their age', () => {
+    expect(resolveQuickPlanRequest({ currentAge: 40 }).inputs.retirementAge).toBe(65);
+    // Already past it: the question is about retiring now, not at 65.
+    expect(resolveQuickPlanRequest({ currentAge: 72 }).inputs.retirementAge).toBe(72);
+  });
+
+  it('never reports a dollar figure for a portfolio it was not given', async () => {
+    const result = await runRetirementQuickPlan({ ...AGES_ONLY, annualSpending: 40_000 });
+
+    expect(result.mode).toBe('rates');
+    expect(result.sustainableSpending).toBeNull();
+    // A survival rate would be a verdict on a portfolio the visitor never named.
+    expect(result.primary).toBeNull();
+    expect(result.alternatives).toEqual([]);
+    expect(result.assumed.map((entry) => entry.field)).not.toContain('investableAssets');
+  }, 120_000);
+
+  it('still prices sustainable spending in dollars when only spending is blank', async () => {
+    const result = await runRetirementQuickPlan({ ...AGES_ONLY, investableAssets: 500_000 });
+
+    expect(result.mode).toBe('rates');
+    // The projection needs the portfolio, contributions and horizon -- never
+    // the spending level -- so these dollars rest on nothing invented.
+    expect(result.sustainableSpending).not.toBeNull();
+    expect(result.sustainableSpending!.p50).toBeGreaterThan(0);
+    expect(result.primary).toBeNull();
+  }, 120_000);
+
+  it('describes no Social Security rather than when a benefit of zero starts', async () => {
+    const result = await runRetirementQuickPlan({
+      currentAge: 68, retirementAge: 70, investableAssets: 500_000,
+      annualSpending: 40_000, lifeExpectancy: 85,
+    });
+    const limitations = result.limitations.join(' ');
+
+    // The claiming age defaults to 67 and means nothing without a benefit;
+    // narrating when it starts would describe income this plan does not have.
+    expect(limitations).toContain('No Social Security is included');
+    expect(limitations).not.toContain('between retiring and claiming');
+    expect(limitations).not.toContain('an amount you actually receive');
+  }, 120_000);
+
+  it('treats a blank contribution or benefit as zero, not as a rejection', () => {
+    const resolved = resolveQuickPlanRequest({
+      currentAge: 60, retirementAge: 65, investableAssets: 800_000, annualSpending: 50_000,
+      annualContributions: '', socialSecurityAnnual: '',
+    });
+
+    expect(resolved.mode).toBe('plan');
+    expect(resolved.inputs.annualContributions).toBe(0);
+    expect(resolved.inputs.socialSecurityAnnual).toBe(0);
+  });
+
+  it('still rejects a figure the visitor did supply and the model cannot use', () => {
+    // Blank is "I did not answer"; 0 is an answer, and substituting a default
+    // for it would change the result without saying so.
+    expect(() => resolveQuickPlanRequest({ investableAssets: 0 })).toThrow(QuickPlanValidationError);
+    expect(() => resolveQuickPlanRequest({ currentAge: 'soon' })).toThrow(QuickPlanValidationError);
+  });
+
+  it('names the field for a decimal the model cannot use, rather than reading it as blank', () => {
+    // The form now sends a typed decimal through instead of deleting the
+    // point, so these have to come back as rejections naming the field.
+    try {
+      resolveQuickPlanRequest({ currentAge: 62.5, investableAssets: 500_000, annualSpending: 40_000 });
+      throw new Error('expected a validation error');
+    } catch (error) {
+      expect((error as QuickPlanValidationError).field).toBe('currentAge');
+      expect((error as QuickPlanValidationError).message).toContain('whole number');
+    }
+
+    // 1.2 typed for 1.2 million: below the floor, and said so by name.
+    try {
+      resolveQuickPlanRequest({ currentAge: 60, retirementAge: 65, investableAssets: 1.2 });
+      throw new Error('expected a validation error');
+    } catch (error) {
+      expect((error as QuickPlanValidationError).field).toBe('investableAssets');
+    }
+
+    // Money itself takes decimals; only ages have to be whole.
+    expect(resolveQuickPlanRequest({ investableAssets: 500_000.5 }).inputs.investableAssets).toBe(500_000.5);
+  });
+
+  it('serves a repeated empty form from cache rather than re-running the century', async () => {
+    clearQuickPlanCache();
+    // Every empty submission normalizes to the same run, so the open form
+    // costs one simulation however many visitors submit it untouched.
+    const first = await runRetirementQuickPlan({});
+    const second = await runRetirementQuickPlan({});
+
+    expect(first.cached).toBe(false);
+    expect(second.cached).toBe(true);
+  }, 180_000);
+
+  it('does not serve a blank-age run from the cache of the same age typed in', async () => {
+    const typed = await runRetirementQuickPlan({
+      currentAge: 65, retirementAge: 65, investableAssets: 600_000, annualSpending: 30_000, lifeExpectancy: 85,
+    });
+    const blank = await runRetirementQuickPlan({
+      investableAssets: 600_000, annualSpending: 30_000, lifeExpectancy: 85,
+    });
+
+    expect(typed.assumed).toEqual([]);
+    expect(blank.assumed.map((entry) => entry.field)).toEqual(['retirementAge', 'currentAge']);
+    expect(blank.cached).toBe(false);
+  }, 180_000);
+});
+
+/**
+ * `primary` is null only in rates mode, which needs a blank portfolio or
+ * spending. Every request below supplies both, so this narrows the type
+ * without each assertion having to.
+ */
+function planOf(result: Awaited<ReturnType<typeof runRetirementQuickPlan>>) {
+  if (!result.primary) throw new Error('expected a plan-mode result');
+  return result.primary;
+}
+
 describe('quick plan sensitivity to Social Security', () => {
   const SHORT = {
     currentAge: 68,
@@ -377,11 +553,11 @@ describe('quick plan sensitivity to Social Security', () => {
     const atSeventyFive = await runRetirementQuickPlan({ ...SHORT, socialSecurityAnnual: 34_000, socialSecurityStartAge: 75 });
     const atSeventy = await runRetirementQuickPlan({ ...SHORT, socialSecurityAnnual: 34_000, socialSecurityStartAge: 70 });
 
-    expect(atSeventyFive.primary.survivalRate).toBeGreaterThan(none.primary.survivalRate);
-    expect(atSeventy.primary.survivalRate).toBeGreaterThan(atSeventyFive.primary.survivalRate);
+    expect(planOf(atSeventyFive).survivalRate).toBeGreaterThan(planOf(none).survivalRate);
+    expect(planOf(atSeventy).survivalRate).toBeGreaterThan(planOf(atSeventyFive).survivalRate);
 
     // Claiming at retirement takes the benefit straight off the first year's draw.
-    expect(atSeventy.primary.firstYearPortfolioWithdrawal).toBe(SHORT.annualSpending - 34_000);
-    expect(atSeventyFive.primary.firstYearPortfolioWithdrawal).toBe(SHORT.annualSpending);
+    expect(planOf(atSeventy).firstYearPortfolioWithdrawal).toBe(SHORT.annualSpending - 34_000);
+    expect(planOf(atSeventyFive).firstYearPortfolioWithdrawal).toBe(SHORT.annualSpending);
   }, 180_000);
 });

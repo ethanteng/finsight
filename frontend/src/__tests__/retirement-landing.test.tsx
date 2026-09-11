@@ -74,7 +74,10 @@ describe('retirement landing page', () => {
     jest.clearAllMocks();
   });
 
-  it('counts one start and deduplicates per-field validation errors', () => {
+  // The burst of `invalid` events is now collapsed on a timer rather than on
+  // the first one, so the single event carries the whole submission: the field
+  // the browser focused, and the count behind it.
+  it('counts one start and deduplicates per-field validation errors', async () => {
     const { container } = render(<RetirementQuickPlan headline="When can I retire?" initialRetirementAge={null} />);
     fireEvent.change(screen.getByLabelText('Current age'), { target: { value: '50' } });
     fireEvent.change(screen.getByLabelText('Current age'), { target: { value: '51' } });
@@ -82,18 +85,28 @@ describe('retirement landing page', () => {
     fireEvent.invalid(screen.getByLabelText('Investment assets today'));
     expect(trackContentsquareEvent).toHaveBeenNthCalledWith(1, 'retirement_calculator_field_edited');
     expect(trackContentsquareEvent).toHaveBeenNthCalledWith(2, 'retirement_calculator_started');
-    expect(trackContentsquareEvent).toHaveBeenNthCalledWith(3, 'retirement_validation_error');
+    await waitFor(() => {
+      expect(trackContentsquareEvent).toHaveBeenNthCalledWith(3, 'retirement_validation_error');
+    });
     expect(trackContentsquareEvent).toHaveBeenCalledTimes(3);
     expect(container.querySelector('.qp-results')).toBeNull();
   });
 
-  it('does not count prefills, focus or an invalid Run click as a field edit', () => {
+  it('does not count prefills or focus as a field edit', () => {
     render(<RetirementQuickPlan headline="When can I retire?" initialRetirementAge={60} />);
     fireEvent.focus(screen.getByLabelText('Current age'));
     fireEvent.click(screen.getByRole('button', { name: 'Run the model' }));
     expect(trackContentsquareEvent).toHaveBeenCalledWith('retirement_model_clicked');
     expect(trackContentsquareEvent).not.toHaveBeenCalledWith('retirement_calculator_field_edited');
-    expect(trackContentsquareEvent).not.toHaveBeenCalledWith('retirement_model_requested');
+  });
+
+  // An untouched form used to be stopped by the browser. Nothing is required
+  // now, so the run happens and the model answers what it can.
+  it('runs the model from an untouched form instead of refusing to submit', () => {
+    const { container } = render(<RetirementQuickPlan headline="When can I retire?" initialRetirementAge={null} />);
+    fireEvent.submit(container.querySelector('form')!);
+    expect(trackContentsquareEvent).toHaveBeenCalledWith('retirement_model_requested');
+    expect(trackContentsquareEvent).not.toHaveBeenCalledWith('retirement_validation_error');
   });
 
   it('counts select and allocation edits once per mount, without sending values', () => {
@@ -125,6 +138,7 @@ describe('retirement landing page', () => {
   it('counts each committed result once, including a deliberate rerun, under Strict Mode', async () => {
     const result = {
       inputs: { retirementAge: 60, socialSecurityStartAge: 67, socialSecurityAnnual: 20000, annualSpending: 50000, lifeExpectancy: 95 },
+      mode: 'plan', assumed: [], missing: [],
       allocation: { label: 'Balanced' },
       history: { firstMonth: '1926-01', lastMonth: '2025-12', firstStartMonth: '1926-01', horizonYears: 45, sequencesTested: 100 },
       primary: {
@@ -160,6 +174,7 @@ describe('retirement landing page', () => {
     // has to point at an id something on the page actually carries.
     const result = {
       inputs: { retirementAge: 60, socialSecurityStartAge: 67, socialSecurityAnnual: 20000, annualSpending: 50000, lifeExpectancy: 95 },
+      mode: 'plan', assumed: [], missing: [],
       allocation: { label: 'Balanced' },
       history: { firstMonth: '1926-01', lastMonth: '2025-12', firstStartMonth: '1926-01', horizonYears: 45, sequencesTested: 100 },
       primary: {
@@ -202,6 +217,7 @@ describe('retirement landing page', () => {
         lifeExpectancy: 95,
         allocation: 'balanced',
       },
+      mode: 'plan', assumed: [], missing: [],
       allocation: { id: 'balanced', label: 'Balanced', description: 'Example', equityPercent: 60 },
       history: { firstMonth: '1926-01', lastMonth: '2025-12', firstStartMonth: '1926-01', lastStartMonth: '1980-12', horizonYears: 47, sequencesTested: 100 },
       primary: {

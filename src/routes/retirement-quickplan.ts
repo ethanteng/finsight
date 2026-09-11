@@ -2,14 +2,23 @@
  * Public retirement quick-plan endpoint.
  *
  * Unauthenticated by design: it is the landing page's calculation, and it
- * touches no user data. It reads nothing from the database, calls no external
- * provider, and stores nothing — the historical dataset it runs against is a
- * checked-in CSV, so a request is pure CPU.
+ * touches no user data. It reads nothing from the database and calls no
+ * external provider — the historical dataset it runs against is a checked-in
+ * CSV, so answering a request is pure CPU.
  *
  * That CPU is the only thing worth protecting, hence the per-IP window below.
+ *
+ * It does write one row per run, after the response, for pattern analysis on
+ * the admin side. That write is deliberately incapable of affecting the
+ * answer: see `services/retirement-quickplan-log`.
  */
 
 import express, { Request, Response } from 'express';
+import {
+  readSubmittedPlan,
+  recordQuickPlanRejection,
+  recordQuickPlanRun,
+} from '../services/retirement-quickplan-log';
 import {
   QuickPlanValidationError,
   QUICKPLAN_ALLOCATIONS,
@@ -162,12 +171,20 @@ router.get('/options', (_req: Request, res: Response) => {
 });
 
 router.post('/', quickPlanRateLimit, async (req: Request, res: Response) => {
+  // Read before running: the normalizer assumes blanks and throws on bad
+  // figures, so afterwards there is no way back to what was actually typed.
+  const submitted = readSubmittedPlan(req.body);
+
   try {
     const result = await runRetirementQuickPlan(req.body);
     res.json(result);
+    // After the response, and unawaited. The visitor has their answer; the
+    // row is bookkeeping, and `record*` never rejects.
+    void recordQuickPlanRun(submitted, result);
   } catch (error) {
     if (error instanceof QuickPlanValidationError) {
       res.status(400).json({ error: error.message, field: error.field });
+      void recordQuickPlanRejection(submitted, error);
       return;
     }
     console.error('❌ Retirement quick plan failed:', error);
