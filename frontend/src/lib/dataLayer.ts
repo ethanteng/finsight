@@ -117,7 +117,14 @@ function getContentType(pathname: string): string {
   return 'marketing_page';
 }
 
-/** Record the calculator outcome as a funnel event, never the figures used to reach it. */
+/**
+ * Record the calculator outcome as a funnel event, never the figures used to
+ * reach it. GTM needs a Custom Event trigger on `coast_fire_calculated` plus a
+ * GA4 Event tag that forwards `coast_fire_status`, `calculation_trigger`,
+ * `years_to_retirement`, `source_page`, and `content_type`; without that tag
+ * the beachhead scorecard's Result shown stage stays at zero even when the
+ * page is live and visitors are calculating.
+ */
 export function pushCoastFireCalculated(
   status: CoastFireStatus,
   yearsToRetirement: number,
