@@ -18,6 +18,7 @@ import {
   pushTrialSignupViewed,
 } from '@/lib/dataLayer';
 import {
+  RETIREMENT_REF_COOKIE,
   RETIREMENT_SIGNUP_SOURCE,
   storeRetirementSignupContext,
 } from '@/lib/retirement-signup-context';
@@ -242,6 +243,164 @@ describe('RegisterForm', () => {
       await waitFor(() => expect(global.fetch).toHaveBeenCalled());
       expect(screen.getByRole('heading', { name: 'Build your plan free for 30 days.' })).toBeInTheDocument();
       expect(screen.queryByRole('region', { name: 'Your Coast FIRE scenario' })).not.toBeInTheDocument();
+    });
+
+    const RETIREMENT_SCENARIO = {
+      currentAge: 48,
+      retirementAge: 60,
+      investableAssets: 1_200_000,
+      annualSpending: 95_000,
+      annualContributions: 35_000,
+      socialSecurityAnnual: 36_000,
+      socialSecurityStartAge: 67,
+      lifeExpectancy: 95,
+      allocation: 'balanced' as const,
+    };
+
+    /** What `/retirement/continue` leaves behind after stripping the URL. */
+    function handOverRetirementRef(token: string) {
+      document.cookie = `${RETIREMENT_REF_COOKIE}=${token}; Path=/getstarted`;
+    }
+
+    it('exchanges an emailed retirement token and prefills that address', async () => {
+      const token = 'f'.repeat(48);
+      searchParams = new URLSearchParams(`source=${RETIREMENT_SIGNUP_SOURCE}`);
+      handOverRetirementRef(token);
+      const fetchMock = jest.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          email: 'reader@example.com',
+          inputs: RETIREMENT_SCENARIO,
+          outcome: { survivalRate: 0.92, sequencesTested: 800, sequencesSurvived: 736 },
+        }),
+      })) as unknown as typeof fetch;
+      global.fetch = fetchMock;
+
+      render(<RegisterForm variant="trial" />);
+
+      const summary = await screen.findByRole('region', { name: 'Your modeled retirement scenario' });
+      expect(within(summary).getByText('$1.2M')).toBeInTheDocument();
+      expect(screen.getByLabelText('Email address')).toHaveValue('reader@example.com');
+      expect(String((fetchMock as unknown as jest.Mock).mock.calls[0][0]))
+        .toContain(`/api/retirement-quickplan/signup-context/${token}`);
+      // The token is a bearer credential and this page loads Google Tag
+      // Manager, so it arrives in a cookie and never in the address bar.
+      expect(window.location.search).not.toContain(token);
+      await waitFor(() => expect(document.cookie).not.toContain(RETIREMENT_REF_COOKIE));
+    });
+
+    /*
+     * The email stated a survival figure. Both the engine and the market
+     * dataset change inside the token's 90 days, so the page shows what was
+     * sent rather than anything recomputed.
+     */
+    /*
+     * Whole-percent rounding turned a 99.6% survival rate into "100% lasted"
+     * while the email said 99.6%. The figure is stored precisely so the page
+     * and the inbox agree; rounding it here gave that away.
+     */
+    it('never rounds the emailed verdict up to a stronger claim', async () => {
+      searchParams = new URLSearchParams(`source=${RETIREMENT_SIGNUP_SOURCE}`);
+      handOverRetirementRef('c'.repeat(48));
+      global.fetch = jest.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          email: 'reader@example.com',
+          inputs: RETIREMENT_SCENARIO,
+          outcome: { survivalRate: 0.996, sequencesTested: 685, sequencesSurvived: 682 },
+        }),
+      })) as unknown as typeof fetch;
+
+      render(<RegisterForm variant="trial" />);
+
+      const summary = await screen.findByRole('region', { name: 'Your modeled retirement scenario' });
+      expect(within(summary).getByText('99.6% lasted')).toBeInTheDocument();
+      expect(within(summary).queryByText('100% lasted')).not.toBeInTheDocument();
+    });
+
+    it('shows the verdict the email stated', async () => {
+      searchParams = new URLSearchParams(`source=${RETIREMENT_SIGNUP_SOURCE}`);
+      handOverRetirementRef('e'.repeat(48));
+      global.fetch = jest.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          email: 'reader@example.com',
+          inputs: RETIREMENT_SCENARIO,
+          outcome: { survivalRate: 0.62, sequencesTested: 800, sequencesSurvived: 496 },
+        }),
+      })) as unknown as typeof fetch;
+
+      render(<RegisterForm variant="trial" />);
+
+      const summary = await screen.findByRole('region', { name: 'Your modeled retirement scenario' });
+      expect(within(summary).getByText('62.0% lasted')).toBeInTheDocument();
+    });
+
+    /* A same-tab click-through has no emailed verdict, so it claims none. */
+    it('shows no verdict badge for a scenario carried in the same tab', async () => {
+      searchParams = new URLSearchParams(`source=${RETIREMENT_SIGNUP_SOURCE}`);
+      storeRetirementSignupContext(RETIREMENT_SCENARIO);
+
+      render(<RegisterForm variant="trial" />);
+
+      const summary = await screen.findByRole('region', { name: 'Your modeled retirement scenario' });
+      expect(within(summary).queryByText(/lasted/)).not.toBeInTheDocument();
+    });
+
+    it('falls back to the generic page when the emailed retirement token no longer resolves', async () => {
+      searchParams = new URLSearchParams(`source=${RETIREMENT_SIGNUP_SOURCE}`);
+      handOverRetirementRef('d'.repeat(48));
+      global.fetch = jest.fn(async () => ({
+        ok: false,
+        status: 404,
+        json: async () => ({ error: 'Not found' }),
+      })) as unknown as typeof fetch;
+
+      render(<RegisterForm variant="trial" />);
+
+      await waitFor(() => expect(global.fetch).toHaveBeenCalled());
+      expect(screen.getByRole('heading', { name: 'Build your plan free for 30 days.' })).toBeInTheDocument();
+      expect(screen.queryByRole('region', { name: 'Your modeled retirement scenario' })).not.toBeInTheDocument();
+    });
+
+    /*
+     * The cookie is the only surviving copy of the token once `/continue` has
+     * stripped it from the URL. A backend that was briefly unreachable is not
+     * a verdict on the token, so dropping it there would lose the emailed
+     * personalization with no way to reload into a retry.
+     */
+    it.each([
+      ['a server error', { ok: false, status: 502 }],
+      ['a rate limit', { ok: false, status: 429 }],
+    ])('keeps the emailed token after %s so a reload can retry', async (_label, response) => {
+      searchParams = new URLSearchParams(`source=${RETIREMENT_SIGNUP_SOURCE}`);
+      handOverRetirementRef('a'.repeat(48));
+      global.fetch = jest.fn(async () => ({
+        ...response,
+        json: async () => ({ error: 'nope' }),
+      })) as unknown as typeof fetch;
+
+      render(<RegisterForm variant="trial" />);
+
+      await waitFor(() => expect(global.fetch).toHaveBeenCalled());
+      expect(document.cookie).toContain(RETIREMENT_REF_COOKIE);
+      // And the page is still an ordinary, working signup.
+      expect(screen.getByRole('heading', { name: 'Build your plan free for 30 days.' })).toBeInTheDocument();
+    });
+
+    /* A 404 is the endpoint saying it has no such token; retrying cannot help. */
+    it('spends the emailed token when the backend definitively does not know it', async () => {
+      searchParams = new URLSearchParams(`source=${RETIREMENT_SIGNUP_SOURCE}`);
+      handOverRetirementRef('a'.repeat(48));
+      global.fetch = jest.fn(async () => ({
+        ok: false,
+        status: 404,
+        json: async () => ({ error: 'Not found' }),
+      })) as unknown as typeof fetch;
+
+      render(<RegisterForm variant="trial" />);
+
+      await waitFor(() => expect(document.cookie).not.toContain(RETIREMENT_REF_COOKIE));
     });
 
     it('keeps generic /getstarted unchanged when the retirement source or scenario is missing', async () => {

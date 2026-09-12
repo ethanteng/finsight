@@ -1,4 +1,13 @@
 import { GET_STARTED_HREF } from './site-nav';
+import {
+  clearHandoverToken,
+  HANDOVER_COOKIE_MAX_AGE_SECONDS,
+  HANDOVER_COOKIE_PATH,
+  isHandoverToken,
+  lookupStatusForResponse,
+  readHandoverToken,
+  type HandoverLookup,
+} from './calculator-handover';
 import { calculateCoastFire, type CoastFireInputs, type CoastFireResult } from './coast-fire';
 
 /**
@@ -27,15 +36,11 @@ export const COAST_FIRE_SIGNUP_STORAGE_KEY = 'asklinc.coast-fire-signup-context.
 /** Where the link in a results email lands, before any page has rendered. */
 export const COAST_FIRE_CONTINUE_PATH = '/coast-fire/continue';
 export const COAST_FIRE_REF_COOKIE = 'asklinc_cf_ref';
-export const COAST_FIRE_REF_COOKIE_PATH = GET_STARTED_HREF;
-/** Minutes, not days: it is read once, on the page it redirects to. */
-export const COAST_FIRE_REF_COOKIE_MAX_AGE_SECONDS = 10 * 60;
+export const COAST_FIRE_REF_COOKIE_PATH = HANDOVER_COOKIE_PATH;
+export const COAST_FIRE_REF_COOKIE_MAX_AGE_SECONDS = HANDOVER_COOKIE_MAX_AGE_SECONDS;
 
 const CONTEXT_VERSION = 1 as const;
 const CONTEXT_TTL_MS = 2 * 60 * 60 * 1000;
-
-/** 24 random bytes, hex encoded — the shape `services/coast-fire-leads` mints. */
-const TOKEN_PATTERN = /^[a-f0-9]{48}$/;
 
 export interface CoastFireSignupContext {
   version: typeof CONTEXT_VERSION;
@@ -151,7 +156,7 @@ export function storeCoastFireSignupContext(
   const now = options.now ?? Date.now();
   const inputs = parseInputs(value);
   if (!inputs || !numberInRange(now, 0, Number.MAX_SAFE_INTEGER)) return false;
-  if (options.sourceToken && !TOKEN_PATTERN.test(options.sourceToken)) return false;
+  if (options.sourceToken && !isHandoverToken(options.sourceToken)) return false;
   const emailedOutcome = options.emailedOutcome
     ? parseEmailedOutcome(options.emailedOutcome)
     : undefined;
@@ -199,9 +204,7 @@ export function readCoastFireSignupContext(
 
     const emailedOutcome = parseEmailedOutcome(value.emailedOutcome);
     const sourceToken =
-      typeof value.sourceToken === 'string' && TOKEN_PATTERN.test(value.sourceToken)
-        ? value.sourceToken
-        : undefined;
+      isHandoverToken(value.sourceToken) ? value.sourceToken : undefined;
 
     return {
       version: CONTEXT_VERSION,
@@ -221,18 +224,9 @@ export function hasCoastFireSignupSource(searchParams: Pick<URLSearchParams, 'ge
   return searchParams.get('source') === COAST_FIRE_SIGNUP_SOURCE;
 }
 
-/** True only for a token of the shape `services/coast-fire-leads` mints. */
+/** True only for a token of the shape `services/lead-token` mints. */
 export function isCoastFireSignupRef(value: unknown): value is string {
-  return typeof value === 'string' && TOKEN_PATTERN.test(value);
-}
-
-function readCookie(name: string): string | null {
-  if (typeof document === 'undefined') return null;
-  for (const entry of document.cookie.split(';')) {
-    const [key, ...rest] = entry.trim().split('=');
-    if (key === name) return decodeURIComponent(rest.join('='));
-  }
-  return null;
+  return isHandoverToken(value);
 }
 
 /**
@@ -244,28 +238,12 @@ function readCookie(name: string): string | null {
  * that loads Google Tag Manager in `<head>`.
  */
 export function readCoastFireSignupRef(): string | null {
-  const ref = readCookie(COAST_FIRE_REF_COOKIE);
-  return isCoastFireSignupRef(ref) ? ref : null;
+  return readHandoverToken(COAST_FIRE_REF_COOKIE);
 }
 
-/**
- * Drop the handover cookie once it has been spent. It expires on its own
- * within minutes; clearing it means a second visit to /getstarted in the same
- * session is an ordinary one rather than a replay of an old link.
- *
- * Attribute matching matters: `/coast-fire/continue` sets `Secure` on HTTPS,
- * and browsers will not delete a Secure cookie unless the clearing write also
- * includes `Secure`. Omitting it left the bearer token readable on
- * `/getstarted` for the rest of the ten-minute lifetime after "spend".
- */
+/** Drop the handover cookie once it has been spent. */
 export function clearCoastFireSignupRef(): void {
-  if (typeof document === 'undefined') return;
-  const secure =
-    typeof window !== 'undefined' && window.location.protocol === 'https:'
-      ? '; Secure'
-      : '';
-  document.cookie =
-    `${COAST_FIRE_REF_COOKIE}=; Path=${COAST_FIRE_REF_COOKIE_PATH}; Max-Age=0; SameSite=Lax${secure}`;
+  clearHandoverToken(COAST_FIRE_REF_COOKIE);
 }
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
@@ -280,16 +258,16 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
 export async function fetchCoastFireSignupContext(
   token: string,
   signal?: AbortSignal,
-): Promise<{
+): Promise<HandoverLookup<{
   inputs: CoastFireInputs;
   email?: string;
   emailedOutcome?: CoastFireSignupContext['emailedOutcome'];
-} | null> {
-  if (!TOKEN_PATTERN.test(token)) return null;
+}>> {
+  if (!isHandoverToken(token)) return { status: 'not-found' };
 
   try {
     const response = await fetch(`${API_URL}/api/coast-fire/signup-context/${token}`, { signal });
-    if (!response.ok) return null;
+    if (!response.ok) return { status: lookupStatusForResponse(response.status) };
 
     const body = await response.json() as {
       inputs?: unknown;
@@ -298,21 +276,28 @@ export async function fetchCoastFireSignupContext(
       hasReachedCoastFire?: unknown;
     };
     const inputs = parseInputs(body?.inputs);
-    if (!inputs) return null;
+    // A 200 we cannot read is a problem with the stored row, not a passing
+    // one, so the token is spent rather than retried forever.
+    if (!inputs) return { status: 'not-found' };
+
     const emailedOutcome = parseEmailedOutcome({
       coastFireNumber: body.coastFireNumber,
       hasReachedCoastFire: body.hasReachedCoastFire,
     });
-
     return {
-      inputs,
-      ...(typeof body.email === 'string' && body.email.includes('@')
-        ? { email: body.email }
-        : {}),
-      ...(emailedOutcome ? { emailedOutcome } : {}),
+      status: 'resolved',
+      context: {
+        inputs,
+        ...(typeof body.email === 'string' && body.email.includes('@')
+          ? { email: body.email }
+          : {}),
+        ...(emailedOutcome ? { emailedOutcome } : {}),
+      },
     };
   } catch {
-    return null;
+    // An aborted request is the component unmounting, not a verdict on the
+    // token; treating it as unavailable keeps the cookie for the next mount.
+    return { status: 'unavailable' };
   }
 }
 

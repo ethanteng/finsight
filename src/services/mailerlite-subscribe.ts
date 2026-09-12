@@ -84,6 +84,19 @@ export async function subscribeToMailerLite(
  * subscriber list, just without a group.
  */
 export function coastFireGroupIds(): string[] {
-  const groupId = process.env.MAILER_LITE_COAST_FIRE_GROUP_ID?.trim();
+  return groupIdsFrom('MAILER_LITE_COAST_FIRE_GROUP_ID');
+}
+
+/**
+ * The group retirement calculator leads join. Separate from the Coast FIRE
+ * group because they are different questions and deserve different follow-up,
+ * and separate from the sync job's group because neither has an account yet.
+ */
+export function retirementGroupIds(): string[] {
+  return groupIdsFrom('MAILER_LITE_RETIREMENT_GROUP_ID');
+}
+
+function groupIdsFrom(variable: string): string[] {
+  const groupId = process.env[variable]?.trim();
   return groupId ? [groupId] : [];
 }

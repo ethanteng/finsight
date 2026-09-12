@@ -19,7 +19,9 @@ const list = {
 const leads = {
   record: jest.fn(async () => true),
   read: jest.fn(async () => null as unknown),
-  mark: jest.fn(async () => undefined),
+  // Typed with its arguments so the cases can assert what was written, and
+  // in what order.
+  mark: jest.fn<Promise<void>, [string, Record<string, boolean>]>(async () => undefined),
 };
 
 jest.mock('../../auth/resend-email', () => ({
@@ -33,7 +35,8 @@ jest.mock('../../services/coast-fire-leads', () => ({
   ...jest.requireActual('../../services/coast-fire-leads'),
   recordCoastFireLead: (...args: unknown[]) => leads.record(...(args as [])),
   readCoastFireLead: (...args: unknown[]) => leads.read(...(args as [])),
-  markCoastFireLeadDelivery: (...args: unknown[]) => leads.mark(...(args as [])),
+  markCoastFireLeadDelivery: (...args: unknown[]) =>
+    leads.mark(...(args as [string, Record<string, boolean>])),
 }));
 
 /** Both limits are read once at module load, so the env has to be set first. */
@@ -151,10 +154,13 @@ describe('POST /api/coast-fire/email-results', () => {
     await settle();
 
     expect(response.status).toBe(200);
-    expect(leads.mark).toHaveBeenCalledWith(expect.any(String), {
-      emailSent: true,
-      mailerliteSynced: false,
-    });
+    // Two writes, in this order. The send is recorded before the subscribe is
+    // even attempted, so a restart during its timeout cannot leave a delivered
+    // email marked unsent.
+    expect(leads.mark.mock.calls.map((call) => call[1])).toEqual([
+      { emailSent: true },
+      { mailerliteSynced: false },
+    ]);
   });
 
   it('says so when the send itself failed, rather than claiming it sent', async () => {

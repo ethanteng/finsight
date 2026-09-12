@@ -16,10 +16,15 @@ import {
 } from '@/lib/dataLayer';
 import { useDialog } from '@/components/ui/dialog';
 import {
+  clearRetirementSignupRef,
+  fetchRetirementSignupContext,
   hasRetirementSignupSource,
   readRetirementSignupContext,
+  readRetirementSignupRef,
+  storeRetirementSignupContext,
   type RetirementSignupContext,
 } from '@/lib/retirement-signup-context';
+import { isLookupSettled } from '@/lib/calculator-handover';
 import {
   clearCoastFireSignupRef,
   coastFireSignupSummary,
@@ -174,8 +179,15 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
     // Every trial path returns here, before reading checkout parameters, so a
     // stray Stripe URL still cannot turn the no-card signup into a paid flow.
     if (isTrial) {
+      // An emailed token is authoritative for this landing, on either
+      // calculator. Skip painting a same-tab CTA scenario from sessionStorage
+      // while the exchange runs, so an earlier click cannot flash the wrong
+      // numbers at someone arriving from their inbox.
+      const emailedRetirementRef = hasRetirementSignupSource(searchParams)
+        ? readRetirementSignupRef()
+        : null;
       setRetirementContext(
-        hasRetirementSignupSource(searchParams)
+        hasRetirementSignupSource(searchParams) && !emailedRetirementRef
           ? readRetirementSignupContext()
           : null,
       );
@@ -234,24 +246,76 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
 
     const controller = new AbortController();
     void (async () => {
-      const resolved = await fetchCoastFireSignupContext(token, controller.signal);
+      const lookup = await fetchCoastFireSignupContext(token, controller.signal);
       if (controller.signal.aborted) return;
-      // Spent either way: a token that did not resolve will not resolve on a
-      // reload, and leaving it would retry the lookup on every visit.
-      clearCoastFireSignupRef();
-      if (!resolved) return;
+
+      /*
+       * Spent only once the answer is settled. A resolved or unknown token
+       * cannot say anything different on a retry, and leaving either would
+       * re-ask on every visit. But this cookie is the only surviving copy of
+       * the token — `/coast-fire/continue` stripped it from the URL — so
+       * dropping it after a blip would lose the personalization with no way to
+       * reload into a retry.
+       */
+      if (isLookupSettled(lookup.status)) clearCoastFireSignupRef();
+      if (lookup.status !== 'resolved') return;
 
       // Kept for the rest of this tab, so a reload or a step backwards in the
       // flow does not lose the scenario and re-ask the backend for it.
-      storeCoastFireSignupContext(resolved.inputs, {
-        email: resolved.email,
+      const { context } = lookup;
+      storeCoastFireSignupContext(context.inputs, {
+        email: context.email,
         sourceToken: token,
-        emailedOutcome: resolved.emailedOutcome,
+        emailedOutcome: context.emailedOutcome,
       });
       setCoastFireContext(readCoastFireSignupContext());
       // Their own address, from the link we sent them. Prefilled, not locked:
       // they can sign up under a different one.
-      if (resolved.email) setEmail((current) => current || resolved.email!);
+      if (context.email) setEmail((current) => current || context.email!);
+    })();
+
+    return () => controller.abort();
+  }, [isTrial, searchParams]);
+
+  /*
+   * The emailed retirement link. Same shape as the Coast FIRE exchange above:
+   * the token arrives in a cookie `/retirement/continue` set, never on the
+   * URL, and nothing blocks on the lookup.
+   */
+  useEffect(() => {
+    if (!isTrial || !hasRetirementSignupSource(searchParams)) return;
+    const token = readRetirementSignupRef();
+    if (!token) return;
+
+    // A stored plan only short-circuits the lookup when it came from this same
+    // link. Opening a second results email in the same tab has to show that
+    // email's plan, and prefill the address it was sent to.
+    const existing = readRetirementSignupContext();
+    if (existing?.sourceToken === token) {
+      clearRetirementSignupRef();
+      setRetirementContext(existing);
+      if (existing.email) setEmail((current) => current || existing.email!);
+      return;
+    }
+
+    const controller = new AbortController();
+    void (async () => {
+      const lookup = await fetchRetirementSignupContext(token, controller.signal);
+      if (controller.signal.aborted) return;
+
+      // Settled answers spend the token; a lookup that could not be made keeps
+      // it, so a reload retries. See the Coast FIRE exchange above.
+      if (isLookupSettled(lookup.status)) clearRetirementSignupRef();
+      if (lookup.status !== 'resolved') return;
+
+      const { context } = lookup;
+      storeRetirementSignupContext(context.inputs, {
+        email: context.email,
+        sourceToken: token,
+        emailedOutcome: context.emailedOutcome,
+      });
+      setRetirementContext(readRetirementSignupContext());
+      if (context.email) setEmail((current) => current || context.email!);
     })();
 
     return () => controller.abort();
@@ -488,9 +552,36 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
           data-cs-mask
           className="mb-5 rounded-2xl border border-[#123c2f]/15 bg-[#fffdf7] p-4 shadow-sm"
         >
-          <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#477064]">
-            Your modeled scenario
-          </p>
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#477064]">
+              Your modeled scenario
+            </p>
+            {/*
+              * Only for a plan that arrived from an email. The figure is the
+              * one that message stated, not a fresh run: the link lives for 90
+              * days and both the engine and its market dataset change.
+              */}
+            {retirementContext.emailedOutcome && (
+              <span
+                className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-bold ${
+                  retirementContext.emailedOutcome.survivalRate >= 0.9
+                    ? 'bg-[#eaf5d5] text-[#34551c]'
+                    : retirementContext.emailedOutcome.survivalRate >= 0.7
+                      ? 'bg-[#f7e5c6] text-[#6b4a12]'
+                      : 'bg-[#f8dcd8] text-[#8b3027]'
+                }`}
+              >
+                {/*
+                  * One decimal, the same precision the email and the results
+                  * page use. Rounding to whole percent turned a 99.6% survival
+                  * rate into "100% lasted" here while the message in the
+                  * recipient's inbox said 99.6% — and the reason the figure is
+                  * stored at all is that the two must agree.
+                  */}
+                {`${(retirementContext.emailedOutcome.survivalRate * 100).toFixed(1)}% lasted`}
+              </span>
+            )}
+          </div>
           <dl className="mt-3 grid grid-cols-3 gap-2">
             <ScenarioValue label="Retire at" value={String(retirementContext.inputs.retirementAge)} />
             <ScenarioValue label="Assets today" value={compactMoney(retirementContext.inputs.investableAssets)} />

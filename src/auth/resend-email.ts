@@ -2,7 +2,12 @@ import { Resend } from 'resend';
 import crypto from 'crypto';
 import { createEmailHtml, getBaseUrl } from '../email/templates';
 import { buildCoastFireResultsEmail } from '../email/coast-fire-results';
+import { buildRetirementResultsEmail } from '../email/retirement-results';
 import type { CoastFireResult } from '../services/coast-fire';
+import type {
+  QuickPlanScenario,
+  RetirementQuickPlanResult,
+} from '../services/retirement-quickplan';
 
 // Initialize Resend client function
 function getResendClient(): Resend | null {
@@ -279,6 +284,54 @@ export async function sendCoastFireResultsEmail(
     return true;
   } catch (error) {
     console.error('Error sending Coast FIRE results email:', error);
+    return false;
+  }
+}
+
+/**
+ * Send someone the retirement quick-plan results they asked for.
+ *
+ * Both parts are sent, for the same reason as the Coast FIRE message: a client
+ * that will not render HTML shows the text part, which carries the same
+ * verdict and the same figures rather than a "view this in a browser" stub.
+ */
+export async function sendRetirementResultsEmail(
+  email: string,
+  result: RetirementQuickPlanResult,
+  primary: QuickPlanScenario,
+  ctaUrl: string
+): Promise<boolean> {
+  try {
+    const resend = getResendClient();
+
+    if (!resend) {
+      console.log('Resend not configured, skipping retirement results email');
+      return true;
+    }
+
+    const message = buildRetirementResultsEmail(result, primary, {
+      email,
+      ctaUrl,
+      calculatorUrl: `${getBaseUrl()}/retirement-calculator`,
+    });
+
+    const { error } = await resend.emails.send({
+      from: 'Ask Linc <noreply@asklinc.com>',
+      to: email,
+      subject: message.subject,
+      html: message.html,
+      text: message.text,
+    });
+
+    if (error) {
+      console.error('Resend error:', error);
+      return false;
+    }
+
+    console.log(`Retirement results emailed to ${email}`);
+    return true;
+  } catch (error) {
+    console.error('Error sending retirement results email:', error);
     return false;
   }
 }

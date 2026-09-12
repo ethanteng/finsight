@@ -656,6 +656,145 @@
 
 /* ------------------------------------------------------------ methodology */
 
+/* --------------------------------------------- the results email capture */
+
+/*
+ * Sits between the scenario comparison and the methodology, on the page's own
+ * paper-and-rule card treatment rather than anything louder: it is an input,
+ * and every other input on this page is on paper.
+ */
+.quickplan-page .qp-email-section {
+  padding-block: 44px;
+  border-top: 1px solid rgba(16, 35, 25, 0.12);
+}
+
+.quickplan-page .qp-email-capture {
+  max-width: 620px;
+  padding: 30px 32px;
+  border: 1px solid #bfc7ba;
+  border-radius: 24px;
+  background: var(--cream);
+  box-shadow: 0 18px 44px rgba(20, 47, 32, 0.07);
+}
+
+.quickplan-page .qp-email-capture .section-kicker {
+  margin: 0 0 8px;
+}
+
+.quickplan-page .qp-email-capture h3 {
+  margin: 0;
+  font-family: var(--font-display), sans-serif;
+  font-size: 27px;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  line-height: 1.12;
+}
+
+.quickplan-page .qp-email-lead {
+  margin: 11px 0 0;
+  max-width: 52ch;
+  color: #4f5e55;
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.quickplan-page .qp-email-label {
+  display: block;
+  margin: 22px 0 7px;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.quickplan-page .qp-email-row {
+  display: grid;
+  gap: 10px;
+}
+
+.quickplan-page .qp-email-row input {
+  width: 100%;
+  min-height: 52px;
+  padding: 13px 15px;
+  border: 1px solid #bfc7ba;
+  border-radius: 12px;
+  background: white;
+  color: var(--ink);
+  font-size: 16px;
+  font-weight: 600;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.quickplan-page .qp-email-row input:focus {
+  border-color: #2b8f5d;
+  box-shadow: 0 0 0 3px rgba(43, 143, 93, 0.15);
+  outline: 0;
+}
+
+.quickplan-page .qp-email-row input::placeholder {
+  color: #97a39b;
+  font-weight: 500;
+}
+
+.quickplan-page .qp-email-row button {
+  width: 100%;
+  border: 0;
+  cursor: pointer;
+  font-size: 16px;
+}
+
+.quickplan-page .qp-email-row button[disabled] {
+  cursor: progress;
+  opacity: 0.65;
+}
+
+.quickplan-page .qp-email-note {
+  margin: 14px 0 0;
+  color: #68766e;
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
+.quickplan-page .qp-email-error {
+  margin: 14px 0 0;
+  padding: 12px 14px;
+  border-left: 3px solid #b4352b;
+  border-radius: 4px 10px 10px 4px;
+  background: #fbe9e5;
+  color: #7e2d26;
+  font-size: 14px;
+}
+
+.quickplan-page .qp-email-capture.is-sent {
+  border-color: #9dbd6e;
+  background: #f4f9e8;
+}
+
+.quickplan-page .qp-email-capture.is-sent p:not(.section-kicker) {
+  margin: 11px 0 0;
+  color: #4f5e55;
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.quickplan-page .qp-email-capture.is-sent strong {
+  color: var(--ink);
+  word-break: break-word;
+}
+
+.quickplan-page .qp-email-again {
+  margin-top: 16px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 700;
+  text-decoration: underline;
+  text-decoration-color: rgba(16, 35, 25, 0.35);
+  text-underline-offset: 4px;
+}
+
 .quickplan-page .qp-methodology {
   padding-block: 52px 76px;
 }
@@ -841,6 +980,10 @@
   }
 
   .quickplan-page .qp-chart-block,
+  .quickplan-page .qp-email-capture {
+    padding: 26px 22px;
+  }
+
   .quickplan-page .qp-scenarios {
     grid-template-columns: minmax(0, 1fr);
     gap: 30px;

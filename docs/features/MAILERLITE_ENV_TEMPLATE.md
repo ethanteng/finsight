@@ -13,10 +13,11 @@ MAILER_LITE_GROUP_ID=your_mailerlite_group_id_here
 ## Optional Environment Variables
 
 ```bash
-# Group that Coast FIRE calculator leads join when they ask for their
-# results by email. Unset means those addresses still reach the account's
-# subscriber list, just without a group.
+# Groups that calculator leads join when they ask for their results by
+# email. Unset means those addresses still reach the account's subscriber
+# list, just without a group.
 MAILER_LITE_COAST_FIRE_GROUP_ID=your_coast_fire_group_id_here
+MAILER_LITE_RETIREMENT_GROUP_ID=your_retirement_group_id_here
 ```
 
 ## How to Get These Values
@@ -39,12 +40,13 @@ MAILER_LITE_COAST_FIRE_GROUP_ID=your_coast_fire_group_id_here
 5. Copy the group ID number
 6. Paste it as the value for `MAILER_LITE_GROUP_ID`
 
-### 3. MAILER_LITE_COAST_FIRE_GROUP_ID
+### 3. MAILER_LITE_COAST_FIRE_GROUP_ID and MAILER_LITE_RETIREMENT_GROUP_ID
 
-Same steps as above, using the **Coast FIRE** group. This is a different
-audience from `MAILER_LITE_GROUP_ID`: that group is every registered user, and
-this one is calculator visitors who have not registered. Keep them separate so
-a Coast FIRE nurture campaign does not go to paying customers.
+Same steps as above, using the **Coast FIRE** and **Retirement** groups. Both
+are a different audience from `MAILER_LITE_GROUP_ID`: that group is every
+registered user, and these are calculator visitors who have not registered.
+Keep all three separate so a nurture campaign for one question does not go to
+paying customers or to people who asked a different one.
 
 ## Environment-Specific Setup
 
