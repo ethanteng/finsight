@@ -85,6 +85,25 @@ describe('why a holding produced no modeled exposure', () => {
     expect(mapping.holdingExposures[0].unresolvedReason).toBe('unrecognized');
   });
 
+  it('does not treat a short exchange-shaped ticker as equity either', async () => {
+    // The same reasoning reaches past mutual funds. Three-letter tickers
+    // belong to bond ETFs -- AGG, BND, LQD, TIP -- as readily as to stocks, so
+    // the shape establishes "exchange-listed" and nothing about asset class.
+    const mapping = await mapOne('', { ticker_symbol: 'ABC' });
+
+    expect(mapping.unrecognizedHoldings).toEqual(['ABC']);
+    expect(mapping.equityGeographyUnresolvedHoldings).toEqual([]);
+  });
+
+  it('still reads equity from the name when the ticker says nothing', async () => {
+    // The guard narrows the remedy to name evidence; it must not withdraw it
+    // from a fund that has some merely because a mutual-fund ticker is present.
+    const mapping = await mapOne('Large Cap Growth Fund', { ticker_symbol: 'ABCDX' });
+
+    expect(mapping.equityGeographyUnresolvedHoldings).toEqual(['Large Cap Growth Fund']);
+    expect(mapping.unrecognizedHoldings).toEqual([]);
+  });
+
   it('names a recognized target-date fund that has no registry row', async () => {
     // The remedy here is a registry entry we write from UC's published fact
     // sheet, not a vendor feed. Reporting it as "no asset class resolved" sent
