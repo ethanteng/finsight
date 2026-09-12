@@ -390,6 +390,153 @@ function staleAccountIds(snapshot: FinancesSnapshotLike): Set<string> {
   return stale;
 }
 
+/**
+ * Signals written as `account:{id}:{signal}`. Longest first: `:balance-derived`
+ * would otherwise be truncated to `:balance`, naming a different signal.
+ */
+const ACCOUNT_SIGNAL_SUFFIXES = [
+  ':holdings-coverage',
+  ':balance-derived',
+  ':classification',
+  ':currency',
+  ':balance',
+] as const;
+
+/** Sources that stand for themselves rather than for one account or provider. */
+const STANDALONE_SOURCE_LABELS: Record<string, string> = {
+  'home-value': 'Home value',
+  'financial-data:partial': 'Connected financial data',
+};
+
+/** What the user calls each integration, as opposed to the id we key it by. */
+const PROVIDER_LABELS: Record<string, string> = {
+  plaid: 'Plaid',
+  snaptrade: 'SnapTrade',
+  public: 'Public.com',
+};
+
+/**
+ * Institution values that stand for "the provider did not tell us", not for an
+ * institution. A SnapTrade account with no institution is stored as the literal
+ * 'Unknown', and connection rows use 'Unknown Institution'; appending either would
+ * produce "Brokerage (Unknown)", which reads as a disambiguation while
+ * disambiguating nothing.
+ */
+const PLACEHOLDER_INSTITUTIONS = new Set([
+  'unknown',
+  'unknown institution',
+  'n/a',
+  'null',
+  'undefined',
+]);
+
+/**
+ * What to call an account in a warning. The institution is appended only when the
+ * name does not already carry it -- two brokerages both named "Individual" are
+ * indistinguishable otherwise, and "Chase Checking (Chase)" is noise.
+ */
+function accountLabel(account: FinancesAccount, currentName?: string): string | null {
+  // A blank live name is no name, not a rename to nothing -- the same reading
+  // `groupAccounts` takes of the map, so a row and a warning agree on what to
+  // call an account.
+  const liveName = typeof currentName === 'string' ? currentName.trim() : '';
+  const snapshotName = typeof account.name === 'string' ? account.name.trim() : '';
+  const name = liveName || snapshotName;
+  const rawInstitution = typeof account.institution === 'string' ? account.institution.trim() : '';
+  const institution = PLACEHOLDER_INSTITUTIONS.has(rawInstitution.toLowerCase()) ? '' : rawInstitution;
+  if (!name) return institution || null;
+  if (!institution || name.toLowerCase().includes(institution.toLowerCase())) return name;
+  return `${name} (${institution})`;
+}
+
+/**
+ * Every id an account's source observations may be written under, mapped to its
+ * label. The snapshot builder keys observations by `account_id || id`, while this
+ * module's own `accountId` prefers provider-specific ids first, so both are
+ * registered rather than assuming the two agree.
+ */
+function accountLabelsBySourceKey(
+  snapshot: FinancesSnapshotLike,
+  accountNames?: ReadonlyMap<string, string>
+): Map<string, string> {
+  const accounts = Array.isArray(snapshot.accounts) ? snapshot.accounts as FinancesAccount[] : [];
+  const labels = new Map<string, string>();
+  accounts.forEach((account, index) => {
+    const label = accountLabel(account, accountNames?.get(accountId(account)));
+    if (!label) return;
+    const keys: unknown[] = [accountId(account), account.account_id, account.id];
+    // The builder falls back to a positional id only for an account carrying no id
+    // of its own, so registering that key for every account would mis-attribute.
+    if (!account.account_id && !account.id) keys.push(`index-${index}`);
+    for (const key of keys) {
+      if (typeof key === 'string' && key && !labels.has(key)) labels.set(key, label);
+    }
+  });
+  return labels;
+}
+
+/** The account a source observation is about, or null when it is not account-scoped. */
+function accountKeyFromSourceId(sourceId: string): string | null {
+  if (!sourceId.startsWith(ACCOUNT_SOURCE_PREFIX)) return null;
+  let key = sourceId.slice(ACCOUNT_SOURCE_PREFIX.length);
+  for (const suffix of ACCOUNT_SIGNAL_SUFFIXES) {
+    if (key.endsWith(suffix)) {
+      key = key.slice(0, -suffix.length);
+      break;
+    }
+  }
+  return key || null;
+}
+
+/**
+ * A name the user will recognize for an unavailable source, or null when the id
+ * names nothing they have ever seen. A warning is better off saying only how many
+ * sources are missing than naming them with an internal id.
+ */
+function sourceLabel(sourceId: string, accountLabels: ReadonlyMap<string, string>): string | null {
+  const standalone = STANDALONE_SOURCE_LABELS[sourceId];
+  if (standalone) return standalone;
+
+  const accountKey = accountKeyFromSourceId(sourceId);
+  if (accountKey) return accountLabels.get(accountKey) || null;
+
+  // Provider failures are `{provider}:{advisory|error}:{suffix}`, where the suffix is
+  // an access token id as often as an account id. Name the account when it resolves,
+  // and fall back to the integration, which is at least something the user connected.
+  const parts = sourceId.split(':');
+  if (parts.length >= 3 && (parts[1] === 'advisory' || parts[1] === 'error')) {
+    return accountLabels.get(parts.slice(2).join(':')) || PROVIDER_LABELS[parts[0]] || null;
+  }
+  return null;
+}
+
+/** "A", "A and B", "A, B, and C". */
+function formatNameList(names: readonly string[]): string {
+  if (names.length <= 1) return names[0] || '';
+  if (names.length === 2) return `${names[0]} and ${names[1]}`;
+  return `${names.slice(0, -1).join(', ')}, and ${names[names.length - 1]}`;
+}
+
+/**
+ * The names behind a counted warning, in parentheses after the count. Deliberately
+ * additive: the count stays the subject even when every source is named, so a
+ * warning never claims to list more or fewer sources than it counted. "including"
+ * marks a list that does not cover the whole count -- either because a source
+ * resolved to no name, or because several share one (two Plaid failures).
+ */
+function nameSuffix(count: number, sourceIds: readonly string[], accountLabels: ReadonlyMap<string, string>): string {
+  const names: string[] = [];
+  let unnamed = false;
+  for (const id of sourceIds) {
+    const label = sourceLabel(id, accountLabels);
+    if (!label) unnamed = true;
+    else if (!names.includes(label)) names.push(label);
+  }
+  if (names.length === 0) return '';
+  const complete = !unnamed && names.length === count;
+  return ` (${complete ? '' : 'including '}${formatNameList(names)})`;
+}
+
 function groupAccounts(snapshot: FinancesSnapshotLike, accountNames?: ReadonlyMap<string, string>) {
   const groups = {
     cash: [] as FinancesAccount[],
@@ -483,27 +630,42 @@ export function buildFinancesOverview(input: FinancesOverviewInput): FinancesOve
   // itemized positions explain; balance-derived is the mirror image — the total is
   // the sum of positions (a floor) rather than a figure the institution stood behind.
   // Each gets its own note instead of being counted as unavailable data.
-  const coverageGapCount = unavailableSourceIds
-    .filter(id => id.endsWith(':holdings-coverage')).length;
-  const derivedBalanceCount = unavailableSourceIds
-    .filter(id => id.endsWith(':balance-derived')).length;
-  const unavailableSources =
-    unavailableSourceIds.length - coverageGapCount - derivedBalanceCount;
+  const coverageGapIds = unavailableSourceIds.filter(id => id.endsWith(':holdings-coverage'));
+  const derivedBalanceIds = unavailableSourceIds.filter(id => id.endsWith(':balance-derived'));
+  const optionalSourceIds = unavailableSourceIds
+    .filter(id => !id.endsWith(':holdings-coverage') && !id.endsWith(':balance-derived'));
+  const coverageGapCount = coverageGapIds.length;
+  const derivedBalanceCount = derivedBalanceIds.length;
+  const unavailableSources = optionalSourceIds.length;
+  // A count alone leaves the user nothing to check. Name what is missing wherever the
+  // source id resolves to something they have seen -- an account, their home value, an
+  // integration they connected -- and stay with the bare count when it does not.
+  const accountLabels = accountLabelsBySourceKey(snapshot, input.accountNames);
   // 'partial' and 'unavailable' already say a source is missing; anything else must not
   // swallow this, or a stale snapshot would hide the only note explaining a missing value.
   if (unavailableSources > 0 && status !== 'partial' && status !== 'unavailable') {
-    warnings.push({ code: 'optional-sources-unavailable', message: `${unavailableSources} optional data source${unavailableSources === 1 ? ' was' : 's were'} unavailable.` });
+    warnings.push({
+      code: 'optional-sources-unavailable',
+      message: `${unavailableSources} optional data source${unavailableSources === 1 ? ' was' : 's were'} unavailable${nameSuffix(unavailableSources, optionalSourceIds, accountLabels)}.`,
+    });
   }
   if (coverageGapCount > 0) {
+    const one = coverageGapCount === 1;
     warnings.push({
       code: 'incomplete-holdings-coverage',
-      message: `${coverageGapCount} investment account${coverageGapCount === 1 ? '' : 's'} report${coverageGapCount === 1 ? 's' : ''} a balance its listed holdings do not fully account for. Totals use the balance the institution reports; the remainder appears as Not itemized in your allocation.`,
+      message: `${coverageGapCount} investment account${one ? '' : 's'}${nameSuffix(coverageGapCount, coverageGapIds, accountLabels)} `
+        + `${one ? 'reports a balance its' : 'report balances their'} listed holdings do not fully account for. `
+        + `Totals use the ${one ? 'balance the institution reports' : 'balances the institutions report'}; `
+        + 'the remainder appears as Not itemized in your allocation.',
     });
   }
   if (derivedBalanceCount > 0) {
+    const one = derivedBalanceCount === 1;
     warnings.push({
       code: 'derived-account-balance',
-      message: `${derivedBalanceCount} investment account${derivedBalanceCount === 1 ? '' : 's'} ${derivedBalanceCount === 1 ? 'has a balance' : 'have balances'} derived from listed positions rather than reported by the institution. Totals may understate if uninvested cash sits in ${derivedBalanceCount === 1 ? 'that account' : 'those accounts'}.`,
+      message: `${derivedBalanceCount} investment account${one ? '' : 's'}${nameSuffix(derivedBalanceCount, derivedBalanceIds, accountLabels)} `
+        + `${one ? 'has a balance' : 'have balances'} derived from listed positions rather than reported by the institution. `
+        + `Totals may understate if uninvested cash sits in ${one ? 'that account' : 'those accounts'}.`,
     });
   }
 
