@@ -435,7 +435,8 @@
   display: inline-flex;
   align-items: center;
   gap: 12px;
-  margin-top: 26px;
+  /* Clears the email capture card above it rather than a row of figures. */
+  margin-top: 24px;
   padding: 15px 24px;
   border-radius: 999px;
   background: var(--lime);
@@ -659,16 +660,12 @@
 /* --------------------------------------------- the results email capture */
 
 /*
- * Sits between the scenario comparison and the methodology, on the page's own
- * paper-and-rule card treatment rather than anything louder: it is an input,
- * and every other input on this page is on paper.
+ * Sits inside the results block, directly under the four figures, on the
+ * page's own paper-and-rule card treatment rather than anything louder: it is
+ * an input, and every other input on this page is on paper.
  */
-.quickplan-page .qp-email-section {
-  padding-block: 44px;
-  border-top: 1px solid rgba(16, 35, 25, 0.12);
-}
-
 .quickplan-page .qp-email-capture {
+  margin-top: 28px;
   max-width: 620px;
   padding: 30px 32px;
   border: 1px solid #bfc7ba;

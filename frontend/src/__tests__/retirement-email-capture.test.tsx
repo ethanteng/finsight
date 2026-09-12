@@ -127,6 +127,27 @@ it('asks for an address only once a plan has produced a verdict', async () => {
 });
 
 /*
+ * Placement is the point of where this sits: someone who reads their verdict
+ * and stops should still be offered a copy of it. The capture belongs with the
+ * answer, above the jump link, and both inside the results block — not further
+ * down past two charts.
+ */
+it('puts the capture with the answer, above the shortcut to the connected example', async () => {
+  renderPage();
+  runTheModel();
+
+  const field = await screen.findByLabelText('Email address');
+  const results = field.closest('section')!;
+  const jump = screen.getByRole('link', { name: /see what changes with your actual holdings/i });
+
+  // Same block as the verdict, so it cannot drift back down the page.
+  expect(results).toHaveTextContent(/retiring at 60 worked in/i);
+  expect(results).toContainElement(jump);
+  // Capture first, shortcut second.
+  expect(field.compareDocumentPosition(jump) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+});
+
+/*
  * A rates run has no survival figure — the model will not invent a portfolio
  * or a spending level — so there is nothing to send and no address to collect.
  */

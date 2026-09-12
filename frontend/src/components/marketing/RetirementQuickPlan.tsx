@@ -894,11 +894,46 @@ function QuickPlanResults({ result, primary }: { result: QuickPlanResult; primar
         </div>
 
         {/*
-          * The answer above is the page's payoff, and the section that argues
-          * for connecting accounts is four blocks further down — past two
-          * charts and the methodology. Someone who reads their result and
-          * stops never sees it. This is the shortcut, placed the moment they
-          * have an answer to compare against.
+          * The capture sits with the answer, not four blocks below it. This is
+          * the moment the visitor has something worth keeping, and someone who
+          * reads their verdict and stops never reaches anything further down.
+          */}
+        <RetirementEmailCapture
+          /*
+           * Remount when the run changes, so a prior "sent" state cannot claim
+           * to belong to a plan it was never sent for — and so an in-flight
+           * send for the old plan cannot confirm the new one.
+           */
+          key={[
+            inputs.currentAge,
+            inputs.retirementAge,
+            inputs.investableAssets,
+            inputs.annualSpending,
+            inputs.annualContributions,
+            inputs.socialSecurityAnnual,
+            inputs.socialSecurityStartAge,
+            inputs.lifeExpectancy,
+            inputs.allocation,
+          ].join(':')}
+          inputs={{
+            currentAge: inputs.currentAge,
+            retirementAge: inputs.retirementAge,
+            investableAssets: inputs.investableAssets,
+            annualSpending: inputs.annualSpending,
+            annualContributions: inputs.annualContributions,
+            socialSecurityAnnual: inputs.socialSecurityAnnual,
+            socialSecurityStartAge: inputs.socialSecurityStartAge,
+            lifeExpectancy: inputs.lifeExpectancy,
+            allocation: inputs.allocation,
+          }}
+          survivalRate={primary.survivalRate}
+        />
+
+        {/*
+          * The section that argues for connecting accounts is four blocks
+          * further down — past two charts and the methodology — and someone
+          * who reads their result and stops never sees it. This is the
+          * shortcut, kept with the answer it invites a comparison against.
           */}
         <a className="qp-jump" href={`#${CONNECTED_EXAMPLE_ID}`}>
           <span>See what changes with your actual holdings</span>
@@ -1006,44 +1041,6 @@ function QuickPlanResults({ result, primary }: { result: QuickPlanResult; primar
             </li>
           ))}
         </ul>
-      </section>
-
-      {/*
-        * Placed after the comparison rather than beside the verdict: by here
-        * the visitor has the answer and has seen what moves it, which is the
-        * point at which a copy of it in their inbox is worth an address.
-        */}
-      <section className="shell qp-email-section">
-        <RetirementEmailCapture
-          /*
-           * Remount when the run changes, so a prior "sent" state cannot claim
-           * to belong to a plan it was never sent for — and so an in-flight
-           * send for the old plan cannot confirm the new one.
-           */
-          key={[
-            inputs.currentAge,
-            inputs.retirementAge,
-            inputs.investableAssets,
-            inputs.annualSpending,
-            inputs.annualContributions,
-            inputs.socialSecurityAnnual,
-            inputs.socialSecurityStartAge,
-            inputs.lifeExpectancy,
-            inputs.allocation,
-          ].join(':')}
-          inputs={{
-            currentAge: inputs.currentAge,
-            retirementAge: inputs.retirementAge,
-            investableAssets: inputs.investableAssets,
-            annualSpending: inputs.annualSpending,
-            annualContributions: inputs.annualContributions,
-            socialSecurityAnnual: inputs.socialSecurityAnnual,
-            socialSecurityStartAge: inputs.socialSecurityStartAge,
-            lifeExpectancy: inputs.lifeExpectancy,
-            allocation: inputs.allocation,
-          }}
-          survivalRate={primary.survivalRate}
-        />
       </section>
 
       <section className="shell qp-methodology">
