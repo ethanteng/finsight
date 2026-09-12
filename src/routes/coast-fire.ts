@@ -175,7 +175,14 @@ router.get('/signup-context/:token', contextRateLimit, async (req: Request, res:
 
   // Never cached by an intermediary: the response is personal to one link.
   res.setHeader('Cache-Control', 'no-store');
-  res.json({ email: lead.email, inputs: lead.inputs });
+  // Include the emailed outcome, not just the inputs: signup must show the
+  // same Coast FIRE number the inbox carried, even after a formula change.
+  res.json({
+    email: lead.email,
+    inputs: lead.inputs,
+    coastFireNumber: lead.coastFireNumber,
+    hasReachedCoastFire: lead.hasReachedCoastFire,
+  });
 });
 
 export default router;

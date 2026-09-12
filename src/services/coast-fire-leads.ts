@@ -38,6 +38,13 @@ export interface CoastFireLeadRecord {
   token: string;
   email: string;
   inputs: CoastFireInputs;
+  /**
+   * The figures the email actually carried. Returned so signup can show the
+   * same number the inbox shows, even if the browser formula has changed
+   * since the message was sent.
+   */
+  coastFireNumber: number;
+  hasReachedCoastFire: boolean;
 }
 
 export function generateLeadToken(): string {
@@ -142,6 +149,8 @@ export async function readCoastFireLead(
         realReturnRate: lead.realReturnRate,
         withdrawalRate: lead.withdrawalRate,
       },
+      coastFireNumber: lead.coastFireNumber,
+      hasReachedCoastFire: lead.hasReachedCoastFire,
     };
   } catch (error) {
     console.error('⚠️  Could not read Coast FIRE lead:', error);

@@ -221,12 +221,19 @@ describe('GET /api/coast-fire/signup-context/:token', () => {
       token: 'a'.repeat(48),
       email: 'reader@example.com',
       inputs: SCENARIO,
+      coastFireNumber: 369_128.46,
+      hasReachedCoastFire: true,
     });
 
     const response = await request(buildApp()).get(`/api/coast-fire/signup-context/${'a'.repeat(48)}`);
 
     expect(response.status).toBe(200);
-    expect(response.body).toEqual({ email: 'reader@example.com', inputs: SCENARIO });
+    expect(response.body).toEqual({
+      email: 'reader@example.com',
+      inputs: SCENARIO,
+      coastFireNumber: 369_128.46,
+      hasReachedCoastFire: true,
+    });
     // Personal to one link, so no intermediary may hold a copy.
     expect(response.headers['cache-control']).toBe('no-store');
   });
