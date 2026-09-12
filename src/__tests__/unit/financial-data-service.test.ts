@@ -2,7 +2,7 @@ import { describe, expect, beforeEach, it, jest } from '@jest/globals';
 import { FinancialDataService } from '../../services/financial-data-service';
 import { loadPersistedPlaidData } from '../../services/financial-source-persistence';
 
-const mockGetOriginalProfile = jest.fn<() => Promise<string>>();
+const mockGetOriginalProfile = jest.fn<(userId: string, options?: unknown) => Promise<string>>();
 
 jest.mock('../../profile/manager', () => ({
   ProfileManager: jest.fn().mockImplementation(() => ({
@@ -491,7 +491,10 @@ describe('FinancialDataService investment persistence safeguards', () => {
     // Encrypted profiles store nothing in profileText. Falling back to an empty
     // string after a decrypt failure must not look like "no home on record".
     mockGetOriginalProfile.mockRejectedValue(new Error('decrypt failed'));
-    (mockPrisma.userProfile.findUnique as any).mockResolvedValue({ profileText: '' });
+    (mockPrisma.userProfile.findUnique as any).mockResolvedValue({
+      profileText: '',
+      encrypted_profile_data: { id: 'enc-1' },
+    });
     const service = new FinancialDataService();
 
     await expect((service as any).fetchHomeValue('user-123')).rejects.toThrow('decrypt failed');
@@ -500,6 +503,40 @@ describe('FinancialDataService investment persistence safeguards', () => {
   it('still reports no home for a user who has no profile at all', async () => {
     // The rethrow above must not turn an ordinary absence into a failure.
     mockGetOriginalProfile.mockResolvedValue('');
+    const service = new FinancialDataService();
+
+    await expect((service as any).fetchHomeValue('user-123')).resolves.toBeNull();
+  });
+
+  it('asks the profile manager to surface a decryption failure', async () => {
+    // Left to its default the manager swallows one and returns the plaintext column,
+    // which an encrypted profile keeps empty -- arriving here as an ordinary '' and
+    // reading as "no home on record".
+    mockGetOriginalProfile.mockResolvedValue('');
+    const service = new FinancialDataService();
+
+    await (service as any).fetchHomeValue('user-123');
+
+    expect(mockGetOriginalProfile).toHaveBeenCalledWith('user-123', { throwOnDecryptFailure: true });
+  });
+
+  it('does not call a user with no profile partial when the manager itself fails', async () => {
+    // Manager construction or its own read failing tells us nothing about whether this
+    // user has a profile. With no encrypted row there is nothing we failed to read, so
+    // an ordinary absence must stay an absence rather than becoming a data failure.
+    mockGetOriginalProfile.mockRejectedValue(new Error('manager unavailable'));
+    (mockPrisma.userProfile.findUnique as any).mockResolvedValue(null);
+    const service = new FinancialDataService();
+
+    await expect((service as any).fetchHomeValue('user-123')).resolves.toBeNull();
+  });
+
+  it('does not call a blank plaintext profile partial when nothing is encrypted', async () => {
+    mockGetOriginalProfile.mockRejectedValue(new Error('manager unavailable'));
+    (mockPrisma.userProfile.findUnique as any).mockResolvedValue({
+      profileText: '',
+      encrypted_profile_data: null,
+    });
     const service = new FinancialDataService();
 
     await expect((service as any).fetchHomeValue('user-123')).resolves.toBeNull();

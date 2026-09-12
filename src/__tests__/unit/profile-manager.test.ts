@@ -31,6 +31,51 @@ describe('ProfileManager personal context', () => {
 
   afterEach(() => delete process.env.PROFILE_ENCRYPTION_KEY);
 
+  describe('getOriginalProfile decryption failure', () => {
+    // An encrypted profile keeps profileText empty, so a swallowed decryption failure
+    // and an absent profile both surface as '' -- indistinguishable to a caller that
+    // must tell them apart.
+    const encryptedProfile = {
+      profileText: '',
+      encrypted_profile_data: {
+        encryptedData: 'not-decryptable',
+        iv: 'bad-iv',
+        tag: 'bad-tag',
+      },
+    };
+
+    it('falls back to the plaintext column by default', async () => {
+      mockPrisma.userProfile.findUnique.mockResolvedValue({
+        ...encryptedProfile,
+        profileText: 'legacy plaintext',
+      });
+
+      await expect(manager.getOriginalProfile('user-1')).resolves.toBe('legacy plaintext');
+    });
+
+    it('returns empty rather than throwing when the fallback is empty too', async () => {
+      mockPrisma.userProfile.findUnique.mockResolvedValue(encryptedProfile);
+
+      await expect(manager.getOriginalProfile('user-1')).resolves.toBe('');
+    });
+
+    it('rejects when the caller asks to see the failure', async () => {
+      mockPrisma.userProfile.findUnique.mockResolvedValue(encryptedProfile);
+
+      await expect(
+        manager.getOriginalProfile('user-1', { throwOnDecryptFailure: true })
+      ).rejects.toThrow();
+    });
+
+    it('still returns an absent profile as empty under the strict flag', async () => {
+      mockPrisma.userProfile.findUnique.mockResolvedValue(null);
+
+      await expect(
+        manager.getOriginalProfile('user-1', { throwOnDecryptFailure: true })
+      ).resolves.toBe('');
+    });
+  });
+
   it('requires a valid encryption key', () => {
     delete process.env.PROFILE_ENCRYPTION_KEY;
     expect(() => new ProfileManager()).toThrow('PROFILE_ENCRYPTION_KEY environment variable is required');

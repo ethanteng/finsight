@@ -2184,6 +2184,28 @@ export class FinancialDataService {
    * Uses ProfileManager.getOriginalProfile() to support encrypted profiles - critical for
    * users with manual override (HOME_VALUE_MANUAL) stored in encrypted profile data.
    */
+  /**
+   * True when this user stores an encrypted profile that produced no readable text.
+   * Distinguishes a profile we failed to read from one that does not exist -- the two
+   * are otherwise identical at this layer, since both surface as an empty string.
+   */
+  private async hasUnreadableEncryptedProfile(userId: string): Promise<boolean> {
+    try {
+      const profile = await prisma.userProfile.findUnique({
+        where: { userId },
+        select: { profileText: true, encrypted_profile_data: { select: { id: true } } },
+      });
+      // No profile row is not a failure, and readable plaintext means nothing is hidden.
+      if (!profile || profile.profileText?.trim()) return false;
+      return Boolean(profile.encrypted_profile_data);
+    } catch (error) {
+      // The check itself failing says nothing either way. Report no failure rather than
+      // manufacturing one from a second fault.
+      console.warn('fetchHomeValue: could not check for an encrypted profile:', error);
+      return false;
+    }
+  }
+
   private async fetchHomeValue(userId: string): Promise<HomeData | null> {
     try {
       let profileData: string;
@@ -2194,7 +2216,11 @@ export class FinancialDataService {
       try {
         const { ProfileManager } = await import('../profile/manager');
         profileManager = new ProfileManager();
-        profileData = await profileManager.getOriginalProfile(userId);
+        // Strict: a decryption failure must reach this catch. Left to its default the
+        // manager swallows one and returns the plaintext column, which an encrypted
+        // profile keeps empty -- so the failure would arrive here as an ordinary '' and
+        // read as "no home on record".
+        profileData = await profileManager.getOriginalProfile(userId, { throwOnDecryptFailure: true });
       } catch (profileError) {
         console.warn('fetchHomeValue: ProfileManager unavailable, falling back to profileText:', profileError);
         const userProfile = await prisma.userProfile.findUnique({
@@ -2202,11 +2228,12 @@ export class FinancialDataService {
           select: { profileText: true }
         });
         profileData = userProfile?.profileText || '';
-        // Encrypted profiles keep profileText empty. If ProfileManager failed and
-        // there is no plaintext to fall back to, returning null would look like
-        // "no home on record" and drop a valued home from net worth with no
-        // metadata.errors.homeValue. Rethrow so the outer catch rejects.
-        if (!profileData.trim()) {
+        // No plaintext to fall back to, after something already went wrong. Whether that
+        // is a failure depends on whether there was anything to read: an encrypted row we
+        // cannot open is a read failure, and returning null for it would drop a valued
+        // home from net worth with no metadata.errors.homeValue to show for it. No such
+        // row means the user simply has no profile, and must not be reported as partial.
+        if (!profileData.trim() && await this.hasUnreadableEncryptedProfile(userId)) {
           throw profileError instanceof Error ? profileError : new Error(String(profileError));
         }
       }
