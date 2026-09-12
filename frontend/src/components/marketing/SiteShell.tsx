@@ -71,7 +71,7 @@ export function SiteFooter() {
         </div>
       </div>
       <div className="footer-bottom shell">
-        <span>© {new Date().getFullYear()} Ethan Teng Consulting LLC</span>
+        <span>© {new Date().getFullYear()} Ask Linc</span>
         <div><Link href="/privacy">Privacy</Link><Link href="/terms">Terms</Link></div>
       </div>
     </footer>
