@@ -402,9 +402,12 @@ const ACCOUNT_SIGNAL_SUFFIXES = [
   ':balance',
 ] as const;
 
+/** The snapshot's observation id for the user's home valuation. */
+const HOME_VALUE_SOURCE_ID = 'home-value';
+
 /** Sources that stand for themselves rather than for one account or provider. */
 const STANDALONE_SOURCE_LABELS: Record<string, string> = {
-  'home-value': 'Home value',
+  [HOME_VALUE_SOURCE_ID]: 'Home value',
   'financial-data:partial': 'Connected financial data',
 };
 
@@ -632,7 +635,13 @@ export function buildFinancesOverview(input: FinancesOverviewInput): FinancesOve
   // Each gets its own note instead of being counted as unavailable data.
   const coverageGapIds = unavailableSourceIds.filter(id => id.endsWith(':holdings-coverage'));
   const derivedBalanceIds = unavailableSourceIds.filter(id => id.endsWith(':balance-derived'));
+  // An unvalued home is the one unavailable source the user can fix themselves, so it
+  // gets a warning that says what to do instead of being counted as an anonymous
+  // optional source. The snapshot observes it only for a user who has a home on
+  // record, so this never fires at someone who does not own one.
+  const hasUnavailableHomeValue = unavailableSourceIds.includes(HOME_VALUE_SOURCE_ID);
   const optionalSourceIds = unavailableSourceIds
+    .filter(id => id !== HOME_VALUE_SOURCE_ID)
     .filter(id => !id.endsWith(':holdings-coverage') && !id.endsWith(':balance-derived'));
   const coverageGapCount = coverageGapIds.length;
   const derivedBalanceCount = derivedBalanceIds.length;
@@ -647,6 +656,17 @@ export function buildFinancesOverview(input: FinancesOverviewInput): FinancesOve
     warnings.push({
       code: 'optional-sources-unavailable',
       message: `${unavailableSources} optional data source${unavailableSources === 1 ? ' was' : 's were'} unavailable${nameSuffix(unavailableSources, optionalSourceIds, accountLabels)}.`,
+    });
+  }
+  // Deliberately not suppressed on a 'partial' snapshot the way the anonymous count
+  // is: that suppression exists so a generic "something is missing" line is not said
+  // twice, and this one names a specific value and how to supply it.
+  if (hasUnavailableHomeValue) {
+    warnings.push({
+      code: 'home-value-unavailable',
+      message: 'Your home value is unavailable, so net worth does not include it. '
+        + 'Set a value or refresh the estimate under Accounts & context, '
+        + 'or remove the address if you no longer own the home.',
     });
   }
   if (coverageGapCount > 0) {

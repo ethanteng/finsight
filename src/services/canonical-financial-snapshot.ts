@@ -570,19 +570,28 @@ function buildSourceObservations(
   }
 
   const homeValue = data.homeValue;
-  const homeAsOf = validObservationDate(homeValue?.lastUpdated);
-  const hasKnownHomeValue = finiteNumber(homeValue?.valueMid) !== null;
-  observations.push({
-    id: 'home-value',
-    required: hasKnownHomeValue,
-    status: hasKnownHomeValue && homeAsOf ? 'available' : 'unavailable',
-    asOf: hasKnownHomeValue && homeAsOf ? homeAsOf : null,
-    // A manual override is the user's own figure, so it does not expire. Only a
-    // provider estimate can drift away from what the home is currently worth.
-    maxAgeMs: homeValue?.isManualOverride ? null : homeValueMaxAgeMs,
-    error: data.metadata?.errors?.homeValue?.error ||
-      (homeValue && !hasKnownHomeValue ? 'Home value midpoint is unavailable' : null),
-  });
+  const homeValueError = data.metadata?.errors?.homeValue?.error || null;
+  // A renter has no home value to be missing. `fetchHomeValue` returns null for a
+  // user with no address on record, which is not the same as an address whose
+  // valuation did not arrive -- observing a source they never had would tell them
+  // an optional source was unavailable and name something they have never entered.
+  // A recorded error still counts as a home: the lookup ran, so there was one to
+  // look up.
+  if (homeValue || homeValueError) {
+    const homeAsOf = validObservationDate(homeValue?.lastUpdated);
+    const hasKnownHomeValue = finiteNumber(homeValue?.valueMid) !== null;
+    observations.push({
+      id: 'home-value',
+      required: hasKnownHomeValue,
+      status: hasKnownHomeValue && homeAsOf ? 'available' : 'unavailable',
+      asOf: hasKnownHomeValue && homeAsOf ? homeAsOf : null,
+      // A manual override is the user's own figure, so it does not expire. Only a
+      // provider estimate can drift away from what the home is currently worth.
+      maxAgeMs: homeValue?.isManualOverride ? null : homeValueMaxAgeMs,
+      error: homeValueError ||
+        (homeValue && !hasKnownHomeValue ? 'Home value midpoint is unavailable' : null),
+    });
+  }
 
   const providerErrors: Array<[string, SnapshotError]> = [
     ...(data.metadata?.errors?.plaid || []).map(error => ['plaid', error] as [string, SnapshotError]),
