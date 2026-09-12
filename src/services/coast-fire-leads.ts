@@ -13,26 +13,12 @@
  * next month must still show the number they were sent.
  */
 
-import crypto from 'crypto';
 import type { CoastFireInputs, CoastFireResult } from './coast-fire';
+import { generateLeadToken, isLeadToken, leadExpiresAt } from './lead-token';
 
-/**
- * Long enough that guessing is hopeless, short enough for one clean URL line.
- *
- * The frontend recognizes the emailed link's token by its length before it
- * will spend a request on it (`TOKEN_PATTERN` in
- * `frontend/src/lib/coast-fire-signup-context.ts`), so changing this means
- * changing that too — and old links stop personalizing until they expire.
- */
-const TOKEN_BYTES = 24;
-
-/**
- * How long the email's link keeps carrying the scenario. Past this the link
- * still works — it lands on the normal /getstarted — it simply stops
- * personalizing, which is the right failure for a marketing link that may sit
- * in an inbox for a year.
- */
-const CONTEXT_TTL_DAYS = 90;
+// Token shape and lifetime are shared with every other calculator that emails
+// a result; see `services/lead-token`.
+export { generateLeadToken, isLeadToken };
 
 export interface CoastFireLeadRecord {
   token: string;
@@ -45,19 +31,6 @@ export interface CoastFireLeadRecord {
    */
   coastFireNumber: number;
   hasReachedCoastFire: boolean;
-}
-
-export function generateLeadToken(): string {
-  return crypto.randomBytes(TOKEN_BYTES).toString('hex');
-}
-
-/** Rejects anything that is not one of our tokens before it reaches the database. */
-export function isLeadToken(value: unknown): value is string {
-  return typeof value === 'string' && new RegExp(`^[a-f0-9]{${TOKEN_BYTES * 2}}$`).test(value);
-}
-
-function expiresAt(now: Date): Date {
-  return new Date(now.getTime() + CONTEXT_TTL_DAYS * 24 * 60 * 60 * 1000);
 }
 
 /**
@@ -91,7 +64,7 @@ export async function recordCoastFireLead(params: {
         retirementTarget: params.result.retirementTarget,
         projectedSavingsAtRetirement: params.result.projectedSavingsAtRetirement,
         hasReachedCoastFire: params.result.hasReachedCoastFire,
-        expiresAt: expiresAt(now),
+        expiresAt: leadExpiresAt(now),
       } as never,
     });
     return true;

@@ -163,6 +163,29 @@ export function pushCoastFireResultsEmailed(status: CoastFireStatus): void {
   });
 }
 
+/**
+ * A visitor asked for their retirement model run by email — the point where an
+ * anonymous calculator user becomes a known prospect, and the counterpart to
+ * `coast_fire_results_emailed` on the other calculator.
+ *
+ * GTM needs a Custom Event trigger on `retirement_results_emailed` plus a GA4
+ * Event tag forwarding `survival_band`, `source_page`, and `content_type`;
+ * mark it a key event in GA4 Admin so it reports as a conversion. The address
+ * is never pushed — only that one was given, and roughly how the plan did.
+ */
+export function pushRetirementResultsEmailed(survivalRate: number): void {
+  if (typeof window === 'undefined') return;
+  trackContentsquareEvent('retirement_results_emailed');
+  pushToDataLayer({
+    event: 'retirement_results_emailed',
+    source_page: window.location.pathname,
+    content_type: 'retirement_calculator',
+    // The band, not the rate: a percentage to two decimals is close enough to
+    // a fingerprint of one person's plan to be worth not sending.
+    survival_band: survivalRate >= 0.9 ? 'strong' : survivalRate >= 0.7 ? 'mixed' : 'weak',
+  });
+}
+
 export function pushBeginCheckout(ctaLocation = 'marketing_cta'): void {
   if (typeof window === 'undefined') return;
 

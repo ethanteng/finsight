@@ -23,7 +23,7 @@ describe('retirement signup context', () => {
   beforeEach(() => window.sessionStorage.clear());
 
   it('round-trips the complete scenario within the current browser session', () => {
-    expect(storeRetirementSignupContext(INPUTS, 1_000)).toBe(true);
+    expect(storeRetirementSignupContext(INPUTS, { now: 1_000 })).toBe(true);
     expect(readRetirementSignupContext(2_000)).toEqual({
       version: 1,
       savedAt: 1_000,
@@ -32,7 +32,7 @@ describe('retirement signup context', () => {
   });
 
   it('rejects and removes expired context', () => {
-    storeRetirementSignupContext(INPUTS, 1_000);
+    storeRetirementSignupContext(INPUTS, { now: 1_000 });
 
     expect(readRetirementSignupContext(3 * 60 * 60 * 1_000)).toBeNull();
     expect(window.sessionStorage.getItem(RETIREMENT_SIGNUP_STORAGE_KEY)).toBeNull();

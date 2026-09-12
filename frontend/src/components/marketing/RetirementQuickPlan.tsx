@@ -22,6 +22,7 @@ import {
   YAxis,
 } from "recharts";
 import { MarketingGetStartedButton } from "./MarketingGetStartedButton";
+import { RetirementEmailCapture } from "./RetirementEmailCapture";
 import { TRIAL_CTA_MICROCOPY } from "./trial-copy";
 import { SiteFooter, SiteHeader } from "./SiteShell";
 import { CONNECTED_EXAMPLE_ID, RetirementConnectedExample } from "./RetirementConnectedExample";
@@ -1005,6 +1006,44 @@ function QuickPlanResults({ result, primary }: { result: QuickPlanResult; primar
             </li>
           ))}
         </ul>
+      </section>
+
+      {/*
+        * Placed after the comparison rather than beside the verdict: by here
+        * the visitor has the answer and has seen what moves it, which is the
+        * point at which a copy of it in their inbox is worth an address.
+        */}
+      <section className="shell qp-email-section">
+        <RetirementEmailCapture
+          /*
+           * Remount when the run changes, so a prior "sent" state cannot claim
+           * to belong to a plan it was never sent for — and so an in-flight
+           * send for the old plan cannot confirm the new one.
+           */
+          key={[
+            inputs.currentAge,
+            inputs.retirementAge,
+            inputs.investableAssets,
+            inputs.annualSpending,
+            inputs.annualContributions,
+            inputs.socialSecurityAnnual,
+            inputs.socialSecurityStartAge,
+            inputs.lifeExpectancy,
+            inputs.allocation,
+          ].join(':')}
+          inputs={{
+            currentAge: inputs.currentAge,
+            retirementAge: inputs.retirementAge,
+            investableAssets: inputs.investableAssets,
+            annualSpending: inputs.annualSpending,
+            annualContributions: inputs.annualContributions,
+            socialSecurityAnnual: inputs.socialSecurityAnnual,
+            socialSecurityStartAge: inputs.socialSecurityStartAge,
+            lifeExpectancy: inputs.lifeExpectancy,
+            allocation: inputs.allocation,
+          }}
+          survivalRate={primary.survivalRate}
+        />
       </section>
 
       <section className="shell qp-methodology">

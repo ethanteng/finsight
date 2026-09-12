@@ -1,5 +1,9 @@
 # Coast FIRE results email
 
+> The retirement calculator has the same feature, built on the same shared
+> pieces. See `docs/RETIREMENT_RESULTS_EMAIL.md`; everything about tokens,
+> handover, and what must not fail the visitor applies identically there.
+
 The `/coast-fire-calculator` page is the acquisition wedge for the Coast FIRE
 beachhead experiment. It answers the free question — "have I reached Coast
 FIRE?" — in the browser, with no account and no email. This document covers the

@@ -29,7 +29,8 @@ export type ContentsquareEvent =
   | 'retirement_api_error'
   | 'retirement_request_error'
   | 'coast_fire_calculated'
-  | 'coast_fire_results_emailed';
+  | 'coast_fire_results_emailed'
+  | 'retirement_results_emailed';
 
 /** Custom page events do not create artificial pageviews or alter bounce rates. */
 export function trackContentsquareEvent(event: ContentsquareEvent): void {

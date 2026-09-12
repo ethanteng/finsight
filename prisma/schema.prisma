@@ -737,3 +737,54 @@ model CoastFireLead {
   @@index([email])
   @@map("coast_fire_leads")
 }
+
+/// A retirement quick-plan result someone asked us to email them.
+///
+/// Same arrangement as `CoastFireLead`: the row is what lets the email's call
+/// to action continue the scenario, and its `token` is the only thing that
+/// link carries, so no dollar figure ever appears in a URL that analytics,
+/// history, or a referrer header can collect.
+///
+/// The stored verdict is the one that was sent. The model is deterministic
+/// given its inputs and a checked-in dataset, but the dataset and the engine
+/// both change; the signup page a recipient opens months later has to agree
+/// with the message in their inbox.
+model RetirementLead {
+  id String @id @default(cuid())
+
+  /// Lowercased address the results were sent to. Unverified by design: this
+  /// is a marketing lead, and MailerLite owns consent and unsubscribes.
+  email String
+  /// Random, not derived from the address, and the sole key of the email link.
+  token String @unique
+
+  /// The plan, as submitted.
+  currentAge             Int
+  retirementAge          Int
+  investableAssets       Float
+  annualSpending         Float
+  annualContributions    Float
+  socialSecurityAnnual   Float
+  socialSecurityStartAge Int
+  lifeExpectancy         Int
+  allocation             String
+
+  /// What the email said.
+  survivalRate                 Float
+  sequencesTested              Int
+  sequencesSurvived            Int
+  projectedPortfolioAtRetiremt Float
+  firstYearWithdrawalRate      Float
+
+  /// Bookkeeping for the acquisition experiment, never a gate on the response.
+  emailSent        Boolean @default(false)
+  mailerliteSynced Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  /// After this the link stops personalizing signup and lands on plain /getstarted.
+  expiresAt DateTime
+
+  @@index([createdAt])
+  @@index([email])
+  @@map("retirement_leads")
+}

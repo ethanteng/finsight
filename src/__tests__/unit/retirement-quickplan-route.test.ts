@@ -19,28 +19,63 @@ jest.mock('../../services/retirement-quickplan-log', () => ({
   recordQuickPlanRejection: (...args: unknown[]) => log.reject(...(args as [])),
 }));
 
+/** The results-email dependencies, held the same way and for the same reason. */
+const email = { send: jest.fn(async () => true) };
+const list = {
+  subscribe: jest.fn<Promise<'subscribed' | 'skipped' | 'failed'>, unknown[]>(
+    async () => 'subscribed',
+  ),
+};
+const leads = {
+  record: jest.fn(async () => true),
+  read: jest.fn(async () => null as unknown),
+  mark: jest.fn(async () => undefined),
+};
+
+jest.mock('../../auth/resend-email', () => ({
+  sendRetirementResultsEmail: (...args: unknown[]) => email.send(...(args as [])),
+}));
+jest.mock('../../services/mailerlite-subscribe', () => ({
+  ...jest.requireActual('../../services/mailerlite-subscribe'),
+  subscribeToMailerLite: (...args: unknown[]) => list.subscribe(...(args as [])),
+}));
+jest.mock('../../services/retirement-leads', () => ({
+  ...jest.requireActual('../../services/retirement-leads'),
+  recordRetirementLead: (...args: unknown[]) => leads.record(...(args as [])),
+  readRetirementLead: (...args: unknown[]) => leads.read(...(args as [])),
+  markRetirementLeadDelivery: (...args: unknown[]) => leads.mark(...(args as [])),
+}));
+
 /**
  * Both settings are read once at module load, so a test that wants different
  * ones has to reload the module with the environment already in place.
  */
-function buildApp(rateLimit?: string, trustedProxies?: string) {
-  const previousLimit = process.env.RETIREMENT_QUICKPLAN_RATE_LIMIT;
-  const previousProxies = process.env.RETIREMENT_QUICKPLAN_TRUSTED_PROXIES;
+function buildApp(
+  rateLimit?: string,
+  trustedProxies?: string,
+  overrides: Record<string, string | undefined> = {},
+) {
+  const settings: Record<string, string | undefined> = {
+    RETIREMENT_QUICKPLAN_RATE_LIMIT: rateLimit,
+    RETIREMENT_QUICKPLAN_TRUSTED_PROXIES: trustedProxies,
+    ...overrides,
+  };
+  const previous = new Map(
+    Object.keys(settings).map((name) => [name, process.env[name]] as const),
+  );
   const apply = (name: string, value?: string) => {
     if (value === undefined) delete process.env[name];
     else process.env[name] = value;
   };
 
-  apply('RETIREMENT_QUICKPLAN_RATE_LIMIT', rateLimit);
-  apply('RETIREMENT_QUICKPLAN_TRUSTED_PROXIES', trustedProxies);
+  for (const [name, value] of Object.entries(settings)) apply(name, value);
 
   let router: express.Router;
   jest.isolateModules(() => {
     router = require(ROUTE_MODULE).default;
   });
 
-  apply('RETIREMENT_QUICKPLAN_RATE_LIMIT', previousLimit);
-  apply('RETIREMENT_QUICKPLAN_TRUSTED_PROXIES', previousProxies);
+  for (const [name, value] of previous) apply(name, value);
 
   const app = express();
   app.use(express.json());
@@ -79,6 +114,15 @@ describe('retirement quick plan route', () => {
   beforeEach(() => {
     log.run.mockClear();
     log.reject.mockClear();
+    email.send.mockClear();
+    email.send.mockResolvedValue(true);
+    list.subscribe.mockClear();
+    list.subscribe.mockResolvedValue('subscribed');
+    leads.record.mockClear();
+    leads.record.mockResolvedValue(true);
+    leads.read.mockClear();
+    leads.read.mockResolvedValue(null);
+    leads.mark.mockClear();
   });
 
   afterEach(() => {
@@ -229,5 +273,231 @@ describe('retirement quick plan route', () => {
     const options = await request(limited).get('/api/retirement-quickplan/options');
 
     expect(options.status).toBe(200);
+  });
+  describe('emailing a plan', () => {
+    /** The send is fired, then MailerLite is called after the response. */
+    const settle = () => new Promise((resolve) => setImmediate(resolve));
+
+    it('emails figures it computed rather than figures it was handed', async () => {
+      const response = await request(buildApp())
+        .post('/api/retirement-quickplan/email-results')
+        // A caller-supplied verdict must not be able to reach an inbox under
+        // our branding. Only the plan's own inputs are read.
+        .send({ ...SHORT_PLAN, email: 'Reader@Example.com', survivalRate: 1 });
+
+      expect(response.status).toBe(200);
+      const [address, result, primary] = email.send.mock.calls[0] as unknown as [
+        string, { inputs: { retirementAge: number } }, { survivalRate: number },
+      ];
+      expect(address).toBe('reader@example.com');
+      expect(result.inputs.retirementAge).toBe(SHORT_PLAN.retirementAge);
+      expect(primary.survivalRate).toBeGreaterThanOrEqual(0);
+      expect(primary.survivalRate).toBeLessThanOrEqual(1);
+    }, 60_000);
+
+    it('links the email at the token-stripping redirect, never at the figures', async () => {
+      await request(buildApp())
+        .post('/api/retirement-quickplan/email-results')
+        .send({ ...SHORT_PLAN, email: 'reader@example.com' });
+
+      const ctaUrl = (email.send.mock.calls[0] as unknown as [string, unknown, unknown, string])[3];
+      expect(ctaUrl).toMatch(/\/retirement\/continue\?ref=[a-f0-9]{48}$/);
+      expect(ctaUrl).not.toMatch(/500000|60000|30000/);
+    }, 60_000);
+
+    /* Personalization is worth a database row; the results are not. */
+    it('still sends when the lead could not be stored, minus the personalization', async () => {
+      leads.record.mockResolvedValue(false);
+
+      const response = await request(buildApp())
+        .post('/api/retirement-quickplan/email-results')
+        .send({ ...SHORT_PLAN, email: 'reader@example.com' });
+
+      expect(response.status).toBe(200);
+      const ctaUrl = (email.send.mock.calls[0] as unknown as [string, unknown, unknown, string])[3];
+      expect(ctaUrl).toBe('http://localhost:3001/getstarted?source=retirement-calculator');
+    }, 60_000);
+
+    it('adds the address to the retirement group after answering', async () => {
+      // Read when the subscribe runs, not at module load, so a group added in
+      // MailerLite takes effect on a restart-free config change.
+      const previous = process.env.MAILER_LITE_RETIREMENT_GROUP_ID;
+      process.env.MAILER_LITE_RETIREMENT_GROUP_ID = '87654321';
+
+      await request(buildApp())
+        .post('/api/retirement-quickplan/email-results')
+        .send({ ...SHORT_PLAN, email: 'reader@example.com' });
+      await settle();
+
+      if (previous === undefined) delete process.env.MAILER_LITE_RETIREMENT_GROUP_ID;
+      else process.env.MAILER_LITE_RETIREMENT_GROUP_ID = previous;
+
+      expect(list.subscribe).toHaveBeenCalledWith(expect.objectContaining({
+        email: 'reader@example.com',
+        groups: ['87654321'],
+        fields: expect.objectContaining({ retirement_age: SHORT_PLAN.retirementAge }),
+      }));
+    }, 60_000);
+
+    /* The list is a nice-to-have; the results the visitor asked for are not. */
+    it('reports success even when the list rejects the address', async () => {
+      list.subscribe.mockResolvedValue('failed');
+
+      const response = await request(buildApp())
+        .post('/api/retirement-quickplan/email-results')
+        .send({ ...SHORT_PLAN, email: 'reader@example.com' });
+      await settle();
+
+      expect(response.status).toBe(200);
+      expect(leads.mark).toHaveBeenCalledWith(expect.any(String), {
+        emailSent: true,
+        mailerliteSynced: false,
+      });
+    }, 60_000);
+
+    it('says so when the send itself failed, rather than claiming it sent', async () => {
+      email.send.mockResolvedValue(false);
+
+      const response = await request(buildApp())
+        .post('/api/retirement-quickplan/email-results')
+        .send({ ...SHORT_PLAN, email: 'reader@example.com' });
+
+      expect(response.status).toBe(502);
+      expect(list.subscribe).not.toHaveBeenCalled();
+    }, 60_000);
+
+    it.each(['not-an-email', ''])('refuses %p without running the model', async (address) => {
+      const response = await request(buildApp())
+        .post('/api/retirement-quickplan/email-results')
+        .send({ ...SHORT_PLAN, email: address });
+
+      expect(response.status).toBe(400);
+      expect(response.body.field).toBe('email');
+      expect(email.send).not.toHaveBeenCalled();
+    });
+
+    it('names the figure it refused so the form can point at the box', async () => {
+      const response = await request(buildApp())
+        .post('/api/retirement-quickplan/email-results')
+        .send({ ...REJECTED_PLAN, email: 'reader@example.com' });
+
+      expect(response.status).toBe(400);
+      expect(response.body.field).toBe('investableAssets');
+      expect(email.send).not.toHaveBeenCalled();
+    });
+
+    /*
+     * A rates run has no survival figure — the model will not invent a
+     * portfolio or a spending level — so there is nothing to put in an inbox.
+     */
+    it('refuses a run with no verdict, and says which box would give it one', async () => {
+      const response = await request(buildApp())
+        .post('/api/retirement-quickplan/email-results')
+        .send({ ...SHORT_PLAN, investableAssets: '', email: 'reader@example.com' });
+
+      expect(response.status).toBe(400);
+      expect(response.body.field).toBe('investableAssets');
+      expect(response.body.error).toMatch(/investments and annual spending/i);
+      expect(email.send).not.toHaveBeenCalled();
+    }, 60_000);
+
+    /*
+     * Every accepted request puts mail in an address the caller chose, so the
+     * window here is far tighter than the model's own.
+     */
+    it('rejects a caller past its own, tighter window', async () => {
+      const limited = buildApp(undefined, undefined, { RETIREMENT_EMAIL_RATE_LIMIT: '1' });
+
+      const first = await request(limited)
+        .post('/api/retirement-quickplan/email-results')
+        .send({ ...SHORT_PLAN, email: 'reader@example.com' });
+      const second = await request(limited)
+        .post('/api/retirement-quickplan/email-results')
+        .send({ ...SHORT_PLAN, email: 'reader@example.com' });
+
+      expect(first.status).toBe(200);
+      expect(second.status).toBe(429);
+      expect(email.send).toHaveBeenCalledTimes(1);
+    }, 60_000);
+
+    it('keeps a low default limit when the environment value is malformed', async () => {
+      const response = await request(
+        buildApp(undefined, undefined, { RETIREMENT_EMAIL_RATE_LIMIT: 'not-a-number' }),
+      )
+        .post('/api/retirement-quickplan/email-results')
+        .send({ ...REJECTED_PLAN, email: 'reader@example.com' });
+
+      expect(response.headers['x-ratelimit-limit']).toBe('5');
+    });
+  });
+
+  describe('the emailed link\'s plan', () => {
+    const TOKEN = 'a'.repeat(48);
+
+    /*
+     * The stored verdict comes back with the inputs. The token lives for 90
+     * days, and re-running would let a change to the engine or its dataset put
+     * a different number on the page than the one in the recipient's inbox.
+     */
+    it('returns the plan and the verdict the email stated', async () => {
+      const outcome = {
+        survivalRate: 0.94,
+        sequencesTested: 800,
+        sequencesSurvived: 752,
+        projectedPortfolioAtRetirement: 1_840_000,
+        firstYearWithdrawalRate: 0.0272,
+      };
+      leads.read.mockResolvedValue({
+        token: TOKEN,
+        email: 'reader@example.com',
+        inputs: SHORT_PLAN,
+        outcome,
+      });
+
+      const response = await request(buildApp())
+        .get(`/api/retirement-quickplan/signup-context/${TOKEN}`);
+
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual({
+        email: 'reader@example.com',
+        inputs: SHORT_PLAN,
+        outcome,
+      });
+      // Personal to one link, so no intermediary may hold a copy.
+      expect(response.headers['cache-control']).toBe('no-store');
+    });
+
+    /* Unknown and expired are the same answer, so neither can be probed for. */
+    it('answers an expired or unknown token with a bare 404', async () => {
+      const response = await request(buildApp())
+        .get(`/api/retirement-quickplan/signup-context/${'b'.repeat(48)}`);
+
+      expect(response.status).toBe(404);
+      expect(response.body).toEqual({ error: 'Not found' });
+    });
+
+    it('refuses a malformed token before it reaches the database', async () => {
+      const response = await request(buildApp())
+        .get('/api/retirement-quickplan/signup-context/short');
+
+      expect(response.status).toBe(404);
+      expect(leads.read).not.toHaveBeenCalled();
+    });
+
+    /*
+     * Opening the link is a read the recipient performs; the send preceding it
+     * must not have spent their window.
+     */
+    it('counts against its own window, not the send limit', async () => {
+      const limited = buildApp(undefined, undefined, { RETIREMENT_EMAIL_RATE_LIMIT: '1' });
+
+      await request(limited)
+        .post('/api/retirement-quickplan/email-results')
+        .send({ ...REJECTED_PLAN, email: 'reader@example.com' });
+      const context = await request(limited)
+        .get(`/api/retirement-quickplan/signup-context/${'c'.repeat(48)}`);
+
+      expect(context.status).toBe(404);
+    });
   });
 });
