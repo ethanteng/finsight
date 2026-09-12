@@ -37,6 +37,26 @@ const ratio = (numerator: number, denominator: number): number | null =>
 const isoDate = (value: Date): string => value.toISOString().slice(0, 10);
 
 /**
+ * Build a live, calendar-day window for first-party lead records. Unlike the
+ * GA4 daily export window, this deliberately includes the current UTC day up
+ * to the instant the report is requested.
+ */
+export function liveCalculatorLeadPeriod(
+  days: number,
+  now: Date = new Date(),
+): { periodStart: Date; periodEndExclusive: Date } {
+  const safeDays = Math.max(1, Math.floor(days));
+  const periodEndExclusive = new Date(now);
+  const periodStart = new Date(Date.UTC(
+    periodEndExclusive.getUTCFullYear(),
+    periodEndExclusive.getUTCMonth(),
+    periodEndExclusive.getUTCDate(),
+  ));
+  periodStart.setUTCDate(periodStart.getUTCDate() - (safeDays - 1));
+  return { periodStart, periodEndExclusive };
+}
+
+/**
  * Produce only aggregates. Addresses are used for a first-party equality join
  * in memory and never leave the backend response.
  */

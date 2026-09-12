@@ -1,9 +1,21 @@
-import { buildCalculatorLeadSummary } from '../../services/calculator-lead-report';
+import {
+  buildCalculatorLeadSummary,
+  liveCalculatorLeadPeriod,
+} from '../../services/calculator-lead-report';
 
 const start = new Date('2026-09-01T00:00:00.000Z');
 const end = new Date('2026-10-01T00:00:00.000Z');
 
 describe('calculator lead report', () => {
+  it('keeps first-party leads live through the current day instead of using the GA4 cutoff', () => {
+    const now = new Date('2026-09-12T18:07:23.040Z');
+
+    expect(liveCalculatorLeadPeriod(28, now)).toEqual({
+      periodStart: new Date('2026-08-16T00:00:00.000Z'),
+      periodEndExclusive: now,
+    });
+  });
+
   it('separates requests, delivery, continuation, and later account matches', () => {
     const report = buildCalculatorLeadSummary({
       periodStart: start,

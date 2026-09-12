@@ -55,6 +55,8 @@ type LeadCapture = {
   emailTrialCompletedSessions: Metric;
   firstParty: {
     state: 'live' | 'error';
+    periodStart: string;
+    periodEnd: string;
     requests: number | null;
     emailsSent: number | null;
     uniqueEmails: number | null;
@@ -201,7 +203,7 @@ function Journey({
   </div>;
 }
 
-function LeadCapturePanel({ capture }: { capture: LeadCapture }) {
+function LeadCapturePanel({ capture, ga4PeriodEnd }: { capture: LeadCapture; ga4PeriodEnd: string }) {
   const cells = [
     ['GA4 email requests', count(capture.resultsEmailedSessions.value), capture.resultsEmailedSessions.note],
     ['GA4 capture rate', precisePercent(capture.captureRate.value), capture.captureRate.note],
@@ -219,7 +221,7 @@ function LeadCapturePanel({ capture }: { capture: LeadCapture }) {
         <div>
           <p className="text-[10px] font-extrabold uppercase tracking-[.14em] text-[#49725a]">Known-prospect branch</p>
           <h3 className="mt-1 text-base font-semibold tracking-[-.025em]">Email me these results</h3>
-          <p className="mt-1 max-w-4xl text-[10px] leading-4 text-[#66736b]">GA4 rows are attributed sessions from the settled daily export. First-party rows are live Postgres delivery and continuation records. {capture.firstParty.note}</p>
+          <p className="mt-1 max-w-4xl text-[10px] leading-4 text-[#66736b]">GA4 rows use the reporting window through {shortDate(ga4PeriodEnd)}. First-party rows are live Postgres records from {shortDate(capture.firstParty.periodStart)} through {shortDate(capture.firstParty.periodEnd)}. {capture.firstParty.note}</p>
         </div>
       </div>
       <SourcePill state={capture.firstParty.state} />
@@ -363,7 +365,7 @@ export default function MarketingDashboardPage() {
             </div>}
 
             <Journey stages={report.beachhead.coastFireJourney} compare={filters.compare} unavailableLabel={journeyUnavailableLabel} />
-            <LeadCapturePanel capture={report.beachhead.leadCapture.coastFire} />
+            <LeadCapturePanel capture={report.beachhead.leadCapture.coastFire} ga4PeriodEnd={report.period.end} />
           </section>
 
           <section className="mt-6 rounded-[24px] border border-[#102319]/10 bg-[#fffdf5] p-5 shadow-[0_18px_45px_rgba(16,35,25,.05)] sm:p-7">
@@ -396,7 +398,7 @@ export default function MarketingDashboardPage() {
               </div>
             </div>}
             <Journey stages={report.beachhead.currentCalculatorBaseline} compare={filters.compare} unavailableLabel={journeyUnavailableLabel} />
-            <LeadCapturePanel capture={report.beachhead.leadCapture.retirement} />
+            <LeadCapturePanel capture={report.beachhead.leadCapture.retirement} ga4PeriodEnd={report.period.end} />
           </section>
 
           <section className="mt-10">
