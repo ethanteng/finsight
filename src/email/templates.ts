@@ -321,7 +321,7 @@ export function createEmailHtml(content: string, options: CreateEmailHtmlOptions
               <a class="footer-link" href="${assetBaseUrl}/how-we-protect-your-data" style="margin: 0 9px; color: #cfff68; font-size: 12px; font-weight: 600; text-decoration: none;">Privacy &amp; Security</a>
               <a class="footer-link" href="${assetBaseUrl}/contact" style="margin: 0 9px; color: #cfff68; font-size: 12px; font-weight: 600; text-decoration: none;">Contact</a>
             </div>
-            <p style="margin: 0; color: #d7e1dc; font-size: 12px; line-height: 1.6;">© ${new Date().getFullYear()} Ethan Teng Consulting LLC</p>
+            <p style="margin: 0; color: #d7e1dc; font-size: 12px; line-height: 1.6;">© ${new Date().getFullYear()} Ask Linc</p>
             ${footerNote ? `<p style="margin: 5px 0 0; color: #aebeb6; font-size: 11px; line-height: 1.5;">${footerNote}</p>` : ''}
           </div>
         </div>
