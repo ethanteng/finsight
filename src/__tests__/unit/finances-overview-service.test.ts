@@ -175,6 +175,19 @@ describe('finances overview contract', () => {
     expect(message).toContain('2 investment accounts (Brokerage and Individual (Vanguard)) report balances');
   });
 
+  it('keeps the snapshot name when the live name is blank', () => {
+    const overview = buildFinancesOverview({
+      snapshot: {
+        ...snapshot,
+        quality: { unavailableSourceIds: ['account:brokerage:holdings-coverage'] },
+      },
+      accountNames: new Map([['brokerage', '   ']]),
+    });
+
+    expect(overview.warnings.find(warning => warning.code === 'incomplete-holdings-coverage')?.message)
+      .toContain('1 investment account (Brokerage) reports a balance');
+  });
+
   it('omits a placeholder institution rather than labelling an account "(Unknown)"', () => {
     // SnapTrade stores the literal 'Unknown' when it reports no institution.
     const overview = buildFinancesOverview({

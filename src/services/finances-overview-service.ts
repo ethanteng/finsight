@@ -436,8 +436,12 @@ const PLACEHOLDER_INSTITUTIONS = new Set([
  * indistinguishable otherwise, and "Chase Checking (Chase)" is noise.
  */
 function accountLabel(account: FinancesAccount, currentName?: string): string | null {
-  const rawName = currentName ?? account.name;
-  const name = typeof rawName === 'string' ? rawName.trim() : '';
+  // A blank live name is no name, not a rename to nothing -- the same reading
+  // `groupAccounts` takes of the map, so a row and a warning agree on what to
+  // call an account.
+  const liveName = typeof currentName === 'string' ? currentName.trim() : '';
+  const snapshotName = typeof account.name === 'string' ? account.name.trim() : '';
+  const name = liveName || snapshotName;
   const rawInstitution = typeof account.institution === 'string' ? account.institution.trim() : '';
   const institution = PLACEHOLDER_INSTITUTIONS.has(rawInstitution.toLowerCase()) ? '' : rawInstitution;
   if (!name) return institution || null;
