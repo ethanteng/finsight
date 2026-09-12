@@ -127,6 +127,38 @@ describe("Coast FIRE calculator page", () => {
     expect(screen.getAllByText("$1,500,000").length).toBeGreaterThanOrEqual(1);
   });
 
+  /*
+   * The boxes are text now, so the browser no longer range-checks them. These
+   * two cases are what replaced that: a figure the page would have blocked has
+   * to be refused by name rather than answered confidently.
+   */
+  it("refuses a money figure larger than the calculator models", () => {
+    const { container } = render(<CoastFireCalculator />);
+
+    fireEvent.change(screen.getByLabelText("Annual spending in retirement"), {
+      target: { value: "50000000" },
+    });
+    fireEvent.submit(container.querySelector("form")!);
+
+    expect(screen.getByRole("alert")).toHaveTextContent("Annual spending must be $10,000,000 or less.");
+  });
+
+  /*
+   * A pasted or typed minus used to be stripped on the way in, so -5,000
+   * displayed as 5,000 and was answered as a positive. Silently inverting
+   * someone's figure is worse than any rejection.
+   */
+  it("keeps a negative as typed, and refuses it by name", () => {
+    const { container } = render(<CoastFireCalculator />);
+    const savings = screen.getByLabelText("Retirement savings today");
+
+    fireEvent.change(savings, { target: { value: "-5000" } });
+    expect(savings).toHaveValue("-5,000");
+
+    fireEvent.submit(container.querySelector("form")!);
+    expect(screen.getByRole("alert")).toHaveTextContent("cannot be negative");
+  });
+
   it("leaves ages and rates as plain numbers, where grouping never applies", () => {
     render(<CoastFireCalculator />);
 

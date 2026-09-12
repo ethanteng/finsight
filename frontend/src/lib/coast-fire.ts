@@ -20,6 +20,19 @@ export interface CoastFireResult extends CoastFireInputs {
   hasReachedCoastFire: boolean;
 }
 
+/**
+ * The largest figure each money box accepts.
+ *
+ * One definition, because three used to disagree: the inputs declared these,
+ * the signup handoff validated the same, and the calculator checked none of
+ * them. `services/coast-fire.ts` mirrors this for the emailed copy.
+ */
+export const MONEY_LIMITS = {
+  currentSavings: 100_000_000,
+  annualRetirementSpending: 10_000_000,
+  annualRetirementIncome: 10_000_000,
+} as const;
+
 export const DEFAULT_COAST_FIRE_INPUTS: CoastFireInputs = {
   currentAge: 40,
   retirementAge: 65,
@@ -48,13 +61,29 @@ export function calculateCoastFire(inputs: CoastFireInputs): CoastFireResult {
     throw new Error("Retirement age must be a whole number after your current age and no later than 95.");
   }
 
-  const moneyInputs = [
-    inputs.currentSavings,
-    inputs.annualRetirementSpending,
-    inputs.annualRetirementIncome,
+  /*
+   * Both ends of every money field, checked here rather than left to the
+   * inputs. The boxes hold grouped text so they can show "1,500,000", which
+   * costs the browser's own `min`/`max` — and the lower bounds were always
+   * checked here while the upper ones were not, so an uncapped figure used to
+   * produce a confident answer nothing on the page disagreed with.
+   *
+   * The maxima match what the signup handoff will store and what the server
+   * will re-run for an email, so a figure this accepts cannot be refused a
+   * step later.
+   */
+  const moneyFields: Array<[number, number, string]> = [
+    [inputs.currentSavings, MONEY_LIMITS.currentSavings, "Retirement savings"],
+    [inputs.annualRetirementSpending, MONEY_LIMITS.annualRetirementSpending, "Annual spending"],
+    [inputs.annualRetirementIncome, MONEY_LIMITS.annualRetirementIncome, "Retirement income"],
   ];
-  if (moneyInputs.some((value) => !Number.isFinite(value) || value < 0)) {
+  if (moneyFields.some(([value]) => !Number.isFinite(value) || value < 0)) {
     throw new Error("Savings, spending, and retirement income cannot be negative.");
+  }
+  for (const [value, max, label] of moneyFields) {
+    if (value > max) {
+      throw new Error(`${label} must be $${max.toLocaleString("en-US")} or less.`);
+    }
   }
   if (inputs.annualRetirementSpending < 1_000) {
     throw new Error("Annual retirement spending must be at least $1,000.");

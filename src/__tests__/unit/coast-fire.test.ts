@@ -60,9 +60,26 @@ describe('Coast FIRE calculation (server)', () => {
     }
   });
 
-  it('refuses a figure larger than the calculator models', () => {
-    expect(() => calculateCoastFire({ ...DEFAULTS, currentSavings: 5e12 }))
-      .toThrow(/larger than this calculator models/);
+  /*
+   * The maxima match the page's, so a figure the calculator accepted cannot be
+   * refused by the email endpoint a click later.
+   */
+  it.each([
+    ['currentSavings', 2e8, 'Retirement savings must be $100,000,000 or less.'],
+    ['annualRetirementSpending', 5e7, 'Annual spending must be $10,000,000 or less.'],
+    ['annualRetirementIncome', 5e7, 'Retirement income must be $10,000,000 or less.'],
+  ])('refuses %s above what the calculator models', (field, value, message) => {
+    expect(() => calculateCoastFire({ ...DEFAULTS, [field]: value }))
+      .toThrow(message);
+  });
+
+  it('accepts each money figure at its limit', () => {
+    expect(() => calculateCoastFire({
+      ...DEFAULTS,
+      currentSavings: 100_000_000,
+      annualRetirementSpending: 10_000_000,
+      annualRetirementIncome: 9_000_000,
+    })).not.toThrow();
   });
 });
 

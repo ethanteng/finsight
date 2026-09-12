@@ -104,22 +104,30 @@ export function calculateCoastFire(inputs: CoastFireInputs): CoastFireResult {
     );
   }
 
+  /*
+   * The maxima mirror `MONEY_LIMITS` in `frontend/src/lib/coast-fire.ts`. They
+   * used to be one flat cap here and three different figures there, so a
+   * spending figure the page accepted could be refused by the email endpoint
+   * a click later. An uncapped figure would also render as a nonsense headline
+   * number in an email nobody can edit afterwards.
+   */
   const moneyFields = [
-    ['currentSavings', inputs.currentSavings],
-    ['annualRetirementSpending', inputs.annualRetirementSpending],
-    ['annualRetirementIncome', inputs.annualRetirementIncome],
+    ['currentSavings', inputs.currentSavings, 100_000_000, 'Retirement savings'],
+    ['annualRetirementSpending', inputs.annualRetirementSpending, 10_000_000, 'Annual spending'],
+    ['annualRetirementIncome', inputs.annualRetirementIncome, 10_000_000, 'Retirement income'],
   ] as const;
-  for (const [field, value] of moneyFields) {
+  for (const [field, value, max, label] of moneyFields) {
     if (!Number.isFinite(value) || value < 0) {
       throw new CoastFireValidationError(
         'Savings, spending, and retirement income cannot be negative.',
         field,
       );
     }
-    // The page's own inputs cap here, and an uncapped figure would render as a
-    // nonsense headline number in an email nobody can edit afterwards.
-    if (value > 100_000_000) {
-      throw new CoastFireValidationError('That figure is larger than this calculator models.', field);
+    if (value > max) {
+      throw new CoastFireValidationError(
+        `${label} must be $${max.toLocaleString('en-US')} or less.`,
+        field,
+      );
     }
   }
   if (inputs.annualRetirementSpending < 1_000) {
