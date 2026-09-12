@@ -423,14 +423,21 @@ function resolveHoldingExposure(
     if (geography === 'us') {
       return { weights: { ...EMPTY_WEIGHTS, usEquity: 1 }, method: 'name-inference', confidence: 'medium' };
     }
-    // The name reads as equity ("Large Cap Growth Fund"), or the ticker is
-    // exchange-shaped; only the US/international split is missing.
-    return {
-      weights: copyWeights(EMPTY_WEIGHTS),
-      method: 'name-inference',
-      confidence: 'low',
-      unresolvedReason: 'equity-geography-unresolved',
-    };
+    // Claim "equity; geography unresolved" only when the name actually read as
+    // equity. A bare exchange-shaped ticker is not enough: five-character
+    // tickers ending in X are conventionally mutual funds and may be bond,
+    // cash, or blended vehicles (the US-listing fallback already excludes them
+    // for that reason). Filing those under an equity remedy would send
+    // operators looking for country data for a fund whose asset class we never
+    // established.
+    if (hasEquityNameSignal(securityName)) {
+      return {
+        weights: copyWeights(EMPTY_WEIGHTS),
+        method: 'name-inference',
+        confidence: 'low',
+        unresolvedReason: 'equity-geography-unresolved',
+      };
+    }
   }
 
   return {

@@ -73,6 +73,18 @@ describe('why a holding produced no modeled exposure', () => {
     expect(opaque.holdingExposures[0].unresolvedReason).toBe('unrecognized');
   });
 
+  it('does not treat a ticker-only mutual fund as equity missing geography', async () => {
+    // Five-character tickers ending in X are conventionally mutual funds.
+    // With no name or type, the ticker shape alone does not establish an
+    // equity mandate — VBTLX is a bond fund — so the remedy is still "we
+    // could not read this," not country data for an equity we never saw.
+    const mapping = await mapOne('', { ticker_symbol: 'VBTLX' });
+
+    expect(mapping.unrecognizedHoldings).toEqual(['VBTLX']);
+    expect(mapping.equityGeographyUnresolvedHoldings).toEqual([]);
+    expect(mapping.holdingExposures[0].unresolvedReason).toBe('unrecognized');
+  });
+
   it('names a recognized target-date fund that has no registry row', async () => {
     // The remedy here is a registry entry we write from UC's published fact
     // sheet, not a vendor feed. Reporting it as "no asset class resolved" sent
