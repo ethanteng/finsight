@@ -639,9 +639,19 @@ export function buildFinancesOverview(input: FinancesOverviewInput): FinancesOve
   // gets a warning that says what to do instead of being counted as an anonymous
   // optional source. The snapshot observes it only for a user who has a home on
   // record, so this never fires at someone who does not own one.
-  const hasUnavailableHomeValue = unavailableSourceIds.includes(HOME_VALUE_SOURCE_ID);
+  //
+  // The source is also unavailable when the midpoint is known but its timestamp is
+  // missing -- we cannot say how fresh the figure is, but the figure is real and the
+  // canonical total uses it. Requiring the value to be absent from net worth keeps the
+  // warning from telling those users their home was excluded when it was not, and asking
+  // them to change data that is fine.
+  const hasUnavailableHomeValue = unavailableSourceIds.includes(HOME_VALUE_SOURCE_ID)
+    && finite(overview.homeValue) === null;
+  // Only carved out of the anonymous count when it has a warning of its own; a
+  // home-value source that keeps its value in net worth still counts as one more
+  // unavailable source rather than disappearing from both.
   const optionalSourceIds = unavailableSourceIds
-    .filter(id => id !== HOME_VALUE_SOURCE_ID)
+    .filter(id => id !== HOME_VALUE_SOURCE_ID || !hasUnavailableHomeValue)
     .filter(id => !id.endsWith(':holdings-coverage') && !id.endsWith(':balance-derived'));
   const coverageGapCount = coverageGapIds.length;
   const derivedBalanceCount = derivedBalanceIds.length;
