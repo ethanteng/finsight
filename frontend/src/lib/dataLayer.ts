@@ -142,6 +142,27 @@ export function pushCoastFireCalculated(
   });
 }
 
+/**
+ * A visitor asked for their Coast FIRE results by email — the first point in
+ * this funnel where an anonymous calculator user becomes a known prospect, and
+ * the thing the beachhead experiment most needs to measure.
+ *
+ * GTM needs a Custom Event trigger on `coast_fire_results_emailed` plus a GA4
+ * Event tag forwarding `coast_fire_status`, `source_page`, and `content_type`;
+ * mark it a key event in GA4 Admin so it reports as a conversion. The address
+ * itself is never pushed — only that one was given.
+ */
+export function pushCoastFireResultsEmailed(status: CoastFireStatus): void {
+  if (typeof window === 'undefined') return;
+  trackContentsquareEvent('coast_fire_results_emailed');
+  pushToDataLayer({
+    event: 'coast_fire_results_emailed',
+    source_page: window.location.pathname,
+    content_type: 'coast_fire_calculator',
+    coast_fire_status: status,
+  });
+}
+
 export function pushBeginCheckout(ctaLocation = 'marketing_cta'): void {
   if (typeof window === 'undefined') return;
 

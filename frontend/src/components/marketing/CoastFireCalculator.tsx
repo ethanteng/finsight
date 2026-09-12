@@ -20,9 +20,10 @@ import {
 } from "@/lib/coast-fire";
 import { pushCoastFireCalculated } from "@/lib/dataLayer";
 import {
-  RETIREMENT_SIGNUP_HREF,
-  storeRetirementSignupContext,
-} from "@/lib/retirement-signup-context";
+  COAST_FIRE_SIGNUP_HREF,
+  storeCoastFireSignupContext,
+} from "@/lib/coast-fire-signup-context";
+import { CoastFireEmailCapture } from "./CoastFireEmailCapture";
 import { MarketingGetStartedButton } from "./MarketingGetStartedButton";
 import { SiteFooter, SiteHeader } from "./SiteShell";
 import { TRIAL_CTA_MICROCOPY } from "./trial-copy";
@@ -62,21 +63,23 @@ function parseForm(form: FormState): CoastFireInputs {
 }
 
 /**
- * The handoff into signup. `investableAssets` is floored at the $1,000 the
- * stored context validates against, so a visitor who models $0 saved still
- * carries their ages and spending across instead of silently losing all of it.
+ * The handoff into signup: the seven numbers as entered, nothing derived.
+ *
+ * This used to translate them into the retirement calculator's scenario shape,
+ * which meant a Coast FIRE visitor landed on a page framed around a retirement
+ * plan they had not run. The signup page recomputes the Coast FIRE figures
+ * from these inputs instead, so both entry points — this button and the link
+ * in the results email — continue the same decision.
  */
-function signupContext(result: CoastFireResult) {
+function signupContext(result: CoastFireResult): CoastFireInputs {
   return {
     currentAge: result.currentAge,
     retirementAge: result.retirementAge,
-    investableAssets: Math.max(1_000, result.currentSavings),
-    annualSpending: result.annualRetirementSpending,
-    annualContributions: 0,
-    socialSecurityAnnual: Math.min(result.annualRetirementIncome, 250_000),
-    socialSecurityStartAge: Math.max(50, Math.min(80, result.retirementAge)),
-    lifeExpectancy: Math.max(95, result.retirementAge + 1),
-    allocation: "balanced" as const,
+    currentSavings: result.currentSavings,
+    annualRetirementSpending: result.annualRetirementSpending,
+    annualRetirementIncome: result.annualRetirementIncome,
+    realReturnRate: result.realReturnRate,
+    withdrawalRate: result.withdrawalRate,
   };
 }
 
@@ -189,6 +192,13 @@ export function CoastFireCalculator({ children }: { children?: ReactNode }) {
   const [form, setForm] = useState<FormState>(INITIAL_FORM);
   const [result, setResult] = useState<CoastFireResult>(() => calculateCoastFire(DEFAULT_COAST_FIRE_INPUTS));
   const [error, setError] = useState<string | null>(null);
+  /*
+   * The email capture waits for a submitted run. The page opens with a default
+   * scenario already answered, and asking for an address against figures the
+   * visitor has not entered collects the wrong thing — and would send someone
+   * an email about a stranger's retirement.
+   */
+  const [hasSubmitted, setHasSubmitted] = useState(false);
   const resultRef = useRef<HTMLDivElement>(null);
   const defaultResultReported = useRef(false);
 
@@ -239,6 +249,7 @@ export function CoastFireCalculator({ children }: { children?: ReactNode }) {
       const nextResult = calculateCoastFire(parseForm(form));
       setResult(nextResult);
       setError(null);
+      setHasSubmitted(true);
       pushCoastFireCalculated(
         nextResult.hasReachedCoastFire ? "reached" : "not_yet",
         nextResult.yearsToRetirement,
@@ -290,8 +301,14 @@ export function CoastFireCalculator({ children }: { children?: ReactNode }) {
           <p className="cf-private-note">The calculation runs in your browser. No account or email required.</p>
         </form>
 
-        <div className="cf-result-column" ref={resultRef}>
+        {/*
+          * Sticky while the column holds one card, static once the capture
+          * form joins it: a sticky element taller than the viewport pins its
+          * top and puts the rest out of reach.
+          */}
+        <div className={`cf-result-column${hasSubmitted ? " has-capture" : ""}`} ref={resultRef}>
           <ResultPanel result={result} />
+          {hasSubmitted && <CoastFireEmailCapture result={result} />}
         </div>
       </section>
 
@@ -366,8 +383,8 @@ export function CoastFireCalculator({ children }: { children?: ReactNode }) {
             trackingLocation="coast_fire_plan_cta"
             csOverrideId="cta-stress-test-coast-fire"
             label="Stress-test my Coast FIRE plan"
-            href={RETIREMENT_SIGNUP_HREF}
-            onBeforeNavigate={() => storeRetirementSignupContext(signupContext(result))}
+            href={COAST_FIRE_SIGNUP_HREF}
+            onBeforeNavigate={() => storeCoastFireSignupContext(signupContext(result))}
           />
           <p className="microcopy">{TRIAL_CTA_MICROCOPY}</p>
         </div>

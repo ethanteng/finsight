@@ -7,14 +7,19 @@ import {
   COAST_FIRE_FAQ,
   DEFAULT_COAST_FIRE_INPUTS,
 } from "@/lib/coast-fire";
-import { pushCoastFireCalculated, pushStartFreeClick } from "@/lib/dataLayer";
 import {
-  readRetirementSignupContext,
-  RETIREMENT_SIGNUP_HREF,
-} from "@/lib/retirement-signup-context";
+  pushCoastFireCalculated,
+  pushCoastFireResultsEmailed,
+  pushStartFreeClick,
+} from "@/lib/dataLayer";
+import {
+  readCoastFireSignupContext,
+  COAST_FIRE_SIGNUP_HREF,
+} from "@/lib/coast-fire-signup-context";
 
 jest.mock("@/lib/dataLayer", () => ({
   pushCoastFireCalculated: jest.fn(),
+  pushCoastFireResultsEmailed: jest.fn(),
   pushStartFreeClick: jest.fn(),
 }));
 
@@ -137,29 +142,23 @@ describe("Coast FIRE calculator page", () => {
     expect(pushStartFreeClick).toHaveBeenCalledWith("coast_fire_plan_cta");
   });
 
-  it("carries the simple scenario into the retirement signup flow", () => {
+  it("carries the seven numbers into the Coast FIRE signup flow", () => {
     render(<CoastFireCalculator />);
 
     const cta = screen.getByRole("link", { name: "Stress-test my Coast FIRE plan" });
-    expect(cta).toHaveAttribute("href", RETIREMENT_SIGNUP_HREF);
+    expect(cta).toHaveAttribute("href", COAST_FIRE_SIGNUP_HREF);
     cta.addEventListener("click", (event) => event.preventDefault(), { once: true });
     fireEvent.click(cta);
 
-    const context = readRetirementSignupContext();
-    expect(context?.inputs).toMatchObject({
-      currentAge: 40,
-      retirementAge: 65,
-      investableAssets: 400_000,
-      annualSpending: 80_000,
-      annualContributions: 0,
-    });
+    expect(readCoastFireSignupContext()?.inputs).toEqual(DEFAULT_COAST_FIRE_INPUTS);
   });
 
   /*
-   * The stored context rejects assets under $1,000, so an unfloored $0 would
-   * drop the visitor's ages and spending along with it.
+   * The retirement-shaped handoff this replaced floored assets at $1,000,
+   * because its own validation rejected anything lower. The Coast FIRE context
+   * accepts the figure as typed, so $0 saved has to survive the trip.
    */
-  it("still carries the scenario when no savings were entered", () => {
+  it("carries $0 saved across rather than substituting a floor", () => {
     const { container } = render(<CoastFireCalculator />);
 
     fireEvent.change(screen.getByLabelText("Retirement savings today"), { target: { value: "0" } });
@@ -169,10 +168,106 @@ describe("Coast FIRE calculator page", () => {
     cta.addEventListener("click", (event) => event.preventDefault(), { once: true });
     fireEvent.click(cta);
 
-    expect(readRetirementSignupContext()?.inputs).toMatchObject({
+    expect(readCoastFireSignupContext()?.inputs).toMatchObject({
       currentAge: 40,
-      annualSpending: 80_000,
-      investableAssets: 1_000,
+      annualRetirementSpending: 80_000,
+      currentSavings: 0,
+    });
+  });
+
+  describe("emailing the result", () => {
+    const originalFetch = global.fetch;
+
+    afterEach(() => {
+      global.fetch = originalFetch;
+      jest.clearAllMocks();
+    });
+
+    function mockSend(response: Partial<Response> = { ok: true }) {
+      const fetchMock = jest.fn(async () => ({
+        ok: true,
+        json: async () => ({ message: "sent" }),
+        ...response,
+      })) as unknown as typeof fetch;
+      global.fetch = fetchMock;
+      return fetchMock as unknown as jest.Mock;
+    }
+
+    /*
+     * The page opens with a default scenario already answered. Collecting an
+     * address against it would email someone a stranger's retirement.
+     */
+    it("asks for an address only after a scenario has been submitted", () => {
+      const { container } = render(<CoastFireCalculator />);
+
+      expect(screen.queryByLabelText("Email address")).not.toBeInTheDocument();
+
+      fireEvent.submit(container.querySelector("form")!);
+
+      expect(screen.getByLabelText("Email address")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Email me my Coast FIRE results" })).toBeInTheDocument();
+    });
+
+    it("posts the seven inputs and never the figures computed from them", async () => {
+      const fetchMock = mockSend();
+      const { container } = render(<CoastFireCalculator />);
+
+      fireEvent.change(screen.getByLabelText("Retirement savings today"), { target: { value: "250000" } });
+      fireEvent.submit(container.querySelector("form")!);
+      fireEvent.change(screen.getByLabelText("Email address"), { target: { value: " Reader@Example.com " } });
+      fireEvent.submit(screen.getByLabelText("Email address").closest("form")!);
+
+      await screen.findByText(/on their way/i);
+
+      const [url, request] = fetchMock.mock.calls[0] as [string, RequestInit];
+      expect(url).toMatch(/\/api\/coast-fire\/email-results$/);
+      const body = JSON.parse(String(request.body));
+      expect(body).toEqual({
+        email: "Reader@Example.com",
+        currentAge: 40,
+        retirementAge: 65,
+        currentSavings: 250_000,
+        annualRetirementSpending: 80_000,
+        annualRetirementIncome: 30_000,
+        realReturnRate: 5,
+        withdrawalRate: 4,
+      });
+      // The server recalculates, so a computed figure in the body would only be
+      // an opportunity to disagree with it.
+      expect(body).not.toHaveProperty("coastFireNumber");
+    });
+
+    it("reports the conversion with the outcome but never the address", async () => {
+      mockSend();
+      const { container } = render(<CoastFireCalculator />);
+
+      fireEvent.submit(container.querySelector("form")!);
+      fireEvent.change(screen.getByLabelText("Email address"), { target: { value: "reader@example.com" } });
+      fireEvent.submit(screen.getByLabelText("Email address").closest("form")!);
+
+      await screen.findByText(/on their way/i);
+      expect(pushCoastFireResultsEmailed).toHaveBeenCalledTimes(1);
+      expect(pushCoastFireResultsEmailed).toHaveBeenCalledWith("reached");
+    });
+
+    it("surfaces a refusal and leaves the form ready to retry", async () => {
+      mockSend({ ok: false, json: async () => ({ error: "Enter a valid email address." }) });
+      const { container } = render(<CoastFireCalculator />);
+
+      fireEvent.submit(container.querySelector("form")!);
+      fireEvent.change(screen.getByLabelText("Email address"), { target: { value: "reader@example.com" } });
+      fireEvent.submit(screen.getByLabelText("Email address").closest("form")!);
+
+      expect(await screen.findByRole("alert")).toHaveTextContent("Enter a valid email address.");
+      expect(screen.getByRole("button", { name: "Email me my Coast FIRE results" })).toBeEnabled();
+      expect(pushCoastFireResultsEmailed).not.toHaveBeenCalled();
+    });
+
+    it("keeps the typed address out of Contentsquare recordings", () => {
+      const { container } = render(<CoastFireCalculator />);
+      fireEvent.submit(container.querySelector("form")!);
+
+      expect(screen.getByLabelText("Email address")).toHaveAttribute("data-cs-mask");
     });
   });
 

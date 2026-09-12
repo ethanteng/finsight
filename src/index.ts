@@ -15,6 +15,7 @@ import aiRoutes from './routes/ai';
 import aiPerformanceRoutes from './routes/ai-performance';
 import askRoutes from './routes/ask';
 import retirementQuickPlanRoutes from './routes/retirement-quickplan';
+import coastFireRoutes from './routes/coast-fire';
 import adminMarketingRoutes from './routes/admin-marketing';
 import { optionalAuth, requireAuth, adminAuth } from './auth/middleware';
 import { assertJwtSecretConfigured } from './auth/utils';
@@ -353,6 +354,9 @@ app.use(askRoutes);
 // Public retirement quick-plan calculator for the marketing landing page.
 // Unauthenticated on purpose; it reads no user data and is rate limited per IP.
 app.use('/api/retirement-quickplan', retirementQuickPlanRoutes);
+
+// Setup the public Coast FIRE results email and its signup handoff
+app.use('/api/coast-fire', coastFireRoutes);
 
 // Setup Stripe routes (webhook route already registered above)
 app.use('/api/stripe', stripeRoutes);
