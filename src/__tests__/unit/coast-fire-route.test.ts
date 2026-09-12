@@ -107,8 +107,10 @@ describe('POST /api/coast-fire/email-results', () => {
     await request(buildApp()).post('/api/coast-fire/email-results').send({ ...SCENARIO, email: 'reader@example.com' });
 
     const ctaUrl = (email.send.mock.calls[0] as unknown as [string, unknown, string])[2];
-    expect(ctaUrl).toMatch(/\/coast-fire\/continue\?ref=[a-f0-9]{48}$/);
-    expect(ctaUrl).not.toMatch(/400000|369|80000/);
+    const parsedCtaUrl = new URL(ctaUrl);
+    expect(parsedCtaUrl.pathname).toBe('/coast-fire/continue');
+    expect([...parsedCtaUrl.searchParams.keys()]).toEqual(['ref']);
+    expect(parsedCtaUrl.searchParams.get('ref')).toMatch(/^[a-f0-9]{48}$/);
   });
 
   /* Personalization is worth a database row; the results are not. */
