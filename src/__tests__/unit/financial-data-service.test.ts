@@ -30,6 +30,9 @@ jest.mock('@prisma/client', () => {
     financialSummarySnapshot: {
       findUnique: jest.fn(),
     },
+    userProfile: {
+      findUnique: jest.fn(),
+    },
   };
 
   const PrismaClient = jest.fn(() => mockPrisma);
@@ -52,6 +55,7 @@ const { __mockPrisma: mockPrisma } = jest.requireMock('@prisma/client') as {
     manualAccount: { findMany: jest.Mock };
     snapTradeUser: { findUnique: jest.Mock };
     financialSummarySnapshot: { findUnique: jest.Mock };
+    userProfile: { findUnique: jest.Mock };
   };
 };
 
@@ -470,6 +474,25 @@ describe('FinancialDataService investment persistence safeguards', () => {
 
     expect(result.valueMid).toBe(500000);
     expect(result.lastUpdated).toBeNull();
+  });
+
+  it('reports a profile it could not read rather than calling it no home', async () => {
+    // Null is this method's answer for "no home on record", and the snapshot observes no
+    // home-value source at all for it. A homeowner whose profile cannot be read must not
+    // get that answer: it would drop their home from net worth silently.
+    mockGetOriginalProfile.mockRejectedValue(new Error('decrypt failed'));
+    (mockPrisma.userProfile.findUnique as any).mockRejectedValue(new Error('database unavailable'));
+    const service = new FinancialDataService();
+
+    await expect((service as any).fetchHomeValue('user-123')).rejects.toThrow('database unavailable');
+  });
+
+  it('still reports no home for a user who has no profile at all', async () => {
+    // The rethrow above must not turn an ordinary absence into a failure.
+    mockGetOriginalProfile.mockResolvedValue('');
+    const service = new FinancialDataService();
+
+    await expect((service as any).fetchHomeValue('user-123')).resolves.toBeNull();
   });
 
   it('retains the RentCast property ID from the encrypted profile data', async () => {

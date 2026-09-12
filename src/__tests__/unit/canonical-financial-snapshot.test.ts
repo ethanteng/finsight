@@ -168,7 +168,79 @@ describe('canonical financial snapshot', () => {
       { computedAt }
     );
     expect(noHome.status).toBe('current');
-    expect(noHome.quality.unavailableSourceIds).toContain('home-value');
+    // A user with no home on record has no home value to be missing, so the
+    // snapshot observes no such source at all.
+    expect(noHome.quality.unavailableSourceIds).not.toContain('home-value');
+  });
+
+  it('observes no home value for a user who never entered a home', () => {
+    const snapshot = buildCanonicalSnapshotCore(
+      {
+        accounts: [{
+          account_id: 'checking',
+          source: 'plaid',
+          type: 'depository',
+          subtype: 'checking',
+          snapshotTimestamp: computedAt,
+          balance: { current: 100, iso_currency_code: 'USD' },
+        }],
+        homeValue: null,
+      },
+      { computedAt }
+    );
+
+    expect(snapshot.sourceObservations.map(source => source.id)).not.toContain('home-value');
+    expect(snapshot.quality.unavailableSourceIds).not.toContain('home-value');
+  });
+
+  it('reports an unavailable home value for a user whose address has no valuation', () => {
+    const snapshot = buildCanonicalSnapshotCore(
+      {
+        accounts: [{
+          account_id: 'checking',
+          source: 'plaid',
+          type: 'depository',
+          subtype: 'checking',
+          snapshotTimestamp: computedAt,
+          balance: { current: 100, iso_currency_code: 'USD' },
+        }],
+        // An address on record whose valuation did not arrive: the canonical view of
+        // a home carries only the figure, so a home with no value is an object with
+        // a null valueMid -- distinct from the null homeValue of a user with no home.
+        homeValue: { valueMid: null, lastUpdated: computedAt, isManualOverride: false },
+      },
+      { computedAt }
+    );
+
+    expect(snapshot.quality.unavailableSourceIds).toContain('home-value');
+    expect(snapshot.quality.errors).toContainEqual({
+      sourceId: 'home-value',
+      message: 'Home value midpoint is unavailable',
+    });
+  });
+
+  it('still observes a home value when the lookup itself failed', () => {
+    const snapshot = buildCanonicalSnapshotCore(
+      {
+        accounts: [{
+          account_id: 'checking',
+          source: 'plaid',
+          type: 'depository',
+          subtype: 'checking',
+          snapshotTimestamp: computedAt,
+          balance: { current: 100, iso_currency_code: 'USD' },
+        }],
+        homeValue: null,
+        metadata: { errors: { homeValue: { error: 'RentCast request failed' } } },
+      } as any,
+      { computedAt }
+    );
+
+    expect(snapshot.quality.unavailableSourceIds).toContain('home-value');
+    expect(snapshot.quality.errors).toContainEqual({
+      sourceId: 'home-value',
+      message: 'RentCast request failed',
+    });
   });
 
   it('excludes unconverted and unavailable investment values instead of silently summing them', () => {

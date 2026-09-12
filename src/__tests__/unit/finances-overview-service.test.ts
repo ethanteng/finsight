@@ -259,25 +259,98 @@ describe('finances overview contract', () => {
       .toContain('1 investment account (Brokerage) has a balance');
   });
 
-  it('names an unavailable optional source', () => {
+  it('gives an unavailable home value its own actionable warning', () => {
     const overview = buildFinancesOverview({
-      snapshot: { ...snapshot, quality: { unavailableSourceIds: ['home-value'] } },
+      snapshot: {
+        ...snapshot,
+        financialOverview: { ...snapshot.financialOverview, homeValue: null },
+        quality: { unavailableSourceIds: ['home-value'] },
+      },
+    });
+
+    const codes = overview.warnings.map(warning => warning.code);
+    expect(codes).toContain('home-value-unavailable');
+    // Never also counted as an anonymous optional source -- one situation, one warning.
+    expect(codes).not.toContain('optional-sources-unavailable');
+    expect(overview.warnings.find(warning => warning.code === 'home-value-unavailable')?.message)
+      .toContain('Set a value or refresh the estimate');
+  });
+
+  it('does not claim net worth excludes a home value that net worth includes', () => {
+    // An unavailable `home-value` source can mean only that the midpoint's timestamp is
+    // missing. The figure itself is real and the canonical total uses it, so the "net
+    // worth does not include it" warning must not fire.
+    const overview = buildFinancesOverview({
+      snapshot: {
+        ...snapshot,
+        financialOverview: { ...snapshot.financialOverview, homeValue: 400000 },
+        quality: { unavailableSourceIds: ['home-value'] },
+      },
+    });
+
+    expect(overview.warnings.map(warning => warning.code)).not.toContain('home-value-unavailable');
+  });
+
+  it('still counts a home value kept in net worth as an unavailable source', () => {
+    // Carved out of the anonymous count only when it has a warning of its own -- it must
+    // not vanish from both.
+    const overview = buildFinancesOverview({
+      snapshot: {
+        ...snapshot,
+        financialOverview: { ...snapshot.financialOverview, homeValue: 400000 },
+        quality: { unavailableSourceIds: ['home-value'] },
+      },
     });
 
     expect(overview.warnings.find(warning => warning.code === 'optional-sources-unavailable')?.message)
       .toBe('1 optional data source was unavailable (Home value).');
   });
 
+  it('still names the home value warning on a partial snapshot', () => {
+    // The anonymous count is suppressed on a partial snapshot; a warning that names a
+    // specific value and how to supply it is not.
+    const overview = buildFinancesOverview({
+      snapshot: {
+        ...snapshot,
+        status: 'partial',
+        financialOverview: { ...snapshot.financialOverview, homeValue: null },
+        quality: { unavailableSourceIds: ['home-value'] },
+      },
+    });
+
+    expect(overview.warnings.map(warning => warning.code)).toContain('home-value-unavailable');
+  });
+
+  it('raises no home warning for a user with no home on record', () => {
+    // The snapshot observes no `home-value` source at all for such a user.
+    const overview = buildFinancesOverview({
+      snapshot: { ...snapshot, quality: { unavailableSourceIds: [] } },
+    });
+
+    const codes = overview.warnings.map(warning => warning.code);
+    expect(codes).not.toContain('home-value-unavailable');
+    expect(codes).not.toContain('optional-sources-unavailable');
+  });
+
+  it('names an unavailable optional source', () => {
+    const overview = buildFinancesOverview({
+      snapshot: { ...snapshot, quality: { unavailableSourceIds: ['plaid:advisory:token-1'] } },
+    });
+
+    expect(overview.warnings.find(warning => warning.code === 'optional-sources-unavailable')?.message)
+      .toBe('1 optional data source was unavailable (Plaid).');
+  });
+
   it('names a provider advisory by the integration when its suffix is not an account', () => {
     const overview = buildFinancesOverview({
       snapshot: {
         ...snapshot,
-        quality: { unavailableSourceIds: ['snaptrade:advisory:token-1', 'home-value'] },
+        quality: { unavailableSourceIds: ['snaptrade:advisory:token-1', 'public:error:token-2'] },
       },
     });
 
     expect(overview.warnings.find(warning => warning.code === 'optional-sources-unavailable')?.message)
-      .toBe('2 optional data sources were unavailable (SnapTrade and Home value).');
+      .toBe('2 optional data sources were unavailable (SnapTrade and Public.com).');
   });
 
   it('marks the list as partial when two sources share one name', () => {
@@ -296,19 +369,19 @@ describe('finances overview contract', () => {
     const overview = buildFinancesOverview({
       snapshot: {
         ...snapshot,
-        quality: { unavailableSourceIds: ['home-value', 'holding:mystery'] },
+        quality: { unavailableSourceIds: ['snaptrade:advisory:token-1', 'holding:mystery'] },
       },
     });
 
     expect(overview.warnings.find(warning => warning.code === 'optional-sources-unavailable')?.message)
-      .toBe('2 optional data sources were unavailable (including Home value).');
+      .toBe('2 optional data sources were unavailable (including SnapTrade).');
   });
 
   it('still counts genuinely unavailable sources alongside a coverage gap', () => {
     const overview = buildFinancesOverview({
       snapshot: {
         ...snapshot,
-        quality: { unavailableSourceIds: ['account:401k:holdings-coverage', 'home-value'] },
+        quality: { unavailableSourceIds: ['account:401k:holdings-coverage', 'plaid:advisory:token-1'] },
       },
     });
 
@@ -324,7 +397,7 @@ describe('finances overview contract', () => {
           unavailableSourceIds: [
             'account:public-3CR23334:balance-derived',
             'account:public-3CT47684:balance-derived',
-            'home-value',
+            'plaid:advisory:token-1',
           ],
         },
       },
@@ -629,7 +702,7 @@ describe('finances overview contract', () => {
       snapshot: {
         ...snapshot,
         status: 'stale',
-        quality: { staleSourceIds: ['account:brokerage'], unavailableSourceIds: ['home-value'] },
+        quality: { staleSourceIds: ['account:brokerage'], unavailableSourceIds: ['plaid:advisory:token-1'] },
       },
       manualAccounts: [{
         id: 'manual-cash', name: 'Wallet', amount: 100, type: 'cash',
@@ -645,7 +718,7 @@ describe('finances overview contract', () => {
       snapshot: {
         ...snapshot,
         status: 'partial',
-        quality: { staleSourceIds: [], unavailableSourceIds: ['home-value'] },
+        quality: { staleSourceIds: [], unavailableSourceIds: ['plaid:advisory:token-1'] },
       },
       manualAccounts: [{
         id: 'manual-cash', name: 'Wallet', amount: 100, type: 'cash',

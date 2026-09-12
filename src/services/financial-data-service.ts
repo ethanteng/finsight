@@ -2242,8 +2242,14 @@ export class FinancialDataService {
         isManualOverride: parsed.isManualOverride,
       };
     } catch (error: any) {
+      // Rethrow rather than returning null. Null is this method's answer for "this user
+      // has no home on record", and the snapshot reads it that way -- it observes no
+      // home-value source at all. Returning null here would say that about a homeowner
+      // whose profile merely could not be read, dropping their home from net worth with
+      // nothing to show for it. A rejection is recorded as metadata.errors.homeValue,
+      // which keeps the source observed and the snapshot honest about being incomplete.
       console.error('Error fetching home value:', error);
-      return null;
+      throw error instanceof Error ? error : new Error(String(error));
     }
   }
 

@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import ManualIndicator from './ui/ManualIndicator';
+import { useDialog } from './ui/dialog';
 
 interface UserProfileProps {
   userId?: string;
@@ -50,6 +51,7 @@ export default function UserProfile({ userId }: UserProfileProps) {
   const [homeSaving, setHomeSaving] = useState(false);
   const [homeRefreshing, setHomeRefreshing] = useState(false);
   const [homeEditing, setHomeEditing] = useState(false);
+  const [homeRemoving, setHomeRemoving] = useState(false);
   const [homeError, setHomeError] = useState('');
   const [homeSuccess, setHomeSuccess] = useState('');
 
@@ -58,6 +60,8 @@ export default function UserProfile({ userId }: UserProfileProps) {
   const [editValue, setEditValue] = useState('');
   const [isSavingValue, setIsSavingValue] = useState(false);
   const [valueError, setValueError] = useState<string | null>(null);
+
+  const { showConfirm, dialog } = useDialog();
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
 
@@ -273,6 +277,59 @@ export default function UserProfile({ userId }: UserProfileProps) {
       setHomeError('Failed to save home data');
     } finally {
       setHomeSaving(false);
+    }
+  };
+
+  /**
+   * Clear the home entirely, for a user who no longer owns one -- or never did, where
+   * an address reached the profile some other way. Saving the address form cannot do
+   * this: it posts an address to be valued, and rejects an empty one, so without this
+   * a stored address had no way out of the profile.
+   */
+  const removeHomeData = async () => {
+    const confirmed = await showConfirm({
+      title: 'Remove home?',
+      message: 'This deletes your home address and value. Your net worth will no longer include the home.',
+      confirmLabel: 'Remove home',
+    });
+    if (!confirmed) return;
+
+    setHomeRemoving(true);
+    setHomeError('');
+    setHomeSuccess('');
+
+    try {
+      const token = localStorage.getItem('auth_token');
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      const response = await fetch(`${API_URL}/profile/home`, {
+        method: 'DELETE',
+        headers,
+      });
+
+      if (response.ok) {
+        setHomeData(null);
+        setHomeAddress('');
+        setOwnsHome(false);
+        setHomeEditing(false);
+        setIsEditingValue(false);
+        setHomeSuccess('Home removed.');
+        setTimeout(() => setHomeSuccess(''), 3000);
+      } else {
+        const errorData = await response.json().catch(() => ({}));
+        setHomeError(errorData.error || 'Failed to remove home');
+      }
+    } catch (error) {
+      console.error('Failed to remove home data:', error);
+      setHomeError('Failed to remove home');
+    } finally {
+      setHomeRemoving(false);
     }
   };
 
@@ -678,6 +735,13 @@ export default function UserProfile({ userId }: UserProfileProps) {
                   >
                     {homeRefreshing ? 'Refreshing...' : 'Refresh Home Value'}
                   </button>
+                  <button
+                    onClick={removeHomeData}
+                    disabled={homeRemoving}
+                    className="px-4 py-2 bg-red-700 text-white rounded hover:bg-red-800 disabled:bg-red-900 transition-colors text-sm"
+                  >
+                    {homeRemoving ? 'Removing...' : 'Remove Home'}
+                  </button>
                 </div>
               </div>
             ) : homeEditing ? (
@@ -712,6 +776,16 @@ export default function UserProfile({ userId }: UserProfileProps) {
                       I own this home
                     </label>
                   </div>
+
+                  {/* Clearing the field is what a user reaches for when they want the home
+                      gone, and Save cannot do it -- saving values an address. Say so here
+                      rather than leaving a disabled button and no explanation. */}
+                  {!homeAddress.trim() && (
+                    <p className="text-gray-400 text-sm">
+                      An address is needed to look up a value. To delete your home entirely,
+                      cancel and use Remove Home.
+                    </p>
+                  )}
 
                   <div className="flex gap-2">
                     <button
@@ -788,6 +862,7 @@ export default function UserProfile({ userId }: UserProfileProps) {
             )}
           </div>
       </>
+      {dialog}
     </div>
   );
 }
