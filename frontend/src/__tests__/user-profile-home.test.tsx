@@ -116,6 +116,20 @@ describe('UserProfile home removal', () => {
     expect(screen.getByText('Remove Home')).toBeInTheDocument();
   });
 
+  it('uses the destructive background the authenticated theme styles', async () => {
+    // `.authenticated-site` re-inks `.text-white` to near-black and wins it back only
+    // for backgrounds it names -- bg-red-600 among them, bg-red-700/800 not. A darker
+    // shade here renders near-black on dark red, unreadable on hover.
+    mockFetch();
+    await renderWithHome();
+
+    const remove = screen.getByText('Remove Home');
+    // Bare `bg-*` tokens only; `hover:`/`disabled:` variants do not start with `bg-`.
+    const backgrounds = remove.className.split(/\s+/).filter(cls => cls.startsWith('bg-'));
+    expect(backgrounds).toEqual(['bg-red-600']);
+    expect(remove).toHaveClass('hover:bg-red-700');
+  });
+
   it('explains why an emptied address cannot be saved', async () => {
     // The dead end this replaces: clearing the field left Save disabled and silent.
     mockFetch();
