@@ -191,6 +191,15 @@
   scroll-margin-top: 18px;
 }
 
+/*
+ * A sticky element taller than the viewport pins its top and leaves its
+ * bottom unreachable, so the column stops sticking once the email capture
+ * joins the result card in it.
+ */
+.coast-fire-page .cf-result-column.has-capture {
+  position: static;
+}
+
 .coast-fire-page .cf-result-card {
   overflow: hidden;
   padding: 30px;
@@ -345,6 +354,139 @@
   color: var(--cf-dark-muted);
   font-size: 13px;
   line-height: 1.55;
+}
+
+/* --------------------------------------------- the results email capture */
+
+/*
+ * Sits under the result card, in the same column, and borrows the form card's
+ * paper-and-rule treatment rather than the dark card's: it is an input, and
+ * every other input on this page is on paper.
+ */
+.coast-fire-page .cf-email-capture {
+  margin-top: 18px;
+  padding: 26px;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: var(--cream);
+  box-shadow: 0 10px 30px rgba(16, 35, 25, 0.06);
+}
+
+.coast-fire-page .cf-email-capture .section-kicker {
+  margin: 0 0 8px;
+}
+
+.coast-fire-page .cf-email-capture h3 {
+  margin: 0;
+  font-family: var(--font-display), sans-serif;
+  font-size: 25px;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  line-height: 1.1;
+}
+
+.coast-fire-page .cf-email-lead {
+  margin: 10px 0 0;
+  color: var(--cf-body);
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.coast-fire-page .cf-email-label {
+  display: block;
+  margin: 20px 0 7px;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.coast-fire-page .cf-email-row {
+  display: grid;
+  gap: 10px;
+}
+
+.coast-fire-page .cf-email-row input {
+  width: 100%;
+  min-height: 52px;
+  padding: 13px 15px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: white;
+  color: var(--ink);
+  font-size: 16px;
+  font-weight: 600;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.coast-fire-page .cf-email-row input:focus {
+  border-color: #2b8f5d;
+  box-shadow: 0 0 0 3px rgba(43, 143, 93, 0.15);
+  outline: 0;
+}
+
+.coast-fire-page .cf-email-row input::placeholder {
+  color: #97a39b;
+  font-weight: 500;
+}
+
+.coast-fire-page .cf-email-row button {
+  width: 100%;
+  border: 0;
+  cursor: pointer;
+  font-size: 16px;
+}
+
+.coast-fire-page .cf-email-row button[disabled] {
+  cursor: progress;
+  opacity: 0.65;
+}
+
+.coast-fire-page .cf-email-note {
+  margin: 14px 0 0;
+  color: #68766e;
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
+.coast-fire-page .cf-email-error {
+  margin: 14px 0 0;
+  padding: 12px 14px;
+  border-left: 3px solid #b4352b;
+  border-radius: 4px 10px 10px 4px;
+  background: #fbe9e5;
+  color: #7e2d26;
+  font-size: 14px;
+}
+
+.coast-fire-page .cf-email-capture.is-sent {
+  border-color: #9dbd6e;
+  background: #f4f9e8;
+}
+
+.coast-fire-page .cf-email-capture.is-sent p:not(.section-kicker) {
+  margin: 10px 0 0;
+  color: var(--cf-body);
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.coast-fire-page .cf-email-capture.is-sent strong {
+  color: var(--ink);
+  word-break: break-word;
+}
+
+.coast-fire-page .cf-email-again {
+  margin-top: 16px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 700;
+  text-decoration: underline;
+  text-decoration-color: rgba(16, 35, 25, 0.35);
+  text-underline-offset: 4px;
 }
 
 /* ------------------------------------------------------- section headings */
@@ -710,6 +852,10 @@
 
   .coast-fire-page .cf-result-card {
     padding: 28px 24px;
+  }
+
+  .coast-fire-page .cf-email-capture {
+    padding: 24px 22px;
   }
 
   .coast-fire-page .cf-result-lead {

@@ -10,6 +10,15 @@ MAILER_LITE_API_KEY=your_mailerlite_api_key_here
 MAILER_LITE_GROUP_ID=your_mailerlite_group_id_here
 ```
 
+## Optional Environment Variables
+
+```bash
+# Group that Coast FIRE calculator leads join when they ask for their
+# results by email. Unset means those addresses still reach the account's
+# subscriber list, just without a group.
+MAILER_LITE_COAST_FIRE_GROUP_ID=your_coast_fire_group_id_here
+```
+
 ## How to Get These Values
 
 ### 1. MAILER_LITE_API_KEY
@@ -29,6 +38,13 @@ MAILER_LITE_GROUP_ID=your_mailerlite_group_id_here
 4. The group ID will be visible in the URL: `https://app.mailerlite.com/subscribers/groups/{GROUP_ID}`
 5. Copy the group ID number
 6. Paste it as the value for `MAILER_LITE_GROUP_ID`
+
+### 3. MAILER_LITE_COAST_FIRE_GROUP_ID
+
+Same steps as above, using the **Coast FIRE** group. This is a different
+audience from `MAILER_LITE_GROUP_ID`: that group is every registered user, and
+this one is calculator visitors who have not registered. Keep them separate so
+a Coast FIRE nurture campaign does not go to paying customers.
 
 ## Environment-Specific Setup
 

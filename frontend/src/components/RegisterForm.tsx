@@ -21,6 +21,16 @@ import {
   type RetirementSignupContext,
 } from '@/lib/retirement-signup-context';
 import {
+  clearCoastFireSignupRef,
+  coastFireSignupSummary,
+  fetchCoastFireSignupContext,
+  hasCoastFireSignupSource,
+  readCoastFireSignupContext,
+  readCoastFireSignupRef,
+  storeCoastFireSignupContext,
+  type CoastFireSignupContext,
+} from '@/lib/coast-fire-signup-context';
+import {
   beginFreeTrialSignupFlow,
   withFreeTrialSignupFlow,
 } from '@/lib/trial-signup-flow';
@@ -90,6 +100,29 @@ const RETIREMENT_TRIAL_COPY = {
   submitting: 'Creating your account…',
 };
 
+/**
+ * The Coast FIRE arrival, from the page's own CTA or from the link in a
+ * results email. The free number is already theirs; what they came for is the
+ * question it raised, so the page continues that rather than restating it.
+ */
+const COAST_FIRE_TRIAL_COPY = {
+  eyebrow: 'Continue your Coast FIRE plan',
+  title: 'Now find out what coasting would actually cost you.',
+  description:
+    'Create your account to replace the calculator’s flat return and withdrawal rate with your real holdings, spending, and income.',
+  asideEyebrow: 'The number is the easy part',
+  asideTitle: 'Know what reaching it lets you change.',
+  asideDescription:
+    'Ask Linc runs the change you are weighing — stopping contributions, a pay cut, one income instead of two — against your actual finances and a century of market history.',
+  benefits: [
+    'Continue from the Coast FIRE scenario you just ran',
+    'Stress-test it against real market sequences, not one flat return',
+    'Full access for 30 days — no credit card',
+  ],
+  submit: 'Create account and continue',
+  submitting: 'Creating your account…',
+};
+
 const ACCOUNT_COPY = {
   asideTitle: 'Keep every decision in one planning model.',
   asideDescription:
@@ -115,6 +148,7 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
   const [error, setError] = useState('');
   const [subscriptionContext, setSubscriptionContext] = useState<SubscriptionContext | null>(null);
   const [retirementContext, setRetirementContext] = useState<RetirementSignupContext | null>(null);
+  const [coastFireContext, setCoastFireContext] = useState<CoastFireSignupContext | null>(null);
   const trialViewedRef = useRef(false);
   const trialStartedRef = useRef(false);
   const router = useRouter();
@@ -145,6 +179,17 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
           ? readRetirementSignupContext()
           : null,
       );
+      // An emailed token is authoritative for this landing. Skip painting any
+      // same-tab CTA scenario from sessionStorage while the token exchange runs,
+      // so a prior calculator click cannot flash the wrong numbers.
+      const emailedRef = hasCoastFireSignupSource(searchParams)
+        ? readCoastFireSignupRef()
+        : null;
+      setCoastFireContext(
+        hasCoastFireSignupSource(searchParams) && !emailedRef
+          ? readCoastFireSignupContext()
+          : null,
+      );
       return;
     }
 
@@ -161,7 +206,70 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
     }
   }, [searchParams, isTrial]);
 
-  const trialCopy = retirementContext ? RETIREMENT_TRIAL_COPY : TRIAL_COPY;
+  /*
+   * The emailed link. A visitor arriving from their results email has no
+   * sessionStorage to read — they may be on a different device days later — so
+   * the token `/coast-fire/continue` left in a cookie is exchanged for the
+   * same seven numbers. Nothing blocks on it: until it resolves, and forever
+   * if it fails, the page is the ordinary /getstarted.
+   */
+  useEffect(() => {
+    if (!isTrial || !hasCoastFireSignupSource(searchParams)) return;
+    // Handed over in a cookie by `/coast-fire/continue`, never read off the
+    // URL: the token resolves to an address and seven figures, and this page
+    // loads Google Tag Manager.
+    const token = readCoastFireSignupRef();
+    if (!token) return;
+
+    // Prefer the emailed token over any cached same-tab scenario. A visitor who
+    // stress-tested one run and later opens a different results email in this
+    // tab must see the emailed figures, not the older sessionStorage copy.
+    const existing = readCoastFireSignupContext();
+    if (existing?.sourceToken === token) {
+      clearCoastFireSignupRef();
+      setCoastFireContext(existing);
+      if (existing.email) setEmail((current) => current || existing.email!);
+      return;
+    }
+
+    const controller = new AbortController();
+    void (async () => {
+      const resolved = await fetchCoastFireSignupContext(token, controller.signal);
+      if (controller.signal.aborted) return;
+      // Spent either way: a token that did not resolve will not resolve on a
+      // reload, and leaving it would retry the lookup on every visit.
+      clearCoastFireSignupRef();
+      if (!resolved) return;
+
+      // Kept for the rest of this tab, so a reload or a step backwards in the
+      // flow does not lose the scenario and re-ask the backend for it.
+      storeCoastFireSignupContext(resolved.inputs, {
+        email: resolved.email,
+        sourceToken: token,
+        emailedOutcome: resolved.emailedOutcome,
+      });
+      setCoastFireContext(readCoastFireSignupContext());
+      // Their own address, from the link we sent them. Prefilled, not locked:
+      // they can sign up under a different one.
+      if (resolved.email) setEmail((current) => current || resolved.email!);
+    })();
+
+    return () => controller.abort();
+  }, [isTrial, searchParams]);
+
+  const coastFireSummary = coastFireContext
+    ? coastFireSignupSummary(coastFireContext.inputs, coastFireContext.emailedOutcome)
+    : null;
+
+  /*
+   * Coast FIRE wins when both are somehow present: it is the more specific
+   * arrival, and the two sources are mutually exclusive in the URL anyway.
+   */
+  const trialCopy = coastFireContext
+    ? COAST_FIRE_TRIAL_COPY
+    : retirementContext
+      ? RETIREMENT_TRIAL_COPY
+      : TRIAL_COPY;
 
   const trackTrialStart = (value: string) => {
     if (!isTrial || trialStartedRef.current || value.length === 0) return;
@@ -346,6 +454,34 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
       asideDescription={isTrial ? trialCopy.asideDescription : ACCOUNT_COPY.asideDescription}
       benefits={isTrial ? trialCopy.benefits : ACCOUNT_COPY.benefits}
     >
+      {coastFireSummary && (
+        <section
+          aria-label="Your Coast FIRE scenario"
+          data-cs-mask
+          className="mb-5 rounded-2xl border border-[#123c2f]/15 bg-[#fffdf7] p-4 shadow-sm"
+        >
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#477064]">
+              Your Coast FIRE scenario
+            </p>
+            <span
+              className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-bold ${
+                coastFireSummary.hasReachedCoastFire
+                  ? 'bg-[#eaf5d5] text-[#34551c]'
+                  : 'bg-[#f7e5c6] text-[#6b4a12]'
+              }`}
+            >
+              {coastFireSummary.hasReachedCoastFire ? 'Reached' : 'Not yet'}
+            </span>
+          </div>
+          <dl className="mt-3 grid grid-cols-3 gap-2">
+            <ScenarioValue label="Coast FIRE number" value={compactMoney(coastFireSummary.coastFireNumber)} />
+            <ScenarioValue label="Saved today" value={compactMoney(coastFireSummary.currentSavings)} />
+            <ScenarioValue label="Retire at" value={String(coastFireSummary.retirementAge)} />
+          </dl>
+        </section>
+      )}
+
       {retirementContext && (
         <section
           aria-label="Your modeled retirement scenario"

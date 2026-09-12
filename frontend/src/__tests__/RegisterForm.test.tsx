@@ -1,3 +1,11 @@
+/**
+ * @jest-environment-options {"url": "http://localhost/getstarted"}
+ *
+ * The document URL matters here: `/coast-fire/continue` hands the emailed
+ * token over in a cookie scoped to /getstarted, and jsdom applies cookie path
+ * matching, so at the default "/" URL that cookie would be invisible.
+ */
+
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import RegisterForm from '@/components/RegisterForm';
 import { USER_TIME_ZONE_KEY } from '@/lib/browser-time-zone';
@@ -13,6 +21,11 @@ import {
   RETIREMENT_SIGNUP_SOURCE,
   storeRetirementSignupContext,
 } from '@/lib/retirement-signup-context';
+import {
+  COAST_FIRE_REF_COOKIE,
+  COAST_FIRE_SIGNUP_SOURCE,
+  storeCoastFireSignupContext,
+} from '@/lib/coast-fire-signup-context';
 
 const push = jest.fn();
 let searchParams = new URLSearchParams();
@@ -53,6 +66,12 @@ describe('RegisterForm', () => {
     jest.clearAllMocks();
     localStorage.clear();
     sessionStorage.clear();
+    // Cookies survive between cases in jsdom; a leftover handover token would
+    // make the next case look like an arrival from an email.
+    for (const entry of document.cookie.split(';')) {
+      const name = entry.trim().split('=')[0];
+      if (name) document.cookie = `${name}=; Path=/getstarted; Max-Age=0`;
+    }
     searchParams = new URLSearchParams();
   });
 
@@ -110,6 +129,119 @@ describe('RegisterForm', () => {
       expect(within(summary).getByText('$95K')).toBeInTheDocument();
       expect(screen.getByText('No credit card required')).toBeInTheDocument();
       expect(screen.getByRole('button', { name: /Create account and continue/i })).toBeInTheDocument();
+    });
+
+    /** What `/coast-fire/continue` leaves behind after stripping the URL. */
+    function handOverRef(token: string) {
+      document.cookie = `${COAST_FIRE_REF_COOKIE}=${token}; Path=/getstarted`;
+    }
+
+    const COAST_FIRE_SCENARIO = {
+      currentAge: 48,
+      retirementAge: 65,
+      currentSavings: 400_000,
+      annualRetirementSpending: 80_000,
+      annualRetirementIncome: 30_000,
+      realReturnRate: 5,
+      withdrawalRate: 4,
+    };
+
+    it('continues a Coast FIRE scenario clicked through in the same tab', async () => {
+      searchParams = new URLSearchParams(`source=${COAST_FIRE_SIGNUP_SOURCE}`);
+      expect(storeCoastFireSignupContext(COAST_FIRE_SCENARIO)).toBe(true);
+
+      render(<RegisterForm variant="trial" />);
+
+      expect(await screen.findByRole('heading', {
+        name: 'Now find out what coasting would actually cost you.',
+      })).toBeInTheDocument();
+
+      const summary = screen.getByRole('region', { name: 'Your Coast FIRE scenario' });
+      expect(summary).toHaveAttribute('data-cs-mask');
+      // $545,371 on these inputs — derived from the seven numbers, not stored
+      // alongside them, so the page cannot disagree with the calculator.
+      expect(within(summary).getByText('$545K')).toBeInTheDocument();
+      expect(within(summary).getByText('$400K')).toBeInTheDocument();
+      expect(within(summary).getByText('Not yet')).toBeInTheDocument();
+    });
+
+    it('exchanges an emailed token for the scenario and prefills that address', async () => {
+      const token = 'a'.repeat(48);
+      searchParams = new URLSearchParams(`source=${COAST_FIRE_SIGNUP_SOURCE}`);
+      handOverRef(token);
+      const fetchMock = jest.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          email: 'reader@example.com',
+          inputs: COAST_FIRE_SCENARIO,
+          coastFireNumber: 545_371,
+          hasReachedCoastFire: false,
+        }),
+      })) as unknown as typeof fetch;
+      global.fetch = fetchMock;
+
+      render(<RegisterForm variant="trial" />);
+
+      expect(await screen.findByRole('region', { name: 'Your Coast FIRE scenario' })).toBeInTheDocument();
+      expect(screen.getByLabelText('Email address')).toHaveValue('reader@example.com');
+      expect(String((fetchMock as unknown as jest.Mock).mock.calls[0][0]))
+        .toContain(`/api/coast-fire/signup-context/${token}`);
+      /*
+       * The token is a 90-day bearer credential for this address and these
+       * seven figures, and this page loads Google Tag Manager in <head>, which
+       * records the URL of every pageview. So it arrives in a cookie that
+       * `/coast-fire/continue` set, and never in the address bar.
+       */
+      expect(window.location.search).not.toContain(token);
+      // Spent, so a reload is an ordinary visit rather than a replay.
+      await waitFor(() => expect(document.cookie).not.toContain(COAST_FIRE_REF_COOKIE));
+    });
+
+    it('lets an emailed ref override a different scenario left in sessionStorage', async () => {
+      const token = 'c'.repeat(48);
+      // Stale same-tab CTA scenario that must not win over the email link.
+      expect(storeCoastFireSignupContext({
+        ...COAST_FIRE_SCENARIO,
+        currentSavings: 50_000,
+      })).toBe(true);
+      searchParams = new URLSearchParams(`source=${COAST_FIRE_SIGNUP_SOURCE}`);
+      handOverRef(token);
+      global.fetch = jest.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          email: 'from-email@example.com',
+          inputs: COAST_FIRE_SCENARIO,
+          coastFireNumber: 545_371,
+          hasReachedCoastFire: false,
+        }),
+      })) as unknown as typeof fetch;
+
+      render(<RegisterForm variant="trial" />);
+
+      const summary = await screen.findByRole('region', { name: 'Your Coast FIRE scenario' });
+      expect(within(summary).getByText('$400K')).toBeInTheDocument();
+      expect(within(summary).queryByText('$50K')).not.toBeInTheDocument();
+      expect(screen.getByLabelText('Email address')).toHaveValue('from-email@example.com');
+      expect(global.fetch).toHaveBeenCalled();
+    });
+
+    /*
+     * A link that has expired, or a lookup that fails, still has to land the
+     * visitor on a working signup page rather than an error.
+     */
+    it('falls back to the generic page when the emailed token no longer resolves', async () => {
+      searchParams = new URLSearchParams(`source=${COAST_FIRE_SIGNUP_SOURCE}`);
+      handOverRef('b'.repeat(48));
+      global.fetch = jest.fn(async () => ({
+        ok: false,
+        json: async () => ({ error: 'Not found' }),
+      })) as unknown as typeof fetch;
+
+      render(<RegisterForm variant="trial" />);
+
+      await waitFor(() => expect(global.fetch).toHaveBeenCalled());
+      expect(screen.getByRole('heading', { name: 'Build your plan free for 30 days.' })).toBeInTheDocument();
+      expect(screen.queryByRole('region', { name: 'Your Coast FIRE scenario' })).not.toBeInTheDocument();
     });
 
     it('keeps generic /getstarted unchanged when the retirement source or scenario is missing', async () => {
