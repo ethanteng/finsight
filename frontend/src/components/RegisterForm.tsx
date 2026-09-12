@@ -21,6 +21,7 @@ import {
   type RetirementSignupContext,
 } from '@/lib/retirement-signup-context';
 import {
+  clearCoastFireSignupRef,
   coastFireSignupSummary,
   fetchCoastFireSignupContext,
   hasCoastFireSignupSource,
@@ -178,11 +179,11 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
           ? readRetirementSignupContext()
           : null,
       );
-      // An emailed `ref` is authoritative for this landing. Skip painting any
+      // An emailed token is authoritative for this landing. Skip painting any
       // same-tab CTA scenario from sessionStorage while the token exchange runs,
       // so a prior calculator click cannot flash the wrong numbers.
       const emailedRef = hasCoastFireSignupSource(searchParams)
-        ? readCoastFireSignupRef(searchParams)
+        ? readCoastFireSignupRef()
         : null;
       setCoastFireContext(
         hasCoastFireSignupSource(searchParams) && !emailedRef
@@ -208,13 +209,16 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
   /*
    * The emailed link. A visitor arriving from their results email has no
    * sessionStorage to read — they may be on a different device days later — so
-   * the opaque `ref` token is exchanged for the same seven numbers. Nothing
-   * blocks on it: until it resolves, and forever if it fails, the page is the
-   * ordinary /getstarted.
+   * the token `/coast-fire/continue` left in a cookie is exchanged for the
+   * same seven numbers. Nothing blocks on it: until it resolves, and forever
+   * if it fails, the page is the ordinary /getstarted.
    */
   useEffect(() => {
     if (!isTrial || !hasCoastFireSignupSource(searchParams)) return;
-    const token = readCoastFireSignupRef(searchParams);
+    // Handed over in a cookie by `/coast-fire/continue`, never read off the
+    // URL: the token resolves to an address and seven figures, and this page
+    // loads Google Tag Manager.
+    const token = readCoastFireSignupRef();
     if (!token) return;
 
     // Prefer the emailed token over any cached same-tab scenario. A visitor who
@@ -222,6 +226,7 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
     // tab must see the emailed figures, not the older sessionStorage copy.
     const existing = readCoastFireSignupContext();
     if (existing?.sourceToken === token) {
+      clearCoastFireSignupRef();
       setCoastFireContext(existing);
       if (existing.email) setEmail((current) => current || existing.email!);
       return;
@@ -230,7 +235,11 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
     const controller = new AbortController();
     void (async () => {
       const resolved = await fetchCoastFireSignupContext(token, controller.signal);
-      if (!resolved || controller.signal.aborted) return;
+      if (controller.signal.aborted) return;
+      // Spent either way: a token that did not resolve will not resolve on a
+      // reload, and leaving it would retry the lookup on every visit.
+      clearCoastFireSignupRef();
+      if (!resolved) return;
 
       // Kept for the rest of this tab, so a reload or a step backwards in the
       // flow does not lose the scenario and re-ask the backend for it.

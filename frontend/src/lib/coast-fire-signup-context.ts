@@ -6,12 +6,16 @@ import { calculateCoastFire, type CoastFireInputs, type CoastFireResult } from '
  *
  * Two ways in, one destination. A visitor who clicks through in the same tab
  * carries the scenario in sessionStorage; a visitor who asked for their
- * results by email arrives days later with an opaque `ref` token that the
- * backend exchanges for the same seven numbers.
+ * results by email arrives days later with an opaque token that the backend
+ * exchanges for the same seven numbers.
  *
- * Neither route puts a financial value in the URL. Page URLs are routinely
- * collected by analytics and appear in browser history, logs, referrers, and
- * screenshots, so the token carries nothing but its own randomness.
+ * Neither route puts a financial value in the URL, and neither leaves the
+ * token in one either. Page URLs are collected by analytics — Google Tag
+ * Manager loads in `<head>` on every page — and appear in browser history,
+ * logs, referrers, and screenshots. So the emailed link lands on
+ * `/coast-fire/continue`, which moves the token into a short-lived
+ * first-party cookie server-side and redirects to a clean address before any
+ * page renders.
  */
 
 export const COAST_FIRE_SIGNUP_SOURCE = 'coast-fire-calculator';
@@ -19,6 +23,13 @@ export const COAST_FIRE_SIGNUP_HREF =
   `${GET_STARTED_HREF}?source=${COAST_FIRE_SIGNUP_SOURCE}`;
 
 export const COAST_FIRE_SIGNUP_STORAGE_KEY = 'asklinc.coast-fire-signup-context.v1';
+
+/** Where the link in a results email lands, before any page has rendered. */
+export const COAST_FIRE_CONTINUE_PATH = '/coast-fire/continue';
+export const COAST_FIRE_REF_COOKIE = 'asklinc_cf_ref';
+export const COAST_FIRE_REF_COOKIE_PATH = GET_STARTED_HREF;
+/** Minutes, not days: it is read once, on the page it redirects to. */
+export const COAST_FIRE_REF_COOKIE_MAX_AGE_SECONDS = 10 * 60;
 
 const CONTEXT_VERSION = 1 as const;
 const CONTEXT_TTL_MS = 2 * 60 * 60 * 1000;
@@ -210,12 +221,42 @@ export function hasCoastFireSignupSource(searchParams: Pick<URLSearchParams, 'ge
   return searchParams.get('source') === COAST_FIRE_SIGNUP_SOURCE;
 }
 
-/** The emailed link's token, or null for anything that is not one of ours. */
-export function readCoastFireSignupRef(
-  searchParams: Pick<URLSearchParams, 'get'>,
-): string | null {
-  const ref = searchParams.get('ref');
-  return typeof ref === 'string' && TOKEN_PATTERN.test(ref) ? ref : null;
+/** True only for a token of the shape `services/coast-fire-leads` mints. */
+export function isCoastFireSignupRef(value: unknown): value is string {
+  return typeof value === 'string' && TOKEN_PATTERN.test(value);
+}
+
+function readCookie(name: string): string | null {
+  if (typeof document === 'undefined') return null;
+  for (const entry of document.cookie.split(';')) {
+    const [key, ...rest] = entry.trim().split('=');
+    if (key === name) return decodeURIComponent(rest.join('='));
+  }
+  return null;
+}
+
+/**
+ * The emailed link's token, handed over by `/coast-fire/continue` in a cookie
+ * rather than in the URL. Null for anything that is not one of ours.
+ *
+ * It used to be read straight off the query string, which put a 90-day bearer
+ * credential for someone's address and seven figures into the URL of a page
+ * that loads Google Tag Manager in `<head>`.
+ */
+export function readCoastFireSignupRef(): string | null {
+  const ref = readCookie(COAST_FIRE_REF_COOKIE);
+  return isCoastFireSignupRef(ref) ? ref : null;
+}
+
+/**
+ * Drop the handover cookie once it has been spent. It expires on its own
+ * within minutes; clearing it means a second visit to /getstarted in the same
+ * session is an ordinary one rather than a replay of an old link.
+ */
+export function clearCoastFireSignupRef(): void {
+  if (typeof document === 'undefined') return;
+  document.cookie =
+    `${COAST_FIRE_REF_COOKIE}=; Path=${COAST_FIRE_REF_COOKIE_PATH}; Max-Age=0; SameSite=Lax`;
 }
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';

@@ -80,14 +80,19 @@ function readEmail(raw: unknown): string {
 }
 
 /**
- * The link in the email. It carries an opaque token and nothing else — no
- * figures, no address — so forwarding it, or a referrer header leaking it,
- * discloses no more than the page it lands on already shows the person
- * holding it.
+ * The link in the email.
+ *
+ * It carries an opaque token and nothing else — no figures, no address. And it
+ * points at `/coast-fire/continue` rather than at signup directly: that
+ * handler moves the token into a short-lived first-party cookie and redirects
+ * to a clean URL, so the token is never in the address of a rendered page,
+ * where Google Tag Manager and every tag in the container would see it.
  */
 function signupUrl(token: string | null): string {
-  const base = `${getBaseUrl()}/getstarted?source=coast-fire-calculator`;
-  return token ? `${base}&ref=${token}` : base;
+  const base = getBaseUrl();
+  return token
+    ? `${base}/coast-fire/continue?ref=${token}`
+    : `${base}/getstarted?source=coast-fire-calculator`;
 }
 
 router.post('/email-results', emailRateLimit, async (req: Request, res: Response) => {

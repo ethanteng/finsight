@@ -1,3 +1,11 @@
+/**
+ * @jest-environment-options {"url": "http://localhost/getstarted"}
+ *
+ * The document URL matters here: `/coast-fire/continue` hands the emailed
+ * token over in a cookie scoped to /getstarted, and jsdom applies cookie path
+ * matching, so at the default "/" URL that cookie would be invisible.
+ */
+
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import RegisterForm from '@/components/RegisterForm';
 import { USER_TIME_ZONE_KEY } from '@/lib/browser-time-zone';
@@ -14,6 +22,7 @@ import {
   storeRetirementSignupContext,
 } from '@/lib/retirement-signup-context';
 import {
+  COAST_FIRE_REF_COOKIE,
   COAST_FIRE_SIGNUP_SOURCE,
   storeCoastFireSignupContext,
 } from '@/lib/coast-fire-signup-context';
@@ -57,6 +66,12 @@ describe('RegisterForm', () => {
     jest.clearAllMocks();
     localStorage.clear();
     sessionStorage.clear();
+    // Cookies survive between cases in jsdom; a leftover handover token would
+    // make the next case look like an arrival from an email.
+    for (const entry of document.cookie.split(';')) {
+      const name = entry.trim().split('=')[0];
+      if (name) document.cookie = `${name}=; Path=/getstarted; Max-Age=0`;
+    }
     searchParams = new URLSearchParams();
   });
 
@@ -116,6 +131,11 @@ describe('RegisterForm', () => {
       expect(screen.getByRole('button', { name: /Create account and continue/i })).toBeInTheDocument();
     });
 
+    /** What `/coast-fire/continue` leaves behind after stripping the URL. */
+    function handOverRef(token: string) {
+      document.cookie = `${COAST_FIRE_REF_COOKIE}=${token}; Path=/getstarted`;
+    }
+
     const COAST_FIRE_SCENARIO = {
       currentAge: 48,
       retirementAge: 65,
@@ -147,7 +167,8 @@ describe('RegisterForm', () => {
 
     it('exchanges an emailed token for the scenario and prefills that address', async () => {
       const token = 'a'.repeat(48);
-      searchParams = new URLSearchParams(`source=${COAST_FIRE_SIGNUP_SOURCE}&ref=${token}`);
+      searchParams = new URLSearchParams(`source=${COAST_FIRE_SIGNUP_SOURCE}`);
+      handOverRef(token);
       const fetchMock = jest.fn(async () => ({
         ok: true,
         json: async () => ({
@@ -165,6 +186,15 @@ describe('RegisterForm', () => {
       expect(screen.getByLabelText('Email address')).toHaveValue('reader@example.com');
       expect(String((fetchMock as unknown as jest.Mock).mock.calls[0][0]))
         .toContain(`/api/coast-fire/signup-context/${token}`);
+      /*
+       * The token is a 90-day bearer credential for this address and these
+       * seven figures, and this page loads Google Tag Manager in <head>, which
+       * records the URL of every pageview. So it arrives in a cookie that
+       * `/coast-fire/continue` set, and never in the address bar.
+       */
+      expect(window.location.search).not.toContain(token);
+      // Spent, so a reload is an ordinary visit rather than a replay.
+      await waitFor(() => expect(document.cookie).not.toContain(COAST_FIRE_REF_COOKIE));
     });
 
     it('lets an emailed ref override a different scenario left in sessionStorage', async () => {
@@ -174,7 +204,8 @@ describe('RegisterForm', () => {
         ...COAST_FIRE_SCENARIO,
         currentSavings: 50_000,
       })).toBe(true);
-      searchParams = new URLSearchParams(`source=${COAST_FIRE_SIGNUP_SOURCE}&ref=${token}`);
+      searchParams = new URLSearchParams(`source=${COAST_FIRE_SIGNUP_SOURCE}`);
+      handOverRef(token);
       global.fetch = jest.fn(async () => ({
         ok: true,
         json: async () => ({
@@ -199,7 +230,8 @@ describe('RegisterForm', () => {
      * visitor on a working signup page rather than an error.
      */
     it('falls back to the generic page when the emailed token no longer resolves', async () => {
-      searchParams = new URLSearchParams(`source=${COAST_FIRE_SIGNUP_SOURCE}&ref=${'b'.repeat(48)}`);
+      searchParams = new URLSearchParams(`source=${COAST_FIRE_SIGNUP_SOURCE}`);
+      handOverRef('b'.repeat(48));
       global.fetch = jest.fn(async () => ({
         ok: false,
         json: async () => ({ error: 'Not found' }),

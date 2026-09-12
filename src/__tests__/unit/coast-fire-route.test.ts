@@ -95,11 +95,16 @@ describe('POST /api/coast-fire/email-results', () => {
     expect(result.coastFireNumber).toBeCloseTo(369_128, 0);
   });
 
-  it('links the email at an opaque token and never at the figures', async () => {
+  /*
+   * The link lands on the redirect that strips the token before any page
+   * renders, because Google Tag Manager records the URL of every page that
+   * does render — and the token resolves to an address and seven figures.
+   */
+  it('links the email at the token-stripping redirect, never at the figures', async () => {
     await request(buildApp()).post('/api/coast-fire/email-results').send({ ...SCENARIO, email: 'reader@example.com' });
 
     const ctaUrl = (email.send.mock.calls[0] as unknown as [string, unknown, string])[2];
-    expect(ctaUrl).toMatch(/\/getstarted\?source=coast-fire-calculator&ref=[a-f0-9]{48}$/);
+    expect(ctaUrl).toMatch(/\/coast-fire\/continue\?ref=[a-f0-9]{48}$/);
     expect(ctaUrl).not.toMatch(/400000|369|80000/);
   });
 

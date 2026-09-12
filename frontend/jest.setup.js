@@ -23,25 +23,30 @@ jest.mock('next/navigation', () => ({
   },
 }))
 
-// Mock window.matchMedia
-Object.defineProperty(window, 'matchMedia', {
-  writable: true,
-  value: jest.fn().mockImplementation(query => ({
-    matches: false,
-    media: query,
-    onchange: null,
-    addListener: jest.fn(), // deprecated
-    removeListener: jest.fn(), // deprecated
-    addEventListener: jest.fn(),
-    removeEventListener: jest.fn(),
-    dispatchEvent: jest.fn(),
-  })),
-})
+// Browser-only shims. Guarded so a server-side test (a route handler, which
+// needs the node environment for the web Request/Response it is built on) can
+// share this setup instead of needing its own.
+if (typeof window !== 'undefined') {
+  // Mock window.matchMedia
+  Object.defineProperty(window, 'matchMedia', {
+    writable: true,
+    value: jest.fn().mockImplementation(query => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addListener: jest.fn(), // deprecated
+      removeListener: jest.fn(), // deprecated
+      addEventListener: jest.fn(),
+      removeEventListener: jest.fn(),
+      dispatchEvent: jest.fn(),
+    })),
+  })
 
-// Mock IntersectionObserver
-global.IntersectionObserver = class IntersectionObserver {
-  constructor() {}
-  disconnect() {}
-  observe() {}
-  unobserve() {}
+  // Mock IntersectionObserver
+  global.IntersectionObserver = class IntersectionObserver {
+    constructor() {}
+    disconnect() {}
+    observe() {}
+    unobserve() {}
+  }
 } 

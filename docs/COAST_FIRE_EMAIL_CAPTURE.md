@@ -20,17 +20,21 @@ prospect by emailing them their own result.
 4. After the response, the address is added to MailerLite, in the Coast FIRE
    group.
 5. The email's call to action — "Stress-test this with my actual finances" —
-   links to `/getstarted?source=coast-fire-calculator&ref=<token>`.
-6. `/getstarted` exchanges that token through
-   `GET /api/coast-fire/signup-context/:token` and renders the Coast FIRE
-   variant of the signup page: its own copy, the visitor's Coast FIRE number,
-   what they have saved, and their retirement age, with their email prefilled.
+   links to `/coast-fire/continue?ref=<token>`.
+6. That route handler runs server-side, moves the token into a short-lived
+   first-party cookie scoped to `/getstarted`, and redirects to a clean
+   `/getstarted?source=coast-fire-calculator`.
+7. `/getstarted` reads the cookie, exchanges it through
+   `GET /api/coast-fire/signup-context/:token`, clears the cookie, and renders
+   the Coast FIRE variant of the signup page: its own copy, the Coast FIRE
+   number the email stated, what they have saved, and their retirement age,
+   with their email prefilled.
 
 The page's own "Stress-test my Coast FIRE plan" button reaches the same
 tailored page through sessionStorage rather than a token, so both entry points
 continue the same decision.
 
-## Why a token and not the numbers
+## Why a token, and why it is not in the URL either
 
 The link could carry the figures directly. It does not, for the same reason the
 retirement calculator's handoff does not: page URLs are collected by analytics,
@@ -40,12 +44,31 @@ derived from the address or the figures, expires after 90 days, and resolves to
 a response marked `no-store`. An unknown token and an expired one get the same
 bare 404, so the endpoint cannot be used to test whether a token was ever real.
 
+The token itself gets the same treatment, because it is a bearer credential for
+that scenario and that address. Google Tag Manager loads in `<head>` on every
+page and a GA4 pageview records the full URL, so a token sitting in the address
+of a rendered page would be handed to analytics and to every other tag in the
+container. `/coast-fire/continue` therefore does the handover before any page
+exists: it reads the token server-side, sets it as a cookie that lives ten
+minutes and is only sent on `/getstarted`, and redirects to an address with no
+token in it. The signup page spends the cookie and deletes it. A blocked cookie
+costs the personalization, not the signup.
+
+The token does still appear in first-party server logs for that one redirect.
+That is the trade: our own logs rather than a third-party tag manager.
+
 ## Why the figures are recomputed
 
 The request body carries the seven inputs and nothing else; the result is
 calculated on the server before the email is built. An email carries Ask Linc
 branding into someone's inbox, so every figure in it has to be one we produced.
 A `coastFireNumber` posted by a caller is ignored.
+
+The figures are also *stored*, and an emailed scenario shows the stored copy
+rather than recomputing. The token lives for 90 days; if the formula changed
+inside that window, a recomputed headline would disagree with the message still
+sitting in the recipient's inbox. A same-tab click-through has nothing stored
+and nothing that could have drifted, so it derives from the seven inputs.
 
 `src/services/coast-fire.ts` is a deliberate second copy of
 `frontend/src/lib/coast-fire.ts` — the two are separate TypeScript projects and
@@ -75,6 +98,13 @@ mail, and the result card mirrors the one on the page.
 | `COAST_FIRE_CONTEXT_RATE_LIMIT` | 30 | Token lookups per caller per minute, on its own window so a send does not spend it. |
 | `COAST_FIRE_TRUSTED_PROXIES` | 1 | How many proxies sit in front of this process. See `routes/fixed-window-rate-limit.ts`. |
 | `RESEND_API_KEY` | — | Unset means no mail is sent and the endpoint reports success, matching the rest of the auth email path in development. |
+
+## Recalculating after sending
+
+The capture form is keyed on the submitted scenario, so changing the inputs and
+recalculating remounts it. Without that, a visitor who emailed one scenario and
+then recalculated would see the new result claiming its figures had been sent,
+and a response still in flight for the old scenario could confirm the new one.
 
 ## What must not fail the visitor
 
