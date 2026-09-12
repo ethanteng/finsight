@@ -91,11 +91,11 @@ const factRoutingSteps = [
 const comparisonData = {
   chatgpt: {
     eyebrow: "A MONEY TOOL VS A GENERAL CHATBOT",
-    fit: { competitor: "Choose ChatGPT for breadth.", askLinc: "Choose Ask Linc when you need to check the work.", order: "competitor-first" },
+    fit: { competitor: "Choose ChatGPT for breadth.", askLinc: "Choose Ask Linc to turn the decision into an inspectable model.", order: "competitor-first" },
   },
   origin: {
     eyebrow: "ONE BIG DECISION VS ALL-IN-ONE MONEY MANAGEMENT",
-    fit: { competitor: "Choose Origin when you want broader day-to-day money management.", askLinc: "Choose Ask Linc when you need help with a specific decision.", order: "ask-linc-first" },
+    fit: { competitor: "Choose Origin for broader, proactive money management.", askLinc: "Choose Ask Linc for a narrower model you direct.", order: "ask-linc-first" },
   },
   portfoliopilot: {
     eyebrow: "YOUR WHOLE MONEY PICTURE VS YOUR INVESTMENTS",
@@ -106,8 +106,8 @@ const comparisonData = {
     fit: { competitor: "Choose Monarch when shared budgeting and tracking are the priority.", askLinc: "Choose Ask Linc when you need to turn your numbers into a decision.", order: "competitor-first" },
   },
   boldin: {
-    eyebrow: "A CONNECTED MONEY QUESTION VS A DETAILED RETIREMENT PLAN",
-    fit: { competitor: "Choose Boldin when you want to build and maintain a detailed retirement model.", askLinc: "Choose Ask Linc when retirement is one part of a connected household decision.", order: "competitor-first" },
+    eyebrow: "LOWER-SETUP DECISION MODELING VS DEEP RETIREMENT PLANNING",
+    fit: { competitor: "Choose Boldin when you want to build and maintain a detailed retirement model.", askLinc: "Choose Ask Linc for lower-setup modeling across a household decision.", order: "competitor-first" },
   },
 } as const;
 
@@ -122,7 +122,7 @@ const useCases = {
     summary: "At the current pace, the plan is short by about $110K. A small monthly increase closes most of the gap without changing the retirement date.",
     metrics: [["SAVING NOW", "$2.4K/mo"], ["SAVING NEEDED", "$3K/mo"], ["RETIREMENT AGE", "60"]],
     levers: [["Retirement age", "See how 58, 60, or 62 changes the cushion."], ["Spending", "Try different spending levels and see what your investments need to cover."], ["A bad start in the markets", "See how the plan holds up if markets fall early in retirement."]],
-    context: ["Connected accounts", "Income + spending", "Social Security", "Rates + inflation", "Historical returns"],
+    context: ["Current financial state", "Income + spending", "Social Security", "Rates + inflation", "Historical returns"],
     tone: "mint",
   },
   home: {
@@ -177,7 +177,7 @@ const useCases = {
     metrics: [["MARKET DROP", "−25%"], ["CASH BUFFER", "14 mo"], ["PLAN RESULT", "Still works"]],
     levers: [["Market downturns", "See what an early market drop does to withdrawals and how long the plan lasts."], ["Inflation and spending", "Test how higher prices and different spending levels change the retirement margin."], ["Retirement date", "Compare retiring earlier or later without rebuilding the plan from scratch."],
     ],
-    context: ["Connected accounts", "Retirement spending", "Rates + inflation", "Historical returns", "Your holdings"],
+    context: ["Current financial state", "Retirement spending", "Rates + inflation", "Historical returns", "Your holdings"],
     tone: "sand",
   },
 } as const;
@@ -205,18 +205,18 @@ function FeaturesPage() {
   return (
     <StandardPage className="features-page">
       <section className="subhero shell split-subhero">
-        <div><p className="section-kicker">HOW ASK LINC WORKS</p><h1>See how one decision changes <em>the rest of your plan.</em></h1><p className="subhero-copy">Connect your accounts, ask a question in your own words, and get a clear answer with the numbers shown.</p><div className="hero-actions"><MarketingGetStartedButton className="button button-primary" csOverrideId="cta-start-free-trial-hero" /><a className="text-link" href="#system">See what goes into an answer ↓</a></div></div>
+        <div><p className="section-kicker">HOW ASK LINC WORKS</p><h1>See how one decision changes <em>the rest of your plan.</em></h1><p className="subhero-copy">Ask a question in your own words. Linc builds the relevant financial model, runs the calculations, and shows the scenarios and assumptions behind the answer.</p><div className="hero-actions"><MarketingGetStartedButton className="button button-primary" csOverrideId="cta-start-free-trial-hero" label="Build my plan" /><a className="text-link" href="#system">See what goes into an answer ↓</a></div></div>
         <DecisionMiniature />
       </section>
       <section className="page-section shell" id="system">
         <FeatureScenario />
         <div className="feature-proof-intro">
           <p className="section-kicker">WHAT THE ANSWER USES</p>
-          <h2>Your accounts, your goals, and what could change the answer.</h2>
+          <h2>Your real financial state—and what could change the answer.</h2>
         </div>
         <div className="feature-proof-grid">
           <article className="feature-proof-card feature-model-card">
-            <span className="card-index">02 / CONNECT</span>
+            <span className="card-index">02 / MODEL</span>
             <h3>Your full money picture</h3>
             <p>Cash, investments, debt, property, income, and goals stay together so every question starts with the same numbers.</p>
             <div className="account-stack" aria-label="Sample connected financial picture">
@@ -288,7 +288,7 @@ function FeaturesPage() {
           </div>
         </div>
       </section>
-      <PageCta csOverrideId="cta-start-free-trial-mid" />
+      <PageCta title="Turn the decision into a model you can stress-test." label="Start planning" csOverrideId="cta-start-free-trial-mid" />
     </StandardPage>
   );
 }
@@ -315,12 +315,12 @@ function UseCasePage({ useCase }: { useCase: UseCaseKey }) {
           <h1>{item.title}</h1>
           <p className="subhero-copy">
             {isRetirementStressTest
-              ? "Connect your financial accounts and ask Linc how market drops, inflation, spending, and different retirement dates change your plan. See the numbers and assumptions behind every answer."
+              ? "Start with the retirement decision you are weighing. Linc turns your holdings, spending, income, and timeline into a model you can test against market drops, inflation, and different retirement dates."
               : useCase === "retirement"
-                ? "Connect your financial accounts and ask Linc when you could retire and how long your money could last. See the numbers and assumptions behind every answer."
+                ? "Ask when you could retire or what working less would change. Linc builds the model from your retirement age, spending, Social Security, portfolio, and real historical sequences."
                 : useCase === "home"
-                  ? "Connect your financial accounts and ask Linc how much house you can afford while keeping cash on hand and saving for retirement. See the numbers and assumptions behind every answer."
-                  : "Connect your financial accounts and ask Linc your money questions in plain English. See the numbers and assumptions behind every answer."}
+                  ? "Ask how much house you can afford. Linc models the price, cash after closing, debt, monthly spending, and retirement impact together."
+                  : "Start with the decision in plain English. Linc builds the relevant financial model, lets you test scenarios, and shows the numbers and assumptions behind the answer."}
           </p>
           {isRetirementStressTest ? (
             <>
@@ -334,6 +334,7 @@ function UseCasePage({ useCase }: { useCase: UseCaseKey }) {
                   className="button button-primary"
                   trackingLocation="retirement_stress_test_hero"
                   csOverrideId="cta-start-free-trial-hero"
+                  label="Stress-test my retirement plan"
                 />
                 <p className="stress-test-cta-proof">
                   <strong>{TRIAL_CTA_MICROCOPY}</strong>
@@ -342,9 +343,12 @@ function UseCasePage({ useCase }: { useCase: UseCaseKey }) {
             </>
           ) : (
             <div className="case-trial-actions">
-              <MarketingGetStartedButton className="button button-primary" trackingLocation={`${item.slug}_hero`} csOverrideId="cta-start-free-trial-hero" />
+              <MarketingGetStartedButton className="button button-primary" trackingLocation={`${item.slug}_hero`} csOverrideId="cta-start-free-trial-hero" label={useCase === "retirement" ? "Model my retirement decision" : "Model this decision"} />
               <p className="microcopy">{TRIAL_CTA_MICROCOPY}</p>
             </div>
+          )}
+          {(useCase === "retirement" || isRetirementStressTest) && (
+            <Link className="text-link coast-fire-inline-link" href="/coast-fire-calculator">Start with the free Coast FIRE calculator →</Link>
           )}
         </div>
         <article className="use-case-answer">
@@ -357,10 +361,10 @@ function UseCasePage({ useCase }: { useCase: UseCaseKey }) {
       </section>
       <section className="decision-levers shell"><div className="editorial-heading"><p className="section-kicker">WHAT MOVES THE ANSWER</p><h2>Change one thing. See what happens.</h2></div><div className="lever-grid">{item.levers.map(([title,copy],index)=><article key={title}><span>0{index+1}</span><h3>{title}</h3><p>{copy}</p></article>)}</div></section>
       <section className="case-context dark-band"><div className="shell case-context-inner"><div><p className="section-kicker light">WHAT LINC CHECKS FIRST</p><h2>The numbers that can change the answer.</h2></div><RotatingContextChips items={item.context} /></div></section>
-      <PageCta title={`Bring your ${item.label.toLowerCase()} question to Linc.`} csOverrideId="cta-start-free-trial-mid" />
+      <PageCta title={`Keep testing your ${item.label.toLowerCase()} decision.`} label={isRetirementStressTest ? "Stress-test my plan" : "Model this decision"} csOverrideId="cta-start-free-trial-mid" />
       <details className="related-decisions shell"><summary>More financial planning questions</summary>
         <Link href="/use-cases" className="back-link">See all questions →</Link>
-        <section className="other-cases"><span>EXPLORE ANOTHER DECISION</span>{Object.values(useCases).filter((candidate)=>candidate.slug!==item.slug).map((candidate)=><Link href={`/use-cases/${candidate.slug}`} key={candidate.slug}>{candidate.label}<b>→</b></Link>)}</section>
+        <section className="other-cases"><span>EXPLORE ANOTHER DECISION</span>{(useCase === "retirement" || isRetirementStressTest) && <Link href="/coast-fire-calculator">COAST FIRE<b>→</b></Link>}{Object.values(useCases).filter((candidate)=>candidate.slug!==item.slug).map((candidate)=><Link href={`/use-cases/${candidate.slug}`} key={candidate.slug}>{candidate.label}<b>→</b></Link>)}</section>
         {useCase === "retirement" && <RetirementDecisionCrossSell />}
       </details>
     </StandardPage>
@@ -371,13 +375,13 @@ function PricingPage({ pricing }: { pricing: Pricing }) {
   const faqs = buildFaqs(pricing);
   return (
     <StandardPage className="pricing-page">
-      <section className="subhero centered-subhero shell"><p className="section-kicker">SIMPLE PRICING</p><h1>One month free. Then <em>{pricing.dollars} a {pricing.intervalLabel}.</em></h1><p className="subhero-copy">Ask as many questions as you need, connect your accounts, and compare what-if scenarios. Cancel anytime.</p></section>
+      <section className="subhero centered-subhero shell"><p className="section-kicker">SIMPLE PRICING</p><h1>One month free. Then <em>{pricing.dollars} a {pricing.intervalLabel}.</em></h1><p className="subhero-copy">Pay for an ongoing planning model and scenario engine. Ask follow-ups, change assumptions, and compare what-ifs. Cancel anytime.</p></section>
       <section className="pricing-stage shell">
         <div className="price-argument"><p className="section-kicker">A FLAT MONTHLY PRICE</p><h2>Planning help before the decision gets expensive.</h2><p>No minimum balance. No annual contract. No sales call.</p><div className="cost-comparison"><span><small>ASK LINC</small><b>{pricing.label}</b><i>after first month free</i></span><span className="versus">VS</span><span><small>1% OF A $500K PORTFOLIO</small><b>$5,000</b><i>per year · illustrative</i></span></div></div>
         <article className="sub-price-card" data-cs-override-id="pricing-card-premium"><div className="price-card-top"><span>ASK LINC</span><b>EVERYTHING INCLUDED</b></div><div className="price"><sup>{pricing.symbol}</sup>{pricing.amountText}<span>/{pricing.intervalLabel}</span></div><p>First month free. Cancel anytime.</p><ul><li>Unlimited questions and follow-ups</li><li>Unlimited connected accounts</li><li>What-if scenarios</li><li>Current rates and market data when needed</li><li>Retirement and investment what-ifs</li><li>Show the math on every answer</li><li>Your financial data is never used to train AI</li></ul><MarketingGetStartedButton className="button button-primary price-button" csOverrideId="cta-start-free-trial-pricing-premium" /></article>
       </section>
       <section className="page-section shell compact-faq"><div><p className="section-kicker">PRICING QUESTIONS</p><h2>No tiers to decode.</h2></div><div>{faqs.slice(0,4).map(([q,a])=><details key={q}><summary>{q}<span>+</span></summary><p>{a}</p></details>)}</div></section>
-      <PageCta title="Bring your hardest money question to Linc." csOverrideId="cta-start-free-trial-mid" />
+      <PageCta title="Build the plan once. Keep testing the decisions." label="Start planning" csOverrideId="cta-start-free-trial-mid" />
     </StandardPage>
   );
 }
@@ -428,9 +432,9 @@ function CompareIndexPage() {
     <StandardPage className="compare-index-page">
       <section className="subhero centered-subhero shell">
         <p className="section-kicker">COMPARE ASK LINC</p>
-        <h1>Choose the tool built for <em>the job you need done.</em></h1>
+        <h1>Choose the planning workflow built for <em>the job you need done.</em></h1>
         <p className="subhero-copy">
-          Ask Linc helps with a specific money decision. See how that differs from ChatGPT, all-in-one money apps, budget trackers, investment tools, and retirement planners.
+          Ask Linc is self-directed planning for a specific money decision. Compare its modeling effort, scope, and outputs with ChatGPT, all-in-one money apps, investment tools, and retirement planners.
         </p>
       </section>
       <section className="compare-index-grid shell" aria-label="Ask Linc comparisons">
@@ -443,7 +447,7 @@ function CompareIndexPage() {
           </Link>
         ))}
       </section>
-      <PageCta title="Start with the financial decision in front of you." csOverrideId="cta-start-free-trial-mid" />
+      <PageCta title="Start with the financial decision in front of you." label="Model my decision" csOverrideId="cta-start-free-trial-mid" />
     </StandardPage>
   );
 }
@@ -455,13 +459,13 @@ function ComparisonPage({ product, pricing }: { product: keyof typeof comparison
 
   return (
     <StandardPage className="comparison-page">
-      <section className="subhero shell comparison-hero"><div><p className="section-kicker">{design.eyebrow}</p><h1>Ask Linc <em>vs {page.competitorName}</em></h1><p className="subhero-copy">{page.summary}</p><div className="hero-actions"><MarketingGetStartedButton className="button button-primary" csOverrideId="cta-start-free-trial-hero" />{page.relatedLinks?.length ? <div className="comparison-reading-links" aria-label="Related reading">{page.relatedLinks.map((link)=><Link className="text-link" href={link.href} key={link.href}>{link.label}</Link>)}</div> : <Link className="text-link" href="/pricing">View free-trial pricing</Link>}</div></div><div className="versus-mark"><span className="brand-mark">L</span><b>VS</b><span>{page.competitorName.slice(0,2).toUpperCase()}</span></div></section>
+      <section className="subhero shell comparison-hero"><div><p className="section-kicker">{design.eyebrow}</p><h1>Ask Linc <em>vs {page.competitorName}</em></h1><p className="subhero-copy">{page.summary}</p><div className="hero-actions"><MarketingGetStartedButton className="button button-primary" csOverrideId="cta-start-free-trial-hero" label="Model my decision" />{page.relatedLinks?.length ? <div className="comparison-reading-links" aria-label="Related reading">{page.relatedLinks.map((link)=><Link className="text-link" href={link.href} key={link.href}>{link.label}</Link>)}</div> : <Link className="text-link" href="/pricing">View free-trial pricing</Link>}</div></div><div className="versus-mark"><span className="brand-mark">L</span><b>VS</b><span>{page.competitorName.slice(0,2).toUpperCase()}</span></div></section>
       <section className="comparison-strip"><div className="shell"><span>ASK LINC</span><i>Different tools for different jobs</i><span>{page.competitorName.toUpperCase()}</span></div></section>
       <section className="page-section shell comparison-section"><div className="editorial-heading"><p className="section-kicker">THE SHORT VERSION</p><h2>Start with the job you need done.</h2></div><div className="comparison-table" role="table"><div className="comparison-row comparison-head" role="row"><span>DIMENSION</span><b>ASK LINC</b><b>{page.competitorName.toUpperCase()}</b></div>{page.rows.map(({ dimension, askLinc, competitor })=><div className="comparison-row" role="row" key={dimension}><span className="comparison-dimension" role="rowheader">{dimension}</span><div className="comparison-value" role="cell"><small>ASK LINC</small><b>{askLinc}</b></div><div className="comparison-value" role="cell"><small>{page.competitorName.toUpperCase()}</small><b>{competitor}</b></div></div>)}</div></section>
       <section className="fit-section"><div className="shell"><p className="section-kicker">OUR HONEST TAKE</p><h2>{design.fit.order === "competitor-first" ? <><span>{design.fit.competitor}</span>{" "}<em>{design.fit.askLinc}</em></> : <><em>{design.fit.askLinc}</em>{" "}<span>{design.fit.competitor}</span></>}</h2><p>{page.honestTake ?? "Ask Linc does not replace a budget app, investment platform, dedicated retirement planner, or human professional. It helps you compare options and see how the answer was worked out."}</p></div></section>
       <section className="page-section shell compact-faq comparison-faq"><div><p className="section-kicker">BEFORE YOU CHOOSE</p><h2>The questions people actually ask.</h2></div><div>{page.faqs.map((faq)=><details key={faq.question}><summary>{faq.question}<span>+</span></summary><p>{faq.answer}</p></details>)}</div></section>
       <section className="other-comparisons shell"><span>COMPARE ASK LINC WITH</span>{Object.keys(comparisonData).filter((key)=>key!==product).map((key)=>{ const other = getComparison(key, pricing); return other ? <Link href={`/vs/${key}`} key={key}>{other.competitorName} <b>→</b></Link> : null; })}</section>
-      <PageCta title="See which experience answers your question." csOverrideId="cta-start-free-trial-mid" />
+      <PageCta title="Choose the planning workflow that fits the decision." label="Model my decision" csOverrideId="cta-start-free-trial-mid" />
     </StandardPage>
   );
 }

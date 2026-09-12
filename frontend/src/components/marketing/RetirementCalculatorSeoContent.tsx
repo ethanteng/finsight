@@ -63,9 +63,15 @@ export function RetirementCalculatorSeoContent() {
             </Link>
           </li>
           <li>
+            <Link href="/coast-fire-calculator">
+              <strong>Coast FIRE calculator</strong>
+              <span>Find your Coast FIRE number, inspect the assumptions, and ask whether you can really coast.</span>
+            </Link>
+          </li>
+          <li>
             <Link href="/use-cases/retirement">
               <strong>How Ask Linc plans retirement</strong>
-              <span>The same engine, run against your real accounts.</span>
+              <span>Keep retirement age, spending, Social Security, portfolio risk, and scenarios in one model.</span>
             </Link>
           </li>
         </ul>

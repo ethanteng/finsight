@@ -659,22 +659,22 @@ export function RetirementQuickPlan({
 
       <section className="qp-cross-sell">
         <div className="shell qp-cross-sell-inner">
-          <p className="section-kicker light">THE SAME ENGINE, WITH REAL INPUTS</p>
+          <p className="section-kicker light">CONTINUE THE DECISION WITH REAL INPUTS</p>
           <h2>
             {carriedResult
-              ? "This analysis used six numbers."
-              : "Get answers based on your actual finances."}
+              ? "Keep testing this retirement decision."
+              : "Model retirement with your actual finances."}
           </h2>
           <p>
             {carriedResult
-              ? "We'll carry forward the retirement age, assets, and spending you just modeled, then replace the calculator's estimates with your actual holdings, spending, and income."
-              : "Ask Linc runs this same model on your real accounts — every holding, every fee, your actual spending and income."}
+              ? "We'll carry forward the retirement age, assets, and spending you just modeled, then replace the calculator's portfolio preset with your actual holdings and add your real spending and income."
+              : "Ask Linc keeps your holdings, spending, income, Social Security timing, and scenarios in one retirement model you can keep changing."}
           </p>
           <MarketingGetStartedButton
             className="button button-primary"
             trackingLocation="quickplan_cross_sell"
             csOverrideId="cta-start-free-trial-quickplan"
-            label={carriedResult ? "Run this with my actual finances" : "Analyze my actual finances"}
+            label={carriedResult ? "Stress-test this with my actual finances" : "Build my retirement plan"}
             href={carriedResult ? RETIREMENT_SIGNUP_HREF : undefined}
             onBeforeNavigate={
               carriedResult ? () => { storeRetirementSignupContext(carriedResult.inputs); } : undefined
@@ -900,7 +900,7 @@ function QuickPlanResults({ result, primary }: { result: QuickPlanResult; primar
           * have an answer to compare against.
           */}
         <a className="qp-jump" href={`#${CONNECTED_EXAMPLE_ID}`}>
-          <span>See this same answer with real accounts connected</span>
+          <span>See what changes with your actual holdings</span>
           <span className="qp-jump-arrow" aria-hidden="true">↓</span>
         </a>
       </section>
@@ -1140,7 +1140,7 @@ function QuickPlanRateResults({ result }: { result: QuickPlanResult }) {
         </div>
 
         <a className="qp-jump" href={`#${CONNECTED_EXAMPLE_ID}`}>
-          <span>See this same answer with real accounts connected</span>
+          <span>See what changes with your actual holdings</span>
           <span className="qp-jump-arrow" aria-hidden="true">↓</span>
         </a>
       </section>

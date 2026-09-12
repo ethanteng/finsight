@@ -167,10 +167,10 @@ export function RetirementConnectedExample() {
 
       <div className="shell">
         <div className="qp-example-head">
-          <p className="section-kicker light">WHAT CHANGES WHEN YOU CONNECT YOUR ACCOUNTS</p>
-          <h2>A far more realistic answer, because it stops guessing what you own.</h2>
+          <p className="section-kicker light">WHAT CHANGES WITH A REAL FINANCIAL MODEL</p>
+          <h2>A more realistic answer, because the portfolio stops being a preset.</h2>
           <p className="qp-example-lede">
-            Below is the same question for someone whose accounts are connected:{" "}
+            Below is the same question modeled with actual holdings from connected, read-only accounts:{" "}
             {portfolio.holdingCount} real holdings across {portfolio.accountCount} accounts, worth{" "}
             {money(portfolio.totalInvestments)}. Same model, same century of history — nothing about
             the portfolio assumed.

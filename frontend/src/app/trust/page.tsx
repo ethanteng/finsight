@@ -5,11 +5,11 @@ import TrustPage, { TRUST_FAQS } from "@/components/marketing/TrustPage";
 export const metadata: Metadata = {
   title: "See the Math Behind Every Answer | Ask Linc",
   description:
-    "See how Ask Linc starts with your real accounts, uses dedicated tools for important math, checks the result, and shows you the work.",
+    "See how Ask Linc separates financial data, deterministic calculations, and model reasoning—then shows the inputs, assumptions, checks, and sources.",
   keywords: [
-    "verifiable financial AI",
+    "verifiable financial planning",
     "financial math you can check",
-    "AI financial calculations",
+    "deterministic financial calculations",
     "transparent financial analysis",
     "Show the Math",
   ],
@@ -19,7 +19,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "Don’t Trust the Answer. Check It. | Ask Linc",
     description:
-      "Ask Linc starts with your real accounts, uses the same math every time, checks the result, and shows you the work.",
+      "Ask Linc separates data, deterministic calculations, and reasoning, then shows the assumptions, checks, and sources.",
     type: "website",
     url: "https://asklinc.com/trust",
     siteName: "Ask Linc",

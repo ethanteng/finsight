@@ -25,13 +25,13 @@ export default function Home() {
 
       <section className="hero shell" id="top">
         <div className="hero-copy">
-          <div className="eyebrow"><span className="pulse" /> AI FINANCIAL PLANNING</div>
-          <h1>Financial planning that starts with <em>your question.</em></h1>
+          <div className="eyebrow"><span className="pulse" /> SELF-DIRECTED FINANCIAL PLANNING</div>
+          <h1>Know what your money lets you do <em>next.</em></h1>
           <p className="hero-subhead">
-            Ask Linc what you’re trying to decide. It uses your connected financial accounts to work out the answer.
+            Ask Linc turns your real finances into a plan you can stress-test—so you can decide when to retire, work less, spend more, or make another big move.
           </p>
           <div className="hero-actions">
-            <MarketingGetStartedButton className="button button-primary" trackingLocation="homepage_hero" csOverrideId="cta-start-free-trial-hero" />
+            <MarketingGetStartedButton className="button button-primary" trackingLocation="homepage_hero" csOverrideId="cta-start-free-trial-hero" label="Plan my next move" />
           </div>
           <p className="microcopy">{TRIAL_CTA_MICROCOPY}</p>
         </div>
@@ -41,9 +41,30 @@ export default function Home() {
 
       <section className="proof-strip" aria-label="Product trust signals">
         <div className="shell proof-grid">
-          <p><strong>Ask in plain English</strong><span>about retirement, buying a home, or taking time off</span></p>
-          <p><strong>Your whole financial picture</strong><span>cash, debt, investments, property, and goals</span></p>
-          <p><Link href="/trust"><strong>Show the Math</strong><span>see the numbers behind every answer</span></Link></p>
+          <p><strong>Question → model</strong><span>start with the decision, not a spreadsheet</span></p>
+          <p><strong>Deterministic calculations</strong><span>purpose-built math for supported scenarios</span></p>
+          <p><strong>Stress-test the plan</strong><span>change assumptions and compare what-ifs</span></p>
+          <p><Link href="/trust"><strong>Show the Math</strong><span>inspect the numbers, assumptions, and sources</span></Link></p>
+        </div>
+      </section>
+
+      <section className="coast-fire-entry shell" aria-labelledby="coast-fire-entry-title">
+        <div className="coast-fire-entry-inner">
+          <div className="coast-fire-entry-copy">
+            <p className="section-kicker light">COAST FIRE · FREE CALCULATOR</p>
+            <h2 id="coast-fire-entry-title">Find your Coast FIRE number. <em>Then see what it lets you change.</em></h2>
+            <p>
+              Working toward Coast FIRE? Find out whether your current savings could grow to your retirement target without more contributions—then decide what that could mean for work, saving, and retirement.
+            </p>
+            <Link className="button button-primary" href="/coast-fire-calculator" data-cs-override-id="homepage-coast-fire-calculator">
+              Calculate my Coast FIRE number <span aria-hidden="true">→</span>
+            </Link>
+          </div>
+          <div className="coast-fire-entry-model" aria-label="From a free Coast FIRE number to a stress-tested plan">
+            <span><small>FREE TOOL</small><strong>Have I reached Coast FIRE?</strong><i>Number + assumptions</i></span>
+            <b aria-hidden="true">→</b>
+            <span><small>NEXT DECISION</small><strong>Can I really coast?</strong><i>Real finances + scenarios</i></span>
+          </div>
         </div>
       </section>
 
@@ -51,9 +72,9 @@ export default function Home() {
         <div className="section-heading split-heading">
           <div>
             <p className="section-kicker">SEE ASK LINC IN ACTION</p>
-            <h2>See an example before you start.</h2>
+            <h2>See the planning model before you start.</h2>
           </div>
-          <p>Explore a real product example with identifying details removed—from the decision itself to connected finances, Show the Math, and the sources behind the answer.</p>
+          <p>Explore a real product example with identifying details removed—from the decision and financial model to the calculations, assumptions, and sources behind the answer.</p>
         </div>
         <details className="product-demo-disclosure">
           <summary>Explore the interactive example</summary>
@@ -76,13 +97,13 @@ export default function Home() {
             <div className="price"><sup>{pricing.symbol}</sup>{pricing.amountText}<span>/{pricing.intervalLabel}</span></div>
             <p>First month free. Full access. Cancel anytime.</p>
             <ul>
-              <li>Unlimited questions &amp; follow-ups</li>
-              <li>Unlimited connected accounts</li>
-              <li>What-if scenarios</li>
-              <li>Current rates and market context</li>
-              <li>Show the Math on every answer</li>
+              <li>An ongoing model built from your real finances</li>
+              <li>Unlimited questions and follow-ups</li>
+              <li>What-if scenarios and retirement stress tests</li>
+              <li>Current rates and historical market context</li>
+              <li>Inspectable assumptions and Show the Math</li>
             </ul>
-            <MarketingGetStartedButton className="button button-primary price-button" csOverrideId="cta-start-free-trial-pricing-premium" />
+            <MarketingGetStartedButton className="button button-primary price-button" csOverrideId="cta-start-free-trial-pricing-premium" label="Start planning" />
           </article>
         </div>
       </section>
@@ -91,9 +112,9 @@ export default function Home() {
         <div className="section-heading split-heading">
           <div>
             <p className="section-kicker">START WITH THE DECISION, NOT THE DASHBOARD</p>
-            <h2>Your money is connected. <em>Your decisions should be too.</em></h2>
+            <h2>Know what you can safely change. <em>Before you change it.</em></h2>
           </div>
-          <p>One decision can ripple through the rest of your plan. Linc keeps cash, work, family costs, and retirement in the same picture.</p>
+          <p>One decision can ripple through the rest of your plan. Linc keeps cash, work, family costs, investments, and retirement in the same model.</p>
         </div>
         <div className="use-case-index">
           {decisions.map((item, index) => (
@@ -114,16 +135,16 @@ export default function Home() {
           <div className="home-math-heading">
             <div>
               <p className="section-kicker light">HOW IT WORKS</p>
-              <h2>Ask the question. <em>Linc finds what could change the answer.</em></h2>
+              <h2>Ask the question. <em>Linc builds the financial model.</em></h2>
             </div>
             <div className="home-math-details">
-              <p>Your accounts provide the facts. Linc adds only the cash, debt, investments, rates, or market context that could change the decision.</p>
+              <p>Your real financial state supplies the inputs. Deterministic calculations handle supported math. You control the model by asking follow-ups and changing assumptions.</p>
               <ul aria-label="How Ask Linc works">
                 <li>Ask in your own words</li>
-                <li>Bring in what matters</li>
-                <li>Compare the tradeoffs</li>
-                <li>Get a recommendation</li>
-                <li>Check the work</li>
+                <li>Build the relevant model</li>
+                <li>Run the calculations</li>
+                <li>Stress-test scenarios</li>
+                <li>Inspect the assumptions</li>
               </ul>
             </div>
           </div>
@@ -191,8 +212,8 @@ export default function Home() {
       <section className="final-cta">
         <div className="shell final-cta-inner">
           <p className="section-kicker light">YOUR NEXT DECISION STARTS HERE</p>
-          <h2>What are you trying to figure out?</h2>
-          <MarketingGetStartedButton className="button button-primary" csOverrideId="cta-start-free-trial-mid" />
+          <h2>Know what your money lets you do next.</h2>
+          <MarketingGetStartedButton className="button button-primary" csOverrideId="cta-start-free-trial-mid" label="Plan my next move" />
         </div>
       </section>
 

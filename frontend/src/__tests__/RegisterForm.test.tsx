@@ -60,7 +60,7 @@ describe('RegisterForm', () => {
     it('frames the page around starting a free trial rather than signing back in', () => {
       render(<RegisterForm variant="trial" />);
 
-      expect(screen.getByRole('heading', { name: 'Try free for 30 days.' })).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'Build your plan free for 30 days.' })).toBeInTheDocument();
       expect(screen.getByText('No credit card required')).toBeInTheDocument();
       expect(screen.queryByText('Welcome back.')).not.toBeInTheDocument();
       // Both the header and the form footer offer the existing-account escape hatch.
@@ -127,9 +127,9 @@ describe('RegisterForm', () => {
 
       render(<RegisterForm variant="trial" />);
 
-      expect(screen.getByRole('heading', { name: 'Try free for 30 days.' })).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'Build your plan free for 30 days.' })).toBeInTheDocument();
       expect(screen.queryByRole('region', { name: 'Your modeled retirement scenario' })).not.toBeInTheDocument();
-      expect(screen.getByRole('button', { name: /Start free trial/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Start planning/i })).toBeInTheDocument();
     });
 
     it('offers no route to Stripe checkout', () => {
@@ -149,7 +149,7 @@ describe('RegisterForm', () => {
 
       render(<RegisterForm variant="trial" />);
       fillForm();
-      fireEvent.click(screen.getByRole('button', { name: /Start free trial/i }));
+      fireEvent.click(screen.getByRole('button', { name: /Start planning/i }));
 
       await waitFor(() => expect(push).toHaveBeenCalledWith('/verify-email?signup_flow=free_trial'));
 
@@ -181,7 +181,7 @@ describe('RegisterForm', () => {
       expect(screen.queryByText('Payment received.')).not.toBeInTheDocument();
 
       fillForm();
-      fireEvent.click(screen.getByRole('button', { name: /Start free trial/i }));
+      fireEvent.click(screen.getByRole('button', { name: /Start planning/i }));
 
       await waitFor(() => expect(push).toHaveBeenCalledWith('/verify-email?signup_flow=free_trial'));
       const body = JSON.parse((global.fetch as jest.Mock).mock.calls[0][1].body as string);
@@ -199,7 +199,7 @@ describe('RegisterForm', () => {
 
       // A single password field is still enough to submit.
       fillForm();
-      fireEvent.click(screen.getByRole('button', { name: /Start free trial/i }));
+      fireEvent.click(screen.getByRole('button', { name: /Start planning/i }));
 
       await waitFor(() => expect(push).toHaveBeenCalledWith('/verify-email?signup_flow=free_trial'));
     });
@@ -230,7 +230,7 @@ describe('RegisterForm', () => {
 
       render(<RegisterForm variant="trial" />);
       fillForm('password');
-      fireEvent.click(screen.getByRole('button', { name: /Start free trial/i }));
+      fireEvent.click(screen.getByRole('button', { name: /Start planning/i }));
 
       await waitFor(() =>
         expect(screen.getByRole('alert')).toHaveTextContent(
@@ -251,7 +251,7 @@ describe('RegisterForm', () => {
 
       render(<RegisterForm variant="trial" />);
       fillForm();
-      fireEvent.click(screen.getByRole('button', { name: /Start free trial/i }));
+      fireEvent.click(screen.getByRole('button', { name: /Start planning/i }));
 
       await waitFor(() =>
         expect(screen.getByRole('alert')).toHaveTextContent('User with this email already exists'),
@@ -268,7 +268,7 @@ describe('RegisterForm', () => {
 
       render(<RegisterForm variant="trial" />);
       fillForm();
-      fireEvent.click(screen.getByRole('button', { name: /Start free trial/i }));
+      fireEvent.click(screen.getByRole('button', { name: /Start planning/i }));
 
       await waitFor(() =>
         expect(screen.getByRole('alert')).toHaveTextContent('Network error. Please try again.'),

@@ -3,21 +3,27 @@ import Link from "next/link";
 const decisions = [
   {
     number: "01",
+    title: "Reaching Coast FIRE",
+    body: "Find your Coast FIRE number, then test what it could let you change about work and saving.",
+    href: "/coast-fire-calculator",
+  },
+  {
+    number: "02",
     title: "Buying a home",
     body: "Check the price and mortgage against the retirement date.",
     href: "/use-cases/home-buying",
   },
   {
-    number: "02",
+    number: "03",
     title: "Taking parental leave",
     body: "See how time away changes cash flow and savings.",
     href: "/use-cases/family-planning",
   },
   {
-    number: "03",
+    number: "04",
     title: "Changing jobs",
     body: "See whether your savings can cover an income gap before you move.",
-    href: "/use-cases/financial-stress-testing",
+    href: "/use-cases/career-change",
   },
 ] as const;
 
@@ -30,7 +36,7 @@ export function RetirementDecisionCrossSell() {
             <p className="section-kicker">BEFORE RETIREMENT</p>
             <h2>Retirement starts with the decisions before it.</h2>
           </div>
-          <p>Try a home, leave, or job change using the same accounts and goals.</p>
+          <p>Try Coast FIRE, a home, leave, or job change in the context of the same long-term plan.</p>
         </div>
         <div className="retirement-cross-sell-grid">
           {decisions.map((decision) => (

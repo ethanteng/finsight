@@ -29,7 +29,7 @@ describe("comparison pages", () => {
     await expect(
       generateMetadata({ params: Promise.resolve({ slug: "chatgpt" }) }),
     ).resolves.toMatchObject({
-      title: "Ask Linc vs ChatGPT | Financial Decisions vs General AI",
+      title: "Ask Linc vs ChatGPT | Financial Planning Comparison",
       alternates: { canonical: "https://asklinc.com/vs/chatgpt" },
       openGraph: { url: "https://asklinc.com/vs/chatgpt" },
       robots: { index: true, follow: true },
@@ -46,11 +46,11 @@ describe("comparison pages", () => {
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Ask Linc vs ChatGPT");
     const comparison = screen.getByRole("table");
     expect(within(comparison).getByText("How the answer is checked")).toBeInTheDocument();
-    expect(within(comparison).getByText(/show the math keeps your numbers, assumptions, calculations, checks, and sources/i)).toBeInTheDocument();
+    expect(within(comparison).getByText(/show the math keeps your numbers, assumptions, deterministic calculations, checks, and sources/i)).toBeInTheDocument();
     expect(screen.getByText(/financial data is never used to train ai models/i)).toBeInTheDocument();
     expect(within(comparison).getByText("Important calculations")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: /choose chatgpt for breadth.*check the work/i })).toBeInTheDocument();
-    expect(screen.getByText(/keep chatgpt for general work\. use ask linc when the question is a consequential financial decision/i)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /choose chatgpt for breadth.*inspectable model/i })).toBeInTheDocument();
+    expect(screen.getByText(/keep chatgpt for broad work and everyday finance questions/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "See how Ask Linc checks an answer" })).toHaveAttribute(
       "href",
       "/trust",
@@ -81,7 +81,7 @@ describe("comparison pages", () => {
     await expect(
       generateMetadata({ params: Promise.resolve({ slug: "boldin" }) }),
     ).resolves.toMatchObject({
-      title: "Ask Linc vs Boldin | Life Decisions vs Deep Retirement Planning",
+      title: "Ask Linc vs Boldin | Self-Directed Planning Comparison",
       alternates: { canonical: "https://asklinc.com/vs/boldin" },
       openGraph: { url: "https://asklinc.com/vs/boldin" },
       robots: { index: true, follow: true },

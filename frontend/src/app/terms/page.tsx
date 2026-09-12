@@ -3,7 +3,7 @@ import MarketingSubpage from '../../components/marketing/MarketingSubpage';
 
 export const metadata: Metadata = {
   title: 'User Agreement & Terms | Ask Linc Platform Rules',
-  description: 'Review Ask Linc\'s terms of service and user agreement. Understand your rights, responsibilities, and the rules governing your use of our AI financial assistant platform.',
+  description: 'Review Ask Linc\'s terms of service and user agreement for the self-directed financial planning platform.',
   keywords: ['terms of service', 'user agreement', 'terms and conditions', 'platform rules'],
   alternates: {
     canonical: 'https://asklinc.com/terms',

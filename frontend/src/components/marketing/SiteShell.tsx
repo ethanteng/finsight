@@ -35,7 +35,7 @@ export function SiteFooter() {
             <span className="brand-mark" aria-hidden="true">L</span>
             <span>Ask Linc</span>
           </Link>
-          <p>Financial planning that starts with the decision you&apos;re trying to make.</p>
+          <p>Self-directed financial planning for whatever your money lets you do next.</p>
           <MarketingGetStartedButton className="footer-cta-link" trackingLocation="footer" csOverrideId="cta-start-free-trial-footer" />
         </div>
         <div className="footer-column">
@@ -80,9 +80,11 @@ export function SiteFooter() {
 
 export function PageCta({
   title = "What are you trying to figure out?",
+  label = "Start planning",
   csOverrideId,
 }: {
   title?: string;
+  label?: string;
   csOverrideId: string;
 }) {
   return (
@@ -90,7 +92,7 @@ export function PageCta({
       <div className="page-cta-inner shell">
         <p className="section-kicker light">START WITH THE DECISION</p>
         <h2>{title}</h2>
-        <MarketingGetStartedButton className="button button-primary" trackingLocation="page_cta" csOverrideId={csOverrideId} />
+        <MarketingGetStartedButton className="button button-primary" trackingLocation="page_cta" csOverrideId={csOverrideId} label={label} />
       </div>
     </section>
   );

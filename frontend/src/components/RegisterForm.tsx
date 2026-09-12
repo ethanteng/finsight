@@ -56,20 +56,20 @@ const inputClasses = `${inputBaseClasses} pr-4`;
 const passwordInputClasses = `${inputBaseClasses} pr-12`;
 
 const TRIAL_COPY = {
-  eyebrow: 'Start your free trial',
-  title: 'Try free for 30 days.',
-  description: 'Connect your accounts. Ask real questions. Get answers using your actual financial picture.',
-  asideEyebrow: 'Your financial decision workspace',
-  asideTitle: 'Bring a real decision. Leave with a real answer.',
+  eyebrow: 'Start planning free',
+  title: 'Build your plan free for 30 days.',
+  description: 'Bring the decision you are weighing. Turn your real finances into a model you can stress-test and inspect.',
+  asideEyebrow: 'Self-directed financial planning',
+  asideTitle: 'From one question to a rigorous financial model.',
   asideDescription:
-    'Connect your accounts once, then ask what you are actually trying to work out. Every answer is built from your own balances, holdings, and history.',
+    'Ask in your own words. Linc brings in the relevant numbers, runs supported calculations, and keeps the assumptions and sources attached to the answer.',
   benefits: [
     'Full access for 30 days — no credit card',
-    'Connect banks, brokerages, and property in minutes',
-    'Every answer shows the math behind it',
+    'Model what-if scenarios using your real financial state',
+    'Inspect the numbers, assumptions, and math',
   ],
-  submit: 'Start free trial',
-  submitting: 'Starting your trial…',
+  submit: 'Start planning',
+  submitting: 'Creating your planning workspace…',
 };
 
 const RETIREMENT_TRIAL_COPY = {
@@ -80,7 +80,7 @@ const RETIREMENT_TRIAL_COPY = {
   asideEyebrow: 'From estimates to actuals',
   asideTitle: 'Keep the plan. Replace the assumptions.',
   asideDescription:
-    'Connect your accounts once and Ask Linc can rerun the decision using what you actually own, earn, and spend.',
+    'Ask Linc can rerun the decision with what you actually own, earn, and spend, then let you keep changing the scenario.',
   benefits: [
     'Continue from the retirement scenario you just modeled',
     'Replace estimated assets and allocation with real holdings',
@@ -91,9 +91,9 @@ const RETIREMENT_TRIAL_COPY = {
 };
 
 const ACCOUNT_COPY = {
-  asideTitle: 'Start every answer with your full context.',
+  asideTitle: 'Keep every decision in one planning model.',
   asideDescription:
-    'Connect your accounts once, and every question you ask is answered against your real balances, holdings, and history.',
+    'Your balances, holdings, history, goals, and assumptions stay available as inputs to the next decision you model.',
   benefits: [
     'Decision-ready answers grounded in your data',
     'Calculations and supporting evidence one click away',

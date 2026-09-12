@@ -28,9 +28,10 @@ describe("retirement answer library", () => {
     expect(within(comparison).getByRole("row", { name: /\$2M portfolio \$60K \/ year \$70K \/ year \$80K \/ year/i })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /retirement starts with the decisions before it/i })).toBeInTheDocument();
     expect(screen.getAllByRole("link", { name: /explore the decision/i }).map((link) => link.getAttribute("href"))).toEqual([
+      "/coast-fire-calculator",
       "/use-cases/home-buying",
       "/use-cases/family-planning",
-      "/use-cases/financial-stress-testing",
+      "/use-cases/career-change",
     ]);
 
     const schemas = Array.from(container.querySelectorAll('script[type="application/ld+json"]')).map(

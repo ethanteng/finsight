@@ -22,11 +22,11 @@ describe("trust page", () => {
     );
     expect(screen.getByRole("heading", { name: /from the decision to the numbers to the recommendation/i })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /you do not have to take linc's word for it/i })).toBeInTheDocument();
-    const openingHeading = screen.getByRole("heading", { name: /accounts provide the facts.*good decisions need more/i });
-    expect(openingHeading.querySelector("em")).toHaveTextContent("Good decisions need more.");
+    const openingHeading = screen.getByRole("heading", { name: /data supplies the inputs.*planning system does the work/i });
+    expect(openingHeading.querySelector("em")).toHaveTextContent("The planning system does the work.");
     expect(document.querySelectorAll(".trust-question-card")).toHaveLength(4);
     expect(screen.getByText(/no product is perfect/i)).toBeInTheDocument();
-    expect(screen.getByText(/purpose-built tools handle supported financial math/i)).toBeInTheDocument();
+    expect(screen.getByText(/purpose-built tools run supported calculations/i)).toBeInTheDocument();
 
     const answerCheck = screen.getByLabelText("Illustrative Ask Linc answer with checks");
     ["Your numbers", "Assumptions", "Math", "Checks", "Sources"].forEach((label) => {
@@ -52,12 +52,12 @@ describe("trust page", () => {
 
   it("links existing trust and verification copy back to the evergreen page", async () => {
     const { unmount } = render(<MarketingHome />);
-    expect(screen.getByRole("link", { name: /show the math.*see the numbers behind every answer/i })).toHaveAttribute("href", "/trust");
+    expect(screen.getByRole("link", { name: /show the math.*inspect the numbers, assumptions, and sources/i })).toHaveAttribute("href", "/trust");
     unmount();
 
     render(<FeaturesPageRoute />);
     const coverageSection = screen
-      .getByRole("heading", { name: /your whole financial picture stays connected to the answer/i })
+      .getByRole("heading", { name: /your real financial state stays attached to the model/i })
       .closest("section");
     expect(coverageSection).not.toBeNull();
     expect(within(coverageSection as HTMLElement).getByRole("link", { name: /show the math/i })).toHaveAttribute(

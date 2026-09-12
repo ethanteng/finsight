@@ -112,29 +112,31 @@ describe("marketing review fixes", () => {
     expect(screen.queryByRole("link", { name: "Sign in to Ask Linc" })).not.toBeInTheDocument();
   });
 
-  it("keeps the hero copy to the account explanation and the trial line", () => {
+  it("leads with self-directed planning, an outcome, and the card-free trial", () => {
     render(<MarketingHome />);
 
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
-      "Financial planning that starts with your question.",
+      "Know what your money lets you do next.",
     );
-    const explanation = screen.getByText("Ask Linc what you’re trying to decide. It uses your connected financial accounts to work out the answer.");
+    expect(screen.getAllByText(/self-directed financial planning/i).length).toBeGreaterThan(0);
+    const explanation = screen.getByText(/turns your real finances into a plan you can stress-test/i);
     expect(explanation.tagName).toBe("P");
-    expect(screen.queryByText("See the numbers and assumptions behind every answer.")).not.toBeInTheDocument();
-    // The hero now leads with the card-free trial rather than the price, so
-    // neither priced trial line belongs in it.
+    expect(document.querySelector('[data-cs-override-id="cta-start-free-trial-hero"]'))
+      .toHaveTextContent("Plan my next move");
     expect(screen.getByText(TRIAL_CTA_MICROCOPY)).toBeInTheDocument();
     expect(screen.queryByText(FALLBACK_PRICING.trialLineShort)).not.toBeInTheDocument();
     expect(screen.queryByText(FALLBACK_PRICING.trialLine)).not.toBeInTheDocument();
-    expect(screen.queryByText(/Try asking:.*Can I retire early.*How much house can I afford/)).not.toBeInTheDocument();
-    expect(screen.queryByText("Read-only connections. Your financial data is never used to train AI.")).not.toBeInTheDocument();
-    expect(screen.getByText("Ask in plain English")).toBeInTheDocument();
-    expect(screen.getByText("Your whole financial picture")).toBeInTheDocument();
+    expect(screen.getByText("Question → model")).toBeInTheDocument();
+    expect(screen.getByText("Deterministic calculations")).toBeInTheDocument();
     expect(screen.getAllByText("Show the Math").length).toBeGreaterThan(0);
     expect(screen.getByRole("heading", { name: "Can we afford this home without becoming house poor?" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Can I take a year off without setting retirement back?" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: /linc finds what could change the answer/i })).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "The right numbers for this decision." })).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /ask the question.*linc builds the financial model/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /find your coast fire number.*then see what it lets you change/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /calculate my coast fire number/i })).toHaveAttribute(
+      "href",
+      "/coast-fire-calculator",
+    );
     expect(USE_CASE_LINKS).toContainEqual({
       href: "/use-cases/career-change",
       label: "Career Change & Time Off",
@@ -267,7 +269,7 @@ describe("marketing review fixes", () => {
     const user = userEvent.setup();
     render(<MarketingHome />);
 
-    expect(screen.getByRole("heading", { name: "See an example before you start." })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "See the planning model before you start." })).toBeInTheDocument();
     const disclosure = screen.getByText("Explore the interactive example").closest("details");
     expect(disclosure).not.toHaveAttribute("open");
     await user.click(screen.getByText("Explore the interactive example"));
@@ -348,16 +350,16 @@ describe("marketing review fixes", () => {
     render(<FeaturesPageRoute />);
 
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
-      "From your question to the math behind the answer.",
+      "From your question to a financial model you can inspect.",
     );
     // The homepage owns the "starts with your question" opener; this page does not repeat it.
     expect(screen.getByRole("heading", { level: 1 })).not.toHaveTextContent("starts with your question");
-    expect(screen.getByRole("heading", { name: "One question. Five clear steps." })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "One question. One inspectable planning model." })).toBeInTheDocument();
     expect(screen.getByText("Ask the question")).toBeInTheDocument();
-    expect(screen.getByText("Linc pulls in what matters")).toBeInTheDocument();
-    expect(screen.getByText("Compare the tradeoffs")).toBeInTheDocument();
-    expect(screen.getByText("Get the recommendation")).toBeInTheDocument();
-    expect(screen.getByText("Check the work")).toBeInTheDocument();
+    expect(screen.getByText("Build the relevant model")).toBeInTheDocument();
+    expect(screen.getByText("Run deterministic calculations")).toBeInTheDocument();
+    expect(screen.getByText("Stress-test the scenarios")).toBeInTheDocument();
+    expect(screen.getByText("Inspect the answer")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Cash, spending, and debt" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Investments, property, and goals" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Rates, rules, and markets" })).toBeInTheDocument();
@@ -369,15 +371,15 @@ describe("marketing review fixes", () => {
     render(<IntegrationsPage />);
 
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
-      "Your finances live in many places. Your answer shouldn't.",
+      "Accurate plans need accurate inputs.",
     );
-    expect(screen.getByRole("heading", { name: "Linc pulls in what could change the answer." })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Data is infrastructure for the plan." })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Cash, spending, and debt" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Investments, property, and goals" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "What is true now" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Different decisions need different facts." })).toBeInTheDocument();
     expect(screen.getByText("Can I take a year off without setting retirement back?")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Connected accounts, property, markets, and current information." })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Current inputs, historical data, and visible provenance." })).toBeInTheDocument();
     ["Plaid", "SnapTrade", "RentCast", "FRED + Massive", "FMP + Tiingo", "Kenneth French + Robert Shiller"].forEach((source) => {
       expect(screen.getByRole("heading", { name: source })).toBeInTheDocument();
     });

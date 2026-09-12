@@ -344,10 +344,10 @@ export function CoastFireCalculator({ children }: { children?: ReactNode }) {
       <section className="cf-cross-sell">
         <div className="shell cf-cross-sell-inner">
           <p className="section-kicker light">THE NUMBER IS THE EASY PART</p>
-          <h2>Reaching it doesn’t tell you what to change.</h2>
+          <h2>Have you reached it—and can you really coast?</h2>
           <p>
             Ask Linc replaces the flat return and withdrawal rate above with your actual holdings,
-            spending, income, and taxes, then runs the change you are considering against a century
+            spending, income, and timing, then runs the change you are considering against a century
             of real market history.
           </p>
           <ul className="cf-decision-list">

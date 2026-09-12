@@ -2,14 +2,14 @@ import type { Metadata } from 'next';
 import MarketingSubpage from '../../components/marketing/MarketingSubpage';
 
 export const metadata: Metadata = {
-  title: 'Compare Ask Linc With Other Money Tools',
+  title: 'Compare Self-Directed Financial Planning Tools | Ask Linc',
   description:
-    'Compare Ask Linc with ChatGPT, Origin, PortfolioPilot, Monarch, and Boldin by the financial job each product is built to do.',
+    'Compare Ask Linc with ChatGPT, Origin, PortfolioPilot, Monarch, and Boldin by modeling effort, planning scope, scenarios, and the job each tool does.',
   alternates: {
     canonical: 'https://asklinc.com/vs',
   },
   openGraph: {
-    title: 'Compare Ask Linc With Other Money Tools',
+    title: 'Compare Self-Directed Financial Planning Tools',
     description:
       'See how Ask Linc differs from ChatGPT, all-in-one money apps, budget trackers, investment tools, and retirement planners.',
     type: 'website',
@@ -19,7 +19,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Compare Ask Linc With Other Money Tools',
+    title: 'Compare Self-Directed Financial Planning Tools',
     description: 'Compare financial tools by the job each product is built to do.',
     images: ['https://asklinc.com/og-image.jpg'],
   },

@@ -14,7 +14,7 @@ const description =
 
 // The longer version, for the schema description, which is not snippet-length.
 const applicationDescription =
-  "Enter seven numbers and get your Coast FIRE number in today's dollars, your retirement target, what your savings reach with no further contributions, and how much the answer moves when the return assumption does.";
+  "Enter seven numbers and get your Coast FIRE number in today's dollars, your retirement target, what your savings reach with no further contributions, and every assumption behind the answer.";
 
 export const metadata: Metadata = {
   title: "Free Coast FIRE Calculator | Ask Linc",

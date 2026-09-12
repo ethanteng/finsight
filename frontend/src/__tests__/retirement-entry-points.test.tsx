@@ -38,16 +38,20 @@ describe("retirement entry points", () => {
       .toHaveAttribute("href", "/retirement-calculator");
   });
 
-  it("sends the retirement card on the homepage and the use-cases hub to the calculator", () => {
+  it("sends homepage and use-case entries to the right free calculators", () => {
     const { unmount } = render(<MarketingHome />);
+    expect(screen.getByRole("link", { name: /calculate my coast fire number/i }))
+      .toHaveAttribute("href", "/coast-fire-calculator");
     // By the card's own text, so a header or footer link cannot satisfy this.
     expect(screen.getByRole("link", { name: /04 \/ RETIRE/ }))
       .toHaveAttribute("href", "/retirement-calculator");
     unmount();
 
     render(<UseCasesRoute />);
-    const tile = screen.getByRole("link", { name: /01 \/ RETIREMENT/ });
-    expect(tile).toHaveAttribute("href", "/retirement-calculator");
+    expect(screen.getByRole("link", { name: /01 \/ COAST FIRE & OPTIONALITY/ }))
+      .toHaveAttribute("href", "/coast-fire-calculator");
+    expect(screen.getByRole("link", { name: /02 \/ RETIREMENT/ }))
+      .toHaveAttribute("href", "/retirement-calculator");
   });
 
   function readinessHref(page: AnswerPageData) {

@@ -5,13 +5,13 @@ import RotatingHeroExamples from '@/components/marketing/RotatingHeroExamples';
 import { PageCta, SiteFooter, SiteHeader } from '@/components/marketing/SiteShell';
 
 export const metadata: Metadata = {
-  title: 'How Ask Linc Works | Question-First Financial Planning',
-  description: 'Ask a financial question, bring in the parts of your financial life that matter, compare the tradeoffs, and see the math behind the answer.',
-  keywords: ['financial planning', 'financial decisions', 'what-if planning', 'connected financial accounts', 'show the math'],
+  title: 'How Ask Linc Works | Self-Directed Financial Planning',
+  description: 'Ask a financial question. Ask Linc builds a model from your real numbers, runs deterministic calculations, tests scenarios, and shows every assumption.',
+  keywords: ['self-directed financial planning', 'financial modeling', 'financial decisions', 'what-if planning', 'deterministic financial calculations', 'show the math'],
   alternates: { canonical: 'https://asklinc.com/features' },
   openGraph: {
-    title: 'How Ask Linc Works | Question-First Financial Planning',
-    description: 'Start with the decision, not the dashboard. See how Ask Linc builds the analysis around your question.',
+    title: 'How Ask Linc Works | Self-Directed Financial Planning',
+    description: 'Go from a question to a rigorous financial model without building the spreadsheet first.',
     type: 'website',
     url: 'https://asklinc.com/features',
     siteName: 'Ask Linc',
@@ -27,11 +27,11 @@ export const metadata: Metadata = {
 };
 
 const steps = [
-  ['01', 'Ask the question', 'Start with what you are trying to decide. No financial model to build first.'],
-  ['02', 'Linc pulls in what matters', 'Cash, spending, debt, investments, property, goals, rates, and market context—only when they could change the answer.'],
-  ['03', 'Compare the tradeoffs', 'Change the price, date, income, spending, or assumption and see what moves with it.'],
-  ['04', 'Get the recommendation', 'See what looks workable, what is tight, what could break the plan, and what Linc would change.'],
-  ['05', 'Check the work', 'Show the Math keeps your numbers, assumptions, calculations, checks, and sources attached to the answer.'],
+  ['01', 'Ask the question', 'Start with what you are trying to decide. No spreadsheet or financial model to build first.'],
+  ['02', 'Build the relevant model', 'Linc brings in the cash, spending, debt, investments, property, goals, rates, or history that could change this decision.'],
+  ['03', 'Run deterministic calculations', 'Purpose-built tools handle supported financial math so the same inputs produce the same calculated result.'],
+  ['04', 'Stress-test the scenarios', 'Change the date, income, spending, portfolio, or assumption in plain English and see what moves with it.'],
+  ['05', 'Inspect the answer', 'See what looks workable, what could break, and the numbers, assumptions, checks, and sources behind the conclusion.'],
 ] as const;
 
 export default function FeaturesPageRoute() {
@@ -41,10 +41,10 @@ export default function FeaturesPageRoute() {
       <section className="subhero shell split-subhero">
         <div>
           <p className="section-kicker">HOW ASK LINC WORKS</p>
-          <h1>From your question <em>to the math behind the answer.</em></h1>
-          <p className="subhero-copy">You should not have to build the financial model before you can ask the question. Tell Linc what you are trying to decide; it builds the analysis around it.</p>
+          <h1>From your question <em>to a financial model you can inspect.</em></h1>
+          <p className="subhero-copy">You should not have to build the spreadsheet before you can ask the question. Tell Linc what you are trying to decide; it builds the relevant model, runs the math, and lets you change the assumptions conversationally.</p>
           <div className="hero-actions">
-            <MarketingGetStartedButton className="button button-primary" csOverrideId="cta-start-free-trial-hero" />
+            <MarketingGetStartedButton className="button button-primary" csOverrideId="cta-start-free-trial-hero" label="Build my plan" />
             <Link className="text-link" href="/use-cases">See what you can ask →</Link>
           </div>
         </div>
@@ -54,7 +54,7 @@ export default function FeaturesPageRoute() {
       <section className="page-section shell" id="system">
         <div className="editorial-heading">
           <p className="section-kicker">START WITH THE DECISION, NOT THE DASHBOARD</p>
-          <h2>One question. Five clear steps.</h2>
+          <h2>One question. One inspectable planning model.</h2>
         </div>
         <ol className="fact-routing-steps" aria-label="How Ask Linc builds an answer">
           {steps.map(([number, title, description]) => (
@@ -68,9 +68,9 @@ export default function FeaturesPageRoute() {
           <div className="ecosystem-detail-heading">
             <div>
               <p className="section-kicker light">THE NUMBERS BEHIND THE DECISION</p>
-              <h2>Your whole financial picture stays connected to the answer.</h2>
+              <h2>Your real financial state stays attached to the model.</h2>
             </div>
-            <p>Ask Linc can use cash, spending, debt, investments, property, goals, current rates, rules, and market history. It does not pull everything into every answer—only what could change the decision.</p>
+            <p>Accounts and data sources are infrastructure, not the product. Ask Linc uses only the cash, spending, debt, investments, property, goals, current rates, rules, and history that could change the decision.</p>
           </div>
           <div className="coverage-grid">
             <article className="coverage-card"><div className="coverage-card-top"><span>01</span><small>YOUR MONEY</small></div><h3>Cash, spending, and debt</h3><p>What you have available, what you owe, and what your current lifestyle costs.</p></article>
@@ -88,7 +88,7 @@ export default function FeaturesPageRoute() {
         </div>
       </section>
 
-      <PageCta title="What decision are you trying to make?" csOverrideId="cta-start-free-trial-mid" />
+      <PageCta title="Turn the decision into a model you can stress-test." label="Start planning" csOverrideId="cta-start-free-trial-mid" />
       <SiteFooter />
     </main>
   );

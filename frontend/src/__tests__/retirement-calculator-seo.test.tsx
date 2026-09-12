@@ -43,6 +43,7 @@ describe('retirement calculator SEO', () => {
       '/can-i-retire-with-1-million',
       '/retirement-readiness',
       '/use-cases/retirement',
+      '/coast-fire-calculator',
     ]) {
       expect(document.querySelector(`a[href="${href}"]`)).not.toBeNull();
     }

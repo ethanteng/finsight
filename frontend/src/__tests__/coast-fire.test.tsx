@@ -117,7 +117,7 @@ describe("Coast FIRE calculator page", () => {
   it("carries the paid job onto the same page as the free number", () => {
     render(<CoastFireCalculator />);
 
-    expect(screen.getByRole("heading", { name: /doesn’t tell you what to change/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /have you reached it.*can you really coast/i })).toBeInTheDocument();
     expect(screen.getByText("Could I take a $30K pay cut?")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Open the retirement calculator/ }))
       .toHaveAttribute("href", "/retirement-calculator");

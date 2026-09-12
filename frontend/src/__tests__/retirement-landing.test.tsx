@@ -248,7 +248,7 @@ describe('retirement landing page', () => {
       await screen.findByText(/Based on the numbers you entered/);
 
       expect(screen.getByText(/carry forward the retirement age, assets, and spending/i)).toBeInTheDocument();
-      const cta = screen.getByRole('link', { name: 'Run this with my actual finances' });
+      const cta = screen.getByRole('link', { name: 'Stress-test this with my actual finances' });
       expect(cta).toHaveAttribute('href', RETIREMENT_SIGNUP_HREF);
       expect(cta).toHaveAttribute('data-cs-override-id', 'cta-start-free-trial-quickplan');
       expect(container.querySelector('.qp-results')?.parentElement).toHaveAttribute('data-cs-mask');

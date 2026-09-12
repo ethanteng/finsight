@@ -2,8 +2,8 @@ import type { Metadata } from 'next';
 import AppPageClient from './AppPageClient';
 
 export const metadata: Metadata = {
-  title: 'Personal Financial Dashboard | Ask Linc - AI-Powered Money Management',
-  description: 'Access your personal financial command center with Ask Linc. View real-time account balances, analyze spending patterns, and get AI-powered recommendations for your financial goals.',
+  title: 'Your Financial Planning Workspace | Ask Linc',
+  description: 'Open your Ask Linc planning workspace to model decisions, test scenarios, and inspect the numbers and assumptions behind your plan.',
   robots: {
     index: false,
     follow: true,
@@ -12,4 +12,4 @@ export const metadata: Metadata = {
 
 export default function AppPage() {
   return <AppPageClient />;
-} 
+}

@@ -7,7 +7,7 @@ import { getPricing } from '../../lib/pricing';
 export const metadata: Metadata = {
   title: 'FAQ | Frequently Asked Questions | Ask Linc',
   description: 'Common questions about Ask Linc: what it does, what it costs, how it protects your data, and how it checks the math.',
-  keywords: ['FAQ', 'frequently asked questions', 'Ask Linc', 'financial AI', 'budget app'],
+  keywords: ['FAQ', 'frequently asked questions', 'Ask Linc', 'self-directed financial planning', 'financial modeling'],
   alternates: {
     canonical: 'https://asklinc.com/faq',
   },

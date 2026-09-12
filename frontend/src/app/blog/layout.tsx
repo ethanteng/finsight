@@ -2,11 +2,11 @@ import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
   title: 'Financial Insights & Market Analysis | Ask Linc Blog',
-  description: 'Field notes on intelligent finance, retirement decisions, product transparency, and trustworthy financial AI.',
+  description: 'Field notes on Coast FIRE, retirement decisions, self-directed planning, financial models, and product transparency.',
   alternates: { canonical: 'https://asklinc.com/blog' },
   openGraph: {
     title: 'Financial Insights & Market Analysis | Ask Linc Blog',
-    description: 'Field notes on intelligent finance, retirement decisions, product transparency, and trustworthy financial AI.',
+    description: 'Field notes on Coast FIRE, retirement decisions, self-directed planning, financial models, and product transparency.',
     type: 'website',
     url: 'https://asklinc.com/blog',
     siteName: 'Ask Linc',
@@ -15,7 +15,7 @@ export const metadata: Metadata = {
   twitter: {
     card: 'summary_large_image',
     title: 'Financial Insights & Market Analysis | Ask Linc Blog',
-    description: 'Field notes on intelligent finance, retirement decisions, product transparency, and trustworthy financial AI.',
+    description: 'Field notes on Coast FIRE, retirement decisions, self-directed planning, financial models, and product transparency.',
     images: ['https://asklinc.com/og-image.jpg'],
   },
   robots: { index: true, follow: true },

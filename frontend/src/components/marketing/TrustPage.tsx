@@ -12,10 +12,10 @@ const answerLayers = [
 ] as const;
 
 const pipelineSteps = [
-  ["01", "Start with the decision", "Linc identifies what you are trying to decide before deciding which data or calculations matter."],
-  ["02", "Bring in the relevant numbers", "Cash, spending, debt, investments, property, goals, rates, or market history are included only when they could change the answer."],
-  ["03", "Run the calculations", "Purpose-built tools handle supported financial math and scenarios instead of asking a chatbot to invent the numbers."],
-  ["04", "Check and explain the result", "Linc checks the work, explains the tradeoffs, and keeps the evidence attached to the answer."],
+  ["01", "Start with the decision", "Linc identifies what you are trying to decide before deciding which inputs or calculations matter."],
+  ["02", "Build the financial model", "Cash, spending, debt, investments, property, goals, rates, or market history are included only when they could change the answer."],
+  ["03", "Run deterministic calculations", "Purpose-built tools handle supported math and scenarios. The language model does not invent those calculated results."],
+  ["04", "Check and explain the result", "Reasoning and calculation stay separate. Linc explains the tradeoffs and keeps the inputs, assumptions, checks, and sources attached."],
 ] as const;
 
 const trustQuestions = [
@@ -58,11 +58,11 @@ export default function TrustPage() {
           <p className="section-kicker">ANSWERS YOU CAN CHECK</p>
           <h1>Don&apos;t trust the answer. <em>Check it.</em></h1>
           <p className="subhero-copy">
-            Your accounts provide the facts. Purpose-built calculations handle the important math. AI helps understand the question, compare the options, and explain the result.
+            Your question defines the decision. Your real financial state supplies the inputs. Purpose-built tools run supported calculations, and the assumptions stay visible.
           </p>
           <p className="trust-hero-support">Show the Math keeps the numbers, assumptions, calculations, checks, and sources attached to the answer.</p>
           <div className="hero-actions">
-            <MarketingGetStartedButton className="button button-primary" trackingLocation="trust_hero" csOverrideId="cta-start-free-trial-hero" />
+            <MarketingGetStartedButton className="button button-primary" trackingLocation="trust_hero" csOverrideId="cta-start-free-trial-hero" label="Build a plan I can check" />
             <Link className="text-link" href="#how-it-works">See how an answer is built ↓</Link>
           </div>
           <p className="microcopy">{TRIAL_CTA_MICROCOPY}</p>
@@ -81,9 +81,9 @@ export default function TrustPage() {
 
       <section className="trust-opening page-section shell">
         <div className="trust-opening-heading">
-          <div><p className="section-kicker">CONNECTED DATA IS ONLY THE BEGINNING</p><h2>Accounts provide the facts. <em>Good decisions need more.</em></h2></div>
+          <div><p className="section-kicker">CONNECTED DATA IS ONLY THE BEGINNING</p><h2>Data supplies the inputs. <em>The planning system does the work.</em></h2></div>
           <div>
-            <p>Facts are only the start. Linc separates what is known from what is assumed, runs the calculations, and shows what could change the result.</p>
+            <p>Facts are only the start. Linc separates what is known from what is assumed, separates calculation from inference, and shows what could change the result.</p>
             <strong>That is the standard behind every answer.</strong>
           </div>
         </div>
@@ -140,7 +140,7 @@ export default function TrustPage() {
         <div>{TRUST_FAQS.map((item) => <details key={item.question}><summary>{item.question}<span>+</span></summary><p>{item.answer}</p></details>)}</div>
       </section>
 
-      <PageCta title="Bring a real decision to Linc—and check the work." csOverrideId="cta-start-free-trial-mid" />
+      <PageCta title="Bring a real decision to Linc—and check the work." label="Build a plan I can inspect" csOverrideId="cta-start-free-trial-mid" />
       <SiteFooter />
     </main>
   );

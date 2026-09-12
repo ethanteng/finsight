@@ -33,8 +33,11 @@ describe("financial stress testing landing page", () => {
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
       "Stress-test your retirement plan before the market tests it.",
     );
-    expect(screen.getByText(/market drops, inflation, spending, and different retirement dates/i)).toBeInTheDocument();
-    expect(screen.getByText(/connect your financial accounts and ask Linc/i)).toHaveTextContent("See the numbers and assumptions behind every answer.");
+    expect(screen.getByText(/turns your holdings, spending, income, and timeline into a model/i)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /start with the free coast fire calculator/i })).toHaveAttribute(
+      "href",
+      "/coast-fire-calculator",
+    );
 
     const benefits = screen.getByRole("list", { name: "What you can test in your retirement plan" });
     expect(within(benefits).getByText("Model an early market drop")).toBeInTheDocument();

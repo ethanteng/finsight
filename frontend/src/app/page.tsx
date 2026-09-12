@@ -6,21 +6,17 @@ import type { Metadata } from 'next';
 
 // Dynamic metadata generation based on query parameters
 export async function generateMetadata({ searchParams }: { searchParams: Promise<{ ref?: string }> }): Promise<Metadata> {
-  const params = await searchParams;
-  const ref = params.ref;
-  
-  let description = 'AI financial planning powered by your real financial data. Connect your accounts for clear answers on retirement, spending, investing, and more.';
-  
-  if (ref === 'blog.asklinc.com') {
-    description = 'AI financial planning powered by your real financial data. Connect your accounts for clear answers on retirement, spending, investing, and more.';
-  }
+  // Resolve the legacy referral parameter without letting campaign URLs create
+  // different metadata or canonicals for the same homepage.
+  await searchParams;
 
-  const title = 'AI Financial Planning | Ask Linc';
+  const description = 'Self-directed financial planning that turns your real finances into a plan you can stress-test—so you can see what your money lets you do next.';
+  const title = 'Self-Directed Financial Planning | Ask Linc';
   
   return {
     title,
     description: description,
-    keywords: ['financial planning', 'AI financial assistant', 'natural language financial planning', 'home affordability planning', 'retirement planning', 'personal finance AI'],
+    keywords: ['self-directed financial planning', 'financial scenario modeling', 'Coast FIRE calculator', 'retirement stress test', 'what-if financial planning', 'financial decision planning'],
     alternates: {
       canonical: 'https://asklinc.com',
     },

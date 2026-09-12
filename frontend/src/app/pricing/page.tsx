@@ -10,7 +10,7 @@ export async function generateMetadata(): Promise<Metadata> {
   const pricing = await getPricing();
   return buildMarketingMetadata({
     title: `Ask Linc Pricing — 1 Month Free, Then ${pricing.label}`,
-    description: `One plan. Start with 1 month free, then pay ${pricing.label} for unlimited questions, connected accounts, what-if scenarios, and Show the Math. Cancel anytime.`,
+    description: `One self-directed planning model. Start with 1 month free, then pay ${pricing.label} for scenarios, deterministic calculations, and inspectable assumptions.`,
     path: '/pricing',
     imageAlt: 'Ask Linc pricing',
   });
@@ -26,31 +26,32 @@ export default async function PricingPage() {
         <section className="subhero centered-subhero shell">
           <p className="section-kicker">SIMPLE PRICING</p>
           <h1>One month free. Then <em>{pricing.dollars} a {pricing.intervalLabel}.</em></h1>
-          <p className="subhero-copy">One plan. Full access. Cancel anytime.</p>
+          <p className="subhero-copy">Pay for an ongoing planning model and scenario engine—not another chatbot window. One plan. Full access. Cancel anytime.</p>
         </section>
         <section className="pricing-stage shell">
           <div className="price-argument">
             <p className="section-kicker">NO TIERS TO DECODE</p>
-            <h2>Everything you need to work through the decision.</h2>
-            <p>Ask as many follow-up questions as you need. Change assumptions. Compare what-ifs. Check the math.</p>
+            <h2>Self-directed planning without maintaining the spreadsheet.</h2>
+            <p>Go from a question to a rigorous model, ask as many follow-ups as you need, change assumptions, compare what-ifs, and check the math.</p>
           </div>
           <article className="sub-price-card" data-cs-override-id="pricing-card-premium">
             <div className="price-card-top"><span>ASK LINC</span><b>EVERYTHING INCLUDED</b></div>
             <div className="price"><sup>{pricing.symbol}</sup>{pricing.amountText}<span>/{pricing.intervalLabel}</span></div>
             <p>First month free. Cancel anytime.</p>
             <ul>
-              <li>Unlimited questions and follow-ups</li>
-              <li>Unlimited connected accounts</li>
-              <li>What-if scenarios</li>
+              <li>An ongoing model built from your real financial state</li>
+              <li>Unlimited questions and conversational follow-ups</li>
+              <li>What-if scenarios and deterministic calculations</li>
               <li>Current rates and market context when needed</li>
-              <li>Retirement and investment scenarios</li>
-              <li>Show the Math on every answer</li>
+              <li>Retirement, investment, and cross-life decision modeling</li>
+              <li>Inspectable assumptions and Show the Math</li>
+              <li>Read-only account and property inputs</li>
               <li>Your financial data is never used to train AI models</li>
             </ul>
-            <MarketingGetStartedButton className="button button-primary price-button" csOverrideId="cta-start-free-trial-pricing-premium" />
+            <MarketingGetStartedButton className="button button-primary price-button" csOverrideId="cta-start-free-trial-pricing-premium" label="Start planning" />
           </article>
         </section>
-        <PageCta title="Bring the decision you are weighing to Linc." csOverrideId="cta-start-free-trial-mid" />
+        <PageCta title="Build the plan once. Keep testing the decisions." label="Start planning" csOverrideId="cta-start-free-trial-mid" />
         <SiteFooter />
       </main>
     </>

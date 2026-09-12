@@ -14,7 +14,7 @@ import {
 
 const canonical = "https://asklinc.com/retirement-answers";
 const description =
-  "Explore clear retirement guides for different ages and savings balances, then try the same questions with your own finances.";
+  "Explore retirement guides by age and savings, use the free Coast FIRE and retirement calculators, then stress-test the decisions with your actual finances.";
 
 const balanceAnswers = [
   canIRetireWithOneMillion,
@@ -108,7 +108,7 @@ export default function RetirementAnswersPage() {
           </p>
           <div className="answer-hub-hero-links">
             <a className="button button-dark" href="#by-portfolio">Explore the guides <span aria-hidden="true">↓</span></a>
-            <Link className="text-link" href="/use-cases/retirement">See how Ask Linc plans retirement</Link>
+            <Link className="text-link" href="/coast-fire-calculator">Find my Coast FIRE number</Link>
           </div>
         </div>
         <aside className="answer-hub-method-card" aria-label="How to use these retirement guides">
@@ -199,17 +199,18 @@ export default function RetirementAnswersPage() {
           <ol>
             <li><span>01</span><div><strong>Show the calculation</strong><p>Rates, amounts, income gaps, and assumptions stay visible.</p></div></li>
             <li><span>02</span><div><strong>Use primary sources</strong><p>Each guide links to relevant IRS, Social Security, Medicare, and federal data.</p></div></li>
-            <li><span>03</span><div><strong>Model the connected plan</strong><p>Use Ask Linc to replace the examples with your accounts, spending, income, and goals.</p></div></li>
+            <li><span>03</span><div><strong>Model the consequential decision</strong><p>Use Ask Linc to replace the examples with your real financial state, then change the date, spending, income, or assumptions.</p></div></li>
           </ol>
           <div className="answer-hub-method-links">
             <Link href="/use-cases/retirement">Explore retirement planning <span aria-hidden="true">→</span></Link>
             <Link href="/retirement-calculator">Check retirement readiness <span aria-hidden="true">→</span></Link>
+            <Link href="/coast-fire-calculator">Calculate your Coast FIRE number <span aria-hidden="true">→</span></Link>
           </div>
         </div>
       </section>
 
       <RetirementDecisionCrossSell />
-      <PageCta title="Replace the examples with your accounts, spending, income, and goals." csOverrideId="cta-start-free-trial-mid" />
+      <PageCta title="Replace the examples with your real numbers—and keep testing the plan." label="Model my retirement decisions" csOverrideId="cta-start-free-trial-mid" />
       <SiteFooter />
     </main>
   );

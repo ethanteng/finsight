@@ -77,10 +77,10 @@ export default function IntegrationsPage() {
       <section className="integration-hero shell">
         <div>
           <p className="section-kicker">ACCOUNTS &amp; DATA</p>
-          <h1>Your finances live in many places. <em>Your answer shouldn&apos;t.</em></h1>
-          <p className="subhero-copy">Linc brings together the parts of your financial life that matter for the question you are asking—and leaves out what does not.</p>
+          <h1>Accurate plans need <em>accurate inputs.</em></h1>
+          <p className="subhero-copy">Accounts, manual details, current context, and market history give the model a real starting point. Linc brings in what could change the decision—and leaves out what does not.</p>
           <div className="hero-actions">
-            <MarketingGetStartedButton className="button button-primary" trackingLocation="integrations_hero" csOverrideId="cta-start-free-trial-hero" />
+            <MarketingGetStartedButton className="button button-primary" trackingLocation="integrations_hero" csOverrideId="cta-start-free-trial-hero" label="Build my financial model" />
             <Link className="text-link" href="/features">See how Linc builds an answer →</Link>
           </div>
         </div>
@@ -90,7 +90,7 @@ export default function IntegrationsPage() {
       <section className="integration-principles" aria-label="How Ask Linc handles financial data">
         <div className="shell">
           <span><strong>READ-ONLY</strong><small>Linc cannot move your money</small></span>
-          <span><strong>QUESTION-FIRST</strong><small>The decision determines what matters</small></span>
+          <span><strong>MODEL INPUTS</strong><small>The decision determines what data matters</small></span>
           <span><strong>ONLY WHAT MATTERS</strong><small>No need to throw every data point at every answer</small></span>
           <span><strong>CHECKABLE</strong><small>See the facts and sources behind the result</small></span>
         </div>
@@ -98,8 +98,8 @@ export default function IntegrationsPage() {
 
       <section className="integration-owned-section shell">
         <div className="integration-section-heading">
-          <div><p className="section-kicker">THE NUMBERS BEHIND THE DECISION</p><h2>Linc pulls in what could change the answer.</h2></div>
-          <p>Connected accounts are the starting point, not the product. The value is knowing which facts belong in this decision and how they affect one another.</p>
+          <div><p className="section-kicker">THE NUMBERS BEHIND THE DECISION</p><h2>Data is infrastructure for the plan.</h2></div>
+          <p>Connected accounts are one source of inputs, not the product. The value is a current financial model that shows which facts belong in this decision and how they affect one another.</p>
         </div>
         <div className="connected-source-grid" aria-label="Financial information Ask Linc can use">
           {financialPicture.map((item) => (
@@ -135,8 +135,8 @@ export default function IntegrationsPage() {
       <section className="integration-inventory-section">
         <div className="shell">
           <div className="integration-section-heading">
-            <div><p className="section-kicker">WHERE THE FACTS COME FROM</p><h2>Connected accounts, property, markets, and current information.</h2></div>
-            <p>You do not need to know the provider names to use Ask Linc. They are here so you can see where the underlying information comes from.</p>
+            <div><p className="section-kicker">WHERE THE FACTS COME FROM</p><h2>Current inputs, historical data, and visible provenance.</h2></div>
+            <p>You do not need to know the provider names to use Ask Linc. They are shown so you can inspect where an input came from and when current information was checked.</p>
           </div>
           <div className="coverage-grid" aria-label="Ask Linc data providers">
             {sources.map(([name, description], index) => (
@@ -151,7 +151,7 @@ export default function IntegrationsPage() {
         </div>
       </section>
 
-      <PageCta title="What decision are you trying to make?" csOverrideId="cta-start-free-trial-mid" />
+      <PageCta title="Put accurate inputs behind the decision." label="Build my financial model" csOverrideId="cta-start-free-trial-mid" />
       <SiteFooter />
     </main>
   );

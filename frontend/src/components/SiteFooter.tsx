@@ -70,7 +70,7 @@ export default function SiteFooter({ variant = 'default' }: { variant?: 'default
         <div className="mt-8 pt-8 border-t border-border">
           <div className="flex flex-col md:flex-row justify-between items-center space-y-4 md:space-y-0">
             <p className="text-sm text-muted-foreground">
-              &copy; {new Date().getFullYear()} Ask Linc. Your AI financial analyst — with privacy in mind.
+              &copy; {new Date().getFullYear()} Ask Linc. Self-directed financial planning for your next move.
             </p>
             <div className="flex items-center space-x-4">
               <a
