@@ -113,6 +113,31 @@ describe('retirementPortfolioFingerprint', () => {
     { security_id: 'b', ticker_symbol: 'BBB', type: 'bond' },
   ];
 
+  it("changes when the custodian's cash-equivalent flag changes", () => {
+    // Classification reads this flag, so a feed that flips it changes the
+    // modeled portfolio. Left out of the signature, a cached analysis would
+    // outlive the change that invalidated it.
+    const flagged = securities.map(security =>
+      security.security_id === 'a' ? { ...security, is_cash_equivalent: true } : security
+    );
+
+    expect(retirementPortfolioFingerprint(holdings, flagged)).not.toBe(
+      retirementPortfolioFingerprint(holdings, securities)
+    );
+  });
+
+  it('treats an absent flag and an explicit false as the same portfolio', () => {
+    // Neither asserts anything, so neither may force a recomputation.
+    const explicitlyFalse = securities.map(security => ({
+      ...security,
+      is_cash_equivalent: false,
+    }));
+
+    expect(retirementPortfolioFingerprint(holdings, explicitlyFalse)).toBe(
+      retirementPortfolioFingerprint(holdings, securities)
+    );
+  });
+
   it('is insensitive to row order', () => {
     expect(retirementPortfolioFingerprint(holdings, securities)).toBe(
       retirementPortfolioFingerprint([...holdings].reverse(), [...securities].reverse())

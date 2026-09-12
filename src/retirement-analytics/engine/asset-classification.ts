@@ -39,10 +39,38 @@ export function isKnownRealAssetTicker(ticker: string): boolean {
   return REAL_ASSET_TICKERS.has(ticker.trim().toUpperCase());
 }
 
+/**
+ * The `UST` abbreviation custodians use for an individual Treasury line, as in
+ * `UST 3.5% 02/15/2029` or `UST 0% 10/29/2026` (a STRIP).
+ *
+ * The abbreviation alone is not evidence: `UST` has been a listed equity ticker
+ * and can sit inside a company name. Require the instrument shape that only a
+ * bond line carries -- a coupon rate or a maturity date -- so a security merely
+ * named for those letters is never pulled into the bond sleeve.
+ *
+ * These lines arrive with no ticker (the custodian identifies them by CUSIP).
+ * We now carry that CUSIP on the security, but nothing resolves it yet, so the
+ * name remains the only evidence classification can use. That leaves one
+ * ambiguity the name cannot settle: a TIPS issue whose label omits the word
+ * reads exactly like a nominal note and is classified as nominal here. The
+ * same ambiguity already applies to every `treasury` name below; resolving the
+ * CUSIP against the Treasury's own auction data is what removes it, not a
+ * longer list of words.
+ */
+const TREASURY_ABBREVIATION_PATTERN = /\b(?:ust|u\.s\.t)\b/;
+const BOND_INSTRUMENT_SHAPE = /\d+(?:\.\d+)?\s*%|\b\d{1,2}\/\d{1,2}\/\d{2,4}\b/;
+
+export function hasTreasuryAbbreviationSignal(name: string): boolean {
+  const normalized = name.toLowerCase();
+  return TREASURY_ABBREVIATION_PATTERN.test(normalized) &&
+    BOND_INSTRUMENT_SHAPE.test(normalized);
+}
+
 export function hasBondNameSignal(name: string): boolean {
   const normalized = name.toLowerCase();
   return ['bond', 'fixed income', 'treasury', 'tips', 'aggregate', 'corporate credit']
-    .some(signal => normalized.includes(signal));
+    .some(signal => normalized.includes(signal)) ||
+    hasTreasuryAbbreviationSignal(name);
 }
 
 export function hasTipsNameSignal(name: string): boolean {

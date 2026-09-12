@@ -81,6 +81,19 @@ interface MarketNewsContext {
   tier: string;
 }
 
+/**
+ * Why a security did not reach the simulation. Mirrors `DataGapCategory` in
+ * `src/services/data-gap-report.ts`; each value names a different remedy.
+ */
+type DataGapSecurityCategory =
+  | 'unrecognized'
+  | 'equity-geography-unresolved'
+  | 'target-date-unregistered'
+  | 'unmapped'
+  | 'unsupported'
+  | 'partially-mapped'
+  | 'us-listing-fallback';
+
 export default function AdminPage() {
   const [activeTab, setActiveTab] = useState<'production' | 'users' | 'market-news' | 'ai-settings' | 'data-gaps'>('production');
 
@@ -150,7 +163,7 @@ export default function AdminPage() {
       identifier?: string;
       /** No source could name this security; the label is its raw identifier. */
       unnamed?: boolean;
-      category: 'unmapped' | 'unsupported' | 'us-listing-fallback';
+      category: DataGapSecurityCategory;
       userCount: number;
       lastSeenAt: string;
     }>;
@@ -817,9 +830,17 @@ export default function AdminPage() {
     }
   };
 
-  const CATEGORY_LABEL: Record<'unmapped' | 'unsupported' | 'us-listing-fallback', string> = {
-    unmapped: 'No asset class resolved',
+  // Each label names the remedy, not the severity — that is the point of the
+  // split. "No asset class resolved" was previously shown for every excluded
+  // holding, including Treasuries we can read off the name and equity funds
+  // missing only a country split, which made the list impossible to act on.
+  const CATEGORY_LABEL: Record<DataGapSecurityCategory, string> = {
+    unrecognized: 'No asset class resolved',
+    'equity-geography-unresolved': 'Equity; geography unresolved',
+    'target-date-unregistered': 'Target-date fund not in registry',
+    unmapped: 'Excluded; reason not recorded',
     unsupported: 'Recognized, no return series',
+    'partially-mapped': 'Mostly modeled; one sleeve withheld',
     'us-listing-fallback': 'US-listed fallback used',
   };
 
