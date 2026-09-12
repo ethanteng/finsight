@@ -738,7 +738,7 @@ export default function UserProfile({ userId }: UserProfileProps) {
                   <button
                     onClick={removeHomeData}
                     disabled={homeRemoving}
-                    className="px-4 py-2 bg-red-700 text-white rounded hover:bg-red-800 disabled:bg-red-900 transition-colors text-sm"
+                    className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-60 transition-colors text-sm"
                   >
                     {homeRemoving ? 'Removing...' : 'Remove Home'}
                   </button>

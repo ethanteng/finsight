@@ -400,6 +400,13 @@
 .authenticated-site .border-orange-700 { border-color: rgb(157 106 22 / .25); }
 .authenticated-site .bg-rose-600,
 .authenticated-site .bg-red-600 { background-color: #9b4137; color: white; }
+/* Without this the hover falls through to Tailwind's own red, off this palette.
+   Note also that `.text-white` is re-inked dark above, and wins back white only
+   from a later, equally specific rule like the one above this -- so a destructive
+   button must carry bg-red-600, not a darker shade the theme does not name, or it
+   renders near-black on dark red. */
+.authenticated-site .hover\:bg-red-700:hover,
+.authenticated-site .hover\:bg-rose-700:hover { background-color: #8b3027; }
 .authenticated-site input,
 .authenticated-site textarea,
 .authenticated-site select {

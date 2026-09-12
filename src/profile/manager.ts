@@ -35,7 +35,22 @@ export class ProfileManager {
 
   // Internal raw-storage read used by migration and the separate home-value feature.
   // User/model-facing callers should use getPersonalContext* instead.
-  async getOriginalProfile(userId: string): Promise<string> {
+  async getOriginalProfile(
+    userId: string,
+    options: {
+      /**
+       * Reject instead of falling back to the plaintext column when decryption fails.
+       *
+       * The fallback is right for callers that would rather show a stale or empty
+       * profile than nothing. It is wrong for a caller that must distinguish "this
+       * user has no profile" from "this user's profile could not be read", because an
+       * encrypted profile keeps `profileText` empty -- so a decryption failure and an
+       * absent profile both arrive as ''. Off by default; every existing caller keeps
+       * the fallback.
+       */
+      throwOnDecryptFailure?: boolean;
+    } = {}
+  ): Promise<string> {
     const prisma = new PrismaClient();
     
     try {
@@ -59,6 +74,7 @@ export class ProfileManager {
           );
         } catch (error) {
           console.error('Failed to decrypt profile data:', error);
+          if (options.throwOnDecryptFailure) throw error;
           // Fallback to plain text if decryption fails
           profileText = profile.profileText || '';
         }
