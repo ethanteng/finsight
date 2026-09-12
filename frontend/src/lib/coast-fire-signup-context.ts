@@ -252,11 +252,20 @@ export function readCoastFireSignupRef(): string | null {
  * Drop the handover cookie once it has been spent. It expires on its own
  * within minutes; clearing it means a second visit to /getstarted in the same
  * session is an ordinary one rather than a replay of an old link.
+ *
+ * Attribute matching matters: `/coast-fire/continue` sets `Secure` on HTTPS,
+ * and browsers will not delete a Secure cookie unless the clearing write also
+ * includes `Secure`. Omitting it left the bearer token readable on
+ * `/getstarted` for the rest of the ten-minute lifetime after "spend".
  */
 export function clearCoastFireSignupRef(): void {
   if (typeof document === 'undefined') return;
+  const secure =
+    typeof window !== 'undefined' && window.location.protocol === 'https:'
+      ? '; Secure'
+      : '';
   document.cookie =
-    `${COAST_FIRE_REF_COOKIE}=; Path=${COAST_FIRE_REF_COOKIE_PATH}; Max-Age=0; SameSite=Lax`;
+    `${COAST_FIRE_REF_COOKIE}=; Path=${COAST_FIRE_REF_COOKIE_PATH}; Max-Age=0; SameSite=Lax${secure}`;
 }
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
