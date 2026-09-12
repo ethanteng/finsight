@@ -178,8 +178,14 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
           ? readRetirementSignupContext()
           : null,
       );
+      // An emailed `ref` is authoritative for this landing. Skip painting any
+      // same-tab CTA scenario from sessionStorage while the token exchange runs,
+      // so a prior calculator click cannot flash the wrong numbers.
+      const emailedRef = hasCoastFireSignupSource(searchParams)
+        ? readCoastFireSignupRef(searchParams)
+        : null;
       setCoastFireContext(
-        hasCoastFireSignupSource(searchParams)
+        hasCoastFireSignupSource(searchParams) && !emailedRef
           ? readCoastFireSignupContext()
           : null,
       );
@@ -209,7 +215,17 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
   useEffect(() => {
     if (!isTrial || !hasCoastFireSignupSource(searchParams)) return;
     const token = readCoastFireSignupRef(searchParams);
-    if (!token || readCoastFireSignupContext()) return;
+    if (!token) return;
+
+    // Prefer the emailed token over any cached same-tab scenario. A visitor who
+    // stress-tested one run and later opens a different results email in this
+    // tab must see the emailed figures, not the older sessionStorage copy.
+    const existing = readCoastFireSignupContext();
+    if (existing?.sourceToken === token) {
+      setCoastFireContext(existing);
+      if (existing.email) setEmail((current) => current || existing.email!);
+      return;
+    }
 
     const controller = new AbortController();
     void (async () => {
@@ -218,7 +234,11 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
 
       // Kept for the rest of this tab, so a reload or a step backwards in the
       // flow does not lose the scenario and re-ask the backend for it.
-      storeCoastFireSignupContext(resolved.inputs, { email: resolved.email });
+      storeCoastFireSignupContext(resolved.inputs, {
+        email: resolved.email,
+        sourceToken: token,
+        emailedOutcome: resolved.emailedOutcome,
+      });
       setCoastFireContext(readCoastFireSignupContext());
       // Their own address, from the link we sent them. Prefilled, not locked:
       // they can sign up under a different one.
@@ -229,7 +249,7 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
   }, [isTrial, searchParams]);
 
   const coastFireSummary = coastFireContext
-    ? coastFireSignupSummary(coastFireContext.inputs)
+    ? coastFireSignupSummary(coastFireContext.inputs, coastFireContext.emailedOutcome)
     : null;
 
   /*

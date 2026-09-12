@@ -150,7 +150,12 @@ describe('RegisterForm', () => {
       searchParams = new URLSearchParams(`source=${COAST_FIRE_SIGNUP_SOURCE}&ref=${token}`);
       const fetchMock = jest.fn(async () => ({
         ok: true,
-        json: async () => ({ email: 'reader@example.com', inputs: COAST_FIRE_SCENARIO }),
+        json: async () => ({
+          email: 'reader@example.com',
+          inputs: COAST_FIRE_SCENARIO,
+          coastFireNumber: 545_371,
+          hasReachedCoastFire: false,
+        }),
       })) as unknown as typeof fetch;
       global.fetch = fetchMock;
 
@@ -160,6 +165,33 @@ describe('RegisterForm', () => {
       expect(screen.getByLabelText('Email address')).toHaveValue('reader@example.com');
       expect(String((fetchMock as unknown as jest.Mock).mock.calls[0][0]))
         .toContain(`/api/coast-fire/signup-context/${token}`);
+    });
+
+    it('lets an emailed ref override a different scenario left in sessionStorage', async () => {
+      const token = 'c'.repeat(48);
+      // Stale same-tab CTA scenario that must not win over the email link.
+      expect(storeCoastFireSignupContext({
+        ...COAST_FIRE_SCENARIO,
+        currentSavings: 50_000,
+      })).toBe(true);
+      searchParams = new URLSearchParams(`source=${COAST_FIRE_SIGNUP_SOURCE}&ref=${token}`);
+      global.fetch = jest.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          email: 'from-email@example.com',
+          inputs: COAST_FIRE_SCENARIO,
+          coastFireNumber: 545_371,
+          hasReachedCoastFire: false,
+        }),
+      })) as unknown as typeof fetch;
+
+      render(<RegisterForm variant="trial" />);
+
+      const summary = await screen.findByRole('region', { name: 'Your Coast FIRE scenario' });
+      expect(within(summary).getByText('$400K')).toBeInTheDocument();
+      expect(within(summary).queryByText('$50K')).not.toBeInTheDocument();
+      expect(screen.getByLabelText('Email address')).toHaveValue('from-email@example.com');
+      expect(global.fetch).toHaveBeenCalled();
     });
 
     /*

@@ -32,6 +32,17 @@ export interface CoastFireSignupContext {
   inputs: CoastFireInputs;
   /** Prefills the signup form when the scenario came from an emailed link. */
   email?: string;
+  /** Token that produced this context, when it came from an emailed link. */
+  sourceToken?: string;
+  /**
+   * Figures the email actually carried. When present, signup shows these
+   * instead of recomputing, so a later formula change cannot disagree with
+   * the inbox.
+   */
+  emailedOutcome?: {
+    coastFireNumber: number;
+    hasReachedCoastFire: boolean;
+  };
 }
 
 function numberInRange(
@@ -99,20 +110,49 @@ function removeStoredContext(): void {
  * invalid or browser storage is unavailable; navigation must never depend on
  * this succeeding.
  */
+function parseEmailedOutcome(
+  value: unknown,
+): CoastFireSignupContext['emailedOutcome'] | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const outcome = value as Record<string, unknown>;
+  if (
+    !numberInRange(outcome.coastFireNumber, 0, 1_000_000_000_000) ||
+    typeof outcome.hasReachedCoastFire !== 'boolean'
+  ) {
+    return undefined;
+  }
+  return {
+    coastFireNumber: outcome.coastFireNumber,
+    hasReachedCoastFire: outcome.hasReachedCoastFire,
+  };
+}
+
 export function storeCoastFireSignupContext(
   value: CoastFireInputs,
-  options: { email?: string; now?: number } = {},
+  options: {
+    email?: string;
+    now?: number;
+    sourceToken?: string;
+    emailedOutcome?: CoastFireSignupContext['emailedOutcome'];
+  } = {},
 ): boolean {
   if (typeof window === 'undefined') return false;
   const now = options.now ?? Date.now();
   const inputs = parseInputs(value);
   if (!inputs || !numberInRange(now, 0, Number.MAX_SAFE_INTEGER)) return false;
+  if (options.sourceToken && !TOKEN_PATTERN.test(options.sourceToken)) return false;
+  const emailedOutcome = options.emailedOutcome
+    ? parseEmailedOutcome(options.emailedOutcome)
+    : undefined;
+  if (options.emailedOutcome && !emailedOutcome) return false;
 
   const context: CoastFireSignupContext = {
     version: CONTEXT_VERSION,
     savedAt: now,
     inputs,
     ...(options.email ? { email: options.email } : {}),
+    ...(options.sourceToken ? { sourceToken: options.sourceToken } : {}),
+    ...(emailedOutcome ? { emailedOutcome } : {}),
   };
 
   try {
@@ -146,11 +186,19 @@ export function readCoastFireSignupContext(
       return null;
     }
 
+    const emailedOutcome = parseEmailedOutcome(value.emailedOutcome);
+    const sourceToken =
+      typeof value.sourceToken === 'string' && TOKEN_PATTERN.test(value.sourceToken)
+        ? value.sourceToken
+        : undefined;
+
     return {
       version: CONTEXT_VERSION,
       savedAt,
       inputs,
       ...(typeof value.email === 'string' ? { email: value.email } : {}),
+      ...(sourceToken ? { sourceToken } : {}),
+      ...(emailedOutcome ? { emailedOutcome } : {}),
     };
   } catch {
     removeStoredContext();
@@ -182,22 +230,36 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
 export async function fetchCoastFireSignupContext(
   token: string,
   signal?: AbortSignal,
-): Promise<{ inputs: CoastFireInputs; email?: string } | null> {
+): Promise<{
+  inputs: CoastFireInputs;
+  email?: string;
+  emailedOutcome?: CoastFireSignupContext['emailedOutcome'];
+} | null> {
   if (!TOKEN_PATTERN.test(token)) return null;
 
   try {
     const response = await fetch(`${API_URL}/api/coast-fire/signup-context/${token}`, { signal });
     if (!response.ok) return null;
 
-    const body = await response.json() as { inputs?: unknown; email?: unknown };
+    const body = await response.json() as {
+      inputs?: unknown;
+      email?: unknown;
+      coastFireNumber?: unknown;
+      hasReachedCoastFire?: unknown;
+    };
     const inputs = parseInputs(body?.inputs);
     if (!inputs) return null;
+    const emailedOutcome = parseEmailedOutcome({
+      coastFireNumber: body.coastFireNumber,
+      hasReachedCoastFire: body.hasReachedCoastFire,
+    });
 
     return {
       inputs,
       ...(typeof body.email === 'string' && body.email.includes('@')
         ? { email: body.email }
         : {}),
+      ...(emailedOutcome ? { emailedOutcome } : {}),
     };
   } catch {
     return null;
@@ -205,13 +267,25 @@ export async function fetchCoastFireSignupContext(
 }
 
 /**
- * The figures the signup page shows back. Derived rather than stored: the
- * calculator is the single definition of what these seven numbers mean, and a
- * stored copy is a second one waiting to disagree with it.
+ * The figures the signup page shows back.
+ *
+ * Same-tab CTA handoffs recompute from the seven inputs (the calculator is the
+ * definition of those). Emailed handoffs also pass the outcome the message
+ * carried, so a formula change during the token's lifetime cannot show a
+ * different Coast FIRE number than the inbox.
  */
-export function coastFireSignupSummary(inputs: CoastFireInputs): CoastFireResult | null {
+export function coastFireSignupSummary(
+  inputs: CoastFireInputs,
+  emailedOutcome?: CoastFireSignupContext['emailedOutcome'],
+): CoastFireResult | null {
   try {
-    return calculateCoastFire(inputs);
+    const computed = calculateCoastFire(inputs);
+    if (!emailedOutcome) return computed;
+    return {
+      ...computed,
+      coastFireNumber: emailedOutcome.coastFireNumber,
+      hasReachedCoastFire: emailedOutcome.hasReachedCoastFire,
+    };
   } catch {
     return null;
   }
