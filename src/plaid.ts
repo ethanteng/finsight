@@ -250,7 +250,14 @@ const processSecurity = (security: any) => {
     close_price: security.close_price,
     close_price_as_of: security.close_price_as_of,
     iso_currency_code: security.iso_currency_code,
-    unofficial_currency_code: security.unofficial_currency_code
+    unofficial_currency_code: security.unofficial_currency_code,
+    // Plaid sends both of these on every security and we were dropping them.
+    // `cusip` is the only identifier a Treasury line or an employer-plan share
+    // class carries -- they have no ticker -- and `is_cash_equivalent` is the
+    // custodian stating outright what we were otherwise inferring from a fund
+    // name.
+    cusip: security.cusip,
+    is_cash_equivalent: security.is_cash_equivalent
   };
 };
 

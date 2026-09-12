@@ -144,6 +144,27 @@ export interface Security {
   close_price?: number;
   close_price_as_of?: string;
   unofficial_currency_code?: string | null;
+  /**
+   * CUSIP, as the custodian reports it.
+   *
+   * The only identifier many positions have: individual Treasuries and
+   * employer-plan share classes arrive with no ticker at all, so every rule
+   * keyed on one skips them and their name is the sole evidence available.
+   * Carried so that identifier-based resolution -- the Treasury's own auction
+   * data settles nominal-vs-TIPS, which a name cannot -- has something to
+   * resolve. Nothing classifies on it yet.
+   */
+  cusip?: string | null;
+  /**
+   * The custodian's own statement that this position can be treated as cash.
+   *
+   * Worth more than any name heuristic: it is the institution asserting a fact
+   * about the instrument, where "Government Cash Reserves" is us guessing from
+   * a string. Plaid sends `is_cash_equivalent` on the security; SnapTrade sends
+   * `cash_equivalent` on the position, which this file already reads when
+   * reconciling account cash.
+   */
+  is_cash_equivalent?: boolean | null;
 }
 
 export interface Transaction {
@@ -1244,7 +1265,9 @@ export class FinancialDataService {
                     iso_currency_code: security.iso_currency_code,
                     close_price: security.close_price,
                     close_price_as_of: security.close_price_as_of,
-                    unofficial_currency_code: security.unofficial_currency_code
+                    unofficial_currency_code: security.unofficial_currency_code,
+                    cusip: security.cusip,
+                    is_cash_equivalent: security.is_cash_equivalent
                   });
                 }
 
@@ -1858,7 +1881,13 @@ export class FinancialDataService {
                       ticker_symbol: holding.ticker_symbol,
                       iso_currency_code: holding.iso_currency_code,
                       close_price: holding.institution_price,
-                      close_price_as_of: holding.institution_price_as_of
+                      close_price_as_of: holding.institution_price_as_of,
+                      // SnapTrade's name for the same fact Plaid calls
+                      // `is_cash_equivalent`. Read a few lines below to keep
+                      // money-market positions from being double-counted
+                      // against account cash; the classifier deserves it too,
+                      // rather than inferring cash from the fund's name.
+                      is_cash_equivalent: position.cash_equivalent === true
                     });
                   }
                 }

@@ -147,3 +147,42 @@ describe('a mostly modeled holding is not a classification gap', () => {
     expect(mapping.partiallyMappedHoldings).toEqual([]);
   });
 });
+
+describe("the custodian's cash-equivalent flag", () => {
+  it('places a sweep vehicle the provider type alone cannot describe', async () => {
+    // "Mutual Fund" is a wrapper, not an exposure, and this fund's name carries
+    // no cash signal. Plaid's own boolean is the only evidence there is.
+    const mapping = await mapOne('Fidelity Phillips Street Trust', {
+      type: 'mutual fund',
+      is_cash_equivalent: true,
+    });
+
+    expect(mapping.cashValue).toBe(10_000);
+    expect(mapping.holdingExposures[0].method).toBe('provider');
+    expect(mapping.holdingExposures[0].confidence).toBe('high');
+  });
+
+  it('does not let the flag override a declared fixed-income type', async () => {
+    // A bond fund a custodian also treats as liquid is still a bond fund.
+    // Simulating it as cash would understate its return and its risk alike.
+    const mapping = await mapOne('Ultra Short Bond Fund', {
+      type: 'fixed income',
+      is_cash_equivalent: true,
+    });
+
+    expect(mapping.nominalBondsValue).toBe(10_000);
+    expect(mapping.cashValue).toBe(0);
+  });
+
+  it('leaves a security without the flag on its existing path', async () => {
+    // Absent and false both mean "not asserted" -- neither may place a holding.
+    const absent = await mapOne('Large Cap Growth Fund');
+    expect(absent.cashValue).toBe(0);
+    expect(absent.equityGeographyUnresolvedHoldings).toEqual(['Large Cap Growth Fund']);
+
+    const explicitlyFalse = await mapOne('Large Cap Growth Fund', {
+      is_cash_equivalent: false,
+    });
+    expect(explicitlyFalse.cashValue).toBe(0);
+  });
+});

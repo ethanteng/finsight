@@ -85,6 +85,10 @@ export function retirementPortfolioFingerprint(holdings: readonly any[], securit
     name: String(security?.name ?? security?.security_name ?? ''),
     type: String(security?.security_type ?? security?.type ?? ''),
     assetClass: String(security?.asset_class ?? ''),
+    // Classification reads the custodian's cash-equivalent flag, so a feed that
+    // flips it changes the modeled portfolio. Left out of the signature, the
+    // cached analysis would survive a change that invalidates it.
+    cashEquivalent: security?.is_cash_equivalent === true,
   })).sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right)));
   return JSON.stringify({ holdings: normalizedHoldings, securities: normalizedSecurities });
 }

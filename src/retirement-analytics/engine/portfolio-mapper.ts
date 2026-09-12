@@ -249,6 +249,19 @@ function resolveHoldingExposure(
   if (/^CUR:[A-Z]{3}$/.test(ticker)) {
     return { weights: { ...EMPTY_WEIGHTS, cash: 1 }, method: 'provider', confidence: 'high' };
   }
+  // The custodian's own cash-equivalent flag (Plaid `is_cash_equivalent`,
+  // SnapTrade `cash_equivalent`). It outranks every name heuristic below,
+  // because it is the institution asserting a fact about the instrument rather
+  // than us reading a fund title -- and it reaches the sweep vehicles that
+  // arrive typed only as "mutual fund", which no other rule here can place.
+  //
+  // A declared fixed-income type still wins, on the same reasoning that makes
+  // fixed income the tie-breaker in `selectDeclaredAssetType`: a bond fund the
+  // custodian happens to also treat as liquid is a bond fund, and simulating it
+  // as cash would understate both its return and its risk.
+  if (security?.is_cash_equivalent === true && !isDeclaredFixedIncomeType(specificAssetType)) {
+    return { weights: { ...EMPTY_WEIGHTS, cash: 1 }, method: 'provider', confidence: 'high' };
+  }
   if (
     isDeclaredFixedIncomeType(specificAssetType) &&
     (hasTipsNameSignal(specificAssetType) || hasTipsNameSignal(securityName) || isKnownTipsTicker(ticker))
