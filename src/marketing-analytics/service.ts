@@ -527,7 +527,7 @@ export async function getMarketingDashboard(filters: MarketingFilters): Promise<
       }] : []),
     ],
     diagnostics: [
-      { id: 'gtm', name: 'Google Tag Manager', state: 'live', freshness: '2026-09-12', detail: 'Container GTM-PL362L36 v20 publishes calculator results-email conversions and cross-session signup attribution; v19 publishes Coast FIRE calculator completion, v17 publishes the no-card funnel, and v16 publishes retirement-calculator interactions.' },
+      { id: 'gtm', name: 'Google Tag Manager', state: 'live', freshness: '2026-09-12', detail: 'Container GTM-PL362L36 v21 publishes GA4 and Google Ads results-email conversions plus cross-session signup attribution; v19 publishes Coast FIRE calculator completion, v17 publishes the no-card funnel, and v16 publishes retirement-calculator interactions.' },
       { id: 'ga4', name: 'GA4 + BigQuery', state: ga4.state, freshness: ga4.reportEnd, detail: `Property 519498279. ${ga4.detail}` },
       { id: 'contentsquare', name: 'Contentsquare', state: 'verified_snapshot', freshness: VERIFIED_SNAPSHOT.capturedAt, detail: 'Ask Linc project 530048. Runtime API credentials are not present; frustration/error APIs are outside the current account entitlement.' },
       { id: 'ubersuggest', name: 'Ubersuggest', state: 'verified_snapshot', freshness: VERIFIED_SNAPSHOT.capturedAt, detail: 'asklinc.com project verified through the connected account. Query impressions/clicks require Search Console or GA4/Search Console export.' },

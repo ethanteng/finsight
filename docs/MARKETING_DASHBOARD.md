@@ -114,13 +114,14 @@ marketing attribution is persisted with the first-party user.
 
 ## Data sources
 
-- GTM container `GTM-PL362L36`, production version 20, forwards
+- GTM container `GTM-PL362L36`, production version 21, forwards
   `coast_fire_results_emailed`, `retirement_results_emailed`,
   `calculator_results_email_cta_opened`, and the fixed email-path attribution
-  fields on trial events. Version 19 forwards `coast_fire_calculated`; version
-  17 forwards the strict no-card funnel in `TRIAL_SIGNUP_FUNNEL_TRACKING.md`;
-  version 16 forwards the retirement calculator events in
-  `CALCULATOR_ABANDONMENT_TRACKING.md`.
+  fields on trial events to GA4. It also forwards the two successful-email
+  events to their Google Ads lead conversion actions. Version 19 forwards
+  `coast_fire_calculated`; version 17 forwards the strict no-card funnel in
+  `TRIAL_SIGNUP_FUNNEL_TRACKING.md`; version 16 forwards the retirement
+  calculator events in `CALCULATOR_ABANDONMENT_TRACKING.md`.
 - GA4 property `519498279` (`G-0QBF34C7VK`) and its BigQuery export supply
   session acquisition, the journey-specific events, and the strict funnel.
 - PostgreSQL supplies account creation, observed financial connections,
@@ -175,7 +176,7 @@ Known gaps that affect the beachhead decision:
 - original campaign/cohort and a privacy-safe analytics join key are not stored
   on the user, so first-party connection, activation, and payment are not yet
   attributable to Coast FIRE;
-- Coast FIRE completion events from before GTM version 19 and results-email branch events from before version 20 cannot be backfilled;
+- Coast FIRE completion events from before GTM version 19 and results-email branch events from before version 20 cannot be backfilled; Google Ads lead conversion delivery starts with version 21;
 - results-email GA4 events from before September 12, 2026 cannot be backfilled;
 - paid conversion matures after the 30-day trial, so the initial 4–6 week test
   needs cohort-age context; and
