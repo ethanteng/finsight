@@ -27,6 +27,7 @@ import { TRIAL_CTA_MICROCOPY } from "./trial-copy";
 import { SiteFooter, SiteHeader } from "./SiteShell";
 import { CONNECTED_EXAMPLE_ID, RetirementConnectedExample } from "./RetirementConnectedExample";
 import { pushRetirementInteraction, pushRetirementModelRun } from "@/lib/dataLayer";
+import { numericInput, withCommas } from "@/lib/number-input";
 import {
   RETIREMENT_SIGNUP_HREF,
   storeRetirementSignupContext,
@@ -201,21 +202,6 @@ const FORM_FIELD_IDS = new Set([
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
 
 /**
- * Digits and at most one decimal point.
- *
- * The point used to be deleted as it was typed, so `1.2` became `12` and
- * `62.5` became `625`. A visitor meaning 1.2 million got a confident answer
- * about twelve dollars, which is worse than any rejection: nothing on the
- * page disagreed with them. Keeping the point lets the model say it cannot
- * use the figure — money accepts decimals, ages are told they must be whole.
- */
-function numericInput(value: string): string {
-  const cleaned = value.replace(/[^\d.]/g, "");
-  const [whole, ...fraction] = cleaned.split(".");
-  return fraction.length === 0 ? whole : `${whole}.${fraction.join("")}`;
-}
-
-/**
  * What to send for a field the visitor left alone.
  *
  * `undefined` drops the key from the JSON body, which the endpoint reads as
@@ -232,15 +218,6 @@ function submitted(value: string): number | string | undefined {
   if (cleaned === "") return undefined;
   const parsed = Number(cleaned);
   return Number.isFinite(parsed) ? parsed : cleaned;
-}
-
-/** Groups the whole part while a decimal is being typed, so "1200.5" stays "1,200.5". */
-function withCommas(value: string): string {
-  const cleaned = numericInput(value);
-  if (cleaned === "") return "";
-  const [whole, fraction] = cleaned.split(".");
-  const grouped = whole === "" ? "" : Number(whole).toLocaleString("en-US");
-  return fraction === undefined ? grouped : `${grouped}.${fraction}`;
 }
 
 function money(value: number): string {
@@ -935,10 +912,7 @@ function QuickPlanResults({ result, primary }: { result: QuickPlanResult; primar
           * who reads their result and stops never sees it. This is the
           * shortcut, kept with the answer it invites a comparison against.
           */}
-        <a className="qp-jump" href={`#${CONNECTED_EXAMPLE_ID}`}>
-          <span>See what changes with your actual holdings</span>
-          <span className="qp-jump-arrow" aria-hidden="true">↓</span>
-        </a>
+        <JumpToConnectedExample />
       </section>
 
       <section className="shell qp-chart-block">
@@ -1175,10 +1149,7 @@ function QuickPlanRateResults({ result }: { result: QuickPlanResult }) {
           </p>
         </div>
 
-        <a className="qp-jump" href={`#${CONNECTED_EXAMPLE_ID}`}>
-          <span>See what changes with your actual holdings</span>
-          <span className="qp-jump-arrow" aria-hidden="true">↓</span>
-        </a>
+        <JumpToConnectedExample />
       </section>
 
       <section className="shell qp-chart-block">
@@ -1251,6 +1222,51 @@ function QuickPlanRateResults({ result }: { result: QuickPlanResult }) {
         </details>
       </section>
     </>
+  );
+}
+
+/**
+ * The shortcut from a result down to the connect-accounts section.
+ *
+ * Three chevrons cascading downward rather than a labelled pill. The pill sat
+ * directly under the email capture's own button, where two filled controls
+ * read as competing asks; a wordless gesture says "keep going" without
+ * competing with the thing being asked for.
+ *
+ * The name survives for anyone not looking at it — screen readers, and the
+ * link's own title — and the cascade is off under prefers-reduced-motion,
+ * where three static chevrons still point down.
+ */
+function JumpToConnectedExample() {
+  return (
+    <a
+      className="qp-jump"
+      href={`#${CONNECTED_EXAMPLE_ID}`}
+      aria-label="See what changes with your actual holdings"
+      title="See what changes with your actual holdings"
+    >
+      {[0, 1, 2].map((index) => (
+        <svg
+          key={index}
+          className="qp-chevron"
+          style={{ animationDelay: `${index * 0.16}s` }}
+          viewBox="0 0 24 14"
+          width="26"
+          height="15"
+          fill="none"
+          aria-hidden="true"
+          focusable="false"
+        >
+          <path
+            d="M2 2 L12 11 L22 2"
+            stroke="currentColor"
+            strokeWidth="3"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      ))}
+    </a>
   );
 }
 

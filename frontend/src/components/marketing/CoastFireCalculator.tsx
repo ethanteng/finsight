@@ -19,6 +19,7 @@ import {
   type CoastFireResult,
 } from "@/lib/coast-fire";
 import { pushCoastFireCalculated } from "@/lib/dataLayer";
+import { fromGrouped, withCommas } from "@/lib/number-input";
 import {
   COAST_FIRE_SIGNUP_HREF,
   storeCoastFireSignupContext,
@@ -30,8 +31,27 @@ import { TRIAL_CTA_MICROCOPY } from "./trial-copy";
 
 type FormState = Record<keyof CoastFireInputs, string>;
 
+/**
+ * The boxes that hold money, and so hold grouped digits.
+ *
+ * They are text inputs rather than `type="number"`, which cannot show
+ * grouping: `1500000` stays an unreadable run of zeros exactly where someone
+ * most needs to check they typed the figure they meant. Ages and rates stay
+ * numeric, where a spinner is useful and grouping never applies.
+ */
+const MONEY_FIELDS = new Set<keyof CoastFireInputs>([
+  "currentSavings",
+  "annualRetirementSpending",
+  "annualRetirementIncome",
+]);
+
 const INITIAL_FORM: FormState = Object.fromEntries(
-  Object.entries(DEFAULT_COAST_FIRE_INPUTS).map(([key, value]) => [key, String(value)]),
+  Object.entries(DEFAULT_COAST_FIRE_INPUTS).map(([key, value]) => [
+    key,
+    MONEY_FIELDS.has(key as keyof CoastFireInputs)
+      ? withCommas(String(value))
+      : String(value),
+  ]),
 ) as FormState;
 
 /** The decisions a Coast FIRE number raises but cannot answer. */
@@ -56,9 +76,20 @@ function percent(value: number): string {
   return `${Math.round(value * 100)}%`;
 }
 
+/**
+ * Read the form back as numbers.
+ *
+ * The money boxes hold grouped text ("1,500,000"), so they go through
+ * `fromGrouped`; `Number` on that string is NaN, which the calculator would
+ * refuse by name but only after the visitor had watched a correct-looking
+ * figure be rejected.
+ */
 function parseForm(form: FormState): CoastFireInputs {
   return Object.fromEntries(
-    Object.entries(form).map(([key, value]) => [key, Number(value)]),
+    Object.entries(form).map(([key, value]) => [
+      key,
+      MONEY_FIELDS.has(key as keyof CoastFireInputs) ? fromGrouped(value) : Number(value),
+    ]),
   ) as unknown as CoastFireInputs;
 }
 
@@ -165,6 +196,14 @@ function CalculatorField({
   max: number;
   step?: string;
 }) {
+  /*
+   * A money box is text, so it can show grouped digits as they are typed.
+   * That costs the browser's own range checking, which the calculator already
+   * duplicates and states better — it names the figure it refused. Ages and
+   * rates stay numeric, where the spinner earns its place.
+   */
+  const isMoney = MONEY_FIELDS.has(id);
+
   return (
     <div className="cf-field">
       <label htmlFor={id}>{label}</label>
@@ -172,14 +211,15 @@ function CalculatorField({
         {prefix && <span aria-hidden="true">{prefix}</span>}
         <input
           id={id}
-          type="number"
+          type={isMoney ? "text" : "number"}
           inputMode="decimal"
-          min={min}
-          max={max}
-          step={step}
+          autoComplete="off"
+          {...(isMoney ? {} : { min, max, step })}
           required
           value={value}
-          onChange={(event) => onChange(event.target.value)}
+          onChange={(event) =>
+            onChange(isMoney ? withCommas(event.target.value) : event.target.value)
+          }
         />
         {suffix && <span aria-hidden="true">{suffix}</span>}
       </div>
@@ -301,14 +341,18 @@ export function CoastFireCalculator({ children }: { children?: ReactNode }) {
           <p className="cf-private-note">The calculation runs in your browser. No account or email required.</p>
         </form>
 
-        {/*
-          * Sticky while the column holds one card, static once the capture
-          * form joins it: a sticky element taller than the viewport pins its
-          * top and puts the rest out of reach.
-          */}
-        <div className={`cf-result-column${hasSubmitted ? " has-capture" : ""}`} ref={resultRef}>
+        <div className="cf-result-column" ref={resultRef}>
           <ResultPanel result={result} />
-          {hasSubmitted && (
+        </div>
+
+        {/*
+          * Full width beneath both cards rather than stacked under the result.
+          * The form and the result are a matched pair sized as one row; a
+          * third card inside the right column made that column the taller of
+          * the two and turned a balanced row into a lopsided one.
+          */}
+        {hasSubmitted && (
+          <div className="cf-email-band">
             <CoastFireEmailCapture
               // Remount when the submitted scenario changes so a prior "sent"
               // state cannot claim to belong to a newly calculated result.
@@ -323,8 +367,8 @@ export function CoastFireCalculator({ children }: { children?: ReactNode }) {
               ].join(':')}
               result={result}
             />
-          )}
-        </div>
+          </div>
+        )}
       </section>
 
       <section className="shell cf-sensitivity">
