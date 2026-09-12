@@ -23,7 +23,10 @@ Each calculator also has a separate **Email me these results** branch. It is
 not inserted into the linear result-to-product-CTA journey because a recipient
 can return from their inbox in another session or on another device. The branch
 shows settled GA4 sessions beside live first-party lead delivery, continuation,
-and normalized-email account matches.
+and normalized-email account matches. The two sources intentionally use
+different cutoffs: GA4 ends on its latest settled daily-export date, while the
+first-party lead window includes the current calendar day through the moment
+the report is requested.
 
 ## Current state and launch contract
 

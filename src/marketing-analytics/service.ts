@@ -1,6 +1,7 @@
 import { getPrismaClient } from '../prisma-client';
 import {
   calculatorLeadSummary,
+  liveCalculatorLeadPeriod,
   unavailableCalculatorLeadSummary,
 } from '../services/calculator-lead-report';
 import { aggregateTrialFunnel } from './funnel';
@@ -338,8 +339,12 @@ export async function getMarketingDashboard(filters: MarketingFilters): Promise<
       note: 'The first-party calculator-run store could not be read. These values are unavailable, not zero.',
     };
   }
-  const leadPeriodStart = new Date(`${displayedPeriod.start}T00:00:00.000Z`);
-  const leadPeriodEnd = new Date(`${addDays(displayedPeriod.end, 1)}T00:00:00.000Z`);
+  // Lead delivery is first-party data and is available immediately. Do not
+  // truncate it to the settled GA4 daily-export window.
+  const {
+    periodStart: leadPeriodStart,
+    periodEndExclusive: leadPeriodEnd,
+  } = liveCalculatorLeadPeriod(filters.days);
   let coastFireLeads;
   let retirementLeads;
   try {
