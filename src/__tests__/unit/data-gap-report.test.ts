@@ -1,6 +1,10 @@
 import { describe, expect, it } from '@jest/globals';
 import { aggregateDataGaps, type AnalysisRow } from '../../services/data-gap-report';
 
+/**
+ * An analysis from before reasons were recorded: it reports the whole excluded
+ * set as one `unmappedHoldings` list and nothing about why.
+ */
 const analysis = (opts: {
   unmapped?: string[];
   unsupported?: string[];
@@ -14,6 +18,39 @@ const analysis = (opts: {
     proxyUsage: {
       unmappedHoldings: opts.unmapped ?? [],
       unsupportedHoldings: opts.unsupported ?? [],
+      usListingFallbackHoldings: opts.listingFallback ?? [],
+    },
+  },
+});
+
+/**
+ * An analysis from the current engine, which partitions the excluded set by
+ * the reason recorded when each holding was resolved.
+ */
+const splitAnalysis = (opts: {
+  unrecognized?: string[];
+  equityGeography?: string[];
+  targetDateUnregistered?: string[];
+  unsupported?: string[];
+  partiallyMapped?: string[];
+  listingFallback?: string[];
+  unmodeledValue?: number;
+  valueCoverage?: number;
+}) => ({
+  dataQuality: {
+    unmodeledValue: opts.unmodeledValue ?? 0,
+    valueCoverage: opts.valueCoverage ?? 1,
+    proxyUsage: {
+      unmappedHoldings: [
+        ...(opts.unrecognized ?? []),
+        ...(opts.equityGeography ?? []),
+        ...(opts.targetDateUnregistered ?? []),
+      ],
+      unrecognizedHoldings: opts.unrecognized ?? [],
+      equityGeographyUnresolvedHoldings: opts.equityGeography ?? [],
+      targetDateUnregisteredHoldings: opts.targetDateUnregistered ?? [],
+      unsupportedHoldings: opts.unsupported ?? [],
+      partiallyMappedHoldings: opts.partiallyMapped ?? [],
       usListingFallbackHoldings: opts.listingFallback ?? [],
     },
   },
@@ -345,5 +382,93 @@ describe('data gap report', () => {
       securities: [],
       coverage: { totalUnmodeledValue: 0, worstValueCoverage: null, medianValueCoverage: null },
     });
+  });
+});
+
+describe('why a security is listed', () => {
+  it('reports the recorded reason instead of one undifferentiated bucket', () => {
+    const report = aggregateDataGaps([
+      row('a', '2026-09-01', splitAnalysis({
+        unrecognized: ['Guaranteed Interest Account'],
+        equityGeography: ['Large Cap Growth Fund'],
+        targetDateUnregistered: ['UC PATHWAY 2040'],
+        partiallyMapped: ['State St Target Ret 2030 SL SF CL III'],
+      })),
+    ]);
+
+    const byLabel = new Map(report.securities.map(security => [security.label, security.category]));
+    expect(byLabel.get('Guaranteed Interest Account')).toBe('unrecognized');
+    expect(byLabel.get('Large Cap Growth Fund')).toBe('equity-geography-unresolved');
+    expect(byLabel.get('UC PATHWAY 2040')).toBe('target-date-unregistered');
+    expect(byLabel.get('State St Target Ret 2030 SL SF CL III')).toBe('partially-mapped');
+  });
+
+  it('does not count a holding twice when the split and the whole are both present', () => {
+    // `unmappedHoldings` remains the union, so reading it alongside the split
+    // would report every excluded holding under two categories at once.
+    const report = aggregateDataGaps([
+      row('a', '2026-09-01', splitAnalysis({ equityGeography: ['Small Cap Fund'] })),
+    ]);
+
+    expect(report.securities).toHaveLength(1);
+    expect(report.securities[0]).toMatchObject({
+      label: 'Small Cap Fund',
+      category: 'equity-geography-unresolved',
+      userCount: 1,
+    });
+  });
+
+  it('says the reason is unrecorded for an analysis that predates the split', () => {
+    // Claiming "no asset class resolved" for these would assert something the
+    // analysis never recorded; the finding is the analysis's age.
+    const report = aggregateDataGaps([
+      row('a', '2026-08-01', analysis({ unmapped: ['UST 3.5% 02/15/2029'] })),
+    ]);
+
+    expect(report.securities[0]).toMatchObject({
+      label: 'UST 3.5% 02/15/2029',
+      category: 'unmapped',
+    });
+  });
+
+  it('reports a holding whose reason was not recorded as unattributed', () => {
+    // An analysis re-summarized from exposure records that predate the split
+    // can carry reasons for some holdings and not others. Filing the rest
+    // under "no asset class resolved" would assert something it never said.
+    const report = aggregateDataGaps([
+      row('a', '2026-09-01', {
+        dataQuality: {
+          unmodeledValue: 0,
+          valueCoverage: 1,
+          proxyUsage: {
+            unmappedHoldings: ['Small Cap Fund', 'EQ/Com Stck Index'],
+            unrecognizedHoldings: [],
+            equityGeographyUnresolvedHoldings: ['Small Cap Fund'],
+            targetDateUnregisteredHoldings: [],
+            unsupportedHoldings: [],
+            usListingFallbackHoldings: [],
+          },
+        },
+      }),
+    ]);
+
+    const byLabel = new Map(report.securities.map(security => [security.label, security.category]));
+    expect(byLabel.get('Small Cap Fund')).toBe('equity-geography-unresolved');
+    expect(byLabel.get('EQ/Com Stck Index')).toBe('unmapped');
+    expect(report.securities).toHaveLength(2);
+  });
+
+  it('keeps one security separate per reason across users', () => {
+    // Two users can hold the same fund through feeds of different quality.
+    // Merging the rows would hide that one of them is already resolvable.
+    const report = aggregateDataGaps([
+      row('a', '2026-09-01', splitAnalysis({ equityGeography: ['Global Equity Fund'] })),
+      row('b', '2026-09-02', splitAnalysis({ unrecognized: ['Global Equity Fund'] })),
+    ]);
+
+    expect(report.securities.map(security => security.category).sort()).toEqual([
+      'equity-geography-unresolved',
+      'unrecognized',
+    ]);
   });
 });

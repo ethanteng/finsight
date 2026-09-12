@@ -19,12 +19,34 @@ import { isProviderIdentifierLabel } from './holding-label';
  * who has never run a retirement analysis is invisible here.
  */
 
-/** How a security failed to reach the simulation. */
+/**
+ * How a security failed to reach the simulation.
+ *
+ * The categories exist to separate remedies, not to grade severity. Three of
+ * them are fixed by sourcing metadata we do not have; `equity-geography-
+ * unresolved` is fixed by country data for a fund whose asset class we already
+ * read; `target-date-unregistered` is fixed by writing a registry row
+ * ourselves; and `unsupported` is not a metadata problem at all -- the security
+ * is classified correctly and the engine simply has no return series for its
+ * sleeve. Collapsing them, as a single `unmapped` bucket did, produced a list
+ * that could not be acted on.
+ */
 export type DataGapCategory =
-  /** No asset class or equity geography could be resolved at all. */
+  /** Nothing about the security could be read. */
+  | 'unrecognized'
+  /** Asset class resolved as equity; only the US/international split is missing. */
+  | 'equity-geography-unresolved'
+  /** Recognized as a target-date fund with no row in the allocation registry. */
+  | 'target-date-unregistered'
+  /**
+   * Analysed before reasons were recorded, so why it was excluded is unknown.
+   * Not a finding about the security -- a finding about the analysis's age.
+   */
   | 'unmapped'
   /** Recognized, but the engine has no historical return series for it. */
   | 'unsupported'
+  /** Mostly simulated; a known sleeve within it is withheld. */
+  | 'partially-mapped'
   /** Placed as US equity from an exchange-style ticker, lacking country data. */
   | 'us-listing-fallback';
 
@@ -210,9 +232,33 @@ export function aggregateDataGaps(rows: readonly AnalysisRow[]): DataGapReport {
     if (!quality) continue;
     const proxyUsage = quality.proxyUsage ?? {};
 
+    // The three reason lists are a partition of `unmappedHoldings`, so reading
+    // both as-is would report every excluded holding under two categories.
+    // Take the reasons that were recorded, and report whatever is left over
+    // under `unmapped` -- which says only that the reason is unknown.
+    //
+    // Decided per label rather than per analysis, because the two cases are
+    // not the same shape. An analysis that predates the split records no
+    // reasons at all and leaves its whole bucket over; one re-summarized from
+    // exposure records that predate the split can record reasons for some
+    // holdings and not others, and inferring a reason for the rest from the
+    // presence of the lists would put words in its mouth.
+    const reasonBuckets: Array<[DataGapCategory, string[]]> = [
+      ['unrecognized', labelsOf(proxyUsage.unrecognizedHoldings)],
+      ['equity-geography-unresolved', labelsOf(proxyUsage.equityGeographyUnresolvedHoldings)],
+      ['target-date-unregistered', labelsOf(proxyUsage.targetDateUnregisteredHoldings)],
+    ];
+    const attributed = new Set(
+      reasonBuckets.flatMap(([, labels]) => labels).map(normalizeLabel)
+    );
+    const unattributed = labelsOf(proxyUsage.unmappedHoldings)
+      .filter(label => !attributed.has(normalizeLabel(label)));
+
     const buckets: Array<[DataGapCategory, string[]]> = [
-      ['unmapped', labelsOf(proxyUsage.unmappedHoldings)],
+      ...reasonBuckets,
+      ['unmapped', unattributed],
       ['unsupported', labelsOf(proxyUsage.unsupportedHoldings)],
+      ['partially-mapped', labelsOf(proxyUsage.partiallyMappedHoldings)],
       ['us-listing-fallback', labelsOf(proxyUsage.usListingFallbackHoldings)],
     ];
 

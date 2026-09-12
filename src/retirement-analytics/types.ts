@@ -275,7 +275,34 @@ export interface ResolvedHoldingExposure {
   tipsAllocationStatus?: 'exact' | 'lower-bound';
   /** Recognition result retained even when no sourced allocation is available. */
   targetDateIdentity?: TargetDateFundIdentity;
+  /**
+   * Why this holding resolved to no modeled exposure.
+   *
+   * Recorded at resolution time, where the distinction is actually known.
+   * Reconstructing it downstream from the empty weights alone is impossible,
+   * and collapsing every case into one "unresolved" bucket has been telling
+   * operators to go and source data for holdings whose asset class we already
+   * read correctly and whose only missing fact is geography -- or, for a
+   * target-date fund, a registry row we write ourselves.
+   *
+   * Absent on every holding that produced modeled exposure.
+   */
+  unresolvedReason?: UnresolvedExposureReason;
 }
+
+/**
+ * The distinct ways a holding reaches zero modeled exposure. Each names a
+ * different remedy, which is the whole reason they are kept apart:
+ * - `unrecognized` -- no signal at all; needs security metadata we do not have.
+ * - `equity-geography-unresolved` -- the asset class *is* resolved as equity;
+ *   only the US/international split is missing, so the fix is country data.
+ * - `target-date-unregistered` -- recognized as a target-date fund whose
+ *   published allocation is simply not in our registry yet.
+ */
+export type UnresolvedExposureReason =
+  | 'unrecognized'
+  | 'equity-geography-unresolved'
+  | 'target-date-unregistered';
 
 export interface PortfolioMapping {
   /** Signed net exposure weights; shorts can make a sleeve negative or another exceed one. */
@@ -313,7 +340,17 @@ export interface PortfolioMapping {
   holdingExposures: ResolvedHoldingExposure[];
   mappingConfidence: 'high' | 'medium' | 'low'; // based on how well holdings map
   unmappedHoldings: string[]; // labels whose asset class or equity geography could not be resolved
-  unsupportedHoldings: string[]; // labels with a known sleeve but no supported return series
+  /**
+   * `unmappedHoldings` split by why it failed, so a consumer can tell an
+   * unreadable security apart from an equity fund missing only its country
+   * split. Every label in these three appears in `unmappedHoldings`; they
+   * partition it rather than extending it.
+   */
+  unrecognizedHoldings: string[];
+  equityGeographyUnresolvedHoldings: string[];
+  targetDateUnregisteredHoldings: string[];
+  /** Labels with a known sleeve, no supported return series, and no modeled value at all. */
+  unsupportedHoldings: string[];
   partiallyMappedHoldings: string[]; // labels with both supported and unsupported sleeves
   mappingMethod: 'direct' | 'inferred' | 'proxy'; // how mapping was determined
   /**
@@ -439,7 +476,22 @@ export interface DataQualityReport {
     internationalEquityProxy: string; // exact historical series/proxy used
     bondsProxy: string; // e.g., "AGG"
     unmappedHoldings: string[];
+    /**
+     * `unmappedHoldings` partitioned by why the holding produced no modeled
+     * exposure, so a reader can tell a security we could not read at all from
+     * an equity fund missing only its country split, or a target-date fund
+     * missing only a registry row. Each names a different remedy.
+     *
+     * Optional because analyses persisted before this split exist and cannot
+     * be back-filled: their reasons were never recorded. A consumer that finds
+     * them absent should say the reason is unrecorded rather than assume one.
+     */
+    unrecognizedHoldings?: string[];
+    equityGeographyUnresolvedHoldings?: string[];
+    targetDateUnregisteredHoldings?: string[];
     unsupportedHoldings: string[];
+    /** Holdings with modeled sleeves alongside withheld ones; mostly simulated. */
+    partiallyMappedHoldings?: string[];
     usListingFallbackHoldings: string[];
     mappingMethod: string;
   };

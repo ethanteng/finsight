@@ -118,7 +118,12 @@ export function calculateDataQuality(
       internationalEquityProxy: 'Kenneth French EAFE-plus-Canada market return history',
       bondsProxy: 'Shiller synthetic 10-year US government-bond total-return history',
       unmappedHoldings: resolvedMapping.unmappedHoldings,
+      unrecognizedHoldings: resolvedMapping.unrecognizedHoldings ?? [],
+      equityGeographyUnresolvedHoldings:
+        resolvedMapping.equityGeographyUnresolvedHoldings ?? [],
+      targetDateUnregisteredHoldings: resolvedMapping.targetDateUnregisteredHoldings ?? [],
       unsupportedHoldings: resolvedMapping.unsupportedHoldings ?? [],
+      partiallyMappedHoldings: resolvedMapping.partiallyMappedHoldings ?? [],
       usListingFallbackHoldings: Array.from(new Set(
         resolvedMapping.holdingExposures
           .filter(exposure => exposure.usedUsListingFallback && Math.abs(exposure.value) > 0.005)

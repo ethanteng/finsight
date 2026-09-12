@@ -8,6 +8,7 @@ import {
   PortfolioMapping,
   ResolvedHoldingExposure,
   SecurityMetadata,
+  UnresolvedExposureReason,
   UnsupportedAssetClass,
 } from '../types';
 import { DataProviderFactory } from '../data/data-provider-factory';
@@ -103,6 +104,7 @@ interface HoldingResolutionDraft {
   usedUsListingFallback?: boolean;
   targetDateIdentity?: TargetDateFundIdentity;
   targetAllocation?: TargetDateFundAllocation;
+  unresolvedReason?: UnresolvedExposureReason;
 }
 
 function weightTotal(weights: HoldingExposureWeights): number {
@@ -216,6 +218,7 @@ function resolveHoldingExposure(
         method: 'name-inference',
         confidence: 'low',
         targetDateIdentity,
+        unresolvedReason: 'target-date-unregistered',
       };
     }
     return {
@@ -325,6 +328,7 @@ function resolveHoldingExposure(
         weights: copyWeights(EMPTY_WEIGHTS),
         method: 'provider',
         confidence: 'low',
+        unresolvedReason: 'equity-geography-unresolved',
       };
     }
     if (geographicFocus === 'us') {
@@ -343,6 +347,7 @@ function resolveHoldingExposure(
         weights: copyWeights(EMPTY_WEIGHTS),
         method: 'name-inference',
         confidence: 'low',
+        unresolvedReason: 'equity-geography-unresolved',
       };
     }
     if (hasUsListingFallbackEvidence(holding, security, fmpMetadata, ticker, securityName)) {
@@ -355,7 +360,12 @@ function resolveHoldingExposure(
     }
     // A generic equity declaration is not geography evidence. Funds and
     // securities without a qualifying listing remain unavailable.
-    return { weights: copyWeights(EMPTY_WEIGHTS), method: 'provider', confidence: 'low' };
+    return {
+      weights: copyWeights(EMPTY_WEIGHTS),
+      method: 'provider',
+      confidence: 'low',
+      unresolvedReason: 'equity-geography-unresolved',
+    };
   }
 
   // No provider exposure: infer from the label, in specificity order.
@@ -400,10 +410,22 @@ function resolveHoldingExposure(
     if (geography === 'us') {
       return { weights: { ...EMPTY_WEIGHTS, usEquity: 1 }, method: 'name-inference', confidence: 'medium' };
     }
-    return { weights: copyWeights(EMPTY_WEIGHTS), method: 'name-inference', confidence: 'low' };
+    // The name reads as equity ("Large Cap Growth Fund"), or the ticker is
+    // exchange-shaped; only the US/international split is missing.
+    return {
+      weights: copyWeights(EMPTY_WEIGHTS),
+      method: 'name-inference',
+      confidence: 'low',
+      unresolvedReason: 'equity-geography-unresolved',
+    };
   }
 
-  return { weights: copyWeights(EMPTY_WEIGHTS), method: 'name-inference', confidence: 'low' };
+  return {
+    weights: copyWeights(EMPTY_WEIGHTS),
+    method: 'name-inference',
+    confidence: 'low',
+    unresolvedReason: 'unrecognized',
+  };
 }
 
 /**
@@ -461,6 +483,9 @@ export function summarizeHoldingExposures(
   let unsupportedValue = 0;
   let unrecognizedValue = 0;
   const unmappedHoldings: string[] = [];
+  const unrecognizedHoldings: string[] = [];
+  const equityGeographyUnresolvedHoldings: string[] = [];
+  const targetDateUnregisteredHoldings: string[] = [];
   const unsupportedHoldings: string[] = [];
   const partiallyMappedHoldings: string[] = [];
 
@@ -507,14 +532,39 @@ export function summarizeHoldingExposures(
     ) {
       proxiedValue += Math.abs(exposureMappedValue);
     }
-    if (exposureUnsupportedValue > 0.005) {
+    if (exposureUnmodeledValue > 0.005 && exposureMappedValue > 0.005) {
+      partiallyMappedHoldings.push(exposure.label);
+    }
+    // Both lists now require that nothing at all was modeled. A holding with
+    // modeled sleeves alongside withheld ones is a partial exclusion, not a
+    // security we failed to place: a registry target-date fund whose TIPS and
+    // commodity sleeves are withheld is still ninety-odd percent simulated.
+    // Reporting the two in one bucket sent operators to go and source
+    // allocations the registry already holds.
+    if (exposureUnsupportedValue > 0.005 && exposureMappedValue <= 0.005) {
       unsupportedHoldings.push(exposure.label);
     }
     if (exposureUnrecognizedValue > 0.005 && exposureMappedValue <= 0.005) {
       unmappedHoldings.push(exposure.label);
-    }
-    if (exposureUnmodeledValue > 0.005) {
-      if (exposureMappedValue > 0.005) partiallyMappedHoldings.push(exposure.label);
+      // Partitioned by the reason recorded at resolution time. An exposure
+      // record written before reasons existed carries none, and is left out of
+      // all three rather than filed under `unrecognized`: asserting we could
+      // read nothing about a security is exactly the over-claim this split
+      // exists to remove. Such a label still appears in `unmappedHoldings`,
+      // where a reader finds it with no reason attached -- which is true.
+      switch (exposure.unresolvedReason) {
+        case 'equity-geography-unresolved':
+          equityGeographyUnresolvedHoldings.push(exposure.label);
+          break;
+        case 'target-date-unregistered':
+          targetDateUnregisteredHoldings.push(exposure.label);
+          break;
+        case 'unrecognized':
+          unrecognizedHoldings.push(exposure.label);
+          break;
+        default:
+          break;
+      }
     }
   }
 
@@ -635,6 +685,9 @@ export function summarizeHoldingExposures(
     holdingExposures,
     mappingConfidence,
     unmappedHoldings,
+    unrecognizedHoldings,
+    equityGeographyUnresolvedHoldings,
+    targetDateUnregisteredHoldings,
     unsupportedHoldings,
     partiallyMappedHoldings,
     mappingMethod: hasInference ? 'inferred' : hasRegistry ? 'proxy' : 'direct',
@@ -742,6 +795,9 @@ export async function mapPortfolioToAssetBasket(
       targetDateIdentity: draft.targetDateIdentity
         ? { ...draft.targetDateIdentity }
         : undefined,
+      // Only meaningful where nothing was modeled; a draft that resolved
+      // exposure never carries one.
+      unresolvedReason: classifiedFraction > 0 ? undefined : draft.unresolvedReason,
     };
     holdingExposures.push(resolution);
   }
