@@ -487,6 +487,16 @@ describe('FinancialDataService investment persistence safeguards', () => {
     await expect((service as any).fetchHomeValue('user-123')).rejects.toThrow('database unavailable');
   });
 
+  it('rejects when ProfileManager fails and plaintext profileText is empty', async () => {
+    // Encrypted profiles store nothing in profileText. Falling back to an empty
+    // string after a decrypt failure must not look like "no home on record".
+    mockGetOriginalProfile.mockRejectedValue(new Error('decrypt failed'));
+    (mockPrisma.userProfile.findUnique as any).mockResolvedValue({ profileText: '' });
+    const service = new FinancialDataService();
+
+    await expect((service as any).fetchHomeValue('user-123')).rejects.toThrow('decrypt failed');
+  });
+
   it('still reports no home for a user who has no profile at all', async () => {
     // The rethrow above must not turn an ordinary absence into a failure.
     mockGetOriginalProfile.mockResolvedValue('');
