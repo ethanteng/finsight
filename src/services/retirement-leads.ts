@@ -71,7 +71,7 @@ export async function recordRetirementLead(params: {
         survivalRate: params.outcome.survivalRate,
         sequencesTested: params.outcome.sequencesTested,
         sequencesSurvived: params.outcome.sequencesSurvived,
-        projectedPortfolioAtRetiremt: params.outcome.projectedPortfolioAtRetirement,
+        projectedPortfolioAtRetirement: params.outcome.projectedPortfolioAtRetirement,
         firstYearWithdrawalRate: params.outcome.firstYearWithdrawalRate,
         expiresAt: leadExpiresAt(now),
       } as never,
@@ -139,7 +139,7 @@ export async function readRetirementLead(
         survivalRate: lead.survivalRate,
         sequencesTested: lead.sequencesTested,
         sequencesSurvived: lead.sequencesSurvived,
-        projectedPortfolioAtRetirement: lead.projectedPortfolioAtRetiremt,
+        projectedPortfolioAtRetirement: lead.projectedPortfolioAtRetirement,
         firstYearWithdrawalRate: lead.firstYearWithdrawalRate,
       },
     };

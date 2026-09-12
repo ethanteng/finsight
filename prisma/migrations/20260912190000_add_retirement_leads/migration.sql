@@ -15,7 +15,7 @@ CREATE TABLE "retirement_leads" (
     "survivalRate" DOUBLE PRECISION NOT NULL,
     "sequencesTested" INTEGER NOT NULL,
     "sequencesSurvived" INTEGER NOT NULL,
-    "projectedPortfolioAtRetiremt" DOUBLE PRECISION NOT NULL,
+    "projectedPortfolioAtRetirement" DOUBLE PRECISION NOT NULL,
     "firstYearWithdrawalRate" DOUBLE PRECISION NOT NULL,
     "emailSent" BOOLEAN NOT NULL DEFAULT false,
     "mailerliteSynced" BOOLEAN NOT NULL DEFAULT false,

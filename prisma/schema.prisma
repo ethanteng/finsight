@@ -770,11 +770,14 @@ model RetirementLead {
   allocation             String
 
   /// What the email said.
-  survivalRate                 Float
-  sequencesTested              Int
-  sequencesSurvived            Int
-  projectedPortfolioAtRetiremt Float
-  firstYearWithdrawalRate      Float
+  survivalRate                  Float
+  sequencesTested               Int
+  sequencesSurvived             Int
+  /// Spelled out, unlike the truncated column on `retirement_quickplan_runs`.
+  /// That one is deployed and renaming it is a migration for no benefit; this
+  /// table is new, so there is no reason to inherit the typo.
+  projectedPortfolioAtRetirement Float
+  firstYearWithdrawalRate       Float
 
   /// Bookkeeping for the acquisition experiment, never a gate on the response.
   emailSent        Boolean @default(false)
