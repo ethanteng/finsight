@@ -426,41 +426,42 @@
 /*
  * The jump from the result to the connect-accounts section.
  *
- * It animates because it has to compete with a chart the visitor is already
- * reading: a slow bob on the arrow and a breathing ring on the pill, both
- * cheap (transform and box-shadow only, no layout) and both off under
- * prefers-reduced-motion, where the link still reads as a link.
+ * Secondary, deliberately. It used to be a lime pill with a breathing ring,
+ * because it sat alone under the figures and had to compete with a chart the
+ * visitor was already reading. The email capture now sits between the two, and
+ * a second lime pill directly under that one read as a competing primary
+ * action rather than the quieter alternative it is. So: outlined, not filled,
+ * and still no question that it is a control.
+ *
+ * The arrow keeps its bob — it is what says "further down this page" — and is
+ * still off under prefers-reduced-motion.
  */
 .quickplan-page .qp-jump {
   display: inline-flex;
   align-items: center;
   gap: 12px;
-  margin-top: 26px;
-  padding: 15px 24px;
+  /* Clears the email capture card above it rather than a row of figures. */
+  margin-top: 24px;
+  padding: 13px 22px;
+  border: 1px solid rgba(16, 35, 25, 0.25);
   border-radius: 999px;
-  background: var(--lime);
+  background: transparent;
   color: var(--ink);
-  font-size: 15px;
-  font-weight: 800;
+  font-size: 14.5px;
+  font-weight: 700;
   letter-spacing: -0.01em;
-  animation: qp-jump-ring 2.6s ease-in-out infinite;
+  transition: border-color 0.15s, background-color 0.15s;
 }
 
 .quickplan-page .qp-jump:hover {
-  animation-play-state: paused;
-  box-shadow: 0 0 0 6px rgba(120, 175, 60, 0.22);
+  border-color: var(--ink);
+  background: rgba(16, 35, 25, 0.05);
 }
 
 .quickplan-page .qp-jump-arrow {
-  font-size: 17px;
+  font-size: 16px;
   line-height: 1;
   animation: qp-jump-bob 1.5s ease-in-out infinite;
-}
-
-@keyframes qp-jump-ring {
-  0%, 68%, 100% { box-shadow: 0 0 0 0 rgba(120, 175, 60, 0); }
-  20% { box-shadow: 0 0 0 9px rgba(120, 175, 60, 0.26); }
-  46% { box-shadow: 0 0 0 16px rgba(120, 175, 60, 0); }
 }
 
 @keyframes qp-jump-bob {
@@ -469,7 +470,6 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .quickplan-page .qp-jump,
   .quickplan-page .qp-jump-arrow {
     animation: none;
   }
@@ -659,16 +659,12 @@
 /* --------------------------------------------- the results email capture */
 
 /*
- * Sits between the scenario comparison and the methodology, on the page's own
- * paper-and-rule card treatment rather than anything louder: it is an input,
- * and every other input on this page is on paper.
+ * Sits inside the results block, directly under the four figures, on the
+ * page's own paper-and-rule card treatment rather than anything louder: it is
+ * an input, and every other input on this page is on paper.
  */
-.quickplan-page .qp-email-section {
-  padding-block: 44px;
-  border-top: 1px solid rgba(16, 35, 25, 0.12);
-}
-
 .quickplan-page .qp-email-capture {
+  margin-top: 28px;
   max-width: 620px;
   padding: 30px 32px;
   border: 1px solid #bfc7ba;
