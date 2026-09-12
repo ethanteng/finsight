@@ -308,7 +308,22 @@ export function CoastFireCalculator({ children }: { children?: ReactNode }) {
           */}
         <div className={`cf-result-column${hasSubmitted ? " has-capture" : ""}`} ref={resultRef}>
           <ResultPanel result={result} />
-          {hasSubmitted && <CoastFireEmailCapture result={result} />}
+          {hasSubmitted && (
+            <CoastFireEmailCapture
+              // Remount when the submitted scenario changes so a prior "sent"
+              // state cannot claim to belong to a newly calculated result.
+              key={[
+                result.currentAge,
+                result.retirementAge,
+                result.currentSavings,
+                result.annualRetirementSpending,
+                result.annualRetirementIncome,
+                result.realReturnRate,
+                result.withdrawalRate,
+              ].join(':')}
+              result={result}
+            />
+          )}
         </div>
       </section>
 
