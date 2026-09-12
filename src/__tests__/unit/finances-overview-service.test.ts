@@ -145,6 +145,119 @@ describe('finances overview contract', () => {
     expect(codes).not.toContain('optional-sources-unavailable');
   });
 
+  it('names the account behind a holdings coverage gap', () => {
+    const overview = buildFinancesOverview({
+      snapshot: {
+        ...snapshot,
+        quality: { unavailableSourceIds: ['account:brokerage:holdings-coverage'] },
+      },
+    });
+
+    const message = overview.warnings.find(warning => warning.code === 'incomplete-holdings-coverage')?.message;
+    expect(message).toContain('1 investment account (Brokerage) reports a balance');
+  });
+
+  it('names every account behind several coverage gaps', () => {
+    const overview = buildFinancesOverview({
+      snapshot: {
+        ...snapshot,
+        accounts: [
+          ...snapshot.accounts,
+          { account_id: 'ira', name: 'Individual', institution: 'Vanguard', type: 'investment', subtype: 'ira', source: 'plaid', balance: { current: 10_000, iso_currency_code: 'USD' } },
+        ],
+        quality: {
+          unavailableSourceIds: ['account:brokerage:holdings-coverage', 'account:ira:holdings-coverage'],
+        },
+      },
+    });
+
+    const message = overview.warnings.find(warning => warning.code === 'incomplete-holdings-coverage')?.message;
+    expect(message).toContain('2 investment accounts (Brokerage and Individual (Vanguard)) report balances');
+  });
+
+  it('uses the live account name in a coverage gap warning', () => {
+    const overview = buildFinancesOverview({
+      snapshot: {
+        ...snapshot,
+        quality: { unavailableSourceIds: ['account:brokerage:holdings-coverage'] },
+      },
+      accountNames: new Map([['brokerage', 'Taxable brokerage']]),
+    });
+
+    expect(overview.warnings.find(warning => warning.code === 'incomplete-holdings-coverage')?.message)
+      .toContain('(Taxable brokerage)');
+  });
+
+  it('keeps the bare count when a coverage gap names an account the snapshot does not carry', () => {
+    const overview = buildFinancesOverview({
+      snapshot: {
+        ...snapshot,
+        quality: { unavailableSourceIds: ['account:gone:holdings-coverage'] },
+      },
+    });
+
+    const message = overview.warnings.find(warning => warning.code === 'incomplete-holdings-coverage')?.message;
+    expect(message).toContain('1 investment account reports a balance');
+    expect(message).not.toContain('gone');
+  });
+
+  it('names the account behind a position-derived balance', () => {
+    const overview = buildFinancesOverview({
+      snapshot: {
+        ...snapshot,
+        quality: { unavailableSourceIds: ['account:brokerage:balance-derived'] },
+      },
+    });
+
+    expect(overview.warnings.find(warning => warning.code === 'derived-account-balance')?.message)
+      .toContain('1 investment account (Brokerage) has a balance');
+  });
+
+  it('names an unavailable optional source', () => {
+    const overview = buildFinancesOverview({
+      snapshot: { ...snapshot, quality: { unavailableSourceIds: ['home-value'] } },
+    });
+
+    expect(overview.warnings.find(warning => warning.code === 'optional-sources-unavailable')?.message)
+      .toBe('1 optional data source was unavailable (Home value).');
+  });
+
+  it('names a provider advisory by the integration when its suffix is not an account', () => {
+    const overview = buildFinancesOverview({
+      snapshot: {
+        ...snapshot,
+        quality: { unavailableSourceIds: ['snaptrade:advisory:token-1', 'home-value'] },
+      },
+    });
+
+    expect(overview.warnings.find(warning => warning.code === 'optional-sources-unavailable')?.message)
+      .toBe('2 optional data sources were unavailable (SnapTrade and Home value).');
+  });
+
+  it('marks the list as partial when two sources share one name', () => {
+    const overview = buildFinancesOverview({
+      snapshot: {
+        ...snapshot,
+        quality: { unavailableSourceIds: ['plaid:advisory:token-1', 'plaid:advisory:token-2'] },
+      },
+    });
+
+    expect(overview.warnings.find(warning => warning.code === 'optional-sources-unavailable')?.message)
+      .toBe('2 optional data sources were unavailable (including Plaid).');
+  });
+
+  it('marks the list as partial when one source resolves to no name at all', () => {
+    const overview = buildFinancesOverview({
+      snapshot: {
+        ...snapshot,
+        quality: { unavailableSourceIds: ['home-value', 'holding:mystery'] },
+      },
+    });
+
+    expect(overview.warnings.find(warning => warning.code === 'optional-sources-unavailable')?.message)
+      .toBe('2 optional data sources were unavailable (including Home value).');
+  });
+
   it('still counts genuinely unavailable sources alongside a coverage gap', () => {
     const overview = buildFinancesOverview({
       snapshot: {
