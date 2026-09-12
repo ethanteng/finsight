@@ -139,6 +139,12 @@ router.post('/email-results', emailRateLimit, async (req: Request, res: Response
   // slow or failing MailerLite must not hold up the results the visitor asked
   // for, and it is already recorded here either way.
   void (async () => {
+    // The send is recorded first and on its own. The subscribe below can take
+    // up to its eight-second timeout, and a restart inside that window would
+    // otherwise leave a delivered email marked unsent forever — which is
+    // exactly the figure this bookkeeping exists to report.
+    if (stored) await markCoastFireLeadDelivery(token, { emailSent: true });
+
     const outcome = await subscribeToMailerLite({
       email,
       groups: coastFireGroupIds(),
@@ -150,7 +156,6 @@ router.post('/email-results', emailRateLimit, async (req: Request, res: Response
     });
     if (stored) {
       await markCoastFireLeadDelivery(token, {
-        emailSent: true,
         mailerliteSynced: outcome === 'subscribed',
       });
     }

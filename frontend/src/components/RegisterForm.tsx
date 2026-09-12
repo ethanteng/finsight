@@ -24,6 +24,7 @@ import {
   storeRetirementSignupContext,
   type RetirementSignupContext,
 } from '@/lib/retirement-signup-context';
+import { isLookupSettled } from '@/lib/calculator-handover';
 import {
   clearCoastFireSignupRef,
   coastFireSignupSummary,
@@ -245,24 +246,32 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
 
     const controller = new AbortController();
     void (async () => {
-      const resolved = await fetchCoastFireSignupContext(token, controller.signal);
+      const lookup = await fetchCoastFireSignupContext(token, controller.signal);
       if (controller.signal.aborted) return;
-      // Spent either way: a token that did not resolve will not resolve on a
-      // reload, and leaving it would retry the lookup on every visit.
-      clearCoastFireSignupRef();
-      if (!resolved) return;
+
+      /*
+       * Spent only once the answer is settled. A resolved or unknown token
+       * cannot say anything different on a retry, and leaving either would
+       * re-ask on every visit. But this cookie is the only surviving copy of
+       * the token — `/coast-fire/continue` stripped it from the URL — so
+       * dropping it after a blip would lose the personalization with no way to
+       * reload into a retry.
+       */
+      if (isLookupSettled(lookup.status)) clearCoastFireSignupRef();
+      if (lookup.status !== 'resolved') return;
 
       // Kept for the rest of this tab, so a reload or a step backwards in the
       // flow does not lose the scenario and re-ask the backend for it.
-      storeCoastFireSignupContext(resolved.inputs, {
-        email: resolved.email,
+      const { context } = lookup;
+      storeCoastFireSignupContext(context.inputs, {
+        email: context.email,
         sourceToken: token,
-        emailedOutcome: resolved.emailedOutcome,
+        emailedOutcome: context.emailedOutcome,
       });
       setCoastFireContext(readCoastFireSignupContext());
       // Their own address, from the link we sent them. Prefilled, not locked:
       // they can sign up under a different one.
-      if (resolved.email) setEmail((current) => current || resolved.email!);
+      if (context.email) setEmail((current) => current || context.email!);
     })();
 
     return () => controller.abort();
@@ -291,20 +300,22 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
 
     const controller = new AbortController();
     void (async () => {
-      const resolved = await fetchRetirementSignupContext(token, controller.signal);
+      const lookup = await fetchRetirementSignupContext(token, controller.signal);
       if (controller.signal.aborted) return;
-      // Spent either way: a token that did not resolve will not resolve on a
-      // reload, and leaving it would retry the lookup on every visit.
-      clearRetirementSignupRef();
-      if (!resolved) return;
 
-      storeRetirementSignupContext(resolved.inputs, {
-        email: resolved.email,
+      // Settled answers spend the token; a lookup that could not be made keeps
+      // it, so a reload retries. See the Coast FIRE exchange above.
+      if (isLookupSettled(lookup.status)) clearRetirementSignupRef();
+      if (lookup.status !== 'resolved') return;
+
+      const { context } = lookup;
+      storeRetirementSignupContext(context.inputs, {
+        email: context.email,
         sourceToken: token,
-        emailedOutcome: resolved.emailedOutcome,
+        emailedOutcome: context.emailedOutcome,
       });
       setRetirementContext(readRetirementSignupContext());
-      if (resolved.email) setEmail((current) => current || resolved.email!);
+      if (context.email) setEmail((current) => current || context.email!);
     })();
 
     return () => controller.abort();

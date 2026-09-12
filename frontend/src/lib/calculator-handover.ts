@@ -34,6 +34,43 @@ export function isHandoverToken(value: unknown): value is string {
   return typeof value === 'string' && TOKEN_PATTERN.test(value);
 }
 
+/**
+ * What a token lookup concluded.
+ *
+ * The three cases exist because the cookie is the only surviving copy of the
+ * token once `/continue` has stripped it from the URL, and whether to spend it
+ * depends on whether asking again could ever produce a different answer. A
+ * backend that was briefly unreachable is not the same as a token the backend
+ * does not know.
+ */
+export type HandoverLookup<T> =
+  | { status: 'resolved'; context: T }
+  | { status: 'not-found' }
+  | { status: 'unavailable' };
+
+/**
+ * Whether the handover cookie should be dropped after this lookup.
+ *
+ * A resolved or definitively unknown token is spent: asking again cannot
+ * change either answer, and leaving it would retry on every visit. A lookup
+ * that could not be made keeps the cookie, so a reload retries within its ten
+ * minutes rather than silently losing the personalization.
+ */
+export function isLookupSettled(status: HandoverLookup<unknown>['status']): boolean {
+  return status !== 'unavailable';
+}
+
+/**
+ * Classify a response the lookup could not turn into a context.
+ *
+ * 404 is the endpoint saying it has no such token, and 400 means the token was
+ * not even the right shape; neither improves on a retry. A 429 or a 5xx is the
+ * backend asking to be tried later, and so is a network error.
+ */
+export function lookupStatusForResponse(status: number): 'not-found' | 'unavailable' {
+  return status === 404 || status === 400 ? 'not-found' : 'unavailable';
+}
+
 function readCookie(name: string): string | null {
   if (typeof document === 'undefined') return null;
   for (const entry of document.cookie.split(';')) {

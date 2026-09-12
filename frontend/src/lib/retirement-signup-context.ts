@@ -2,7 +2,9 @@ import { GET_STARTED_HREF } from './site-nav';
 import {
   clearHandoverToken,
   isHandoverToken,
+  lookupStatusForResponse,
   readHandoverToken,
+  type HandoverLookup,
 } from './calculator-handover';
 
 /**
@@ -255,19 +257,16 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
 export async function fetchRetirementSignupContext(
   token: string,
   signal?: AbortSignal,
-): Promise<{
+): Promise<HandoverLookup<{
   inputs: RetirementSignupInputs;
   email?: string;
   emailedOutcome?: RetirementEmailedOutcome;
-} | null> {
-  if (!isHandoverToken(token)) return null;
+}>> {
+  if (!isHandoverToken(token)) return { status: 'not-found' };
 
   try {
-    const response = await fetch(
-      `${API_URL}/api/retirement-quickplan/signup-context/${token}`,
-      { signal },
-    );
-    if (!response.ok) return null;
+    const response = await fetch(`${API_URL}/api/retirement-quickplan/signup-context/${token}`, { signal });
+    if (!response.ok) return { status: lookupStatusForResponse(response.status) };
 
     const body = await response.json() as {
       inputs?: unknown;
@@ -275,17 +274,24 @@ export async function fetchRetirementSignupContext(
       outcome?: unknown;
     };
     const inputs = parseInputs(body?.inputs);
-    if (!inputs) return null;
+    // A 200 we cannot read is a problem with the stored row, not a passing
+    // one, so the token is spent rather than retried forever.
+    if (!inputs) return { status: 'not-found' };
 
     const emailedOutcome = parseEmailedOutcome(body?.outcome);
     return {
-      inputs,
-      ...(typeof body.email === 'string' && body.email.includes('@')
-        ? { email: body.email }
-        : {}),
-      ...(emailedOutcome ? { emailedOutcome } : {}),
+      status: 'resolved',
+      context: {
+        inputs,
+        ...(typeof body.email === 'string' && body.email.includes('@')
+          ? { email: body.email }
+          : {}),
+        ...(emailedOutcome ? { emailedOutcome } : {}),
+      },
     };
   } catch {
-    return null;
+    // An aborted request is the component unmounting, not a verdict on the
+    // token; treating it as unavailable keeps the cookie for the next mount.
+    return { status: 'unavailable' };
   }
 }

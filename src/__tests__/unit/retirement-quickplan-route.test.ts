@@ -29,7 +29,9 @@ const list = {
 const leads = {
   record: jest.fn(async () => true),
   read: jest.fn(async () => null as unknown),
-  mark: jest.fn(async () => undefined),
+  // Typed with its arguments so the cases can assert what was written, and
+  // in what order.
+  mark: jest.fn<Promise<void>, [string, Record<string, boolean>]>(async () => undefined),
 };
 
 jest.mock('../../auth/resend-email', () => ({
@@ -43,7 +45,8 @@ jest.mock('../../services/retirement-leads', () => ({
   ...jest.requireActual('../../services/retirement-leads'),
   recordRetirementLead: (...args: unknown[]) => leads.record(...(args as [])),
   readRetirementLead: (...args: unknown[]) => leads.read(...(args as [])),
-  markRetirementLeadDelivery: (...args: unknown[]) => leads.mark(...(args as [])),
+  markRetirementLeadDelivery: (...args: unknown[]) =>
+    leads.mark(...(args as [string, Record<string, boolean>])),
 }));
 
 /**
@@ -349,10 +352,42 @@ describe('retirement quick plan route', () => {
       await settle();
 
       expect(response.status).toBe(200);
-      expect(leads.mark).toHaveBeenCalledWith(expect.any(String), {
-        emailSent: true,
-        mailerliteSynced: false,
+      // Two writes, in this order. The send is recorded before the subscribe
+      // is even attempted, so a restart during its timeout cannot leave a
+      // delivered email marked unsent.
+      expect(leads.mark.mock.calls.map((call) => call[1])).toEqual([
+        { emailSent: true },
+        { mailerliteSynced: false },
+      ]);
+    }, 60_000);
+
+    /*
+     * The order matters on its own, not just when the list fails: the send is
+     * the fact the experiment reports, and it must be durable before anything
+     * slow and optional starts.
+     */
+    it('records the send before it starts waiting on the list', async () => {
+      let subscribeStarted = false;
+      let markedBeforeSubscribe = false;
+      leads.mark.mockImplementation(async () => {
+        if (!subscribeStarted) markedBeforeSubscribe = true;
+        return undefined;
       });
+      list.subscribe.mockImplementation(async () => {
+        subscribeStarted = true;
+        return 'subscribed';
+      });
+
+      await request(buildApp())
+        .post('/api/retirement-quickplan/email-results')
+        .send({ ...SHORT_PLAN, email: 'reader@example.com' });
+      await settle();
+
+      expect(markedBeforeSubscribe).toBe(true);
+      expect(leads.mark.mock.calls.map((call) => call[1])).toEqual([
+        { emailSent: true },
+        { mailerliteSynced: true },
+      ]);
     }, 60_000);
 
     it('says so when the send itself failed, rather than claiming it sent', async () => {

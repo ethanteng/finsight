@@ -352,6 +352,7 @@ describe('RegisterForm', () => {
       handOverRetirementRef('d'.repeat(48));
       global.fetch = jest.fn(async () => ({
         ok: false,
+        status: 404,
         json: async () => ({ error: 'Not found' }),
       })) as unknown as typeof fetch;
 
@@ -360,6 +361,46 @@ describe('RegisterForm', () => {
       await waitFor(() => expect(global.fetch).toHaveBeenCalled());
       expect(screen.getByRole('heading', { name: 'Build your plan free for 30 days.' })).toBeInTheDocument();
       expect(screen.queryByRole('region', { name: 'Your modeled retirement scenario' })).not.toBeInTheDocument();
+    });
+
+    /*
+     * The cookie is the only surviving copy of the token once `/continue` has
+     * stripped it from the URL. A backend that was briefly unreachable is not
+     * a verdict on the token, so dropping it there would lose the emailed
+     * personalization with no way to reload into a retry.
+     */
+    it.each([
+      ['a server error', { ok: false, status: 502 }],
+      ['a rate limit', { ok: false, status: 429 }],
+    ])('keeps the emailed token after %s so a reload can retry', async (_label, response) => {
+      searchParams = new URLSearchParams(`source=${RETIREMENT_SIGNUP_SOURCE}`);
+      handOverRetirementRef('a'.repeat(48));
+      global.fetch = jest.fn(async () => ({
+        ...response,
+        json: async () => ({ error: 'nope' }),
+      })) as unknown as typeof fetch;
+
+      render(<RegisterForm variant="trial" />);
+
+      await waitFor(() => expect(global.fetch).toHaveBeenCalled());
+      expect(document.cookie).toContain(RETIREMENT_REF_COOKIE);
+      // And the page is still an ordinary, working signup.
+      expect(screen.getByRole('heading', { name: 'Build your plan free for 30 days.' })).toBeInTheDocument();
+    });
+
+    /* A 404 is the endpoint saying it has no such token; retrying cannot help. */
+    it('spends the emailed token when the backend definitively does not know it', async () => {
+      searchParams = new URLSearchParams(`source=${RETIREMENT_SIGNUP_SOURCE}`);
+      handOverRetirementRef('a'.repeat(48));
+      global.fetch = jest.fn(async () => ({
+        ok: false,
+        status: 404,
+        json: async () => ({ error: 'Not found' }),
+      })) as unknown as typeof fetch;
+
+      render(<RegisterForm variant="trial" />);
+
+      await waitFor(() => expect(document.cookie).not.toContain(RETIREMENT_REF_COOKIE));
     });
 
     it('keeps generic /getstarted unchanged when the retirement source or scenario is missing', async () => {
