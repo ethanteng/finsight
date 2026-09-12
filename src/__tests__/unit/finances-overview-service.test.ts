@@ -175,6 +175,39 @@ describe('finances overview contract', () => {
     expect(message).toContain('2 investment accounts (Brokerage and Individual (Vanguard)) report balances');
   });
 
+  it('omits a placeholder institution rather than labelling an account "(Unknown)"', () => {
+    // SnapTrade stores the literal 'Unknown' when it reports no institution.
+    const overview = buildFinancesOverview({
+      snapshot: {
+        ...snapshot,
+        accounts: snapshot.accounts.map(account => account.account_id === 'brokerage'
+          ? { ...account, institution: 'Unknown' }
+          : account),
+        quality: { unavailableSourceIds: ['account:brokerage:holdings-coverage'] },
+      },
+    });
+
+    const message = overview.warnings.find(warning => warning.code === 'incomplete-holdings-coverage')?.message;
+    expect(message).toContain('1 investment account (Brokerage) reports a balance');
+    expect(message).not.toContain('Unknown');
+  });
+
+  it('falls back to the bare count when only a placeholder institution names an account', () => {
+    const overview = buildFinancesOverview({
+      snapshot: {
+        ...snapshot,
+        accounts: snapshot.accounts.map(account => account.account_id === 'brokerage'
+          ? { ...account, name: '', institution: 'Unknown Institution' }
+          : account),
+        quality: { unavailableSourceIds: ['account:brokerage:holdings-coverage'] },
+      },
+    });
+
+    const message = overview.warnings.find(warning => warning.code === 'incomplete-holdings-coverage')?.message;
+    expect(message).toContain('1 investment account reports a balance');
+    expect(message).not.toContain('Unknown');
+  });
+
   it('uses the live account name in a coverage gap warning', () => {
     const overview = buildFinancesOverview({
       snapshot: {

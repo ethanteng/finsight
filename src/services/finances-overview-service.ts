@@ -416,6 +416,21 @@ const PROVIDER_LABELS: Record<string, string> = {
 };
 
 /**
+ * Institution values that stand for "the provider did not tell us", not for an
+ * institution. A SnapTrade account with no institution is stored as the literal
+ * 'Unknown', and connection rows use 'Unknown Institution'; appending either would
+ * produce "Brokerage (Unknown)", which reads as a disambiguation while
+ * disambiguating nothing.
+ */
+const PLACEHOLDER_INSTITUTIONS = new Set([
+  'unknown',
+  'unknown institution',
+  'n/a',
+  'null',
+  'undefined',
+]);
+
+/**
  * What to call an account in a warning. The institution is appended only when the
  * name does not already carry it -- two brokerages both named "Individual" are
  * indistinguishable otherwise, and "Chase Checking (Chase)" is noise.
@@ -423,7 +438,8 @@ const PROVIDER_LABELS: Record<string, string> = {
 function accountLabel(account: FinancesAccount, currentName?: string): string | null {
   const rawName = currentName ?? account.name;
   const name = typeof rawName === 'string' ? rawName.trim() : '';
-  const institution = typeof account.institution === 'string' ? account.institution.trim() : '';
+  const rawInstitution = typeof account.institution === 'string' ? account.institution.trim() : '';
+  const institution = PLACEHOLDER_INSTITUTIONS.has(rawInstitution.toLowerCase()) ? '' : rawInstitution;
   if (!name) return institution || null;
   if (!institution || name.toLowerCase().includes(institution.toLowerCase())) return name;
   return `${name} (${institution})`;
