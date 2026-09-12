@@ -94,40 +94,44 @@ export function CoastFireEmailCapture({ result }: { result: CoastFireResult }) {
 
   return (
     <form className="cf-email-capture" onSubmit={handleSubmit} aria-busy={status === "sending"}>
-      <p className="section-kicker">KEEP THIS RESULT</p>
-      <h3>Want these numbers in your inbox?</h3>
-      <p className="cf-email-lead">
-        We will send this result, every assumption behind it, and what it would look like
-        if returns come in a point lower.
-      </p>
+      <div className="cf-email-copy">
+        <p className="section-kicker">KEEP THIS RESULT</p>
+        <h3>Want these numbers in your inbox?</h3>
+        <p className="cf-email-lead">
+          We will send this result, every assumption behind it, and what it would look like
+          if returns come in a point lower.
+        </p>
 
-      <label className="cf-email-label" htmlFor="coast-fire-email">
-        Email address
-      </label>
-      <div className="cf-email-row">
-        <input
-          id="coast-fire-email"
-          name="email"
-          type="email"
-          autoComplete="email"
-          inputMode="email"
-          required
-          placeholder="you@example.com"
-          value={email}
-          onChange={(event) => {
-            setEmail(event.target.value);
-            setError(null);
-          }}
-          data-cs-mask
-        />
-        <button
-          className="button button-primary"
-          type="submit"
-          disabled={status === "sending"}
-          data-cs-override-id="coast-fire-email-results"
-        >
-          {status === "sending" ? "Sending…" : "Email me my Coast FIRE results"}
-        </button>
+      </div>
+
+      <div className="cf-email-fields">
+        <label className="cf-email-label" htmlFor="coast-fire-email">
+          Email address
+        </label>
+        <div className="cf-email-row">
+          <input
+            id="coast-fire-email"
+            name="email"
+            type="email"
+            autoComplete="email"
+            inputMode="email"
+            required
+            placeholder="you@example.com"
+            value={email}
+            onChange={(event) => {
+              setEmail(event.target.value);
+              setError(null);
+            }}
+            data-cs-mask
+          />
+          <button
+            className="button button-primary"
+            type="submit"
+            disabled={status === "sending"}
+            data-cs-override-id="coast-fire-email-results"
+          >
+            {status === "sending" ? "Sending…" : "Email me my Coast FIRE results"}
+          </button>
       </div>
 
       {error && <p className="cf-email-error" role="alert">{error}</p>}
@@ -135,6 +139,7 @@ export function CoastFireEmailCapture({ result }: { result: CoastFireResult }) {
       <p className="cf-email-note">
         One email with your results, plus occasional Ask Linc updates. Unsubscribe anytime.
       </p>
+      </div>
     </form>
   );
 }

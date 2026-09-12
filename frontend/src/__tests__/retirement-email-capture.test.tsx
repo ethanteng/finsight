@@ -148,6 +148,21 @@ it('puts the capture with the answer, above the shortcut to the connected exampl
 });
 
 /*
+ * The shortcut is a graphic now, so its name lives on the anchor. Losing that
+ * would leave a link a screen reader announces as nothing at all.
+ */
+it('keeps the shortcut named even though it renders as chevrons', async () => {
+  renderPage();
+  runTheModel();
+
+  await screen.findByLabelText('Email address');
+  const jump = screen.getByRole('link', { name: 'See what changes with your actual holdings' });
+
+  expect(jump).toHaveTextContent('');
+  expect(jump.querySelectorAll('svg')).toHaveLength(3);
+});
+
+/*
  * A rates run has no survival figure — the model will not invent a portfolio
  * or a spending level — so there is nothing to send and no address to collect.
  */

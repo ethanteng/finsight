@@ -47,12 +47,25 @@
 
 /* --------------------------------------------------- the form and result */
 
+/*
+ * The form and the result are one row of two matched cards, then the email
+ * capture across the full width beneath them.
+ *
+ * `align-items: stretch` (the default, stated here because it is load-bearing)
+ * is what makes the two the same height: the result card has less to say than
+ * the form has to ask, and left to itself it stopped short and left the row
+ * looking unfinished.
+ */
 .coast-fire-page .cf-calculator {
   display: grid;
   grid-template-columns: minmax(0, 1.1fr) minmax(340px, 0.9fr);
-  align-items: start;
+  align-items: stretch;
   gap: 20px;
   padding-block: 40px 84px;
+}
+
+.coast-fire-page .cf-email-band {
+  grid-column: 1 / -1;
 }
 
 .coast-fire-page .cf-form,
@@ -185,22 +198,18 @@
   font-size: 14px;
 }
 
+/*
+ * The column exists only to carry the scroll target and to pass its own
+ * height down: the card stretches to whatever the row is, so the two cards
+ * end level whichever one has more in it.
+ */
 .coast-fire-page .cf-result-column {
-  position: sticky;
-  top: 18px;
+  display: flex;
   scroll-margin-top: 18px;
 }
 
-/*
- * A sticky element taller than the viewport pins its top and leaves its
- * bottom unreachable, so the column stops sticking once the email capture
- * joins the result card in it.
- */
-.coast-fire-page .cf-result-column.has-capture {
-  position: static;
-}
-
 .coast-fire-page .cf-result-card {
+  flex: 1;
   overflow: hidden;
   padding: 30px;
   border-color: #0b1a12;
@@ -359,17 +368,27 @@
 /* --------------------------------------------- the results email capture */
 
 /*
- * Sits under the result card, in the same column, and borrows the form card's
- * paper-and-rule treatment rather than the dark card's: it is an input, and
- * every other input on this page is on paper.
+ * A horizontal band under both cards: the pitch on the left, the box and the
+ * button on the right. It borrows the form card's paper-and-rule treatment
+ * rather than the dark card's, because it is an input and every other input
+ * on this page is on paper.
  */
 .coast-fire-page .cf-email-capture {
-  margin-top: 18px;
-  padding: 26px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 0.85fr);
+  align-items: center;
+  gap: 16px 40px;
+  padding: 28px 32px;
   border: 1px solid var(--line);
   border-radius: 22px;
   background: var(--cream);
   box-shadow: 0 10px 30px rgba(16, 35, 25, 0.06);
+}
+
+/* The pitch and the fields are the two grid items; nothing else is placed. */
+.coast-fire-page .cf-email-copy,
+.coast-fire-page .cf-email-fields {
+  min-width: 0;
 }
 
 .coast-fire-page .cf-email-capture .section-kicker {
@@ -394,7 +413,7 @@
 
 .coast-fire-page .cf-email-label {
   display: block;
-  margin: 20px 0 7px;
+  margin: 0 0 7px;
   color: var(--ink);
   font-size: 13px;
   font-weight: 700;
@@ -442,14 +461,14 @@
 }
 
 .coast-fire-page .cf-email-note {
-  margin: 14px 0 0;
+  margin: 4px 0 0;
   color: #68766e;
   font-size: 12.5px;
   line-height: 1.55;
 }
 
 .coast-fire-page .cf-email-error {
-  margin: 14px 0 0;
+  margin: 0;
   padding: 12px 14px;
   border-left: 3px solid #b4352b;
   border-radius: 4px 10px 10px 4px;
@@ -459,6 +478,7 @@
 }
 
 .coast-fire-page .cf-email-capture.is-sent {
+  grid-template-columns: minmax(0, 1fr);
   border-color: #9dbd6e;
   background: #f4f9e8;
 }
@@ -855,7 +875,17 @@
   }
 
   .coast-fire-page .cf-email-capture {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
     padding: 24px 22px;
+  }
+
+    .coast-fire-page .cf-email-label {
+    margin-top: 20px;
+  }
+
+  .coast-fire-page .cf-email-note {
+    margin-top: 14px;
   }
 
   .coast-fire-page .cf-result-lead {

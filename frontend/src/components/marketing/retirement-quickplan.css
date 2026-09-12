@@ -426,52 +426,53 @@
 /*
  * The jump from the result to the connect-accounts section.
  *
- * Secondary, deliberately. It used to be a lime pill with a breathing ring,
- * because it sat alone under the figures and had to compete with a chart the
- * visitor was already reading. The email capture now sits between the two, and
- * a second lime pill directly under that one read as a competing primary
- * action rather than the quieter alternative it is. So: outlined, not filled,
- * and still no question that it is a control.
+ * Three chevrons cascading downward, not a labelled pill. It sits directly
+ * under the email capture's own button, and two filled controls stacked read
+ * as competing asks; this one says "keep going" without competing with the
+ * thing being asked for. Its accessible name is on the anchor.
  *
- * The arrow keeps its bob — it is what says "further down this page" — and is
- * still off under prefers-reduced-motion.
+ * The cascade is the only motion, it is transform and opacity only (no
+ * layout), and it is off under prefers-reduced-motion — where three static
+ * chevrons still point down.
  */
 .quickplan-page .qp-jump {
-  display: inline-flex;
+  /* Centred under the full-width band above it, rather than hugging its left
+     edge where it read as a stray mark. */
+  display: flex;
+  width: fit-content;
+  flex-direction: column;
   align-items: center;
-  gap: 12px;
-  /* Clears the email capture card above it rather than a row of figures. */
-  margin-top: 24px;
-  padding: 13px 22px;
-  border: 1px solid rgba(16, 35, 25, 0.25);
-  border-radius: 999px;
-  background: transparent;
-  color: var(--ink);
-  font-size: 14.5px;
-  font-weight: 700;
-  letter-spacing: -0.01em;
-  transition: border-color 0.15s, background-color 0.15s;
+  gap: 1px;
+  margin: 22px auto 0;
+  padding: 12px 26px;
+  border-radius: 20px;
+  color: #52705f;
+  transition: color 0.15s, background-color 0.15s;
 }
 
 .quickplan-page .qp-jump:hover {
-  border-color: var(--ink);
   background: rgba(16, 35, 25, 0.05);
+  color: var(--ink);
 }
 
-.quickplan-page .qp-jump-arrow {
-  font-size: 16px;
-  line-height: 1;
-  animation: qp-jump-bob 1.5s ease-in-out infinite;
+.quickplan-page .qp-chevron {
+  display: block;
+  animation: qp-chevron-cascade 1.9s ease-in-out infinite;
 }
 
-@keyframes qp-jump-bob {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(4px); }
+/*
+ * Each chevron fades and drifts in turn, so the group reads downward rather
+ * than pulsing as one block. The stagger is set per element in the markup.
+ */
+@keyframes qp-chevron-cascade {
+  0%, 60%, 100% { opacity: 0.28; transform: translateY(-2px); }
+  30% { opacity: 1; transform: translateY(2px); }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .quickplan-page .qp-jump-arrow {
+  .quickplan-page .qp-chevron {
     animation: none;
+    opacity: 0.7;
   }
 }
 
@@ -664,13 +665,22 @@
  * an input, and every other input on this page is on paper.
  */
 .quickplan-page .qp-email-capture {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 0.8fr);
+  align-items: center;
+  gap: 16px 48px;
   margin-top: 28px;
-  max-width: 620px;
   padding: 30px 32px;
   border: 1px solid #bfc7ba;
   border-radius: 24px;
   background: var(--cream);
   box-shadow: 0 18px 44px rgba(20, 47, 32, 0.07);
+}
+
+/* The pitch and the fields are the two grid items; nothing else is placed. */
+.quickplan-page .qp-email-copy,
+.quickplan-page .qp-email-fields {
+  min-width: 0;
 }
 
 .quickplan-page .qp-email-capture .section-kicker {
@@ -696,7 +706,7 @@
 
 .quickplan-page .qp-email-label {
   display: block;
-  margin: 22px 0 7px;
+  margin: 0 0 7px;
   color: var(--ink);
   font-size: 13px;
   font-weight: 700;
@@ -744,14 +754,14 @@
 }
 
 .quickplan-page .qp-email-note {
-  margin: 14px 0 0;
+  margin: 4px 0 0;
   color: #68766e;
   font-size: 12.5px;
   line-height: 1.55;
 }
 
 .quickplan-page .qp-email-error {
-  margin: 14px 0 0;
+  margin: 0;
   padding: 12px 14px;
   border-left: 3px solid #b4352b;
   border-radius: 4px 10px 10px 4px;
@@ -761,6 +771,7 @@
 }
 
 .quickplan-page .qp-email-capture.is-sent {
+  grid-template-columns: minmax(0, 1fr);
   border-color: #9dbd6e;
   background: #f4f9e8;
 }
@@ -977,7 +988,17 @@
 
   .quickplan-page .qp-chart-block,
   .quickplan-page .qp-email-capture {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
     padding: 26px 22px;
+  }
+
+    .quickplan-page .qp-email-label {
+    margin-top: 22px;
+  }
+
+  .quickplan-page .qp-email-note {
+    margin-top: 14px;
   }
 
   .quickplan-page .qp-scenarios {

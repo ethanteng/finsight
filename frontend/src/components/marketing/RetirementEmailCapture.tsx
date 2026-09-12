@@ -104,40 +104,44 @@ export function RetirementEmailCapture({
 
   return (
     <form className="qp-email-capture" onSubmit={handleSubmit} aria-busy={status === "sending"}>
-      <p className="section-kicker">KEEP THIS ANSWER</p>
-      <h3>Want this model run in your inbox?</h3>
-      <p className="qp-email-lead">
-        We will send the verdict, the four figures behind it, and what working longer or spending
-        less would have done to the same century of history.
-      </p>
+      <div className="qp-email-copy">
+        <p className="section-kicker">KEEP THIS ANSWER</p>
+        <h3>Want this model run in your inbox?</h3>
+        <p className="qp-email-lead">
+          We will send the verdict, the four figures behind it, and what working longer or spending
+          less would have done to the same century of history.
+        </p>
 
-      <label className="qp-email-label" htmlFor="retirement-email">
-        Email address
-      </label>
-      <div className="qp-email-row">
-        <input
-          id="retirement-email"
-          name="email"
-          type="email"
-          autoComplete="email"
-          inputMode="email"
-          required
-          placeholder="you@example.com"
-          value={email}
-          onChange={(event) => {
-            setEmail(event.target.value);
-            setError(null);
-          }}
-          data-cs-mask
-        />
-        <button
-          className="button button-primary"
-          type="submit"
-          disabled={status === "sending"}
-          data-cs-override-id="quickplan-email-results"
-        >
-          {status === "sending" ? "Sending…" : "Email me my retirement results"}
-        </button>
+      </div>
+
+      <div className="qp-email-fields">
+        <label className="qp-email-label" htmlFor="retirement-email">
+          Email address
+        </label>
+        <div className="qp-email-row">
+          <input
+            id="retirement-email"
+            name="email"
+            type="email"
+            autoComplete="email"
+            inputMode="email"
+            required
+            placeholder="you@example.com"
+            value={email}
+            onChange={(event) => {
+              setEmail(event.target.value);
+              setError(null);
+            }}
+            data-cs-mask
+          />
+          <button
+            className="button button-primary"
+            type="submit"
+            disabled={status === "sending"}
+            data-cs-override-id="quickplan-email-results"
+          >
+            {status === "sending" ? "Sending…" : "Email me my retirement results"}
+          </button>
       </div>
 
       {error && <p className="qp-email-error" role="alert">{error}</p>}
@@ -145,6 +149,7 @@ export function RetirementEmailCapture({
       <p className="qp-email-note">
         One email with your results, plus occasional Ask Linc updates. Unsubscribe anytime.
       </p>
+      </div>
     </form>
   );
 }

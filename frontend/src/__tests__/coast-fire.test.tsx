@@ -86,7 +86,8 @@ describe("Coast FIRE calculator page", () => {
 
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Have I reached Coast FIRE?");
     expect(screen.getByLabelText("Your age today")).toHaveValue(40);
-    expect(screen.getByLabelText("Retirement savings today")).toHaveValue(400000);
+    // Grouped, because a money box is text: 400000 is a run of zeros to check.
+    expect(screen.getByLabelText("Retirement savings today")).toHaveValue("400,000");
     expect(screen.getAllByText("$369,128").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByRole("heading", { name: "You’ve reached Coast FIRE." })).toBeInTheDocument();
   });
@@ -107,6 +108,32 @@ describe("Coast FIRE calculator page", () => {
    * The scorecard counts a plan CTA only when a result is timestamped ahead of
    * it, and this page shows its default scenario before anyone submits.
    */
+  /*
+   * `type="number"` cannot show grouping, so the money boxes are text. The
+   * figure a visitor is most likely to mistype is the one with the most
+   * zeros in it.
+   */
+  it("groups money as it is typed, and reads the grouped figure back", () => {
+    const { container } = render(<CoastFireCalculator />);
+    const savings = screen.getByLabelText("Retirement savings today");
+
+    fireEvent.change(savings, { target: { value: "1500000" } });
+    expect(savings).toHaveValue("1,500,000");
+
+    fireEvent.submit(container.querySelector("form")!);
+
+    // Read back as 1.5M, not rejected as NaN and not truncated at the comma.
+    expect(pushCoastFireCalculated).toHaveBeenLastCalledWith("reached", 25, "submitted");
+    expect(screen.getAllByText("$1,500,000").length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("leaves ages and rates as plain numbers, where grouping never applies", () => {
+    render(<CoastFireCalculator />);
+
+    expect(screen.getByLabelText("Your age today")).toHaveValue(40);
+    expect(screen.getByLabelText("Expected real return")).toHaveValue(5);
+  });
+
   it("reports the default scenario it shows before any submission", () => {
     render(<CoastFireCalculator />);
 
@@ -261,6 +288,20 @@ describe("Coast FIRE calculator page", () => {
       expect(await screen.findByRole("alert")).toHaveTextContent("Enter a valid email address.");
       expect(screen.getByRole("button", { name: "Email me my Coast FIRE results" })).toBeEnabled();
       expect(pushCoastFireResultsEmailed).not.toHaveBeenCalled();
+    });
+
+    /*
+     * The form and the result are one row of matched cards; the capture is a
+     * band across both. Inside the result column it made that column taller
+     * than the form and the row read as lopsided.
+     */
+    it("sits across both cards rather than inside the result column", () => {
+      const { container } = render(<CoastFireCalculator />);
+      fireEvent.submit(container.querySelector("form")!);
+
+      const capture = screen.getByLabelText("Email address").closest("form")!;
+      expect(container.querySelector(".cf-result-column")).not.toContainElement(capture);
+      expect(capture.closest(".cf-email-band")).toBeInTheDocument();
     });
 
     it("keeps the typed address out of Contentsquare recordings", () => {
