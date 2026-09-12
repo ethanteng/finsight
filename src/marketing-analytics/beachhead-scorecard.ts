@@ -2,10 +2,12 @@ import { aggregateTrialFunnel } from './funnel';
 import type {
   AnalyticsSession,
   BeachheadScorecard,
+  BeachheadLeadCaptureMetric,
   BeachheadStageMetric,
   FirstPartySummary,
   MetricValue,
 } from './types';
+import type { CalculatorLeadSummary } from '../services/calculator-lead-report';
 
 const COAST_FIRE_PATTERN = /\bcoast\s*fire\b/i;
 
@@ -36,6 +38,7 @@ export const COAST_FIRE_EXPERIMENT = {
 
 /** The retirement calculator's result event, and the baseline journey's. */
 const RETIREMENT_RESULT_EVENT = 'retirement_model_run';
+export const CALCULATOR_EMAIL_TRACKING_STARTED_AT = '2026-09-12';
 
 function ratio(numerator: number, denominator: number): number | null {
   return denominator > 0 ? numerator / denominator : null;
@@ -173,6 +176,72 @@ function metric(
   return { value, previous: null, unit, source, note };
 }
 
+function buildLeadCapture(args: {
+  current: AnalyticsSession[];
+  previous: AnalyticsSession[];
+  currentAll: AnalyticsSession[];
+  previousAll: AnalyticsSession[];
+  resultEvent: string;
+  emailedEvent: string;
+  emailCtaEvent: string;
+  emailTrialEvent: string;
+  ga4Live: boolean;
+  firstParty: CalculatorLeadSummary;
+}): BeachheadLeadCaptureMetric {
+  const eligible = (sessions: AnalyticsSession[]) => sessions.filter(
+    session => session.sessionDate >= CALCULATOR_EMAIL_TRACKING_STARTED_AT,
+  );
+  const values = (cohortSessions: AnalyticsSession[], allSessions: AnalyticsSession[]) => {
+    const trackedCohort = eligible(cohortSessions);
+    const trackedAll = eligible(allSessions);
+    const results = trackedCohort.filter(session => hasEvent(session, args.resultEvent));
+    const emailed = results.filter(session =>
+      hasResultThenPlanCta(session, args.emailedEvent, args.resultEvent));
+    return {
+      results: results.length,
+      emailed: emailed.length,
+      opened: trackedAll.filter(session => hasEvent(session, args.emailCtaEvent)).length,
+      completed: trackedAll.filter(session => hasEvent(session, args.emailTrialEvent)).length,
+    };
+  };
+  const current = values(args.current, args.currentAll);
+  const previous = values(args.previous, args.previousAll);
+  const source = args.ga4Live ? 'GA4 BigQuery · post-instrumentation only' : 'Collecting';
+  const value = (currentValue: number, previousValue: number, note: string): MetricValue => ({
+    value: args.ga4Live ? currentValue : null,
+    previous: args.ga4Live ? previousValue : null,
+    unit: 'count',
+    source,
+    note,
+  });
+
+  return {
+    resultsEmailedSessions: value(
+      current.emailed,
+      previous.emailed,
+      'Successful email requests that followed a result in the same session; no address or financial value is sent to GA4.',
+    ),
+    captureRate: {
+      value: args.ga4Live ? ratio(current.emailed, current.results) : null,
+      previous: args.ga4Live ? ratio(previous.emailed, previous.results) : null,
+      unit: 'percent',
+      source,
+      note: `Email-request sessions divided by result sessions since ${CALCULATOR_EMAIL_TRACKING_STARTED_AT}.`,
+    },
+    emailCtaOpenedSessions: value(
+      current.opened,
+      previous.opened,
+      'Sessions where an emailed token successfully restored its saved calculator scenario.',
+    ),
+    emailTrialCompletedSessions: value(
+      current.completed,
+      previous.completed,
+      'Email-attributed sessions that completed signup, verification, and first login.',
+    ),
+    firstParty: args.firstParty,
+  };
+}
+
 export function buildBeachheadScorecard(args: {
   current: AnalyticsSession[];
   previous: AnalyticsSession[];
@@ -180,6 +249,8 @@ export function buildBeachheadScorecard(args: {
   funnelCoverageComplete: boolean;
   previousFunnelCoverageComplete: boolean;
   firstParty: FirstPartySummary;
+  coastFireLeads?: CalculatorLeadSummary;
+  retirementLeads?: CalculatorLeadSummary;
   experimentLive?: boolean;
 }): BeachheadScorecard {
   const {
@@ -189,6 +260,16 @@ export function buildBeachheadScorecard(args: {
     funnelCoverageComplete,
     previousFunnelCoverageComplete,
     firstParty,
+    coastFireLeads = {
+      state: 'live', periodStart: '', periodEnd: '', requests: 0, emailsSent: 0,
+      uniqueEmails: 0, mailerliteSynced: 0, continuedToSignup: 0, matchedAccounts: 0,
+      deliveryRate: null, continuationRate: null, accountMatchRate: null, note: 'No lead fixture supplied.',
+    },
+    retirementLeads = {
+      state: 'live', periodStart: '', periodEnd: '', requests: 0, emailsSent: 0,
+      uniqueEmails: 0, mailerliteSynced: 0, continuedToSignup: 0, matchedAccounts: 0,
+      deliveryRate: null, continuationRate: null, accountMatchRate: null, note: 'No lead fixture supplied.',
+    },
     experimentLive = COAST_FIRE_EXPERIMENT.live,
   } = args;
   const currentCoast = current.filter(isCoastFireSession);
@@ -226,6 +307,32 @@ export function buildBeachheadScorecard(args: {
         previousFunnelCoverageComplete,
       )
       : unavailableJourney(),
+    leadCapture: {
+      coastFire: buildLeadCapture({
+        current: currentCoast,
+        previous: previousCoast,
+        currentAll: current,
+        previousAll: previous,
+        resultEvent: COAST_FIRE_EXPERIMENT.resultEvent,
+        emailedEvent: 'coast_fire_results_emailed',
+        emailCtaEvent: 'coast_fire_email_cta_opened',
+        emailTrialEvent: 'coast_fire_email_trial_complete',
+        ga4Live,
+        firstParty: coastFireLeads,
+      }),
+      retirement: buildLeadCapture({
+        current: currentBaseline,
+        previous: previousBaseline,
+        currentAll: current,
+        previousAll: previous,
+        resultEvent: RETIREMENT_RESULT_EVENT,
+        emailedEvent: 'retirement_results_emailed',
+        emailCtaEvent: 'retirement_email_cta_opened',
+        emailTrialEvent: 'retirement_email_trial_complete',
+        ga4Live,
+        firstParty: retirementLeads,
+      }),
+    },
     downstream: {
       financialConnectionRate: metric(
         accounts === null || firstParty.createdAccountsWithFinancialConnection === null
@@ -257,6 +364,7 @@ export function buildBeachheadScorecard(args: {
         ? ['This journey is reported as prelaunch, so it is intentionally blank rather than zero. The Coast FIRE experience has shipped, so reaching this state means COAST_FIRE_EXPERIMENT.live was set back to false or a caller passed experimentLive: false.']
         : []),
       'Marketing attribution is not persisted on the first-party user record, so financial connection, activation, and payment cannot yet be joined back to the Coast FIRE cohort.',
+      `Results-email GA4 events are measured only from ${CALCULATOR_EMAIL_TRACKING_STARTED_AT}; earlier absence cannot be backfilled. Live Postgres lead totals remain available without the GA4 daily-export lag.`,
       'A paid conversion matures after the 30-day trial. Read paid rate only for cohorts old enough to have been charged.',
     ],
   };

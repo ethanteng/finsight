@@ -19,6 +19,12 @@ rejection totals as a clearly labeled first-party product-health reference.
 Those rows are immediate but contain no GA4 session or campaign identifier, so
 they do not populate or substitute for the acquisition journey.
 
+Each calculator also has a separate **Email me these results** branch. It is
+not inserted into the linear result-to-product-CTA journey because a recipient
+can return from their inbox in another session or on another device. The branch
+shows settled GA4 sessions beside live first-party lead delivery, continuation,
+and normalized-email account matches.
+
 ## Current state and launch contract
 
 The existing `/retirement-calculator` is the comparison baseline. It measures:
@@ -47,6 +53,15 @@ event=coast_fire_calculated
 
 event=start_free_click
 cta_location=coast_fire_plan_cta
+
+event=coast_fire_results_emailed
+# successful send only; coast_fire_status, never an address or dollar value
+
+event=calculator_results_email_cta_opened
+# emitted only after the emailed token restores the saved scenario
+# calculator_type=coast_fire|retirement
+# signup_origin=coast_fire_calculator|retirement_calculator
+# signup_entry=results_email
 ```
 
 GTM must forward `coast_fire_calculated` to GA4 (Custom Event trigger + GA4
@@ -73,6 +88,17 @@ launched.”
 - **Trial completed:** CTA sessions that contain every published signup,
   verification, and first-login step in order, ending at
   `trial_login_success`.
+- **Results emailed:** result sessions where a successful results-email event
+  occurred later in the same session.
+- **Email CTA opened:** a later session where the opaque emailed token
+  successfully restored the saved scenario on `/getstarted`.
+- **Email-path trial:** `trial_login_success` carrying the persisted fixed
+  calculator origin and `signup_entry=results_email` attribution.
+- **First-party continuation:** the first successful signup-context token
+  exchange, persisted as `continuedAt`; reloads do not move the timestamp.
+- **Matched account:** a unique lead email equal to an account created after
+  that email's first lead in the reporting window. This is a useful first-party
+  match, not proof when a visitor registers under a different address.
 - **Financial data observed:** accounts created in the selected window that now
   have an active Plaid token, an external account in their financial snapshot,
   or a verified Public credential.
@@ -95,7 +121,8 @@ marketing attribution is persisted with the first-party user.
 - GA4 property `519498279` (`G-0QBF34C7VK`) and its BigQuery export supply
   session acquisition, the journey-specific events, and the strict funnel.
 - PostgreSQL supplies account creation, observed financial connections,
-  conversations, and current subscription state.
+  conversations, current subscription state, calculator lead delivery,
+  MailerLite sync, and emailed-link continuation.
 - Contentsquare and Ubersuggest remain visible in the collapsed diagnostics as
   verified snapshots. They do not drive the beachhead scorecard.
 
@@ -146,6 +173,7 @@ Known gaps that affect the beachhead decision:
   on the user, so first-party connection, activation, and payment are not yet
   attributable to Coast FIRE;
 - Coast FIRE events from before GTM version 19 cannot be backfilled;
+- results-email GA4 events from before September 12, 2026 cannot be backfilled;
 - paid conversion matures after the 30-day trial, so the initial 4–6 week test
   needs cohort-age context; and
 - Search Console and Google Ads spend are not connected. They may improve

@@ -1,5 +1,6 @@
 import {
   pushBeginCheckout,
+  pushCalculatorResultsEmailCtaOpened,
   pushCoastFireCalculated,
   pushPurchase,
   pushRetirementModelRun,
@@ -24,6 +25,7 @@ import {
 } from "@/lib/dataLayer";
 import { GET_STARTED_HREF } from "@/lib/site-nav";
 import { INTERNAL_ANALYTICS_BROWSER_KEY } from "@/lib/internal-analytics";
+import { beginFreeTrialSignupFlow } from '@/lib/trial-signup-flow';
 
 type AnalyticsWindow = Window & typeof globalThis & {
   dataLayer?: Array<Record<string, unknown> | unknown[]>;
@@ -143,6 +145,7 @@ describe("free-signup funnel analytics", () => {
 
   beforeEach(() => {
     analyticsWindow.dataLayer = [];
+    window.sessionStorage.clear();
     window.history.replaceState({}, "", "/can-i-retire-at-60");
   });
 
@@ -169,6 +172,45 @@ describe("free-signup funnel analytics", () => {
       source_page: GET_STARTED_HREF,
       signup_flow: "free_trial",
     }]);
+  });
+
+  it('carries calculator email attribution through the signup funnel without PII', () => {
+    window.history.replaceState({}, '', GET_STARTED_HREF);
+    beginFreeTrialSignupFlow(Date.now(), {
+      signupOrigin: 'coast_fire_calculator',
+      signupEntry: 'results_email',
+    });
+
+    pushCalculatorResultsEmailCtaOpened('coast_fire_calculator');
+    pushTrialSignupViewed();
+    pushSignUp({ signupFlow: 'free_trial' });
+
+    expect(analyticsWindow.dataLayer).toEqual([
+      {
+        event: 'calculator_results_email_cta_opened',
+        source_page: '/getstarted',
+        content_type: 'coast_fire_calculator',
+        calculator_type: 'coast_fire',
+        signup_origin: 'coast_fire_calculator',
+        signup_entry: 'results_email',
+      },
+      {
+        event: 'trial_signup_viewed',
+        source_page: '/getstarted',
+        signup_flow: 'free_trial',
+        signup_origin: 'coast_fire_calculator',
+        signup_entry: 'results_email',
+      },
+      {
+        event: 'sign_up',
+        method: 'email',
+        source_page: '/getstarted',
+        signup_flow: 'free_trial',
+        signup_origin: 'coast_fire_calculator',
+        signup_entry: 'results_email',
+      },
+    ]);
+    expect(JSON.stringify(analyticsWindow.dataLayer)).not.toMatch(/@|token|currentSavings/);
   });
 
   it("emits the complete no-card funnel with only fixed, non-sensitive parameters", () => {

@@ -229,12 +229,28 @@ export interface BeachheadScorecard {
   cohortDefinition: string;
   coastFireJourney: BeachheadStageMetric[];
   currentCalculatorBaseline: BeachheadStageMetric[];
+  leadCapture: {
+    coastFire: BeachheadLeadCaptureMetric;
+    retirement: BeachheadLeadCaptureMetric;
+  };
   downstream: {
     financialConnectionRate: MetricValue;
     activationRate: MetricValue;
     paidRate: MetricValue;
   };
   evidenceGaps: string[];
+}
+
+export interface BeachheadLeadCaptureMetric {
+  /** Result sessions where a successful email request followed the result. */
+  resultsEmailedSessions: MetricValue;
+  /** Email-request sessions divided by eligible result sessions. */
+  captureRate: MetricValue;
+  /** Successful scenario restores after a recipient clicked the email CTA. */
+  emailCtaOpenedSessions: MetricValue;
+  /** Email-attributed sessions that reached the final tracked trial step. */
+  emailTrialCompletedSessions: MetricValue;
+  firstParty: CalculatorLeadSummary;
 }
 
 export interface RetirementCalculatorHealthSummary {
@@ -318,3 +334,4 @@ export interface MarketingDashboardReport {
     intents: IntentCohortId[];
   };
 }
+import type { CalculatorLeadSummary } from '../services/calculator-lead-report';

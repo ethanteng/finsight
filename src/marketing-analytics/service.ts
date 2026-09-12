@@ -1,4 +1,8 @@
 import { getPrismaClient } from '../prisma-client';
+import {
+  calculatorLeadSummary,
+  unavailableCalculatorLeadSummary,
+} from '../services/calculator-lead-report';
 import { aggregateTrialFunnel } from './funnel';
 import { buildBeachheadScorecard } from './beachhead-scorecard';
 import { classifyIntent } from './intent-rules';
@@ -334,6 +338,20 @@ export async function getMarketingDashboard(filters: MarketingFilters): Promise<
       note: 'The first-party calculator-run store could not be read. These values are unavailable, not zero.',
     };
   }
+  const leadPeriodStart = new Date(`${displayedPeriod.start}T00:00:00.000Z`);
+  const leadPeriodEnd = new Date(`${addDays(displayedPeriod.end, 1)}T00:00:00.000Z`);
+  let coastFireLeads;
+  let retirementLeads;
+  try {
+    [coastFireLeads, retirementLeads] = await Promise.all([
+      calculatorLeadSummary('coast_fire', leadPeriodStart, leadPeriodEnd),
+      calculatorLeadSummary('retirement', leadPeriodStart, leadPeriodEnd),
+    ]);
+  } catch (error) {
+    console.error('Marketing dashboard could not read calculator lead aggregates:', error);
+    coastFireLeads = unavailableCalculatorLeadSummary(leadPeriodStart, leadPeriodEnd);
+    retirementLeads = unavailableCalculatorLeadSummary(leadPeriodStart, leadPeriodEnd);
+  }
   const trackingStartedAt = ga4.firstFullTrackingDate;
   const funnelCoverageComplete = Boolean(trackingStartedAt && period.start >= trackingStartedAt);
   const funnelCoverage = funnelCoverageComplete ? 'complete' : 'partial';
@@ -351,6 +369,8 @@ export async function getMarketingDashboard(filters: MarketingFilters): Promise<
     funnelCoverageComplete,
     previousFunnelCoverageComplete: previousFunnelCovered,
     firstParty,
+    coastFireLeads,
+    retirementLeads,
   });
   const funnel = hasLiveGa4 && trackingStartedAt
     ? aggregateTrialFunnel(funnelSessions, funnelCoverage)

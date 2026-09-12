@@ -14,7 +14,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { AlertTriangle, ArrowLeft, BarChart3, Database, RefreshCw, ShieldAlert, SlidersHorizontal } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, BarChart3, Database, Mail, RefreshCw, ShieldAlert, SlidersHorizontal } from 'lucide-react';
 import PageMeta from '../../../components/PageMeta';
 import AuthenticatedPageHeader from '../../../components/authenticated/AuthenticatedPageHeader';
 import { markInternalAnalyticsBrowser } from '../../../lib/internal-analytics';
@@ -47,6 +47,19 @@ interface Report {
     survivalRate: Band[];
   };
   daily: Array<{ date: string; runs: number; rejected: number; answerRate: number }>;
+  leadCapture: {
+    state: 'live' | 'error';
+    requests: number | null;
+    emailsSent: number | null;
+    uniqueEmails: number | null;
+    mailerliteSynced: number | null;
+    continuedToSignup: number | null;
+    matchedAccounts: number | null;
+    deliveryRate: number | null;
+    continuationRate: number | null;
+    accountMatchRate: number | null;
+    note: string;
+  };
 }
 
 const FIELD_LABELS: Record<string, string> = {
@@ -140,6 +153,27 @@ export default function RetirementCalculatorAdminPage() {
             No runs recorded in the last {report.windowDays} days. Rows are written from the moment the
             calculator is deployed with logging enabled, so an empty window here is expected until then.
           </div>
+        )}
+
+        {report && (
+          <section className="mt-6 rounded-[22px] border border-[#102319]/10 bg-[#fffdf5] p-5 shadow-[0_18px_45px_rgba(16,35,25,.05)] sm:p-6">
+            <div className="flex items-start gap-3">
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#102319] text-[#d8ff71]"><Mail size={18} /></span>
+              <div>
+                <p className="text-[10px] font-extrabold uppercase tracking-[.13em] text-[#49725a]">Known-prospect capture</p>
+                <h2 className="text-lg font-semibold tracking-[-.03em]">Email me these results</h2>
+                <p className="mt-2 max-w-4xl text-xs leading-5 text-[#66736b]">{report.leadCapture.note}</p>
+              </div>
+            </div>
+            <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+              <Kpi label="Requests stored" value={number(report.leadCapture.requests)} />
+              <Kpi label="Emails sent" value={number(report.leadCapture.emailsSent)} note={`${percent(report.leadCapture.deliveryRate)} of stored requests`} accent />
+              <Kpi label="Unique emails" value={number(report.leadCapture.uniqueEmails)} />
+              <Kpi label="MailerLite synced" value={number(report.leadCapture.mailerliteSynced)} />
+              <Kpi label="Email CTA continued" value={number(report.leadCapture.continuedToSignup)} note={`${percent(report.leadCapture.continuationRate)} of delivered emails`} />
+              <Kpi label="Matched accounts" value={number(report.leadCapture.matchedAccounts)} note={`${percent(report.leadCapture.accountMatchRate)} of unique lead emails`} />
+            </div>
+          </section>
         )}
 
         {report && report.totals.runs > 0 && (

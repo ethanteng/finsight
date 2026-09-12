@@ -48,7 +48,8 @@ const DIAGNOSTIC_EVENTS = [
   'trial_verify_error', 'trial_login_error',
   'retirement_calculator_field_edited', 'retirement_model_clicked',
   'retirement_model_requested', 'retirement_model_run', 'scroll',
-  'coast_fire_calculated',
+  'coast_fire_calculated', 'coast_fire_results_emailed',
+  'retirement_results_emailed', 'calculator_results_email_cta_opened',
 ] as const;
 
 /**
@@ -56,7 +57,12 @@ const DIAGNOSTIC_EVENTS = [
  * timestamps as well as counts: the scorecard proves a plan-CTA handoff by
  * showing the CTA came after the result in the same session.
  */
-const RESULT_EVENTS: string[] = ['retirement_model_run', 'coast_fire_calculated'];
+const ORDERED_JOURNEY_EVENTS: string[] = [
+  'retirement_model_run',
+  'coast_fire_calculated',
+  'retirement_results_emailed',
+  'coast_fire_results_emailed',
+];
 
 let cachedAccessToken: { value: string; expiresAt: number } | null = null;
 
@@ -190,6 +196,10 @@ export function buildQuery(projectId: string, datasetId: string, dates: ReturnTy
     "COUNTIF(event_name = 'start_free_click' AND cta_location = 'coast_fire_plan_cta') AS count_coast_fire_plan_cta_click",
     "MIN(IF(event_name = 'start_free_click' AND cta_location = 'coast_fire_plan_cta', event_timestamp, NULL)) AS first_coast_fire_plan_cta_click",
     "COUNTIF(content_type = 'coast_fire_calculator' OR REGEXP_CONTAINS(LOWER(COALESCE(page_location, source_page, '')), r'/coast[-_]fire')) AS count_coast_fire_touch",
+    "COUNTIF(event_name = 'calculator_results_email_cta_opened' AND calculator_type = 'coast_fire') AS count_coast_fire_email_cta_opened",
+    "COUNTIF(event_name = 'calculator_results_email_cta_opened' AND calculator_type = 'retirement') AS count_retirement_email_cta_opened",
+    "COUNTIF(event_name = 'trial_login_success' AND signup_origin = 'coast_fire_calculator' AND signup_entry = 'results_email') AS count_coast_fire_email_trial_complete",
+    "COUNTIF(event_name = 'trial_login_success' AND signup_origin = 'retirement_calculator' AND signup_entry = 'results_email') AS count_retirement_email_trial_complete",
   ].join(',\n    ');
 
   return `
@@ -207,6 +217,9 @@ WITH raw AS (
     (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'cta_location') AS cta_location,
     (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'content_type') AS content_type,
     (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'signup_flow') AS signup_flow,
+    (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'signup_origin') AS signup_origin,
+    (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'signup_entry') AS signup_entry,
+    (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'calculator_type') AS calculator_type,
     (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'traffic_type') AS traffic_type,
     COALESCE(
       CAST((SELECT value.int_value FROM UNNEST(event_params) WHERE key = 'debug_mode') AS STRING),
@@ -340,7 +353,7 @@ function toSession(row: Record<string, string>): AnalyticsSession {
     // timing is also required so beachhead plan-CTA handoffs can prove ordering,
     // for each journey's own result event.
     if (
-      (FUNNEL_EVENTS.includes(event as FunnelEventName) || RESULT_EVENTS.includes(event))
+      (FUNNEL_EVENTS.includes(event as FunnelEventName) || ORDERED_JOURNEY_EVENTS.includes(event))
       && row[`first_${event}`]
     ) {
       firstEventAt[event] = Number(row[`first_${event}`]);
@@ -349,6 +362,10 @@ function toSession(row: Record<string, string>): AnalyticsSession {
   eventCounts.quickplan_cross_sell_click = Number(row.count_quickplan_cross_sell_click || 0);
   eventCounts.coast_fire_plan_cta_click = Number(row.count_coast_fire_plan_cta_click || 0);
   eventCounts.coast_fire_touch = Number(row.count_coast_fire_touch || 0);
+  eventCounts.coast_fire_email_cta_opened = Number(row.count_coast_fire_email_cta_opened || 0);
+  eventCounts.retirement_email_cta_opened = Number(row.count_retirement_email_cta_opened || 0);
+  eventCounts.coast_fire_email_trial_complete = Number(row.count_coast_fire_email_trial_complete || 0);
+  eventCounts.retirement_email_trial_complete = Number(row.count_retirement_email_trial_complete || 0);
   if (row.first_quickplan_cross_sell_click) {
     firstEventAt.quickplan_cross_sell_click = Number(row.first_quickplan_cross_sell_click);
   }

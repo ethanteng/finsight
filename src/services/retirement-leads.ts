@@ -119,6 +119,17 @@ export async function readRetirementLead(
     const lead = await getPrismaClient().retirementLead.findUnique({ where: { token } });
     if (!lead || lead.expiresAt <= now) return null;
 
+    // Persist the first successful emailed CTA continuation. Reloads and
+    // concurrent exchanges do not move the timestamp forward.
+    try {
+      await getPrismaClient().retirementLead.updateMany({
+        where: { token, continuedAt: null },
+        data: { continuedAt: now },
+      });
+    } catch (error) {
+      console.error('⚠️  Could not mark retirement lead continuation:', error);
+    }
+
     return {
       token: lead.token,
       email: lead.email,

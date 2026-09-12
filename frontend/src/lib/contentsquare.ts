@@ -30,7 +30,8 @@ export type ContentsquareEvent =
   | 'retirement_request_error'
   | 'coast_fire_calculated'
   | 'coast_fire_results_emailed'
-  | 'retirement_results_emailed';
+  | 'retirement_results_emailed'
+  | 'calculator_results_email_cta_opened';
 
 /** Custom page events do not create artificial pageviews or alter bounce rates. */
 export function trackContentsquareEvent(event: ContentsquareEvent): void {

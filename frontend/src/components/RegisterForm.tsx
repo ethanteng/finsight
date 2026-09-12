@@ -7,6 +7,7 @@ import { ArrowRight, Check, CircleAlert, CreditCard, Eye, EyeOff, LoaderCircle, 
 import AuthFlowShell from './auth/AuthFlowShell';
 import {
   pushBeginCheckout,
+  pushCalculatorResultsEmailCtaOpened,
   pushSignUp,
   pushTrialSignupRegistrationError,
   pushTrialSignupStarted,
@@ -37,6 +38,7 @@ import {
 } from '@/lib/coast-fire-signup-context';
 import {
   beginFreeTrialSignupFlow,
+  type TrialSignupAttribution,
   withFreeTrialSignupFlow,
 } from '@/lib/trial-signup-flow';
 
@@ -162,9 +164,23 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
   useEffect(() => {
     if (!isTrial || trialViewedRef.current) return;
     trialViewedRef.current = true;
-    beginFreeTrialSignupFlow();
+    let attribution: TrialSignupAttribution | undefined;
+    if (hasCoastFireSignupSource(searchParams)) {
+      const fromEmail = Boolean(readCoastFireSignupRef() || readCoastFireSignupContext()?.sourceToken);
+      attribution = {
+        signupOrigin: 'coast_fire_calculator',
+        signupEntry: fromEmail ? 'results_email' : 'calculator_cta',
+      };
+    } else if (hasRetirementSignupSource(searchParams)) {
+      const fromEmail = Boolean(readRetirementSignupRef() || readRetirementSignupContext()?.sourceToken);
+      attribution = {
+        signupOrigin: 'retirement_calculator',
+        signupEntry: fromEmail ? 'results_email' : 'calculator_cta',
+      };
+    }
+    beginFreeTrialSignupFlow(Date.now(), attribution);
     pushTrialSignupViewed();
-  }, [isTrial]);
+  }, [isTrial, searchParams]);
 
   // Read URL parameters on component mount
   useEffect(() => {
@@ -268,6 +284,7 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
         sourceToken: token,
         emailedOutcome: context.emailedOutcome,
       });
+      pushCalculatorResultsEmailCtaOpened('coast_fire_calculator');
       setCoastFireContext(readCoastFireSignupContext());
       // Their own address, from the link we sent them. Prefilled, not locked:
       // they can sign up under a different one.
@@ -314,6 +331,7 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
         sourceToken: token,
         emailedOutcome: context.emailedOutcome,
       });
+      pushCalculatorResultsEmailCtaOpened('retirement_calculator');
       setRetirementContext(readRetirementSignupContext());
       if (context.email) setEmail((current) => current || context.email!);
     })();

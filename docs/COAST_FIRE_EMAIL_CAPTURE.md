@@ -130,3 +130,12 @@ address. GTM needs a Custom Event trigger and a GA4 Event tag for it, and it
 should be marked a key event in GA4 Admin: it is the first point in this funnel
 where an anonymous visitor becomes a known prospect, which is what the
 experiment is trying to measure.
+
+When the CTA in that email successfully restores the stored scenario,
+`calculator_results_email_cta_opened` is pushed with only fixed dimensions:
+`calculator_type=coast_fire`, `signup_origin=coast_fire_calculator`, and
+`signup_entry=results_email`. The same two attribution fields are retained in
+sessionStorage and appended to every later no-card signup event. The backend
+also writes the lead's first successful token exchange to `continuedAt`, so the
+admin dashboards have a live first-party count even while GA4's daily export
+is settling.

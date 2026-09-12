@@ -21,6 +21,18 @@ const unavailableJourney = [
   note: 'Unavailable in this fixture.',
 }));
 
+const emptyLeadCapture = {
+  resultsEmailedSessions: { value: null, previous: null, unit: 'count', source: 'Collecting' },
+  captureRate: { value: null, previous: null, unit: 'percent', source: 'Collecting' },
+  emailCtaOpenedSessions: { value: null, previous: null, unit: 'count', source: 'Collecting' },
+  emailTrialCompletedSessions: { value: null, previous: null, unit: 'count', source: 'Collecting' },
+  firstParty: {
+    state: 'live', requests: 0, emailsSent: 0, uniqueEmails: 0, mailerliteSynced: 0,
+    continuedToSignup: 0, matchedAccounts: 0, deliveryRate: null,
+    continuationRate: null, accountMatchRate: null, note: 'Live first-party lead records.',
+  },
+};
+
 describe('marketing scorecard data states', () => {
   const originalFetch = global.fetch;
   const originalApiUrl = process.env.NEXT_PUBLIC_API_URL;
@@ -72,6 +84,10 @@ describe('marketing scorecard data states', () => {
           cohortDefinition: 'Explicit Coast FIRE activity.',
           coastFireJourney: unavailableJourney,
           currentCalculatorBaseline: unavailableJourney,
+          leadCapture: {
+            coastFire: emptyLeadCapture,
+            retirement: emptyLeadCapture,
+          },
           downstream: {
             financialConnectionRate: { value: null, previous: null, unit: 'percent', source: 'First-party accounts' },
             activationRate: { value: null, previous: null, unit: 'percent', source: 'First-party accounts' },

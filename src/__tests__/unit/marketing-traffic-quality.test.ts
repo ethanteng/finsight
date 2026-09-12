@@ -112,4 +112,14 @@ describe('GA4 session query', () => {
     expect(query).toContain('AS first_quickplan_cross_sell_click');
     expect(query).toContain('AS first_coast_fire_plan_cta_click');
   });
+
+  it('extracts calculator email capture and cross-session signup attribution', () => {
+    expect(query).toContain("key = 'signup_origin'");
+    expect(query).toContain("key = 'signup_entry'");
+    expect(query).toContain("key = 'calculator_type'");
+    expect(query).toContain("event_name = 'coast_fire_results_emailed'");
+    expect(query).toContain("event_name = 'retirement_results_emailed'");
+    expect(query).toContain("calculator_type = 'coast_fire'");
+    expect(query).toContain("signup_origin = 'coast_fire_calculator' AND signup_entry = 'results_email'");
+  });
 });

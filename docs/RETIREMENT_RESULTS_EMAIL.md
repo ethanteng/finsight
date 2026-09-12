@@ -80,3 +80,11 @@ never the address, and never the exact rate, which is close enough to a
 fingerprint of one person's plan to be worth not sending. GTM needs a Custom
 Event trigger and a GA4 Event tag for it, and it should be a key event in GA4
 Admin.
+
+After the email CTA restores the stored plan, the browser pushes
+`calculator_results_email_cta_opened` with `calculator_type=retirement`,
+`signup_origin=retirement_calculator`, and `signup_entry=results_email`. Those
+fixed, non-sensitive attribution fields stay on the later trial events. The
+backend records the first successful token exchange in `continuedAt`, which is
+reported live in `/admin/retirement-calculator` and `/admin/marketing` without
+waiting for the GA4 daily export.

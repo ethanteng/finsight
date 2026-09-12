@@ -1096,10 +1096,15 @@ app.get('/sync/status', async (req: Request, res: Response) => {
       try {
         const { getPrismaClient } = await import('./prisma-client');
         const { buildQuickPlanReport } = await import('./services/retirement-quickplan-report');
+        const {
+          calculatorLeadSummary,
+          unavailableCalculatorLeadSummary,
+        } = await import('./services/calculator-lead-report');
         const prisma = getPrismaClient();
 
         const days = Math.min(Math.max(Number(req.query.days) || 28, 1), 365);
-        const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+        const now = new Date();
+        const since = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
         // One past the cap, so a window that overflows it can be reported as
         // clipped rather than quietly answering for a subset.
         const maxRows = 20_000;
@@ -1110,7 +1115,17 @@ app.get('/sync/status', async (req: Request, res: Response) => {
         });
         const truncated = rows.length > maxRows;
 
-        res.json(buildQuickPlanReport(rows.slice(0, maxRows) as never, days, truncated));
+        let leadCapture;
+        try {
+          leadCapture = await calculatorLeadSummary('retirement', since, now);
+        } catch (error) {
+          console.error('Retirement calculator report could not read lead aggregates:', error);
+          leadCapture = unavailableCalculatorLeadSummary(since, now);
+        }
+        res.json({
+          ...buildQuickPlanReport(rows.slice(0, maxRows) as never, days, truncated),
+          leadCapture,
+        });
       } catch (error) {
         console.error('Error building retirement calculator report:', error);
         if (error instanceof Error) {

@@ -13,6 +13,7 @@ import {
   ExternalLink,
   FlaskConical,
   Link2,
+  Mail,
   MessageCircle,
   RefreshCw,
   Target,
@@ -47,6 +48,26 @@ type SourceDiagnostic = {
   detail: string;
 };
 
+type LeadCapture = {
+  resultsEmailedSessions: Metric;
+  captureRate: Metric;
+  emailCtaOpenedSessions: Metric;
+  emailTrialCompletedSessions: Metric;
+  firstParty: {
+    state: 'live' | 'error';
+    requests: number | null;
+    emailsSent: number | null;
+    uniqueEmails: number | null;
+    mailerliteSynced: number | null;
+    continuedToSignup: number | null;
+    matchedAccounts: number | null;
+    deliveryRate: number | null;
+    continuationRate: number | null;
+    accountMatchRate: number | null;
+    note: string;
+  };
+};
+
 interface Report {
   period: { start: string; end: string; previousStart: string; previousEnd: string };
   coverage: {
@@ -75,6 +96,10 @@ interface Report {
     cohortDefinition: string;
     coastFireJourney: JourneyStage[];
     currentCalculatorBaseline: JourneyStage[];
+    leadCapture: {
+      coastFire: LeadCapture;
+      retirement: LeadCapture;
+    };
     downstream: {
       financialConnectionRate: Metric;
       activationRate: Metric;
@@ -173,6 +198,39 @@ function Journey({
         {index < stages.length - 1 && <span className="absolute -right-5 top-1/2 z-10 hidden h-7 w-7 -translate-y-1/2 place-items-center rounded-full border border-[#102319]/10 bg-[#fffdf5] text-[#49725a] lg:grid"><ArrowRight size={13} /></span>}
       </div>;
     })}
+  </div>;
+}
+
+function LeadCapturePanel({ capture }: { capture: LeadCapture }) {
+  const cells = [
+    ['GA4 email requests', count(capture.resultsEmailedSessions.value), capture.resultsEmailedSessions.note],
+    ['GA4 capture rate', precisePercent(capture.captureRate.value), capture.captureRate.note],
+    ['GA4 email CTA opens', count(capture.emailCtaOpenedSessions.value), capture.emailCtaOpenedSessions.note],
+    ['GA4 email-path trials', count(capture.emailTrialCompletedSessions.value), capture.emailTrialCompletedSessions.note],
+    ['First-party emails sent', count(capture.firstParty.emailsSent), `${precisePercent(capture.firstParty.deliveryRate)} of stored requests`],
+    ['Unique lead emails', count(capture.firstParty.uniqueEmails), `${count(capture.firstParty.mailerliteSynced)} synced to MailerLite`],
+    ['First-party continuations', count(capture.firstParty.continuedToSignup), `${precisePercent(capture.firstParty.continuationRate)} of delivered emails`],
+    ['Matched accounts', count(capture.firstParty.matchedAccounts), `${precisePercent(capture.firstParty.accountMatchRate)} of unique lead emails`],
+  ];
+  return <div className="mt-6 rounded-[18px] border border-[#102319]/10 bg-[#edf1e9] p-4 sm:p-5">
+    <div className="flex flex-wrap items-start justify-between gap-3">
+      <div className="flex gap-3">
+        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[#102319] text-[#d8ff71]"><Mail size={16} /></span>
+        <div>
+          <p className="text-[10px] font-extrabold uppercase tracking-[.14em] text-[#49725a]">Known-prospect branch</p>
+          <h3 className="mt-1 text-base font-semibold tracking-[-.025em]">Email me these results</h3>
+          <p className="mt-1 max-w-4xl text-[10px] leading-4 text-[#66736b]">GA4 rows are attributed sessions from the settled daily export. First-party rows are live Postgres delivery and continuation records. {capture.firstParty.note}</p>
+        </div>
+      </div>
+      <SourcePill state={capture.firstParty.state} />
+    </div>
+    <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+      {cells.map(([label, value, note]) => <div key={label} className="rounded-xl bg-[#fffdf5] px-4 py-3">
+        <div className="text-2xl font-semibold tracking-[-.04em] tabular-nums">{value}</div>
+        <div className="mt-1 text-[11px] font-bold text-[#66736b]">{label}</div>
+        <div className="mt-1 text-[9px] leading-4 text-[#89938c]">{note}</div>
+      </div>)}
+    </div>
   </div>;
 }
 
@@ -305,6 +363,7 @@ export default function MarketingDashboardPage() {
             </div>}
 
             <Journey stages={report.beachhead.coastFireJourney} compare={filters.compare} unavailableLabel={journeyUnavailableLabel} />
+            <LeadCapturePanel capture={report.beachhead.leadCapture.coastFire} />
           </section>
 
           <section className="mt-6 rounded-[24px] border border-[#102319]/10 bg-[#fffdf5] p-5 shadow-[0_18px_45px_rgba(16,35,25,.05)] sm:p-7">
@@ -337,6 +396,7 @@ export default function MarketingDashboardPage() {
               </div>
             </div>}
             <Journey stages={report.beachhead.currentCalculatorBaseline} compare={filters.compare} unavailableLabel={journeyUnavailableLabel} />
+            <LeadCapturePanel capture={report.beachhead.leadCapture.retirement} />
           </section>
 
           <section className="mt-10">

@@ -11,6 +11,7 @@ import RegisterForm from '@/components/RegisterForm';
 import { USER_TIME_ZONE_KEY } from '@/lib/browser-time-zone';
 import {
   pushSignUp,
+  pushCalculatorResultsEmailCtaOpened,
   pushTrialSignupRegistrationError,
   pushTrialSignupStarted,
   pushTrialSignupSubmit,
@@ -37,6 +38,7 @@ jest.mock('next/navigation', () => ({
 }));
 jest.mock('@/lib/dataLayer', () => ({
   pushBeginCheckout: jest.fn(),
+  pushCalculatorResultsEmailCtaOpened: jest.fn(),
   pushSignUp: jest.fn(),
   pushTrialSignupRegistrationError: jest.fn(),
   pushTrialSignupStarted: jest.fn(),
@@ -46,6 +48,7 @@ jest.mock('@/lib/dataLayer', () => ({
 }));
 
 const mockPushSignUp = jest.mocked(pushSignUp);
+const mockPushCalculatorResultsEmailCtaOpened = jest.mocked(pushCalculatorResultsEmailCtaOpened);
 const mockPushTrialSignupRegistrationError = jest.mocked(pushTrialSignupRegistrationError);
 const mockPushTrialSignupStarted = jest.mocked(pushTrialSignupStarted);
 const mockPushTrialSignupSubmit = jest.mocked(pushTrialSignupSubmit);
@@ -187,6 +190,8 @@ describe('RegisterForm', () => {
       expect(screen.getByLabelText('Email address')).toHaveValue('reader@example.com');
       expect(String((fetchMock as unknown as jest.Mock).mock.calls[0][0]))
         .toContain(`/api/coast-fire/signup-context/${token}`);
+      expect(mockPushCalculatorResultsEmailCtaOpened)
+        .toHaveBeenCalledWith('coast_fire_calculator');
       /*
        * The token is a 90-day bearer credential for this address and these
        * seven figures, and this page loads Google Tag Manager in <head>, which
@@ -283,6 +288,8 @@ describe('RegisterForm', () => {
       expect(screen.getByLabelText('Email address')).toHaveValue('reader@example.com');
       expect(String((fetchMock as unknown as jest.Mock).mock.calls[0][0]))
         .toContain(`/api/retirement-quickplan/signup-context/${token}`);
+      expect(mockPushCalculatorResultsEmailCtaOpened)
+        .toHaveBeenCalledWith('retirement_calculator');
       // The token is a bearer credential and this page loads Google Tag
       // Manager, so it arrives in a cookie and never in the address bar.
       expect(window.location.search).not.toContain(token);

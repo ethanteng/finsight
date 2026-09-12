@@ -13,10 +13,26 @@ export const TRIAL_SIGNUP_FLOW_STORAGE_KEY = 'asklinc.trial-signup-flow.v1';
 const FLOW_VERSION = 1 as const;
 const FLOW_TTL_MS = 2 * 60 * 60 * 1000;
 
+export const CALCULATOR_SIGNUP_ORIGINS = [
+  'coast_fire_calculator',
+  'retirement_calculator',
+] as const;
+export type CalculatorSignupOrigin = (typeof CALCULATOR_SIGNUP_ORIGINS)[number];
+
+export const CALCULATOR_SIGNUP_ENTRIES = ['calculator_cta', 'results_email'] as const;
+export type CalculatorSignupEntry = (typeof CALCULATOR_SIGNUP_ENTRIES)[number];
+
+export interface TrialSignupAttribution {
+  signupOrigin: CalculatorSignupOrigin;
+  signupEntry: CalculatorSignupEntry;
+}
+
 interface StoredTrialSignupFlow {
   version: typeof FLOW_VERSION;
   signupFlow: typeof FREE_TRIAL_SIGNUP_FLOW;
   startedAt: number;
+  signupOrigin?: CalculatorSignupOrigin;
+  signupEntry?: CalculatorSignupEntry;
 }
 
 function isValidTimestamp(value: unknown): value is number {
@@ -31,14 +47,50 @@ function removeStoredFlow(): void {
   }
 }
 
+function includes<const T extends readonly string[]>(values: T, value: unknown): value is T[number] {
+  return typeof value === 'string' && values.includes(value as T[number]);
+}
+
+function parseStoredFlow(raw: string, now: number): StoredTrialSignupFlow | null {
+  const value = JSON.parse(raw) as Partial<StoredTrialSignupFlow>;
+  const isRecent =
+    isValidTimestamp(value.startedAt) &&
+    value.startedAt <= now &&
+    now - value.startedAt <= FLOW_TTL_MS;
+
+  if (
+    value.version !== FLOW_VERSION ||
+    value.signupFlow !== FREE_TRIAL_SIGNUP_FLOW ||
+    !isRecent
+  ) {
+    return null;
+  }
+
+  const hasAttribution =
+    includes(CALCULATOR_SIGNUP_ORIGINS, value.signupOrigin) &&
+    includes(CALCULATOR_SIGNUP_ENTRIES, value.signupEntry);
+  return {
+    version: FLOW_VERSION,
+    signupFlow: FREE_TRIAL_SIGNUP_FLOW,
+    startedAt: value.startedAt as number,
+    ...(hasAttribution
+      ? { signupOrigin: value.signupOrigin, signupEntry: value.signupEntry }
+      : {}),
+  };
+}
+
 /** Start (or refresh) attribution when the no-card /getstarted page is viewed. */
-export function beginFreeTrialSignupFlow(now = Date.now()): boolean {
+export function beginFreeTrialSignupFlow(
+  now = Date.now(),
+  attribution?: TrialSignupAttribution,
+): boolean {
   if (typeof window === 'undefined' || !isValidTimestamp(now)) return false;
 
   const value: StoredTrialSignupFlow = {
     version: FLOW_VERSION,
     signupFlow: FREE_TRIAL_SIGNUP_FLOW,
     startedAt: now,
+    ...(attribution || {}),
   };
 
   try {
@@ -46,6 +98,28 @@ export function beginFreeTrialSignupFlow(now = Date.now()): boolean {
     return true;
   } catch {
     return false;
+  }
+}
+
+/** Fixed, non-sensitive calculator attribution for subsequent auth events. */
+export function readTrialSignupAttribution(
+  now = Date.now(),
+): TrialSignupAttribution | null {
+  if (typeof window === 'undefined' || !isValidTimestamp(now)) return null;
+  try {
+    const raw = window.sessionStorage.getItem(TRIAL_SIGNUP_FLOW_STORAGE_KEY);
+    if (!raw) return null;
+    const value = parseStoredFlow(raw, now);
+    if (!value) {
+      removeStoredFlow();
+      return null;
+    }
+    return value.signupOrigin && value.signupEntry
+      ? { signupOrigin: value.signupOrigin, signupEntry: value.signupEntry }
+      : null;
+  } catch {
+    removeStoredFlow();
+    return null;
   }
 }
 
@@ -69,17 +143,8 @@ export function isFreeTrialSignupContinuation(
     const raw = window.sessionStorage.getItem(TRIAL_SIGNUP_FLOW_STORAGE_KEY);
     if (!raw) return false;
 
-    const value = JSON.parse(raw) as Partial<StoredTrialSignupFlow>;
-    const isRecent =
-      isValidTimestamp(value.startedAt) &&
-      value.startedAt <= now &&
-      now - value.startedAt <= FLOW_TTL_MS;
-
-    if (
-      value.version !== FLOW_VERSION ||
-      value.signupFlow !== FREE_TRIAL_SIGNUP_FLOW ||
-      !isRecent
-    ) {
+    const value = parseStoredFlow(raw, now);
+    if (!value) {
       removeStoredFlow();
       return false;
     }

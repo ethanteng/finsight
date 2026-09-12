@@ -244,6 +244,42 @@ describe('Coast FIRE beachhead scorecard', () => {
     expect(report.currentCalculatorBaseline[report.currentCalculatorBaseline.length - 1]?.value).toBeNull();
   });
 
+  it('reports email capture as a branch and credits a later attributed return session', () => {
+    const calculator = session('coast-email-request', {
+      sessionDate: '2026-09-12',
+      acquisition: {
+        source: 'google', medium: 'cpc', channel: 'Paid', campaign: 'coast_fire',
+        landingPage: '/coast-fire-calculator', searchTerm: 'coast fire calculator',
+        creative: 'email-results', adId: '1', referrer: '',
+      },
+      eventCounts: { coast_fire_calculated: 1, coast_fire_results_emailed: 1 },
+      firstEventAt: { coast_fire_calculated: 1_000_000, coast_fire_results_emailed: 2_000_000 },
+    });
+    const emailReturn = session('coast-email-return', {
+      sessionDate: '2026-09-12',
+      acquisition: {
+        source: 'newsletter', medium: 'email', channel: 'Other', campaign: '(not set)',
+        landingPage: '/getstarted', searchTerm: '(not set)', creative: '(not set)', adId: '', referrer: '',
+      },
+      eventCounts: { coast_fire_email_cta_opened: 1, coast_fire_email_trial_complete: 1 },
+    });
+
+    const report = buildBeachheadScorecard({
+      current: [calculator, emailReturn],
+      previous: [],
+      ga4State: 'live',
+      funnelCoverageComplete: true,
+      previousFunnelCoverageComplete: true,
+      firstParty,
+    });
+
+    expect(report.coastFireJourney[0].value).toBe(1);
+    expect(report.leadCapture.coastFire.resultsEmailedSessions.value).toBe(1);
+    expect(report.leadCapture.coastFire.captureRate.value).toBe(1);
+    expect(report.leadCapture.coastFire.emailCtaOpenedSessions.value).toBe(1);
+    expect(report.leadCapture.coastFire.emailTrialCompletedSessions.value).toBe(1);
+  });
+
   it('surfaces the actual GA4 failure state instead of calling every outage collecting', () => {
     const report = buildBeachheadScorecard({
       current: [],

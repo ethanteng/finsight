@@ -10,6 +10,10 @@
 import { GET_STARTED_HREF } from './site-nav';
 import { trackContentsquareEvent } from './contentsquare';
 import { isInternalAnalyticsBrowser } from './internal-analytics';
+import {
+  readTrialSignupAttribution,
+  type CalculatorSignupOrigin,
+} from './trial-signup-flow';
 
 interface DataLayerWindow {
   dataLayer?: Array<Record<string, unknown> | unknown[]>;
@@ -186,6 +190,26 @@ export function pushRetirementResultsEmailed(survivalRate: number): void {
   });
 }
 
+/**
+ * The CTA inside a delivered calculator-results email successfully restored
+ * its saved scenario on /getstarted. The opaque token and the recipient's
+ * email address never enter the dataLayer.
+ */
+export function pushCalculatorResultsEmailCtaOpened(
+  signupOrigin: CalculatorSignupOrigin,
+): void {
+  if (typeof window === 'undefined') return;
+  trackContentsquareEvent('calculator_results_email_cta_opened');
+  pushToDataLayer({
+    event: 'calculator_results_email_cta_opened',
+    source_page: window.location.pathname,
+    content_type: signupOrigin,
+    calculator_type: signupOrigin === 'coast_fire_calculator' ? 'coast_fire' : 'retirement',
+    signup_origin: signupOrigin,
+    signup_entry: 'results_email',
+  });
+}
+
 export function pushBeginCheckout(ctaLocation = 'marketing_cta'): void {
   if (typeof window === 'undefined') return;
 
@@ -253,10 +277,14 @@ function pushTrialFunnelEvent(
 ): void {
   if (typeof window === 'undefined') return;
   trackContentsquareEvent(event);
+  const attribution = readTrialSignupAttribution();
   pushToDataLayer({
     event,
     source_page: window.location.pathname,
     signup_flow: 'free_trial',
+    ...(attribution
+      ? { signup_origin: attribution.signupOrigin, signup_entry: attribution.signupEntry }
+      : {}),
     ...parameters,
   });
 }
@@ -337,12 +365,16 @@ export function pushSignUp({ signupFlow }: SignUpEvent): void {
   if (typeof window === 'undefined') return;
   trackContentsquareEvent('sign_up');
   if (signupFlow === 'free_trial') trackContentsquareEvent('sign_up_free_trial');
+  const attribution = signupFlow === 'free_trial' ? readTrialSignupAttribution() : null;
 
   pushToDataLayer({
     event: 'sign_up',
     method: 'email',
     source_page: window.location.pathname,
     signup_flow: signupFlow,
+    ...(attribution
+      ? { signup_origin: attribution.signupOrigin, signup_entry: attribution.signupEntry }
+      : {}),
   });
 }
 

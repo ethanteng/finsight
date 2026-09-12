@@ -110,6 +110,20 @@ export async function readCoastFireLead(
     const lead = await getPrismaClient().coastFireLead.findUnique({ where: { token } });
     if (!lead || lead.expiresAt <= now) return null;
 
+    // This endpoint is the first-party source of truth for an emailed CTA
+    // continuation. `updateMany` makes the write idempotent across reloads and
+    // concurrent requests while preserving the time of the first open.
+    try {
+      await getPrismaClient().coastFireLead.updateMany({
+        where: { token, continuedAt: null },
+        data: { continuedAt: now },
+      });
+    } catch (error) {
+      // Personalization is the product request; analytics bookkeeping cannot
+      // turn a valid emailed link into a 404.
+      console.error('⚠️  Could not mark Coast FIRE lead continuation:', error);
+    }
+
     return {
       token: lead.token,
       email: lead.email,

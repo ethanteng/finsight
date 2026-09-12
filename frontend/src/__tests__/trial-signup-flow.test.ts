@@ -2,6 +2,7 @@ import {
   beginFreeTrialSignupFlow,
   completeFreeTrialSignupFlow,
   isFreeTrialSignupContinuation,
+  readTrialSignupAttribution,
   TRIAL_SIGNUP_FLOW_STORAGE_KEY,
   withFreeTrialSignupFlow,
 } from '@/lib/trial-signup-flow';
@@ -40,5 +41,21 @@ describe('free-trial signup attribution', () => {
     beginFreeTrialSignupFlow(1000);
     completeFreeTrialSignupFlow();
     expect(sessionStorage.getItem(TRIAL_SIGNUP_FLOW_STORAGE_KEY)).toBeNull();
+  });
+
+  it('keeps fixed calculator and email-entry attribution through later auth pages', () => {
+    beginFreeTrialSignupFlow(1000, {
+      signupOrigin: 'coast_fire_calculator',
+      signupEntry: 'results_email',
+    });
+
+    expect(readTrialSignupAttribution(1001)).toEqual({
+      signupOrigin: 'coast_fire_calculator',
+      signupEntry: 'results_email',
+    });
+    expect(isFreeTrialSignupContinuation(
+      new URLSearchParams('signup_flow=free_trial'),
+      1001,
+    )).toBe(true);
   });
 });

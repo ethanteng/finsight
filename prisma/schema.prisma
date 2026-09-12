@@ -728,6 +728,9 @@ model CoastFireLead {
   /// Bookkeeping for the acquisition experiment, never a gate on the response.
   emailSent        Boolean @default(false)
   mailerliteSynced Boolean @default(false)
+  /// First successful exchange of the emailed CTA token on /getstarted.
+  /// Null means the recipient has not continued (or did so before this field shipped).
+  continuedAt      DateTime?
 
   createdAt DateTime @default(now())
   /// After this the link stops personalizing signup and lands on plain /getstarted.
@@ -735,6 +738,7 @@ model CoastFireLead {
 
   @@index([createdAt])
   @@index([email])
+  @@index([continuedAt])
   @@map("coast_fire_leads")
 }
 
@@ -782,6 +786,9 @@ model RetirementLead {
   /// Bookkeeping for the acquisition experiment, never a gate on the response.
   emailSent        Boolean @default(false)
   mailerliteSynced Boolean @default(false)
+  /// First successful exchange of the emailed CTA token on /getstarted.
+  /// Null means the recipient has not continued (or did so before this field shipped).
+  continuedAt      DateTime?
 
   createdAt DateTime @default(now())
   /// After this the link stops personalizing signup and lands on plain /getstarted.
@@ -789,5 +796,6 @@ model RetirementLead {
 
   @@index([createdAt])
   @@index([email])
+  @@index([continuedAt])
   @@map("retirement_leads")
 }
