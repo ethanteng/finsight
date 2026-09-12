@@ -2202,6 +2202,13 @@ export class FinancialDataService {
           select: { profileText: true }
         });
         profileData = userProfile?.profileText || '';
+        // Encrypted profiles keep profileText empty. If ProfileManager failed and
+        // there is no plaintext to fall back to, returning null would look like
+        // "no home on record" and drop a valued home from net worth with no
+        // metadata.errors.homeValue. Rethrow so the outer catch rejects.
+        if (!profileData.trim()) {
+          throw profileError instanceof Error ? profileError : new Error(String(profileError));
+        }
       }
 
       if (!profileData?.trim()) {
