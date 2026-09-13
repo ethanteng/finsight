@@ -89,6 +89,9 @@ export function retirementPortfolioFingerprint(holdings: readonly any[], securit
     // flips it changes the modeled portfolio. Left out of the signature, the
     // cached analysis would survive a change that invalidates it.
     cashEquivalent: security?.is_cash_equivalent === true,
+    // Classification resolves this against the Treasury's auction records, so
+    // a feed that starts or stops sending it changes the modeled portfolio.
+    cusip: String(security?.cusip ?? ''),
   })).sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right)));
   return JSON.stringify({ holdings: normalizedHoldings, securities: normalizedSecurities });
 }

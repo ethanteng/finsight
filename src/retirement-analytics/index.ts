@@ -13,6 +13,7 @@ import {
   populateAssumptions,
 } from './engine/portfolio-mapper';
 import { DataProviderFactory } from './data/data-provider-factory';
+import { treasuryProvider } from './data/providers/treasury-provider';
 import {
   calculateHistoricalPriceCoverage,
   generateRollingSequences,
@@ -104,7 +105,22 @@ export async function analyzeRetirementPortfolio(
   // are interpreted at year-end; production supplies the full UTC date.
   const asOfDate = input.asOfDate
     ?? (input.asOfYear != null ? input.asOfYear : new Date().toISOString().slice(0, 10));
-  const portfolioMapping = await mapPortfolioToAssetBasket(input.holdings, input.securities, totalValue, dataProviderFactory, tickerToMetadata, asOfDate);
+  // Resolve every Treasury CUSIP in the book against the issuer's auction
+  // records. Individual Treasury lines carry no ticker, so nothing above
+  // reaches them; this is the only evidence that separates a TIPS issue from
+  // the nominal note its name is indistinguishable from. An unreachable
+  // service yields an empty map and classification falls back to the name.
+  const cusips = input.securities
+    .map(security => security.cusip)
+    .filter((cusip): cusip is string => typeof cusip === 'string' && cusip.trim().length > 0);
+  const treasuryByCusip = cusips.length > 0
+    ? await treasuryProvider.getTreasurySecurityBatch(cusips)
+    : new Map();
+  if (treasuryByCusip.size > 0) {
+    console.log(`🏛️ Treasury: resolved ${treasuryByCusip.size}/${new Set(cusips).size} CUSIPs from auction records`);
+  }
+
+  const portfolioMapping = await mapPortfolioToAssetBasket(input.holdings, input.securities, totalValue, dataProviderFactory, tickerToMetadata, asOfDate, treasuryByCusip);
   const modeledValue = portfolioMapping.mappedValue;
   // Classification may leave only TIPS / credit / international bonds / real
   // assets / unresolved geography. Those are disclosed, not simulated — a
