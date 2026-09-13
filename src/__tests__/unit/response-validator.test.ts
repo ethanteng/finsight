@@ -217,6 +217,33 @@ describe('buildSnapshotSummaryForValidation', () => {
     expect(summary).toContain('BEC 401K=162802 (no-holdings)');
   });
 
+  it('lists the largest exclusion reasons first when capping the list', () => {
+    // buildCanonicalFactPack sorts by amount before its own cap. Keeping source
+    // order here would drop a large reason past position 15 that grounding still
+    // accepts, and the reviewer would reject the caveat this change preserves.
+    const unmodeledReasons = Array.from({ length: 16 }, (_, index) => ({
+      label: `Account ${index + 1}`,
+      amount: index + 1,
+      kind: 'no-holdings',
+    }));
+    unmodeledReasons[15] = { label: 'Largest account', amount: 500_000, kind: 'partial-holdings' };
+
+    const summary = buildSnapshotSummaryForValidation({
+      ...snapshot,
+      retirementAnalysis: {
+        dataQuality: {
+          modeledValue: 100_000,
+          unmodeledValue: 500_136,
+          valueCoverage: 0.1666,
+          unmodeledReasons,
+        },
+      },
+    } as any);
+
+    expect(summary).toContain('Largest account=500000 (partial-holdings)');
+    expect(summary).not.toContain('Account 1=1');
+  });
+
   it('says nothing about coverage when the whole portfolio was modeled', () => {
     const summary = buildSnapshotSummaryForValidation({
       ...snapshot,

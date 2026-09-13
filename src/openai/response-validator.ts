@@ -213,7 +213,13 @@ export function buildSnapshotSummaryForValidation(snapshot: FinancialContextSnap
     parts.push(
       `Projection coverage: modeledValue=${coverage.modeledValue ?? 'N/A'}, unmodeledValue=${coverage.unmodeledValue}${excludedShare}`
     );
-    const reasons = (coverage.unmodeledReasons ?? []).slice(0, MAX_EXCLUSION_REASONS_LISTED);
+    // Same ordering as buildCanonicalFactPack: largest first, so the cap keeps
+    // the amounts an answer is most likely to quote (and that grounding can
+    // cite), not whichever reasons happened to land first in the array.
+    const reasons = [...(coverage.unmodeledReasons ?? [])]
+      .filter((reason) => typeof reason?.amount === 'number' && Number.isFinite(reason.amount) && reason.amount > 0)
+      .sort((left, right) => right.amount - left.amount)
+      .slice(0, MAX_EXCLUSION_REASONS_LISTED);
     if (reasons.length) {
       parts.push(
         'Excluded from the projection, by account and cause: ' +
