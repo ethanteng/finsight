@@ -184,6 +184,47 @@ describe('Treasury auction lookup', () => {
     expect(calls).toBe(3);
   });
 
+  it('still uses cached hits after the breaker opens', async () => {
+    // Opening the breaker must stop the network, not discard evidence already
+    // on hand. A bond ladder with prior cache hits would otherwise fall back
+    // to name inference for lines that never needed a request on this pass.
+    const cachedCusip = '912828990';
+    const warm = new TreasuryProvider({
+      fetchImplementation: (async () => ({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          data: [auctionRow({
+            cusip: cachedCusip,
+            inflation_index_security: 'Yes',
+            maturity_date: '2035-01-15',
+          })],
+        }),
+      }) as any),
+      maxAttempts: 1,
+    });
+    expect((await warm.getTreasurySecurity(cachedCusip))?.kind).toBe('tips');
+
+    let calls = 0;
+    const provider = new TreasuryProvider({
+      fetchImplementation: (async () => {
+        calls += 1;
+        throw new Error('network down');
+      }) as any,
+      maxAttempts: 1,
+    });
+    const failing = Array.from({ length: 3 }, (_, index) =>
+      `912828${String(index).padStart(2, '0')}0`);
+    const { securities, degraded } = await provider.getTreasurySecurityBatch([
+      ...failing,
+      cachedCusip,
+    ]);
+
+    expect(degraded).toBe(true);
+    expect(calls).toBe(3);
+    expect(securities.get(cachedCusip)?.kind).toBe('tips');
+  });
+
   it('reports a CUSIP the Treasury has no record of as available, not degraded', async () => {
     // A genuine miss and an outage must not look alike: only one of them means
     // the resulting analysis is unsafe to keep.

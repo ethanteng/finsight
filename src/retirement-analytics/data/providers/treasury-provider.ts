@@ -246,10 +246,13 @@ export class TreasuryProvider {
    * portfolio, whose every security also carries a CUSIP, would be sent here
    * in full.
    *
-   * Gives up after `CONSECUTIVE_FAILURE_LIMIT` transport failures in a row.
-   * Sequential lookups at two attempts and a ten-second timeout each would
-   * otherwise let an unreachable service hold an analysis for minutes, which
-   * gates it just as surely as an error would.
+   * Gives up on further network calls after `CONSECUTIVE_FAILURE_LIMIT`
+   * transport failures in a row. Sequential lookups at two attempts and a
+   * ten-second timeout each would otherwise let an unreachable service hold
+   * an analysis for minutes, which gates it just as surely as an error would.
+   * Once the breaker opens, remaining CUSIPs are still read from cache: a
+   * prior hit is evidence we already have, and skipping it would throw away
+   * a correct sleeve for lines that never needed the network on this pass.
    */
   async getTreasurySecurityBatch(
     cusips: readonly string[],
@@ -263,7 +266,19 @@ export class TreasuryProvider {
 
     let degraded = false;
     let consecutiveFailures = 0;
+    let allowNetwork = true;
     for (const cusip of unique) {
+      if (!allowNetwork) {
+        // Breaker is open: take cache hits only. A miss here is not a new
+        // transport failure -- we chose not to ask -- and `degraded` is
+        // already set from the failures that opened the breaker.
+        const cached = await cacheService.get<TreasurySecurity | 'miss'>(
+          `treasury_cusip_${cusip}`,
+        );
+        if (cached && cached !== 'miss') securities.set(cusip, cached);
+        continue;
+      }
+
       const { security, available } = await this.resolve(cusip);
       if (security) securities.set(cusip, security);
       if (available) {
@@ -274,11 +289,10 @@ export class TreasuryProvider {
       consecutiveFailures += 1;
       if (consecutiveFailures >= CONSECUTIVE_FAILURE_LIMIT) {
         console.warn(
-          `⚠️ Treasury: ${consecutiveFailures} consecutive failures; skipping ${
-            unique.size - securities.size - consecutiveFailures
-          } remaining lookups for this analysis`,
+          `⚠️ Treasury: ${consecutiveFailures} consecutive failures; ` +
+            'further lookups for this analysis are cache-only',
         );
-        break;
+        allowNetwork = false;
       }
     }
     return { securities, degraded };
