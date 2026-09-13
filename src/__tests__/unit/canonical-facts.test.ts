@@ -450,6 +450,83 @@ describe('buildCanonicalFactPack', () => {
     expect(validateCanonicalFactPack(pack)).toEqual([]);
   });
 
+  it('publishes the excluded share and its per-account breakdown', () => {
+    // The answers this came from were cut for quoting the excluded share, the
+    // not-itemized subtotal, and a named account's amount -- all three visible
+    // to the model in `dataQuality`, none of them citable until now.
+    const data = snapshot();
+    data.retirementAnalysis = {
+      metrics: {
+        withdrawalRate: 0.04,
+        yearsOfExpenses: 20,
+        expenseRatioWeighted: 0.004,
+        historicalWithdrawalRates: { p10: 0.03, p25: 0.035, p50: 0.04, p75: 0.045, p90: 0.05 },
+      },
+      stressTest: {
+        survivalRate: 0.87,
+        totalSequences: 100,
+        depletionPercentiles: { p10: 15.4, p25: 17, p50: 20, p75: 25, p90: 30 },
+      },
+      dataQuality: {
+        modeledValue: 760_134,
+        unmodeledValue: 548_586,
+        valueCoverage: 0.5808,
+        unmodeledReasons: [
+          { label: 'Wells Fargo 401(k)', amount: 385_784, kind: 'partial-holdings' },
+          { label: 'Baron Funds IRA', amount: 100_000, kind: 'no-holdings' },
+          { label: 'Known asset classes without a supported historical return series', amount: 62_802, kind: 'unsupported-asset-class' },
+        ],
+      },
+      _storedInputParams: { currentAge: 77, retirementAge: 65, annualWithdrawalAmount: 90_000, withdrawalStartAge: 77 },
+    };
+    const pack = buildCanonicalFactPack(data, 'Will my money last?', needs('retirement_analysis'));
+    const fact = (id: string) => pack.facts.find((item) => item.id === id);
+
+    // "42% of your holdings could not be simulated" is the same gap as the
+    // 58% the pack already carried, said the way an answer says it.
+    expect(fact('retirement_excluded_value_share')).toMatchObject({ value: 41.92, unit: 'percent' });
+    expect(fact('retirement_value_coverage')).toMatchObject({ value: 58.08, unit: 'percent' });
+
+    // Named accounts, so the exclusion can be attributed rather than asserted.
+    expect(fact('retirement_unmodeled_value_partial_holdings_wells_fargo_401_k'))
+      .toMatchObject({ value: 385_784, unit: 'usd' });
+    expect(fact('retirement_unmodeled_value_partial_holdings_wells_fargo_401_k')?.label)
+      .toBe('Wells Fargo 401(k) excluded from this projection (not itemized by the provider)');
+    expect(fact('retirement_unmodeled_value_no_holdings_baron_funds_ira'))
+      .toMatchObject({ value: 100_000, unit: 'usd' });
+
+    // Per-cause subtotals, and the not-itemized total the caveat below quotes.
+    expect(fact('retirement_unmodeled_value_unsupported_asset_class')).toMatchObject({ value: 62_802 });
+    expect(fact('retirement_not_itemized_value')).toMatchObject({ value: 485_784, unit: 'usd' });
+    expect(fact('portfolio_expense_ratio')?.caveat).toContain('$485,784');
+
+    expect(validateCanonicalFactPack(pack)).toEqual([]);
+  });
+
+  it('keeps one fact per account when two accounts share a name', () => {
+    const data = snapshot();
+    data.retirementAnalysis = {
+      metrics: { withdrawalRate: 0.04, yearsOfExpenses: 20, historicalWithdrawalRates: { p10: 0.03, p25: 0.035, p50: 0.04, p75: 0.045, p90: 0.05 } },
+      stressTest: { survivalRate: 0.9, totalSequences: 100, depletionPercentiles: { p10: 15, p25: 17, p50: 20, p75: 25, p90: 30 } },
+      dataQuality: {
+        modeledValue: 500_000,
+        unmodeledValue: 300_000,
+        valueCoverage: 0.625,
+        unmodeledReasons: [
+          { label: '401(k)', amount: 200_000, kind: 'no-holdings' },
+          { label: '401(k)', amount: 100_000, kind: 'no-holdings' },
+        ],
+      },
+      _storedInputParams: { currentAge: 50, retirementAge: 65, annualWithdrawalAmount: 40_000, withdrawalStartAge: 65 },
+    };
+    const pack = buildCanonicalFactPack(data, 'Will my money last?', needs('retirement_analysis'));
+
+    expect(pack.facts.filter((item) => item.id.startsWith('retirement_unmodeled_value_no_holdings_401_k')).map((item) => item.value))
+      .toEqual([200_000, 100_000]);
+    // The subtotal covers both, and shares neither account's id.
+    expect(pack.facts.find((item) => item.id === 'retirement_unmodeled_value_no_holdings')).toMatchObject({ value: 300_000 });
+  });
+
   it('leaves retirement facts uncaveated when the whole portfolio was modeled', () => {
     const data = snapshot();
     data.retirementAnalysis = {

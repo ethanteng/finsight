@@ -62,6 +62,33 @@ function safeFactId(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 80);
 }
 
+/**
+ * Per-account exclusion reasons published as facts, largest first.
+ *
+ * The reviewer's snapshot summary caps the same list at the same number
+ * (`response-validator.ts`), so the accounts it can see named are exactly the
+ * accounts an answer can cite an amount for. A reviewer shown a label the pack
+ * never published would be judging a name against nothing.
+ */
+export const MAX_UNMODELED_REASON_FACTS = 12;
+
+/**
+ * Why a slice of the portfolio sat out the simulation, in the words a fact
+ * label can carry. Matches the phrasing of the exclusion note the user reads
+ * (`describeUnmodeledInvestmentValue`), so the label and the prose beside it
+ * do not describe the same gap two different ways.
+ */
+const UNMODELED_KIND_PHRASES: Record<string, string> = {
+  'partial-holdings': 'not itemized by the provider',
+  'no-holdings': 'no holdings detail',
+  'unrecognized-holdings': 'no supported asset-class mapping',
+  'unsupported-asset-class': 'no sufficiently long historical return series',
+};
+
+function describeUnmodeledKind(kind: string): string {
+  return UNMODELED_KIND_PHRASES[kind] ?? 'not modellable';
+}
+
 interface TrustedNumericValue {
   value: number;
   unit: CanonicalFactUnit;
@@ -685,6 +712,69 @@ export function buildCanonicalFactPack(
       if (finite(coverageRatio)) {
         addSnapshotFact('retirement_value_coverage_ratio', 'Share of investments modeled source ratio', coverageRatio, 'ratio', 'retirementAnalysis.dataQuality.valueCoverage', false);
         addCalculatedFact('retirement_value_coverage', 'Share of investments this projection modeled', coverageRatio * 100, 'percent', 'input * 100', ['retirement_value_coverage_ratio']);
+        // The same gap said the other way round. An answer that opens with the
+        // exclusion writes the excluded share, not the modeled one -- "42% of
+        // your holdings could not be simulated" -- and without this fact that
+        // sentence is cut as an invented number while its complement sits in
+        // the pack.
+        addCalculatedFact(
+          'retirement_excluded_value_share',
+          'Share of investments this projection excluded',
+          (1 - coverageRatio) * 100,
+          'percent',
+          '(1 - input) * 100',
+          ['retirement_value_coverage_ratio']
+        );
+      }
+
+      // The exclusion broken down the way a reader asks about it: which
+      // accounts, and how much from each. These amounts are already in the
+      // context pack under `dataQuality.unmodeledReasons`, so an answer will
+      // reach for them; publishing them as facts is what lets it keep them.
+      const reasons = (coverage?.unmodeledReasons ?? [])
+        .filter((reason) => finite(reason?.amount) && reason.amount > 0);
+      const byKind = new Map<string, number>();
+      const takenIds = new Set<string>();
+      for (const reason of reasons) {
+        byKind.set(reason.kind, (byKind.get(reason.kind) ?? 0) + reason.amount);
+      }
+      // Largest first, so the cap drops the amounts least likely to be quoted.
+      for (const reason of [...reasons].sort((left, right) => right.amount - left.amount).slice(0, MAX_UNMODELED_REASON_FACTS)) {
+        const labelId = safeFactId(reason.label ?? '');
+        if (!labelId) continue;
+        const kindId = safeFactId(reason.kind ?? '');
+        let id = `retirement_unmodeled_value_${kindId}_${labelId}`;
+        // Two accounts can share a name, and long names collide once truncated.
+        for (let suffix = 2; takenIds.has(id); suffix++) id = `retirement_unmodeled_value_${kindId}_${labelId}_${suffix}`;
+        takenIds.add(id);
+        addSnapshotFact(
+          id,
+          `${reason.label} excluded from this projection (${describeUnmodeledKind(reason.kind)})`,
+          reason.amount,
+          'usd',
+          `retirementAnalysis.dataQuality.unmodeledReasons.${kindId}.${labelId}`
+        );
+      }
+      for (const [kind, amount] of byKind) {
+        addSnapshotFact(
+          `retirement_unmodeled_value_${safeFactId(kind)}`,
+          `Investment value excluded from this projection: ${describeUnmodeledKind(kind)}`,
+          amount,
+          'usd',
+          `retirementAnalysis.dataQuality.unmodeledReasons.${safeFactId(kind)}`
+        );
+      }
+      // Quoted verbatim by the itemized-holdings caveat below, so it has to be
+      // citeable or that caveat cannot be repeated to the user.
+      const notItemizedTotal = (byKind.get('partial-holdings') ?? 0) + (byKind.get('no-holdings') ?? 0);
+      if (notItemizedTotal > 0) {
+        addSnapshotFact(
+          'retirement_not_itemized_value',
+          'Investment value not itemized by the provider',
+          notItemizedTotal,
+          'usd',
+          'retirementAnalysis.dataQuality.unmodeledReasons.not_itemized'
+        );
       }
     }
   }
@@ -723,9 +813,11 @@ export function buildCanonicalFactPack(
     // holdings. Only provider-level value with no itemized position is absent
     // from their denominator, so do not attach the simulation exclusion to
     // these facts when every holding is itemized.
+    // Summed exactly as `retirement_not_itemized_value` is, so the figure this
+    // caveat tells the model to state is the one it can cite.
     const notItemizedValue = (retirementCoverage?.unmodeledReasons ?? [])
       .filter(reason => reason.kind === 'partial-holdings' || reason.kind === 'no-holdings')
-      .reduce((sum, reason) => sum + (finite(reason.amount) ? reason.amount : 0), 0);
+      .reduce((sum, reason) => sum + (finite(reason.amount) && reason.amount > 0 ? reason.amount : 0), 0);
     const itemizedHoldingsCaveat = notItemizedValue > 0
       ? `${formatUsd(notItemizedValue)} of investments is not itemized by the provider and is not represented. ` +
         'This metric uses itemized holdings only; state the exclusion whenever you state this number.'
@@ -882,6 +974,8 @@ export function validateCanonicalFactPack(pack: CanonicalFactPack): string[] {
       expected = inputs.reduce((total, input) => total + input!.value, 0);
     } else if (fact.provenance.formula === 'input * 100') {
       expected = inputs[0]!.value * 100;
+    } else if (fact.provenance.formula === '(1 - input) * 100') {
+      expected = (1 - inputs[0]!.value) * 100;
     } else if (fact.provenance.formula === 'abs(input[0] - input[1])') {
       expected = Math.abs(inputs[0]!.value - inputs[1]!.value);
     }

@@ -117,6 +117,42 @@ describe('canonical response facts', () => {
     expect(validateResponseFacts({ summary: 'In 2008 markets crashed.' }, pack).valid).toBe(true);
   });
 
+  it('reads a distribution slice as a descriptor, not a claim about the money', () => {
+    // "In the worst 10% of historical sequences the money ran out at year 15"
+    // makes one claim -- year 15 -- and that one still has to be grounded. The
+    // 10% names which sequences are being described.
+    expect(validateResponseFacts({
+      summary: 'In the worst 10% of historical sequences, the portfolio was depleted earliest.',
+    }, pack).valid).toBe(true);
+    expect(validateResponseFacts({
+      summary: 'The best 25% of historical sequences never depleted.',
+    }, pack).valid).toBe(true);
+
+    // A bare percentage still has to come from the pack, and so does the
+    // outcome the slice is describing. Ranked money claims ("top 10% of my
+    // portfolio") are not distribution slices just because they use "top"/"of".
+    expect(validateResponseFacts({ summary: 'About 10% of your portfolio is in cash.' }, pack).valid).toBe(false);
+    expect(validateResponseFacts({
+      summary: 'The top 10% of my portfolio is in speculative tech.',
+    }, pack).valid).toBe(false);
+    expect(validateResponseFacts({
+      summary: 'The bottom 22% of your holdings are bonds.',
+    }, pack).valid).toBe(false);
+
+    // The noun decides it, not the words in front of it. These are the same
+    // descriptor, and cutting an answer over one of them is the failure this
+    // exemption exists to prevent.
+    expect(validateResponseFacts({
+      summary: 'In the worst 10% of the modeled sequences, the money ran out first.',
+    }, pack).valid).toBe(true);
+    expect(validateResponseFacts({
+      summary: 'In the worst 10% of rolling 30-year windows, the money ran out first.',
+    }, pack).valid).toBe(true);
+    expect(validateResponseFacts({
+      summary: 'In the worst 10% of sequences you were left with $42,000.',
+    }, pack).issues).toContain('User-facing usd value 42000 is not present in the canonical fact pack.');
+  });
+
   it('accepts typed scenario premises supplied by the user', () => {
     const scenarioQuestion = 'Can I afford a $500k house with 20% down?';
     const scenarioPack = buildCanonicalFactPack(snapshot, scenarioQuestion, questionNeedsFromPacks([], true));

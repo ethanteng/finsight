@@ -39,6 +39,14 @@ describe('buildFinancialReasoningPrompt – system prompt safeguards', () => {
     expect(systemPrompt).toMatch(/Every dollar amount and percentage in your prose must come from a supplied canonical fact/i);
   });
 
+  it('steers distribution slices to ranks rather than percentages', () => {
+    // A written "10%" is checked against the fact pack as a claim about the
+    // user's money, so "the worst 10% of sequences" costs the sentence. An
+    // ordinal carries no percentage and grounds without a prose exemption.
+    expect(systemPrompt).toMatch(/10th-percentile sequence/i);
+    expect(systemPrompt).toMatch(/not "the worst 10% of sequences"/i);
+  });
+
   it('allows rounding for readability and non-monetary integers', () => {
     expect(systemPrompt).toMatch(/round one for readability/i);
     expect(systemPrompt).toMatch(/Ages, time horizons, counts, and allocation splits/i);

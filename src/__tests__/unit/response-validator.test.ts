@@ -1,4 +1,5 @@
 import { buildSnapshotSummaryForValidation, formatMetricPercent } from '../../openai/response-validator';
+import { MAX_UNMODELED_REASON_FACTS } from '../../openai/canonical-facts';
 
 describe('formatMetricPercent', () => {
   it('converts decimal fractions to whole-number percents', () => {
@@ -161,5 +162,100 @@ describe('buildSnapshotSummaryForValidation', () => {
 
     expect(summary).not.toContain('Data quality');
     expect(summary).not.toContain('not reporting');
+  });
+
+  it('names the accounts the model was given', () => {
+    // The reviewer objected that answers "invent specific accounts" when they
+    // named the accounts a projection left out -- names the primary model had
+    // in its context pack and this summary did not carry.
+    const summary = buildSnapshotSummaryForValidation({
+      ...snapshot,
+      contextSelection: { accountsIncluded: true },
+      accounts: [
+        { id: '1', name: 'Baron Funds IRA', type: 'investment', subtype: 'ira', balance: 100_000, institution: 'Baron' },
+        { id: '2', name: 'BEC 401K', type: 'investment', balance: 250_000 },
+      ],
+    } as any);
+
+    expect(summary).toContain('Baron Funds IRA (investment/ira) at Baron');
+    expect(summary).toContain('BEC 401K (investment)');
+  });
+
+  it('omits the account list when the plan did not include account details', () => {
+    // Snapshot.accounts is always populated for other consumers; only
+    // contextSelection says whether the primary model saw them.
+    const summary = buildSnapshotSummaryForValidation({
+      ...snapshot,
+      contextSelection: { accountsIncluded: false },
+      accounts: [
+        { id: '1', name: 'Baron Funds IRA', type: 'investment', subtype: 'ira', balance: 100_000, institution: 'Baron' },
+      ],
+    } as any);
+
+    expect(summary).not.toContain('Accounts');
+    expect(summary).not.toContain('Baron Funds IRA');
+  });
+
+  it('shows what the projection excluded, and from which accounts', () => {
+    const summary = buildSnapshotSummaryForValidation({
+      ...snapshot,
+      retirementAnalysis: {
+        dataQuality: {
+          modeledValue: 760_134,
+          unmodeledValue: 548_586,
+          valueCoverage: 0.5808,
+          unmodeledReasons: [
+            { label: 'Wells Fargo 401(k)', amount: 385_784, kind: 'partial-holdings' },
+            { label: 'BEC 401K', amount: 162_802, kind: 'no-holdings' },
+          ],
+        },
+      },
+    } as any);
+
+    expect(summary).toContain('Projection coverage: modeledValue=760134, unmodeledValue=548586');
+    expect(summary).toContain('41.9% of investments excluded');
+    expect(summary).toContain('Wells Fargo 401(k)=385784 (partial-holdings)');
+    expect(summary).toContain('BEC 401K=162802 (no-holdings)');
+  });
+
+  it('lists the largest exclusion reasons first when capping the list', () => {
+    // buildCanonicalFactPack sorts by amount before its own cap. Keeping source
+    // order here would drop a large reason past position 15 that grounding still
+    // accepts, and the reviewer would reject the caveat this change preserves.
+    const unmodeledReasons = Array.from({ length: 16 }, (_, index) => ({
+      label: `Account ${index + 1}`,
+      amount: index + 1,
+      kind: 'no-holdings',
+    }));
+    unmodeledReasons[15] = { label: 'Largest account', amount: 500_000, kind: 'partial-holdings' };
+
+    const summary = buildSnapshotSummaryForValidation({
+      ...snapshot,
+      retirementAnalysis: {
+        dataQuality: {
+          modeledValue: 100_000,
+          unmodeledValue: 500_136,
+          valueCoverage: 0.1666,
+          unmodeledReasons,
+        },
+      },
+    } as any);
+
+    expect(summary).toContain('Largest account=500000 (partial-holdings)');
+    expect(summary).not.toContain('Account 1=1');
+    // Capped where the fact pack caps: a label the reviewer sees but the pack
+    // never published is a name it would be judging against nothing.
+    expect(summary.split('; ').length).toBe(MAX_UNMODELED_REASON_FACTS);
+  });
+
+  it('says nothing about coverage when the whole portfolio was modeled', () => {
+    const summary = buildSnapshotSummaryForValidation({
+      ...snapshot,
+      retirementAnalysis: {
+        dataQuality: { modeledValue: 1_000_000, unmodeledValue: 0, valueCoverage: 1, unmodeledReasons: [] },
+      },
+    } as any);
+
+    expect(summary).not.toContain('Projection coverage');
   });
 });
