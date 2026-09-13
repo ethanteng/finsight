@@ -15,7 +15,11 @@ const AS_OF = '2026-09-01';
  * Treasury lines are identified by CUSIP, which we do not carry, so the name
  * is the only evidence the mapper has.
  */
-function mapOne(name: string, overrides: Record<string, unknown> = {}) {
+function mapOne(
+  name: string,
+  overrides: Record<string, unknown> = {},
+  asOf: string = AS_OF,
+) {
   const security = { security_id: 's1', name, type: '', ...overrides } as any;
   const holding = {
     security_id: 's1',
@@ -23,7 +27,7 @@ function mapOne(name: string, overrides: Record<string, unknown> = {}) {
     institution_value: 10_000,
     ...overrides,
   } as any;
-  return mapPortfolioToAssetBasket([holding], [security], 10_000, undefined, new Map(), AS_OF);
+  return mapPortfolioToAssetBasket([holding], [security], 10_000, undefined, new Map(), asOf);
 }
 
 describe('individual Treasury lines', () => {
@@ -67,8 +71,8 @@ describe('why a holding produced no modeled exposure', () => {
     expect(equity.unrecognizedHoldings).toEqual([]);
     expect(equity.holdingExposures[0].unresolvedReason).toBe('equity-geography-unresolved');
 
-    const opaque = await mapOne('Guaranteed Interest Account');
-    expect(opaque.unrecognizedHoldings).toEqual(['Guaranteed Interest Account']);
+    const opaque = await mapOne('EQ/Com Stck Index');
+    expect(opaque.unrecognizedHoldings).toEqual(['EQ/Com Stck Index']);
     expect(opaque.equityGeographyUnresolvedHoldings).toEqual([]);
     expect(opaque.holdingExposures[0].unresolvedReason).toBe('unrecognized');
   });
@@ -107,15 +111,16 @@ describe('why a holding produced no modeled exposure', () => {
   it('names a recognized target-date fund that has no registry row', async () => {
     // The remedy here is a registry entry we write from UC's published fact
     // sheet, not a vendor feed. Reporting it as "no asset class resolved" sent
-    // an operator looking for the wrong thing entirely.
-    const mapping = await mapOne('UC PATHWAY 2040');
+    // an operator looking for the wrong thing entirely. 2040 has since been
+    // written; every other vintage still wants one.
+    const mapping = await mapOne('UC PATHWAY 2055');
 
-    expect(mapping.targetDateUnregisteredHoldings).toEqual(['UC PATHWAY 2040']);
+    expect(mapping.targetDateUnregisteredHoldings).toEqual(['UC PATHWAY 2055']);
     expect(mapping.unrecognizedHoldings).toEqual([]);
     expect(mapping.holdingExposures[0].targetDateIdentity).toMatchObject({
       provider: 'uc',
       series: 'pathway',
-      vintage: 2040,
+      vintage: 2055,
     });
   });
 
@@ -123,14 +128,14 @@ describe('why a holding produced no modeled exposure', () => {
     const mapping = await mapPortfolioToAssetBasket(
       [
         { security_id: 'a', security_name: 'Large Cap Growth Fund', institution_value: 1_000 },
-        { security_id: 'b', security_name: 'UC PATHWAY 2040', institution_value: 1_000 },
-        { security_id: 'c', security_name: 'Guaranteed Interest Account', institution_value: 1_000 },
+        { security_id: 'b', security_name: 'UC PATHWAY 2055', institution_value: 1_000 },
+        { security_id: 'c', security_name: 'EQ/Com Stck Index', institution_value: 1_000 },
         { security_id: 'd', security_name: 'UST 3.5% 02/15/2029', institution_value: 1_000 },
       ] as any[],
       [
         { security_id: 'a', name: 'Large Cap Growth Fund', type: '' },
-        { security_id: 'b', name: 'UC PATHWAY 2040', type: '' },
-        { security_id: 'c', name: 'Guaranteed Interest Account', type: '' },
+        { security_id: 'b', name: 'UC PATHWAY 2055', type: '' },
+        { security_id: 'c', name: 'EQ/Com Stck Index', type: '' },
         { security_id: 'd', name: 'UST 3.5% 02/15/2029', type: '' },
       ] as any[],
       4_000,
@@ -215,5 +220,81 @@ describe("the custodian's cash-equivalent flag", () => {
       is_cash_equivalent: false,
     });
     expect(explicitlyFalse.cashValue).toBe(0);
+  });
+});
+
+describe('employer-plan products with no external source', () => {
+  it('reads a guaranteed interest account as cash', async () => {
+    // An insurer's book-value contract. No custodian type describes it, no
+    // registry covers it, and no vendor prices it -- the name is the only
+    // evidence there will ever be. It was previously excluded outright.
+    const mapping = await mapOne('Guaranteed Interest Account');
+
+    expect(mapping.cashValue).toBe(10_000);
+    expect(mapping.unrecognizedHoldings).toEqual([]);
+    expect(mapping.valueCoverage).toBe(1);
+  });
+
+  it('reads a stable value fund the same way', async () => {
+    const mapping = await mapOne('XYZ Stable Value Fund', { type: 'mutual fund' });
+
+    expect(mapping.cashValue).toBe(10_000);
+  });
+
+  it('does not sweep a guaranteed-rate bond fund into cash', async () => {
+    // The signal must name the contract, not merely mention a guarantee.
+    const mapping = await mapOne('Government Guaranteed Mortgage Bond Fund');
+
+    expect(mapping.cashValue).toBe(0);
+    expect(mapping.nominalBondsValue).toBe(10_000);
+  });
+
+  it('lets the contract phrase win when a name reads as both', async () => {
+    // `guaranteed interest` and `bond fund` both match here, and cash is
+    // checked first, so the contract wins. Pinned deliberately rather than
+    // left to signal ordering: the phrase is insurer product language, and a
+    // bond fund that guarantees its interest is not a category that exists --
+    // whereas Guaranteed Interest Account and Guaranteed Interest Fund are
+    // real products this has to keep placing. If a real security ever trips
+    // this, the fix is to narrow the phrase, not to reorder the signals: the
+    // cash-first ordering is what keeps a Treasury money-market fund out of
+    // the bond sleeve.
+    const mapping = await mapOne('Guaranteed Interest Bond Fund');
+
+    expect(mapping.cashValue).toBe(10_000);
+    expect(mapping.nominalBondsValue).toBe(0);
+  });
+});
+
+describe('UC Pathway in the target-date registry', () => {
+  it('models the 2040 vintage from its published fact sheet', async () => {
+    // Previously recognized as a target-date fund and excluded for want of a
+    // registry row, which is what `target-date-unregistered` was reporting.
+    const mapping = await mapOne('UC PATHWAY 2040', {}, '2026-09-30');
+
+    expect(mapping.targetDateUnregisteredHoldings).toEqual([]);
+    expect(mapping.holdingExposures[0].method).toBe('fund-registry');
+    expect(mapping.usEquityValue).toBeCloseTo(4859, 0);
+    expect(mapping.internationalEquityValue).toBeCloseTo(3518, 0);
+    expect(mapping.nominalBondsValue).toBeCloseTo(1380, 0);
+  });
+
+  it('excludes the high-yield sleeve rather than calling it government debt', async () => {
+    // 2.44% sits in UC High Yield Fund. The nominal sleeve is a government
+    // bond series and high yield draws down like equity, so it is reported as
+    // an unsupported residual -- the holding is mostly modeled, not a gap.
+    const mapping = await mapOne('UC PATHWAY 2040', {}, '2026-09-30');
+
+    expect(mapping.valueCoverage).toBeCloseTo(0.9757, 4);
+    expect(mapping.partiallyMappedHoldings).toEqual(['UC PATHWAY 2040']);
+    expect(mapping.unsupportedHoldings).toEqual([]);
+  });
+
+  it('leaves an unregistered vintage unregistered', async () => {
+    // A neighbouring year's allocation is not evidence for this one.
+    const mapping = await mapOne('UC PATHWAY 2055', {}, '2026-09-30');
+
+    expect(mapping.targetDateUnregisteredHoldings).toEqual(['UC PATHWAY 2055']);
+    expect(mapping.mappedValue).toBe(0);
   });
 });

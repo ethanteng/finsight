@@ -35,7 +35,7 @@ import {
   identifyTargetDateFundHolding,
   type TargetDateFundIdentity,
 } from '../../services/target-date-fund';
-import type { TreasurySecurity } from '../data/providers/treasury-provider';
+import { treasuryLabelKey, type TreasurySecurity } from '../data/providers/treasury-provider';
 import {
   lookupTargetDateAllocation,
   type TargetDateFundAllocation,
@@ -769,7 +769,17 @@ export async function mapPortfolioToAssetBasket(
    * calls: every caller that wants issuer evidence supplies it, and one that
    * does not gets exactly the name-inference behaviour it had before.
    */
-  preFetchedTreasuries?: Map<string, TreasurySecurity>
+  preFetchedTreasuries?: Map<string, TreasurySecurity>,
+  /**
+   * Normalized security label -> Treasury auction record, for the lines that
+   * arrive with no CUSIP at all.
+   *
+   * Only one custodian sends a CUSIP, so without this half the Treasury lines
+   * in the book reach classification with nothing but their name -- the state
+   * the CUSIP path was built to leave behind. Resolved by the caller for the
+   * same reason the CUSIP map is: this function makes no network calls.
+   */
+  preFetchedTreasuriesByLabel?: Map<string, TreasurySecurity>
 ): Promise<PortfolioMapping> {
   const portfolioValue = holdings.reduce(
     (sum, holding) => sum + (Number.isFinite(holding.institution_value) ? holding.institution_value! : 0),
@@ -815,7 +825,13 @@ export async function mapPortfolioToAssetBasket(
     const ticker = security?.ticker_symbol?.toUpperCase() || holding.ticker_symbol?.toUpperCase() || '';
     const fmpMetadata = (ticker ? tickerToMetadata.get(ticker) : null) as SecurityMetadata | null;
     const cusip = security?.cusip?.trim().toUpperCase();
-    const treasurySecurity = (cusip && preFetchedTreasuries?.get(cusip)) || null;
+    // The CUSIP first: it is the custodian stating which security this is,
+    // where the label is us reading coupon and maturity off a string.
+    const labelKey = treasuryLabelKey(security?.name || holding.security_name);
+    const treasurySecurity =
+      (cusip && preFetchedTreasuries?.get(cusip)) ||
+      (labelKey && preFetchedTreasuriesByLabel?.get(labelKey)) ||
+      null;
     const draft = resolveHoldingExposure(holding, security, fmpMetadata, asOfDate, treasurySecurity);
     const resolvedWeightFraction = Math.max(0, Math.min(1, weightTotal(draft.weights)));
     const classifiedFraction = draft.unsupportedAssetClass

@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { describe, expect, it } from '@jest/globals';
 import { listRegistryEntries } from '../../services/target-date-fund-registry';
+import { observerFingerprintKinds } from '../../services/registry-source-check';
 
 /**
  * The registry's allocations are hand-transcribed from provider pages that are
@@ -18,6 +19,18 @@ describe('target-date registry provenance', () => {
     expect(entries.length).toBeGreaterThan(0);
   });
 
+  it('can observe every provider it stores', () => {
+    // A provider added without an observer does not fail loudly: its entry
+    // reports `error` on every run, which pins `verify-registry-sources` at a
+    // non-zero exit and leaves that source unwatched for drift. Nothing caught
+    // that when the UC entry was first written, so this does.
+    const observable = new Set(Object.keys(observerFingerprintKinds()));
+    const unobservable = [...new Set(entries.map(entry => entry.identity.provider))]
+      .filter(provider => !observable.has(provider));
+
+    expect(unobservable).toEqual([]);
+  });
+
   it('records a source fingerprint for every entry', () => {
     const missing = entries
       .filter(entry => !entry.sourceFingerprint)
@@ -25,20 +38,22 @@ describe('target-date registry provenance', () => {
     expect(missing).toEqual([]);
   });
 
-  it('fingerprints a rendered page by its published values, not its bytes', () => {
-    // Hashing a fund page's markup would report drift on every unrelated build,
-    // so HTML sources must fingerprint the figures actually read off the page.
-    for (const entry of entries) {
-      if (entry.sourceUrl.endsWith('.pdf')) continue;
-      expect(entry.sourceFingerprint?.kind).toBe('published-values');
-    }
-  });
+  it('stores the fingerprint kind its own observer emits', () => {
+    // Hashing a fund page's markup reports drift on every unrelated build, so
+    // a rendered page fingerprints the figures read off it; a document is
+    // hashed whole. Which applies is decided by the provider's observer, not
+    // by the URL's spelling -- UC serves a PDF from a link with no extension,
+    // and the suffix heuristic this replaces called that an HTML page.
+    //
+    // Matching the observer is the load-bearing part: a stored kind the
+    // observer will never emit compares two incomparable things and reports
+    // drift forever.
+    const kinds = observerFingerprintKinds();
+    const mismatched = entries
+      .filter(entry => entry.sourceFingerprint?.kind !== kinds[entry.identity.provider])
+      .map(entry => `${entry.identity.provider}/${entry.identity.vintage}`);
 
-  it('fingerprints a PDF source by its bytes', () => {
-    for (const entry of entries) {
-      if (!entry.sourceUrl.endsWith('.pdf')) continue;
-      expect(entry.sourceFingerprint?.kind).toBe('document-sha256');
-    }
+    expect(mismatched).toEqual([]);
   });
 
   it('stores a sha256-shaped value and an ISO observation date', () => {

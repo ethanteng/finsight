@@ -13,7 +13,7 @@ import {
   populateAssumptions,
 } from './engine/portfolio-mapper';
 import { DataProviderFactory } from './data/data-provider-factory';
-import { treasuryProvider } from './data/providers/treasury-provider';
+import { isTreasuryCusip, treasuryProvider } from './data/providers/treasury-provider';
 import {
   calculateHistoricalPriceCoverage,
   generateRollingSequences,
@@ -113,15 +113,29 @@ export async function analyzeRetirementPortfolio(
   const cusips = input.securities
     .map(security => security.cusip)
     .filter((cusip): cusip is string => typeof cusip === 'string' && cusip.trim().length > 0);
-  const { securities: treasuryByCusip, degraded: treasuryEvidenceDegraded } =
-    cusips.length > 0
-      ? await treasuryProvider.getTreasurySecurityBatch(cusips)
-      : { securities: new Map(), degraded: false };
-  if (treasuryByCusip.size > 0) {
-    console.log(`🏛️ Treasury: resolved ${treasuryByCusip.size} CUSIPs from auction records`);
+  // Lines no CUSIP can speak for, offered to the same records by name. Only
+  // Plaid sends a CUSIP, so on a SnapTrade book this is every Treasury in it.
+  // The provider decides which of these labels name a Treasury at all; sending
+  // the whole set spares this layer a second reading of the same strings.
+  const treasuryLabels = input.securities
+    .filter(security => !isTreasuryCusip(String(security.cusip ?? '')))
+    .map(security => String(security.name ?? ''))
+    .filter(name => name.trim().length > 0);
+  const {
+    securities: treasuryByCusip,
+    byLabel: treasuryByLabel,
+    degraded: treasuryEvidenceDegraded,
+  } = cusips.length > 0 || treasuryLabels.length > 0
+    ? await treasuryProvider.getTreasurySecurityBatch(cusips, treasuryLabels)
+    : { securities: new Map(), byLabel: new Map(), degraded: false };
+  if (treasuryByCusip.size > 0 || treasuryByLabel.size > 0) {
+    console.log(
+      `🏛️ Treasury: resolved ${treasuryByCusip.size} securities from auction records ` +
+      `(${treasuryByLabel.size} by name)`,
+    );
   }
 
-  const portfolioMapping = await mapPortfolioToAssetBasket(input.holdings, input.securities, totalValue, dataProviderFactory, tickerToMetadata, asOfDate, treasuryByCusip);
+  const portfolioMapping = await mapPortfolioToAssetBasket(input.holdings, input.securities, totalValue, dataProviderFactory, tickerToMetadata, asOfDate, treasuryByCusip, treasuryByLabel);
   const modeledValue = portfolioMapping.mappedValue;
   // Classification may leave only TIPS / credit / international bonds / real
   // assets / unresolved geography. Those are disclosed, not simulated — a

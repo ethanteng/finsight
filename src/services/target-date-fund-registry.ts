@@ -2,7 +2,8 @@ import type { TargetDateFundIdentity } from './target-date-fund';
 
 type RegisteredTargetDateFundIdentity =
   | { provider: 'state-street'; series: 'target-retirement'; vintage: number }
-  | { provider: 'blackrock'; series: 'lifepath-index'; vintage: number };
+  | { provider: 'blackrock'; series: 'lifepath-index'; vintage: number }
+  | { provider: 'uc'; series: 'pathway'; vintage: number };
 
 /**
  * A recorded observation of a cited source at a point in time.
@@ -101,10 +102,33 @@ export const STALE_ALLOCATION_DAYS = 366;
  * the holdings date. Mutable source pages without a publication timestamp use
  * the date on which their allocation was first verified for this registry.
  *
- * UC Pathway is knowingly absent: no public per-vintage allocation was found,
- * so recognizing its identity is not enough evidence to model its sleeves.
  * Lookup requires an exact provider/series/vintage key; recognition heuristics
  * live elsewhere and cannot invent an allocation for an unregistered identity.
+ * UC Pathway vintages other than those below remain absent on exactly that
+ * basis -- the fact-sheet book publishes each vintage separately, and a
+ * neighbouring year's allocation is not evidence for the one being asked about.
+ */
+/**
+ * How a published holding becomes a sleeve weight.
+ *
+ * A registry row must place an underlying holding in the same sleeve the
+ * mapper would place that instrument in if it were held directly. Otherwise
+ * the same security is modeled two ways depending on its wrapper, which is
+ * what happened here: `hasCreditNameSignal` excludes a high-yield or corporate
+ * bond fund held on its own, while these rows were folding those same
+ * holdings into `nominalBonds`.
+ *
+ * That mattered beyond tidiness. The nominal sleeve is fed a 10-year US
+ * *government* bond return series. High yield draws down with equity -- it
+ * fell with stocks in 2008 and in 2020, while Treasuries rallied -- so
+ * modeling it as government debt hands the simulation a cushion during
+ * exactly the sequences a retirement stress test exists to examine.
+ *
+ * Credit is therefore left out of the weights and reported as an unsupported
+ * residual, which is how commodities and real estate were already handled.
+ * The fingerprints are unchanged: they record what the source published, and
+ * the source did not change -- only our reading of which sleeve each published
+ * holding belongs to.
  */
 const REGISTRY: RegistryEntry[] = [
   {
@@ -122,7 +146,9 @@ const REGISTRY: RegistryEntry[] = [
       sourceAsOf: '2026-06-30',
       observed: '2026-06-30|ssi us gov money market class=0.18|state street aggregate bond index portfolio=21.10|state street equity 500 index ii portfolio=19.56|state street global equity ex-u.s. index portfolio=13.68|state street small/mid cap equity index portfolio=2.45|state street spdr bloomberg 1-10 year tips etf=17.93|state street spdr bloomberg enhanced roll yield commodity strategy no k-1 etf=3.51|state street spdr bloomberg high yield bond etf=6.98|state street spdr dow jones global real estate etf=4.91|state street spdr portfolio short term corporate bond etf=1.99|state street spdr portfolio short term treasury etf=7.76',
     },
-    weights: { usEquity: 0.2201, internationalEquity: 0.1368, nominalBonds: 0.3783, tips: 0.1793, cash: 0.0014 },
+    // nominalBonds 0.2886 = Aggregate Bond 21.10 + Short Term Treasury 7.76.
+    // High Yield 6.98 and Short Term Corporate 1.99 are credit, excluded.
+    weights: { usEquity: 0.2201, internationalEquity: 0.1368, nominalBonds: 0.2886, tips: 0.1793, cash: 0.0014 },
   },
   {
     identity: { provider: 'state-street', series: 'target-retirement', vintage: 2030 },
@@ -139,7 +165,10 @@ const REGISTRY: RegistryEntry[] = [
       sourceAsOf: '2026-06-30',
       observed: '2026-06-30|ssi us gov money market class=0.25|state street aggregate bond index portfolio=19.78|state street equity 500 index ii portfolio=27.38|state street global equity ex-u.s. index portfolio=21.01|state street small/mid cap equity index portfolio=4.07|state street spdr bloomberg 1-10 year tips etf=12.07|state street spdr bloomberg enhanced roll yield commodity strategy no k-1 etf=1.05|state street spdr bloomberg high yield bond etf=6.47|state street spdr dow jones global real estate etf=3.18|state street spdr portfolio long term treasury etf=3.44|state street spdr portfolio short term corporate bond etf=0.32|state street spdr portfolio short term treasury etf=1.09',
     },
-    weights: { usEquity: 0.3145, internationalEquity: 0.2101, nominalBonds: 0.3110, tips: 0.1207, cash: 0.0014 },
+    // nominalBonds 0.2431 = Aggregate Bond 19.78 + Long Term Treasury 3.44
+    // + Short Term Treasury 1.09. High Yield 6.47 and Short Term Corporate
+    // 0.32 are credit, excluded.
+    weights: { usEquity: 0.3145, internationalEquity: 0.2101, nominalBonds: 0.2431, tips: 0.1207, cash: 0.0014 },
   },
   {
     identity: { provider: 'state-street', series: 'target-retirement', vintage: 2035 },
@@ -156,7 +185,9 @@ const REGISTRY: RegistryEntry[] = [
       sourceAsOf: '2026-06-30',
       observed: '2026-06-30|ssi us gov money market class=0.16|state street aggregate bond index portfolio=15.84|state street equity 500 index ii portfolio=33.13|state street global equity ex-u.s. index portfolio=27.97|state street small/mid cap equity index portfolio=5.85|state street spdr bloomberg 1-10 year tips etf=2.93|state street spdr bloomberg high yield bond etf=5.21|state street spdr dow jones global real estate etf=0.73|state street spdr portfolio long term treasury etf=8.15|u.s. dollar=0.03',
     },
-    weights: { usEquity: 0.3898, internationalEquity: 0.2797, nominalBonds: 0.2920, tips: 0.0293, cash: 0.0019 },
+    // nominalBonds 0.2399 = Aggregate Bond 15.84 + Long Term Treasury 8.15.
+    // High Yield 5.21 is credit, excluded.
+    weights: { usEquity: 0.3898, internationalEquity: 0.2797, nominalBonds: 0.2399, tips: 0.0293, cash: 0.0019 },
   },
   {
     identity: { provider: 'state-street', series: 'target-retirement', vintage: 2040 },
@@ -173,7 +204,9 @@ const REGISTRY: RegistryEntry[] = [
       sourceAsOf: '2026-06-30',
       observed: '2026-06-30|ssi us gov money market class=0.17|state street aggregate bond index portfolio=12.22|state street equity 500 index ii portfolio=35.90|state street global equity ex-u.s. index portfolio=31.76|state street small/mid cap equity index portfolio=7.51|state street spdr bloomberg high yield bond etf=2.84|state street spdr portfolio long term treasury etf=9.61',
     },
-    weights: { usEquity: 0.4341, internationalEquity: 0.3176, nominalBonds: 0.2467, tips: 0, cash: 0.0016 },
+    // nominalBonds 0.2183 = Aggregate Bond 12.22 + Long Term Treasury 9.61.
+    // High Yield 2.84 is credit, excluded.
+    weights: { usEquity: 0.4341, internationalEquity: 0.3176, nominalBonds: 0.2183, tips: 0, cash: 0.0016 },
   },
   {
     identity: { provider: 'state-street', series: 'target-retirement', vintage: 2050 },
@@ -190,6 +223,8 @@ const REGISTRY: RegistryEntry[] = [
       sourceAsOf: '2026-06-30',
       observed: '2026-06-30|ssi us gov money market class=0.19|state street aggregate bond index portfolio=3.45|state street equity 500 index ii portfolio=38.72|state street global equity ex-u.s. index portfolio=36.68|state street small/mid cap equity index portfolio=11.39|state street spdr portfolio long term treasury etf=9.59',
     },
+    // nominalBonds 0.1304 = Aggregate Bond 3.45 + Long Term Treasury 9.59.
+    // This vintage holds no credit sleeve, so the weight is unchanged.
     weights: { usEquity: 0.5011, internationalEquity: 0.3668, nominalBonds: 0.1304, tips: 0, cash: 0.0017 },
   },
   {
@@ -213,6 +248,52 @@ const REGISTRY: RegistryEntry[] = [
       observed: '185553 bytes',
     },
     weights: { usEquity: 0.4773, internationalEquity: 0.2698, nominalBonds: 0.2276, tips: 0, cash: 0 },
+  },
+  {
+    identity: { provider: 'uc', series: 'pathway', vintage: 2040 },
+    allocationAsOf: '2026-06-30',
+    // The fact-sheet book carries a release date but no posting timestamp, so
+    // this is the date the allocation was first verified for this registry
+    // rather than a date the source asserts. Conservative in the direction
+    // that matters: it cannot let an analysis use figures before they existed.
+    availableFrom: '2026-09-13',
+    sourceUrl: 'https://fwc.widen.net/s/kflcjfvcwv/ucfundfactsheet',
+    sourceContext:
+      'UC Retirement Savings Program fund fact-sheet book, UC Pathway Fund 2040 pages. ' +
+      'The sheet states seven total fund holdings and lists all seven, so this is the ' +
+      'fund itself rather than a proxy share class. UC High Yield Fund (2.44%) is left ' +
+      'out of the weights as credit, on the same rule as every other row here',
+    exactAllocation: true,
+    // Published holdings, UC Pathway Fund 2040, as of 2026-06-30:
+    //   UC Domestic Equity Index Fund        43.31  -> usEquity
+    //   UC Domestic Small Cap Equity Fund     5.28  -> usEquity
+    //   UC International Equity Index Fund   25.43  -> internationalEquity
+    //   UC Emerging Markets Equity Fund       9.75  -> internationalEquity
+    //   UC Long Duration Fund                 8.88  -> nominalBonds
+    //   UC Bond Fund                          4.92  -> nominalBonds
+    //   UC High Yield Fund                    2.44  -> credit, excluded
+    // The sheet states seven total holdings and lists seven, so this is the
+    // whole fund rather than a top-ten extract.
+    // No TIPS holding is listed among the seven, and the sheet publishes no
+    // look-through TIPS line for UC Bond Fund or UC Long Duration Fund. Zero
+    // is therefore what the source supports, not what it confirms.
+    tipsAllocationStatus: 'lower-bound',
+    // Byte-hashed rather than value-fingerprinted, matching the observer in
+    // registry-source-check.ts: the holdings live in compressed PDF streams
+    // and reading them needs a toolchain that file does not carry. The
+    // transcription the weights come from is recorded above instead, where it
+    // stays legible to an auditor without one either.
+    sourceFingerprint: {
+      kind: 'document-sha256',
+      value: '4fa73ff7bc02dc8924c4ebc7388bc5a442ba431951eb20fd3d9aa1f64a11ebf7',
+      observedAt: '2026-09-13',
+      sourceAsOf: 'see-document',
+      observed: '2440236 bytes',
+    },
+    // Domestic index + domestic small cap; international index + emerging
+    // markets; long duration + core bond. The 2.44% high-yield sleeve is the
+    // residual and is excluded from simulation.
+    weights: { usEquity: 0.4859, internationalEquity: 0.3518, nominalBonds: 0.1380, tips: 0, cash: 0 },
   },
 ];
 

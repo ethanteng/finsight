@@ -11,5 +11,19 @@
  *    record where a CUSIP resolves, which separates TIPS from the nominal note
  *    its name is indistinguishable from, and routes bills and floating-rate
  *    notes to cash. A v5 analysis carries the name-only reading of every one.
+ * 7: UC Pathway 2040 is modeled from its published fact sheet instead of being
+ *    excluded for want of a registry row, and employer-plan book-value
+ *    contracts -- guaranteed interest accounts, stable value funds -- read as
+ *    cash rather than as securities nothing could place.
+ * 8: the State Street rows no longer fold their high-yield and short-term
+ *    corporate holdings into the government-bond sleeve. A v7 analysis of one
+ *    of those vintages credits credit exposure with Treasury returns, which
+ *    overstates the cushion during exactly the sequences a stress test exists
+ *    to examine.
+ * 9: a Treasury line that arrives without a CUSIP is resolved against the
+ *    auction records by the coupon and maturity stated in its own name, so the
+ *    TIPS-versus-nominal reading no longer depends on which custodian the
+ *    position is held through. A v8 analysis carries the name-only reading of
+ *    every Treasury line SnapTrade reported.
  */
-export const RETIREMENT_ANALYSIS_VERSION = 6 as const;
+export const RETIREMENT_ANALYSIS_VERSION = 9 as const;

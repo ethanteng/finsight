@@ -48,14 +48,13 @@ export function isKnownRealAssetTicker(ticker: string): boolean {
  * bond line carries -- a coupon rate or a maturity date -- so a security merely
  * named for those letters is never pulled into the bond sleeve.
  *
- * These lines arrive with no ticker (the custodian identifies them by CUSIP).
- * We now carry that CUSIP on the security, but nothing resolves it yet, so the
- * name remains the only evidence classification can use. That leaves one
- * ambiguity the name cannot settle: a TIPS issue whose label omits the word
- * reads exactly like a nominal note and is classified as nominal here. The
- * same ambiguity already applies to every `treasury` name below; resolving the
- * CUSIP against the Treasury's own auction data is what removes it, not a
- * longer list of words.
+ * These lines arrive with no ticker (the custodian identifies them by CUSIP,
+ * where it identifies them at all). The name alone cannot settle whether one
+ * is TIPS -- an issue whose label omits the word reads exactly like a nominal
+ * note, and would be classified as nominal here, as every `treasury` name
+ * below still is. What removes that ambiguity is the Treasury's own auction
+ * record, reached by CUSIP or by the coupon and maturity this same label
+ * states; this rule is the fallback for the lines neither route resolves.
  */
 const TREASURY_ABBREVIATION_PATTERN = /\b(?:ust|u\.s\.t)\b/;
 const BOND_INSTRUMENT_SHAPE = /\d+(?:\.\d+)?\s*%|\b\d{1,2}\/\d{1,2}\/\d{2,4}\b/;
@@ -158,7 +157,26 @@ const EQUITY_NAME_SIGNALS = [
  * equity so a fund like "Government Cash Reserves" is not swept up by the
  * ticker-shaped-like-a-stock fallback.
  */
-const CASH_NAME_SIGNALS = ['money market', 'cash reserve', 'cash management', 'liquid reserve'];
+/**
+ * Cash signals, including the book-value products employer plans offer in
+ * place of a money-market fund.
+ *
+ * A guaranteed interest account or stable-value fund is an insurer or bank
+ * contract: principal does not fluctuate and a credited rate is declared in
+ * advance. No custodian type describes it, no fund registry covers it, and no
+ * market-data vendor prices it -- the name is the only evidence there will
+ * ever be, which is why it is read here rather than sourced.
+ *
+ * Cash is the conservative reading rather than the exact one. These contracts
+ * credit closer to intermediate bond yields than to Treasury bills, so the
+ * cash series understates their return; it matches their defining property,
+ * which is that the principal does not move. Understating return lowers a
+ * projected success rate, so the error runs in the safe direction.
+ */
+const CASH_NAME_SIGNALS = [
+  'money market', 'cash reserve', 'cash management', 'liquid reserve',
+  'guaranteed interest', 'stable value', 'guaranteed account',
+];
 
 const US_MARKET_SIGNALS = [
   's&p', 'russell', 'nasdaq', 'dow jones', 'wilshire',

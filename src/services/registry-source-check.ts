@@ -110,8 +110,8 @@ function normalizeDate(raw: string): string {
  * that is where every stored weight comes from. For the 2040 entry:
  *   usEquity      0.4341 = Equity 500 35.90 + Small/Mid Cap 7.51
  *   international 0.3176 = Global Equity ex-U.S. 31.76
- *   nominalBonds  0.2467 = Aggregate Bond 12.22 + Long Term Treasury 9.61
- *                          + High Yield 2.84
+ *   nominalBonds  0.2183 = Aggregate Bond 12.22 + Long Term Treasury 9.61
+ *                          (High Yield 2.84 is credit and is excluded)
  *   cash          0.0016 = money market 0.17, less the documented rounding
  *
  * So the fingerprint covers the holdings lines and their own as-of date, which
@@ -176,10 +176,59 @@ async function observeBlackRock(url: string): Promise<SourceFingerprint> {
   };
 }
 
-const OBSERVERS: Record<string, (url: string) => Promise<SourceFingerprint>> = {
-  'state-street': observeStateStreet,
-  blackrock: observeBlackRock,
+/**
+ * UC publishes one fact-sheet book covering every fund in the Retirement
+ * Savings Program, so the Pathway 2040 pages are a few of several hundred.
+ *
+ * Observed by byte hash for the same reason as BlackRock: reading the holdings
+ * out needs a PDF toolchain this file deliberately does not depend on. The
+ * cost is specific and worth stating -- the book is republished when *any* UC
+ * fund changes, so a drift report here often means some other fund moved, not
+ * Pathway 2040. Re-read the 2040 pages before concluding the stored weights
+ * are wrong. A noisy signal that says "go and look" beats the alternative,
+ * which is the silence of having no observer at all.
+ */
+async function observeUcPathway(url: string): Promise<SourceFingerprint> {
+  const bytes = await fetchBodyLimited(url);
+  return {
+    kind: 'document-sha256',
+    value: sha256(bytes),
+    observedAt: todayUtc(),
+    sourceAsOf: 'see-document',
+    observed: `${bytes.length} bytes`,
+  };
+}
+
+const OBSERVERS: Record<string, RegistryObserver> = {
+  'state-street': { observe: observeStateStreet, kind: 'published-values' },
+  blackrock: { observe: observeBlackRock, kind: 'document-sha256' },
+  uc: { observe: observeUcPathway, kind: 'document-sha256' },
 };
+
+/**
+ * What each provider's observer will produce, alongside how to produce it.
+ *
+ * The kind is declared rather than inferred because a stored fingerprint has
+ * to match it. A `published-values` entry checked by a byte-hashing observer
+ * compares two incomparable things and reports drift forever; the reverse
+ * reports drift on every unrelated republication. Neither fails loudly.
+ *
+ * Exported so a test can assert both halves: that every registry provider has
+ * an observer, and that each entry stores the kind its observer emits. A
+ * provider added to the registry without one reports `error` on every run,
+ * which pins `verify-registry-sources` at a non-zero exit and leaves that
+ * source unwatched.
+ */
+interface RegistryObserver {
+  observe(url: string): Promise<SourceFingerprint>;
+  kind: SourceFingerprint['kind'];
+}
+
+export function observerFingerprintKinds(): Record<string, SourceFingerprint['kind']> {
+  return Object.fromEntries(
+    Object.entries(OBSERVERS).map(([provider, observer]) => [provider, observer.kind]),
+  );
+}
 
 export type RegistrySourceStatus = 'unchanged' | 'drifted' | 'baseline' | 'error';
 
@@ -227,13 +276,13 @@ export async function checkRegistrySources(
       staleByAge: ageDays > STALE_ALLOCATION_DAYS,
     };
 
-    const observe = OBSERVERS[entry.identity.provider];
-    if (!observe) {
+    const observer = OBSERVERS[entry.identity.provider];
+    if (!observer) {
       return { ...base, status: 'error' as const, detail: `no observer for provider ${entry.identity.provider}` };
     }
 
     try {
-      const fingerprint = await observe(entry.sourceUrl);
+      const fingerprint = await observer.observe(entry.sourceUrl);
       const stored = entry.sourceFingerprint;
       const observedFields = {
         fingerprint,
