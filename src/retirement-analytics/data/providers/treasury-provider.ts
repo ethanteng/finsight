@@ -631,7 +631,14 @@ export class TreasuryProvider {
       MATURITY_PAGE_SIZE,
       maturityDate,
     );
-    return { rows, complete: totalCount === null || totalCount <= rows.length };
+    // Missing total-count cannot prove the page is the full match set. A short
+    // page (fewer rows than we asked for) is still complete: the API has no
+    // further rows to send. A full page without a total must abstain.
+    const complete =
+      totalCount !== null
+        ? totalCount <= rows.length
+        : rows.length < MATURITY_PAGE_SIZE;
+    return { rows, complete };
   }
 
   private async requestAuctions(
@@ -661,9 +668,15 @@ export class TreasuryProvider {
       throw new Error(`Treasury API returned an unexpected response for ${subject}`);
     }
     const reported = (body as { meta?: Record<string, unknown> })?.meta?.['total-count'];
-    const totalCount = typeof reported === 'number' && Number.isFinite(reported)
-      ? reported
-      : null;
+    // Fiscal Data documents a number, but coerce numeric strings too so a
+    // shape drift cannot flip us into the fail-open path below.
+    const coerced =
+      typeof reported === 'number'
+        ? reported
+        : typeof reported === 'string' && reported.trim() !== ''
+          ? Number(reported)
+          : NaN;
+    const totalCount = Number.isFinite(coerced) ? coerced : null;
     return { rows: data as AuctionRow[], totalCount };
   }
 }

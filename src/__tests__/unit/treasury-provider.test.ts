@@ -338,17 +338,23 @@ describe('reading a Treasury line that arrived without a CUSIP', () => {
     ];
   }
 
-  function respondWithPage(rows: unknown[], totalCount?: number) {
+  function respondWithPage(
+    rows: unknown[],
+    totalCount: number | string | null = rows.length,
+  ) {
     const calls: string[] = [];
     const fetchImplementation = (async (input: any) => {
       calls.push(String(input));
+      const body: Record<string, unknown> = { data: rows };
+      // `null` omits meta entirely -- the fail-closed path when the service
+      // does not say how many rows matched.
+      if (totalCount !== null) {
+        body.meta = { 'total-count': totalCount };
+      }
       return {
         ok: true,
         status: 200,
-        json: async () => ({
-          data: rows,
-          meta: { 'total-count': totalCount ?? rows.length },
-        }),
+        json: async () => body,
       } as any;
     }) as any;
     return { fetchImplementation, calls };
@@ -464,6 +470,48 @@ describe('reading a Treasury line that arrived without a CUSIP', () => {
     );
 
     expect(byLabel.size).toBe(0);
+  });
+
+  it('abstains when total-count is missing from a full page', async () => {
+    // A full page without a total cannot prove there was not another match
+    // past the page boundary. The previous fail-open treated a missing total
+    // as complete and would have accepted a truncated unique hit.
+    const fullPage = Array.from({ length: 100 }, (_, index) =>
+      auctionRow({ cusip: `912828A${String(index).padStart(2, '0')}`, int_rate: '1.000000' }),
+    );
+    fullPage[0] = auctionRow();
+    const { fetchImplementation } = respondWithPage(fullPage, null);
+    const provider = new TreasuryProvider({ fetchImplementation });
+
+    const { byLabel } = await provider.getTreasurySecurityBatch(
+      [], ['UST 2.375% 07/15/2036'],
+    );
+
+    expect(byLabel.size).toBe(0);
+  });
+
+  it('still resolves when total-count is missing from a short page', async () => {
+    // Fewer rows than the page size means the API had nothing further to
+    // send, so uniqueness among those rows is still provable.
+    const { fetchImplementation } = respondWithPage(feb2029Rows(), null);
+    const provider = new TreasuryProvider({ fetchImplementation });
+
+    const { byLabel } = await provider.getTreasurySecurityBatch(
+      [], ['UST 3.5% 02/15/2029'],
+    );
+
+    expect(byLabel.get('ust 3.5% 02/15/2029')?.cusip).toBe('91282CQA2');
+  });
+
+  it('accepts a numeric-string total-count', async () => {
+    const { fetchImplementation } = respondWithPage(feb2029Rows(), '5');
+    const provider = new TreasuryProvider({ fetchImplementation });
+
+    const { byLabel } = await provider.getTreasurySecurityBatch(
+      [], ['UST 3.5% 02/15/2029'],
+    );
+
+    expect(byLabel.get('ust 3.5% 02/15/2029')?.cusip).toBe('91282CQA2');
   });
 
   it('asks once for a security a book lists twice, and not at all for the rest', async () => {
