@@ -209,9 +209,9 @@ export default function ProfilePage() {
   const [retryMessage, setRetryMessage] = useState<string>('');
   const [forcePlaidReinitialize, setForcePlaidReinitialize] = useState(false);
   const [manualAccounts, setManualAccounts] = useState<ManualAccount[]>([]);
-  // Set from `?connect=plaid` on mount. The param is stripped from the URL as
-  // soon as it is read, so the deep link opens Plaid Link once rather than on
-  // every refresh of the page it landed on.
+  // Set from `?connect=plaid` on mount. The param stays in the URL until
+  // auto-connect consumes it, so a Strict Mode remount still sees the intent
+  // while a refresh after open does not reopen Plaid Link.
   const [wantsToConnectPlaid, setWantsToConnectPlaid] = useState(false);
   const autoConnectTriggeredRef = useRef(false);
   const plaidLinkButtonRef = useRef<PlaidLinkButtonRef>(null);
@@ -934,13 +934,12 @@ export default function ProfilePage() {
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
 
-    // `?connect=plaid` opens Plaid Link on arrival. Read it once and drop it
-    // from the URL so the modal does not reopen on refresh or back-navigation.
+    // `?connect=plaid` opens Plaid Link on arrival. Keep the param in the URL
+    // until auto-connect consumes it below — stripping on read would lose the
+    // intent across a React Strict Mode remount (and would drop it from the
+    // signed-out auth redirect's returnTo if this effect won the race).
     if (urlParams.get(CONNECT_INTENT_PARAM) === CONNECT_PLAID_INTENT) {
       setWantsToConnectPlaid(true);
-      const url = new URL(window.location.href);
-      url.searchParams.delete(CONNECT_INTENT_PARAM);
-      window.history.replaceState({}, '', url.toString());
     }
 
     // Check for subscription-related URL parameters
@@ -1056,10 +1055,19 @@ export default function ProfilePage() {
         console.log('Auto-triggering Plaid Link for user who wants to connect accounts');
 
         // Consume the intent from every source so nothing re-triggers once the
-        // modal has been asked to open.
+        // modal has been asked to open. Strip `?connect=plaid` here (not on
+        // read) so a refresh after open does not reopen, while a remount
+        // before open can still see the param.
         autoConnectTriggeredRef.current = true;
         localStorage.removeItem(CONNECT_ACCOUNTS_STORAGE_KEY);
         setWantsToConnectPlaid(false);
+        {
+          const url = new URL(window.location.href);
+          if (url.searchParams.has(CONNECT_INTENT_PARAM)) {
+            url.searchParams.delete(CONNECT_INTENT_PARAM);
+            window.history.replaceState({}, '', url.toString());
+          }
+        }
 
         // Set the force flag first
         setForcePlaidReinitialize(true);
