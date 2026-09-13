@@ -159,11 +159,12 @@ export function buildSnapshotSummaryForValidation(snapshot: FinancialContextSnap
     );
   }
 
-  // The primary model is handed the account list whenever the plan asks for
-  // account details, and the exclusion reasons below name accounts by name. A
-  // reviewer that cannot see those names reads every one of them as invented
-  // and objects to an answer that was quoting its own context.
-  if (snapshot.accounts?.length) {
+  // The primary model is handed the account list only when the plan asks for
+  // account details. Matching that gate keeps the reviewer from treating
+  // accounts the model never saw as fair game. Exclusion reasons below still
+  // carry the account labels a retirement answer quotes from `dataQuality`, so
+  // those names remain visible when the projection left money out.
+  if (snapshot.contextSelection?.accountsIncluded && snapshot.accounts?.length) {
     const accountNames = snapshot.accounts
       .slice(0, MAX_ACCOUNTS_LISTED)
       .map((account) => {

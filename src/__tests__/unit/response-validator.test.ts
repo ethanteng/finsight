@@ -169,6 +169,7 @@ describe('buildSnapshotSummaryForValidation', () => {
     // in its context pack and this summary did not carry.
     const summary = buildSnapshotSummaryForValidation({
       ...snapshot,
+      contextSelection: { accountsIncluded: true },
       accounts: [
         { id: '1', name: 'Baron Funds IRA', type: 'investment', subtype: 'ira', balance: 100_000, institution: 'Baron' },
         { id: '2', name: 'BEC 401K', type: 'investment', balance: 250_000 },
@@ -177,6 +178,21 @@ describe('buildSnapshotSummaryForValidation', () => {
 
     expect(summary).toContain('Baron Funds IRA (investment/ira) at Baron');
     expect(summary).toContain('BEC 401K (investment)');
+  });
+
+  it('omits the account list when the plan did not include account details', () => {
+    // Snapshot.accounts is always populated for other consumers; only
+    // contextSelection says whether the primary model saw them.
+    const summary = buildSnapshotSummaryForValidation({
+      ...snapshot,
+      contextSelection: { accountsIncluded: false },
+      accounts: [
+        { id: '1', name: 'Baron Funds IRA', type: 'investment', subtype: 'ira', balance: 100_000, institution: 'Baron' },
+      ],
+    } as any);
+
+    expect(summary).not.toContain('Accounts');
+    expect(summary).not.toContain('Baron Funds IRA');
   });
 
   it('shows what the projection excluded, and from which accounts', () => {
