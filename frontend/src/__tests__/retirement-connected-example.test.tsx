@@ -161,14 +161,28 @@ describe('connected-accounts example panel', () => {
     expect(unresolved).toBeGreaterThan(0);
     expect(unsupported).toBeGreaterThan(0);
 
+    // Both branches, because the counts move with the engine: TIPS left the
+    // unsupported list when they gained a return series, and a test that only
+    // knew the plural wording read that as the copy breaking.
+    const word = (count: number) => (count === 1 ? 'one' : count === 2 ? 'two' : String(count));
     expect(
       screen.getByText(
-        new RegExp(`${unresolved === 2 ? 'Two' : unresolved} do not say clearly enough what they hold or where`, 'i')
+        new RegExp(
+          unresolved === 1
+            ? 'One does not say clearly enough what it holds or where'
+            : `${word(unresolved)} do not say clearly enough what they hold or where`,
+          'i',
+        )
       )
     ).toBeInTheDocument();
     expect(
       screen.getByText(
-        new RegExp(`${unsupported === 2 ? 'two' : unsupported} are kinds of investment with no century of history`, 'i')
+        new RegExp(
+          unsupported === 1
+            ? 'one is a kind of investment with no century of history to test it against'
+            : `${word(unsupported)} are kinds of investment with no century of history`,
+          'i',
+        )
       )
     ).toBeInTheDocument();
   });
@@ -185,11 +199,22 @@ describe('connected-accounts example panel', () => {
   it('discloses any sleeve represented by a stand-in for part of the window', () => {
     render(<RetirementConnectedExample />);
 
-    const [proxied] = EXAMPLE.result.proxiedSeries;
-    expect(proxied).toBeDefined();
-    expect(proxied.months).toBeGreaterThan(0);
-    expect(proxied.months).toBeLessThan(proxied.windowMonths);
+    // Every one of them, not just the first. There are two now -- international
+    // equity before 1975 and TIPS before 2003 -- and a panel that discloses one
+    // substitution while staying silent about another is worse than one that
+    // discloses none, because it reads as though it listed them all.
+    expect(EXAMPLE.result.proxiedSeries.length).toBeGreaterThan(0);
+    for (const proxied of EXAMPLE.result.proxiedSeries) {
+      expect(proxied.months).toBeGreaterThan(0);
+      expect(proxied.months).toBeLessThan(proxied.windowMonths);
+      expect(
+        screen.getByText(new RegExp(`For ${proxied.months} of the ${proxied.windowMonths} months tested`, 'i'))
+      ).toBeInTheDocument();
+    }
     expect(screen.getByText(/those months use the US market return instead/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/those months use ordinary government\s+bonds instead/i)
+    ).toBeInTheDocument();
   });
 
   it('answers the page\'s question before showing its work', () => {

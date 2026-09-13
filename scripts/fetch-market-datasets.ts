@@ -1,6 +1,6 @@
 #!/usr/bin/env npx ts-node
 /**
- * Refresh the checked-in Shiller and Kenneth French source snapshots.
+ * Refresh the checked-in Shiller, Kenneth French, and FRED source snapshots.
  *
  * The retirement engine stays offline at runtime. This script is the explicit,
  * reviewable network step used by maintainers before rebuilding the unified
@@ -21,6 +21,11 @@ const FRENCH_US_URL =
   'https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/ftp/F-F_Research_Data_Factors_CSV.zip';
 const FRENCH_INTERNATIONAL_URL =
   'https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/ftp/F-F_International_Indices.zip';
+// FRED's graph endpoint serves the full series as CSV without an API key, so
+// the refresh stays runnable by any maintainer rather than only one holding a
+// key. DFII10 is the 10-year Treasury constant-maturity *real* yield.
+const FRED_TIPS_REAL_YIELD_URL =
+  'https://fred.stlouisfed.org/graph/fredgraph.csv?id=DFII10';
 
 interface SourceManifestEntry {
   provider: string;
@@ -109,6 +114,37 @@ function inspectInternationalFile(content: Buffer): { first: string; last: strin
   };
 }
 
+/**
+ * Read the span of a FRED daily CSV, which carries "." for market holidays.
+ *
+ * Months rather than days, because the dataset this feeds is monthly and the
+ * manifest records what a reader would compare against the built file.
+ */
+function inspectFredDailyCsv(content: Buffer, column: string): { first: string; last: string; vintage: string } {
+  const lines = content.toString('utf8').split(/\r?\n/);
+  const header = (lines[0] || '').split(',').map(value => value.trim());
+  const valueIndex = header.indexOf(column);
+  if (valueIndex < 1) throw new Error(`Downloaded FRED series has no ${column} column`);
+
+  const months: string[] = [];
+  for (const line of lines.slice(1)) {
+    const parts = line.split(',');
+    const date = (parts[0] || '').trim();
+    const value = (parts[valueIndex] || '').trim();
+    // Empty is a market holiday, and `Number('')` is a finite 0 -- so the
+    // emptiness has to be tested before the conversion, here as in the builder.
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || value === '' || !Number.isFinite(Number(value))) {
+      continue;
+    }
+    months.push(date.slice(0, 7));
+  }
+  if (months.length < 1_000) {
+    throw new Error(`Downloaded FRED ${column} series has only ${months.length} observations`);
+  }
+  const last = months[months.length - 1];
+  return { first: months[0], last, vintage: last };
+}
+
 function extractZipEntry(zip: Buffer, entry: string, tempDir: string): Buffer {
   const zipPath = path.join(tempDir, `${entry.replace(/[^a-z0-9]/gi, '_')}.zip`);
   fs.writeFileSync(zipPath, zip);
@@ -137,10 +173,11 @@ async function main(): Promise<void> {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ask-linc-market-data-'));
   try {
     const shillerDownloadUrl = await resolveShillerDownloadUrl();
-    const [shiller, frenchUsZip, frenchInternationalZip] = await Promise.all([
+    const [shiller, frenchUsZip, frenchInternationalZip, fredTipsRealYield] = await Promise.all([
       download(shillerDownloadUrl),
       download(FRENCH_US_URL),
       download(FRENCH_INTERNATIONAL_URL),
+      download(FRED_TIPS_REAL_YIELD_URL).then(normalizeTextSnapshot),
     ]);
     const frenchUs = normalizeTextSnapshot(
       extractZipEntry(frenchUsZip, 'F-F_Research_Data_Factors.csv', tempDir)
@@ -152,11 +189,13 @@ async function main(): Promise<void> {
     const shillerInfo = inspectShillerWorkbook(shiller);
     const frenchUsInfo = inspectFrenchCsv(frenchUs);
     const frenchInternationalInfo = inspectInternationalFile(frenchInternational);
+    const fredTipsInfo = inspectFredDailyCsv(fredTipsRealYield, 'DFII10');
     const retrievedAt = new Date().toISOString();
 
     fs.writeFileSync(path.join(DATASET_DIR, 'ie_data.xls'), shiller);
     fs.writeFileSync(path.join(DATASET_DIR, 'F-F_Research_Data_Factors.csv'), frenchUs);
     fs.writeFileSync(path.join(DATASET_DIR, 'F-F_International_Indices.dat'), frenchInternational);
+    fs.writeFileSync(path.join(DATASET_DIR, 'DFII10.csv'), fredTipsRealYield);
 
     const manifest: { schemaVersion: number; sources: Record<string, SourceManifestEntry> } = {
       schemaVersion: 1,
@@ -195,6 +234,17 @@ async function main(): Promise<void> {
           firstObservation: frenchInternationalInfo.first,
           lastObservation: frenchInternationalInfo.last,
           sha256: sha256(frenchInternational),
+        },
+        fredTipsRealYield: {
+          provider: 'Federal Reserve Bank of St. Louis (FRED)',
+          file: 'src/datasets/DFII10.csv',
+          documentationUrl: 'https://fred.stlouisfed.org/series/DFII10',
+          downloadUrl: FRED_TIPS_REAL_YIELD_URL,
+          retrievedAt,
+          sourceVintage: fredTipsInfo.vintage,
+          firstObservation: fredTipsInfo.first,
+          lastObservation: fredTipsInfo.last,
+          sha256: sha256(fredTipsRealYield),
         },
       },
     };

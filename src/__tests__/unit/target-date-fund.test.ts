@@ -278,13 +278,14 @@ describe('target-date funds in retirement mapping', () => {
     expect(mapping.unmappedHoldings).toEqual([]);
     expect(mapping.partiallyMappedHoldings).toEqual(['State St Target Ret 2030 SL SF CL III']);
     expect(mapping.holdingExposures[0].weights?.tips).toBeCloseTo(0.1207, 6);
-    // 0.7691 modeled = US 0.3145 + intl 0.2101 + government bonds 0.2431 +
-    // cash 0.0014. The vintage's High Yield 6.47 and Short Term Corporate 0.32
-    // are credit and sit in the unsupported residual with TIPS.
-    expect(mapping.nominalBondsWeight).toBeCloseTo(0.2431 / 0.7691, 6);
+    // 0.8898 modeled = US 0.3145 + intl 0.2101 + government bonds 0.2431 +
+    // TIPS 0.1207 + cash 0.0014. The vintage's High Yield 6.47 and Short Term
+    // Corporate 0.32 are credit and are the whole of what stays withheld.
+    expect(mapping.nominalBondsWeight).toBeCloseTo(0.2431 / 0.8898, 6);
+    expect(mapping.tipsWeight).toBeCloseTo(0.1207 / 0.8898, 6);
     expect(mapping.tipsValue).toBeCloseTo(24_079.23 * 0.1207, 2);
-    expect(mapping.unsupportedValue).toBeCloseTo(24_079.23 * 0.2309, 2);
-    expect(mapping.valueCoverage).toBeCloseTo(0.7691, 6);
+    expect(mapping.unsupportedValue).toBeCloseTo(24_079.23 * 0.1102, 2);
+    expect(mapping.valueCoverage).toBeCloseTo(0.8898, 6);
   });
 
   it.each([
@@ -319,12 +320,13 @@ describe('target-date funds in retirement mapping', () => {
     );
 
     expect(mapping.holdingExposures[0].weights?.tips).toBeCloseTo(0.0293, 6);
-    // 0.9113 modeled once the vintage's High Yield 5.21 is excluded as credit;
-    // the withheld 8.87% is that plus the 2.93% TIPS sleeve.
-    expect(mapping.mappedValue).toBeCloseTo(91_130, 2);
-    expect(mapping.unmappedValue).toBeCloseTo(8_870, 2);
-    expect(mapping.unsupportedValue).toBeCloseTo(8_870, 2);
-    expect(mapping.cashWeight).toBeCloseTo(0.0019 / 0.9113, 8);
+    // 0.9406 modeled: 0.9113 of supported sleeves plus the 2.93% TIPS sleeve,
+    // which is now simulated on its own series. The withheld 5.94% is the
+    // vintage's High Yield 5.21 and the rest of its credit, nothing else.
+    expect(mapping.mappedValue).toBeCloseTo(94_060, 2);
+    expect(mapping.unmappedValue).toBeCloseTo(5_940, 2);
+    expect(mapping.unsupportedValue).toBeCloseTo(5_940, 2);
+    expect(mapping.cashWeight).toBeCloseTo(0.0019 / 0.9406, 8);
   });
 
   it('leaves a dated Treasury in bonds rather than on a glidepath', async () => {

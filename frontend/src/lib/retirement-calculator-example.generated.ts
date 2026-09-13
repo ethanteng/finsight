@@ -36,30 +36,30 @@ export const RETIREMENT_CALCULATOR_EXAMPLE = {
     "cash": 2.8101845662376777
   },
   "coverage": {
-    "modeledValue": 1809600,
-    "unmodeledValue": 464272,
-    "valueCoverage": 0.7958231597908765,
+    "modeledValue": 1904300,
+    "unmodeledValue": 369572,
+    "valueCoverage": 0.8374701830182174,
     "confidence": "low",
     "unresolved": [
       "Employer Stock Units",
       "Brokerage Holdings Not Itemized"
     ],
     "unsupported": [
-      "Inflation Protected Securities Fund (TIPS)",
       "Investment Grade Corporate Bond Fund"
     ]
   },
   "result": {
-    "survivalRate": 0.923836389280677,
+    "survivalRate": 0.9703808180535967,
     "sequencesTested": 709,
-    "sequencesSurvived": 655,
-    "projectedPortfolioAtRetirement": 2786161.0276904893,
+    "sequencesSurvived": 688,
+    "projectedPortfolioAtRetirement": 2900878.4850188014,
     "firstMonth": "1926-07",
     "lastMonth": "2026-06",
     "primaryObservation": "Balanced allocation pattern with moderate characteristics",
     "confidence": "low",
     "proxiedSeries": [
       {
+        "series": "intl_equity",
         "description": "International equity returns outside the series's own span use the US market return; those months carry no distinct international behaviour",
         "months": 588,
         "windowMonths": 1200,
@@ -75,37 +75,50 @@ export const RETIREMENT_CALCULATOR_EXAMPLE = {
             "months": 6
           }
         ]
+      },
+      {
+        "series": "tips",
+        "description": "TIPS returns before 2003 use the nominal 10-year government bond series; those months carry no inflation indexation, which understates TIPS in inflationary sequences",
+        "months": 919,
+        "windowMonths": 1200,
+        "ranges": [
+          {
+            "firstMonth": "1926-07",
+            "lastMonth": "2003-01",
+            "months": 919
+          }
+        ]
       }
     ]
   },
   "byRetirementAge": [
     {
       "age": 56,
-      "survivalRate": 0.6008462623413258,
+      "survivalRate": 0.6403385049365303,
       "sequencesTested": 709,
-      "sequencesSurvived": 426,
-      "projectedPortfolioAtRetirement": 2113562.192130349
+      "sequencesSurvived": 454,
+      "projectedPortfolioAtRetirement": 2211287.861151734
     },
     {
       "age": 58,
-      "survivalRate": 0.8124118476727785,
+      "survivalRate": 0.8321579689703809,
       "sequencesTested": 709,
-      "sequencesSurvived": 576,
-      "projectedPortfolioAtRetirement": 2440316.520176432
+      "sequencesSurvived": 590,
+      "projectedPortfolioAtRetirement": 2536494.6016703495
     },
     {
       "age": 60,
-      "survivalRate": 0.923836389280677,
+      "survivalRate": 0.9703808180535967,
       "sequencesTested": 709,
-      "sequencesSurvived": 655,
-      "projectedPortfolioAtRetirement": 2786161.0276904893
+      "sequencesSurvived": 688,
+      "projectedPortfolioAtRetirement": 2900878.4850188014
     },
     {
       "age": 62,
       "survivalRate": 1,
       "sequencesTested": 709,
       "sequencesSurvived": 709,
-      "projectedPortfolioAtRetirement": 3256858.95411862
+      "projectedPortfolioAtRetirement": 3346114.832766099
     }
   ]
 } as const;

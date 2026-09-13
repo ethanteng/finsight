@@ -40,6 +40,7 @@ function flatSequence(months: number): HistoricalSequence {
       usEquity: [...zeroes],
       internationalEquity: [...zeroes],
       nominalBonds: [...zeroes],
+      tips: [...zeroes],
       cash: [...zeroes],
     },
     inflationRates: [...zeroes],

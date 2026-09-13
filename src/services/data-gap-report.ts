@@ -45,7 +45,14 @@ export type DataGapCategory =
   | 'unmapped'
   /** Recognized, but the engine has no historical return series for it. */
   | 'unsupported'
-  /** Mostly simulated; a known sleeve within it is withheld. */
+  /**
+   * Mostly simulated; the rest is a classified sleeve with no return series.
+   *
+   * Named for the same remedy as `unsupported`, because it is the same one: a
+   * return series the engine does not have, not metadata anyone can source.
+   * Often several sleeves at once -- a registry target-date row can withhold
+   * TIPS, commodities and credit together.
+   */
   | 'partially-mapped'
   /** Placed as US equity from an exchange-style ticker, lacking country data. */
   | 'us-listing-fallback';

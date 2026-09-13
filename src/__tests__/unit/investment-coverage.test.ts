@@ -23,6 +23,7 @@ const mapping = {
   usEquityWeight: 1,
   internationalEquityWeight: 0,
   nominalBondsWeight: 0,
+  tipsWeight: 0,
   cashWeight: 0,
   totalValue: 804_827.9,
   usEquityValue: 804_827.9,

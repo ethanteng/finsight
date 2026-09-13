@@ -232,6 +232,9 @@ async function main() {
        * instead of leaving it stale.
        */
       proxiedSeries: (historicalData?.proxiedSeries ?? []).map(proxied => ({
+        // The key, so the page can say which sleeve was substituted in its own
+        // words rather than parsing the engine's description for a hint.
+        series: proxied.series,
         description: proxied.description,
         months: proxied.months,
         windowMonths: proxied.windowMonths,

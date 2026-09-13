@@ -108,6 +108,37 @@ function unmodeledGapCopy(unresolvedCount: number, unsupportedCount: number): st
 }
 
 /**
+ * What a substituted series means, in the reader's terms.
+ *
+ * Keyed on the series rather than shown as the engine's own description,
+ * because the two substitutions fail differently and a visitor deciding
+ * whether to trust the number needs the difference: months with no overseas
+ * record tell you nothing about holding money abroad, while months with no
+ * TIPS record actively understate what TIPS would have done.
+ *
+ * A series with no copy here falls back to saying it was substituted at all,
+ * which is worse writing than a bespoke sentence but still true — the one
+ * thing this must not do is stay silent about a substitution.
+ */
+function proxiedSeriesCopy(series: string): string {
+  if (series === "intl_equity") {
+    return (
+      "nobody recorded what overseas markets did, so those months use the US market return " +
+      "instead. The plan is still checked against the whole record; those months just cannot " +
+      "tell you anything about holding money abroad."
+    );
+  }
+  if (series === "tips") {
+    return (
+      "inflation-protected bonds did not exist yet, so those months use ordinary government " +
+      "bonds instead. That leaves out the inflation protection TIPS are bought for, which " +
+      "makes the plan look worse in the inflationary stretches rather than better."
+    );
+  }
+  return "that part of the portfolio has no recorded returns, so a close relative stands in for it.";
+}
+
+/**
  * The "when can I retire?" sentence, written from the ladder rather than about
  * it. Every branch has to stay true of whatever the engine last produced —
  * including the unhappy one where no tested age clears nine in ten, which is a
@@ -148,7 +179,7 @@ export function RetirementConnectedExample() {
   const { plan, portfolio, allocation, coverage, result } = EXAMPLE;
   const unmodeled = [...coverage.unresolved, ...coverage.unsupported];
   const gapCopy = unmodeledGapCopy(coverage.unresolved.length, coverage.unsupported.length);
-  const [proxied] = result.proxiedSeries;
+  const proxiedSeries = result.proxiedSeries;
   const ladder = readLadder(EXAMPLE.byRetirementAge);
   const band = outcomeBand(result.survivalRate);
 
@@ -269,17 +300,19 @@ export function RetirementConnectedExample() {
               <div><dt>Mapping confidence</dt><dd className="qp-example-low">{coverage.confidence}</dd></div>
               <div><dt>History tested</dt><dd>{result.sequencesTested} windows</dd></div>
             </dl>
-            {proxied ? (
-              <p>
-                Real holdings bring their own gaps too. For {proxied.months} of the{" "}
-                {proxied.windowMonths} months tested —{" "}
-                {proxied.ranges
-                  .map((range) => `${monthLabel(range.firstMonth)} to ${monthLabel(range.lastMonth)}`)
-                  .join(", and ")}{" "}
-                — nobody recorded what overseas markets did, so those months use the US market
-                return instead. The plan is still checked against the whole record; those months
-                just cannot tell you anything about holding money abroad.
-              </p>
+            {proxiedSeries.length > 0 ? (
+              <>
+                <p>Real holdings bring their own gaps too.</p>
+                {proxiedSeries.map((proxied) => (
+                  <p key={proxied.series}>
+                    For {proxied.months} of the {proxied.windowMonths} months tested —{" "}
+                    {proxied.ranges
+                      .map((range) => `${monthLabel(range.firstMonth)} to ${monthLabel(range.lastMonth)}`)
+                      .join(", and ")}{" "}
+                    — {proxiedSeriesCopy(proxied.series)}
+                  </p>
+                ))}
+              </>
             ) : (
               <p>
                 Every part of this portfolio has its own recorded returns for the whole tested
