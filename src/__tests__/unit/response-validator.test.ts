@@ -1,4 +1,5 @@
 import { buildSnapshotSummaryForValidation, formatMetricPercent } from '../../openai/response-validator';
+import { MAX_UNMODELED_REASON_FACTS } from '../../openai/canonical-facts';
 
 describe('formatMetricPercent', () => {
   it('converts decimal fractions to whole-number percents', () => {
@@ -242,6 +243,9 @@ describe('buildSnapshotSummaryForValidation', () => {
 
     expect(summary).toContain('Largest account=500000 (partial-holdings)');
     expect(summary).not.toContain('Account 1=1');
+    // Capped where the fact pack caps: a label the reviewer sees but the pack
+    // never published is a name it would be judging against nothing.
+    expect(summary.split('; ').length).toBe(MAX_UNMODELED_REASON_FACTS);
   });
 
   it('says nothing about coverage when the whole portfolio was modeled', () => {

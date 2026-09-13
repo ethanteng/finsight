@@ -63,6 +63,16 @@ function safeFactId(value: string): string {
 }
 
 /**
+ * Per-account exclusion reasons published as facts, largest first.
+ *
+ * The reviewer's snapshot summary caps the same list at the same number
+ * (`response-validator.ts`), so the accounts it can see named are exactly the
+ * accounts an answer can cite an amount for. A reviewer shown a label the pack
+ * never published would be judging a name against nothing.
+ */
+export const MAX_UNMODELED_REASON_FACTS = 12;
+
+/**
  * Why a slice of the portfolio sat out the simulation, in the words a fact
  * label can carry. Matches the phrasing of the exclusion note the user reads
  * (`describeUnmodeledInvestmentValue`), so the label and the prose beside it
@@ -729,7 +739,7 @@ export function buildCanonicalFactPack(
         byKind.set(reason.kind, (byKind.get(reason.kind) ?? 0) + reason.amount);
       }
       // Largest first, so the cap drops the amounts least likely to be quoted.
-      for (const reason of [...reasons].sort((left, right) => right.amount - left.amount).slice(0, 12)) {
+      for (const reason of [...reasons].sort((left, right) => right.amount - left.amount).slice(0, MAX_UNMODELED_REASON_FACTS)) {
         const labelId = safeFactId(reason.label ?? '');
         if (!labelId) continue;
         const kindId = safeFactId(reason.kind ?? '');

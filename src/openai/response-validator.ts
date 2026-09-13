@@ -11,6 +11,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import { AskLincResponse } from './structured-response';
 import { FinancialContextSnapshot } from './types';
 import { mergeAssetAllocation } from '../services/asset-class';
+import { MAX_UNMODELED_REASON_FACTS } from './canonical-facts';
 import { getActiveModel, getActiveNumericGenerationSetting } from './model-config';
 
 const GOOGLE_AI_API_KEY = process.env.GOOGLE_AI_API_KEY || process.env.GEMINI_API_KEY || '';
@@ -91,7 +92,8 @@ const MAX_PERSONAL_CONTEXT_LINES = 20;
 
 /** Enough to cover a real household's connections without unbounding the prompt. */
 const MAX_ACCOUNTS_LISTED = 40;
-const MAX_EXCLUSION_REASONS_LISTED = 15;
+/** Matches the fact pack's own cap, so every label here has a citable amount. */
+const MAX_EXCLUSION_REASONS_LISTED = MAX_UNMODELED_REASON_FACTS;
 
 function boundedPersonalContext(profile: string): string {
   return profile
