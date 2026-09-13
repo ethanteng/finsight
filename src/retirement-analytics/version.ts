@@ -20,5 +20,10 @@
  *    of those vintages credits credit exposure with Treasury returns, which
  *    overstates the cushion during exactly the sequences a stress test exists
  *    to examine.
+ * 9: a Treasury line that arrives without a CUSIP is resolved against the
+ *    auction records by the coupon and maturity stated in its own name, so the
+ *    TIPS-versus-nominal reading no longer depends on which custodian the
+ *    position is held through. A v8 analysis carries the name-only reading of
+ *    every Treasury line SnapTrade reported.
  */
-export const RETIREMENT_ANALYSIS_VERSION = 8 as const;
+export const RETIREMENT_ANALYSIS_VERSION = 9 as const;

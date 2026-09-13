@@ -48,14 +48,13 @@ export function isKnownRealAssetTicker(ticker: string): boolean {
  * bond line carries -- a coupon rate or a maturity date -- so a security merely
  * named for those letters is never pulled into the bond sleeve.
  *
- * These lines arrive with no ticker (the custodian identifies them by CUSIP).
- * We now carry that CUSIP on the security, but nothing resolves it yet, so the
- * name remains the only evidence classification can use. That leaves one
- * ambiguity the name cannot settle: a TIPS issue whose label omits the word
- * reads exactly like a nominal note and is classified as nominal here. The
- * same ambiguity already applies to every `treasury` name below; resolving the
- * CUSIP against the Treasury's own auction data is what removes it, not a
- * longer list of words.
+ * These lines arrive with no ticker (the custodian identifies them by CUSIP,
+ * where it identifies them at all). The name alone cannot settle whether one
+ * is TIPS -- an issue whose label omits the word reads exactly like a nominal
+ * note, and would be classified as nominal here, as every `treasury` name
+ * below still is. What removes that ambiguity is the Treasury's own auction
+ * record, reached by CUSIP or by the coupon and maturity this same label
+ * states; this rule is the fallback for the lines neither route resolves.
  */
 const TREASURY_ABBREVIATION_PATTERN = /\b(?:ust|u\.s\.t)\b/;
 const BOND_INSTRUMENT_SHAPE = /\d+(?:\.\d+)?\s*%|\b\d{1,2}\/\d{1,2}\/\d{2,4}\b/;
