@@ -840,7 +840,7 @@ export default function AdminPage() {
     'target-date-unregistered': 'Target-date fund not in registry',
     unmapped: 'Excluded; reason not recorded',
     unsupported: 'Recognized, no return series',
-    'partially-mapped': 'Mostly modeled; one sleeve withheld',
+    'partially-mapped': 'Mostly modeled; rest has no return series',
     'us-listing-fallback': 'US-listed fallback used',
   };
 
