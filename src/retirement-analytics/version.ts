@@ -11,5 +11,9 @@
  *    record where a CUSIP resolves, which separates TIPS from the nominal note
  *    its name is indistinguishable from, and routes bills and floating-rate
  *    notes to cash. A v5 analysis carries the name-only reading of every one.
+ * 7: UC Pathway 2040 is modeled from its published fact sheet instead of being
+ *    excluded for want of a registry row, and employer-plan book-value
+ *    contracts -- guaranteed interest accounts, stable value funds -- read as
+ *    cash rather than as securities nothing could place.
  */
-export const RETIREMENT_ANALYSIS_VERSION = 6 as const;
+export const RETIREMENT_ANALYSIS_VERSION = 7 as const;

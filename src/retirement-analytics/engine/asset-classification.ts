@@ -158,7 +158,26 @@ const EQUITY_NAME_SIGNALS = [
  * equity so a fund like "Government Cash Reserves" is not swept up by the
  * ticker-shaped-like-a-stock fallback.
  */
-const CASH_NAME_SIGNALS = ['money market', 'cash reserve', 'cash management', 'liquid reserve'];
+/**
+ * Cash signals, including the book-value products employer plans offer in
+ * place of a money-market fund.
+ *
+ * A guaranteed interest account or stable-value fund is an insurer or bank
+ * contract: principal does not fluctuate and a credited rate is declared in
+ * advance. No custodian type describes it, no fund registry covers it, and no
+ * market-data vendor prices it -- the name is the only evidence there will
+ * ever be, which is why it is read here rather than sourced.
+ *
+ * Cash is the conservative reading rather than the exact one. These contracts
+ * credit closer to intermediate bond yields than to Treasury bills, so the
+ * cash series understates their return; it matches their defining property,
+ * which is that the principal does not move. Understating return lowers a
+ * projected success rate, so the error runs in the safe direction.
+ */
+const CASH_NAME_SIGNALS = [
+  'money market', 'cash reserve', 'cash management', 'liquid reserve',
+  'guaranteed interest', 'stable value', 'guaranteed account',
+];
 
 const US_MARKET_SIGNALS = [
   's&p', 'russell', 'nasdaq', 'dow jones', 'wilshire',

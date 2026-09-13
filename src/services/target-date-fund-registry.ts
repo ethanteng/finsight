@@ -2,7 +2,8 @@ import type { TargetDateFundIdentity } from './target-date-fund';
 
 type RegisteredTargetDateFundIdentity =
   | { provider: 'state-street'; series: 'target-retirement'; vintage: number }
-  | { provider: 'blackrock'; series: 'lifepath-index'; vintage: number };
+  | { provider: 'blackrock'; series: 'lifepath-index'; vintage: number }
+  | { provider: 'uc'; series: 'pathway'; vintage: number };
 
 /**
  * A recorded observation of a cited source at a point in time.
@@ -101,10 +102,11 @@ export const STALE_ALLOCATION_DAYS = 366;
  * the holdings date. Mutable source pages without a publication timestamp use
  * the date on which their allocation was first verified for this registry.
  *
- * UC Pathway is knowingly absent: no public per-vintage allocation was found,
- * so recognizing its identity is not enough evidence to model its sleeves.
  * Lookup requires an exact provider/series/vintage key; recognition heuristics
  * live elsewhere and cannot invent an allocation for an unregistered identity.
+ * UC Pathway vintages other than those below remain absent on exactly that
+ * basis -- the fact-sheet book publishes each vintage separately, and a
+ * neighbouring year's allocation is not evidence for the one being asked about.
  */
 const REGISTRY: RegistryEntry[] = [
   {
@@ -213,6 +215,39 @@ const REGISTRY: RegistryEntry[] = [
       observed: '185553 bytes',
     },
     weights: { usEquity: 0.4773, internationalEquity: 0.2698, nominalBonds: 0.2276, tips: 0, cash: 0 },
+  },
+  {
+    identity: { provider: 'uc', series: 'pathway', vintage: 2040 },
+    allocationAsOf: '2026-06-30',
+    // The fact-sheet book carries a release date but no posting timestamp, so
+    // this is the date the allocation was first verified for this registry
+    // rather than a date the source asserts. Conservative in the direction
+    // that matters: it cannot let an analysis use figures before they existed.
+    availableFrom: '2026-09-13',
+    sourceUrl: 'https://fwc.widen.net/s/kflcjfvcwv/ucfundfactsheet',
+    sourceContext:
+      'UC Retirement Savings Program fund fact-sheet book, UC Pathway Fund 2040 pages. ' +
+      'The sheet states seven total fund holdings and lists all seven, so this is the ' +
+      'fund itself rather than a proxy share class. UC High Yield Fund (2.44%) is left ' +
+      'out of the weights: the nominal sleeve is a government-bond return series, and ' +
+      'high yield draws down like equity, so it is reported as an unsupported residual ' +
+      'rather than modeled as government debt',
+    exactAllocation: true,
+    // No TIPS holding is listed among the seven, and the sheet publishes no
+    // look-through TIPS line for UC Bond Fund or UC Long Duration Fund. Zero
+    // is therefore what the source supports, not what it confirms.
+    tipsAllocationStatus: 'lower-bound',
+    sourceFingerprint: {
+      kind: 'published-values',
+      value: '1ea0722210e823dad79036b83d2080af8a20b6cbfd48e240b33dc9d12d2a44f1',
+      observedAt: '2026-09-13',
+      sourceAsOf: '2026-06-30',
+      observed: '2026-06-30|uc bond fund=4.92|uc domestic equity index fund=43.31|uc domestic small cap equity fund=5.28|uc emerging markets equity fund=9.75|uc high yield fund=2.44|uc international equity index fund=25.43|uc long duration fund=8.88',
+    },
+    // Domestic index + domestic small cap; international index + emerging
+    // markets; long duration + core bond. The 2.44% high-yield sleeve is the
+    // residual and is excluded from simulation.
+    weights: { usEquity: 0.4859, internationalEquity: 0.3518, nominalBonds: 0.1380, tips: 0, cash: 0 },
   },
 ];
 

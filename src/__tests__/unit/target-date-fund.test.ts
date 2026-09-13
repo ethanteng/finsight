@@ -118,13 +118,16 @@ describe('target-date fund recognition', () => {
   });
 
   it('keeps recognized but unsourced series allocation-unavailable', () => {
+    // UC Pathway 2040 has since been sourced from its published fact sheet;
+    // every other Pathway vintage, and these other series, remain unsourced.
     for (const label of [
-      'UC PATHWAY 2040',
+      'UC PATHWAY 2055',
       'Fidelity Freedom 2040 Fund',
       'Target Date 2040 Fund',
     ]) {
+      const expectedVintage = label.includes('2055') ? 2055 : 2040;
       const identity = identifyTargetDateFund(label)!;
-      expect(identity.vintage).toBe(2040);
+      expect(identity.vintage).toBe(expectedVintage);
       expect(lookupTargetDateAllocation(identity, '2026-12-31')).toBeNull();
     }
   });
@@ -335,8 +338,8 @@ describe('target-date funds in retirement mapping', () => {
 
   it('recognizes an unmatched target-date fund without inventing an allocation', async () => {
     const mapping = await mapPortfolioToAssetBasket(
-      [{ security_id: 'uc', security_name: 'UC PATHWAY 2040', institution_value: 25_000 }] as any[],
-      [{ security_id: 'uc', name: 'UC PATHWAY 2040', type: 'mutual fund' }] as any[],
+      [{ security_id: 'uc', security_name: 'UC PATHWAY 2055', institution_value: 25_000 }] as any[],
+      [{ security_id: 'uc', name: 'UC PATHWAY 2055', type: 'mutual fund' }] as any[],
       25_000,
       undefined,
       new Map(),
@@ -347,7 +350,7 @@ describe('target-date funds in retirement mapping', () => {
     expect(mapping.holdingExposures[0].targetDateIdentity).toEqual({
       provider: 'uc',
       series: 'pathway',
-      vintage: 2040,
+      vintage: 2055,
     });
     expect(mapping.holdingExposures[0]).toMatchObject({
       status: 'unmapped',
