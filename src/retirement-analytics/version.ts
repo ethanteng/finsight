@@ -15,5 +15,10 @@
  *    excluded for want of a registry row, and employer-plan book-value
  *    contracts -- guaranteed interest accounts, stable value funds -- read as
  *    cash rather than as securities nothing could place.
+ * 8: the State Street rows no longer fold their high-yield and short-term
+ *    corporate holdings into the government-bond sleeve. A v7 analysis of one
+ *    of those vintages credits credit exposure with Treasury returns, which
+ *    overstates the cushion during exactly the sequences a stress test exists
+ *    to examine.
  */
-export const RETIREMENT_ANALYSIS_VERSION = 7 as const;
+export const RETIREMENT_ANALYSIS_VERSION = 8 as const;

@@ -110,8 +110,8 @@ function normalizeDate(raw: string): string {
  * that is where every stored weight comes from. For the 2040 entry:
  *   usEquity      0.4341 = Equity 500 35.90 + Small/Mid Cap 7.51
  *   international 0.3176 = Global Equity ex-U.S. 31.76
- *   nominalBonds  0.2467 = Aggregate Bond 12.22 + Long Term Treasury 9.61
- *                          + High Yield 2.84
+ *   nominalBonds  0.2183 = Aggregate Bond 12.22 + Long Term Treasury 9.61
+ *                          (High Yield 2.84 is credit and is excluded)
  *   cash          0.0016 = money market 0.17, less the documented rounding
  *
  * So the fingerprint covers the holdings lines and their own as-of date, which

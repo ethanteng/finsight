@@ -278,10 +278,13 @@ describe('target-date funds in retirement mapping', () => {
     expect(mapping.unmappedHoldings).toEqual([]);
     expect(mapping.partiallyMappedHoldings).toEqual(['State St Target Ret 2030 SL SF CL III']);
     expect(mapping.holdingExposures[0].weights?.tips).toBeCloseTo(0.1207, 6);
-    expect(mapping.nominalBondsWeight).toBeCloseTo(0.311 / 0.837, 6);
+    // 0.7691 modeled = US 0.3145 + intl 0.2101 + government bonds 0.2431 +
+    // cash 0.0014. The vintage's High Yield 6.47 and Short Term Corporate 0.32
+    // are credit and sit in the unsupported residual with TIPS.
+    expect(mapping.nominalBondsWeight).toBeCloseTo(0.2431 / 0.7691, 6);
     expect(mapping.tipsValue).toBeCloseTo(24_079.23 * 0.1207, 2);
-    expect(mapping.unsupportedValue).toBeCloseTo(24_079.23 * 0.163, 2);
-    expect(mapping.valueCoverage).toBeCloseTo(0.837, 6);
+    expect(mapping.unsupportedValue).toBeCloseTo(24_079.23 * 0.2309, 2);
+    expect(mapping.valueCoverage).toBeCloseTo(0.7691, 6);
   });
 
   it.each([
@@ -316,10 +319,12 @@ describe('target-date funds in retirement mapping', () => {
     );
 
     expect(mapping.holdingExposures[0].weights?.tips).toBeCloseTo(0.0293, 6);
-    expect(mapping.mappedValue).toBeCloseTo(96_340, 2);
-    expect(mapping.unmappedValue).toBeCloseTo(3_660, 2);
-    expect(mapping.unsupportedValue).toBeCloseTo(3_660, 2);
-    expect(mapping.cashWeight).toBeCloseTo(0.0019 / 0.9634, 8);
+    // 0.9113 modeled once the vintage's High Yield 5.21 is excluded as credit;
+    // the withheld 8.87% is that plus the 2.93% TIPS sleeve.
+    expect(mapping.mappedValue).toBeCloseTo(91_130, 2);
+    expect(mapping.unmappedValue).toBeCloseTo(8_870, 2);
+    expect(mapping.unsupportedValue).toBeCloseTo(8_870, 2);
+    expect(mapping.cashWeight).toBeCloseTo(0.0019 / 0.9113, 8);
   });
 
   it('leaves a dated Treasury in bonds rather than on a glidepath', async () => {
@@ -686,7 +691,10 @@ describe('container provider types', () => {
       const mapping = await map('State St Target Ret 2040 SL SF CL III', 'O7PE', type);
       expect(mapping.targetDateFunds).toHaveLength(1);
       expect(mapping.targetDateFunds[0].vintage).toBe(2040);
-      expect(mapping.nominalBondsWeight).toBeCloseTo(0.2467, 6);
+      // 0.2183 of the fund over the 0.9716 it models: the sleeve weights are
+      // normalized across modeled value, and this vintage's 2.84% high-yield
+      // holding is credit, excluded rather than simulated as government debt.
+      expect(mapping.nominalBondsWeight).toBeCloseTo(0.2183 / 0.9716, 6);
       expect(mapping.targetDateFunds[0].allocationAsOf).toBe('2026-06-30');
     }
   });
