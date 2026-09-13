@@ -125,10 +125,16 @@ function isNumericIdentifier(prose: string, index: number, rawValue: string): bo
   // "the worst 10% of historical sequences" names a slice of a distribution,
   // not an amount of the user's money. The claim in such a sentence is the
   // outcome that follows it -- the depletion year, the ending balance -- and
-  // that number is grounded on its own. Requiring the "of <something>" keeps
-  // this to distribution language: "the top 10% of my portfolio" does not
-  // reach here without it, and neither does a bare "10%".
-  if (/\b(?:worst|best|bottom|top|lowest|highest)\s+$/i.test(before) && /^\s*%\s+of\b/.test(after)) return true;
+  // that number is grounded on its own. Require a distribution noun after
+  // "of" so "the top 10% of my portfolio" stays a money claim (and a bare
+  // "10%" never matches). Look past the usual 16-char window so
+  // "of historical sequences" still fits.
+  const afterDistribution = prose.slice(index + rawValue.length, index + rawValue.length + 48);
+  if (
+    /\b(?:worst|best|bottom|top|lowest|highest)\s+$/i.test(before) &&
+    /^\s*%\s+of\s+(?:the\s+)?(?:historical\s+)?(?:sequences?|outcomes?|cases?|scenarios?|paths?|simulations?|windows?|runs?)\b/i
+      .test(afterDistribution)
+  ) return true;
   return digits === '72' && /Rule\s+of\s*$/i.test(before);
 }
 

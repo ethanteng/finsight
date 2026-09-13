@@ -129,8 +129,12 @@ describe('canonical response facts', () => {
     }, pack).valid).toBe(true);
 
     // A bare percentage still has to come from the pack, and so does the
-    // outcome the slice is describing.
+    // outcome the slice is describing. Ranked money claims ("top 10% of my
+    // portfolio") are not distribution slices just because they use "top"/"of".
     expect(validateResponseFacts({ summary: 'About 10% of your portfolio is in cash.' }, pack).valid).toBe(false);
+    expect(validateResponseFacts({
+      summary: 'The top 10% of my portfolio is in speculative tech.',
+    }, pack).valid).toBe(false);
     expect(validateResponseFacts({
       summary: 'In the worst 10% of sequences you were left with $42,000.',
     }, pack).issues).toContain('User-facing usd value 42000 is not present in the canonical fact pack.');
