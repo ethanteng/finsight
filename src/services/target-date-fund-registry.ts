@@ -264,16 +264,31 @@ const REGISTRY: RegistryEntry[] = [
       'fund itself rather than a proxy share class. UC High Yield Fund (2.44%) is left ' +
       'out of the weights as credit, on the same rule as every other row here',
     exactAllocation: true,
+    // Published holdings, UC Pathway Fund 2040, as of 2026-06-30:
+    //   UC Domestic Equity Index Fund        43.31  -> usEquity
+    //   UC Domestic Small Cap Equity Fund     5.28  -> usEquity
+    //   UC International Equity Index Fund   25.43  -> internationalEquity
+    //   UC Emerging Markets Equity Fund       9.75  -> internationalEquity
+    //   UC Long Duration Fund                 8.88  -> nominalBonds
+    //   UC Bond Fund                          4.92  -> nominalBonds
+    //   UC High Yield Fund                    2.44  -> credit, excluded
+    // The sheet states seven total holdings and lists seven, so this is the
+    // whole fund rather than a top-ten extract.
     // No TIPS holding is listed among the seven, and the sheet publishes no
     // look-through TIPS line for UC Bond Fund or UC Long Duration Fund. Zero
     // is therefore what the source supports, not what it confirms.
     tipsAllocationStatus: 'lower-bound',
+    // Byte-hashed rather than value-fingerprinted, matching the observer in
+    // registry-source-check.ts: the holdings live in compressed PDF streams
+    // and reading them needs a toolchain that file does not carry. The
+    // transcription the weights come from is recorded above instead, where it
+    // stays legible to an auditor without one either.
     sourceFingerprint: {
-      kind: 'published-values',
-      value: '1ea0722210e823dad79036b83d2080af8a20b6cbfd48e240b33dc9d12d2a44f1',
+      kind: 'document-sha256',
+      value: '4fa73ff7bc02dc8924c4ebc7388bc5a442ba431951eb20fd3d9aa1f64a11ebf7',
       observedAt: '2026-09-13',
-      sourceAsOf: '2026-06-30',
-      observed: '2026-06-30|uc bond fund=4.92|uc domestic equity index fund=43.31|uc domestic small cap equity fund=5.28|uc emerging markets equity fund=9.75|uc high yield fund=2.44|uc international equity index fund=25.43|uc long duration fund=8.88',
+      sourceAsOf: 'see-document',
+      observed: '2440236 bytes',
     },
     // Domestic index + domestic small cap; international index + emerging
     // markets; long duration + core bond. The 2.44% high-yield sleeve is the
