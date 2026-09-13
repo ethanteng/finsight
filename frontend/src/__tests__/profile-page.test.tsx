@@ -2,9 +2,29 @@ import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import ProfilePage from '../app/profile/page';
+import {
+  clearAllFinancialServices,
+  resetPlaidLinkInitialization,
+} from '../components/PlaidLinkButton';
 
 jest.mock('snaptrade-react', () => ({
   SnapTradeReact: () => null,
+}));
+
+// A stable router, so the redirect a signed-out visitor gets is observable.
+const routerMock = {
+  push: jest.fn(),
+  replace: jest.fn(),
+  prefetch: jest.fn(),
+  back: jest.fn(),
+  forward: jest.fn(),
+  refresh: jest.fn(),
+};
+
+jest.mock('next/navigation', () => ({
+  useRouter: () => routerMock,
+  useSearchParams: () => new URLSearchParams(),
+  usePathname: () => '/profile',
 }));
 
 jest.mock('snaptrade-react/hooks/useWindowMessage', () => ({
@@ -280,6 +300,84 @@ describe('ProfilePage', () => {
         const errorMessage = screen.getByText('Failed to disconnect some accounts. Please try again.');
         expect(errorMessage).toHaveClass('bg-red-900');
       });
+    });
+  });
+
+  describe('Plaid connect deep link', () => {
+    // jsdom keeps window.location non-configurable, so drive the real history
+    // instead of stubbing it: the page reads the URL the same way a browser
+    // would, and the strip-the-param behavior is observable on location itself.
+    const visit = (url: string) => window.history.replaceState({}, '', url);
+
+    const requestedLinkToken = () =>
+      (global.fetch as jest.Mock).mock.calls.some(
+        ([url, options]) =>
+          typeof url === 'string' &&
+          url.endsWith('/plaid/create_link_token') &&
+          options?.method === 'POST'
+      );
+
+    beforeEach(() => {
+      clearAllFinancialServices();
+      resetPlaidLinkInitialization();
+      localStorageMock.getItem.mockImplementation((key) =>
+        key === 'auth_token' ? 'mock-auth-token' : null
+      );
+      (global.fetch as jest.Mock).mockImplementation(() =>
+        Promise.resolve({ ok: true, status: 200, json: async () => ({}) })
+      );
+    });
+
+    afterEach(() => visit('/'));
+
+    it('opens Plaid Link when arriving with ?connect=plaid', async () => {
+      visit('/profile?connect=plaid');
+
+      render(<ProfilePage />);
+
+      await waitFor(() => expect(requestedLinkToken()).toBe(true), { timeout: 4000 });
+    });
+
+    it('strips the param so a refresh does not reopen Plaid Link', async () => {
+      visit('/profile?connect=plaid');
+
+      render(<ProfilePage />);
+
+      await waitFor(() => expect(window.location.search).not.toContain('connect=plaid'));
+      expect(window.location.pathname).toBe('/profile');
+    });
+
+    it('leaves Plaid Link closed on an ordinary visit', async () => {
+      visit('/profile');
+
+      render(<ProfilePage />);
+
+      // Long enough to cover the delay the auto-open path waits out.
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      expect(requestedLinkToken()).toBe(false);
+    });
+
+    it('sends a signed-out visitor to sign in and back to the deep link', async () => {
+      visit('/profile?connect=plaid');
+      localStorageMock.getItem.mockImplementation(() => null);
+
+      render(<ProfilePage />);
+
+      await waitFor(() =>
+        expect(routerMock.replace).toHaveBeenCalledWith(
+          `/login?returnTo=${encodeURIComponent('/profile?connect=plaid')}`
+        )
+      );
+      expect(requestedLinkToken()).toBe(false);
+    });
+
+    it('leaves a signed-in visitor on the page', async () => {
+      visit('/profile?connect=plaid');
+
+      render(<ProfilePage />);
+
+      await waitFor(() => expect(requestedLinkToken()).toBe(true), { timeout: 4000 });
+      expect(routerMock.replace).not.toHaveBeenCalled();
     });
   });
 });
