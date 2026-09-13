@@ -37,6 +37,39 @@ const MISS_TTL_MS = 60 * 60 * 1000;
 const CUSIP_PATTERN = /^[A-Z0-9]{8}[0-9]$/;
 
 /**
+ * CUSIP issuer numbers reserved for US government debt.
+ *
+ * Every security a custodian sends carries a CUSIP -- stocks and funds
+ * included -- so without this the batch would ask the Treasury about an entire
+ * equity portfolio. The first six characters identify the issuer, and the
+ * Treasury's all begin `912`: bills at 91279x, bonds at 912810, notes at
+ * 912828 and 91282x, STRIPS at 91280x / 91282x / 91283x. Agencies sit
+ * elsewhere (313x), so this admits Treasuries and almost nothing else.
+ *
+ * Filtering here rather than at the call site because a caller cannot be
+ * expected to know CUSIP issuer ranges. Erring narrow is safe: a Treasury this
+ * fails to admit simply keeps the name-inferred classification it had before.
+ */
+const TREASURY_ISSUER_PATTERN = /^912/;
+
+/**
+ * Consecutive transport failures after which a batch stops asking.
+ *
+ * Each lookup costs up to two attempts at a ten-second timeout, and the batch
+ * is sequential, so an unreachable service would otherwise cost twenty-odd
+ * seconds per Treasury line -- minutes for a bond ladder. Optional evidence
+ * must not be able to gate an analysis on wall-clock time any more than it can
+ * on correctness.
+ */
+const CONSECUTIVE_FAILURE_LIMIT = 3;
+
+/** True when this CUSIP could be US government debt worth asking about. */
+export function isTreasuryCusip(cusip: string): boolean {
+  const normalized = normalizeCusip(cusip);
+  return normalized !== null && TREASURY_ISSUER_PATTERN.test(normalized);
+}
+
+/**
  * What the Treasury issued, reduced to the distinctions that change how the
  * engine models a position.
  *
@@ -46,6 +79,19 @@ const CUSIP_PATTERN = /^[A-Z0-9]{8}[0-9]$/;
  * duration the nominal series would impute to it.
  */
 export type TreasurySecurityKind = 'bill' | 'nominal' | 'tips' | 'frn';
+
+export interface TreasuryBatchResult {
+  securities: Map<string, TreasurySecurity>;
+  /**
+   * True when at least one lookup could not be completed.
+   *
+   * Distinct from a CUSIP the Treasury has no record of, and the distinction
+   * decides whether the resulting analysis may be cached: a name-inferred
+   * reading produced during an outage must not be persisted as the current
+   * answer and reused for a week after the service recovers.
+   */
+  degraded: boolean;
+}
 
 export interface TreasurySecurity {
   cusip: string;
@@ -132,19 +178,31 @@ export class TreasuryProvider {
   constructor(private readonly requestOptions: BoundedFetchOptions = {}) {}
 
   /**
-   * Resolve one CUSIP, or null when the Treasury has no auction record for it.
+   * Resolve one CUSIP, or null when the Treasury has no auction record for it
+   * and when the service is unreachable.
    *
-   * Null is also what a caller gets when the service is unreachable. That is
-   * deliberate: this provider adds evidence, and its absence must leave the
-   * classifier exactly where it stood before rather than failing an analysis.
+   * Collapsing those two into null is deliberate for a single lookup: this
+   * provider adds evidence, and its absence must leave the classifier exactly
+   * where it stood rather than failing an analysis. A caller that needs to
+   * tell them apart -- to decide whether the resulting analysis may be cached
+   * -- uses `getTreasurySecurityBatch`, which reports availability.
    */
   async getTreasurySecurity(cusip: string): Promise<TreasurySecurity | null> {
+    return (await this.resolve(cusip)).security;
+  }
+
+  private async resolve(
+    cusip: string,
+  ): Promise<{ security: TreasurySecurity | null; available: boolean }> {
     const normalized = normalizeCusip(cusip);
-    if (!normalized) return null;
+    // Not a CUSIP at all: nothing was attempted, and nothing is degraded.
+    if (!normalized) return { security: null, available: true };
 
     const cacheKey = `treasury_cusip_${normalized}`;
     const cached = await cacheService.get<TreasurySecurity | 'miss'>(cacheKey);
-    if (cached) return cached === 'miss' ? null : cached;
+    if (cached) {
+      return { security: cached === 'miss' ? null : cached, available: true };
+    }
 
     let rows: AuctionRow[];
     try {
@@ -156,13 +214,13 @@ export class TreasuryProvider {
         `⚠️ Treasury: lookup failed for ${normalized}:`,
         error instanceof Error ? error.message : String(error),
       );
-      return null;
+      return { security: null, available: false };
     }
 
     const row = originalIssue(rows);
     if (!row) {
       await cacheService.set(cacheKey, 'miss', MISS_TTL_MS);
-      return null;
+      return { security: null, available: true };
     }
 
     const couponRate = numeric(row.int_rate);
@@ -174,7 +232,7 @@ export class TreasuryProvider {
       maturityDate: isoDate(row.maturity_date),
     };
     await cacheService.set(cacheKey, security, HIT_TTL_MS);
-    return security;
+    return { security, available: true };
   }
 
   /**
@@ -183,20 +241,47 @@ export class TreasuryProvider {
    * Sequential because the endpoint takes a single equality filter and a
    * portfolio holds tens of Treasury lines, not thousands; issuing them in
    * parallel would buy little and risks tripping rate limits on a free public
-   * service. Cached CUSIPs cost no request at all.
+   * service. Cached CUSIPs cost no request at all, and non-Treasury issuers
+   * are dropped before any request is made -- without that an ordinary equity
+   * portfolio, whose every security also carries a CUSIP, would be sent here
+   * in full.
+   *
+   * Gives up after `CONSECUTIVE_FAILURE_LIMIT` transport failures in a row.
+   * Sequential lookups at two attempts and a ten-second timeout each would
+   * otherwise let an unreachable service hold an analysis for minutes, which
+   * gates it just as surely as an error would.
    */
   async getTreasurySecurityBatch(
     cusips: readonly string[],
-  ): Promise<Map<string, TreasurySecurity>> {
-    const resolved = new Map<string, TreasurySecurity>();
+  ): Promise<TreasuryBatchResult> {
+    const securities = new Map<string, TreasurySecurity>();
     const unique = new Set(
-      cusips.map(normalizeCusip).filter((cusip): cusip is string => cusip !== null),
+      cusips
+        .map(normalizeCusip)
+        .filter((cusip): cusip is string => cusip !== null && isTreasuryCusip(cusip)),
     );
+
+    let degraded = false;
+    let consecutiveFailures = 0;
     for (const cusip of unique) {
-      const security = await this.getTreasurySecurity(cusip);
-      if (security) resolved.set(cusip, security);
+      const { security, available } = await this.resolve(cusip);
+      if (security) securities.set(cusip, security);
+      if (available) {
+        consecutiveFailures = 0;
+        continue;
+      }
+      degraded = true;
+      consecutiveFailures += 1;
+      if (consecutiveFailures >= CONSECUTIVE_FAILURE_LIMIT) {
+        console.warn(
+          `⚠️ Treasury: ${consecutiveFailures} consecutive failures; skipping ${
+            unique.size - securities.size - consecutiveFailures
+          } remaining lookups for this analysis`,
+        );
+        break;
+      }
     }
-    return resolved;
+    return { securities, degraded };
   }
 
   private async fetchAuctions(cusip: string): Promise<AuctionRow[]> {

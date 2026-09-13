@@ -113,11 +113,12 @@ export async function analyzeRetirementPortfolio(
   const cusips = input.securities
     .map(security => security.cusip)
     .filter((cusip): cusip is string => typeof cusip === 'string' && cusip.trim().length > 0);
-  const treasuryByCusip = cusips.length > 0
-    ? await treasuryProvider.getTreasurySecurityBatch(cusips)
-    : new Map();
+  const { securities: treasuryByCusip, degraded: treasuryEvidenceDegraded } =
+    cusips.length > 0
+      ? await treasuryProvider.getTreasurySecurityBatch(cusips)
+      : { securities: new Map(), degraded: false };
   if (treasuryByCusip.size > 0) {
-    console.log(`🏛️ Treasury: resolved ${treasuryByCusip.size}/${new Set(cusips).size} CUSIPs from auction records`);
+    console.log(`🏛️ Treasury: resolved ${treasuryByCusip.size} CUSIPs from auction records`);
   }
 
   const portfolioMapping = await mapPortfolioToAssetBasket(input.holdings, input.securities, totalValue, dataProviderFactory, tickerToMetadata, asOfDate, treasuryByCusip);
@@ -324,7 +325,7 @@ export async function analyzeRetirementPortfolio(
     timelineBucket
   };
 
-  return formatAnalysisOutput(
+  const analysis = formatAnalysisOutput(
     assessment,
     stressTestResults,
     portfolioMetrics,
@@ -335,6 +336,10 @@ export async function analyzeRetirementPortfolio(
     historicalData,
     modeledEquityAllocation,
   );
+
+  // Only set when true, so an analysis that used every source it wanted
+  // serializes exactly as it did before.
+  return treasuryEvidenceDegraded ? { ...analysis, evidenceDegraded: true } : analysis;
 }
 
 // Re-export types for convenience

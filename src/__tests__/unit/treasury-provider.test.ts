@@ -137,12 +137,84 @@ describe('Treasury auction lookup', () => {
     const { fetchImplementation, calls } = respondWith([auctionRow()]);
     const provider = new TreasuryProvider({ fetchImplementation });
 
-    const resolved = await provider.getTreasurySecurityBatch([
+    const { securities } = await provider.getTreasurySecurityBatch([
       '91282CRE3', ' 91282cre3 ', '91282CRE3',
     ]);
 
-    expect(resolved.size).toBe(1);
+    expect(securities.size).toBe(1);
     expect(calls).toHaveLength(1);
+  });
+
+  it('asks about nothing when the book holds no government debt', async () => {
+    // Every security a custodian sends carries a CUSIP, funds and stocks
+    // included. Without an issuer filter an ordinary equity portfolio would be
+    // sent to the Treasury in full.
+    const { fetchImplementation, calls } = respondWith([auctionRow()]);
+    const provider = new TreasuryProvider({ fetchImplementation });
+
+    const { securities, degraded } = await provider.getTreasurySecurityBatch([
+      '922908363', // VTI
+      '464287200', // an iShares fund
+      '037833100', // AAPL
+    ]);
+
+    expect(calls).toHaveLength(0);
+    expect(securities.size).toBe(0);
+    expect(degraded).toBe(false);
+  });
+
+  it('stops asking once the service has failed repeatedly', async () => {
+    // Sequential lookups at two attempts and a ten-second timeout each would
+    // otherwise let an unreachable service hold an analysis for minutes, which
+    // gates it as surely as an error would.
+    let calls = 0;
+    const provider = new TreasuryProvider({
+      fetchImplementation: (async () => {
+        calls += 1;
+        throw new Error('network down');
+      }) as any,
+      maxAttempts: 1,
+    });
+
+    const cusips = Array.from({ length: 20 }, (_, index) =>
+      `912828${String(index).padStart(2, '0')}0`);
+    const { degraded } = await provider.getTreasurySecurityBatch(cusips);
+
+    expect(degraded).toBe(true);
+    expect(calls).toBe(3);
+  });
+
+  it('reports a CUSIP the Treasury has no record of as available, not degraded', async () => {
+    // A genuine miss and an outage must not look alike: only one of them means
+    // the resulting analysis is unsafe to keep.
+    const { fetchImplementation } = respondWith([]);
+    const provider = new TreasuryProvider({ fetchImplementation });
+
+    const { securities, degraded } = await provider.getTreasurySecurityBatch(['912828XX0']);
+
+    expect(securities.size).toBe(0);
+    expect(degraded).toBe(false);
+  });
+
+  it('does not let one failure in a healthy run trip the breaker', async () => {
+    let calls = 0;
+    const provider = new TreasuryProvider({
+      fetchImplementation: (async () => {
+        calls += 1;
+        if (calls === 2) throw new Error('blip');
+        return { ok: true, status: 200, json: async () => ({ data: [auctionRow()] }) } as any;
+      }) as any,
+      maxAttempts: 1,
+    });
+
+    const { securities, degraded } = await provider.getTreasurySecurityBatch([
+      '912828010', '912828020', '912828030', '912828040',
+    ]);
+
+    expect(calls).toBe(4);
+    expect(securities.size).toBe(3);
+    // Still degraded: evidence this analysis wanted was not obtained.
+    expect(degraded).toBe(true);
   });
 });
 
