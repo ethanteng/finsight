@@ -3,7 +3,7 @@
   "firstMonth": "1926-07",
   "lastMonth": "2026-06",
   "rowCount": 1200,
-  "generatedFromSourceRetrieval": "2026-08-18T17:22:32.892Z",
+  "generatedFromSourceRetrieval": "2026-09-13T03:22:19.052572Z",
   "series": {
     "us_equity": {
       "source": "frenchUsFactors",
@@ -21,6 +21,12 @@
       "source": "shiller",
       "description": "Synthetic 10-year US government-bond total return aligned to the month earned",
       "firstMonth": "1926-07",
+      "lastMonth": "2026-06"
+    },
+    "tips": {
+      "source": "fredTipsRealYield",
+      "description": "Synthetic 10-year constant-maturity TIPS total return: the real return implied by the DFII10 real yield, indexed by the same monthly CPI change the inflation column carries",
+      "firstMonth": "2003-02",
       "lastMonth": "2026-06"
     },
     "cash": {
@@ -69,10 +75,22 @@
       "firstObservation": "1975-01",
       "lastObservation": "2025-12",
       "sha256": "047aab4e9ae512f3759fde34e8e49b8ff12a162fad4e8d36ec5b8c99b8d06266"
+    },
+    "fredTipsRealYield": {
+      "provider": "Federal Reserve Bank of St. Louis (FRED)",
+      "file": "src/datasets/DFII10.csv",
+      "documentationUrl": "https://fred.stlouisfed.org/series/DFII10",
+      "downloadUrl": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DFII10",
+      "retrievedAt": "2026-09-13T03:22:19.052572Z",
+      "sourceVintage": "2026-09",
+      "firstObservation": "2003-01",
+      "lastObservation": "2026-09",
+      "sha256": "b88542fcf663d0b94152446b33be3bfdd5ea691c2e95f5c0156ee97d5141b8f7"
     }
   },
   "methodology": {
     "rollingWindows": "Monthly rolling start dates overlap and are not statistically independent observations.",
-    "internationalAvailability": "Rows outside the French international index range contain NA for international equity and are excluded when that sleeve is active."
+    "internationalAvailability": "Rows outside the French international index range contain NA for international equity and are excluded when that sleeve is active.",
+    "tipsAvailability": "TIPS real yields begin in 2003. Earlier rows contain NA, and the engine represents the sleeve with the nominal bond series there, reporting the substitution. Those months show no inflation protection the nominal series does not have, which understates TIPS in the inflationary sequences and so lowers rather than raises a projected success rate."
   }
 }

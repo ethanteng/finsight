@@ -310,6 +310,13 @@ export interface PortfolioMapping {
   internationalEquityWeight: number;
   /** Weight fed only to the nominal government-bond return series. */
   nominalBondsWeight: number;
+  /**
+   * Weight fed to the TIPS return series, which is the nominal bond series
+   * before 2003. Kept apart from `nominalBondsWeight` because the two differ
+   * wherever real yields exist, and a reader of the mapping needs to see the
+   * sleeve the user actually holds.
+   */
+  tipsWeight: number;
   cashWeight: number;
   /** Signed net sum of itemized holding values presented to the mapper. */
   totalValue: number;
@@ -323,7 +330,7 @@ export interface PortfolioMapping {
   /** Known credit/international-bond dollars excluded from simulation but retained in fixed-income composition. */
   unsupportedFixedIncomeValue: number;
   cashValue: number;
-  /** Signed net dollars represented by the four supported historical return series. */
+  /** Signed net dollars represented by the five supported historical return series. */
   mappedValue: number;
   /** Itemized dollars deliberately excluded from the historical simulation. */
   unmappedValue: number;
@@ -387,6 +394,7 @@ export interface HistoricalSequence {
     usEquity: number[]; // monthly returns
     internationalEquity: number[]; // monthly returns
     nominalBonds: number[]; // monthly returns
+    tips: number[]; // monthly returns; the nominal bond series before 2003
     cash: number[]; // monthly returns (near-zero)
   };
   inflationRates: number[]; // monthly inflation
@@ -475,6 +483,13 @@ export interface DataQualityReport {
     usEquityProxy: string; // e.g., "VTI"
     internationalEquityProxy: string; // exact historical series/proxy used
     bondsProxy: string; // e.g., "AGG"
+    /**
+     * Series behind the TIPS sleeve, including what stands in before 2003.
+     *
+     * Optional because analyses persisted before TIPS were simulated carry no
+     * such sleeve; their TIPS dollars are in `unsupportedHoldings` instead.
+     */
+    tipsProxy?: string;
     unmappedHoldings: string[];
     /**
      * `unmappedHoldings` partitioned by why the holding produced no modeled

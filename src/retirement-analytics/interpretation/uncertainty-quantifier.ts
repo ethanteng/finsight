@@ -117,6 +117,9 @@ export function calculateDataQuality(
       usEquityProxy: 'Kenneth French broad US market total-return history',
       internationalEquityProxy: 'Kenneth French EAFE-plus-Canada market return history',
       bondsProxy: 'Shiller synthetic 10-year US government-bond total-return history',
+      tipsProxy:
+        'Synthetic 10-year constant-maturity TIPS total return from published real yields ' +
+        '(2003 onward); the nominal government-bond series stands in before that',
       unmappedHoldings: resolvedMapping.unmappedHoldings,
       unrecognizedHoldings: resolvedMapping.unrecognizedHoldings ?? [],
       equityGeographyUnresolvedHoldings:

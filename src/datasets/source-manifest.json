@@ -33,6 +33,17 @@
       "firstObservation": "1975-01",
       "lastObservation": "2025-12",
       "sha256": "047aab4e9ae512f3759fde34e8e49b8ff12a162fad4e8d36ec5b8c99b8d06266"
+    },
+    "fredTipsRealYield": {
+      "provider": "Federal Reserve Bank of St. Louis (FRED)",
+      "file": "src/datasets/DFII10.csv",
+      "documentationUrl": "https://fred.stlouisfed.org/series/DFII10",
+      "downloadUrl": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DFII10",
+      "retrievedAt": "2026-09-13T03:22:19.052572Z",
+      "sourceVintage": "2026-09",
+      "firstObservation": "2003-01",
+      "lastObservation": "2026-09",
+      "sha256": "b88542fcf663d0b94152446b33be3bfdd5ea691c2e95f5c0156ee97d5141b8f7"
     }
   }
 }

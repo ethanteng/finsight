@@ -86,6 +86,7 @@ export function simulateWithdrawals(
   let usEquity = initialPortfolioValue * w.usEquityWeight;
   let intlEquity = initialPortfolioValue * w.internationalEquityWeight;
   let bonds = initialPortfolioValue * w.nominalBondsWeight;
+  let tips = initialPortfolioValue * w.tipsWeight;
   let cash = initialPortfolioValue * w.cashWeight;
 
   let monthlyWithdrawal = annualWithdrawal / 12;
@@ -105,14 +106,16 @@ export function simulateWithdrawals(
     const usRet = sequence.assetBasketReturns.usEquity[month] ?? 0;
     const intlRet = sequence.assetBasketReturns.internationalEquity[month] ?? 0;
     const bondRet = sequence.assetBasketReturns.nominalBonds[month] ?? 0;
+    const tipsRet = sequence.assetBasketReturns.tips[month] ?? 0;
     const cashRet = sequence.assetBasketReturns.cash[month] ?? 0;
 
     usEquity *= 1 + usRet;
     intlEquity *= 1 + intlRet;
     bonds *= 1 + bondRet;
+    tips *= 1 + tipsRet;
     cash *= 1 + cashRet;
 
-    let portfolioValue = usEquity + intlEquity + bonds + cash;
+    let portfolioValue = usEquity + intlEquity + bonds + tips + cash;
 
     // inflationRates[] are monthly (CPI_t/CPI_(t-1) - 1 from build-market-dataset). Not annual.
     const monthlyInflation = sequence.inflationRates[month] ?? 0;
@@ -128,6 +131,7 @@ export function simulateWithdrawals(
       usEquity += monthlyContribution * w.usEquityWeight;
       intlEquity += monthlyContribution * w.internationalEquityWeight;
       bonds += monthlyContribution * w.nominalBondsWeight;
+      tips += monthlyContribution * w.tipsWeight;
       cash += monthlyContribution * w.cashWeight;
       portfolioValue += monthlyContribution;
     }
@@ -196,6 +200,7 @@ export function simulateWithdrawals(
       usEquity = portfolioValue * w.usEquityWeight;
       intlEquity = portfolioValue * w.internationalEquityWeight;
       bonds = portfolioValue * w.nominalBondsWeight;
+      tips = portfolioValue * w.tipsWeight;
       cash = portfolioValue * w.cashWeight;
     } else {
       // Withdrawal applied to total; scale sleeves proportionally to match new total
@@ -203,6 +208,7 @@ export function simulateWithdrawals(
       usEquity *= scale;
       intlEquity *= scale;
       bonds *= scale;
+      tips *= scale;
       cash *= scale;
     }
   }
@@ -212,7 +218,7 @@ export function simulateWithdrawals(
     yearsUntilDepletion: null,
     portfolioValueAtWithdrawalStart,
     realPortfolioValueAtWithdrawalStart,
-    finalValue: usEquity + intlEquity + bonds + cash,
+    finalValue: usEquity + intlEquity + bonds + tips + cash,
     maximumDrawdown: maxDrawdown,
     timeToRecovery: recoveryMonth != null ? recoveryMonth - (drawdownStartMonth ?? 0) : null,
     realReturn: calculateRealReturn(portfolioValues, sequence.inflationRates),

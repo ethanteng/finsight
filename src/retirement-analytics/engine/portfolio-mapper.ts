@@ -113,7 +113,8 @@ function weightTotal(weights: HoldingExposureWeights): number {
 }
 
 function modeledWeightTotal(weights: HoldingExposureWeights): number {
-  return weights.usEquity + weights.internationalEquity + weights.nominalBonds + weights.cash;
+  return weights.usEquity + weights.internationalEquity + weights.nominalBonds +
+    weights.tips + weights.cash;
 }
 
 function copyWeights(weights: HoldingExposureWeights): HoldingExposureWeights {
@@ -481,8 +482,15 @@ function settleNegativeSleeves(sleeves: {
   usEquity: number;
   internationalEquity: number;
   nominalBonds: number;
+  tips: number;
   cash: number;
-}): { usEquity: number; internationalEquity: number; nominalBonds: number; cash: number } {
+}): {
+  usEquity: number;
+  internationalEquity: number;
+  nominalBonds: number;
+  tips: number;
+  cash: number;
+} {
   const values = Object.values(sleeves);
   const shortfall = values.reduce((sum, value) => sum + Math.min(0, value), 0);
   const positive = values.reduce((sum, value) => sum + Math.max(0, value), 0);
@@ -495,6 +503,7 @@ function settleNegativeSleeves(sleeves: {
     usEquity: settle(sleeves.usEquity),
     internationalEquity: settle(sleeves.internationalEquity),
     nominalBonds: settle(sleeves.nominalBonds),
+    tips: settle(sleeves.tips),
     cash: settle(sleeves.cash),
   };
 }
@@ -537,15 +546,11 @@ export function summarizeHoldingExposures(
     const mappedFraction = weights
       ? Math.max(0, Math.min(1, modeledWeightTotal(weights)))
       : 0;
-    const tipsFraction = weights
-      ? Math.max(0, Math.min(1 - mappedFraction, weights.tips))
-      : 0;
     // Registry residuals are sourced sleeves the historical engine does not
     // support (for example commodities), not failures to recognize the fund.
-    const unsupportedResidual = exposure.unsupportedAssetClass || exposure.method === 'fund-registry'
-      ? Math.max(0, 1 - mappedFraction - tipsFraction)
+    const unsupportedFraction = exposure.unsupportedAssetClass || exposure.method === 'fund-registry'
+      ? Math.max(0, 1 - mappedFraction)
       : 0;
-    const unsupportedFraction = tipsFraction + unsupportedResidual;
     const unrecognizedFraction = Math.max(0, 1 - mappedFraction - unsupportedFraction);
     const exposureMappedValue = exposure.value * mappedFraction;
     const exposureUnsupportedValue = exposure.value * unsupportedFraction;
@@ -628,11 +633,13 @@ export function summarizeHoldingExposures(
     usEquity: usEquityValue,
     internationalEquity: internationalEquityValue,
     nominalBonds: nominalBondsValue,
+    tips: tipsValue,
     cash: cashValue,
   });
   usEquityValue = settledSleeves.usEquity;
   internationalEquityValue = settledSleeves.internationalEquity;
   nominalBondsValue = settledSleeves.nominalBonds;
+  tipsValue = settledSleeves.tips;
   cashValue = settledSleeves.cash;
 
   const unmappedValue = Math.max(0, totalValue - mappedValue);
@@ -709,6 +716,7 @@ export function summarizeHoldingExposures(
     usEquityWeight: mappedValue > 0 ? usEquityValue / mappedValue : 0,
     internationalEquityWeight: mappedValue > 0 ? internationalEquityValue / mappedValue : 0,
     nominalBondsWeight: mappedValue > 0 ? nominalBondsValue / mappedValue : 0,
+    tipsWeight: mappedValue > 0 ? tipsValue / mappedValue : 0,
     cashWeight: mappedValue > 0 ? cashValue / mappedValue : 0,
     totalValue,
     usEquityValue,
@@ -1069,7 +1077,8 @@ export function populateAssumptions(
       `$${Math.round(incompleteTipsValue).toLocaleString('en-US')} across ` +
       `${incompleteTipsExposures.length} target-date holding${incompleteTipsExposures.length === 1 ? '' : 's'} ` +
       `${incompleteTipsExposures.length === 1 ? 'does' : 'do'} not publish embedded TIPS separately; ` +
-      'any unreported sleeve remains excluded rather than recorded as zero or reassigned to nominal bonds'
+      'any unreported sleeve stays inside whatever the source did publish rather than being ' +
+      'recorded as a TIPS allocation nobody stated'
     );
   }
   const nonTipsBondValue = resolvedMapping.holdingExposures.reduce(
@@ -1083,13 +1092,14 @@ export function populateAssumptions(
 
   if (tipsValue > 0.005) {
     assumptions.push(
-      `$${Math.round(tipsValue).toLocaleString('en-US')} of TIPS exposure was excluded from the ` +
-      'historical simulation rather than reassigned to nominal bonds: TIPS began in 1997, so ' +
-      'observed market history cannot satisfy the engine\'s 50-year evidence floor'
+      `$${Math.round(tipsValue).toLocaleString('en-US')} of TIPS exposure uses a 10-year ` +
+      'constant-maturity TIPS total return derived from published real yields, which begin in ' +
+      '2003; before then the sleeve is represented by the nominal 10-year government-bond series, ' +
+      'so those months carry no inflation indexation and understate TIPS in inflationary sequences'
     );
   }
 
-  const otherUnsupportedValue = Math.max(0, (resolvedMapping.unsupportedValue ?? 0) - tipsValue);
+  const otherUnsupportedValue = Math.max(0, resolvedMapping.unsupportedValue ?? 0);
   if (otherUnsupportedValue > 0.005) {
     assumptions.push(
       `$${Math.round(otherUnsupportedValue).toLocaleString('en-US')} in other known asset sleeves ` +

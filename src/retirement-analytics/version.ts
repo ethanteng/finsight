@@ -25,5 +25,11 @@
  *    TIPS-versus-nominal reading no longer depends on which custodian the
  *    position is held through. A v8 analysis carries the name-only reading of
  *    every Treasury line SnapTrade reported.
+ * 10: TIPS are simulated rather than excluded. The dataset carries a 10-year
+ *    constant-maturity TIPS total return derived from published real yields
+ *    from 2003, and the nominal bond series represents the sleeve before that,
+ *    reported as a substitution. A v9 analysis withheld every TIPS dollar from
+ *    the simulation, so its coverage and its survival figures both describe a
+ *    portfolio the user does not hold.
  */
-export const RETIREMENT_ANALYSIS_VERSION = 9 as const;
+export const RETIREMENT_ANALYSIS_VERSION = 10 as const;

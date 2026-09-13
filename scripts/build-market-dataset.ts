@@ -6,6 +6,8 @@
  * - US equity: Kenneth French broad US market return (Mkt-RF + RF)
  * - International equity: Kenneth French EAFE-plus-Canada market return
  * - Bonds: Shiller synthetic 10-year US government-bond total return
+ * - TIPS: 10-year constant-maturity real bond total return, derived from the
+ *   FRED DFII10 real yield and indexed by the same CPI (2003-02 onward)
  * - Cash: Kenneth French one-month Treasury-bill return (RF)
  * - Inflation: monthly change in Shiller CPI
  *
@@ -22,6 +24,7 @@ const DATASET_DIR = path.join(__dirname, '../src/datasets');
 const SHILLER_PATH = path.join(DATASET_DIR, 'ie_data.xls');
 const FRENCH_US_PATH = path.join(DATASET_DIR, 'F-F_Research_Data_Factors.csv');
 const FRENCH_INTERNATIONAL_PATH = path.join(DATASET_DIR, 'F-F_International_Indices.dat');
+const FRED_TIPS_REAL_YIELD_PATH = path.join(DATASET_DIR, 'DFII10.csv');
 const SOURCE_MANIFEST_PATH = path.join(DATASET_DIR, 'source-manifest.json');
 const OUTPUT_PATH = path.join(__dirname, '../data/historical_market_returns.csv');
 const OUTPUT_METADATA_PATH = path.join(__dirname, '../data/historical_market_returns.metadata.json');
@@ -46,9 +49,26 @@ export interface UnifiedMonthlyRow {
   usEquity: number;
   internationalEquity: number | null;
   bonds: number;
+  tips: number | null;
   cash: number;
   inflation: number;
 }
+
+/**
+ * Maturity of the synthetic TIPS bond, in years.
+ *
+ * Ten, to match the nominal bond series rather than to match any TIPS index.
+ * The engine represents TIPS by the nominal series wherever real yields do not
+ * reach, and a splice between a 10-year bond and a 7-year index would put a
+ * duration step at the join that no market event produced. Matching the
+ * nominal sleeve makes the substitution a change of one variable.
+ *
+ * The consequence is a series more rate-sensitive than a TIPS fund: measured
+ * against the published index this reads -17.9% for 2022 where the index reads
+ * -11.9%, and -12.4% for 2013 against -8.6%. Overstating the drawdown lowers a
+ * projected success rate, so the error runs the safe way.
+ */
+const TIPS_MATURITY_YEARS = 10;
 
 interface SourceManifestEntry {
   provider: string;
@@ -83,6 +103,7 @@ export interface HistoricalDatasetMetadata {
   methodology: {
     rollingWindows: string;
     internationalAvailability: string;
+    tipsAvailability: string;
   };
 }
 
@@ -206,6 +227,106 @@ export function loadFrenchInternationalData(filePath = FRENCH_INTERNATIONAL_PATH
   return rows;
 }
 
+/**
+ * Month-end real yields, as fractions, from the FRED daily series.
+ *
+ * Month-end rather than a monthly average because the return being built is
+ * the change between two month boundaries; averaging would blur the price move
+ * this measures across the month it happened in. Market holidays arrive as
+ * ".", and the last quoted day of each month wins.
+ */
+export function loadTipsRealYields(filePath = FRED_TIPS_REAL_YIELD_PATH): Map<string, number> {
+  const lines = fs.readFileSync(filePath, 'utf8').split(/\r?\n/);
+  const header = (lines[0] || '').split(',').map(value => value.trim());
+  const valueIndex = header.indexOf('DFII10');
+  if (valueIndex < 1) throw new Error('FRED real-yield snapshot has no DFII10 column');
+
+  const byMonth = new Map<string, number>();
+  for (const line of lines.slice(1)) {
+    const parts = line.split(',');
+    const date = (parts[0] || '').trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
+    const value = Number((parts[valueIndex] || '').trim());
+    if (!Number.isFinite(value)) continue;
+    byMonth.set(date.slice(0, 7), value / 100);
+  }
+  if (byMonth.size < 200) {
+    throw new Error(`FRED real-yield snapshot covers only ${byMonth.size} months`);
+  }
+  return byMonth;
+}
+
+/**
+ * One month of total return on a constant-maturity par bond, priced exactly.
+ *
+ * Buy a par bond yielding `startYield` with semiannual coupons, hold one
+ * month, then value what is left -- nineteen-and-a-fraction coupons plus
+ * principal -- at the new yield. The dirty price carries the accrued coupon,
+ * so the difference from par is the whole return.
+ *
+ * Negative yields are priced, not rejected. Real yields were below zero for 48
+ * months between 2011 and 2022, and a par bond with a negative coupon is the
+ * right instrument for the job: an issued TIPS would carry the 0.125% floor
+ * coupon and a premium price, but its duration -- the thing this series exists
+ * to express -- is what the par-bond arithmetic gives.
+ */
+export function parBondMonthlyReturn(
+  startYield: number,
+  endYield: number,
+  maturityYears = TIPS_MATURITY_YEARS,
+): number {
+  const couponPerPeriod = (startYield / 2) * 100;
+  const ratePerPeriod = endYield / 2;
+  if (ratePerPeriod <= -1) throw new Error(`Unusable bond yield: ${endYield}`);
+  const periods = Math.round(maturityYears * 2);
+  // A month is a third of a semiannual period.
+  const elapsed = (1 / 12) / 0.5;
+
+  let price = 0;
+  for (let period = 1; period <= periods; period++) {
+    price += couponPerPeriod / (1 + ratePerPeriod) ** (period - elapsed);
+  }
+  price += 100 / (1 + ratePerPeriod) ** (periods - elapsed);
+  return price / 100 - 1;
+}
+
+/**
+ * Nominal TIPS total return for each month real yields cover.
+ *
+ * Real return first, from the yield move, then indexed by the month's CPI
+ * change: a TIPS pays a real coupon on a principal that tracks the index, so
+ * its nominal return is the real return compounded with realized inflation.
+ * The same CPI the `inflation` column carries is used, so the two columns
+ * cannot disagree about what prices did.
+ *
+ * The indexation the Treasury actually applies lags CPI by about three months,
+ * a refinement this leaves out. It shifts the month a given price move lands
+ * in; it does not change the level, and the engine reads decade-long sequences
+ * rather than single months.
+ */
+export function buildTipsReturns(
+  realYields: Map<string, number>,
+  inflationByMonth: Map<string, number>,
+): Map<string, number> {
+  const months = Array.from(realYields.keys()).sort();
+  const returns = new Map<string, number>();
+  for (let index = 1; index < months.length; index++) {
+    const previous = months[index - 1];
+    const current = months[index];
+    // A hole in the real-yield series must not silently become a two-month
+    // return attributed to one month.
+    if (monthOrdinal(current) !== monthOrdinal(previous) + 1) continue;
+    const inflation = inflationByMonth.get(current);
+    if (inflation === undefined) continue;
+    const realReturn = parBondMonthlyReturn(
+      realYields.get(previous) as number,
+      realYields.get(current) as number,
+    );
+    returns.set(current, (1 + realReturn) * (1 + inflation) - 1);
+  }
+  return returns;
+}
+
 function readAndVerifySourceManifest(): SourceManifest {
   const manifest = JSON.parse(fs.readFileSync(SOURCE_MANIFEST_PATH, 'utf8')) as SourceManifest;
   if (manifest.schemaVersion !== 1) throw new Error('Unsupported market source manifest schema');
@@ -222,9 +343,14 @@ function readAndVerifySourceManifest(): SourceManifest {
 export function buildUnifiedRows(
   shiller = loadShillerData(),
   frenchUs = loadFrenchUsData(),
-  frenchInternational = loadFrenchInternationalData()
+  frenchInternational = loadFrenchInternationalData(),
+  tipsRealYields = loadTipsRealYields()
 ): UnifiedMonthlyRow[] {
   const shillerByDate = new Map(shiller.map(row => [row.date, row]));
+  const tips = buildTipsReturns(
+    tipsRealYields,
+    new Map(shiller.map(row => [row.date, row.inflation])),
+  );
   const rows = frenchUs.flatMap(row => {
     const shillerRow = shillerByDate.get(row.date);
     if (!shillerRow) return [];
@@ -233,6 +359,7 @@ export function buildUnifiedRows(
       usEquity: row.usEquity,
       internationalEquity: frenchInternational.get(row.date) ?? null,
       bonds: shillerRow.bonds,
+      tips: tips.get(row.date) ?? null,
       cash: row.cash,
       inflation: shillerRow.inflation,
     }];
@@ -243,6 +370,21 @@ export function buildUnifiedRows(
   const internationalMonths = rows.filter(row => row.internationalEquity !== null);
   if (internationalMonths.length < 500) {
     throw new Error(`Unified history contains only ${internationalMonths.length} international months`);
+  }
+  const tipsMonths = rows.filter(row => row.tips !== null);
+  if (tipsMonths.length < 200) {
+    throw new Error(`Unified history contains only ${tipsMonths.length} TIPS months`);
+  }
+  // Both short series are edge-anchored: the engine proxies only outside a
+  // series' own span, so an interior hole would be read as the span continuing
+  // and quietly proxied nowhere.
+  for (const [label, key] of [['international', 'internationalEquity'], ['TIPS', 'tips']] as const) {
+    const present = rows.map(row => row[key] !== null);
+    const first = present.indexOf(true);
+    const last = present.lastIndexOf(true);
+    if (present.slice(first, last + 1).some(value => !value)) {
+      throw new Error(`Unified history has a gap inside the ${label} series`);
+    }
   }
   return rows;
 }
@@ -256,6 +398,7 @@ function rangeFor(rows: UnifiedMonthlyRow[], predicate: (row: UnifiedMonthlyRow)
 function buildMetadata(rows: UnifiedMonthlyRow[], manifest: SourceManifest): HistoricalDatasetMetadata {
   const allRange = rangeFor(rows, () => true);
   const internationalRange = rangeFor(rows, row => row.internationalEquity !== null);
+  const tipsRange = rangeFor(rows, row => row.tips !== null);
   const retrievalDates = Object.values(manifest.sources)
     .map(source => source.retrievedAt)
     .sort();
@@ -281,6 +424,13 @@ function buildMetadata(rows: UnifiedMonthlyRow[], manifest: SourceManifest): His
         description: 'Synthetic 10-year US government-bond total return aligned to the month earned',
         ...allRange,
       },
+      tips: {
+        source: 'fredTipsRealYield',
+        description:
+          'Synthetic 10-year constant-maturity TIPS total return: the real return implied by the ' +
+          'DFII10 real yield, indexed by the same monthly CPI change the inflation column carries',
+        ...tipsRange,
+      },
       cash: {
         source: 'frenchUsFactors',
         description: 'One-month US Treasury-bill return (RF)',
@@ -297,18 +447,24 @@ function buildMetadata(rows: UnifiedMonthlyRow[], manifest: SourceManifest): His
       rollingWindows: 'Monthly rolling start dates overlap and are not statistically independent observations.',
       internationalAvailability:
         'Rows outside the French international index range contain NA for international equity and are excluded when that sleeve is active.',
+      tipsAvailability:
+        'TIPS real yields begin in 2003. Earlier rows contain NA, and the engine represents the ' +
+        'sleeve with the nominal bond series there, reporting the substitution. Those months show ' +
+        'no inflation protection the nominal series does not have, which understates TIPS in the ' +
+        'inflationary sequences and so lowers rather than raises a projected success rate.',
     },
   };
 }
 
 export function serializeRows(rows: UnifiedMonthlyRow[]): string {
-  const lines = ['date,us_equity,intl_equity,bonds,cash,inflation'];
+  const lines = ['date,us_equity,intl_equity,bonds,tips,cash,inflation'];
   for (const row of rows) {
     lines.push([
       row.date,
       row.usEquity.toFixed(6),
       row.internationalEquity === null ? 'NA' : row.internationalEquity.toFixed(6),
       row.bonds.toFixed(6),
+      row.tips === null ? 'NA' : row.tips.toFixed(6),
       row.cash.toFixed(6),
       row.inflation.toFixed(6),
     ].join(','));
@@ -324,6 +480,7 @@ function geometricAnnualized(rows: UnifiedMonthlyRow[], value: (row: UnifiedMont
 function sanityCheck(rows: UnifiedMonthlyRow[]): void {
   for (const row of rows) {
     const values = [row.usEquity, row.bonds, row.cash, row.inflation];
+    if (row.tips !== null) values.push(row.tips);
     if (values.some(value => !Number.isFinite(value) || value <= -1)) {
       throw new Error(`Invalid unified return values for ${row.date}`);
     }
@@ -331,12 +488,21 @@ function sanityCheck(rows: UnifiedMonthlyRow[]): void {
   const annualizedUs = geometricAnnualized(rows, row => row.usEquity);
   const annualizedBonds = geometricAnnualized(rows, row => row.bonds);
   const annualizedCash = geometricAnnualized(rows, row => row.cash);
+  const tipsRows = rows.filter(row => row.tips !== null);
+  const annualizedTips = geometricAnnualized(tipsRows, row => row.tips as number);
   if (annualizedUs < 0.04 || annualizedUs > 0.15) {
     throw new Error(`US equity annualized sanity check failed: ${annualizedUs}`);
+  }
+  // Since 2003 TIPS have returned in the low single digits. A synthetic series
+  // outside that band means the yield snapshot or the indexation is wrong, not
+  // that the asset class did something remarkable.
+  if (annualizedTips < 0 || annualizedTips > 0.08) {
+    throw new Error(`TIPS annualized sanity check failed: ${annualizedTips}`);
   }
   console.log('Geometric annualized sanity check:');
   console.log(`  US equities: ${(annualizedUs * 100).toFixed(2)}%`);
   console.log(`  10-year government bonds: ${(annualizedBonds * 100).toFixed(2)}%`);
+  console.log(`  10-year TIPS (${tipsRows.length} months): ${(annualizedTips * 100).toFixed(2)}%`);
   console.log(`  Treasury bills: ${(annualizedCash * 100).toFixed(2)}%`);
 }
 

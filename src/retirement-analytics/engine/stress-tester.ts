@@ -125,7 +125,9 @@ export async function generateRollingSequences(
 }> {
   const resolvedMapping = mappingFromResolvedExposures(mapping);
   const data = loadHistoricalReturns();
-  const { dates, usEquityReturns, intlEquityReturns, bondReturns, cashReturns, inflationRates } = data;
+  const {
+    dates, usEquityReturns, intlEquityReturns, bondReturns, tipsReturns, cashReturns, inflationRates,
+  } = data;
 
   const horizonMonths = Math.round(analysisYears * 12);
   if (!Number.isFinite(horizonMonths) || horizonMonths <= 0) {
@@ -133,25 +135,65 @@ export async function generateRollingSequences(
   }
 
   const internationalRequired = Math.abs(resolvedMapping.internationalEquityWeight) > 1e-12;
+  const tipsRequired = Math.abs(resolvedMapping.tipsWeight) > 1e-12;
 
-  // The international series starts in 1975; every other series starts in 1926
-  // and runs six months later. Restricting the window to months that series
-  // covers is what used to cost a portfolio holding any international at all
-  // the 1929, 1937, 1966 and 1973 starts — the ones that decide whether a plan
-  // is actually safe. Outside its own span the sleeve is represented by the US
-  // market return instead, and the substitution is reported.
-  const proxyInternational = internationalRequired && shortSeriesPolicy === 'proxy';
-  const intlFirst = firstObservation(intlEquityReturns);
-  const intlLast = lastObservation(intlEquityReturns);
+  // Two series start late: international equity in 1975, TIPS in 2003; every
+  // other series starts in 1926 and runs six months later. Restricting the
+  // window to months a late series covers is what used to cost a portfolio
+  // holding any international at all the 1929, 1937, 1966 and 1973 starts —
+  // the ones that decide whether a plan is actually safe. Outside its own span
+  // each sleeve is represented by its nearest full-history neighbour instead,
+  // and the substitution is reported.
+  //
+  // TIPS are represented by the nominal bond series, which is the same
+  // instrument without the inflation indexation — so those months show a TIPS
+  // sleeve suffering the inflation it exists to hedge. That understates the
+  // sleeve in exactly the sequences it would have helped most, which lowers a
+  // projected success rate rather than raising one. Both series are ten-year
+  // constant-maturity bonds, so the substitution changes one property and not
+  // the portfolio's duration.
+  const shortSeries: Array<{
+    key: string;
+    proxyKey: string;
+    values: Array<number | null>;
+    proxy: number[];
+    description: string;
+  }> = [];
+  if (internationalRequired) {
+    shortSeries.push({
+      key: 'intl_equity',
+      proxyKey: 'us_equity',
+      values: intlEquityReturns,
+      proxy: usEquityReturns,
+      description:
+        'International equity returns outside the series\'s own span use the US market return; ' +
+        'those months carry no distinct international behaviour',
+    });
+  }
+  if (tipsRequired) {
+    shortSeries.push({
+      key: 'tips',
+      proxyKey: 'bonds',
+      values: tipsReturns,
+      proxy: bondReturns,
+      description:
+        'TIPS returns before 2003 use the nominal 10-year government bond series; those months ' +
+        'carry no inflation indexation, which understates TIPS in inflationary sequences',
+    });
+  }
+  const proxying = shortSeriesPolicy === 'proxy';
+  const spans = shortSeries.map(series => ({
+    first: firstObservation(series.values),
+    last: lastObservation(series.values),
+  }));
 
-  const usable = dates.map((_, index) => {
-    if (!internationalRequired) return true;
-    if (intlEquityReturns[index] !== null) return true;
-    // Only the edges are proxied. A hole inside the series means the dataset
+  const usable = dates.map((_, index) =>
+    // Only the edges are proxied. A hole inside a series means the dataset
     // builder produced something unexpected, and splicing across it would hide
     // that, so an interior gap still narrows the window and is caught below.
-    return proxyInternational && (index < intlFirst || index > intlLast);
-  });
+    shortSeries.every((series, position) =>
+      series.values[index] !== null ||
+      (proxying && (index < spans[position].first || index > spans[position].last))));
   const firstUsable = usable.indexOf(true);
   const lastUsable = usable.lastIndexOf(true);
   const availableMonths = firstUsable < 0 ? 0 : lastUsable - firstUsable + 1;
@@ -171,7 +213,10 @@ export async function generateRollingSequences(
       lastMonth,
       minHistoryYears * 12,
       // Only claim the international sleeve is the constraint when it actually
-      // cost months; otherwise the whole dataset is simply too short.
+      // cost months; otherwise the whole dataset is simply too short. A TIPS
+      // sleeve can narrow the window the same way under `truncate`, and the
+      // message then reports the window without naming a sleeve rather than
+      // naming the wrong one.
       internationalRequired && availableMonths < dates.length
     );
   }
@@ -180,11 +225,15 @@ export async function generateRollingSequences(
   const activeUsEquity = usEquityReturns.slice(firstUsable, lastUsable + 1);
   // Substitution happens once, here, so every sequence and every consumer of
   // them sees the same series.
-  const effectiveInternational = proxyInternational
+  const effectiveInternational = proxying && internationalRequired
     ? intlEquityReturns.map((value, index) => (value === null ? usEquityReturns[index] : value))
     : intlEquityReturns;
   const activeInternational = effectiveInternational.slice(firstUsable, lastUsable + 1);
   const activeBonds = bondReturns.slice(firstUsable, lastUsable + 1);
+  const effectiveTips = proxying && tipsRequired
+    ? tipsReturns.map((value, index) => (value === null ? bondReturns[index] : value))
+    : tipsReturns;
+  const activeTips = effectiveTips.slice(firstUsable, lastUsable + 1);
   const activeCash = cashReturns.slice(firstUsable, lastUsable + 1);
   const activeInflation = inflationRates.slice(firstUsable, lastUsable + 1);
 
@@ -201,6 +250,7 @@ export async function generateRollingSequences(
       .slice(i, endIndex + 1)
       .map(value => value ?? 0);
     const nominalBonds = activeBonds.slice(i, endIndex + 1);
+    const tips = activeTips.slice(i, endIndex + 1).map(value => value ?? 0);
     const cash = activeCash.slice(i, endIndex + 1);
     const seqInflationRates = activeInflation.slice(i, endIndex + 1);
 
@@ -219,6 +269,7 @@ export async function generateRollingSequences(
         usEquity,
         internationalEquity,
         nominalBonds,
+        tips,
         cash,
       },
       inflationRates: seqInflationRates,
@@ -229,19 +280,18 @@ export async function generateRollingSequences(
     `Generated ${sequences.length} rolling sequences (monthly overlapping starts, ${analysisYears}-year horizon, full data only)`
   );
 
-  const internationalProxyRanges = proxyInternational
-    ? proxiedRanges(dates, intlEquityReturns, firstUsable, lastUsable)
-    : [];
-  const proxiedSeries: ProxiedSeriesReport[] = internationalProxyRanges.length === 0 ? [] : [{
-    series: 'intl_equity',
-    proxy: 'us_equity',
-    description:
-      'International equity returns outside the series\'s own span use the US market return; ' +
-      'those months carry no distinct international behaviour',
-    ranges: internationalProxyRanges,
-    months: internationalProxyRanges.reduce((total, range) => total + range.months, 0),
-    windowMonths: availableMonths,
-  }];
+  const proxiedSeries: ProxiedSeriesReport[] = (proxying ? shortSeries : []).flatMap(series => {
+    const ranges = proxiedRanges(dates, series.values, firstUsable, lastUsable);
+    if (ranges.length === 0) return [];
+    return [{
+      series: series.key,
+      proxy: series.proxyKey,
+      description: series.description,
+      ranges,
+      months: ranges.reduce((total, range) => total + range.months, 0),
+      windowMonths: availableMonths,
+    }];
+  });
 
   const historicalData = data.metadata && firstMonth && lastMonth ? {
     firstMonth,
@@ -271,6 +321,12 @@ export function calculateHistoricalPriceCoverage(
     [resolvedMapping.usEquityWeight, data.usEquityReturns],
     [resolvedMapping.internationalEquityWeight, data.intlEquityReturns],
     [resolvedMapping.nominalBondsWeight, data.bondReturns],
+    // TIPS count their own observations, not the nominal series standing in for
+    // them: this measures how much real history a sleeve has, and a substituted
+    // month is not history about TIPS. The 281 months since 2003 clear the
+    // ten-year floor this applies, so a TIPS sleeve does not depress coverage
+    // -- what the substitution costs is disclosed as a proxied series instead.
+    [resolvedMapping.tipsWeight, data.tipsReturns],
     [resolvedMapping.cashWeight, data.cashReturns],
   ];
   const activeWeight = sleeves.reduce((total, [weight]) => total + Math.abs(weight), 0);
@@ -305,6 +361,7 @@ export function sliceHistoricalSequence(
       usEquity: sequence.assetBasketReturns.usEquity.slice(offset),
       internationalEquity: sequence.assetBasketReturns.internationalEquity.slice(offset),
       nominalBonds: sequence.assetBasketReturns.nominalBonds.slice(offset),
+      tips: sequence.assetBasketReturns.tips.slice(offset),
       cash: sequence.assetBasketReturns.cash.slice(offset),
     },
     inflationRates: sequence.inflationRates.slice(offset),

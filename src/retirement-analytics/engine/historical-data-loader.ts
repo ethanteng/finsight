@@ -13,6 +13,8 @@ export interface HistoricalReturns {
   usEquityReturns: number[];
   intlEquityReturns: Array<number | null>;
   bondReturns: number[];
+  /** Null before 2003, where no TIPS real yields exist to derive a return from. */
+  tipsReturns: Array<number | null>;
   cashReturns: number[];
   inflationRates: number[];
   metadata?: HistoricalDatasetMetadata;
@@ -44,6 +46,7 @@ export interface HistoricalDatasetMetadata {
   methodology: {
     rollingWindows: string;
     internationalAvailability: string;
+    tipsAvailability: string;
   };
 }
 
@@ -114,24 +117,26 @@ export function loadHistoricalReturns(csvPath: string = DEFAULT_CSV_PATH): Histo
   }
 
   const header = lines[0];
-  if (header !== 'date,us_equity,intl_equity,bonds,cash,inflation') {
-    throw new Error(`Unexpected CSV header. Expected: date,us_equity,intl_equity,bonds,cash,inflation. Got: ${header}`);
+  const EXPECTED_HEADER = 'date,us_equity,intl_equity,bonds,tips,cash,inflation';
+  if (header !== EXPECTED_HEADER) {
+    throw new Error(`Unexpected CSV header. Expected: ${EXPECTED_HEADER}. Got: ${header}`);
   }
 
   const dates: Date[] = [];
   const usEquityReturns: number[] = [];
   const intlEquityReturns: Array<number | null> = [];
   const bondReturns: number[] = [];
+  const tipsReturns: Array<number | null> = [];
   const cashReturns: number[] = [];
   const inflationRates: number[] = [];
 
   for (let i = 1; i < lines.length; i++) {
     const parts = lines[i].split(',');
-    if (parts.length !== 6) {
+    if (parts.length !== 7) {
       throw new Error(`Invalid historical return row ${i + 1}: ${lines[i]}`);
     }
 
-    const [dateStr, usStr, intlStr, bondsStr, cashStr, inflationStr] = parts;
+    const [dateStr, usStr, intlStr, bondsStr, tipsStr, cashStr, inflationStr] = parts;
     const [yearStr, monthStr] = dateStr.split('-');
     const year = parseInt(yearStr, 10);
     const month = parseInt(monthStr || '1', 10) - 1;
@@ -139,10 +144,13 @@ export function loadHistoricalReturns(csvPath: string = DEFAULT_CSV_PATH): Histo
     const requiredRawValues = [usStr, bondsStr, cashStr, inflationStr];
     const requiredValues = requiredRawValues.map(Number);
     const internationalValue = intlStr === 'NA' ? null : Number(intlStr);
+    const tipsValue = tipsStr === 'NA' ? null : Number(tipsStr);
+    const optionalValues = [internationalValue, tipsValue];
     if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(dateStr) || !Number.isInteger(year) || month < 0 || month > 11 ||
-        requiredRawValues.some(value => value.trim() === '') || intlStr.trim() === '' ||
+        requiredRawValues.some(value => value.trim() === '') ||
+        intlStr.trim() === '' || tipsStr.trim() === '' ||
         requiredValues.some(value => !Number.isFinite(value) || value <= -1) ||
-        (internationalValue !== null && (!Number.isFinite(internationalValue) || internationalValue <= -1))) {
+        optionalValues.some(value => value !== null && (!Number.isFinite(value) || value <= -1))) {
       throw new Error(`Invalid historical return row ${i + 1}: ${lines[i]}`);
     }
     const date = new Date(Date.UTC(year, month, 1));
@@ -154,6 +162,7 @@ export function loadHistoricalReturns(csvPath: string = DEFAULT_CSV_PATH): Histo
     usEquityReturns.push(requiredValues[0]);
     intlEquityReturns.push(internationalValue);
     bondReturns.push(requiredValues[1]);
+    tipsReturns.push(tipsValue);
     cashReturns.push(requiredValues[2]);
     inflationRates.push(requiredValues[3]);
   }
@@ -163,6 +172,7 @@ export function loadHistoricalReturns(csvPath: string = DEFAULT_CSV_PATH): Histo
     usEquityReturns.length !== n ||
     intlEquityReturns.length !== n ||
     bondReturns.length !== n ||
+    tipsReturns.length !== n ||
     cashReturns.length !== n ||
     inflationRates.length !== n
   ) {
@@ -183,6 +193,7 @@ export function loadHistoricalReturns(csvPath: string = DEFAULT_CSV_PATH): Histo
     usEquityReturns,
     intlEquityReturns,
     bondReturns,
+    tipsReturns,
     cashReturns,
     inflationRates,
     metadata,

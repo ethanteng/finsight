@@ -59,6 +59,7 @@ const balancedMapping: PortfolioMapping = {
   usEquityWeight: 0.6,
   internationalEquityWeight: 0.2,
   nominalBondsWeight: 0.2,
+  tipsWeight: 0,
   cashWeight: 0,
   totalValue: 1,
   usEquityValue: 0.6,
@@ -96,6 +97,7 @@ function flatSequence(months: number): HistoricalSequence {
       usEquity: [...zeroes],
       internationalEquity: [...zeroes],
       nominalBonds: [...zeroes],
+      tips: [...zeroes],
       cash: [...zeroes],
     },
     inflationRates: [...zeroes],
@@ -330,7 +332,7 @@ describe('retirement correctness contracts', () => {
     },
   );
 
-  it('preserves TIPS as a distinct exposure and excludes it without a return proxy', async () => {
+  it('simulates TIPS on their own series and keeps them out of the nominal sleeve', async () => {
     const holdings = [holding('tips', 'TIP', 100_000)];
     const securities = [security('tips', 'TIP', 'iShares TIPS Bond ETF', 'fixed income')];
 
@@ -349,27 +351,48 @@ describe('retirement correctness contracts', () => {
       method: 'provider',
       weights: { nominalBonds: 0, tips: 1 },
     });
+    // The distinction the sleeve exists for: modeled, but never as nominal
+    // bonds, which is what the two separate weights carry into the simulator.
+    expect(mapping.tipsWeight).toBe(1);
     expect(mapping.nominalBondsWeight).toBe(0);
-    expect(mapping.mappedValue).toBe(0);
-    expect(mapping.unsupportedValue).toBe(100_000);
-    expect(mapping.proxiedValuePercentage).toBe(0);
-    expect(mapping.mappingConfidence).toBe('low');
+    expect(mapping.mappedValue).toBe(100_000);
+    expect(mapping.unsupportedValue).toBe(0);
+    expect(mapping.valueCoverage).toBe(1);
     expect(metrics.fixedIncomeAllocation).toBe(100);
     expect(metrics.tipsAllocation).toBe(100);
+    expect(assumptions).toContain('$100,000 of TIPS exposure uses a 10-year constant-maturity');
+    // The substitution has to be stated wherever it applies, and it is the
+    // whole of the pre-2003 window.
     expect(assumptions).toContain(
-      '$100,000 of TIPS exposure was excluded from the historical simulation',
+      'the sleeve is represented by the nominal 10-year government-bond series',
     );
-    expect(assumptions).toContain(
-      'observed market history cannot satisfy the engine\'s 50-year evidence floor',
-    );
+    // Still not the nominal-bond note: no nominal sleeve is held.
     expect(assumptions).not.toContain(
       'Bond exposure uses the Shiller synthetic 10-year US government-bond total-return history',
     );
   });
 
-  it('refuses historical simulation when no supported series value remains', async () => {
+  it('reports the pre-2003 TIPS substitution as a proxied series, not silently', async () => {
     const holdings = [holding('tips', 'TIP', 100_000)];
     const securities = [security('tips', 'TIP', 'iShares TIPS Bond ETF', 'fixed income')];
+    const mapping = await mapPortfolioToAssetBasket(holdings, securities, 100_000);
+
+    const { historicalData } = await generateRollingSequences(30, mapping);
+
+    const tipsProxy = historicalData?.proxiedSeries?.find(entry => entry.series === 'tips');
+    expect(tipsProxy).toMatchObject({ series: 'tips', proxy: 'bonds' });
+    // Every month before real yields exist, and none after.
+    expect(tipsProxy?.ranges).toEqual([
+      { firstMonth: '1926-07', lastMonth: '2003-01', months: 919 },
+    ]);
+    expect(tipsProxy?.description).toContain('understates TIPS in inflationary sequences');
+  });
+
+  it('refuses historical simulation when no supported series value remains', async () => {
+    // A commodity fund, now that TIPS are modeled: recognized, classified, and
+    // still carrying no return series the engine can simulate.
+    const holdings = [holding('gld', 'GLD', 100_000)];
+    const securities = [security('gld', 'GLD', 'SPDR Gold Shares', 'etf')];
 
     await expect(analyzeRetirementPortfolio({
       holdings,
@@ -754,6 +777,7 @@ describe('retirement correctness contracts', () => {
       usEquityWeight: 1,
       internationalEquityWeight: 0,
       nominalBondsWeight: 0,
+      tipsWeight: 0,
       cashWeight: 0,
       mappedValue: 1,
       unmappedValue: 99,
@@ -1170,7 +1194,7 @@ describe('retirement correctness contracts', () => {
     const csvPath = join(directory, 'returns.csv');
     writeFileSync(
       csvPath,
-      'date,us_equity,intl_equity,bonds,cash,inflation\n2000-01,0.01,,0.003,0.001,0.002\n'
+      'date,us_equity,intl_equity,bonds,tips,cash,inflation\n2000-01,0.01,,0.003,NA,0.001,0.002\n'
     );
 
     try {

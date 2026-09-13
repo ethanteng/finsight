@@ -45,10 +45,12 @@ The runtime engine reads only **`data/historical_market_returns.csv`**. This fil
 
 | Source | File | Columns used |
 |--------|------|--------------|
-| Shiller | `ie_data.xls` | US equity (P, D), bonds (col 17), inflation (CPI) |
-| Kenneth French | `F-F_Research_Data_Factors.csv` | Cash (RF = 1-month T-bill) |
+| Shiller | `ie_data.xls` | Bonds (col 17), inflation (CPI) |
+| Kenneth French | `F-F_Research_Data_Factors.csv` | US equity (Mkt-RF + RF), cash (RF = 1-month T-bill) |
+| Kenneth French | `F-F_International_Indices.dat` | International equity (EAFE plus Canada, USD) |
+| FRED | `DFII10.csv` | TIPS (10-year constant-maturity real yield) |
 
-**International equity:** Uses US equity as proxy (`intl_equity = us_equity`). International diversification is not currently modeled. Mkt-RF is US market excess return, not international.
+**Short series:** international equity starts in 1975 and TIPS in 2003; every other series starts in 1926. Outside its own span each is represented by a full-history neighbour — international by US equity, TIPS by the nominal bond series — and every substituted month is reported on the analysis as a proxied series. The TIPS substitution carries no inflation indexation, so it understates the sleeve in inflationary sequences rather than flattering it.
 
 Run `npm run build:market-dataset` to regenerate the CSV. No downloads or API calls.
 
@@ -148,9 +150,10 @@ Among sequences that **failed**, percentiles of `yearsUntilDepletion`. When all 
 
 | Asset | Source | Notes |
 |-------|--------|-------|
-| US equity | Shiller P, D | D = trailing 12‑month dividend total; monthly ≈ D/12. Total return = priceReturn + (D/12)/price_prev |
-| International equity | US equity proxy | `intl_equity = us_equity`; international diversification not modeled |
+| US equity | Kenneth French Mkt-RF + RF | Value-weighted broad US market total return, 1926-07 onward |
+| International equity | Kenneth French international indices | EAFE plus Canada in USD, 1975-01 onward; US equity stands in outside that span |
 | Bonds | Shiller col 17 "Bond Returns" | Value is (1 + monthly_return); return = value − 1. Proper return series. Fallback: GS10 yield → (1+y/100)^(1/12)−1 |
+| TIPS | FRED DFII10 + Shiller CPI | 10-year constant-maturity par bond priced off the real yield, then indexed by the month's CPI change, 2003-02 onward; the nominal bond series stands in before that. Ten years to match the bond sleeve it is spliced to, which makes it more rate-sensitive than a TIPS fund |
 | Cash | Kenneth French RF | 1‑month T‑bill; convert percent to decimal (RF/100) |
 | Inflation | Shiller CPI | MoM: CPI_t / CPI_(t-1) − 1 |
 
