@@ -24,6 +24,16 @@ describe('sanitizePostLoginRedirect', () => {
     expect(sanitizePostLoginRedirect('/\\evil.example')).toBeNull();
   });
 
+  it('rejects paths that normalize into a protocol-relative URL', () => {
+    // `new URL` collapses these to pathname `//evil.example` / `///evil.example`.
+    // Returning that string would open-redirect on the subsequent navigation.
+    expect(sanitizePostLoginRedirect('/.//evil.example')).toBeNull();
+    expect(sanitizePostLoginRedirect('/..//evil.example')).toBeNull();
+    expect(sanitizePostLoginRedirect('/profile/..//evil.example')).toBeNull();
+    expect(sanitizePostLoginRedirect('/%2e%2e//evil.example')).toBeNull();
+    expect(sanitizePostLoginRedirect('/.///evil.example')).toBeNull();
+  });
+
   it('rejects control characters a browser would strip into a protocol-relative path', () => {
     expect(sanitizePostLoginRedirect('/\t/evil.example')).toBeNull();
     expect(sanitizePostLoginRedirect('/\n/evil.example')).toBeNull();

@@ -62,7 +62,16 @@ export function sanitizePostLoginRedirect(value: string | null | undefined): str
     return null;
   }
 
-  return `${url.pathname}${url.search}${url.hash}`;
+  // `new URL` normalizes `/..//evil.example` into pathname `//evil.example`.
+  // Returning that string would make the next navigation protocol-relative
+  // (`new URL('//evil.example', origin)` → https://evil.example/), so reject
+  // anything that is not a single-slash absolute path after normalization.
+  const normalized = `${url.pathname}${url.search}${url.hash}`;
+  if (!normalized.startsWith('/') || normalized.startsWith('//')) {
+    return null;
+  }
+
+  return normalized;
 }
 
 /** The sign-in URL that returns to `destination`, or a plain one if it fails the check. */
