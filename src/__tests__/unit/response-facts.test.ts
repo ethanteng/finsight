@@ -136,6 +136,19 @@ describe('canonical response facts', () => {
       summary: 'The top 10% of my portfolio is in speculative tech.',
     }, pack).valid).toBe(false);
     expect(validateResponseFacts({
+      summary: 'The bottom 22% of your holdings are bonds.',
+    }, pack).valid).toBe(false);
+
+    // The noun decides it, not the words in front of it. These are the same
+    // descriptor, and cutting an answer over one of them is the failure this
+    // exemption exists to prevent.
+    expect(validateResponseFacts({
+      summary: 'In the worst 10% of the modeled sequences, the money ran out first.',
+    }, pack).valid).toBe(true);
+    expect(validateResponseFacts({
+      summary: 'In the worst 10% of rolling 30-year windows, the money ran out first.',
+    }, pack).valid).toBe(true);
+    expect(validateResponseFacts({
       summary: 'In the worst 10% of sequences you were left with $42,000.',
     }, pack).issues).toContain('User-facing usd value 42000 is not present in the canonical fact pack.');
   });
