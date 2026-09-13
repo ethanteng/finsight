@@ -21,6 +21,21 @@ In the same structured pass, the planner extracts only retirement values the use
 
 The default life-expectancy assumption is 95 when the user does not provide one, and the answer states the analysis assumptions. Stored annual spending is not silently carried into a new scenario; it requires an explicit confirmation where applicable.
 
+## Excluded portfolio value
+
+A projection runs position by position, so investment value with no resolved exposure or no sufficiently long return series is deliberately left out of it — a 401(k) the administrator does not itemize, a manually-added account carrying only a balance, an asset class without a usable history. That exclusion is measured (`src/services/investment-coverage.ts`), stamped as a caveat onto every figure it distorts, and published as canonical facts so the answer can state it:
+
+| Fact | Meaning |
+| --- | --- |
+| `retirement_modeled_portfolio_value` | Value the projection actually simulated |
+| `retirement_unmodeled_portfolio_value` | Value excluded from it |
+| `retirement_value_coverage` / `retirement_excluded_value_share` | The same gap as a share of investments, modeled and excluded |
+| `retirement_not_itemized_value` | Excluded value the provider did not itemize, quoted by the itemized-holdings caveat |
+| `retirement_unmodeled_value_<cause>` | Excluded value by cause |
+| `retirement_unmodeled_value_<cause>_<account>` | Excluded value by account, largest twelve |
+
+Every dollar figure and percentage in a user-facing answer must cite a fact, so a caveat whose numbers are not in the pack is a caveat the deterministic grounding check removes. The per-account and per-cause facts exist because the exclusion is stated in those terms: an answer that names an amount or an account has to be able to cite it.
+
 ## Scenario comparison
 
 Once a matching retirement baseline exists, Ask Linc can deterministically compare historical CPI-linked, flat nominal, and fixed annual-growth withdrawal policies. Scenario intent is selected semantically by the same two-pass planning subsystem; the LLMs choose a typed policy plan but never calculate the result. The application runs each requested variant, promotes its metrics into the canonical fact pack with scenario provenance, validates the final answer against those facts, and appends an explicit assumption disclosure.

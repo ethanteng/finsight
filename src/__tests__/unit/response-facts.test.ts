@@ -117,6 +117,25 @@ describe('canonical response facts', () => {
     expect(validateResponseFacts({ summary: 'In 2008 markets crashed.' }, pack).valid).toBe(true);
   });
 
+  it('reads a distribution slice as a descriptor, not a claim about the money', () => {
+    // "In the worst 10% of historical sequences the money ran out at year 15"
+    // makes one claim -- year 15 -- and that one still has to be grounded. The
+    // 10% names which sequences are being described.
+    expect(validateResponseFacts({
+      summary: 'In the worst 10% of historical sequences, the portfolio was depleted earliest.',
+    }, pack).valid).toBe(true);
+    expect(validateResponseFacts({
+      summary: 'The best 25% of historical sequences never depleted.',
+    }, pack).valid).toBe(true);
+
+    // A bare percentage still has to come from the pack, and so does the
+    // outcome the slice is describing.
+    expect(validateResponseFacts({ summary: 'About 10% of your portfolio is in cash.' }, pack).valid).toBe(false);
+    expect(validateResponseFacts({
+      summary: 'In the worst 10% of sequences you were left with $42,000.',
+    }, pack).issues).toContain('User-facing usd value 42000 is not present in the canonical fact pack.');
+  });
+
   it('accepts typed scenario premises supplied by the user', () => {
     const scenarioQuestion = 'Can I afford a $500k house with 20% down?';
     const scenarioPack = buildCanonicalFactPack(snapshot, scenarioQuestion, questionNeedsFromPacks([], true));

@@ -162,4 +162,53 @@ describe('buildSnapshotSummaryForValidation', () => {
     expect(summary).not.toContain('Data quality');
     expect(summary).not.toContain('not reporting');
   });
+
+  it('names the accounts the model was given', () => {
+    // The reviewer objected that answers "invent specific accounts" when they
+    // named the accounts a projection left out -- names the primary model had
+    // in its context pack and this summary did not carry.
+    const summary = buildSnapshotSummaryForValidation({
+      ...snapshot,
+      accounts: [
+        { id: '1', name: 'Baron Funds IRA', type: 'investment', subtype: 'ira', balance: 100_000, institution: 'Baron' },
+        { id: '2', name: 'BEC 401K', type: 'investment', balance: 250_000 },
+      ],
+    } as any);
+
+    expect(summary).toContain('Baron Funds IRA (investment/ira) at Baron');
+    expect(summary).toContain('BEC 401K (investment)');
+  });
+
+  it('shows what the projection excluded, and from which accounts', () => {
+    const summary = buildSnapshotSummaryForValidation({
+      ...snapshot,
+      retirementAnalysis: {
+        dataQuality: {
+          modeledValue: 760_134,
+          unmodeledValue: 548_586,
+          valueCoverage: 0.5808,
+          unmodeledReasons: [
+            { label: 'Wells Fargo 401(k)', amount: 385_784, kind: 'partial-holdings' },
+            { label: 'BEC 401K', amount: 162_802, kind: 'no-holdings' },
+          ],
+        },
+      },
+    } as any);
+
+    expect(summary).toContain('Projection coverage: modeledValue=760134, unmodeledValue=548586');
+    expect(summary).toContain('41.9% of investments excluded');
+    expect(summary).toContain('Wells Fargo 401(k)=385784 (partial-holdings)');
+    expect(summary).toContain('BEC 401K=162802 (no-holdings)');
+  });
+
+  it('says nothing about coverage when the whole portfolio was modeled', () => {
+    const summary = buildSnapshotSummaryForValidation({
+      ...snapshot,
+      retirementAnalysis: {
+        dataQuality: { modeledValue: 1_000_000, unmodeledValue: 0, valueCoverage: 1, unmodeledReasons: [] },
+      },
+    } as any);
+
+    expect(summary).not.toContain('Projection coverage');
+  });
 });

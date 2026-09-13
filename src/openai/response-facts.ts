@@ -122,6 +122,13 @@ function isNumericIdentifier(prose: string, index: number, rawValue: string): bo
   if (digits === '2' && /W\s*-?\s*$/i.test(before)) return true;
   if (digits === '10' && /^\s*-\s*[KQ]\b/i.test(after)) return true;
   if (digits === '529' && /^\s+plan\b/i.test(after)) return true;
+  // "the worst 10% of historical sequences" names a slice of a distribution,
+  // not an amount of the user's money. The claim in such a sentence is the
+  // outcome that follows it -- the depletion year, the ending balance -- and
+  // that number is grounded on its own. Requiring the "of <something>" keeps
+  // this to distribution language: "the top 10% of my portfolio" does not
+  // reach here without it, and neither does a bare "10%".
+  if (/\b(?:worst|best|bottom|top|lowest|highest)\s+$/i.test(before) && /^\s*%\s+of\b/.test(after)) return true;
   return digits === '72' && /Rule\s+of\s*$/i.test(before);
 }
 

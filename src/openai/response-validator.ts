@@ -46,7 +46,7 @@ Given:
 Check for:
 - Calculation consistency: Do the key_numbers align with the summary and insights?
 - Logical reasoning: Are the conclusions supported by the data?
-- Unsupported assumptions: Does the response invent data NOT present in the financial context? (If the snapshot contains portfolio value, holdings, withdrawal amounts, remembered personal context, etc., the response may use them—do NOT flag as invented. Age, household, occupation and retirement status supplied under "Remembered personal context" are user-stated facts the response is entitled to reason from, and the counts under "Data quality" are the basis for any statement that connections are not reporting or that totals are incomplete.)
+- Unsupported assumptions: Does the response invent data NOT present in the financial context? (If the snapshot contains portfolio value, holdings, withdrawal amounts, remembered personal context, etc., the response may use them—do NOT flag as invented. Age, household, occupation and retirement status supplied under "Remembered personal context" are user-stated facts the response is entitled to reason from, the counts under "Data quality" are the basis for any statement that connections are not reporting or that totals are incomplete, and the account names under "Accounts" and the amounts under "Projection coverage" / "Excluded from the projection" are the basis for naming which accounts a projection left out and how much it left out.)
 - Formula errors: Are any financial formulas (e.g., 4% rule, debt-to-income) applied correctly?
 
 Respond with a JSON object:
@@ -88,6 +88,10 @@ function countConnectionGaps(
  */
 const MAX_PERSONAL_CONTEXT_LINE_CHARS = 200;
 const MAX_PERSONAL_CONTEXT_LINES = 20;
+
+/** Enough to cover a real household's connections without unbounding the prompt. */
+const MAX_ACCOUNTS_LISTED = 40;
+const MAX_EXCLUSION_REASONS_LISTED = 15;
 
 function boundedPersonalContext(profile: string): string {
   return profile
@@ -155,6 +159,24 @@ export function buildSnapshotSummaryForValidation(snapshot: FinancialContextSnap
     );
   }
 
+  // The primary model is handed the account list whenever the plan asks for
+  // account details, and the exclusion reasons below name accounts by name. A
+  // reviewer that cannot see those names reads every one of them as invented
+  // and objects to an answer that was quoting its own context.
+  if (snapshot.accounts?.length) {
+    const accountNames = snapshot.accounts
+      .slice(0, MAX_ACCOUNTS_LISTED)
+      .map((account) => {
+        const kind = [account.type, account.subtype].filter(Boolean).join('/');
+        const institution = account.institution ? ` at ${account.institution}` : '';
+        return `${account.name}${kind ? ` (${kind})` : ''}${institution}`;
+      });
+    const remainder = snapshot.accounts.length - accountNames.length;
+    parts.push(
+      `Accounts (names as the user labeled them${remainder > 0 ? `, ${remainder} more not listed` : ''}): ${accountNames.join('; ')}`
+    );
+  }
+
   const invPortfolio = snapshot.financialSummary?.investmentPortfolio;
   const invSnapshot = snapshot.investments;
   if (invPortfolio) {
@@ -177,6 +199,27 @@ export function buildSnapshotSummaryForValidation(snapshot: FinancialContextSnap
   }
 
   const ra = snapshot.retirementAnalysis;
+  // What the projection ran on and what it deliberately left out. These are the
+  // figures an honest retirement answer opens with -- the modeled basis, the
+  // excluded amount and share, and which accounts it came from -- and each one
+  // is in the primary model's context pack under `dataQuality`. Omitting them
+  // here made the reviewer object to a caveat the answer was required to state.
+  const coverage = ra?.dataQuality;
+  if (coverage && typeof coverage.unmodeledValue === 'number' && coverage.unmodeledValue > 0) {
+    const excludedShare = typeof coverage.valueCoverage === 'number'
+      ? ` (${((1 - coverage.valueCoverage) * 100).toFixed(1)}% of investments excluded, ${(coverage.valueCoverage * 100).toFixed(1)}% modeled)`
+      : '';
+    parts.push(
+      `Projection coverage: modeledValue=${coverage.modeledValue ?? 'N/A'}, unmodeledValue=${coverage.unmodeledValue}${excludedShare}`
+    );
+    const reasons = (coverage.unmodeledReasons ?? []).slice(0, MAX_EXCLUSION_REASONS_LISTED);
+    if (reasons.length) {
+      parts.push(
+        'Excluded from the projection, by account and cause: ' +
+        reasons.map((reason) => `${reason.label}=${reason.amount} (${reason.kind})`).join('; ')
+      );
+    }
+  }
   if (ra?._storedInputParams) {
     const p = ra._storedInputParams;
     parts.push(
