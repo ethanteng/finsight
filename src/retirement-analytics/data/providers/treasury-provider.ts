@@ -112,6 +112,17 @@ interface AuctionRow {
   auction_date?: string;
 }
 
+/**
+ * Cache key for one CUSIP.
+ *
+ * Named because both the resolver and the breaker's cache-only path read it;
+ * a format change in one place would otherwise silently stop the other from
+ * finding hits, which fails open as a missing sleeve rather than an error.
+ */
+function cacheKeyFor(cusip: string): string {
+  return `treasury_cusip_${cusip}`;
+}
+
 function normalizeCusip(value: unknown): string | null {
   if (typeof value !== 'string') return null;
   const normalized = value.trim().toUpperCase();
@@ -198,7 +209,7 @@ export class TreasuryProvider {
     // Not a CUSIP at all: nothing was attempted, and nothing is degraded.
     if (!normalized) return { security: null, available: true };
 
-    const cacheKey = `treasury_cusip_${normalized}`;
+    const cacheKey = cacheKeyFor(normalized);
     const cached = await cacheService.get<TreasurySecurity | 'miss'>(cacheKey);
     if (cached) {
       return { security: cached === 'miss' ? null : cached, available: true };
@@ -273,7 +284,7 @@ export class TreasuryProvider {
         // transport failure -- we chose not to ask -- and `degraded` is
         // already set from the failures that opened the breaker.
         const cached = await cacheService.get<TreasurySecurity | 'miss'>(
-          `treasury_cusip_${cusip}`,
+          cacheKeyFor(cusip),
         );
         if (cached && cached !== 'miss') securities.set(cusip, cached);
         continue;

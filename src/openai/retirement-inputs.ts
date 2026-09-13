@@ -91,7 +91,10 @@ export function retirementPortfolioFingerprint(holdings: readonly any[], securit
     cashEquivalent: security?.is_cash_equivalent === true,
     // Classification resolves this against the Treasury's auction records, so
     // a feed that starts or stops sending it changes the modeled portfolio.
-    cusip: String(security?.cusip ?? ''),
+    // Normalized the same way the Treasury provider normalizes it. Stored raw,
+    // a feed that flips case without changing the security would bust the
+    // fingerprint and force a recompute that resolves to the same CUSIP.
+    cusip: String(security?.cusip ?? '').trim().toUpperCase(),
   })).sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right)));
   return JSON.stringify({ holdings: normalizedHoldings, securities: normalizedSecurities });
 }
