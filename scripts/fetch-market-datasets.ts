@@ -131,7 +131,11 @@ function inspectFredDailyCsv(content: Buffer, column: string): { first: string; 
     const parts = line.split(',');
     const date = (parts[0] || '').trim();
     const value = (parts[valueIndex] || '').trim();
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isFinite(Number(value))) continue;
+    // Empty is a market holiday, and `Number('')` is a finite 0 -- so the
+    // emptiness has to be tested before the conversion, here as in the builder.
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || value === '' || !Number.isFinite(Number(value))) {
+      continue;
+    }
     months.push(date.slice(0, 7));
   }
   if (months.length < 1_000) {

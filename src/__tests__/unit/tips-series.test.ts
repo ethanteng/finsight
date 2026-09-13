@@ -4,6 +4,7 @@ import { tmpdir } from 'os';
 import { join } from 'path';
 import {
   buildTipsReturns,
+  loadTipsRealYields,
   parBondMonthlyReturn,
 } from '../../../scripts/build-market-dataset';
 import { loadHistoricalReturns } from '../../retirement-analytics/engine/historical-data-loader';
@@ -35,6 +36,34 @@ describe('synthetic TIPS return series', () => {
     expect(parBondMonthlyReturn(-0.01, -0.01)).toBeLessThan(0);
     expect(parBondMonthlyReturn(-0.01, -0.012)).toBeGreaterThan(0);
     expect(Number.isFinite(parBondMonthlyReturn(-0.01, 0.005))).toBe(true);
+  });
+
+  it('skips a market holiday instead of reading it as a 0% yield', () => {
+    // FRED leaves the cell empty on a holiday, and `Number('')` is a finite 0.
+    // Taken as a yield, a blank month-end invents a collapse to zero and a
+    // reversal the month after -- the 2004-05 and 2024-03 month-ends are both
+    // holidays, and reading them as zero produced +21.8% and +20.0% months.
+    // Those two fabrications nearly cancel within their own calendar year,
+    // so only a check on the monthly extreme catches them.
+    const directory = mkdtempSync(join(tmpdir(), 'ask-linc-dfii-'));
+    const csvPath = join(directory, 'DFII10.csv');
+    writeFileSync(
+      csvPath,
+      ['observation_date,DFII10', '2024-03-27,1.90', '2024-03-28,1.88', '2024-03-29,']
+        .concat(Array.from({ length: 220 }, (_, index) => {
+          const month = String((index % 12) + 1).padStart(2, '0');
+          return `${2005 + Math.floor(index / 12)}-${month}-15,2.00`;
+        }))
+        .join('\n') + '\n'
+    );
+
+    try {
+      const yields = loadTipsRealYields(csvPath);
+      // The last quoted day of the month, not the blank one after it.
+      expect(yields.get('2024-03')).toBeCloseTo(0.0188, 12);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
   });
 
   it('indexes the real return by the same month of inflation', () => {
@@ -74,6 +103,17 @@ describe('the TIPS column in the built dataset', () => {
     // Nothing before it, so the engine proxies an edge rather than a hole.
     expect(data.tipsReturns.slice(0, first).every(value => value === null)).toBe(true);
     expect(data.tipsReturns.slice(first).every(value => value !== null)).toBe(true);
+  });
+
+  it('holds every month inside what a ten-year real bond can do', () => {
+    // The guard against an unreadable yield cell reaching the series. A real
+    // bond needs a move of well over a point in one month to lose a tenth of
+    // its value, and no such month is in the record; a double-digit month here
+    // means a fabricated yield, not a market event.
+    const data = loadHistoricalReturns();
+    const observed = data.tipsReturns.filter((value): value is number => value !== null);
+
+    expect(Math.max(...observed.map(Math.abs))).toBeLessThan(0.1);
   });
 
   it('is not a copy of the nominal bond series', () => {

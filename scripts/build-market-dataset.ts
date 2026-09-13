@@ -246,9 +246,14 @@ export function loadTipsRealYields(filePath = FRED_TIPS_REAL_YIELD_PATH): Map<st
     const parts = line.split(',');
     const date = (parts[0] || '').trim();
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
-    const value = Number((parts[valueIndex] || '').trim());
-    if (!Number.isFinite(value)) continue;
-    byMonth.set(date.slice(0, 7), value / 100);
+    const cell = (parts[valueIndex] || '').trim();
+    // A market holiday is an empty cell, and `Number('')` is 0 -- which is
+    // finite, and would be taken as a real 0% yield. When such a row ends a
+    // month it invents a yield collapse and a reversal the month after: the
+    // 2004-05 and 2024-03 month-ends both land on holidays, and reading them
+    // as zero produced +21.8% and +20.0% months against a true range under 9%.
+    if (cell === '' || !Number.isFinite(Number(cell))) continue;
+    byMonth.set(date.slice(0, 7), Number(cell) / 100);
   }
   if (byMonth.size < 200) {
     throw new Error(`FRED real-yield snapshot covers only ${byMonth.size} months`);
@@ -499,10 +504,29 @@ function sanityCheck(rows: UnifiedMonthlyRow[]): void {
   if (annualizedTips < 0 || annualizedTips > 0.08) {
     throw new Error(`TIPS annualized sanity check failed: ${annualizedTips}`);
   }
+  // A single month outside this band is not a market event: a ten-year real
+  // bond needs a move of well over a point in a month to lose a tenth of its
+  // value, and no such month exists in the record. What does produce one is an
+  // unreadable yield cell being taken as a number, so the check is on the
+  // monthly extreme rather than only on the annualized average, which a pair
+  // of equal and opposite fabrications leaves almost untouched.
+  const worstTipsMonth = tipsRows.reduce(
+    (worst, row) => Math.max(worst, Math.abs(row.tips as number)),
+    0,
+  );
+  if (worstTipsMonth > 0.1) {
+    const month = tipsRows.find(row => Math.abs(row.tips as number) === worstTipsMonth)?.date;
+    throw new Error(
+      `TIPS monthly sanity check failed: ${(worstTipsMonth * 100).toFixed(2)}% in ${month}`,
+    );
+  }
   console.log('Geometric annualized sanity check:');
   console.log(`  US equities: ${(annualizedUs * 100).toFixed(2)}%`);
   console.log(`  10-year government bonds: ${(annualizedBonds * 100).toFixed(2)}%`);
-  console.log(`  10-year TIPS (${tipsRows.length} months): ${(annualizedTips * 100).toFixed(2)}%`);
+  console.log(
+    `  10-year TIPS (${tipsRows.length} months): ${(annualizedTips * 100).toFixed(2)}%` +
+    `, worst month ${(worstTipsMonth * 100).toFixed(2)}%`,
+  );
   console.log(`  Treasury bills: ${(annualizedCash * 100).toFixed(2)}%`);
 }
 
