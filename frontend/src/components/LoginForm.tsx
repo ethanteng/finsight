@@ -17,6 +17,11 @@ import {
   completeFreeTrialSignupFlow,
   isFreeTrialSignupContinuation,
 } from '@/lib/trial-signup-flow';
+import {
+  DEFAULT_POST_LOGIN_DESTINATION,
+  POST_LOGIN_REDIRECT_PARAM,
+  sanitizePostLoginRedirect,
+} from '@/lib/post-login-redirect';
 
 interface SubscriptionContext {
   subscription: string;
@@ -139,7 +144,12 @@ function LoginFormContent() {
   const handleBuyClick = async (planId: string, authToken?: string | null) => {
     pushBeginCheckout();
     setIsCheckoutLoading(true);
-    
+
+    const returnTo = sanitizePostLoginRedirect(searchParams.get(POST_LOGIN_REDIRECT_PARAM));
+    const cancelDestination = returnTo
+      ? `/login?${POST_LOGIN_REDIRECT_PARAM}=${encodeURIComponent(returnTo)}`
+      : '/login';
+
     try {
       const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
       
@@ -153,7 +163,9 @@ function LoginFormContent() {
         body: JSON.stringify({
           tier: planId,
           successUrl: `${window.location.origin}/payment-success?session_id={CHECKOUT_SESSION_ID}&tier=${planId}`,
-          cancelUrl: `${window.location.origin}/login`
+          // Abandoning checkout returns to sign-in still pointed at wherever
+          // the visitor was originally headed.
+          cancelUrl: `${window.location.origin}${cancelDestination}`
         })
       });
 
@@ -266,7 +278,12 @@ function LoginFormContent() {
           pushTrialLoginSuccess();
           completeFreeTrialSignupFlow();
         }
-        router.push('/app');
+        // A deep link that bounced here carries where it was headed. The value
+        // is untrusted, so it only survives if it sanitizes to a path of ours.
+        router.push(
+          sanitizePostLoginRedirect(searchParams.get(POST_LOGIN_REDIRECT_PARAM)) ??
+            DEFAULT_POST_LOGIN_DESTINATION
+        );
       } else {
         if (isFreeTrialFlow) {
           pushTrialLoginError(res.ok ? 'unknown' : 'server_rejected');

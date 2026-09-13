@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import PlaidLinkButton, { PlaidLinkButtonRef, resetPlaidLinkInitialization } from '../../components/PlaidLinkButton';
 import SnapTradeConnections from '../../components/SnapTradeConnections';
 import PlaidConnections from '../../components/PlaidConnections';
@@ -15,6 +16,12 @@ import { resolveAccountBalance } from '../../lib/account-balance';
 import { normalizeAssetType } from '../../lib/asset-class';
 import { normalizeLabel } from '../../lib/label-normalization';
 import AuthenticatedPageHeader from '../../components/authenticated/AuthenticatedPageHeader';
+import {
+  CONNECT_ACCOUNTS_STORAGE_KEY,
+  CONNECT_INTENT_PARAM,
+  CONNECT_PLAID_INTENT,
+} from '../../lib/connect-accounts';
+import { loginUrlFor } from '../../lib/post-login-redirect';
 
 // (removed) local InvestmentHolding type - no longer used after snapshot refactor
 
@@ -202,7 +209,13 @@ export default function ProfilePage() {
   const [retryMessage, setRetryMessage] = useState<string>('');
   const [forcePlaidReinitialize, setForcePlaidReinitialize] = useState(false);
   const [manualAccounts, setManualAccounts] = useState<ManualAccount[]>([]);
+  // Set from `?connect=plaid` on mount. The param is stripped from the URL as
+  // soon as it is read, so the deep link opens Plaid Link once rather than on
+  // every refresh of the page it landed on.
+  const [wantsToConnectPlaid, setWantsToConnectPlaid] = useState(false);
+  const autoConnectTriggeredRef = useRef(false);
   const plaidLinkButtonRef = useRef<PlaidLinkButtonRef>(null);
+  const router = useRouter();
 
   // Ref for TransactionHistory component to trigger refresh
   const transactionHistoryRef = useRef<{ refresh: () => void }>(null);
@@ -906,8 +919,29 @@ export default function ProfilePage() {
       }
   }, [loadConnectedAccounts, loadInvestmentData, loadTokenStatuses, loadSnapTradeStatus]);
 
+  // Signed-out visitors get sent to sign in and come back here afterwards, so a
+  // deep link into this page (an emailed "connect your accounts" link, say)
+  // survives the detour instead of rendering an empty page with no way forward.
+  useEffect(() => {
+    const token = localStorage.getItem('auth_token');
+    if (!token) {
+      const destination = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+      // `replace`, so the back button does not land them here to bounce again.
+      router.replace(loginUrlFor(destination));
+    }
+  }, [router]);
+
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
+
+    // `?connect=plaid` opens Plaid Link on arrival. Read it once and drop it
+    // from the URL so the modal does not reopen on refresh or back-navigation.
+    if (urlParams.get(CONNECT_INTENT_PARAM) === CONNECT_PLAID_INTENT) {
+      setWantsToConnectPlaid(true);
+      const url = new URL(window.location.href);
+      url.searchParams.delete(CONNECT_INTENT_PARAM);
+      window.history.replaceState({}, '', url.toString());
+    }
 
     // Check for subscription-related URL parameters
     const subscriptionParam = urlParams.get('subscription');
@@ -979,8 +1013,8 @@ export default function ProfilePage() {
   // Log localStorage flag changes for debugging
   useEffect(() => {
     const checkFlag = () => {
-      const flag = localStorage.getItem('wants_to_connect_accounts');
-      console.log('localStorage wants_to_connect_accounts flag:', flag);
+      const flag = localStorage.getItem(CONNECT_ACCOUNTS_STORAGE_KEY);
+      console.log(`localStorage ${CONNECT_ACCOUNTS_STORAGE_KEY} flag:`, flag);
     };
 
     // Check on mount
@@ -1000,12 +1034,15 @@ export default function ProfilePage() {
       hasPlaidRef: !!plaidLinkButtonRef.current,
       referrer: document.referrer,
       forcePlaidReinitialize,
-      wantsToConnectAccounts: localStorage.getItem('wants_to_connect_accounts')
+      wantsToConnectPlaid,
+      wantsToConnectAccounts: localStorage.getItem(CONNECT_ACCOUNTS_STORAGE_KEY)
     });
 
-    if (!loading && plaidLinkButtonRef.current) {
-      // Check if user wants to connect accounts (from localStorage flag set in app page)
-      const wantsToConnectAccounts = localStorage.getItem('wants_to_connect_accounts') === 'true';
+    if (!loading && plaidLinkButtonRef.current && !autoConnectTriggeredRef.current) {
+      // The intent arrives either as `?connect=plaid` (the deep link) or as the
+      // legacy in-tab flag still honored for navigations already in flight.
+      const wantsToConnectAccounts =
+        wantsToConnectPlaid || localStorage.getItem(CONNECT_ACCOUNTS_STORAGE_KEY) === 'true';
 
       console.log('Auto-trigger conditions met:', {
         wantsToConnectAccounts,
@@ -1018,8 +1055,11 @@ export default function ProfilePage() {
       if (wantsToConnectAccounts) {
         console.log('Auto-triggering Plaid Link for user who wants to connect accounts');
 
-        // Clear the localStorage flag to prevent re-triggering
-        localStorage.removeItem('wants_to_connect_accounts');
+        // Consume the intent from every source so nothing re-triggers once the
+        // modal has been asked to open.
+        autoConnectTriggeredRef.current = true;
+        localStorage.removeItem(CONNECT_ACCOUNTS_STORAGE_KEY);
+        setWantsToConnectPlaid(false);
 
         // Set the force flag first
         setForcePlaidReinitialize(true);
@@ -1043,7 +1083,7 @@ export default function ProfilePage() {
         }, 1000); // Increased delay to ensure state updates
       }
     }
-  }, [loading, connectedAccounts.length]); // Removed forcePlaidReinitialize dependency to avoid infinite loops
+  }, [loading, connectedAccounts.length, wantsToConnectPlaid]); // Removed forcePlaidReinitialize dependency to avoid infinite loops
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', {

@@ -151,4 +151,50 @@ describe('LoginForm', () => {
     // Without this the backend cannot reuse their existing Stripe customer
     expect(checkoutInit.headers.Authorization).toBe('Bearer lapsed-token');
   });
+
+  it('returns a deep link to where it was headed after signing in', async () => {
+    searchParams = new URLSearchParams(`returnTo=${encodeURIComponent('/profile?connect=plaid')}`);
+    global.fetch = jest.fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ token: 'secure-token' }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ status: 'active', accessLevel: 'full' }) });
+
+    render(<LoginForm />);
+    fireEvent.change(screen.getByLabelText('Email address'), { target: { value: 'member@example.com' } });
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'correct-password' } });
+    fireEvent.click(screen.getByRole('button', { name: /Sign in to your workspace/i }));
+
+    await waitFor(() => expect(push).toHaveBeenCalledWith('/profile?connect=plaid'));
+  });
+
+  it('ignores an off-site return destination rather than following it', async () => {
+    searchParams = new URLSearchParams(`returnTo=${encodeURIComponent('https://evil.example/steal')}`);
+    global.fetch = jest.fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ token: 'secure-token' }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ status: 'active', accessLevel: 'full' }) });
+
+    render(<LoginForm />);
+    fireEvent.change(screen.getByLabelText('Email address'), { target: { value: 'member@example.com' } });
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'correct-password' } });
+    fireEvent.click(screen.getByRole('button', { name: /Sign in to your workspace/i }));
+
+    await waitFor(() => expect(push).toHaveBeenCalledWith('/app'));
+    expect(push).not.toHaveBeenCalledWith('https://evil.example/steal');
+  });
+
+  it('carries the return destination through an abandoned checkout', async () => {
+    searchParams = new URLSearchParams(`returnTo=${encodeURIComponent('/profile?connect=plaid')}`);
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ url: 'https://checkout.stripe.com/new' }),
+    });
+
+    render(<LoginForm />);
+    fireEvent.click(screen.getAllByRole('button', { name: /Get started/i })[0]);
+
+    await waitFor(() => expect(global.fetch).toHaveBeenCalled());
+    const [, checkoutInit] = (global.fetch as jest.Mock).mock.calls[0];
+    expect(JSON.parse(checkoutInit.body).cancelUrl).toContain(
+      `/login?returnTo=${encodeURIComponent('/profile?connect=plaid')}`
+    );
+  });
 });

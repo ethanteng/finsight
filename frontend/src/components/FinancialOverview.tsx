@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import type { FinancesOverview } from '../types/finances-overview';
 import ReconnectNotice from './ReconnectNotice';
+import { CONNECT_ACCOUNTS_PATH } from '../lib/connect-accounts';
 
 interface FinancialOverviewProps {
   tier?: string;
@@ -98,9 +99,7 @@ export default function FinancialOverview({ tier: _tier }: FinancialOverviewProp
     value === null ? 'Unavailable' : formatCurrency(value);
 
   const handleAddAccounts = () => {
-    // Set a flag in localStorage to indicate user wants to connect accounts
-    localStorage.setItem('wants_to_connect_accounts', 'true');
-    router.push('/profile');
+    router.push(CONNECT_ACCOUNTS_PATH);
   };
 
   const handleOverviewClick = () => {
