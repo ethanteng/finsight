@@ -35,6 +35,7 @@ import {
   identifyTargetDateFundHolding,
   type TargetDateFundIdentity,
 } from '../../services/target-date-fund';
+import type { TreasurySecurity } from '../data/providers/treasury-provider';
 import {
   lookupTargetDateAllocation,
   type TargetDateFundAllocation,
@@ -197,6 +198,7 @@ function resolveHoldingExposure(
   security: Security | undefined,
   fmpMetadata: SecurityMetadata | null,
   asOfDate: string | number,
+  treasurySecurity: TreasurySecurity | null = null,
 ): HoldingResolutionDraft {
   const ticker = security?.ticker_symbol?.toUpperCase() || holding.ticker_symbol?.toUpperCase() || '';
   const securityName = security?.name?.toLowerCase() || holding.security_name?.toLowerCase() || '';
@@ -228,6 +230,27 @@ function resolveHoldingExposure(
       targetDateIdentity,
       targetAllocation: allocation,
     };
+  }
+
+  // The Treasury's own record of what it issued. Placed ahead of every other
+  // rule because it is the issuer speaking: it settles nominal-vs-TIPS, which
+  // no name can, and a custodian type of "fixed income" cannot contradict it.
+  // Only a target-date identity outranks it, and no target-date fund has a
+  // Treasury CUSIP.
+  if (treasurySecurity) {
+    switch (treasurySecurity.kind) {
+      case 'tips':
+        return { weights: { ...EMPTY_WEIGHTS, tips: 1 }, method: 'provider', confidence: 'high' };
+      // A bill matures inside a year and a floating-rate note resets off the
+      // 13-week bill, so both earn the cash series rather than the ten-year
+      // one. Sending them to the nominal sleeve would impute a duration
+      // neither of them has.
+      case 'bill':
+      case 'frn':
+        return { weights: { ...EMPTY_WEIGHTS, cash: 1 }, method: 'provider', confidence: 'high' };
+      case 'nominal':
+        return { weights: { ...EMPTY_WEIGHTS, nominalBonds: 1 }, method: 'provider', confidence: 'high' };
+    }
   }
 
   const selectedAssetType = selectDeclaredAssetType(providerTypes).toLowerCase();
@@ -738,7 +761,15 @@ export async function mapPortfolioToAssetBasket(
    * published. Numeric years remain accepted for legacy direct callers and
    * are interpreted as year-end by the registry.
    */
-  asOfDate: string | number = new Date().toISOString().slice(0, 10)
+  asOfDate: string | number = new Date().toISOString().slice(0, 10),
+  /**
+   * CUSIP -> Treasury auction record, resolved by the caller.
+   *
+   * Passed in rather than fetched here so this function stays free of network
+   * calls: every caller that wants issuer evidence supplies it, and one that
+   * does not gets exactly the name-inference behaviour it had before.
+   */
+  preFetchedTreasuries?: Map<string, TreasurySecurity>
 ): Promise<PortfolioMapping> {
   const portfolioValue = holdings.reduce(
     (sum, holding) => sum + (Number.isFinite(holding.institution_value) ? holding.institution_value! : 0),
@@ -783,7 +814,9 @@ export async function mapPortfolioToAssetBasket(
 
     const ticker = security?.ticker_symbol?.toUpperCase() || holding.ticker_symbol?.toUpperCase() || '';
     const fmpMetadata = (ticker ? tickerToMetadata.get(ticker) : null) as SecurityMetadata | null;
-    const draft = resolveHoldingExposure(holding, security, fmpMetadata, asOfDate);
+    const cusip = security?.cusip?.trim().toUpperCase();
+    const treasurySecurity = (cusip && preFetchedTreasuries?.get(cusip)) || null;
+    const draft = resolveHoldingExposure(holding, security, fmpMetadata, asOfDate, treasurySecurity);
     const resolvedWeightFraction = Math.max(0, Math.min(1, weightTotal(draft.weights)));
     const classifiedFraction = draft.unsupportedAssetClass
       ? 1

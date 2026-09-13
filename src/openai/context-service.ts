@@ -924,6 +924,27 @@ async function fetchOrCreateRetirementAnalysis(args: {
     const analysisResult = await analyzeRetirementPortfolio(analysisInput);
     console.log('✅ Retirement analysis completed successfully');
 
+    // An analysis computed without evidence it wanted is correct to return and
+    // wrong to keep. Stored entries are reused for seven days on portfolio
+    // fingerprint and version alone, neither of which records that a source was
+    // unreachable -- so persisting this would let a TIPS holding read as
+    // nominal during an outage stay nominal long after the service recovered.
+    // Returning it uncached costs one recomputation; storing it costs a week of
+    // a wrong sleeve.
+    if (analysisResult.evidenceDegraded) {
+      console.warn('⚠️ Retirement analysis ran without complete evidence; returning it without caching');
+      const degradedResult = analysisResult as RetirementAnalysis;
+      degradedResult._storedInputParams = {
+        currentAge: analysisInput.currentAge,
+        retirementAge: analysisInput.retirementAge,
+        annualWithdrawalAmount: analysisInput.annualWithdrawalAmount,
+        withdrawalStartAge: analysisInput.withdrawalStartAge,
+        lifeExpectancy: analysisInput.lifeExpectancy,
+      };
+      // No `_evidence`: that cites a stored record, and this one is not stored.
+      return withSources(degradedResult);
+    }
+
     // Store in database
     // Note: Store full analysis result in historicalImplications field for retrieval
     const createdAnalysis = await prisma.retirementAnalysis.create({

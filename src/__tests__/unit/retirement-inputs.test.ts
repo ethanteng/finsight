@@ -138,6 +138,18 @@ describe('retirementPortfolioFingerprint', () => {
     );
   });
 
+  it('does not recompute when a feed only changes CUSIP casing', () => {
+    // The provider normalizes before resolving, so the two spellings reach the
+    // same auction record. Treating them as different portfolios would discard
+    // a cached analysis for no change in what gets modeled.
+    const upper = securities.map(security => ({ ...security, cusip: '91282CRE3' }));
+    const lower = securities.map(security => ({ ...security, cusip: ' 91282cre3 ' }));
+
+    expect(retirementPortfolioFingerprint(holdings, upper)).toBe(
+      retirementPortfolioFingerprint(holdings, lower)
+    );
+  });
+
   it('is insensitive to row order', () => {
     expect(retirementPortfolioFingerprint(holdings, securities)).toBe(
       retirementPortfolioFingerprint([...holdings].reverse(), [...securities].reverse())

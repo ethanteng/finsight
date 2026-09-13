@@ -545,6 +545,17 @@ export interface HistoricalDataSummary {
 // ============================================================================
 
 export interface RetirementAnalysisOutput {
+  /**
+   * True when evidence this analysis would have used could not be reached.
+   *
+   * Set when the Treasury lookup failed rather than returning no record: the
+   * classification that results is the name-inferred fallback, which is a
+   * correct answer for right now and a wrong one to keep. Callers that cache
+   * an analysis must not persist a degraded one -- a TIPS holding read as
+   * nominal during an outage would otherwise stay nominal for the life of the
+   * cache entry, long after the service recovered.
+   */
+  evidenceDegraded?: boolean;
   summary: {
     characteristics: PortfolioCharacteristics;
     tradeoffs: PortfolioTradeoffs;
