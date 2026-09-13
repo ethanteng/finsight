@@ -248,6 +248,22 @@ describe('employer-plan products with no external source', () => {
     expect(mapping.cashValue).toBe(0);
     expect(mapping.nominalBondsValue).toBe(10_000);
   });
+
+  it('lets the contract phrase win when a name reads as both', async () => {
+    // `guaranteed interest` and `bond fund` both match here, and cash is
+    // checked first, so the contract wins. Pinned deliberately rather than
+    // left to signal ordering: the phrase is insurer product language, and a
+    // bond fund that guarantees its interest is not a category that exists --
+    // whereas Guaranteed Interest Account and Guaranteed Interest Fund are
+    // real products this has to keep placing. If a real security ever trips
+    // this, the fix is to narrow the phrase, not to reorder the signals: the
+    // cash-first ordering is what keeps a Treasury money-market fund out of
+    // the bond sleeve.
+    const mapping = await mapOne('Guaranteed Interest Bond Fund');
+
+    expect(mapping.cashValue).toBe(10_000);
+    expect(mapping.nominalBondsValue).toBe(0);
+  });
 });
 
 describe('UC Pathway in the target-date registry', () => {
