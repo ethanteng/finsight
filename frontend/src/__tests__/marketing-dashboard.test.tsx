@@ -128,7 +128,7 @@ describe('marketing scorecard data states', () => {
     expect(screen.getAllByText('Ran calculator')).toHaveLength(2);
     expect(screen.getAllByText('Emailed results')).toHaveLength(2);
     expect(screen.getAllByText('Clicked email CTA')).toHaveLength(2);
-    expect(screen.getAllByText('Started free trial')).toHaveLength(2);
+    expect(screen.getAllByText('Completed trial signup')).toHaveLength(2);
     expect(screen.getAllByText('Observed in this window; the email may have been sent earlier')).toHaveLength(2);
     expect(screen.getAllByText('Email-attributed trial completions observed in this window')).toHaveLength(2);
     expect(screen.queryByText('Conversion from emailed results unavailable')).not.toBeInTheDocument();

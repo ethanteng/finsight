@@ -243,7 +243,7 @@ function LeadCapturePanel({
       note: 'Observed in this window; the email may have been sent earlier',
     },
     {
-      label: 'Started free trial',
+      label: 'Completed trial signup',
       value: capture.emailTrialCompletedSessions.value,
       note: 'Email-attributed trial completions observed in this window',
     },
