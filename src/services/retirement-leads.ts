@@ -15,6 +15,7 @@
  */
 
 import type { RetirementQuickPlanResult } from './retirement-quickplan';
+import type { CalculatorLeadAttribution } from './calculator-lead-attribution';
 import { generateLeadToken, isLeadToken, leadExpiresAt } from './lead-token';
 
 export { generateLeadToken, isLeadToken };
@@ -49,6 +50,7 @@ export async function recordRetirementLead(params: {
   token: string;
   inputs: RetirementLeadInputs;
   outcome: RetirementLeadOutcome;
+  attribution?: CalculatorLeadAttribution;
   now?: Date;
 }): Promise<boolean> {
   const now = params.now ?? new Date();
@@ -73,6 +75,7 @@ export async function recordRetirementLead(params: {
         sequencesSurvived: params.outcome.sequencesSurvived,
         projectedPortfolioAtRetirement: params.outcome.projectedPortfolioAtRetirement,
         firstYearWithdrawalRate: params.outcome.firstYearWithdrawalRate,
+        ...params.attribution,
         expiresAt: leadExpiresAt(now),
       } as never,
     });

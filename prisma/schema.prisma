@@ -710,6 +710,21 @@ model CoastFireLead {
   /// Random, not derived from the address, and the sole key of the email link.
   token String @unique
 
+  /// Privacy-bounded acquisition context captured when the email was requested.
+  /// No address or financial figure is duplicated into these fields.
+  landingPage String?
+  referrer    String?
+  utmSource   String?
+  utmMedium   String?
+  utmCampaign String?
+  utmTerm     String?
+  utmContent  String?
+  gclid       String?
+  gbraid      String?
+  wbraid      String?
+  gaClientId  String?
+  gaSessionId String?
+
   /// The seven inputs, as submitted.
   currentAge               Int
   retirementAge            Int
@@ -761,6 +776,21 @@ model RetirementLead {
   email String
   /// Random, not derived from the address, and the sole key of the email link.
   token String @unique
+
+  /// Privacy-bounded acquisition context captured when the email was requested.
+  /// No address or financial figure is duplicated into these fields.
+  landingPage String?
+  referrer    String?
+  utmSource   String?
+  utmMedium   String?
+  utmCampaign String?
+  utmTerm     String?
+  utmContent  String?
+  gclid       String?
+  gbraid      String?
+  wbraid      String?
+  gaClientId  String?
+  gaSessionId String?
 
   /// The plan, as submitted.
   currentAge             Int

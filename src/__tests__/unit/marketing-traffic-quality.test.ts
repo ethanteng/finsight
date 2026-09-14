@@ -122,4 +122,9 @@ describe('GA4 session query', () => {
     expect(query).toContain("calculator_type = 'coast_fire'");
     expect(query).toContain("signup_origin = 'coast_fire_calculator' AND signup_entry = 'results_email'");
   });
+
+  it('counts only intentional Coast FIRE submissions as calculated results', () => {
+    expect(query).toContain("key = 'calculation_trigger'");
+    expect(query).toContain("event_name = 'coast_fire_calculated' AND calculation_trigger = 'submitted'");
+  });
 });

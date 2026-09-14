@@ -1,5 +1,6 @@
 import {
   buildCalculatorLeadSummary,
+  calculatorLeadPeriodForReportingWindow,
   liveCalculatorLeadPeriod,
 } from '../../services/calculator-lead-report';
 
@@ -7,6 +8,13 @@ const start = new Date('2026-09-01T00:00:00.000Z');
 const end = new Date('2026-10-01T00:00:00.000Z');
 
 describe('calculator lead report', () => {
+  it('aligns a completed first-party window to GA4 calendar days in Los Angeles', () => {
+    expect(calculatorLeadPeriodForReportingWindow('2026-09-12', '2026-09-13')).toEqual({
+      periodStart: new Date('2026-09-12T07:00:00.000Z'),
+      periodEndExclusive: new Date('2026-09-14T07:00:00.000Z'),
+    });
+  });
+
   it('keeps first-party leads live through the current day instead of using the GA4 cutoff', () => {
     const now = new Date('2026-09-12T18:07:23.040Z');
 
@@ -21,7 +29,7 @@ describe('calculator lead report', () => {
       periodStart: start,
       periodEndExclusive: end,
       leads: [
-        { email: 'A@example.com', emailSent: true, mailerliteSynced: true, continuedAt: new Date('2026-09-03'), createdAt: new Date('2026-09-02') },
+        { email: 'A@example.com', emailSent: true, mailerliteSynced: true, continuedAt: new Date('2026-09-03'), createdAt: new Date('2026-09-02'), gclid: 'paid-click', gaClientId: '1.2' },
         { email: 'a@example.com', emailSent: true, mailerliteSynced: false, continuedAt: null, createdAt: new Date('2026-09-04') },
         { email: 'b@example.com', emailSent: false, mailerliteSynced: false, continuedAt: null, createdAt: new Date('2026-09-05') },
       ],
@@ -38,9 +46,12 @@ describe('calculator lead report', () => {
       mailerliteSynced: 1,
       continuedToSignup: 1,
       matchedAccounts: 1,
+      attributionCaptured: 1,
+      paidAttributionCaptured: 1,
       deliveryRate: 2 / 3,
       continuationRate: 1 / 2,
       accountMatchRate: 1 / 2,
+      attributionRate: 1 / 3,
     });
   });
 

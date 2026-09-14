@@ -48,26 +48,38 @@ type SourceDiagnostic = {
   detail: string;
 };
 
+type LeadSummary = {
+  state: 'live' | 'error';
+  periodStart: string;
+  periodEnd: string;
+  requests: number | null;
+  emailsSent: number | null;
+  uniqueEmails: number | null;
+  mailerliteSynced: number | null;
+  continuedToSignup: number | null;
+  matchedAccounts: number | null;
+  attributionCaptured: number | null;
+  paidAttributionCaptured: number | null;
+  deliveryRate: number | null;
+  continuationRate: number | null;
+  accountMatchRate: number | null;
+  attributionRate: number | null;
+  note: string;
+};
+
 type LeadCapture = {
+  rawResultsEmailedEvents: Metric;
   resultsEmailedSessions: Metric;
+  emailRequestExclusions: Array<{
+    reason: 'traffic_quality' | 'outside_journey' | 'missing_result' | 'unproven_order';
+    label: string;
+    sessions: number;
+  }>;
   captureRate: Metric;
   emailCtaOpenedSessions: Metric;
   emailTrialCompletedSessions: Metric;
-  firstParty: {
-    state: 'live' | 'error';
-    periodStart: string;
-    periodEnd: string;
-    requests: number | null;
-    emailsSent: number | null;
-    uniqueEmails: number | null;
-    mailerliteSynced: number | null;
-    continuedToSignup: number | null;
-    matchedAccounts: number | null;
-    deliveryRate: number | null;
-    continuationRate: number | null;
-    accountMatchRate: number | null;
-    note: string;
-  };
+  pendingFirstParty: LeadSummary;
+  firstParty: LeadSummary;
 };
 
 interface Report {
@@ -204,15 +216,20 @@ function Journey({
 }
 
 function LeadCapturePanel({ capture, ga4PeriodEnd }: { capture: LeadCapture; ga4PeriodEnd: string }) {
+  const excludedSessions = capture.emailRequestExclusions.reduce((sum, row) => sum + row.sessions, 0);
   const cells = [
-    ['GA4 email requests', count(capture.resultsEmailedSessions.value), capture.resultsEmailedSessions.note],
+    ['GA4 email events observed', count(capture.rawResultsEmailedEvents.value), capture.rawResultsEmailedEvents.note],
+    ['Qualified GA4 email sessions', count(capture.resultsEmailedSessions.value), capture.resultsEmailedSessions.note],
+    ['Excluded or unmatched sessions', count(excludedSessions), excludedSessions > 0 ? 'See the reconciliation below.' : 'Every observed session qualified.'],
     ['GA4 capture rate', precisePercent(capture.captureRate.value), capture.captureRate.note],
     ['GA4 email CTA opens', count(capture.emailCtaOpenedSessions.value), capture.emailCtaOpenedSessions.note],
     ['GA4 email-path trials', count(capture.emailTrialCompletedSessions.value), capture.emailTrialCompletedSessions.note],
     ['First-party emails sent', count(capture.firstParty.emailsSent), `${precisePercent(capture.firstParty.deliveryRate)} of stored requests`],
     ['Unique lead emails', count(capture.firstParty.uniqueEmails), `${count(capture.firstParty.mailerliteSynced)} synced to MailerLite`],
+    ['Attribution captured', count(capture.firstParty.attributionCaptured), `${precisePercent(capture.firstParty.attributionRate)} of stored requests · ${count(capture.firstParty.paidAttributionCaptured)} paid`],
     ['First-party continuations', count(capture.firstParty.continuedToSignup), `${precisePercent(capture.firstParty.continuationRate)} of delivered emails`],
     ['Matched accounts', count(capture.firstParty.matchedAccounts), `${precisePercent(capture.firstParty.accountMatchRate)} of unique lead emails`],
+    ['Pending after GA4 cutoff', count(capture.pendingFirstParty.emailsSent), `First-party emails since ${shortDate(ga4PeriodEnd)}; not compared until the GA4 export settles.`],
   ];
   return <div className="mt-6 rounded-[18px] border border-[#102319]/10 bg-[#edf1e9] p-4 sm:p-5">
     <div className="flex flex-wrap items-start justify-between gap-3">
@@ -221,7 +238,7 @@ function LeadCapturePanel({ capture, ga4PeriodEnd }: { capture: LeadCapture; ga4
         <div>
           <p className="text-[10px] font-extrabold uppercase tracking-[.14em] text-[#49725a]">Known-prospect branch</p>
           <h3 className="mt-1 text-base font-semibold tracking-[-.025em]">Email me these results</h3>
-          <p className="mt-1 max-w-4xl text-[10px] leading-4 text-[#66736b]">GA4 rows use the reporting window through {shortDate(ga4PeriodEnd)}. First-party rows are live Postgres records from {shortDate(capture.firstParty.periodStart)} through {shortDate(capture.firstParty.periodEnd)}. {capture.firstParty.note}</p>
+          <p className="mt-1 max-w-4xl text-[10px] leading-4 text-[#66736b]">GA4 and first-party comparison rows both cover {shortDate(capture.firstParty.periodStart)} through {shortDate(capture.firstParty.periodEnd)}. Activity after {shortDate(ga4PeriodEnd)} is separated as pending until the daily GA4 export settles. {capture.firstParty.note}</p>
         </div>
       </div>
       <SourcePill state={capture.firstParty.state} />
@@ -233,6 +250,12 @@ function LeadCapturePanel({ capture, ga4PeriodEnd }: { capture: LeadCapture; ga4
         <div className="mt-1 text-[9px] leading-4 text-[#89938c]">{note}</div>
       </div>)}
     </div>
+    {capture.emailRequestExclusions.length > 0 && <div className="mt-3 rounded-xl border border-[#9d6a16]/15 bg-[#f8f1df] px-4 py-3">
+      <div className="text-[10px] font-extrabold uppercase tracking-[.1em] text-[#775617]">GA4 reconciliation</div>
+      <ul className="mt-2 space-y-1">
+        {capture.emailRequestExclusions.map(row => <li key={row.reason} className="text-[10px] leading-4 text-[#6f654c]">{count(row.sessions)} session{row.sessions === 1 ? '' : 's'}: {row.label}.</li>)}
+      </ul>
+    </div>}
   </div>;
 }
 
@@ -405,7 +428,7 @@ export default function MarketingDashboardPage() {
             <div className="max-w-3xl">
               <p className="text-[10px] font-extrabold uppercase tracking-[.14em] text-[#49725a]">Downstream value</p>
               <h2 className="mt-1 text-2xl font-semibold tracking-[-.035em]">Do new accounts become valuable users?</h2>
-              <p className="mt-2 text-sm leading-6 text-[#66736b]">These are the right outcomes—financial connection, activation, and payment—but they currently describe all new accounts because marketing attribution is not stored with the user.</p>
+              <p className="mt-2 text-sm leading-6 text-[#66736b]">These are the right outcomes—financial connection, activation, and payment. New calculator-email leads now preserve acquisition context, while these cards still describe all new accounts until the cohort-level join is added.</p>
             </div>
             <div className="mt-5 grid gap-4 md:grid-cols-3">
               <OutcomeCard icon={<Link2 size={17} />} label="Connected financial data" metric={report.beachhead.downstream.financialConnectionRate} numerator={report.firstParty.createdAccountsWithFinancialConnection} denominator={report.firstParty.accountsCreated} />

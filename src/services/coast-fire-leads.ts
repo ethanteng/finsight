@@ -14,6 +14,7 @@
  */
 
 import type { CoastFireInputs, CoastFireResult } from './coast-fire';
+import type { CalculatorLeadAttribution } from './calculator-lead-attribution';
 import { generateLeadToken, isLeadToken, leadExpiresAt } from './lead-token';
 
 // Token shape and lifetime are shared with every other calculator that emails
@@ -43,6 +44,7 @@ export async function recordCoastFireLead(params: {
   email: string;
   token: string;
   result: CoastFireResult;
+  attribution?: CalculatorLeadAttribution;
   now?: Date;
 }): Promise<boolean> {
   const now = params.now ?? new Date();
@@ -64,6 +66,7 @@ export async function recordCoastFireLead(params: {
         retirementTarget: params.result.retirementTarget,
         projectedSavingsAtRetirement: params.result.projectedSavingsAtRetirement,
         hasReachedCoastFire: params.result.hasReachedCoastFire,
+        ...params.attribution,
         expiresAt: leadExpiresAt(now),
       } as never,
     });

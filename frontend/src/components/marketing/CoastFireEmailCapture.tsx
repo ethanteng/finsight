@@ -16,6 +16,7 @@
 import { useRef, useState } from "react";
 import type { CoastFireResult } from "@/lib/coast-fire";
 import { pushCoastFireResultsEmailed } from "@/lib/dataLayer";
+import { readCalculatorLeadAttribution } from "@/lib/calculator-lead-attribution";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
 
@@ -48,6 +49,7 @@ export function CoastFireEmailCapture({ result }: { result: CoastFireResult }) {
           annualRetirementIncome: result.annualRetirementIncome,
           realReturnRate: result.realReturnRate,
           withdrawalRate: result.withdrawalRate,
+          attribution: readCalculatorLeadAttribution(),
         }),
       });
 

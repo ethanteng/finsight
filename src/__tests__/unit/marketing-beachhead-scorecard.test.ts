@@ -274,10 +274,45 @@ describe('Coast FIRE beachhead scorecard', () => {
     });
 
     expect(report.coastFireJourney[0].value).toBe(1);
+    expect(report.leadCapture.coastFire.rawResultsEmailedEvents.value).toBe(1);
     expect(report.leadCapture.coastFire.resultsEmailedSessions.value).toBe(1);
+    expect(report.leadCapture.coastFire.emailRequestExclusions).toEqual([]);
     expect(report.leadCapture.coastFire.captureRate.value).toBe(1);
     expect(report.leadCapture.coastFire.emailCtaOpenedSessions.value).toBe(1);
     expect(report.leadCapture.coastFire.emailTrialCompletedSessions.value).toBe(1);
+  });
+
+  it('reconciles a raw email event that traffic-quality filtering excludes', () => {
+    const internalRequest = session('internal-email-request', {
+      sessionDate: '2026-09-13',
+      acquisition: {
+        source: 'direct', medium: '(none)', channel: 'Direct', campaign: '(not set)',
+        landingPage: '/coast-fire-calculator', searchTerm: '(not set)', creative: '(not set)', adId: '', referrer: '',
+      },
+      trafficQuality: 'internal',
+      exclusionReasons: ['admin_page_session'],
+      eventCounts: { coast_fire_calculated: 1, coast_fire_results_emailed: 1 },
+      firstEventAt: { coast_fire_calculated: 1_000_000, coast_fire_results_emailed: 2_000_000 },
+    });
+
+    const report = buildBeachheadScorecard({
+      current: [],
+      previous: [],
+      rawCurrent: [internalRequest],
+      rawPrevious: [],
+      ga4State: 'live',
+      funnelCoverageComplete: true,
+      previousFunnelCoverageComplete: true,
+      firstParty,
+    });
+
+    expect(report.leadCapture.coastFire.rawResultsEmailedEvents.value).toBe(1);
+    expect(report.leadCapture.coastFire.resultsEmailedSessions.value).toBe(0);
+    expect(report.leadCapture.coastFire.emailRequestExclusions).toEqual([{
+      reason: 'traffic_quality',
+      label: 'Excluded as internal, developer, automated, or non-production traffic',
+      sessions: 1,
+    }]);
   });
 
   it('surfaces the actual GA4 failure state instead of calling every outage collecting', () => {

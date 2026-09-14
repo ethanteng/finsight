@@ -187,8 +187,12 @@ function channelFor(source: string, medium: string, hasAdId: boolean): string {
 
 export function buildQuery(projectId: string, datasetId: string, dates: ReturnType<typeof reportDates>): string {
   const eventColumns = [...FUNNEL_EVENTS, ...DIAGNOSTIC_EVENTS].map(event => {
-    const signupGuard = event === 'sign_up' ? " AND signup_flow = 'free_trial'" : '';
-    return `COUNTIF(event_name = '${event}'${signupGuard}) AS count_${event}, MIN(IF(event_name = '${event}'${signupGuard}, event_timestamp, NULL)) AS first_${event}`;
+    const eventGuard = event === 'sign_up'
+      ? " AND signup_flow = 'free_trial'"
+      : event === 'coast_fire_calculated'
+        ? " AND calculation_trigger = 'submitted'"
+        : '';
+    return `COUNTIF(event_name = '${event}'${eventGuard}) AS count_${event}, MIN(IF(event_name = '${event}'${eventGuard}, event_timestamp, NULL)) AS first_${event}`;
   }).join(',\n    ');
   const journeyColumns = [
     "COUNTIF(event_name = 'start_free_click' AND cta_location = 'quickplan_cross_sell') AS count_quickplan_cross_sell_click",
@@ -216,6 +220,7 @@ WITH raw AS (
     (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'source_page') AS source_page,
     (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'cta_location') AS cta_location,
     (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'content_type') AS content_type,
+    (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'calculation_trigger') AS calculation_trigger,
     (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'signup_flow') AS signup_flow,
     (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'signup_origin') AS signup_origin,
     (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'signup_entry') AS signup_entry,

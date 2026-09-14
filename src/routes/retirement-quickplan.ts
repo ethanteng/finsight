@@ -29,6 +29,7 @@ import {
   retirementGroupIds,
   subscribeToMailerLite,
 } from '../services/mailerlite-subscribe';
+import { parseCalculatorLeadAttribution } from '../services/calculator-lead-attribution';
 import {
   readSubmittedPlan,
   recordQuickPlanRejection,
@@ -207,7 +208,8 @@ router.post('/email-results', emailRateLimit, async (req: Request, res: Response
     projectedPortfolioAtRetirement: primary.projectedPortfolioAtRetirement,
     firstYearWithdrawalRate: primary.firstYearWithdrawalRate,
   };
-  const stored = await recordRetirementLead({ email, token, inputs: result.inputs, outcome });
+  const attribution = parseCalculatorLeadAttribution(req.body?.attribution);
+  const stored = await recordRetirementLead({ email, token, inputs: result.inputs, outcome, attribution });
 
   const emailSent = await sendRetirementResultsEmail(
     email,

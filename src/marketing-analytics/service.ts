@@ -1,7 +1,8 @@
 import { getPrismaClient } from '../prisma-client';
 import {
+  buildCalculatorLeadSummary,
+  calculatorLeadPeriodForReportingWindow,
   calculatorLeadSummary,
-  liveCalculatorLeadPeriod,
   unavailableCalculatorLeadSummary,
 } from '../services/calculator-lead-report';
 import { aggregateTrialFunnel } from './funnel';
@@ -339,23 +340,45 @@ export async function getMarketingDashboard(filters: MarketingFilters): Promise<
       note: 'The first-party calculator-run store could not be read. These values are unavailable, not zero.',
     };
   }
-  // Lead delivery is first-party data and is available immediately. Do not
-  // truncate it to the settled GA4 daily-export window.
   const {
     periodStart: leadPeriodStart,
     periodEndExclusive: leadPeriodEnd,
-  } = liveCalculatorLeadPeriod(filters.days);
+  } = calculatorLeadPeriodForReportingWindow(displayedPeriod.start, displayedPeriod.end);
+  const pendingPeriodEnd = new Date();
+  const hasPendingLeadWindow = pendingPeriodEnd > leadPeriodEnd;
+  const emptyPendingLeads = () => buildCalculatorLeadSummary({
+    leads: [],
+    accounts: [],
+    periodStart: leadPeriodEnd,
+    periodEndExclusive: new Date(leadPeriodEnd.getTime() + 1),
+  });
   let coastFireLeads;
   let retirementLeads;
+  let pendingCoastFireLeads;
+  let pendingRetirementLeads;
   try {
-    [coastFireLeads, retirementLeads] = await Promise.all([
+    [coastFireLeads, retirementLeads, pendingCoastFireLeads, pendingRetirementLeads] = await Promise.all([
       calculatorLeadSummary('coast_fire', leadPeriodStart, leadPeriodEnd),
       calculatorLeadSummary('retirement', leadPeriodStart, leadPeriodEnd),
+      hasPendingLeadWindow
+        ? calculatorLeadSummary('coast_fire', leadPeriodEnd, pendingPeriodEnd)
+        : Promise.resolve(emptyPendingLeads()),
+      hasPendingLeadWindow
+        ? calculatorLeadSummary('retirement', leadPeriodEnd, pendingPeriodEnd)
+        : Promise.resolve(emptyPendingLeads()),
     ]);
   } catch (error) {
     console.error('Marketing dashboard could not read calculator lead aggregates:', error);
     coastFireLeads = unavailableCalculatorLeadSummary(leadPeriodStart, leadPeriodEnd);
     retirementLeads = unavailableCalculatorLeadSummary(leadPeriodStart, leadPeriodEnd);
+    pendingCoastFireLeads = unavailableCalculatorLeadSummary(
+      leadPeriodEnd,
+      hasPendingLeadWindow ? pendingPeriodEnd : new Date(leadPeriodEnd.getTime() + 1),
+    );
+    pendingRetirementLeads = unavailableCalculatorLeadSummary(
+      leadPeriodEnd,
+      hasPendingLeadWindow ? pendingPeriodEnd : new Date(leadPeriodEnd.getTime() + 1),
+    );
   }
   const trackingStartedAt = ga4.firstFullTrackingDate;
   const funnelCoverageComplete = Boolean(trackingStartedAt && period.start >= trackingStartedAt);
@@ -370,12 +393,16 @@ export async function getMarketingDashboard(filters: MarketingFilters): Promise<
   const beachhead = buildBeachheadScorecard({
     current,
     previous,
+    rawCurrent: currentPopulation,
+    rawPrevious: previousPopulation,
     ga4State: ga4.state,
     funnelCoverageComplete,
     previousFunnelCoverageComplete: previousFunnelCovered,
     firstParty,
     coastFireLeads,
     retirementLeads,
+    pendingCoastFireLeads,
+    pendingRetirementLeads,
   });
   const funnel = hasLiveGa4 && trackingStartedAt
     ? aggregateTrialFunnel(funnelSessions, funnelCoverage)
@@ -536,7 +563,7 @@ export async function getMarketingDashboard(filters: MarketingFilters): Promise<
       { id: 'ga4', name: 'GA4 + BigQuery', state: ga4.state, freshness: ga4.reportEnd, detail: `Property 519498279. ${ga4.detail}` },
       { id: 'contentsquare', name: 'Contentsquare', state: 'verified_snapshot', freshness: VERIFIED_SNAPSHOT.capturedAt, detail: 'Ask Linc project 530048. Runtime API credentials are not present; frustration/error APIs are outside the current account entitlement.' },
       { id: 'ubersuggest', name: 'Ubersuggest', state: 'verified_snapshot', freshness: VERIFIED_SNAPSHOT.capturedAt, detail: 'asklinc.com project verified through the connected account. Query impressions/clicks require Search Console or GA4/Search Console export.' },
-      { id: 'first_party', name: 'First-party accounts', state: firstPartyState, freshness: firstPartyState === 'live' ? new Date().toISOString() : null, detail: firstPartyState === 'live' ? 'Live PostgreSQL account, verification, subscription, login, and conversation state. No marketing attribution is stored in these records.' : 'The account adapter failed; no zero values were substituted.' },
+      { id: 'first_party', name: 'First-party accounts', state: firstPartyState, freshness: firstPartyState === 'live' ? new Date().toISOString() : null, detail: firstPartyState === 'live' ? 'Live PostgreSQL account, verification, subscription, login, conversation, and calculator-lead attribution state. Historical calculator leads created before attribution capture remain unattributed.' : 'The account adapter failed; no zero values were substituted.' },
       { id: 'google_ads', name: 'Google Ads', state: 'unavailable', freshness: null, detail: 'Campaign event instrumentation exists, but spend, campaign and creative reporting are not connected to this backend.' },
     ],
     warnings,
