@@ -33,6 +33,7 @@ import {
   recordCoastFireLead,
 } from '../services/coast-fire-leads';
 import { coastFireGroupIds, subscribeToMailerLite } from '../services/mailerlite-subscribe';
+import { parseCalculatorLeadAttribution } from '../services/calculator-lead-attribution';
 
 const router = express.Router();
 
@@ -118,7 +119,8 @@ router.post('/email-results', emailRateLimit, async (req: Request, res: Response
   // A failed write costs personalization, not the email: the CTA falls back to
   // plain /getstarted.
   const token = generateLeadToken();
-  const stored = await recordCoastFireLead({ email, token, result });
+  const attribution = parseCalculatorLeadAttribution(req.body?.attribution);
+  const stored = await recordCoastFireLead({ email, token, result, attribution });
 
   const emailSent = await sendCoastFireResultsEmail(
     email,

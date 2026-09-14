@@ -107,6 +107,7 @@ function runTheModel() {
 beforeEach(() => {
   posts.length = 0;
   emailed.mockClear();
+  window.history.replaceState({}, '', '/retirement-calculator');
   window.sessionStorage.clear();
   Element.prototype.scrollIntoView = jest.fn();
   mockApi(BASE_RESULT);
@@ -187,7 +188,11 @@ it('posts the plan inputs and never the figures computed from them', async () =>
 
   await screen.findByText(/on their way/i);
   const send = posts.find((post) => post.url.includes('/email-results'))!;
-  expect(send.body).toEqual({ email: 'Reader@Example.com', ...INPUTS });
+  expect(send.body).toEqual({
+    email: 'Reader@Example.com',
+    ...INPUTS,
+    attribution: { landingPage: '/retirement-calculator' },
+  });
   // The server re-runs the model, so a verdict in the body would only be an
   // opportunity to disagree with it.
   expect(send.body).not.toHaveProperty('survivalRate');

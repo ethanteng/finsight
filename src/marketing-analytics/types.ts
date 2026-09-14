@@ -242,14 +242,24 @@ export interface BeachheadScorecard {
 }
 
 export interface BeachheadLeadCaptureMetric {
+  /** Raw occurrences observed by GA4 after email tracking launched. */
+  rawResultsEmailedEvents: MetricValue;
   /** Result sessions where a successful email request followed the result. */
   resultsEmailedSessions: MetricValue;
+  /** Session-level reasons raw email events did not enter the qualified count. */
+  emailRequestExclusions: Array<{
+    reason: 'traffic_quality' | 'outside_journey' | 'missing_result' | 'unproven_order';
+    label: string;
+    sessions: number;
+  }>;
   /** Email-request sessions divided by eligible result sessions. */
   captureRate: MetricValue;
   /** Successful scenario restores after a recipient clicked the email CTA. */
   emailCtaOpenedSessions: MetricValue;
   /** Email-attributed sessions that reached the final tracked trial step. */
   emailTrialCompletedSessions: MetricValue;
+  /** First-party rows after the settled GA4 cutoff, shown separately. */
+  pendingFirstParty: CalculatorLeadSummary;
   firstParty: CalculatorLeadSummary;
 }
 

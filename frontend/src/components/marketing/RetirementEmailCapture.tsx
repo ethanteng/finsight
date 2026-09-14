@@ -16,6 +16,7 @@
 
 import { useRef, useState } from "react";
 import { pushRetirementResultsEmailed } from "@/lib/dataLayer";
+import { readCalculatorLeadAttribution } from "@/lib/calculator-lead-attribution";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
 
@@ -58,7 +59,11 @@ export function RetirementEmailCapture({
       const response = await fetch(`${API_URL}/api/retirement-quickplan/email-results`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: email.trim(), ...inputs }),
+        body: JSON.stringify({
+          email: email.trim(),
+          ...inputs,
+          attribution: readCalculatorLeadAttribution(),
+        }),
       });
 
       if (!response.ok) {

@@ -31,13 +31,6 @@ export type RetirementInteractionEvent =
 export type CoastFireStatus = 'reached' | 'not_yet';
 
 /**
- * Whether the visitor was shown the page's default scenario or one they
- * submitted. Both are results the page put in front of them, so both count as
- * the scorecard's "Result shown"; the field keeps them separable in reporting.
- */
-export type CoastFireTrigger = 'default' | 'submitted';
-
-/**
  * Every input the calculator can blame an error on, including the two the form
  * does not render (`lifeExpectancy` is derived server-side, `body` means the
  * request was not a plan at all). An allowlist rather than a passthrough: the
@@ -127,12 +120,12 @@ function getContentType(pathname: string): string {
  * GA4 Event tag that forwards `coast_fire_status`, `calculation_trigger`,
  * `years_to_retirement`, `source_page`, and `content_type`; without that tag
  * the beachhead scorecard's Result shown stage stays at zero even when the
- * page is live and visitors are calculating.
+ * page is live and visitors are intentionally calculating. The default result
+ * shown on initial page load is deliberately not a calculation conversion.
  */
 export function pushCoastFireCalculated(
   status: CoastFireStatus,
   yearsToRetirement: number,
-  trigger: CoastFireTrigger = 'submitted',
 ): void {
   if (typeof window === 'undefined') return;
   trackContentsquareEvent('coast_fire_calculated');
@@ -141,7 +134,7 @@ export function pushCoastFireCalculated(
     source_page: window.location.pathname,
     content_type: 'coast_fire_calculator',
     coast_fire_status: status,
-    calculation_trigger: trigger,
+    calculation_trigger: 'submitted',
     years_to_retirement: Math.max(0, Math.min(77, Math.round(yearsToRetirement))),
   });
 }

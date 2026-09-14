@@ -100,7 +100,7 @@ describe("Coast FIRE calculator page", () => {
 
     expect(screen.getByRole("heading", { name: "You’re still building your coast." })).toBeInTheDocument();
     expect(screen.getByText(/short of your Coast FIRE number today/i)).toBeInTheDocument();
-    expect(pushCoastFireCalculated).toHaveBeenCalledWith("not_yet", 25, "submitted");
+    expect(pushCoastFireCalculated).toHaveBeenCalledWith("not_yet", 25);
     expect(JSON.stringify(jest.mocked(pushCoastFireCalculated).mock.calls)).not.toContain("100000");
   });
 
@@ -123,7 +123,7 @@ describe("Coast FIRE calculator page", () => {
     fireEvent.submit(container.querySelector("form")!);
 
     // Read back as 1.5M, not rejected as NaN and not truncated at the comma.
-    expect(pushCoastFireCalculated).toHaveBeenLastCalledWith("reached", 25, "submitted");
+    expect(pushCoastFireCalculated).toHaveBeenLastCalledWith("reached", 25);
     expect(screen.getAllByText("$1,500,000").length).toBeGreaterThanOrEqual(1);
   });
 
@@ -166,11 +166,10 @@ describe("Coast FIRE calculator page", () => {
     expect(screen.getByLabelText("Expected real return")).toHaveValue(5);
   });
 
-  it("reports the default scenario it shows before any submission", () => {
+  it("does not count the default scenario as an intentional calculation", () => {
     render(<CoastFireCalculator />);
 
-    expect(pushCoastFireCalculated).toHaveBeenCalledTimes(1);
-    expect(pushCoastFireCalculated).toHaveBeenCalledWith("reached", 25, "default");
+    expect(pushCoastFireCalculated).not.toHaveBeenCalled();
   });
 
   /*
@@ -290,6 +289,7 @@ describe("Coast FIRE calculator page", () => {
         annualRetirementIncome: 30_000,
         realReturnRate: 5,
         withdrawalRate: 4,
+        attribution: { landingPage: "/coast-fire-calculator" },
       });
       // The server recalculates, so a computed figure in the body would only be
       // an opportunity to disagree with it.

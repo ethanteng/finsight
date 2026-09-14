@@ -1,5 +1,6 @@
 import {
   calendarDateInTimeZone,
+  instantAtStartOfCalendarDate,
   isValidTimeZone,
   normalizeTimeZone,
   observationDateForCalendarDate,
@@ -23,5 +24,12 @@ describe('history time-zone helpers', () => {
     expect(observationDateForCalendarDate('2026-08-14').toISOString()).toBe(
       '2026-08-14T00:00:00.000Z'
     );
+  });
+
+  it.each([
+    ['2026-01-15', '2026-01-15T08:00:00.000Z'],
+    ['2026-09-13', '2026-09-13T07:00:00.000Z'],
+  ])('resolves Los Angeles midnight for %s across DST', (calendarDate, expected) => {
+    expect(instantAtStartOfCalendarDate(calendarDate, 'America/Los_Angeles').toISOString()).toBe(expected);
   });
 });

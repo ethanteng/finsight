@@ -1,4 +1,4 @@
-import { readGaClientId, isGaClientId } from "@/lib/ga-client-id";
+import { readGaClientId, readGaSessionId, isGaClientId } from "@/lib/ga-client-id";
 
 function setCookie(value: string): void {
   Object.defineProperty(document, "cookie", {
@@ -49,5 +49,20 @@ describe("isGaClientId", () => {
 
   it("rejects a non-string", () => {
     expect(isGaClientId(42)).toBe(false);
+  });
+});
+
+describe("readGaSessionId", () => {
+  it.each([
+    ["old GA4 cookie", "_ga_G0QBF34C7VK=GS1.1.1700000000.4.1", "1700000000"],
+    ["new GA4 cookie", "_ga_G0QBF34C7VK=GS2.1.s1700000001$o4$g1", "1700000001"],
+  ])("reads the session id from the %s", (_label, cookie, expected) => {
+    setCookie(cookie);
+    expect(readGaSessionId()).toBe(expected);
+  });
+
+  it("does not confuse the client-id cookie with a session", () => {
+    setCookie("_ga=GA1.1.123.456");
+    expect(readGaSessionId()).toBeNull();
   });
 });

@@ -10,7 +10,7 @@
  * split the ranking for the same query.
  */
 
-import { useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import {
   calculateCoastFire,
@@ -240,30 +240,6 @@ export function CoastFireCalculator({ children }: { children?: ReactNode }) {
    */
   const [hasSubmitted, setHasSubmitted] = useState(false);
   const resultRef = useRef<HTMLDivElement>(null);
-  const defaultResultReported = useRef(false);
-
-  /*
-   * The page answers before it is asked: the default scenario is on screen at
-   * first paint and the plan CTA is live beside it. Reporting only submitted
-   * runs would drop every visitor who accepts the defaults and clicks through,
-   * because the scorecard counts a plan CTA only when a result is timestamped
-   * ahead of it in the same session.
-   *
-   * useLayoutEffect (not useEffect) so the result timestamp is recorded before
-   * the browser paints and a fast click on the already-visible plan CTA cannot
-   * beat it. With only first-event timestamps, a CTA that lands first can never
-   * satisfy the scorecard's result-then-CTA ordering check.
-   */
-  useLayoutEffect(() => {
-    if (defaultResultReported.current) return;
-    defaultResultReported.current = true;
-    const initial = calculateCoastFire(DEFAULT_COAST_FIRE_INPUTS);
-    pushCoastFireCalculated(
-      initial.hasReachedCoastFire ? "reached" : "not_yet",
-      initial.yearsToRetirement,
-      "default",
-    );
-  }, []);
 
   const sensitivity = useMemo(() => {
     const rates = [
@@ -293,7 +269,6 @@ export function CoastFireCalculator({ children }: { children?: ReactNode }) {
       pushCoastFireCalculated(
         nextResult.hasReachedCoastFire ? "reached" : "not_yet",
         nextResult.yearsToRetirement,
-        "submitted",
       );
       requestAnimationFrame(() => resultRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" }));
     } catch (caught) {
