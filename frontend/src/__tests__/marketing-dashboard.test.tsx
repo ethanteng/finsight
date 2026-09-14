@@ -72,7 +72,7 @@ describe('marketing scorecard data states', () => {
         },
         coverage: {
           eventTrackingStartedAt: null,
-          fullyObservedThrough: null,
+          fullyObservedThrough: '2026-09-08',
           usesFallbackSnapshot: true,
         },
         firstParty: {
@@ -139,6 +139,7 @@ describe('marketing scorecard data states', () => {
     const delayedIndicators = screen.getAllByLabelText(/Delayed GA4 data from the daily export/);
     expect(liveIndicators.length).toBeGreaterThan(0);
     expect(delayedIndicators.length).toBeGreaterThan(0);
+    expect(screen.queryByText('Delayed · Sep 8')).not.toBeInTheDocument();
     expect(liveIndicators[0]).toHaveAttribute('title', expect.stringContaining('first-party database'));
     expect(delayedIndicators[0]).toHaveAttribute('title', expect.stringContaining('daily export'));
     await waitFor(() => expect(global.fetch).toHaveBeenCalledWith(
