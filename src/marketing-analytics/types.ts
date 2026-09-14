@@ -242,6 +242,8 @@ export interface BeachheadScorecard {
 }
 
 export interface BeachheadLeadCaptureMetric {
+  /** Calculator-result sessions in the same post-instrumentation window used for capture rate. */
+  resultSessions: MetricValue;
   /** Raw occurrences observed by GA4 after email tracking launched. */
   rawResultsEmailedEvents: MetricValue;
   /** Result sessions where a successful email request followed the result. */

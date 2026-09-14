@@ -254,6 +254,11 @@ function buildLeadCapture(args: {
   });
 
   return {
+    resultSessions: value(
+      current.results,
+      previous.results,
+      `Qualified calculator-result sessions observed since ${CALCULATOR_EMAIL_TRACKING_STARTED_AT}.`,
+    ),
     rawResultsEmailedEvents: value(
       current.rawEmailEvents,
       previous.rawEmailEvents,

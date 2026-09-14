@@ -274,12 +274,49 @@ describe('Coast FIRE beachhead scorecard', () => {
     });
 
     expect(report.coastFireJourney[0].value).toBe(1);
+    expect(report.leadCapture.coastFire.resultSessions.value).toBe(1);
     expect(report.leadCapture.coastFire.rawResultsEmailedEvents.value).toBe(1);
     expect(report.leadCapture.coastFire.resultsEmailedSessions.value).toBe(1);
     expect(report.leadCapture.coastFire.emailRequestExclusions).toEqual([]);
     expect(report.leadCapture.coastFire.captureRate.value).toBe(1);
     expect(report.leadCapture.coastFire.emailCtaOpenedSessions.value).toBe(1);
     expect(report.leadCapture.coastFire.emailTrialCompletedSessions.value).toBe(1);
+  });
+
+  it('uses the post-instrumentation result cohort for the email capture rate', () => {
+    const beforeTracking = session('coast-before-email-tracking', {
+      sessionDate: '2026-09-11',
+      acquisition: {
+        source: 'google', medium: 'cpc', channel: 'Paid', campaign: 'coast_fire',
+        landingPage: '/coast-fire-calculator', searchTerm: 'coast fire calculator',
+        creative: 'calculator', adId: '1', referrer: '',
+      },
+      eventCounts: { coast_fire_calculated: 1 },
+    });
+    const afterTracking = session('coast-after-email-tracking', {
+      sessionDate: '2026-09-12',
+      acquisition: {
+        source: 'google', medium: 'cpc', channel: 'Paid', campaign: 'coast_fire',
+        landingPage: '/coast-fire-calculator', searchTerm: 'coast fire calculator',
+        creative: 'email-results', adId: '2', referrer: '',
+      },
+      eventCounts: { coast_fire_calculated: 1, coast_fire_results_emailed: 1 },
+      firstEventAt: { coast_fire_calculated: 1_000_000, coast_fire_results_emailed: 2_000_000 },
+    });
+
+    const report = buildBeachheadScorecard({
+      current: [beforeTracking, afterTracking],
+      previous: [],
+      ga4State: 'live',
+      funnelCoverageComplete: true,
+      previousFunnelCoverageComplete: true,
+      firstParty,
+    });
+
+    expect(report.coastFireJourney[0].value).toBe(2);
+    expect(report.leadCapture.coastFire.resultSessions.value).toBe(1);
+    expect(report.leadCapture.coastFire.resultsEmailedSessions.value).toBe(1);
+    expect(report.leadCapture.coastFire.captureRate.value).toBe(1);
   });
 
   it('reconciles a raw email event that traffic-quality filtering excludes', () => {

@@ -22,6 +22,7 @@ const unavailableJourney = [
 }));
 
 const emptyLeadCapture = {
+  resultSessions: { value: null, previous: null, unit: 'count', source: 'Collecting' },
   rawResultsEmailedEvents: { value: 0, previous: 0, unit: 'count', source: 'GA4' },
   resultsEmailedSessions: { value: null, previous: null, unit: 'count', source: 'Collecting' },
   emailRequestExclusions: [],
@@ -128,6 +129,10 @@ describe('marketing scorecard data states', () => {
     expect(screen.getAllByText('Emailed results')).toHaveLength(2);
     expect(screen.getAllByText('Clicked email CTA')).toHaveLength(2);
     expect(screen.getAllByText('Started free trial')).toHaveLength(2);
+    expect(screen.getAllByText('Observed in this window; the email may have been sent earlier')).toHaveLength(2);
+    expect(screen.getAllByText('Email-attributed trial completions observed in this window')).toHaveLength(2);
+    expect(screen.queryByText('Conversion from emailed results unavailable')).not.toBeInTheDocument();
+    expect(screen.queryByText('Conversion from email CTA clicks unavailable')).not.toBeInTheDocument();
     expect(screen.getAllByText('Show measurement details')).toHaveLength(2);
     expect(screen.getAllByText('GA4 email events observed')).toHaveLength(2);
     await waitFor(() => expect(global.fetch).toHaveBeenCalledWith(

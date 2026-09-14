@@ -68,6 +68,7 @@ type LeadSummary = {
 };
 
 type LeadCapture = {
+  resultSessions: Metric;
   rawResultsEmailedEvents: Metric;
   resultsEmailedSessions: Metric;
   emailRequestExclusions: Array<{
@@ -157,11 +158,6 @@ function rateChange(current: number | null, previous: number | null): string | n
   return `${points >= 0 ? '+' : ''}${points.toFixed(1)} pts`;
 }
 
-function ratio(numerator: number | null, denominator: number | null): number | null {
-  if (numerator === null || denominator === null || denominator <= 0) return null;
-  return numerator / denominator;
-}
-
 function StatePill({ state }: { state: Report['beachhead']['state'] }) {
   const copy = state === 'measuring'
     ? 'Measuring'
@@ -223,20 +219,16 @@ function Journey({
 function LeadCapturePanel({
   capture,
   ga4PeriodEnd,
-  calculatorRuns,
 }: {
   capture: LeadCapture;
   ga4PeriodEnd: string;
-  calculatorRuns: number | null;
 }) {
   const excludedSessions = capture.emailRequestExclusions.reduce((sum, row) => sum + row.sessions, 0);
-  const emailCtaRate = ratio(capture.emailCtaOpenedSessions.value, capture.resultsEmailedSessions.value);
-  const trialRate = ratio(capture.emailTrialCompletedSessions.value, capture.emailCtaOpenedSessions.value);
   const funnel = [
     {
       label: 'Ran calculator',
-      value: calculatorRuns,
-      note: calculatorRuns === null ? 'GA4 session count unavailable' : 'Qualified result sessions',
+      value: capture.resultSessions.value,
+      note: capture.resultSessions.note || 'Qualified result sessions in the email-tracking window',
     },
     {
       label: 'Emailed results',
@@ -248,16 +240,12 @@ function LeadCapturePanel({
     {
       label: 'Clicked email CTA',
       value: capture.emailCtaOpenedSessions.value,
-      note: emailCtaRate === null
-        ? 'Conversion from emailed results unavailable'
-        : `${precisePercent(emailCtaRate)} of emailed results`,
+      note: 'Observed in this window; the email may have been sent earlier',
     },
     {
       label: 'Started free trial',
       value: capture.emailTrialCompletedSessions.value,
-      note: trialRate === null
-        ? 'Conversion from email CTA clicks unavailable'
-        : `${precisePercent(trialRate)} of email CTA clicks`,
+      note: 'Email-attributed trial completions observed in this window',
     },
   ];
   const cells = [
@@ -281,7 +269,7 @@ function LeadCapturePanel({
         <div>
           <p className="text-[10px] font-extrabold uppercase tracking-[.14em] text-[#49725a]">Known-prospect branch</p>
           <h3 className="mt-1 text-base font-semibold tracking-[-.025em]">Email me these results</h3>
-          <p className="mt-1 max-w-4xl text-[10px] leading-4 text-[#66736b]">People are represented by qualified GA4 sessions in the selected reporting window.</p>
+          <p className="mt-1 max-w-4xl text-[10px] leading-4 text-[#66736b]">Calculator runs and email requests share the email-tracking window. Later email clicks and trials are outcomes observed in the selected reporting window.</p>
         </div>
       </div>
       <SourcePill state={capture.firstParty.state} />
@@ -456,7 +444,6 @@ export default function MarketingDashboardPage() {
             <LeadCapturePanel
               capture={report.beachhead.leadCapture.coastFire}
               ga4PeriodEnd={report.period.end}
-              calculatorRuns={report.beachhead.coastFireJourney.find(stage => stage.id === 'calculator_result')?.value ?? null}
             />
           </section>
 
@@ -493,7 +480,6 @@ export default function MarketingDashboardPage() {
             <LeadCapturePanel
               capture={report.beachhead.leadCapture.retirement}
               ga4PeriodEnd={report.period.end}
-              calculatorRuns={report.beachhead.currentCalculatorBaseline.find(stage => stage.id === 'calculator_result')?.value ?? null}
             />
           </section>
 
