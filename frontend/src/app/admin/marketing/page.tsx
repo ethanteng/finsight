@@ -158,6 +158,34 @@ function rateChange(current: number | null, previous: number | null): string | n
   return `${points >= 0 ? '+' : ''}${points.toFixed(1)} pts`;
 }
 
+function DataTiming({
+  kind,
+  observedThrough,
+}: {
+  kind: 'live' | 'delayed';
+  observedThrough?: string | null;
+}) {
+  const isLive = kind === 'live';
+  const label = isLive
+    ? 'Live'
+    : observedThrough
+      ? `Delayed · ${shortDate(observedThrough)}`
+      : 'Delayed';
+  const description = isLive
+    ? 'Live data, queried from the first-party database when this page was refreshed; selected date-window limits still apply.'
+    : observedThrough
+      ? `Delayed GA4 data from the daily export, complete through ${freshness(observedThrough)}.`
+      : 'Delayed GA4 data from the daily export; the latest complete date is unavailable.';
+  return <span
+    aria-label={description}
+    title={description}
+    className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2 py-1 text-[8px] font-extrabold uppercase tracking-[.08em] ${isLive ? 'bg-[#e5f0e6] text-[#3d6a50]' : 'bg-[#f3ead8] text-[#80601e]'}`}
+  >
+    <span className={`h-1.5 w-1.5 rounded-full ${isLive ? 'bg-[#4d8b65]' : 'bg-[#b3852e]'}`} />
+    {label}
+  </span>;
+}
+
 function StatePill({ state }: { state: Report['beachhead']['state'] }) {
   const copy = state === 'measuring'
     ? 'Measuring'
@@ -182,10 +210,12 @@ function Journey({
   stages,
   compare,
   unavailableLabel,
+  observedThrough,
 }: {
   stages: JourneyStage[];
   compare: boolean;
   unavailableLabel: string;
+  observedThrough: string | null;
 }) {
   return <div className="mt-6 grid gap-3 lg:grid-cols-4">
     {stages.map((stage, index) => {
@@ -195,7 +225,10 @@ function Journey({
         <article className="h-full rounded-[18px] border border-[#102319]/10 bg-[#f8f7ef] p-4 sm:p-5">
           <div className="flex items-center justify-between gap-3">
             <span className="grid h-7 w-7 place-items-center rounded-full bg-[#e4eadf] text-xs font-extrabold text-[#315d45]">{index + 1}</span>
-            {countDelta && <span className="rounded-full bg-[#e4eadf] px-2 py-1 text-[10px] font-bold text-[#315d45]">{countDelta}</span>}
+            <div className="flex flex-wrap items-center justify-end gap-1.5">
+              {countDelta && <span className="rounded-full bg-[#e4eadf] px-2 py-1 text-[10px] font-bold text-[#315d45]">{countDelta}</span>}
+              <DataTiming kind="delayed" observedThrough={observedThrough} />
+            </div>
           </div>
           <div className="mt-5 text-[clamp(1.8rem,4vw,2.6rem)] font-semibold leading-none tracking-[-.055em] tabular-nums">
             {count(stage.value)}
@@ -219,11 +252,15 @@ function Journey({
 function LeadCapturePanel({
   capture,
   ga4PeriodEnd,
+  ga4ObservedThrough,
 }: {
   capture: LeadCapture;
   ga4PeriodEnd: string;
+  ga4ObservedThrough: string | null;
 }) {
   const excludedSessions = capture.emailRequestExclusions.reduce((sum, row) => sum + row.sessions, 0);
+  const firstPartyTiming = capture.firstParty.state === 'live' ? 'live' as const : null;
+  const pendingFirstPartyTiming = capture.pendingFirstParty.state === 'live' ? 'live' as const : null;
   const funnel = [
     {
       label: 'Ran calculator',
@@ -248,19 +285,19 @@ function LeadCapturePanel({
       note: 'Email-attributed trial completions observed in this window',
     },
   ];
-  const cells = [
-    ['GA4 email events observed', count(capture.rawResultsEmailedEvents.value), capture.rawResultsEmailedEvents.note],
-    ['Qualified GA4 email sessions', count(capture.resultsEmailedSessions.value), capture.resultsEmailedSessions.note],
-    ['Excluded or unmatched sessions', count(excludedSessions), excludedSessions > 0 ? 'See the reconciliation below.' : 'Every observed session qualified.'],
-    ['GA4 capture rate', precisePercent(capture.captureRate.value), capture.captureRate.note],
-    ['GA4 email CTA opens', count(capture.emailCtaOpenedSessions.value), capture.emailCtaOpenedSessions.note],
-    ['GA4 email-path trials', count(capture.emailTrialCompletedSessions.value), capture.emailTrialCompletedSessions.note],
-    ['First-party emails sent', count(capture.firstParty.emailsSent), `${precisePercent(capture.firstParty.deliveryRate)} of stored requests`],
-    ['Unique lead emails', count(capture.firstParty.uniqueEmails), `${count(capture.firstParty.mailerliteSynced)} synced to MailerLite`],
-    ['Attribution captured', count(capture.firstParty.attributionCaptured), `${precisePercent(capture.firstParty.attributionRate)} of stored requests · ${count(capture.firstParty.paidAttributionCaptured)} paid`],
-    ['First-party continuations', count(capture.firstParty.continuedToSignup), `${precisePercent(capture.firstParty.continuationRate)} of delivered emails`],
-    ['Matched accounts', count(capture.firstParty.matchedAccounts), `${precisePercent(capture.firstParty.accountMatchRate)} of unique lead emails`],
-    ['Pending after GA4 cutoff', count(capture.pendingFirstParty.emailsSent), `First-party emails since ${shortDate(ga4PeriodEnd)}; not compared until the GA4 export settles.`],
+  const cells: Array<{ label: string; value: string; note?: string; timing: 'live' | 'delayed' | null }> = [
+    { label: 'GA4 email events observed', value: count(capture.rawResultsEmailedEvents.value), note: capture.rawResultsEmailedEvents.note, timing: 'delayed' },
+    { label: 'Qualified GA4 email sessions', value: count(capture.resultsEmailedSessions.value), note: capture.resultsEmailedSessions.note, timing: 'delayed' },
+    { label: 'Excluded or unmatched sessions', value: count(excludedSessions), note: excludedSessions > 0 ? 'See the reconciliation below.' : 'Every observed session qualified.', timing: 'delayed' },
+    { label: 'GA4 capture rate', value: precisePercent(capture.captureRate.value), note: capture.captureRate.note, timing: 'delayed' },
+    { label: 'GA4 email CTA opens', value: count(capture.emailCtaOpenedSessions.value), note: capture.emailCtaOpenedSessions.note, timing: 'delayed' },
+    { label: 'GA4 email-path trials', value: count(capture.emailTrialCompletedSessions.value), note: capture.emailTrialCompletedSessions.note, timing: 'delayed' },
+    { label: 'First-party emails sent', value: count(capture.firstParty.emailsSent), note: `${precisePercent(capture.firstParty.deliveryRate)} of stored requests`, timing: firstPartyTiming },
+    { label: 'Unique lead emails', value: count(capture.firstParty.uniqueEmails), note: `${count(capture.firstParty.mailerliteSynced)} synced to MailerLite`, timing: firstPartyTiming },
+    { label: 'Attribution captured', value: count(capture.firstParty.attributionCaptured), note: `${precisePercent(capture.firstParty.attributionRate)} of stored requests · ${count(capture.firstParty.paidAttributionCaptured)} paid`, timing: firstPartyTiming },
+    { label: 'First-party continuations', value: count(capture.firstParty.continuedToSignup), note: `${precisePercent(capture.firstParty.continuationRate)} of delivered emails`, timing: firstPartyTiming },
+    { label: 'Matched accounts', value: count(capture.firstParty.matchedAccounts), note: `${precisePercent(capture.firstParty.accountMatchRate)} of unique lead emails`, timing: firstPartyTiming },
+    { label: 'Pending after GA4 cutoff', value: count(capture.pendingFirstParty.emailsSent), note: `First-party emails since ${shortDate(ga4PeriodEnd)}; not compared until the GA4 export settles.`, timing: pendingFirstPartyTiming },
   ];
   return <div className="mt-6 rounded-[18px] border border-[#102319]/10 bg-[#edf1e9] p-4 sm:p-5">
     <div className="flex flex-wrap items-start justify-between gap-3">
@@ -277,9 +314,12 @@ function LeadCapturePanel({
     <div className="mt-4 grid gap-3 md:grid-cols-2 lg:grid-cols-4">
       {funnel.map((step, index) => <div key={step.label} className="relative min-w-0">
         <div className="h-full rounded-xl bg-[#fffdf5] px-4 py-4">
-          <div className="flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-[.1em] text-[#49725a]">
-            <span className="grid h-6 w-6 place-items-center rounded-full bg-[#e4eadf] text-[#315d45]">{index + 1}</span>
-            {step.label}
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-[.1em] text-[#49725a]">
+              <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-[#e4eadf] text-[#315d45]">{index + 1}</span>
+              {step.label}
+            </div>
+            <DataTiming kind="delayed" observedThrough={ga4ObservedThrough} />
           </div>
           <div className="mt-4 text-3xl font-semibold tracking-[-.05em] tabular-nums">{count(step.value)}</div>
           <div className="mt-2 text-[10px] leading-4 text-[#7b867f]">{step.note}</div>
@@ -295,10 +335,13 @@ function LeadCapturePanel({
       <div className="border-t border-[#102319]/10 p-4">
         <p className="text-[10px] leading-4 text-[#66736b]">GA4 and first-party comparison rows both cover {shortDate(capture.firstParty.periodStart)} through {shortDate(capture.firstParty.periodEnd)}. Activity after {shortDate(ga4PeriodEnd)} is separated as pending until the daily GA4 export settles. {capture.firstParty.note}</p>
         <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
-          {cells.map(([label, value, note]) => <div key={label} className="rounded-xl bg-[#f8f7ef] px-4 py-3">
-            <div className="text-2xl font-semibold tracking-[-.04em] tabular-nums">{value}</div>
-            <div className="mt-1 text-[11px] font-bold text-[#66736b]">{label}</div>
-            <div className="mt-1 text-[9px] leading-4 text-[#89938c]">{note}</div>
+          {cells.map(cell => <div key={cell.label} className="rounded-xl bg-[#f8f7ef] px-4 py-3">
+            <div className="flex items-start justify-between gap-2">
+              <div className="text-2xl font-semibold tracking-[-.04em] tabular-nums">{cell.value}</div>
+              {cell.timing ? <DataTiming kind={cell.timing} observedThrough={cell.timing === 'delayed' ? ga4ObservedThrough : undefined} /> : null}
+            </div>
+            <div className="mt-1 text-[11px] font-bold text-[#66736b]">{cell.label}</div>
+            <div className="mt-1 text-[9px] leading-4 text-[#89938c]">{cell.note}</div>
           </div>)}
         </div>
         {capture.emailRequestExclusions.length > 0 && <div className="mt-3 rounded-xl border border-[#9d6a16]/15 bg-[#f8f1df] px-4 py-3">
@@ -318,16 +361,21 @@ function OutcomeCard({
   metric,
   numerator,
   denominator,
+  showLiveTiming,
 }: {
   icon: ReactNode;
   label: string;
   metric: Metric;
   numerator: number | null;
   denominator: number | null;
+  showLiveTiming: boolean;
 }) {
   return <article className="rounded-[18px] border border-[#102319]/10 bg-[#fffdf5] p-5 shadow-[0_14px_36px_rgba(16,35,25,.045)]">
     <span className="grid h-9 w-9 place-items-center rounded-xl bg-[#e9eee5] text-[#397052]">{icon}</span>
-    <div className="mt-5 text-3xl font-semibold tracking-[-.05em] tabular-nums">{percent(metric.value)}</div>
+    <div className="mt-5 flex items-start justify-between gap-3">
+      <div className="text-3xl font-semibold tracking-[-.05em] tabular-nums">{percent(metric.value)}</div>
+      {showLiveTiming ? <DataTiming kind="live" /> : null}
+    </div>
     <h3 className="mt-2 text-sm font-bold">{label}</h3>
     <p className="mt-1 text-xs text-[#66736b]">{numerator === null || denominator === null ? 'Unavailable' : `${count(numerator)} of ${count(denominator)} new accounts`}</p>
     <p className="mt-3 text-[10px] leading-4 text-[#7b867f]">{metric.note}</p>
@@ -378,6 +426,11 @@ export default function MarketingDashboardPage() {
   useEffect(() => { void load(); }, [load]);
 
   const ga4Diagnostic = report?.diagnostics.find(source => source.id === 'ga4');
+  const firstPartyDiagnostic = report?.diagnostics.find(source => source.id === 'first_party');
+  const ga4ObservedThrough = ga4Diagnostic?.state === 'live'
+    ? report?.coverage.fullyObservedThrough || null
+    : null;
+  const firstPartyLive = firstPartyDiagnostic?.state === 'live';
   const journeyUnavailableLabel = report?.beachhead.state === 'prelaunch'
     ? 'Not launched'
     : report?.beachhead.state === 'needs_configuration'
@@ -440,10 +493,16 @@ export default function MarketingDashboardPage() {
               <AlertTriangle className="mr-2 inline" size={16} /><strong>{report.beachhead.state === 'error' ? 'GA4 reporting failed.' : 'GA4 reporting needs configuration.'}</strong>{' '}{ga4Diagnostic?.detail || 'Open the data-source diagnostics below for details.'}
             </div>}
 
-            <Journey stages={report.beachhead.coastFireJourney} compare={filters.compare} unavailableLabel={journeyUnavailableLabel} />
+            <Journey
+              stages={report.beachhead.coastFireJourney}
+              compare={filters.compare}
+              unavailableLabel={journeyUnavailableLabel}
+              observedThrough={ga4ObservedThrough}
+            />
             <LeadCapturePanel
               capture={report.beachhead.leadCapture.coastFire}
               ga4PeriodEnd={report.period.end}
+              ga4ObservedThrough={ga4ObservedThrough}
             />
           </section>
 
@@ -473,13 +532,25 @@ export default function MarketingDashboardPage() {
                   ['Answered', count(report.retirementCalculatorHealth.answered)],
                   ['Answer rate', precisePercent(report.retirementCalculatorHealth.answerRate)],
                   ['Rejected', count(report.retirementCalculatorHealth.rejected)],
-                ].map(([label, value]) => <div key={label} className="rounded-xl bg-[#fffdf5] px-4 py-3"><div className="text-2xl font-semibold tracking-[-.04em] tabular-nums">{value}</div><div className="mt-1 text-[11px] font-bold text-[#66736b]">{label}</div></div>)}
+                ].map(([label, value]) => <div key={label} className="rounded-xl bg-[#fffdf5] px-4 py-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="text-2xl font-semibold tracking-[-.04em] tabular-nums">{value}</div>
+                    {report.retirementCalculatorHealth.state === 'live' ? <DataTiming kind="live" /> : null}
+                  </div>
+                  <div className="mt-1 text-[11px] font-bold text-[#66736b]">{label}</div>
+                </div>)}
               </div>
             </div>}
-            <Journey stages={report.beachhead.currentCalculatorBaseline} compare={filters.compare} unavailableLabel={journeyUnavailableLabel} />
+            <Journey
+              stages={report.beachhead.currentCalculatorBaseline}
+              compare={filters.compare}
+              unavailableLabel={journeyUnavailableLabel}
+              observedThrough={ga4ObservedThrough}
+            />
             <LeadCapturePanel
               capture={report.beachhead.leadCapture.retirement}
               ga4PeriodEnd={report.period.end}
+              ga4ObservedThrough={ga4ObservedThrough}
             />
           </section>
 
@@ -490,9 +561,9 @@ export default function MarketingDashboardPage() {
               <p className="mt-2 text-sm leading-6 text-[#66736b]">These are the right outcomes—financial connection, activation, and payment. New calculator-email leads now preserve acquisition context, while these cards still describe all new accounts until the cohort-level join is added.</p>
             </div>
             <div className="mt-5 grid gap-4 md:grid-cols-3">
-              <OutcomeCard icon={<Link2 size={17} />} label="Connected financial data" metric={report.beachhead.downstream.financialConnectionRate} numerator={report.firstParty.createdAccountsWithFinancialConnection} denominator={report.firstParty.accountsCreated} />
-              <OutcomeCard icon={<MessageCircle size={17} />} label="Asked a planning question" metric={report.beachhead.downstream.activationRate} numerator={report.firstParty.createdAccountsWithConversation} denominator={report.firstParty.accountsCreated} />
-              <OutcomeCard icon={<CircleDollarSign size={18} />} label="Paid now" metric={report.beachhead.downstream.paidRate} numerator={report.firstParty.createdAccountsCurrentlyPaid} denominator={report.firstParty.accountsCreated} />
+              <OutcomeCard icon={<Link2 size={17} />} label="Connected financial data" metric={report.beachhead.downstream.financialConnectionRate} numerator={report.firstParty.createdAccountsWithFinancialConnection} denominator={report.firstParty.accountsCreated} showLiveTiming={firstPartyLive} />
+              <OutcomeCard icon={<MessageCircle size={17} />} label="Asked a planning question" metric={report.beachhead.downstream.activationRate} numerator={report.firstParty.createdAccountsWithConversation} denominator={report.firstParty.accountsCreated} showLiveTiming={firstPartyLive} />
+              <OutcomeCard icon={<CircleDollarSign size={18} />} label="Paid now" metric={report.beachhead.downstream.paidRate} numerator={report.firstParty.createdAccountsCurrentlyPaid} denominator={report.firstParty.accountsCreated} showLiveTiming={firstPartyLive} />
             </div>
           </section>
 
