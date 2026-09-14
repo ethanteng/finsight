@@ -157,6 +157,11 @@ function rateChange(current: number | null, previous: number | null): string | n
   return `${points >= 0 ? '+' : ''}${points.toFixed(1)} pts`;
 }
 
+function ratio(numerator: number | null, denominator: number | null): number | null {
+  if (numerator === null || denominator === null || denominator <= 0) return null;
+  return numerator / denominator;
+}
+
 function StatePill({ state }: { state: Report['beachhead']['state'] }) {
   const copy = state === 'measuring'
     ? 'Measuring'
@@ -215,8 +220,46 @@ function Journey({
   </div>;
 }
 
-function LeadCapturePanel({ capture, ga4PeriodEnd }: { capture: LeadCapture; ga4PeriodEnd: string }) {
+function LeadCapturePanel({
+  capture,
+  ga4PeriodEnd,
+  calculatorRuns,
+}: {
+  capture: LeadCapture;
+  ga4PeriodEnd: string;
+  calculatorRuns: number | null;
+}) {
   const excludedSessions = capture.emailRequestExclusions.reduce((sum, row) => sum + row.sessions, 0);
+  const emailCtaRate = ratio(capture.emailCtaOpenedSessions.value, capture.resultsEmailedSessions.value);
+  const trialRate = ratio(capture.emailTrialCompletedSessions.value, capture.emailCtaOpenedSessions.value);
+  const funnel = [
+    {
+      label: 'Ran calculator',
+      value: calculatorRuns,
+      note: calculatorRuns === null ? 'GA4 session count unavailable' : 'Qualified result sessions',
+    },
+    {
+      label: 'Emailed results',
+      value: capture.resultsEmailedSessions.value,
+      note: capture.captureRate.value === null
+        ? 'Conversion from calculator runs unavailable'
+        : `${precisePercent(capture.captureRate.value)} of calculator runs`,
+    },
+    {
+      label: 'Clicked email CTA',
+      value: capture.emailCtaOpenedSessions.value,
+      note: emailCtaRate === null
+        ? 'Conversion from emailed results unavailable'
+        : `${precisePercent(emailCtaRate)} of emailed results`,
+    },
+    {
+      label: 'Started free trial',
+      value: capture.emailTrialCompletedSessions.value,
+      note: trialRate === null
+        ? 'Conversion from email CTA clicks unavailable'
+        : `${precisePercent(trialRate)} of email CTA clicks`,
+    },
+  ];
   const cells = [
     ['GA4 email events observed', count(capture.rawResultsEmailedEvents.value), capture.rawResultsEmailedEvents.note],
     ['Qualified GA4 email sessions', count(capture.resultsEmailedSessions.value), capture.resultsEmailedSessions.note],
@@ -238,24 +281,46 @@ function LeadCapturePanel({ capture, ga4PeriodEnd }: { capture: LeadCapture; ga4
         <div>
           <p className="text-[10px] font-extrabold uppercase tracking-[.14em] text-[#49725a]">Known-prospect branch</p>
           <h3 className="mt-1 text-base font-semibold tracking-[-.025em]">Email me these results</h3>
-          <p className="mt-1 max-w-4xl text-[10px] leading-4 text-[#66736b]">GA4 and first-party comparison rows both cover {shortDate(capture.firstParty.periodStart)} through {shortDate(capture.firstParty.periodEnd)}. Activity after {shortDate(ga4PeriodEnd)} is separated as pending until the daily GA4 export settles. {capture.firstParty.note}</p>
+          <p className="mt-1 max-w-4xl text-[10px] leading-4 text-[#66736b]">People are represented by qualified GA4 sessions in the selected reporting window.</p>
         </div>
       </div>
       <SourcePill state={capture.firstParty.state} />
     </div>
-    <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
-      {cells.map(([label, value, note]) => <div key={label} className="rounded-xl bg-[#fffdf5] px-4 py-3">
-        <div className="text-2xl font-semibold tracking-[-.04em] tabular-nums">{value}</div>
-        <div className="mt-1 text-[11px] font-bold text-[#66736b]">{label}</div>
-        <div className="mt-1 text-[9px] leading-4 text-[#89938c]">{note}</div>
+    <div className="mt-4 grid gap-3 md:grid-cols-2 lg:grid-cols-4">
+      {funnel.map((step, index) => <div key={step.label} className="relative min-w-0">
+        <div className="h-full rounded-xl bg-[#fffdf5] px-4 py-4">
+          <div className="flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-[.1em] text-[#49725a]">
+            <span className="grid h-6 w-6 place-items-center rounded-full bg-[#e4eadf] text-[#315d45]">{index + 1}</span>
+            {step.label}
+          </div>
+          <div className="mt-4 text-3xl font-semibold tracking-[-.05em] tabular-nums">{count(step.value)}</div>
+          <div className="mt-2 text-[10px] leading-4 text-[#7b867f]">{step.note}</div>
+        </div>
+        {index < funnel.length - 1 && <span className="absolute -right-5 top-1/2 z-10 hidden h-7 w-7 -translate-y-1/2 place-items-center rounded-full border border-[#102319]/10 bg-[#edf1e9] text-[#49725a] lg:grid"><ArrowRight size={13} /></span>}
       </div>)}
     </div>
-    {capture.emailRequestExclusions.length > 0 && <div className="mt-3 rounded-xl border border-[#9d6a16]/15 bg-[#f8f1df] px-4 py-3">
-      <div className="text-[10px] font-extrabold uppercase tracking-[.1em] text-[#775617]">GA4 reconciliation</div>
-      <ul className="mt-2 space-y-1">
-        {capture.emailRequestExclusions.map(row => <li key={row.reason} className="text-[10px] leading-4 text-[#6f654c]">{count(row.sessions)} session{row.sessions === 1 ? '' : 's'}: {row.label}.</li>)}
-      </ul>
-    </div>}
+    <details className="group mt-4 rounded-xl border border-[#102319]/10 bg-[#fffdf5]">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-4 py-3 text-xs font-bold text-[#486657]">
+        <span>Show measurement details</span>
+        <ChevronDown size={15} className="transition-transform group-open:rotate-180" />
+      </summary>
+      <div className="border-t border-[#102319]/10 p-4">
+        <p className="text-[10px] leading-4 text-[#66736b]">GA4 and first-party comparison rows both cover {shortDate(capture.firstParty.periodStart)} through {shortDate(capture.firstParty.periodEnd)}. Activity after {shortDate(ga4PeriodEnd)} is separated as pending until the daily GA4 export settles. {capture.firstParty.note}</p>
+        <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+          {cells.map(([label, value, note]) => <div key={label} className="rounded-xl bg-[#f8f7ef] px-4 py-3">
+            <div className="text-2xl font-semibold tracking-[-.04em] tabular-nums">{value}</div>
+            <div className="mt-1 text-[11px] font-bold text-[#66736b]">{label}</div>
+            <div className="mt-1 text-[9px] leading-4 text-[#89938c]">{note}</div>
+          </div>)}
+        </div>
+        {capture.emailRequestExclusions.length > 0 && <div className="mt-3 rounded-xl border border-[#9d6a16]/15 bg-[#f8f1df] px-4 py-3">
+          <div className="text-[10px] font-extrabold uppercase tracking-[.1em] text-[#775617]">GA4 reconciliation</div>
+          <ul className="mt-2 space-y-1">
+            {capture.emailRequestExclusions.map(row => <li key={row.reason} className="text-[10px] leading-4 text-[#6f654c]">{count(row.sessions)} session{row.sessions === 1 ? '' : 's'}: {row.label}.</li>)}
+          </ul>
+        </div>}
+      </div>
+    </details>
   </div>;
 }
 
@@ -388,7 +453,11 @@ export default function MarketingDashboardPage() {
             </div>}
 
             <Journey stages={report.beachhead.coastFireJourney} compare={filters.compare} unavailableLabel={journeyUnavailableLabel} />
-            <LeadCapturePanel capture={report.beachhead.leadCapture.coastFire} ga4PeriodEnd={report.period.end} />
+            <LeadCapturePanel
+              capture={report.beachhead.leadCapture.coastFire}
+              ga4PeriodEnd={report.period.end}
+              calculatorRuns={report.beachhead.coastFireJourney.find(stage => stage.id === 'calculator_result')?.value ?? null}
+            />
           </section>
 
           <section className="mt-6 rounded-[24px] border border-[#102319]/10 bg-[#fffdf5] p-5 shadow-[0_18px_45px_rgba(16,35,25,.05)] sm:p-7">
@@ -421,7 +490,11 @@ export default function MarketingDashboardPage() {
               </div>
             </div>}
             <Journey stages={report.beachhead.currentCalculatorBaseline} compare={filters.compare} unavailableLabel={journeyUnavailableLabel} />
-            <LeadCapturePanel capture={report.beachhead.leadCapture.retirement} ga4PeriodEnd={report.period.end} />
+            <LeadCapturePanel
+              capture={report.beachhead.leadCapture.retirement}
+              ga4PeriodEnd={report.period.end}
+              calculatorRuns={report.beachhead.currentCalculatorBaseline.find(stage => stage.id === 'calculator_result')?.value ?? null}
+            />
           </section>
 
           <section className="mt-10">

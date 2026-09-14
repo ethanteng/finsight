@@ -124,6 +124,12 @@ describe('marketing scorecard data states', () => {
     expect(screen.getByText('GA4 reporting needs configuration.')).toBeInTheDocument();
     expect(screen.getAllByText('Add a read-only BigQuery service account to the backend environment.')).toHaveLength(2);
     expect(screen.getAllByText(/GA4 and first-party comparison rows both cover Aug 12 through Sep 8/)).toHaveLength(2);
+    expect(screen.getAllByText('Ran calculator')).toHaveLength(2);
+    expect(screen.getAllByText('Emailed results')).toHaveLength(2);
+    expect(screen.getAllByText('Clicked email CTA')).toHaveLength(2);
+    expect(screen.getAllByText('Started free trial')).toHaveLength(2);
+    expect(screen.getAllByText('Show measurement details')).toHaveLength(2);
+    expect(screen.getAllByText('GA4 email events observed')).toHaveLength(2);
     await waitFor(() => expect(global.fetch).toHaveBeenCalledWith(
       'https://api.example.test/admin/marketing?days=28&compare=true',
       expect.objectContaining({ headers: expect.objectContaining({ Authorization: 'Bearer test-token' }) }),
