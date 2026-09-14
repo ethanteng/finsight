@@ -390,11 +390,18 @@ export async function getMarketingDashboard(filters: MarketingFilters): Promise<
     ? previous.filter(session => session.sessionDate >= trackingStartedAt)
     : [];
   const previousFunnelCovered = Boolean(trackingStartedAt && period.previousStart >= trackingStartedAt);
+  // Email reconciliation compares raw observed events to the scorecard cohort.
+  // With the default traffic-quality filter that means "all observed" vs
+  // "included humans." An explicit trafficQuality selection must narrow both
+  // sides: otherwise production sessions omitted by the selection are labeled
+  // as internal/developer/automated exclusions.
+  const beachheadRawCurrent = filters.trafficQuality ? current : currentPopulation;
+  const beachheadRawPrevious = filters.trafficQuality ? previous : previousPopulation;
   const beachhead = buildBeachheadScorecard({
     current,
     previous,
-    rawCurrent: currentPopulation,
-    rawPrevious: previousPopulation,
+    rawCurrent: beachheadRawCurrent,
+    rawPrevious: beachheadRawPrevious,
     ga4State: ga4.state,
     funnelCoverageComplete,
     previousFunnelCoverageComplete: previousFunnelCovered,
