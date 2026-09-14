@@ -135,6 +135,12 @@ describe('marketing scorecard data states', () => {
     expect(screen.queryByText('Conversion from email CTA clicks unavailable')).not.toBeInTheDocument();
     expect(screen.getAllByText('Show measurement details')).toHaveLength(2);
     expect(screen.getAllByText('GA4 email events observed')).toHaveLength(2);
+    const liveIndicators = screen.getAllByLabelText(/Live data, queried from the first-party database/);
+    const delayedIndicators = screen.getAllByLabelText(/Delayed GA4 data from the daily export/);
+    expect(liveIndicators.length).toBeGreaterThan(0);
+    expect(delayedIndicators.length).toBeGreaterThan(0);
+    expect(liveIndicators[0]).toHaveAttribute('title', expect.stringContaining('first-party database'));
+    expect(delayedIndicators[0]).toHaveAttribute('title', expect.stringContaining('daily export'));
     await waitFor(() => expect(global.fetch).toHaveBeenCalledWith(
       'https://api.example.test/admin/marketing?days=28&compare=true',
       expect.objectContaining({ headers: expect.objectContaining({ Authorization: 'Bearer test-token' }) }),
