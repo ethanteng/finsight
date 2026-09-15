@@ -201,11 +201,19 @@ describe("redactAnalyticsUrl", () => {
     expect(
       redact(
         "https://asklinc.com/?utm_source=google&utm_medium=cpc&utm_campaign=retire-at-62" +
-          "&utm_term=retire+at+62&utm_content=variant-b&gclid=click_123&ref=partner",
+          "&utm_term=retire+at+62&utm_content=variant-b&gclid=click_123",
       ),
     ).toBe(
       "https://asklinc.com/?utm_source=google&utm_medium=cpc&utm_campaign=retire-at-62" +
-        "&utm_term=retire+at+62&utm_content=variant-b&gclid=click_123&ref=partner",
+        "&utm_term=retire+at+62&utm_content=variant-b&gclid=click_123",
+    );
+  });
+
+  it("drops ref, which names the handover bearer token and attributes nothing", () => {
+    // lib/calculator-handover.ts uses ?ref= for a one-time token; the
+    // homepage's own ref is read and discarded. Keeping it could only lose.
+    expect(redact("https://asklinc.com/getstarted?ref=abc123def456")).toBe(
+      "https://asklinc.com/getstarted",
     );
   });
 

@@ -116,6 +116,13 @@ export function isMarketingPath(pathname: string): boolean {
  * Campaign attribution is the only thing measuring a marketing site needs
  * from a query string, so that is all this lists. Add a parameter here only
  * once it is clear it can never carry anything about a specific person.
+ *
+ * `ref` is deliberately absent despite looking like attribution. It is the
+ * name the calculator results-email handover uses for its one-time bearer
+ * token (lib/calculator-handover.ts), and the homepage's own `ref` is a
+ * legacy parameter that is read and discarded rather than attributed. So it
+ * would record nothing we use while standing ready to record a token the
+ * moment one reaches a rendered URL.
  */
 export const MEASURED_QUERY_PARAMS = [
   "utm_source",
@@ -124,7 +131,6 @@ export const MEASURED_QUERY_PARAMS = [
   "utm_term",
   "utm_content",
   "gclid",
-  "ref",
 ] as const;
 
 /**
