@@ -27,6 +27,60 @@
   }
   .use-case-hero .back-link { margin-bottom: 18px; font-size: 14px; }
   .case-trial-actions .microcopy { margin-top: 12px; }
+
+  @media (max-width: 980px) {
+    .demo-landing-hero { min-height: 0; grid-template-columns: 1fr; gap: 54px; padding-block: 82px; }
+    .demo-landing-hero-copy h1 { max-width: 820px; }
+    .demo-landing-map { width: min(100%,720px); }
+    .demo-experience-heading { grid-template-columns: 1fr; gap: 24px; align-items: start; }
+    .demo-experience-heading > p { max-width: 700px; }
+    .demo-value-section .editorial-heading { grid-template-columns: 1fr; gap: 22px; }
+    .demo-value-grid article { min-height: 350px; padding-inline: 25px; }
+    .demo-trust-band-inner { grid-template-columns: 1fr; gap: 34px; }
+    .demo-faq-section { grid-template-columns: 1fr; gap: 45px; }
+  }
+
+  @media (max-width: 760px) {
+    .demo-landing-hero { display: block; padding-block: 46px 54px; }
+    .demo-landing-hero-copy h1 { margin-block: 14px 18px; font-size: clamp(38px,10.5vw,50px); }
+    .demo-landing-hero-copy > p:not(.section-kicker,.demo-sample-note) { font-size: 17px; }
+    .demo-landing-hero-copy .hero-actions { margin-top: 25px; }
+    .demo-landing-hero-copy .hero-actions .text-link,.demo-sample-note,.demo-landing-map { display: none; }
+    .demo-experience-section { padding-block: 30px 52px; }
+    .demo-experience-heading { display: none; }
+    .demo-experience-cta { align-items: flex-start; flex-direction: column; padding: 23px; }
+    /* Keep FAQ visible: the page emits FAQPage JSON-LD, and Google mobile-first
+       indexing treats display:none FAQ markup as ineligible / mismatched. */
+    .demo-value-section,.demo-trust-band { display: none; }
+    :scope.demo-landing-page > .page-cta { padding-block: 42px; text-align: left; }
+    :scope.demo-landing-page > .page-cta .page-cta-inner { align-items: flex-start; }
+    :scope.demo-landing-page > .page-cta h2 { max-width: 540px; font-size: clamp(30px,8vw,40px); }
+    :scope.demo-landing-page > .page-cta .button { margin-top: 22px; }
+    :scope.demo-landing-page > .page-cta small { margin-top: 12px; }
+    :scope.demo-landing-page .footer-column,:scope.demo-landing-page .footer-brand .footer-cta-link { display: none; }
+    :scope.demo-landing-page .expanded-footer { padding-block: 42px 25px; }
+    :scope.demo-landing-page .footer-bottom { flex-direction: column; gap: 13px; }
+    .demo-value-grid { grid-template-columns: 1fr; }
+    .demo-value-grid article,.demo-value-grid article:first-child,.demo-value-grid article:last-child { min-height: 290px; padding: 30px 0; border-right: 0; border-bottom: 1px solid #b9c2b7; }
+    .demo-value-grid article:last-child { border-bottom: 0; }
+    .demo-value-grid h3 { max-width: 620px; margin-top: 35px; }
+    .demo-value-grid p { max-width: 650px; }
+    .demo-trust-band { padding-block: 76px; }
+    .demo-trust-band h2 { font-size: clamp(38px,10vw,52px); }
+    .demo-faq-list summary { min-height: 72px; font-size: 18px; }
+  }
+
+  @media (max-width: 580px) {
+    .demo-landing-map > span { padding-inline: 19px; }
+    .demo-landing-map ol { padding-inline: 19px; }
+    .demo-landing-map li { grid-template-columns: 34px 1fr; gap: 10px; }
+    .demo-landing-map strong { font-size: 18px; }
+    .demo-experience-section { padding-block: 30px 52px; }
+    .demo-experience-cta .button { width: 100%; }
+    .demo-faq-list details p { margin-right: 0; }
+    :scope.demo-landing-page > .page-cta .button { width: 100%; }
+  }
+
   /* The homepage hero headline uses the same type scale as the /features
      subhero so the two entry points read as one page family. */
   @media (min-width: 641px) {

@@ -4,6 +4,10 @@ import { isInternalAnalyticsBrowser } from './internal-analytics';
 /** Fixed names only: never send form values, answers, or error messages. */
 export type ContentsquareEvent =
   | 'start_free_click'
+  | 'product_demo_started'
+  | 'product_demo_section_viewed'
+  | 'product_demo_detail_viewed'
+  | 'product_demo_completed'
   | 'sign_up'
   | 'sign_up_free_trial'
   | 'trial_signup_viewed'

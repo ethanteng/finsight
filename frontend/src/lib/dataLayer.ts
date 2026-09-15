@@ -102,6 +102,7 @@ function pushToDataLayer(payload: Record<string, unknown>): void {
 
 function getContentType(pathname: string): string {
   if (pathname === '/retirement-answers') return 'retirement_answers_hub';
+  if (pathname === '/demo') return 'product_demo';
   // Its own type so the beachhead page's traffic cannot be silently folded
   // into the generic retirement baseline. Matched by prefix, which also keeps
   // any later /coast-fire-* variant out of the generic bucket by default.
@@ -112,6 +113,51 @@ function getContentType(pathname: string): string {
   if (pathname === '/retirement-calculator') return 'retirement_calculator';
   if (/^\/can-i-retire-(at|with)-/.test(pathname)) return 'retirement_answer';
   return 'marketing_page';
+}
+
+export type ProductDemoSection = 'decisions' | 'finances' | 'accounts';
+export type ProductDemoDetail = 'answer' | 'math' | 'sources';
+
+/**
+ * Product-demo engagement is deliberately separate from a trial conversion.
+ * GTM needs Custom Event triggers for these four names and GA4 Event tags that
+ * forward `source_page`, `content_type`, and the optional `demo_section` or
+ * `demo_detail` parameter. These are diagnostic events, not Ads primaries.
+ */
+function pushProductDemoEvent(
+  event:
+    | 'product_demo_started'
+    | 'product_demo_section_viewed'
+    | 'product_demo_detail_viewed'
+    | 'product_demo_completed',
+  detail: Record<string, string> = {},
+): void {
+  if (typeof window === 'undefined') return;
+  trackContentsquareEvent(event);
+  const sourcePage = window.location.pathname;
+  pushToDataLayer({
+    event,
+    source_page: sourcePage,
+    content_type: getContentType(sourcePage),
+    ...detail,
+  });
+}
+
+export function pushProductDemoStarted(): void {
+  pushProductDemoEvent('product_demo_started');
+}
+
+export function pushProductDemoSectionViewed(section: ProductDemoSection): void {
+  pushProductDemoEvent('product_demo_section_viewed', { demo_section: section });
+}
+
+export function pushProductDemoDetailViewed(detail: ProductDemoDetail): void {
+  pushProductDemoEvent('product_demo_detail_viewed', { demo_detail: detail });
+}
+
+/** All three top-level product areas were opened during this component visit. */
+export function pushProductDemoCompleted(): void {
+  pushProductDemoEvent('product_demo_completed');
 }
 
 /**
