@@ -315,8 +315,8 @@ export function RetirementConnectedExample() {
               </p>
               <p className="qp-example-figure-note">
                 of {money(portfolio.totalInvestments)} — every one of the {portfolio.holdingCount}{" "}
-                holdings resolved to a sleeve with its own recorded history, so all of it went into
-                the test:
+                holdings resolved to a sleeve the model knows how to run, so all of it went into the
+                test:
               </p>
               <ul className="qp-example-modeled">
                 <li>Nothing dropped for being unrecognized</li>
