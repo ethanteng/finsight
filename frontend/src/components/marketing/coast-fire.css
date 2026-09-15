@@ -778,6 +778,63 @@
   line-height: 1.7;
 }
 
+/* ------------------------------------------------------- editorial guides */
+
+.coast-fire-page .cf-guides {
+  display: grid;
+  grid-template-columns: 0.72fr 1.28fr;
+  gap: 70px;
+  padding-bottom: 92px;
+}
+
+.coast-fire-page .cf-guides h2 {
+  max-width: 430px;
+  margin-top: 14px;
+  font-family: var(--font-display), sans-serif;
+  font-size: clamp(34px, 4vw, 50px);
+  line-height: 1.04;
+  letter-spacing: -0.045em;
+}
+
+.coast-fire-page .cf-guides ul {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--cf-rule-strong);
+  list-style: none;
+}
+
+.coast-fire-page .cf-guides li {
+  border-right: 1px solid var(--cf-rule);
+  border-bottom: 1px solid var(--cf-rule);
+}
+
+.coast-fire-page .cf-guides li:nth-child(2n) {
+  border-right: 0;
+}
+
+.coast-fire-page .cf-guides a {
+  display: flex;
+  min-height: 170px;
+  flex-direction: column;
+  padding: 24px;
+}
+
+.coast-fire-page .cf-guides strong {
+  font-family: var(--font-display), sans-serif;
+  font-size: 21px;
+  line-height: 1.2;
+  letter-spacing: -0.025em;
+}
+
+.coast-fire-page .cf-guides span {
+  margin-top: auto;
+  color: var(--cf-muted);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
 /* ----------------------------------------------------- retirement handoff */
 
 .coast-fire-page .cf-related {
@@ -843,6 +900,11 @@
   .coast-fire-page .cf-related a {
     white-space: normal;
   }
+
+  .coast-fire-page .cf-guides {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 32px;
+  }
 }
 
 @media (max-width: 720px) {
@@ -895,6 +957,23 @@
   .coast-fire-page .cf-sensitivity,
   .coast-fire-page .cf-faq {
     padding-block: 70px;
+  }
+
+  .coast-fire-page .cf-guides {
+    padding-bottom: 70px;
+  }
+
+  .coast-fire-page .cf-guides ul {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .coast-fire-page .cf-guides li,
+  .coast-fire-page .cf-guides li:nth-child(2n) {
+    border-right: 0;
+  }
+
+  .coast-fire-page .cf-guides a {
+    min-height: 140px;
   }
 
   .coast-fire-page .cf-assumptions {

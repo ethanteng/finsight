@@ -69,4 +69,24 @@ describe("blog feature images", () => {
     expect(within(headerArtwork as HTMLElement).queryByRole("img")).not.toBeInTheDocument();
     expect(within(headerArtwork as HTMLElement).getByText("ASK LINC / FIELD NOTE")).toBeInTheDocument();
   });
+
+  it("offers the matching calculator before the body of a ranking article", () => {
+    const retirementPost = { ...posts[1], slug: "can-i-retire-at-55", title: "Can I retire at 55?" };
+    const { rerender } = render(
+      <MarketingArticlePage post={retirementPost} processedHtml="<p>Article body</p>" />,
+    );
+
+    expect(screen.getByRole("link", { name: "Run the age-55 calculator →" })).toHaveAttribute(
+      "href",
+      "/retirement-calculator?retirement_age=55",
+    );
+
+    const coastPost = { ...posts[1], slug: "coast-fire-by-age", title: "Coast FIRE by age" };
+    rerender(<MarketingArticlePage post={coastPost} processedHtml="<p>Article body</p>" />);
+
+    expect(screen.getByRole("link", { name: "Calculate my Coast FIRE number →" })).toHaveAttribute(
+      "href",
+      "/coast-fire-calculator",
+    );
+  });
 });

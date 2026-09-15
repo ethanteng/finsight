@@ -44,6 +44,8 @@ describe('retirement calculator SEO', () => {
       '/retirement-readiness',
       '/use-cases/retirement',
       '/coast-fire-calculator',
+      '/blog/retirement-age-calculator',
+      '/blog/ai-financial-calculator',
     ]) {
       expect(document.querySelector(`a[href="${href}"]`)).not.toBeNull();
     }

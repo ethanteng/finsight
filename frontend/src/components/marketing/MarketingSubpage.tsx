@@ -201,6 +201,64 @@ function StandardPage({ children, className = "" }: { children: React.ReactNode;
   return <main className={`marketing-site subpage ${className}`}><SiteHeader />{children}<SiteFooter /></main>;
 }
 
+const articleCalculatorBridges: Record<string, {
+  eyebrow: string;
+  title: string;
+  description: string;
+  href: string;
+  label: string;
+  secondary?: { href: string; label: string };
+}> = {
+  "ai-financial-calculator": {
+    eyebrow: "TRY THE APPROACH",
+    title: "Test an AI calculator on a real retirement question.",
+    description: "Run the numbers free, then inspect the historical periods, assumptions, and math behind the answer.",
+    href: "/retirement-calculator",
+    label: "Run the retirement calculator →",
+    secondary: { href: "/vs/chatgpt", label: "Compare Ask Linc with ChatGPT" },
+  },
+  "can-i-retire-at-55": {
+    eyebrow: "USE YOUR NUMBERS",
+    title: "See whether age 55 works for your plan.",
+    description: "Start with age 55 prefilled, then change your spending, savings, and portfolio to see what holds up.",
+    href: "/retirement-calculator?retirement_age=55",
+    label: "Run the age-55 calculator →",
+    secondary: { href: "/retirement-answers", label: "Explore more retirement guides" },
+  },
+  "how-much-do-i-need-to-retire-early-at-45": {
+    eyebrow: "USE YOUR NUMBERS",
+    title: "See what retiring at 45 requires.",
+    description: "Start with age 45 prefilled and test the spending, portfolio, and margin your own plan would need.",
+    href: "/retirement-calculator?retirement_age=45",
+    label: "Run the age-45 calculator →",
+    secondary: { href: "/retirement-answers", label: "Explore more retirement guides" },
+  },
+  "coast-fire-vs-fire-vs-barista-fire": {
+    eyebrow: "COMPARE WITH YOUR NUMBERS",
+    title: "Find out whether you have reached Coast FIRE.",
+    description: "Calculate the invested amount that could grow to fund retirement without further contributions, then inspect the assumptions.",
+    href: "/coast-fire-calculator",
+    label: "Calculate my Coast FIRE number →",
+    secondary: { href: "/retirement-calculator", label: "Stress-test full retirement" },
+  },
+  "coast-fire-by-age": {
+    eyebrow: "USE YOUR NUMBERS",
+    title: "Calculate your Coast FIRE number by age.",
+    description: "Replace broad benchmarks with your current age, retirement target, spending, assets, and return assumptions.",
+    href: "/coast-fire-calculator",
+    label: "Calculate my Coast FIRE number →",
+    secondary: { href: "/retirement-calculator", label: "Stress-test full retirement" },
+  },
+  "coast-fire": {
+    eyebrow: "USE YOUR NUMBERS",
+    title: "Turn the Coast FIRE idea into a number.",
+    description: "See the invested amount you need today, when you could reach it, and which assumptions change the result most.",
+    href: "/coast-fire-calculator",
+    label: "Calculate my Coast FIRE number →",
+    secondary: { href: "/retirement-calculator", label: "Stress-test full retirement" },
+  },
+};
+
 function FeaturesPage() {
   return (
     <StandardPage className="features-page">
@@ -587,6 +645,8 @@ export function MarketingBlogPage({ ghostPosts }: { ghostPosts: GhostPost[] }) {
 export function MarketingArticlePage({ post, processedHtml }: { post: GhostPost; processedHtml: string }) {
   const author = post.authors?.[0]?.name || "Ethan Teng";
   const featureImage = post.feature_image?.trim();
+  const calculatorBridge = post.slug ? articleCalculatorBridges[post.slug] : undefined;
+  const calculatorBridgeId = `calculator-bridge-${post.slug || post.id}`;
 
   return (
     <StandardPage className="article-page">
@@ -613,7 +673,22 @@ export function MarketingArticlePage({ post, processedHtml }: { post: GhostPost;
       )}
       <section className="article-layout shell marketing-article-layout">
         <aside><span>ASK LINC BLOG</span><Link href="/features">See how Linc works</Link><Link href="/use-cases">Explore use cases</Link></aside>
-        <article className="marketing-article-body ghost-content" dangerouslySetInnerHTML={{ __html: processedHtml }} />
+        <div className="marketing-article-main">
+          {calculatorBridge ? (
+            <section className="article-calculator-bridge" aria-labelledby={calculatorBridgeId}>
+              <span>{calculatorBridge.eyebrow}</span>
+              <h2 id={calculatorBridgeId}>{calculatorBridge.title}</h2>
+              <p>{calculatorBridge.description}</p>
+              <div>
+                <Link className="button button-dark" href={calculatorBridge.href}>{calculatorBridge.label}</Link>
+                {calculatorBridge.secondary ? (
+                  <Link className="text-link" href={calculatorBridge.secondary.href}>{calculatorBridge.secondary.label}</Link>
+                ) : null}
+              </div>
+            </section>
+          ) : null}
+          <article className="marketing-article-body ghost-content" dangerouslySetInnerHTML={{ __html: processedHtml }} />
+        </div>
       </section>
       <section className="next-reading shell"><span>KEEP EXPLORING</span><h2>Bring the question back to your own numbers.</h2><MarketingGetStartedButton className="button button-primary" csOverrideId="blog-cta-inline" /></section>
       <PageCta title="Try a real question with your own numbers." csOverrideId="blog-cta-end" />

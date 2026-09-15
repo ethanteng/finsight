@@ -11,6 +11,7 @@ describe("comparison pages", () => {
       competitorName: "ChatGPT",
       headline: "Ask Linc vs ChatGPT",
       relatedLinks: [
+        { href: "/blog/ai-financial-calculator" },
         { href: "/trust" },
         { href: "/use-cases" },
       ],
@@ -54,6 +55,10 @@ describe("comparison pages", () => {
     expect(screen.getByRole("link", { name: "See how Ask Linc checks an answer" })).toHaveAttribute(
       "href",
       "/trust",
+    );
+    expect(screen.getByRole("link", { name: "See what an AI financial calculator should do" })).toHaveAttribute(
+      "href",
+      "/blog/ai-financial-calculator",
     );
     expect(screen.getByRole("link", { name: "See the decisions Ask Linc is built for" })).toHaveAttribute(
       "href",

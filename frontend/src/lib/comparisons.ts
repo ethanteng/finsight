@@ -33,6 +33,7 @@ export function buildComparisons(pricing: Pricing = FALLBACK_PRICING): Compariso
         { dimension: 'Price', askLinc: `${pricing.trialThenPriceLine} Full product.`, competitor: 'Check ChatGPT for current plans and feature availability.' },
       ],
       relatedLinks: [
+        { href: '/blog/ai-financial-calculator', label: 'See what an AI financial calculator should do' },
         { href: '/trust', label: 'See how Ask Linc checks an answer' },
         { href: '/use-cases', label: 'See the decisions Ask Linc is built for' },
       ],
