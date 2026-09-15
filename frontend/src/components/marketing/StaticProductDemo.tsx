@@ -458,6 +458,12 @@ export default function StaticProductDemo({ anchorId = "product-demo" }: { ancho
     pushProductDemoStarted();
   }
 
+  /** Count intentional activation keys only — Tabbing through the widget is not engagement. */
+  function trackStartFromKey(event: { key: string }) {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    trackStart();
+  }
+
   function selectView(nextView: DemoView) {
     trackStart();
     if (nextView !== view) pushProductDemoSectionViewed(nextView);
@@ -475,7 +481,7 @@ export default function StaticProductDemo({ anchorId = "product-demo" }: { ancho
       id={anchorId ?? undefined}
       aria-label="Interactive Ask Linc product demo"
       onClickCapture={trackStart}
-      onKeyDownCapture={trackStart}
+      onKeyDownCapture={trackStartFromKey}
     >
       <div className="demo-browser-bar"><div aria-hidden="true"><span/><span/><span/></div><p><i>⌁</i> asklinc.com/demo</p><strong>INTERACTIVE DEMO</strong></div>
       <div className="demo-app-shell">
