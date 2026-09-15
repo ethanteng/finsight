@@ -13,9 +13,16 @@
  *
  * The panel answers the page's question first and shows its work second. The
  * three cards below it are the reasons to believe the answer — the mix it
- * found, the $464,272 it declined to simulate, its own low confidence rating —
- * but a visitor who reads only the first line should still learn whether this
- * plan retires at 60, and at which age it stops being a close call.
+ * found, how much of the money it could actually test, and its own rating of
+ * that mapping — but a visitor who reads only the first line should still
+ * learn whether this plan retires at 60, and at which age it stops being a
+ * close call.
+ *
+ * Both the gap card and the rating render whatever the engine reported. The
+ * current example book resolves in full, so the card states full coverage; a
+ * book with a position the engine cannot place renders the gap and its list
+ * instead. Neither branch is copy about the product — swapping the book in the
+ * generator script switches which one the page shows.
  *
  * That answer is a band across retirement ages rather than a single rate,
  * because a single rate answers "can I retire at 60?" and says nothing about
@@ -178,6 +185,14 @@ export const CONNECTED_EXAMPLE_ID = "connect-accounts";
 export function RetirementConnectedExample() {
   const { plan, portfolio, allocation, coverage, result } = EXAMPLE;
   const unmodeled = [...coverage.unresolved, ...coverage.unsupported];
+  /**
+   * `as const` on the generated file narrows this to whichever rating the last
+   * run produced, which makes a literal comparison a type error rather than a
+   * branch. Which rating the engine reported is runtime data, so read it as
+   * one — otherwise a regeneration that changes the rating breaks the build
+   * instead of changing the page.
+   */
+  const mappingConfidence: string = coverage.confidence;
   const gapCopy = unmodeledGapCopy(coverage.unresolved.length, coverage.unsupported.length);
   const proxiedSeries = result.proxiedSeries;
   const ladder = readLadder(EXAMPLE.byRetirementAge);
@@ -270,39 +285,71 @@ export function RetirementConnectedExample() {
             <p>
               No ready-made mix would have guessed the inflation-protected bonds or how much of this
               money is invested overseas, and both change how the plan comes through a bad decade.
-              These percentages are what the model could identify, not all of what it could run —
-              the inflation-protected and corporate bonds counted on the bond line also appear in
-              the list next door.
+              Every percentage here was read off the holdings themselves — the sleeves a preset
+              would have averaged away are the ones doing the work in a bad decade.
             </p>
           </article>
 
-          <article className="qp-example-card qp-example-card-flag">
-            <h3>It says what it cannot see</h3>
-            <p className="qp-example-figure">{money(coverage.unmodeledValue)}</p>
-            <p className="qp-example-figure-note">
-              of {money(portfolio.totalInvestments)} — {percent((1 - coverage.valueCoverage) * 100, 1)} of the
-              money — left out of the test rather than guessed at:
-            </p>
-            <ul className="qp-example-unmodeled">
-              {unmodeled.map((label) => <li key={label}>{label}</li>)}
-            </ul>
-            <p>
-              {gapCopy ? `${gapCopy} ` : null}
-              The six-number answer above had nothing to admit here, because it made the whole
-              portfolio up.
-            </p>
-          </article>
+          {unmodeled.length > 0 ? (
+            <article className="qp-example-card qp-example-card-flag">
+              <h3>It says what it cannot see</h3>
+              <p className="qp-example-figure">{money(coverage.unmodeledValue)}</p>
+              <p className="qp-example-figure-note">
+                of {money(portfolio.totalInvestments)} — {percent((1 - coverage.valueCoverage) * 100, 1)} of the
+                money — left out of the test rather than guessed at:
+              </p>
+              <ul className="qp-example-unmodeled">
+                {unmodeled.map((label) => <li key={label}>{label}</li>)}
+              </ul>
+              <p>
+                {gapCopy ? `${gapCopy} ` : null}
+                The six-number answer above had nothing to admit here, because it made the whole
+                portfolio up.
+              </p>
+            </article>
+          ) : (
+            <article className="qp-example-card qp-example-card-clear">
+              <h3>It tested every dollar</h3>
+              <p className="qp-example-figure qp-example-figure-clear">
+                {percent(coverage.valueCoverage * 100, 0)}
+              </p>
+              <p className="qp-example-figure-note">
+                of {money(portfolio.totalInvestments)} — every one of the {portfolio.holdingCount}{" "}
+                holdings resolved to a sleeve with its own recorded history, so all of it went into
+                the test:
+              </p>
+              <ul className="qp-example-modeled">
+                <li>Nothing dropped for being unrecognized</li>
+                <li>Nothing stood in for a holding the model could not place</li>
+                <li>Nothing averaged into a preset mix</li>
+              </ul>
+              <p>
+                A book with a position the model cannot place says so here instead of guessing at
+                it. This one had nothing to declare. The six-number answer above had nothing to
+                admit either — but only because it made the whole portfolio up.
+              </p>
+            </article>
+          )}
 
           <article className="qp-example-card">
             <h3>It shows how much to trust the answer</h3>
             <dl className="qp-example-mix">
               <div><dt>Money modeled</dt><dd>{percent(coverage.valueCoverage * 100)}</dd></div>
-              <div><dt>Mapping confidence</dt><dd className="qp-example-low">{coverage.confidence}</dd></div>
+              <div>
+                <dt>Mapping confidence</dt>
+                <dd className={mappingConfidence === "low" ? "qp-example-low" : "qp-example-rating"}>
+                  {mappingConfidence}
+                </dd>
+              </div>
               <div><dt>History tested</dt><dd>{result.sequencesTested} windows</dd></div>
             </dl>
             {proxiedSeries.length > 0 ? (
               <>
-                <p>Real holdings bring their own gaps too.</p>
+                <p>
+                  {unmodeled.length > 0
+                    ? "Real holdings bring their own gaps too."
+                    : "The record itself is the remaining limit, so the panel states it."}
+                </p>
                 {proxiedSeries.map((proxied) => (
                   <p key={proxied.series}>
                     For {proxied.months} of the {proxied.windowMonths} months tested —{" "}

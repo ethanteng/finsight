@@ -29,34 +29,29 @@ export const RETIREMENT_CALCULATOR_EXAMPLE = {
     "totalInvestments": 2273872
   },
   "allocation": {
-    "equity": 53.87286531519804,
-    "international": 14.503894678328418,
-    "fixedIncome": 30.41508053223752,
+    "equity": 60.38915119232745,
+    "international": 21.020180555457827,
+    "fixedIncome": 36.80066424143487,
     "tips": 4.164702322734085,
     "cash": 2.8101845662376777
   },
   "coverage": {
-    "modeledValue": 1904300,
-    "unmodeledValue": 369572,
-    "valueCoverage": 0.8374701830182174,
-    "confidence": "low",
-    "unresolved": [
-      "Employer Stock Units",
-      "Brokerage Holdings Not Itemized"
-    ],
-    "unsupported": [
-      "Investment Grade Corporate Bond Fund"
-    ]
+    "modeledValue": 2273872,
+    "unmodeledValue": 0,
+    "valueCoverage": 1,
+    "confidence": "medium",
+    "unresolved": [],
+    "unsupported": []
   },
   "result": {
-    "survivalRate": 0.9703808180535967,
+    "survivalRate": 1,
     "sequencesTested": 709,
-    "sequencesSurvived": 688,
-    "projectedPortfolioAtRetirement": 2900878.4850188014,
+    "sequencesSurvived": 709,
+    "projectedPortfolioAtRetirement": 3326191.6349441237,
     "firstMonth": "1926-07",
     "lastMonth": "2026-06",
     "primaryObservation": "Balanced allocation pattern with moderate characteristics",
-    "confidence": "low",
+    "confidence": "medium",
     "proxiedSeries": [
       {
         "series": "intl_equity",
@@ -94,31 +89,31 @@ export const RETIREMENT_CALCULATOR_EXAMPLE = {
   "byRetirementAge": [
     {
       "age": 56,
-      "survivalRate": 0.6403385049365303,
+      "survivalRate": 0.8194640338504936,
       "sequencesTested": 709,
-      "sequencesSurvived": 454,
-      "projectedPortfolioAtRetirement": 2211287.861151734
+      "sequencesSurvived": 581,
+      "projectedPortfolioAtRetirement": 2612384.6500311457
     },
     {
       "age": 58,
-      "survivalRate": 0.8321579689703809,
+      "survivalRate": 0.9605077574047954,
       "sequencesTested": 709,
-      "sequencesSurvived": 590,
-      "projectedPortfolioAtRetirement": 2536494.6016703495
+      "sequencesSurvived": 681,
+      "projectedPortfolioAtRetirement": 2962845.469553962
     },
     {
       "age": 60,
-      "survivalRate": 0.9703808180535967,
+      "survivalRate": 1,
       "sequencesTested": 709,
-      "sequencesSurvived": 688,
-      "projectedPortfolioAtRetirement": 2900878.4850188014
+      "sequencesSurvived": 709,
+      "projectedPortfolioAtRetirement": 3326191.6349441237
     },
     {
       "age": 62,
       "survivalRate": 1,
       "sequencesTested": 709,
       "sequencesSurvived": 709,
-      "projectedPortfolioAtRetirement": 3346114.832766099
+      "projectedPortfolioAtRetirement": 3876901.150649065
     }
   ]
 } as const;

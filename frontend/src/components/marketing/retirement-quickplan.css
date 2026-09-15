@@ -1468,6 +1468,42 @@
   color: #97600f;
 }
 
+.quickplan-page .qp-example-rating {
+  text-transform: capitalize;
+}
+
+/* The gap card's other face: same shape, stated as coverage rather than a
+   shortfall, so a fully resolved book does not borrow the warning's colour. */
+.quickplan-page .qp-example-card-clear {
+  border-color: #b3c9b6;
+  background: #eef5ec;
+}
+
+.quickplan-page .qp-example-modeled {
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.quickplan-page .qp-example-modeled li {
+  padding: 7px 0 7px 18px;
+  border-bottom: 1px solid rgba(16, 35, 25, 0.08);
+  color: #4a564e;
+  font-size: 13px;
+  position: relative;
+}
+
+.quickplan-page .qp-example-modeled li::before {
+  content: "";
+  position: absolute;
+  top: 14px;
+  left: 2px;
+  width: 6px;
+  height: 6px;
+  border-radius: 2px;
+  background: #4e8f62;
+}
+
 .quickplan-page .qp-example-figure {
   margin: 0 !important;
   color: #8a5a12 !important;
@@ -1475,6 +1511,10 @@
   font-size: 34px !important;
   font-weight: 780;
   letter-spacing: -0.05em;
+}
+
+.quickplan-page .qp-example-figure-clear {
+  color: #176840 !important;
 }
 
 .quickplan-page .qp-example-figure-note {

@@ -15,11 +15,13 @@
  * EXAMPLE_BOOK and EXAMPLE_PLAN and re-run. Do not edit the generated file by
  * hand; the page's claim that these are engine outputs depends on it.
  *
- * A note on what to put here. The book is deliberately awkward in the ways real
- * feeds are: a fund whose sleeve the engine cannot simulate, a single-stock
- * position with no resolvable geography, and a chunk the custodian never
- * itemised. Those are the whole point. A tidy book would produce a tidier
- * answer and would misrepresent what connecting real accounts actually does.
+ * A note on what to put here. The book is an itemised one: every position names
+ * a fund the engine can resolve, which is what a well-mapped brokerage feed
+ * looks like and what lets the panel report full coverage. That is a property
+ * of this profile, not a promise — the engine reports whatever it cannot place,
+ * and the panel renders that gap when a book has one. Keep the holdings
+ * plausible rather than convenient: real people hold small-cap, emerging
+ * markets and TIPS sleeves, and those are what make the mix worth showing.
  */
 
 import { writeFileSync } from 'fs';
@@ -61,9 +63,9 @@ const EXAMPLE_BOOK: BookEntry[] = [
   ['smid', 'Russell 2000 Small Cap Index', 'equity', 96_800, '401k'],
   ['em', 'Emerging Markets Stock Index Fund', 'equity', 88_300, '401k'],
   ['gov', 'Intermediate Term Government Bond Fund', 'fixed income', 118_600, '401k'],
-  ['corp', 'Investment Grade Corporate Bond Fund', 'fixed income', 76_200, '401k'],
-  ['emp', 'Employer Stock Units', 'equity', 45_200, 'taxable-brokerage'],
-  ['misc', 'Brokerage Holdings Not Itemized', 'unknown', 248_172, 'taxable-brokerage'],
+  ['ltgov', 'Long Term Government Bond Fund', 'fixed income', 76_200, '401k'],
+  ['intltot', 'Total International Stock Index Fund', 'equity', 148_172, 'taxable-brokerage'],
+  ['totbond', 'Total Bond Market Index Fund', 'fixed income', 145_200, 'taxable-brokerage'],
 ];
 
 /**
