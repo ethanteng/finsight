@@ -13,9 +13,16 @@
  *
  * The panel answers the page's question first and shows its work second. The
  * three cards below it are the reasons to believe the answer — the mix it
- * found, the $464,272 it declined to simulate, its own low confidence rating —
- * but a visitor who reads only the first line should still learn whether this
- * plan retires at 60, and at which age it stops being a close call.
+ * found, how much of the money it could actually test, and its own rating of
+ * that mapping — but a visitor who reads only the first line should still
+ * learn whether this plan retires at 60, and at which age it stops being a
+ * close call.
+ *
+ * Both the gap card and the rating render whatever the engine reported. The
+ * current example book resolves in full, so the card states full coverage; a
+ * book with a position the engine cannot place renders the gap and its list
+ * instead. Neither branch is copy about the product — swapping the book in the
+ * generator script switches which one the page shows.
  *
  * That answer is a band across retirement ages rather than a single rate,
  * because a single rate answers "can I retire at 60?" and says nothing about
@@ -87,7 +94,11 @@ function countWord(n: number): string {
  * excluded for the geography alone. Saying only "what they hold" would misstate
  * why the engine left it out.
  */
-function unmodeledGapCopy(unresolvedCount: number, unsupportedCount: number): string | null {
+function unmodeledGapCopy(
+  unresolvedCount: number,
+  unsupportedCount: number,
+  partiallyMappedCount: number
+): string | null {
   const parts: string[] = [];
   if (unresolvedCount > 0) {
     parts.push(
@@ -103,39 +114,72 @@ function unmodeledGapCopy(unresolvedCount: number, unsupportedCount: number): st
         : `${countWord(unsupportedCount)} are kinds of investment with no century of history to test them against`
     );
   }
+  if (partiallyMappedCount > 0) {
+    // Not a failure to place the holding: the engine ran most of it and held
+    // back the sleeves it has no series for. Saying it "could not be placed"
+    // would send a reader looking for a mapping that already exists.
+    parts.push(
+      partiallyMappedCount === 1
+        ? "one was placed but has a sleeve with no history to run, so that slice stayed out"
+        : `${countWord(partiallyMappedCount)} were placed but have sleeves with no history to run, ` +
+          "so those slices stayed out"
+    );
+  }
   if (parts.length === 0) return null;
   return `${parts.join("; ")}.`;
 }
 
 /**
- * What a substituted series means, in the reader's terms.
+ * A substituted series, in the reader's terms and at the length it deserves.
  *
- * Keyed on the series rather than shown as the engine's own description,
- * because the two substitutions fail differently and a visitor deciding
- * whether to trust the number needs the difference: months with no overseas
- * record tell you nothing about holding money abroad, while months with no
- * TIPS record actively understate what TIPS would have done.
+ * These are a property of the century of record, not of the portfolio or the
+ * model: some sleeves are younger than the history they are tested against, so
+ * their early months borrow the closest series that does exist. The panel has
+ * to disclose that — a stand-in the reader never hears about is the one thing
+ * this must not do — but it is a footnote to the answer, not a finding about
+ * this plan, and three paragraphs of it read as though it were the latter.
  *
- * A series with no copy here falls back to saying it was substituted at all,
- * which is worse writing than a bespoke sentence but still true — the one
- * thing this must not do is stay silent about a substitution.
+ * So: a label and the stand-in, rendered as a row. The prose that follows the
+ * rows carries the one thing a reader could act on, which is the direction the
+ * substitution pushes the answer.
+ *
+ * A series with no entry here still renders, in the engine's own terms.
  */
-function proxiedSeriesCopy(series: string): string {
+function proxiedSeriesLabel(series: string): { label: string; standIn: string } {
   if (series === "intl_equity") {
-    return (
-      "nobody recorded what overseas markets did, so those months use the US market return " +
-      "instead. The plan is still checked against the whole record; those months just cannot " +
-      "tell you anything about holding money abroad."
-    );
+    return { label: "International stocks", standIn: "US market returns" };
   }
   if (series === "tips") {
-    return (
-      "inflation-protected bonds did not exist yet, so those months use ordinary government " +
-      "bonds instead. That leaves out the inflation protection TIPS are bought for, which " +
-      "makes the plan look worse in the inflationary stretches rather than better."
+    return { label: "TIPS", standIn: "Ordinary government bonds" };
+  }
+  return { label: series, standIn: "The closest recorded series" };
+}
+
+/**
+ * Which way the stand-ins push the answer — the only part of this a reader can
+ * do anything with. Stated only for series where the direction is actually
+ * known: the TIPS substitution drops the inflation protection TIPS are bought
+ * for, so those stretches test the plan harder than the real record would. The
+ * international one is not conservative, just uninformative about holding money
+ * abroad, and saying otherwise to sound reassuring would be the kind of claim
+ * this panel exists to avoid.
+ */
+function standInDirection(seriesKeys: readonly string[]): string {
+  const notes: string[] = [];
+  if (seriesKeys.includes("tips")) {
+    notes.push(
+      "the TIPS months drop the inflation protection TIPS are bought for, so those stretches " +
+        "test the plan harder than the real record would"
     );
   }
-  return "that part of the portfolio has no recorded returns, so a close relative stands in for it.";
+  if (seriesKeys.includes("intl_equity")) {
+    notes.push("the international months cannot speak to holding money abroad either way");
+  }
+  if (notes.length === 0) {
+    return "Every month of the window is still tested either way.";
+  }
+  const lead = notes.length === 1 ? "It does not flatter the plan" : "Neither flatters the plan";
+  return `${lead}: ${notes.join("; ")}. The whole window is still tested.`;
 }
 
 /**
@@ -177,9 +221,46 @@ export const CONNECTED_EXAMPLE_ID = "connect-accounts";
 
 export function RetirementConnectedExample() {
   const { plan, portfolio, allocation, coverage, result } = EXAMPLE;
-  const unmodeled = [...coverage.unresolved, ...coverage.unsupported];
-  const gapCopy = unmodeledGapCopy(coverage.unresolved.length, coverage.unsupported.length);
-  const proxiedSeries = result.proxiedSeries;
+  /**
+   * Everything the engine reported as not fully tested. `partiallyMapped` is a
+   * third bucket, not a subset of the other two: a holding with some sleeves
+   * modeled and some withheld is filed there and in neither of them, while its
+   * withheld slice still counts toward `unmodeledValue`.
+   */
+  const unmodeled = [
+    ...coverage.unresolved,
+    ...coverage.unsupported,
+    ...(coverage.partiallyMapped ?? []),
+  ];
+  /**
+   * Which face the card shows is the coverage figure's call, not the list's.
+   * A book whose only gap is a partial exclusion would otherwise render "It
+   * tested every dollar" over a coverage figure below 100% — the over-claim
+   * this panel exists to avoid, and the one a list-length check cannot catch.
+   */
+  const hasGap = coverage.unmodeledValue > 0 || coverage.valueCoverage < 1 || unmodeled.length > 0;
+  /**
+   * `as const` on the generated file narrows this to whichever rating the last
+   * run produced, which makes a literal comparison a type error rather than a
+   * branch. Which rating the engine reported is runtime data, so read it as
+   * one — otherwise a regeneration that changes the rating breaks the build
+   * instead of changing the page.
+   */
+  const mappingConfidence: string = coverage.confidence;
+  const gapCopy = unmodeledGapCopy(
+    coverage.unresolved.length,
+    coverage.unsupported.length,
+    coverage.partiallyMapped?.length ?? 0
+  );
+  /**
+   * Widened for the same reason as the rating above: `as const` pins the length
+   * and the series keys to whatever the last run produced, so counting them or
+   * testing a key is a type error rather than a branch. How many sleeves were
+   * substituted is runtime data — a regeneration that substitutes one, or none,
+   * should change the sentence, not fail the build.
+   */
+  const proxiedSeries: ReadonlyArray<{ series: string; months: number; windowMonths: number }> =
+    result.proxiedSeries;
   const ladder = readLadder(EXAMPLE.byRetirementAge);
   const band = outcomeBand(result.survivalRate);
 
@@ -270,48 +351,88 @@ export function RetirementConnectedExample() {
             <p>
               No ready-made mix would have guessed the inflation-protected bonds or how much of this
               money is invested overseas, and both change how the plan comes through a bad decade.
-              These percentages are what the model could identify, not all of what it could run —
-              the inflation-protected and corporate bonds counted on the bond line also appear in
-              the list next door.
+              Every percentage here was read off the holdings themselves — the sleeves a preset
+              would have averaged away are the ones doing the work in a bad decade.
             </p>
           </article>
 
-          <article className="qp-example-card qp-example-card-flag">
-            <h3>It says what it cannot see</h3>
-            <p className="qp-example-figure">{money(coverage.unmodeledValue)}</p>
-            <p className="qp-example-figure-note">
-              of {money(portfolio.totalInvestments)} — {percent((1 - coverage.valueCoverage) * 100, 1)} of the
-              money — left out of the test rather than guessed at:
-            </p>
-            <ul className="qp-example-unmodeled">
-              {unmodeled.map((label) => <li key={label}>{label}</li>)}
-            </ul>
-            <p>
-              {gapCopy ? `${gapCopy} ` : null}
-              The six-number answer above had nothing to admit here, because it made the whole
-              portfolio up.
-            </p>
-          </article>
+          {hasGap ? (
+            <article className="qp-example-card qp-example-card-flag">
+              <h3>It says what it cannot see</h3>
+              <p className="qp-example-figure">{money(coverage.unmodeledValue)}</p>
+              <p className="qp-example-figure-note">
+                of {money(portfolio.totalInvestments)} — {percent((1 - coverage.valueCoverage) * 100, 1)} of the
+                money — left out of the test rather than guessed at:
+              </p>
+              <ul className="qp-example-unmodeled">
+                {unmodeled.map((label) => <li key={label}>{label}</li>)}
+              </ul>
+              <p>
+                {gapCopy ? `${gapCopy} ` : null}
+                The six-number answer above had nothing to admit here, because it made the whole
+                portfolio up.
+              </p>
+            </article>
+          ) : (
+            <article className="qp-example-card qp-example-card-clear">
+              <h3>It tested every dollar</h3>
+              <p className="qp-example-figure qp-example-figure-clear">
+                {percent(coverage.valueCoverage * 100, 0)}
+              </p>
+              <p className="qp-example-figure-note">
+                of {money(portfolio.totalInvestments)} — every one of the {portfolio.holdingCount}{" "}
+                holdings resolved to a sleeve the model knows how to run, so all of it went into the
+                test:
+              </p>
+              <ul className="qp-example-modeled">
+                <li>Nothing dropped for being unrecognized</li>
+                <li>Nothing stood in for a holding the model could not place</li>
+                <li>Nothing averaged into a preset mix</li>
+              </ul>
+              <p>
+                A book with a position the model cannot place says so here instead of guessing at
+                it. This one had nothing to declare. The six-number answer above had nothing to
+                admit either — but only because it made the whole portfolio up.
+              </p>
+            </article>
+          )}
 
           <article className="qp-example-card">
             <h3>It shows how much to trust the answer</h3>
             <dl className="qp-example-mix">
               <div><dt>Money modeled</dt><dd>{percent(coverage.valueCoverage * 100)}</dd></div>
-              <div><dt>Mapping confidence</dt><dd className="qp-example-low">{coverage.confidence}</dd></div>
+              <div>
+                <dt>Mapping confidence</dt>
+                <dd className={mappingConfidence === "low" ? "qp-example-low" : "qp-example-rating"}>
+                  {mappingConfidence}
+                </dd>
+              </div>
               <div><dt>History tested</dt><dd>{result.sequencesTested} windows</dd></div>
             </dl>
             {proxiedSeries.length > 0 ? (
               <>
-                <p>Real holdings bring their own gaps too.</p>
-                {proxiedSeries.map((proxied) => (
-                  <p key={proxied.series}>
-                    For {proxied.months} of the {proxied.windowMonths} months tested —{" "}
-                    {proxied.ranges
-                      .map((range) => `${monthLabel(range.firstMonth)} to ${monthLabel(range.lastMonth)}`)
-                      .join(", and ")}{" "}
-                    — {proxiedSeriesCopy(proxied.series)}
-                  </p>
-                ))}
+                <p>
+                  {countWord(proxiedSeries.length)
+                    .replace(/^./, (c) => c.toUpperCase())}{" "}
+                  {proxiedSeries.length === 1 ? "sleeve is" : "sleeves are"} younger than the
+                  century tested, so the closest recorded series stands in for the early months:
+                </p>
+                <ul className="qp-example-standins">
+                  {proxiedSeries.map((proxied) => {
+                    const { label, standIn } = proxiedSeriesLabel(proxied.series);
+                    return (
+                      <li key={proxied.series}>
+                        <b>{label}</b>
+                        <span>{standIn}</span>
+                        <small>
+                          {proxied.months.toLocaleString("en-US")} of{" "}
+                          {proxied.windowMonths.toLocaleString("en-US")} months
+                        </small>
+                      </li>
+                    );
+                  })}
+                </ul>
+                <p>{standInDirection(proxiedSeries.map((proxied) => proxied.series))}</p>
               </>
             ) : (
               <p>

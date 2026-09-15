@@ -1,12 +1,18 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { RetirementConnectedExample } from '@/components/marketing/RetirementConnectedExample';
 import { RETIREMENT_CALCULATOR_EXAMPLE as EXAMPLE } from '@/lib/retirement-calculator-example.generated';
 
 /**
  * The panel's whole claim is that these numbers are engine output rather than
  * marketing copy. That claim survives a regeneration only if the generated file
- * still hangs together and the page still shows the awkward parts of it.
+ * still hangs together and the page still shows whatever the engine reported —
+ * including, when the book has one, the part it could not model.
+ *
+ * So these tests read the branch out of the generated data rather than pinning
+ * the example to one profile. Swapping EXAMPLE_BOOK in the generator is a
+ * supported edit; a test that hardcodes "there is a gap" turns that edit into a
+ * failure and tempts the next person to fix it by editing the generated file.
  */
 describe('connected-accounts example data', () => {
   it('accounts for every dollar it read', () => {
@@ -19,10 +25,37 @@ describe('connected-accounts example data', () => {
     );
   });
 
-  it('keeps the part the engine could not model, which is the point of the panel', () => {
-    expect(EXAMPLE.coverage.unmodeledValue).toBeGreaterThan(0);
-    expect(EXAMPLE.coverage.valueCoverage).toBeLessThan(1);
-    expect([...EXAMPLE.coverage.unresolved, ...EXAMPLE.coverage.unsupported].length).toBeGreaterThan(0);
+  it('keeps its coverage figures consistent with its own unmodeled list', () => {
+    // Either the engine placed and ran everything, or it named what it did not.
+    // "Some value unmodeled but nothing listed" is the state that would let the
+    // panel show a shortfall it cannot account for.
+    //
+    // All three buckets, because `partiallyMappedHoldings` is not a subset of
+    // the other two: a holding with some sleeves modeled and some withheld is
+    // filed there alone, while its withheld slice still counts toward
+    // `unmodeledValue`.
+    const listed = [
+      ...EXAMPLE.coverage.unresolved,
+      ...EXAMPLE.coverage.unsupported,
+      ...(EXAMPLE.coverage.partiallyMapped ?? []),
+    ];
+
+    if (EXAMPLE.coverage.unmodeledValue > 0) {
+      expect(EXAMPLE.coverage.valueCoverage).toBeLessThan(1);
+      expect(listed.length).toBeGreaterThan(0);
+    } else {
+      expect(EXAMPLE.coverage.valueCoverage).toBe(1);
+      expect(listed).toHaveLength(0);
+    }
+  });
+
+  it('exports the partially mapped bucket, which the other two do not contain', () => {
+    // The generator used to export `unmappedHoldings` and `unsupportedHoldings`
+    // only. A registry fund with a withheld sleeve lands in neither, so a page
+    // reading just those two would have shown full coverage over a book with a
+    // real gap. The field has to exist for the page to be able to check it.
+    expect(EXAMPLE.coverage).toHaveProperty('partiallyMapped');
+    expect(Array.isArray(EXAMPLE.coverage.partiallyMapped)).toBe(true);
   });
 
   it('reports a survival rate and a horizon the engine could produce', () => {
@@ -112,79 +145,149 @@ describe('connected-accounts example data', () => {
 });
 
 describe('connected-accounts example panel', () => {
-  it('leads with what the model could not model, not with a better number', () => {
+  it('states its coverage either way, naming every holding it did not fully test', () => {
     render(<RetirementConnectedExample />);
 
-    const unmodeled = `$${Math.round(EXAMPLE.coverage.unmodeledValue).toLocaleString('en-US')}`;
-    expect(screen.getByText(unmodeled)).toBeInTheDocument();
+    const listed = [
+      ...EXAMPLE.coverage.unresolved,
+      ...EXAMPLE.coverage.unsupported,
+      ...(EXAMPLE.coverage.partiallyMapped ?? []),
+    ];
 
-    for (const label of [...EXAMPLE.coverage.unresolved, ...EXAMPLE.coverage.unsupported]) {
-      expect(screen.getByText(label)).toBeInTheDocument();
+    if (listed.length > 0) {
+      const unmodeled = `$${Math.round(EXAMPLE.coverage.unmodeledValue).toLocaleString('en-US')}`;
+      expect(screen.getByText(unmodeled)).toBeInTheDocument();
+      for (const label of listed) {
+        expect(screen.getByText(label)).toBeInTheDocument();
+      }
+    } else {
+      // Full coverage is a claim too, and it still has to say what it means:
+      // nothing dropped, nothing substituted for an unplaceable holding.
+      expect(screen.getByText('It tested every dollar')).toBeInTheDocument();
+      expect(screen.getByText(/Nothing dropped for being unrecognized/i)).toBeInTheDocument();
+      // Placement ≠ complete history: this book still proxies intl/TIPS months.
+      // Claiming "recorded history" here would contradict the trust card next door.
+      expect(screen.queryByText(/own recorded history/i)).not.toBeInTheDocument();
+      // The offer to declare a gap must survive having none to declare, or the
+      // card reads as a product that never has them.
+      expect(
+        screen.getByText(/cannot place says so here instead of guessing/i)
+      ).toBeInTheDocument();
     }
   });
 
   it('labels the subset rows as subsets, not as separate sleeves', () => {
-    render(<RetirementConnectedExample />);
+    const { container } = render(<RetirementConnectedExample />);
 
     // `internationalAllocation` is inside `equityAllocation` and
     // `tipsAllocation` is inside `fixedIncomeAllocation`. A bare "TIPS" row
     // would double-count and push the mix past 100% of the book.
-    expect(screen.getByText('of which international')).toBeInTheDocument();
-    expect(screen.getByText('of which TIPS')).toBeInTheDocument();
-    expect(screen.queryByText(/^TIPS$/)).not.toBeInTheDocument();
-    expect(screen.queryByText(/^International$/)).not.toBeInTheDocument();
+    //
+    // Scoped to the mix list, which is where double-counting is possible. The
+    // trust card names the same sleeves when it discloses a stand-in, and that
+    // is not a mix row — a page-wide match cannot tell the two apart.
+    const mix = container.querySelector('.qp-example-mix') as HTMLElement;
+
+    expect(within(mix).getByText('of which international')).toBeInTheDocument();
+    expect(within(mix).getByText('of which TIPS')).toBeInTheDocument();
+    expect(within(mix).queryByText(/^TIPS$/)).not.toBeInTheDocument();
+    expect(within(mix).queryByText(/^International$/)).not.toBeInTheDocument();
   });
 
-  it('says the bond line is what was identified, not all of what was run', () => {
+  it('says where the mix came from without claiming a list that may not exist', () => {
     render(<RetirementConnectedExample />);
 
-    // Part of that percentage is also in the "cannot see" list next to it.
+    // The mix card used to point at the "cannot see" list beside it for the
+    // overlap. With a book the engine places in full there is no such list, so
+    // the sentence has to stand on the holdings themselves.
     expect(
-      screen.getByText(/what the model could identify, not all of what it could run/i)
+      screen.getByText(/read off the holdings themselves/i)
     ).toBeInTheDocument();
   });
 
   it('shows the coverage and confidence the engine reported', () => {
-    render(<RetirementConnectedExample />);
+    const { container } = render(<RetirementConnectedExample />);
 
-    expect(
-      screen.getByText(`${(EXAMPLE.coverage.valueCoverage * 100).toFixed(1)}%`)
-    ).toBeInTheDocument();
-    expect(screen.getByText(EXAMPLE.coverage.confidence)).toBeInTheDocument();
+    // Scoped to the trust card: survival rates render in the same "100.0%"
+    // shape, so a page-wide text match is ambiguous rather than wrong.
+    const trustCard = Array.from(container.querySelectorAll('.qp-example-card')).find(
+      (card) => card.querySelector('h3')?.textContent === 'It shows how much to trust the answer'
+    ) as HTMLElement;
+
+    expect(within(trustCard).getByText(`${(EXAMPLE.coverage.valueCoverage * 100).toFixed(1)}%`))
+      .toBeInTheDocument();
+    expect(within(trustCard).getByText(EXAMPLE.coverage.confidence)).toBeInTheDocument();
+  });
+
+  it('picks the card face from the coverage figure, not the length of a list', () => {
+    const { container } = render(<RetirementConnectedExample />);
+
+    // The two faces have to agree with the number printed beside them. Keying
+    // the branch off list length alone let a book whose only gap was a partial
+    // exclusion render "It tested every dollar" over a sub-100% coverage
+    // figure, because that bucket is in neither list the page used to read.
+    const clear = container.querySelector('.qp-example-card-clear');
+    const flagged = container.querySelector('.qp-example-card-flag');
+    const fullyCovered = EXAMPLE.coverage.unmodeledValue === 0 && EXAMPLE.coverage.valueCoverage === 1;
+
+    expect(Boolean(clear)).toBe(fullyCovered);
+    expect(Boolean(flagged)).toBe(!fullyCovered);
+  });
+
+  it('flags the mapping rating as a warning only when it reads low', () => {
+    const { container } = render(<RetirementConnectedExample />);
+
+    const rating = container.querySelector('.qp-example-low, .qp-example-rating');
+    expect(rating).not.toBeNull();
+    expect(rating!.textContent).toBe(EXAMPLE.coverage.confidence);
+    // A medium or high rating rendered in the low rating's colour understates
+    // the answer as surely as the reverse overstates it.
+    expect(rating!.classList.contains('qp-example-low')).toBe(
+      EXAMPLE.coverage.confidence === 'low'
+    );
   });
 
   it('describes unmodeled gaps from the generated counts, not hardcoded copy', () => {
-    render(<RetirementConnectedExample />);
-
     const unresolved = EXAMPLE.coverage.unresolved.length;
     const unsupported = EXAMPLE.coverage.unsupported.length;
-    expect(unresolved).toBeGreaterThan(0);
-    expect(unsupported).toBeGreaterThan(0);
+
+    if (unresolved === 0 && unsupported === 0) {
+      // Nothing to describe on this book. The full-coverage branch is covered
+      // by its own case above; asserting gap wording here would only pin the
+      // page to a profile the generator is meant to be able to change.
+      return;
+    }
+
+    render(<RetirementConnectedExample />);
 
     // Both branches, because the counts move with the engine: TIPS left the
     // unsupported list when they gained a return series, and a test that only
     // knew the plural wording read that as the copy breaking.
     const word = (count: number) => (count === 1 ? 'one' : count === 2 ? 'two' : String(count));
-    expect(
-      screen.getByText(
-        new RegExp(
-          unresolved === 1
-            ? 'One does not say clearly enough what it holds or where'
-            : `${word(unresolved)} do not say clearly enough what they hold or where`,
-          'i',
+    if (unresolved > 0) {
+      expect(
+        screen.getByText(
+          new RegExp(
+            unresolved === 1
+              ? 'One does not say clearly enough what it holds or where'
+              : `${word(unresolved)} do not say clearly enough what they hold or where`,
+            'i',
+          )
         )
-      )
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText(
-        new RegExp(
-          unsupported === 1
-            ? 'one is a kind of investment with no century of history to test it against'
-            : `${word(unsupported)} are kinds of investment with no century of history`,
-          'i',
+      ).toBeInTheDocument();
+    }
+    if (unsupported > 0) {
+      expect(
+        screen.getByText(
+          new RegExp(
+            unsupported === 1
+              ? 'one is a kind of investment with no century of history to test it against'
+              : `${word(unsupported)} are kinds of investment with no century of history`,
+            'i',
+          )
         )
-      )
-    ).toBeInTheDocument();
+      ).toBeInTheDocument();
+    }
   });
 
   it('says the two results are read against the same record', () => {
@@ -197,24 +300,72 @@ describe('connected-accounts example panel', () => {
   });
 
   it('discloses any sleeve represented by a stand-in for part of the window', () => {
-    render(<RetirementConnectedExample />);
+    const { container } = render(<RetirementConnectedExample />);
 
     // Every one of them, not just the first. There are two now -- international
     // equity before 1975 and TIPS before 2003 -- and a panel that discloses one
     // substitution while staying silent about another is worse than one that
     // discloses none, because it reads as though it listed them all.
+    //
+    // The disclosure is a row per sleeve rather than a paragraph per sleeve, so
+    // this reads the rows. Shortening the copy is allowed; dropping a sleeve or
+    // its share of the window is not.
     expect(EXAMPLE.result.proxiedSeries.length).toBeGreaterThan(0);
-    for (const proxied of EXAMPLE.result.proxiedSeries) {
+
+    const rows = Array.from(container.querySelectorAll('.qp-example-standins li'));
+    expect(rows).toHaveLength(EXAMPLE.result.proxiedSeries.length);
+
+    EXAMPLE.result.proxiedSeries.forEach((proxied, index) => {
+      const row = rows[index] as HTMLElement;
       expect(proxied.months).toBeGreaterThan(0);
       expect(proxied.months).toBeLessThan(proxied.windowMonths);
       expect(
-        screen.getByText(new RegExp(`For ${proxied.months} of the ${proxied.windowMonths} months tested`, 'i'))
+        within(row).getByText(
+          `${proxied.months.toLocaleString('en-US')} of ${proxied.windowMonths.toLocaleString('en-US')} months`
+        )
       ).toBeInTheDocument();
-    }
-    expect(screen.getByText(/those months use the US market return instead/i)).toBeInTheDocument();
+      // What replaced it, not just that something did. The row names the
+      // substitute; the sentence above the rows carries "stands in".
+      expect(row.textContent!.length).toBeGreaterThan(
+        `${proxied.months.toLocaleString('en-US')} of ${proxied.windowMonths.toLocaleString('en-US')} months`.length
+      );
+    });
+
     expect(
-      screen.getByText(/those months use ordinary government\s+bonds instead/i)
+      screen.getByText(/closest recorded series stands in for the early months/i)
     ).toBeInTheDocument();
+  });
+
+  it('keeps the direction of the TIPS stand-in, which is the actionable part', () => {
+    render(<RetirementConnectedExample />);
+
+    const series = EXAMPLE.result.proxiedSeries.map((proxied) => proxied.series);
+    if (!series.includes('tips')) return;
+
+    // Substituting ordinary government bonds for TIPS drops the inflation
+    // protection TIPS are bought for, so those stretches test the plan harder
+    // than the real record would. Trimming the copy must not trim that: it is
+    // the one part a reader can act on, and it cuts in the plan's favour.
+    expect(
+      screen.getByText(/test the plan harder than the real record would/i)
+    ).toBeInTheDocument();
+  });
+
+  it('does not dress the stand-ins up as caution', () => {
+    const { container } = render(<RetirementConnectedExample />);
+
+    if (EXAMPLE.result.proxiedSeries.length === 0) return;
+
+    // Only the TIPS substitution is known to cut in the plan's favour. Using US
+    // returns for months with no overseas record is uninformative about holding
+    // money abroad, not cautious about it, and shortening this copy must not
+    // round the pair up to reassurance — that is the claim the panel exists to
+    // avoid making.
+    const trustCard = Array.from(container.querySelectorAll('.qp-example-card')).find(
+      (card) => card.querySelector('h3')?.textContent === 'It shows how much to trust the answer'
+    ) as HTMLElement;
+
+    expect(trustCard.textContent).not.toMatch(/conservative|cautious|err(s|ed)? on the safe side/i);
   });
 
   it('answers the page\'s question before showing its work', () => {
@@ -234,16 +385,24 @@ describe('connected-accounts example panel', () => {
   });
 
   it('bands the answer across retirement ages, each with its own count', () => {
-    render(<RetirementConnectedExample />);
+    const { container } = render(<RetirementConnectedExample />);
 
-    for (const entry of EXAMPLE.byRetirementAge) {
-      expect(screen.getByText(`Retire at ${entry.age}`)).toBeInTheDocument();
+    const rungs = Array.from(container.querySelectorAll('.qp-example-ladder li'));
+    const ordered = [...EXAMPLE.byRetirementAge].sort((a, b) => a.age - b.age);
+    expect(rungs).toHaveLength(ordered.length);
+
+    // Per rung rather than page-wide: two ages that both clear every history
+    // print the same count, and a page-wide match cannot tell which rung it
+    // found — or that one of them is missing.
+    ordered.forEach((entry, index) => {
+      const rung = rungs[index] as HTMLElement;
+      expect(within(rung).getByText(`Retire at ${entry.age}`)).toBeInTheDocument();
       expect(
-        screen.getByText(
+        within(rung).getByText(
           `${entry.sequencesSurvived.toLocaleString('en-US')} of ${entry.sequencesTested.toLocaleString('en-US')} lasted`
         )
       ).toBeInTheDocument();
-    }
+    });
   });
 
   it('reads the "when" sentence off the band rather than asserting an age', () => {

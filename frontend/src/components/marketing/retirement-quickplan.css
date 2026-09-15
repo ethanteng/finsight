@@ -1468,6 +1468,80 @@
   color: #97600f;
 }
 
+.quickplan-page .qp-example-rating {
+  text-transform: capitalize;
+}
+
+/* The gap card's other face: same shape, stated as coverage rather than a
+   shortfall, so a fully resolved book does not borrow the warning's colour. */
+.quickplan-page .qp-example-card-clear {
+  border-color: #b3c9b6;
+  background: #eef5ec;
+}
+
+.quickplan-page .qp-example-modeled {
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.quickplan-page .qp-example-modeled li {
+  padding: 7px 0 7px 18px;
+  border-bottom: 1px solid rgba(16, 35, 25, 0.08);
+  color: #4a564e;
+  font-size: 13px;
+  position: relative;
+}
+
+.quickplan-page .qp-example-modeled li::before {
+  content: "";
+  position: absolute;
+  top: 14px;
+  left: 2px;
+  width: 6px;
+  height: 6px;
+  border-radius: 2px;
+  background: #4e8f62;
+}
+
+/* Stand-ins read as rows, not paragraphs: which sleeve, what replaced it, and
+   over how much of the window. The detail is a footnote to the answer, so it
+   is sized like one. */
+.quickplan-page .qp-example-standins {
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.quickplan-page .qp-example-standins li {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 1px 12px;
+  padding: 9px 0;
+  border-bottom: 1px solid rgba(16, 35, 25, 0.09);
+}
+
+.quickplan-page .qp-example-standins b {
+  color: #2f3b34;
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.quickplan-page .qp-example-standins small {
+  grid-row: 1 / span 2;
+  grid-column: 2;
+  align-self: center;
+  color: #7c8981;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.quickplan-page .qp-example-standins span {
+  color: #6b7871;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
 .quickplan-page .qp-example-figure {
   margin: 0 !important;
   color: #8a5a12 !important;
@@ -1475,6 +1549,10 @@
   font-size: 34px !important;
   font-weight: 780;
   letter-spacing: -0.05em;
+}
+
+.quickplan-page .qp-example-figure-clear {
+  color: #176840 !important;
 }
 
 .quickplan-page .qp-example-figure-note {
