@@ -1,8 +1,9 @@
+import userEvent from "@testing-library/user-event";
 import { render, screen, within } from "@testing-library/react";
 import AnswerPage from "@/components/marketing/AnswerPage";
 import MarketingHome from "@/components/marketing/MarketingHome";
 import UseCasesRoute from "@/app/use-cases/page";
-import { SiteFooter } from "@/components/marketing/SiteShell";
+import { SiteFooter, SiteHeader } from "@/components/marketing/SiteShell";
 import {
   canIRetireAt55,
   canIRetireAt60,
@@ -51,6 +52,31 @@ describe("retirement entry points", () => {
     expect(screen.getByRole("link", { name: /01 \/ COAST FIRE & OPTIONALITY/ }))
       .toHaveAttribute("href", "/coast-fire-calculator");
     expect(screen.getByRole("link", { name: /02 \/ RETIREMENT/ }))
+      .toHaveAttribute("href", "/retirement-calculator");
+  });
+
+  it("puts Retirement in the header nav, desktop and mobile alike", async () => {
+    expect(PRIMARY_NAV_LINKS.find((link) => link.label === "Retirement")?.href)
+      .toBe("/retirement-calculator");
+
+    const user = userEvent.setup();
+    render(<SiteHeader />);
+    expect(screen.getByRole("link", { name: "Retirement" }))
+      .toHaveAttribute("href", "/retirement-calculator");
+
+    // The mobile menu renders the same list, so the link cannot be desktop-only.
+    await user.click(screen.getByRole("button", { name: "Open menu" }));
+    const panel = screen.getByLabelText("Mobile navigation");
+    expect(within(panel).getByRole("link", { name: /Retirement/ }))
+      .toHaveAttribute("href", "/retirement-calculator");
+  });
+
+  it("offers full retirement as the secondary path out of the homepage Coast FIRE card", () => {
+    render(<MarketingHome />);
+
+    const card = screen.getByLabelText("From a free Coast FIRE number to a stress-tested plan")
+      .closest("section") as HTMLElement;
+    expect(within(card).getByRole("link", { name: "Stress-test full retirement" }))
       .toHaveAttribute("href", "/retirement-calculator");
   });
 

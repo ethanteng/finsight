@@ -56,9 +56,14 @@ export default function Home() {
             <p>
               Working toward Coast FIRE? Find out whether your current savings could grow to your retirement target without more contributions—then decide what that could mean for work, saving, and retirement.
             </p>
-            <Link className="button button-primary" href="/coast-fire-calculator" data-cs-override-id="homepage-coast-fire-calculator">
-              Calculate my Coast FIRE number <span aria-hidden="true">→</span>
-            </Link>
+            <div className="coast-fire-entry-actions">
+              <Link className="button button-primary" href="/coast-fire-calculator" data-cs-override-id="homepage-coast-fire-calculator">
+                Calculate my Coast FIRE number <span aria-hidden="true">→</span>
+              </Link>
+              <Link className="light-link" href="/retirement-calculator" data-cs-override-id="homepage-coast-fire-retirement-calculator">
+                Stress-test full retirement
+              </Link>
+            </div>
           </div>
           <div className="coast-fire-entry-model" aria-label="From a free Coast FIRE number to a stress-tested plan">
             <span><small>FREE TOOL</small><strong>Have I reached Coast FIRE?</strong><i>Number + assumptions</i></span>

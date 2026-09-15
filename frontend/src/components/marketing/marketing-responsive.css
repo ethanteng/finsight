@@ -19,6 +19,12 @@
   .related-decisions { padding-block: 20px; }
   .related-decisions .other-cases { width: 100%; }
   :is(.conversion-home, .use-case-page) .site-header { position: sticky; top: 0; z-index: 30; background: #f3f2e9; }
+  /* Six primary nav items have to clear the brand and the sign-in/CTA pair
+     before the mobile menu takes over at 980px. Tighten the gap rather than
+     dropping a link, so every destination stays reachable on a laptop. */
+  @media (min-width: 981px) and (max-width: 1180px) {
+    .nav-links { gap: 22px; font-size: 13px; }
+  }
   .use-case-hero .back-link { margin-bottom: 18px; font-size: 14px; }
   .case-trial-actions .microcopy { margin-top: 12px; }
   /* The homepage hero headline uses the same type scale as the /features
