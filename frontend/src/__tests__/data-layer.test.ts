@@ -3,6 +3,10 @@ import {
   pushCalculatorResultsEmailCtaOpened,
   pushCoastFireCalculated,
   pushPurchase,
+  pushProductDemoCompleted,
+  pushProductDemoDetailViewed,
+  pushProductDemoSectionViewed,
+  pushProductDemoStarted,
   pushRetirementModelRun,
   pushSignUp,
   pushStartFreeClick,
@@ -125,6 +129,37 @@ describe("begin_checkout analytics", () => {
         source_page: "/coast-fire-calculator",
         cta_location: "coast_fire_plan_cta",
         content_type: "coast_fire_calculator",
+        destination_page: GET_STARTED_HREF,
+      },
+    ]);
+  });
+});
+
+describe("product-demo analytics", () => {
+  const analyticsWindow = window as AnalyticsWindow;
+
+  beforeEach(() => {
+    window.history.replaceState({}, "", "/demo?utm_source=email&utm_medium=nurture");
+    analyticsWindow.dataLayer = [];
+  });
+
+  it("classifies the demo separately and records only bounded interaction labels", () => {
+    pushProductDemoStarted();
+    pushProductDemoDetailViewed("sources");
+    pushProductDemoSectionViewed("accounts");
+    pushProductDemoCompleted();
+    pushStartFreeClick("demo_page_cta");
+
+    expect(analyticsWindow.dataLayer).toEqual([
+      { event: "product_demo_started", source_page: "/demo", content_type: "product_demo" },
+      { event: "product_demo_detail_viewed", source_page: "/demo", content_type: "product_demo", demo_detail: "sources" },
+      { event: "product_demo_section_viewed", source_page: "/demo", content_type: "product_demo", demo_section: "accounts" },
+      { event: "product_demo_completed", source_page: "/demo", content_type: "product_demo" },
+      {
+        event: "start_free_click",
+        source_page: "/demo",
+        cta_location: "demo_page_cta",
+        content_type: "product_demo",
         destination_page: GET_STARTED_HREF,
       },
     ]);

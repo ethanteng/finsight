@@ -1,6 +1,13 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import {
+  pushProductDemoCompleted,
+  pushProductDemoDetailViewed,
+  pushProductDemoSectionViewed,
+  pushProductDemoStarted,
+  type ProductDemoDetail,
+} from "@/lib/dataLayer";
 
 type DemoView = "decisions" | "finances" | "accounts";
 type DecisionTab = "answer" | "math" | "sources";
@@ -256,7 +263,13 @@ function SourcesPanel() {
   );
 }
 
-function DecisionsView({ onOpenFinances }: { onOpenFinances: () => void }) {
+function DecisionsView({
+  onOpenFinances,
+  onDetailViewed,
+}: {
+  onOpenFinances: () => void;
+  onDetailViewed: (detail: ProductDemoDetail) => void;
+}) {
   const [decisionId, setDecisionId] = useState(decisions[0].id);
   const [tab, setTab] = useState<DecisionTab>("answer");
   const [askNotice, setAskNotice] = useState(false);
@@ -318,6 +331,7 @@ function DecisionsView({ onOpenFinances }: { onOpenFinances: () => void }) {
 
   function chooseTab(nextTab: DecisionTab) {
     stopAutoPlay();
+    if (nextTab !== tab) onDetailViewed(nextTab);
     setTab(nextTab);
   }
 
@@ -434,22 +448,49 @@ function AccountsView() {
 
 export default function StaticProductDemo({ anchorId = "product-demo" }: { anchorId?: string | null } = {}) {
   const [view, setView] = useState<DemoView>("decisions");
+  const started = useRef(false);
+  const completed = useRef(false);
+  const viewedSections = useRef(new Set<DemoView>(["decisions"]));
+
+  function trackStart() {
+    if (started.current) return;
+    started.current = true;
+    pushProductDemoStarted();
+  }
+
+  function selectView(nextView: DemoView) {
+    trackStart();
+    if (nextView !== view) pushProductDemoSectionViewed(nextView);
+    viewedSections.current.add(nextView);
+    if (!completed.current && viewedSections.current.size === 3) {
+      completed.current = true;
+      pushProductDemoCompleted();
+    }
+    setView(nextView);
+  }
+
   return (
-    <figure className="static-product-demo" id={anchorId ?? undefined} aria-label="Interactive Ask Linc product demo">
+    <figure
+      className="static-product-demo"
+      id={anchorId ?? undefined}
+      aria-label="Interactive Ask Linc product demo"
+      onClickCapture={trackStart}
+      onKeyDownCapture={trackStart}
+    >
       <div className="demo-browser-bar"><div aria-hidden="true"><span/><span/><span/></div><p><i>⌁</i> asklinc.com/demo</p><strong>INTERACTIVE DEMO</strong></div>
       <div className="demo-app-shell">
         <aside className="demo-app-nav">
           <div className="demo-app-brand"><span>L</span><strong>Ask Linc</strong><small>DEMO</small></div>
           <nav aria-label="Interactive demo navigation">
-            <button type="button" className={view === "decisions" ? "active" : ""} aria-current={view === "decisions" ? "page" : undefined} onClick={() => setView("decisions")}><span aria-hidden="true">✦</span> Decisions</button>
-            <button type="button" className={view === "finances" ? "active" : ""} aria-current={view === "finances" ? "page" : undefined} onClick={() => setView("finances")}><span aria-hidden="true">▥</span> Finances</button>
-            <button type="button" className={view === "accounts" ? "active" : ""} aria-current={view === "accounts" ? "page" : undefined} onClick={() => setView("accounts")}><span aria-hidden="true">◎</span> Accounts &amp; context</button>
+            <button type="button" className={view === "decisions" ? "active" : ""} aria-current={view === "decisions" ? "page" : undefined} onClick={() => selectView("decisions")}><span aria-hidden="true">✦</span> Decisions</button>
+            <button type="button" className={view === "finances" ? "active" : ""} aria-current={view === "finances" ? "page" : undefined} onClick={() => selectView("finances")}><span aria-hidden="true">▥</span> Finances</button>
+            <button type="button" className={view === "accounts" ? "active" : ""} aria-current={view === "accounts" ? "page" : undefined} onClick={() => selectView("accounts")}><span aria-hidden="true">◎</span> Accounts &amp; context</button>
           </nav>
           <p>Explore freely. Asking new questions is disabled.</p>
         </aside>
         <main className="demo-app-main">
-          {view === "decisions" ? <DecisionsView onOpenFinances={() => setView("finances")} /> : null}
-          {view === "finances" ? <FinancesView onOpenAccounts={() => setView("accounts")} /> : null}
+          {view === "decisions" ? <DecisionsView onOpenFinances={() => selectView("finances")} onDetailViewed={pushProductDemoDetailViewed} /> : null}
+          {view === "finances" ? <FinancesView onOpenAccounts={() => selectView("accounts")} /> : null}
           {view === "accounts" ? <AccountsView /> : null}
         </main>
       </div>

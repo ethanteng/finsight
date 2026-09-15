@@ -85,6 +85,11 @@ export default function Home() {
           <summary>Explore the interactive example</summary>
           <StaticProductDemo anchorId={null} />
         </details>
+        <div className="hero-actions product-demo-actions">
+          <Link className="text-link" href="/demo" data-cs-override-id="homepage-full-product-demo">
+            Open the full demo →
+          </Link>
+        </div>
       </section>
 
       <section className="section pricing-section" id="pricing">
