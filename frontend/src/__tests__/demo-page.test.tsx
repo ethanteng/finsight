@@ -1,6 +1,7 @@
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import DemoPage, { metadata } from "@/app/demo/page";
+import StaticProductDemo from "@/components/marketing/StaticProductDemo";
 import { DEMO_FAQS } from "@/lib/demo-content";
 
 type AnalyticsWindow = Window & typeof globalThis & {
@@ -87,5 +88,25 @@ describe("interactive demo landing page", () => {
         content_type: "product_demo",
       },
     ]);
+  });
+
+  it("does not treat keyboard focus navigation as demo engagement", () => {
+    render(<DemoPage />);
+    const demo = screen.getByLabelText("Interactive Ask Linc product demo");
+
+    fireEvent.keyDown(within(demo).getByRole("button", { name: "Decisions" }), { key: "Tab" });
+
+    expect(analyticsWindow.dataLayer).toEqual([]);
+  });
+
+  it("keeps shared demo embeds outside the dedicated demo funnel by default", async () => {
+    const user = userEvent.setup();
+    render(<StaticProductDemo anchorId={null} />);
+    const demo = screen.getByLabelText("Interactive Ask Linc product demo");
+
+    await user.click(within(demo).getByRole("tab", { name: "math" }));
+    await user.click(within(demo).getByRole("button", { name: "Finances" }));
+
+    expect(analyticsWindow.dataLayer).toEqual([]);
   });
 });

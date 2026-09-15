@@ -446,14 +446,23 @@ function AccountsView() {
   );
 }
 
-export default function StaticProductDemo({ anchorId = "product-demo" }: { anchorId?: string | null } = {}) {
+type StaticProductDemoProps = {
+  anchorId?: string | null;
+  /** Emit the dedicated /demo funnel events. Shared marketing embeds leave this disabled. */
+  trackAnalytics?: boolean;
+};
+
+export default function StaticProductDemo({
+  anchorId = "product-demo",
+  trackAnalytics = false,
+}: StaticProductDemoProps = {}) {
   const [view, setView] = useState<DemoView>("decisions");
   const started = useRef(false);
   const completed = useRef(false);
   const viewedSections = useRef(new Set<DemoView>(["decisions"]));
 
   function trackStart() {
-    if (started.current) return;
+    if (!trackAnalytics || started.current) return;
     started.current = true;
     pushProductDemoStarted();
   }
@@ -465,14 +474,21 @@ export default function StaticProductDemo({ anchorId = "product-demo" }: { ancho
   }
 
   function selectView(nextView: DemoView) {
-    trackStart();
-    if (nextView !== view) pushProductDemoSectionViewed(nextView);
-    viewedSections.current.add(nextView);
-    if (!completed.current && viewedSections.current.size === 3) {
-      completed.current = true;
-      pushProductDemoCompleted();
+    if (trackAnalytics) {
+      trackStart();
+      if (nextView !== view) pushProductDemoSectionViewed(nextView);
+      viewedSections.current.add(nextView);
+      if (!completed.current && viewedSections.current.size === 3) {
+        completed.current = true;
+        pushProductDemoCompleted();
+      }
     }
     setView(nextView);
+  }
+
+  function trackDetailViewed(detail: ProductDemoDetail) {
+    if (!trackAnalytics) return;
+    pushProductDemoDetailViewed(detail);
   }
 
   return (
@@ -495,7 +511,7 @@ export default function StaticProductDemo({ anchorId = "product-demo" }: { ancho
           <p>Explore freely. Asking new questions is disabled.</p>
         </aside>
         <main className="demo-app-main">
-          {view === "decisions" ? <DecisionsView onOpenFinances={() => selectView("finances")} onDetailViewed={pushProductDemoDetailViewed} /> : null}
+          {view === "decisions" ? <DecisionsView onOpenFinances={() => selectView("finances")} onDetailViewed={trackDetailViewed} /> : null}
           {view === "finances" ? <FinancesView onOpenAccounts={() => selectView("accounts")} /> : null}
           {view === "accounts" ? <AccountsView /> : null}
         </main>

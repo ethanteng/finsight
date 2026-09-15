@@ -51,7 +51,12 @@
     .demo-experience-cta { align-items: flex-start; flex-direction: column; padding: 23px; }
     /* Keep FAQ visible: the page emits FAQPage JSON-LD, and Google mobile-first
        indexing treats display:none FAQ markup as ineligible / mismatched. */
-    .demo-value-section,.demo-trust-band,:scope.demo-landing-page > .page-cta { display: none; }
+    .demo-value-section,.demo-trust-band { display: none; }
+    :scope.demo-landing-page > .page-cta { padding-block: 42px; text-align: left; }
+    :scope.demo-landing-page > .page-cta .page-cta-inner { align-items: flex-start; }
+    :scope.demo-landing-page > .page-cta h2 { max-width: 540px; font-size: clamp(30px,8vw,40px); }
+    :scope.demo-landing-page > .page-cta .button { margin-top: 22px; }
+    :scope.demo-landing-page > .page-cta small { margin-top: 12px; }
     :scope.demo-landing-page .footer-column,:scope.demo-landing-page .footer-brand .footer-cta-link { display: none; }
     :scope.demo-landing-page .expanded-footer { padding-block: 42px 25px; }
     :scope.demo-landing-page .footer-bottom { flex-direction: column; gap: 13px; }

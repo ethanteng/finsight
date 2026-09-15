@@ -120,7 +120,7 @@ export default function DemoPage() {
               new question is the only thing disabled in this read-only example.
             </p>
           </div>
-          <StaticProductDemo anchorId={null} />
+          <StaticProductDemo anchorId={null} trackAnalytics />
           <div className="demo-experience-cta">
             <div>
               <strong>Ready to use your own numbers?</strong>
