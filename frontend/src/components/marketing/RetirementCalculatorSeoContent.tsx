@@ -74,6 +74,18 @@ export function RetirementCalculatorSeoContent() {
               <span>Keep retirement age, spending, Social Security, portfolio risk, and scenarios in one model.</span>
             </Link>
           </li>
+          <li>
+            <Link href="/blog/retirement-age-calculator">
+              <strong>How retirement-age calculators work</strong>
+              <span>Understand the inputs, assumptions, and tradeoffs behind an estimated retirement age.</span>
+            </Link>
+          </li>
+          <li>
+            <Link href="/blog/ai-financial-calculator">
+              <strong>What makes an AI financial calculator trustworthy?</strong>
+              <span>Separate conversational help from the deterministic math a consequential decision needs.</span>
+            </Link>
+          </li>
         </ul>
       </section>
     </>
