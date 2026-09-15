@@ -716,7 +716,7 @@ export function MarketingArticlePage({ post, processedHtml }: { post: GhostPost;
     <StandardPage className="article-page">
       <section className="article-head shell">
         <Link href="/blog" className="back-link">← Back to the blog</Link>
-        <span className="post-category">{postCategory(post)}</span>
+        <PostCategory post={post} />
         <h1>{post.title}</h1>
         {post.excerpt && <p>{post.excerpt}</p>}
         <div className="article-byline"><span><Image src="/images/ethan-teng-cartoon.webp" alt={`Portrait of ${author}`} fill sizes="38px" /></span><p><b>{author}</b><small>Published {formatPostDate(post.published_at)} · {post.reading_time || 5} min read</small></p></div>

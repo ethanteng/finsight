@@ -1,5 +1,9 @@
 import { render, screen, within } from "@testing-library/react";
-import { MarketingBlogPage, MarketingBlogTopicPage } from "@/components/marketing/MarketingSubpage";
+import {
+  MarketingArticlePage,
+  MarketingBlogPage,
+  MarketingBlogTopicPage,
+} from "@/components/marketing/MarketingSubpage";
 import { listBlogTopics, postsForTopic, findBlogTopic } from "@/lib/blog-topics";
 import type { GhostPost } from "@/lib/ghost";
 
@@ -64,6 +68,26 @@ describe("blog topic navigation", () => {
 
     expect(screen.queryByRole("link", { name: "ASK LINC BLOG" })).not.toBeInTheDocument();
     expect(screen.getByText("ASK LINC BLOG")).toBeInTheDocument();
+  });
+
+  it("links the category in an article header to that topic's archive", () => {
+    const { container } = render(
+      <MarketingArticlePage post={posts[0]} processedHtml="<p>Article body</p>" />,
+    );
+
+    const label = container.querySelector(".article-head .post-category") as HTMLElement;
+    expect(label.tagName).toBe("A");
+    expect(label).toHaveAttribute("href", "/blog/topics/fire");
+  });
+
+  it("leaves an untagged article's category as plain text", () => {
+    const { container } = render(
+      <MarketingArticlePage post={posts[3]} processedHtml="<p>Article body</p>" />,
+    );
+
+    const label = container.querySelector(".article-head .post-category") as HTMLElement;
+    expect(label.tagName).toBe("SPAN");
+    expect(label).toHaveTextContent("ASK LINC BLOG");
   });
 
   it("groups topics by primary tag with a post count", () => {
