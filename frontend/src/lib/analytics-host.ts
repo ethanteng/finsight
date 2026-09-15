@@ -1,4 +1,7 @@
-import { INTERNAL_ANALYTICS_BROWSER_KEY } from './internal-analytics';
+import {
+  INTERNAL_ANALYTICS_BROWSER_KEY,
+  isInternalAnalyticsBrowser,
+} from './internal-analytics';
 
 /**
  * Analytics is production-only.
@@ -145,4 +148,46 @@ export function redactAnalyticsUrl(url: URL): string {
     if (value !== null) redacted.searchParams.set(param, value);
   }
   return redacted.toString();
+}
+
+/**
+ * How much of the site a Vercel component is meant to report on.
+ *
+ * Web Analytics answers "how is the website doing", so the product is noise
+ * in it. Speed Insights answers "how fast is this page", which is worth
+ * knowing for the signed-in app too — a slow `/finances` is a real problem,
+ * and dropping it would measure only the half of the site that is already
+ * static. The two differ here and nowhere else.
+ */
+export type TelemetrySurface = "marketing-only" | "whole-site";
+
+/**
+ * The URL a Vercel component should report for an event, or null to drop it.
+ *
+ * Both components ask the same three questions — is this the production
+ * site, is this a surface we measure, is this browser marked internal — and
+ * report the same redacted URL, so they ask them through one function rather
+ * than two `beforeSend` bodies that can drift apart. Only `surface` differs.
+ *
+ * A URL that will not parse is dropped rather than reported: a value this
+ * code cannot inspect is exactly the one not to hand to a third party.
+ */
+export function measuredUrl(href: string, surface: TelemetrySurface): string | null {
+  let url: URL;
+  try {
+    url = new URL(href);
+  } catch {
+    return null;
+  }
+
+  // Same allowlist as the GTM snippet, so dev servers and *.vercel.app
+  // previews never record into the production project.
+  if (!isAnalyticsHost(url.hostname)) return null;
+
+  if (surface === "marketing-only" && !isMarketingPath(url.pathname)) return null;
+
+  // The same opt-out that keeps our own browsing out of GTM and Contentsquare.
+  if (isInternalAnalyticsBrowser()) return null;
+
+  return redactAnalyticsUrl(url);
 }

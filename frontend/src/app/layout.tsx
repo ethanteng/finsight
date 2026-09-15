@@ -5,7 +5,7 @@ import '../components/marketing/marketing-responsive.css'
 import StructuredData from '../components/StructuredData'
 import type { Metadata } from 'next'
 import VercelAnalytics from '../components/VercelAnalytics'
-import { SpeedInsights } from '@vercel/speed-insights/next'
+import VercelSpeedInsights from '../components/VercelSpeedInsights'
 import { PricingProvider } from '../components/PricingProvider'
 import { getPricing } from '../lib/pricing'
 import {
@@ -124,7 +124,7 @@ export default async function RootLayout({
         {/* End Google Tag Manager (noscript) */}
         <PricingProvider pricing={pricing}>{children}</PricingProvider>
         <VercelAnalytics />
-        <SpeedInsights />
+        <VercelSpeedInsights />
       </body>
     </html>
   )

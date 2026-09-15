@@ -4,6 +4,7 @@ import {
   buildGoogleTagManagerSnippet,
   isAnalyticsHost,
   isMarketingPath,
+  measuredUrl,
   redactAnalyticsUrl,
   shouldRenderNoscriptFallback,
 } from "@/lib/analytics-host";
@@ -151,29 +152,61 @@ describe("isMarketingPath", () => {
   );
 });
 
-describe("Vercel Web Analytics wiring", () => {
+describe("Vercel component wiring", () => {
   const layout = readFileSync(join(process.cwd(), "src/app/layout.tsx"), "utf8");
-  const wrapper = readFileSync(
-    join(process.cwd(), "src/components/VercelAnalytics.tsx"),
-    "utf8",
-  );
+  const read = (file: string) =>
+    readFileSync(join(process.cwd(), "src/components", file), "utf8");
 
-  it("renders only the gated wrapper, never the raw component", () => {
-    // An ungated <Analytics /> would record previews and the signed-in app.
+  it("renders only the gated wrappers, never the raw components", () => {
     expect(layout).toContain("<VercelAnalytics />");
+    expect(layout).toContain("<VercelSpeedInsights />");
+    // Importing either package here would mean an ungated component.
     expect(layout).not.toContain("@vercel/analytics");
+    expect(layout).not.toContain("@vercel/speed-insights");
   });
 
-  it("gates on host, surface and the internal-browser opt-out", () => {
-    expect(wrapper).toContain("isAnalyticsHost(url.hostname)");
-    expect(wrapper).toContain("isMarketingPath(url.pathname)");
-    expect(wrapper).toContain("isInternalAnalyticsBrowser()");
-  });
-
-  it("reports a redacted URL rather than the one the visitor arrived on", () => {
-    expect(wrapper).toContain("redactAnalyticsUrl(url)");
+  it.each([
+    ["VercelAnalytics.tsx", "marketing-only"],
+    ["VercelSpeedInsights.tsx", "whole-site"],
+  ])("routes %s through measuredUrl for the %s surface", (file, surface) => {
+    const wrapper = read(file);
+    expect(wrapper).toContain(`measuredUrl(event.url, '${surface}')`);
     // Returning `event` unchanged would ship the raw query string.
     expect(wrapper).not.toMatch(/^\s*return event$/m);
+  });
+});
+
+describe("measuredUrl", () => {
+  it("drops a preview host for both surfaces", () => {
+    for (const surface of ["marketing-only", "whole-site"] as const) {
+      expect(measuredUrl("https://finsight-abc123.vercel.app/pricing", surface)).toBeNull();
+    }
+  });
+
+  it("drops a product path for Web Analytics but keeps it for Speed Insights", () => {
+    // A vital says how long /finances took, not who was reading it.
+    expect(measuredUrl("https://asklinc.com/finances", "marketing-only")).toBeNull();
+    expect(measuredUrl("https://asklinc.com/finances", "whole-site")).toBe(
+      "https://asklinc.com/finances",
+    );
+  });
+
+  it("strips the reset token on the surface that still reports that page", () => {
+    // The leak this gate exists to close: Speed Insights measures
+    // /reset-password, so the token must not survive the redaction.
+    expect(
+      measuredUrl("https://asklinc.com/reset-password?token=live-single-use", "whole-site"),
+    ).toBe("https://asklinc.com/reset-password");
+  });
+
+  it("keeps campaign attribution on a measured marketing page", () => {
+    expect(measuredUrl("https://asklinc.com/pricing?utm_source=google", "marketing-only")).toBe(
+      "https://asklinc.com/pricing?utm_source=google",
+    );
+  });
+
+  it("drops a URL that will not parse rather than reporting it", () => {
+    expect(measuredUrl("not a url", "whole-site")).toBeNull();
   });
 });
 
