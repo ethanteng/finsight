@@ -1,7 +1,7 @@
 'use client'
 
 import { Analytics, type BeforeSendEvent } from '@vercel/analytics/next'
-import { isAnalyticsHost, isMarketingPath } from '../lib/analytics-host'
+import { isAnalyticsHost, isMarketingPath, redactAnalyticsUrl } from '../lib/analytics-host'
 import { isInternalAnalyticsBrowser } from '../lib/internal-analytics'
 
 /**
@@ -34,7 +34,10 @@ export default function VercelAnalytics() {
         // and Contentsquare. See lib/internal-analytics.ts.
         if (isInternalAnalyticsBrowser()) return null
 
-        return event
+        // A measured path can still be reached by a URL carrying a customer's
+        // email address or a Stripe session id, so the query string is
+        // rebuilt from an allowlist rather than passed through.
+        return { ...event, url: redactAnalyticsUrl(url) }
       }}
     />
   )

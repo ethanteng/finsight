@@ -101,3 +101,42 @@ export function isMarketingPath(pathname: string): boolean {
     prefix => pathname === prefix || pathname.startsWith(`${prefix}/`),
   );
 }
+
+/**
+ * Query parameters that may ride along with a measured pageview.
+ *
+ * An allowlist for the same reason isAnalyticsHost() is one. The marketing
+ * site's own links put a customer's email address on `/register`
+ * (src/services/stripe-email.ts) and a Stripe checkout session id beside it
+ * (src/routes/stripe.ts), and Vercel records the whole URL, query string
+ * included. A blocklist would have to name `email` and `session_id` today
+ * and the next such parameter before anyone adds it; this way the default
+ * for an unrecognised parameter is to drop it.
+ *
+ * Campaign attribution is the only thing measuring a marketing site needs
+ * from a query string, so that is all this lists. Add a parameter here only
+ * once it is clear it can never carry anything about a specific person.
+ */
+export const MEASURED_QUERY_PARAMS = [
+  "utm_source",
+  "utm_medium",
+  "utm_campaign",
+  "utm_term",
+  "utm_content",
+  "gclid",
+  "ref",
+] as const;
+
+/**
+ * The URL to report for a pageview: the origin and path as visited, the
+ * allowlisted query parameters, and nothing else — no other parameters and
+ * no fragment.
+ */
+export function redactAnalyticsUrl(url: URL): string {
+  const redacted = new URL(`${url.origin}${url.pathname}`);
+  for (const param of MEASURED_QUERY_PARAMS) {
+    const value = url.searchParams.get(param);
+    if (value !== null) redacted.searchParams.set(param, value);
+  }
+  return redacted.toString();
+}
