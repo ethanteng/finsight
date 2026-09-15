@@ -625,7 +625,7 @@ export function MarketingBlogPage({ ghostPosts }: { ghostPosts: GhostPost[] }) {
     <StandardPage className="blog-page">
       <section className="blog-hero shell">
         <div><p className="section-kicker">THE ASK LINC BLOG</p><h1>Better thinking about <em>money.</em></h1></div>
-        <p>Practical guides for retirement, Coast FIRE, and the big financial decisions that shape what you can do next.</p>
+        <p>Practical guides for retirement, Coast FIRE, and the big financial decisions that shape what you can do next. Start with <Link href="/blog/average-american-savings">what Americans actually have in savings</Link>.</p>
       </section>
       {featured ? (
         <>
