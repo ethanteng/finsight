@@ -1,649 +1,275 @@
-# 🚀 Ask Linc - AI-Powered Financial Analysis Platform
+# Ask Linc
 
-## **Project Overview**
+Ask Linc (`finsight`) is a personal-finance decision tool that combines connected accounts, deterministic financial calculations, and language-model analysis. Users can inspect their finances, ask follow-up questions about a decision, and see the data and assumptions behind an answer.
 
-Ask Linc is a comprehensive financial analysis platform that combines AI-powered insights with connected financial data and relevant market context to help users understand and optimize their financial health. The platform features privacy-protected data processing, tier-based access control, seamless integration with financial institutions, and a sophisticated **Retrieval-Augmented Generation (RAG)** system for current public financial information.
+**Repository snapshot: September 14, 2026.** This README describes the implementation on `main` at that date. Runtime credentials, provider entitlements, and admin settings determine which integrations and models a deployment uses.
 
-## 🏗️ **Architecture & Tech Stack**
+## Why it exists
 
-### **Backend (Node.js/TypeScript)**
-- **Framework**: Express.js with TypeScript
-- **Database**: PostgreSQL with Prisma ORM
-- **Authentication**: JWT-based with optional auth middleware
-- **AI Integration**: OpenAI GPT-4 for financial analysis
-- **External APIs**:
-  - Plaid (banking data)
-  - SnapTrade (investment data)
-  - FRED (latest published economic indicators and rate benchmarks)
-  - Massive (formerly Polygon.io; delayed SPY daily bars, Treasury curve, and inflation expectations)
-  - Financial Modeling Prep Starter (fund fees, metadata, country allocations, and sector weightings)
-  - Tiingo Power (adjusted price history, IEX quotes, and market news)
-  - RentCast (home valuations)
-  - **Brave Search API** (real-time financial information)
+A retirement or home-purchase decision spans cash flow, investments, liabilities, household context, and current rates. Those inputs usually live in different accounts and spreadsheets. Ask Linc assembles them into a shared financial snapshot, runs supported calculations in application code, and uses models to explain the implications and identify missing information. The engineering focus is keeping observed facts, calculated results, and hypothetical assumptions distinguishable and inspectable.
 
-### **Frontend (Next.js/React)**
-- **Framework**: Next.js 14 with TypeScript
-- **Styling**: Tailwind CSS
-- **UI Components**: Custom component library
-- **Deployment**: Vercel
+## Product surface
 
-### **Infrastructure**
-- **Backend Deployment**: Render
-- **Frontend Deployment**: Vercel
-- **Database**: PostgreSQL (Render)
-- **CI/CD**: GitHub Actions with automated testing
+- **Decisions (`/app`):** financial Q&A with decision threads, follow-ups, streamed answers, structured result cards, ratings, and **Show the Math** evidence. A financial overview and market-news view provide context alongside the conversation.
+- **Finances (`/finances`):** net worth, cash, investments, debt, home value, account groups, historical charts, income/expense overrides, and data-freshness or coverage notices.
+- **Accounts & context (`/profile`):** Plaid and SnapTrade connections, eligible direct Public.com connections, manual accounts, holdings and transactions, category corrections, home valuations, remembered personal details, and subscription management.
+- **Public calculators:** `/retirement-calculator` runs the retirement engine with disclosed allocation presets and user inputs; `/coast-fire-calculator` computes a deterministic savings target in the browser. Optional result emails are calculated again on the server. These are separate from authenticated analysis of actual holdings.
+- **Operations and content:** admin views for answer quality, model/tone settings, data gaps, registry-source drift, marketing analytics, and calculator reporting; marketing/use-case pages and a Ghost-backed blog.
 
-## 🧠 **Core Systems**
+Stripe checkout, webhooks, and the customer portal support subscription access. The current pricing path resolves one configured Stripe price through `STRIPE_PRICE_DEFAULT`; Starter/Standard/Premium still exist in data-access and compatibility code. See [pricing resolution](src/config/stripe-pricing.ts) and [authentication](src/auth/middleware.ts).
 
-### **1. Canonical Financial Context System**
-- **Purpose**: Gives AI responses a single, traceable source of financial truth
-- **Implementation**: Builds question-specific context from persisted canonical snapshots
-- **Features**:
-    - Deterministic financial calculations
-    - Explicit value, unit, and provenance metadata
-    - Locally validated authoritative numbers
+## System overview
 
-### **2. Enhanced Market Context System**
-- **Purpose**: Provides current economic and market context for informed financial advice
-- **Data Sources**: FRED (economic indicators), Brave Search (current public information), Massive (Premium macro context), Tiingo (quotes/news/performance), and FMP (fund look-through metadata)
-- **Features**:
-    - Proactive caching with scheduled updates
-    - Tier-based data access
-    - Latest published observations with their observation dates
-    - Scheduled economic-indicator refreshes
-    - Treasury yield-curve, inflation, and broad-market context
+The repository contains two npm projects: an Express API and a Next.js web app, sharing PostgreSQL-backed application state through the API.
 
-### **3. RAG System**
-- **Purpose**: Enhances AI responses with real-time financial information
-- **Data Sources**: Brave Search API for current financial data
-- **Features**:
-    - Real-time search for current rates and information
-    - Holistic coverage of all financial institutions
-    - Intelligent query enhancement
-    - Source attribution and transparency
-    - Tier-aware access control
-
-### Historical Retirement Market Data
-
-Retirement stress tests run entirely from the checked-in, monthly dataset in
-`data/historical_market_returns.csv`. Its source snapshots and generated
-metadata are versioned so production analysis never depends on a live market
-data request:
-
-- Kenneth French broad US market total returns and one-month Treasury-bill returns
-- Kenneth French EAFE-plus-Canada market returns for international equity
-- Robert Shiller 10-year US government-bond returns and CPI inflation
-
-TIPS are classified and reported separately but are not simulated: [the first
-U.S. TIPS auction was in 1997](https://www.treasurydirect.gov/research-center/history-of-marketable-securities/tips/), which is shorter than the engine's 50-year
-historical-evidence floor. The engine excludes that sleeve instead of assigning
-it nominal Treasury returns or inventing a pre-issuance history.
-
-Run `npm run refresh:market-datasets` to download validated official snapshots,
-update their hashes and vintages, and rebuild the unified dataset. Monthly
-rolling stress-test windows overlap and must be described as historical shares,
-not independent probability estimates.
-
-### **4. Tier-Based Access Control**
-- **Tiers**: Starter, Standard, Premium
-- **Features**:
-    - Differentiated data access per tier
-    - RAG system access for Standard and Premium
-    - Upgrade recommendations
-    - Source attribution for data transparency
-    - Cache management and performance optimization
-
-### **5. Seamless Plaid Integration**
-- **Purpose**: Maximum institution coverage with intelligent data detection
-- **Features**:
-    - Minimal products array (`["transactions"]`) for maximum FI coverage
-    - Comprehensive additional consent for future access without relinking
-    - Intelligent account type detection and automatic data fetching
-    - Smart endpoint usage (`/transactions/sync`, conditional real-time balance)
-    - No upfront user choice required - truly seamless experience
-
-### **6. AI Conversation Context Enhancement**
-- **Purpose**: Enables AI to build context across multiple conversation turns
-- **Features**:
-    - Grouped conversation turns and active-decision context
-    - Question-specific canonical data packs
-    - Bounded “What Linc remembers about you” details (age, location, household, and employment)
-    - Field-level updates that replace or clear stale details instead of appending summaries
-    - Seamless multi-turn financial conversations
-    - Financial facts, goals, and scenario assumptions remain in their authoritative sources
-
-### **7. MailerLite User Sync System**
-- **Purpose**: Automatically synchronizes user data to MailerLite for email marketing
-- **Features**:
-    - Daily automated sync at 3 AM EST
-    - Non-destructive upsert operations
-
-### **8. Home Value Tracking System**
-- **Purpose**: Track and include home values in Net Worth calculations
-- **Data Source**: RentCast API for real-time property valuations
-- **Features**:
-    - Home records kept separate from remembered personal context
-    - Manual home address entry in profile settings
-    - Automatic valuation with price ranges (low, mid, high)
-    - Monthly automatic value refresh
-    - Manual refresh capability
-    - Integrated into Financial Overview Net Worth calculation
-    - Encrypted storage alongside remembered personal context
-    - Available to authenticated users
-
-## 🚀 **Quick Start**
-
-### **Prerequisites**
-- Node.js 18+
-- PostgreSQL
-- npm or yarn
-
-### **Project Structure**
-```
-finsight/
-├── 📁 docs/                    # 📚 Documentation
-│   ├── README.md               # Documentation index
-│   ├── TESTING.md              # Comprehensive testing documentation
-│   ├── FINANCIAL_TRUTH_CONTRACT.md
-│   ├── DETERMINISTIC_LLM_CALCULATIONS.md
-│   └── features/               # Feature-specific references
-├── 📁 scripts/                 # 🔧 Utility scripts
-│   ├── test-*.js/ts           # Testing scripts
-│   ├── test-mailerlite-sync.js # MailerLite sync testing
-│   ├── check-db.js            # Database utilities
-│   ├── clear-*.js             # Cleanup scripts
-│   ├── build.sh               # Build scripts
-│   └── deploy-*.sh            # Deployment scripts
-├── 📁 frontend/               # 🎨 Next.js frontend
-├── 📁 src/                    # ⚙️ Backend source code
-├── 📁 prisma/                 # 🗄️ Database schema
-├── 📁 .github/                # 🔄 CI/CD workflows
-└── 📄 Configuration files     # ⚙️ Project config
+```mermaid
+flowchart TD
+    P[Plaid / SnapTrade / Public.com / manual accounts / RentCast] --> I[Financial ingestion and normalization]
+    I --> C[Deterministic calculations and source-quality checks]
+    C --> DB[(PostgreSQL: canonical snapshots, history, conversations, caches)]
+    DB --> UI[Next.js financial views]
+    Q[Question and active decision transcript] --> PLAN[OpenAI context preflight]
+    PLAN --> PACK[Selected snapshot data packs]
+    DB --> PACK
+    PACK --> AUDIT[Claude constrained pack and query audit]
+    AUDIT --> E[Final context and deterministic scenario execution]
+    EXT[Market providers and validated public search] --> E
+    E --> LLM[Claude answer / OpenAI fallback]
+    LLM --> V[Deterministic grounding / optional Gemini review]
+    V --> A[Answer and persisted evidence manifest]
+    A --> UI
+    A --> DB
 ```
 
-### **Environment Setup**
+### Financial data and calculations
 
-1. **Clone the repository**
+[Financial ingestion](src/services/financial-ingestion.ts) collects provider observations. [Source merging](src/services/financial-calculations.ts), [canonical snapshots](src/services/canonical-financial-snapshot.ts), and the [financial-truth domain](src/domain/financial-truth.ts) establish the values consumed by financial views and AI context. [FinancialRevisionService](src/services/financial-revision-service.ts) coordinates recomputation after account/data mutations and coalesces overlapping requests per user within a process.
+
+Key rules implemented in this path:
+
+- Account identity includes the owner, source, connection, and provider account ID. Explicit supersession handles replaced connections and direct Public feeds; similar names or balances are insufficient identity.
+- Investment totals reconcile account balances and deduplicated holdings without adding both. For a provider-held investment account, the greater of its balance and holdings value contributes to the total; unexplained balance value is reported as **Not itemized**.
+- Cash-flow aggregation uses canonical transaction types and signed amounts. Pending activity, transfers, and investment trades are excluded from operating income/expenses; refunds reduce expenses. Unconverted currencies and unresolved transactions are reported and omitted from totals.
+- Snapshots distinguish source observation time (`asOf`) from calculation time (`computedAt`) and retain `current`, `stale`, `partial`, or `unavailable` status. Recalculation does not make an old observation fresh. Unknown values remain unavailable rather than becoming zero.
+- Financial history copies canonical values and observation times. Daily history follows the user's timezone; material balance-sheet changes can create separately identified observations.
+
+### Deterministic calculations vs. model inference
+
+| Application code owns | Models contribute |
+| --- | --- |
+| Balances, net worth, cash flow, allocation, coverage, and derived metrics | Selecting relevant context and interpreting the user's decision |
+| Historical retirement simulations, withdrawal-rate solving, and registered what-if calculations | Extracting stated planning inputs and proposing typed scenario requests |
+| Input bounds, formulas, units, provenance, freshness, and assumption disclosure | Explaining results, tradeoffs, missing information, and follow-up questions |
+| Numeric grounding, retry/recovery rules, and evidence persistence | Drafting the structured answer and optional independent reasoning review |
+
+The [scenario registry](src/scenarios/calculator-registry.ts) currently registers **retirement withdrawal planning** and **target-home affordability**. Retirement variants can change spending, contributions, retirement/withdrawal ages, horizon, and withdrawal policy. Home affordability computes purchase cash, mortgage payments, ownership costs, post-purchase cash flow, and reserve constraints. Missing taxes, insurance, or other necessary inputs produce qualified/incomplete results. Scenario assumptions and outputs remain answer-scoped; they do not overwrite the observed financial snapshot.
+
+The historical `src/openai/` directory now handles multiple providers. [Model configuration](src/openai/model-config.ts) resolves admin overrides, supported environment overrides, then shipped defaults. Claude is the primary analysis provider; OpenAI runs context preflight, personal-context extraction, and answer fallback. The fallback reuses the prepared prompts. Gemini provides market-news synthesis and, when enabled and selected, a secondary reasoning review.
+
+### Custom RAG, data packs, and validation
+
+Retrieval-augmented generation (RAG) is implemented as application-owned data selection and public search. The current path uses typed packs, relational persistence, and provider caches; it has no vector-database dependency.
+
+1. **Plan:** an OpenAI preflight reads the active decision transcript and proposes allowlisted packs, typed scenarios, and up to three standalone public-search queries.
+2. **Audit:** the primary Claude model uses the constrained `request_data_packs` tool to accept or widen the selection and refine search/scenario plans. Application code validates IDs, dependencies, inputs, and access.
+3. **Retrieve and calculate:** aggregate financial facts are always present. Optional packs cover account details, transactions, investments, monthly cash flow, personal context, home value, retirement analysis, market context, and search. The application loads the final projection and executes registered calculators.
+4. **Ground:** canonical facts carry IDs, values, units, provenance, and applicable caveats. Local checks validate the fact pack and compare response numbers against it. Unsupported values can trigger wider retrieval and regeneration; persistently ungrounded passages are removed or replaced. Optional Gemini review evaluates reasoning separately.
+5. **Inspect:** a conversation stores the structured answer and compact evidence manifest: facts, selected packs, search execution, scenario inputs/results, model calls, validation outcomes, and timings. Show the Math loads referenced supporting records on demand.
+
+Public-search queries have length, purpose, freshness, and obvious-identifier checks. The raw user prompt is never substituted for a missing search plan. Brave results are URL-deduplicated and cached by query/freshness for 30 minutes; retrieval failure is recorded as unavailable evidence. Numeric grounding establishes consistency with supplied evidence, not the truth of every retrieved statement or model interpretation.
+
+Remembered personal context is bounded to explicitly stated biographical fields such as age, location, household, and employment. Validated set/clear operations replace stale details; financial facts, goals, and scenario assumptions belong in canonical data or the active conversation.
+
+Implementation: [context packs](src/openai/context-packs.ts), [analysis pipeline](src/openai/analysis-pipeline.ts), [canonical facts](src/openai/canonical-facts.ts), [response grounding](src/openai/response-facts.ts), [evidence loading](src/openai/show-the-math-db-service.ts). Design references: [context planning](docs/CONTEXT_PLANNING.md) and [scenario modeling](docs/SCENARIO_MODELING.md).
+
+## Integrations and datasets
+
+### Connected financial and market data
+
+| Integration | Implemented use |
+| --- | --- |
+| [Plaid](src/plaid.ts) | Account linking, balances, transaction sync/webhooks, investments, and liability terms where supported/consented. Connection-scoped refresh and reconnect handling. |
+| [SnapTrade](src/snaptrade.ts) | Brokerage connections, balances, positions, and investment activity. |
+| [Public.com direct API](src/services/public-api/client.ts) | Eligible users with linked Public accounts can supply an encrypted personal API secret. The client reads accounts, portfolios, and unrealized tax lots, including managed-yield accounts that the SnapTrade feed cannot serve. Position-derived valuations retain their limitations. |
+| [RentCast](src/services/rentcast.ts) | Home-value estimates and ranges, with manual overrides and age-based refresh. |
+| [FRED](src/data/providers/fred.ts) | CPI year-over-year inflation (`CPIAUCSL`, `pc1`), effective federal funds (`DFF`), mortgage rates (`MORTGAGE30US`), credit-card rates (`TERMCBCCALLNS`), unemployment (`UNRATE`), 10-year Treasuries (`DGS10`), and national 12-month CD rates (`NDR12MCD`). Observations carry dates and units. |
+| [Massive](src/data/providers/massive.ts) (formerly Polygon.io) | Delayed SPY daily bars, Treasury yield-curve data, and inflation expectations for macro context. `POLYGON_API_KEY` remains an alias. |
+| [Tiingo](src/data/providers/tiingo.ts) | Adjusted end-of-day price history, IEX quotes, and news; used for security enrichment and market context. |
+| [Financial Modeling Prep](src/retirement-analytics/data/providers/fmp-provider.ts) | Security/fund metadata, expense ratios, country allocations, and sector weights, with coverage and inference provenance. |
+| [U.S. Treasury Fiscal Data](src/retirement-analytics/data/providers/treasury-provider.ts) | Auction records identify individual Treasuries, including TIPS and floating-rate notes, using CUSIPs or unambiguous coupon/maturity matches. |
+| [Brave Search](src/data/providers/search.ts) | Per-question public rates/rules/news lookup and evidence for scheduled market-news summaries. |
+
+These feeds have different publication, delay, cache, and entitlement constraints. An integration in the repo does not imply complete institution/security coverage or uniformly live prices.
+
+### Historical retirement data and fund registry
+
+The simulation engine reads checked-in [monthly returns](data/historical_market_returns.csv); it does not fetch live market returns to run a historical sequence. [Dataset metadata](data/historical_market_returns.metadata.json) and the [source manifest](src/datasets/source-manifest.json) record vintages, observation ranges, retrieval dates, and SHA-256 hashes.
+
+| Series | Source and checked-in coverage |
+| --- | --- |
+| U.S. equities and cash | Kenneth French broad-market total return (`Mkt-RF + RF`) and one-month Treasury-bill return; July 1926–June 2026 |
+| International equities | Kenneth French EAFE-plus-Canada USD returns; January 1975–December 2025 |
+| Nominal bonds and inflation | Shiller-derived synthetic 10-year U.S. government-bond total returns and monthly CPI changes; July 1926–June 2026 in the unified dataset |
+| TIPS | Synthetic constant-maturity total returns derived from FRED `DFII10` real yields and CPI; February 2003–June 2026 |
+
+The unified file has 1,200 monthly rows. The [current engine](src/retirement-analytics/engine/stress-tester.ts) defaults to a disclosed **proxy** policy: U.S. equity returns stand in outside the international series' coverage, and nominal-bond returns stand in before TIPS coverage. Those substituted months contain neither distinct international behavior nor TIPS inflation protection. A `truncate` policy restricts analysis to available active-series history; the engine still requires a complete requested horizon and its minimum historical window. Rolling monthly windows overlap: survival shares are historical outcomes, not independent probability estimates.
+
+[Portfolio mapping](src/retirement-analytics/engine/portfolio-mapper.ts) records supported exposures, inference/proxy provenance, modeled and unmodeled value, and coverage. Credit, international bonds, real assets, and unresolved exposures can remain outside simulation. Missing itemized holdings are not assigned invented returns.
+
+The dated [target-date fund registry](src/services/target-date-fund-registry.ts) supplies reviewed allocations for specific State Street Target Retirement vintages, BlackRock LifePath Index 2040, and UC Pathway 2040. Entries distinguish allocation dates from verified availability dates, identify exact versus proxy share classes, and retain source fingerprints and unsupported residuals. Recognition of a fund name alone does not authorize an allocation.
+
 ```bash
-git clone <repository-url>
+npm run build:market-dataset     # Rebuild from checked-in source snapshots
+npm run refresh:market-datasets # Download/validate sources, update manifests, rebuild
+```
+
+Dataset refresh changes versioned analytical inputs; review the generated diff. Older design documents describe earlier TIPS/short-series policies; the engine linked above defines current behavior.
+
+## Stack, operations, and delivery
+
+- **Backend:** Node.js/TypeScript, Express 5, Prisma 6, PostgreSQL; JWT authentication and bcrypt password hashing. CI uses Node 20 and PostgreSQL 16.
+- **Web:** Next.js 15.5.12 App Router, React 19.1.2, TypeScript, Tailwind CSS 3, Radix primitives, Recharts/Chart.js, and Markdown rendering.
+- **Persistence:** Prisma models cover connections, accounts, transactions, canonical snapshots/history, conversations/evidence, retirement analyses, market/security caches, subscriptions, and calculator leads. Profile context and direct Public credentials use AES-256-GCM; selected financial context is sent to the configured AI providers.
+- **Supporting services:** Stripe billing; Resend transactional/result emails; MailerLite subscriber/lead sync; Ghost blog content. GA4 browser and Measurement Protocol events plus GA4 BigQuery reporting adapters support marketing analysis. These paths require their own configuration.
+- **Scheduled work:** the web process schedules market-news refresh every four hours, reusing one evidence batch across tiers, and MailerLite sync at 03:00 America/New_York. [The external financial-refresh script](scripts/refresh-transactions.js) handles transaction, home-value, and snapshot refresh with a database lease and recorded job status; its Render schedule is configured outside this repo.
+- **Observability:** Sentry backend/frontend instrumentation, provider and LLM latency/failure metrics, privacy scrubbing, answer-quality reports, and `/health` plus `/health/cron`. `/health` reports process health; it is not a database-readiness assertion. See [backend instrumentation](src/instrument.ts) and [observability modules](src/observability).
+- **Deployment:** GitHub Actions targets Vercel for `frontend/` and Render for the API. [The main workflow](.github/workflows/ci-cd.yml) runs lint/type checks, backend coverage, PostgreSQL-backed integration and security suites, frontend tests/build, and retirement-example verification. Dependency audit reports currently use a non-blocking vulnerability threshold. Production migration is a separate guarded job using the `production` environment, followed by frontend deployment and a Render deploy-hook request. [Vercel's direct Git deployments are disabled](frontend/vercel.json).
+- **Other workflows:** [marketing-only fast deploy](.github/workflows/fast-deploy.yml) checks the changed-file allowlist; [weekly registry drift](.github/workflows/registry-drift.yml) checks reviewed fund sources; content workflows handle [Soro-to-Ghost sync](.github/workflows/sync-soro-blog.yml) and [social drafts](.github/workflows/social-posts.yml).
+
+Build scripts generate Prisma and compile code; production schema changes belong to the guarded migration path, not application builds. Hosting secrets, environment approval rules, and actual service health require deployment-side verification.
+
+## Local development
+
+### 1. Install and start PostgreSQL
+
+Use Node 20 to match CI, npm, and PostgreSQL 16 (native or Docker Compose).
+
+```bash
+git clone https://github.com/ethanteng/finsight.git
 cd finsight
+npm ci
+npm ci --prefix frontend
+docker compose up -d db
 ```
 
-2. **Install dependencies**
-```bash
-# Backend dependencies
-npm install
+The checked-in Compose service exposes PostgreSQL on **localhost:5433**. Its first-run initialization creates `finsight` with local credentials `postgres` / `postgres`. Adjust the URL if using an existing/native database.
 
-# Frontend dependencies
-cd frontend
-npm install
-cd ..
+### 2. Configure the applications
+
+Create **`.env.local` at the repository root**. [Backend initialization](src/instrument.ts) loads this file outside production; production uses injected environment variables.
+
+```dotenv
+DATABASE_URL="postgresql://postgres:postgres@localhost:5433/finsight"
+PORT="3000"
+FRONTEND_URL="http://localhost:3001"
+JWT_SECRET="replace-with-a-random-local-secret"
+PROFILE_ENCRYPTION_KEY="replace-with-base64-encoded-32-random-bytes"
+ENABLE_USER_AUTH="true"
+ENABLE_TIER_ENFORCEMENT="true"
+PLAID_MODE="sandbox"
+SNAPTRADE_MODE="sandbox"
+OPENAI_API_KEY="local-placeholder"
 ```
 
-3. **Environment Variables**
-Create `.env` file in the root directory:
-```bash
-# Database
-DATABASE_URL="postgresql://username:password@localhost:5432/finsight"
+Generate an encryption key with `openssl rand -base64 32` and a separate JWT secret with `openssl rand -hex 32`. Keep those values stable for the local database. The OpenAI client is constructed during module loading, so a nonempty placeholder is needed even for non-AI development; it cannot perform real inference. Full Ask Linc analysis needs real OpenAI and Anthropic keys, plus credentials for the external evidence you exercise.
 
-# Authentication & Security
-JWT_SECRET="your_jwt_secret"
-PROFILE_ENCRYPTION_KEY="your_32_byte_encryption_key"  # Required for encrypted user profiles
+Create **`frontend/.env.local`**:
 
-# OpenAI (main AI chat, fallback when Ask Linc disabled)
-OPENAI_API_KEY="your_openai_api_key"
-
-# Plaid (banking data)
-PLAID_CLIENT_ID="your_plaid_client_id"
-PLAID_SECRET="your_plaid_secret"
-PLAID_MODE="sandbox"                    # sandbox or production (default: sandbox)
-PLAID_CLIENT_ID_PROD="..."              # Optional: production credentials
-PLAID_SECRET_PROD="..."
-PLAID_ENV_PROD="production"
-PLAID_ACCESS_LEVEL="sandbox"            # Optional: access level when not sandbox (default: sandbox)
-PLAID_WEBHOOK_URL="https://..."         # Optional: for webhook events
-
-# SnapTrade (investment data)
-SNAPTRADE_CLIENT_ID="your_snaptrade_client_id"
-SNAPTRADE_CONSUMER_KEY="your_snaptrade_consumer_key"
-SNAPTRADE_MODE="sandbox"                # sandbox or production (default: sandbox)
-SNAPTRADE_CLIENT_ID_PROD="..."          # Optional: production credentials
-SNAPTRADE_CONSUMER_KEY_PROD="..."
-SNAPTRADE_ENV_PROD="production"
-
-# Market Data APIs
-FRED_API_KEY="your_fred_api_key"
-MASSIVE_API_KEY="your_massive_api_key"  # Preferred for Premium market context
-POLYGON_API_KEY="your_polygon_api_key"  # Backward-compatible alias for existing deployments
-
-# Home Valuation API
-RENTCAST_API_KEY="your_rentcast_api_key"
-
-# Search API (for RAG system)
-SEARCH_API_KEY="your_search_api_key"
-SEARCH_PROVIDER="brave"                 # brave or google (default: brave)
-GOOGLE_SEARCH_ENGINE_ID="..."           # Required when SEARCH_PROVIDER=google
-BRAVE_MIN_REQUEST_INTERVAL_MS="1100"    # Min ms between Brave calls (default: 1100,
-                                        # the free tier's 1/s). Brave's paid Search
-                                        # plan allows 50/s, where 25 is appropriate.
-
-# Transaction & Investment History
-TRANSACTION_HISTORY_DAYS="90"           # Days of banking transactions (default: 90)
-INVESTMENT_HISTORY_YEARS="2"            # Years of investment history (default: 2)
-
-# MailerLite (for user sync)
-MAILER_LITE_API_KEY="your_mailerlite_api_key"
-MAILER_LITE_GROUP_ID="your_mailerlite_group_id"
-
-# Stripe (subscriptions)
-STRIPE_SECRET_KEY="sk_..."
-STRIPE_PUBLISHABLE_KEY="pk_..."
-STRIPE_WEBHOOK_SECRET="whsec_..."
-STRIPE_PRICE_DEFAULT="price_..."       # Stripe price ID to charge and display everywhere
-STRIPE_PRICE_CACHE_TTL_MS="300000"     # Optional (default: 5 minutes)
-STRIPE_PRICE_PREMIUM="price_..."        # Deprecated: legacy fallback for STRIPE_PRICE_DEFAULT
-STRIPE_CHECKOUT_SUCCESS_URL="..."      # Optional (default: /api/stripe/payment-success)
-STRIPE_CHECKOUT_CANCEL_URL="..."       # Optional (default: /pricing)
-STRIPE_PORTAL_RETURN_URL="..."          # Optional (default: /profile)
-STRIPE_PORTAL_CANCEL_RETURN_URL="..."  # Optional
-STRIPE_PORTAL_UPDATE_RETURN_URL="..."  # Optional
-STRIPE_ACCOUNT_REFRESH_URL="..."       # Optional
-STRIPE_ACCOUNT_RETURN_URL="..."        # Optional
-
-# GA4 Measurement Protocol (server-side conversion reporting)
-# Every new customer starts a 30-day trial, so the browser sees no purchase at
-# checkout; the conversion is the first invoice Stripe charges a month later,
-# in a webhook with no browser to push to the data layer. These let that webhook
-# report it. Leave unset outside production: reporting is then skipped, never failed.
-GA4_MEASUREMENT_ID="G-..."             # GA4 data stream measurement ID
-GA4_API_SECRET="..."                   # GA4 Admin -> Data Streams -> Measurement Protocol API secrets
-
-# Email (Resend)
-RESEND_API_KEY="re_..."
-ADMIN_EMAILS="admin@example.com,other@example.com"  # Comma-separated for admin access
-
-# URLs
-FRONTEND_URL="http://localhost:3001"    # Base URL for frontend (default: http://localhost:3001)
-EMAIL_ASSET_BASE_URL="https://asklinc.com"  # Optional: public base URL for email images/marketing links.
-                                        # Must be an absolute https URL on a publicly reachable host; localhost,
-                                        # private/link-local addresses and scheme-less values are skipped.
-                                        # Falls back to FRONTEND_URL, then https://asklinc.com
-PORT="3000"                             # Backend port (default: 3000)
-
-# Transaction & Context Persistence (optional, for debugging)
-PERSIST_TRANSACTIONS="false"            # Toggle transaction persistence to database
-PERSIST_GPT_CONTEXT="false"             # Toggle GPT context logging to /opt/render/project/src/logs
-
-# Ask Linc canonical-facts pipeline (Claude primary, OpenAI provider fallback)
-ANTHROPIC_API_KEY="your_anthropic_api_key"  # Required for Ask Linc analysis
-ENABLE_RESPONSE_VALIDATION="false"      # Optional: validate Claude responses with Gemini
-ASK_LINC_MAX_OUTPUT_TOKENS="16000"      # Optional: default max output tokens for primary/fallback (the admin panel overrides it per slot)
-OPENAI_FALLBACK_MODEL="gpt-4o"          # Optional: fallback model; reuses the prepared context pack
-
-# Gemini (market news synthesis + optional validation)
-GOOGLE_AI_API_KEY="your_google_ai_key"  # Required for market news; optional for validation (or GEMINI_API_KEY)
-GEMINI_API_KEY="..."                    # Alternative to GOOGLE_AI_API_KEY
-GEMINI_VALIDATION_MODEL="gemini-3-flash-preview"    # Model for Claude validation (default)
-GEMINI_MARKET_SYNTHESIS_MODEL="gemini-2.5-flash"    # Model for market news synthesis (default)
-
-# Feature Flags
-ENABLE_USER_AUTH="true"                 # Enable JWT auth (default: false)
-ENABLE_TIER_ENFORCEMENT="true"          # Enforce tier-based access (default: false)
-ENABLE_PLAID_ENRICH="false"             # Use Plaid enrich for categorization (default: false)
-
-# AI Rate Limiting
-AI_RATE_LIMIT_AUTHENTICATED="30"        # Requests per minute for authenticated users (default: 30)
-AI_RATE_LIMIT_UNAUTHENTICATED="20"      # Requests per minute before authentication (default: 20)
-
-# Caching & Performance (optional)
-MAX_PROMPT_TRANSACTIONS="75"            # Max transactions in AI prompt (default: 75)
-CATEGORIZATION_CACHE_TTL_HOURS="24"     # Transaction categorization cache (default: 24)
-FINANCIAL_DATA_CACHE_TTL_MS="300000"    # Financial data cache in ms (default: 300000)
-PERSISTED_DATA_MAX_AGE_MINUTES="120"    # Max age for persisted snapshot (default: 120)
-
-# Retirement Analytics (optional)
-TIINGO_API_KEY="..."                    # Power: adjusted history, IEX quotes, and market news
-FMP_API_KEY="..."                       # Starter: fund fees, country allocations, and sector weights
-
-# Monitoring
-SENTRY_DSN="https://..."                # Optional: backend error tracking
-SENTRY_ENVIRONMENT="development"        # Use "production" in production
-SENTRY_TRACES_SAMPLE_RATE="0"           # Production default is 0.05; keep local tracing off
-```
-
-Create `.env.local` file in the `frontend` directory:
-```bash
-# Backend API URL
+```dotenv
 NEXT_PUBLIC_API_URL="http://localhost:3000"
-
-# GPT Context Logging (should match backend PERSIST_GPT_CONTEXT)
-NEXT_PUBLIC_PERSIST_GPT_CONTEXT="false"
-
-# Stripe Customer Portal (optional - for subscription management)
-NEXT_PUBLIC_STRIPE_CUSTOMER_PORTAL_URL="https://..."
-
-# Google Analytics (optional)
-NEXT_PUBLIC_GA_ID="G-..."
-
-# Sentry (optional - error tracking)
-NEXT_PUBLIC_SENTRY_DSN="https://..."
-NEXT_PUBLIC_SENTRY_ENVIRONMENT="development"
-NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE="0"
-
-# Build-only Sentry settings (set in CI/deployment, not exposed to the browser)
-SENTRY_ORG="your-sentry-organization"
-SENTRY_PROJECT="your-sentry-project"
-SENTRY_AUTH_TOKEN="..."
-
-# Ghost CMS (optional - for blog content)
-GHOST_URL="https://..."
-GHOST_CONTENT_KEY="..."
 ```
 
-4. **Database Setup**
+Add backend credentials only for the features you need:
+
+| Feature | Configuration |
+| --- | --- |
+| Analysis/planning | `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`; optional `OPENAI_FALLBACK_MODEL`, `ASK_LINC_MAX_OUTPUT_TOKENS` |
+| Gemini | `GOOGLE_AI_API_KEY` or `GEMINI_API_KEY`; optional `GEMINI_MARKET_SYNTHESIS_MODEL`. Secondary review additionally uses `ENABLE_RESPONSE_VALIDATION=true` and optional `GEMINI_VALIDATION_MODEL`. |
+| Plaid | `PLAID_CLIENT_ID`, `PLAID_SECRET`; optional `PLAID_WEBHOOK_URL`. Production mode supports `PLAID_CLIENT_ID_PROD`, `PLAID_SECRET_PROD`, `PLAID_ENV_PROD`. |
+| SnapTrade | `SNAPTRADE_CLIENT_ID`, `SNAPTRADE_CONSUMER_KEY`; production mode supports their `_PROD` variants and `SNAPTRADE_ENV_PROD`. |
+| Direct Public connection | `ENCRYPTION_KEY` or `DATA_ENCRYPTION_KEY` containing a base64-encoded 32-byte key; the user's Public secret is entered through the eligible profile UI. |
+| Market data/home values | `FRED_API_KEY`, `MASSIVE_API_KEY` (or `POLYGON_API_KEY`), `TIINGO_API_KEY`, `FMP_API_KEY`, `RENTCAST_API_KEY` |
+| Search | `SEARCH_API_KEY`, `SEARCH_PROVIDER=brave`; `BRAVE_MIN_REQUEST_INTERVAL_MS` controls provider pacing. The Google alternative uses `GOOGLE_SEARCH_ENGINE_ID`. |
+| Billing | Stripe **test-mode** `STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY`, `STRIPE_WEBHOOK_SECRET`, and `STRIPE_PRICE_DEFAULT` |
+| Email/subscriber sync | `RESEND_API_KEY`, `ADMIN_EMAILS`, `MAILER_LITE_API_KEY`, `MAILER_LITE_GROUP_ID`; `EMAIL_ASSET_BASE_URL` for publicly reachable email images |
+| Monitoring/analytics | Backend `SENTRY_DSN`, `SENTRY_ENVIRONMENT`, `SENTRY_TRACES_SAMPLE_RATE`; optional `GA4_MEASUREMENT_ID`, `GA4_API_SECRET` for server-side conversion reporting |
+
+Optional frontend configuration includes `GHOST_URL` / `GHOST_CONTENT_KEY`, `NEXT_PUBLIC_GA_ID`, and `NEXT_PUBLIC_SENTRY_DSN` / `NEXT_PUBLIC_SENTRY_ENVIRONMENT` / `NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE`. Sentry source-map upload uses build-only `SENTRY_ORG`, `SENTRY_PROJECT`, and `SENTRY_AUTH_TOKEN`. Provider secrets belong on the server, never in `NEXT_PUBLIC_*` variables.
+
+### 3. Initialize the local schema and run
+
+Prisma CLI does not automatically load the backend's `.env.local`; export the **local** database URL in the shell used for schema commands.
+
 ```bash
-# Generate Prisma client
+export DATABASE_URL="postgresql://postgres:postgres@localhost:5433/finsight"
 npx prisma generate
-
-# Run migrations
 npx prisma db push
-
-```
-
-5. **Start Development Servers**
-```bash
-# Start backend (port 3000)
-npm run dev
-
-# Start frontend (port 3001)
-cd frontend
 npm run dev
 ```
 
-## 🧪 **Testing**
+`db push` initializes a disposable local schema; use reviewed migrations for deployment. `npm run dev` starts **both** servers: API at `http://localhost:3000`, web at `http://localhost:3001`. To run them separately, use `npm run dev:backend` and `npm run dev:frontend`.
 
-### **Run All Tests**
-```bash
-npm test
-```
+Check `http://localhost:3000/health`, then use the registration/login flow. Connected accounts, AI answers, result emails, and checkout each need the relevant service configuration; an unconfigured local session is not a complete product smoke test.
 
-### **Run Specific Test Suites**
-```bash
-# Unit tests
-npm run test:unit
+### API entry points
 
-# Integration tests
-npm run test:integration
+The authenticated analysis route is [defined here](src/routes/ask.ts):
 
-# Enhanced market context tests
-npm run test:enhanced-market-context
-
-# Deterministic Ask Linc quality evaluation
-npm run eval:llm
-
-# GPT Model Smoke Test (Real API validation)
-npm run test:gpt-smoke
-```
-
-### **Test Coverage**
-- **Unit Tests**: 35+ tests covering core functionality
-- **Integration Tests**: 33+ tests for API endpoints and workflows
-- **RAG System Tests**: Enhanced market context and search integration
-- **CI/CD Tests**: Selective test suite for reliable deployment
-- **GPT Smoke Tests**: Real OpenAI API validation to catch model issues
-
-## 🔐 **Security & Privacy**
-
-### **Data Protection**
-- **Tokenization**: Real account names never sent to AI
-- **Session Management**: Secure authenticated user sessions
-- **API Security**: Rate limiting and error handling
-- **Database Security**: Prisma with connection pooling
-- **RAG Security**: Secure search API integration
-
-### **Authentication**
-- **JWT Tokens**: Secure user authentication
-- **Required Auth**: Financial data and analysis endpoints require a valid user token
-- **Session Persistence**: Cross-request context maintenance
-
-## 📈 **Performance & Optimization**
-
-### **Cost Optimization for OpenAI API**
-
-To optimize costs, we use different OpenAI models for different environments:
-
-- **Production (`/app`)**: Uses the configured primary and fallback models
-- **Tests**: Uses `gpt-3.5-turbo` for cost efficiency
-
-### **Environment Variables for Model Selection**
-
-```bash
-# For production (default: gpt-4o)
-OPENAI_MODEL=gpt-4o
-
-# For tests (default: gpt-3.5-turbo)
-OPENAI_MODEL=gpt-3.5-turbo
-```
-
-### **Cost Comparison**
-
-| Model | Input Cost | Output Cost | Use Case |
-|-------|------------|-------------|----------|
-| gpt-4o | $5.00/1M tokens | $15.00/1M tokens | Production endpoints |
-| gpt-3.5-turbo | $0.50/1M tokens | $1.50/1M tokens | Tests |
-
-**Savings**: Using gpt-3.5-turbo for tests reduces costs by ~90% while maintaining test coverage.
-
-### **GPT Model Smoke Testing**
-
-To prevent issues like the GPT-5 prompt failures, we've implemented a comprehensive smoke testing strategy:
-
-#### **Automated Tests (Unit Test Suite)**
-- **Configuration Validation**: Ensures API keys and environment variables are properly set
-- **Model Configuration**: Validates that the expected model (`gpt-4o`) is correctly configured
-- **Environment Setup**: Checks that all required environment variables are present
-
-#### **Manual Smoke Tests (Real API Validation)**
-```bash
-# Test real OpenAI API calls with current model
-npm run test:gpt-smoke
-```
-
-This script:
-- Makes actual API calls to validate model availability
-- Tests prompt formatting and response generation
-- Catches model-specific issues (like GPT-5 failures)
-- Provides cost estimates for testing
-- Runs outside the Jest environment to avoid mocking
-
-**When to Run**:
-- Before deploying model changes
-- When switching between GPT models
-- To validate API key functionality
-- After OpenAI API updates or changes
-
-### **Performance Features**
-- **Caching**: Multi-level caching for market data
-- **Database**: Efficient queries with Prisma
-- **API**: Rate limiting and error handling
-- **Frontend**: Optimized bundle size and loading
-- **RAG System**: 30-minute search result caching
-
-## 🚀 **Deployment**
-
-### **Production Environment**
-- **Frontend**: Vercel (automatic deployments)
-- **Backend**: Render (with health checks)
-- **Database**: PostgreSQL on Render
-- **Environment**: Production-ready with monitoring
-
-### **CI/CD Pipeline**
-The project uses GitHub Actions for automated testing and deployment:
-
-1. **Code Quality**: Linting and TypeScript compilation
-2. **Security Audit**: npm audit for vulnerabilities
-3. **Backend Tests**: Unit and integration tests
-4. **Frontend Build**: Next.js build verification
-5. **Integration Tests**: End-to-end workflow testing
-6. **Deployment**: Automatic deployment to Vercel and Render
-
-## 📚 **API Documentation**
-
-### **Core Endpoints**
-
-#### **Ask Questions**
 ```http
 POST /ask/display-real
-Content-Type: application/json
 Authorization: Bearer <token>
+Content-Type: application/json
 
-{
-  "question": "How can I improve my savings?"
-}
+{"question":"What changes if I retire two years later?","threadId":"my-decision-id"}
 ```
 
-#### **Plaid Integration**
-```http
-POST /plaid/create-link-token
-GET /plaid/accounts
-GET /plaid/transactions
+Use the same `threadId` for follow-ups and a new ID for a new decision. Add `Accept: text/event-stream` for progress and answer deltas; the final `result` event contains the validated answer. Financial reads are mounted under `/api/finances`, account management under `/api/accounts` and `/api/manual-accounts`, and authentication under `/auth`.
+
+## Verification
+
+Run suites according to their scope; `npm test` uses the root Jest configuration (unit/performance selection), not every integration/security suite. Before backend tests, point **both `DATABASE_URL` and `TEST_DATABASE_URL` at a separate disposable test database** and use the test environment from [the CI workflow](.github/workflows/ci-cd.yml). Even the unit-test setup clears database tables.
+
+```bash
+npm run type-check
+npm run test:unit
+npm run test:integration:ci
+npm run test:security:all
+npm test --prefix frontend -- --ci
+OPENAI_API_KEY=local-placeholder npm run eval:llm
+npm run verify:retirement-example
+npm run build:backend
+npm run build --prefix frontend
 ```
 
-#### **Market Data**
-```http
-GET /test/enhanced-market-context?tier=premium
-POST /test/refresh-market-context
+`eval:llm` exercises deterministic grounding/recovery with supplied snapshots and model-output fixtures, not live-model quality; its imports still need a nonempty OpenAI key. `test:gpt-smoke` is a separate real-OpenAI check requiring a working key. See [test guidance](docs/TESTING.md), [test environment notes](docs/TESTING_ENVIRONMENT_VARIABLES.md), and the executable CI workflow for suite wiring.
+
+## Repository map and extension points
+
+```text
+frontend/                 Next.js app, components, browser utilities, frontend tests
+src/index.ts              Express entry point, route mounting, scheduled web-process jobs
+src/auth/, src/routes/    Authentication, financial APIs, analysis, billing, calculators
+src/domain/               Financial meanings, arithmetic contracts, time semantics
+src/services/             Ingestion, revisions, persistence, integrations, business logic
+src/openai/               Multi-provider planning, data packs, prompts, grounding, evidence
+src/scenarios/            Registered deterministic what-if calculators
+src/retirement-analytics/ Historical engine, holdings mapping, security data providers
+src/data/, src/market-news/ Market retrieval, caching, scheduled context synthesis
+src/profile/              Bounded personal memory and encryption
+src/observability/        Provider/LLM metrics and Sentry privacy controls
+src/marketing-analytics/  Funnel/traffic analysis and reporting adapters
+src/__tests__/            Backend test suites
+specs/                    Implemented and proposed feature specifications
+src/evals/                Deterministic answer-quality fixtures
+src/datasets/, data/      Source snapshots, generated historical returns, provenance
+prisma/                   Database schema and migrations
+scripts/                  Dataset, build, refresh, verification, and operations utilities
+.github/workflows/        CI, deployment, registry checks, and content workflows
+docs/                     Design, setup, operations, and feature references
 ```
 
-#### **User Management**
-```http
-POST /auth/register
-POST /auth/login
-GET /auth/profile
-```
+New scenario domains belong in the calculator registry with validated inputs, deterministic execution, canonical facts, and evidence disclosure. [Scenario modeling](docs/SCENARIO_MODELING.md#next-registered-calculators) records candidate next domains—career/income changes, debt payoff, allocation/downturn scenarios, and savings goals. They are documented extension plans, not additional registered calculators or release commitments.
 
-## 🎯 **Key Features**
-
-### **AI-Powered Financial Analysis**
-- Personalized financial insights based on user data
-- Market context integration for informed advice
-- **RAG-enhanced responses** with real-time information
-- Conversation history for contextual responses
-- Tier-aware recommendations and upgrade suggestions
-
-### **Real-Time Market Data**
-- Current economic indicators (Fed rate, CPI, mortgage rates)
-- Live CD rates and treasury yields
-- Market trend analysis and recommendations
-- Source attribution for transparency
-- **Real-time search results** for current financial information
-
-### **User Experience**
-- Seamless account connection via Plaid
-- Responsive web interface
-- Mobile-friendly design
-- **Holistic financial advice** for any institution or product
-
-## 📊 **Monitoring & Analytics**
-
-### **Health Checks**
-- Automated service monitoring
-- Database connection verification
-- API endpoint availability
-- Performance metrics tracking
-
-### **Error Tracking**
-- Comprehensive error handling
-- Detailed error logging
-- Performance monitoring
-- Uptime tracking
-
-## 🔮 **Future Enhancements**
-
-### **Phase 2: Vector Database**
-- Store processed market insights in vector DB
-- Semantic search for market context
-- Historical trend analysis
-
-### **Phase 3: Advanced Analytics**
-- Market sentiment analysis
-- Predictive modeling
-- Personalized recommendations
-
-### **Phase 4: Real-Time Updates**
-- WebSocket connections for live updates
-- Push notifications for market changes
-- Real-time alert system
-
-## 📝 **Project Structure**
-
-```
-finsight/
-├── 📁 docs/                    # 📚 Documentation
-│   ├── README.md               # Documentation index
-│   ├── TESTING.md              # Comprehensive testing documentation
-│   ├── FINANCIAL_TRUTH_CONTRACT.md
-│   ├── DETERMINISTIC_LLM_CALCULATIONS.md
-│   └── features/               # Feature-specific references
-├── 📁 scripts/                 # 🔧 Utility scripts
-│   ├── test-*.js/ts           # Testing scripts
-│   ├── check-db.js            # Database utilities
-│   ├── clear-*.js             # Cleanup scripts
-│   ├── build.sh               # Build scripts
-│   └── deploy-*.sh            # Deployment scripts
-├── 📁 src/                    # ⚙️ Backend source code
-│   ├── __tests__/             # Test suites
-│   ├── auth/                  # Authentication system
-│   ├── config/                # Configuration files
-│   ├── data/                  # Data providers and orchestrator
-│   └── index.ts               # Main server file
-├── 📁 frontend/               # 🎨 Next.js frontend
-│   ├── src/
-│   │   ├── app/              # Next.js app router
-│   │   ├── components/       # React components
-│   │   └── lib/              # Utility functions
-│   └── package.json
-├── 📁 prisma/                 # 🗄️ Database schema and migrations
-├── 📁 .github/                # 🔄 CI/CD workflows
-└── 📄 Configuration files     # ⚙️ Project config
-```
-
-### **📚 Documentation**
-- **`docs/`** - Comprehensive project documentation
-- **`docs/README.md`** - Documentation index
-- **`docs/TESTING.md`** - Comprehensive testing documentation and best practices
-- **`docs/FINANCIAL_TRUTH_CONTRACT.md`** - Canonical financial data and calculation rules
-- **Feature-specific docs** - Current implementation references under `docs/features/`
-
-### **🔧 Scripts**
-- **`scripts/`** - Utility scripts for development and deployment
-- **Testing scripts** - Authentication, Plaid, API testing
-- **Database scripts** - Health checks, cleanup, data management
-- **Deployment scripts** - Build, deploy, verify processes
-- **Cleanup scripts** - Environment maintenance
-
-### Reset local environment
-npm run reset
-
-### Full clean build (matches CI)
-npm run rebuild
-
-## 🤝 **Contributing**
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-## 📄 **License**
+## License
 
 This project is proprietary software. All rights reserved. This software and its documentation are owned by the project maintainer and may not be reproduced, distributed, or used without explicit permission.
-
-## 🆘 **Support**
-
-For support, please contact the development team or create an issue in the repository.
-
----
-
-**Ask Linc** - Empowering users with AI-driven financial insights while maintaining the highest standards of privacy and security.
