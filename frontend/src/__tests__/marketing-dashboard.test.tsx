@@ -135,6 +135,7 @@ describe('marketing scorecard data states', () => {
     expect(screen.queryByText('Conversion from email CTA clicks unavailable')).not.toBeInTheDocument();
     expect(screen.getAllByText('Show measurement details')).toHaveLength(2);
     expect(screen.getAllByText('GA4 email events observed')).toHaveLength(2);
+    expect(screen.getAllByText('live')).toHaveLength(1);
     const liveIndicators = screen.getAllByLabelText(/Live data, queried from the first-party database/);
     const delayedIndicators = screen.getAllByLabelText(/Delayed GA4 data from the daily export/);
     expect(liveIndicators.length).toBeGreaterThan(0);

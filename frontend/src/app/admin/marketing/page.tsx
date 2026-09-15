@@ -309,7 +309,6 @@ function LeadCapturePanel({
           <p className="mt-1 max-w-4xl text-[10px] leading-4 text-[#66736b]">Calculator runs and email requests share the email-tracking window. Later email clicks and trials are outcomes observed in the selected reporting window.</p>
         </div>
       </div>
-      <SourcePill state={capture.firstParty.state} />
     </div>
     <div className="mt-4 grid gap-3 md:grid-cols-2 lg:grid-cols-4">
       {funnel.map((step, index) => <div key={step.label} className="relative min-w-0">
