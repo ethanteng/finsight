@@ -7,6 +7,7 @@ import { MarketingGetStartedButton } from "./MarketingGetStartedButton";
 import { RotatingContextChips } from "./RotatingContextChips";
 import { TRIAL_CTA_MICROCOPY } from "./trial-copy";
 import type { GhostPost } from "@/lib/ghost";
+import { primaryTopic, topicHref, type BlogTopic } from "@/lib/blog-topics";
 import { getComparison } from "@/lib/comparisons";
 import type { Pricing } from "@/config/pricing";
 import { getPricing } from "@/lib/pricing";
@@ -569,6 +570,22 @@ function postCategory(post: GhostPost) {
   return post.tags?.[0]?.name?.toUpperCase() || "ASK LINC BLOG";
 }
 
+/**
+ * The topic label doubles as the entry point to that topic's archive.
+ * It stays plain text for a post with no tag, and on the archive itself,
+ * where every card would otherwise link back to the page you are on.
+ */
+function PostCategory({ post, linked = true }: { post: GhostPost; linked?: boolean }) {
+  const topic = linked ? primaryTopic(post) : null;
+  if (!topic) return <span className="post-category">{postCategory(post)}</span>;
+
+  return (
+    <Link className="post-category post-category-link" href={topicHref(topic.slug)}>
+      {postCategory(post)}
+    </Link>
+  );
+}
+
 function PostArtwork({ post, position, featured = false }: { post: GhostPost; position: number; featured?: boolean }) {
   const featureImage = post.feature_image?.trim();
   const fallbackTone = featured ? "lime" : postTones[(position - 2) % postTones.length];
@@ -607,15 +624,15 @@ export function MarketingBlogPage({ ghostPosts }: { ghostPosts: GhostPost[] }) {
   return (
     <StandardPage className="blog-page">
       <section className="blog-hero shell">
-        <div><p className="section-kicker">THE ASK LINC BLOG</p><h1>Better thinking about <em>money and machines.</em></h1></div>
-        <p>Field notes on intelligent finance, retirement decisions, product transparency, and the systems that make AI worth trusting. Start with <Link href="/blog/average-american-savings">what Americans actually have in savings</Link>.</p>
+        <div><p className="section-kicker">THE ASK LINC BLOG</p><h1>Better thinking about <em>money.</em></h1></div>
+        <p>Practical guides for retirement, Coast FIRE, and the big financial decisions that shape what you can do next.</p>
       </section>
       {featured ? (
         <>
           <section className="featured-post shell">
             <PostArtwork post={featured} position={1} featured />
             <div>
-              <span className="post-category">{postCategory(featured)}</span>
+              <PostCategory post={featured} />
               <h2>{featured.title}</h2>
               <p>{featured.excerpt}</p>
               <div className="post-meta"><span><Image src="/images/ethan-teng-cartoon.webp" alt="" fill sizes="38px" /></span><p><b>{featured.authors?.[0]?.name || "Ethan Teng"}</b><small>{formatPostDate(featured.published_at)} · {featured.reading_time || 5} min read</small></p></div>
@@ -626,7 +643,7 @@ export function MarketingBlogPage({ ghostPosts }: { ghostPosts: GhostPost[] }) {
             {publishedPosts.slice(1).map((post, index) => (
               <article key={post.id}>
                 <PostArtwork post={post} position={index + 2} />
-                <span className="post-category">{postCategory(post)}</span>
+                <PostCategory post={post} />
                 <h3><Link href={`/blog/${post.slug}`}>{post.title}</Link></h3>
                 <p>{post.excerpt}</p>
                 <small>{formatPostDate(post.published_at)} · {post.reading_time || 5} min read</small>
@@ -642,6 +659,53 @@ export function MarketingBlogPage({ ghostPosts }: { ghostPosts: GhostPost[] }) {
   );
 }
 
+export function MarketingBlogTopicPage({
+  topic,
+  posts,
+  allTopics,
+}: {
+  topic: BlogTopic;
+  posts: GhostPost[];
+  allTopics: BlogTopic[];
+}) {
+  const otherTopics = allTopics.filter((other) => other.slug !== topic.slug);
+
+  return (
+    <StandardPage className="blog-page blog-topic-page">
+      <section className="blog-hero blog-topic-hero shell">
+        <div>
+          <Link href="/blog" className="back-link">← Back to the blog</Link>
+          <p className="section-kicker">TOPIC</p>
+          <h1>{topic.name}</h1>
+        </div>
+        <p>
+          {topic.count} {topic.count === 1 ? "post" : "posts"} on {topic.name.toLowerCase()} from the Ask Linc blog.
+        </p>
+      </section>
+      {otherTopics.length > 0 ? (
+        <nav className="topic-nav shell" aria-label="Blog topics">
+          <Link href="/blog">All posts</Link>
+          {otherTopics.map((other) => (
+            <Link key={other.slug} href={topicHref(other.slug)}>{other.name}</Link>
+          ))}
+        </nav>
+      ) : null}
+      <section className="post-grid shell">
+        {posts.map((post, index) => (
+          <article key={post.id}>
+            <PostArtwork post={post} position={index + 2} />
+            <PostCategory post={post} linked={false} />
+            <h3><Link href={`/blog/${post.slug}`}>{post.title}</Link></h3>
+            <p>{post.excerpt}</p>
+            <small>{formatPostDate(post.published_at)} · {post.reading_time || 5} min read</small>
+          </article>
+        ))}
+      </section>
+      <PageCta title="Turn the reading into a real decision." csOverrideId="blog-cta-end" />
+    </StandardPage>
+  );
+}
+
 export function MarketingArticlePage({ post, processedHtml }: { post: GhostPost; processedHtml: string }) {
   const author = post.authors?.[0]?.name || "Ethan Teng";
   const featureImage = post.feature_image?.trim();
@@ -652,7 +716,7 @@ export function MarketingArticlePage({ post, processedHtml }: { post: GhostPost;
     <StandardPage className="article-page">
       <section className="article-head shell">
         <Link href="/blog" className="back-link">← Back to the blog</Link>
-        <span className="post-category">{postCategory(post)}</span>
+        <PostCategory post={post} />
         <h1>{post.title}</h1>
         {post.excerpt && <p>{post.excerpt}</p>}
         <div className="article-byline"><span><Image src="/images/ethan-teng-cartoon.webp" alt={`Portrait of ${author}`} fill sizes="38px" /></span><p><b>{author}</b><small>Published {formatPostDate(post.published_at)} · {post.reading_time || 5} min read</small></p></div>
