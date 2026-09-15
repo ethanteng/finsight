@@ -76,13 +76,10 @@ export default function Home() {
           </div>
           <p>Explore a real product example with identifying details removed—from the decision and financial model to the calculations, assumptions, and sources behind the answer.</p>
         </div>
-        <details className="product-demo-disclosure">
+        <details className="product-demo-disclosure" open>
           <summary>Explore the interactive example</summary>
           <StaticProductDemo anchorId={null} />
         </details>
-        <div className="hero-actions">
-          <MarketingGetStartedButton className="button button-primary" trackingLocation="homepage_demo" csOverrideId="cta-start-free-trial-demo" />
-        </div>
       </section>
 
       <section className="section pricing-section" id="pricing">

@@ -265,14 +265,12 @@ describe("marketing review fixes", () => {
     expect(screen.getByText("So I built Ask Linc.")).toBeInTheDocument();
   });
 
-  it("lets visitors expand the full product demo on the homepage", async () => {
+  it("shows the full product demo expanded by default on the homepage", async () => {
     const user = userEvent.setup();
     render(<MarketingHome />);
 
     expect(screen.getByRole("heading", { name: "See the planning model before you start." })).toBeInTheDocument();
     const disclosure = screen.getByText("Explore the interactive example").closest("details");
-    expect(disclosure).not.toHaveAttribute("open");
-    await user.click(screen.getByText("Explore the interactive example"));
     expect(disclosure).toHaveAttribute("open");
     const demo = screen.getByLabelText("Interactive Ask Linc product demo");
     expect(within(demo).getByText("Interactive demo using real product output. Identifying details removed.")).toBeInTheDocument();
