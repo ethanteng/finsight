@@ -1,5 +1,6 @@
 import type { MetadataRoute } from 'next';
-import { ghost, type GhostPost } from '@/lib/ghost';
+import { ghost, getAllPosts, type GhostPost } from '@/lib/ghost';
+import { listBlogTopics } from '@/lib/blog-topics';
 
 const BASE_URL = 'https://asklinc.com';
 
@@ -116,6 +117,18 @@ async function getBlogEntries(): Promise<MetadataRoute.Sitemap> {
   }
 }
 
+/** One entry per blog topic archive, derived from each post's primary tag. */
+async function getBlogTopicEntries(): Promise<MetadataRoute.Sitemap> {
+  const posts = await getAllPosts();
+  const topics = listBlogTopics(posts.filter((post) => post.slug && post.title));
+
+  return topics.map((topic) => ({
+    url: `${BASE_URL}/blog/topics/${topic.slug}`,
+    changeFrequency: 'weekly' as const,
+    priority: 0.6,
+  }));
+}
+
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const staticEntries: MetadataRoute.Sitemap = STATIC_ROUTES.map((route) => ({
     url: `${BASE_URL}${route.path}`,
@@ -123,7 +136,10 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: route.priority,
   }));
 
-  const blogEntries = await getBlogEntries();
+  const [blogEntries, topicEntries] = await Promise.all([
+    getBlogEntries(),
+    getBlogTopicEntries(),
+  ]);
 
-  return [...staticEntries, ...blogEntries];
+  return [...staticEntries, ...blogEntries, ...topicEntries];
 }

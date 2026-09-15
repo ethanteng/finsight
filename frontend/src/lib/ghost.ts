@@ -56,6 +56,26 @@ export type GhostPosts = {
 };
 
 /**
+ * Every published post, newest first, with tags and authors attached.
+ * The blog index, the topic pages, and the sitemap all need the same list,
+ * and Next.js dedupes the fetch across them within a render.
+ */
+export async function getAllPosts(): Promise<GhostPost[]> {
+  if (!ghost) return [];
+
+  try {
+    return await ghost.posts.browse({
+      limit: 10000,
+      include: ['tags', 'authors'],
+      order: 'published_at DESC',
+    });
+  } catch (error) {
+    console.error('Error fetching posts:', error);
+    return [];
+  }
+}
+
+/**
  * Fetch posts filtered by tag slug.
  * Per Ghost Content API: filter=tag:{slug}, include=authors,tags
  * @see https://docs.ghost.org/content-api/posts
