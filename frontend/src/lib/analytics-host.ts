@@ -61,3 +61,43 @@ f.parentNode.insertBefore(j,f);
 export function shouldRenderNoscriptFallback(vercelEnv: string | undefined): boolean {
   return vercelEnv === "production";
 }
+
+/**
+ * Paths that belong to the product, not the website.
+ *
+ * Vercel Web Analytics is here to measure the marketing site — what people
+ * read before they sign up. Once someone is inside the product, their
+ * pageviews say nothing about that, and the URLs start carrying things worth
+ * keeping out of a third-party store: `/reset-password` puts a live
+ * single-use token in the query string, and `/app` and `/finances` name what
+ * a signed-in person is looking at.
+ *
+ * `/register` and `/getstarted` are deliberately NOT here. They are noindexed,
+ * but they are the website's conversion point — measuring the site without
+ * them would leave out the only pageview that matters.
+ */
+export const PRODUCT_PATH_PREFIXES = [
+  "/admin",
+  "/app",
+  "/finances",
+  "/forgot-password",
+  "/login",
+  "/payment-success",
+  "/profile",
+  "/reset-password",
+  "/transactions",
+  "/verify-email",
+] as const;
+
+/**
+ * True for a path on the marketing site rather than inside the product.
+ *
+ * Prefixes match a whole segment: `/app` covers `/app` and `/app/settings`
+ * but not `/apply`, so a future marketing page is not silently swallowed by
+ * a product prefix it happens to start with.
+ */
+export function isMarketingPath(pathname: string): boolean {
+  return !PRODUCT_PATH_PREFIXES.some(
+    prefix => pathname === prefix || pathname.startsWith(`${prefix}/`),
+  );
+}

@@ -3,6 +3,7 @@ import { join } from "node:path";
 import {
   buildGoogleTagManagerSnippet,
   isAnalyticsHost,
+  isMarketingPath,
   shouldRenderNoscriptFallback,
 } from "@/lib/analytics-host";
 import { INTERNAL_ANALYTICS_BROWSER_KEY } from "@/lib/internal-analytics";
@@ -107,5 +108,64 @@ describe("root layout wiring", () => {
 
   it("gates the noscript iframe", () => {
     expect(layout).toContain("shouldRenderNoscriptFallback(process.env.VERCEL_ENV)");
+  });
+});
+
+describe("isMarketingPath", () => {
+  it.each([
+    "/",
+    "/pricing",
+    "/blog/how-to-retire-at-55",
+    "/use-cases/retirement",
+    "/retirement-calculator",
+    // Conversion pages: noindexed, but still the website's whole point.
+    "/register",
+    "/getstarted",
+  ])("measures the website path %s", (pathname) => {
+    expect(isMarketingPath(pathname)).toBe(true);
+  });
+
+  it.each([
+    "/app",
+    "/app/settings",
+    "/finances",
+    "/transactions",
+    "/profile",
+    "/admin/marketing",
+    "/login",
+    "/payment-success",
+    "/forgot-password",
+    "/verify-email",
+    // Carries a live single-use reset token in the query string.
+    "/reset-password",
+  ])("skips the product path %s", (pathname) => {
+    expect(isMarketingPath(pathname)).toBe(false);
+  });
+
+  it.each(["/apply", "/applications", "/logindetails", "/profiles-explained"])(
+    "does not let a product prefix swallow the marketing path %s",
+    (pathname) => {
+      expect(isMarketingPath(pathname)).toBe(true);
+    },
+  );
+});
+
+describe("Vercel Web Analytics wiring", () => {
+  const layout = readFileSync(join(process.cwd(), "src/app/layout.tsx"), "utf8");
+  const wrapper = readFileSync(
+    join(process.cwd(), "src/components/VercelAnalytics.tsx"),
+    "utf8",
+  );
+
+  it("renders only the gated wrapper, never the raw component", () => {
+    // An ungated <Analytics /> would record previews and the signed-in app.
+    expect(layout).toContain("<VercelAnalytics />");
+    expect(layout).not.toContain("@vercel/analytics");
+  });
+
+  it("gates on host, surface and the internal-browser opt-out", () => {
+    expect(wrapper).toContain("isAnalyticsHost(url.hostname)");
+    expect(wrapper).toContain("isMarketingPath(url.pathname)");
+    expect(wrapper).toContain("isInternalAnalyticsBrowser()");
   });
 });
