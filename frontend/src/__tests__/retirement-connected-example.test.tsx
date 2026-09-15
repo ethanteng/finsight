@@ -143,6 +143,9 @@ describe('connected-accounts example panel', () => {
       // nothing dropped, nothing substituted for an unplaceable holding.
       expect(screen.getByText('It tested every dollar')).toBeInTheDocument();
       expect(screen.getByText(/Nothing dropped for being unrecognized/i)).toBeInTheDocument();
+      // Placement ≠ complete history: this book still proxies intl/TIPS months.
+      // Claiming "recorded history" here would contradict the trust card next door.
+      expect(screen.queryByText(/own recorded history/i)).not.toBeInTheDocument();
       // The offer to declare a gap must survive having none to declare, or the
       // card reads as a product that never has them.
       expect(
