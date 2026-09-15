@@ -94,7 +94,11 @@ function countWord(n: number): string {
  * excluded for the geography alone. Saying only "what they hold" would misstate
  * why the engine left it out.
  */
-function unmodeledGapCopy(unresolvedCount: number, unsupportedCount: number): string | null {
+function unmodeledGapCopy(
+  unresolvedCount: number,
+  unsupportedCount: number,
+  partiallyMappedCount: number
+): string | null {
   const parts: string[] = [];
   if (unresolvedCount > 0) {
     parts.push(
@@ -108,6 +112,17 @@ function unmodeledGapCopy(unresolvedCount: number, unsupportedCount: number): st
       unsupportedCount === 1
         ? "one is a kind of investment with no century of history to test it against"
         : `${countWord(unsupportedCount)} are kinds of investment with no century of history to test them against`
+    );
+  }
+  if (partiallyMappedCount > 0) {
+    // Not a failure to place the holding: the engine ran most of it and held
+    // back the sleeves it has no series for. Saying it "could not be placed"
+    // would send a reader looking for a mapping that already exists.
+    parts.push(
+      partiallyMappedCount === 1
+        ? "one was placed but has a sleeve with no history to run, so that slice stayed out"
+        : `${countWord(partiallyMappedCount)} were placed but have sleeves with no history to run, ` +
+          "so those slices stayed out"
     );
   }
   if (parts.length === 0) return null;
@@ -206,7 +221,24 @@ export const CONNECTED_EXAMPLE_ID = "connect-accounts";
 
 export function RetirementConnectedExample() {
   const { plan, portfolio, allocation, coverage, result } = EXAMPLE;
-  const unmodeled = [...coverage.unresolved, ...coverage.unsupported];
+  /**
+   * Everything the engine reported as not fully tested. `partiallyMapped` is a
+   * third bucket, not a subset of the other two: a holding with some sleeves
+   * modeled and some withheld is filed there and in neither of them, while its
+   * withheld slice still counts toward `unmodeledValue`.
+   */
+  const unmodeled = [
+    ...coverage.unresolved,
+    ...coverage.unsupported,
+    ...(coverage.partiallyMapped ?? []),
+  ];
+  /**
+   * Which face the card shows is the coverage figure's call, not the list's.
+   * A book whose only gap is a partial exclusion would otherwise render "It
+   * tested every dollar" over a coverage figure below 100% — the over-claim
+   * this panel exists to avoid, and the one a list-length check cannot catch.
+   */
+  const hasGap = coverage.unmodeledValue > 0 || coverage.valueCoverage < 1 || unmodeled.length > 0;
   /**
    * `as const` on the generated file narrows this to whichever rating the last
    * run produced, which makes a literal comparison a type error rather than a
@@ -215,7 +247,11 @@ export function RetirementConnectedExample() {
    * instead of changing the page.
    */
   const mappingConfidence: string = coverage.confidence;
-  const gapCopy = unmodeledGapCopy(coverage.unresolved.length, coverage.unsupported.length);
+  const gapCopy = unmodeledGapCopy(
+    coverage.unresolved.length,
+    coverage.unsupported.length,
+    coverage.partiallyMapped?.length ?? 0
+  );
   /**
    * Widened for the same reason as the rating above: `as const` pins the length
    * and the series keys to whatever the last run produced, so counting them or
@@ -320,7 +356,7 @@ export function RetirementConnectedExample() {
             </p>
           </article>
 
-          {unmodeled.length > 0 ? (
+          {hasGap ? (
             <article className="qp-example-card qp-example-card-flag">
               <h3>It says what it cannot see</h3>
               <p className="qp-example-figure">{money(coverage.unmodeledValue)}</p>

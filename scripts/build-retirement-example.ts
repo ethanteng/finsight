@@ -213,6 +213,15 @@ async function main() {
       unresolved: dataQuality.proxyUsage.unmappedHoldings,
       /** Holdings with a known class the engine has no return series for. */
       unsupported: dataQuality.proxyUsage.unsupportedHoldings,
+      /**
+       * Holdings the engine placed but only in part — a registry fund whose
+       * TIPS or commodity sleeve is withheld is mostly simulated, and lands in
+       * neither list above. Its withheld residual is still counted in
+       * `unmodeledValue`, so a panel reading only those two lists would show
+       * full coverage over a book that has a gap. Exported so the page can name
+       * what the gap is instead of printing a figure with nothing under it.
+       */
+      partiallyMapped: dataQuality.proxyUsage.partiallyMappedHoldings ?? [],
     },
     result: {
       survivalRate: stressTest.survivalRate,

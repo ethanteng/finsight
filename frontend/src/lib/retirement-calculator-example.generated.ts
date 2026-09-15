@@ -41,7 +41,8 @@ export const RETIREMENT_CALCULATOR_EXAMPLE = {
     "valueCoverage": 1,
     "confidence": "medium",
     "unresolved": [],
-    "unsupported": []
+    "unsupported": [],
+    "partiallyMapped": []
   },
   "result": {
     "survivalRate": 1,

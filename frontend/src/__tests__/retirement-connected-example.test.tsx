@@ -26,10 +26,19 @@ describe('connected-accounts example data', () => {
   });
 
   it('keeps its coverage figures consistent with its own unmodeled list', () => {
-    // Either the engine placed everything or it named what it could not place.
+    // Either the engine placed and ran everything, or it named what it did not.
     // "Some value unmodeled but nothing listed" is the state that would let the
     // panel show a shortfall it cannot account for.
-    const listed = [...EXAMPLE.coverage.unresolved, ...EXAMPLE.coverage.unsupported];
+    //
+    // All three buckets, because `partiallyMappedHoldings` is not a subset of
+    // the other two: a holding with some sleeves modeled and some withheld is
+    // filed there alone, while its withheld slice still counts toward
+    // `unmodeledValue`.
+    const listed = [
+      ...EXAMPLE.coverage.unresolved,
+      ...EXAMPLE.coverage.unsupported,
+      ...(EXAMPLE.coverage.partiallyMapped ?? []),
+    ];
 
     if (EXAMPLE.coverage.unmodeledValue > 0) {
       expect(EXAMPLE.coverage.valueCoverage).toBeLessThan(1);
@@ -38,6 +47,15 @@ describe('connected-accounts example data', () => {
       expect(EXAMPLE.coverage.valueCoverage).toBe(1);
       expect(listed).toHaveLength(0);
     }
+  });
+
+  it('exports the partially mapped bucket, which the other two do not contain', () => {
+    // The generator used to export `unmappedHoldings` and `unsupportedHoldings`
+    // only. A registry fund with a withheld sleeve lands in neither, so a page
+    // reading just those two would have shown full coverage over a book with a
+    // real gap. The field has to exist for the page to be able to check it.
+    expect(EXAMPLE.coverage).toHaveProperty('partiallyMapped');
+    expect(Array.isArray(EXAMPLE.coverage.partiallyMapped)).toBe(true);
   });
 
   it('reports a survival rate and a horizon the engine could produce', () => {
@@ -127,10 +145,14 @@ describe('connected-accounts example data', () => {
 });
 
 describe('connected-accounts example panel', () => {
-  it('states its coverage either way, naming every holding it could not place', () => {
+  it('states its coverage either way, naming every holding it did not fully test', () => {
     render(<RetirementConnectedExample />);
 
-    const listed = [...EXAMPLE.coverage.unresolved, ...EXAMPLE.coverage.unsupported];
+    const listed = [
+      ...EXAMPLE.coverage.unresolved,
+      ...EXAMPLE.coverage.unsupported,
+      ...(EXAMPLE.coverage.partiallyMapped ?? []),
+    ];
 
     if (listed.length > 0) {
       const unmodeled = `$${Math.round(EXAMPLE.coverage.unmodeledValue).toLocaleString('en-US')}`;
@@ -195,6 +217,21 @@ describe('connected-accounts example panel', () => {
     expect(within(trustCard).getByText(`${(EXAMPLE.coverage.valueCoverage * 100).toFixed(1)}%`))
       .toBeInTheDocument();
     expect(within(trustCard).getByText(EXAMPLE.coverage.confidence)).toBeInTheDocument();
+  });
+
+  it('picks the card face from the coverage figure, not the length of a list', () => {
+    const { container } = render(<RetirementConnectedExample />);
+
+    // The two faces have to agree with the number printed beside them. Keying
+    // the branch off list length alone let a book whose only gap was a partial
+    // exclusion render "It tested every dollar" over a sub-100% coverage
+    // figure, because that bucket is in neither list the page used to read.
+    const clear = container.querySelector('.qp-example-card-clear');
+    const flagged = container.querySelector('.qp-example-card-flag');
+    const fullyCovered = EXAMPLE.coverage.unmodeledValue === 0 && EXAMPLE.coverage.valueCoverage === 1;
+
+    expect(Boolean(clear)).toBe(fullyCovered);
+    expect(Boolean(flagged)).toBe(!fullyCovered);
   });
 
   it('flags the mapping rating as a warning only when it reads low', () => {
