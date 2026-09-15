@@ -28,7 +28,7 @@ export default function TermsContent() {
                   <strong className="text-foreground">Effective Date:</strong> July 29, 2025
                 </p>
                 <p className="text-lg text-muted-foreground">
-                  These terms apply to your use of Ask Linc, a product operated by Ethan Teng Consulting LLC.
+                  These terms apply to your use of Ask Linc.
                 </p>
               </div>
             </div>

@@ -28,7 +28,7 @@ export default function PrivacyContent() {
                   <strong className="text-foreground">Effective Date:</strong> July 29, 2025
                 </p>
                 <p className="text-lg text-muted-foreground">
-                  <strong className="text-foreground">Operated by:</strong> Ethan Teng Consulting LLC
+                  <strong className="text-foreground">Operated by:</strong> Ask Linc
                 </p>
               </div>
             </div>

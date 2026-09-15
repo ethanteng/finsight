@@ -404,5 +404,5 @@ ${limitations}
   This is educational information, not financial advice.
 
 These results were sent to ${options.email} at your request from the Ask Linc retirement calculator.
-© ${new Date().getFullYear()} Ethan Teng Consulting LLC`;
+© ${new Date().getFullYear()} Ask Linc`;
 }

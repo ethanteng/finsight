@@ -351,5 +351,5 @@ Run the numbers again: ${options.calculatorUrl}
 ${LIMITATIONS}
 
 These results were sent to ${options.email} at your request from the Ask Linc Coast FIRE calculator.
-© ${new Date().getFullYear()} Ethan Teng Consulting LLC`;
+© ${new Date().getFullYear()} Ask Linc`;
 }

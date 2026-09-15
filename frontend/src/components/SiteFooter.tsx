@@ -17,7 +17,7 @@ export default function SiteFooter({ variant = 'default' }: { variant?: 'default
             <Link href="/terms" className="hover:text-[#123c2f]">Terms</Link>
             <Link href="/contact" className="hover:text-[#123c2f]">Contact</Link>
           </nav>
-          <p className="text-center text-xs text-[#71857f] md:text-right">&copy; {new Date().getFullYear()} Ethan Teng Consulting LLC</p>
+          <p className="text-center text-xs text-[#71857f] md:text-right">&copy; {new Date().getFullYear()} Ask Linc</p>
         </div>
       </footer>
     );
