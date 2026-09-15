@@ -152,15 +152,21 @@ describe('connected-accounts example panel', () => {
   });
 
   it('labels the subset rows as subsets, not as separate sleeves', () => {
-    render(<RetirementConnectedExample />);
+    const { container } = render(<RetirementConnectedExample />);
 
     // `internationalAllocation` is inside `equityAllocation` and
     // `tipsAllocation` is inside `fixedIncomeAllocation`. A bare "TIPS" row
     // would double-count and push the mix past 100% of the book.
-    expect(screen.getByText('of which international')).toBeInTheDocument();
-    expect(screen.getByText('of which TIPS')).toBeInTheDocument();
-    expect(screen.queryByText(/^TIPS$/)).not.toBeInTheDocument();
-    expect(screen.queryByText(/^International$/)).not.toBeInTheDocument();
+    //
+    // Scoped to the mix list, which is where double-counting is possible. The
+    // trust card names the same sleeves when it discloses a stand-in, and that
+    // is not a mix row — a page-wide match cannot tell the two apart.
+    const mix = container.querySelector('.qp-example-mix') as HTMLElement;
+
+    expect(within(mix).getByText('of which international')).toBeInTheDocument();
+    expect(within(mix).getByText('of which TIPS')).toBeInTheDocument();
+    expect(within(mix).queryByText(/^TIPS$/)).not.toBeInTheDocument();
+    expect(within(mix).queryByText(/^International$/)).not.toBeInTheDocument();
   });
 
   it('says where the mix came from without claiming a list that may not exist', () => {
@@ -254,24 +260,72 @@ describe('connected-accounts example panel', () => {
   });
 
   it('discloses any sleeve represented by a stand-in for part of the window', () => {
-    render(<RetirementConnectedExample />);
+    const { container } = render(<RetirementConnectedExample />);
 
     // Every one of them, not just the first. There are two now -- international
     // equity before 1975 and TIPS before 2003 -- and a panel that discloses one
     // substitution while staying silent about another is worse than one that
     // discloses none, because it reads as though it listed them all.
+    //
+    // The disclosure is a row per sleeve rather than a paragraph per sleeve, so
+    // this reads the rows. Shortening the copy is allowed; dropping a sleeve or
+    // its share of the window is not.
     expect(EXAMPLE.result.proxiedSeries.length).toBeGreaterThan(0);
-    for (const proxied of EXAMPLE.result.proxiedSeries) {
+
+    const rows = Array.from(container.querySelectorAll('.qp-example-standins li'));
+    expect(rows).toHaveLength(EXAMPLE.result.proxiedSeries.length);
+
+    EXAMPLE.result.proxiedSeries.forEach((proxied, index) => {
+      const row = rows[index] as HTMLElement;
       expect(proxied.months).toBeGreaterThan(0);
       expect(proxied.months).toBeLessThan(proxied.windowMonths);
       expect(
-        screen.getByText(new RegExp(`For ${proxied.months} of the ${proxied.windowMonths} months tested`, 'i'))
+        within(row).getByText(
+          `${proxied.months.toLocaleString('en-US')} of ${proxied.windowMonths.toLocaleString('en-US')} months`
+        )
       ).toBeInTheDocument();
-    }
-    expect(screen.getByText(/those months use the US market return instead/i)).toBeInTheDocument();
+      // What replaced it, not just that something did. The row names the
+      // substitute; the sentence above the rows carries "stands in".
+      expect(row.textContent!.length).toBeGreaterThan(
+        `${proxied.months.toLocaleString('en-US')} of ${proxied.windowMonths.toLocaleString('en-US')} months`.length
+      );
+    });
+
     expect(
-      screen.getByText(/those months use ordinary government\s+bonds instead/i)
+      screen.getByText(/closest recorded series stands in for the early months/i)
     ).toBeInTheDocument();
+  });
+
+  it('keeps the direction of the TIPS stand-in, which is the actionable part', () => {
+    render(<RetirementConnectedExample />);
+
+    const series = EXAMPLE.result.proxiedSeries.map((proxied) => proxied.series);
+    if (!series.includes('tips')) return;
+
+    // Substituting ordinary government bonds for TIPS drops the inflation
+    // protection TIPS are bought for, so those stretches test the plan harder
+    // than the real record would. Trimming the copy must not trim that: it is
+    // the one part a reader can act on, and it cuts in the plan's favour.
+    expect(
+      screen.getByText(/test the plan harder than the real record would/i)
+    ).toBeInTheDocument();
+  });
+
+  it('does not dress the stand-ins up as caution', () => {
+    const { container } = render(<RetirementConnectedExample />);
+
+    if (EXAMPLE.result.proxiedSeries.length === 0) return;
+
+    // Only the TIPS substitution is known to cut in the plan's favour. Using US
+    // returns for months with no overseas record is uninformative about holding
+    // money abroad, not cautious about it, and shortening this copy must not
+    // round the pair up to reassurance — that is the claim the panel exists to
+    // avoid making.
+    const trustCard = Array.from(container.querySelectorAll('.qp-example-card')).find(
+      (card) => card.querySelector('h3')?.textContent === 'It shows how much to trust the answer'
+    ) as HTMLElement;
+
+    expect(trustCard.textContent).not.toMatch(/conservative|cautious|err(s|ed)? on the safe side/i);
   });
 
   it('answers the page\'s question before showing its work', () => {

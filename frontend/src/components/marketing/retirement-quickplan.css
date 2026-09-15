@@ -1504,6 +1504,44 @@
   background: #4e8f62;
 }
 
+/* Stand-ins read as rows, not paragraphs: which sleeve, what replaced it, and
+   over how much of the window. The detail is a footnote to the answer, so it
+   is sized like one. */
+.quickplan-page .qp-example-standins {
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.quickplan-page .qp-example-standins li {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 1px 12px;
+  padding: 9px 0;
+  border-bottom: 1px solid rgba(16, 35, 25, 0.09);
+}
+
+.quickplan-page .qp-example-standins b {
+  color: #2f3b34;
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.quickplan-page .qp-example-standins small {
+  grid-row: 1 / span 2;
+  grid-column: 2;
+  align-self: center;
+  color: #7c8981;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.quickplan-page .qp-example-standins span {
+  color: #6b7871;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
 .quickplan-page .qp-example-figure {
   margin: 0 !important;
   color: #8a5a12 !important;

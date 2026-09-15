@@ -115,34 +115,56 @@ function unmodeledGapCopy(unresolvedCount: number, unsupportedCount: number): st
 }
 
 /**
- * What a substituted series means, in the reader's terms.
+ * A substituted series, in the reader's terms and at the length it deserves.
  *
- * Keyed on the series rather than shown as the engine's own description,
- * because the two substitutions fail differently and a visitor deciding
- * whether to trust the number needs the difference: months with no overseas
- * record tell you nothing about holding money abroad, while months with no
- * TIPS record actively understate what TIPS would have done.
+ * These are a property of the century of record, not of the portfolio or the
+ * model: some sleeves are younger than the history they are tested against, so
+ * their early months borrow the closest series that does exist. The panel has
+ * to disclose that — a stand-in the reader never hears about is the one thing
+ * this must not do — but it is a footnote to the answer, not a finding about
+ * this plan, and three paragraphs of it read as though it were the latter.
  *
- * A series with no copy here falls back to saying it was substituted at all,
- * which is worse writing than a bespoke sentence but still true — the one
- * thing this must not do is stay silent about a substitution.
+ * So: a label and the stand-in, rendered as a row. The prose that follows the
+ * rows carries the one thing a reader could act on, which is the direction the
+ * substitution pushes the answer.
+ *
+ * A series with no entry here still renders, in the engine's own terms.
  */
-function proxiedSeriesCopy(series: string): string {
+function proxiedSeriesLabel(series: string): { label: string; standIn: string } {
   if (series === "intl_equity") {
-    return (
-      "nobody recorded what overseas markets did, so those months use the US market return " +
-      "instead. The plan is still checked against the whole record; those months just cannot " +
-      "tell you anything about holding money abroad."
-    );
+    return { label: "International stocks", standIn: "US market returns" };
   }
   if (series === "tips") {
-    return (
-      "inflation-protected bonds did not exist yet, so those months use ordinary government " +
-      "bonds instead. That leaves out the inflation protection TIPS are bought for, which " +
-      "makes the plan look worse in the inflationary stretches rather than better."
+    return { label: "TIPS", standIn: "Ordinary government bonds" };
+  }
+  return { label: series, standIn: "The closest recorded series" };
+}
+
+/**
+ * Which way the stand-ins push the answer — the only part of this a reader can
+ * do anything with. Stated only for series where the direction is actually
+ * known: the TIPS substitution drops the inflation protection TIPS are bought
+ * for, so those stretches test the plan harder than the real record would. The
+ * international one is not conservative, just uninformative about holding money
+ * abroad, and saying otherwise to sound reassuring would be the kind of claim
+ * this panel exists to avoid.
+ */
+function standInDirection(seriesKeys: readonly string[]): string {
+  const notes: string[] = [];
+  if (seriesKeys.includes("tips")) {
+    notes.push(
+      "the TIPS months drop the inflation protection TIPS are bought for, so those stretches " +
+        "test the plan harder than the real record would"
     );
   }
-  return "that part of the portfolio has no recorded returns, so a close relative stands in for it.";
+  if (seriesKeys.includes("intl_equity")) {
+    notes.push("the international months cannot speak to holding money abroad either way");
+  }
+  if (notes.length === 0) {
+    return "Every month of the window is still tested either way.";
+  }
+  const lead = notes.length === 1 ? "It does not flatter the plan" : "Neither flatters the plan";
+  return `${lead}: ${notes.join("; ")}. The whole window is still tested.`;
 }
 
 /**
@@ -194,7 +216,15 @@ export function RetirementConnectedExample() {
    */
   const mappingConfidence: string = coverage.confidence;
   const gapCopy = unmodeledGapCopy(coverage.unresolved.length, coverage.unsupported.length);
-  const proxiedSeries = result.proxiedSeries;
+  /**
+   * Widened for the same reason as the rating above: `as const` pins the length
+   * and the series keys to whatever the last run produced, so counting them or
+   * testing a key is a type error rather than a branch. How many sleeves were
+   * substituted is runtime data — a regeneration that substitutes one, or none,
+   * should change the sentence, not fail the build.
+   */
+  const proxiedSeries: ReadonlyArray<{ series: string; months: number; windowMonths: number }> =
+    result.proxiedSeries;
   const ladder = readLadder(EXAMPLE.byRetirementAge);
   const band = outcomeBand(result.survivalRate);
 
@@ -346,19 +376,27 @@ export function RetirementConnectedExample() {
             {proxiedSeries.length > 0 ? (
               <>
                 <p>
-                  {unmodeled.length > 0
-                    ? "Real holdings bring their own gaps too."
-                    : "The record itself is the remaining limit, so the panel states it."}
+                  {countWord(proxiedSeries.length)
+                    .replace(/^./, (c) => c.toUpperCase())}{" "}
+                  {proxiedSeries.length === 1 ? "sleeve is" : "sleeves are"} younger than the
+                  century tested, so the closest recorded series stands in for the early months:
                 </p>
-                {proxiedSeries.map((proxied) => (
-                  <p key={proxied.series}>
-                    For {proxied.months} of the {proxied.windowMonths} months tested —{" "}
-                    {proxied.ranges
-                      .map((range) => `${monthLabel(range.firstMonth)} to ${monthLabel(range.lastMonth)}`)
-                      .join(", and ")}{" "}
-                    — {proxiedSeriesCopy(proxied.series)}
-                  </p>
-                ))}
+                <ul className="qp-example-standins">
+                  {proxiedSeries.map((proxied) => {
+                    const { label, standIn } = proxiedSeriesLabel(proxied.series);
+                    return (
+                      <li key={proxied.series}>
+                        <b>{label}</b>
+                        <span>{standIn}</span>
+                        <small>
+                          {proxied.months.toLocaleString("en-US")} of{" "}
+                          {proxied.windowMonths.toLocaleString("en-US")} months
+                        </small>
+                      </li>
+                    );
+                  })}
+                </ul>
+                <p>{standInDirection(proxiedSeries.map((proxied) => proxied.series))}</p>
               </>
             ) : (
               <p>
