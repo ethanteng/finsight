@@ -178,4 +178,92 @@ describe('marketing scorecard data states', () => {
       expect.objectContaining({ headers: expect.objectContaining({ Authorization: 'Bearer test-token' }) }),
     ));
   });
+
+  it('resets the repeat-use device when a refresh drops the selected device', async () => {
+    process.env.NEXT_PUBLIC_API_URL = 'https://api.example.test';
+    window.localStorage.setItem('auth_token', 'test-token');
+
+    const repeatRow = (calculator: 'retirement' | 'coast_fire', device: string, sessions: number) => ({
+      calculator, device, sessions, runs: sessions * 2, repeatSessions: sessions > 0 ? 1 : 0,
+      repeatRate: sessions > 0 ? 0.5 : null, averageRuns: sessions > 0 ? 2 : null,
+      distribution: sessions > 0 ? [sessions - 1, 1, 0, 0] as [number, number, number, number] : [0, 0, 0, 0] as [number, number, number, number],
+      singleRunCtaSessions: 0, repeatRunCtaSessions: 0, singleRunCtaRate: null, repeatRunCtaRate: null,
+    });
+    const baseReport = {
+      period: { start: '2026-08-12', end: '2026-09-08', previousStart: '2026-07-15', previousEnd: '2026-08-11' },
+      coverage: { eventTrackingStartedAt: null, fullyObservedThrough: '2026-09-08', usesFallbackSnapshot: false },
+      firstParty: {
+        accountsCreated: 0, createdAccountsWithFinancialConnection: 0,
+        createdAccountsWithConversation: 0, createdAccountsCurrentlyPaid: 0,
+      },
+      retirementCalculatorHealth: {
+        state: 'live', windowDays: 28, submissions: 1, answered: 1, rejected: 0, answerRate: 1,
+        note: 'Live first-party calculator-run records.',
+      },
+      beachhead: {
+        state: 'collecting', cohortLabel: 'Coast FIRE planners', cohortDefinition: 'Explicit Coast FIRE activity.',
+        coastFireJourney: unavailableJourney, currentCalculatorBaseline: unavailableJourney,
+        leadCapture: { coastFire: emptyLeadCapture, retirement: emptyLeadCapture },
+        downstream: {
+          financialConnectionRate: { value: null, previous: null, unit: 'percent', source: 'First-party accounts' },
+          activationRate: { value: null, previous: null, unit: 'percent', source: 'First-party accounts' },
+          paidRate: { value: null, previous: null, unit: 'percent', source: 'First-party accounts' },
+        },
+        evidenceGaps: [],
+      },
+      diagnostics: [{ id: 'ga4', name: 'GA4 + BigQuery', state: 'live', freshness: '2026-09-08', detail: 'Live' }],
+      warnings: [],
+    };
+    const withTablet = {
+      ...baseReport,
+      calculatorRepeatUsage: {
+        state: 'available' as const,
+        note: 'Repeat means 2+ successful runs in the same session.',
+        rows: (['all', 'desktop', 'mobile', 'tablet'] as const).flatMap(device => [
+          repeatRow('retirement', device, device === 'tablet' ? 3 : 2),
+          repeatRow('coast_fire', device, device === 'tablet' ? 3 : 2),
+        ]),
+        bothCalculators: [
+          { device: 'all', sessions: 2 }, { device: 'desktop', sessions: 1 },
+          { device: 'mobile', sessions: 1 }, { device: 'tablet', sessions: 1 },
+        ],
+      },
+    };
+    const withoutTablet = {
+      ...baseReport,
+      calculatorRepeatUsage: {
+        state: 'available' as const,
+        note: 'Repeat means 2+ successful runs in the same session.',
+        rows: (['all', 'desktop', 'mobile'] as const).flatMap(device => [
+          repeatRow('retirement', device, 4),
+          repeatRow('coast_fire', device, 4),
+        ]),
+        bothCalculators: [
+          { device: 'all', sessions: 2 }, { device: 'desktop', sessions: 1 }, { device: 'mobile', sessions: 1 },
+        ],
+      },
+    };
+
+    global.fetch = jest.fn()
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => withTablet })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => withoutTablet }) as jest.Mock;
+
+    render(<MarketingDashboardPage />);
+
+    const repeatSection = await screen.findByRole('region', { name: 'Do people run the calculators again?' });
+    const deviceSelect = within(repeatSection).getByLabelText('Device');
+    expect(within(deviceSelect).getByRole('option', { name: 'Tablet' })).toBeInTheDocument();
+    fireEvent.change(deviceSelect, { target: { value: 'tablet' } });
+    expect(deviceSelect).toHaveValue('tablet');
+    expect(repeatSection).toHaveTextContent(/1 sessions ran both calculators/);
+
+    fireEvent.click(screen.getByRole('button', { name: '7d' }));
+
+    await waitFor(() => {
+      expect(within(repeatSection).getByLabelText('Device')).toHaveValue('all');
+    });
+    expect(within(repeatSection).queryByRole('option', { name: 'Tablet' })).not.toBeInTheDocument();
+    expect(repeatSection).toHaveTextContent(/2 sessions ran both calculators/);
+    expect(within(repeatSection).getAllByText('4')).toHaveLength(2); // calculating sessions on both cards
+  });
 });

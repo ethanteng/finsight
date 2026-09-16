@@ -146,6 +146,13 @@ function CalculatorRepeatUsage({ data, observedThrough }: {
 }) {
   const [device, setDevice] = useState('all');
   const devices = [...new Set(['all', 'desktop', 'mobile', ...(data?.rows.map(row => row.device) || [])])];
+  // Fall back immediately when a refresh drops the selected device (e.g. tablet →
+  // a window with no tablet sessions); otherwise the select stays invalid and the
+  // cards/`bothCalculators` line show empty/zero as if nothing happened.
+  const activeDevice = devices.includes(device) ? device : 'all';
+  useEffect(() => {
+    if (device !== activeDevice) setDevice(activeDevice);
+  }, [device, activeDevice]);
   const deviceLabel = (value: string) => value === 'all' ? 'All devices' : value.charAt(0).toUpperCase() + value.slice(1);
   return <section aria-labelledby="calculator-repeat-heading" className="rounded-[24px] border border-[#102319]/10 bg-white p-5 sm:p-8">
     <div className="flex flex-wrap items-start justify-between gap-4">
@@ -157,12 +164,12 @@ function CalculatorRepeatUsage({ data, observedThrough }: {
     </div>
     {!data || data.state !== 'available' ? <p className="mt-5 text-sm text-[#66736b]">{data?.note || 'Repeat-run reporting is unavailable until the updated reporting API is deployed.'}</p> : <>
       <label className="mt-5 flex items-center gap-3 text-sm font-semibold">Device
-        <select className="rounded-lg border border-[#102319]/20 bg-white p-2" value={device} onChange={event => setDevice(event.target.value)}>
+        <select className="rounded-lg border border-[#102319]/20 bg-white p-2" value={activeDevice} onChange={event => setDevice(event.target.value)}>
           {devices.map(value => <option key={value} value={value}>{deviceLabel(value)}</option>)}
         </select>
       </label>
       <div className="mt-5 grid gap-5 lg:grid-cols-2">
-        {data.rows.filter(row => row.device === device).map(row => <article key={row.calculator} className="min-w-0 rounded-2xl border border-[#102319]/10 p-4 sm:p-5">
+        {data.rows.filter(row => row.device === activeDevice).map(row => <article key={row.calculator} className="min-w-0 rounded-2xl border border-[#102319]/10 p-4 sm:p-5">
           <h3 className="text-lg font-semibold">{row.calculator === 'retirement' ? 'Retirement calculator' : 'Coast FIRE calculator'}</h3>
           <dl className="mt-4 grid grid-cols-2 gap-4 text-sm">
             {[
@@ -184,7 +191,7 @@ function CalculatorRepeatUsage({ data, observedThrough }: {
           {row.sessions === 0 && <p className="mt-3 text-xs text-[#66736b]">No successful runs observed for this device and period. This alone does not confirm tracking is working.</p>}
         </article>)}
       </div>
-      <p className="mt-4 text-sm"><strong>{count(data.bothCalculators.find(row => row.device === device)?.sessions ?? 0)}</strong> sessions ran both calculators. Those sessions appear in both calculator cards.</p>
+      <p className="mt-4 text-sm"><strong>{count(data.bothCalculators.find(row => row.device === activeDevice)?.sessions ?? 0)}</strong> sessions ran both calculators. Those sessions appear in both calculator cards.</p>
       <p className="mt-3 text-xs leading-5 text-[#66736b]">{data.note}</p>
     </>}
   </section>;
