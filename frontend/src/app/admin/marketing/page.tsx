@@ -84,6 +84,19 @@ type LeadCapture = {
 };
 
 interface Report {
+  calculatorRepeatUsage?: {
+    state: 'available' | 'unavailable';
+    note: string;
+    rows: Array<{
+      calculator: 'retirement' | 'coast_fire'; device: string;
+      sessions: number; runs: number; repeatSessions: number;
+      repeatRate: number | null; averageRuns: number | null;
+      distribution: [number, number, number, number];
+      singleRunCtaSessions: number; repeatRunCtaSessions: number;
+      singleRunCtaRate: number | null; repeatRunCtaRate: number | null;
+    }>;
+    bothCalculators: Array<{ device: string; sessions: number }>;
+  };
   period: { start: string; end: string; previousStart: string; previousEnd: string };
   coverage: {
     eventTrackingStartedAt: string | null;
@@ -127,6 +140,62 @@ interface Report {
 }
 
 type Filters = { days: 7 | 28 | 90; compare: boolean };
+
+function CalculatorRepeatUsage({ data, observedThrough }: {
+  data: Report['calculatorRepeatUsage']; observedThrough: string | null;
+}) {
+  const [device, setDevice] = useState('all');
+  const devices = [...new Set(['all', 'desktop', 'mobile', ...(data?.rows.map(row => row.device) || [])])];
+  // Fall back immediately when a refresh drops the selected device (e.g. tablet →
+  // a window with no tablet sessions); otherwise the select stays invalid and the
+  // cards/`bothCalculators` line show empty/zero as if nothing happened.
+  const activeDevice = devices.includes(device) ? device : 'all';
+  useEffect(() => {
+    if (device !== activeDevice) setDevice(activeDevice);
+  }, [device, activeDevice]);
+  const deviceLabel = (value: string) => value === 'all' ? 'All devices' : value.charAt(0).toUpperCase() + value.slice(1);
+  return <section aria-labelledby="calculator-repeat-heading" className="rounded-[24px] border border-[#102319]/10 bg-white p-5 sm:p-8">
+    <div className="flex flex-wrap items-start justify-between gap-4">
+      <div>
+        <h2 id="calculator-repeat-heading" className="text-2xl font-semibold tracking-[-.035em]">Do people run the calculators again?</h2>
+        <p className="mt-2 text-sm leading-6 text-[#66736b]">Successful runs in the same session—not repeated button clicks.</p>
+      </div>
+      <DataTiming kind="delayed" observedThrough={observedThrough} />
+    </div>
+    {!data || data.state !== 'available' ? <p className="mt-5 text-sm text-[#66736b]">{data?.note || 'Repeat-run reporting is unavailable until the updated reporting API is deployed.'}</p> : <>
+      <label className="mt-5 flex items-center gap-3 text-sm font-semibold">Device
+        <select className="rounded-lg border border-[#102319]/20 bg-white p-2" value={activeDevice} onChange={event => setDevice(event.target.value)}>
+          {devices.map(value => <option key={value} value={value}>{deviceLabel(value)}</option>)}
+        </select>
+      </label>
+      <div className="mt-5 grid gap-5 lg:grid-cols-2">
+        {data.rows.filter(row => row.device === activeDevice).map(row => <article key={row.calculator} className="min-w-0 rounded-2xl border border-[#102319]/10 p-4 sm:p-5">
+          <h3 className="text-lg font-semibold">{row.calculator === 'retirement' ? 'Retirement calculator' : 'Coast FIRE calculator'}</h3>
+          <dl className="mt-4 grid grid-cols-2 gap-4 text-sm">
+            {[
+              ['Calculating sessions', count(row.sessions)],
+              ['Successful runs', count(row.runs)],
+              ['Ran again', `${precisePercent(row.repeatRate)} (${count(row.repeatSessions)} sessions)`],
+              ['Runs per calculating session', row.averageRuns === null ? '—' : row.averageRuns.toFixed(2)],
+            ].map(([label, value]) => <div key={label}><dt className="text-xs text-[#66736b]">{label}</dt><dd className="mt-1 font-semibold">{value}</dd></div>)}
+          </dl>
+          <p className="mt-5 text-xs font-semibold">Sessions by number of runs</p>
+          <dl className="mt-2 grid grid-cols-4 gap-2 rounded-xl bg-[#f8f7ef] p-3 text-center text-sm">
+            {row.distribution.map((sessions, index) => <div key={index}><dt className="text-xs text-[#66736b]">{index === 3 ? '4+' : index + 1} {index === 0 ? 'run' : 'runs'}</dt><dd className="mt-1 font-semibold">{count(sessions)}</dd></div>)}
+          </dl>
+          <p className="mt-5 text-xs font-semibold">Start free clicked in the same session</p>
+          <dl className="mt-2 grid grid-cols-2 gap-3 text-sm">
+            <div><dt className="text-xs text-[#66736b]">Single-run sessions</dt><dd>{precisePercent(row.singleRunCtaRate)} <span className="text-xs text-[#66736b]">({count(row.singleRunCtaSessions)}/{count(row.distribution[0])})</span></dd></div>
+            <div><dt className="text-xs text-[#66736b]">Repeat-run sessions</dt><dd>{precisePercent(row.repeatRunCtaRate)} <span className="text-xs text-[#66736b]">({count(row.repeatRunCtaSessions)}/{count(row.repeatSessions)})</span></dd></div>
+          </dl>
+          {row.sessions === 0 && <p className="mt-3 text-xs text-[#66736b]">No successful runs observed for this device and period. This alone does not confirm tracking is working.</p>}
+        </article>)}
+      </div>
+      <p className="mt-4 text-sm"><strong>{count(data.bothCalculators.find(row => row.device === activeDevice)?.sessions ?? 0)}</strong> sessions ran both calculators. Those sessions appear in both calculator cards.</p>
+      <p className="mt-3 text-xs leading-5 text-[#66736b]">{data.note}</p>
+    </>}
+  </section>;
+}
 
 const DEFAULT_FILTERS: Filters = { days: 28, compare: true };
 const count = (value: number | null) => value === null
@@ -454,7 +523,7 @@ export default function MarketingDashboardPage() {
               <StatePill state={report?.beachhead.state || 'collecting'} />
               <p className="mt-5 text-[10px] font-extrabold uppercase tracking-[.16em] text-[#d8ff71]">The decision this page should answer</p>
               <h2 className="mt-3 max-w-3xl font-serif text-[clamp(2.15rem,5vw,4.2rem)] italic leading-[.96] tracking-[-.045em]">Are Coast FIRE planners moving from a free number to a real plan?</h2>
-              <p className="mt-5 max-w-2xl text-sm leading-6 text-white/65">One acquisition-to-value journey, a clean comparison baseline, and no generic engagement metrics that distract from the beachhead test.</p>
+              <p className="mt-5 max-w-2xl text-sm leading-6 text-white/65">Track calculator use, repeat runs, and the path from a result to a trial.</p>
             </div>
             <div className="self-end rounded-2xl border border-white/10 bg-white/[.06] p-5">
               <div className="text-2xl font-semibold tracking-[-.05em]">{report ? `${shortDate(report.period.start)}–${shortDate(report.period.end)}` : '—'}</div>
@@ -552,6 +621,10 @@ export default function MarketingDashboardPage() {
               ga4ObservedThrough={ga4ObservedThrough}
             />
           </section>
+
+          <div className="mt-10">
+            <CalculatorRepeatUsage data={report.calculatorRepeatUsage} observedThrough={ga4ObservedThrough} />
+          </div>
 
           <section className="mt-10">
             <div className="max-w-3xl">
