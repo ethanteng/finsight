@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import MarketingDashboardPage from '@/app/admin/marketing/page';
 
 jest.mock('@/components/PageMeta', () => function MockPageMeta() { return null; });
@@ -57,7 +57,7 @@ describe('marketing scorecard data states', () => {
     jest.clearAllMocks();
   });
 
-  it('shows immediate calculator health and the real GA4 configuration failure', async () => {
+  it.each([true, false])('shows health, source errors, and repeat usage (API supported: %s)', async (supportsRepeatUsage) => {
     process.env.NEXT_PUBLIC_API_URL = 'https://api.example.test';
     window.localStorage.setItem('auth_token', 'test-token');
     global.fetch = jest.fn().mockResolvedValue({
@@ -81,6 +81,22 @@ describe('marketing scorecard data states', () => {
           createdAccountsWithConversation: 0,
           createdAccountsCurrentlyPaid: 0,
         },
+        calculatorRepeatUsage: supportsRepeatUsage ? {
+          state: 'available', note: 'Repeat means 2+ successful runs in the same session.',
+          rows: ['retirement', 'coast_fire'].flatMap(calculator => ['all', 'desktop', 'mobile'].map(device => ({
+            calculator, device, sessions: device === 'desktop' ? 0 : 4,
+            runs: device === 'desktop' ? 0 : 9,
+            repeatSessions: device === 'desktop' ? 0 : 2,
+            repeatRate: device === 'desktop' ? null : .5,
+            averageRuns: device === 'desktop' ? null : 2.25,
+            distribution: device === 'desktop' ? [0, 0, 0, 0] : [2, 1, 0, 1],
+            singleRunCtaSessions: device === 'desktop' ? 0 : 1,
+            repeatRunCtaSessions: device === 'desktop' ? 0 : 2,
+            singleRunCtaRate: device === 'desktop' ? null : .5,
+            repeatRunCtaRate: device === 'desktop' ? null : 1,
+          }))),
+          bothCalculators: [{ device: 'all', sessions: 1 }, { device: 'desktop', sessions: 0 }, { device: 'mobile', sessions: 1 }],
+        } : undefined,
         retirementCalculatorHealth: {
           state: 'live',
           windowDays: 28,
@@ -122,6 +138,20 @@ describe('marketing scorecard data states', () => {
 
     expect(await screen.findByText('First-party product health · last 28 days')).toBeInTheDocument();
     expect(screen.getByText('95.7%')).toBeInTheDocument();
+    const repeatSection = screen.getByRole('region', { name: 'Do people run the calculators again?' });
+    if (supportsRepeatUsage) {
+      expect(within(repeatSection).getAllByText('50.0% (2 sessions)')).toHaveLength(2);
+      expect(within(repeatSection).getAllByText('2.25')).toHaveLength(2);
+      expect(within(repeatSection).getAllByText('4+ runs')).toHaveLength(2);
+      fireEvent.change(within(repeatSection).getByLabelText('Device'), { target: { value: 'desktop' } });
+      expect(within(repeatSection).getAllByText(/No successful runs observed/)).toHaveLength(2);
+      expect(within(repeatSection).queryByText('2.25')).not.toBeInTheDocument();
+      fireEvent.change(within(repeatSection).getByLabelText('Device'), { target: { value: 'mobile' } });
+      expect(within(repeatSection).getAllByText('2.25')).toHaveLength(2);
+    } else {
+      expect(within(repeatSection).getByText(/unavailable until the updated reporting API/)).toBeInTheDocument();
+      expect(within(repeatSection).queryByLabelText('Device')).not.toBeInTheDocument();
+    }
     expect(screen.getByText('GA4 reporting needs configuration.')).toBeInTheDocument();
     expect(screen.getAllByText('Add a read-only BigQuery service account to the backend environment.')).toHaveLength(2);
     expect(screen.getAllByText(/GA4 and first-party comparison rows both cover Aug 12 through Sep 8/)).toHaveLength(2);

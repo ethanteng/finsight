@@ -275,6 +275,28 @@ export interface RetirementCalculatorHealthSummary {
   note: string;
 }
 
+export interface CalculatorRepeatRow {
+  calculator: 'retirement' | 'coast_fire';
+  device: string;
+  sessions: number;
+  runs: number;
+  repeatSessions: number;
+  repeatRate: number | null;
+  averageRuns: number | null;
+  distribution: [number, number, number, number];
+  singleRunCtaSessions: number;
+  repeatRunCtaSessions: number;
+  singleRunCtaRate: number | null;
+  repeatRunCtaRate: number | null;
+}
+
+export interface CalculatorRepeatUsage {
+  state: 'available' | 'unavailable';
+  note: string;
+  rows: CalculatorRepeatRow[];
+  bothCalculators: Array<{ device: string; sessions: number }>;
+}
+
 export interface MarketingDashboardReport {
   generatedAt: string;
   requested: MarketingFilters;
@@ -303,6 +325,7 @@ export interface MarketingDashboardReport {
    */
   retirementCalculatorHealth: RetirementCalculatorHealthSummary;
   beachhead: BeachheadScorecard;
+  calculatorRepeatUsage: CalculatorRepeatUsage;
   funnel: FunnelStepMetric[];
   funnelErrors: Array<{ event: string; sessions: number | null; events: number | null; rate: number | null }>;
   acquisition: BreakdownRow[];

@@ -7,6 +7,7 @@ import {
 } from '../services/calculator-lead-report';
 import { aggregateTrialFunnel } from './funnel';
 import { buildBeachheadScorecard } from './beachhead-scorecard';
+import { buildCalculatorRepeatUsage } from './calculator-repeat-usage';
 import { classifyIntent } from './intent-rules';
 import { loadGa4Sessions } from './adapters/ga4-bigquery';
 import { isIncludedByDefault } from './traffic-quality';
@@ -533,6 +534,7 @@ export async function getMarketingDashboard(filters: MarketingFilters): Promise<
     firstParty,
     retirementCalculatorHealth: calculatorHealth,
     beachhead,
+    calculatorRepeatUsage: buildCalculatorRepeatUsage(current, hasLiveGa4 && !ga4.truncated),
     funnel,
     funnelErrors: ['trial_signup_validation_error', 'trial_signup_registration_error', 'trial_verify_error', 'trial_login_error'].map(event => ({
       event,
