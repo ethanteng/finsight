@@ -288,6 +288,16 @@ const MAGNITUDE_WORDS: Record<string, number> = {
 const ANY_NUMBER_WORD = [...Object.keys(NUMBER_WORDS), ...Object.keys(MAGNITUDE_WORDS)].join('|');
 
 /**
+ * Whether the prose running up to a match ends in a number word, which is what
+ * separates a spelled decimal from the ordinary English noun: "five point five
+ * percent" is a figure, "at this point five years remain" is a sentence.
+ */
+function endsInNumberWord(before: string): boolean {
+  const word = /([a-z]+)[-\s]*$/i.exec(before)?.[1]?.toLowerCase();
+  return word !== undefined && (word in NUMBER_WORDS || word in MAGNITUDE_WORDS);
+}
+
+/**
  * A quantity spelled out in words, attached to a unit that makes it a claim.
  *
  * The tokenizer above reads digits, and the prompts ask for small counts as
@@ -381,12 +391,19 @@ export function extractSpelledFigures(text: string): NumericToken[] {
     const unit = match[3].toLowerCase();
     const isPercent = unit === '%' || unit === 'percent' || unit === 'per cent';
 
-    if (modifier === 'point') {
+    const decimal =
+      modifier === 'point' &&
+      endsInNumberWord(text.slice(Math.max(0, (match.index ?? 0) - 16), match.index ?? 0));
+    if (decimal) {
       /*
        * A decimal spelled out. Reading "five point five" back reliably is more
        * than this is worth, and guessing is the one thing it must not do — so
        * the phrase is reported as a figure that matches nothing, which names it
        * in the retry and asks for digits instead.
+       *
+       * Only when a number word leads into it. "Point" is also a plain English
+       * noun, and rejecting "at this point five years remain" over a licensed
+       * 5 would be the false drop this whole path exists to stop.
        */
       tokens.push({ raw: match[0].trim(), value: Number.NaN, halfWidth: 0, isPercent });
       continue;

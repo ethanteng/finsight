@@ -247,6 +247,23 @@ describe('extractSpelledFigures', () => {
   it('leaves the thirty-year compound adjective alone', () => {
     expect(extractSpelledFigures('the thirty-year Treasury yield')).toEqual([]);
   });
+
+  /*
+   * "Point" is a decimal connector only when a number word leads into it.
+   * Treating every one as a decimal rejected "at this point five years",
+   * which is ordinary English about a licensed count — the false drop this
+   * whole path exists to stop.
+   */
+  it('reads the English noun "point" as prose, not as a decimal', () => {
+    const prose = extractSpelledFigures('At this point five years remain before you claim.');
+    expect(prose).toHaveLength(1);
+    expect(prose[0].value).toBe(5);
+
+    // A number word in front still marks the figure unreadable.
+    for (const decimal of ['five point five percent', 'twenty-five point five percent']) {
+      expect(Number.isFinite(extractSpelledFigures(decimal)[0].value)).toBe(false);
+    }
+  });
 });
 
 describe('groundInterpretation', () => {
