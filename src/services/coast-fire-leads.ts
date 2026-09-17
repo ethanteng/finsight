@@ -105,12 +105,21 @@ export async function recordCoastFireLead(params: {
 export async function markCoastFireLeadTokenDisclosed(token: string): Promise<boolean> {
   try {
     const { getPrismaClient } = await import('../prisma-client');
-    await getPrismaClient().coastFireLead.updateMany({
+    const prisma = getPrismaClient();
+    const updated = await prisma.coastFireLead.updateMany({
       // First disclosure is the one that counts; a second never un-discloses.
       where: { token, tokenDisclosedAt: null },
       data: { tokenDisclosedAt: new Date() },
     });
-    return true;
+    // updateMany does not throw on zero matches. Returning true for a missing
+    // row would hand the page a token the registration skip still treats as
+    // inbox-only — fail closed unless the stamp is actually on the row.
+    if (updated.count > 0) return true;
+    const existing = await prisma.coastFireLead.findUnique({
+      where: { token },
+      select: { tokenDisclosedAt: true },
+    });
+    return existing?.tokenDisclosedAt != null;
   } catch (error) {
     console.error('⚠️  Could not mark Coast FIRE lead token disclosure:', error);
     return false;
