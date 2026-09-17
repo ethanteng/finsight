@@ -277,7 +277,7 @@ export async function cachedBrokerages(
   // as a 200. Caching it would hide every brokerage from the picker for the
   // next six hours over one bad reply, with nothing in the logs to say why.
   // Serving it once and retrying next search is the cheap, self-correcting
-  // choice.
+  // choice. Non-empty tables are stable enough that the ordinary TTL is fine.
   if (brokerages.length > 0) {
     brokerageCache = { fetchedAt: now, brokerages };
   }

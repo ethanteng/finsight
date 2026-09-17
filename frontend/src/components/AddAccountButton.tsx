@@ -210,7 +210,8 @@ const AddAccountButton = forwardRef<AddAccountButtonRef, AddAccountButtonProps>(
       // has started, clearing the timer no longer stops anything: the reply for
       // the old query could land during the debounce window and repaint the
       // list with institutions that do not match what is now typed -- briefly
-      // clickable, and wrong.
+      // clickable, and wrong. Nulling the ref keeps the aborted request's
+      // `finally` from clearing the `isSearching` the new effect just set.
       inFlight.current?.abort();
       inFlight.current = null;
     };

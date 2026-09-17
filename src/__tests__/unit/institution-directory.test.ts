@@ -222,6 +222,18 @@ describe('cachedBrokerages', () => {
 
     expect(fetchBrokerages).toHaveBeenCalledTimes(2);
   });
+
+  it('does not cache an empty list, so a transient blank response does not blank investment search for hours', async () => {
+    const fetchBrokerages = jest.fn()
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([brokerage()]);
+
+    expect(await cachedBrokerages(fetchBrokerages, 0)).toEqual([]);
+    expect(await cachedBrokerages(fetchBrokerages, 60_000)).toEqual([
+      expect.objectContaining({ slug: 'FIDELITY' }),
+    ]);
+    expect(fetchBrokerages).toHaveBeenCalledTimes(2);
+  });
 });
 
 describe('result caps', () => {
