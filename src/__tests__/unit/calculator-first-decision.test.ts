@@ -421,6 +421,7 @@ describe('seedFirstDecisionFromLead', () => {
     expect(outcome).toBe('seeded');
     const [call] = db.create.mock.calls as Array<[{ data: Record<string, string> }]>;
     expect(call[0].data.userId).toBe('user-1');
+    expect(call[0].data.origin).toBe('calculator_retirement');
     expect(call[0].data.question).toContain('Can I retire at 60?');
     expect(call[0].data.answer).toContain('619 of the 709');
   });
@@ -434,6 +435,7 @@ describe('seedFirstDecisionFromLead', () => {
     expect(outcome).toBe('seeded');
     const [call] = db.create.mock.calls as Array<[{ data: Record<string, string> }]>;
     expect(call[0].data.question).toContain('Have I reached Coast FIRE?');
+    expect(call[0].data.origin).toBe('calculator_coast_fire');
     expect(call[0].data.answer).toContain('$577,221');
   });
 

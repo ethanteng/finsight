@@ -18,6 +18,8 @@ export interface CalculatorLeadSummary {
   mailerliteSynced: number | null;
   continuedToSignup: number | null;
   matchedAccounts: number | null;
+  verifiedMatchedAccounts: number | null;
+  savedResultAccounts: number | null;
   attributionCaptured: number | null;
   paidAttributionCaptured: number | null;
   deliveryRate: number | null;
@@ -38,6 +40,8 @@ export interface CalculatorLeadRow extends CalculatorLeadAttribution {
 export interface CalculatorLeadAccountRow {
   email: string;
   createdAt: Date;
+  emailVerified?: boolean;
+  conversations?: Array<{ origin: string }>;
 }
 
 const ratio = (numerator: number, denominator: number): number | null =>
@@ -101,13 +105,13 @@ export function buildCalculatorLeadSummary(args: {
     if (!previous || lead.createdAt < previous) firstLeadByEmail.set(email, lead.createdAt);
   }
 
-  const matchedAccounts = new Set(
-    accounts.flatMap(account => {
-      const email = account.email.trim().toLowerCase();
-      const firstLeadAt = firstLeadByEmail.get(email);
-      return firstLeadAt && account.createdAt >= firstLeadAt ? [email] : [];
-    }),
-  ).size;
+  const matchingAccounts = accounts.filter(account => {
+    const email = account.email.trim().toLowerCase();
+    const firstLeadAt = firstLeadByEmail.get(email);
+    return firstLeadAt && account.createdAt >= firstLeadAt;
+  });
+  const uniqueAccounts = (rows: CalculatorLeadAccountRow[]) => new Set(rows.map(row => row.email.trim().toLowerCase())).size;
+  const matchedAccounts = uniqueAccounts(matchingAccounts);
   const emailsSent = leads.filter(lead => lead.emailSent).length;
   const continuedToSignup = leads.filter(lead => lead.continuedAt !== null).length;
   const uniqueEmails = firstLeadByEmail.size;
@@ -124,13 +128,15 @@ export function buildCalculatorLeadSummary(args: {
     mailerliteSynced: leads.filter(lead => lead.mailerliteSynced).length,
     continuedToSignup,
     matchedAccounts,
+    verifiedMatchedAccounts: uniqueAccounts(matchingAccounts.filter(account => account.emailVerified === true)),
+    savedResultAccounts: uniqueAccounts(matchingAccounts.filter(account => (account.conversations?.length || 0) > 0)),
     attributionCaptured,
     paidAttributionCaptured,
     deliveryRate: ratio(emailsSent, leads.length),
     continuationRate: ratio(continuedToSignup, emailsSent),
     accountMatchRate: ratio(matchedAccounts, uniqueEmails),
     attributionRate: ratio(attributionCaptured, leads.length),
-    note: 'First-party lead records for the same completed calendar window as GA4. “Continued” is the first successful emailed-link scenario exchange; matched accounts use a normalized email equality join and are counted only when the account was created after the first lead in this window.',
+    note: 'First-party records for the stated window. “Opened signup link” is the first successful emailed-link scenario exchange. Matched accounts share the lead email and were created later in this window; this association alone does not prove use of the email link. Verified means currently verified, not necessarily by this link. Saved results count matched accounts with an automatically saved result from this calculator, not a user-submitted planning question. Saving is asynchronous and can lag account creation.',
   };
 }
 
@@ -148,6 +154,8 @@ export function unavailableCalculatorLeadSummary(
     mailerliteSynced: null,
     continuedToSignup: null,
     matchedAccounts: null,
+    verifiedMatchedAccounts: null,
+    savedResultAccounts: null,
     attributionCaptured: null,
     paidAttributionCaptured: null,
     deliveryRate: null,
@@ -195,7 +203,13 @@ export async function calculatorLeadSummary(
         email: { in: emails },
         createdAt: { gte: periodStart, lt: periodEndExclusive },
       },
-      select: { email: true, createdAt: true },
+      select: {
+        email: true, createdAt: true, emailVerified: true,
+        conversations: {
+          where: { origin: kind === 'retirement' ? 'calculator_retirement' : 'calculator_coast_fire' },
+          select: { origin: true }, take: 1,
+        },
+      },
     });
 
   return buildCalculatorLeadSummary({ leads, accounts, periodStart, periodEndExclusive });

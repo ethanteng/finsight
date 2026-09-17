@@ -14,6 +14,7 @@ import {
   pushTrialLoginSubmit,
   pushTrialLoginSuccess,
   pushTrialLoginViewed,
+  pushTrialSignupCompleted,
   pushTrialSignupRegistrationError,
   pushTrialSignupStarted,
   pushTrialSignupSubmit,
@@ -168,6 +169,12 @@ describe("product-demo analytics", () => {
 
 describe("free-signup funnel analytics", () => {
   const analyticsWindow = window as AnalyticsWindow;
+  const directTrialParameters = {
+    signup_flow: 'free_trial',
+    signup_flow_version: '2',
+    signup_origin: 'getstarted',
+    signup_entry: 'direct',
+  };
 
   beforeEach(() => {
     analyticsWindow.dataLayer = [];
@@ -197,49 +204,64 @@ describe("free-signup funnel analytics", () => {
       method: "email",
       source_page: GET_STARTED_HREF,
       signup_flow: "free_trial",
+      signup_origin: "getstarted",
+      signup_entry: "direct",
     }]);
   });
 
-  it('carries calculator email attribution through the signup funnel without PII', () => {
-    window.history.replaceState({}, '', GET_STARTED_HREF);
-    beginFreeTrialSignupFlow(Date.now(), {
-      signupOrigin: 'coast_fire_calculator',
-      signupEntry: 'results_email',
-    });
+  it.each(['coast_fire_calculator', 'retirement_calculator'] as const)(
+    'carries %s email attribution through the signup funnel without PII', (origin) => {
+      window.history.replaceState({}, '', GET_STARTED_HREF);
+      beginFreeTrialSignupFlow(Date.now(), {
+        signupOrigin: origin,
+        signupEntry: 'results_email',
+      });
 
-    pushCalculatorResultsEmailCtaOpened('coast_fire_calculator');
-    pushTrialSignupViewed();
-    pushSignUp({ signupFlow: 'free_trial' });
+      pushCalculatorResultsEmailCtaOpened(origin);
+      pushTrialSignupViewed();
+      pushSignUp({ signupFlow: 'free_trial' });
+      pushTrialSignupCompleted('email_link');
 
-    expect(analyticsWindow.dataLayer).toEqual([
-      {
-        event: 'calculator_results_email_cta_opened',
-        source_page: '/getstarted',
-        content_type: 'coast_fire_calculator',
-        calculator_type: 'coast_fire',
-        signup_origin: 'coast_fire_calculator',
-        signup_entry: 'results_email',
-      },
-      {
-        event: 'trial_signup_viewed',
-        source_page: '/getstarted',
-        signup_flow: 'free_trial',
-        signup_origin: 'coast_fire_calculator',
-        signup_entry: 'results_email',
-      },
-      {
-        event: 'sign_up',
-        method: 'email',
-        source_page: '/getstarted',
-        signup_flow: 'free_trial',
-        signup_origin: 'coast_fire_calculator',
-        signup_entry: 'results_email',
-      },
-    ]);
-    expect(JSON.stringify(analyticsWindow.dataLayer)).not.toMatch(/@|token|currentSavings/);
-  });
+      expect(analyticsWindow.dataLayer).toEqual([
+        {
+          event: 'calculator_results_email_cta_opened',
+          source_page: '/getstarted',
+          content_type: origin,
+          calculator_type: origin === 'coast_fire_calculator' ? 'coast_fire' : 'retirement',
+          signup_origin: origin,
+          signup_entry: 'results_email',
+        },
+        {
+          event: 'trial_signup_viewed',
+          source_page: '/getstarted',
+          signup_flow: 'free_trial',
+          signup_flow_version: '2',
+          signup_origin: origin,
+          signup_entry: 'results_email',
+        },
+        {
+          event: 'sign_up',
+          method: 'email',
+          source_page: '/getstarted',
+          signup_flow: 'free_trial',
+          signup_origin: origin,
+          signup_entry: 'results_email',
+        },
+        {
+          event: 'trial_signup_completed',
+          source_page: '/getstarted',
+          signup_flow: 'free_trial',
+          signup_flow_version: '2',
+          signup_origin: origin,
+          signup_entry: 'results_email',
+          completion_method: 'email_link',
+        },
+      ]);
+      expect(JSON.stringify(analyticsWindow.dataLayer)).not.toMatch(/@|token|currentSavings/);
+    },
+  );
 
-  it("emits the complete no-card funnel with only fixed, non-sensitive parameters", () => {
+  it("emits the no-card verification-to-app funnel with only fixed, non-sensitive parameters", () => {
     window.history.replaceState({}, "", GET_STARTED_HREF);
     pushTrialSignupViewed();
     pushTrialSignupStarted();
@@ -252,52 +274,100 @@ describe("free-signup funnel analytics", () => {
     pushTrialVerifySubmit();
     pushTrialVerifyError('network_error');
     pushTrialVerifySuccess();
+    pushTrialSignupCompleted('verification_code');
 
-    window.history.replaceState({}, "", "/login?signup_flow=free_trial");
+    expect(analyticsWindow.dataLayer).toEqual([
+      { event: 'trial_signup_viewed', source_page: '/getstarted', ...directTrialParameters },
+      { event: 'trial_signup_started', source_page: '/getstarted', ...directTrialParameters },
+      { event: 'trial_signup_submit', source_page: '/getstarted', ...directTrialParameters },
+      {
+        event: 'trial_signup_validation_error',
+        source_page: '/getstarted',
+        ...directTrialParameters,
+        validation_reason: 'password_requirements',
+      },
+      {
+        event: 'trial_signup_registration_error',
+        source_page: '/getstarted',
+        ...directTrialParameters,
+        error_category: 'server_rejected',
+      },
+      { event: 'trial_verify_viewed', source_page: '/verify-email', ...directTrialParameters },
+      { event: 'trial_verify_submit', source_page: '/verify-email', ...directTrialParameters },
+      {
+        event: 'trial_verify_error',
+        source_page: '/verify-email',
+        ...directTrialParameters,
+        error_category: 'network_error',
+      },
+      { event: 'trial_verify_success', source_page: '/verify-email', ...directTrialParameters },
+      {
+        event: 'trial_signup_completed',
+        source_page: '/verify-email',
+        ...directTrialParameters,
+        completion_method: 'verification_code',
+      },
+    ]);
+
+    const serialized = JSON.stringify(analyticsWindow.dataLayer);
+    expect(serialized).not.toMatch(/person@example\.com|Password1|123456/);
+  });
+
+  it('retains the legacy login event contract without making login a required signup step', () => {
+    window.history.replaceState({}, '', '/login?signup_flow=free_trial');
     pushTrialLoginViewed();
     pushTrialLoginSubmit();
     pushTrialLoginError('unknown');
     pushTrialLoginSuccess();
 
     expect(analyticsWindow.dataLayer).toEqual([
-      { event: 'trial_signup_viewed', source_page: '/getstarted', signup_flow: 'free_trial' },
-      { event: 'trial_signup_started', source_page: '/getstarted', signup_flow: 'free_trial' },
-      { event: 'trial_signup_submit', source_page: '/getstarted', signup_flow: 'free_trial' },
-      {
-        event: 'trial_signup_validation_error',
-        source_page: '/getstarted',
-        signup_flow: 'free_trial',
-        validation_reason: 'password_requirements',
-      },
-      {
-        event: 'trial_signup_registration_error',
-        source_page: '/getstarted',
-        signup_flow: 'free_trial',
-        error_category: 'server_rejected',
-      },
-      { event: 'trial_verify_viewed', source_page: '/verify-email', signup_flow: 'free_trial' },
-      { event: 'trial_verify_submit', source_page: '/verify-email', signup_flow: 'free_trial' },
-      {
-        event: 'trial_verify_error',
-        source_page: '/verify-email',
-        signup_flow: 'free_trial',
-        error_category: 'network_error',
-      },
-      { event: 'trial_verify_success', source_page: '/verify-email', signup_flow: 'free_trial' },
-      { event: 'trial_login_viewed', source_page: '/login', signup_flow: 'free_trial' },
-      { event: 'trial_login_submit', source_page: '/login', signup_flow: 'free_trial' },
+      { event: 'trial_login_viewed', source_page: '/login', ...directTrialParameters },
+      { event: 'trial_login_submit', source_page: '/login', ...directTrialParameters },
       {
         event: 'trial_login_error',
         source_page: '/login',
-        signup_flow: 'free_trial',
+        ...directTrialParameters,
         error_category: 'unknown',
       },
-      { event: 'trial_login_success', source_page: '/login', signup_flow: 'free_trial' },
+      { event: 'trial_login_success', source_page: '/login', ...directTrialParameters },
     ]);
-
-    const serialized = JSON.stringify(analyticsWindow.dataLayer);
-    expect(serialized).not.toMatch(/person@example\.com|Password1|123456/);
   });
+
+  it('explicitly replaces calculator attribution when a new direct signup starts', () => {
+    window.history.replaceState({}, '', GET_STARTED_HREF);
+    beginFreeTrialSignupFlow(Date.now(), {
+      signupOrigin: 'retirement_calculator', signupEntry: 'results_email',
+    });
+    pushTrialSignupViewed();
+
+    beginFreeTrialSignupFlow();
+    pushTrialSignupViewed();
+    pushSignUp({ signupFlow: 'free_trial' });
+
+    expect(analyticsWindow.dataLayer?.slice(1)).toEqual([
+      { event: 'trial_signup_viewed', source_page: '/getstarted', ...directTrialParameters },
+      {
+        event: 'sign_up', method: 'email', source_page: '/getstarted',
+        signup_flow: 'free_trial', signup_origin: 'getstarted', signup_entry: 'direct',
+      },
+    ]);
+  });
+
+  it.each(['paid_checkout', 'direct'] as const)(
+    'does not reuse calculator attribution for a %s registration', (signupFlow) => {
+      window.history.replaceState({}, '', '/register');
+      beginFreeTrialSignupFlow(Date.now(), {
+        signupOrigin: 'coast_fire_calculator', signupEntry: 'results_email',
+      });
+
+      pushSignUp({ signupFlow });
+
+      expect(analyticsWindow.dataLayer).toEqual([{
+        event: 'sign_up', method: 'email', source_page: '/register',
+        signup_flow: signupFlow, signup_origin: 'not_applicable', signup_entry: 'direct',
+      }]);
+    },
+  );
 
   it("normalizes unexpected error input instead of forwarding raw text", () => {
     window.history.replaceState({}, "", GET_STARTED_HREF);

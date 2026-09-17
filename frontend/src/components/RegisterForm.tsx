@@ -9,6 +9,7 @@ import {
   pushBeginCheckout,
   pushCalculatorResultsEmailCtaOpened,
   pushSignUp,
+  pushTrialSignupCompleted,
   pushTrialSignupRegistrationError,
   pushTrialSignupStarted,
   pushTrialSignupSubmit,
@@ -646,7 +647,10 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
         markFirstDecisionPending();
         // The funnel ends here for this account; nothing further will report
         // its completion, and a stale record would follow the tab for hours.
-        if (isTrial) completeFreeTrialSignupFlow();
+        if (isTrial) {
+          pushTrialSignupCompleted('email_link');
+          completeFreeTrialSignupFlow();
+        }
         router.push(DEFAULT_POST_LOGIN_DESTINATION);
       } else if (isTrial) {
         router.push(withFreeTrialSignupFlow('/verify-email'));

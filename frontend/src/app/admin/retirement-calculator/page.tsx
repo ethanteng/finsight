@@ -55,6 +55,8 @@ interface Report {
     mailerliteSynced: number | null;
     continuedToSignup: number | null;
     matchedAccounts: number | null;
+    verifiedMatchedAccounts: number | null;
+    savedResultAccounts: number | null;
     deliveryRate: number | null;
     continuationRate: number | null;
     accountMatchRate: number | null;
@@ -161,7 +163,7 @@ export default function RetirementCalculatorAdminPage() {
               <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#102319] text-[#d8ff71]"><Mail size={18} /></span>
               <div>
                 <p className="text-[10px] font-extrabold uppercase tracking-[.13em] text-[#49725a]">Known-prospect capture</p>
-                <h2 className="text-lg font-semibold tracking-[-.03em]">Email me these results</h2>
+                <h2 className="text-lg font-semibold tracking-[-.03em]">Save results → create an account</h2>
                 <p className="mt-2 max-w-4xl text-xs leading-5 text-[#66736b]">{report.leadCapture.note}</p>
               </div>
             </div>
@@ -170,9 +172,12 @@ export default function RetirementCalculatorAdminPage() {
               <Kpi label="Emails sent" value={number(report.leadCapture.emailsSent)} note={`${percent(report.leadCapture.deliveryRate)} of stored requests`} accent />
               <Kpi label="Unique emails" value={number(report.leadCapture.uniqueEmails)} />
               <Kpi label="MailerLite synced" value={number(report.leadCapture.mailerliteSynced)} />
-              <Kpi label="Email CTA continued" value={number(report.leadCapture.continuedToSignup)} note={`${percent(report.leadCapture.continuationRate)} of delivered emails`} />
+              <Kpi label="Opened signup link" value={number(report.leadCapture.continuedToSignup)} note={`${percent(report.leadCapture.continuationRate)} of delivered emails`} />
               <Kpi label="Matched accounts" value={number(report.leadCapture.matchedAccounts)} note={`${percent(report.leadCapture.accountMatchRate)} of unique lead emails`} />
+              <Kpi label="Verified matched accounts" value={number(report.leadCapture.verifiedMatchedAccounts ?? null)} note="Current email verification status" />
+              <Kpi label="Result saved to account" value={number(report.leadCapture.savedResultAccounts ?? null)} note="Automatic first decision, not a new question" />
             </div>
+            <p className="mt-4 text-xs leading-5 text-[#66736b]">No second login is required. <Link href="/admin/marketing" className="underline">See signup paths and desktop/mobile outcomes in Marketing.</Link> Calculator runs above measure deterministic results, not the optional AI interpretation.</p>
           </section>
         )}
 

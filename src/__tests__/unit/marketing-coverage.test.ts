@@ -1,7 +1,20 @@
 import { generateKeyPairSync } from 'crypto';
-import { loadGa4Sessions, parseFirstFullTrackingDate } from '../../marketing-analytics/adapters/ga4-bigquery';
+import { buildQuery, loadGa4Sessions, parseFirstFullTrackingDate } from '../../marketing-analytics/adapters/ga4-bigquery';
 
 describe('marketing funnel coverage date', () => {
+  it('collects v2 handoffs and skipped verification, preserves method and email attribution, and guards paid signups', () => {
+    const sql = buildQuery('test-project', 'analytics_123', {
+      start: '2026-09-17', end: '2026-09-23', previousStart: '2026-09-10', previousEnd: '2026-09-16',
+    });
+    expect(sql).toContain("event_name = 'trial_signup_completed' AND signup_flow = 'free_trial'");
+    expect(sql).toContain("event_name = 'trial_verify_skipped' AND signup_flow = 'free_trial'");
+    expect(sql).toContain("key = 'completion_method'");
+    expect(sql).toContain("completion_method = 'email_link'");
+    expect(sql).toContain("signup_origin = 'retirement_calculator' AND signup_entry = 'results_email'");
+    expect(sql).toContain("signup_origin = 'coast_fire_calculator' AND signup_entry = 'results_email'");
+    expect(sql).toContain("calculation_trigger = 'submitted'");
+    expect(sql).not.toContain("COUNTIF(event_name = 'trial_login_success' AND signup_origin");
+  });
   it('leaves coverage unset until a full day has been verified', () => {
     expect(parseFirstFullTrackingDate(undefined)).toEqual({ date: null, error: null });
     expect(parseFirstFullTrackingDate('   ')).toEqual({ date: null, error: null });

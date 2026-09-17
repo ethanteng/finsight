@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import VerifyEmailForm from '@/components/VerifyEmailForm';
 import {
   pushTrialVerifyError,
+  pushTrialSignupCompleted,
   pushTrialVerifySkipped,
   pushTrialVerifySubmit,
   pushTrialVerifySuccess,
@@ -21,6 +22,7 @@ jest.mock('next/navigation', () => ({
 }));
 jest.mock('@/lib/dataLayer', () => ({
   pushTrialVerifyError: jest.fn(),
+  pushTrialSignupCompleted: jest.fn(),
   pushTrialVerifySkipped: jest.fn(),
   pushTrialVerifySubmit: jest.fn(),
   pushTrialVerifySuccess: jest.fn(),
@@ -104,6 +106,7 @@ describe('VerifyEmailForm', () => {
 
     expect(mockPushTrialVerifySubmit).toHaveBeenCalledTimes(1);
     expect(mockPushTrialVerifySuccess).toHaveBeenCalledTimes(1);
+    expect(pushTrialSignupCompleted).toHaveBeenCalledWith('verification_code');
     expect(mockPushTrialVerifyError).not.toHaveBeenCalled();
     // The registration session is what carries the visitor into the app, so it
     // must survive verification rather than being traded for a fresh sign-in.
@@ -127,6 +130,7 @@ describe('VerifyEmailForm', () => {
   it('reports a skipped verification as a trial completion', async () => {
     searchParams = new URLSearchParams('signup_flow=free_trial');
     beginFreeTrialSignupFlow();
+    localStorage.setItem('auth_token', 'registration-token');
     global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({}) });
 
     render(<VerifyEmailForm />);
@@ -137,6 +141,9 @@ describe('VerifyEmailForm', () => {
     fireEvent.click(skip);
 
     expect(mockPushTrialVerifySkipped).toHaveBeenCalledTimes(1);
+    expect(pushTrialSignupCompleted).toHaveBeenCalledWith('verification_skipped');
+    fireEvent.click(skip);
+    expect(pushTrialSignupCompleted).toHaveBeenCalledTimes(1);
     expect(mockPushTrialVerifySuccess).not.toHaveBeenCalled();
     expect(sessionStorage.getItem(TRIAL_SIGNUP_FLOW_STORAGE_KEY)).toBeNull();
   });
@@ -199,6 +206,65 @@ describe('VerifyEmailForm', () => {
     await waitFor(() => expect(push).toHaveBeenCalledWith('/app'));
     expect(localStorage.getItem('auth_token')).toBe('registration-token');
     expect(mockPushTrialVerifySubmit).not.toHaveBeenCalled();
+    expect(pushTrialSignupCompleted).toHaveBeenCalledWith('already_verified');
+    expect(pushTrialSignupCompleted).toHaveBeenCalledTimes(1);
+  });
+
+  /*
+   * A slow mount-time /auth/profile can observe the account only after the
+   * verify POST has already committed. Without discarding that probe, the
+   * session would be labeled already_verified and the real code path would
+   * suppress trial_verify_success / verification_code.
+   */
+  it('keeps a successful code verification when the profile probe returns later', async () => {
+    searchParams = new URLSearchParams('signup_flow=free_trial');
+    beginFreeTrialSignupFlow();
+    localStorage.setItem('auth_token', 'registration-token');
+
+    let resolveProfile: (value: {
+      ok: boolean;
+      json: () => Promise<{ user: { emailVerified: boolean } }>;
+    }) => void = () => undefined;
+    const profilePromise = new Promise<{
+      ok: boolean;
+      json: () => Promise<{ user: { emailVerified: boolean } }>;
+    }>((resolve) => {
+      resolveProfile = resolve;
+    });
+
+    global.fetch = jest.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/auth/profile')) return profilePromise;
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({ success: true }),
+      });
+    }) as jest.Mock;
+
+    render(<VerifyEmailForm />);
+    await waitFor(() => expect(mockPushTrialVerifyViewed).toHaveBeenCalledTimes(1));
+    jest.useFakeTimers();
+
+    await act(async () => {
+      enterCode('654321');
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(pushTrialSignupCompleted).toHaveBeenCalledWith('verification_code');
+    expect(mockPushTrialVerifySuccess).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      resolveProfile({
+        ok: true,
+        json: async () => ({ user: { emailVerified: true } }),
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(pushTrialSignupCompleted).toHaveBeenCalledTimes(1);
+    expect(pushTrialSignupCompleted).not.toHaveBeenCalledWith('already_verified');
   });
 
   it('uses the network category when the verification request cannot be sent', async () => {

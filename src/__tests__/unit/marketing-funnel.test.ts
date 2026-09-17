@@ -1,7 +1,8 @@
 import { aggregateTrialFunnel } from '../../marketing-analytics/funnel';
-import type { AnalyticsSession, FunnelEventName } from '../../marketing-analytics/types';
+import { buildSignupOutcomes } from '../../marketing-analytics/signup-outcomes';
+import type { AnalyticsSession } from '../../marketing-analytics/types';
 
-function session(id: string, events: Partial<Record<FunnelEventName, number>>): AnalyticsSession {
+function session(id: string, events: Record<string, number>): AnalyticsSession {
   return {
     id,
     userId: `user-${id}`,
@@ -57,19 +58,52 @@ describe('trial funnel aggregation', () => {
     expect(funnel[funnel.length - 1]).toMatchObject({ sessions: 1, users: 1 });
   });
 
-  it('surfaces downstream re-entry separately from qualified funnel reach', () => {
-    const reentry = session('reentry', { trial_verify_success: 3_000_000, trial_login_viewed: 4_000_000 });
-    const funnel = aggregateTrialFunnel([reentry]);
-    const verify = funnel.find(step => step.event === 'trial_verify_success');
+  it('surfaces a handoff without upstream steps as raw reach, not qualified progress', () => {
+    const handoff = aggregateTrialFunnel([
+      session('handoff-only', { trial_signup_completed: 3_000_000 }),
+    ]).slice(-1)[0];
 
-    expect(verify).toMatchObject({ sessions: 0, rawEventSessions: 1 });
+    expect(handoff).toMatchObject({ sessions: 0, rawEventSessions: 1 });
   });
 
   it('computes median seconds only for ordered qualifying sessions', () => {
     const first = session('first', { start_free_click: 1_000_000, trial_signup_viewed: 4_000_000 });
     const second = session('second', { start_free_click: 2_000_000, trial_signup_viewed: 7_000_000 });
-    const viewed = aggregateTrialFunnel([first, second]).find(step => step.event === 'trial_signup_viewed');
+    first.firstEventAt.trial_signup_started = 7_000_000;
+    second.firstEventAt.trial_signup_started = 12_000_000;
+    const viewed = aggregateTrialFunnel([first, second]).find(step => step.event === 'trial_signup_started');
 
     expect(viewed?.medianSecondsFromPrevious).toBe(4);
+  });
+
+  const core = { trial_signup_viewed: 1, trial_signup_started: 2, trial_signup_submit: 3, sign_up: 4 };
+  it.each(['trial_signup_completed', 'trial_verify_skipped', 'trial_login_success'])(
+    'accepts %s without requiring optional verification screens or a CTA', completion => {
+      const rows = aggregateTrialFunnel([session('direct', { ...core, [completion]: 5 })]);
+      expect(rows.slice(-1)[0]).toMatchObject({ event: 'trial_signup_completed', sessions: 1 });
+    },
+  );
+  it('does not infer a handoff from account creation or legacy verification alone', () => {
+    expect(aggregateTrialFunnel([session('abandoned', { ...core, trial_verify_success: 5 })]).slice(-1)[0]?.sessions).toBe(0);
+  });
+  it('deduplicates overlapping terminal events and rejects reversed order', () => {
+    const done = session('done', { ...core, trial_verify_skipped: 5, trial_signup_completed: 5, trial_login_success: 6 });
+    const invalid = session('invalid', { ...core, trial_signup_completed: 2 });
+    expect(aggregateTrialFunnel([done, invalid]).slice(-1)[0]?.sessions).toBe(1);
+    expect(aggregateTrialFunnel([done], 'complete', 'start_free_click').slice(-1)[0]?.sessions).toBe(0);
+  });
+  it('reports devices, verified branches and skips without double counting or false abandonment', () => {
+    const skipped = session('skipped', { ...core, trial_verify_skipped: 5, trial_signup_completed: 5 });
+    skipped.eventCounts.signup_completed_verification_skipped = 1;
+    const linked = session('linked', { ...core, trial_signup_completed: 5 });
+    linked.device = 'mobile';
+    linked.signupOrigin = 'retirement_calculator';
+    linked.signupEntry = 'results_email';
+    linked.eventCounts.signup_completed_email_link = 1;
+    expect(buildSignupOutcomes([skipped, linked], false)).toEqual(expect.arrayContaining([
+      expect.objectContaining({ device: 'mobile', emailLink: 1, verificationSkipped: 0, handoffs: 1, signupAbandonmentRate: null }),
+      expect.objectContaining({ device: 'desktop', emailLink: 0, verificationSkipped: 1, handoffs: 1 }),
+    ]));
+    expect(aggregateTrialFunnel([linked], 'partial').slice(-1)[0]?.abandonmentRate).toBeNull();
   });
 });

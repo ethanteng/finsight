@@ -5,11 +5,12 @@ import {
   calculatorLeadSummary,
   unavailableCalculatorLeadSummary,
 } from '../services/calculator-lead-report';
-import { aggregateTrialFunnel } from './funnel';
+import { aggregateTrialFunnel, FUNNEL_LABELS } from './funnel';
+import { buildSignupOutcomes } from './signup-outcomes';
 import { buildBeachheadScorecard } from './beachhead-scorecard';
 import { buildCalculatorRepeatUsage } from './calculator-repeat-usage';
 import { classifyIntent } from './intent-rules';
-import { loadGa4Sessions } from './adapters/ga4-bigquery';
+import { loadGa4Sessions, parseFirstFullTrackingDate } from './adapters/ga4-bigquery';
 import { isIncludedByDefault } from './traffic-quality';
 import {
   INTENT_COHORT_IDS,
@@ -173,7 +174,7 @@ function aggregateIntents(sessions: AnalyticsSession[], conversionCoverageComple
       ctaRate: ratio(countSessionEvents(rows, 'start_free_click'), rows.length),
       signupStartRate: qualified ? ratio(stepCount('trial_signup_started'), rows.length) : null,
       accountCreatedRate: qualified ? ratio(stepCount('sign_up'), rows.length) : null,
-      trialCompleteRate: qualified ? ratio(stepCount('trial_login_success'), rows.length) : null,
+      trialCompleteRate: qualified ? ratio(stepCount('trial_signup_completed'), rows.length) : null,
       // First-party user ids are intentionally not sent to GA4, so there is no
       // honest join for activation yet. Null means unavailable; zero would
       // incorrectly claim nobody activated.
@@ -201,7 +202,7 @@ async function firstPartySummary(period: ReturnType<typeof requestedPeriod>): Pr
       },
       publicApiCredential: { select: { lastVerifiedAt: true } },
       financialSummarySnapshot: { select: { accounts: true } },
-      _count: { select: { conversations: true } },
+      _count: { select: { conversations: { where: { origin: 'user' } } } },
     },
   });
   const subscriptionsCreated = await prisma.subscription.count({
@@ -228,7 +229,7 @@ async function firstPartySummary(period: ReturnType<typeof requestedPeriod>): Pr
       createdAccountsCurrentlyPaid: users.filter(user => user.subscriptionStatus === 'active').length,
       subscriptionsCreated,
       currentlyTrialingAccounts: users.filter(user => user.subscriptionStatus === 'trialing').length,
-    note: 'Live database counts for accounts created in the selected window. Financial connection means an active Plaid token, an external account observed in the financial snapshot, or a verified Public credential. Verification, latest-login, and current subscription state may have changed later.',
+    note: 'Live database counts for accounts created in the selected window. Asked a planning question excludes automatically saved calculator results. Financial connection means an active Plaid token, an external account observed in the financial snapshot, or a verified Public credential. Verification, latest-login, and current subscription state may have changed later. Login is not required during signup.',
   };
 }
 
@@ -257,16 +258,8 @@ async function retirementCalculatorHealth(days: number): Promise<RetirementCalcu
 }
 
 function emptyFunnel(): MarketingDashboardReport['funnel'] {
-  const labels: Record<FunnelEventName, string> = {
-    start_free_click: 'Start free clicked', trial_signup_viewed: 'Signup viewed',
-    trial_signup_started: 'Signup started', trial_signup_submit: 'Signup submitted',
-    sign_up: 'Account created', trial_verify_viewed: 'Verification viewed',
-    trial_verify_submit: 'Verification submitted', trial_verify_success: 'Email verified',
-    trial_login_viewed: 'First login viewed', trial_login_submit: 'First login submitted',
-    trial_login_success: 'Trial path completed',
-  };
   return FUNNEL_EVENT_NAMES.map(event => ({
-    event, label: labels[event], sessions: null, users: null,
+    event, label: FUNNEL_LABELS[event], sessions: null, users: null,
     previousStepRate: null, abandonmentRate: null, medianSecondsFromPrevious: null,
     coverage: 'collecting' as const,
   }));
@@ -382,7 +375,13 @@ export async function getMarketingDashboard(filters: MarketingFilters): Promise<
     );
   }
   const trackingStartedAt = ga4.firstFullTrackingDate;
-  const funnelCoverageComplete = Boolean(trackingStartedAt && period.start >= trackingStartedAt);
+  const handoffCoverage = parseFirstFullTrackingDate(
+    process.env.GA4_SIGNUP_HANDOFF_TRACKING_DATE,
+    'GA4_SIGNUP_HANDOFF_TRACKING_DATE',
+  );
+  const handoffTrackingStartedAt = handoffCoverage.date;
+  const funnelCoverageComplete = Boolean(!ga4.truncated && trackingStartedAt && period.start >= trackingStartedAt
+    && handoffTrackingStartedAt && period.start >= handoffTrackingStartedAt);
   const funnelCoverage = funnelCoverageComplete ? 'complete' : 'partial';
   const funnelSessions = trackingStartedAt
     ? current.filter(session => session.sessionDate >= trackingStartedAt)
@@ -390,7 +389,8 @@ export async function getMarketingDashboard(filters: MarketingFilters): Promise<
   const previousFunnelSessions = trackingStartedAt
     ? previous.filter(session => session.sessionDate >= trackingStartedAt)
     : [];
-  const previousFunnelCovered = Boolean(trackingStartedAt && period.previousStart >= trackingStartedAt);
+  const previousFunnelCovered = Boolean(!ga4.truncated && trackingStartedAt && period.previousStart >= trackingStartedAt
+    && handoffTrackingStartedAt && period.previousStart >= handoffTrackingStartedAt);
   // Email reconciliation compares raw observed events to the scorecard cohort.
   // With the default traffic-quality filter that means "all observed" vs
   // "included humans." An explicit trafficQuality selection must narrow both
@@ -420,13 +420,17 @@ export async function getMarketingDashboard(filters: MarketingFilters): Promise<
     : null;
   const funnelStepCount = (steps: MarketingDashboardReport['funnel'], event: FunnelEventName) =>
     steps.find(step => step.event === event)?.sessions ?? 0;
-  const completed = hasLiveGa4 ? funnelStepCount(funnel, 'trial_login_success') : null;
-  const previousCompleted = previousFunnel ? funnelStepCount(previousFunnel, 'trial_login_success') : null;
+  const completed = hasLiveGa4 && trackingStartedAt ? funnelStepCount(funnel, 'trial_signup_completed') : null;
+  const previousCompleted = previousFunnel ? funnelStepCount(previousFunnel, 'trial_signup_completed') : null;
   const clicks = countEvents(current, 'start_free_click');
   const previousClicks = countEvents(previous, 'start_free_click');
-  const funnelClicks = hasLiveGa4 ? funnelStepCount(funnel, 'start_free_click') : null;
-  const previousFunnelClicks = previousFunnel ? funnelStepCount(previousFunnel, 'start_free_click') : null;
-  const signupStarts = hasLiveGa4 ? funnelStepCount(funnel, 'trial_signup_started') : null;
+  const funnelClicks = hasLiveGa4 ? countSessionEvents(funnelSessions, 'start_free_click') : null;
+  const previousFunnelClicks = previousFunnel ? countSessionEvents(previousFunnelSessions, 'start_free_click') : null;
+  const ctaCompleted = funnelCoverageComplete
+    ? funnelStepCount(aggregateTrialFunnel(funnelSessions, 'complete', 'start_free_click'), 'trial_signup_completed') : null;
+  const previousCtaCompleted = previousFunnelCovered
+    ? funnelStepCount(aggregateTrialFunnel(previousFunnelSessions, 'complete', 'start_free_click'), 'trial_signup_completed') : null;
+  const signupStarts = hasLiveGa4 && trackingStartedAt ? funnelStepCount(funnel, 'trial_signup_started') : null;
   const previousSignupStarts = previousFunnel ? funnelStepCount(previousFunnel, 'trial_signup_started') : null;
   const acquisition = hasLiveGa4
     ? aggregateBreakdown(current, session => `${session.acquisition.source} / ${session.acquisition.medium}`)
@@ -480,6 +484,11 @@ export async function getMarketingDashboard(filters: MarketingFilters): Promise<
     ? [`Strict no-card funnel coverage begins ${trackingStartedAt}. Earlier event absence is not abandonment and cannot be backfilled.`]
     : ['Strict funnel coverage is unavailable until GA4_FIRST_FULL_TRACKING_DATE is set to the first verified, fully instrumented calendar day.'];
   warnings.push(`GA4 daily export excludes the current day with a ${ga4.reportingLagDays}-day availability lag. The newest included tables can still receive late events for up to 3 days.`);
+  if (handoffCoverage.error) {
+    warnings.push(`Signup handoff coverage is unavailable: ${handoffCoverage.error}`);
+  } else if (!funnelCoverageComplete) {
+    warnings.push('Signup flow changed: handoff counts are observed lower bounds, not verified-email or app-load counts. Completion and abandonment rates need a fully covered window after GA4_SIGNUP_HANDOFF_TRACKING_DATE. Events missed between the flow change and tracking deployment cannot be backfilled.');
+  }
   if (canUseSnapshot) warnings.push('Top-line web behavior is a connector-verified Contentsquare snapshot for August 12–September 8. It excludes 291 automated sessions and 84 owner-confirmed internal sessions; no contaminated prior-period comparison is shown.');
   if (hasLiveGa4 && trafficQuality.excludedSessions > 0) warnings.push(`${trafficQuality.excludedSessions} bot, internal/developer, or non-production sessions are excluded from headline metrics and remain visible in Traffic quality.`);
   if (ga4.truncated) warnings.push('The GA4 query reached its 100,000-session safety cap. Narrow the date range before interpreting totals.');
@@ -526,8 +535,8 @@ export async function getMarketingDashboard(filters: MarketingFilters): Promise<
       engagedSessionRate: metric(hasLiveGa4 ? ratio(current.filter(session => session.engaged).length, current.length) : canUseSnapshot ? 1 - VERIFIED_SNAPSHOT.contentsquare.reportingPopulation.bounceRate : null, hasLiveGa4 ? ratio(previous.filter(session => session.engaged).length, previous.length) : null, 'percent', hasLiveGa4 ? 'GA4 BigQuery · quality filtered' : canUseSnapshot ? 'Contentsquare inverse bounce rate · quality filtered' : 'Unavailable'),
       ctaClicks: metric(hasLiveGa4 ? clicks : null, hasLiveGa4 ? previousClicks : null, 'count', hasLiveGa4 ? 'GA4 BigQuery' : 'Collecting', 'Uses the deployed start_free_click event, not signup-page reach.'),
       signupStarts: metric(signupStarts, previousSignupStarts, 'count', hasLiveGa4 ? 'GA4 BigQuery · post-instrumentation only' : 'Collecting', 'Strict same-session funnel reach for trial_signup_started.'),
-      trialsCompleted: metric(completed, previousCompleted, 'count', hasLiveGa4 ? 'GA4 BigQuery · post-instrumentation only' : 'Collecting', 'A completed no-card path is a qualified trial_login_success after every earlier step in the same session.'),
-      clickToTrialRate: metric(hasLiveGa4 && funnelClicks !== null ? ratio(completed || 0, funnelClicks) : null, hasLiveGa4 && previousCompleted !== null && previousFunnelClicks !== null ? ratio(previousCompleted, previousFunnelClicks) : null, 'percent', hasLiveGa4 ? 'GA4 BigQuery · matched coverage' : 'Collecting'),
+      trialsCompleted: metric(completed, previousCompleted, 'count', hasLiveGa4 ? 'GA4 BigQuery · observed handoffs' : 'Collecting', 'Ordered signup to authenticated app handoff; includes skipped verification, excludes a mandatory login. Not proof the app loaded. Transitional history is incomplete.'),
+      clickToTrialRate: metric(hasLiveGa4 && ctaCompleted !== null && funnelClicks !== null ? ratio(ctaCompleted, funnelClicks) : null, hasLiveGa4 && previousCtaCompleted !== null && previousFunnelClicks !== null ? ratio(previousCtaCompleted, previousFunnelClicks) : null, 'percent', hasLiveGa4 ? 'GA4 BigQuery · matched coverage' : 'Collecting'),
       paidSpend: metric(null, null, 'currency', 'Unavailable', 'No Google Ads spend connector is available to the runtime.'),
       cac: metric(null, null, 'currency', 'Unavailable', 'Requires paid spend plus an agreed acquisition boundary.'),
     },
@@ -536,6 +545,12 @@ export async function getMarketingDashboard(filters: MarketingFilters): Promise<
     beachhead,
     calculatorRepeatUsage: buildCalculatorRepeatUsage(current, hasLiveGa4 && !ga4.truncated),
     funnel,
+    signupOutcomes: {
+      state: hasLiveGa4 && !ga4.truncated ? 'available' : 'unavailable',
+      rows: hasLiveGa4 && !ga4.truncated ? buildSignupOutcomes(current, funnelCoverageComplete) : [],
+      trackingStartedAt: handoffTrackingStartedAt,
+      note: 'Distinct observed sessions by device and signup entry. Handoff means signup is ready to open /app, not confirmed app load. Skipped verification is not a verified email. Branches may overlap on retries; never add them together. Unknown attribution is kept separate. Abandonment requires the ordered signup chain and verified full-window tracking coverage.',
+    },
     funnelErrors: ['trial_signup_validation_error', 'trial_signup_registration_error', 'trial_verify_error', 'trial_login_error'].map(event => ({
       event,
       sessions: hasLiveGa4 ? countSessionEvents(funnelSessions, event) : null,
@@ -568,7 +583,7 @@ export async function getMarketingDashboard(filters: MarketingFilters): Promise<
       }] : []),
     ],
     diagnostics: [
-      { id: 'gtm', name: 'Google Tag Manager', state: 'live', freshness: '2026-09-12', detail: 'Container GTM-PL362L36 v21 publishes GA4 and Google Ads results-email conversions plus cross-session signup attribution; v19 publishes Coast FIRE calculator completion, v17 publishes the no-card funnel, and v16 publishes retirement-calculator interactions.' },
+      { id: 'gtm', name: 'Google Tag Manager', state: 'verified_snapshot', freshness: '2026-09-16', detail: 'GTM-PL362L36 v24 was verified published September 16 Pacific: trial_signup_completed, trial_verify_skipped, completion_method and signup_flow_version. App deployment and the first complete export day must still be verified before setting GA4_SIGNUP_HANDOFF_TRACKING_DATE. This is a configuration snapshot, not a live container check.' },
       { id: 'ga4', name: 'GA4 + BigQuery', state: ga4.state, freshness: ga4.reportEnd, detail: `Property 519498279. ${ga4.detail}` },
       { id: 'contentsquare', name: 'Contentsquare', state: 'verified_snapshot', freshness: VERIFIED_SNAPSHOT.capturedAt, detail: 'Ask Linc project 530048. Runtime API credentials are not present; frustration/error APIs are outside the current account entitlement.' },
       { id: 'ubersuggest', name: 'Ubersuggest', state: 'verified_snapshot', freshness: VERIFIED_SNAPSHOT.capturedAt, detail: 'asklinc.com project verified through the connected account. Query impressions/clicks require Search Console or GA4/Search Console export.' },

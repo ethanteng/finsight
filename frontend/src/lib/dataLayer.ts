@@ -296,6 +296,7 @@ export const TRIAL_FUNNEL_ERROR_CATEGORIES = [
 export type TrialFunnelErrorCategory = (typeof TRIAL_FUNNEL_ERROR_CATEGORIES)[number];
 
 type TrialFunnelEvent =
+  | 'trial_signup_completed'
   | 'trial_signup_viewed'
   | 'trial_signup_started'
   | 'trial_signup_submit'
@@ -322,9 +323,9 @@ function pushTrialFunnelEvent(
     event,
     source_page: window.location.pathname,
     signup_flow: 'free_trial',
-    ...(attribution
-      ? { signup_origin: attribution.signupOrigin, signup_entry: attribution.signupEntry }
-      : {}),
+    signup_flow_version: '2',
+    signup_origin: attribution?.signupOrigin ?? 'getstarted',
+    signup_entry: attribution?.signupEntry ?? 'direct',
     ...parameters,
   });
 }
@@ -378,13 +379,22 @@ export function pushTrialVerifySuccess(): void {
   pushTrialFunnelEvent('trial_verify_success');
 }
 
+/** Authenticated signup is ready to hand off to /app, not proof it loaded.
+ * Emit before clearing same-tab attribution. Skipping is not email verification.
+ */
+export function pushTrialSignupCompleted(
+  completionMethod: 'email_link' | 'verification_code' | 'verification_skipped' | 'already_verified',
+): void {
+  pushTrialFunnelEvent('trial_signup_completed', { completion_method: completionMethod });
+}
+
 /**
  * "Skip for now" — the other way into the workspace from this screen.
  *
  * It used to route to `/login`, where `trial_login_success` reported the
  * completion. Skipping now opens the workspace directly, so without this the
  * funnel would simply lose everyone who took that door. Completion is
- * `trial_verify_success` plus this.
+ * reported separately from verification by `trial_signup_completed`.
  */
 export function pushTrialVerifySkipped(): void {
   pushTrialFunnelEvent('trial_verify_skipped');
@@ -424,9 +434,9 @@ export function pushSignUp({ signupFlow }: SignUpEvent): void {
     method: 'email',
     source_page: window.location.pathname,
     signup_flow: signupFlow,
-    ...(attribution
-      ? { signup_origin: attribution.signupOrigin, signup_entry: attribution.signupEntry }
-      : {}),
+    // Explicit defaults prevent GTM retaining a prior calculator's attribution.
+    signup_origin: attribution?.signupOrigin ?? (signupFlow === 'free_trial' ? 'getstarted' : 'not_applicable'),
+    signup_entry: attribution?.signupEntry ?? 'direct',
   });
 }
 

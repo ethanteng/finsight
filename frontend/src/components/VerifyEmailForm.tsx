@@ -6,6 +6,7 @@ import { ArrowRight, CircleAlert, CircleCheck, LoaderCircle, MailCheck, RefreshC
 import AuthFlowShell from './auth/AuthFlowShell';
 import {
   pushTrialVerifyError,
+  pushTrialSignupCompleted,
   pushTrialVerifySkipped,
   pushTrialVerifySubmit,
   pushTrialVerifySuccess,
@@ -37,8 +38,19 @@ function VerifyEmailFormContent() {
   const [subscriptionContext, setSubscriptionContext] = useState<SubscriptionContext | null>(null);
   const [isFreeTrialFlow, setIsFreeTrialFlow] = useState(false);
   const trialViewedRef = useRef(false);
+  const trialCompletedRef = useRef(false);
+  // Once the visitor submits a code (or skips), the mount-time profile probe
+  // must not classify the session. A slow GET can observe the just-verified
+  // account and mislabel a real code verification as already_verified.
+  const ignoreProfileProbeRef = useRef(false);
+  const profileProbeControllerRef = useRef<AbortController | null>(null);
   const router = useRouter();
   const searchParams = useSearchParams();
+
+  const abandonProfileProbe = () => {
+    ignoreProfileProbeRef.current = true;
+    profileProbeControllerRef.current?.abort();
+  };
 
   // Check if user came from subscription context
   useEffect(() => {
@@ -73,9 +85,14 @@ function VerifyEmailFormContent() {
   useEffect(() => {
     const token = localStorage.getItem('auth_token');
     if (!token) return;
+    // After verify/skip starts (or handoff already fired), never revive the
+    // probe. Resetting ignore on a remount/searchParams change would reopen
+    // the already_verified race against an in-flight code POST.
+    if (ignoreProfileProbeRef.current || trialCompletedRef.current) return;
 
     const API_URL = process.env.NEXT_PUBLIC_API_URL;
     const controller = new AbortController();
+    profileProbeControllerRef.current = controller;
 
     void (async () => {
       try {
@@ -83,13 +100,19 @@ function VerifyEmailFormContent() {
           headers: { Authorization: `Bearer ${token}` },
           signal: controller.signal,
         });
+        if (ignoreProfileProbeRef.current || controller.signal.aborted) return;
         if (!res.ok) return;
         const data = (await res.json().catch(() => ({}))) as {
           user?: { emailVerified?: boolean };
         };
+        if (ignoreProfileProbeRef.current || controller.signal.aborted) return;
         if (data.user?.emailVerified !== true) return;
 
         if (isFreeTrialSignupContinuation(searchParams)) {
+          if (!trialCompletedRef.current) {
+            trialCompletedRef.current = true;
+            pushTrialSignupCompleted('already_verified');
+          }
           completeFreeTrialSignupFlow();
         }
         router.push(DEFAULT_POST_LOGIN_DESTINATION);
@@ -99,11 +122,17 @@ function VerifyEmailFormContent() {
       }
     })();
 
-    return () => controller.abort();
+    return () => {
+      controller.abort();
+      if (profileProbeControllerRef.current === controller) {
+        profileProbeControllerRef.current = null;
+      }
+    };
   }, [router, searchParams]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    abandonProfileProbe();
     if (isFreeTrialFlow) pushTrialVerifySubmit();
     setIsLoading(true);
     setError('');
@@ -131,7 +160,11 @@ function VerifyEmailFormContent() {
     const data = await res.json().catch(() => ({})) as { error?: string };
 
     if (res.ok) {
-      if (isFreeTrialFlow) pushTrialVerifySuccess();
+      if (isFreeTrialFlow && !trialCompletedRef.current) {
+        trialCompletedRef.current = true;
+        pushTrialVerifySuccess();
+        pushTrialSignupCompleted('verification_code');
+      }
       setSuccess('Email verified. Opening your workspace…');
 
       /*
@@ -315,10 +348,13 @@ function VerifyEmailFormContent() {
           <Link
             href={DEFAULT_POST_LOGIN_DESTINATION}
             onClick={() => {
-              if (!isFreeTrialFlow) return;
+              if (!isFreeTrialFlow || trialCompletedRef.current || !localStorage.getItem('auth_token')) return;
+              abandonProfileProbe();
+              trialCompletedRef.current = true;
               // Report before clearing: the event reads the attribution this
               // call is about to drop, and a skip is a completion too.
               pushTrialVerifySkipped();
+              pushTrialSignupCompleted('verification_skipped');
               completeFreeTrialSignupFlow();
             }}
             className="text-sm text-[#71857f] hover:text-[#123c2f]"

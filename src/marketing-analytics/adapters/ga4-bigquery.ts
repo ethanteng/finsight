@@ -1,5 +1,5 @@
 import { createSign } from 'crypto';
-import type { AnalyticsSession, FunnelEventName, MarketingFilters } from '../types';
+import type { AnalyticsSession, MarketingFilters } from '../types';
 import { assessTrafficQuality } from '../traffic-quality';
 
 interface ServiceAccountCredentials {
@@ -36,11 +36,12 @@ export interface FirstFullTrackingDateConfig {
   error: string | null;
 }
 
-const FUNNEL_EVENTS: FunnelEventName[] = [
+const FUNNEL_EVENTS: string[] = [
   'start_free_click', 'trial_signup_viewed', 'trial_signup_started',
   'trial_signup_submit', 'sign_up', 'trial_verify_viewed',
   'trial_verify_submit', 'trial_verify_success', 'trial_login_viewed',
   'trial_login_submit', 'trial_login_success',
+  'trial_verify_skipped', 'trial_signup_completed',
 ];
 
 const DIAGNOSTIC_EVENTS = [
@@ -136,16 +137,19 @@ function subtractDays(value: string, days: number): string {
  * The configured date is a coverage boundary, not a deployment timestamp. It
  * must be the first complete reporting-calendar day with the full event chain.
  */
-export function parseFirstFullTrackingDate(raw: string | undefined): FirstFullTrackingDateConfig {
+export function parseFirstFullTrackingDate(
+  raw: string | undefined,
+  envName = 'GA4_FIRST_FULL_TRACKING_DATE',
+): FirstFullTrackingDateConfig {
   const value = raw?.trim();
   if (!value) return { date: null, error: null };
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-    return { date: null, error: 'GA4_FIRST_FULL_TRACKING_DATE must use YYYY-MM-DD.' };
+    return { date: null, error: `${envName} must use YYYY-MM-DD.` };
   }
   const [year, month, day] = value.split('-').map(Number);
   const parsed = new Date(Date.UTC(year, month - 1, day));
   if (parsed.getUTCFullYear() !== year || parsed.getUTCMonth() !== month - 1 || parsed.getUTCDate() !== day) {
-    return { date: null, error: 'GA4_FIRST_FULL_TRACKING_DATE must be a real calendar date.' };
+    return { date: null, error: `${envName} must be a real calendar date.` };
   }
   return { date: value, error: null };
 }
@@ -187,7 +191,7 @@ function channelFor(source: string, medium: string, hasAdId: boolean): string {
 
 export function buildQuery(projectId: string, datasetId: string, dates: ReturnType<typeof reportDates>): string {
   const eventColumns = [...FUNNEL_EVENTS, ...DIAGNOSTIC_EVENTS].map(event => {
-    const eventGuard = event === 'sign_up'
+    const eventGuard = event === 'sign_up' || event === 'trial_signup_completed' || event === 'trial_verify_skipped'
       ? " AND signup_flow = 'free_trial'"
       : event === 'coast_fire_calculated'
         ? " AND calculation_trigger = 'submitted'"
@@ -202,8 +206,10 @@ export function buildQuery(projectId: string, datasetId: string, dates: ReturnTy
     "COUNTIF(content_type = 'coast_fire_calculator' OR REGEXP_CONTAINS(LOWER(COALESCE(page_location, source_page, '')), r'/coast[-_]fire')) AS count_coast_fire_touch",
     "COUNTIF(event_name = 'calculator_results_email_cta_opened' AND calculator_type = 'coast_fire') AS count_coast_fire_email_cta_opened",
     "COUNTIF(event_name = 'calculator_results_email_cta_opened' AND calculator_type = 'retirement') AS count_retirement_email_cta_opened",
-    "COUNTIF(event_name = 'trial_login_success' AND signup_origin = 'coast_fire_calculator' AND signup_entry = 'results_email') AS count_coast_fire_email_trial_complete",
-    "COUNTIF(event_name = 'trial_login_success' AND signup_origin = 'retirement_calculator' AND signup_entry = 'results_email') AS count_retirement_email_trial_complete",
+    ...['coast_fire', 'retirement'].map(calculator =>
+      `COUNTIF(event_name IN ('trial_signup_completed', 'trial_verify_skipped', 'trial_login_success') AND signup_flow = 'free_trial' AND signup_origin = '${calculator}_calculator' AND signup_entry = 'results_email') AS count_${calculator}_email_trial_complete`),
+    ...['email_link', 'verification_code', 'verification_skipped', 'already_verified'].map(method =>
+      `COUNTIF(event_name = 'trial_signup_completed' AND signup_flow = 'free_trial' AND completion_method = '${method}') AS count_signup_completed_${method}`),
   ].join(',\n    ');
 
   return `
@@ -224,6 +230,7 @@ WITH raw AS (
     (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'signup_flow') AS signup_flow,
     (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'signup_origin') AS signup_origin,
     (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'signup_entry') AS signup_entry,
+    (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'completion_method') AS completion_method,
     (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'calculator_type') AS calculator_type,
     (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'traffic_type') AS traffic_type,
     COALESCE(
@@ -292,6 +299,8 @@ WITH raw AS (
     )[SAFE_OFFSET(0)] AS landing,
     ARRAY_AGG(NULLIF(hostname, '') IGNORE NULLS ORDER BY event_timestamp LIMIT 1)[SAFE_OFFSET(0)] AS session_hostname,
     MIN(session_number) AS session_number,
+    ARRAY_AGG(IF(event_name = 'trial_signup_viewed', signup_origin, NULL) IGNORE NULLS ORDER BY event_timestamp LIMIT 1)[SAFE_OFFSET(0)] AS signup_origin,
+    ARRAY_AGG(IF(event_name = 'trial_signup_viewed', signup_entry, NULL) IGNORE NULLS ORDER BY event_timestamp LIMIT 1)[SAFE_OFFSET(0)] AS signup_entry,
     MAX(IF(session_engaged = '1', 1, 0)) AS engaged,
     SUM(engagement_ms) AS engagement_ms,
     COUNTIF(event_name = 'page_view') AS page_views,
@@ -358,7 +367,7 @@ function toSession(row: Record<string, string>): AnalyticsSession {
     // timing is also required so beachhead plan-CTA handoffs can prove ordering,
     // for each journey's own result event.
     if (
-      (FUNNEL_EVENTS.includes(event as FunnelEventName) || ORDERED_JOURNEY_EVENTS.includes(event))
+      (FUNNEL_EVENTS.includes(event) || ORDERED_JOURNEY_EVENTS.includes(event))
       && row[`first_${event}`]
     ) {
       firstEventAt[event] = Number(row[`first_${event}`]);
@@ -371,6 +380,9 @@ function toSession(row: Record<string, string>): AnalyticsSession {
   eventCounts.retirement_email_cta_opened = Number(row.count_retirement_email_cta_opened || 0);
   eventCounts.coast_fire_email_trial_complete = Number(row.count_coast_fire_email_trial_complete || 0);
   eventCounts.retirement_email_trial_complete = Number(row.count_retirement_email_trial_complete || 0);
+  for (const method of ['email_link', 'verification_code', 'verification_skipped', 'already_verified']) {
+    eventCounts[`signup_completed_${method}`] = Number(row[`count_signup_completed_${method}`] || 0);
+  }
   if (row.first_quickplan_cross_sell_click) {
     firstEventAt.quickplan_cross_sell_click = Number(row.first_quickplan_cross_sell_click);
   }
@@ -398,6 +410,8 @@ function toSession(row: Record<string, string>): AnalyticsSession {
     eventCounts,
   });
   return {
+    signupOrigin: row.signup_origin || 'unknown',
+    signupEntry: row.signup_entry || 'unknown',
     id: `${row.user_pseudo_id}.${row.session_id}`,
     userId: row.user_pseudo_id,
     sessionDate: row.session_date,

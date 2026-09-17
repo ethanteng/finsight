@@ -177,6 +177,8 @@ model Conversation {
   /// clients that predate threads and send none.
   threadId           String?
   showTheMathData    Json?
+  /// A saved calculator result is not a question submitted by the user.
+  origin             String     @default("user")
   user               User?      @relation(fields: [userId], references: [id])
   feedback           Feedback[]
 

@@ -36,7 +36,7 @@ The existing `/retirement-calculator` is the comparison baseline. It measures:
 retirement-calculator session
   -> retirement_model_run
   -> start_free_click with cta_location=quickplan_cross_sell
-  -> strict trial_login_success
+  -> ordered signup through trial_signup_completed (app handoff)
 ```
 
 The Coast FIRE experiment is live (`COAST_FIRE_EXPERIMENT.live === true` in
@@ -88,15 +88,17 @@ launched.”
   `coast_fire_calculated` for Coast FIRE).
 - **Actual-plan CTA:** result sessions that also fire the journey-specific CTA
   in the same session. Clicking the cross-sell before a result does not count.
-- **Trial completed:** CTA sessions that contain every published signup,
-  verification, and first-login step in order, ending at
-  `trial_login_success`.
+- **Signup handoff:** CTA sessions that contain the signup steps and account
+  creation in order, ending at `trial_signup_completed`. Verification by email
+  link, by code, or Skip are separate branches. Login is not required. This
+  boundary does not prove that the app loaded or that the email is verified.
 - **Results emailed:** result sessions where a successful results-email event
   occurred later in the same session.
 - **Email CTA opened:** a later session where the opaque emailed token
   successfully restored the saved scenario on `/getstarted`.
-- **Email-path trial:** `trial_login_success` carrying the persisted fixed
-  calculator origin and `signup_entry=results_email` attribution.
+- **Email-path handoff:** `trial_signup_completed` carrying the persisted fixed
+  calculator origin and `signup_entry=results_email` attribution. Legacy login
+  success and observed skips remain historical evidence, deduplicated per session.
 - **First-party continuation:** the first successful signup-context token
   exchange, persisted as `continuedAt`; reloads do not move the timestamp.
 - **Matched account:** a unique lead email equal to an account created after
@@ -106,7 +108,13 @@ launched.”
   have an active Plaid token, an external account in their financial snapshot,
   or a verified Public credential.
 - **Activated:** accounts created in the selected window that have asked at
-  least one Ask Linc question.
+  least one Ask Linc question. Automatically saved calculator results are
+  excluded using Conversation.origin; user follow-ups still count.
+- **Signup paths by device:** observed signup views, accounts, handoffs and
+  verification outcomes, split by desktop/mobile/other plus origin and entry.
+  Unknown historic attribution remains visible rather than being guessed.
+- **Saved results / verified matches:** first-party account state for lead-email
+  matches, not inferred GA4 conversions. Available on both admin pages.
 - **Paid now:** accounts created in the selected window whose current
   `subscriptionStatus` is `active`. A cohort younger than the 30-day trial has
   not matured and should not be judged on this metric.
@@ -143,6 +151,7 @@ GA4_BIGQUERY_PROJECT_ID=gen-lang-client-0360308471
 GA4_BIGQUERY_DATASET_ID=analytics_519498279
 GA4_BIGQUERY_LOCATION=US
 GA4_FIRST_FULL_TRACKING_DATE=YYYY-MM-DD
+GA4_SIGNUP_HANDOFF_TRACKING_DATE=YYYY-MM-DD
 GA4_REPORTING_LAG_DAYS=1
 GA4_ALLOWED_HOSTNAMES=asklinc.com,www.asklinc.com
 ```
@@ -155,6 +164,13 @@ complete daily export has been inspected. Until then, leave it unset; the
 scorecard still reports available GA4 session, calculator-result, and plan-CTA
 metrics, but reports strict trial completion as unavailable instead of zero.
 The coverage date never blocks the underlying session query.
+
+After PRs 252–259, `GA4_SIGNUP_HANDOFF_TRACKING_DATE` is also required for
+completion and abandonment rates. Set it only after confirming a full Pacific
+calendar day with the new frontend events and GTM v24 forwarding. Keep it unset
+while collecting; observed counts still appear. Do not backdate it to deployment
+or reuse the original September 10 signup-coverage date. See
+`TRIAL_SIGNUP_FUNNEL_TRACKING.md` for event meanings and deployment order.
 
 The BigQuery service account needs only query-job and dataset-read permissions.
 Its JSON must never be exposed to the frontend or a `NEXT_PUBLIC_` variable.

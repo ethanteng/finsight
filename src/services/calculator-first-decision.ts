@@ -379,7 +379,10 @@ export async function seedFirstDecisionFromLead(params: {
     const existing = await prisma.conversation.count({ where: { userId } });
     if (existing > 0) return 'already-has-decisions';
 
-    await prisma.conversation.create({ data: { userId, ...composeDecision(lead) } });
+    await prisma.conversation.create({ data: {
+      userId, ...composeDecision(lead),
+      origin: lead.kind === 'retirement' ? 'calculator_retirement' : 'calculator_coast_fire',
+    } });
 
     return 'seeded';
   } catch (error) {

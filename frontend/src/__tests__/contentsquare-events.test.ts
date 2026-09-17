@@ -1,11 +1,13 @@
 import { trackContentsquareEvent } from '@/lib/contentsquare';
 import { isAnalyticsHost } from '@/lib/analytics-host';
 import { INTERNAL_ANALYTICS_BROWSER_KEY } from '@/lib/internal-analytics';
+import { beginFreeTrialSignupFlow, completeFreeTrialSignupFlow } from '@/lib/trial-signup-flow';
 import {
   pushCoastFireCalculated,
   pushRetirementInteraction,
   pushRetirementModelRun,
   pushSignUp,
+  pushTrialSignupCompleted,
   pushStartFreeClick,
   pushTrialLoginError,
   pushTrialLoginSubmit,
@@ -25,6 +27,17 @@ import {
 jest.mock('@/lib/analytics-host', () => ({ isAnalyticsHost: jest.fn() }));
 const hostAllowed = jest.mocked(isAnalyticsHost);
 const win = window as unknown as { _uxa?: unknown[][]; dataLayer?: unknown[] };
+
+it.each(['retirement_calculator', 'coast_fire_calculator'] as const)('keeps %s email attribution on the terminal event without financial or identity data', origin => {
+  beginFreeTrialSignupFlow(Date.now(), { signupOrigin: origin, signupEntry: 'results_email' });
+  pushTrialSignupCompleted('email_link');
+  completeFreeTrialSignupFlow();
+  expect(win.dataLayer).toEqual([{
+    event: 'trial_signup_completed', source_page: '/retirement-calculator', signup_flow: 'free_trial',
+    signup_flow_version: '2', signup_origin: origin, signup_entry: 'results_email', completion_method: 'email_link',
+  }]);
+  expect(win._uxa).toEqual([['trackPageEvent', 'trial_signup_completed']]);
+});
 
 beforeEach(() => {
   window.localStorage.removeItem(INTERNAL_ANALYTICS_BROWSER_KEY);

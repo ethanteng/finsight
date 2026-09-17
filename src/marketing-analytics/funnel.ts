@@ -1,18 +1,29 @@
 import { FUNNEL_EVENT_NAMES, type AnalyticsSession, type FunnelEventName, type FunnelStepMetric } from './types';
 
-const LABELS: Record<FunnelEventName, string> = {
-  start_free_click: 'Start free clicked',
+export const FUNNEL_LABELS: Record<FunnelEventName, string> = {
   trial_signup_viewed: 'Signup viewed',
   trial_signup_started: 'Signup started',
   trial_signup_submit: 'Signup submitted',
   sign_up: 'Account created',
-  trial_verify_viewed: 'Verification viewed',
-  trial_verify_submit: 'Verification submitted',
-  trial_verify_success: 'Email verified',
-  trial_login_viewed: 'First login viewed',
-  trial_login_submit: 'First login submitted',
-  trial_login_success: 'Trial path completed',
+  trial_signup_completed: 'Signup handoff to app',
 };
+
+/** Do not infer success from sign_up alone: code verification may be abandoned.
+ * Keep legacy login completions, but never require that removed step for v2.
+ * An old verify-success event is not proof of handoff in the former login flow.
+ */
+export function signupCompletionAt(session: AnalyticsSession): number | undefined {
+  const times = ['trial_signup_completed', 'trial_verify_skipped', 'trial_login_success']
+    .map(event => session.firstEventAt[event]).filter((at): at is number => at !== undefined);
+  return times.length ? Math.min(...times) : undefined;
+}
+
+export function withSignupCompletion(session: AnalyticsSession): AnalyticsSession {
+  const at = signupCompletionAt(session);
+  return at === undefined ? session : {
+    ...session, firstEventAt: { ...session.firstEventAt, trial_signup_completed: at },
+  };
+}
 
 function median(values: number[]): number | null {
   if (values.length === 0) return null;
@@ -25,17 +36,26 @@ function median(values: number[]): number | null {
  * A strict same-session funnel. A session qualifies for a step only when every
  * earlier boundary exists in order. Raw step reach is retained so re-entry or
  * missing-upstream instrumentation can be shown instead of mislabeled as drop-off.
+ * Entry is /getstarted, not a mandatory CTA: email links and direct visits skip it.
+ * Verification screens are branches, not compulsory steps. `ctaEvent` optionally
+ * scopes the funnel to a proven earlier CTA for calculator/click conversion rates.
  */
 export function aggregateTrialFunnel(
   sessions: AnalyticsSession[],
   coverage: FunnelStepMetric['coverage'] = 'complete',
+  ctaEvent?: string,
 ): FunnelStepMetric[] {
-  let previousQualified = sessions;
+  const normalized = sessions.map(withSignupCompletion);
+  let previousQualified = normalized.filter(session => !ctaEvent || (
+    session.firstEventAt[ctaEvent] !== undefined
+    && session.firstEventAt.trial_signup_viewed !== undefined
+    && session.firstEventAt.trial_signup_viewed >= session.firstEventAt[ctaEvent]!
+  ));
   let previousEvent: FunnelEventName | null = null;
 
   return FUNNEL_EVENT_NAMES.map((event, index) => {
     const priorEvent = previousEvent;
-    const rawReached = sessions.filter(session => session.firstEventAt[event] !== undefined);
+    const rawReached = normalized.filter(session => session.firstEventAt[event] !== undefined);
     const qualified = previousQualified.filter(session => {
       const at = session.firstEventAt[event];
       if (at === undefined) return false;
@@ -49,11 +69,11 @@ export function aggregateTrialFunnel(
       : [];
     const step: FunnelStepMetric = {
       event,
-      label: LABELS[event],
+      label: FUNNEL_LABELS[event],
       sessions: qualified.length,
       users: new Set(qualified.map(session => session.userId)).size,
-      previousStepRate: index === 0 ? null : previousCount > 0 ? qualified.length / previousCount : null,
-      abandonmentRate: index === 0 ? null : previousCount > 0 ? 1 - qualified.length / previousCount : null,
+      previousStepRate: index === 0 || coverage !== 'complete' ? null : previousCount > 0 ? qualified.length / previousCount : null,
+      abandonmentRate: index === 0 || coverage !== 'complete' ? null : previousCount > 0 ? 1 - qualified.length / previousCount : null,
       medianSecondsFromPrevious: median(elapsed),
       coverage,
       rawEventSessions: rawReached.length,

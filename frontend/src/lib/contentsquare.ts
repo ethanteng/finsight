@@ -20,6 +20,7 @@ export type ContentsquareEvent =
   | 'trial_verify_error'
   | 'trial_verify_success'
   | 'trial_verify_skipped'
+  | 'trial_signup_completed'
   | 'trial_login_viewed'
   | 'trial_login_submit'
   | 'trial_login_error'
