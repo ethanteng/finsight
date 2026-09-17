@@ -51,7 +51,7 @@ describe('calculator lead report', () => {
       attributionCaptured: 1,
       paidAttributionCaptured: 1,
       deliveryRate: 2 / 3,
-      continuationRate: 1 / 2,
+      continuationRate: 1 / 3,
       accountMatchRate: 1 / 2,
       attributionRate: 1 / 3,
     });
@@ -67,5 +67,15 @@ describe('calculator lead report', () => {
     expect(report.deliveryRate).toBeNull();
     expect(report.continuationRate).toBeNull();
     expect(report.accountMatchRate).toBeNull();
+  });
+
+  it('does not label a disclosed-token continuation as an email click', () => {
+    const report = buildCalculatorLeadSummary({ periodStart: start, periodEndExclusive: end,
+      leads: [{ email: 'test@example.com', emailSent: false, mailerliteSynced: false,
+        createdAt: start, continuedAt: start, tokenDisclosedAt: start }], accounts: [],
+    });
+    expect(report).toMatchObject({ pageHandoffsPrepared: 1, continuedToSignup: 1,
+      emailsSent: 0, continuationRate: 1 });
+    expect(report.note).toContain('do not prove an inbox click');
   });
 });

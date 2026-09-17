@@ -13,6 +13,12 @@ describe('marketing funnel coverage date', () => {
     expect(sql).toContain("signup_origin = 'retirement_calculator' AND signup_entry = 'results_email'");
     expect(sql).toContain("signup_origin = 'coast_fire_calculator' AND signup_entry = 'results_email'");
     expect(sql).toContain("calculation_trigger = 'submitted'");
+    for (const calculator of ['retirement', 'coast_fire']) {
+      expect(sql).toContain(`event_name = 'sign_up' AND signup_flow = 'free_trial' AND signup_origin = '${calculator}_calculator' AND signup_entry = 'results_page'`);
+      expect(sql).toContain(`event_name = 'calculator_run_limit_reached' AND calculator_type = '${calculator}'`);
+      expect(sql).toContain(`AS count_${calculator}_page_cta_opened`);
+      expect(sql).toContain(`AS count_${calculator}_page_trial_complete`);
+    }
     expect(sql).not.toContain("COUNTIF(event_name = 'trial_login_success' AND signup_origin");
   });
   it('leaves coverage unset until a full day has been verified', () => {
@@ -51,6 +57,15 @@ describe('marketing funnel coverage date', () => {
     });
     delete process.env.GA4_FIRST_FULL_TRACKING_DATE;
     delete process.env.GA4_REPORTING_LAG_DAYS;
+    const exportedRow: Record<string, string> = {
+      user_pseudo_id: 'visitor', session_id: '123', session_date: '2026-09-17',
+      hostname: 'asklinc.com', device: 'mobile', browser: 'Safari',
+      landing_page: 'https://asklinc.com/retirement-calculator',
+      count_retirement_page_cta_opened: '1', count_retirement_page_account_created: '1',
+      count_retirement_page_trial_complete: '1', count_retirement_run_limit_reached: '2',
+      first_retirement_run_limit_reached: '100', first_retirement_account_created: '200',
+      count_coast_fire_email_cta_opened: '1', count_coast_fire_email_trial_complete: '1',
+    };
     global.fetch = jest.fn()
       .mockResolvedValueOnce({
         ok: true,
@@ -60,7 +75,11 @@ describe('marketing funnel coverage date', () => {
       .mockResolvedValue({
         ok: true,
         status: 200,
-        json: async () => ({ jobComplete: true, schema: { fields: [] }, rows: [], totalRows: '0' }),
+        json: async () => ({
+          jobComplete: true,
+          schema: { fields: Object.keys(exportedRow).map(name => ({ name })) },
+          rows: [{ f: Object.values(exportedRow).map(v => ({ v })) }], totalRows: '1',
+        }),
       }) as jest.Mock;
 
     try {
@@ -70,6 +89,16 @@ describe('marketing funnel coverage date', () => {
       expect(withoutCoverage.detail).toContain('1-day availability lag applied');
       expect(withoutCoverage.detail).toContain('late events for up to 3 days');
       expect(withoutCoverage.detail).toContain('strict trial attribution remains unavailable');
+      expect(withoutCoverage.sessions[0].eventCounts).toMatchObject({
+        retirement_page_cta_opened: 1, retirement_page_account_created: 1,
+        retirement_page_trial_complete: 1, retirement_run_limit_reached: 2,
+        coast_fire_page_cta_opened: 0, coast_fire_page_account_created: 0,
+        coast_fire_email_cta_opened: 1, coast_fire_email_trial_complete: 1,
+      });
+      expect(withoutCoverage.sessions[0].firstEventAt).toMatchObject({
+        retirement_run_limit_reached: 100, retirement_account_created: 200,
+      });
+      expect(withoutCoverage.sessions[0].firstEventAt.coast_fire_account_created).toBeUndefined();
 
       process.env.GA4_FIRST_FULL_TRACKING_DATE = '2999-01-01';
       const beforeCoverage = await loadGa4Sessions({ days: 28, compare: true });

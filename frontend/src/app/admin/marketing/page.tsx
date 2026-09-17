@@ -57,6 +57,7 @@ type LeadSummary = {
   uniqueEmails: number | null;
   mailerliteSynced: number | null;
   continuedToSignup: number | null;
+  pageHandoffsPrepared?: number | null;
   matchedAccounts: number | null;
   verifiedMatchedAccounts?: number | null;
   savedResultAccounts?: number | null;
@@ -81,6 +82,9 @@ type LeadCapture = {
   captureRate: Metric;
   emailCtaOpenedSessions: Metric;
   emailTrialCompletedSessions: Metric;
+  pageCtaOpenedSessions?: Metric;
+  pageAccountsCreatedSessions?: Metric;
+  pageTrialCompletedSessions?: Metric;
   pendingFirstParty: LeadSummary;
   firstParty: LeadSummary;
 };
@@ -96,6 +100,7 @@ interface Report {
       distribution: [number, number, number, number];
       singleRunCtaSessions: number; repeatRunCtaSessions: number;
       singleRunCtaRate: number | null; repeatRunCtaRate: number | null;
+      limitReachedSessions?: number; accountsAfterLimitSessions?: number;
     }>;
     bothCalculators: Array<{ device: string; sessions: number }>;
   };
@@ -189,6 +194,8 @@ function CalculatorRepeatUsage({ data, observedThrough }: {
               ['Successful runs', count(row.runs)],
               ['Ran again', `${precisePercent(row.repeatRate)} (${count(row.repeatSessions)} sessions)`],
               ['Runs per calculating session', row.averageRuns === null ? '—' : row.averageRuns.toFixed(2)],
+              ['Sessions shown the run limit', count(row.limitReachedSessions ?? null)],
+              ['Created account after limit', count(row.accountsAfterLimitSessions ?? null)],
             ].map(([label, value]) => <div key={label}><dt className="text-xs text-[#66736b]">{label}</dt><dd className="mt-1 font-semibold">{value}</dd></div>)}
           </dl>
           <p className="mt-5 text-xs font-semibold">Sessions by number of runs</p>
@@ -356,12 +363,27 @@ function LeadCapturePanel({
         : `${precisePercent(capture.captureRate.value)} of calculator runs`,
     },
     {
+      label: 'Direct save → signup',
+      value: capture.pageCtaOpenedSessions?.value ?? null,
+      note: 'Arrived from the results page without opening an email',
+    },
+    {
+      label: 'Direct-save accounts created',
+      value: capture.pageAccountsCreatedSessions?.value ?? null,
+      note: 'Observed results_page signups; verification is separate',
+    },
+    {
+      label: 'Direct-save app handoffs',
+      value: capture.pageTrialCompletedSessions?.value ?? null,
+      note: 'Ready to enter the app; not proof it loaded',
+    },
+    {
       label: 'Clicked email CTA',
       value: capture.emailCtaOpenedSessions.value,
       note: 'Observed in this window; the email may have been sent earlier',
     },
     {
-      label: 'Signup handoff to app',
+      label: 'Email-return app handoffs',
       value: capture.emailTrialCompletedSessions.value,
       note: 'Email-attributed handoffs observed; no second login required',
     },
@@ -376,7 +398,8 @@ function LeadCapturePanel({
     { label: 'First-party emails sent', value: count(capture.firstParty.emailsSent), note: `${precisePercent(capture.firstParty.deliveryRate)} of stored requests`, timing: firstPartyTiming },
     { label: 'Unique lead emails', value: count(capture.firstParty.uniqueEmails), note: `${count(capture.firstParty.mailerliteSynced)} synced to MailerLite`, timing: firstPartyTiming },
     { label: 'Attribution captured', value: count(capture.firstParty.attributionCaptured), note: `${precisePercent(capture.firstParty.attributionRate)} of stored requests · ${count(capture.firstParty.paidAttributionCaptured)} paid`, timing: firstPartyTiming },
-    { label: 'First-party continuations', value: count(capture.firstParty.continuedToSignup), note: `${precisePercent(capture.firstParty.continuationRate)} of delivered emails`, timing: firstPartyTiming },
+    { label: 'Signup-context restores', value: count(capture.firstParty.continuedToSignup), note: `${precisePercent(capture.firstParty.continuationRate)} of stored requests · direct or email route`, timing: firstPartyTiming },
+    { label: 'Page handoffs prepared', value: count(capture.firstParty.pageHandoffsPrepared ?? null), note: 'Direct-continuation token prepared; not proof of navigation', timing: firstPartyTiming },
     { label: 'Matched accounts', value: count(capture.firstParty.matchedAccounts), note: `${precisePercent(capture.firstParty.accountMatchRate)} of unique lead emails`, timing: firstPartyTiming },
     { label: 'Verified matched accounts', value: count(capture.firstParty.verifiedMatchedAccounts ?? null), note: 'Current verification status; not proof of link attribution', timing: firstPartyTiming },
     { label: 'Results saved to accounts', value: count(capture.firstParty.savedResultAccounts ?? null), note: 'Automatic first decisions, not user-submitted questions', timing: firstPartyTiming },
@@ -388,17 +411,16 @@ function LeadCapturePanel({
         <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[#102319] text-[#d8ff71]"><Mail size={16} /></span>
         <div>
           <p className="text-[10px] font-extrabold uppercase tracking-[.14em] text-[#49725a]">Known-prospect branch</p>
-          <h3 className="mt-1 text-base font-semibold tracking-[-.025em]">Email me these results</h3>
-          <p className="mt-1 max-w-4xl text-[10px] leading-4 text-[#66736b]">Calculator runs and email requests share the email-tracking window. Later email clicks and trials are outcomes observed in the selected reporting window.</p>
+          <h3 className="mt-1 text-base font-semibold tracking-[-.025em]">Save results → create an account</h3>
+          <p className="mt-1 max-w-4xl text-[10px] leading-4 text-[#66736b]">Saving now takes visitors straight to signup and emails a copy. Direct saves and email returns are separate routes, not consecutive steps. Counts are outcomes observed in this window, not a closed cohort. New direct-arrival tracking cannot recover missed historical events. See Signup paths below for desktop/mobile splits.</p>
         </div>
       </div>
     </div>
     <div className="mt-4 grid gap-3 md:grid-cols-2 lg:grid-cols-4">
-      {funnel.map((step, index) => <div key={step.label} className="relative min-w-0">
+      {funnel.map(step => <div key={step.label} className="relative min-w-0">
         <div className="h-full rounded-xl bg-[#fffdf5] px-4 py-4">
           <div className="flex items-start justify-between gap-2">
             <div className="flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-[.1em] text-[#49725a]">
-              <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-[#e4eadf] text-[#315d45]">{index + 1}</span>
               {step.label}
             </div>
             <DataTiming kind="delayed" observedThrough={ga4ObservedThrough} />
@@ -406,7 +428,6 @@ function LeadCapturePanel({
           <div className="mt-4 text-3xl font-semibold tracking-[-.05em] tabular-nums">{count(step.value)}</div>
           <div className="mt-2 text-[10px] leading-4 text-[#7b867f]">{step.note}</div>
         </div>
-        {index < funnel.length - 1 && <span className="absolute -right-5 top-1/2 z-10 hidden h-7 w-7 -translate-y-1/2 place-items-center rounded-full border border-[#102319]/10 bg-[#edf1e9] text-[#49725a] lg:grid"><ArrowRight size={13} /></span>}
       </div>)}
     </div>
     <details className="group mt-4 rounded-xl border border-[#102319]/10 bg-[#fffdf5]">

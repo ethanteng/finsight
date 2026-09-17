@@ -103,9 +103,10 @@ export function RetirementEmailCapture({
         return;
       }
 
+      let tracking: Promise<void> | undefined;
       if (!reported.current) {
         reported.current = true;
-        pushRetirementResultsEmailed(survivalRate);
+        tracking = pushRetirementResultsEmailed(survivalRate);
       }
 
       const body = await response.json().catch(() => null) as { ref?: unknown } | null;
@@ -128,6 +129,7 @@ export function RetirementEmailCapture({
       storeRetirementSignupContext(inputs, { email: email.trim(), sourceToken: ref });
 
       setStatus("leaving");
+      await tracking;
       leaveForSignup(resultsPageSignupHref(RETIREMENT_SIGNUP_HREF));
     } catch {
       setError("Network error. Please check your connection and try again.");

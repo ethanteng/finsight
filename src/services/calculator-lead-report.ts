@@ -17,6 +17,7 @@ export interface CalculatorLeadSummary {
   uniqueEmails: number | null;
   mailerliteSynced: number | null;
   continuedToSignup: number | null;
+  pageHandoffsPrepared?: number | null;
   matchedAccounts: number | null;
   verifiedMatchedAccounts: number | null;
   savedResultAccounts: number | null;
@@ -34,6 +35,7 @@ export interface CalculatorLeadRow extends CalculatorLeadAttribution {
   emailSent: boolean;
   mailerliteSynced: boolean;
   continuedAt: Date | null;
+  tokenDisclosedAt?: Date | null;
   createdAt: Date;
 }
 
@@ -127,16 +129,17 @@ export function buildCalculatorLeadSummary(args: {
     uniqueEmails,
     mailerliteSynced: leads.filter(lead => lead.mailerliteSynced).length,
     continuedToSignup,
+    pageHandoffsPrepared: leads.filter(lead => lead.tokenDisclosedAt != null).length,
     matchedAccounts,
     verifiedMatchedAccounts: uniqueAccounts(matchingAccounts.filter(account => account.emailVerified === true)),
     savedResultAccounts: uniqueAccounts(matchingAccounts.filter(account => (account.conversations?.length || 0) > 0)),
     attributionCaptured,
     paidAttributionCaptured,
     deliveryRate: ratio(emailsSent, leads.length),
-    continuationRate: ratio(continuedToSignup, emailsSent),
+    continuationRate: ratio(continuedToSignup, leads.length),
     accountMatchRate: ratio(matchedAccounts, uniqueEmails),
     attributionRate: ratio(attributionCaptured, leads.length),
-    note: 'First-party records for the stated window. “Opened signup link” is the first successful emailed-link scenario exchange. Matched accounts share the lead email and were created later in this window; this association alone does not prove use of the email link. Verified means currently verified, not necessarily by this link. Saved results count matched accounts with an automatically saved result from this calculator, not a user-submitted planning question. Saving is asynchronous and can lag account creation.',
+    note: 'First-party records for the stated window. Signup-context restores count the first successful token exchange, reached directly from results or through email; they do not prove an inbox click. Page handoffs prepared counts tokens marked for direct continuation, not confirmed navigation. Continuation rate uses stored requests, not delivered emails. Matched accounts share the lead email and were created later in this window; this is association, not route attribution. Verified means currently verified, not necessarily by an email link. Saved results count automatic calculator decisions, not user-submitted questions, and can lag account creation. See GA4 signup origin/entry for route and device splits.',
   };
 }
 
@@ -153,6 +156,7 @@ export function unavailableCalculatorLeadSummary(
     uniqueEmails: null,
     mailerliteSynced: null,
     continuedToSignup: null,
+    pageHandoffsPrepared: null,
     matchedAccounts: null,
     verifiedMatchedAccounts: null,
     savedResultAccounts: null,
@@ -178,6 +182,7 @@ export async function calculatorLeadSummary(
     emailSent: true,
     mailerliteSynced: true,
     continuedAt: true,
+    tokenDisclosedAt: true,
     createdAt: true,
     landingPage: true,
     referrer: true,

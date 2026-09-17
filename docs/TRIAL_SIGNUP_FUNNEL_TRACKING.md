@@ -36,7 +36,9 @@ Ordinary login/verification traffic does not belong to the signup funnel.
 Boundary events carry `source_page` (pathname only), `signup_flow=free_trial`,
 `signup_flow_version=2`, `signup_origin`, and `signup_entry`.
 Origins are `retirement_calculator`, `coast_fire_calculator`, or `getstarted`;
-entries are `results_email`, `calculator_cta`, or `direct`.
+entries are `results_email`, `results_page`, `calculator_cta`, or `direct`.
+PR #264's direct results-page continuation is documented in
+`CALCULATOR_RESULTS_PAGE_TRACKING.md`; it is not an email CTA open.
 Unknown historic attribution remains unknown.
 Errors use `server_rejected | network_error | unknown`;
 client validation uses `password_requirements`.
@@ -66,8 +68,9 @@ Forward `source_page`, `signup_flow`, `signup_origin`, `signup_entry`,
 `completion_method` is meaningful only on `trial_signup_completed`; GTM's persistent
 data model may retain it on later diagnostic events.
 
-Keep error and validation tags separate. Keep the existing `sign_up` tag and
-Google Ads account-created conversion unchanged. Do not mark the new handoff
+Keep error and validation tags separate. Keep GA4's existing `sign_up` tag.
+GTM v25 scopes the existing Google Ads account-created conversion to `sign_up`
+with `signup_flow=free_trial`; keep that conversion primary. Do not mark the new handoff
 event as another Ads primary conversion or sum it with sign_up.
 
 Register event-scoped GA4 custom dimensions for `completion_method` and

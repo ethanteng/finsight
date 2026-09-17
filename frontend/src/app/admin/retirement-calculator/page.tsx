@@ -54,6 +54,7 @@ interface Report {
     uniqueEmails: number | null;
     mailerliteSynced: number | null;
     continuedToSignup: number | null;
+    pageHandoffsPrepared?: number | null;
     matchedAccounts: number | null;
     verifiedMatchedAccounts: number | null;
     savedResultAccounts: number | null;
@@ -172,7 +173,8 @@ export default function RetirementCalculatorAdminPage() {
               <Kpi label="Emails sent" value={number(report.leadCapture.emailsSent)} note={`${percent(report.leadCapture.deliveryRate)} of stored requests`} accent />
               <Kpi label="Unique emails" value={number(report.leadCapture.uniqueEmails)} />
               <Kpi label="MailerLite synced" value={number(report.leadCapture.mailerliteSynced)} />
-              <Kpi label="Opened signup link" value={number(report.leadCapture.continuedToSignup)} note={`${percent(report.leadCapture.continuationRate)} of delivered emails`} />
+              <Kpi label="Signup-context restores" value={number(report.leadCapture.continuedToSignup)} note={`${percent(report.leadCapture.continuationRate)} of stored requests · direct or email`} />
+              <Kpi label="Page handoffs prepared" value={number(report.leadCapture.pageHandoffsPrepared ?? null)} note="Token prepared, not confirmed navigation" />
               <Kpi label="Matched accounts" value={number(report.leadCapture.matchedAccounts)} note={`${percent(report.leadCapture.accountMatchRate)} of unique lead emails`} />
               <Kpi label="Verified matched accounts" value={number(report.leadCapture.verifiedMatchedAccounts ?? null)} note="Current email verification status" />
               <Kpi label="Result saved to account" value={number(report.leadCapture.savedResultAccounts ?? null)} note="Automatic first decision, not a new question" />

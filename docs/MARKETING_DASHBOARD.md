@@ -19,7 +19,10 @@ rejection totals as a clearly labeled first-party product-health reference.
 Those rows are immediate but contain no GA4 session or campaign identifier, so
 they do not populate or substitute for the acquisition journey.
 
-Each calculator also has a separate **Email me these results** branch. It is
+Each calculator also has a separate **Save results → create an account** branch.
+After PR #264, saving emails a copy and immediately continues to signup;
+the `results_page` route is shown separately from later `results_email` returns.
+See `CALCULATOR_RESULTS_PAGE_TRACKING.md` for deployment, GTM, and run-limit semantics. It is
 not inserted into the linear result-to-product-CTA journey because a recipient
 can return from their inbox in another session or on another device. The branch
 shows settled GA4 sessions beside live first-party lead delivery, continuation,
@@ -100,7 +103,8 @@ launched.”
   calculator origin and `signup_entry=results_email` attribution. Legacy login
   success and observed skips remain historical evidence, deduplicated per session.
 - **First-party continuation:** the first successful signup-context token
-  exchange, persisted as `continuedAt`; reloads do not move the timestamp.
+  exchange from either direct save or email, persisted as `continuedAt`; reloads
+  do not move the timestamp. Denominator: stored requests, not delivered emails.
 - **Matched account:** a unique lead email equal to an account created after
   that email's first lead in the reporting window. This is a useful first-party
   match, not proof when a visitor registers under a different address.

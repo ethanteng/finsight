@@ -187,6 +187,7 @@ function buildLeadCapture(args: {
   emailedEvent: string;
   emailCtaEvent: string;
   emailTrialEvent: string;
+  calculator: 'coast_fire' | 'retirement';
   ga4Live: boolean;
   firstParty: CalculatorLeadSummary;
   pendingFirstParty: CalculatorLeadSummary;
@@ -240,6 +241,9 @@ function buildLeadCapture(args: {
       exclusions,
       opened: trackedAll.filter(session => hasEvent(session, args.emailCtaEvent)).length,
       completed: trackedAll.filter(session => hasEvent(session, args.emailTrialEvent)).length,
+      pageOpened: trackedAll.filter(session => hasEvent(session, `${args.calculator}_page_cta_opened`)).length,
+      pageAccounts: trackedAll.filter(session => hasEvent(session, `${args.calculator}_page_account_created`)).length,
+      pageCompleted: trackedAll.filter(session => hasEvent(session, `${args.calculator}_page_trial_complete`)).length,
     };
   };
   const current = values(args.current, args.currentAll, args.rawCurrentAll);
@@ -288,6 +292,12 @@ function buildLeadCapture(args: {
       'Observed email-attributed signup handoffs, including skipped verification and legacy first login. Counted once per session; not proof of app load or verified email. Missing events during the tracking transition cannot be recovered.',
     ),
     pendingFirstParty: args.pendingFirstParty,
+    pageCtaOpenedSessions: value(current.pageOpened, previous.pageOpened,
+      'Observed direct save-results arrivals at signup (results_page), not inbox opens. Requires the new GTM event; historical missing arrivals cannot be recovered.'),
+    pageAccountsCreatedSessions: value(current.pageAccounts, previous.pageAccounts,
+      'Sessions with sign_up, signup_flow=free_trial and signup_entry=results_page for this calculator. Account creation, not verification or app entry.'),
+    pageTrialCompletedSessions: value(current.pageCompleted, previous.pageCompleted,
+      'Direct save-results signup handoffs observed in the window. Not a conversion rate from emails sent, and not proof the app loaded.'),
     firstParty: args.firstParty,
   };
 }
@@ -383,6 +393,7 @@ export function buildBeachheadScorecard(args: {
         emailedEvent: 'coast_fire_results_emailed',
         emailCtaEvent: 'coast_fire_email_cta_opened',
         emailTrialEvent: 'coast_fire_email_trial_complete',
+        calculator: 'coast_fire',
         ga4Live,
         firstParty: coastFireLeads,
         pendingFirstParty: pendingCoastFireLeads,
@@ -398,6 +409,7 @@ export function buildBeachheadScorecard(args: {
         emailedEvent: 'retirement_results_emailed',
         emailCtaEvent: 'retirement_email_cta_opened',
         emailTrialEvent: 'retirement_email_trial_complete',
+        calculator: 'retirement',
         ga4Live,
         firstParty: retirementLeads,
         pendingFirstParty: pendingRetirementLeads,

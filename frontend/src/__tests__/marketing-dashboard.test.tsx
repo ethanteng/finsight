@@ -168,7 +168,10 @@ describe('marketing scorecard data states', () => {
     expect(screen.getAllByText('Ran calculator')).toHaveLength(2);
     expect(screen.getAllByText('Emailed results')).toHaveLength(2);
     expect(screen.getAllByText('Clicked email CTA')).toHaveLength(2);
-    expect(screen.getAllByText('Signup handoff to app')).toHaveLength(2);
+    expect(screen.getAllByText('Email-return app handoffs')).toHaveLength(2);
+    expect(screen.getAllByText('Direct save → signup')).toHaveLength(2);
+    expect(screen.getAllByText('Direct-save accounts created')).toHaveLength(2);
+    expect(screen.getAllByText('Direct-save app handoffs')).toHaveLength(2);
     expect(screen.getAllByText('Observed in this window; the email may have been sent earlier')).toHaveLength(2);
     expect(screen.getAllByText('Email-attributed handoffs observed; no second login required')).toHaveLength(2);
     expect(screen.queryByText('Conversion from emailed results unavailable')).not.toBeInTheDocument();
