@@ -382,6 +382,40 @@ describe('RegisterForm', () => {
       );
     });
 
+    it('says where a saved Coast FIRE run is attached when the address is changed away from it', async () => {
+      const token = 'f'.repeat(48);
+      searchParams = new URLSearchParams(`source=${COAST_FIRE_SIGNUP_SOURCE}`);
+      handOverRef(token);
+      global.fetch = jest.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          email: 'reader@example.com',
+          inputs: COAST_FIRE_SCENARIO,
+          coastFireNumber: 545_371,
+          hasReachedCoastFire: false,
+        }),
+      })) as unknown as typeof fetch;
+
+      render(<RegisterForm variant="trial" />);
+      await screen.findByRole('region', { name: 'Your Coast FIRE scenario' });
+
+      expect(screen.queryByText(/saved Coast FIRE run is attached/i)).not.toBeInTheDocument();
+
+      fireEvent.change(screen.getByLabelText('Email address'), {
+        target: { value: 'work@example.com' },
+      });
+
+      const note = await screen.findByText(/saved Coast FIRE run is attached/i);
+      expect(note).toHaveTextContent('reader@example.com');
+
+      fireEvent.change(screen.getByLabelText('Email address'), {
+        target: { value: 'READER@example.com ' },
+      });
+      await waitFor(() =>
+        expect(screen.queryByText(/saved Coast FIRE run is attached/i)).not.toBeInTheDocument(),
+      );
+    });
+
     /*
      * Following a link sent to an address proves the same thing a mailed code
      * proves, so a signup that arrived holding a matching lead token skips the

@@ -349,12 +349,19 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
    * empty app and no explanation. Saying it here is the whole fix: the
    * mismatch is legitimate (a work address instead of a personal one), it is
    * just not what was promised.
+   *
+   * Either calculator can be the source. The two arrivals are mutually
+   * exclusive in the URL, so at most one context carries an emailed address.
    */
-  const savedRunAddress =
-    retirementContext?.email &&
-    email.trim().toLowerCase() !== retirementContext.email.trim().toLowerCase()
-      ? retirementContext.email
-      : null;
+  const savedRun = (() => {
+    const leadEmail = retirementContext?.email ?? coastFireContext?.email;
+    if (!leadEmail) return null;
+    if (email.trim().toLowerCase() === leadEmail.trim().toLowerCase()) return null;
+    return {
+      address: leadEmail,
+      kind: retirementContext?.email ? 'retirement' as const : 'coast-fire' as const,
+    };
+  })();
 
   const coastFireSummary = coastFireContext
     ? coastFireSignupSummary(coastFireContext.inputs, coastFireContext.emailedOutcome)
@@ -731,10 +738,11 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
               placeholder="you@example.com"
             />
           </div>
-          {savedRunAddress && (
+          {savedRun && (
             <p className="mt-2 text-sm text-[#8a6d2f]" role="status">
-              Your saved retirement run is attached to <strong>{savedRunAddress}</strong>. Register
-              with that address to find it waiting in your new account.
+              Your saved {savedRun.kind === 'coast-fire' ? 'Coast FIRE' : 'retirement'} run is
+              attached to <strong>{savedRun.address}</strong>. Register with that address to find
+              it waiting in your new account.
             </p>
           )}
         </div>
