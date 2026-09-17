@@ -537,6 +537,88 @@
   grid-template-columns: minmax(0, 1fr);
 }
 
+/*
+ * The card before there is anything in it.
+ *
+ * It keeps the row's shape — the form and the result are a matched pair sized
+ * as one line, and dropping one of them moves the other — while reading as a
+ * card that is waiting rather than one that has answered. The heading is
+ * quieter than a verdict and there is no status pill above it, because the
+ * whole point is that nothing here is a figure anyone could take as theirs.
+ */
+.coast-fire-page .cf-result-card.is-empty {
+  display: flex;
+  flex-direction: column;
+}
+
+.coast-fire-page .cf-result-card.is-empty h2 {
+  margin-top: 18px;
+  color: #cfe0d4;
+  font-size: clamp(26px, 2.6vw, 32px);
+}
+
+.coast-fire-page .cf-result-card.is-empty .cf-result-lead {
+  min-height: 0;
+  margin-bottom: 0;
+}
+
+/* ------------------------------------------------ the jump to the reading */
+
+/*
+ * Three chevrons rather than a labelled pill. This sits under the email
+ * capture's own button, and two filled controls stacked read as competing
+ * asks; this one says "keep going" without competing with the thing being
+ * asked for. Its accessible name is on the anchor.
+ *
+ * The cascade is the only motion, it is transform and opacity only (no
+ * layout), and it is off under prefers-reduced-motion — where three static
+ * chevrons still point down.
+ */
+.coast-fire-page .cf-jump {
+  /* A direct child of the two-column calculator grid, like the email band it
+     sits under: without spanning both tracks it lands under the form column
+     alone, off-centre from the band it is answering. */
+  grid-column: 1 / -1;
+  /* Centred under that full-width band rather than hugging its left edge,
+     where it read as a stray mark. */
+  display: flex;
+  width: fit-content;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  margin: 22px auto 0;
+  padding: 12px 26px;
+  border-radius: 20px;
+  color: #52705f;
+  transition: color 0.15s, background-color 0.15s;
+}
+
+.coast-fire-page .cf-jump:hover {
+  background: rgba(16, 35, 25, 0.05);
+  color: var(--ink);
+}
+
+.coast-fire-page .cf-chevron {
+  display: block;
+  animation: cf-chevron-cascade 1.9s ease-in-out infinite;
+}
+
+/*
+ * Each chevron fades and drifts in turn, so the group reads downward rather
+ * than pulsing as one block. The stagger is set per element in the markup.
+ */
+@keyframes cf-chevron-cascade {
+  0%, 60%, 100% { opacity: 0.28; transform: translateY(-2px); }
+  30% { opacity: 1; transform: translateY(2px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .coast-fire-page .cf-chevron {
+    animation: none;
+    opacity: 0.7;
+  }
+}
+
 /* ------------------------------------------------------- the model's reading */
 
 /*

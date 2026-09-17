@@ -81,21 +81,99 @@ describe("Coast FIRE calculator page", () => {
     Element.prototype.scrollIntoView = originalScrollIntoView;
   });
 
-  it("opens with editable inputs and a useful result", () => {
+  /**
+   * The five figures that belong to the visitor, which the page no longer
+   * fills in for them. The return and the withdrawal rate are left alone:
+   * those open on a stated convention, the way the retirement calculator's
+   * allocation preset does.
+   */
+  function fillForm(overrides: Record<string, string> = {}) {
+    const values: Record<string, string> = {
+      "Your age today": "40",
+      "Retirement age": "65",
+      "Retirement savings today": "400000",
+      "Annual spending in retirement": "80000",
+      "Annual income available at retirement": "30000",
+      ...overrides,
+    };
+    for (const [label, value] of Object.entries(values)) {
+      fireEvent.change(screen.getByLabelText(label), { target: { value } });
+    }
+  }
+
+  /*
+   * The page used to open with all seven boxes filled and a finished answer
+   * beside them, which reads as a result the visitor already has rather than
+   * an illustration of one.
+   */
+  it("opens with empty inputs and no result", () => {
     render(<CoastFireCalculator />);
 
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Have I reached Coast FIRE?");
-    expect(screen.getByLabelText("Your age today")).toHaveValue(40);
-    // Grouped, because a money box is text: 400000 is a run of zeros to check.
-    expect(screen.getByLabelText("Retirement savings today")).toHaveValue("400,000");
+    expect(screen.getByLabelText("Your age today")).toHaveValue(null);
+    expect(screen.getByLabelText("Retirement savings today")).toHaveValue("");
+    expect(screen.getByLabelText("Retirement savings today")).toHaveAttribute("placeholder", "e.g. 400,000");
+
+    // No figure, no verdict, nothing that could be mistaken for an answer.
+    expect(screen.queryByText("$369,128")).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /reached Coast FIRE\./ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /still building your coast/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /Your number, once you fill in the form/ })).toBeInTheDocument();
+  });
+
+  /*
+   * The two assumptions are not the visitor's figures and nobody knows theirs,
+   * so asking them to invent one before the page will answer at all is a worse
+   * ask than stating the convention.
+   */
+  it("keeps the return and withdrawal assumptions on their stated convention", () => {
+    render(<CoastFireCalculator />);
+
+    expect(screen.getByLabelText("Expected real return")).toHaveValue(5);
+    expect(screen.getByLabelText("Withdrawal rate")).toHaveValue(4);
+  });
+
+  it("answers once the visitor has entered their own numbers", () => {
+    const { container } = render(<CoastFireCalculator />);
+
+    fillForm();
+    fireEvent.submit(container.querySelector("form")!);
+
     expect(screen.getAllByText("$369,128").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByRole("heading", { name: "You’ve reached Coast FIRE." })).toBeInTheDocument();
+  });
+
+  /*
+   * Named together rather than one at a time: the browser's own bubble points
+   * at whichever box it reached first and vanishes on the next click.
+   */
+  it("says which boxes are empty rather than answering around them", () => {
+    const { container } = render(<CoastFireCalculator />);
+
+    fireEvent.submit(container.querySelector("form")!);
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Enter your age today, your retirement age, your retirement savings today and your annual spending in retirement to get your Coast FIRE number."
+    );
+    expect(screen.queryByRole("heading", { name: /reached Coast FIRE\./ })).not.toBeInTheDocument();
+  });
+
+  /* Not everyone expects a pension or Social Security by the date they pick. */
+  it("treats a blank retirement income as none rather than refusing it", () => {
+    const { container } = render(<CoastFireCalculator />);
+
+    fillForm({ "Annual income available at retirement": "" });
+    fireEvent.submit(container.querySelector("form")!);
+
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    // $80,000 at a 4% withdrawal rate, with nothing offsetting it.
+    expect(screen.getAllByText("$2,000,000").length).toBeGreaterThanOrEqual(1);
   });
 
   it("recalculates a not-yet result and tracks only the outcome", () => {
     const { container } = render(<CoastFireCalculator />);
 
-    fireEvent.change(screen.getByLabelText("Retirement savings today"), { target: { value: "100000" } });
+    fillForm({ "Retirement savings today": "100000" });
     fireEvent.submit(container.querySelector("form")!);
 
     expect(screen.getByRole("heading", { name: "You’re still building your coast." })).toBeInTheDocument();
@@ -115,9 +193,8 @@ describe("Coast FIRE calculator page", () => {
    */
   it("groups money as it is typed, and reads the grouped figure back", () => {
     const { container } = render(<CoastFireCalculator />);
+    fillForm({ "Retirement savings today": "1500000" });
     const savings = screen.getByLabelText("Retirement savings today");
-
-    fireEvent.change(savings, { target: { value: "1500000" } });
     expect(savings).toHaveValue("1,500,000");
 
     fireEvent.submit(container.querySelector("form")!);
@@ -135,9 +212,7 @@ describe("Coast FIRE calculator page", () => {
   it("refuses a money figure larger than the calculator models", () => {
     const { container } = render(<CoastFireCalculator />);
 
-    fireEvent.change(screen.getByLabelText("Annual spending in retirement"), {
-      target: { value: "50000000" },
-    });
+    fillForm({ "Annual spending in retirement": "50000000" });
     fireEvent.submit(container.querySelector("form")!);
 
     expect(screen.getByRole("alert")).toHaveTextContent("Annual spending must be $10,000,000 or less.");
@@ -150,10 +225,8 @@ describe("Coast FIRE calculator page", () => {
    */
   it("keeps a negative as typed, and refuses it by name", () => {
     const { container } = render(<CoastFireCalculator />);
-    const savings = screen.getByLabelText("Retirement savings today");
-
-    fireEvent.change(savings, { target: { value: "-5000" } });
-    expect(savings).toHaveValue("-5,000");
+    fillForm({ "Retirement savings today": "-5000" });
+    expect(screen.getByLabelText("Retirement savings today")).toHaveValue("-5,000");
 
     fireEvent.submit(container.querySelector("form")!);
     expect(screen.getByRole("alert")).toHaveTextContent("cannot be negative");
@@ -162,6 +235,7 @@ describe("Coast FIRE calculator page", () => {
   it("leaves ages and rates as plain numbers, where grouping never applies", () => {
     render(<CoastFireCalculator />);
 
+    fillForm({ "Your age today": "40" });
     expect(screen.getByLabelText("Your age today")).toHaveValue(40);
     expect(screen.getByLabelText("Expected real return")).toHaveValue(5);
   });
@@ -201,7 +275,10 @@ describe("Coast FIRE calculator page", () => {
   });
 
   it("carries the seven numbers into the Coast FIRE signup flow", () => {
-    render(<CoastFireCalculator />);
+    const { container } = render(<CoastFireCalculator />);
+
+    fillForm();
+    fireEvent.submit(container.querySelector("form")!);
 
     const cta = screen.getByRole("link", { name: "Stress-test my Coast FIRE plan" });
     expect(cta).toHaveAttribute("href", COAST_FIRE_SIGNUP_HREF);
@@ -219,7 +296,7 @@ describe("Coast FIRE calculator page", () => {
   it("carries $0 saved across rather than substituting a floor", () => {
     const { container } = render(<CoastFireCalculator />);
 
-    fireEvent.change(screen.getByLabelText("Retirement savings today"), { target: { value: "0" } });
+    fillForm({ "Retirement savings today": "0" });
     fireEvent.submit(container.querySelector("form")!);
 
     const cta = screen.getByRole("link", { name: "Stress-test my Coast FIRE plan" });
@@ -272,6 +349,12 @@ describe("Coast FIRE calculator page", () => {
 
       expect(screen.queryByLabelText("Email address")).not.toBeInTheDocument();
 
+      // A refused submit is not a scenario either: there is no result to email.
+      fireEvent.submit(container.querySelector("form")!);
+      expect(screen.getByRole("alert")).toBeInTheDocument();
+      expect(screen.queryByLabelText("Email address")).not.toBeInTheDocument();
+
+      fillForm();
       fireEvent.submit(container.querySelector("form")!);
 
       expect(screen.getByLabelText("Email address")).toBeInTheDocument();
@@ -282,7 +365,7 @@ describe("Coast FIRE calculator page", () => {
       const fetchMock = mockSend();
       const { container } = render(<CoastFireCalculator />);
 
-      fireEvent.change(screen.getByLabelText("Retirement savings today"), { target: { value: "250000" } });
+      fillForm({ "Retirement savings today": "250000" });
       fireEvent.submit(container.querySelector("form")!);
       fireEvent.change(screen.getByLabelText("Email address"), { target: { value: " Reader@Example.com " } });
       fireEvent.submit(screen.getByLabelText("Email address").closest("form")!);
@@ -312,6 +395,7 @@ describe("Coast FIRE calculator page", () => {
       mockSend();
       const { container } = render(<CoastFireCalculator />);
 
+      fillForm();
       fireEvent.submit(container.querySelector("form")!);
       fireEvent.change(screen.getByLabelText("Email address"), { target: { value: "reader@example.com" } });
       fireEvent.submit(screen.getByLabelText("Email address").closest("form")!);
@@ -325,6 +409,7 @@ describe("Coast FIRE calculator page", () => {
       mockSend({ ok: false, json: async () => ({ error: "Enter a valid email address." }) });
       const { container } = render(<CoastFireCalculator />);
 
+      fillForm();
       fireEvent.submit(container.querySelector("form")!);
       fireEvent.change(screen.getByLabelText("Email address"), { target: { value: "reader@example.com" } });
       fireEvent.submit(screen.getByLabelText("Email address").closest("form")!);
@@ -341,6 +426,7 @@ describe("Coast FIRE calculator page", () => {
      */
     it("sits across both cards rather than inside the result column", () => {
       const { container } = render(<CoastFireCalculator />);
+      fillForm();
       fireEvent.submit(container.querySelector("form")!);
 
       const capture = screen.getByLabelText("Email address").closest("form")!;
@@ -350,6 +436,7 @@ describe("Coast FIRE calculator page", () => {
 
     it("keeps the typed address out of Contentsquare recordings", () => {
       const { container } = render(<CoastFireCalculator />);
+      fillForm();
       fireEvent.submit(container.querySelector("form")!);
 
       expect(screen.getByLabelText("Email address")).toHaveAttribute("data-cs-mask");

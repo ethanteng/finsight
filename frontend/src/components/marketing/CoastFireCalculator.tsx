@@ -45,14 +45,50 @@ const MONEY_FIELDS = new Set<keyof CoastFireInputs>([
   "annualRetirementIncome",
 ]);
 
+/**
+ * What each box shows when it is empty.
+ *
+ * Examples, not values. The page used to open with all seven boxes filled in
+ * and a finished answer beside them, which reads as a result the visitor
+ * already has — the one thing a calculator must never imply. These are the
+ * same figures, greyed and inert, so the shape of the expected answer is still
+ * visible without anything claiming to be theirs.
+ */
+const PLACEHOLDERS: Partial<Record<keyof CoastFireInputs, string>> = {
+  currentAge: "e.g. 40",
+  retirementAge: "e.g. 65",
+  currentSavings: "e.g. 400,000",
+  annualRetirementSpending: "e.g. 80,000",
+  annualRetirementIncome: "e.g. 30,000",
+};
+
+/**
+ * The two boxes that open with a figure in them, and why they are not the
+ * same kind of thing as the other five.
+ *
+ * A real return and a withdrawal rate are assumptions rather than facts about
+ * the visitor: nobody knows theirs, and asking someone to invent one before
+ * the page will answer at all is a worse ask than stating the convention and
+ * letting them argue with it. `/retirement-calculator` draws the line in the
+ * same place — its allocation preset and its Social Security age open on a
+ * stated default, while every figure that belongs to the visitor opens empty.
+ */
+const ASSUMED_FIELDS = new Set<keyof CoastFireInputs>(['realReturnRate', 'withdrawalRate']);
+
 const INITIAL_FORM: FormState = Object.fromEntries(
   Object.entries(DEFAULT_COAST_FIRE_INPUTS).map(([key, value]) => [
     key,
-    MONEY_FIELDS.has(key as keyof CoastFireInputs)
-      ? withCommas(String(value))
-      : String(value),
+    ASSUMED_FIELDS.has(key as keyof CoastFireInputs) ? String(value) : "",
   ]),
 ) as FormState;
+
+/** Required because the formula cannot proceed without them, in reading order. */
+const REQUIRED_FIELDS: Array<[keyof CoastFireInputs, string]> = [
+  ["currentAge", "your age today"],
+  ["retirementAge", "your retirement age"],
+  ["currentSavings", "your retirement savings today"],
+  ["annualRetirementSpending", "your annual spending in retirement"],
+];
 
 /** The decisions a Coast FIRE number raises but cannot answer. */
 const DECISIONS = [
@@ -86,10 +122,16 @@ function percent(value: number): string {
  */
 function parseForm(form: FormState): CoastFireInputs {
   return Object.fromEntries(
-    Object.entries(form).map(([key, value]) => [
-      key,
-      MONEY_FIELDS.has(key as keyof CoastFireInputs) ? fromGrouped(value) : Number(value),
-    ]),
+    Object.entries(form).map(([key, value]) => {
+      const field = key as keyof CoastFireInputs;
+      // Retirement income is the one figure where blank has a meaning: not
+      // everyone has a pension or expects Social Security by then. Every other
+      // blank is NaN, which the formula refuses by name — `Number("")` is 0,
+      // and a zero nobody typed would answer confidently about a plan that
+      // does not exist.
+      if (value.trim() === "") return [key, field === "annualRetirementIncome" ? 0 : Number.NaN];
+      return [key, MONEY_FIELDS.has(field) ? fromGrouped(value) : Number(value)];
+    }),
   ) as unknown as CoastFireInputs;
 }
 
@@ -207,6 +249,74 @@ function useCoastFireInterpretation(submitted: CoastFireInputs | null): {
   return { interpretation, isLoading };
 }
 
+/** The anchor the chevrons under the result jump to. */
+const INTERPRETATION_ID = "what-this-means";
+
+/**
+ * Whether the reading panel will render anything at all.
+ *
+ * The panel and the chevrons that point at it both read this, so a chevron can
+ * never be left pointing at a section that did not render — which is the
+ * ordinary case, not an edge one: a reading that could not be grounded is
+ * dropped and the panel disappears with it.
+ */
+function hasInterpretation(interpretation: Interpretation | null, isInterpreting: boolean): boolean {
+  return Boolean(interpretation) || isInterpreting;
+}
+
+/**
+ * The shortcut from the result down to what the model made of it.
+ *
+ * Three chevrons cascading downward rather than a labelled pill: it sits under
+ * the email capture's own button, and two filled controls stacked read as
+ * competing asks. A wordless gesture says "keep going" without competing with
+ * the thing being asked for. The name survives for anyone not looking at it —
+ * screen readers, and the link's own title.
+ *
+ * Same component as `/retirement-calculator`, deliberately: it is the same
+ * gesture doing the same job two clicks apart.
+ */
+function JumpToInterpretation({
+  interpretation,
+  isInterpreting,
+}: {
+  interpretation: Interpretation | null;
+  isInterpreting: boolean;
+}) {
+  if (!hasInterpretation(interpretation, isInterpreting)) return null;
+
+  return (
+    <a
+      className="cf-jump"
+      href={`#${INTERPRETATION_ID}`}
+      aria-label="See what this result means"
+      title="See what this result means"
+    >
+      {[0, 1, 2].map((index) => (
+        <svg
+          key={index}
+          className="cf-chevron"
+          style={{ animationDelay: `${index * 0.16}s` }}
+          viewBox="0 0 24 14"
+          width="26"
+          height="15"
+          fill="none"
+          aria-hidden="true"
+          focusable="false"
+        >
+          <path
+            d="M2 2 L12 11 L22 2"
+            stroke="currentColor"
+            strokeWidth="3"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      ))}
+    </a>
+  );
+}
+
 /** The model's reading, or nothing. */
 function InterpretationPanel({
   interpretation,
@@ -215,12 +325,12 @@ function InterpretationPanel({
   interpretation: Interpretation | null;
   isInterpreting: boolean;
 }) {
-  if (!interpretation && !isInterpreting) return null;
+  if (!hasInterpretation(interpretation, isInterpreting)) return null;
 
   return (
     <section
       className="shell cf-interpretation"
-      id="what-this-means"
+      id={INTERPRETATION_ID}
       aria-live="polite"
       aria-busy={isInterpreting}
     >
@@ -246,6 +356,31 @@ function InterpretationPanel({
         </>
       )}
     </section>
+  );
+}
+
+/**
+ * What the card says before there is anything to say.
+ *
+ * The card holds its place rather than disappearing: the form and the result
+ * are a matched pair sized as one row, and dropping one of them mid-layout
+ * moves the other. What it must not do is look like an answer — no figure, no
+ * status pill, nothing a reader could mistake for theirs.
+ */
+function EmptyResultPanel() {
+  return (
+    <aside className="cf-result-card is-empty" aria-live="polite">
+      <div className="cf-result-topline">
+        <span>YOUR COAST FIRE STATUS</span>
+      </div>
+      <h2>Your number, once you fill in the form.</h2>
+      <p className="cf-result-lead">
+        Coast FIRE is the amount that, left alone and compounding, would reach your retirement
+        target without another dollar added. Enter your seven numbers and this card will show
+        that amount, how much of it your savings already cover, and what today&rsquo;s savings
+        would grow to if you never added to them again.
+      </p>
+    </aside>
   );
 }
 
@@ -331,6 +466,7 @@ function CalculatorField({
   max: number;
   step?: string;
 }) {
+  const placeholder = PLACEHOLDERS[id];
   /*
    * A money box is text, so it can show grouped digits as they are typed.
    * That costs the browser's own range checking, which the calculator already
@@ -350,7 +486,13 @@ function CalculatorField({
           inputMode="decimal"
           autoComplete="off"
           {...(isMoney ? {} : { min, max, step })}
-          required
+          {...(placeholder ? { placeholder } : {})}
+          /*
+           * Deliberately not `required`. The browser's own bubble names one
+           * box at a time and disappears on the next click; the form says what
+           * is missing, in the page's own words, next to the button that
+           * refused. See `handleSubmit`.
+           */
           value={value}
           onChange={(event) =>
             onChange(isMoney ? withCommas(event.target.value) : event.target.value)
@@ -365,15 +507,17 @@ function CalculatorField({
 
 export function CoastFireCalculator({ children }: { children?: ReactNode }) {
   const [form, setForm] = useState<FormState>(INITIAL_FORM);
-  const [result, setResult] = useState<CoastFireResult>(() => calculateCoastFire(DEFAULT_COAST_FIRE_INPUTS));
-  const [error, setError] = useState<string | null>(null);
   /*
-   * The email capture waits for a submitted run. The page opens with a default
-   * scenario already answered, and asking for an address against figures the
-   * visitor has not entered collects the wrong thing — and would send someone
-   * an email about a stranger's retirement.
+   * Null until the visitor asks for an answer.
+   *
+   * The page used to open on a worked example already answered, which reads as
+   * a result they have rather than an illustration of one — and everything
+   * downstream inherited that: the email capture, the reading, and the
+   * sensitivity table all had figures to talk about before anyone had entered
+   * anything. One piece of state now gates all of it.
    */
-  const [hasSubmitted, setHasSubmitted] = useState(false);
+  const [result, setResult] = useState<CoastFireResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
   /*
    * The scenario the reading is written from. Set only on submit, and only to
    * the seven numbers the calculator accepted — so the panel is always about
@@ -385,6 +529,7 @@ export function CoastFireCalculator({ children }: { children?: ReactNode }) {
   const { interpretation, isLoading: isInterpreting } = useCoastFireInterpretation(submitted);
 
   const sensitivity = useMemo(() => {
+    if (!result) return [];
     const rates = [
       Math.max(0, result.realReturnRate - 1),
       result.realReturnRate,
@@ -404,11 +549,24 @@ export function CoastFireCalculator({ children }: { children?: ReactNode }) {
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+
+    // Named before the formula runs, so a visitor who left two boxes empty is
+    // told about both rather than about whichever one the formula reached
+    // first and refused for looking like a zero.
+    const missing = REQUIRED_FIELDS.filter(([field]) => form[field].trim() === "");
+    if (missing.length > 0) {
+      const names = missing.map(([, name]) => name);
+      const list = names.length === 1
+        ? names[0]
+        : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+      setError(`Enter ${list} to get your Coast FIRE number.`);
+      return;
+    }
+
     try {
       const nextResult = calculateCoastFire(parseForm(form));
       setResult(nextResult);
       setError(null);
-      setHasSubmitted(true);
       setSubmitted(signupContext(nextResult));
       pushCoastFireCalculated(
         nextResult.hasReachedCoastFire ? "reached" : "not_yet",
@@ -465,7 +623,7 @@ export function CoastFireCalculator({ children }: { children?: ReactNode }) {
         </form>
 
         <div className="cf-result-column" ref={resultRef}>
-          <ResultPanel result={result} />
+          {result ? <ResultPanel result={result} /> : <EmptyResultPanel />}
         </div>
 
         {/*
@@ -474,7 +632,7 @@ export function CoastFireCalculator({ children }: { children?: ReactNode }) {
           * third card inside the right column made that column the taller of
           * the two and turned a balanced row into a lopsided one.
           */}
-        {hasSubmitted && (
+        {result && (
           <div className="cf-email-band">
             <CoastFireEmailCapture
               // Remount when the submitted scenario changes so a prior "sent"
@@ -492,17 +650,31 @@ export function CoastFireCalculator({ children }: { children?: ReactNode }) {
             />
           </div>
         )}
+
+        {/*
+          * The reading is the next thing worth having, and it is below the
+          * fold from here — past the capture band someone has just finished
+          * with. This is the shortcut to it, kept with the result it reads.
+          */}
+        <JumpToInterpretation interpretation={interpretation} isInterpreting={isInterpreting} />
       </section>
 
       <InterpretationPanel interpretation={interpretation} isInterpreting={isInterpreting} />
 
+      {/*
+        * Nothing but a comparison of computed answers, so it waits for one.
+        * The assumptions below it do not: they describe the formula rather
+        * than any run of it, and they are worth reading — and worth
+        * indexing — before anyone has typed anything.
+        */}
+      {result && (
       <section className="shell cf-sensitivity">
         <div className="cf-section-head">
           <p className="section-kicker">SEE WHAT CHANGES</p>
           <h2>Your return assumption does most of the work.</h2>
           <p>
-            One point either way compounds for {result.yearsToRetirement} years. A single green badge
-            should never be the end of the decision.
+            One point either way compounds for {result?.yearsToRetirement} years. A single green
+            badge should never be the end of the decision.
           </p>
         </div>
         <div className="cf-sensitivity-table" role="table" aria-label="Coast FIRE number by real return assumption" data-cs-mask>
@@ -523,6 +695,7 @@ export function CoastFireCalculator({ children }: { children?: ReactNode }) {
           })}
         </div>
       </section>
+      )}
 
       <section className="shell cf-assumptions">
         <div className="cf-section-head">
@@ -531,9 +704,9 @@ export function CoastFireCalculator({ children }: { children?: ReactNode }) {
         </div>
         <ul>
           <li><strong>Constant real growth</strong><span>Your portfolio earns the same after-inflation return every year until retirement.</span></li>
-          <li><strong>No more contributions</strong><span>The projection adds $0 from today through age {result.retirementAge}.</span></li>
-          <li><strong>One withdrawal rate</strong><span>Your retirement target is annual portfolio spending divided by {result.withdrawalRate}%.</span></li>
-          <li><strong>Income starts with retirement</strong><span>The {dollars(result.annualRetirementIncome)} you entered offsets spending from day one.</span></li>
+          <li><strong>No more contributions</strong><span>The projection adds $0 from today through {result ? `age ${result.retirementAge}` : "the retirement age you enter"}.</span></li>
+          <li><strong>One withdrawal rate</strong><span>Your retirement target is annual portfolio spending divided by {result ? `${result.withdrawalRate}%` : "your withdrawal rate"}.</span></li>
+          <li><strong>Income starts with retirement</strong><span>{result ? `The ${dollars(result.annualRetirementIncome)} you entered offsets` : "Any retirement income you enter offsets"} spending from day one.</span></li>
         </ul>
         <p className="cf-limitations">
           Not modeled: taxes, fees, account types, healthcare, one-off costs, changing spending,
@@ -568,7 +741,9 @@ export function CoastFireCalculator({ children }: { children?: ReactNode }) {
             csOverrideId="cta-stress-test-coast-fire"
             label="Stress-test my Coast FIRE plan"
             href={COAST_FIRE_SIGNUP_HREF}
-            onBeforeNavigate={() => storeCoastFireSignupContext(signupContext(result))}
+            onBeforeNavigate={
+              result ? () => { storeCoastFireSignupContext(signupContext(result)); } : undefined
+            }
           />
           <p className="microcopy">{TRIAL_CTA_MICROCOPY}</p>
         </div>
