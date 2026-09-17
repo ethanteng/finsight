@@ -231,6 +231,61 @@ describe('the figures a Coast FIRE reading may state', () => {
     }, facts).grounded).toBe(true);
   });
 
+  /*
+   * The hole the digit tokenizer leaves. The prompts ask for small counts as
+   * words so that every digit on the page is a licensed figure, which means a
+   * figure spelled out carries nothing to check — and "a ninety percent
+   * chance" is the exact claim rule 4 of this prompt forbids.
+   *
+   * The line is the unit: a quantity spelled out is refused, a count is not.
+   */
+  it('refuses a quantity spelled out in words', () => {
+    const facts = buildCoastFireFacts(result());
+
+    for (const spelled of [
+      'There is roughly a ninety percent chance this holds.',
+      'Over the next five years that compounds.',
+      'You would need about two million dollars.',
+      'Left alone for twenty-five years it grows.',
+    ]) {
+      const grounded = groundDraft(
+        { headline: 'A headline.', paragraphs: [spelled], watchOuts: [] },
+        facts
+      );
+      expect(grounded.grounded).toBe(false);
+    }
+  });
+
+  /*
+   * And does not refuse the phrasings the prompt asks for. The hyphenated
+   * compound matters on its own account: it is how the fact block names the
+   * published series, so flagging it would reject a draft for quoting the
+   * prompt — the failure this whole file exists to catch.
+   */
+  it('leaves counts and series names alone', () => {
+    const facts = buildCoastFireFacts(result(), {
+      fetchedAt: '2026-09-16T00:00:00.000Z',
+      treasury30Y: {
+        percent: 4.71,
+        asOf: '2026-09-16',
+        label: 'thirty-year Treasury yield',
+        source: 'Massive',
+      },
+    });
+
+    for (const allowed of [
+      'There are two levers here, and a third of the answer is timing.',
+      'The thirty-year Treasury yields 4.71% as of September 2026.',
+      'That is one of the two assumptions doing the work.',
+    ]) {
+      const grounded = groundDraft(
+        { headline: 'A headline.', paragraphs: [allowed], watchOuts: [] },
+        facts
+      );
+      expect(grounded).toEqual({ grounded: true, ungrounded: [] });
+    }
+  });
+
   it('names the rate the visitor typed as theirs, not as ours', () => {
     const labels = buildCoastFireFacts(result()).map((fact) => fact.label);
     expect(labels.some((label) => label.includes('entered by the visitor'))).toBe(true);

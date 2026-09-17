@@ -154,6 +154,23 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
   const [isCheckoutLoading, setIsCheckoutLoading] = useState(false);
   const [error, setError] = useState('');
   const [subscriptionContext, setSubscriptionContext] = useState<SubscriptionContext | null>(null);
+  /*
+   * The emailed token, held for as long as this page is open.
+   *
+   * The exchange below spends the handover cookie as soon as the lookup
+   * settles, and everything after that reads the token back out of
+   * sessionStorage. That is one copy too few: storage can be blocked outright
+   * by a privacy setting, and the stored context expires after two hours while
+   * the token itself is good for ninety days. In either case the cookie is
+   * already gone, so registration would omit `calculatorRef` — sending someone
+   * who followed a link from their own inbox through verification anyway and
+   * quietly dropping the first decision they were promised.
+   *
+   * A ref, because nothing renders from it and it must survive a re-render
+   * without causing one.
+   */
+  const emailedToken = useRef<string | null>(null);
+
   const [retirementContext, setRetirementContext] = useState<RetirementSignupContext | null>(null);
   const [coastFireContext, setCoastFireContext] = useState<CoastFireSignupContext | null>(null);
   const trialViewedRef = useRef(false);
@@ -254,6 +271,7 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
     // tab must see the emailed figures, not the older sessionStorage copy.
     const existing = readCoastFireSignupContext();
     if (existing?.sourceToken === token) {
+      emailedToken.current = token;
       clearCoastFireSignupRef();
       setCoastFireContext(existing);
       if (existing.email) setEmail((current) => current || existing.email!);
@@ -275,6 +293,9 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
        */
       if (isLookupSettled(lookup.status)) clearCoastFireSignupRef();
       if (lookup.status !== 'resolved') return;
+
+      // Before the store, which is the step that can silently fail.
+      emailedToken.current = token;
 
       // Kept for the rest of this tab, so a reload or a step backwards in the
       // flow does not lose the scenario and re-ask the backend for it.
@@ -309,6 +330,7 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
     // email's plan, and prefill the address it was sent to.
     const existing = readRetirementSignupContext();
     if (existing?.sourceToken === token) {
+      emailedToken.current = token;
       clearRetirementSignupRef();
       setRetirementContext(existing);
       if (existing.email) setEmail((current) => current || existing.email!);
@@ -324,6 +346,9 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
       // it, so a reload retries. See the Coast FIRE exchange above.
       if (isLookupSettled(lookup.status)) clearRetirementSignupRef();
       if (lookup.status !== 'resolved') return;
+
+      // Before the store, which is the step that can silently fail.
+      emailedToken.current = token;
 
       const { context } = lookup;
       storeRetirementSignupContext(context.inputs, {
@@ -474,6 +499,9 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
     const calculatorRef =
       retirementContext?.sourceToken
       ?? coastFireContext?.sourceToken
+      // Held since the exchange, and the only copy left once the cookie is
+      // spent and browser storage has refused or expired. See `emailedToken`.
+      ?? emailedToken.current
       ?? (isTrial && hasRetirementSignupSource(searchParams)
         ? readRetirementSignupRef()
         : null)

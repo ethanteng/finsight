@@ -274,6 +274,46 @@ export function extractNumericTokens(text: string): NumericToken[] {
   return tokens;
 }
 
+/**
+ * A figure spelled out in words, attached to a unit that makes it a claim.
+ *
+ * The tokenizer above reads digits, and the prompts ask for small counts as
+ * words precisely so that every digit on the page is a licensed figure. That
+ * arrangement has a hole in it: "a ninety percent chance" and "over the next
+ * five years" state figures this run never produced and contain no digit to
+ * check, so they would reach the page unexamined — and rule 4 of the Coast
+ * FIRE prompt forbids exactly the first of those.
+ *
+ * The line drawn here is the unit. "Two levers" and "a third of the answer"
+ * are the phrasings the prompts want and carry no quantity; "five years",
+ * "ninety percent" and "two million dollars" are quantities, and every
+ * quantity this run produced is in the fact block in digits. A draft that
+ * spells one out is sent back to write it as a digit, where it is checked like
+ * any other.
+ *
+ * The separator is whitespace only, never a hyphen, so the compound adjective
+ * in "the thirty-year Treasury yield" — which is how the fact block itself
+ * names the series — stays prose rather than becoming a rejected figure.
+ */
+const SPELLED_FIGURE = new RegExp(
+  String.raw`\b(` +
+  String.raw`(?:zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|` +
+  String.raw`thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|` +
+  String.raw`thirty|forty|fifty|sixty|seventy|eighty|ninety|` +
+  String.raw`hundred|thousand|million|billion)` +
+  String.raw`(?:[-\s](?:zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|` +
+  String.raw`thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|` +
+  String.raw`thirty|forty|fifty|sixty|seventy|eighty|ninety|` +
+  String.raw`hundred|thousand|million|billion))*` +
+  String.raw`)\s+(%|percent|per cent|years?|months?|dollars?|hundred|thousand|million|billion)\b`,
+  'gi'
+);
+
+/** Every spelled-out quantity in a piece of prose, as written. */
+export function extractSpelledFigures(text: string): string[] {
+  return [...text.matchAll(SPELLED_FIGURE)].map((match) => match[0].trim());
+}
+
 export interface GroundingResult {
   grounded: boolean;
   /** The tokens that matched nothing, as written, for the retry to name. */
@@ -307,7 +347,9 @@ export function groundDraft(draft: InterpretationDraft, facts: CalculatorFact[])
   }
 
   const text = [draft.headline, ...draft.paragraphs, ...draft.watchOuts].join('\n');
-  const ungrounded: string[] = [];
+  // Spelled-out quantities first: they carry no digit to check, so they are
+  // refused outright rather than matched against anything.
+  const ungrounded: string[] = extractSpelledFigures(text);
   for (const token of extractNumericTokens(text)) {
     const allowed = token.isPercent ? percents : plain;
     // A hair over the half-width, so a value sitting exactly on a rounding
@@ -372,10 +414,12 @@ function feedbackLines(feedback?: DraftFeedback): string[] {
   if (feedback?.kind === 'ungrounded' && feedback.tokens.length > 0) {
     return [
       '',
-      'Your previous draft was rejected. These numbers appear in it but are not in the list above:',
+      'Your previous draft was rejected. These appear in it but are not figures from the list above:',
       ...feedback.tokens.map((token) => `- ${token}`),
       '',
-      'Rewrite it using only the figures listed. Do not compute anything.',
+      'Rewrite it using only the figures listed. Do not compute anything. Write every figure in',
+      'digits exactly as the list gives it — a quantity spelled out in words ("five years", "ninety',
+      'percent") is rejected too, because it states a figure without one to check.',
     ];
   }
   if (feedback?.kind === 'unparseable') {
