@@ -137,16 +137,19 @@ function subtractDays(value: string, days: number): string {
  * The configured date is a coverage boundary, not a deployment timestamp. It
  * must be the first complete reporting-calendar day with the full event chain.
  */
-export function parseFirstFullTrackingDate(raw: string | undefined): FirstFullTrackingDateConfig {
+export function parseFirstFullTrackingDate(
+  raw: string | undefined,
+  envName = 'GA4_FIRST_FULL_TRACKING_DATE',
+): FirstFullTrackingDateConfig {
   const value = raw?.trim();
   if (!value) return { date: null, error: null };
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-    return { date: null, error: 'GA4_FIRST_FULL_TRACKING_DATE must use YYYY-MM-DD.' };
+    return { date: null, error: `${envName} must use YYYY-MM-DD.` };
   }
   const [year, month, day] = value.split('-').map(Number);
   const parsed = new Date(Date.UTC(year, month - 1, day));
   if (parsed.getUTCFullYear() !== year || parsed.getUTCMonth() !== month - 1 || parsed.getUTCDate() !== day) {
-    return { date: null, error: 'GA4_FIRST_FULL_TRACKING_DATE must be a real calendar date.' };
+    return { date: null, error: `${envName} must be a real calendar date.` };
   }
   return { date: value, error: null };
 }

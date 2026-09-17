@@ -75,4 +75,12 @@ describe('signup reporting service', () => {
     expect(truncated.signupOutcomes).toMatchObject({ state: 'unavailable', rows: [] });
     expect(truncated.summary.clickToTrialRate.value).toBeNull();
   });
+
+  it('surfaces an invalid GA4_SIGNUP_HANDOFF_TRACKING_DATE instead of blanking rates silently', async () => {
+    process.env.GA4_SIGNUP_HANDOFF_TRACKING_DATE = '09/18/2026';
+    const report = await getMarketingDashboard({ days: 7, compare: true });
+    expect(report.summary.clickToTrialRate.value).toBeNull();
+    expect(report.warnings.some(warning =>
+      warning.includes('GA4_SIGNUP_HANDOFF_TRACKING_DATE must use YYYY-MM-DD'))).toBe(true);
+  });
 });

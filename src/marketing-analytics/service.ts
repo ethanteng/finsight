@@ -375,7 +375,11 @@ export async function getMarketingDashboard(filters: MarketingFilters): Promise<
     );
   }
   const trackingStartedAt = ga4.firstFullTrackingDate;
-  const handoffTrackingStartedAt = parseFirstFullTrackingDate(process.env.GA4_SIGNUP_HANDOFF_TRACKING_DATE).date;
+  const handoffCoverage = parseFirstFullTrackingDate(
+    process.env.GA4_SIGNUP_HANDOFF_TRACKING_DATE,
+    'GA4_SIGNUP_HANDOFF_TRACKING_DATE',
+  );
+  const handoffTrackingStartedAt = handoffCoverage.date;
   const funnelCoverageComplete = Boolean(!ga4.truncated && trackingStartedAt && period.start >= trackingStartedAt
     && handoffTrackingStartedAt && period.start >= handoffTrackingStartedAt);
   const funnelCoverage = funnelCoverageComplete ? 'complete' : 'partial';
@@ -480,7 +484,11 @@ export async function getMarketingDashboard(filters: MarketingFilters): Promise<
     ? [`Strict no-card funnel coverage begins ${trackingStartedAt}. Earlier event absence is not abandonment and cannot be backfilled.`]
     : ['Strict funnel coverage is unavailable until GA4_FIRST_FULL_TRACKING_DATE is set to the first verified, fully instrumented calendar day.'];
   warnings.push(`GA4 daily export excludes the current day with a ${ga4.reportingLagDays}-day availability lag. The newest included tables can still receive late events for up to 3 days.`);
-  if (!funnelCoverageComplete) warnings.push('Signup flow changed: handoff counts are observed lower bounds, not verified-email or app-load counts. Completion and abandonment rates need a fully covered window after GA4_SIGNUP_HANDOFF_TRACKING_DATE. Events missed between the flow change and tracking deployment cannot be backfilled.');
+  if (handoffCoverage.error) {
+    warnings.push(`Signup handoff coverage is unavailable: ${handoffCoverage.error}`);
+  } else if (!funnelCoverageComplete) {
+    warnings.push('Signup flow changed: handoff counts are observed lower bounds, not verified-email or app-load counts. Completion and abandonment rates need a fully covered window after GA4_SIGNUP_HANDOFF_TRACKING_DATE. Events missed between the flow change and tracking deployment cannot be backfilled.');
+  }
   if (canUseSnapshot) warnings.push('Top-line web behavior is a connector-verified Contentsquare snapshot for August 12–September 8. It excludes 291 automated sessions and 84 owner-confirmed internal sessions; no contaminated prior-period comparison is shown.');
   if (hasLiveGa4 && trafficQuality.excludedSessions > 0) warnings.push(`${trafficQuality.excludedSessions} bot, internal/developer, or non-production sessions are excluded from headline metrics and remain visible in Traffic quality.`);
   if (ga4.truncated) warnings.push('The GA4 query reached its 100,000-session safety cap. Narrow the date range before interpreting totals.');
