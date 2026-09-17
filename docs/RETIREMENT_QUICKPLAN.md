@@ -108,6 +108,26 @@ same sourcing is still in the assumptions disclosure, which a visitor only
 reaches by running the model, so the page no longer credits its data sources to
 someone who reads it without running anything.
 
+## Three runs, then the save
+
+The Calculate button locks after three completed runs, and the sentence under
+it points at the capture instead. Three answers the question the page asks —
+the plan as it stands, plus the two obvious what-ifs — and past that the page
+is being used as a free modelling tool rather than as an argument for the
+product.
+
+`lib/calculator-run-limit.ts` holds it, shared with the Coast FIRE page. The
+count lives in session storage, so it survives a reload and goes when the tab
+does: a new tab gets three more, and someone returning tomorrow is not still
+locked out. **It is a nudge, not a control.** The calculation itself runs in
+the browser, the count is client-side, and blocked storage reads as zero — the
+direction something persuasive should fail. The endpoints behind the page keep
+their own rate limits, which are the actual limits.
+
+The count is read after mount rather than during render, because the page is
+server-rendered and session storage does not exist there. A reload that should
+find the button locked therefore shows it live for one frame.
+
 ## The closing CTA
 
 One kicker, one line, one sentence, the button, and `TRIAL_CTA_MICROCOPY` —
@@ -333,22 +353,46 @@ without affecting any answer in the product.
 ## Saving a run to a new account
 
 The capture under the result asks for an account rather than an inbox copy:
-**"Save these results to your free account."** The email it sends carries a
-link labelled **"Finish creating your account"**, which lands on signup with
-the address already filled in, and a password is the only thing left. Setting
-it opens the workspace directly — no code screen, and no sign-in form asking
-for the password one field later. The run becomes the first decision in the new
-account.
+**"Save these results to your free account."** Submitting it does two things:
+it sends the email, whose **"Finish creating your account"** link lands on
+signup with the address already filled in, and it takes the visitor to that
+same page immediately rather than asking them to go and find the message. The
+run becomes the first decision in the new account either way, and a password is
+the only thing left.
 
-**This path skips the verification code, and that is the point of the token.**
-Every other registration goes to `/verify-email` and enters a mailed code. A
-lead token is forty-eight random characters that only ever left this system
-inside an email to the lead's own address, so presenting one *and* registering
-that address demonstrates control of the inbox — the same thing the code
-demonstrates, established the same way, one round trip earlier. Asking for it
-twice is not more proof, just more steps.
+**Only the emailed route skips the verification code, and the difference is the
+point of the token.** Every other registration goes to `/verify-email` and
+enters a mailed code. A lead token is forty-eight random characters, and when
+the only place it ever went is an email to the lead's own address, presenting
+one *and* registering that address demonstrates control of the inbox — the same
+thing the code demonstrates, one round trip earlier. Asking for it twice is not
+more proof, just more steps.
+
+The token handed back to the calculator page carries no such argument. Anyone
+can type a stranger's address into a public calculator, and returning the token
+to whoever did would let them register that address with the code skipped — the
+lead's own address check cannot catch it, because the address matches by
+construction. So `POST /email-results` stamps `tokenDisclosedAt` on the row
+before it returns the token, and `/auth/register` withholds the skip from any
+lead carrying the stamp. That signup still saves the run; it just verifies by
+code like every other one. If the stamp cannot be written, no token is
+returned and the page stays where it is — the results are in the inbox either
+way.
+
+Going straight there also means no `/signup-context` exchange: the page stores
+the run in sessionStorage next to the cookie, carrying the same token, so
+`RegisterForm` short-circuits the lookup. It is reported as
+`calculator_results_page_cta_opened` rather than the email event, so the two
+funnels — one that crossed an inbox, one that did not — stay apart in GA4.
 
 Three things keep that honest:
+
+**The `tokenDisclosedAt` migration has to land with or before the backend.**
+Both directions fail safe, which is worth knowing rather than relying on: with
+the column missing, the disclosure write throws, no `ref` is returned, and the
+page stays on "check your inbox" — the behaviour that shipped before this. A
+lead read against a missing column errors too, which resolves to no lead, so
+the code is sent. More verification, never less.
 
 **Deploy the frontend first, or with the backend — never after.** This is the
 opposite of the usual order here, and it is worth stating because getting it
@@ -362,6 +406,11 @@ wrong strands people silently.
   while the old page still sends every signup to `/verify-email`, where they
   wait for mail that will never arrive. Nothing errors; it simply looks like a
   broken email pipeline.
+
+  The straight-to-signup step is safe in both orders on its own: an old page
+  ignores the `ref` a new backend returns, and a new page gets no `ref` from an
+  old backend and stays where it is. It is the verification skip above that
+  constrains the order, and it always did.
 
 `VerifyEmailForm` bounces an already-verified session into the workspace, which
 covers someone landing there later — but that bounce lives in the *frontend*,
@@ -384,11 +433,13 @@ step.
 |---|---|
 | Capture posts the six numbers | `RetirementEmailCapture.tsx` → `POST /api/retirement-quickplan/email-results` |
 | Lead stored with the plan and the verdict | `services/retirement-leads.ts` |
+| Token stamped disclosed, then returned as `ref` | `markRetirementLeadTokenDisclosed` — before the response |
+| Page writes the same cookie and leaves for signup | `RetirementEmailCapture.tsx` → `writeHandoverToken`, `leaveForSignup` |
 | Email links to `/retirement/continue?ref=…` | `email/retirement-results.ts` |
 | Token moved into a first-party cookie, URL cleaned | `app/retirement/continue/route.ts` |
 | Token exchanged, address prefilled | `RegisterForm.tsx` → `GET /signup-context/:token` |
 | Token sent with the registration | `RegisterForm.tsx` → `POST /auth/register` (`calculatorRef`) |
-| Token resolved, address proved | `resolveCalculatorLead` — before the account exists |
+| Token resolved; address proved only if never disclosed | `resolveCalculatorLead` + `tokenDisclosed` — before the account exists |
 | Run written as the first decision | `seedFirstDecisionFromLead` — after the response |
 | Registration session carried into `/app` | `RegisterForm.tsx` — no re-entered password |
 

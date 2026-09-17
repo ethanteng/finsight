@@ -22,6 +22,7 @@ import {
   generateLeadToken,
   isLeadToken,
   markRetirementLeadDelivery,
+  markRetirementLeadTokenDisclosed,
   readRetirementLead,
   recordRetirementLead,
 } from '../services/retirement-leads';
@@ -285,7 +286,25 @@ router.post('/email-results', emailRateLimit, async (req: Request, res: Response
     return;
   }
 
-  res.json({ message: 'Your retirement results are on their way.' });
+  /*
+   * Handed back so the page can take this visitor straight to signup instead
+   * of asking them to go and find the email. The same token the message
+   * carries, so both routes restore the same run — but disclosed tokens are
+   * marked first, and registration reads that mark to withhold the emailed
+   * verification code. See `src/auth/routes.ts`.
+   *
+   * Marked before it is returned, and not returned at all if the mark did not
+   * take: a token loose in a page while the row still claims it was only
+   * emailed is exactly the bypass the column exists to prevent. The fallback
+   * is the behaviour that shipped before this — the results are in the inbox
+   * and the emailed link still works.
+   */
+  const ref = stored && (await markRetirementLeadTokenDisclosed(token)) ? token : null;
+
+  // The token is a bearer credential for this lead. Nothing about this
+  // response may sit in a shared cache.
+  res.setHeader('Cache-Control', 'no-store');
+  res.json({ message: 'Your retirement results are on their way.', ref });
 
   // After the response. Joining the list is what the form promised, but a slow
   // or failing MailerLite must not hold up the results the visitor asked for,

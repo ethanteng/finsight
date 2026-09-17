@@ -11,6 +11,18 @@ import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { RetirementQuickPlan } from '@/components/marketing/RetirementQuickPlan';
 import { pushRetirementResultsEmailed } from '@/lib/dataLayer';
+import { leaveForSignup } from '@/lib/calculator-handover';
+
+/*
+ * jsdom implements neither navigation nor a `location` that can be replaced,
+ * so the one function that leaves the page is mocked. Everything else in the
+ * module is real: the cookie the component writes is one of the things these
+ * cases are checking.
+ */
+jest.mock('@/lib/calculator-handover', () => ({
+  ...jest.requireActual('@/lib/calculator-handover'),
+  leaveForSignup: jest.fn(),
+}));
 
 jest.mock('@/lib/dataLayer', () => ({
   pushRetirementInteraction: jest.fn(),
@@ -118,6 +130,7 @@ function runTheModel() {
 beforeEach(() => {
   posts.length = 0;
   emailed.mockClear();
+  jest.mocked(leaveForSignup).mockClear();
   window.history.replaceState({}, '', '/retirement-calculator');
   window.sessionStorage.clear();
   Element.prototype.scrollIntoView = jest.fn();
@@ -239,6 +252,102 @@ it('surfaces a refusal and leaves the form ready to retry', async () => {
   expect(await screen.findByRole('alert')).toHaveTextContent('Enter a valid email address.');
   expect(screen.getByRole('button', { name: 'Save these results to your free account' })).toBeEnabled();
   expect(emailed).not.toHaveBeenCalled();
+});
+
+/*
+ * The ask is an account, not an inbox copy, so submitting takes the visitor to
+ * the signup page rather than leaving them to go and find the message. The
+ * email is still sent — it is what someone who wanders off comes back to.
+ */
+it('carries the run to signup instead of stopping at the inbox', async () => {
+  const ref = 'a'.repeat(48);
+  mockApi(BASE_RESULT, { ok: true, json: async () => ({ message: 'sent', ref }) });
+  const assign = jest.mocked(leaveForSignup);
+
+  renderPage();
+  runTheModel();
+
+  fireEvent.change(await screen.findByLabelText('Email address'), {
+    target: { value: 'reader@example.com' },
+  });
+  fireEvent.submit(screen.getByLabelText('Email address').closest('form')!);
+
+  await waitFor(() => expect(assign).toHaveBeenCalled());
+  const destination = assign.mock.calls[0][0] as string;
+  // The page the emailed link lands on, marked so the two funnels stay apart.
+  expect(destination).toContain('/getstarted?source=retirement-calculator');
+  expect(destination).toContain('entry=results_page');
+  // Never in the address of a page that renders: GTM records those.
+  expect(destination).not.toContain(ref);
+
+  // Both carriers, because they fail differently. The cookie is what
+  // /getstarted exchanges; the stored run is what survives a refused cookie.
+  //
+  // The cookie is scoped to the path that spends it, so it is deliberately
+  // invisible from the calculator — this reads it from where it is meant to
+  // be read, which is also the only place it would ever be sent.
+  window.history.replaceState({}, '', '/getstarted');
+  expect(document.cookie).toContain(ref);
+  const stored = JSON.parse(
+    window.sessionStorage.getItem('asklinc.retirement-signup-context.v1')!,
+  );
+  expect(stored.sourceToken).toBe(ref);
+  expect(stored.email).toBe('reader@example.com');
+});
+
+/*
+ * No token came back — the lead did not store, or its disclosure did not — so
+ * there is nothing to carry and the inbox is the only route left.
+ */
+it('stays on the page when no token comes back', async () => {
+  const assign = jest.mocked(leaveForSignup);
+
+  renderPage();
+  runTheModel();
+
+  fireEvent.change(await screen.findByLabelText('Email address'), {
+    target: { value: 'reader@example.com' },
+  });
+  fireEvent.submit(screen.getByLabelText('Email address').closest('form')!);
+
+  await screen.findByText(/on its way/i);
+  expect(assign).not.toHaveBeenCalled();
+});
+
+/*
+ * Three runs answer the question the page asks. Past that it is being used as
+ * a free modelling tool, and the only thing left to do is save the result —
+ * which is the argument the page exists to make.
+ */
+it('locks the model after three runs and points at the save form', async () => {
+  renderPage();
+
+  for (let run = 0; run < 3; run += 1) {
+    runTheModel();
+    await screen.findByLabelText('Email address');
+  }
+
+  const button = screen.getByRole('button', { name: /run the model/i });
+  expect(button).toBeDisabled();
+  expect(screen.getByText(/that is 3 runs/i)).toBeInTheDocument();
+  // The save form is still there: it is what the lock is pointing at.
+  expect(screen.getByRole('button', { name: 'Save these results to your free account' })).toBeEnabled();
+});
+
+/* The count survives a reload, so it is not shrugged off by refreshing. */
+it('is still locked after the page is rendered again', async () => {
+  const first = renderPage();
+  for (let run = 0; run < 3; run += 1) {
+    runTheModel();
+    await screen.findByLabelText('Email address');
+  }
+  first.unmount();
+
+  const again = renderPage();
+
+  await waitFor(() => {
+    expect(again.getByRole('button', { name: /run the model/i })).toBeDisabled();
+  });
 });
 
 it('keeps the typed address out of Contentsquare recordings', async () => {

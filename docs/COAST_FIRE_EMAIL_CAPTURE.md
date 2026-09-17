@@ -24,27 +24,48 @@ copy.
 3. `POST /api/coast-fire/email-results` receives the seven inputs and an email
    address. It recomputes the result server-side, stores a `CoastFireLead` row
    with a random token, and sends the message through Resend.
-4. After the response, the address is added to MailerLite, in the Coast FIRE
+4. It then stamps `tokenDisclosedAt` on that row and returns the token as
+   `ref`. The page writes the same `/getstarted`-scoped cookie the emailed
+   route would have written, stores the run in sessionStorage beside it, and
+   navigates to
+   `/getstarted?source=coast-fire-calculator&entry=results_page` — so the
+   visitor lands on the signup page the email would have taken them to,
+   without waiting on their inbox. If the stamp fails, no `ref` is returned and
+   this step does not happen: the results are in their inbox either way.
+5. After the response, the address is added to MailerLite, in the Coast FIRE
    group.
-5. The email's call to action — "Finish creating your account" — links to
-   `/coast-fire/continue?ref=<token>`.
-6. That route handler runs server-side, moves the token into a short-lived
+6. The email's call to action — "Finish creating your account" — links to
+   `/coast-fire/continue?ref=<token>`. This is what someone who left the signup
+   page comes back to, and the only route for a visitor whose browser refused
+   the cookie.
+7. That route handler runs server-side, moves the token into a short-lived
    first-party cookie scoped to `/getstarted`, and redirects to a clean
    `/getstarted?source=coast-fire-calculator`.
-7. `/getstarted` reads the cookie, exchanges it through
+8. `/getstarted` reads the cookie, exchanges it through
    `GET /api/coast-fire/signup-context/:token`, clears the cookie, and renders
    the Coast FIRE variant of the signup page: its own copy, the Coast FIRE
    number the email stated, what they have saved, and their retirement age,
-   with their email prefilled.
+   with their email prefilled. Arriving straight from the page skips the
+   exchange — the context stored alongside the cookie already carries the same
+   token — and is reported as `calculator_results_page_cta_opened` rather than
+   the email event.
 
-8. Registering with that token in hand skips the emailed verification code,
-   opens `/app` on the session registration returns rather than sending them to
-   the sign-in form, and writes the run as the account's first decision. See
+9. Registering with that token in hand writes the run as the account's first
+   decision, and opens `/app` on the session registration returns rather than
+   sending them to the sign-in form. Whether it also skips the emailed
+   verification code depends on how the token was obtained. See
    **Saving a run to an account** below.
 
 The page's own "Stress-test my Coast FIRE plan" button reaches the same
 tailored page through sessionStorage rather than a token, so both entry points
 continue the same decision.
+
+## Three runs, then the save
+
+The Calculate button locks after three completed runs, and a line under it
+points at the capture instead. Shared with `/retirement-calculator` through
+`lib/calculator-run-limit.ts`; the reasoning, and why it is a nudge rather than
+a control, is in `docs/RETIREMENT_QUICKPLAN.md`.
 
 ## The reading under the number
 
@@ -97,13 +118,21 @@ The capture asks "Save these results to your free account", and the email links
 into signup with the address prefilled. Two things happen when someone
 registers with that token:
 
-- **The verification code is skipped.** A lead token is 48 random characters
-  that only ever left this system inside a message to the lead's own address, so
-  presenting one *and* registering that address demonstrates exactly what the
-  code demonstrates. `resolveCalculatorLead` is resolved on the server, before
-  the account exists, from the token alone — a client cannot declare itself
-  verified — and the addresses must match. Every other registration still
-  verifies by code.
+- **The verification code is skipped — but only for a token that was emailed.**
+  A lead token is 48 random characters, and when the only place it ever went is
+  a message to the lead's own address, presenting one *and* registering that
+  address demonstrates exactly what the code demonstrates.
+
+  That argument fails for the token handed back to the page in step 4: anyone
+  can type somebody else's address into the calculator, and returning the token
+  to them would otherwise let them register that address with the code skipped.
+  So the row is stamped `tokenDisclosedAt` before the token is returned, and
+  `/auth/register` withholds the skip from any lead carrying the stamp. Such a
+  signup still saves the run and still verifies by code, like every other one.
+
+  `resolveCalculatorLead` is resolved on the server, before the account exists,
+  from the token alone — a client cannot declare itself verified — and the
+  addresses must match.
 - **The run becomes the account's first decision.** `buildCoastFireQuestion`
   states the scenario back in the first person; `buildCoastFireAnswer` states
   the verdict from the *stored* figures, never a fresh run, for the same reason

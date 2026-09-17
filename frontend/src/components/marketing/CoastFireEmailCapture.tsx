@@ -13,21 +13,39 @@
  * recalculates before it sends, so nothing this form does can put an arbitrary
  * figure in an email carrying our branding.
  *
- * What arrives is a link into signup with the address already filled in.
- * Following it is what turns this run into the first decision in a new
- * account — and, because the token only ever left this system inside a message
- * to that address, it is also what lets registration skip the verification
- * code. See `services/calculator-first-decision`.
+ * Submitting does two things. An email goes out carrying a link into signup,
+ * which is what someone who wanders off can come back to; and this page takes
+ * them there itself, straight away, rather than asking them to go and find it.
+ * Either route restores the same run as the first decision in a new account.
+ *
+ * The two are not equivalent in one respect, and deliberately so. Registration
+ * skips the emailed verification code for a token that only ever left this
+ * system inside a message to the address it names — holding one is evidence of
+ * reading that inbox. The token this page is handed proves no such thing:
+ * whoever typed the address got it. The server marks a disclosed token and
+ * withholds the skip, so this route saves the run and still verifies the
+ * address. See `services/calculator-first-decision` and `auth/routes`.
  */
 
 import { useRef, useState } from "react";
 import type { CoastFireResult } from "@/lib/coast-fire";
 import { pushCoastFireResultsEmailed } from "@/lib/dataLayer";
 import { readCalculatorLeadAttribution } from "@/lib/calculator-lead-attribution";
+import {
+  isHandoverToken,
+  leaveForSignup,
+  resultsPageSignupHref,
+  writeHandoverToken,
+} from "@/lib/calculator-handover";
+import {
+  COAST_FIRE_REF_COOKIE,
+  COAST_FIRE_SIGNUP_HREF,
+  storeCoastFireSignupContext,
+} from "@/lib/coast-fire-signup-context";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
 
-type Status = "idle" | "sending" | "sent";
+type Status = "idle" | "sending" | "sent" | "leaving";
 
 export function CoastFireEmailCapture({ result }: { result: CoastFireResult }) {
   const [email, setEmail] = useState("");
@@ -67,15 +85,61 @@ export function CoastFireEmailCapture({ result }: { result: CoastFireResult }) {
         return;
       }
 
-      setStatus("sent");
       if (!reported.current) {
         reported.current = true;
         pushCoastFireResultsEmailed(result.hasReachedCoastFire ? "reached" : "not_yet");
       }
+
+      const body = await response.json().catch(() => null) as { ref?: unknown } | null;
+      const ref = isHandoverToken(body?.ref) ? body.ref : null;
+      if (!ref) {
+        // The lead did not store, or its disclosure did not. Nothing to carry,
+        // so this stays what it was before: the results are in their inbox.
+        setStatus("sent");
+        return;
+      }
+
+      // Both, because they fail differently. The cookie is what /getstarted
+      // exchanges, and it cannot be read back from here to know it took; the
+      // stored context carries the same token and the figures, so a browser
+      // refusing the cookie costs the address prefill rather than the run.
+      writeHandoverToken(COAST_FIRE_REF_COOKIE, ref);
+      // No `emailedOutcome`: that field exists because a link opened days
+      // later may disagree with the figures its message quoted. Nothing has
+      // drifted between this result and this click.
+      storeCoastFireSignupContext(
+        {
+          currentAge: result.currentAge,
+          retirementAge: result.retirementAge,
+          currentSavings: result.currentSavings,
+          annualRetirementSpending: result.annualRetirementSpending,
+          annualRetirementIncome: result.annualRetirementIncome,
+          realReturnRate: result.realReturnRate,
+          withdrawalRate: result.withdrawalRate,
+        },
+        { email: email.trim(), sourceToken: ref },
+      );
+
+      setStatus("leaving");
+      leaveForSignup(resultsPageSignupHref(COAST_FIRE_SIGNUP_HREF));
     } catch {
       setError("Network error. Please check your connection and try again.");
       setStatus("idle");
     }
+  }
+
+  if (status === "leaving") {
+    return (
+      <div className="cf-email-capture is-sent" role="status" aria-live="polite">
+        <p className="section-kicker">SAVING THIS RUN</p>
+        <h3>Taking you to your account…</h3>
+        <p>
+          Your Coast FIRE number and the assumptions behind it are on their way to{" "}
+          <strong>{email.trim()}</strong> as well, so you can pick this up later if you would
+          rather not finish now.
+        </p>
+      </div>
+    );
   }
 
   if (status === "sent") {

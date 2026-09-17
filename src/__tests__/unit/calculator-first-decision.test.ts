@@ -64,6 +64,7 @@ function lead(overrides: Partial<RetirementLeadRecord> = {}): RetirementLeadReco
       projectedPortfolioAtRetirement: 3_326_191.63,
       firstYearWithdrawalRate: 0.0397,
     },
+    tokenDisclosed: false,
     ...overrides,
   } as RetirementLeadRecord;
 }
@@ -89,6 +90,7 @@ function coastFireLead(overrides: Partial<CoastFireLeadRecord> = {}): CoastFireL
     retirementTarget: 1_200_000,
     projectedSavingsAtRetirement: 1_871_034.62,
     hasReachedCoastFire: true,
+    tokenDisclosed: false,
     ...overrides,
   } as CoastFireLeadRecord;
 }

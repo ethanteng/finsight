@@ -181,18 +181,28 @@ router.post('/register', async (req: Request, res: Response) => {
      * things: what the first decision is written from, and whether this address
      * still needs a verification code.
      *
-     * A lead token is forty-eight random characters that only ever left this
-     * system inside an email to the lead's own address. Presenting one *and*
+     * A lead token is forty-eight random characters. When the only place it
+     * ever went is an email to the lead's own address, presenting one *and*
      * registering that address demonstrates control of the inbox — the same
      * thing the code demonstrates, established the same way, one round trip
      * earlier. The check is made on the server from the token alone, so a
      * client cannot declare itself verified by sending a flag.
+     *
+     * `tokenDisclosed` is the case where that argument does not hold. The
+     * calculator page can ask for the token back so it can take the visitor
+     * straight to signup rather than making them wait on their inbox, and a
+     * token handed to a page proves nothing about who owns the address —
+     * anyone can type someone else's into the form. Such a lead still writes
+     * the run as the first decision, because the figures are the figures; it
+     * just does not verify the address, and registration falls back to the
+     * emailed code like any other signup. The server decides this from the
+     * row, never from anything the client sends.
      */
     const calculatorLead = await resolveCalculatorLead({
       token: calculatorRef,
       email: email.toLowerCase(),
     });
-    const emailProvenByLink = calculatorLead !== null;
+    const emailProvenByLink = calculatorLead !== null && !calculatorLead.lead.tokenDisclosed;
 
     // Create user
     const user = await prisma.user.create({

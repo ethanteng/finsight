@@ -748,6 +748,18 @@ model CoastFireLead {
   /// First successful exchange of the emailed CTA token on /getstarted.
   /// Null means the recipient has not continued (or did so before this field shipped).
   continuedAt      DateTime?
+  /// When this token was handed straight back to the browser that asked for
+  /// the email, so the visitor could be taken to signup without waiting on
+  /// their inbox.
+  ///
+  /// It is what stops that convenience from becoming an email-verification
+  /// bypass. Skipping the emailed code rests on the token having gone only to
+  /// the address it names — anyone holding one has demonstrated control of
+  /// that inbox. A token the page was given proves nothing: whoever typed the
+  /// address received it, whether or not it is theirs. Set here, the lead
+  /// still seeds the new account's first decision and still never verifies it.
+  /// Null means the token has only ever been emailed.
+  tokenDisclosedAt DateTime?
 
   createdAt DateTime @default(now())
   /// After this the link stops personalizing signup and lands on plain /getstarted.
@@ -821,6 +833,18 @@ model RetirementLead {
   /// First successful exchange of the emailed CTA token on /getstarted.
   /// Null means the recipient has not continued (or did so before this field shipped).
   continuedAt      DateTime?
+  /// When this token was handed straight back to the browser that asked for
+  /// the email, so the visitor could be taken to signup without waiting on
+  /// their inbox.
+  ///
+  /// It is what stops that convenience from becoming an email-verification
+  /// bypass. Skipping the emailed code rests on the token having gone only to
+  /// the address it names — anyone holding one has demonstrated control of
+  /// that inbox. A token the page was given proves nothing: whoever typed the
+  /// address received it, whether or not it is theirs. Set here, the lead
+  /// still seeds the new account's first decision and still never verifies it.
+  /// Null means the token has only ever been emailed.
+  tokenDisclosedAt DateTime?
 
   createdAt DateTime @default(now())
   /// After this the link stops personalizing signup and lands on plain /getstarted.

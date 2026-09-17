@@ -200,6 +200,27 @@
 }
 
 /*
+ * Not an error. The run limit is reached, the button below it is spent, and
+ * the sentence is pointing at the save form — so it reads as the next step
+ * rather than as something that went wrong.
+ */
+.coast-fire-page .cf-form-locked {
+  margin: 14px 0 0;
+  padding: 13px 15px;
+  border-left: 3px solid #1f6f5c;
+  border-radius: 4px 10px 10px 4px;
+  background: #e8f4f0;
+  color: #1c4d42;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.coast-fire-page .cf-calculate-button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/*
  * The column exists only to carry the scroll target and to pass its own
  * height down: the card stretches to whatever the row is, so the two cards
  * end level whichever one has more in it.

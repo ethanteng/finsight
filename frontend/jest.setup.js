@@ -50,3 +50,16 @@ if (typeof window !== 'undefined') {
     unobserve() {}
   }
 } 
+/*
+ * One jsdom serves every test in a file, and session storage outlives a
+ * render. Anything a component persists — the calculators count their runs
+ * there, so the fourth submit in a file is refused — otherwise leaks into the
+ * next test as state no visitor would have had.
+ */
+beforeEach(() => {
+  try {
+    window.sessionStorage.clear()
+  } catch {
+    // Not every environment provides one; nothing here depends on it existing.
+  }
+})

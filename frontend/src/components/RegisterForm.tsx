@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useRef, Suspense } from 'react';
+import { useState, useEffect, useRef, useCallback, Suspense } from 'react';
 import { getBrowserTimeZone, setStoredUserTimeZone } from '@/lib/browser-time-zone';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
@@ -8,6 +8,7 @@ import AuthFlowShell from './auth/AuthFlowShell';
 import {
   pushBeginCheckout,
   pushCalculatorResultsEmailCtaOpened,
+  pushCalculatorResultsPageCtaOpened,
   pushSignUp,
   pushTrialSignupCompleted,
   pushTrialSignupRegistrationError,
@@ -16,6 +17,10 @@ import {
   pushTrialSignupValidationError,
   pushTrialSignupViewed,
 } from '@/lib/dataLayer';
+import {
+  SIGNUP_ENTRY_PARAM,
+  SIGNUP_ENTRY_RESULTS_PAGE,
+} from '@/lib/calculator-handover';
 import { useDialog } from '@/components/ui/dialog';
 import {
   buildRetirementSignupContext,
@@ -259,6 +264,26 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
   }, [searchParams, isTrial]);
 
   /*
+   * Which of the two "a saved run was restored here" events this landing is.
+   *
+   * The cookie looks identical whichever way the visitor arrived, so the
+   * destination says: the calculator appends `entry=results_page` when it
+   * sends someone straight here rather than waiting on their inbox. Keeping
+   * them apart matters because the emailed one is a GA4 key event counting
+   * email CTA opens, and this path crosses no inbox at all.
+   */
+  const pushSignupEntryOpened = useCallback(
+    (origin: CalculatorSignupOrigin) => {
+      if (searchParams.get(SIGNUP_ENTRY_PARAM) === SIGNUP_ENTRY_RESULTS_PAGE) {
+        pushCalculatorResultsPageCtaOpened(origin);
+      } else {
+        pushCalculatorResultsEmailCtaOpened(origin);
+      }
+    },
+    [searchParams],
+  );
+
+  /*
    * The emailed link. A visitor arriving from their results email has no
    * sessionStorage to read — they may be on a different device days later — so
    * the token `/coast-fire/continue` left in a cookie is exchanged for the
@@ -282,6 +307,13 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
       clearCoastFireSignupRef();
       setCoastFireContext(existing);
       if (existing.email) setEmail((current) => current || existing.email!);
+      // The straight-from-the-page route always lands here: it wrote the
+      // context and the cookie together, so the token already matches and no
+      // lookup runs. Reporting only that entry leaves the emailed event
+      // counting exactly what it counted before.
+      if (searchParams.get(SIGNUP_ENTRY_PARAM) === SIGNUP_ENTRY_RESULTS_PAGE) {
+        pushCalculatorResultsPageCtaOpened('coast_fire_calculator');
+      }
       return;
     }
 
@@ -313,7 +345,7 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
         emailedOutcome: context.emailedOutcome,
       };
       storeCoastFireSignupContext(context.inputs, options);
-      pushCalculatorResultsEmailCtaOpened('coast_fire_calculator');
+      pushSignupEntryOpened('coast_fire_calculator');
       /*
        * Rendered from the lookup, not from what comes back out of storage.
        * Persisting and rendering are separate concerns and only the first can
@@ -330,7 +362,7 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
     })();
 
     return () => controller.abort();
-  }, [isTrial, searchParams]);
+  }, [isTrial, searchParams, pushSignupEntryOpened]);
 
   /*
    * The emailed retirement link. Same shape as the Coast FIRE exchange above:
@@ -351,6 +383,13 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
       clearRetirementSignupRef();
       setRetirementContext(existing);
       if (existing.email) setEmail((current) => current || existing.email!);
+      // The straight-from-the-page route always lands here: it wrote the
+      // context and the cookie together, so the token already matches and no
+      // lookup runs. Reporting only that entry leaves the emailed event
+      // counting exactly what it counted before.
+      if (searchParams.get(SIGNUP_ENTRY_PARAM) === SIGNUP_ENTRY_RESULTS_PAGE) {
+        pushCalculatorResultsPageCtaOpened('retirement_calculator');
+      }
       return;
     }
 
@@ -374,7 +413,7 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
         emailedOutcome: context.emailedOutcome,
       };
       storeRetirementSignupContext(context.inputs, options);
-      pushCalculatorResultsEmailCtaOpened('retirement_calculator');
+      pushSignupEntryOpened('retirement_calculator');
       // Rendered from the lookup when storage refuses to keep it. See the
       // Coast FIRE exchange above.
       setRetirementContext(buildRetirementSignupContext(context.inputs, options));
@@ -382,7 +421,7 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
     })();
 
     return () => controller.abort();
-  }, [isTrial, searchParams]);
+  }, [isTrial, searchParams, pushSignupEntryOpened]);
 
   /*
    * The prefilled address, when the typed one has moved away from it.

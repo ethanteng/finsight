@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { CoastFireCalculator } from "@/components/marketing/CoastFireCalculator";
 import { CoastFireCalculatorSeoContent } from "@/components/marketing/CoastFireCalculatorSeoContent";
 import { metadata as calculatorMetadata } from "@/app/coast-fire-calculator/page";
@@ -16,11 +16,22 @@ import {
   readCoastFireSignupContext,
   COAST_FIRE_SIGNUP_HREF,
 } from "@/lib/coast-fire-signup-context";
+import { leaveForSignup } from "@/lib/calculator-handover";
 
 jest.mock("@/lib/dataLayer", () => ({
   pushCoastFireCalculated: jest.fn(),
   pushCoastFireResultsEmailed: jest.fn(),
   pushStartFreeClick: jest.fn(),
+}));
+
+/*
+ * jsdom implements neither navigation nor a `location` that can be replaced,
+ * so the one function that leaves the page is mocked. Everything else in the
+ * module is real, including the cookie the capture writes.
+ */
+jest.mock("@/lib/calculator-handover", () => ({
+  ...jest.requireActual("@/lib/calculator-handover"),
+  leaveForSignup: jest.fn(),
 }));
 
 describe("Coast FIRE calculation", () => {
@@ -451,6 +462,67 @@ describe("Coast FIRE calculator page", () => {
 
       expect(screen.getByLabelText("Email address")).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Save these results to your free account" })).toBeInTheDocument();
+    });
+
+    /*
+     * The ask is an account, not an inbox copy, so submitting takes the
+     * visitor to signup rather than leaving them to go and find the message.
+     * The email is still sent — it is what someone who wanders off returns to.
+     */
+    it("carries the run to signup instead of stopping at the inbox", async () => {
+      const ref = "c".repeat(48);
+      mockSend({ ok: true, json: async () => ({ message: "sent", ref }) } as Partial<Response>);
+      const { container } = render(<CoastFireCalculator />);
+
+      fillForm();
+      fireEvent.submit(container.querySelector("form")!);
+      fireEvent.change(screen.getByLabelText("Email address"), { target: { value: "reader@example.com" } });
+      fireEvent.submit(screen.getByLabelText("Email address").closest("form")!);
+
+      await waitFor(() => expect(jest.mocked(leaveForSignup)).toHaveBeenCalled());
+      const destination = jest.mocked(leaveForSignup).mock.calls[0][0];
+      expect(destination).toContain("/getstarted?source=coast-fire-calculator");
+      expect(destination).toContain("entry=results_page");
+      // Never in the address of a page that renders: GTM records those.
+      expect(destination).not.toContain(ref);
+
+      // The cookie is scoped to the path that spends it, so it is read from
+      // there — which is also the only place it would ever be sent.
+      window.history.replaceState({}, "", "/getstarted");
+      expect(document.cookie).toContain(ref);
+      expect(readCoastFireSignupContext()?.sourceToken).toBe(ref);
+    });
+
+    /* No token came back, so there is nothing to carry and the inbox is it. */
+    it("stays on the page when no token comes back", async () => {
+      mockSend();
+      const { container } = render(<CoastFireCalculator />);
+
+      fillForm();
+      fireEvent.submit(container.querySelector("form")!);
+      fireEvent.change(screen.getByLabelText("Email address"), { target: { value: "reader@example.com" } });
+      fireEvent.submit(screen.getByLabelText("Email address").closest("form")!);
+
+      await screen.findByText(/on its way/i);
+      expect(jest.mocked(leaveForSignup)).not.toHaveBeenCalled();
+    });
+
+    /*
+     * Three runs answer the question the page asks. Past that it is being used
+     * as a free modelling tool, and the only thing left is to save the result.
+     */
+    it("locks the calculator after three runs and points at the save form", () => {
+      const { container } = render(<CoastFireCalculator />);
+
+      fillForm();
+      for (let run = 0; run < 3; run += 1) {
+        fireEvent.submit(container.querySelector("form")!);
+      }
+
+      expect(screen.getByRole("button", { name: /calculate my coast fire number/i })).toBeDisabled();
+      expect(screen.getByText(/that is 3 runs/i)).toBeInTheDocument();
+      // The save form is still there: it is what the lock is pointing at.
+      expect(screen.getByRole("button", { name: "Save these results to your free account" })).toBeEnabled();
     });
 
     it("posts the seven inputs and never the figures computed from them", async () => {

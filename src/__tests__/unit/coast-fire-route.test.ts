@@ -29,6 +29,7 @@ const leads = {
   // Typed with its arguments so the cases can assert what was written, and
   // in what order.
   mark: jest.fn<Promise<void>, [string, Record<string, boolean>]>(async () => undefined),
+  disclose: jest.fn<Promise<boolean>, [string]>(async () => true),
 };
 
 jest.mock('../../auth/resend-email', () => ({
@@ -44,6 +45,7 @@ jest.mock('../../services/coast-fire-leads', () => ({
   readCoastFireLead: (...args: unknown[]) => leads.read(...(args as [])),
   markCoastFireLeadDelivery: (...args: unknown[]) =>
     leads.mark(...(args as [string, Record<string, boolean>])),
+  markCoastFireLeadTokenDisclosed: (...args: unknown[]) => leads.disclose(...(args as [string])),
 }));
 
 /** Both limits are read once at module load, so the env has to be set first. */
@@ -90,6 +92,55 @@ describe('POST /api/coast-fire/email-results', () => {
     email.send.mockResolvedValue(true);
     list.subscribe.mockResolvedValue('subscribed');
     leads.record.mockResolvedValue(true);
+    leads.disclose.mockResolvedValue(true);
+  });
+
+  /*
+   * The page takes the visitor to signup itself rather than making them go
+   * and find the message, so it needs the same token the message carries.
+   */
+  it('hands the token back so the page can continue to signup', async () => {
+    const response = await request(buildApp())
+      .post('/api/coast-fire/email-results')
+      .send({ ...SCENARIO, email: 'reader@example.com' });
+
+    expect(response.body.ref).toMatch(/^[a-f0-9]{48}$/);
+    // The same one the email links to, so both routes restore the same run.
+    const ctaUrl = new URL((email.send.mock.calls[0] as unknown as [string, unknown, string])[2]);
+    expect(ctaUrl.searchParams.get('ref')).toBe(response.body.ref);
+    // Marked before it was returned, never after.
+    expect(leads.disclose).toHaveBeenCalledWith(response.body.ref);
+    expect(response.headers['cache-control']).toBe('no-store');
+  });
+
+  /*
+   * The mark is what withholds the emailed verification code from a token its
+   * own page was given. A token loose in a page while the row still says it
+   * was only emailed is the bypass the column exists to prevent, so a lost
+   * mark withholds the token instead — the results are still in the inbox.
+   */
+  it('withholds the token when its disclosure could not be recorded', async () => {
+    leads.disclose.mockResolvedValue(false);
+
+    const response = await request(buildApp())
+      .post('/api/coast-fire/email-results')
+      .send({ ...SCENARIO, email: 'reader@example.com' });
+
+    expect(response.status).toBe(200);
+    expect(response.body.ref).toBeNull();
+    expect(email.send).toHaveBeenCalled();
+  });
+
+  /* No lead row, nothing to continue from — and nothing to disclose. */
+  it('hands back no token when the lead did not store', async () => {
+    leads.record.mockResolvedValue(false);
+
+    const response = await request(buildApp())
+      .post('/api/coast-fire/email-results')
+      .send({ ...SCENARIO, email: 'reader@example.com' });
+
+    expect(response.body.ref).toBeNull();
+    expect(leads.disclose).not.toHaveBeenCalled();
   });
 
   it('emails figures it computed rather than figures it was handed', async () => {

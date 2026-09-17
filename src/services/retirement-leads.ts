@@ -37,6 +37,17 @@ export interface RetirementLeadRecord {
   email: string;
   inputs: RetirementLeadInputs;
   outcome: RetirementLeadOutcome;
+  /**
+   * Whether this token has been handed to a browser as well as emailed.
+   *
+   * Registration skips the emailed verification code for someone presenting a
+   * token whose lead names the address they are registering — holding one is
+   * evidence of controlling that inbox, because it went nowhere else. Once the
+   * page that asked for the email has been given the token too, that stops
+   * being true: whoever typed the address received it. The lead still seeds a
+   * first decision; it just cannot verify the address any more.
+   */
+  tokenDisclosed: boolean;
 }
 
 /**
@@ -82,6 +93,32 @@ export async function recordRetirementLead(params: {
     return true;
   } catch (error) {
     console.error('⚠️  Could not record retirement lead:', error);
+    return false;
+  }
+}
+
+/**
+ * Record that this token is about to be handed to the browser, and report
+ * whether that is now durable.
+ *
+ * Unlike the delivery flags beside it, this one is allowed to fail the thing
+ * it describes. The caller discloses the token only on true: the column is
+ * what withholds the emailed verification code from a token its own page was
+ * given, so a token disclosed while the mark was lost would be one that still
+ * proves an address nobody proved. Failing closed costs the visitor a
+ * redirect and nothing else — their results are still in their inbox.
+ */
+export async function markRetirementLeadTokenDisclosed(token: string): Promise<boolean> {
+  try {
+    const { getPrismaClient } = await import('../prisma-client');
+    await getPrismaClient().retirementLead.updateMany({
+      // First disclosure is the one that counts; a second never un-discloses.
+      where: { token, tokenDisclosedAt: null },
+      data: { tokenDisclosedAt: new Date() },
+    });
+    return true;
+  } catch (error) {
+    console.error('⚠️  Could not mark retirement lead token disclosure:', error);
     return false;
   }
 }
@@ -169,6 +206,7 @@ export async function readRetirementLead(
         projectedPortfolioAtRetirement: lead.projectedPortfolioAtRetirement,
         firstYearWithdrawalRate: lead.firstYearWithdrawalRate,
       },
+      tokenDisclosed: lead.tokenDisclosedAt !== null,
     };
   } catch (error) {
     console.error('⚠️  Could not read retirement lead:', error);
