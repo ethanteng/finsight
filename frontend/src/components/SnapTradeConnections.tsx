@@ -135,8 +135,11 @@ export default function SnapTradeConnections({
   }
 
   return (
-    <div className="mt-4">
-      <h3 className="mb-2 text-sm font-semibold text-gray-300">Connected institutions</h3>
+    // No heading of its own: this renders inside the accounts page's "Manage
+    // connections" section, alongside the other providers' rows. A per-provider
+    // "Connected institutions" subheading repeated the section heading once per
+    // provider and split one list into two that look like different things.
+    <div>
       <div className="space-y-3">
         {connections.map(connection => {
           const accountCount = connection.accounts.length;
