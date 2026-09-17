@@ -202,6 +202,10 @@ const PlaidLinkButton = forwardRef<PlaidLinkButtonRef, PlaidLinkButtonProps>(({ 
         const errorText = await res.text();
         console.error('Plaid Link token creation failed:', res.status, errorText);
         setStatus(`Failed to create link token: ${res.status} ${errorText}`);
+        // Release the coordinator slot: a failed mint never opens Link, and
+        // leaving PLAID_LINK registered blocks SnapTrade opens from the shared
+        // "Add an account" picker until a full page reload.
+        financialServiceCoordinator.unregisterService(SERVICE_NAMES.PLAID_LINK);
         return;
       }
 
@@ -215,13 +219,16 @@ const PlaidLinkButton = forwardRef<PlaidLinkButtonRef, PlaidLinkButtonProps>(({ 
       } else if (data.error) {
         console.error('Plaid Link token creation error:', data.error, data.details);
         setStatus(`${data.error}: ${data.details || 'Failed to create link token'}`);
+        financialServiceCoordinator.unregisterService(SERVICE_NAMES.PLAID_LINK);
       } else {
         console.error('Plaid Link token creation failed - no link_token or error in response');
         setStatus('Failed to create link token.');
+        financialServiceCoordinator.unregisterService(SERVICE_NAMES.PLAID_LINK);
       }
     } catch (error) {
       console.error('Plaid Link token creation network error:', error);
       setStatus('Network error. Please try again.');
+      financialServiceCoordinator.unregisterService(SERVICE_NAMES.PLAID_LINK);
     }
   }, [forceReinitialize, updateModeTokenId]);
 

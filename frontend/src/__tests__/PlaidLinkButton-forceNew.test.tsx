@@ -14,6 +14,7 @@ import PlaidLinkButton, {
   clearAllFinancialServices,
   resetPlaidLinkInitialization,
 } from '../components/PlaidLinkButton';
+import { financialServiceCoordinator } from '../services/FinancialServiceCoordinator';
 
 jest.mock('react-plaid-link', () => ({
   usePlaidLink: () => ({ ready: false, open: jest.fn(), exit: jest.fn() }),
@@ -76,5 +77,23 @@ describe('PlaidLinkButton forceNew vs update mode', () => {
       ([url]) => typeof url === 'string' && url.endsWith('/plaid/create_link_token')
     );
     expect(JSON.parse(options.body)).toEqual({ accessTokenId: 'token-needs-reauth' });
+  });
+
+  it('releases PLAID_LINK when create_link_token fails so SnapTrade can open next', async () => {
+    const user = userEvent.setup();
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: false,
+      status: 500,
+      json: async () => ({}),
+      text: async () => 'boom',
+    });
+
+    render(<Harness />);
+    await user.click(screen.getByRole('button', { name: 'Add via picker' }));
+
+    await waitFor(() =>
+      expect(screen.getByText(/Failed to create link token/i)).toBeInTheDocument(),
+    );
+    expect(financialServiceCoordinator.hasActiveServices()).toBe(false);
   });
 });
