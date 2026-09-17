@@ -236,7 +236,6 @@ npm run test:integration:ci
 npm run test:security:all
 npm test --prefix frontend -- --ci
 OPENAI_API_KEY=local-placeholder npm run eval:llm
-npm run verify:retirement-example
 npm run build:backend
 npm run build --prefix frontend
 ```
