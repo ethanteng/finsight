@@ -19,6 +19,7 @@ import {
   pushTrialSignupSubmit,
   pushTrialSignupValidationError,
   pushTrialSignupViewed,
+  pushTrialSignupCompleted,
   pushTrialStartedVerified,
   pushTrialVerifyError,
   pushTrialVerifySubmit,
@@ -197,6 +198,8 @@ describe("free-signup funnel analytics", () => {
       method: "email",
       source_page: GET_STARTED_HREF,
       signup_flow: "free_trial",
+      signup_origin: "getstarted",
+      signup_entry: "direct",
     }]);
   });
 
@@ -224,6 +227,7 @@ describe("free-signup funnel analytics", () => {
         event: 'trial_signup_viewed',
         source_page: '/getstarted',
         signup_flow: 'free_trial',
+        signup_flow_version: '2',
         signup_origin: 'coast_fire_calculator',
         signup_entry: 'results_email',
       },
@@ -252,6 +256,7 @@ describe("free-signup funnel analytics", () => {
     pushTrialVerifySubmit();
     pushTrialVerifyError('network_error');
     pushTrialVerifySuccess();
+    pushTrialSignupCompleted('verification_code');
 
     window.history.replaceState({}, "", "/login?signup_flow=free_trial");
     pushTrialLoginViewed();
@@ -259,40 +264,53 @@ describe("free-signup funnel analytics", () => {
     pushTrialLoginError('unknown');
     pushTrialLoginSuccess();
 
+    const trialDefaults = {
+      signup_flow: 'free_trial' as const,
+      signup_flow_version: '2',
+      signup_origin: 'getstarted',
+      signup_entry: 'direct',
+    };
+
     expect(analyticsWindow.dataLayer).toEqual([
-      { event: 'trial_signup_viewed', source_page: '/getstarted', signup_flow: 'free_trial' },
-      { event: 'trial_signup_started', source_page: '/getstarted', signup_flow: 'free_trial' },
-      { event: 'trial_signup_submit', source_page: '/getstarted', signup_flow: 'free_trial' },
+      { event: 'trial_signup_viewed', source_page: '/getstarted', ...trialDefaults },
+      { event: 'trial_signup_started', source_page: '/getstarted', ...trialDefaults },
+      { event: 'trial_signup_submit', source_page: '/getstarted', ...trialDefaults },
       {
         event: 'trial_signup_validation_error',
         source_page: '/getstarted',
-        signup_flow: 'free_trial',
+        ...trialDefaults,
         validation_reason: 'password_requirements',
       },
       {
         event: 'trial_signup_registration_error',
         source_page: '/getstarted',
-        signup_flow: 'free_trial',
+        ...trialDefaults,
         error_category: 'server_rejected',
       },
-      { event: 'trial_verify_viewed', source_page: '/verify-email', signup_flow: 'free_trial' },
-      { event: 'trial_verify_submit', source_page: '/verify-email', signup_flow: 'free_trial' },
+      { event: 'trial_verify_viewed', source_page: '/verify-email', ...trialDefaults },
+      { event: 'trial_verify_submit', source_page: '/verify-email', ...trialDefaults },
       {
         event: 'trial_verify_error',
         source_page: '/verify-email',
-        signup_flow: 'free_trial',
+        ...trialDefaults,
         error_category: 'network_error',
       },
-      { event: 'trial_verify_success', source_page: '/verify-email', signup_flow: 'free_trial' },
-      { event: 'trial_login_viewed', source_page: '/login', signup_flow: 'free_trial' },
-      { event: 'trial_login_submit', source_page: '/login', signup_flow: 'free_trial' },
+      { event: 'trial_verify_success', source_page: '/verify-email', ...trialDefaults },
+      {
+        event: 'trial_signup_completed',
+        source_page: '/verify-email',
+        ...trialDefaults,
+        completion_method: 'verification_code',
+      },
+      { event: 'trial_login_viewed', source_page: '/login', ...trialDefaults },
+      { event: 'trial_login_submit', source_page: '/login', ...trialDefaults },
       {
         event: 'trial_login_error',
         source_page: '/login',
-        signup_flow: 'free_trial',
+        ...trialDefaults,
         error_category: 'unknown',
       },
-      { event: 'trial_login_success', source_page: '/login', signup_flow: 'free_trial' },
+      { event: 'trial_login_success', source_page: '/login', ...trialDefaults },
     ]);
 
     const serialized = JSON.stringify(analyticsWindow.dataLayer);

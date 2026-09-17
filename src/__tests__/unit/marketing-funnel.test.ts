@@ -58,12 +58,12 @@ describe('trial funnel aggregation', () => {
     expect(funnel[funnel.length - 1]).toMatchObject({ sessions: 1, users: 1 });
   });
 
-  it('surfaces downstream re-entry separately from qualified funnel reach', () => {
-    const reentry = session('reentry', { trial_verify_success: 3_000_000, trial_login_viewed: 4_000_000 });
-    const funnel = aggregateTrialFunnel([reentry]);
-    const verify = aggregateTrialFunnel([session('handoff-only', { trial_signup_completed: 3_000_000 })]).slice(-1)[0];
+  it('surfaces a handoff without upstream steps as raw reach, not qualified progress', () => {
+    const handoff = aggregateTrialFunnel([
+      session('handoff-only', { trial_signup_completed: 3_000_000 }),
+    ]).slice(-1)[0];
 
-    expect(verify).toMatchObject({ sessions: 0, rawEventSessions: 1 });
+    expect(handoff).toMatchObject({ sessions: 0, rawEventSessions: 1 });
   });
 
   it('computes median seconds only for ordered qualifying sessions', () => {
