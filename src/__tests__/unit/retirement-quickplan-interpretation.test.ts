@@ -246,6 +246,28 @@ describe('extractSpelledFigures', () => {
     expect(extractSpelledFigures('ninety eight point seven percent')[0].value).toBe(98.7);
   });
 
+  /*
+   * English writes the fraction two ways and means the same thing: as a number
+   * ("point twenty five") or as digits read out one at a time ("point two
+   * five"). Summing the words handles the first and mangles the second — "two
+   * five" adds to 7 — reporting a figure the draft does not state, against
+   * facts it might match by accident.
+   */
+  it('reads a spelled fraction the way it was written', () => {
+    expect(extractSpelledFigures('twenty-five point twenty five percent')[0].value).toBeCloseTo(25.25);
+    expect(extractSpelledFigures('twenty-five point two five percent')[0].value).toBeCloseTo(25.25);
+  });
+
+  /*
+   * A decimal with its integer part left off has nothing in front of "point"
+   * to read it from, and reading the fraction as a whole number would report 5
+   * where the draft wrote 0.05 — against a block that usually licenses a 5% of
+   * some kind. Skipped rather than measured wrong.
+   */
+  it('skips a bare decimal rather than reading it a hundred times over', () => {
+    expect(extractSpelledFigures('point zero five percent')).toEqual([]);
+  });
+
   it('leaves the thirty-year compound adjective alone', () => {
     expect(extractSpelledFigures('the thirty-year Treasury yield')).toEqual([]);
   });

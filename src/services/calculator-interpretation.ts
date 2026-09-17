@@ -290,6 +290,23 @@ const MAGNITUDE_WORDS: Record<string, number> = {
 const ANY_NUMBER_WORD = [...Object.keys(NUMBER_WORDS), ...Object.keys(MAGNITUDE_WORDS)].join('|');
 
 /**
+ * The digits after a spelled decimal point.
+ *
+ * English says these two ways and means the same thing: "point twenty five" is
+ * a number, "point two five" is the digits read out one at a time. Summing the
+ * words handles the first and mangles the second — "two five" adds to 7, not
+ * 25 — so single digits are concatenated and anything else is read as a
+ * number, the way each was written.
+ */
+function fractionDigits(phrase: string): string {
+  const words = phrase.toLowerCase().split(/[-\s]+/).filter(Boolean);
+  const spelledOut = words.every((word) => word in NUMBER_WORDS && NUMBER_WORDS[word] < 10);
+  if (spelledOut && words.length > 1) return words.map((word) => NUMBER_WORDS[word]).join('');
+  const read = readNumberWords(phrase);
+  return read ? String(Math.round(Math.abs(read.value))) : '';
+}
+
+/**
  * Whether the prose running up to a match ends in a number word, which is what
  * separates a spelled decimal from the ordinary English noun: "five point five
  * percent" is a figure, "at this point five years remain" is a sentence.
@@ -395,6 +412,17 @@ export function extractSpelledFigures(text: string): NumericToken[] {
 
     const matchIndex = match.index ?? 0;
     const before = text.slice(Math.max(0, matchIndex - 64), matchIndex);
+    if (modifier === 'point' && !endsInNumberWord(before) && !/\w[-\s]*$/.test(before)) {
+      /*
+       * "point zero five percent" — a decimal with its integer part left off,
+       * and nothing in front of "point" to read it from. The English noun
+       * always has a word before it ("at this point"), so this is not that,
+       * and reading the fraction as a whole number would report 5 where the
+       * draft wrote 0.05. Skipped rather than measured wrong.
+       */
+      continue;
+    }
+
     const decimal = modifier === 'point' && endsInNumberWord(before);
     if (decimal) {
       /*
@@ -416,9 +444,9 @@ export function extractSpelledFigures(text: string): NumericToken[] {
       const whole = leading ? readNumberWords(leading[1]) : null;
       if (!leading || !whole) continue;
 
-      const fracDigits = String(Math.round(Math.abs(read.value)));
+      const fracDigits = fractionDigits(match[2]);
       const places = Math.max(1, fracDigits.length);
-      const value = whole.value + read.value / Math.pow(10, places);
+      const value = whole.value + Number(fracDigits) / Math.pow(10, places);
       const raw = `${leading[1]} ${match[0]}`.replace(/\s+/g, ' ').trim();
       tokens.push({
         raw,
