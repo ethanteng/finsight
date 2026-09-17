@@ -143,26 +143,40 @@ function parseEmailedOutcome(
   };
 }
 
-export function storeCoastFireSignupContext(
+interface CoastFireSignupOptions {
+  email?: string;
+  now?: number;
+  sourceToken?: string;
+  emailedOutcome?: CoastFireSignupContext['emailedOutcome'];
+}
+
+/**
+ * The context a scenario becomes, without persisting it.
+ *
+ * Separate from storing it because the two can succeed independently: a
+ * browser that refuses sessionStorage still has a perfectly good scenario to
+ * render from for the life of the page. Reading back what was just written is
+ * what used to decide whether the signup page showed the run at all — so a
+ * blocked storage partition cost the scenario card *and* the warning that says
+ * which address a saved run is attached to, on the one path where that warning
+ * is the only thing standing between someone and a silently empty account.
+ *
+ * Returns null for anything the calculator itself would have refused.
+ */
+export function buildCoastFireSignupContext(
   value: CoastFireInputs,
-  options: {
-    email?: string;
-    now?: number;
-    sourceToken?: string;
-    emailedOutcome?: CoastFireSignupContext['emailedOutcome'];
-  } = {},
-): boolean {
-  if (typeof window === 'undefined') return false;
+  options: CoastFireSignupOptions = {},
+): CoastFireSignupContext | null {
   const now = options.now ?? Date.now();
   const inputs = parseInputs(value);
-  if (!inputs || !numberInRange(now, 0, Number.MAX_SAFE_INTEGER)) return false;
-  if (options.sourceToken && !isHandoverToken(options.sourceToken)) return false;
+  if (!inputs || !numberInRange(now, 0, Number.MAX_SAFE_INTEGER)) return null;
+  if (options.sourceToken && !isHandoverToken(options.sourceToken)) return null;
   const emailedOutcome = options.emailedOutcome
     ? parseEmailedOutcome(options.emailedOutcome)
     : undefined;
-  if (options.emailedOutcome && !emailedOutcome) return false;
+  if (options.emailedOutcome && !emailedOutcome) return null;
 
-  const context: CoastFireSignupContext = {
+  return {
     version: CONTEXT_VERSION,
     savedAt: now,
     inputs,
@@ -170,6 +184,15 @@ export function storeCoastFireSignupContext(
     ...(options.sourceToken ? { sourceToken: options.sourceToken } : {}),
     ...(emailedOutcome ? { emailedOutcome } : {}),
   };
+}
+
+export function storeCoastFireSignupContext(
+  value: CoastFireInputs,
+  options: CoastFireSignupOptions = {},
+): boolean {
+  if (typeof window === 'undefined') return false;
+  const context = buildCoastFireSignupContext(value, options);
+  if (!context) return false;
 
   try {
     window.sessionStorage.setItem(COAST_FIRE_SIGNUP_STORAGE_KEY, JSON.stringify(context));

@@ -17,6 +17,7 @@ import {
 } from '@/lib/dataLayer';
 import { useDialog } from '@/components/ui/dialog';
 import {
+  buildRetirementSignupContext,
   clearRetirementSignupRef,
   fetchRetirementSignupContext,
   hasRetirementSignupSource,
@@ -27,6 +28,7 @@ import {
 } from '@/lib/retirement-signup-context';
 import { isLookupSettled } from '@/lib/calculator-handover';
 import {
+  buildCoastFireSignupContext,
   clearCoastFireSignupRef,
   coastFireSignupSummary,
   fetchCoastFireSignupContext,
@@ -300,13 +302,23 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
       // Kept for the rest of this tab, so a reload or a step backwards in the
       // flow does not lose the scenario and re-ask the backend for it.
       const { context } = lookup;
-      storeCoastFireSignupContext(context.inputs, {
+      const options = {
         email: context.email,
         sourceToken: token,
         emailedOutcome: context.emailedOutcome,
-      });
+      };
+      storeCoastFireSignupContext(context.inputs, options);
       pushCalculatorResultsEmailCtaOpened('coast_fire_calculator');
-      setCoastFireContext(readCoastFireSignupContext());
+      /*
+       * Rendered from the lookup, not from what comes back out of storage.
+       * Persisting and rendering are separate concerns and only the first can
+       * be refused — reading the write back meant a browser that blocks
+       * sessionStorage showed no scenario card and, worse, no warning that the
+       * saved run belongs to a different address than the one being typed.
+       * `emailedToken` already keeps that signup working; this keeps it
+       * explicable.
+       */
+      setCoastFireContext(buildCoastFireSignupContext(context.inputs, options));
       // Their own address, from the link we sent them. Prefilled, not locked:
       // they can sign up under a different one.
       if (context.email) setEmail((current) => current || context.email!);
@@ -351,13 +363,16 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
       emailedToken.current = token;
 
       const { context } = lookup;
-      storeRetirementSignupContext(context.inputs, {
+      const options = {
         email: context.email,
         sourceToken: token,
         emailedOutcome: context.emailedOutcome,
-      });
+      };
+      storeRetirementSignupContext(context.inputs, options);
       pushCalculatorResultsEmailCtaOpened('retirement_calculator');
-      setRetirementContext(readRetirementSignupContext());
+      // Rendered from the lookup when storage refuses to keep it. See the
+      // Coast FIRE exchange above.
+      setRetirementContext(buildRetirementSignupContext(context.inputs, options));
       if (context.email) setEmail((current) => current || context.email!);
     })();
 

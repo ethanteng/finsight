@@ -503,13 +503,15 @@ describe('RegisterForm', () => {
      * sent through verification anyway and silently loses the first decision
      * both the email and this page promised them.
      */
-    it('still sends calculatorRef when browser storage refuses the scenario', async () => {
+    it('keeps the run usable when browser storage refuses to hold it', async () => {
       const token = 'f'.repeat(48);
       searchParams = new URLSearchParams(`source=${RETIREMENT_SIGNUP_SOURCE}`);
       handOverRetirementRef(token);
 
       // Exactly what a blocked storage partition does: writes are accepted and
-      // nothing comes back.
+      // nothing comes back. Restored in `finally`, because a spy on
+      // Storage.prototype that outlives a failing assertion breaks every case
+      // after this one.
       const setItem = jest
         .spyOn(Storage.prototype, 'setItem')
         .mockImplementation(() => undefined);
@@ -517,44 +519,56 @@ describe('RegisterForm', () => {
         .spyOn(Storage.prototype, 'getItem')
         .mockImplementation(() => null);
 
-      const fetchMock = jest.fn(async (url: RequestInfo | URL) => {
-        if (String(url).includes('/auth/register')) {
+      try {
+        const fetchMock = jest.fn(async (url: RequestInfo | URL) => {
+          if (String(url).includes('/auth/register')) {
+            return {
+              ok: true,
+              json: async () => ({
+                token: 'trial-token',
+                user: { email: 'reader@example.com', timeZone: 'America/New_York' },
+              }),
+            };
+          }
           return {
             ok: true,
             json: async () => ({
-              token: 'trial-token',
-              user: { email: 'reader@example.com', timeZone: 'America/New_York' },
+              email: 'reader@example.com',
+              inputs: RETIREMENT_SCENARIO,
+              outcome: { survivalRate: 0.92, sequencesTested: 800, sequencesSurvived: 736 },
             }),
           };
-        }
-        return {
-          ok: true,
-          json: async () => ({
-            email: 'reader@example.com',
-            inputs: RETIREMENT_SCENARIO,
-            outcome: { survivalRate: 0.92, sequencesTested: 800, sequencesSurvived: 736 },
-          }),
-        };
-      }) as unknown as typeof fetch;
-      global.fetch = fetchMock;
+        }) as unknown as typeof fetch;
+        global.fetch = fetchMock;
 
-      render(<RegisterForm variant="trial" />);
-      // The scenario never paints — that is the point — so wait on the cookie
-      // being spent instead.
-      await waitFor(() => expect(document.cookie).not.toContain(RETIREMENT_REF_COOKIE));
+        render(<RegisterForm variant="trial" />);
 
-      fireEvent.change(screen.getByLabelText('Email address'), { target: { value: 'reader@example.com' } });
-      fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'Password1' } });
-      fireEvent.click(screen.getByRole('button', { name: /Start planning/i }));
+        // Rendered from the lookup rather than from what came back out of
+        // storage, so the scenario and the address are both on the page.
+        await screen.findByRole('region', { name: 'Your modeled retirement scenario' });
+        expect(screen.getByLabelText('Email address')).toHaveValue('reader@example.com');
 
-      await waitFor(() => expect(push).toHaveBeenCalled());
-      const registerCall = (fetchMock as unknown as jest.Mock).mock.calls.find(
-        ([url]) => String(url).includes('/auth/register'),
-      );
-      expect(JSON.parse(registerCall![1].body as string).calculatorRef).toBe(token);
+        // And the mismatch warning still works, which is the thing worth
+        // protecting: it is all that stands between changing this address and a
+        // silently empty account.
+        fireEvent.change(screen.getByLabelText('Email address'), { target: { value: 'work@example.com' } });
+        expect(await screen.findByText(/reader@example\.com/)).toBeInTheDocument();
 
-      setItem.mockRestore();
-      getItem.mockRestore();
+        // The token survives independently of storage, so the run is still
+        // claimed for whichever address is finally submitted.
+        fireEvent.change(screen.getByLabelText('Email address'), { target: { value: 'reader@example.com' } });
+        fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'Password1' } });
+        fireEvent.click(screen.getByRole('button', { name: /Create account and continue/i }));
+
+        await waitFor(() => expect(push).toHaveBeenCalled());
+        const registerCall = (fetchMock as unknown as jest.Mock).mock.calls.find(
+          ([url]) => String(url).includes('/auth/register'),
+        );
+        expect(JSON.parse(registerCall![1].body as string).calculatorRef).toBe(token);
+      } finally {
+        setItem.mockRestore();
+        getItem.mockRestore();
+      }
     });
 
     /*
