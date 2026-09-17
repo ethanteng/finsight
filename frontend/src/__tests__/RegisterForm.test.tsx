@@ -12,6 +12,7 @@ import { PENDING_FIRST_DECISION_STORAGE_KEY } from '@/lib/pending-first-decision
 import { USER_TIME_ZONE_KEY } from '@/lib/browser-time-zone';
 import {
   pushSignUp,
+  pushTrialSignupCompleted,
   pushCalculatorResultsEmailCtaOpened,
   pushTrialSignupRegistrationError,
   pushTrialSignupStarted,
@@ -41,6 +42,7 @@ jest.mock('@/lib/dataLayer', () => ({
   pushBeginCheckout: jest.fn(),
   pushCalculatorResultsEmailCtaOpened: jest.fn(),
   pushSignUp: jest.fn(),
+  pushTrialSignupCompleted: jest.fn(),
   pushTrialSignupRegistrationError: jest.fn(),
   pushTrialSignupStarted: jest.fn(),
   pushTrialSignupSubmit: jest.fn(),
@@ -463,6 +465,8 @@ describe('RegisterForm', () => {
       // The session minted by registration is what opens the workspace; the
       // visitor never re-enters the password they just set.
       expect(localStorage.getItem('auth_token')).toBe('trial-token');
+      expect(pushTrialSignupCompleted).toHaveBeenCalledTimes(1);
+      expect(pushTrialSignupCompleted).toHaveBeenCalledWith('email_link');
       /*
        * Registration answers before the first decision is written, and the
        * navigation no longer waits behind a sign-in form. Signup does not stall

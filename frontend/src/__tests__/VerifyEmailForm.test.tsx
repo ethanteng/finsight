@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import VerifyEmailForm from '@/components/VerifyEmailForm';
 import {
   pushTrialVerifyError,
+  pushTrialSignupCompleted,
   pushTrialVerifySkipped,
   pushTrialVerifySubmit,
   pushTrialVerifySuccess,
@@ -21,6 +22,7 @@ jest.mock('next/navigation', () => ({
 }));
 jest.mock('@/lib/dataLayer', () => ({
   pushTrialVerifyError: jest.fn(),
+  pushTrialSignupCompleted: jest.fn(),
   pushTrialVerifySkipped: jest.fn(),
   pushTrialVerifySubmit: jest.fn(),
   pushTrialVerifySuccess: jest.fn(),
@@ -104,6 +106,7 @@ describe('VerifyEmailForm', () => {
 
     expect(mockPushTrialVerifySubmit).toHaveBeenCalledTimes(1);
     expect(mockPushTrialVerifySuccess).toHaveBeenCalledTimes(1);
+    expect(pushTrialSignupCompleted).toHaveBeenCalledWith('verification_code');
     expect(mockPushTrialVerifyError).not.toHaveBeenCalled();
     // The registration session is what carries the visitor into the app, so it
     // must survive verification rather than being traded for a fresh sign-in.
@@ -127,6 +130,7 @@ describe('VerifyEmailForm', () => {
   it('reports a skipped verification as a trial completion', async () => {
     searchParams = new URLSearchParams('signup_flow=free_trial');
     beginFreeTrialSignupFlow();
+    localStorage.setItem('auth_token', 'registration-token');
     global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({}) });
 
     render(<VerifyEmailForm />);
@@ -137,6 +141,9 @@ describe('VerifyEmailForm', () => {
     fireEvent.click(skip);
 
     expect(mockPushTrialVerifySkipped).toHaveBeenCalledTimes(1);
+    expect(pushTrialSignupCompleted).toHaveBeenCalledWith('verification_skipped');
+    fireEvent.click(skip);
+    expect(pushTrialSignupCompleted).toHaveBeenCalledTimes(1);
     expect(mockPushTrialVerifySuccess).not.toHaveBeenCalled();
     expect(sessionStorage.getItem(TRIAL_SIGNUP_FLOW_STORAGE_KEY)).toBeNull();
   });
@@ -199,6 +206,8 @@ describe('VerifyEmailForm', () => {
     await waitFor(() => expect(push).toHaveBeenCalledWith('/app'));
     expect(localStorage.getItem('auth_token')).toBe('registration-token');
     expect(mockPushTrialVerifySubmit).not.toHaveBeenCalled();
+    expect(pushTrialSignupCompleted).toHaveBeenCalledWith('already_verified');
+    expect(pushTrialSignupCompleted).toHaveBeenCalledTimes(1);
   });
 
   it('uses the network category when the verification request cannot be sent', async () => {

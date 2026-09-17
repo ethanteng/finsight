@@ -58,6 +58,8 @@ type LeadSummary = {
   mailerliteSynced: number | null;
   continuedToSignup: number | null;
   matchedAccounts: number | null;
+  verifiedMatchedAccounts?: number | null;
+  savedResultAccounts?: number | null;
   attributionCaptured: number | null;
   paidAttributionCaptured: number | null;
   deliveryRate: number | null;
@@ -136,6 +138,16 @@ interface Report {
     evidenceGaps: string[];
   };
   diagnostics: SourceDiagnostic[];
+  signupOutcomes?: {
+    state?: 'available' | 'unavailable';
+    trackingStartedAt: string | null;
+    note: string;
+    rows: Array<{
+      device: string; origin: string; entry: string; viewed: number; accountsCreated: number;
+      handoffs: number; emailLink: number; verificationCode: number; verificationSkipped: number;
+      alreadyVerified: number; legacyLogin: number; signupAbandonmentRate: number | null;
+    }>;
+  };
   warnings: string[];
 }
 
@@ -349,9 +361,9 @@ function LeadCapturePanel({
       note: 'Observed in this window; the email may have been sent earlier',
     },
     {
-      label: 'Completed trial signup',
+      label: 'Signup handoff to app',
       value: capture.emailTrialCompletedSessions.value,
-      note: 'Email-attributed trial completions observed in this window',
+      note: 'Email-attributed handoffs observed; no second login required',
     },
   ];
   const cells: Array<{ label: string; value: string; note?: string; timing: 'live' | 'delayed' | null }> = [
@@ -360,12 +372,14 @@ function LeadCapturePanel({
     { label: 'Excluded or unmatched sessions', value: count(excludedSessions), note: excludedSessions > 0 ? 'See the reconciliation below.' : 'Every observed session qualified.', timing: 'delayed' },
     { label: 'GA4 capture rate', value: precisePercent(capture.captureRate.value), note: capture.captureRate.note, timing: 'delayed' },
     { label: 'GA4 email CTA opens', value: count(capture.emailCtaOpenedSessions.value), note: capture.emailCtaOpenedSessions.note, timing: 'delayed' },
-    { label: 'GA4 email-path trials', value: count(capture.emailTrialCompletedSessions.value), note: capture.emailTrialCompletedSessions.note, timing: 'delayed' },
+    { label: 'GA4 email-path handoffs', value: count(capture.emailTrialCompletedSessions.value), note: capture.emailTrialCompletedSessions.note, timing: 'delayed' },
     { label: 'First-party emails sent', value: count(capture.firstParty.emailsSent), note: `${precisePercent(capture.firstParty.deliveryRate)} of stored requests`, timing: firstPartyTiming },
     { label: 'Unique lead emails', value: count(capture.firstParty.uniqueEmails), note: `${count(capture.firstParty.mailerliteSynced)} synced to MailerLite`, timing: firstPartyTiming },
     { label: 'Attribution captured', value: count(capture.firstParty.attributionCaptured), note: `${precisePercent(capture.firstParty.attributionRate)} of stored requests · ${count(capture.firstParty.paidAttributionCaptured)} paid`, timing: firstPartyTiming },
     { label: 'First-party continuations', value: count(capture.firstParty.continuedToSignup), note: `${precisePercent(capture.firstParty.continuationRate)} of delivered emails`, timing: firstPartyTiming },
     { label: 'Matched accounts', value: count(capture.firstParty.matchedAccounts), note: `${precisePercent(capture.firstParty.accountMatchRate)} of unique lead emails`, timing: firstPartyTiming },
+    { label: 'Verified matched accounts', value: count(capture.firstParty.verifiedMatchedAccounts ?? null), note: 'Current verification status; not proof of link attribution', timing: firstPartyTiming },
+    { label: 'Results saved to accounts', value: count(capture.firstParty.savedResultAccounts ?? null), note: 'Automatic first decisions, not user-submitted questions', timing: firstPartyTiming },
     { label: 'Pending after GA4 cutoff', value: count(capture.pendingFirstParty.emailsSent), note: `First-party emails since ${shortDate(ga4PeriodEnd)}; not compared until the GA4 export settles.`, timing: pendingFirstPartyTiming },
   ];
   return <div className="mt-6 rounded-[18px] border border-[#102319]/10 bg-[#edf1e9] p-4 sm:p-5">
@@ -626,11 +640,30 @@ export default function MarketingDashboardPage() {
             <CalculatorRepeatUsage data={report.calculatorRepeatUsage} observedThrough={ga4ObservedThrough} />
           </div>
 
+          {report.signupOutcomes && <section className="mt-10 rounded-[22px] border border-[#102319]/10 bg-[#fffdf5] p-5 sm:p-6">
+            <h2 className="text-2xl font-semibold tracking-[-.035em]">Signup paths by device</h2>
+            <p className="mt-2 max-w-4xl text-xs leading-5 text-[#66736b]">{report.signupOutcomes.note}</p>
+            {!report.signupOutcomes.trackingStartedAt && <p className="mt-2 text-xs text-[#8b5c16]">New handoff tracking is collecting. Rates stay blank until a complete day of tracking is verified.</p>}
+            <div className="mt-5 overflow-x-auto">
+              <table className="w-full min-w-[1020px] text-left text-xs">
+                <caption className="sr-only">Observed signup sessions by entry route and device</caption>
+                <thead><tr>{['Signup route', 'Device', 'Viewed signup', 'Accounts created', 'Handoffs', 'Email link verified', 'Code verified', 'Skipped verification', 'Already verified', 'Legacy login', 'Signup drop-off'].map(label => <th key={label} scope="col" className="p-2 font-semibold">{label}</th>)}</tr></thead>
+                <tbody>{report.signupOutcomes.rows.map(row => <tr key={`${row.origin}:${row.entry}:${row.device}`} className="border-t border-[#102319]/10">
+                  <th scope="row" className="p-2 font-medium">{row.origin.replaceAll('_', ' ')} / {row.entry.replaceAll('_', ' ')}</th>
+                  <td className="p-2">{row.device}</td>
+                  {[row.viewed, row.accountsCreated, row.handoffs, row.emailLink, row.verificationCode, row.verificationSkipped, row.alreadyVerified, row.legacyLogin].map((value, index) => <td key={index} className="p-2 tabular-nums">{count(value)}</td>)}
+                  <td className="p-2 tabular-nums">{precisePercent(row.signupAbandonmentRate)}</td>
+                </tr>)}</tbody>
+              </table>
+            </div>
+            {report.signupOutcomes.rows.length === 0 && <p className="mt-4 text-sm text-[#66736b]">{report.signupOutcomes.state === 'unavailable' ? 'Signup data is unavailable or the export was truncated; no zero counts have been substituted.' : 'No signup sessions observed in this reporting window.'}</p>}
+          </section>}
+
           <section className="mt-10">
             <div className="max-w-3xl">
               <p className="text-[10px] font-extrabold uppercase tracking-[.14em] text-[#49725a]">Downstream value</p>
               <h2 className="mt-1 text-2xl font-semibold tracking-[-.035em]">Do new accounts become valuable users?</h2>
-              <p className="mt-2 text-sm leading-6 text-[#66736b]">These are the right outcomes—financial connection, activation, and payment. New calculator-email leads now preserve acquisition context, while these cards still describe all new accounts until the cohort-level join is added.</p>
+              <p className="mt-2 text-sm leading-6 text-[#66736b]">Financial connection, questions people submit, and payment. Automatically saved calculator results do not count as questions. These cards describe all new accounts, not just calculator-email signups.</p>
             </div>
             <div className="mt-5 grid gap-4 md:grid-cols-3">
               <OutcomeCard icon={<Link2 size={17} />} label="Connected financial data" metric={report.beachhead.downstream.financialConnectionRate} numerator={report.firstParty.createdAccountsWithFinancialConnection} denominator={report.firstParty.accountsCreated} showLiveTiming={firstPartyLive} />

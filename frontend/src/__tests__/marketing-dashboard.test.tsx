@@ -81,6 +81,12 @@ describe('marketing scorecard data states', () => {
           createdAccountsWithConversation: 0,
           createdAccountsCurrentlyPaid: 0,
         },
+        signupOutcomes: {
+          trackingStartedAt: null, note: 'Observed handoffs, not verified emails or app loads.',
+          rows: [{ device: 'mobile', origin: 'retirement_calculator', entry: 'results_email',
+            viewed: 3, accountsCreated: 2, handoffs: 2, emailLink: 1, verificationCode: 0,
+            verificationSkipped: 1, alreadyVerified: 0, legacyLogin: 0, signupAbandonmentRate: null }],
+        },
         calculatorRepeatUsage: supportsRepeatUsage ? {
           state: 'available', note: 'Repeat means 2+ successful runs in the same session.',
           rows: ['retirement', 'coast_fire'].flatMap(calculator => ['all', 'desktop', 'mobile'].map(device => ({
@@ -138,6 +144,10 @@ describe('marketing scorecard data states', () => {
 
     expect(await screen.findByText('First-party product health · last 28 days')).toBeInTheDocument();
     expect(screen.getByText('95.7%')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Signup paths by device' })).toBeInTheDocument();
+    expect(screen.getByText('retirement calculator / results email')).toBeInTheDocument();
+    expect(screen.getByText('Skipped verification')).toBeInTheDocument();
+    expect(screen.getByText(/Rates stay blank until a complete day/)).toBeInTheDocument();
     const repeatSection = screen.getByRole('region', { name: 'Do people run the calculators again?' });
     if (supportsRepeatUsage) {
       expect(within(repeatSection).getAllByText('50.0% (2 sessions)')).toHaveLength(2);
@@ -158,9 +168,9 @@ describe('marketing scorecard data states', () => {
     expect(screen.getAllByText('Ran calculator')).toHaveLength(2);
     expect(screen.getAllByText('Emailed results')).toHaveLength(2);
     expect(screen.getAllByText('Clicked email CTA')).toHaveLength(2);
-    expect(screen.getAllByText('Completed trial signup')).toHaveLength(2);
+    expect(screen.getAllByText('Signup handoff to app')).toHaveLength(2);
     expect(screen.getAllByText('Observed in this window; the email may have been sent earlier')).toHaveLength(2);
-    expect(screen.getAllByText('Email-attributed trial completions observed in this window')).toHaveLength(2);
+    expect(screen.getAllByText('Email-attributed handoffs observed; no second login required')).toHaveLength(2);
     expect(screen.queryByText('Conversion from emailed results unavailable')).not.toBeInTheDocument();
     expect(screen.queryByText('Conversion from email CTA clicks unavailable')).not.toBeInTheDocument();
     expect(screen.getAllByText('Show measurement details')).toHaveLength(2);

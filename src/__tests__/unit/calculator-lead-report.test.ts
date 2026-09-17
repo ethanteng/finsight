@@ -34,7 +34,7 @@ describe('calculator lead report', () => {
         { email: 'b@example.com', emailSent: false, mailerliteSynced: false, continuedAt: null, createdAt: new Date('2026-09-05') },
       ],
       accounts: [
-        { email: 'a@example.com', createdAt: new Date('2026-09-06') },
+        { email: 'a@example.com', createdAt: new Date('2026-09-06'), emailVerified: true, conversations: [{ origin: 'calculator_retirement' }] },
         { email: 'b@example.com', createdAt: new Date('2026-09-01') },
       ],
     });
@@ -46,6 +46,8 @@ describe('calculator lead report', () => {
       mailerliteSynced: 1,
       continuedToSignup: 1,
       matchedAccounts: 1,
+      verifiedMatchedAccounts: 1,
+      savedResultAccounts: 1,
       attributionCaptured: 1,
       paidAttributionCaptured: 1,
       deliveryRate: 2 / 3,

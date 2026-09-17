@@ -95,8 +95,8 @@ function completedTrialSessions(
     }];
   });
 
-  return aggregateTrialFunnel(anchoredSessions, 'complete')
-    .find(step => step.event === 'trial_login_success')?.sessions ?? 0;
+  return aggregateTrialFunnel(anchoredSessions, 'complete', 'start_free_click')
+    .find(step => step.event === 'trial_signup_completed')?.sessions ?? 0;
 }
 
 function hasResultThenPlanCta(
@@ -138,7 +138,7 @@ function buildJourney(
     ['qualified_visit', 'Qualified visits', 'Sessions with an explicit page, campaign, query, or tracking signal for this journey.'],
     ['calculator_result', 'Calculated result', `Sessions that intentionally reached ${resultEvent}. Calculator reliability lives in the separate calculator dashboard.`],
     ['plan_cta', 'Actual-plan CTA', 'Result sessions that clicked the journey-specific plan CTA after the result in the same session.'],
-    ['trial_complete', 'Trial completed', 'CTA sessions that completed every tracked signup, verification, and first-login step in order.'],
+    ['trial_complete', 'Signup handoff', 'CTA sessions with an ordered account creation and app handoff. Email-link, code, and skipped verification are valid branches; login is not required. This is not proof the app loaded.'],
   ] as const;
 
   return labels.map(([id, label, note], index) => ({
@@ -285,7 +285,7 @@ function buildLeadCapture(args: {
     emailTrialCompletedSessions: value(
       current.completed,
       previous.completed,
-      'Email-attributed sessions that completed signup, verification, and first login.',
+      'Observed email-attributed signup handoffs, including skipped verification and legacy first login. Counted once per session; not proof of app load or verified email. Missing events during the tracking transition cannot be recovered.',
     ),
     pendingFirstParty: args.pendingFirstParty,
     firstParty: args.firstParty,
@@ -319,6 +319,7 @@ export function buildBeachheadScorecard(args: {
     coastFireLeads = {
       state: 'live', periodStart: '', periodEnd: '', requests: 0, emailsSent: 0,
       uniqueEmails: 0, mailerliteSynced: 0, continuedToSignup: 0, matchedAccounts: 0,
+      verifiedMatchedAccounts: 0, savedResultAccounts: 0,
       attributionCaptured: 0, paidAttributionCaptured: 0,
       deliveryRate: null, continuationRate: null, accountMatchRate: null,
       attributionRate: null, note: 'No lead fixture supplied.',
@@ -326,6 +327,7 @@ export function buildBeachheadScorecard(args: {
     retirementLeads = {
       state: 'live', periodStart: '', periodEnd: '', requests: 0, emailsSent: 0,
       uniqueEmails: 0, mailerliteSynced: 0, continuedToSignup: 0, matchedAccounts: 0,
+      verifiedMatchedAccounts: 0, savedResultAccounts: 0,
       attributionCaptured: 0, paidAttributionCaptured: 0,
       deliveryRate: null, continuationRate: null, accountMatchRate: null,
       attributionRate: null, note: 'No lead fixture supplied.',

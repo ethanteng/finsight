@@ -13,17 +13,11 @@ export const INTENT_COHORT_IDS = [
 export type IntentCohortId = (typeof INTENT_COHORT_IDS)[number];
 
 export const FUNNEL_EVENT_NAMES = [
-  'start_free_click',
   'trial_signup_viewed',
   'trial_signup_started',
   'trial_signup_submit',
   'sign_up',
-  'trial_verify_viewed',
-  'trial_verify_submit',
-  'trial_verify_success',
-  'trial_login_viewed',
-  'trial_login_submit',
-  'trial_login_success',
+  'trial_signup_completed',
 ] as const;
 
 export type FunnelEventName = (typeof FUNNEL_EVENT_NAMES)[number];
@@ -75,6 +69,8 @@ export interface IntentCohort {
 }
 
 export interface AnalyticsSession {
+  signupOrigin?: string;
+  signupEntry?: string;
   id: string;
   userId: string;
   sessionDate: string;
@@ -149,6 +145,21 @@ export interface FunnelStepMetric {
   medianSecondsFromPrevious: number | null;
   coverage: 'complete' | 'partial' | 'collecting' | 'unavailable';
   rawEventSessions?: number;
+}
+
+export interface SignupOutcomeRow {
+  device: string;
+  origin: string;
+  entry: string;
+  viewed: number;
+  accountsCreated: number;
+  handoffs: number;
+  emailLink: number;
+  verificationCode: number;
+  verificationSkipped: number;
+  alreadyVerified: number;
+  legacyLogin: number;
+  signupAbandonmentRate: number | null;
 }
 
 export interface BreakdownRow {
@@ -327,6 +338,7 @@ export interface MarketingDashboardReport {
   beachhead: BeachheadScorecard;
   calculatorRepeatUsage: CalculatorRepeatUsage;
   funnel: FunnelStepMetric[];
+  signupOutcomes: { state: 'available' | 'unavailable'; rows: SignupOutcomeRow[]; note: string; trackingStartedAt: string | null };
   funnelErrors: Array<{ event: string; sessions: number | null; events: number | null; rate: number | null }>;
   acquisition: BreakdownRow[];
   landingPages: PageExperienceRow[];

@@ -59,6 +59,7 @@ function completedJourney(id: string, ctaEvent: string, coast = false): Analytic
   );
   // Result must precede the plan CTA; the cross-sell is visible before a run.
   firstEventAt[resultEvent] = 10_000_000;
+  firstEventAt.start_free_click = 15_000_000;
   firstEventAt[ctaEvent] = firstEventAt.start_free_click;
   return session(id, {
     acquisition: {

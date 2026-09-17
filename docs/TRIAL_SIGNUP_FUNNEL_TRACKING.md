@@ -1,169 +1,126 @@
-# No-card trial signup funnel tracking
+# No-card signup tracking after PRs 252–259
 
-This document defines the production analytics contract for the no-card
-`/getstarted` flow. The implementation sends fixed event names to both the GTM
-data layer and Contentsquare. GTM must forward the data-layer events to GA4;
-the frontend does not call GA4 directly.
+## What is measured
 
-## Funnel contract
+The main same-session funnel is:
 
-Use this order in a GA4 funnel exploration, filtering every step to
-`signup_flow = free_trial` where the event supplies that parameter:
+1. `trial_signup_viewed`
+2. `trial_signup_started`
+3. `trial_signup_submit`
+4. `sign_up`, with `signup_flow = free_trial`: the server created an account.
+5. `trial_signup_completed`: the authenticated signup is ready to hand off to `/app`.
 
-1. `start_free_click` — a marketing CTA sends the visitor to `/getstarted`.
-2. `trial_signup_viewed` — the no-card signup page renders.
-3. `trial_signup_started` — the first non-empty edit to email or password in
-   that page view. It fires once and carries no field name or value.
-4. `trial_signup_submit` — each browser-valid submit attempt, before the
-   application validates password requirements or calls `/auth/register`.
-5. One of:
-   - `trial_signup_validation_error`, with
-     `validation_reason = password_requirements`;
-   - `trial_signup_registration_error`, with `error_category` from the strict
-     allowlist below; or
-   - `sign_up`, the existing account-created boundary, with
-     `method = email` and `signup_flow = free_trial`.
-6. `trial_verify_viewed` — `/verify-email` renders as a confirmed continuation
-   of the free-trial flow.
-7. `trial_verify_submit` — each verification-code submit attempt.
-8. Either `trial_verify_error` with a safe `error_category`, or
-   `trial_verify_success` after a successful backend response.
-9. `trial_verify_skipped` — "Skip for now", the other door from this screen
-   into the workspace.
+A handoff is **not** proof that the app loaded, the user asked a question, or the email is verified.
+`start_free_click` is an optional preceding step for CTA-specific conversion rates.
+Direct visits and emailed calculator links must not require a CTA.
+No current signup path requires another login.
 
-**Steps 8 and 9 are the funnel's terminal events.** Verification and skipping
-both carry the registration session straight into `/app`, so the no-card funnel
-no longer passes through `/login`; completion is the two of them together.
+The terminal event includes one fixed `completion_method`:
 
-The `trial_login_*` events still exist and still fire on `/login` when both the
-URL marker and recent same-tab state are present, but no signup routes there
-any more, so in practice they stop appearing. Anything that measured the funnel
-on `trial_login_success` has to move to `trial_verify_success`.
+| Value | Evidence |
+| --- | --- |
+| `email_link` | Registration server confirmed the calculator email-link signup is already verified. |
+| `verification_code` | Verification endpoint returned success. |
+| `verification_skipped` | Visitor chose Skip for now. This is **not** a verified email. |
+| `already_verified` | Profile endpoint confirmed a stale verification-page arrival is already verified; original method unknown. |
 
-A signup that arrived holding a calculator lead token has no step 6 through 8
-either: the server reports the address already proved, registration goes
-straight to `/app`, and `sign_up` is that session's last funnel event.
+The existing `trial_verify_viewed/submit/success/error/skipped` events remain diagnostic branches,
+not mandatory steps. Old `trial_login_*` events remain historical; they are not a new conversion.
 
-`sign_up` keeps its existing semantics and remains the only account-created
-event. None of the new submit events should be treated as a registration.
+## Attribution and payloads
 
-## Attribution and privacy
+Events are emitted before clearing the two-hour same-tab signup marker.
+A verification continuation still requires both that marker and `signup_flow=free_trial` in the URL.
+Ordinary login/verification traffic does not belong to the signup funnel.
 
-`/getstarted` stores a versioned `free_trial` marker in sessionStorage for at
-most two hours. Registration then routes to
-`/verify-email?signup_flow=free_trial`, and successful verification (or “Skip
-for now”) opens `/app` on the session registration already minted. Verification
-is classified as a trial step only when the fixed URL marker and recent same-tab
-state both exist. State is cleared where the funnel ends — at verification, or
-at registration for a link-proved signup that skips it. Ordinary verify and
-login visits therefore remain unclassified.
+Boundary events carry `source_page` (pathname only), `signup_flow=free_trial`,
+`signup_flow_version=2`, `signup_origin`, and `signup_entry`.
+Origins are `retirement_calculator`, `coast_fire_calculator`, or `getstarted`;
+entries are `results_email`, `calculator_cta`, or `direct`.
+Unknown historic attribution remains unknown.
+Errors use `server_rejected | network_error | unknown`;
+client validation uses `password_requirements`.
 
-Analytics payloads contain only:
+Do not send email addresses, credentials, codes, lead/auth tokens, financial inputs,
+or raw server errors. Contentsquare receives fixed event names only, including the
+new `trial_signup_completed`; all existing override IDs remain intact.
 
-- `event` — one of the fixed names above;
-- `source_page` — pathname only, never the query string;
-- `signup_flow = free_trial`;
-- `validation_reason = password_requirements` on the one validation event;
-- `error_category = server_rejected | network_error | unknown` on error
-  events; and
-- the existing safe CTA/sign-up parameters.
+## GTM and GA4 contract
 
-Email addresses, passwords, verification codes, auth tokens, raw server error
-text, retirement inputs, and other financial values must never be added. The
-typed frontend helpers normalize any unexpected error-category input to
-`unknown`. The calculator-to-signup scenario remains in a separately validated
-and masked sessionStorage record and is not part of this analytics state.
+Container `GTM-PL362L36`; measurement `G-0QBF34C7VK`; GA4 property `519498279`.
 
-Page-view and first-edit refs prevent duplicate events from React rerenders.
-Submit and outcome events intentionally fire for each attempt. Do not add
-unload or beacon events: signup-page bounce is computed as sessions containing
-`trial_signup_viewed` with no later `trial_signup_started` or
-`trial_signup_submit`.
+Live configuration: GTM version **24**, “Signup v2: direct app handoff and
+verification branches,” published September 16, 2026 at 11:53 PM Pacific.
+Only the boundary trigger/tag and the two new data-layer variables changed.
+Application deployment and end-to-end event delivery are still separate rollout checks.
 
-## GTM configuration
+Update existing `CE - trial signup funnel boundaries` (do not add a duplicate trigger/tag):
 
-Container: `GTM-PL362L36`. GA4 measurement ID: `G-0QBF34C7VK`.
+```text
+^trial_(signup_(viewed|started|submit|completed)|verify_(viewed|submit|success|skipped)|login_(viewed|submit|success))$
+```
 
-Production status: GTM version 17, **No-card trial signup funnel**, was
-published on September 9, 2026 with the variables, triggers, and tags below.
-The rules are inert until the corresponding frontend events are deployed.
+Keep `GA4 - trial signup funnel boundaries` using event name `{{Event}}`.
+Forward `source_page`, `signup_flow`, `signup_origin`, `signup_entry`,
+`completion_method`, and `signup_flow_version` from matching Version-2 Data Layer Variables.
+`completion_method` is meaningful only on `trial_signup_completed`; GTM's persistent
+data model may retain it on later diagnostic events.
 
-Create or reuse Data Layer Variables (Version 2) for:
+Keep error and validation tags separate. Keep the existing `sign_up` tag and
+Google Ads account-created conversion unchanged. Do not mark the new handoff
+event as another Ads primary conversion or sum it with sign_up.
 
-- `DLV - source_page` → `source_page`
-- `DLV - signup_flow` → `signup_flow`
-- `DLV - validation_reason` → `validation_reason`
-- `DLV - error_category` → `error_category`
+Register event-scoped GA4 custom dimensions for `completion_method` and
+`signup_flow_version` (existing origin/entry dimensions are reused). Native
+explorations use the five main steps above, with Device category breakdown
+and signup-origin/entry comparisons; optional verification belongs in a
+separate diagnostic tab. BigQuery parameters do not require custom dimensions.
 
-Forward each frontend event exactly once. Splitting the tags below prevents a
-previous error or validation value from leaking into a later success through
-GTM's persistent data model.
+Configuration verified: “Signup completion method” and “Signup flow version”
+were created as event-scoped custom dimensions on September 16, 2026 Pacific.
+Existing signup origin/entry definitions were retained.
 
-### Base funnel tag
+The existing saved exploration “Signup & calculator — device funnels (users)”
+still correctly measures page view → account creation and keeps its Device
+category breakdown. Its signup tab is now named “Signup page → account created”
+to avoid implying verification or app entry. It is a native user funnel, not
+the exact session report supplied by the backend.
 
-- Trigger name: `CE - trial signup funnel boundaries`
-- Trigger type: Custom Event, regex enabled
-- Event regex:
-  `^trial_(signup_(viewed|started|submit)|verify_(viewed|submit|success)|login_(viewed|submit|success))$`
-- Tag name: `GA4 - trial signup funnel boundaries`
-- Event name: `{{Event}}`
-- Event parameters: `source_page`, `signup_flow`
+## Reporting and rollout
 
-### Error tag
+- `/admin/marketing`: signup paths by device and entry, with created accounts,
+  handoffs and separate verification outcomes. Calculator CTA journeys still
+  require result → relevant CTA → signup in order.
+- Email-path handoffs use terminal-event attribution, including email opens in
+  later sessions. They are outcomes observed in the window, not a closed
+  cohort conversion rate from emails sent in the same window.
+- Distinct sessions use GA4 user_pseudo_id + ga_session_id, not event sums.
+  A skip plus the terminal event counts once. Legacy login success is accepted
+  as observed historical completion; legacy verification alone is not.
+- First-party lead/account email matches are associations, not proof of link use.
+  Both admin pages show verified matched accounts and automatically saved results.
+- Auto-created calculator conversations have an explicit origin and do not
+  count as “Asked a planning question.” The additive migration recognizes old
+  generated results by their deterministic question/answer signatures.
+  User follow-ups still count as user questions.
+- Retirement run success remains the deterministic model response; the optional
+  interpretation request does not create another run. Coast FIRE only counts
+  submitted results, not an empty initial form. Repeat-run reporting is unchanged.
 
-- Trigger name: `CE - trial signup funnel errors`
-- Trigger type: Custom Event, regex enabled
-- Event regex:
-  `^trial_(signup_registration_error|verify_error|login_error)$`
-- Tag name: `GA4 - trial signup funnel errors`
-- Event name: `{{Event}}`
-- Event parameters: `source_page`, `signup_flow`, `error_category`
+Apply the Prisma migration before the new backend. Deploy frontend + backend
+and publish GTM. Test both calculators' email links (including changed-address
+fallback), ordinary /getstarted code verification, Skip, rejection/retry,
+and the already-verified bounce. Verify one account-created event and one handoff,
+correct method/origin/entry, and no mandatory login.
 
-### Validation tag
+Only after observing the events in GA4 and a complete exported reporting day,
+set backend `GA4_SIGNUP_HANDOFF_TRACKING_DATE=YYYY-MM-DD` to the first fully covered
+America/Los_Angeles calendar day. Keep `GA4_FIRST_FULL_TRACKING_DATE` for earlier
+signup instrumentation. A window must be covered by both dates for new funnel
+rates. Until then counts are observed lower bounds and rates remain unavailable.
+Never substitute the PR merge date or GTM publish date for verified coverage.
+Events lost between the flow change and analytics deployment cannot be recovered.
 
-- Trigger name: `CE - trial signup validation error`
-- Trigger type: Custom Event
-- Event name: `trial_signup_validation_error`
-- Tag name: `GA4 - trial signup validation error`
-- GA4 event name: `{{Event}}`
-- Event parameters: `source_page`, `signup_flow`, `validation_reason`
-
-Do not change the existing `start_free_click` or `sign_up` tags, and do not
-change any existing Contentsquare override ID. Preview the container and verify
-one GA4 tag per data-layer event before publishing any future revision.
-
-GA4 property 519498279 has event-scoped custom dimensions for `signup_flow`,
-`source_page`, `error_category`, and `validation_reason`. `signup_flow` was
-already present; the other three were registered on September 9, 2026.
-Parameter collection does not depend on custom-dimension registration, but GA4
-exploration filtering and breakdowns do.
-
-## Recommended GA4 reports
-
-Build a closed funnel in the exact event order above for strict same-path
-completion, and an open funnel for diagnosing where visitors re-enter. Report
-these separately rather than combining all errors:
-
-- signup start rate: `trial_signup_started / trial_signup_viewed`;
-- signup submit rate: `trial_signup_submit / trial_signup_started`;
-- client validation rate: sessions with `trial_signup_validation_error` per
-  signup-submit session;
-- registration failure rate: sessions with
-  `trial_signup_registration_error` per signup-submit session;
-- account-created rate: `sign_up (signup_flow=free_trial)` per signup-viewed
-  session;
-- verification attempt and failure rates, using `trial_verify_error` and
-  `trial_verify_submit`; and
-- end-to-end completion:
-  `(trial_verify_success + trial_verify_skipped) / trial_signup_viewed`.
-  Counting only `trial_verify_success` undercounts by everyone who skipped,
-  who reach the workspace just the same.
-
-The former verification-to-login return rate and login failure rate no longer
-have a step to measure — the funnel ends at verification.
-
-Event counts can exceed users or sessions because submit and error events fire
-for every attempt. Use session- or user-based funnel steps for conversion rates,
-and event counts to diagnose repeated retries. GA4's native funnel can span
-sessions depending on exploration settings; use the BigQuery export when an
-exact completed-session definition is required.
+The backend query is the maintained session report. The older
+`docs/analytics-session-reports.sql` still measures /getstarted → account creation;
+that boundary remains valid and must not be relabeled as verified signup or app entry.
