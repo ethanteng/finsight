@@ -53,6 +53,15 @@ export interface AskClaudeOptions {
    * predates the second Anthropic slot means.
    */
   slot?: AnthropicSlotId;
+  /**
+   * Cap how long a single request may wait on Anthropic. Used by the public
+   * calculator narrative path so a provider stall degrades to no panel rather
+   * than holding an unauthenticated request for the SDK's default (10 minutes,
+   * with retries). When set, retries default to 0 unless `maxRetries` is also
+   * provided — otherwise a short timeout is multiplied by the retry budget.
+   */
+  timeoutMs?: number;
+  maxRetries?: number;
 }
 
 /** The slots this client serves. Both are configured as Anthropic models. */
@@ -262,13 +271,26 @@ export async function askClaude(
   const model = options.model || getActiveModel(slot);
   const maxTokens = options.maxTokens ?? resolveAskLincMaxOutputTokens();
 
-  const response = await client.messages.create({
-    model,
-    max_tokens: maxTokens,
-    ...reasoningParams(model, slot),
-    system: systemPrompt,
-    messages: [{ role: 'user', content: userMessage }]
-  });
+  const requestOptions =
+    options.timeoutMs != null || options.maxRetries != null
+      ? {
+          ...(options.timeoutMs != null ? { timeout: options.timeoutMs } : {}),
+          // A bounded public call must not inherit the SDK's default retries,
+          // which would multiply a short timeout into a long stall.
+          maxRetries: options.maxRetries ?? (options.timeoutMs != null ? 0 : undefined),
+        }
+      : undefined;
+
+  const response = await client.messages.create(
+    {
+      model,
+      max_tokens: maxTokens,
+      ...reasoningParams(model, slot),
+      system: systemPrompt,
+      messages: [{ role: 'user', content: userMessage }],
+    },
+    requestOptions
+  );
 
   reportIfTruncated(response.stop_reason, model);
 

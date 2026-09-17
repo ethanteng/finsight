@@ -571,6 +571,13 @@ function parseDraft(raw: string): Pick<QuickPlanInterpretation, 'headline' | 'pa
 
 const DEFAULT_MAX_OUTPUT_TOKENS = 2_000;
 
+/**
+ * The panel is optional and the page already has its deterministic answer.
+ * Fifteen seconds is enough for Haiku with thinking off; beyond that the
+ * visitor is better served by no paragraph than by "Reading your result…".
+ */
+const NARRATIVE_TIMEOUT_MS = 15_000;
+
 function maxOutputTokens(): number {
   const configured = getActiveNumericGenerationSetting('calculatorNarrative', 'maxOutputTokens');
   return configured !== null && configured > 0 ? configured : DEFAULT_MAX_OUTPUT_TOKENS;
@@ -650,6 +657,7 @@ export async function interpretRetirementQuickPlan(
       raw = await askClaude(SYSTEM_PROMPT, buildUserMessage(result, facts, feedback), {
         slot: 'calculatorNarrative',
         maxTokens: maxOutputTokens(),
+        timeoutMs: NARRATIVE_TIMEOUT_MS,
       });
     } catch (error) {
       // The provider is the one thing here that fails for reasons unrelated to

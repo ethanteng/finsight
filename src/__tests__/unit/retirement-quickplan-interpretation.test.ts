@@ -506,6 +506,19 @@ describe('interpretRetirementQuickPlan', () => {
     expect(model.ask).toHaveBeenCalledTimes(1);
   });
 
+  it('bounds the public narrative call so a provider stall can fail open', async () => {
+    model.ask.mockResolvedValue(DRAFT('Your money lasted in 87.3% of tested retirements.'));
+
+    await interpretRetirementQuickPlan(planResult());
+
+    expect(model.ask.mock.calls[0][2]).toEqual(
+      expect.objectContaining({
+        slot: 'calculatorNarrative',
+        timeoutMs: 15_000,
+      })
+    );
+  });
+
   it('returns null on a response that is not the expected object', async () => {
     model.ask.mockResolvedValue('I am afraid I cannot do that.');
     expect(await interpretRetirementQuickPlan(planResult())).toBeNull();
