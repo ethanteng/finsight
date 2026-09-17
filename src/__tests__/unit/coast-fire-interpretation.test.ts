@@ -169,6 +169,28 @@ describe('the figures a Coast FIRE reading may state', () => {
   });
 
   /*
+   * Same idea as the series-name case, for the sensitivity rows. Those rows
+   * have to license "4.0%" and "6.0%" as rates, but a bare 6 must not become
+   * permission to write "over the next 6 years" when this run's horizon is 25.
+   */
+  it('does not license a bare adjacent return as a horizon', () => {
+    const facts = buildCoastFireFacts(result({
+      // Keep the entered rates clear of 6 so the only way a bare 6 gets in is
+      // the +1 sensitivity row.
+      realReturnRate: 5,
+      withdrawalRate: 3.5,
+    }));
+
+    const grounded = groundDraft({
+      headline: 'A headline.',
+      paragraphs: ['Over the next 6 years that compounds.'],
+      watchOuts: [],
+    }, facts);
+    expect(grounded.grounded).toBe(false);
+    expect(grounded.ungrounded).toContain('6');
+  });
+
+  /*
    * A scenario whose entered income covers its entered spending has an
    * infinite funded share. Licensing that licenses nothing, and a percentage
    * is the wrong shape for the answer anyway — it is a sentence.

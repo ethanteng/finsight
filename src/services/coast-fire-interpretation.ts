@@ -147,10 +147,14 @@ export function buildCoastFireFacts(
       display:
         `the Coast FIRE number would be $${Math.round(scenario.coastFireNumber).toLocaleString('en-US')}` +
         `, which today’s savings ${scenario.reached ? 'would still meet' : 'would not meet'}`,
+      // The rate stays in percentValues only. Putting 4 or 6 in the plain
+      // allowlist would license "over the next 4 years" the same way a
+      // "30-year" label used to license a bare 30 — and those adjacent rates
+      // are not horizons this run used.
       values: [
-        scenario.rate,
         scenario.coastFireNumber,
         Math.round(scenario.coastFireNumber),
+        scenario.rate / 100,
       ],
       percentValues: [scenario.rate],
     });
