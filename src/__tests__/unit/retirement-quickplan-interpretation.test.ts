@@ -239,9 +239,11 @@ describe('extractSpelledFigures', () => {
     expect(plus.value).toBe(5);
     expect(plus.raw.toLowerCase()).toContain('plus');
 
-    const decimal = extractSpelledFigures('five point five percent')[0];
-    expect(decimal.raw.toLowerCase()).toContain('point');
-    expect(Number.isFinite(decimal.value)).toBe(false);
+    // Spelled decimals are read, not refused: with no ungrounded-retry left to
+    // ask for digits, NaN would only inflate the mismatch rate.
+    expect(extractSpelledFigures('five point five percent')[0].value).toBe(5.5);
+    expect(extractSpelledFigures('twenty-five point five percent')[0].value).toBe(25.5);
+    expect(extractSpelledFigures('ninety eight point seven percent')[0].value).toBe(98.7);
   });
 
   it('leaves the thirty-year compound adjective alone', () => {
@@ -259,10 +261,8 @@ describe('extractSpelledFigures', () => {
     expect(prose).toHaveLength(1);
     expect(prose[0].value).toBe(5);
 
-    // A number word in front still marks the figure unreadable.
-    for (const decimal of ['five point five percent', 'twenty-five point five percent']) {
-      expect(Number.isFinite(extractSpelledFigures(decimal)[0].value)).toBe(false);
-    }
+    // A number word in front still marks a real decimal, and is read as one.
+    expect(extractSpelledFigures('five point five percent')[0].value).toBe(5.5);
   });
 });
 

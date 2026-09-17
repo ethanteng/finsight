@@ -60,8 +60,8 @@ export interface CoastFireInterpretation {
  * Everything true about this run, and nothing else.
  *
  * Exported because the grounding suite asserts against it directly: the
- * guarantee this module makes is "no number outside this block reaches the
- * page", and that is only testable if the block is reachable.
+ * advisory check this module runs is "does every number fall inside this
+ * block", and that is only testable if the block is reachable.
  */
 export function buildCoastFireFacts(
   result: CoastFireResult,

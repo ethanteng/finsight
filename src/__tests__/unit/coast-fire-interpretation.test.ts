@@ -290,6 +290,7 @@ describe('the figures a Coast FIRE reading may state', () => {
 
     for (const text of [
       'Returns could come in at negative five percent.',
+      // 5.5% is a different rate than the licensed 5% — not a suffix restart.
       'At five point five percent the picture changes.',
     ]) {
       expect(groundDraft(
@@ -302,6 +303,13 @@ describe('the figures a Coast FIRE reading may state', () => {
     expect(groundDraft(
       { headline: 'A headline.', paragraphs: ['At five percent after inflation, the savings do the rest.'], watchOuts: [] },
       facts
+    ).grounded).toBe(true);
+
+    // And a spelled decimal that the formula did produce grounds too.
+    const withHalf = buildCoastFireFacts(result({ realReturnRate: 5.5 }));
+    expect(groundDraft(
+      { headline: 'A headline.', paragraphs: ['At five point five percent after inflation, the savings do the rest.'], watchOuts: [] },
+      withHalf
     ).grounded).toBe(true);
   });
 

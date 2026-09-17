@@ -9,11 +9,13 @@
  *
  *  - Every number in the draft is checked against the figures the engine
  *    produced, at the precision the draft actually wrote them to.
- *  - A draft that fails is sent back once with the offending tokens named,
- *    and then dropped. The page's deterministic answer is already complete, so
- *    a reading that cannot be grounded costs a paragraph rather than being
- *    shown wrong.
- *  - The whole thing sits behind one budget, because a visitor is waiting.
+ *  - The check reports; it does not gate. A mismatch is logged (and sent to
+ *    Sentry) and the reading is shown either way — these pages are free and
+ *    unauthenticated, and an empty panel was judged worse than a paragraph
+ *    that may misquote a number. The prompt is the only thing asking the
+ *    model to stay inside the fact block.
+ *  - A response that cannot be parsed is retried once. The whole thing sits
+ *    behind one budget, because a visitor is waiting.
  *
  * This module owns that contract. Each calculator supplies its own facts, its
  * own system prompt, and its own run block; nothing here knows what a Coast
@@ -391,21 +393,39 @@ export function extractSpelledFigures(text: string): NumericToken[] {
     const unit = match[3].toLowerCase();
     const isPercent = unit === '%' || unit === 'percent' || unit === 'per cent';
 
-    const decimal =
-      modifier === 'point' &&
-      endsInNumberWord(text.slice(Math.max(0, (match.index ?? 0) - 16), match.index ?? 0));
+    const matchIndex = match.index ?? 0;
+    const before = text.slice(Math.max(0, matchIndex - 64), matchIndex);
+    const decimal = modifier === 'point' && endsInNumberWord(before);
     if (decimal) {
       /*
-       * A decimal spelled out. Reading "five point five" back reliably is more
-       * than this is worth, and guessing is the one thing it must not do — so
-       * the phrase is reported as a figure that matches nothing, which names it
-       * in the retry and asks for digits instead.
+       * A decimal spelled out — "five point five percent" — only when a number
+       * word leads into "point". Otherwise "point" is ordinary English
+       * ("at this point five years remain") and falls through as the count.
        *
-       * Only when a number word leads into it. "Point" is also a plain English
-       * noun, and rejecting "at this point five years remain" over a licensed
-       * 5 would be the false drop this whole path exists to stop.
+       * The integer sits before the match; the fractional words are match[2].
+       * Digits after the point set the place value the same way "5.25" does:
+       * "twenty five" is two places, so /100. There is no ungrounded-retry
+       * left to ask for digits, so an unreadable form is skipped rather than
+       * emitted as NaN (which would inflate the mismatch rate this check
+       * exists to measure).
        */
-      tokens.push({ raw: match[0].trim(), value: Number.NaN, halfWidth: 0, isPercent });
+      const leading = new RegExp(
+        String.raw`((?:${ANY_NUMBER_WORD})(?:[-\s](?:${ANY_NUMBER_WORD}))*)[-\s]*$`,
+        'i'
+      ).exec(before);
+      const whole = leading ? readNumberWords(leading[1]) : null;
+      if (!leading || !whole) continue;
+
+      const fracDigits = String(Math.round(Math.abs(read.value)));
+      const places = Math.max(1, fracDigits.length);
+      const value = whole.value + read.value / Math.pow(10, places);
+      const raw = `${leading[1]} ${match[0]}`.replace(/\s+/g, ' ').trim();
+      tokens.push({
+        raw,
+        value,
+        halfWidth: 0.5 * writtenStep(fracDigits, places, 1, isPercent),
+        isPercent,
+      });
       continue;
     }
 

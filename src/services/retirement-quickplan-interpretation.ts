@@ -53,8 +53,8 @@ import type { RetirementQuickPlanResult } from './retirement-quickplan';
 
 /**
  * Re-exported because the grounding suite asserts against them directly: the
- * guarantee this module makes is "no number outside the fact block reaches the
- * page", and that is only testable through the tokenizer that enforces it.
+ * advisory check this module runs is "does every number fall inside the fact
+ * block", and that is only testable through the tokenizer that measures it.
  */
 export { extractNumericTokens };
 export type { GroundingResult } from './calculator-interpretation';
@@ -85,8 +85,8 @@ export function groundInterpretation(draft: InterpretationDraft, facts: PlanFact
  * Everything true about this run, and nothing else.
  *
  * Exported because the grounding test suite asserts against it directly: the
- * guarantee this module makes is "no number outside this block reaches the
- * page", and that is only testable if the block is reachable.
+ * advisory check this module runs is "does every number fall inside this
+ * block", and that is only testable if the block is reachable.
  */
 export function buildPlanFacts(
   result: RetirementQuickPlanResult,
@@ -357,7 +357,7 @@ function cacheKey(
     // provider revising a value in place, and misses the 10-year point falling
     // back from Massive to FRED — same label, possibly the same date, a
     // different number. Either would serve prose quoting a yield that is no
-    // longer the one in the facts, which is the guarantee this module makes.
+    // longer the one in the facts, which is what the advisory check measures.
     marketRates(market).map(
       (rate) => `${rate.label}@${rate.source}@${rate.asOf}@${rate.percent}`
     ),
