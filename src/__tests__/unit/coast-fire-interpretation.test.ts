@@ -250,26 +250,51 @@ describe('the figures a Coast FIRE reading may state', () => {
 
   /*
    * The hole the digit tokenizer leaves. The prompts ask for small counts as
-   * words so that every digit on the page is a licensed figure, which means a
-   * figure spelled out carries nothing to check — and "a ninety percent
-   * chance" is the exact claim rule 4 of this prompt forbids.
+   * words, which means a figure spelled out carries no digit to check — and "a
+   * ninety percent chance" is the exact claim rule 4 of this prompt forbids.
    *
-   * The line is the unit: a quantity spelled out is refused, a count is not.
+   * They are read as numbers and held to the same list, rather than refused on
+   * sight. Refusing was the first attempt and it contradicted the instruction
+   * that produces them: a count written as a word is what rule 2 asks for, and
+   * rejecting it dropped panels that were telling the truth. See the
+   * "grounds a spelled figure the formula did produce" case below.
    */
-  it('refuses a quantity spelled out in words', () => {
+  it('refuses a spelled quantity the formula did not produce', () => {
     const facts = buildCoastFireFacts(result());
 
     for (const spelled of [
       'There is roughly a ninety percent chance this holds.',
-      'Over the next five years that compounds.',
       'You would need about two million dollars.',
-      'Left alone for twenty-five years it grows.',
+      'That is thirty-seven percent of the target.',
+      // Fifty is in no fact here; forty would be, as the visitor's age, which
+      // is the by-value gap `groundDraft` documents rather than a new one.
+      'Left alone for fifty years it grows.',
     ]) {
       const grounded = groundDraft(
         { headline: 'A headline.', paragraphs: [spelled], watchOuts: [] },
         facts
       );
       expect(grounded.grounded).toBe(false);
+    }
+  });
+
+  /*
+   * The other half of the same rule, and the one that was wrong before: this
+   * scenario runs from 40 to 65, so twenty-five years is a figure the formula
+   * produced. Spelling it does not make it a fabrication, and refusing it
+   * taught the model nothing it could act on.
+   */
+  it('grounds a spelled figure the formula did produce', () => {
+    const facts = buildCoastFireFacts(result());
+
+    for (const spelled of [
+      'Left alone for twenty-five years, your savings do the rest.',
+      'You have twenty-five years of compounding ahead of you.',
+    ]) {
+      expect(groundDraft(
+        { headline: 'A headline.', paragraphs: [spelled], watchOuts: [] },
+        facts
+      )).toEqual({ grounded: true, ungrounded: [] });
     }
   });
 

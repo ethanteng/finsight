@@ -274,44 +274,102 @@ export function extractNumericTokens(text: string): NumericToken[] {
   return tokens;
 }
 
+const NUMBER_WORDS: Record<string, number> = {
+  zero: 0, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8,
+  nine: 9, ten: 10, eleven: 11, twelve: 12, thirteen: 13, fourteen: 14, fifteen: 15,
+  sixteen: 16, seventeen: 17, eighteen: 18, nineteen: 19, twenty: 20, thirty: 30,
+  forty: 40, fifty: 50, sixty: 60, seventy: 70, eighty: 80, ninety: 90,
+};
+
+const MAGNITUDE_WORDS: Record<string, number> = {
+  hundred: 100, thousand: 1_000, million: 1_000_000, billion: 1_000_000_000,
+};
+
+const ANY_NUMBER_WORD = [...Object.keys(NUMBER_WORDS), ...Object.keys(MAGNITUDE_WORDS)].join('|');
+
 /**
- * A figure spelled out in words, attached to a unit that makes it a claim.
+ * A quantity spelled out in words, attached to a unit that makes it a claim.
  *
  * The tokenizer above reads digits, and the prompts ask for small counts as
- * words precisely so that every digit on the page is a licensed figure. That
- * arrangement has a hole in it: "a ninety percent chance" and "over the next
- * five years" state figures this run never produced and contain no digit to
- * check, so they would reach the page unexamined — and rule 4 of the Coast
- * FIRE prompt forbids exactly the first of those.
+ * words so that every digit on the page is a licensed figure. That leaves
+ * spelled quantities unexamined: "a ninety percent chance" states a figure no
+ * run produced and contains no digit to check.
  *
- * The line drawn here is the unit. "Two levers" and "a third of the answer"
- * are the phrasings the prompts want and carry no quantity; "five years",
- * "ninety percent" and "two million dollars" are quantities, and every
- * quantity this run produced is in the fact block in digits. A draft that
- * spells one out is sent back to write it as a digit, where it is checked like
- * any other.
+ * These are read as numbers and checked like any other, rather than refused on
+ * sight. Refusing was the first attempt and it contradicted the instruction
+ * that produces them: "seven years between retiring and claiming" is a small
+ * count written as a word, exactly as rule 2 asks, and the figure behind it is
+ * licensed — so rejecting the draft taught the model nothing it could act on
+ * and dropped panels that were telling the truth.
  *
- * The separator is whitespace only, never a hyphen, so the compound adjective
- * in "the thirty-year Treasury yield" — which is how the fact block itself
- * names the series — stays prose rather than becoming a rejected figure.
+ * The line is still the unit. "Two levers" and "a third of the answer" carry no
+ * quantity and are not read at all; "seven years", "ninety percent" and "two
+ * million dollars" are quantities, and they now stand or fall on whether the
+ * engine produced them.
+ *
+ * The separator before the unit is whitespace, never a hyphen, so the compound
+ * adjective in "the thirty-year Treasury yield" — which is how the fact block
+ * names the series — stays prose rather than becoming a figure. A hyphen
+ * *inside* the number ("twenty-five years") is still read.
  */
 const SPELLED_FIGURE = new RegExp(
-  String.raw`\b(` +
-  String.raw`(?:zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|` +
-  String.raw`thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|` +
-  String.raw`thirty|forty|fifty|sixty|seventy|eighty|ninety|` +
-  String.raw`hundred|thousand|million|billion)` +
-  String.raw`(?:[-\s](?:zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|` +
-  String.raw`thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|` +
-  String.raw`thirty|forty|fifty|sixty|seventy|eighty|ninety|` +
-  String.raw`hundred|thousand|million|billion))*` +
-  String.raw`)\s+(%|percent|per cent|years?|months?|dollars?|hundred|thousand|million|billion)\b`,
+  String.raw`\b((?:${ANY_NUMBER_WORD})(?:[-\s](?:${ANY_NUMBER_WORD}))*)` +
+  String.raw`\s+(%|percent|per cent|years?|months?|dollars?|hundred|thousand|million|billion)\b`,
   'gi'
 );
 
-/** Every spelled-out quantity in a piece of prose, as written. */
-export function extractSpelledFigures(text: string): string[] {
-  return [...text.matchAll(SPELLED_FIGURE)].map((match) => match[0].trim());
+/** "twenty-five" -> 25, "two million" -> 2000000, and the magnitude it used. */
+function readNumberWords(phrase: string): { value: number; multiplier: number } | null {
+  const words = phrase.toLowerCase().split(/[-\s]+/).filter(Boolean);
+  let value = 0;
+  let pending = 0;
+  let multiplier = 1;
+  let sawNumber = false;
+
+  for (const word of words) {
+    if (word in NUMBER_WORDS) {
+      pending += NUMBER_WORDS[word];
+      sawNumber = true;
+      continue;
+    }
+    const magnitude = MAGNITUDE_WORDS[word];
+    if (magnitude === undefined) return null;
+    // "two million" scales what came before it; a bare "million dollars" reads
+    // as one of them, the way a writer means it.
+    const scaled = (pending === 0 ? 1 : pending) * magnitude;
+    value += scaled;
+    multiplier = Math.max(multiplier, magnitude);
+    pending = 0;
+    sawNumber = true;
+  }
+
+  if (!sawNumber) return null;
+  return { value: value + pending, multiplier };
+}
+
+/**
+ * Every spelled-out quantity in a piece of prose, as a token the grounder can
+ * check against the facts exactly like a written one.
+ */
+export function extractSpelledFigures(text: string): NumericToken[] {
+  const tokens: NumericToken[] = [];
+  for (const match of text.matchAll(SPELLED_FIGURE)) {
+    const read = readNumberWords(match[1]);
+    if (!read) continue;
+
+    const unit = match[2].toLowerCase();
+    const isPercent = unit === '%' || unit === 'percent' || unit === 'per cent';
+    // Scored at the precision the words commit to, by the same rule a written
+    // figure gets: "two million" is as coarse as "$2M", "seven" is exact.
+    const digits = String(Math.round(read.value / read.multiplier));
+    tokens.push({
+      raw: match[0].trim(),
+      value: read.value,
+      halfWidth: 0.5 * writtenStep(digits, 0, read.multiplier, isPercent),
+      isPercent,
+    });
+  }
+  return tokens;
 }
 
 export interface GroundingResult {
@@ -347,10 +405,10 @@ export function groundDraft(draft: InterpretationDraft, facts: CalculatorFact[])
   }
 
   const text = [draft.headline, ...draft.paragraphs, ...draft.watchOuts].join('\n');
-  // Spelled-out quantities first: they carry no digit to check, so they are
-  // refused outright rather than matched against anything.
-  const ungrounded: string[] = extractSpelledFigures(text);
-  for (const token of extractNumericTokens(text)) {
+  const ungrounded: string[] = [];
+  // Written and spelled figures are the same claim in two scripts, and are
+  // held to the same list.
+  for (const token of [...extractNumericTokens(text), ...extractSpelledFigures(text)]) {
     const allowed = token.isPercent ? percents : plain;
     // A hair over the half-width, so a value sitting exactly on a rounding
     // boundary is not rejected by floating-point noise.
@@ -417,9 +475,14 @@ function feedbackLines(feedback?: DraftFeedback): string[] {
       'Your previous draft was rejected. These appear in it but are not figures from the list above:',
       ...feedback.tokens.map((token) => `- ${token}`),
       '',
-      'Rewrite it using only the figures listed. Do not compute anything. Write every figure in',
-      'digits exactly as the list gives it — a quantity spelled out in words ("five years", "ninety',
-      'percent") is rejected too, because it states a figure without one to check.',
+      'Rewrite it using only the figures listed. Do not compute anything. Each of these is one of a',
+      'few mistakes, so check which you made:',
+      '- A figure you worked out from the listed ones — a remainder, a complement, a difference, a',
+      '  monthly figure from an annual one. Drop the sentence or use a figure from the list.',
+      '- A share turned into a ratio of your own ("9 in 10"). Use the percentage the list gives.',
+      '- A calendar year or a span of them. The list does not contain years; do not name any.',
+      '- A figure rounded further than the list supports. Use it as given, or round more gently.',
+      'Spelling a number out does not get it past this check: "seven years" is read as 7.',
     ];
   }
   if (feedback?.kind === 'unparseable') {

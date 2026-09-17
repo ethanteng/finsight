@@ -268,6 +268,68 @@ describe('groundInterpretation', () => {
   });
 
   /*
+   * From production. Every dropped panel in the first day and a half of this
+   * feature failed grounding — no provider error, no timeout, no unparseable
+   * response — and the rejected tokens were mostly of two shapes.
+   *
+   * The first was a licensed count written the way rule 2 asks for, which the
+   * spelled-quantity check then refused. "Seven years between retiring and
+   * claiming" is a figure this plan produced, and the panel was dropped for
+   * saying so in words.
+   */
+  it('grounds a licensed count whether it is spelled or written', () => {
+    const facts = buildPlanFacts(planResult());
+
+    for (const phrasing of [
+      'Seven years pass between retiring at 60 and claiming at 67.',
+      'There are 7 years between retiring at 60 and claiming at 67.',
+    ]) {
+      expect(groundInterpretation(
+        { headline: 'A headline.', paragraphs: [phrasing], watchOuts: [] },
+        facts
+      )).toEqual({ grounded: true, ungrounded: [] });
+    }
+  });
+
+  /*
+   * The second shape, which the prompt now forbids rather than the grounder
+   * accommodating: a share turned into a ratio of the model's own, and a
+   * calendar year. Both state a figure the run did not produce, so both stay
+   * rejected — the fix for these is rules 8 and 10, not a wider allowlist.
+   */
+  it('still refuses a ratio of its own making, and a calendar year', () => {
+    const facts = buildPlanFacts(planResult());
+
+    const ratio = groundInterpretation(
+      { headline: 'A headline.', paragraphs: ['Your money lasted in 9 of every 10 tested retirements.'], watchOuts: [] },
+      facts
+    );
+    expect(ratio.grounded).toBe(false);
+
+    const year = groundInterpretation(
+      { headline: 'A headline.', paragraphs: ['Runs beginning near the 2008 downturn are the hard ones.'], watchOuts: [] },
+      facts
+    );
+    expect(year.grounded).toBe(false);
+    expect(year.ungrounded).toContain('2008');
+  });
+
+  /* And the retry has to say what to do about them, not just name them. */
+  it('tells a rejected draft which mistake it made', async () => {
+    model.ask
+      .mockResolvedValueOnce(DRAFT('That leaves 13% of them running short.'))
+      .mockResolvedValueOnce(DRAFT('Your money lasted in 87.3% of tested retirements.'));
+
+    await interpretRetirementQuickPlan(planResult());
+
+    const retry = String(model.ask.mock.calls[1][1]);
+    expect(retry).toContain('13%');
+    expect(retry).toContain('a remainder, a complement, a difference');
+    expect(retry).toContain('Use the percentage the list gives');
+    expect(retry).toContain('"seven years" is read as 7');
+  });
+
+  /*
    * The whole block, echoed. The targeted cases below each pin one string the
    * prompt shows the model; this pins all of them at once, including every
    * published-rate label — which is where the mistake actually happens, since
