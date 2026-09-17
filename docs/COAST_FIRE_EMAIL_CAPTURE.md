@@ -37,9 +37,10 @@ copy.
    number the email stated, what they have saved, and their retirement age,
    with their email prefilled.
 
-8. Registering with that token in hand skips the emailed verification code and
-   writes the run as the account's first decision. See **Saving a run to an
-   account** below.
+8. Registering with that token in hand skips the emailed verification code,
+   opens `/app` on the session registration returns rather than sending them to
+   the sign-in form, and writes the run as the account's first decision. See
+   **Saving a run to an account** below.
 
 The page's own "Stress-test my Coast FIRE plan" button reaches the same
 tailored page through sessionStorage rather than a token, so both entry points
@@ -102,6 +103,10 @@ registers with that token:
   states the scenario back in the first person; `buildCoastFireAnswer` states
   the verdict from the *stored* figures, never a fresh run, for the same reason
   the signup context does.
+- **The sign-in form is skipped with it.** `/auth/register` already returns a
+  usable session, so re-collecting the password set one field earlier proves
+  nothing. `/app` re-verifies the token and the subscription on mount, so the
+  check still happens — just not as a form.
 
 Both calculators mint tokens from the same 48-character space, so the token
 itself says which table holds it: `resolveCalculatorLead` tries the retirement

@@ -305,6 +305,7 @@ type TrialFunnelEvent =
   | 'trial_verify_submit'
   | 'trial_verify_error'
   | 'trial_verify_success'
+  | 'trial_verify_skipped'
   | 'trial_login_viewed'
   | 'trial_login_submit'
   | 'trial_login_error'
@@ -375,6 +376,18 @@ export function pushTrialVerifyError(category: unknown): void {
 
 export function pushTrialVerifySuccess(): void {
   pushTrialFunnelEvent('trial_verify_success');
+}
+
+/**
+ * "Skip for now" — the other way into the workspace from this screen.
+ *
+ * It used to route to `/login`, where `trial_login_success` reported the
+ * completion. Skipping now opens the workspace directly, so without this the
+ * funnel would simply lose everyone who took that door. Completion is
+ * `trial_verify_success` plus this.
+ */
+export function pushTrialVerifySkipped(): void {
+  pushTrialFunnelEvent('trial_verify_skipped');
 }
 
 export function pushTrialLoginViewed(): void {

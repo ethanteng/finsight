@@ -312,8 +312,10 @@ without affecting any answer in the product.
 The capture under the result asks for an account rather than an inbox copy:
 **"Save these results to your free account."** The email it sends carries a
 link labelled **"Finish creating your account"**, which lands on signup with
-the address already filled in, and a password is the only thing left. The run
-becomes the first decision in the new account.
+the address already filled in, and a password is the only thing left. Setting
+it opens the workspace directly — no code screen, and no sign-in form asking
+for the password one field later. The run becomes the first decision in the new
+account.
 
 **This path skips the verification code, and that is the point of the token.**
 Every other registration goes to `/verify-email` and enters a mailed code. A
@@ -338,9 +340,9 @@ wrong strands people silently.
   wait for mail that will never arrive. Nothing errors; it simply looks like a
   broken email pipeline.
 
-`VerifyEmailForm` bounces an already-verified session to sign-in, which covers
-someone landing there later — but that bounce lives in the *frontend*, so it
-cannot rescue a backend-first rollout. Order is still the control.
+`VerifyEmailForm` bounces an already-verified session into the workspace, which
+covers someone landing there later — but that bounce lives in the *frontend*,
+so it cannot rescue a backend-first rollout. Order is still the control.
 
 - `resolveCalculatorLead` runs **before** the account is created, on the
   server, from the token alone. The client sends a token, never a claim; the
@@ -365,6 +367,7 @@ step.
 | Token sent with the registration | `RegisterForm.tsx` → `POST /auth/register` (`calculatorRef`) |
 | Token resolved, address proved | `resolveCalculatorLead` — before the account exists |
 | Run written as the first decision | `seedFirstDecisionFromLead` — after the response |
+| Registration session carried into `/app` | `RegisterForm.tsx` — no re-entered password |
 
 Three things about that last step are load-bearing:
 
@@ -384,6 +387,21 @@ since the two addresses arrive from different places.
 returns a reason rather than throwing, and skips an account that already has
 decisions — registration can be retried, and two attempts must not leave two
 copies of one run.
+
+That ordering has a consequence now that registration opens `/app` directly:
+the workspace's first `/conversations` fetch can beat the insert. The sign-in
+form used to cover the gap. `RegisterForm` therefore leaves a short-lived
+same-tab marker (`lib/pending-first-decision.ts`) whenever the server reports
+the address already proved — which is exactly when a seed is in flight — and
+`AppPageClient` reloads history a few times over ~2.8s before accepting an
+empty workspace, showing that it is saving the run rather than the empty-state
+copy while it waits. Only that signup waits; every other visit reads the marker
+as absent and does nothing.
+
+The wait belongs in the workspace, not in front of the redirect. Polling
+`/conversations` from the signup form before navigating would hold the visitor
+on a disabled button — for the full timeout whenever the seed is never coming
+at all, which `already-has-decisions` and `failed` both allow.
 
 The decision's question is synthesized, because a calculator is a form and
 there is no prompt to carry over. It states the plan back in the first person

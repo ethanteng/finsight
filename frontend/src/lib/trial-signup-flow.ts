@@ -162,7 +162,13 @@ export function withFreeTrialSignupFlow(path: string): string {
   return `${path}${separator}${SIGNUP_FLOW_QUERY_PARAM}=${FREE_TRIAL_SIGNUP_FLOW}`;
 }
 
-/** End attribution only after the user has successfully authenticated. */
+/**
+ * End attribution where the funnel ends — that is, where the visitor reaches
+ * the workspace. Since signup stopped routing through `/login`, that is
+ * verification, "Skip for now", or registration itself for a link-proved
+ * signup that never sees a code. In every case they arrive holding the session
+ * registration minted, so this still only runs on an authenticated visitor.
+ */
 export function completeFreeTrialSignupFlow(): void {
   if (typeof window === 'undefined') return;
   removeStoredFlow();

@@ -10,6 +10,7 @@ import MarketNewsModal from '../../components/MarketNewsModal';
 import { resetPlaidLinkInitialization } from '../../components/PlaidLinkButton';
 import { syncStoredUserTimeZoneFromAuthUser } from '../../lib/browser-time-zone';
 import { groupTurnsIntoDecisions } from '../../lib/decision-threads';
+import { takePendingFirstDecision } from '../../lib/pending-first-decision';
 import { relativeTurnTime } from '../../lib/relative-time';
 import type { StructuredPromptHistory } from '../../lib/structured-answer';
 
@@ -17,6 +18,15 @@ type PromptHistory = StructuredPromptHistory;
 interface SubscriptionStatus { status: string; tier: string; message: string; isActive: boolean; accessLevel: 'full' | 'none'; upgradeRequired: boolean; expiresAt?: string }
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+
+/*
+ * How long to keep looking for a first decision that registration is still
+ * writing, and how often. Roughly 2.8s across three retries covers a count and
+ * an insert with room to spare; past that the account genuinely has nothing in
+ * it and the empty state is the honest answer. Only a signup that handed over a
+ * calculator lead waits at all — see `takePendingFirstDecision`.
+ */
+const PENDING_FIRST_DECISION_RETRY_DELAYS_MS = [400, 800, 1600];
 
 export default function AppPageClient() {
   const [promptHistory, setPromptHistory] = useState<PromptHistory[]>([]);
@@ -50,6 +60,28 @@ export default function AppPageClient() {
   const [showMarketNewsModal, setShowMarketNewsModal] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const router = useRouter();
+
+  /*
+   * Whether this arrival is still owed the decision registration was writing
+   * as it navigated here. Read once on the client — the marker lives in
+   * sessionStorage, which does not exist during the server render — and held
+   * in a ref so consuming it never re-runs the history load itself.
+   */
+  const awaitingFirstDecisionRef = useRef(false);
+  const firstDecisionAttemptRef = useRef(0);
+  /** Counts answered history loads, so the retry below waits on one. */
+  const [historyLoads, setHistoryLoads] = useState(0);
+  /*
+   * Drives the sidebar while the retry runs. "Your completed questions will
+   * appear here" is a claim about the account, and it is not yet true of one
+   * whose first decision is mid-write — so the wait is shown, not the claim.
+   */
+  const [awaitingFirstDecision, setAwaitingFirstDecision] = useState(false);
+  useEffect(() => {
+    const pending = takePendingFirstDecision();
+    awaitingFirstDecisionRef.current = pending;
+    setAwaitingFirstDecision(pending);
+  }, []);
 
   useEffect(() => {
     if (!mobileNavOpen) return;
@@ -112,6 +144,9 @@ export default function AppPageClient() {
         timestamp: conversation.timestamp,
       }));
       setPromptHistory(history);
+      // Answered, whatever it contained. The pending-decision retry waits on
+      // this rather than on the history itself, which starts out empty too.
+      setHistoryLoads(count => count + 1);
       // Only the user starting a new decision mid-flight blocks the selection.
       // Refusing to select whenever nothing is selected would be simpler and
       // wrong: a first question in a fresh decision leaves selectedPrompt null,
@@ -163,6 +198,31 @@ export default function AppPageClient() {
 
   useEffect(() => { if (isAuthenticated) loadConversationHistory(); }, [isAuthenticated, loadConversationHistory]);
 
+  /*
+   * An empty history on a signup that saved a calculator run is ambiguous: the
+   * decision may simply not be written yet. Reload a few times before believing
+   * it. This keys on completed loads rather than on `promptHistory`, which
+   * starts empty — waiting on the initial state would spend an attempt on a
+   * fetch that had not answered yet. The first non-empty answer, or a spent
+   * budget, clears the flag and every later reload skips this entirely.
+   */
+  useEffect(() => {
+    if (!isAuthenticated || historyLoads === 0 || !awaitingFirstDecisionRef.current) return;
+
+    const attempt = firstDecisionAttemptRef.current;
+    if (promptHistory.length > 0 || attempt >= PENDING_FIRST_DECISION_RETRY_DELAYS_MS.length) {
+      awaitingFirstDecisionRef.current = false;
+      setAwaitingFirstDecision(false);
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      firstDecisionAttemptRef.current = attempt + 1;
+      void loadConversationHistory();
+    }, PENDING_FIRST_DECISION_RETRY_DELAYS_MS[attempt]);
+    return () => clearTimeout(timer);
+  }, [isAuthenticated, historyLoads, promptHistory, loadConversationHistory]);
+
   const handleLogout = () => {
     resetPlaidLinkInitialization();
     localStorage.removeItem('auth_token');
@@ -196,7 +256,7 @@ export default function AppPageClient() {
         </nav>
         <section className="min-h-0 flex-1 overflow-y-auto border-t border-white/10 px-4 py-5" aria-labelledby="recent-decisions">
           <div className="mb-3 flex items-center justify-between px-2"><h2 id="recent-decisions" className="text-xs font-bold uppercase tracking-[0.16em] text-white/45">Recent decisions</h2><span className="text-xs text-white/40">{decisionThreads.length}</span></div>
-          {historyError ? <button onClick={loadConversationHistory} className="rounded-xl border border-white/15 p-3 text-left text-sm text-white/70">History couldn’t load. <span className="text-[#d9ff6f]">Try again</span></button> : decisionThreads.length === 0 ? <p className="px-2 text-sm leading-6 text-white/50">Your completed questions will appear here.</p> : (
+          {historyError ? <button onClick={loadConversationHistory} className="rounded-xl border border-white/15 p-3 text-left text-sm text-white/70">History couldn’t load. <span className="text-[#d9ff6f]">Try again</span></button> : decisionThreads.length === 0 ? (awaitingFirstDecision ? <p className="px-2 text-sm leading-6 text-white/50" role="status">Saving the run you modeled…</p> : <p className="px-2 text-sm leading-6 text-white/50">Your completed questions will appear here.</p>) : (
             <div className="space-y-2">
               {decisionThreads.map(thread => {
                 const isActive = thread.threadId === activeThreadId;

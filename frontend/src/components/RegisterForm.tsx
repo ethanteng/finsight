@@ -40,9 +40,12 @@ import {
 } from '@/lib/coast-fire-signup-context';
 import {
   beginFreeTrialSignupFlow,
+  completeFreeTrialSignupFlow,
   type TrialSignupAttribution,
   withFreeTrialSignupFlow,
 } from '@/lib/trial-signup-flow';
+import { DEFAULT_POST_LOGIN_DESTINATION } from '@/lib/post-login-redirect';
+import { markFirstDecisionPending } from '@/lib/pending-first-decision';
 
 interface SubscriptionContext {
   subscription: string;
@@ -598,23 +601,33 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
        */
       const alreadyVerified = data.user?.emailVerified === true;
 
-      // Match the verify-email success path: login must mint a fresh session.
-      // Leaving the registration JWT here would also let a half-finished tab
-      // skip the sign-in step the rest of the funnel expects.
+      /*
+       * Nothing is left to do at the sign-in form once the address is proved:
+       * the response above carries a full session, so asking for the password
+       * that was set one field ago is friction, not a check. Keep the token
+       * and open the workspace. Access is still not granted here — /app
+       * re-verifies the token and the subscription on mount and bounces a
+       * session that fails either.
+       */
       if (alreadyVerified) {
-        try {
-          localStorage.removeItem('auth_token');
-        } catch {
-          // Continue to login; a fresh sign-in issues a new token.
-        }
-      }
-
-      if (isTrial) {
-        router.push(withFreeTrialSignupFlow(alreadyVerified ? '/login' : '/verify-email'));
-      } else if (alreadyVerified) {
-        router.push('/login');
+        /*
+         * The server reports this only when it resolved a lead, which is
+         * exactly when it is also writing that run as the account's first
+         * decision — unawaited, after the response above. The sign-in form
+         * used to cover that window; nothing does now, so tell /app to wait
+         * for the decision rather than render an empty workspace over it.
+         */
+        markFirstDecisionPending();
+        // The funnel ends here for this account; nothing further will report
+        // its completion, and a stale record would follow the tab for hours.
+        if (isTrial) completeFreeTrialSignupFlow();
+        router.push(DEFAULT_POST_LOGIN_DESTINATION);
+      } else if (isTrial) {
+        router.push(withFreeTrialSignupFlow('/verify-email'));
       } else if (subscriptionContext) {
-        const verifyUrl = `/verify-email?subscription=${subscriptionContext.subscription}&tier=${subscriptionContext.tier}&email=${encodeURIComponent(email)}&session_id=${subscriptionContext.sessionId || ''}`;
+        // Banner on verify only needs subscription + tier; email/session_id
+        // used to ride onward to /login and no longer have a reader.
+        const verifyUrl = `/verify-email?subscription=${subscriptionContext.subscription}&tier=${subscriptionContext.tier}`;
         router.push(verifyUrl);
       } else {
         router.push('/verify-email');
