@@ -111,6 +111,19 @@ A visitor can save a run from either calculator to a new account: the results em
 
 “What Linc remembers about you” is a bounded, field-level memory of user-stated biographical details such as age, location, household, and employment. It is encrypted at rest. Financial facts, goals, risk tolerance, and scenario assumptions belong to canonical data or active conversation context and must not be added to this memory. The extractor emits validated set/clear operations; it never appends free-form summaries.
 
+### Marketing list membership
+
+Three paths put an address in MailerLite, and they are not interchangeable.
+`mailerlite-sync` re-posts the entire user table into `MAILER_LITE_GROUP_ID`
+nightly. The two calculator `email-results` endpoints subscribe a visitor who
+asked for results by email, into that calculator's group. Registration
+subscribes a no-card signup immediately into `MAILER_LITE_TRIAL_GROUP_ID`,
+plus the calculator's group when the signup continued from one — a resolved
+lead token names the calculator, and a click-through from the page declares it
+in `signupOrigin`, which the server allowlists and a resolved lead outranks.
+Paid checkouts are left to the nightly sync. Every one of these runs after the
+response and cannot fail or delay the request it follows.
+
 ### Tier System
 
 Starter / Standard / Premium tiers control feature access. Tier checks are embedded throughout routes and services (not a centralized middleware). Stripe handles subscriptions.
@@ -132,7 +145,7 @@ The platform supports OpenAI (GPT-4), Anthropic (Claude), and Google (Gemini) wi
 | RentCast | Home valuation |
 | Brave Search | RAG for real-time financial info |
 | Stripe | Subscription billing |
-| MailerLite | Email marketing (daily sync at 3 AM EST) |
+| MailerLite | Email marketing (subscribe on no-card signup; daily sync at 3 AM EST) |
 | Resend | Transactional email |
 | Sentry | Error tracking (frontend + backend) |
 

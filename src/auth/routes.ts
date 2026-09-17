@@ -23,6 +23,11 @@ import {
   resolveCalculatorLead,
   seedFirstDecisionFromLead,
 } from '../services/calculator-first-decision';
+import {
+  normalizeCalculatorSignupOrigin,
+  signupGroupIds,
+  subscribeToMailerLite,
+} from '../services/mailerlite-subscribe';
 
 const router = Router();
 const prisma = getPrismaClient();
@@ -95,6 +100,15 @@ router.post('/register', async (req: Request, res: Response) => {
       // from one. Optional everywhere and never trusted on its own — see
       // `resolveCalculatorLead` for why the address has to match it.
       calculatorRef,
+      /*
+       * Which calculator the signup page was reached from, for the marketing
+       * group below and nothing else. The page CTA carries no token — nothing
+       * was emailed — so this is the only way that arrival can be attributed.
+       * Unverified by nature and treated that way: it is run through an
+       * allowlist, a resolved lead outranks it, and the worst a forged value
+       * can do is put the registrant in one of our own groups.
+       */
+      signupOrigin,
     } = req.body;
     
     // Handle both parameter names for Stripe session ID
@@ -223,6 +237,18 @@ router.post('/register', async (req: Request, res: Response) => {
       await sendEmailVerificationCode(user.email, verificationCode);
     }
 
+    /*
+     * The lead the server resolved outranks whatever the client said: it was
+     * proved against this address a moment ago, while `signupOrigin` is just a
+     * query parameter that survived a page load. They agree in the ordinary
+     * case; when they do not, the verified one is the true story.
+     */
+    const calculatorOrigin = calculatorLead
+      ? (calculatorLead.kind === 'retirement'
+        ? 'retirement_calculator' as const
+        : 'coast_fire_calculator' as const)
+      : normalizeCalculatorSignupOrigin(signupOrigin);
+
     // Generate token
     const token = generateToken({
       userId: user.id,
@@ -263,6 +289,45 @@ router.post('/register', async (req: Request, res: Response) => {
       // nothing escapes as an unhandled rejection.
       console.warn('First-decision seeding rejected:', error);
     });
+
+    /*
+     * Put a no-card signup on the marketing list now rather than whenever the
+     * nightly sync next runs.
+     *
+     * `mailerlite-sync` walks the whole user table at 3am into its own group,
+     * so these addresses were never lost — they were just up to a day late,
+     * which is too late for anything that should greet a new account. A
+     * visitor who only used a calculator and left an address was on a list
+     * within eight seconds; someone who created an account waited until
+     * morning.
+     *
+     * Paid checkouts are left to that sync. The trial group is for accounts
+     * that started without a card, and a customer who has just paid does not
+     * belong in a sequence written to convert one.
+     *
+     * After the response and unawaited, for the same reason as the seed above:
+     * the account exists, and an email list must never be able to fail or
+     * delay a registration. `subscribeToMailerLite` returns an outcome rather
+     * than throwing, including when the integration is unconfigured.
+     */
+    if (!stripeSessionIdToUse) {
+      void subscribeToMailerLite({
+        email: user.email,
+        groups: signupGroupIds(calculatorOrigin),
+        // Names the nightly sync already writes, so tonight's run updates
+        // these rather than leaving a second set of fields beside them.
+        fields: {
+          current_tier: user.tier,
+          user_created_at: user.createdAt.toISOString().split('T')[0],
+        },
+      }).then((outcome) => {
+        if (outcome === 'failed') {
+          console.warn(`New account not added to MailerLite: ${user.email}`);
+        }
+      }).catch(error => {
+        console.warn('MailerLite subscribe rejected:', error);
+      });
+    }
   } catch (error) {
     console.error('Registration error:', error);
     res.status(500).json({ error: 'Registration failed' });
