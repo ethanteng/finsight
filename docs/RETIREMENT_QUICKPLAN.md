@@ -325,6 +325,23 @@ twice is not more proof, just more steps.
 
 Three things keep that honest:
 
+**Deploy the frontend first, or with the backend — never after.** This is the
+opposite of the usual order here, and it is worth stating because getting it
+wrong strands people silently.
+
+- *Frontend first* is safe. The new page sends `calculatorRef`, which an older
+  backend ignores as an unknown body field, and reads `user.emailVerified`,
+  which an older backend omits — so it falls through to the verification screen
+  and the older backend has mailed a code. Nothing breaks.
+- *Backend first* is not. The new backend stops mailing the code on this path
+  while the old page still sends every signup to `/verify-email`, where they
+  wait for mail that will never arrive. Nothing errors; it simply looks like a
+  broken email pipeline.
+
+`VerifyEmailForm` bounces an already-verified session to sign-in, which covers
+someone landing there later — but that bounce lives in the *frontend*, so it
+cannot rescue a backend-first rollout. Order is still the control.
+
 - `resolveCalculatorLead` runs **before** the account is created, on the
   server, from the token alone. The client sends a token, never a claim; the
   response reports `user.emailVerified` and `RegisterForm` reads that answer
