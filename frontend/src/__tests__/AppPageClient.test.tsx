@@ -231,7 +231,11 @@ describe('AppPageClient decision list', () => {
 
     render(<AppPageClient />);
 
-    await screen.findByText('Your completed questions will appear here.');
+    // The empty-state copy is a claim about the account, and it is not true
+    // while its first decision is still being written.
+    await screen.findByText('Saving the run you modeled…');
+    expect(screen.queryByText('Your completed questions will appear here.')).toBeNull();
+
     await screen.findByRole('group', { name: 'Decision: Can I retire at 60?' }, { timeout: 5000 });
   }, 10000);
 

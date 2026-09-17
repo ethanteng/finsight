@@ -71,8 +71,16 @@ export default function AppPageClient() {
   const firstDecisionAttemptRef = useRef(0);
   /** Counts answered history loads, so the retry below waits on one. */
   const [historyLoads, setHistoryLoads] = useState(0);
+  /*
+   * Drives the sidebar while the retry runs. "Your completed questions will
+   * appear here" is a claim about the account, and it is not yet true of one
+   * whose first decision is mid-write — so the wait is shown, not the claim.
+   */
+  const [awaitingFirstDecision, setAwaitingFirstDecision] = useState(false);
   useEffect(() => {
-    awaitingFirstDecisionRef.current = takePendingFirstDecision();
+    const pending = takePendingFirstDecision();
+    awaitingFirstDecisionRef.current = pending;
+    setAwaitingFirstDecision(pending);
   }, []);
 
   useEffect(() => {
@@ -204,6 +212,7 @@ export default function AppPageClient() {
     const attempt = firstDecisionAttemptRef.current;
     if (promptHistory.length > 0 || attempt >= PENDING_FIRST_DECISION_RETRY_DELAYS_MS.length) {
       awaitingFirstDecisionRef.current = false;
+      setAwaitingFirstDecision(false);
       return;
     }
 
@@ -247,7 +256,7 @@ export default function AppPageClient() {
         </nav>
         <section className="min-h-0 flex-1 overflow-y-auto border-t border-white/10 px-4 py-5" aria-labelledby="recent-decisions">
           <div className="mb-3 flex items-center justify-between px-2"><h2 id="recent-decisions" className="text-xs font-bold uppercase tracking-[0.16em] text-white/45">Recent decisions</h2><span className="text-xs text-white/40">{decisionThreads.length}</span></div>
-          {historyError ? <button onClick={loadConversationHistory} className="rounded-xl border border-white/15 p-3 text-left text-sm text-white/70">History couldn’t load. <span className="text-[#d9ff6f]">Try again</span></button> : decisionThreads.length === 0 ? <p className="px-2 text-sm leading-6 text-white/50">Your completed questions will appear here.</p> : (
+          {historyError ? <button onClick={loadConversationHistory} className="rounded-xl border border-white/15 p-3 text-left text-sm text-white/70">History couldn’t load. <span className="text-[#d9ff6f]">Try again</span></button> : decisionThreads.length === 0 ? (awaitingFirstDecision ? <p className="px-2 text-sm leading-6 text-white/50" role="status">Saving the run you modeled…</p> : <p className="px-2 text-sm leading-6 text-white/50">Your completed questions will appear here.</p>) : (
             <div className="space-y-2">
               {decisionThreads.map(thread => {
                 const isActive = thread.threadId === activeThreadId;

@@ -394,8 +394,14 @@ form used to cover the gap. `RegisterForm` therefore leaves a short-lived
 same-tab marker (`lib/pending-first-decision.ts`) whenever the server reports
 the address already proved — which is exactly when a seed is in flight — and
 `AppPageClient` reloads history a few times over ~2.8s before accepting an
-empty workspace. Only that signup waits; every other visit reads the marker as
-absent and does nothing.
+empty workspace, showing that it is saving the run rather than the empty-state
+copy while it waits. Only that signup waits; every other visit reads the marker
+as absent and does nothing.
+
+The wait belongs in the workspace, not in front of the redirect. Polling
+`/conversations` from the signup form before navigating would hold the visitor
+on a disabled button — for the full timeout whenever the seed is never coming
+at all, which `already-has-decisions` and `failed` both allow.
 
 The decision's question is synthesized, because a calculator is a form and
 there is no prompt to carry over. It states the plan back in the first person

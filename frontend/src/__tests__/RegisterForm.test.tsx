@@ -8,6 +8,7 @@
 
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import RegisterForm from '@/components/RegisterForm';
+import { PENDING_FIRST_DECISION_STORAGE_KEY } from '@/lib/pending-first-decision';
 import { USER_TIME_ZONE_KEY } from '@/lib/browser-time-zone';
 import {
   pushSignUp,
@@ -441,22 +442,6 @@ describe('RegisterForm', () => {
             }),
           };
         }
-        // Already-verified signups wait for the unawaited first-decision seed
-        // before opening /app, so the conversations probe must resolve.
-        if (String(url).includes('/conversations')) {
-          return {
-            ok: true,
-            json: async () => ({
-              conversations: [
-                {
-                  id: 'seeded-1',
-                  question: 'How does my retirement plan look?',
-                  answer: 'Seeded from your saved run.',
-                },
-              ],
-            }),
-          };
-        }
         return {
           ok: true,
           json: async () => ({
@@ -478,11 +463,16 @@ describe('RegisterForm', () => {
       // The session minted by registration is what opens the workspace; the
       // visitor never re-enters the password they just set.
       expect(localStorage.getItem('auth_token')).toBe('trial-token');
-      expect(global.fetch).toHaveBeenCalledWith(
+      /*
+       * Registration answers before the first decision is written, and the
+       * navigation no longer waits behind a sign-in form. Signup does not stall
+       * to cover that — it hands the workspace the fact that a decision is
+       * coming, and /app resolves it there.
+       */
+      expect(sessionStorage.getItem(PENDING_FIRST_DECISION_STORAGE_KEY)).not.toBeNull();
+      expect(global.fetch).not.toHaveBeenCalledWith(
         expect.stringContaining('/conversations'),
-        expect.objectContaining({
-          headers: expect.objectContaining({ Authorization: 'Bearer trial-token' }),
-        }),
+        expect.anything(),
       );
     });
 
