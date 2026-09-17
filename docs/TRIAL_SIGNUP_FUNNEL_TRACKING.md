@@ -27,12 +27,19 @@ Use this order in a GA4 funnel exploration, filtering every step to
    of the free-trial flow.
 7. `trial_verify_submit` — each verification-code submit attempt.
 8. Either `trial_verify_error` with a safe `error_category`, or
-   `trial_verify_success` after a successful backend response.
-9. `trial_login_viewed` — `/login` renders as the same continuation.
-10. `trial_login_submit` — each login attempt.
-11. Either `trial_login_error` with a safe `error_category`, or
-    `trial_login_success` after authentication, access verification, and local
-    session persistence succeed.
+   `trial_verify_success` after a successful backend response. **This is the
+   funnel's terminal event.** Verification carries the registration session
+   straight into `/app`, so the no-card funnel no longer passes through
+   `/login`.
+
+The `trial_login_*` events still exist and still fire on `/login` when both the
+URL marker and recent same-tab state are present, but no signup routes there
+any more, so in practice they stop appearing. Anything that measured the funnel
+on `trial_login_success` has to move to `trial_verify_success`.
+
+A signup that arrived holding a calculator lead token has no step 6 through 8
+either: the server reports the address already proved, registration goes
+straight to `/app`, and `sign_up` is that session's last funnel event.
 
 `sign_up` keeps its existing semantics and remains the only account-created
 event. None of the new submit events should be treated as a registration.
@@ -42,10 +49,11 @@ event. None of the new submit events should be treated as a registration.
 `/getstarted` stores a versioned `free_trial` marker in sessionStorage for at
 most two hours. Registration then routes to
 `/verify-email?signup_flow=free_trial`, and successful verification (or “Skip
-for now”) routes to `/login?signup_flow=free_trial`. Verification and login are
-classified as trial steps only when the fixed URL marker and recent same-tab
-state both exist. State is cleared after authenticated login. Ordinary verify
-and login visits therefore remain unclassified.
+for now”) opens `/app` on the session registration already minted. Verification
+is classified as a trial step only when the fixed URL marker and recent same-tab
+state both exist. State is cleared where the funnel ends — at verification, or
+at registration for a link-proved signup that skips it. Ordinary verify and
+login visits therefore remain unclassified.
 
 Analytics payloads contain only:
 
@@ -141,12 +149,11 @@ these separately rather than combining all errors:
   `trial_signup_registration_error` per signup-submit session;
 - account-created rate: `sign_up (signup_flow=free_trial)` per signup-viewed
   session;
-- verification attempt and failure rates, using `trial_verify_*` only;
-- verification-to-login return rate:
-  `trial_login_viewed / trial_verify_success`;
-- login failure rate: sessions with `trial_login_error` per login-submit
-  session; and
-- end-to-end completion: `trial_login_success / trial_signup_viewed`.
+- verification attempt and failure rates, using `trial_verify_*` only; and
+- end-to-end completion: `trial_verify_success / trial_signup_viewed`.
+
+The former verification-to-login return rate and login failure rate no longer
+have a step to measure — the funnel ends at verification.
 
 Event counts can exceed users or sessions because submit and error events fire
 for every attempt. Use session- or user-based funnel steps for conversion rates,

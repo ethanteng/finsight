@@ -6,7 +6,10 @@ import {
   pushTrialVerifySuccess,
   pushTrialVerifyViewed,
 } from '@/lib/dataLayer';
-import { beginFreeTrialSignupFlow } from '@/lib/trial-signup-flow';
+import {
+  beginFreeTrialSignupFlow,
+  TRIAL_SIGNUP_FLOW_STORAGE_KEY,
+} from '@/lib/trial-signup-flow';
 
 const push = jest.fn();
 let searchParams = new URLSearchParams();
@@ -48,7 +51,7 @@ describe('VerifyEmailForm', () => {
     render(<VerifyEmailForm />);
 
     expect(mockPushTrialVerifyViewed).not.toHaveBeenCalled();
-    expect(screen.getByRole('link', { name: 'Skip for now' })).toHaveAttribute('href', '/login');
+    expect(screen.getByRole('link', { name: 'Skip for now' })).toHaveAttribute('href', '/app');
     expect(screen.getByRole('button', { name: /Verify email/i })).toHaveAttribute(
       'data-cs-override-id',
       'form-submit-verify-email',
@@ -68,10 +71,7 @@ describe('VerifyEmailForm', () => {
     await waitFor(() => expect(mockPushTrialVerifyViewed).toHaveBeenCalledTimes(1));
     rerender(<VerifyEmailForm />);
     expect(mockPushTrialVerifyViewed).toHaveBeenCalledTimes(1);
-    expect(screen.getByRole('link', { name: 'Skip for now' })).toHaveAttribute(
-      'href',
-      '/login?signup_flow=free_trial',
-    );
+    expect(screen.getByRole('link', { name: 'Skip for now' })).toHaveAttribute('href', '/app');
 
     enterCode();
 
@@ -83,7 +83,7 @@ describe('VerifyEmailForm', () => {
     expect(mockPushTrialVerifySuccess).not.toHaveBeenCalled();
   });
 
-  it('tracks backend-confirmed verification and preserves the flow into login', async () => {
+  it('tracks backend-confirmed verification and opens the workspace on the same session', async () => {
     searchParams = new URLSearchParams('signup_flow=free_trial');
     beginFreeTrialSignupFlow();
     localStorage.setItem('auth_token', 'registration-token');
@@ -102,19 +102,57 @@ describe('VerifyEmailForm', () => {
     expect(mockPushTrialVerifySubmit).toHaveBeenCalledTimes(1);
     expect(mockPushTrialVerifySuccess).toHaveBeenCalledTimes(1);
     expect(mockPushTrialVerifyError).not.toHaveBeenCalled();
-    expect(localStorage.getItem('auth_token')).toBeNull();
+    // The registration session is what carries the visitor into the app, so it
+    // must survive verification rather than being traded for a fresh sign-in.
+    expect(localStorage.getItem('auth_token')).toBe('registration-token');
 
     act(() => {
       jest.advanceTimersByTime(2000);
     });
-    expect(push).toHaveBeenCalledWith('/login?signup_flow=free_trial');
+    expect(push).toHaveBeenCalledWith('/app');
+    expect(push).not.toHaveBeenCalledWith(expect.stringContaining('/login'));
+    // The no-card funnel ends here now, so its attribution record must not be
+    // left behind to claim a later auth page in this tab.
+    expect(sessionStorage.getItem(TRIAL_SIGNUP_FLOW_STORAGE_KEY)).toBeNull();
+  });
+
+  /*
+   * The paid funnel used to hand Stripe context forward through the login URL
+   * so the sign-in page could show a "subscription is ready" banner. There is
+   * no sign-in page in this path any more, and the checkout was already linked
+   * to the account at registration, so none of it should follow the visitor.
+   */
+  it('opens the workspace after a paid-checkout verification without a sign-in detour', async () => {
+    searchParams = new URLSearchParams(
+      'subscription=active&tier=premium&email=buyer%40example.com&session_id=cs_test_123',
+    );
+    localStorage.setItem('auth_token', 'registration-token');
+    global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({ success: true }) });
+
+    render(<VerifyEmailForm />);
+    jest.useFakeTimers();
+
+    await act(async () => {
+      enterCode('654321');
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    act(() => {
+      jest.advanceTimersByTime(2000);
+    });
+
+    expect(push).toHaveBeenCalledWith('/app');
+    expect(push).not.toHaveBeenCalledWith(expect.stringContaining('/login'));
+    expect(push).not.toHaveBeenCalledWith(expect.stringContaining('cs_test_123'));
+    expect(localStorage.getItem('auth_token')).toBe('registration-token');
   });
 
   /*
    * Link-proved calculator signups never receive a code. If a stale client (or a
-   * bookmark) still lands here, bounce to login instead of waiting forever.
+   * bookmark) still lands here, bounce into the app instead of waiting forever.
    */
-  it('sends an already-verified registration straight to login', async () => {
+  it('sends an already-verified registration straight into the workspace', async () => {
     searchParams = new URLSearchParams('signup_flow=free_trial');
     beginFreeTrialSignupFlow();
     localStorage.setItem('auth_token', 'registration-token');
@@ -125,8 +163,8 @@ describe('VerifyEmailForm', () => {
 
     render(<VerifyEmailForm />);
 
-    await waitFor(() => expect(push).toHaveBeenCalledWith('/login?signup_flow=free_trial'));
-    expect(localStorage.getItem('auth_token')).toBeNull();
+    await waitFor(() => expect(push).toHaveBeenCalledWith('/app'));
+    expect(localStorage.getItem('auth_token')).toBe('registration-token');
     expect(mockPushTrialVerifySubmit).not.toHaveBeenCalled();
   });
 

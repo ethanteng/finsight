@@ -11,15 +11,20 @@ import {
   pushTrialVerifyViewed,
 } from '@/lib/dataLayer';
 import {
+  completeFreeTrialSignupFlow,
   isFreeTrialSignupContinuation,
-  withFreeTrialSignupFlow,
 } from '@/lib/trial-signup-flow';
+import { DEFAULT_POST_LOGIN_DESTINATION } from '@/lib/post-login-redirect';
 
+/*
+ * Only what the "your subscription is ready" banner needs. The address and the
+ * checkout session used to be carried on to the sign-in URL; verification now
+ * opens the workspace directly, and the checkout was linked to the account at
+ * registration, so neither has a reader here any more.
+ */
 interface SubscriptionContext {
   subscription: string;
   tier: string;
-  email: string | null;
-  sessionId: string | null;
 }
 
 function VerifyEmailFormContent() {
@@ -45,15 +50,11 @@ function VerifyEmailFormContent() {
 
     const subscriptionParam = searchParams.get('subscription');
     const tierParam = searchParams.get('tier');
-    const emailParam = searchParams.get('email');
-    const sessionIdParam = searchParams.get('session_id');
 
     if (subscriptionParam && tierParam) {
       setSubscriptionContext({
         subscription: subscriptionParam,
         tier: tierParam,
-        email: emailParam,
-        sessionId: sessionIdParam
       });
     }
   }, [searchParams]);
@@ -64,6 +65,9 @@ function VerifyEmailFormContent() {
    * build (backend deployed first) still sends every account here; without this
    * check the visitor waits for a code that will never arrive. Same bounce if
    * they bookmarked the page after a link-proved signup.
+   *
+   * The token that answered this call is the session, so the bounce goes to the
+   * workspace rather than the sign-in form: there is no step left to perform.
    */
   useEffect(() => {
     const token = localStorage.getItem('auth_token');
@@ -84,31 +88,10 @@ function VerifyEmailFormContent() {
         };
         if (data.user?.emailVerified !== true) return;
 
-        try {
-          localStorage.removeItem('auth_token');
-        } catch {
-          // Continue to login; the account is already verified.
-        }
-
         if (isFreeTrialSignupContinuation(searchParams)) {
-          router.push(withFreeTrialSignupFlow('/login'));
-          return;
+          completeFreeTrialSignupFlow();
         }
-
-        const subscriptionParam = searchParams.get('subscription');
-        const tierParam = searchParams.get('tier');
-        if (subscriptionParam && tierParam) {
-          const emailParam = searchParams.get('email');
-          const sessionIdParam = searchParams.get('session_id');
-          router.push(
-            `/login?subscription=${subscriptionParam}&tier=${tierParam}` +
-              `&email=${encodeURIComponent(emailParam || '')}` +
-              `&session_id=${sessionIdParam || ''}`,
-          );
-          return;
-        }
-
-        router.push('/login');
+        router.push(DEFAULT_POST_LOGIN_DESTINATION);
       } catch {
         // Network blip or abort — leave them on the form; resend still works
         // for accounts that actually need a code.
@@ -148,27 +131,23 @@ function VerifyEmailFormContent() {
 
     if (res.ok) {
       if (isFreeTrialFlow) pushTrialVerifySuccess();
-      setSuccess('Email verified successfully! Redirecting to login...');
+      setSuccess('Email verified. Opening your workspace…');
 
-      // Clear the auth token. A storage failure must not turn a confirmed
-      // verification into an analytics error or suppress the redirect.
-      try {
-        localStorage.removeItem('auth_token');
-      } catch {
-        // The backend confirmation is authoritative; continue to login.
+      /*
+       * The token that authorized this call is kept: it is the session the
+       * account was created with, and it is still valid. Signing in again here
+       * would only re-collect the password set a screen ago. /app re-verifies
+       * the token and the subscription on mount, so this hands over a session
+       * rather than granting access.
+       */
+      if (isFreeTrialFlow) {
+        // This is where the no-card funnel ends now. Nothing downstream will
+        // report its completion, and a stale record follows the tab for hours.
+        completeFreeTrialSignupFlow();
       }
 
-      // Always redirect to login after email verification. Users must
-      // authenticate properly to access the app.
       setTimeout(() => {
-        if (isFreeTrialFlow) {
-          router.push(withFreeTrialSignupFlow('/login'));
-        } else if (subscriptionContext) {
-          const loginUrl = `/login?subscription=${subscriptionContext.subscription}&tier=${subscriptionContext.tier}&email=${encodeURIComponent(subscriptionContext.email || '')}&session_id=${subscriptionContext.sessionId || ''}`;
-          router.push(loginUrl);
-        } else {
-          router.push('/login');
-        }
+        router.push(DEFAULT_POST_LOGIN_DESTINATION);
       }, 2000);
     } else {
       if (isFreeTrialFlow) pushTrialVerifyError('server_rejected');
@@ -333,7 +312,8 @@ function VerifyEmailFormContent() {
 
         <div className="mt-5 text-center">
           <Link
-            href={isFreeTrialFlow ? withFreeTrialSignupFlow('/login') : '/login'}
+            href={DEFAULT_POST_LOGIN_DESTINATION}
+            onClick={() => { if (isFreeTrialFlow) completeFreeTrialSignupFlow(); }}
             className="text-sm text-[#71857f] hover:text-[#123c2f]"
           >
             Skip for now

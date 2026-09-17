@@ -419,7 +419,8 @@ describe('RegisterForm', () => {
     /*
      * Following a link sent to an address proves the same thing a mailed code
      * proves, so a signup that arrived holding a matching lead token skips the
-     * verification screen and goes straight to sign-in.
+     * verification screen — and the sign-in form with it, since the
+     * registration response already carries a usable session.
      *
      * The decision is the server's, and these two cases are the whole of it:
      * the client reads `user.emailVerified` off the response and never infers
@@ -455,9 +456,12 @@ describe('RegisterForm', () => {
       fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'Password1' } });
       fireEvent.click(screen.getByRole('button', { name: /Create account and continue/i }));
 
-      await waitFor(() => expect(push).toHaveBeenCalledWith('/login?signup_flow=free_trial'));
+      await waitFor(() => expect(push).toHaveBeenCalledWith('/app'));
       expect(push).not.toHaveBeenCalledWith('/verify-email?signup_flow=free_trial');
-      expect(localStorage.getItem('auth_token')).toBeNull();
+      expect(push).not.toHaveBeenCalledWith(expect.stringContaining('/login'));
+      // The session minted by registration is what opens the workspace; the
+      // visitor never re-enters the password they just set.
+      expect(localStorage.getItem('auth_token')).toBe('trial-token');
     });
 
     it('still verifies when the server does not say the address was proved', async () => {
