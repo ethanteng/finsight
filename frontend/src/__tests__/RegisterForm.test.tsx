@@ -297,6 +297,91 @@ describe('RegisterForm', () => {
     });
 
     /*
+     * The registration body is what turns the emailed run into the account's
+     * first decision. Without `calculatorRef`, the backend has nothing to seed.
+     */
+    it('sends the emailed retirement token with registration as calculatorRef', async () => {
+      const token = 'f'.repeat(48);
+      searchParams = new URLSearchParams(`source=${RETIREMENT_SIGNUP_SOURCE}`);
+      handOverRetirementRef(token);
+      const fetchMock = jest.fn(async (url: RequestInfo | URL) => {
+        if (String(url).includes('/auth/register')) {
+          return {
+            ok: true,
+            json: async () => ({
+              token: 'trial-token',
+              user: { email: 'reader@example.com', timeZone: 'America/New_York' },
+            }),
+          };
+        }
+        return {
+          ok: true,
+          json: async () => ({
+            email: 'reader@example.com',
+            inputs: RETIREMENT_SCENARIO,
+            outcome: { survivalRate: 0.92, sequencesTested: 800, sequencesSurvived: 736 },
+          }),
+        };
+      }) as unknown as typeof fetch;
+      global.fetch = fetchMock;
+
+      render(<RegisterForm variant="trial" />);
+      await screen.findByRole('region', { name: 'Your modeled retirement scenario' });
+
+      fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'Password1' } });
+      fireEvent.click(screen.getByRole('button', { name: /Create account and continue/i }));
+
+      await waitFor(() => expect(push).toHaveBeenCalledWith('/verify-email?signup_flow=free_trial'));
+      const registerCall = (fetchMock as unknown as jest.Mock).mock.calls.find(
+        ([url]) => String(url).includes('/auth/register'),
+      );
+      expect(registerCall).toBeDefined();
+      const body = JSON.parse(registerCall![1].body as string);
+      expect(body.calculatorRef).toBe(token);
+      expect(body.email).toBe('reader@example.com');
+    });
+
+    /*
+     * The exchange paints the scenario; the cookie is what still holds the
+     * bearer while that request is in flight. A submit that wins the race must
+     * still carry the token, or the account is created without its first decision.
+     */
+    it('still sends calculatorRef when registration beats the emailed-token exchange', async () => {
+      const token = 'c'.repeat(48);
+      searchParams = new URLSearchParams(`source=${RETIREMENT_SIGNUP_SOURCE}`);
+      handOverRetirementRef(token);
+      // Never settles: the cookie is still the only copy of the bearer.
+      const fetchMock = jest.fn(async (url: RequestInfo | URL) => {
+        if (String(url).includes('/auth/register')) {
+          return {
+            ok: true,
+            json: async () => ({
+              token: 'trial-token',
+              user: { email: 'reader@example.com', timeZone: 'America/New_York' },
+            }),
+          };
+        }
+        return new Promise(() => undefined);
+      }) as unknown as typeof fetch;
+      global.fetch = fetchMock;
+
+      const { unmount } = render(<RegisterForm variant="trial" />);
+      // Exchange still pending — no scenario painted, cookie still present.
+      expect(screen.queryByRole('region', { name: 'Your modeled retirement scenario' })).not.toBeInTheDocument();
+
+      fireEvent.change(screen.getByLabelText('Email address'), { target: { value: 'reader@example.com' } });
+      fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'Password1' } });
+      fireEvent.click(screen.getByRole('button', { name: /Start planning/i }));
+
+      await waitFor(() => expect(push).toHaveBeenCalledWith('/verify-email?signup_flow=free_trial'));
+      const registerCall = (fetchMock as unknown as jest.Mock).mock.calls.find(
+        ([url]) => String(url).includes('/auth/register'),
+      );
+      expect(JSON.parse(registerCall![1].body as string).calculatorRef).toBe(token);
+      unmount();
+    });
+
+    /*
      * The email stated a survival figure. Both the engine and the market
      * dataset change inside the token's 90 days, so the page shows what was
      * sent rather than anything recomputed.
