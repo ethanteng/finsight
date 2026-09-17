@@ -618,12 +618,17 @@ export function CoastFireCalculator({ children }: { children?: ReactNode }) {
 
       <section className="shell cf-calculator" id="coast-calculator">
         <form className="cf-form" onSubmit={handleSubmit}>
+          {/*
+            * The standalone note this used to carry said two things. One
+            * ("count only income that starts the day you retire") the income
+            * field's own hint already says, in more detail and next to the box
+            * it governs. The other rides on the kicker, which costs no height
+            * — and height is the whole point: what the form gives up, the
+            * capture band below the result gets back, above the fold.
+            */}
           <div className="cf-form-head">
-            <p className="section-kicker">SEVEN NUMBERS</p>
+            <p className="section-kicker">SEVEN NUMBERS · TODAY’S DOLLARS</p>
             <h2>Your coast</h2>
-            <p className="cf-form-note">
-              Use today’s dollars throughout. Count only income that starts the day you retire.
-            </p>
           </div>
 
           <div className="cf-form-grid">
@@ -633,18 +638,13 @@ export function CoastFireCalculator({ children }: { children?: ReactNode }) {
             <CalculatorField id="annualRetirementSpending" label="Annual spending in retirement" value={form.annualRetirementSpending} onChange={setField("annualRetirementSpending")} prefix="$" min={1_000} max={10_000_000} hint="Whole household, after tax." />
             <CalculatorField id="annualRetirementIncome" label="Annual income available at retirement" value={form.annualRetirementIncome} onChange={setField("annualRetirementIncome")} prefix="$" min={0} max={10_000_000} hint="Social Security, a pension, or other reliable income that starts on your retirement date." />
             <CalculatorField id="realReturnRate" label="Expected real return" value={form.realReturnRate} onChange={setField("realReturnRate")} suffix="%" min={0} max={12} step="0.1" hint="Growth after inflation." />
-            <CalculatorField id="withdrawalRate" label="Withdrawal rate" value={form.withdrawalRate} onChange={setField("withdrawalRate")} suffix="%" min={2} max={8} step="0.1" hint="The share of the portfolio you spend in year one." />
+            <CalculatorField id="withdrawalRate" label="Withdrawal rate" value={form.withdrawalRate} onChange={setField("withdrawalRate")} suffix="%" min={2} max={8} step="0.1" hint="The share you spend in year one." />
           </div>
 
           {error && <p className="cf-form-error" role="alert">{error}</p>}
           <button className="button button-primary cf-calculate-button" type="submit" data-cs-override-id="coast-fire-calculate">
             Calculate my Coast FIRE number <span aria-hidden="true">→</span>
           </button>
-          <p className="cf-private-note">
-            The calculation runs in your browser, and your answer appears without waiting on
-            anything. Ask Linc writes the plain-language reading underneath it, which sends these
-            seven numbers to our server and nothing else. No account or email required.
-          </p>
         </form>
 
         <div className="cf-result-column" ref={resultRef}>

@@ -60,8 +60,8 @@
   display: grid;
   grid-template-columns: minmax(0, 1.1fr) minmax(340px, 0.9fr);
   align-items: stretch;
-  gap: 20px;
-  padding-block: 40px 84px;
+  gap: 16px;
+  padding-block: 32px 84px;
 }
 
 .coast-fire-page .cf-email-band {
@@ -76,35 +76,35 @@
 }
 
 .coast-fire-page .cf-form {
-  padding: 34px;
+  padding: 20px 26px;
   background: var(--cream);
 }
 
 .coast-fire-page .cf-form-head {
-  padding-bottom: 25px;
+  padding-bottom: 13px;
   border-bottom: 1px solid var(--line);
 }
 
 .coast-fire-page .cf-form-head h2 {
   margin: 0;
   font-family: var(--font-display);
-  font-size: 34px;
+  font-size: 27px;
   letter-spacing: -0.04em;
 }
 
 .coast-fire-page .cf-form-note {
   max-width: 62ch;
-  margin: 12px 0 0;
+  margin: 8px 0 0;
   color: var(--cf-muted);
-  font-size: 15px;
-  line-height: 1.6;
+  font-size: 14px;
+  line-height: 1.5;
 }
 
 .coast-fire-page .cf-form-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 22px 24px;
-  padding-top: 28px;
+  gap: 12px 22px;
+  padding-top: 14px;
 }
 
 .coast-fire-page .cf-field {
@@ -118,21 +118,21 @@
 
 .coast-fire-page .cf-field > label {
   display: block;
-  margin-bottom: 8px;
-  font-size: 14px;
+  margin-bottom: 5px;
+  font-size: 13.5px;
   font-weight: 750;
 }
 
 .coast-fire-page .cf-field > p {
-  margin: 7px 0 0;
+  margin: 5px 0 0;
   color: #6d7a72;
-  font-size: 13px;
-  line-height: 1.45;
+  font-size: 12.5px;
+  line-height: 1.4;
 }
 
 .coast-fire-page .cf-input-wrap {
   display: flex;
-  min-height: 52px;
+  min-height: 42px;
   align-items: center;
   gap: 7px;
   padding-inline: 14px;
@@ -158,7 +158,7 @@
 .coast-fire-page .cf-input-wrap input {
   width: 100%;
   min-width: 0;
-  padding: 13px 0;
+  padding: 9px 0;
   border: 0;
   outline: 0;
   background: transparent;
@@ -175,7 +175,8 @@
 
 .coast-fire-page .cf-calculate-button {
   width: 100%;
-  margin-top: 28px;
+  margin-top: 14px;
+  padding-block: 14px;
   border: 0;
   cursor: pointer;
   font-size: 16px;
@@ -205,13 +206,16 @@
  */
 .coast-fire-page .cf-result-column {
   display: flex;
-  scroll-margin-top: 18px;
+  /* Small on purpose: every pixel here pushes the capture band below it
+     further down, and the point of this row's height budget is that the band
+     lands above the fold on a laptop. */
+  scroll-margin-top: 8px;
 }
 
 .coast-fire-page .cf-result-card {
   flex: 1;
   overflow: hidden;
-  padding: 30px;
+  padding: 24px;
   border-color: #0b1a12;
   background: var(--cf-dark);
   color: white;
@@ -254,23 +258,24 @@
 }
 
 .coast-fire-page .cf-result-card h2 {
-  margin: 26px 0 0;
+  margin: 16px 0 0;
   color: white;
-  font-size: clamp(32px, 3.6vw, 44px);
-  line-height: 1.05;
+  font-size: clamp(26px, 2.6vw, 34px);
+  line-height: 1.08;
 }
 
 .coast-fire-page .cf-result-lead {
-  min-height: 76px;
-  margin: 14px 0 26px;
+  /* No floor: it held the card's shape when the lead was one line, and the
+     card is now sized to keep the capture below it above the fold. */
+  margin: 10px 0 18px;
   color: var(--cf-dark-body);
-  font-size: 16px;
-  line-height: 1.55;
+  font-size: 15px;
+  line-height: 1.5;
 }
 
 .coast-fire-page .cf-number-block {
   display: grid;
-  padding: 23px;
+  padding: 16px 18px;
   border: 1px solid var(--cf-dark-rule);
   border-radius: 16px;
   background: rgba(255, 255, 255, 0.06);
@@ -283,10 +288,10 @@
 }
 
 .coast-fire-page .cf-number-block strong {
-  margin-top: 6px;
+  margin-top: 4px;
   color: var(--lime);
   font-family: var(--font-display), sans-serif;
-  font-size: clamp(40px, 5vw, 56px);
+  font-size: clamp(34px, 4vw, 44px);
   letter-spacing: -0.055em;
 }
 
@@ -299,7 +304,7 @@
 .coast-fire-page .cf-progress-label {
   display: flex;
   justify-content: space-between;
-  margin-top: 27px;
+  margin-top: 18px;
   color: var(--cf-dark-body);
   font-size: 13px;
 }
@@ -333,7 +338,7 @@
 .coast-fire-page .cf-result-metrics {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  margin: 27px 0 0;
+  margin: 18px 0 0;
   border-block: 1px solid var(--cf-dark-rule);
 }
 
@@ -359,10 +364,10 @@
 }
 
 .coast-fire-page .cf-result-note {
-  margin: 20px 0 0;
+  margin: 14px 0 0;
   color: var(--cf-dark-muted);
-  font-size: 13px;
-  line-height: 1.55;
+  font-size: 12.5px;
+  line-height: 1.5;
 }
 
 /* --------------------------------------------- the results email capture */
@@ -378,7 +383,7 @@
   grid-template-columns: minmax(0, 1fr) minmax(320px, 0.85fr);
   align-items: center;
   gap: 16px 40px;
-  padding: 28px 32px;
+  padding: 18px 28px;
   border: 1px solid var(--line);
   border-radius: 22px;
   background: var(--cream);
@@ -405,10 +410,10 @@
 }
 
 .coast-fire-page .cf-email-lead {
-  margin: 10px 0 0;
+  margin: 8px 0 0;
   color: var(--cf-body);
-  font-size: 15px;
-  line-height: 1.6;
+  font-size: 14.5px;
+  line-height: 1.55;
 }
 
 .coast-fire-page .cf-email-label {
@@ -1101,7 +1106,9 @@
   }
 
   .coast-fire-page .cf-result-card {
-    padding: 28px 24px;
+    /* Tighter than the desktop card, not looser: this override predates the
+       height budget that pulled the desktop padding down to 24px. */
+    padding: 20px 18px;
   }
 
   .coast-fire-page .cf-email-capture {
@@ -1114,9 +1121,7 @@
     margin-top: 20px;
   }
 
-  .coast-fire-page .cf-result-lead {
-    min-height: 0;
-  }
+
 
   .coast-fire-page .cf-sensitivity,
   .coast-fire-page .cf-faq {
