@@ -4,6 +4,8 @@ import React, { useState, useEffect, forwardRef, useImperativeHandle } from 'rea
 import { SnapTradeReact } from 'snaptrade-react';
 import { useWindowMessage } from 'snaptrade-react/hooks/useWindowMessage';
 import { financialServiceCoordinator, SERVICE_NAMES } from '../services/FinancialServiceCoordinator';
+import { snapTradeAccountHealth } from '../lib/snaptrade-account-health';
+import AccountCard from './AccountCard';
 
 interface SnapTradeStatus {
   status: string;
@@ -12,7 +14,7 @@ interface SnapTradeStatus {
   updatedAt?: string;
 }
 
-interface SnapTradeAccount {
+export interface SnapTradeAccount {
   id: string;
   name: string;
   type: string;
@@ -71,6 +73,15 @@ interface SnapTradeButtonProps {
    * of offering a click that cannot go anywhere yet.
    */
   onReadyChange?: (ready: boolean) => void;
+  /**
+   * Hands the brokerage accounts to the parent as they load.
+   *
+   * The accounts page lists every account together now, whichever provider
+   * reported it, so it needs these rows rather than a second list rendered
+   * down here. Separate from `onAccountsUpdated`, which is a "something
+   * changed, go refresh" signal several callers already depend on.
+   */
+  onAccountsLoaded?: (accounts: SnapTradeAccount[]) => void;
 }
 
 export interface SnapTradeButtonRef {
@@ -85,18 +96,8 @@ export interface SnapTradeButtonRef {
   isReady: () => boolean;
 }
 
-// Balances are money: always two decimals. Number.toLocaleString() defaults to
-// three fraction digits, which rendered balances like "$123.456".
-const formatCurrency = (amount: number) =>
-  new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(amount);
-
 const SnapTradeButton = forwardRef<SnapTradeButtonRef, SnapTradeButtonProps>(function SnapTradeButton(
-  { onAccountsUpdated, snapTradeStatus: snapTradeTokenStatus, reconnectAuthorizationId, headless = false, onReadyChange },
+  { onAccountsUpdated, snapTradeStatus: snapTradeTokenStatus, reconnectAuthorizationId, headless = false, onReadyChange, onAccountsLoaded },
   ref,
 ) {
   const [status, setStatus] = useState<string>('loading');
@@ -239,6 +240,7 @@ const SnapTradeButton = forwardRef<SnapTradeButtonRef, SnapTradeButtonProps>(fun
         console.log('SnapTrade accounts:', data);
         if (data.data?.accounts) {
           setConnectedAccounts(data.data.accounts);
+          onAccountsLoaded?.(data.data.accounts);
           // Notify parent component that accounts have been updated
           if (onAccountsUpdated) {
             onAccountsUpdated();
@@ -247,10 +249,12 @@ const SnapTradeButton = forwardRef<SnapTradeButtonRef, SnapTradeButtonProps>(fun
       } else {
         console.log('No connected accounts found or error:', response.status);
         setConnectedAccounts([]);
+        onAccountsLoaded?.([]);
       }
     } catch (error) {
       console.error('Error checking connected accounts:', error);
       setConnectedAccounts([]);
+      onAccountsLoaded?.([]);
     }
   };
 
@@ -503,99 +507,41 @@ const SnapTradeButton = forwardRef<SnapTradeButtonRef, SnapTradeButtonProps>(fun
 
 
 
-      {connectedAccounts.length > 0 && (
+      {/* Headless means the page lists every account together, this component's
+          rows included, so rendering them again here would show each brokerage
+          account twice. */}
+      {!headless && connectedAccounts.length > 0 && (
         <div className="mt-4">
           <div className="space-y-3">
             {connectedAccounts.map((account) => {
-              // Health is per brokerage authorization. Reading LOGIN_REQUIRED off
-              // the SnapTrade *user* status marked every account broken the moment
-              // any one connection was disabled -- including healthy Fidelity
-              // accounts when only Public needed reconnecting.
-              // Read directly from Public, not through SnapTrade. Applying
-              // SnapTrade's health here would report a working feed as broken
-              // whenever the user's SnapTrade link happens to be disabled --
-              // and the direct feed is precisely what still works in that case.
-              const isDirect = account.source === 'public';
-              const connectionDisabled = !isDirect && (
-                account.connectionDisabled === true
-                || Boolean(
-                  account.brokerageAuthorizationId
-                  && snapTradeTokenStatus?.disabledConnections?.some(
-                    connection => connection.authorizationId === account.brokerageAuthorizationId
-                  )
-                )
+              // Shared with the accounts page's combined list, so the two
+              // renderings cannot disagree about whether a connection is broken.
+              const { isHealthy, isDirect, issue: accountIssue } = snapTradeAccountHealth(
+                account,
+                snapTradeTokenStatus,
               );
-              // Whole-user failure still applies across the board. LOGIN_REQUIRED
-              // does not: it means some authorization is disabled, and which ones
-              // is what connectionDisabled answers.
-              const connectionUnusable = !isDirect && (
-                !snapTradeTokenStatus?.connected
-                || snapTradeTokenStatus?.status === 'error'
-                || snapTradeTokenStatus?.status === 'ERROR'
-              );
-              const isHealthy = !connectionDisabled && !connectionUnusable;
-              const institutionName = account.institution || 'this brokerage';
-              const accountIssue = connectionDisabled
-                ? `SnapTrade connection disabled for ${institutionName}. Reconnect to resume updates.`
-                : connectionUnusable
-                  ? (snapTradeTokenStatus?.error || 'Connection issue')
-                  : null;
 
               return (
-                <div key={account.id} className="bg-gray-700 border border-gray-600 rounded-lg p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0 flex-1">
-                      <div className="break-words text-base font-semibold text-white">{account.name}</div>
-                      <div className="mt-1 flex min-w-0 items-start gap-2 text-sm text-gray-400">
-                        {/* Keep connection health in the same stable column as the other account cards. */}
-                        {isHealthy ? (
-                          <span
-                            className="w-4 shrink-0 text-center text-green-400"
-                            title={isDirect ? 'Read directly from Public' : 'Connection active'}
-                          >
-                            ✓
-                          </span>
-                        ) : (
-                          <span className="w-4 shrink-0 text-center text-red-400" title={`Connection issue: ${accountIssue || 'Unknown error'}`}>
-                            ✗
-                          </span>
-                        )}
-                        <div className="min-w-0 break-words">
-                          {account.institution && `${account.institution} • `}{account.type}
-                          {account.subtype && ` • ${account.subtype}`}
-                        </div>
-                      </div>
-                      {accountIssue && (
-                        <div className="text-xs text-red-400 mt-1">
-                          {accountIssue}
-                        </div>
-                      )}
-                    </div>
-                    {typeof account.balance === 'number' ? (
-                      <div className="shrink-0 text-right">
-                        <div className="font-semibold text-white text-base">
-                          {formatCurrency(account.balance)}
-                        </div>
-                        {/* A sum of positions is a floor: it cannot see uninvested
-                            cash, so presenting it as a reported total would
-                            overstate what is known. Same caveat the finances page
-                            carries for these accounts. */}
-                        {account.balanceDerivedFromPositions && (
-                          <div className="text-xs text-gray-400" title="Summed from this account's positions; any uninvested cash is not included.">
-                            from positions
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      /* Distinguish "we have no figure" from "$0". The old blank
-                         cell read as a rendering bug, which is how it was
-                         reported. */
-                      <div className="shrink-0 text-right text-sm text-gray-400" title="This provider did not report a balance for this account.">
-                        Not reported
-                      </div>
-                    )}
-                  </div>
-                </div>
+                <AccountCard
+                  key={account.id}
+                  name={account.name}
+                  health={{
+                    ok: isHealthy,
+                    title: isHealthy
+                      ? (isDirect ? 'Read directly from Public' : 'Connection active')
+                      : `Connection issue: ${accountIssue || 'Unknown error'}`,
+                  }}
+                  detail={`${account.institution ? `${account.institution} • ` : ''}${account.type}${account.subtype ? ` • ${account.subtype}` : ''}`}
+                  issue={accountIssue}
+                  balance={account.balance}
+                  balanceFallback="Not reported"
+                  balanceFallbackTitle="This provider did not report a balance for this account."
+                  /* A sum of positions is a floor: it cannot see uninvested cash,
+                     so presenting it as a reported total would overstate what is
+                     known. Same caveat the finances page carries. */
+                  balanceNote={account.balanceDerivedFromPositions ? 'from positions' : null}
+                  balanceNoteTitle="Summed from this account's positions; any uninvested cash is not included."
+                />
               );
             })}
           </div>
