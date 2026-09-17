@@ -104,7 +104,8 @@ export function readHandoverToken(cookieName: string): string | null {
  * spends it, so the calculator page cannot read back what it just wrote, and a
  * browser refusing the write says nothing either way. Callers therefore store
  * the signup context in session storage as well: a dropped cookie then costs
- * the address prefill and the saved run, not the tailored signup page.
+ * the address prefill, not the saved run — `/getstarted` can still restore
+ * the figures from storage when the source marker is present.
  */
 export function writeHandoverToken(cookieName: string, token: string): void {
   if (typeof document === 'undefined' || !isHandoverToken(token)) return;

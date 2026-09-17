@@ -19,7 +19,12 @@ export const CALCULATOR_SIGNUP_ORIGINS = [
 ] as const;
 export type CalculatorSignupOrigin = (typeof CALCULATOR_SIGNUP_ORIGINS)[number];
 
-export const CALCULATOR_SIGNUP_ENTRIES = ['calculator_cta', 'results_email'] as const;
+export const CALCULATOR_SIGNUP_ENTRIES = [
+  'calculator_cta',
+  'results_email',
+  /** Straight from the calculator after save — no inbox crossed. */
+  'results_page',
+] as const;
 export type CalculatorSignupEntry = (typeof CALCULATOR_SIGNUP_ENTRIES)[number];
 
 export interface TrialSignupAttribution {

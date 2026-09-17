@@ -194,17 +194,38 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
     if (!isTrial || trialViewedRef.current) return;
     trialViewedRef.current = true;
     let attribution: TrialSignupAttribution | undefined;
+    /*
+     * Three doors into the same tailored page. `entry=results_page` is the
+     * calculator taking someone here without an inbox; the emailed continue
+     * route never sets it. Collapsing that path into `results_email` would
+     * count no-inbox completions against the GA4 key event the email funnel
+     * uses — the same reason the open events were split.
+     */
+    const fromResultsPage =
+      searchParams.get(SIGNUP_ENTRY_PARAM) === SIGNUP_ENTRY_RESULTS_PAGE;
     if (hasCoastFireSignupSource(searchParams)) {
-      const fromEmail = Boolean(readCoastFireSignupRef() || readCoastFireSignupContext()?.sourceToken);
+      const fromSavedRun = Boolean(
+        readCoastFireSignupRef() || readCoastFireSignupContext()?.sourceToken,
+      );
       attribution = {
         signupOrigin: 'coast_fire_calculator',
-        signupEntry: fromEmail ? 'results_email' : 'calculator_cta',
+        signupEntry: fromResultsPage && fromSavedRun
+          ? 'results_page'
+          : fromSavedRun
+            ? 'results_email'
+            : 'calculator_cta',
       };
     } else if (hasRetirementSignupSource(searchParams)) {
-      const fromEmail = Boolean(readRetirementSignupRef() || readRetirementSignupContext()?.sourceToken);
+      const fromSavedRun = Boolean(
+        readRetirementSignupRef() || readRetirementSignupContext()?.sourceToken,
+      );
       attribution = {
         signupOrigin: 'retirement_calculator',
-        signupEntry: fromEmail ? 'results_email' : 'calculator_cta',
+        signupEntry: fromResultsPage && fromSavedRun
+          ? 'results_page'
+          : fromSavedRun
+            ? 'results_email'
+            : 'calculator_cta',
       };
     }
     beginFreeTrialSignupFlow(Date.now(), attribution);
