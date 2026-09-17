@@ -6,6 +6,7 @@ import { ArrowRight, CircleAlert, CircleCheck, LoaderCircle, MailCheck, RefreshC
 import AuthFlowShell from './auth/AuthFlowShell';
 import {
   pushTrialVerifyError,
+  pushTrialVerifySkipped,
   pushTrialVerifySubmit,
   pushTrialVerifySuccess,
   pushTrialVerifyViewed,
@@ -313,7 +314,13 @@ function VerifyEmailFormContent() {
         <div className="mt-5 text-center">
           <Link
             href={DEFAULT_POST_LOGIN_DESTINATION}
-            onClick={() => { if (isFreeTrialFlow) completeFreeTrialSignupFlow(); }}
+            onClick={() => {
+              if (!isFreeTrialFlow) return;
+              // Report before clearing: the event reads the attribution this
+              // call is about to drop, and a skip is a completion too.
+              pushTrialVerifySkipped();
+              completeFreeTrialSignupFlow();
+            }}
             className="text-sm text-[#71857f] hover:text-[#123c2f]"
           >
             Skip for now

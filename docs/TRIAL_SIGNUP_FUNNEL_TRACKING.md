@@ -27,10 +27,13 @@ Use this order in a GA4 funnel exploration, filtering every step to
    of the free-trial flow.
 7. `trial_verify_submit` — each verification-code submit attempt.
 8. Either `trial_verify_error` with a safe `error_category`, or
-   `trial_verify_success` after a successful backend response. **This is the
-   funnel's terminal event.** Verification carries the registration session
-   straight into `/app`, so the no-card funnel no longer passes through
-   `/login`.
+   `trial_verify_success` after a successful backend response.
+9. `trial_verify_skipped` — "Skip for now", the other door from this screen
+   into the workspace.
+
+**Steps 8 and 9 are the funnel's terminal events.** Verification and skipping
+both carry the registration session straight into `/app`, so the no-card funnel
+no longer passes through `/login`; completion is the two of them together.
 
 The `trial_login_*` events still exist and still fire on `/login` when both the
 URL marker and recent same-tab state are present, but no signup routes there
@@ -149,8 +152,12 @@ these separately rather than combining all errors:
   `trial_signup_registration_error` per signup-submit session;
 - account-created rate: `sign_up (signup_flow=free_trial)` per signup-viewed
   session;
-- verification attempt and failure rates, using `trial_verify_*` only; and
-- end-to-end completion: `trial_verify_success / trial_signup_viewed`.
+- verification attempt and failure rates, using `trial_verify_error` and
+  `trial_verify_submit`; and
+- end-to-end completion:
+  `(trial_verify_success + trial_verify_skipped) / trial_signup_viewed`.
+  Counting only `trial_verify_success` undercounts by everyone who skipped,
+  who reach the workspace just the same.
 
 The former verification-to-login return rate and login failure rate no longer
 have a step to measure — the funnel ends at verification.

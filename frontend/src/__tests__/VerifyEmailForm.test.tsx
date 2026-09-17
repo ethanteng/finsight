@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import VerifyEmailForm from '@/components/VerifyEmailForm';
 import {
   pushTrialVerifyError,
+  pushTrialVerifySkipped,
   pushTrialVerifySubmit,
   pushTrialVerifySuccess,
   pushTrialVerifyViewed,
@@ -20,6 +21,7 @@ jest.mock('next/navigation', () => ({
 }));
 jest.mock('@/lib/dataLayer', () => ({
   pushTrialVerifyError: jest.fn(),
+  pushTrialVerifySkipped: jest.fn(),
   pushTrialVerifySubmit: jest.fn(),
   pushTrialVerifySuccess: jest.fn(),
   pushTrialVerifyViewed: jest.fn(),
@@ -29,6 +31,7 @@ const mockPushTrialVerifyError = jest.mocked(pushTrialVerifyError);
 const mockPushTrialVerifySubmit = jest.mocked(pushTrialVerifySubmit);
 const mockPushTrialVerifySuccess = jest.mocked(pushTrialVerifySuccess);
 const mockPushTrialVerifyViewed = jest.mocked(pushTrialVerifyViewed);
+const mockPushTrialVerifySkipped = jest.mocked(pushTrialVerifySkipped);
 
 function enterCode(code = '123456') {
   fireEvent.change(screen.getByLabelText('Verification Code'), { target: { value: code } });
@@ -114,6 +117,36 @@ describe('VerifyEmailForm', () => {
     // The no-card funnel ends here now, so its attribution record must not be
     // left behind to claim a later auth page in this tab.
     expect(sessionStorage.getItem(TRIAL_SIGNUP_FLOW_STORAGE_KEY)).toBeNull();
+  });
+
+  /*
+   * Skipping reaches the workspace just as verifying does. It used to land on
+   * /login, where trial_login_success reported the completion; without an event
+   * of its own the funnel would now lose everyone who took this door.
+   */
+  it('reports a skipped verification as a trial completion', async () => {
+    searchParams = new URLSearchParams('signup_flow=free_trial');
+    beginFreeTrialSignupFlow();
+    global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({}) });
+
+    render(<VerifyEmailForm />);
+    await waitFor(() => expect(mockPushTrialVerifyViewed).toHaveBeenCalledTimes(1));
+
+    const skip = screen.getByRole('link', { name: 'Skip for now' });
+    expect(skip).toHaveAttribute('href', '/app');
+    fireEvent.click(skip);
+
+    expect(mockPushTrialVerifySkipped).toHaveBeenCalledTimes(1);
+    expect(mockPushTrialVerifySuccess).not.toHaveBeenCalled();
+    expect(sessionStorage.getItem(TRIAL_SIGNUP_FLOW_STORAGE_KEY)).toBeNull();
+  });
+
+  it('does not report a skip outside the free-trial funnel', () => {
+    render(<VerifyEmailForm />);
+
+    fireEvent.click(screen.getByRole('link', { name: 'Skip for now' }));
+
+    expect(mockPushTrialVerifySkipped).not.toHaveBeenCalled();
   });
 
   /*
