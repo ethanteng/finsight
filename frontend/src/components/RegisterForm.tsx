@@ -434,12 +434,20 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
 
     /*
      * The token from the results email, so the run they saved becomes the
-     * first decision in this account. Only present when they arrived from that
-     * link — a same-tab click-through has no token, and the server refuses one
+     * first decision in this account. Prefer the exchanged context; if the
+     * visitor submits before that lookup paints, the handover cookie still
+     * holds the same bearer — without this fallback a fast submit on a slow
+     * exchange would create the account and silently skip the seed. A
+     * same-tab click-through has neither, and the server refuses a token
      * whose lead was sent to a different address anyway.
      */
-    if (retirementContext?.sourceToken) {
-      registrationData.calculatorRef = retirementContext.sourceToken;
+    const calculatorRef =
+      retirementContext?.sourceToken
+      ?? (isTrial && hasRetirementSignupSource(searchParams)
+        ? readRetirementSignupRef()
+        : null);
+    if (calculatorRef) {
+      registrationData.calculatorRef = calculatorRef;
     }
 
     // If coming from successful subscription, include tier and session info.
