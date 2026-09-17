@@ -65,7 +65,17 @@ interface PlaidLinkButtonProps {
 }
 
 export interface PlaidLinkButtonRef {
-  createLinkToken: () => void;
+  /**
+   * Open Plaid Link.
+   *
+   * Pass `{ forceNew: true }` when the shared "Add an account" picker is starting
+   * a brand-new connection. This instance may also be wired with
+   * `updateModeTokenId` for a pending ITEM_LOGIN_REQUIRED repair, and without
+   * `forceNew` that repair id would ride along and open Link in update mode —
+   * reconnecting the broken Item instead of adding the institution the user
+   * just picked.
+   */
+  createLinkToken: (options?: { forceNew?: boolean }) => void;
 }
 
 const PlaidLinkButton = forwardRef<PlaidLinkButtonRef, PlaidLinkButtonProps>(({ onSuccess, onExit, forceReinitialize = false, updateModeTokenId, headless = false, label, onStatusChange }, ref) => {
@@ -150,8 +160,8 @@ const PlaidLinkButton = forwardRef<PlaidLinkButtonRef, PlaidLinkButtonProps>(({ 
   }, [forceReinitialize, cleanupPlaidLink]);
 
   // Fetch link_token from backend
-  const createLinkToken = useCallback(async () => {
-    console.log('createLinkToken called with props:', { forceReinitialize });
+  const createLinkToken = useCallback(async (options?: { forceNew?: boolean }) => {
+    console.log('createLinkToken called with props:', { forceReinitialize, forceNew: options?.forceNew });
 
     // Check if other financial services are active
     if (financialServiceCoordinator.hasActiveServices()) {
@@ -174,13 +184,16 @@ const PlaidLinkButton = forwardRef<PlaidLinkButtonRef, PlaidLinkButtonProps>(({ 
       headers['Authorization'] = `Bearer ${token}`;
     }
 
+    // Add-account must not inherit a pending reconnect's accessTokenId.
+    const accessTokenIdForRequest = options?.forceNew ? undefined : updateModeTokenId;
+
     try {
-      console.log('Creating Plaid Link token...', { API_URL, hasToken: !!token });
+      console.log('Creating Plaid Link token...', { API_URL, hasToken: !!token, updateMode: Boolean(accessTokenIdForRequest) });
 
       const res = await fetch(`${API_URL}/plaid/create_link_token`, {
         method: 'POST',
         headers,
-        body: JSON.stringify({ accessTokenId: updateModeTokenId || undefined })
+        body: JSON.stringify({ accessTokenId: accessTokenIdForRequest || undefined })
       });
 
       console.log('Plaid Link token response status:', res.status);
@@ -397,7 +410,7 @@ const PlaidLinkButton = forwardRef<PlaidLinkButtonRef, PlaidLinkButtonProps>(({ 
     <div className="space-y-3" data-plaid-modal={!!linkToken ? "true" : undefined}>
       {!headless && (
         <button
-          onClick={createLinkToken}
+          onClick={() => createLinkToken()}
           disabled={!!linkToken}
           className="bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-medium py-2 px-4 rounded-lg transition-colors duration-200"
         >

@@ -1078,7 +1078,10 @@ export default function ProfilePage() {
     // without the remount it causes: remounting swaps the ref out from under
     // the call being made on the next line.
     resetPlaidLinkInitialization();
-    plaidLinkButtonRef.current?.createLinkToken();
+    // forceNew: this same PlaidLinkButton may be holding an ITEM_LOGIN_REQUIRED
+    // updateModeTokenId for the reconnect button. Adding an account must not
+    // open Link in update mode for that broken Item.
+    plaidLinkButtonRef.current?.createLinkToken({ forceNew: true });
   }, []);
 
   /** Open the SnapTrade portal already on the brokerage the picker selected. */
