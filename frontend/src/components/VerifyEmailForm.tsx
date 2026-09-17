@@ -85,10 +85,13 @@ function VerifyEmailFormContent() {
   useEffect(() => {
     const token = localStorage.getItem('auth_token');
     if (!token) return;
+    // After verify/skip starts (or handoff already fired), never revive the
+    // probe. Resetting ignore on a remount/searchParams change would reopen
+    // the already_verified race against an in-flight code POST.
+    if (ignoreProfileProbeRef.current || trialCompletedRef.current) return;
 
     const API_URL = process.env.NEXT_PUBLIC_API_URL;
     const controller = new AbortController();
-    ignoreProfileProbeRef.current = false;
     profileProbeControllerRef.current = controller;
 
     void (async () => {
