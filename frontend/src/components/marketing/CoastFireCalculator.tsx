@@ -21,6 +21,7 @@ import {
 import { pushCoastFireCalculated } from "@/lib/dataLayer";
 import { fromGrouped, withCommas } from "@/lib/number-input";
 import {
+  clearCoastFireSignupContext,
   COAST_FIRE_SIGNUP_HREF,
   storeCoastFireSignupContext,
 } from "@/lib/coast-fire-signup-context";
@@ -747,9 +748,17 @@ export function CoastFireCalculator({ children }: { children?: ReactNode }) {
             csOverrideId="cta-stress-test-coast-fire"
             label="Stress-test my Coast FIRE plan"
             href={COAST_FIRE_SIGNUP_HREF}
-            onBeforeNavigate={
-              result ? () => { storeCoastFireSignupContext(signupContext(result)); } : undefined
-            }
+            /*
+             * The handoff carries what this page is showing, including when
+             * that is nothing. A scenario stored by an earlier run lives for
+             * two hours, so leaving it in place here would hand signup a run
+             * the visitor did not just see — the same answer-they-did-not-ask
+             * -for this page was emptied to avoid.
+             */
+            onBeforeNavigate={() => {
+              if (result) storeCoastFireSignupContext(signupContext(result));
+              else clearCoastFireSignupContext();
+            }}
           />
           <p className="microcopy">{TRIAL_CTA_MICROCOPY}</p>
         </div>
