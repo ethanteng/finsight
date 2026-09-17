@@ -1,6 +1,7 @@
 import React from 'react';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import AppPageClient from '@/app/app/AppPageClient';
+import { markFirstDecisionPending } from '@/lib/pending-first-decision';
 
 const mockRouter = { push: jest.fn() };
 jest.mock('next/navigation', () => ({ useRouter: () => mockRouter }));
@@ -76,12 +77,14 @@ describe('AppPageClient decision list', () => {
 
   beforeEach(() => {
     localStorage.setItem('auth_token', 'token');
+    sessionStorage.clear();
     releaseHistory = null;
   });
 
   afterEach(() => {
     jest.restoreAllMocks();
     localStorage.clear();
+    sessionStorage.clear();
   });
 
   it('groups turns into decisions and marks the one a follow-up would continue', async () => {
@@ -214,4 +217,39 @@ describe('AppPageClient decision list', () => {
       )
     );
   });
+  /*
+   * Registration answers before it writes a saved calculator run as the
+   * account's first decision, and now navigates straight here, so the first
+   * history fetch can beat that insert. An empty workspace is the wrong answer
+   * for someone who was promised their run.
+   */
+  it('waits for a first decision that registration is still writing', async () => {
+    mockApi([], {
+      laterConversations: [turn('seeded', null, 'Can I retire at 60?', 100)],
+    });
+    markFirstDecisionPending();
+
+    render(<AppPageClient />);
+
+    await screen.findByText('Your completed questions will appear here.');
+    await screen.findByRole('group', { name: 'Decision: Can I retire at 60?' }, { timeout: 5000 });
+  }, 10000);
+
+  it('does not poll for a decision when the signup saved no calculator run', async () => {
+    mockApi([], {
+      laterConversations: [turn('seeded', null, 'Can I retire at 60?', 100)],
+    });
+
+    render(<AppPageClient />);
+    await screen.findByText('Your completed questions will appear here.');
+
+    // Long enough to cover the whole retry budget had one been armed.
+    await new Promise(resolve => setTimeout(resolve, 3200));
+
+    expect(screen.getByText('Your completed questions will appear here.')).toBeInTheDocument();
+    const historyCalls = (global.fetch as jest.Mock).mock.calls.filter(([input]) =>
+      String(input).includes('/conversations'),
+    );
+    expect(historyCalls).toHaveLength(1);
+  }, 10000);
 });

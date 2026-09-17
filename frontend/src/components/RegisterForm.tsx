@@ -45,6 +45,7 @@ import {
   withFreeTrialSignupFlow,
 } from '@/lib/trial-signup-flow';
 import { DEFAULT_POST_LOGIN_DESTINATION } from '@/lib/post-login-redirect';
+import { markFirstDecisionPending } from '@/lib/pending-first-decision';
 
 interface SubscriptionContext {
   subscription: string;
@@ -609,6 +610,14 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
        * session that fails either.
        */
       if (alreadyVerified) {
+        /*
+         * The server reports this only when it resolved a lead, which is
+         * exactly when it is also writing that run as the account's first
+         * decision — unawaited, after the response above. The sign-in form
+         * used to cover that window; nothing does now, so tell /app to wait
+         * for the decision rather than render an empty workspace over it.
+         */
+        markFirstDecisionPending();
         // The funnel ends here for this account; nothing further will report
         // its completion, and a stale record would follow the tab for hours.
         if (isTrial) completeFreeTrialSignupFlow();

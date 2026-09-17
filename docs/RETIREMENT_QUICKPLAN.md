@@ -388,6 +388,15 @@ returns a reason rather than throwing, and skips an account that already has
 decisions — registration can be retried, and two attempts must not leave two
 copies of one run.
 
+That ordering has a consequence now that registration opens `/app` directly:
+the workspace's first `/conversations` fetch can beat the insert. The sign-in
+form used to cover the gap. `RegisterForm` therefore leaves a short-lived
+same-tab marker (`lib/pending-first-decision.ts`) whenever the server reports
+the address already proved — which is exactly when a seed is in flight — and
+`AppPageClient` reloads history a few times over ~2.8s before accepting an
+empty workspace. Only that signup waits; every other visit reads the marker as
+absent and does nothing.
+
 The decision's question is synthesized, because a calculator is a form and
 there is no prompt to carry over. It states the plan back in the first person
 using only figures the visitor entered, so the answer under it answers
