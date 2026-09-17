@@ -10,7 +10,7 @@
  * split the ranking for the same query.
  */
 
-import { useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import {
   calculateCoastFire,
@@ -112,6 +112,141 @@ function signupContext(result: CoastFireResult): CoastFireInputs {
     realReturnRate: result.realReturnRate,
     withdrawalRate: result.withdrawalRate,
   };
+}
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
+
+/**
+ * How long the page waits for the reading before giving up on it.
+ *
+ * A deadline of our own, past the server's. The endpoint bounds its own model
+ * call and answers 204 when it gives up, so this should never fire on an
+ * ordinarily slow reading — it is the backstop for a connection that stops
+ * answering, which would otherwise leave the placeholder spinning for as long
+ * as the browser's own timeout allows.
+ */
+const INTERPRETATION_TIMEOUT_MS = 30_000;
+
+/**
+ * The model's reading of a result. Everything in it is prose; every figure
+ * inside that prose was checked against the formula's own output before it was
+ * sent, and a draft that failed that check is not sent at all — which is why
+ * this is optional everywhere below rather than part of the result.
+ */
+interface Interpretation {
+  headline: string;
+  paragraphs: string[];
+  watchOuts: string[];
+  model: string;
+}
+
+/**
+ * Ask for a reading of a submitted scenario.
+ *
+ * Only ever called for a scenario the visitor actually submitted. The page
+ * opens with a worked example already answered, and reading that one would
+ * spend a model call — and a slice of this visitor's rate limit — on figures
+ * nobody entered.
+ *
+ * Everything here fails to `null`, which renders as nothing: a visitor who
+ * never learns the panel exists has still had a complete answer, because the
+ * answer was computed in their browser before this request was made.
+ */
+function useCoastFireInterpretation(submitted: CoastFireInputs | null): {
+  interpretation: Interpretation | null;
+  isLoading: boolean;
+} {
+  const [interpretation, setInterpretation] = useState<Interpretation | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    if (!submitted || typeof fetch !== "function") return;
+
+    let cancelled = false;
+    setInterpretation(null);
+    setIsLoading(true);
+
+    const controller = typeof AbortController === "function" ? new AbortController() : null;
+    const deadline = controller
+      ? setTimeout(() => controller.abort(), INTERPRETATION_TIMEOUT_MS)
+      : null;
+
+    fetch(`${API_URL}/api/coast-fire/interpretation`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(submitted),
+      ...(controller ? { signal: controller.signal } : {}),
+    })
+      // 204 is the ordinary "nothing to show" answer and has no body to read.
+      .then((response) => (response.ok && response.status !== 204 ? response.json() : null))
+      .then((payload) => {
+        if (cancelled) return;
+        const usable =
+          payload &&
+          typeof payload.headline === "string" &&
+          Array.isArray(payload.paragraphs) &&
+          payload.paragraphs.length > 0;
+        setInterpretation(usable ? (payload as Interpretation) : null);
+      })
+      .catch(() => {
+        if (!cancelled) setInterpretation(null);
+      })
+      .finally(() => {
+        if (deadline !== null) clearTimeout(deadline);
+        if (!cancelled) setIsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+      if (deadline !== null) clearTimeout(deadline);
+      // A new scenario supersedes this one; nothing is waiting on the answer.
+      controller?.abort();
+    };
+  }, [submitted]);
+
+  return { interpretation, isLoading };
+}
+
+/** The model's reading, or nothing. */
+function InterpretationPanel({
+  interpretation,
+  isInterpreting,
+}: {
+  interpretation: Interpretation | null;
+  isInterpreting: boolean;
+}) {
+  if (!interpretation && !isInterpreting) return null;
+
+  return (
+    <section
+      className="shell cf-interpretation"
+      id="what-this-means"
+      aria-live="polite"
+      aria-busy={isInterpreting}
+    >
+      <p className="section-kicker">WHAT THIS RESULT MEANS</p>
+      {isInterpreting || !interpretation ? (
+        <div className="cf-interpretation-loading" role="status">
+          <span className="cf-interpretation-pulse" aria-hidden="true" />
+          Reading your result&hellip;
+        </div>
+      ) : (
+        <>
+          <h3>{interpretation.headline}</h3>
+          {interpretation.paragraphs.map((paragraph) => (
+            <p key={paragraph}>{paragraph}</p>
+          ))}
+          {interpretation.watchOuts.length > 0 && (
+            <ul className="cf-interpretation-watch">
+              {interpretation.watchOuts.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
+          )}
+        </>
+      )}
+    </section>
+  );
 }
 
 function ResultPanel({ result }: { result: CoastFireResult }) {
@@ -239,7 +374,15 @@ export function CoastFireCalculator({ children }: { children?: ReactNode }) {
    * an email about a stranger's retirement.
    */
   const [hasSubmitted, setHasSubmitted] = useState(false);
+  /*
+   * The scenario the reading is written from. Set only on submit, and only to
+   * the seven numbers the calculator accepted — so the panel is always about
+   * the figures on screen, and the default example never costs a model call.
+   */
+  const [submitted, setSubmitted] = useState<CoastFireInputs | null>(null);
   const resultRef = useRef<HTMLDivElement>(null);
+
+  const { interpretation, isLoading: isInterpreting } = useCoastFireInterpretation(submitted);
 
   const sensitivity = useMemo(() => {
     const rates = [
@@ -266,6 +409,7 @@ export function CoastFireCalculator({ children }: { children?: ReactNode }) {
       setResult(nextResult);
       setError(null);
       setHasSubmitted(true);
+      setSubmitted(signupContext(nextResult));
       pushCoastFireCalculated(
         nextResult.hasReachedCoastFire ? "reached" : "not_yet",
         nextResult.yearsToRetirement,
@@ -313,7 +457,11 @@ export function CoastFireCalculator({ children }: { children?: ReactNode }) {
           <button className="button button-primary cf-calculate-button" type="submit" data-cs-override-id="coast-fire-calculate">
             Calculate my Coast FIRE number <span aria-hidden="true">→</span>
           </button>
-          <p className="cf-private-note">The calculation runs in your browser. No account or email required.</p>
+          <p className="cf-private-note">
+            The calculation runs in your browser, and your answer appears without waiting on
+            anything. Ask Linc writes the plain-language reading underneath it, which sends these
+            seven numbers to our server and nothing else. No account or email required.
+          </p>
         </form>
 
         <div className="cf-result-column" ref={resultRef}>
@@ -345,6 +493,8 @@ export function CoastFireCalculator({ children }: { children?: ReactNode }) {
           </div>
         )}
       </section>
+
+      <InterpretationPanel interpretation={interpretation} isInterpreting={isInterpreting} />
 
       <section className="shell cf-sensitivity">
         <div className="cf-section-head">

@@ -28,9 +28,12 @@ export interface CoastFireLeadRecord {
   /**
    * The figures the email actually carried. Returned so signup can show the
    * same number the inbox shows, even if the browser formula has changed
-   * since the message was sent.
+   * since the message was sent — and so the first decision a saved run
+   * becomes states what the reader was actually sent.
    */
   coastFireNumber: number;
+  retirementTarget: number;
+  projectedSavingsAtRetirement: number;
   hasReachedCoastFire: boolean;
 }
 
@@ -140,6 +143,8 @@ export async function readCoastFireLead(
         withdrawalRate: lead.withdrawalRate,
       },
       coastFireNumber: lead.coastFireNumber,
+      retirementTarget: lead.retirementTarget,
+      projectedSavingsAtRetirement: lead.projectedSavingsAtRetirement,
       hasReachedCoastFire: lead.hasReachedCoastFire,
     };
   } catch (error) {

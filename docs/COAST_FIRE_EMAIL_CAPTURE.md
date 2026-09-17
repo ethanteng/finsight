@@ -7,8 +7,10 @@
 The `/coast-fire-calculator` page is the acquisition wedge for the Coast FIRE
 beachhead experiment. It answers the free question — "have I reached Coast
 FIRE?" — in the browser, with no account and no email. This document covers the
-one step past that: turning an anonymous calculator visitor into a known
-prospect by emailing them their own result.
+two steps past that: the plain-language reading printed under the number, and
+turning an anonymous calculator visitor into a known prospect by emailing them
+their own result — which now offers them an account rather than just an inbox
+copy.
 
 ## The flow
 
@@ -23,8 +25,8 @@ prospect by emailing them their own result.
    with a random token, and sends the message through Resend.
 4. After the response, the address is added to MailerLite, in the Coast FIRE
    group.
-5. The email's call to action — "Stress-test this with my actual finances" —
-   links to `/coast-fire/continue?ref=<token>`.
+5. The email's call to action — "Finish creating your account" — links to
+   `/coast-fire/continue?ref=<token>`.
 6. That route handler runs server-side, moves the token into a short-lived
    first-party cookie scoped to `/getstarted`, and redirects to a clean
    `/getstarted?source=coast-fire-calculator`.
@@ -34,9 +36,80 @@ prospect by emailing them their own result.
    number the email stated, what they have saved, and their retirement age,
    with their email prefilled.
 
+8. Registering with that token in hand skips the emailed verification code and
+   writes the run as the account's first decision. See **Saving a run to an
+   account** below.
+
 The page's own "Stress-test my Coast FIRE plan" button reaches the same
 tailored page through sessionStorage rather than a token, so both entry points
 continue the same decision.
+
+## The reading under the number
+
+Submitting a scenario also posts the same seven inputs to
+`POST /api/coast-fire/interpretation`, which re-runs the formula server-side and
+asks a model to say what the figures mean. The division is the one
+`docs/SCENARIO_MODELING.md` draws for the authenticated product: the formula
+produces every number, the model only describes them.
+
+`src/services/coast-fire-interpretation.ts` builds a fact block — every figure
+this run produced, plus a handful of published rates from named series — and
+`src/services/calculator-interpretation.ts` checks the draft against it. Any
+number that is not one of those facts, at the precision the draft wrote it to,
+rejects the draft; it is sent back once naming the offending tokens, and then
+dropped. A dropped reading renders as nothing at all, which is why the endpoint
+answers `204` rather than an error.
+
+Three things are specific to this page rather than inherited from the quick
+plan:
+
+- **"Reached" is not permission to stop saving.** A green badge reads as one,
+  and the prompt forbids prescribing anything — stopping contributions,
+  changing jobs, spending more — in either direction.
+- **There is no probability here.** The quick plan tests a plan against
+  hundreds of real historical stretches and can report how many lasted. This
+  compounds one assumed return for a fixed number of years. The prompt forbids
+  "chance", "likely", and "on track to".
+- **The return and the withdrawal rate are the visitor's assumptions**, not our
+  estimates, and the fact labels say so.
+
+The rate labels are stored without digits (`thirty-year Treasury yield`, not
+`30-year`) and the as-of date is given to the month. Everything a fact shows the
+model is a number the model may then write, so a label reading "30-year" would
+license a bare `30` — and a draft could then state a horizon this scenario never
+ran.
+
+This is the one part of the page that is not computed in the browser. The form's
+note and the "is it free?" FAQ entry both say so: the number appears with no
+network round trip, and the reading beneath it sends the seven inputs and
+nothing else.
+
+## Saving a run to an account
+
+The capture asks "Save these results to your free account", and the email links
+into signup with the address prefilled. Two things happen when someone
+registers with that token:
+
+- **The verification code is skipped.** A lead token is 48 random characters
+  that only ever left this system inside a message to the lead's own address, so
+  presenting one *and* registering that address demonstrates exactly what the
+  code demonstrates. `resolveCalculatorLead` is resolved on the server, before
+  the account exists, from the token alone — a client cannot declare itself
+  verified — and the addresses must match. Every other registration still
+  verifies by code.
+- **The run becomes the account's first decision.** `buildCoastFireQuestion`
+  states the scenario back in the first person; `buildCoastFireAnswer` states
+  the verdict from the *stored* figures, never a fresh run, for the same reason
+  the signup context does.
+
+Both calculators mint tokens from the same 48-character space, so the token
+itself says which table holds it: `resolveCalculatorLead` tries the retirement
+leads and then the Coast FIRE leads. The client is never asked which calculator
+it came from. Seeding runs after the response and unawaited, and returns a
+reason rather than throwing — it may never fail a registration.
+
+See `docs/RETIREMENT_QUICKPLAN.md` for the deploy-ordering constraint this
+creates: **the frontend must ship first, or with the backend, never after.**
 
 ## Why a token, and why it is not in the URL either
 
@@ -100,6 +173,8 @@ mail, and the result card mirrors the one on the page.
 | `MAILER_LITE_COAST_FIRE_GROUP_ID` | — | The Coast FIRE group. Unset means the address reaches the subscriber list without a group. |
 | `COAST_FIRE_EMAIL_RATE_LIMIT` | 5 | Sends per caller per minute. Far below the quick plan's 20: every accepted request puts mail in an address the caller chose. |
 | `COAST_FIRE_CONTEXT_RATE_LIMIT` | 30 | Token lookups per caller per minute, on its own window so a send does not spend it. |
+| `COAST_FIRE_INTERPRETATION_RATE_LIMIT` | 8 | Readings per caller per minute, on its own window. Every request past the cache is a model call we pay for on a page with no account behind it. |
+| `CALCULATOR_NARRATIVE_MODEL` | Haiku 4.5 | Shared with the retirement reading. See `src/openai/model-config.ts`. |
 | `COAST_FIRE_TRUSTED_PROXIES` | 1 | How many proxies sit in front of this process. See `routes/fixed-window-rate-limit.ts`. |
 | `RESEND_API_KEY` | — | Unset means no mail is sent and the endpoint reports success, matching the rest of the auth email path in development. |
 

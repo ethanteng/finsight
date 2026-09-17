@@ -5,10 +5,17 @@ import { describe, expect, it, beforeEach } from '@jest/globals';
  * are held here so a case can decide what they say. The composition helpers
  * are pure and are exercised directly.
  */
-const leads = { read: jest.fn<Promise<unknown>, unknown[]>(async () => null) };
+const leads = {
+  readRetirement: jest.fn<Promise<unknown>, unknown[]>(async () => null),
+  readCoastFire: jest.fn<Promise<unknown>, unknown[]>(async () => null),
+};
 jest.mock('../../services/retirement-leads', () => ({
   ...(jest.requireActual('../../services/retirement-leads') as object),
-  readRetirementLead: (...args: unknown[]) => leads.read(...args),
+  readRetirementLead: (...args: unknown[]) => leads.readRetirement(...args),
+}));
+jest.mock('../../services/coast-fire-leads', () => ({
+  ...(jest.requireActual('../../services/coast-fire-leads') as object),
+  readCoastFireLead: (...args: unknown[]) => leads.readCoastFire(...args),
 }));
 
 const db = {
@@ -25,12 +32,15 @@ jest.mock('../../prisma-client', () => ({
 }));
 
 import {
+  buildCoastFireAnswer,
+  buildCoastFireQuestion,
   buildDecisionAnswer,
   buildDecisionQuestion,
   resolveCalculatorLead,
   seedFirstDecisionFromLead,
 } from '../../services/calculator-first-decision';
 import type { RetirementLeadRecord } from '../../services/retirement-leads';
+import type { CoastFireLeadRecord } from '../../services/coast-fire-leads';
 
 function lead(overrides: Partial<RetirementLeadRecord> = {}): RetirementLeadRecord {
   return {
@@ -58,8 +68,34 @@ function lead(overrides: Partial<RetirementLeadRecord> = {}): RetirementLeadReco
   } as RetirementLeadRecord;
 }
 
+/**
+ * A Coast FIRE lead carries the figures the email stated, not a fresh run, so
+ * the outcome fields here are stored values rather than anything recomputed.
+ */
+function coastFireLead(overrides: Partial<CoastFireLeadRecord> = {}): CoastFireLeadRecord {
+  return {
+    token: 'c'.repeat(48),
+    email: 'reader@example.com',
+    inputs: {
+      currentAge: 52,
+      retirementAge: 67,
+      currentSavings: 900_000,
+      annualRetirementSpending: 90_000,
+      annualRetirementIncome: 42_000,
+      realReturnRate: 5,
+      withdrawalRate: 4,
+    },
+    coastFireNumber: 577_220.91,
+    retirementTarget: 1_200_000,
+    projectedSavingsAtRetirement: 1_871_034.62,
+    hasReachedCoastFire: true,
+    ...overrides,
+  } as CoastFireLeadRecord;
+}
+
 beforeEach(() => {
-  leads.read.mockReset().mockResolvedValue(null);
+  leads.readRetirement.mockReset().mockResolvedValue(null);
+  leads.readCoastFire.mockReset().mockResolvedValue(null);
   db.count.mockReset().mockResolvedValue(0);
   db.create.mockReset().mockResolvedValue({ id: 'conversation-1' });
 });
@@ -153,6 +189,110 @@ describe('the answer a calculator run becomes', () => {
   });
 });
 
+describe('the question a Coast FIRE run becomes', () => {
+  it('owns the return and the withdrawal rate as assumptions the visitor typed', () => {
+    expect(buildCoastFireQuestion(coastFireLead())).toBe(
+      'Have I reached Coast FIRE? I am 52 now and plan to retire at 67. I have $900,000 in ' +
+      'retirement savings, expect to spend $90,000 a year once I stop, and expect $42,000 a year ' +
+      'of income from the day I retire. I assumed 5% growth a year after inflation and a 4% ' +
+      'withdrawal rate.'
+    );
+  });
+
+  /* Two clauses join with "and"; three take the serial comma. */
+  it('leaves out retirement income the visitor did not enter', () => {
+    const question = buildCoastFireQuestion(coastFireLead({
+      inputs: { ...coastFireLead().inputs, annualRetirementIncome: 0 },
+    }));
+
+    expect(question).toContain(
+      'I have $900,000 in retirement savings and expect to spend $90,000 a year once I stop.'
+    );
+    expect(question).not.toContain('from the day I retire');
+  });
+
+  it('writes a fractional rate without inventing precision', () => {
+    const question = buildCoastFireQuestion(coastFireLead({
+      inputs: { ...coastFireLead().inputs, realReturnRate: 5.5, withdrawalRate: 3.5 },
+    }));
+
+    expect(question).toContain('5.5% growth');
+    expect(question).toContain('3.5% withdrawal rate');
+  });
+});
+
+describe('the answer a Coast FIRE run becomes', () => {
+  /*
+   * The emailed figures, not a fresh run — same reason as the quick plan. The
+   * Coast FIRE number, the target and the projection are all stored, so a
+   * formula change inside the token's ninety days cannot make this decision
+   * disagree with the message that produced it.
+   */
+  it('states the verdict and the figures the email carried', () => {
+    const answer = buildCoastFireAnswer(coastFireLead());
+
+    expect(answer).toContain('On the assumptions you entered, yes.');
+    expect(answer).toContain('$577,221');
+    expect(answer).toContain('**Portfolio needed at 67:** $1,200,000');
+    expect(answer).toContain('$1,871,035');
+    expect(answer).toContain('**Retirement income:** $42,000');
+  });
+
+  it('says not yet without turning it into an instruction to save harder', () => {
+    const answer = buildCoastFireAnswer(coastFireLead({
+      inputs: { ...coastFireLead().inputs, currentSavings: 120_000 },
+      coastFireNumber: 497_126,
+      hasReachedCoastFire: false,
+    }));
+
+    expect(answer).toContain('On the assumptions you entered, not yet.');
+    expect(answer).not.toMatch(/you should|start saving|save more|keep saving/i);
+  });
+
+  /* The limit of a run made from seven numbers, and why the app is worth opening. */
+  it('names the single straight line and what it does not model', () => {
+    const answer = buildCoastFireAnswer(coastFireLead());
+
+    expect(answer).toContain('a single straight line: 5% every year');
+    expect(answer).toContain('no taxes, fees, account types, healthcare, uneven markets');
+    expect(answer).toContain('Connect your accounts');
+  });
+
+  /*
+   * Entered income covering entered spending is a real answer, not an edge
+   * case to paper over: the Coast FIRE number is zero, and "you need $0
+   * invested today" reads as a broken calculator rather than as the finding.
+   */
+  it('explains a scenario that asks nothing of the portfolio', () => {
+    const answer = buildCoastFireAnswer(coastFireLead({
+      inputs: {
+        ...coastFireLead().inputs,
+        annualRetirementSpending: 60_000,
+        annualRetirementIncome: 60_000,
+      },
+      coastFireNumber: 0,
+      retirementTarget: 0,
+      hasReachedCoastFire: true,
+    }));
+
+    expect(answer).toContain('already covers the $60,000 a year you plan to spend');
+    expect(answer).toContain('asks nothing of your portfolio');
+    expect(answer).not.toContain('Your Coast FIRE number was $0');
+  });
+
+  /* "$0 grows to $0" is true and reads as a bug. */
+  it('does not describe nothing as compounding', () => {
+    const answer = buildCoastFireAnswer(coastFireLead({
+      inputs: { ...coastFireLead().inputs, currentSavings: 0 },
+      projectedSavingsAtRetirement: 0,
+      hasReachedCoastFire: false,
+    }));
+
+    expect(answer).toContain('This projection only compounds what you already have');
+    expect(answer).not.toContain('$0 grows to $0');
+  });
+});
+
 /*
  * Resolution is separate from writing because two things hang off it: what the
  * first decision says, and whether the address still needs a code. It runs
@@ -161,13 +301,13 @@ describe('the answer a calculator run becomes', () => {
  */
 describe('resolveCalculatorLead', () => {
   it('returns the lead for a live token addressed to the registering email', async () => {
-    leads.read.mockResolvedValue(lead());
+    leads.readRetirement.mockResolvedValue(lead());
 
     const resolved = await resolveCalculatorLead({
       token: 'a'.repeat(48),
       email: 'reader@example.com',
     });
-    expect(resolved?.email).toBe('reader@example.com');
+    expect(resolved).toMatchObject({ kind: 'retirement', lead: { email: 'reader@example.com' } });
   });
 
   /*
@@ -177,7 +317,7 @@ describe('resolveCalculatorLead', () => {
    * count as proof of an address they do not control.
    */
   it('refuses a token whose lead was sent to a different address', async () => {
-    leads.read.mockResolvedValue(lead({ email: 'someone-else@example.com' }));
+    leads.readRetirement.mockResolvedValue(lead({ email: 'someone-else@example.com' }));
 
     expect(await resolveCalculatorLead({
       token: 'a'.repeat(48),
@@ -186,7 +326,7 @@ describe('resolveCalculatorLead', () => {
   });
 
   it('matches the address regardless of case or surrounding space', async () => {
-    leads.read.mockResolvedValue(lead({ email: 'Reader@Example.com' }));
+    leads.readRetirement.mockResolvedValue(lead({ email: 'Reader@Example.com' }));
 
     expect(await resolveCalculatorLead({
       token: 'a'.repeat(48),
@@ -195,20 +335,54 @@ describe('resolveCalculatorLead', () => {
   });
 
   it('returns null for an unknown or expired token, without reading one that is absent', async () => {
-    leads.read.mockResolvedValue(null);
+    leads.readRetirement.mockResolvedValue(null);
     expect(await resolveCalculatorLead({
       token: 'b'.repeat(48), email: 'reader@example.com',
     })).toBeNull();
 
-    leads.read.mockClear();
+    leads.readRetirement.mockClear();
     for (const token of [undefined, null, '', '   ', 42]) {
       expect(await resolveCalculatorLead({ token, email: 'reader@example.com' })).toBeNull();
     }
-    expect(leads.read).not.toHaveBeenCalled();
+    expect(leads.readRetirement).not.toHaveBeenCalled();
+  });
+
+  /*
+   * Both calculators mint tokens from the same space, so the token itself says
+   * which table holds it. The client is never asked, and a retirement lookup
+   * that finds nothing is not the answer.
+   */
+  it('finds a Coast FIRE lead behind a token the retirement table does not hold', async () => {
+    leads.readCoastFire.mockResolvedValue(coastFireLead());
+
+    const resolved = await resolveCalculatorLead({
+      token: 'c'.repeat(48),
+      email: 'reader@example.com',
+    });
+    expect(resolved).toMatchObject({ kind: 'coast-fire', lead: { email: 'reader@example.com' } });
+    expect(leads.readRetirement).toHaveBeenCalled();
+  });
+
+  /* The same control, on the second table: a forwarded link is not proof. */
+  it('refuses a Coast FIRE token whose lead was sent to a different address', async () => {
+    leads.readCoastFire.mockResolvedValue(coastFireLead({ email: 'someone-else@example.com' }));
+
+    expect(await resolveCalculatorLead({
+      token: 'c'.repeat(48),
+      email: 'attacker@example.com',
+    })).toBeNull();
+  });
+
+  /* One token cannot be in both tables, and the first hit settles it. */
+  it('does not look in the Coast FIRE table once the retirement one answered', async () => {
+    leads.readRetirement.mockResolvedValue(lead());
+
+    await resolveCalculatorLead({ token: 'a'.repeat(48), email: 'reader@example.com' });
+    expect(leads.readCoastFire).not.toHaveBeenCalled();
   });
 
   it('returns null rather than throwing when the lookup fails', async () => {
-    leads.read.mockRejectedValue(new Error('database down'));
+    leads.readRetirement.mockRejectedValue(new Error('database down'));
 
     expect(await resolveCalculatorLead({
       token: 'a'.repeat(48), email: 'reader@example.com',
@@ -218,13 +392,28 @@ describe('resolveCalculatorLead', () => {
 
 describe('seedFirstDecisionFromLead', () => {
   it('writes the run as the account\u2019s first decision', async () => {
-    const outcome = await seedFirstDecisionFromLead({ userId: 'user-1', lead: lead() });
+    const outcome = await seedFirstDecisionFromLead({
+      userId: 'user-1',
+      lead: { kind: 'retirement', lead: lead() },
+    });
 
     expect(outcome).toBe('seeded');
     const [call] = db.create.mock.calls as Array<[{ data: Record<string, string> }]>;
     expect(call[0].data.userId).toBe('user-1');
     expect(call[0].data.question).toContain('Can I retire at 60?');
     expect(call[0].data.answer).toContain('619 of the 709');
+  });
+
+  it('writes a Coast FIRE run as the first decision too', async () => {
+    const outcome = await seedFirstDecisionFromLead({
+      userId: 'user-1',
+      lead: { kind: 'coast-fire', lead: coastFireLead() },
+    });
+
+    expect(outcome).toBe('seeded');
+    const [call] = db.create.mock.calls as Array<[{ data: Record<string, string> }]>;
+    expect(call[0].data.question).toContain('Have I reached Coast FIRE?');
+    expect(call[0].data.answer).toContain('$577,221');
   });
 
   it('does nothing, quietly, for a signup that resolved no lead', async () => {
@@ -236,8 +425,10 @@ describe('seedFirstDecisionFromLead', () => {
   it('does not add a second copy to an account that already has decisions', async () => {
     db.count.mockResolvedValue(1);
 
-    expect(await seedFirstDecisionFromLead({ userId: 'user-1', lead: lead() }))
-      .toBe('already-has-decisions');
+    expect(await seedFirstDecisionFromLead({
+      userId: 'user-1',
+      lead: { kind: 'retirement', lead: lead() },
+    })).toBe('already-has-decisions');
     expect(db.create).not.toHaveBeenCalled();
   });
 
@@ -248,6 +439,9 @@ describe('seedFirstDecisionFromLead', () => {
   it('swallows a write failure instead of escaping into the caller', async () => {
     db.create.mockRejectedValue(new Error('constraint violation'));
 
-    expect(await seedFirstDecisionFromLead({ userId: 'user-1', lead: lead() })).toBe('failed');
+    expect(await seedFirstDecisionFromLead({
+      userId: 'user-1',
+      lead: { kind: 'retirement', lead: lead() },
+    })).toBe('failed');
   });
 });

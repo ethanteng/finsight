@@ -425,7 +425,7 @@ describe('buildPlanFacts', () => {
       treasury30Y: {
         percent: 4.62,
         asOf: '2026-09-15',
-        label: '30-year Treasury yield',
+        label: 'thirty-year Treasury yield',
         source: 'Massive',
       },
     });
@@ -438,17 +438,19 @@ describe('buildPlanFacts', () => {
   });
 
   /*
-   * Same class of failure as the asset-mix weights: the prompt itself puts
-   * "30-year" and the as-of date in front of the model, so a draft that quotes
-   * the fact line back must not be rejected for those digits.
+   * Same class of failure as the asset-mix weights: the prompt puts the series
+   * name and its as-of date in front of the model, so a draft quoting the fact
+   * line back must not be rejected for those digits. What keeps that from
+   * licensing anything else is that the line carries as few as it can — the
+   * label holds no digits at all, and the date is given to the month.
    */
-  it('licenses the digits inside a published-rate label and its as-of date', () => {
+  it('licenses a published rate as the prompt actually writes it', () => {
     const facts = buildPlanFacts(planResult(), {
       fetchedAt: '2026-09-16T00:00:00.000Z',
       treasury30Y: {
         percent: 4.62,
         asOf: '2026-09-15',
-        label: '30-year Treasury yield',
+        label: 'thirty-year Treasury yield',
         source: 'Massive',
       },
     });
@@ -456,12 +458,40 @@ describe('buildPlanFacts', () => {
     const grounded = groundInterpretation(
       {
         headline: 'A headline.',
-        paragraphs: ['The 30-year Treasury yields 4.62% as of 2026-09-15.'],
+        paragraphs: ['The thirty-year Treasury yields 4.62% as of September 2026.'],
         watchOuts: [],
       },
       facts
     );
     expect(grounded).toEqual({ grounded: true, ungrounded: [] });
+  });
+
+  /*
+   * The reason the label is spelled out. "30-year" in a label would put a bare
+   * 30 in the allowlist, and a draft could then state a horizon this run never
+   * ran — which is exactly the class of mistake the grounding exists to catch.
+   */
+  it('does not license a horizon smuggled in by a series name', () => {
+    const facts = buildPlanFacts(planResult(), {
+      fetchedAt: '2026-09-16T00:00:00.000Z',
+      treasury30Y: {
+        percent: 4.62,
+        asOf: '2026-09-15',
+        label: 'thirty-year Treasury yield',
+        source: 'Massive',
+      },
+    });
+
+    const grounded = groundInterpretation(
+      {
+        headline: 'A headline.',
+        paragraphs: ['Over the next 30 years that compounds.'],
+        watchOuts: [],
+      },
+      facts
+    );
+    expect(grounded.grounded).toBe(false);
+    expect(grounded.ungrounded).toContain('30');
   });
 });
 
@@ -549,13 +579,13 @@ describe('interpretRetirementQuickPlan', () => {
 
     market.get.mockResolvedValue({
       fetchedAt: '2026-09-16T00:00:00.000Z',
-      treasury30Y: { percent: 4.62, asOf: '2026-09-15', label: '30-year Treasury yield', source: 'Massive' },
+      treasury30Y: { percent: 4.62, asOf: '2026-09-15', label: 'thirty-year Treasury yield', source: 'Massive' },
     } as never);
     await interpretRetirementQuickPlan(planResult());
 
     market.get.mockResolvedValue({
       fetchedAt: '2026-09-17T00:00:00.000Z',
-      treasury30Y: { percent: 4.71, asOf: '2026-09-16', label: '30-year Treasury yield', source: 'Massive' },
+      treasury30Y: { percent: 4.71, asOf: '2026-09-16', label: 'thirty-year Treasury yield', source: 'Massive' },
     } as never);
     const second = await interpretRetirementQuickPlan(planResult());
 
@@ -573,20 +603,20 @@ describe('interpretRetirementQuickPlan', () => {
 
     market.get.mockResolvedValue({
       fetchedAt: '2026-09-16T00:00:00.000Z',
-      treasury10Y: { percent: 4.21, asOf: '2026-09-15', label: '10-year Treasury yield', source: 'Massive' },
+      treasury10Y: { percent: 4.21, asOf: '2026-09-15', label: 'ten-year Treasury yield', source: 'Massive' },
     } as never);
     await interpretRetirementQuickPlan(planResult());
 
     market.get.mockResolvedValue({
       fetchedAt: '2026-09-16T01:00:00.000Z',
-      treasury10Y: { percent: 4.24, asOf: '2026-09-15', label: '10-year Treasury yield', source: 'Massive' },
+      treasury10Y: { percent: 4.24, asOf: '2026-09-15', label: 'ten-year Treasury yield', source: 'Massive' },
     } as never);
     expect((await interpretRetirementQuickPlan(planResult()))?.cached).toBe(false);
 
     // Same value and date, different provider: also a different set of facts.
     market.get.mockResolvedValue({
       fetchedAt: '2026-09-16T02:00:00.000Z',
-      treasury10Y: { percent: 4.24, asOf: '2026-09-15', label: '10-year Treasury yield', source: 'FRED' },
+      treasury10Y: { percent: 4.24, asOf: '2026-09-15', label: 'ten-year Treasury yield', source: 'FRED' },
     } as never);
     expect((await interpretRetirementQuickPlan(planResult()))?.cached).toBe(false);
 

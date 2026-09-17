@@ -252,6 +252,18 @@ describe("Coast FIRE calculator page", () => {
     }
 
     /*
+     * Submitting a scenario also asks the server for a plain-language reading
+     * of it, so the send is no longer the page's only request. Cases about the
+     * send pick it out by URL rather than by position.
+     */
+    function sendCall(fetchMock: jest.Mock): [string, RequestInit] {
+      const call = (fetchMock.mock.calls as Array<[string, RequestInit]>)
+        .find(([url]) => String(url).includes("/email-results"));
+      if (!call) throw new Error("the results email was never requested");
+      return call;
+    }
+
+    /*
      * The page opens with a default scenario already answered. Collecting an
      * address against it would email someone a stranger's retirement.
      */
@@ -263,7 +275,7 @@ describe("Coast FIRE calculator page", () => {
       fireEvent.submit(container.querySelector("form")!);
 
       expect(screen.getByLabelText("Email address")).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: "Email me my Coast FIRE results" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Save these results to your free account" })).toBeInTheDocument();
     });
 
     it("posts the seven inputs and never the figures computed from them", async () => {
@@ -275,9 +287,9 @@ describe("Coast FIRE calculator page", () => {
       fireEvent.change(screen.getByLabelText("Email address"), { target: { value: " Reader@Example.com " } });
       fireEvent.submit(screen.getByLabelText("Email address").closest("form")!);
 
-      await screen.findByText(/on their way/i);
+      await screen.findByText(/on its way/i);
 
-      const [url, request] = fetchMock.mock.calls[0] as [string, RequestInit];
+      const [url, request] = sendCall(fetchMock);
       expect(url).toMatch(/\/api\/coast-fire\/email-results$/);
       const body = JSON.parse(String(request.body));
       expect(body).toEqual({
@@ -304,7 +316,7 @@ describe("Coast FIRE calculator page", () => {
       fireEvent.change(screen.getByLabelText("Email address"), { target: { value: "reader@example.com" } });
       fireEvent.submit(screen.getByLabelText("Email address").closest("form")!);
 
-      await screen.findByText(/on their way/i);
+      await screen.findByText(/on its way/i);
       expect(pushCoastFireResultsEmailed).toHaveBeenCalledTimes(1);
       expect(pushCoastFireResultsEmailed).toHaveBeenCalledWith("reached");
     });
@@ -318,7 +330,7 @@ describe("Coast FIRE calculator page", () => {
       fireEvent.submit(screen.getByLabelText("Email address").closest("form")!);
 
       expect(await screen.findByRole("alert")).toHaveTextContent("Enter a valid email address.");
-      expect(screen.getByRole("button", { name: "Email me my Coast FIRE results" })).toBeEnabled();
+      expect(screen.getByRole("button", { name: "Save these results to your free account" })).toBeEnabled();
       expect(pushCoastFireResultsEmailed).not.toHaveBeenCalled();
     });
 

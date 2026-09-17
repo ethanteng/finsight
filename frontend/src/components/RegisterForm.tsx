@@ -457,11 +457,21 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
      * exchange would create the account and silently skip the seed. A
      * same-tab click-through has neither, and the server refuses a token
      * whose lead was sent to a different address anyway.
+     *
+     * Either calculator can be the source. The two mint tokens from the same
+     * space and the server decides which table holds this one, so nothing here
+     * labels it — this only has to find whichever one is present. At most one
+     * can be: a signup carries one `source`, and each context is read only for
+     * its own.
      */
     const calculatorRef =
       retirementContext?.sourceToken
+      ?? coastFireContext?.sourceToken
       ?? (isTrial && hasRetirementSignupSource(searchParams)
         ? readRetirementSignupRef()
+        : null)
+      ?? (isTrial && hasCoastFireSignupSource(searchParams)
+        ? readCoastFireSignupRef()
         : null);
     if (calculatorRef) {
       registrationData.calculatorRef = calculatorRef;

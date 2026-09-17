@@ -157,7 +157,10 @@ describe('the results email', () => {
     const message = buildCoastFireResultsEmail(calculateCoastFire(DEFAULTS), options);
 
     expect(message.html).toContain(`href="${options.ctaUrl.replace(/&/g, '&amp;')}"`);
-    expect(message.html).toContain('Stress-test this with my actual finances');
+    expect(message.html).toContain('Finish creating your account');
+    // The link is what proves the address, so the message has to say so: a
+    // recipient who is told to expect a code and never gets one is stuck.
+    expect(message.html).toContain('already confirmed by this link');
     expect(message.html.match(/asklinc\.com\/getstarted/g)?.length).toBeGreaterThanOrEqual(2);
   });
 

@@ -22,7 +22,7 @@ export interface CoastFireEmail {
   text: string;
 }
 
-const CTA_LABEL = 'Stress-test this with my actual finances';
+const CTA_LABEL = 'Finish creating your account';
 
 /** The decisions the number raises but cannot answer, as on the page. */
 const DECISIONS = [
@@ -276,7 +276,8 @@ export function buildCoastFireResultsEmail(
         </a>
       </div>
       <p style="margin: 0 0 10px; color: #71857f; font-size: 13px; line-height: 1.6; text-align: center;">
-        Free for 30 days. No credit card required. Your scenario above is carried over.
+        Your address is already confirmed by this link &mdash; just pick a password. This run
+        will be waiting as your first decision. Free for 30 days, no credit card required.
       </p>
       <div class="fallback-link" style="margin: 22px 0; padding: 16px; border: 1px solid #d8d2c5; border-radius: 12px; background-color: #f8f5ed; color: #526d64; font-size: 12px; line-height: 1.6; word-break: break-all;">
         <strong style="color: #29483f; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;">If the button does not work, use this link:</strong><br />
@@ -344,7 +345,8 @@ ${DECISIONS.map((decision) => `  - ${decision}`).join('\n')}
 ${CTA_LABEL}:
 ${options.ctaUrl}
 
-Free for 30 days. No credit card required. Your scenario above is carried over.
+Your address is already confirmed by this link - just pick a password. This run
+will be waiting as your first decision. Free for 30 days, no credit card required.
 
 Run the numbers again: ${options.calculatorUrl}
 
