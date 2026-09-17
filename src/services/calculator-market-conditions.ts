@@ -184,7 +184,10 @@ export async function getCalculatorMarketConditions(): Promise<CalculatorMarketC
     conditions.inflationExpectation10Y = {
       percent: expectation.market_10_year,
       asOf: expectation.date ?? conditions.fetchedAt.slice(0, 10),
-      label: 'inflation the market prices in over the next ten years',
+      // Hyphenated on purpose, same reason the Treasury labels are: a draft
+      // that names this series must be allowed to, and "ten years" as two
+      // words is exactly the spelled quantity the grounding check refuses.
+      label: 'ten-year breakeven inflation',
       source: 'Massive',
     };
   }

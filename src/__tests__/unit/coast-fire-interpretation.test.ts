@@ -271,12 +271,22 @@ describe('the figures a Coast FIRE reading may state', () => {
         label: 'thirty-year Treasury yield',
         source: 'Massive',
       },
+      inflationExpectation10Y: {
+        percent: 2.35,
+        asOf: '2026-09-16',
+        label: 'ten-year breakeven inflation',
+        source: 'Massive',
+      },
     });
 
     for (const allowed of [
       'There are two levers here, and a third of the answer is timing.',
       'The thirty-year Treasury yields 4.71% as of September 2026.',
       'That is one of the two assumptions doing the work.',
+      // The breakeven series used to be labelled with a whitespace "ten years",
+      // which the spelled-figure check would then refuse in any draft that
+      // named it. Hyphenated, the series name is prose again.
+      'The ten-year breakeven inflation is 2.35% as of September 2026.',
     ]) {
       const grounded = groundDraft(
         { headline: 'A headline.', paragraphs: [allowed], watchOuts: [] },
