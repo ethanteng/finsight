@@ -460,22 +460,46 @@ Return one JSON object and nothing else:
 
 The first paragraph reads the headline result. The second explains what is driving it — the withdrawal rate, the horizon, the contributions, the Social Security timing, whichever the figures actually implicate. A third, if it earns its place, reads the variants. The watch-outs are about this plan, not about calculators in general: "no taxes are modeled" is only worth saying if you tie it to a figure here.`;
 
+/** What a rates-mode reading must not invent, given which boxes were blank. */
+function ratesModeInstructions(missing: RetirementQuickPlanResult['missing']): string {
+  const missingLabels: Record<RetirementQuickPlanResult['missing'][number], string> = {
+    investableAssets: 'what they have invested',
+    annualSpending: 'what they expect to spend each year',
+  };
+  const blanks = missing.map((field) => missingLabels[field]);
+  // Only withhold the figure that was actually blank. A visitor who gave
+  // spending but not a portfolio still gets to hear about the spending — the
+  // fact block already licenses it — and telling the model not to mention it
+  // would contradict the list below.
+  const withhold = [
+    'a verdict',
+    missing.includes('investableAssets') ? 'a balance' : null,
+    missing.includes('annualSpending') ? 'a spending level' : null,
+  ].filter((entry): entry is string => entry !== null);
+  const withholdClause = withhold.length === 2
+    ? `${withhold[0]} or ${withhold[1]}`
+    : withhold.length > 2
+      ? `${withhold.slice(0, -1).join(', ')}, or ${withhold[withhold.length - 1]}`
+      : withhold[0];
+  const plural = blanks.length > 1;
+  return (
+    'The visitor left ' + blanks.join(' and ') + ' blank. There is no survival verdict, because '
+    + (plural ? 'neither can' : 'it cannot') + ' be guessed at: the engine answered in '
+    + 'withdrawal rates instead, which hold whatever ' + (plural ? 'those figures' : 'that figure')
+    + ' turn' + (plural ? '' : 's') + ' out to be. Do not state or imply ' + withholdClause
+    + '. Say plainly what filling the blank' + (plural ? 's' : '') + ' in would add.'
+  );
+}
+
 /** Everything the model sees about this run, in one block. */
 function buildUserMessage(
   result: RetirementQuickPlanResult,
   facts: PlanFact[],
   feedback?: string[]
 ): string {
-  const missingLabels: Record<RetirementQuickPlanResult['missing'][number], string> = {
-    investableAssets: 'what they have invested',
-    annualSpending: 'what they expect to spend each year',
-  };
   const mode = result.mode === 'plan'
     ? 'The visitor gave both a portfolio and a spending level, so the engine produced a survival verdict for their own plan.'
-    : 'The visitor left ' + result.missing.map((field) => missingLabels[field]).join(' and ')
-      + ' blank. There is no survival verdict, because neither can be guessed at: the engine answered in '
-      + 'withdrawal rates instead, which hold whatever those figures turn out to be. Do not state or imply a '
-      + 'verdict, a balance, or a spending level. Say plainly what filling the blank in would add.';
+    : ratesModeInstructions(result.missing);
 
   const lines = [
     mode,

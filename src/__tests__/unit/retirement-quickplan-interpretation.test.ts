@@ -512,6 +512,24 @@ describe('interpretRetirementQuickPlan', () => {
 
     const message = String(model.ask.mock.calls[0][1]);
     expect(message).toContain('what they have invested');
-    expect(message).toContain('Do not state or imply a verdict');
+    expect(message).toContain('Do not state or imply a verdict or a balance');
+    // Spending was entered; withholding it would contradict the fact block.
+    expect(message).not.toContain('spending level');
+  });
+
+  it('withholds only the spending level when that box alone was blank', async () => {
+    model.ask.mockResolvedValue(DRAFT('What this mix sustained, as a share of the portfolio.'));
+
+    await interpretRetirementQuickPlan(planResult({
+      mode: 'rates',
+      missing: ['annualSpending'],
+      primary: null,
+      alternatives: [],
+      sustainableSpending: null,
+    }));
+
+    const message = String(model.ask.mock.calls[0][1]);
+    expect(message).toContain('Do not state or imply a verdict or a spending level');
+    expect(message).not.toContain('a balance');
   });
 });
