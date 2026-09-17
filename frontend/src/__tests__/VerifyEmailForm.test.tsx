@@ -210,6 +210,63 @@ describe('VerifyEmailForm', () => {
     expect(pushTrialSignupCompleted).toHaveBeenCalledTimes(1);
   });
 
+  /*
+   * A slow mount-time /auth/profile can observe the account only after the
+   * verify POST has already committed. Without discarding that probe, the
+   * session would be labeled already_verified and the real code path would
+   * suppress trial_verify_success / verification_code.
+   */
+  it('keeps a successful code verification when the profile probe returns later', async () => {
+    searchParams = new URLSearchParams('signup_flow=free_trial');
+    beginFreeTrialSignupFlow();
+    localStorage.setItem('auth_token', 'registration-token');
+
+    let resolveProfile: (value: {
+      ok: boolean;
+      json: () => Promise<{ user: { emailVerified: boolean } }>;
+    }) => void = () => undefined;
+    const profilePromise = new Promise<{
+      ok: boolean;
+      json: () => Promise<{ user: { emailVerified: boolean } }>;
+    }>((resolve) => {
+      resolveProfile = resolve;
+    });
+
+    global.fetch = jest.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/auth/profile')) return profilePromise;
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({ success: true }),
+      });
+    }) as jest.Mock;
+
+    render(<VerifyEmailForm />);
+    await waitFor(() => expect(mockPushTrialVerifyViewed).toHaveBeenCalledTimes(1));
+    jest.useFakeTimers();
+
+    await act(async () => {
+      enterCode('654321');
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(pushTrialSignupCompleted).toHaveBeenCalledWith('verification_code');
+    expect(mockPushTrialVerifySuccess).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      resolveProfile({
+        ok: true,
+        json: async () => ({ user: { emailVerified: true } }),
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(pushTrialSignupCompleted).toHaveBeenCalledTimes(1);
+    expect(pushTrialSignupCompleted).not.toHaveBeenCalledWith('already_verified');
+  });
+
   it('uses the network category when the verification request cannot be sent', async () => {
     searchParams = new URLSearchParams('signup_flow=free_trial');
     beginFreeTrialSignupFlow();

@@ -39,8 +39,18 @@ function VerifyEmailFormContent() {
   const [isFreeTrialFlow, setIsFreeTrialFlow] = useState(false);
   const trialViewedRef = useRef(false);
   const trialCompletedRef = useRef(false);
+  // Once the visitor submits a code (or skips), the mount-time profile probe
+  // must not classify the session. A slow GET can observe the just-verified
+  // account and mislabel a real code verification as already_verified.
+  const ignoreProfileProbeRef = useRef(false);
+  const profileProbeControllerRef = useRef<AbortController | null>(null);
   const router = useRouter();
   const searchParams = useSearchParams();
+
+  const abandonProfileProbe = () => {
+    ignoreProfileProbeRef.current = true;
+    profileProbeControllerRef.current?.abort();
+  };
 
   // Check if user came from subscription context
   useEffect(() => {
@@ -78,6 +88,8 @@ function VerifyEmailFormContent() {
 
     const API_URL = process.env.NEXT_PUBLIC_API_URL;
     const controller = new AbortController();
+    ignoreProfileProbeRef.current = false;
+    profileProbeControllerRef.current = controller;
 
     void (async () => {
       try {
@@ -85,10 +97,12 @@ function VerifyEmailFormContent() {
           headers: { Authorization: `Bearer ${token}` },
           signal: controller.signal,
         });
+        if (ignoreProfileProbeRef.current || controller.signal.aborted) return;
         if (!res.ok) return;
         const data = (await res.json().catch(() => ({}))) as {
           user?: { emailVerified?: boolean };
         };
+        if (ignoreProfileProbeRef.current || controller.signal.aborted) return;
         if (data.user?.emailVerified !== true) return;
 
         if (isFreeTrialSignupContinuation(searchParams)) {
@@ -105,11 +119,17 @@ function VerifyEmailFormContent() {
       }
     })();
 
-    return () => controller.abort();
+    return () => {
+      controller.abort();
+      if (profileProbeControllerRef.current === controller) {
+        profileProbeControllerRef.current = null;
+      }
+    };
   }, [router, searchParams]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    abandonProfileProbe();
     if (isFreeTrialFlow) pushTrialVerifySubmit();
     setIsLoading(true);
     setError('');
@@ -326,6 +346,7 @@ function VerifyEmailFormContent() {
             href={DEFAULT_POST_LOGIN_DESTINATION}
             onClick={() => {
               if (!isFreeTrialFlow || trialCompletedRef.current || !localStorage.getItem('auth_token')) return;
+              abandonProfileProbe();
               trialCompletedRef.current = true;
               // Report before clearing: the event reads the attribution this
               // call is about to drop, and a skip is a completion too.
