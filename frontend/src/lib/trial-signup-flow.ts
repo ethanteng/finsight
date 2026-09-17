@@ -19,7 +19,20 @@ export const CALCULATOR_SIGNUP_ORIGINS = [
 ] as const;
 export type CalculatorSignupOrigin = (typeof CALCULATOR_SIGNUP_ORIGINS)[number];
 
-export const CALCULATOR_SIGNUP_ENTRIES = ['calculator_cta', 'results_email'] as const;
+/**
+ * How a calculator visitor reached /getstarted.
+ *
+ * `results_page` is the one that does not cross an inbox: the capture form
+ * takes them straight here and hands the run over in the same gesture. It
+ * converts differently from a link opened out of an email hours later, so the
+ * whole funnel — viewed, started, submitted, completed — has to be able to
+ * tell them apart, not just the moment the scenario is restored.
+ */
+export const CALCULATOR_SIGNUP_ENTRIES = [
+  'calculator_cta',
+  'results_email',
+  'results_page',
+] as const;
 export type CalculatorSignupEntry = (typeof CALCULATOR_SIGNUP_ENTRIES)[number];
 
 export interface TrialSignupAttribution {

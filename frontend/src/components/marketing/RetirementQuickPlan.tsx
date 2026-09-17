@@ -26,6 +26,13 @@ import { RetirementEmailCapture } from "./RetirementEmailCapture";
 import { TRIAL_CTA_MICROCOPY } from "./trial-copy";
 import { SiteFooter, SiteHeader } from "./SiteShell";
 import { pushRetirementInteraction, pushRetirementModelRun } from "@/lib/dataLayer";
+import {
+  RETIREMENT_RUN_COUNT_KEY,
+  CALCULATOR_RUN_LIMIT,
+  isRunLimitReached,
+  readRunCount,
+  recordRun,
+} from "@/lib/calculator-run-limit";
 import { numericInput, withCommas } from "@/lib/number-input";
 import {
   RETIREMENT_SIGNUP_HREF,
@@ -487,6 +494,9 @@ export function RetirementQuickPlan({
    */
   const [fieldError, setFieldError] = useState<{ field: string; message: string } | null>(null);
   const [isRunning, setIsRunning] = useState(false);
+  /** Runs this visitor has spent in this tab. Hydrated from storage on mount. */
+  const [runCount, setRunCount] = useState(0);
+  const locked = isRunLimitReached(runCount);
   const allocations = useAllocations();
   const { interpretation, isLoading: isInterpreting } = useInterpretation(submittedPlan);
   const resultsRef = useRef<HTMLDivElement | null>(null);
@@ -555,8 +565,19 @@ export function RetirementQuickPlan({
     setForm((current) => ({ ...current, [field]: value }));
   };
 
+  /*
+   * Read after mount rather than during render: the page is server-rendered,
+   * and session storage does not exist there. The button is therefore live for
+   * one frame on a reload that should find it locked, which is the right cost
+   * for a nudge — see `calculator-run-limit`.
+   */
+  useEffect(() => {
+    setRunCount(readRunCount(RETIREMENT_RUN_COUNT_KEY));
+  }, []);
+
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
+    if (locked) return;
     if (requestInFlightRef.current) return;
     requestInFlightRef.current = true;
     trackStarted();
@@ -607,10 +628,20 @@ export function RetirementQuickPlan({
         return;
       }
 
-      setResult(payload as QuickPlanResult);
+      const answered = payload as QuickPlanResult;
+      setResult(answered);
       // A new object every run, so an identical re-submission still retires the
       // panel and asks again rather than leaving the previous reading in place.
       setSubmittedPlan(plan);
+      /*
+       * Only a run that produced a verdict counts. A validation refusal or an
+       * unreachable backend is not one of this visitor's three — and neither
+       * is a rates-only answer, which has no capture form and is deliberately
+       * not handed to signup. Counting those would let three of them lock the
+       * page while telling the visitor to save a result they cannot save, with
+       * no way left to enter the full plan that would have been savable.
+       */
+      if (answered.primary) setRunCount(recordRun(RETIREMENT_RUN_COUNT_KEY, runCount));
       // Let the results render before scrolling to them.
       requestAnimationFrame(() => {
         resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -780,7 +811,7 @@ export function RetirementQuickPlan({
           {error && <p className="qp-error" role="alert">{error}</p>}
 
           <div className="qp-submit-row">
-            <button className="button button-primary" type="submit" disabled={isRunning} data-cs-override-id="quickplan-run-model"
+            <button className="button button-primary" type="submit" disabled={isRunning || locked} data-cs-override-id="quickplan-run-model"
               onClick={() => pushRetirementInteraction('retirement_model_clicked')}>
               {isRunning ? "Running the model…" : "Run the model"}
             </button>
@@ -790,7 +821,9 @@ export function RetirementQuickPlan({
               * actually ask it, so the line says what is true instead.
               */}
             <p className="qp-submit-note">
-              No account, no email, nothing to sign. We keep the numbers to improve the model.
+              {locked
+                ? `That is ${CALCULATOR_RUN_LIMIT} runs. Save this one to a free account to keep changing the numbers — the same model, with your own accounts behind it, and this run waiting as your first decision.`
+                : "No account, no email, nothing to sign. We keep the numbers to improve the model."}
             </p>
           </div>
         </form>

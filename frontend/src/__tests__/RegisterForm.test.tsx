@@ -14,6 +14,7 @@ import {
   pushSignUp,
   pushTrialSignupCompleted,
   pushCalculatorResultsEmailCtaOpened,
+  pushCalculatorResultsPageCtaOpened,
   pushTrialSignupRegistrationError,
   pushTrialSignupStarted,
   pushTrialSignupSubmit,
@@ -41,6 +42,7 @@ jest.mock('next/navigation', () => ({
 jest.mock('@/lib/dataLayer', () => ({
   pushBeginCheckout: jest.fn(),
   pushCalculatorResultsEmailCtaOpened: jest.fn(),
+  pushCalculatorResultsPageCtaOpened: jest.fn(),
   pushSignUp: jest.fn(),
   pushTrialSignupCompleted: jest.fn(),
   pushTrialSignupRegistrationError: jest.fn(),
@@ -52,6 +54,7 @@ jest.mock('@/lib/dataLayer', () => ({
 
 const mockPushSignUp = jest.mocked(pushSignUp);
 const mockPushCalculatorResultsEmailCtaOpened = jest.mocked(pushCalculatorResultsEmailCtaOpened);
+const mockPushCalculatorResultsPageCtaOpened = jest.mocked(pushCalculatorResultsPageCtaOpened);
 const mockPushTrialSignupRegistrationError = jest.mocked(pushTrialSignupRegistrationError);
 const mockPushTrialSignupStarted = jest.mocked(pushTrialSignupStarted);
 const mockPushTrialSignupSubmit = jest.mocked(pushTrialSignupSubmit);
@@ -269,6 +272,85 @@ describe('RegisterForm', () => {
     function handOverRetirementRef(token: string) {
       document.cookie = `${RETIREMENT_REF_COOKIE}=${token}; Path=/getstarted`;
     }
+
+    /*
+     * The token says a run was carried here; it does not say from where. The
+     * straight-from-the-page route carries the same token in the same cookie,
+     * so without the marker every later event — started, submitted, completed
+     * — files under the email funnel and the comparison this entry exists to
+     * make is quietly wrong. The stored flow is what all of them read.
+     */
+    it('attributes a run carried straight from the page to its own entry', async () => {
+      const token = 'e'.repeat(48);
+      searchParams = new URLSearchParams(`source=${RETIREMENT_SIGNUP_SOURCE}&entry=results_page`);
+      handOverRetirementRef(token);
+      global.fetch = jest.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          email: 'reader@example.com',
+          inputs: RETIREMENT_SCENARIO,
+          outcome: { survivalRate: 0.92, sequencesTested: 800, sequencesSurvived: 736 },
+        }),
+      })) as unknown as typeof fetch;
+
+      render(<RegisterForm variant="trial" />);
+      await screen.findByLabelText('Email address');
+
+      const stored = JSON.parse(
+        window.sessionStorage.getItem('asklinc.trial-signup-flow.v1')!,
+      );
+      expect(stored.signupEntry).toBe('results_page');
+      expect(stored.signupOrigin).toBe('retirement_calculator');
+      // Its own event fires, and the email funnel's key event stays out of it.
+      expect(mockPushCalculatorResultsPageCtaOpened).toHaveBeenCalledWith('retirement_calculator');
+      expect(mockPushCalculatorResultsEmailCtaOpened).not.toHaveBeenCalled();
+    });
+
+    /*
+     * The capture writes the cookie and the stored run together, and only one
+     * of them can be refused. When it is the cookie, the run still paints from
+     * session storage — so the funnel that measures this route must not lose
+     * exactly the visitors whose handover half-failed.
+     */
+    it('reports the page entry when the cookie was refused but the run survived', async () => {
+      searchParams = new URLSearchParams(`source=${RETIREMENT_SIGNUP_SOURCE}&entry=results_page`);
+      storeRetirementSignupContext(RETIREMENT_SCENARIO, {
+        email: 'reader@example.com',
+        sourceToken: 'b'.repeat(48),
+      });
+
+      render(<RegisterForm variant="trial" />);
+      await screen.findByLabelText('Email address');
+
+      expect(mockPushCalculatorResultsPageCtaOpened)
+        .toHaveBeenCalledWith('retirement_calculator');
+      // Once, however many effects looked.
+      expect(mockPushCalculatorResultsPageCtaOpened).toHaveBeenCalledTimes(1);
+      expect(mockPushCalculatorResultsEmailCtaOpened).not.toHaveBeenCalled();
+    });
+
+    /* The same landing without the marker is still the emailed funnel. */
+    it('still attributes an emailed token to the email entry', async () => {
+      const token = 'd'.repeat(48);
+      searchParams = new URLSearchParams(`source=${RETIREMENT_SIGNUP_SOURCE}`);
+      handOverRetirementRef(token);
+      global.fetch = jest.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          email: 'reader@example.com',
+          inputs: RETIREMENT_SCENARIO,
+          outcome: { survivalRate: 0.92, sequencesTested: 800, sequencesSurvived: 736 },
+        }),
+      })) as unknown as typeof fetch;
+
+      render(<RegisterForm variant="trial" />);
+      await screen.findByLabelText('Email address');
+
+      const stored = JSON.parse(
+        window.sessionStorage.getItem('asklinc.trial-signup-flow.v1')!,
+      );
+      expect(stored.signupEntry).toBe('results_email');
+    });
 
     it('exchanges an emailed retirement token and prefills that address', async () => {
       const token = 'f'.repeat(48);

@@ -37,6 +37,17 @@ export interface RetirementLeadRecord {
   email: string;
   inputs: RetirementLeadInputs;
   outcome: RetirementLeadOutcome;
+  /**
+   * Whether this token has been handed to a browser as well as emailed.
+   *
+   * Registration skips the emailed verification code for someone presenting a
+   * token whose lead names the address they are registering — holding one is
+   * evidence of controlling that inbox, because it went nowhere else. Once the
+   * page that asked for the email has been given the token too, that stops
+   * being true: whoever typed the address received it. The lead still seeds a
+   * first decision; it just cannot verify the address any more.
+   */
+  tokenDisclosed: boolean;
 }
 
 /**
@@ -82,6 +93,41 @@ export async function recordRetirementLead(params: {
     return true;
   } catch (error) {
     console.error('⚠️  Could not record retirement lead:', error);
+    return false;
+  }
+}
+
+/**
+ * Record that this token is about to be handed to the browser, and report
+ * whether that is now durable.
+ *
+ * Unlike the delivery flags beside it, this one is allowed to fail the thing
+ * it describes. The caller discloses the token only on true: the column is
+ * what withholds the emailed verification code from a token its own page was
+ * given, so a token disclosed while the mark was lost would be one that still
+ * proves an address nobody proved. Failing closed costs the visitor a
+ * redirect and nothing else — their results are still in their inbox.
+ */
+export async function markRetirementLeadTokenDisclosed(token: string): Promise<boolean> {
+  try {
+    const { getPrismaClient } = await import('../prisma-client');
+    const prisma = getPrismaClient();
+    const updated = await prisma.retirementLead.updateMany({
+      // First disclosure is the one that counts; a second never un-discloses.
+      where: { token, tokenDisclosedAt: null },
+      data: { tokenDisclosedAt: new Date() },
+    });
+    // updateMany does not throw on zero matches. Returning true for a missing
+    // row would hand the page a token the registration skip still treats as
+    // inbox-only — fail closed unless the stamp is actually on the row.
+    if (updated.count > 0) return true;
+    const existing = await prisma.retirementLead.findUnique({
+      where: { token },
+      select: { tokenDisclosedAt: true },
+    });
+    return existing?.tokenDisclosedAt != null;
+  } catch (error) {
+    console.error('⚠️  Could not mark retirement lead token disclosure:', error);
     return false;
   }
 }
@@ -169,6 +215,7 @@ export async function readRetirementLead(
         projectedPortfolioAtRetirement: lead.projectedPortfolioAtRetirement,
         firstYearWithdrawalRate: lead.firstYearWithdrawalRate,
       },
+      tokenDisclosed: lead.tokenDisclosedAt !== null,
     };
   } catch (error) {
     console.error('⚠️  Could not read retirement lead:', error);

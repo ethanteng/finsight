@@ -249,6 +249,36 @@ export function pushCalculatorResultsEmailCtaOpened(
   });
 }
 
+/**
+ * The same restoration, reached without an inbox: the visitor asked to save
+ * their run and was taken straight to /getstarted from the calculator.
+ *
+ * A separate event rather than a field on the one above, because
+ * `calculator_results_email_cta_opened` is a key event in GA4 and counts email
+ * CTA opens; folding a path that crosses no inbox into it would change what a
+ * conversion means without anything in the reports saying so. The two convert
+ * differently — one crossed a delivery — and the funnel needs them apart.
+ *
+ * GTM needs a Custom Event trigger on `calculator_results_page_cta_opened`
+ * plus a GA4 Event tag forwarding `content_type`, `calculator_type`,
+ * `signup_origin`, `signup_entry`, and `source_page`. The token and the
+ * address never enter the dataLayer.
+ */
+export function pushCalculatorResultsPageCtaOpened(
+  signupOrigin: CalculatorSignupOrigin,
+): void {
+  if (typeof window === 'undefined') return;
+  trackContentsquareEvent('calculator_results_page_cta_opened');
+  pushToDataLayer({
+    event: 'calculator_results_page_cta_opened',
+    source_page: window.location.pathname,
+    content_type: signupOrigin,
+    calculator_type: signupOrigin === 'coast_fire_calculator' ? 'coast_fire' : 'retirement',
+    signup_origin: signupOrigin,
+    signup_entry: 'results_page',
+  });
+}
+
 export function pushBeginCheckout(ctaLocation = 'marketing_cta'): void {
   if (typeof window === 'undefined') return;
 

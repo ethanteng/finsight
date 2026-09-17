@@ -19,6 +19,13 @@ import {
   type CoastFireResult,
 } from "@/lib/coast-fire";
 import { pushCoastFireCalculated } from "@/lib/dataLayer";
+import {
+  COAST_FIRE_RUN_COUNT_KEY,
+  CALCULATOR_RUN_LIMIT,
+  isRunLimitReached,
+  readRunCount,
+  recordRun,
+} from "@/lib/calculator-run-limit";
 import { fromGrouped, withCommas } from "@/lib/number-input";
 import {
   clearCoastFireSignupContext,
@@ -531,6 +538,9 @@ export function CoastFireCalculator({ children }: { children?: ReactNode }) {
    * the figures on screen, and a page view never costs a model call.
    */
   const [submitted, setSubmitted] = useState<CoastFireInputs | null>(null);
+  /** Runs this visitor has spent in this tab. Hydrated from storage on mount. */
+  const [runCount, setRunCount] = useState(0);
+  const locked = isRunLimitReached(runCount);
   const resultRef = useRef<HTMLDivElement>(null);
 
   const { interpretation, isLoading: isInterpreting } = useCoastFireInterpretation(submitted);
@@ -572,8 +582,19 @@ export function CoastFireCalculator({ children }: { children?: ReactNode }) {
     setSubmitted(null);
   }
 
+  /*
+   * Read after mount rather than during render: the page is server-rendered,
+   * and session storage does not exist there. The button is therefore live for
+   * one frame on a reload that should find it locked, which is the right cost
+   * for a nudge — see `calculator-run-limit`.
+   */
+  useEffect(() => {
+    setRunCount(readRunCount(COAST_FIRE_RUN_COUNT_KEY));
+  }, []);
+
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (locked) return;
 
     // Named before the formula runs, so a visitor who left two boxes empty is
     // told about both rather than about whichever one the formula reached
@@ -593,6 +614,9 @@ export function CoastFireCalculator({ children }: { children?: ReactNode }) {
       setResult(nextResult);
       setError(null);
       setSubmitted(signupContext(nextResult));
+      // Only a run that produced a number counts. A refused form is not one of
+      // this visitor's three.
+      setRunCount(recordRun(COAST_FIRE_RUN_COUNT_KEY, runCount));
       pushCoastFireCalculated(
         nextResult.hasReachedCoastFire ? "reached" : "not_yet",
         nextResult.yearsToRetirement,
@@ -642,9 +666,21 @@ export function CoastFireCalculator({ children }: { children?: ReactNode }) {
           </div>
 
           {error && <p className="cf-form-error" role="alert">{error}</p>}
-          <button className="button button-primary cf-calculate-button" type="submit" data-cs-override-id="coast-fire-calculate">
+          <button
+            className="button button-primary cf-calculate-button"
+            type="submit"
+            disabled={locked}
+            data-cs-override-id="coast-fire-calculate"
+          >
             Calculate my Coast FIRE number <span aria-hidden="true">→</span>
           </button>
+          {locked && (
+            <p className="cf-form-locked" role="status">
+              That is {CALCULATOR_RUN_LIMIT} runs. Save this one to a free account to keep
+              changing the numbers — you will get the same calculator with your own accounts
+              behind it, and this run waiting as your first decision.
+            </p>
+          )}
         </form>
 
         <div className="cf-result-column" ref={resultRef}>

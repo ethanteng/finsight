@@ -87,6 +87,69 @@ export function readHandoverToken(cookieName: string): string | null {
 }
 
 /**
+ * Hand a token to /getstarted from a page on this origin.
+ *
+ * The emailed route gets here through `/<calculator>/continue`, which reads
+ * the token out of the link server-side. The calculator page already holds
+ * one — the endpoint it just posted to returned it — so it writes the same
+ * cookie directly and skips the round trip. Either way nothing puts the token
+ * in the address of a page that renders, which is the whole point of the
+ * cookie.
+ *
+ * The attributes match the ones `handoverRedirect` sets, for the reason
+ * `clearHandoverToken` documents below: a mismatched write does not reliably
+ * replace a stored cookie.
+ *
+ * There is no confirming it from here. The cookie is scoped to the path that
+ * spends it, so the calculator page cannot read back what it just wrote, and a
+ * browser refusing the write says nothing either way. Callers therefore store
+ * the signup context in session storage as well: a dropped cookie then costs
+ * the address prefill, not the saved run — `/getstarted` can still restore
+ * the figures from storage when the source marker is present.
+ */
+export function writeHandoverToken(cookieName: string, token: string): void {
+  if (typeof document === 'undefined' || !isHandoverToken(token)) return;
+  const secure =
+    typeof window !== 'undefined' && window.location.protocol === 'https:'
+      ? '; Secure'
+      : '';
+  document.cookie =
+    `${cookieName}=${encodeURIComponent(token)}; Path=${HANDOVER_COOKIE_PATH}` +
+    `; Max-Age=${HANDOVER_COOKIE_MAX_AGE_SECONDS}; SameSite=Lax${secure}`;
+}
+
+/**
+ * How someone reached /getstarted carrying a saved run.
+ *
+ * The cookie looks the same either way, so the destination says which. It
+ * separates two funnels that convert differently — one crossed an inbox, the
+ * other did not — and keeps `calculator_results_email_cta_opened` counting
+ * only the emails it was defined to count.
+ */
+export const SIGNUP_ENTRY_PARAM = 'entry';
+export const SIGNUP_ENTRY_RESULTS_PAGE = 'results_page';
+
+/** The calculator's own signup href, marked as the straight-from-the-page one. */
+export function resultsPageSignupHref(signupHref: string): string {
+  const separator = signupHref.includes('?') ? '&' : '?';
+  return `${signupHref}${separator}${SIGNUP_ENTRY_PARAM}=${SIGNUP_ENTRY_RESULTS_PAGE}`;
+}
+
+/**
+ * Leave the calculator for signup.
+ *
+ * A whole document load rather than a client navigation, because the cookie
+ * written just above has to be sent with the request /getstarted reads it
+ * from. Named rather than written inline at both call sites so that what it
+ * does is legible, and so a test can observe it: jsdom implements neither
+ * navigation nor a `location` that can be replaced.
+ */
+export function leaveForSignup(href: string): void {
+  if (typeof window === 'undefined') return;
+  window.location.assign(href);
+}
+
+/**
  * Drop the handover cookie once it has been spent. It expires on its own
  * within minutes; clearing it means a second visit to /getstarted in the same
  * session is an ordinary one rather than a replay of an old link.

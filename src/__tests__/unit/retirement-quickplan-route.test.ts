@@ -32,6 +32,7 @@ const leads = {
   // Typed with its arguments so the cases can assert what was written, and
   // in what order.
   mark: jest.fn<Promise<void>, [string, Record<string, boolean>]>(async () => undefined),
+  disclose: jest.fn<Promise<boolean>, [string]>(async () => true),
 };
 
 /**
@@ -66,6 +67,7 @@ jest.mock('../../services/retirement-leads', () => ({
   readRetirementLead: (...args: unknown[]) => leads.read(...(args as [])),
   markRetirementLeadDelivery: (...args: unknown[]) =>
     leads.mark(...(args as [string, Record<string, boolean>])),
+  markRetirementLeadTokenDisclosed: (...args: unknown[]) => leads.disclose(...(args as [string])),
 }));
 
 /**
@@ -145,6 +147,8 @@ describe('retirement quick plan route', () => {
     leads.read.mockClear();
     leads.read.mockResolvedValue(null);
     leads.mark.mockClear();
+    leads.disclose.mockClear();
+    leads.disclose.mockResolvedValue(true);
     interpretation.write.mockClear();
   });
 
@@ -326,6 +330,41 @@ describe('retirement quick plan route', () => {
       const ctaUrl = (email.send.mock.calls[0] as unknown as [string, unknown, unknown, string])[3];
       expect(ctaUrl).toMatch(/\/retirement\/continue\?ref=[a-f0-9]{48}$/);
       expect(ctaUrl).not.toMatch(/500000|60000|30000/);
+    });
+
+    /*
+     * The page takes the visitor to signup itself rather than making them go
+     * and find the message, so it needs the same token the message carries.
+     */
+    it('hands the token back so the page can continue to signup', async () => {
+      const response = await request(app)
+        .post('/api/retirement-quickplan/email-results')
+        .send({ ...SHORT_PLAN, email: 'reader@example.com' });
+
+      expect(response.body.ref).toMatch(/^[a-f0-9]{48}$/);
+      const ctaUrl = (email.send.mock.calls[0] as unknown as [string, unknown, unknown, string])[3];
+      expect(ctaUrl).toContain(response.body.ref);
+      // Marked before it was returned, never after.
+      expect(leads.disclose).toHaveBeenCalledWith(response.body.ref);
+      expect(response.headers['cache-control']).toBe('no-store');
+    });
+
+    /*
+     * The mark is what withholds the emailed verification code from a token
+     * its own page was given. A token loose in a page while the row still
+     * says it was only emailed is the bypass the column exists to prevent, so
+     * a lost mark withholds the token — the results are still in the inbox.
+     */
+    it('withholds the token when its disclosure could not be recorded', async () => {
+      leads.disclose.mockResolvedValue(false);
+
+      const response = await request(app)
+        .post('/api/retirement-quickplan/email-results')
+        .send({ ...SHORT_PLAN, email: 'reader@example.com' });
+
+      expect(response.status).toBe(200);
+      expect(response.body.ref).toBeNull();
+      expect(email.send).toHaveBeenCalled();
     }, 60_000);
 
     /* Personalization is worth a database row; the results are not. */

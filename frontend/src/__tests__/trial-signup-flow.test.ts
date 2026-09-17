@@ -58,4 +58,16 @@ describe('free-trial signup attribution', () => {
       1001,
     )).toBe(true);
   });
+
+  it('keeps the no-inbox results-page entry distinct from the emailed one', () => {
+    beginFreeTrialSignupFlow(1000, {
+      signupOrigin: 'retirement_calculator',
+      signupEntry: 'results_page',
+    });
+
+    expect(readTrialSignupAttribution(1001)).toEqual({
+      signupOrigin: 'retirement_calculator',
+      signupEntry: 'results_page',
+    });
+  });
 });
