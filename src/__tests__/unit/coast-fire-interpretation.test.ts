@@ -279,6 +279,53 @@ describe('the figures a Coast FIRE reading may state', () => {
   });
 
   /*
+   * A spelled phrase may not be matched as the tail of a longer one. Both of
+   * these reduced to a bare "five percent" before the modifier was captured,
+   * so a draft stating the opposite of a licensed rate — or a materially
+   * different one — passed the check that exists to catch exactly that. The
+   * digit tokenizer captures its sign for the same reason.
+   */
+  it('does not read a spelled quantity as the tail of a longer one', () => {
+    const facts = buildCoastFireFacts(result());   // licenses 5% and 4%
+
+    for (const text of [
+      'Returns could come in at negative five percent.',
+      'At five point five percent the picture changes.',
+    ]) {
+      expect(groundDraft(
+        { headline: 'A headline.', paragraphs: [text], watchOuts: [] },
+        facts
+      ).grounded).toBe(false);
+    }
+
+    // The unmodified phrase still grounds, so this is not a blanket refusal.
+    expect(groundDraft(
+      { headline: 'A headline.', paragraphs: ['At five percent after inflation, the savings do the rest.'], watchOuts: [] },
+      facts
+    ).grounded).toBe(true);
+  });
+
+  /*
+   * A magnitude scales the group in front of it. Read as a running sum instead,
+   * "one hundred thousand dollars" came out as 1,100: it rejected a truthful
+   * figure and would have accepted the claim on any run that licensed $1,100.
+   */
+  it('reads a chained magnitude the way English does', () => {
+    const spending = result({ annualRetirementSpending: 100_000, annualRetirementIncome: 50_000 });
+    const facts = buildCoastFireFacts(spending);
+
+    expect(groundDraft(
+      { headline: 'A headline.', paragraphs: ['You plan to spend one hundred thousand dollars a year.'], watchOuts: [] },
+      facts
+    )).toEqual({ grounded: true, ungrounded: [] });
+
+    expect(groundDraft(
+      { headline: 'A headline.', paragraphs: ['You plan to spend three hundred million dollars a year.'], watchOuts: [] },
+      facts
+    ).grounded).toBe(false);
+  });
+
+  /*
    * The other half of the same rule, and the one that was wrong before: this
    * scenario runs from 40 to 65, so twenty-five years is a figure the formula
    * produced. Spelling it does not make it a fabrication, and refusing it
@@ -295,25 +342,6 @@ describe('the figures a Coast FIRE reading may state', () => {
         { headline: 'A headline.', paragraphs: [spelled], watchOuts: [] },
         facts
       )).toEqual({ grounded: true, ungrounded: [] });
-    }
-  });
-
-  /*
-   * Sign and decimal words before a spelled match. Without them, both of these
-   * restart at "five" and pass against the licensed 5% return — the same hole
-   * the digit tokenizer closed for "-5%".
-   */
-  it('does not let a spelled modifier collapse onto a licensed suffix', () => {
-    const facts = buildCoastFireFacts(result());
-
-    for (const phrasing of [
-      'At a negative five percent return this falls apart.',
-      'At five point five percent the projection changes.',
-    ]) {
-      expect(groundDraft(
-        { headline: 'A headline.', paragraphs: [phrasing], watchOuts: [] },
-        facts
-      ).grounded).toBe(false);
     }
   });
 

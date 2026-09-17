@@ -235,7 +235,9 @@ describe('extractSpelledFigures', () => {
   it('keeps a spelled sign and refuses a decimal suffix restart', () => {
     expect(extractSpelledFigures('negative five percent')[0].value).toBe(-5);
     expect(extractSpelledFigures('minus five percent')[0].value).toBe(-5);
-    expect(extractSpelledFigures('plus five percent')[0].value).toBe(5);
+    const plus = extractSpelledFigures('plus five percent')[0];
+    expect(plus.value).toBe(5);
+    expect(plus.raw.toLowerCase()).toContain('plus');
 
     const decimal = extractSpelledFigures('five point five percent')[0];
     expect(decimal.raw.toLowerCase()).toContain('point');
