@@ -186,6 +186,20 @@ export function buildCoastFireSignupContext(
   };
 }
 
+/**
+ * Forget a scenario this tab was carrying.
+ *
+ * The calculator calls this when its CTA is clicked with nothing on screen.
+ * A stored scenario lives for two hours, so a visitor who ran one, came back
+ * to the page, and clicked through without running another would otherwise
+ * hand signup a run the page they just left was not showing — the same
+ * "answer you did not ask for" the empty calculator exists to avoid.
+ */
+export function clearCoastFireSignupContext(): void {
+  if (typeof window === 'undefined') return;
+  removeStoredContext();
+}
+
 export function storeCoastFireSignupContext(
   value: CoastFireInputs,
   options: CoastFireSignupOptions = {},

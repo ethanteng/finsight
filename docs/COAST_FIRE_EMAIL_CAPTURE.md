@@ -17,9 +17,10 @@ copy.
 1. A visitor submits the seven inputs. The number is calculated and rendered in
    the browser, as before.
 2. An email capture appears under the result card. It appears only after a
-   submitted run: the page opens with a default scenario already answered, and
-   collecting an address against figures nobody entered would email someone a
-   stranger's retirement.
+   submitted run: the page opens with empty personal figures and no result, so
+   there is nothing to email until the visitor asks for an answer — and
+   collecting an address against figures nobody entered would attach their
+   address to our assumptions, not theirs.
 3. `POST /api/coast-fire/email-results` receives the seven inputs and an email
    address. It recomputes the result server-side, stores a `CoastFireLead` row
    with a random token, and sends the message through Resend.

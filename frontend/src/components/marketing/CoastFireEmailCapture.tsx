@@ -4,10 +4,10 @@
  * "Save these results to your free account", under the result the visitor just
  * ran.
  *
- * It appears only after a submitted calculation. The page opens with a default
- * scenario already on screen, and asking for an address before anyone has put
- * their own numbers in would collect addresses attached to our figures, not
- * theirs.
+ * It appears only after a submitted calculation. The page opens with empty
+ * personal figures and no result, so there is nothing to email until the
+ * visitor asks for an answer — and collecting an address against figures they
+ * have not entered would attach their address to our assumptions, not theirs.
  *
  * The seven inputs are posted, never the computed result: the server
  * recalculates before it sends, so nothing this form does can put an arbitrary
