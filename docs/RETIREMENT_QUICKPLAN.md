@@ -312,8 +312,17 @@ without affecting any answer in the product.
 The capture under the result asks for an account rather than an inbox copy:
 **"Save these results to your free account."** The email it sends carries a
 link labelled **"Finish creating your account"**, which lands on signup with
-the address already filled in — the only thing left is a password — and the run
-becomes the first decision in the new account.
+the address already filled in; what is left is a password and the verification
+code every account sets up with. The run becomes the first decision in the new
+account.
+
+**The copy says the code out loud.** `RegisterForm` sends every registration to
+`/verify-email` — "Always go through email verification for security" — so
+promising that a password is the only step left would misstate the flow to
+someone who just handed us their address. Note that clicking a link sent to
+that address is itself evidence of control, so the second code is arguably
+redundant on this path; skipping it would be a change to the auth flow rather
+than to this page, and has not been made.
 
 Most of the path already existed for the results email. What is new is the last
 step.

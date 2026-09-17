@@ -30,10 +30,11 @@ export interface RetirementEmail {
 }
 
 /*
- * The link lands on signup with this address already filled in, so the only
- * thing left is a password — and the run below becomes the first decision in
- * the new account. The label says what pressing it does, rather than naming
- * the benefit and leaving the step a surprise.
+ * The link lands on signup with this address already filled in, so what is
+ * left is a password and the verification code every account sets up with —
+ * and the run below becomes the first decision in the new account. The label
+ * says what pressing it does, rather than naming the benefit and leaving the
+ * step a surprise.
  */
 const CTA_LABEL = 'Finish creating your account';
 
@@ -335,8 +336,9 @@ export function buildRetirementResultsEmail(
         </a>
       </div>
       <p style="margin: 0 0 10px; color: #71857f; font-size: 13px; line-height: 1.6; text-align: center;">
-        Your address is already filled in &mdash; just pick a password. This run will be waiting as
-        your first decision. Free for 30 days, no credit card required.
+        Your address is already filled in &mdash; pick a password and confirm the code we send.
+        This run will be waiting as your first decision. Free for 30 days, no credit card
+        required.
       </p>
       <div class="fallback-link" style="margin: 22px 0; padding: 16px; border: 1px solid #d8d2c5; border-radius: 12px; background-color: #f8f5ed; color: #526d64; font-size: 12px; line-height: 1.6; word-break: break-all;">
         <strong style="color: #29483f; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;">If the button does not work, use this link:</strong><br />
@@ -402,8 +404,9 @@ ${DECISIONS.map((decision) => `  - ${decision}`).join('\n')}
 ${CTA_LABEL}:
 ${options.ctaUrl}
 
-Your address is already filled in - just pick a password. This run will be waiting
-as your first decision. Free for 30 days, no credit card required.
+Your address is already filled in - pick a password and confirm the code we send.
+This run will be waiting as your first decision. Free for 30 days, no credit card
+required.
 
 Run the numbers again: ${options.calculatorUrl}
 
