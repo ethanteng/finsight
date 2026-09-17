@@ -194,30 +194,40 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
   useEffect(() => {
     if (!isTrial || trialViewedRef.current) return;
     trialViewedRef.current = true;
-    /*
-     * A token says a run was carried here; it does not say from where. The
-     * straight-from-the-page route carries the same token in the same cookie,
-     * so without the marker every event after this one — started, submitted,
-     * completed — would be filed under the email funnel and quietly corrupt
-     * the comparison this entry exists to make.
-     */
-    const carriedEntry = (fromEmail: boolean): CalculatorSignupEntry => {
-      if (searchParams.get(SIGNUP_ENTRY_PARAM) === SIGNUP_ENTRY_RESULTS_PAGE) return 'results_page';
-      return fromEmail ? 'results_email' : 'calculator_cta';
-    };
-
     let attribution: TrialSignupAttribution | undefined;
+    /*
+     * Three doors into the same tailored page. `entry=results_page` is the
+     * calculator taking someone here without an inbox; the emailed continue
+     * route never sets it. A token alone cannot tell them apart — the two
+     * routes carry the same one in the same cookie — so without the marker
+     * every event after this, through to completion, would count against the
+     * GA4 key event the email funnel uses.
+     *
+     * The marker decides on its own, without also requiring the run to have
+     * survived. A visitor whose browser refused both carriers still came
+     * through this door, and filing those under `calculator_cta` would hide
+     * this route's own failure mode inside another funnel — leaving it
+     * reporting only the handovers that worked.
+     */
+    const carriedEntry = (fromSavedRun: boolean): CalculatorSignupEntry => {
+      if (searchParams.get(SIGNUP_ENTRY_PARAM) === SIGNUP_ENTRY_RESULTS_PAGE) return 'results_page';
+      return fromSavedRun ? 'results_email' : 'calculator_cta';
+    };
     if (hasCoastFireSignupSource(searchParams)) {
-      const fromEmail = Boolean(readCoastFireSignupRef() || readCoastFireSignupContext()?.sourceToken);
+      const fromSavedRun = Boolean(
+        readCoastFireSignupRef() || readCoastFireSignupContext()?.sourceToken,
+      );
       attribution = {
         signupOrigin: 'coast_fire_calculator',
-        signupEntry: carriedEntry(fromEmail),
+        signupEntry: carriedEntry(fromSavedRun),
       };
     } else if (hasRetirementSignupSource(searchParams)) {
-      const fromEmail = Boolean(readRetirementSignupRef() || readRetirementSignupContext()?.sourceToken);
+      const fromSavedRun = Boolean(
+        readRetirementSignupRef() || readRetirementSignupContext()?.sourceToken,
+      );
       attribution = {
         signupOrigin: 'retirement_calculator',
-        signupEntry: carriedEntry(fromEmail),
+        signupEntry: carriedEntry(fromSavedRun),
       };
     }
     beginFreeTrialSignupFlow(Date.now(), attribution);
