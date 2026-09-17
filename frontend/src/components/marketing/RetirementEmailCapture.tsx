@@ -151,9 +151,6 @@ export function RetirementEmailCapture({
 
       {error && <p className="qp-email-error" role="alert">{error}</p>}
 
-      <p className="qp-email-note">
-        One email with your results, plus occasional Ask Linc updates. Unsubscribe anytime.
-      </p>
       </div>
     </form>
   );

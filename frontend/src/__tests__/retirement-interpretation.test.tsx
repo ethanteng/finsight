@@ -122,17 +122,23 @@ it('renders the reading under the verdict', async () => {
 });
 
 /*
- * The page argues that its numbers are computed rather than generated. A
- * paragraph a model wrote, sitting unlabelled among them, spends that argument.
+ * The chevrons under the verdict point here. The panel is the one section on
+ * the page that may not render at all, so the link and the target have to be
+ * decided by the same condition — a gesture inviting a scroll to a section
+ * that was dropped is worse than no gesture.
  */
-it('says a model wrote it, next to figures that were computed', async () => {
+it('points the chevrons at the reading, and anchors it there', async () => {
   mockApi(reading);
-  renderPage();
+  const { container } = renderPage();
   run();
 
   await screen.findByText(READING.headline);
-  expect(screen.getByText(/written by a language model/i)).toBeInTheDocument();
-  expect(screen.getByText(/states no number the engine did not compute/i)).toBeInTheDocument();
+
+  const jump = container.querySelector('.qp-jump') as HTMLAnchorElement | null;
+  expect(jump).not.toBeNull();
+  const target = jump!.getAttribute('href')!.slice(1);
+  expect(container.querySelector(`#${target}`)).not.toBeNull();
+  expect(container.querySelector(`#${target}`)).toHaveTextContent(/what this result means/i);
 });
 
 /*
@@ -153,6 +159,8 @@ it('shows the verdict without waiting, and shows nothing when no reading comes',
   });
   expect(screen.queryByText(/what this result means/i)).not.toBeInTheDocument();
   expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  // And no chevrons, since there is nothing below to scroll to.
+  expect(document.querySelector('.qp-jump')).toBeNull();
 });
 
 it('leaves the page intact when the interpretation request fails outright', async () => {
