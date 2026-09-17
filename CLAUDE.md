@@ -103,6 +103,8 @@ Supported what-if calculations run in application-owned scenario calculators aft
 
 The public calculator pages draw the same line. `/retirement-calculator` runs the deterministic engine for every figure and calls a model only to write the plain-language reading of that result; the reading is rejected outright if it states any number the engine did not produce, and a rejected one is dropped rather than shown. It runs with no user, no snapshot and no conversation history. See `docs/RETIREMENT_QUICKPLAN.md`.
 
+A visitor can save a `/retirement-calculator` run to a new account: the results email links to signup with their address prefilled, and on registration the run is written as the account's first decision from the stored lead rather than a fresh run. The lead's address must match the registering one — a token is the only key to a lead, and a lead holds someone's retirement figures.
+
 ### Remembered personal context
 
 “What Linc remembers about you” is a bounded, field-level memory of user-stated biographical details such as age, location, household, and employment. It is encrypted at rest. Financial facts, goals, risk tolerance, and scenario assumptions belong to canonical data or active conversation context and must not be added to this memory. The extractor emits validated set/clear operations; it never appends free-form summaries.

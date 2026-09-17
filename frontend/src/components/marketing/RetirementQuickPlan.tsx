@@ -25,7 +25,6 @@ import { MarketingGetStartedButton } from "./MarketingGetStartedButton";
 import { RetirementEmailCapture } from "./RetirementEmailCapture";
 import { TRIAL_CTA_MICROCOPY } from "./trial-copy";
 import { SiteFooter, SiteHeader } from "./SiteShell";
-import { RetirementConnectedExample } from "./RetirementConnectedExample";
 import { pushRetirementInteraction, pushRetirementModelRun } from "@/lib/dataLayer";
 import { numericInput, withCommas } from "@/lib/number-input";
 import {
@@ -815,8 +814,6 @@ export function RetirementQuickPlan({
             />)}
       </div>
 
-      <RetirementConnectedExample />
-
       <section className="qp-cross-sell">
         <div className="shell qp-cross-sell-inner">
           <p className="section-kicker light">CONTINUE THE DECISION WITH REAL INPUTS</p>
@@ -1120,8 +1117,8 @@ function QuickPlanResults({
 
       <section className="shell qp-chart-block">
         <div className="qp-chart-copy">
-          <p className="section-kicker">WHAT THE PORTFOLIO ALONE SUPPORTED</p>
-          <h3>Spending history was willing to fund</h3>
+          <p className="section-kicker">WHAT YOUR SAVINGS ALONE COULD COVER</p>
+          <h3>How much you could spend each year</h3>
           <p>
             Each bar is an amount you could spend in your first year of retirement and keep
             spending — rising with inflation — for all{" "}
@@ -1383,8 +1380,8 @@ function QuickPlanRateResults({
 
       <section className="shell qp-chart-block">
         <div className="qp-chart-copy">
-          <p className="section-kicker">WHAT THE PORTFOLIO ALONE SUPPORTED</p>
-          <h3>Spending history was willing to fund</h3>
+          <p className="section-kicker">WHAT YOUR SAVINGS ALONE COULD COVER</p>
+          <h3>How much you could spend each year</h3>
           <p>
             Each bar is a share of your savings you could spend in your first year of retirement and
             keep spending — rising with inflation — for all {retirementYears} years, out of{" "}

@@ -429,7 +429,18 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
       tier?: string;
       stripeSessionId?: string;
       timeZone: string;
+      calculatorRef?: string;
     } = { email, password, timeZone: getBrowserTimeZone() };
+
+    /*
+     * The token from the results email, so the run they saved becomes the
+     * first decision in this account. Only present when they arrived from that
+     * link — a same-tab click-through has no token, and the server refuses one
+     * whose lead was sent to a different address anyway.
+     */
+    if (retirementContext?.sourceToken) {
+      registrationData.calculatorRef = retirementContext.sourceToken;
+    }
 
     // If coming from successful subscription, include tier and session info.
     if (subscriptionContext) {

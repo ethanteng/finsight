@@ -19,6 +19,7 @@ import { sendContactEmail } from './resend-email';
 import { stripeService } from '../services/stripe';
 import { SubscriptionTier } from '../types/stripe';
 import { isValidTimeZone, normalizeTimeZone } from '../domain/time-zone';
+import { seedRetirementFirstDecision } from '../services/calculator-first-decision';
 
 const router = Router();
 const prisma = getPrismaClient();
@@ -80,7 +81,18 @@ router.get('/verify', async (req: Request, res: Response) => {
 // Register new user
 router.post('/register', async (req: Request, res: Response) => {
   try {
-    const { email, password, tier = 'premium', stripeSessionId, session_id, timeZone } = req.body;
+    const {
+      email,
+      password,
+      tier = 'premium',
+      stripeSessionId,
+      session_id,
+      timeZone,
+      // The lead token from a calculator results email, when the signup came
+      // from one. Optional everywhere and never trusted on its own — see
+      // `seedRetirementFirstDecision` for why the address has to match it.
+      calculatorRef,
+    } = req.body;
     
     // Handle both parameter names for Stripe session ID
     const stripeSessionIdToUse = stripeSessionId || session_id;
@@ -199,6 +211,24 @@ router.post('/register', async (req: Request, res: Response) => {
         createdAt: user.createdAt
       },
       token
+    });
+
+    // After the response, and unawaited. Someone who saved a calculator run
+    // should find it waiting as their first decision, but a signup must never
+    // wait on that write, and must never fail for it: the function returns a
+    // reason rather than throwing, and the account is already created.
+    void seedRetirementFirstDecision({
+      userId: user.id,
+      email: user.email,
+      token: calculatorRef,
+    }).then((outcome) => {
+      if (outcome !== 'seeded' && outcome !== 'no-token') {
+        console.warn(`First decision not seeded for new account: ${outcome}`);
+      }
+    }).catch(error => {
+      // It handles its own failures; this guards the unawaited promise so
+      // nothing escapes as an unhandled rejection.
+      console.warn('First-decision seeding rejected:', error);
     });
   } catch (error) {
     console.error('Registration error:', error);
