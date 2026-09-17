@@ -1,7 +1,10 @@
 import React from 'react';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import AppPageClient from '@/app/app/AppPageClient';
-import { markFirstDecisionPending } from '@/lib/pending-first-decision';
+import {
+  markFirstDecisionPending,
+  resetPendingFirstDecisionCache,
+} from '@/lib/pending-first-decision';
 
 const mockRouter = { push: jest.fn() };
 jest.mock('next/navigation', () => ({ useRouter: () => mockRouter }));
@@ -78,6 +81,8 @@ describe('AppPageClient decision list', () => {
   beforeEach(() => {
     localStorage.setItem('auth_token', 'token');
     sessionStorage.clear();
+    // The marker's answer is cached for the page load; each test is a new one.
+    resetPendingFirstDecisionCache();
     releaseHistory = null;
   });
 

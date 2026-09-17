@@ -23,9 +23,22 @@ export const PENDING_FIRST_DECISION_STORAGE_KEY = 'asklinc.pending-first-decisio
  */
 const PENDING_TTL_MS = 60 * 1000;
 
+/**
+ * The answer this page load already got, so a second read cannot contradict the
+ * first. `takePendingFirstDecision` clears the marker as it reads it, which
+ * makes the raw read a one-shot: React's development Strict Mode remounts every
+ * component once, and the second mount would otherwise see the marker gone and
+ * skip a wait the first mount had correctly begun — dev quietly behaving unlike
+ * production for the one case this file exists to handle.
+ */
+let takenThisPageLoad: boolean | undefined;
+
 /** Record that registration accepted a lead and is writing the decision. */
 export function markFirstDecisionPending(now = Date.now()): void {
   if (typeof window === 'undefined') return;
+  // A fresh signup is a fresh answer, so the tab's previous one is void. Two
+  // registrations in one tab are rare but entirely possible.
+  takenThisPageLoad = undefined;
   try {
     window.sessionStorage.setItem(PENDING_FIRST_DECISION_STORAGE_KEY, String(now));
   } catch {
@@ -34,21 +47,31 @@ export function markFirstDecisionPending(now = Date.now()): void {
 }
 
 /**
- * Read the marker and clear it in the same breath.
+ * Read the marker and clear it in the same breath, then keep answering with
+ * what that read found for the rest of this page load.
  *
- * The wait belongs to this one arrival in the workspace. Leaving the marker
- * behind would make every later visit in the tab re-poll for a decision that
- * either landed long ago or is never coming.
+ * The wait belongs to this one arrival in the workspace. Leaving the marker in
+ * storage would make every later visit in the tab re-poll for a decision that
+ * either landed long ago or is never coming; answering differently on a second
+ * read would make a remount lose a wait that had already started.
  */
 export function takePendingFirstDecision(now = Date.now()): boolean {
   if (typeof window === 'undefined') return false;
+  if (takenThisPageLoad !== undefined) return takenThisPageLoad;
   try {
     const raw = window.sessionStorage.getItem(PENDING_FIRST_DECISION_STORAGE_KEY);
     window.sessionStorage.removeItem(PENDING_FIRST_DECISION_STORAGE_KEY);
-    if (!raw) return false;
-    const markedAt = Number(raw);
-    return Number.isFinite(markedAt) && markedAt <= now && now - markedAt <= PENDING_TTL_MS;
+    const markedAt = raw === null ? Number.NaN : Number(raw);
+    takenThisPageLoad =
+      Number.isFinite(markedAt) && markedAt <= now && now - markedAt <= PENDING_TTL_MS;
+    return takenThisPageLoad;
   } catch {
+    takenThisPageLoad = false;
     return false;
   }
+}
+
+/** Test seam: drops the cached answer the way a fresh page load would. */
+export function resetPendingFirstDecisionCache(): void {
+  takenThisPageLoad = undefined;
 }
