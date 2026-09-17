@@ -54,13 +54,19 @@ export interface AskClaudeOptions {
    */
   slot?: AnthropicSlotId;
   /**
-   * Cap how long a single request may wait on Anthropic. Used by the public
-   * calculator narrative path so a provider stall degrades to no panel rather
-   * than holding an unauthenticated request for the SDK's default (10 minutes,
-   * with retries). When set, retries default to 0 unless `maxRetries` is also
-   * provided — otherwise a short timeout is multiplied by the retry budget.
+   * How long to wait on a single request before giving up, in milliseconds.
+   *
+   * Omitted, the SDK's own default applies — ten minutes. That is the right
+   * default for an authenticated answer someone is waiting on and the wrong
+   * one for an optional panel on a public page, where a stalled provider
+   * should drop the panel rather than hold the request open.
    */
   timeoutMs?: number;
+  /**
+   * Retries for this request. The SDK retries a *timeout* by default, so a
+   * caller bounding its total wait has to set this as well as `timeoutMs` —
+   * otherwise the ceiling it thinks it set is multiplied by the retry count.
+   */
   maxRetries?: number;
 }
 
@@ -257,6 +263,19 @@ function reportIfTruncated(stopReason: string | null | undefined, model: string)
 }
 
 /**
+ * Per-request transport options, or none at all.
+ *
+ * Returning an empty object when a caller sets neither keeps the SDK's own
+ * defaults in place for every caller that predates these settings.
+ */
+function requestOptions(options: AskClaudeOptions): { timeout?: number; maxRetries?: number } {
+  return {
+    ...(options.timeoutMs !== undefined ? { timeout: options.timeoutMs } : {}),
+    ...(options.maxRetries !== undefined ? { maxRetries: options.maxRetries } : {}),
+  };
+}
+
+/**
  * Call Claude Sonnet with a pre-built prompt (system + user message).
  * Lets callers that already built the prompt (e.g. for Show the Math) avoid
  * rebuilding the large reasoning prompt a second time.
@@ -271,26 +290,13 @@ export async function askClaude(
   const model = options.model || getActiveModel(slot);
   const maxTokens = options.maxTokens ?? resolveAskLincMaxOutputTokens();
 
-  const requestOptions =
-    options.timeoutMs != null || options.maxRetries != null
-      ? {
-          ...(options.timeoutMs != null ? { timeout: options.timeoutMs } : {}),
-          // A bounded public call must not inherit the SDK's default retries,
-          // which would multiply a short timeout into a long stall.
-          maxRetries: options.maxRetries ?? (options.timeoutMs != null ? 0 : undefined),
-        }
-      : undefined;
-
-  const response = await client.messages.create(
-    {
-      model,
-      max_tokens: maxTokens,
-      ...reasoningParams(model, slot),
-      system: systemPrompt,
-      messages: [{ role: 'user', content: userMessage }],
-    },
-    requestOptions
-  );
+  const response = await client.messages.create({
+    model,
+    max_tokens: maxTokens,
+    ...reasoningParams(model, slot),
+    system: systemPrompt,
+    messages: [{ role: 'user', content: userMessage }]
+  }, requestOptions(options));
 
   reportIfTruncated(response.stop_reason, model);
 
@@ -320,7 +326,7 @@ export async function askClaudeStream(
     ...reasoningParams(model, slot),
     system: systemPrompt,
     messages: [{ role: 'user', content: userMessage }]
-  });
+  }, requestOptions(options));
 
   stream.on('text', (textDelta: string) => {
     try {

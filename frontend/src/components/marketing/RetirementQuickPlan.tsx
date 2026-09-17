@@ -226,10 +226,23 @@ function useInterpretation(submitted: SubmittedPlan | null): {
     setInterpretation(null);
     setIsLoading(true);
 
+    /*
+     * A deadline of our own, past the server's. The endpoint bounds its own
+     * model call and answers 204 when it gives up, so this should never fire
+     * on an ordinary slow reading — it is the backstop for a connection that
+     * stops answering, which would otherwise leave the placeholder spinning
+     * for as long as the browser's own timeout allows.
+     */
+    const controller = typeof AbortController === "function" ? new AbortController() : null;
+    const deadline = controller
+      ? setTimeout(() => controller.abort(), INTERPRETATION_TIMEOUT_MS)
+      : null;
+
     fetch(`${API_URL}/api/retirement-quickplan/interpretation`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(submitted),
+      ...(controller ? { signal: controller.signal } : {}),
     })
       // 204 is the ordinary "nothing to show" answer and has no body to read.
       .then((response) => (response.ok && response.status !== 204 ? response.json() : null))
@@ -246,11 +259,15 @@ function useInterpretation(submitted: SubmittedPlan | null): {
         if (!cancelled) setInterpretation(null);
       })
       .finally(() => {
+        if (deadline !== null) clearTimeout(deadline);
         if (!cancelled) setIsLoading(false);
       });
 
     return () => {
       cancelled = true;
+      if (deadline !== null) clearTimeout(deadline);
+      // A new run supersedes this one; nothing is waiting on the answer.
+      controller?.abort();
     };
   }, [submitted]);
 
@@ -323,6 +340,15 @@ const FORM_FIELD_IDS = new Set([
 ]);
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
+
+/**
+ * How long the page waits for the interpretation before giving up on it.
+ *
+ * Deliberately longer than the server's own budget for the same work, so the
+ * ordinary "no reading" path is the server's 204 rather than a client-side
+ * abort — this only catches a connection that never answers at all.
+ */
+const INTERPRETATION_TIMEOUT_MS = 30_000;
 
 /**
  * What to send for a field the visitor left alone.

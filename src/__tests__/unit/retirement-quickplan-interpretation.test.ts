@@ -185,32 +185,27 @@ describe('extractNumericTokens', () => {
   });
 
   /*
-   * Signs and leading decimals used to be stripped: "-5%" became 5, and a
-   * contradictory figure passed whenever the absolute value was allowlisted.
+   * Starting the match at the first digit reads "-5%" as "5%". The positive
+   * figure is usually in the allowlist — 5% is the cash weight — so a draft
+   * stating the opposite of a fact would pass the check meant to catch it.
    */
-  it('preserves a leading sign on percentages and money', () => {
-    const [rate] = extractNumericTokens('down -5% on the year');
-    expect(rate.value).toBe(-5);
-    expect(rate.isPercent).toBe(true);
-
-    const [money] = extractNumericTokens('a shortfall of $-48,000');
-    expect(money.value).toBe(-48_000);
-
-    const [leadingMinus] = extractNumericTokens('a shortfall of -$48,000');
-    expect(leadingMinus.value).toBe(-48_000);
+  it('keeps the sign of a negative figure', () => {
+    expect(extractNumericTokens('-5%')[0].value).toBe(-5);
+    expect(extractNumericTokens('$-48,000')[0].value).toBe(-48_000);
+    expect(extractNumericTokens('down \u221260% this year')[0].value).toBe(-60);
   });
 
-  it('reads a leading-decimal percentage as a fraction of one, not as its digit', () => {
-    const [token] = extractNumericTokens('only .5% cash');
+  it('reads a leading decimal as the fraction it is', () => {
+    const [token] = extractNumericTokens('.5% a year');
     expect(token.value).toBe(0.5);
     expect(token.isPercent).toBe(true);
   });
 
-  /* Hyphenated dates must not pick up the date separators as minus signs. */
-  it('does not treat hyphens inside a date as signs', () => {
-    expect(extractNumericTokens('as of 2026-09-15').map((token) => token.value)).toEqual([
-      2026, 9, 15,
-    ]);
+  /* A hyphen after a digit is a range or a compound word, never a minus. */
+  it('does not read a hyphen inside a range or a compound as a sign', () => {
+    expect(extractNumericTokens('1926-1985').map((token) => token.value)).toEqual([1926, 1985]);
+    expect(extractNumericTokens('a 30-year window').map((token) => token.value)).toEqual([30]);
+    expect(extractNumericTokens('1926\u20131985').map((token) => token.value)).toEqual([1926, 1985]);
   });
 });
 
@@ -270,20 +265,6 @@ describe('groundInterpretation', () => {
     );
     expect(result.grounded).toBe(false);
     expect(result.ungrounded).toContain('48%');
-  });
-
-  it('does not let an allowlisted absolute satisfy a signed figure', () => {
-    // 5% cash is licensed; a draft that invents "-5%" must not ride that.
-    const result = groundInterpretation(
-      {
-        headline: 'A headline.',
-        paragraphs: ['The bond sleeve was down -5% in the worst year.'],
-        watchOuts: [],
-      },
-      facts()
-    );
-    expect(result.grounded).toBe(false);
-    expect(result.ungrounded).toContain('-5%');
   });
 
   /*
@@ -358,6 +339,25 @@ describe('groundInterpretation', () => {
     );
     expect(result.grounded).toBe(false);
     expect(result.ungrounded).toContain('100%');
+  });
+
+  /*
+   * The allocation weights and the contributions are in the allowlist as
+   * positive figures. Their negatives are not facts about this plan, and a
+   * sentence asserting one is the kind of contradiction that reads as
+   * authoritative on the page.
+   */
+  it('rejects a negated figure whose positive is a fact', () => {
+    const result = groundInterpretation(
+      {
+        headline: 'A headline.',
+        paragraphs: ['Your equity sleeve fell -60% in the worst stretch.'],
+        watchOuts: [],
+      },
+      facts()
+    );
+    expect(result.grounded).toBe(false);
+    expect(result.ungrounded).toContain('-60%');
   });
 
   it('checks the watch-outs too, not just the prose above them', () => {
@@ -506,19 +506,6 @@ describe('interpretRetirementQuickPlan', () => {
     expect(model.ask).toHaveBeenCalledTimes(1);
   });
 
-  it('bounds the public narrative call so a provider stall can fail open', async () => {
-    model.ask.mockResolvedValue(DRAFT('Your money lasted in 87.3% of tested retirements.'));
-
-    await interpretRetirementQuickPlan(planResult());
-
-    expect(model.ask.mock.calls[0][2]).toEqual(
-      expect.objectContaining({
-        slot: 'calculatorNarrative',
-        timeoutMs: 15_000,
-      })
-    );
-  });
-
   it('returns null on a response that is not the expected object', async () => {
     model.ask.mockResolvedValue('I am afraid I cannot do that.');
     expect(await interpretRetirementQuickPlan(planResult())).toBeNull();
@@ -555,42 +542,67 @@ describe('interpretRetirementQuickPlan', () => {
     expect(model.ask).toHaveBeenCalledTimes(2);
   });
 
-  it('re-reads when a rate revises on the same observation date', async () => {
+  /*
+   * A date alone misses a provider revising a value in place, and misses the
+   * 10-year point falling back from Massive to FRED under the same label. The
+   * cached prose would quote a yield that is no longer in the facts.
+   */
+  it('re-reads a plan when a rate is revised without its date moving', async () => {
     model.ask.mockResolvedValue(DRAFT('Your money lasted in 87.3% of tested retirements.'));
 
     market.get.mockResolvedValue({
       fetchedAt: '2026-09-16T00:00:00.000Z',
-      treasury30Y: { percent: 4.62, asOf: '2026-09-15', label: '30-year Treasury yield', source: 'Massive' },
+      treasury10Y: { percent: 4.21, asOf: '2026-09-15', label: '10-year Treasury yield', source: 'Massive' },
     } as never);
     await interpretRetirementQuickPlan(planResult());
 
     market.get.mockResolvedValue({
       fetchedAt: '2026-09-16T01:00:00.000Z',
-      treasury30Y: { percent: 4.71, asOf: '2026-09-15', label: '30-year Treasury yield', source: 'Massive' },
+      treasury10Y: { percent: 4.24, asOf: '2026-09-15', label: '10-year Treasury yield', source: 'Massive' },
     } as never);
-    const second = await interpretRetirementQuickPlan(planResult());
+    expect((await interpretRetirementQuickPlan(planResult()))?.cached).toBe(false);
 
-    expect(second?.cached).toBe(false);
-    expect(model.ask).toHaveBeenCalledTimes(2);
+    // Same value and date, different provider: also a different set of facts.
+    market.get.mockResolvedValue({
+      fetchedAt: '2026-09-16T02:00:00.000Z',
+      treasury10Y: { percent: 4.24, asOf: '2026-09-15', label: '10-year Treasury yield', source: 'FRED' },
+    } as never);
+    expect((await interpretRetirementQuickPlan(planResult()))?.cached).toBe(false);
+
+    expect(model.ask).toHaveBeenCalledTimes(3);
   });
 
-  it('re-reads when the same label and date come from a different source', async () => {
+  /*
+   * The SDK's default is ten minutes per request and it retries a timeout, so
+   * an unbounded call would hold an unauthenticated request open — and the
+   * page's placeholder with it — far past the point the panel is worth having.
+   */
+  it('bounds the model call so a stalled provider drops the panel', async () => {
     model.ask.mockResolvedValue(DRAFT('Your money lasted in 87.3% of tested retirements.'));
 
-    market.get.mockResolvedValue({
-      fetchedAt: '2026-09-16T00:00:00.000Z',
-      treasury10Y: { percent: 4.10, asOf: '2026-09-15', label: '10-year Treasury yield', source: 'Massive' },
-    } as never);
     await interpretRetirementQuickPlan(planResult());
 
-    market.get.mockResolvedValue({
-      fetchedAt: '2026-09-16T00:00:00.000Z',
-      treasury10Y: { percent: 4.10, asOf: '2026-09-15', label: '10-year Treasury yield', source: 'FRED' },
-    } as never);
-    const second = await interpretRetirementQuickPlan(planResult());
+    const options = model.ask.mock.calls[0][2] as { timeoutMs: number; maxRetries: number };
+    expect(options.maxRetries).toBe(0);
+    expect(options.timeoutMs).toBeGreaterThan(0);
+    expect(options.timeoutMs).toBeLessThanOrEqual(25_000);
+  });
 
-    expect(second?.cached).toBe(false);
-    expect(model.ask).toHaveBeenCalledTimes(2);
+  it('does not start a retry it has no time to finish', async () => {
+    // A first attempt that eats the budget and comes back ungrounded: the
+    // retry is skipped rather than started and waited out.
+    model.ask.mockImplementationOnce(async () => {
+      jest.advanceTimersByTime(24_000);
+      return DRAFT('You can spend $250,000 a year.');
+    });
+
+    jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate'] });
+    try {
+      expect(await interpretRetirementQuickPlan(planResult())).toBeNull();
+      expect(model.ask).toHaveBeenCalledTimes(1);
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   it('tells the model not to claim a verdict it does not have', async () => {

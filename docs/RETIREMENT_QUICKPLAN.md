@@ -292,9 +292,25 @@ is no second list to drift.
 
 `groundInterpretation` then checks every number in the draft against that list.
 The tolerance scales to the precision written: `$3.3M` is any value within
-$50,000 of 3,300,000, while `$3,326,192` is within half a dollar. Percentage
-tokens are checked only against percentage facts, so a rate cannot be satisfied
-by an unrelated dollar amount sharing its digits.
+$50,000 of 3,300,000, while `$3,326,192` is within half a dollar. Trailing
+zeros count as a claim about precision too (`$140,000` is rounded to ten
+thousands), down to a floor of two significant figures — so `$3M` cannot stand
+for $3.36M. Percentage tokens are checked only against percentage facts, so a
+rate cannot be satisfied by an unrelated dollar amount sharing its digits, and
+trailing zeros never widen a rate.
+
+Signs are part of the figure. Reading `-5%` as `5%` would let a draft state the
+opposite of a fact and pass, since the positive figure is usually in the list —
+5% is the cash weight, $48,000 the contributions. A hyphen that follows a digit
+stays a hyphen, so `30-year` and `1926-1985` are not read as negatives, and an
+en dash is never a sign.
+
+Everything the prompt shows the model is something it will quote, so the digits
+inside those strings are licensed too: the asset-mix weights, the year delta in
+a variant's "2 more years of work", the `10%` of "Spend 10% less", and the
+`30-year` and as-of date in a published rate's label. Without that the panel is
+rejected for restating the fact block — on exactly the plans where the model
+did what it was told.
 
 A draft with an ungrounded figure is retried once, with the offending tokens
 named. A second failure returns null, the route answers 204, and the page
@@ -343,8 +359,24 @@ What is left out is deliberate:
 Each rate is optional and independently settled behind a 2.5s timeout, so an
 unconfigured or failing provider costs these sentences and nothing else. The
 set is cached for an hour; the *interpretation* cache keys on each rate's
-observation date, so a republished series reaches the page while an unchanged
-one keeps serving the reading written about it.
+label, source, observation date **and value**, so a revision in place — or the
+10-year point falling back from Massive to FRED under the same label — is a
+different key rather than cached prose quoting a yield that is no longer in the
+facts.
+
+### The wait
+
+The whole panel is bounded at `TOTAL_BUDGET_MS` (25s) across both attempts.
+Each attempt gets what is left rather than a fixed slice, and an attempt is not
+started below `MIN_ATTEMPT_MS`. `maxRetries` is 0 and the timeout is passed
+through `askClaude`: the Anthropic SDK defaults to ten minutes per request
+*and retries a timeout*, so an unbounded call would hold an unauthenticated
+request open — and the page's placeholder spinning — long past the point this
+panel is worth having. A stall has to reach the same drop path as an error.
+
+The page carries its own `AbortController` at 30s, deliberately past the
+server's budget so the ordinary "no reading" outcome is the server's 204 rather
+than a client-side abort. It only catches a connection that never answers.
 
 ### Why not the Ask pipeline
 
