@@ -287,6 +287,13 @@ label, source, observation date **and value**, so a revision in place — or the
 different key rather than cached prose quoting a yield that is no longer in the
 facts.
 
+**A reading whose figures did not check out is not cached.** It is shown to the
+visitor who caused it and then forgotten. Caching it would hand one bad
+generation to everyone who enters the same round numbers, and landing-page
+visitors reach for round numbers — that is a larger decision than showing it
+once, and the cache would make it silently. The next visitor gets a fresh
+attempt.
+
 ### The wait
 
 The whole panel is bounded at `TOTAL_BUDGET_MS` (25s) across both attempts.

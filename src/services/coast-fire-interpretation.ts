@@ -289,6 +289,11 @@ export async function interpretCoastFire(
     model: written.model,
     cached: false,
   };
-  interpretationCache.set(key, interpretation);
+
+  // A reading whose figures did not check out is shown to the visitor who
+  // caused it and then forgotten. Caching it would serve one bad generation to
+  // everyone who enters the same round numbers, which is a different decision
+  // from showing it once — the next visitor gets a fresh attempt instead.
+  if (written.grounded) interpretationCache.set(key, interpretation);
   return interpretation;
 }

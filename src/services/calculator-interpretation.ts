@@ -641,7 +641,7 @@ export async function runCalculatorInterpretation(params: {
   /** The run-specific block. Feedback for a retry is appended to it here. */
   userMessage: string;
   facts: CalculatorFact[];
-}): Promise<{ draft: InterpretationDraft; model: string } | null> {
+}): Promise<{ draft: InterpretationDraft; model: string; grounded: boolean } | null> {
   const model = getActiveModel('calculatorNarrative');
   let feedback: DraftFeedback | undefined;
 
@@ -706,7 +706,11 @@ export async function runCalculatorInterpretation(params: {
       Sentry.captureMessage(message, 'warning');
     }
 
-    return { draft, model };
+    // Returned so the caller can decide whether to keep it. Showing this
+    // visitor an unverified reading is the call that was made; serving the
+    // same one to everyone who types the same round numbers afterwards is a
+    // different and larger one, and the cache would make it silently.
+    return { draft, model, grounded: grounding.grounded };
   }
 
   const message = `${params.label} interpretation: unparseable after retry (model=${model})`;

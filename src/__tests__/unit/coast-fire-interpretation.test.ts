@@ -427,6 +427,27 @@ describe('interpretCoastFire', () => {
    * still runs — it writes a warning naming the figure, so the rate stays
    * visible — and the prompt is now the only thing asking for accuracy.
    */
+  /*
+   * Shown once, not kept. The visitor who caused it sees it; caching it would
+   * hand the same bad generation to everyone entering the same round numbers,
+   * and landing-page visitors reach for round numbers.
+   */
+  it('does not cache a reading whose figures did not check out', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      model.ask.mockResolvedValue(DRAFT('That is $4,167 a month.'));
+
+      const first = await interpretCoastFire(result());
+      const second = await interpretCoastFire(result());
+
+      expect(first?.cached).toBe(false);
+      expect(second?.cached).toBe(false);
+      expect(model.ask).toHaveBeenCalledTimes(2);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
   it('ships a figure it could not verify, and logs it', async () => {
     const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
     try {
