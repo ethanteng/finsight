@@ -46,6 +46,13 @@ export interface MarketRate {
 export interface CalculatorMarketConditions {
   /** When this set was assembled, for the cache key that shadows it. */
   fetchedAt: string;
+  /*
+   * Labels are written without digits on purpose. An interpretation licenses
+   * every number it shows the model, the label included, so "30-year" here
+   * would license a bare 30 — and a draft writing "over the next 30 years"
+   * would then pass the check that exists to catch exactly that.
+   */
+
   /** The starting yield on a long bond, which is what a bond sleeve buys today. */
   treasury30Y?: MarketRate;
   /** The ten-year point, present when the thirty-year one is not published. */
@@ -147,7 +154,7 @@ export async function getCalculatorMarketConditions(): Promise<CalculatorMarketC
     conditions.treasury10Y = {
       percent: fred.treasury10Y.value,
       asOf: fred.treasury10Y.date,
-      label: '10-year Treasury yield',
+      label: 'ten-year Treasury yield',
       source: 'FRED',
     };
   }
@@ -157,7 +164,7 @@ export async function getCalculatorMarketConditions(): Promise<CalculatorMarketC
     conditions.treasury30Y = {
       percent: curve.yield_30_year,
       asOf: curve.date ?? conditions.fetchedAt.slice(0, 10),
-      label: '30-year Treasury yield',
+      label: 'thirty-year Treasury yield',
       source: 'Massive',
     };
   }
@@ -167,7 +174,7 @@ export async function getCalculatorMarketConditions(): Promise<CalculatorMarketC
     conditions.treasury10Y = {
       percent: curve.yield_10_year,
       asOf: curve.date ?? conditions.fetchedAt.slice(0, 10),
-      label: '10-year Treasury yield',
+      label: 'ten-year Treasury yield',
       source: 'Massive',
     };
   }
@@ -177,7 +184,18 @@ export async function getCalculatorMarketConditions(): Promise<CalculatorMarketC
     conditions.inflationExpectation10Y = {
       percent: expectation.market_10_year,
       asOf: expectation.date ?? conditions.fetchedAt.slice(0, 10),
-      label: 'inflation the market prices in over the next ten years',
+      /*
+       * No digits and no spelled quantity, for the two separate reasons this
+       * file's labels are written the way they are: a digit would license
+       * itself as a figure, and "ten years" as two words is exactly what the
+       * spelled-quantity check refuses — so a draft naming the series would be
+       * rejected for quoting the fact block.
+       *
+       * "Decade" satisfies both without reaching for "breakeven", which is the
+       * term of art this page exists to avoid: the audience reads finance but
+       * does not speak it.
+       */
+      label: 'inflation the market expects over the coming decade',
       source: 'Massive',
     };
   }

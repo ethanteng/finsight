@@ -17,6 +17,7 @@ import {
 } from '@/lib/dataLayer';
 import { useDialog } from '@/components/ui/dialog';
 import {
+  buildRetirementSignupContext,
   clearRetirementSignupRef,
   fetchRetirementSignupContext,
   hasRetirementSignupSource,
@@ -27,6 +28,7 @@ import {
 } from '@/lib/retirement-signup-context';
 import { isLookupSettled } from '@/lib/calculator-handover';
 import {
+  buildCoastFireSignupContext,
   clearCoastFireSignupRef,
   coastFireSignupSummary,
   fetchCoastFireSignupContext,
@@ -154,6 +156,23 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
   const [isCheckoutLoading, setIsCheckoutLoading] = useState(false);
   const [error, setError] = useState('');
   const [subscriptionContext, setSubscriptionContext] = useState<SubscriptionContext | null>(null);
+  /*
+   * The emailed token, held for as long as this page is open.
+   *
+   * The exchange below spends the handover cookie as soon as the lookup
+   * settles, and everything after that reads the token back out of
+   * sessionStorage. That is one copy too few: storage can be blocked outright
+   * by a privacy setting, and the stored context expires after two hours while
+   * the token itself is good for ninety days. In either case the cookie is
+   * already gone, so registration would omit `calculatorRef` — sending someone
+   * who followed a link from their own inbox through verification anyway and
+   * quietly dropping the first decision they were promised.
+   *
+   * A ref, because nothing renders from it and it must survive a re-render
+   * without causing one.
+   */
+  const emailedToken = useRef<string | null>(null);
+
   const [retirementContext, setRetirementContext] = useState<RetirementSignupContext | null>(null);
   const [coastFireContext, setCoastFireContext] = useState<CoastFireSignupContext | null>(null);
   const trialViewedRef = useRef(false);
@@ -254,6 +273,7 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
     // tab must see the emailed figures, not the older sessionStorage copy.
     const existing = readCoastFireSignupContext();
     if (existing?.sourceToken === token) {
+      emailedToken.current = token;
       clearCoastFireSignupRef();
       setCoastFireContext(existing);
       if (existing.email) setEmail((current) => current || existing.email!);
@@ -276,16 +296,29 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
       if (isLookupSettled(lookup.status)) clearCoastFireSignupRef();
       if (lookup.status !== 'resolved') return;
 
+      // Before the store, which is the step that can silently fail.
+      emailedToken.current = token;
+
       // Kept for the rest of this tab, so a reload or a step backwards in the
       // flow does not lose the scenario and re-ask the backend for it.
       const { context } = lookup;
-      storeCoastFireSignupContext(context.inputs, {
+      const options = {
         email: context.email,
         sourceToken: token,
         emailedOutcome: context.emailedOutcome,
-      });
+      };
+      storeCoastFireSignupContext(context.inputs, options);
       pushCalculatorResultsEmailCtaOpened('coast_fire_calculator');
-      setCoastFireContext(readCoastFireSignupContext());
+      /*
+       * Rendered from the lookup, not from what comes back out of storage.
+       * Persisting and rendering are separate concerns and only the first can
+       * be refused — reading the write back meant a browser that blocks
+       * sessionStorage showed no scenario card and, worse, no warning that the
+       * saved run belongs to a different address than the one being typed.
+       * `emailedToken` already keeps that signup working; this keeps it
+       * explicable.
+       */
+      setCoastFireContext(buildCoastFireSignupContext(context.inputs, options));
       // Their own address, from the link we sent them. Prefilled, not locked:
       // they can sign up under a different one.
       if (context.email) setEmail((current) => current || context.email!);
@@ -309,6 +342,7 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
     // email's plan, and prefill the address it was sent to.
     const existing = readRetirementSignupContext();
     if (existing?.sourceToken === token) {
+      emailedToken.current = token;
       clearRetirementSignupRef();
       setRetirementContext(existing);
       if (existing.email) setEmail((current) => current || existing.email!);
@@ -325,14 +359,20 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
       if (isLookupSettled(lookup.status)) clearRetirementSignupRef();
       if (lookup.status !== 'resolved') return;
 
+      // Before the store, which is the step that can silently fail.
+      emailedToken.current = token;
+
       const { context } = lookup;
-      storeRetirementSignupContext(context.inputs, {
+      const options = {
         email: context.email,
         sourceToken: token,
         emailedOutcome: context.emailedOutcome,
-      });
+      };
+      storeRetirementSignupContext(context.inputs, options);
       pushCalculatorResultsEmailCtaOpened('retirement_calculator');
-      setRetirementContext(readRetirementSignupContext());
+      // Rendered from the lookup when storage refuses to keep it. See the
+      // Coast FIRE exchange above.
+      setRetirementContext(buildRetirementSignupContext(context.inputs, options));
       if (context.email) setEmail((current) => current || context.email!);
     })();
 
@@ -349,12 +389,19 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
    * empty app and no explanation. Saying it here is the whole fix: the
    * mismatch is legitimate (a work address instead of a personal one), it is
    * just not what was promised.
+   *
+   * Either calculator can be the source. The two arrivals are mutually
+   * exclusive in the URL, so at most one context carries an emailed address.
    */
-  const savedRunAddress =
-    retirementContext?.email &&
-    email.trim().toLowerCase() !== retirementContext.email.trim().toLowerCase()
-      ? retirementContext.email
-      : null;
+  const savedRun = (() => {
+    const leadEmail = retirementContext?.email ?? coastFireContext?.email;
+    if (!leadEmail) return null;
+    if (email.trim().toLowerCase() === leadEmail.trim().toLowerCase()) return null;
+    return {
+      address: leadEmail,
+      kind: retirementContext?.email ? 'retirement' as const : 'coast-fire' as const,
+    };
+  })();
 
   const coastFireSummary = coastFireContext
     ? coastFireSignupSummary(coastFireContext.inputs, coastFireContext.emailedOutcome)
@@ -457,11 +504,24 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
      * exchange would create the account and silently skip the seed. A
      * same-tab click-through has neither, and the server refuses a token
      * whose lead was sent to a different address anyway.
+     *
+     * Either calculator can be the source. The two mint tokens from the same
+     * space and the server decides which table holds this one, so nothing here
+     * labels it — this only has to find whichever one is present. At most one
+     * can be: a signup carries one `source`, and each context is read only for
+     * its own.
      */
     const calculatorRef =
       retirementContext?.sourceToken
+      ?? coastFireContext?.sourceToken
+      // Held since the exchange, and the only copy left once the cookie is
+      // spent and browser storage has refused or expired. See `emailedToken`.
+      ?? emailedToken.current
       ?? (isTrial && hasRetirementSignupSource(searchParams)
         ? readRetirementSignupRef()
+        : null)
+      ?? (isTrial && hasCoastFireSignupSource(searchParams)
+        ? readCoastFireSignupRef()
         : null);
     if (calculatorRef) {
       registrationData.calculatorRef = calculatorRef;
@@ -721,10 +781,11 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
               placeholder="you@example.com"
             />
           </div>
-          {savedRunAddress && (
+          {savedRun && (
             <p className="mt-2 text-sm text-[#8a6d2f]" role="status">
-              Your saved retirement run is attached to <strong>{savedRunAddress}</strong>. Register
-              with that address to find it waiting in your new account.
+              Your saved {savedRun.kind === 'coast-fire' ? 'Coast FIRE' : 'retirement'} run is
+              attached to <strong>{savedRun.address}</strong>. Register with that address to find
+              it waiting in your new account.
             </p>
           )}
         </div>

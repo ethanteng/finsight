@@ -66,7 +66,14 @@ describe('getCalculatorMarketConditions', () => {
 
     expect(conditions.treasury30Y).toMatchObject({ percent: 4.62, asOf: '2026-09-15', source: 'Massive' });
     expect(conditions.inflationYoY).toMatchObject({ percent: 2.71, asOf: '2026-08-01', source: 'FRED' });
-    expect(conditions.inflationExpectation10Y?.percent).toBe(2.35);
+    expect(conditions.inflationExpectation10Y).toMatchObject({
+      percent: 2.35,
+      // No spelled quantity in the label: a whitespace "ten years" is what the
+      // interpretation's grounding check refuses, so a draft naming the series
+      // would be rejected for quoting the fact block. Plain English rather
+      // than "breakeven", which is the jargon these pages avoid.
+      label: 'inflation the market expects over the coming decade',
+    });
   });
 
   /*

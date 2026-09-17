@@ -1,7 +1,8 @@
 "use client";
 
 /**
- * "Email me my Coast FIRE results", under the result the visitor just ran.
+ * "Save these results to your free account", under the result the visitor just
+ * ran.
  *
  * It appears only after a submitted calculation. The page opens with a default
  * scenario already on screen, and asking for an address before anyone has put
@@ -11,6 +12,12 @@
  * The seven inputs are posted, never the computed result: the server
  * recalculates before it sends, so nothing this form does can put an arbitrary
  * figure in an email carrying our branding.
+ *
+ * What arrives is a link into signup with the address already filled in.
+ * Following it is what turns this run into the first decision in a new
+ * account — and, because the token only ever left this system inside a message
+ * to that address, it is also what lets registration skip the verification
+ * code. See `services/calculator-first-decision`.
  */
 
 import { useRef, useState } from "react";
@@ -75,10 +82,11 @@ export function CoastFireEmailCapture({ result }: { result: CoastFireResult }) {
     return (
       <div className="cf-email-capture is-sent" role="status" aria-live="polite">
         <p className="section-kicker">CHECK YOUR INBOX</p>
-        <h3>Your results are on their way.</h3>
+        <h3>Your link is on its way.</h3>
         <p>
-          We sent your Coast FIRE number, the assumptions behind it, and the return
-          comparison to <strong>{email.trim()}</strong>. It can take a minute to arrive.
+          We sent it to <strong>{email.trim()}</strong>, along with your Coast FIRE number, the
+          assumptions behind it, and the return comparison. Open the link, pick a password, and
+          this run will be waiting as your first decision. It can take a minute to arrive.
         </p>
         <button
           className="cf-email-again"
@@ -98,10 +106,11 @@ export function CoastFireEmailCapture({ result }: { result: CoastFireResult }) {
     <form className="cf-email-capture" onSubmit={handleSubmit} aria-busy={status === "sending"}>
       <div className="cf-email-copy">
         <p className="section-kicker">KEEP THIS RESULT</p>
-        <h3>Want these numbers in your inbox?</h3>
+        <h3>Save this to a free account</h3>
         <p className="cf-email-lead">
-          We will send this result, every assumption behind it, and what it would look like
-          if returns come in a point lower.
+          We will email you a link. Pick a password and this run is waiting as your first
+          decision — your number, every assumption behind it, and what it would look like if
+          returns come in a point lower, ready to pick up and ask questions about.
         </p>
 
       </div>
@@ -132,7 +141,7 @@ export function CoastFireEmailCapture({ result }: { result: CoastFireResult }) {
             disabled={status === "sending"}
             data-cs-override-id="coast-fire-email-results"
           >
-            {status === "sending" ? "Sending…" : "Email me my Coast FIRE results"}
+            {status === "sending" ? "Sending…" : "Save these results to your free account"}
           </button>
       </div>
 

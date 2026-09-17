@@ -1,19 +1,20 @@
 /**
  * The calculator run a new account starts with.
  *
- * Someone who runs `/retirement-calculator` and asks us to save it gets an
- * email with a link; the link lands on signup with their address filled in,
- * and choosing a password is the whole of what is left. This turns the run
- * they already saw into the first decision in that account, so the app opens
- * on their own question rather than on an empty state.
+ * Someone who runs `/retirement-calculator` or `/coast-fire-calculator` and
+ * asks us to save it gets an email with a link; the link lands on signup with
+ * their address filled in, and choosing a password is the whole of what is
+ * left. This turns the run they already saw into the first decision in that
+ * account, so the app opens on their own question rather than on an empty
+ * state.
  *
  * Two properties are worth stating plainly, because both are load-bearing:
  *
- *  1. **The figures come from the lead, not from a fresh run.** The engine and
- *     its dataset change; a token lives for ninety days. Re-running would let
- *     the saved decision disagree with the email that produced it, over a
+ *  1. **The figures come from the lead, not from a fresh run.** The engines and
+ *     their datasets change; a token lives for ninety days. Re-running would
+ *     let the saved decision disagree with the email that produced it, over a
  *     difference the reader has no way to see. This is the same reasoning the
- *     signup-context endpoint already follows.
+ *     signup-context endpoints already follow.
  *  2. **The address must match.** The token is the only key to a lead, and a
  *     lead holds a stranger's retirement figures. Without this check, anyone
  *     holding a forwarded link could register under their own address and copy
@@ -34,6 +35,7 @@
 
 import { getPrismaClient } from '../prisma-client';
 import { readRetirementLead, type RetirementLeadRecord } from './retirement-leads';
+import { readCoastFireLead, type CoastFireLeadRecord } from './coast-fire-leads';
 
 /** Why a run did not become a decision, for the log and for the tests. */
 export type FirstDecisionOutcome =
@@ -43,6 +45,16 @@ export type FirstDecisionOutcome =
   | 'already-has-decisions'
   | 'failed';
 
+/**
+ * A resolved lead, and which calculator produced it.
+ *
+ * The two write different decisions, so the kind travels with the record
+ * rather than being sniffed back out of its shape later.
+ */
+export type CalculatorLead =
+  | { kind: 'retirement'; lead: RetirementLeadRecord }
+  | { kind: 'coast-fire'; lead: CoastFireLeadRecord };
+
 function money(value: number): string {
   return `$${Math.round(value).toLocaleString('en-US')}`;
 }
@@ -50,6 +62,22 @@ function money(value: number): string {
 function percent(value: number, digits = 1): string {
   return `${(value * 100).toFixed(digits)}%`;
 }
+
+/** A rate the visitor typed as percentage points: 5 becomes "5%", 4.5 "4.5%". */
+function rate(value: number): string {
+  return `${Number(value.toFixed(2))}%`;
+}
+
+/** "a and b", or "a, b, and c" — never a bare run of commas. */
+function joinClauses(clauses: string[]): string {
+  if (clauses.length <= 1) return clauses[0] ?? '';
+  if (clauses.length === 2) return `${clauses[0]} and ${clauses[1]}`;
+  return `${clauses.slice(0, -1).join(', ')}, and ${clauses[clauses.length - 1]}`;
+}
+
+/* ------------------------------------------------------------------ *
+ * The retirement quick plan
+ * ------------------------------------------------------------------ */
 
 /**
  * The question the visitor never typed.
@@ -88,13 +116,6 @@ export function buildDecisionQuestion(lead: RetirementLeadRecord): string {
   }
 
   return sentences.join(' ');
-}
-
-/** "a and b", or "a, b, and c" — never a bare run of commas. */
-function joinClauses(clauses: string[]): string {
-  if (clauses.length <= 1) return clauses[0] ?? '';
-  if (clauses.length === 2) return `${clauses[0]} and ${clauses[1]}`;
-  return `${clauses.slice(0, -1).join(', ')}, and ${clauses[clauses.length - 1]}`;
 }
 
 /**
@@ -148,6 +169,127 @@ export function buildDecisionAnswer(lead: RetirementLeadRecord): string {
   return lines.join('\n');
 }
 
+/* ------------------------------------------------------------------ *
+ * Coast FIRE
+ * ------------------------------------------------------------------ */
+
+/**
+ * The same idea for a Coast FIRE run, stated back in the visitor's own terms.
+ *
+ * The seven numbers include two assumptions the visitor typed rather than
+ * facts about them — the return and the withdrawal rate — so the question owns
+ * them as assumptions. A follow-up that changes either is the most useful
+ * thing they can ask next, and it should read as a thing they chose.
+ */
+export function buildCoastFireQuestion(lead: CoastFireLeadRecord): string {
+  const { inputs } = lead;
+
+  const holdings = [
+    `I have ${money(inputs.currentSavings)} in retirement savings`,
+    `expect to spend ${money(inputs.annualRetirementSpending)} a year once I stop`,
+  ];
+  if (inputs.annualRetirementIncome > 0) {
+    holdings.push(
+      `expect ${money(inputs.annualRetirementIncome)} a year of income from the day I retire`
+    );
+  }
+
+  return [
+    'Have I reached Coast FIRE?',
+    `I am ${inputs.currentAge} now and plan to retire at ${inputs.retirementAge}.`,
+    `${joinClauses(holdings)}.`,
+    `I assumed ${rate(inputs.realReturnRate)} growth a year after inflation and a ` +
+    `${rate(inputs.withdrawalRate)} withdrawal rate.`,
+  ].join(' ');
+}
+
+/**
+ * The Coast FIRE answer, as the email stated it.
+ *
+ * Two things this deliberately does not do. It does not tell anyone whether to
+ * keep contributing — reaching the number is a fact about one projection, not
+ * permission to stop — and it does not soften the fact that the whole answer
+ * rides on a return the visitor typed. Both are the reason the closing line
+ * points at the app rather than at the badge.
+ */
+export function buildCoastFireAnswer(lead: CoastFireLeadRecord): string {
+  const { inputs } = lead;
+  const portfolioSpendingNeed = Math.max(
+    0,
+    inputs.annualRetirementSpending - inputs.annualRetirementIncome
+  );
+
+  // The scenario that asks nothing of the portfolio. Its Coast FIRE number is
+  // zero, and writing "you need $0 invested today" reads as a bug rather than
+  // as the answer it is.
+  if (portfolioSpendingNeed === 0) {
+    return [
+      `The retirement income you entered — ${money(inputs.annualRetirementIncome)} a year from ` +
+      `age ${inputs.retirementAge} — already covers the ` +
+      `${money(inputs.annualRetirementSpending)} a year you plan to spend, so this formula asks ` +
+      `nothing of your portfolio at all.`,
+      '',
+      `**What your savings alone would become:** ${money(inputs.currentSavings)} left untouched ` +
+      `for ${inputs.retirementAge - inputs.currentAge} years at ${rate(inputs.realReturnRate)} a ` +
+      `year after inflation grows to ${money(lead.projectedSavingsAtRetirement)}.`,
+      '',
+      coastFireLimitations(inputs.realReturnRate),
+    ].join('\n');
+  }
+
+  const lines = [
+    `On the assumptions you entered, ${lead.hasReachedCoastFire ? 'yes' : 'not yet'}. Your Coast ` +
+    `FIRE number was ${money(lead.coastFireNumber)}, and you have ` +
+    `${money(inputs.currentSavings)}.`,
+    '',
+    `That number is what would need to be invested today to reach your retirement target at ` +
+    `${inputs.retirementAge} without adding another dollar.`,
+    '',
+    `**Portfolio needed at ${inputs.retirementAge}:** ${money(lead.retirementTarget)} — the ` +
+    `${money(portfolioSpendingNeed)} a year your portfolio would have to cover, at a ` +
+    `${rate(inputs.withdrawalRate)} withdrawal rate.`,
+    // "$0 grows to $0" is true and reads as a bug. Compounding is the whole
+    // idea of the page, and there is nothing here to compound yet.
+    inputs.currentSavings === 0
+      ? `**If you add nothing further:** nothing. This projection only compounds what you ` +
+        `already have, and you entered ${money(0)}.`
+      : `**If you add nothing further:** ${money(inputs.currentSavings)} grows to ` +
+        `${money(lead.projectedSavingsAtRetirement)} by ${inputs.retirementAge}, at ` +
+        `${rate(inputs.realReturnRate)} a year after inflation.`,
+  ];
+
+  if (inputs.annualRetirementIncome > 0) {
+    lines.push(
+      `**Retirement income:** ${money(inputs.annualRetirementIncome)} a year, counted from the ` +
+      `day you retire, which is what reduces the ${money(inputs.annualRetirementSpending)} to ` +
+      `${money(portfolioSpendingNeed)}.`
+    );
+  }
+
+  lines.push('', coastFireLimitations(inputs.realReturnRate));
+  return lines.join('\n');
+}
+
+/** The honest limit of a run made from seven numbers, and what changes it. */
+function coastFireLimitations(realReturnRate: number): string {
+  return (
+    `This came from the free Coast FIRE calculator, so it is a single straight line: ` +
+    `${rate(realReturnRate)} every year, with no taxes, fees, account types, healthcare, ` +
+    `uneven markets, or income starting later than retirement modeled at all. Connect your ` +
+    `accounts and ask me this again to run it against your actual holdings and a century of ` +
+    `real market sequences.`
+  );
+}
+
+/* ------------------------------------------------------------------ *
+ * Resolving and writing
+ * ------------------------------------------------------------------ */
+
+/** Case- and whitespace-insensitive, since the two addresses arrive separately. */
+function sameAddress(a: string, b: string): boolean {
+  return a.trim().toLowerCase() === b.trim().toLowerCase();
+}
+
 /**
  * The lead a signup is entitled to, or null.
  *
@@ -156,6 +298,12 @@ export function buildDecisionAnswer(lead: RetirementLeadRecord): string {
  * code. Both rest on the same check, and it is made here rather than trusted
  * from the request.
  *
+ * Both calculators mint tokens from the same forty-eight-character space, so
+ * the token alone says which table to look in — the tables are tried in turn
+ * rather than the client being asked which calculator it came from. A client
+ * that could name the table could not gain anything by lying, but it also has
+ * no reason to be asked.
+ *
  * Returns null — never throws — for anything that is not a live token
  * belonging to the address being registered.
  */
@@ -163,26 +311,50 @@ export async function resolveCalculatorLead(params: {
   token: unknown;
   /** The address being registered. */
   email: string;
-}): Promise<RetirementLeadRecord | null> {
+}): Promise<CalculatorLead | null> {
   if (typeof params.token !== 'string' || params.token.trim() === '') return null;
+  const token = params.token.trim();
+
+  // The control that matters. See the header: a token is the only key to a
+  // lead, a lead is somebody's retirement plan, and matching the address is
+  // what makes holding the token proof of controlling the inbox.
+  const claimable = (resolved: CalculatorLead): CalculatorLead | null => {
+    if (sameAddress(resolved.lead.email, params.email)) return resolved;
+    console.warn('⚠️  Calculator lead token did not match the registering address.');
+    return null;
+  };
+
+  // Neither read counts as continuing from the email. `continuedAt` measures
+  // the signup page's own exchange, which has already happened by the time
+  // anyone reaches this; marking here would also mark it for a forwarded link
+  // the address check below is about to refuse.
+  const resolving = { markContinuation: false };
 
   try {
-    const lead = await readRetirementLead(params.token.trim());
-    if (!lead) return null;
+    const retirement = await readRetirementLead(token, new Date(), resolving);
+    if (retirement) return claimable({ kind: 'retirement', lead: retirement });
 
-    // The control that matters. See the header: a token is the only key to a
-    // lead, a lead is somebody's retirement plan, and matching the address is
-    // what makes holding the token proof of controlling the inbox.
-    if (lead.email.trim().toLowerCase() !== params.email.trim().toLowerCase()) {
-      console.warn('⚠️  Retirement lead token did not match the registering address.');
-      return null;
-    }
+    const coastFire = await readCoastFireLead(token, new Date(), resolving);
+    if (coastFire) return claimable({ kind: 'coast-fire', lead: coastFire });
 
-    return lead;
+    return null;
   } catch (error) {
     console.error('⚠️  Could not resolve a calculator lead:', error);
     return null;
   }
+}
+
+/** The question and answer one resolved lead becomes. */
+function composeDecision(resolved: CalculatorLead): { question: string; answer: string } {
+  return resolved.kind === 'retirement'
+    ? {
+      question: buildDecisionQuestion(resolved.lead),
+      answer: buildDecisionAnswer(resolved.lead),
+    }
+    : {
+      question: buildCoastFireQuestion(resolved.lead),
+      answer: buildCoastFireAnswer(resolved.lead),
+    };
 }
 
 /**
@@ -194,7 +366,7 @@ export async function resolveCalculatorLead(params: {
  */
 export async function seedFirstDecisionFromLead(params: {
   userId: string;
-  lead: RetirementLeadRecord | null;
+  lead: CalculatorLead | null;
 }): Promise<FirstDecisionOutcome> {
   const { userId, lead } = params;
   if (!lead) return 'no-lead';
@@ -207,13 +379,7 @@ export async function seedFirstDecisionFromLead(params: {
     const existing = await prisma.conversation.count({ where: { userId } });
     if (existing > 0) return 'already-has-decisions';
 
-    await prisma.conversation.create({
-      data: {
-        userId,
-        question: buildDecisionQuestion(lead),
-        answer: buildDecisionAnswer(lead),
-      },
-    });
+    await prisma.conversation.create({ data: { userId, ...composeDecision(lead) } });
 
     return 'seeded';
   } catch (error) {
