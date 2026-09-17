@@ -97,7 +97,7 @@ export function retirementGroupIds(): string[] {
 }
 
 /**
- * The group a no-card signup joins the moment the account is created.
+ * The group a no-card signup joins once email ownership is proved.
  *
  * Separate from the sync job's `MAILER_LITE_GROUP_ID`, which is every
  * registered user and is rewritten nightly: this one marks the people who

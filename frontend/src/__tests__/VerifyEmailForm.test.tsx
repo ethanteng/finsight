@@ -88,7 +88,10 @@ describe('VerifyEmailForm', () => {
 
   it('tracks backend-confirmed verification and opens the workspace on the same session', async () => {
     searchParams = new URLSearchParams('signup_flow=free_trial');
-    beginFreeTrialSignupFlow();
+    beginFreeTrialSignupFlow(Date.now(), {
+      signupOrigin: 'retirement_calculator',
+      signupEntry: 'calculator_cta',
+    });
     localStorage.setItem('auth_token', 'registration-token');
     global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({ success: true }) });
 
@@ -108,6 +111,15 @@ describe('VerifyEmailForm', () => {
     // The registration session is what carries the visitor into the app, so it
     // must survive verification rather than being traded for a fresh sign-in.
     expect(localStorage.getItem('auth_token')).toBe('registration-token');
+    // Ownership is proved here, so the calculator origin rides along for the
+    // marketing-list join the server performs after verify succeeds.
+    const verifyCall = (global.fetch as jest.Mock).mock.calls.find(
+      ([url]) => String(url).includes('/auth/verify-email'),
+    );
+    expect(JSON.parse(verifyCall![1].body as string)).toEqual({
+      code: '654321',
+      signupOrigin: 'retirement_calculator',
+    });
 
     act(() => {
       jest.advanceTimersByTime(2000);

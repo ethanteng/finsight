@@ -14,6 +14,7 @@ import {
 import {
   completeFreeTrialSignupFlow,
   isFreeTrialSignupContinuation,
+  readTrialSignupAttribution,
 } from '@/lib/trial-signup-flow';
 import { DEFAULT_POST_LOGIN_DESTINATION } from '@/lib/post-login-redirect';
 
@@ -111,6 +112,13 @@ function VerifyEmailFormContent() {
 
     const API_URL = process.env.NEXT_PUBLIC_API_URL;
     const token = localStorage.getItem('auth_token');
+    /*
+     * Same calculator attribution RegisterForm sent at signup. Ownership is
+     * proved only by this code, so the list join happens on the server after
+     * verify succeeds — carry the origin here so a click-through can still
+     * land in that calculator's group, not just the trial one.
+     */
+    const attribution = readTrialSignupAttribution();
     let res: Response;
     try {
       res = await fetch(`${API_URL}/auth/verify-email`, {
@@ -119,7 +127,10 @@ function VerifyEmailFormContent() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
         },
-        body: JSON.stringify({ code: code }),
+        body: JSON.stringify({
+          code: code,
+          ...(attribution ? { signupOrigin: attribution.signupOrigin } : {}),
+        }),
       });
     } catch {
       if (isFreeTrialFlow) pushTrialVerifyError('network_error');

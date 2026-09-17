@@ -27,10 +27,47 @@ import {
   normalizeCalculatorSignupOrigin,
   signupGroupIds,
   subscribeToMailerLite,
+  type CalculatorSignupOrigin,
 } from '../services/mailerlite-subscribe';
 
 const router = Router();
 const prisma = getPrismaClient();
+
+/**
+ * Fire-and-forget list join for a no-card account. Callers must only invoke
+ * this after email ownership is proved — a resolved calculator lead at
+ * register, or a successful `/auth/verify-email`. Skips entirely when every
+ * group id is unset so an unconfigured trial group does not create a no-group
+ * subscriber ahead of the nightly sync.
+ */
+function enqueueTrialSignupMailerLite(params: {
+  email: string;
+  tier: string;
+  createdAt: Date;
+  origin: CalculatorSignupOrigin | null;
+}): void {
+  const groups = signupGroupIds(params.origin);
+  if (groups.length === 0) {
+    return;
+  }
+
+  void subscribeToMailerLite({
+    email: params.email,
+    groups,
+    // Names the nightly sync already writes, so tonight's run updates these
+    // rather than leaving a second set of fields beside them.
+    fields: {
+      current_tier: params.tier,
+      user_created_at: params.createdAt.toISOString().split('T')[0],
+    },
+  }).then((outcome) => {
+    if (outcome === 'failed') {
+      console.warn(`New account not added to MailerLite: ${params.email}`);
+    }
+  }).catch((error) => {
+    console.warn('MailerLite subscribe rejected:', error);
+  });
+}
 
 // Verify token endpoint
 router.get('/verify', async (req: Request, res: Response) => {
@@ -291,41 +328,28 @@ router.post('/register', async (req: Request, res: Response) => {
     });
 
     /*
-     * Put a no-card signup on the marketing list now rather than whenever the
-     * nightly sync next runs.
+     * Put a no-card signup on the marketing list once we know the registrant
+     * owns the address — not before.
      *
-     * `mailerlite-sync` walks the whole user table at 3am into its own group,
-     * so these addresses were never lost — they were just up to a day late,
-     * which is too late for anything that should greet a new account. A
-     * visitor who only used a calculator and left an address was on a list
-     * within eight seconds; someone who created an account waited until
-     * morning.
+     * A resolved calculator lead already proved inbox control (same bar as the
+     * verification code), so those accounts join immediately here. Everyone
+     * else waits for `/auth/verify-email`: the verification mail promises that
+     * an unintended recipient's address will not be used for any other
+     * purpose, and joining a welcome sequence would break that promise.
      *
-     * Paid checkouts are left to that sync. The trial group is for accounts
-     * that started without a card, and a customer who has just paid does not
-     * belong in a sequence written to convert one.
+     * Paid checkouts are left to the nightly sync either way. The trial group
+     * exists to convert someone who has not paid.
      *
      * After the response and unawaited, for the same reason as the seed above:
      * the account exists, and an email list must never be able to fail or
-     * delay a registration. `subscribeToMailerLite` returns an outcome rather
-     * than throwing, including when the integration is unconfigured.
+     * delay a registration.
      */
-    if (!stripeSessionIdToUse) {
-      void subscribeToMailerLite({
+    if (emailProvenByLink && !stripeSessionIdToUse) {
+      enqueueTrialSignupMailerLite({
         email: user.email,
-        groups: signupGroupIds(calculatorOrigin),
-        // Names the nightly sync already writes, so tonight's run updates
-        // these rather than leaving a second set of fields beside them.
-        fields: {
-          current_tier: user.tier,
-          user_created_at: user.createdAt.toISOString().split('T')[0],
-        },
-      }).then((outcome) => {
-        if (outcome === 'failed') {
-          console.warn(`New account not added to MailerLite: ${user.email}`);
-        }
-      }).catch(error => {
-        console.warn('MailerLite subscribe rejected:', error);
+        tier: user.tier,
+        createdAt: user.createdAt,
+        origin: calculatorOrigin,
       });
     }
   } catch (error) {
@@ -694,7 +718,7 @@ router.post('/send-verification', authenticateUser, async (req: AuthenticatedReq
 // Verify email with code
 router.post('/verify-email', authenticateUser, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const { code } = req.body;
+    const { code, signupOrigin } = req.body;
 
     if (!code) {
       return res.status(400).json({ error: 'Verification code is required' });
@@ -723,9 +747,15 @@ router.post('/verify-email', authenticateUser, async (req: AuthenticatedRequest,
     }
 
     // Mark email as verified
-    await prisma.user.update({
+    const user = await prisma.user.update({
       where: { id: req.user!.id },
-      data: { emailVerified: true }
+      data: { emailVerified: true },
+      select: {
+        email: true,
+        tier: true,
+        createdAt: true,
+        subscriptionStatus: true,
+      },
     });
 
     // Mark code as used
@@ -735,6 +765,22 @@ router.post('/verify-email', authenticateUser, async (req: AuthenticatedRequest,
     });
 
     res.json({ message: 'Email verified successfully' });
+
+    /*
+     * Ownership is proved only now for an ordinary no-card signup. Join the
+     * trial list (and the calculator group when the client still carries that
+     * attribution) after the response so a list outage cannot fail verify.
+     * Paid / incomplete checkouts stay on the nightly sync — same rule as
+     * register — and "Skip for now" never reaches this path.
+     */
+    if (user.subscriptionStatus === 'inactive') {
+      enqueueTrialSignupMailerLite({
+        email: user.email,
+        tier: user.tier,
+        createdAt: user.createdAt,
+        origin: normalizeCalculatorSignupOrigin(signupOrigin),
+      });
+    }
   } catch (error) {
     console.error('Verify email error:', error);
     res.status(500).json({ error: 'Failed to verify email' });
