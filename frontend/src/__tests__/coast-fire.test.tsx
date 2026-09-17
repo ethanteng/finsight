@@ -158,6 +158,60 @@ describe("Coast FIRE calculator page", () => {
     expect(screen.queryByRole("heading", { name: /reached Coast FIRE\./ })).not.toBeInTheDocument();
   });
 
+  /*
+   * A refused re-submit is the empty-open thesis applied to the second run.
+   * Keeping the previous answer while the form has moved away from it says two
+   * things at once — the banner asks for a figure "to get your Coast FIRE
+   * number" while a Coast FIRE number sits beside it — and it leaves the
+   * capture and the signup handoff attached to a run the form no longer
+   * matches, which is the stale handoff this page already had to fix once.
+   */
+  it("takes the previous answer down when a re-run is refused", () => {
+    const { container } = render(<CoastFireCalculator />);
+
+    fillForm();
+    fireEvent.submit(container.querySelector("form")!);
+    expect(screen.getAllByText("$369,128").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByLabelText("Email address")).toBeInTheDocument();
+
+    // Clear a figure the formula needs and ask again.
+    fireEvent.change(screen.getByLabelText("Retirement savings today"), { target: { value: "" } });
+    fireEvent.submit(container.querySelector("form")!);
+
+    expect(screen.getByRole("alert")).toHaveTextContent("Enter your retirement savings today");
+    expect(screen.queryByText("$369,128")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Email address")).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /Your number, once you fill in the form/ })).toBeInTheDocument();
+  });
+
+  /* Same for a figure the formula refuses by name rather than a blank one. */
+  it("takes it down for an out-of-range figure too", () => {
+    const { container } = render(<CoastFireCalculator />);
+
+    fillForm();
+    fireEvent.submit(container.querySelector("form")!);
+    expect(screen.getAllByText("$369,128").length).toBeGreaterThanOrEqual(1);
+
+    fillForm({ "Annual spending in retirement": "50000000" });
+    fireEvent.submit(container.querySelector("form")!);
+
+    expect(screen.getByRole("alert")).toHaveTextContent("Annual spending must be $10,000,000 or less.");
+    expect(screen.queryByText("$369,128")).not.toBeInTheDocument();
+  });
+
+  /* The kicker generalises with the list under it. */
+  it("does not call the assumptions a result's before there is one", () => {
+    const { container } = render(<CoastFireCalculator />);
+
+    expect(screen.getByText("WHAT THE FORMULA ASSUMES")).toBeInTheDocument();
+    expect(screen.queryByText("WHAT THIS RESULT ASSUMES")).not.toBeInTheDocument();
+
+    fillForm();
+    fireEvent.submit(container.querySelector("form")!);
+
+    expect(screen.getByText("WHAT THIS RESULT ASSUMES")).toBeInTheDocument();
+  });
+
   /* Not everyone expects a pension or Social Security by the date they pick. */
   it("treats a blank retirement income as none rather than refusing it", () => {
     const { container } = render(<CoastFireCalculator />);

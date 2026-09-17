@@ -554,6 +554,24 @@ export function CoastFireCalculator({ children }: { children?: ReactNode }) {
     setError(null);
   };
 
+  /**
+   * A refusal leaves nothing on screen claiming to be an answer.
+   *
+   * The alternative — keeping the last good result while the form no longer
+   * matches it — reads as generosity but says two things at once: the banner
+   * asks for a figure "to get your Coast FIRE number" while a Coast FIRE
+   * number sits beside it. It also leaves the capture and the signup handoff
+   * attached to a run the form has moved away from, which is the same stale
+   * handoff this page already had to fix once.
+   *
+   * What it costs is one click on a typo, with every other box still filled.
+   */
+  function refuse(message: string) {
+    setError(message);
+    setResult(null);
+    setSubmitted(null);
+  }
+
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
@@ -566,7 +584,7 @@ export function CoastFireCalculator({ children }: { children?: ReactNode }) {
       const list = names.length === 1
         ? names[0]
         : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
-      setError(`Enter ${list} to get your Coast FIRE number.`);
+      refuse(`Enter ${list} to get your Coast FIRE number.`);
       return;
     }
 
@@ -581,7 +599,7 @@ export function CoastFireCalculator({ children }: { children?: ReactNode }) {
       );
       requestAnimationFrame(() => resultRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" }));
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Check your numbers and try again.");
+      refuse(caught instanceof Error ? caught.message : "Check your numbers and try again.");
     }
   }
 
@@ -706,7 +724,10 @@ export function CoastFireCalculator({ children }: { children?: ReactNode }) {
 
       <section className="shell cf-assumptions">
         <div className="cf-section-head">
-          <p className="section-kicker">WHAT THIS RESULT ASSUMES</p>
+          {/* Generic until there is a result, like the list beneath it. */}
+          <p className="section-kicker">
+            {result ? "WHAT THIS RESULT ASSUMES" : "WHAT THE FORMULA ASSUMES"}
+          </p>
           <h2>Simple enough to check.</h2>
         </div>
         <ul>
