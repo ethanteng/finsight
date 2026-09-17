@@ -68,6 +68,11 @@ describe('the figures a Coast FIRE reading may state', () => {
    * instructions.
    */
   it('licenses its own fact block, verbatim', () => {
+    // Every series, deliberately. An earlier version of this case passed two of
+    // the four, and the label on a series it left out ("...over the next ten
+    // years") was a spelled quantity the grounding check refused — so a draft
+    // naming that series would have been rejected for quoting the fact block,
+    // and this test said nothing.
     const facts = buildCoastFireFacts(result(), {
       fetchedAt: '2026-09-16T00:00:00.000Z',
       inflationYoY: {
@@ -76,10 +81,22 @@ describe('the figures a Coast FIRE reading may state', () => {
         label: 'US inflation over the last year (CPI)',
         source: 'FRED',
       },
+      inflationExpectation10Y: {
+        percent: 2.35,
+        asOf: '2026-09-16',
+        label: 'inflation the market expects over the coming decade',
+        source: 'Massive',
+      },
       treasury30Y: {
         percent: 4.71,
         asOf: '2026-09-16',
         label: 'thirty-year Treasury yield',
+        source: 'Massive',
+      },
+      treasury10Y: {
+        percent: 4.18,
+        asOf: '2026-09-16',
+        label: 'ten-year Treasury yield',
         source: 'Massive',
       },
     });
@@ -274,7 +291,7 @@ describe('the figures a Coast FIRE reading may state', () => {
       inflationExpectation10Y: {
         percent: 2.35,
         asOf: '2026-09-16',
-        label: 'ten-year breakeven inflation',
+        label: 'inflation the market expects over the coming decade',
         source: 'Massive',
       },
     });
@@ -283,10 +300,10 @@ describe('the figures a Coast FIRE reading may state', () => {
       'There are two levers here, and a third of the answer is timing.',
       'The thirty-year Treasury yields 4.71% as of September 2026.',
       'That is one of the two assumptions doing the work.',
-      // The breakeven series used to be labelled with a whitespace "ten years",
-      // which the spelled-figure check would then refuse in any draft that
-      // named it. Hyphenated, the series name is prose again.
-      'The ten-year breakeven inflation is 2.35% as of September 2026.',
+      // This series used to be labelled "...over the next ten years", which
+      // the spelled-quantity check then refused in any draft that named it.
+      // The label carries no spelled quantity now, and stays plain English.
+      'The market expects 2.35% inflation over the coming decade.',
     ]) {
       const grounded = groundDraft(
         { headline: 'A headline.', paragraphs: [allowed], watchOuts: [] },

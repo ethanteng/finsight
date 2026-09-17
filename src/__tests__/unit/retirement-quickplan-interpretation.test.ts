@@ -268,6 +268,48 @@ describe('groundInterpretation', () => {
   });
 
   /*
+   * The whole block, echoed. The targeted cases below each pin one string the
+   * prompt shows the model; this pins all of them at once, including every
+   * published-rate label — which is where the mistake actually happens, since
+   * a label is edited for how it reads and not for what it licenses.
+   */
+  it('licenses its own fact block, verbatim, with every series present', () => {
+    const built = buildPlanFacts(planResult(), {
+      fetchedAt: '2026-09-16T00:00:00.000Z',
+      inflationYoY: {
+        percent: 3.02,
+        asOf: '2026-08-01',
+        label: 'US inflation over the last year (CPI)',
+        source: 'FRED',
+      },
+      inflationExpectation10Y: {
+        percent: 2.35,
+        asOf: '2026-09-16',
+        label: 'inflation the market expects over the coming decade',
+        source: 'Massive',
+      },
+      treasury30Y: {
+        percent: 4.71,
+        asOf: '2026-09-16',
+        label: 'thirty-year Treasury yield',
+        source: 'Massive',
+      },
+      treasury10Y: {
+        percent: 4.18,
+        asOf: '2026-09-16',
+        label: 'ten-year Treasury yield',
+        source: 'Massive',
+      },
+    });
+    const echoed = built.map((fact) => `${fact.label}: ${fact.display}`);
+
+    expect(groundInterpretation(
+      { headline: echoed[0], paragraphs: echoed.slice(1), watchOuts: [] },
+      built
+    )).toEqual({ grounded: true, ungrounded: [] });
+  });
+
+  /*
    * The failure mode that is easy to miss: a draft rejected for repeating the
    * fact block back at us. Every string the prompt shows the model is one it
    * will quote, so the numbers inside those strings have to be licensed too —

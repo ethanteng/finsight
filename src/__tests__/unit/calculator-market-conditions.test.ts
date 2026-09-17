@@ -68,10 +68,11 @@ describe('getCalculatorMarketConditions', () => {
     expect(conditions.inflationYoY).toMatchObject({ percent: 2.71, asOf: '2026-08-01', source: 'FRED' });
     expect(conditions.inflationExpectation10Y).toMatchObject({
       percent: 2.35,
-      // Hyphenated: a whitespace "ten years" in the label is a spelled quantity
-      // the interpretation grounding check would then refuse in any draft that
-      // named the series.
-      label: 'ten-year breakeven inflation',
+      // No spelled quantity in the label: a whitespace "ten years" is what the
+      // interpretation's grounding check refuses, so a draft naming the series
+      // would be rejected for quoting the fact block. Plain English rather
+      // than "breakeven", which is the jargon these pages avoid.
+      label: 'inflation the market expects over the coming decade',
     });
   });
 

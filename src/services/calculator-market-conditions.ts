@@ -184,10 +184,18 @@ export async function getCalculatorMarketConditions(): Promise<CalculatorMarketC
     conditions.inflationExpectation10Y = {
       percent: expectation.market_10_year,
       asOf: expectation.date ?? conditions.fetchedAt.slice(0, 10),
-      // Hyphenated on purpose, same reason the Treasury labels are: a draft
-      // that names this series must be allowed to, and "ten years" as two
-      // words is exactly the spelled quantity the grounding check refuses.
-      label: 'ten-year breakeven inflation',
+      /*
+       * No digits and no spelled quantity, for the two separate reasons this
+       * file's labels are written the way they are: a digit would license
+       * itself as a figure, and "ten years" as two words is exactly what the
+       * spelled-quantity check refuses — so a draft naming the series would be
+       * rejected for quoting the fact block.
+       *
+       * "Decade" satisfies both without reaching for "breakeven", which is the
+       * term of art this page exists to avoid: the audience reads finance but
+       * does not speak it.
+       */
+      label: 'inflation the market expects over the coming decade',
       source: 'Massive',
     };
   }
