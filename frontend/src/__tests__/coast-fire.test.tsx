@@ -122,6 +122,21 @@ describe("Coast FIRE calculator page", () => {
   });
 
   /*
+   * The form gave up its standalone note so that the capture band under the
+   * result clears the fold on a laptop. What the note said had to survive that:
+   * one half of it rides on the kicker, and the other was already stated, in
+   * more detail, next to the box it governs.
+   */
+  it("keeps the guidance the form note carried", () => {
+    render(<CoastFireCalculator />);
+
+    expect(screen.getByText(/SEVEN NUMBERS \u00b7 TODAY\u2019S DOLLARS/)).toBeInTheDocument();
+    expect(screen.getByText(/income that starts on your retirement date/)).toBeInTheDocument();
+    // And the reassurance the removed privacy note ended on is still on the page.
+    expect(screen.getByText(/no account needed/i)).toBeInTheDocument();
+  });
+
+  /*
    * The two assumptions are not the visitor's figures and nobody knows theirs,
    * so asking them to invent one before the page will answer at all is a worse
    * ask than stating the convention.
