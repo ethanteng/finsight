@@ -12,6 +12,9 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom';
 import SnapTradeButton, { SnapTradeButtonRef } from '../components/SnapTradeButton';
+import {
+  financialServiceCoordinator,
+} from '../services/FinancialServiceCoordinator';
 
 jest.mock('snaptrade-react', () => ({ SnapTradeReact: () => null }));
 jest.mock('snaptrade-react/hooks/useWindowMessage', () => ({ useWindowMessage: jest.fn() }));
@@ -36,6 +39,7 @@ const loginCalls = () =>
 describe('SnapTrade connect before registration', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    financialServiceCoordinator.clear();
     process.env.NEXT_PUBLIC_API_URL = 'http://localhost:3000';
     Storage.prototype.getItem = jest.fn(() => 'test-token');
   });
@@ -102,5 +106,34 @@ describe('SnapTrade connect before registration', () => {
       { timeout: 4000 },
     );
     expect(loginCalls()).toHaveLength(0);
+  });
+
+  it('releases the coordinator and keeps registration when login fails', async () => {
+    const user = userEvent.setup();
+    const onConnectStatus = jest.fn();
+
+    global.fetch = jest.fn().mockImplementation((url: string) => {
+      const json = (body: unknown, ok = true, status = 200) =>
+        Promise.resolve({ ok, status, json: async () => body });
+      if (url.endsWith('/snaptrade/status/user')) return json({ status: 'registered' });
+      if (url.endsWith('/snaptrade/accounts')) return json({ data: { accounts: [] } });
+      if (url.endsWith('/snaptrade/login')) return json({ error: 'nope' }, false, 500);
+      return json({});
+    });
+
+    render(<Harness onConnectStatus={onConnectStatus} />);
+    await waitFor(() => expect(screen.queryByText(/Error - Try Again/i)).not.toBeInTheDocument());
+
+    await user.click(screen.getByRole('button', { name: 'Pick Fidelity' }));
+
+    await waitFor(() =>
+      expect(onConnectStatus).toHaveBeenCalledWith(
+        expect.stringMatching(/could not open the investment connection/i),
+      ),
+    );
+    // Registration is still fine — a failed portal open must not demote it to
+    // error, or the picker thinks SnapTrade itself needs re-setup.
+    expect(screen.queryByText(/Error - Try Again/i)).not.toBeInTheDocument();
+    expect(financialServiceCoordinator.hasActiveServices()).toBe(false);
   });
 });

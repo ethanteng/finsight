@@ -355,7 +355,11 @@ const SnapTradeButton = forwardRef<SnapTradeButtonRef, SnapTradeButtonProps>(fun
       if (financialServiceCoordinator.hasActiveServices()) {
         const activeServices = financialServiceCoordinator.getActiveServices();
         console.log('Other financial services are active, cannot start SnapTrade:', activeServices);
-        setStatus('error');
+        // Do not demote registration to `error`: Plaid (or another flow) being
+        // open is temporary, and flipping status here would make every picker
+        // investment row look like SnapTrade itself failed. Say so next to the
+        // control the user clicked instead.
+        onConnectStatus?.('Please close other connection windows first…');
         return;
       }
 
@@ -390,16 +394,32 @@ const SnapTradeButton = forwardRef<SnapTradeButtonRef, SnapTradeButtonProps>(fun
         if (data.data?.redirectURI) {
           setRedirectLink(data.data.redirectURI);
           setIsModalOpen(true);
+          onConnectStatus?.('');
+        } else {
+          // Registered the coordinator for a portal that never opened -- release
+          // it or the next Plaid open from the shared picker will be blocked.
+          financialServiceCoordinator.unregisterService(SERVICE_NAMES.SNAPTRADE);
+          onConnectStatus?.(
+            'We could not open the investment connection. Please try again.',
+          );
         }
       } else {
-        const errorData = await response.json();
+        const errorData = await response.json().catch(() => ({}));
         console.error('SnapTrade login failed:', errorData);
-        setStatus('error');
+        // Login failed, not registration. Leaving SNAPTRADE registered blocked
+        // every later Plaid open from the shared picker, and setStatus('error')
+        // falsely reported a working registration as broken.
+        financialServiceCoordinator.unregisterService(SERVICE_NAMES.SNAPTRADE);
+        onConnectStatus?.(
+          'We could not open the investment connection. Please try again.',
+        );
       }
     } catch (error) {
       console.error('Error connecting SnapTrade:', error);
-      setStatus('error');
       financialServiceCoordinator.unregisterService(SERVICE_NAMES.SNAPTRADE);
+      onConnectStatus?.(
+        'We could not open the investment connection. Please try again.',
+      );
     } finally {
       setIsInitializing(false);
     }
