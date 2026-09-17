@@ -8,7 +8,8 @@ import PublicDirectConnection from '../../components/PublicDirectConnection';
 import TransactionHistory from '../../components/TransactionHistory';
 import UserProfile from '../../components/UserProfile';
 import InvestmentPortfolio from '../../components/InvestmentPortfolio';
-import SnapTradeButton from '../../components/SnapTradeButton';
+import SnapTradeButton, { SnapTradeButtonRef } from '../../components/SnapTradeButton';
+import AddAccountButton, { AddAccountButtonRef, InstitutionOption } from '../../components/AddAccountButton';
 import ManualAccountList from '../../components/ManualAccountList';
 import PageMeta from '../../components/PageMeta';
 import type { ManualAccount } from '../../types/manual-account';
@@ -17,9 +18,9 @@ import { normalizeAssetType } from '../../lib/asset-class';
 import { normalizeLabel } from '../../lib/label-normalization';
 import AuthenticatedPageHeader from '../../components/authenticated/AuthenticatedPageHeader';
 import {
+  CONNECT_ACCOUNTS_INTENT,
   CONNECT_ACCOUNTS_STORAGE_KEY,
   CONNECT_INTENT_PARAM,
-  CONNECT_PLAID_INTENT,
 } from '../../lib/connect-accounts';
 import { loginUrlFor } from '../../lib/post-login-redirect';
 
@@ -207,14 +208,22 @@ export default function ProfilePage() {
   const [retryCount, setRetryCount] = useState(0);
   const [isRetrying, setIsRetrying] = useState(false);
   const [retryMessage, setRetryMessage] = useState<string>('');
-  const [forcePlaidReinitialize, setForcePlaidReinitialize] = useState(false);
+  // Plaid Link's own progress/error text, lifted out of the (now hidden) button
+  // so it appears next to the picker the user actually clicked.
+  const [plaidLinkStatus, setPlaidLinkStatus] = useState('');
+  // Whether SnapTrade has registered this user yet. Owned by SnapTradeButton,
+  // which is where the status call lives; mirrored here so the shared picker can
+  // grey out investment rows rather than offering a click that cannot land.
+  const [snapTradeReady, setSnapTradeReady] = useState(false);
   const [manualAccounts, setManualAccounts] = useState<ManualAccount[]>([]);
-  // Set from `?connect=plaid` on mount. The param stays in the URL until
-  // auto-connect consumes it, so a Strict Mode remount still sees the intent
-  // while a refresh after open does not reopen Plaid Link.
-  const [wantsToConnectPlaid, setWantsToConnectPlaid] = useState(false);
+  // Set from the add-accounts deep link on mount. The param stays in the URL
+  // until auto-connect consumes it, so a Strict Mode remount still sees the
+  // intent while a refresh after open does not reopen the picker.
+  const [wantsToAddAccount, setWantsToAddAccount] = useState(false);
   const autoConnectTriggeredRef = useRef(false);
   const plaidLinkButtonRef = useRef<PlaidLinkButtonRef>(null);
+  const snapTradeButtonRef = useRef<SnapTradeButtonRef>(null);
+  const addAccountButtonRef = useRef<AddAccountButtonRef>(null);
   const router = useRouter();
 
   // Ref for TransactionHistory component to trigger refresh
@@ -934,12 +943,13 @@ export default function ProfilePage() {
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
 
-    // `?connect=plaid` opens Plaid Link on arrival. Keep the param in the URL
-    // until auto-connect consumes it below — stripping on read would lose the
-    // intent across a React Strict Mode remount (and would drop it from the
-    // signed-out auth redirect's returnTo if this effect won the race).
-    if (urlParams.get(CONNECT_INTENT_PARAM) === CONNECT_PLAID_INTENT) {
-      setWantsToConnectPlaid(true);
+    // The add-accounts deep link opens the institution picker on arrival. Keep
+    // the param in the URL until auto-connect consumes it below — stripping on
+    // read would lose the intent across a React Strict Mode remount (and would
+    // drop it from the signed-out auth redirect's returnTo if this effect won
+    // the race).
+    if (urlParams.get(CONNECT_INTENT_PARAM) === CONNECT_ACCOUNTS_INTENT) {
+      setWantsToAddAccount(true);
     }
 
     // Check for subscription-related URL parameters
@@ -1001,14 +1011,6 @@ export default function ProfilePage() {
     fetchUserData();
   }, [API_URL, loadSubscriptionStatus, loadTokenStatuses, loadSnapTradeStatus]);
 
-  // Reset Plaid Link flag when forcePlaidReinitialize becomes true
-  useEffect(() => {
-    if (forcePlaidReinitialize) {
-      console.log('forcePlaidReinitialize is true, resetting Plaid Link flag');
-      resetPlaidLinkInitialization();
-    }
-  }, [forcePlaidReinitialize]);
-
   // Log localStorage flag changes for debugging
   useEffect(() => {
     const checkFlag = () => {
@@ -1025,73 +1027,64 @@ export default function ProfilePage() {
     return () => window.removeEventListener('storage', checkFlag);
   }, []);
 
-  // Auto-trigger Plaid Link when user wants to connect accounts (either first time or add more)
+  // Open the institution picker for a visitor who arrived asking to add
+  // accounts, rather than dropping them into one provider's flow: the deep link
+  // is followed most often from an empty Finances page, by someone who has no
+  // way to know whether their institution is a bank or an investment
+  // connection.
   useEffect(() => {
-    console.log('Auto-trigger useEffect check:', {
-      loading,
-      connectedAccountsLength: connectedAccounts.length,
-      hasPlaidRef: !!plaidLinkButtonRef.current,
-      referrer: document.referrer,
-      forcePlaidReinitialize,
-      wantsToConnectPlaid,
-      wantsToConnectAccounts: localStorage.getItem(CONNECT_ACCOUNTS_STORAGE_KEY)
-    });
+    if (loading || autoConnectTriggeredRef.current) return;
 
-    if (!loading && plaidLinkButtonRef.current && !autoConnectTriggeredRef.current) {
-      // The intent arrives either as `?connect=plaid` (the deep link) or as the
-      // legacy in-tab flag still honored for navigations already in flight.
-      const wantsToConnectAccounts =
-        wantsToConnectPlaid || localStorage.getItem(CONNECT_ACCOUNTS_STORAGE_KEY) === 'true';
+    // The intent arrives either as the deep link's query param or as the legacy
+    // in-tab flag, still honored for navigations already in flight.
+    const wantsToConnectAccounts =
+      wantsToAddAccount || localStorage.getItem(CONNECT_ACCOUNTS_STORAGE_KEY) === 'true';
+    if (!wantsToConnectAccounts) return;
 
-      console.log('Auto-trigger conditions met:', {
-        wantsToConnectAccounts,
-        referrer: document.referrer,
-        willAutoTrigger: wantsToConnectAccounts,
-        forcePlaidReinitialize,
-        hasAccounts: connectedAccounts.length > 0
-      });
-
-      if (wantsToConnectAccounts) {
-        console.log('Auto-triggering Plaid Link for user who wants to connect accounts');
-
-        // Consume the intent from every source so nothing re-triggers once the
-        // modal has been asked to open. Strip `?connect=plaid` here (not on
-        // read) so a refresh after open does not reopen, while a remount
-        // before open can still see the param.
-        autoConnectTriggeredRef.current = true;
-        localStorage.removeItem(CONNECT_ACCOUNTS_STORAGE_KEY);
-        setWantsToConnectPlaid(false);
-        {
-          const url = new URL(window.location.href);
-          if (url.searchParams.has(CONNECT_INTENT_PARAM)) {
-            url.searchParams.delete(CONNECT_INTENT_PARAM);
-            window.history.replaceState({}, '', url.toString());
-          }
-        }
-
-        // Set the force flag first
-        setForcePlaidReinitialize(true);
-
-        // Add a delay to ensure the component re-renders with the new prop
-        setTimeout(() => {
-          console.log('Timeout executed, checking ref:', {
-            hasRef: !!plaidLinkButtonRef.current
-          });
-
-          if (plaidLinkButtonRef.current) {
-            console.log('Calling createLinkToken on PlaidLinkButton ref');
-            try {
-              plaidLinkButtonRef.current.createLinkToken();
-            } catch (error) {
-              console.error('Error calling createLinkToken:', error);
-            }
-          } else {
-            console.error('PlaidLinkButton ref is null when trying to auto-trigger');
-          }
-        }, 1000); // Increased delay to ensure state updates
-      }
+    // Consume the intent from every source so nothing re-triggers once the
+    // picker has been asked to open. Strip the param here (not on read) so a
+    // refresh after open does not reopen, while a remount before open can still
+    // see it.
+    autoConnectTriggeredRef.current = true;
+    localStorage.removeItem(CONNECT_ACCOUNTS_STORAGE_KEY);
+    setWantsToAddAccount(false);
+    const url = new URL(window.location.href);
+    if (url.searchParams.has(CONNECT_INTENT_PARAM)) {
+      url.searchParams.delete(CONNECT_INTENT_PARAM);
+      window.history.replaceState({}, '', url.toString());
     }
-  }, [loading, connectedAccounts.length, wantsToConnectPlaid]); // Removed forcePlaidReinitialize dependency to avoid infinite loops
+
+    addAccountButtonRef.current?.open();
+  }, [loading, wantsToAddAccount]);
+
+  /**
+   * Open Plaid Link after the shared picker routed an institution here.
+   *
+   * Plaid has no general institution pre-selection -- `institution_id` on a link
+   * token is documented for Europe-only and legacy configurations -- so Link
+   * still opens on its own picker and the user names the bank once more there.
+   * What the picker bought is the routing: nobody had to work out that their
+   * bank is one integration and their brokerage another.
+   *
+   * `null` is the "browse all banks" escape hatch for a search that found
+   * nothing, since Plaid's own directory is larger than a name search surfaces.
+   */
+  const handleConnectPlaid = useCallback((institution: InstitutionOption | null) => {
+    console.log(
+      'Opening Plaid Link',
+      institution ? `after selecting ${institution.name}` : '(browse all)'
+    );
+    // Clear the module-level guard the way `forceReinitialize` would, but
+    // without the remount it causes: remounting swaps the ref out from under
+    // the call being made on the next line.
+    resetPlaidLinkInitialization();
+    plaidLinkButtonRef.current?.createLinkToken();
+  }, []);
+
+  /** Open the SnapTrade portal already on the brokerage the picker selected. */
+  const handleConnectSnapTrade = useCallback((institution: InstitutionOption) => {
+    snapTradeButtonRef.current?.connect(institution.providerInstitutionId);
+  }, []);
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', {
@@ -1248,23 +1241,53 @@ export default function ProfilePage() {
           {/* Remembered Personal Context Section */}
           <UserProfile userId={userEmail ? 'user' : undefined} />
 
+          {/* One entry point for both providers.
+              Two provider-labelled "Connect Account" buttons asked the user
+              which integration covers their bank, which is our plumbing and not
+              a question they can answer. This asks for the institution instead
+              and opens whichever connection actually supports it. */}
+          <div className="bg-gray-800 rounded-lg p-6 mb-6">
+            <h2 className="text-xl font-semibold mb-2">Add an account</h2>
+            <p className="text-sm text-gray-400 mb-4">
+              Search for your bank or brokerage and we&apos;ll open the connection that supports it.
+            </p>
+            <AddAccountButton
+              ref={addAccountButtonRef}
+              onSelectPlaid={handleConnectPlaid}
+              onSelectSnapTrade={handleConnectSnapTrade}
+              snapTradeReady={snapTradeReady}
+            />
+            {/* Plaid Link reports a failure to mint a token after this modal has
+                closed, so the message is surfaced here rather than beside the
+                hidden button further down the page. */}
+            {plaidLinkStatus && (
+              <div className="mt-3 rounded bg-gray-700 px-3 py-2 text-sm text-gray-300">
+                {plaidLinkStatus}
+              </div>
+            )}
+          </div>
+
           {/* Account Management Section */}
           <div className="bg-gray-800 rounded-lg p-6 mb-6">
-            <h2 className="text-xl font-semibold mb-4">Your Connected Accounts (Plaid)</h2>
+            <h2 className="text-xl font-semibold mb-4">Bank, cash & credit accounts</h2>
 
             {/* Connect New Account */}
             <div className="mb-6">
+              {/* Headless: "Add an account" above owns connecting now. This still
+                  mounts because the whole Link lifecycle lives in it, and the
+                  shared flow drives it through the ref. It does render a button
+                  when a connection needs re-authenticating, which is a repair of
+                  a named Item rather than adding an account. */}
               <PlaidLinkButton
-                key={forcePlaidReinitialize ? 'force-reinit' : 'normal'}
                 onSuccess={() => {
                   // Refresh all data when an account is successfully linked
                   console.log('Account linked, refreshing all data');
                   refreshAllData();
-                  // Reset the force flag after successful connection
-                  setForcePlaidReinitialize(false);
                 }}
-                forceReinitialize={forcePlaidReinitialize}
+                onStatusChange={setPlaidLinkStatus}
                 updateModeTokenId={tokenStatuses.find(t => t.lastError === 'ITEM_LOGIN_REQUIRED')?.id}
+                headless={!tokenStatuses.some(t => t.lastError === 'ITEM_LOGIN_REQUIRED')}
+                label="Reconnect account"
                 ref={plaidLinkButtonRef}
               />
 
@@ -1304,7 +1327,7 @@ export default function ProfilePage() {
                 </div>
               ) : connectedAccounts.length === 0 && tokenStatuses.length === 0 ? (
                 <div className="text-gray-400 text-sm">
-                  No accounts connected yet. Use the button above to connect your first account.
+                  No bank accounts connected yet. Use &ldquo;Add an account&rdquo; above to connect your first one.
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -1426,7 +1449,7 @@ export default function ProfilePage() {
                             </div>
                             <div className="text-xs text-red-400 mt-1">
                               {token.lastError === 'ITEM_LOGIN_REQUIRED' ?
-                                'Re-authentication required - Click "Connect Account" above to reconnect' :
+                                'Re-authentication required - Click "Reconnect account" above to reconnect' :
                                 token.lastError ? token.lastError :
                                 !token.isActive ? 'Connection inactive' :
                                 'No accounts available for this connection'}
@@ -1463,9 +1486,15 @@ export default function ProfilePage() {
 
           {/* Investment Accounts (SnapTrade) Section */}
           <div className="bg-gray-800 rounded-lg p-6 mb-6">
-            <h2 className="text-xl font-semibold mb-4">Your Connected Accounts (SnapTrade)</h2>
+            <h2 className="text-xl font-semibold mb-4">Investment & retirement accounts</h2>
             <div className="mb-6">
+              {/* Headless for the same reason as Plaid above: connecting is the
+                  shared picker's job. It keeps its button only while a disabled
+                  brokerage authorization needs repairing. */}
               <SnapTradeButton
+                ref={snapTradeButtonRef}
+                headless
+                onReadyChange={setSnapTradeReady}
                 snapTradeStatus={snapTradeStatus}
                 // Repairs a disabled authorization rather than adding a second
                 // connection to the same brokerage. Undefined when nothing is
@@ -1617,7 +1646,7 @@ export default function ProfilePage() {
                         No investment accounts available
                       </div>
                       <div className="text-xs text-red-400 mt-1">
-                        {snapTradeStatus.error || 'Connection issue - Click "Connect Account" above to reconnect'}
+                        {snapTradeStatus.error || 'Connection issue - Click "Reconnect Account" above to reconnect'}
                       </div>
                       {snapTradeStatus.lastChecked && (
                         <div className="text-xs text-gray-500 mt-1">

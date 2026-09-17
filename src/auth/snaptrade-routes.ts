@@ -179,10 +179,20 @@ router.post('/login', requireAuth, async (req, res) => {
       }
     }
 
+    // The accounts page's institution picker already asked which brokerage this
+    // is, so hand SnapTrade the slug and open the portal there rather than
+    // making the user pick a second time. Untrusted input, but harmless: an
+    // unknown slug is ignored by SnapTrade and the portal simply opens on its
+    // own picker, which is the pre-existing behaviour.
+    const brokerSlug = typeof req.body?.broker === 'string' && req.body.broker.trim()
+      ? req.body.broker.trim().slice(0, 64)
+      : undefined;
+
     const result = await snapTradeService.getLoginRedirect(
       userId,
       user.userSecret,
-      reconnectAuthorizationId
+      reconnectAuthorizationId,
+      brokerSlug
     );
     
     if (result.success) {

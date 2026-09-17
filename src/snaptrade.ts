@@ -325,6 +325,18 @@ export class SnapTradeService {
   }
 
   /**
+   * The brokerages SnapTrade can connect, as a reference table.
+   *
+   * Static enough to cache upstream (see `institution-directory`), which is why
+   * this is a plain read with no user context: it says what the integration
+   * supports, not what any one person has connected.
+   */
+  async listBrokerages(): Promise<any[]> {
+    const response = await this.read(() => this.client.referenceData.listAllBrokerages());
+    return Array.isArray(response.data) ? response.data : [];
+  }
+
+  /**
    * Get login redirect URI.
    *
    * `reconnectAuthorizationId` repairs an existing brokerage authorization
@@ -332,11 +344,16 @@ export class SnapTradeService {
    * connect flow, so a user sent here to fix a disabled connection ends up with
    * two connections to the same brokerage -- the original still disabled, and a
    * new one whose accounts duplicate its holdings.
+   *
+   * `brokerSlug` opens the portal already on that brokerage. It is what lets the
+   * accounts page ask for the institution once, in our own search, instead of
+   * asking again inside the portal's own picker.
    */
   async getLoginRedirect(
     userId: string,
     userSecret: string,
-    reconnectAuthorizationId?: string
+    reconnectAuthorizationId?: string,
+    brokerSlug?: string
   ): Promise<{ success: boolean; data?: any; error?: string }> {
     try {
       console.log('🔍 Getting login redirect for user:', userId, reconnectAuthorizationId ? '(reconnect)' : '(new connection)');
@@ -345,6 +362,9 @@ export class SnapTradeService {
         userId,
         userSecret,
         ...(reconnectAuthorizationId ? { reconnect: reconnectAuthorizationId } : {}),
+        // A reconnect already names the connection to repair, so a broker on top
+        // of it would be redundant at best and contradictory at worst.
+        ...(brokerSlug && !reconnectAuthorizationId ? { broker: brokerSlug } : {}),
       });
       
       if (!('redirectURI' in loginData.data)) {
@@ -911,6 +931,14 @@ if (process.env.NODE_ENV === 'test' || process.env.GITHUB_ACTIONS) {
     };
   };
   
+  snapTradeService.listBrokerages = async () => {
+    console.log('SnapTrade: Mock listBrokerages called');
+    return [
+      { slug: 'FIDELITY', name: 'Fidelity', display_name: 'Fidelity', enabled: true },
+      { slug: 'ROBINHOOD', name: 'Robinhood', display_name: 'Robinhood', enabled: true },
+    ];
+  };
+
   snapTradeService.getUserHoldings = async (userId: string, userSecret: string) => {
     console.log('SnapTrade: Mock getUserHoldings called with:', userId);
     return {

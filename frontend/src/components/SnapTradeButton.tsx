@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, forwardRef, useImperativeHandle } from 'react';
 import { SnapTradeReact } from 'snaptrade-react';
 import { useWindowMessage } from 'snaptrade-react/hooks/useWindowMessage';
 import { financialServiceCoordinator, SERVICE_NAMES } from '../services/FinancialServiceCoordinator';
@@ -50,6 +50,39 @@ interface SnapTradeButtonProps {
    * disabled; leave unset for an ordinary new connection.
    */
   reconnectAuthorizationId?: string;
+  /**
+   * Hide the connect button and keep the account list plus the imperative
+   * handle.
+   *
+   * The accounts page now offers one "Add an account" flow that asks for the
+   * institution and routes from there, so a SnapTrade-labelled button beside it
+   * puts the provider choice back in front of the user. Registration, the
+   * portal, the window-message lifecycle and the account cards all still live
+   * here; only the button goes.
+   *
+   * A pending reconnect is the exception -- repairing a named connection is not
+   * "add an account" -- so the page leaves the button visible for that.
+   */
+  headless?: boolean;
+  /**
+   * Reports whether SnapTrade has registered this user, which is what the
+   * portal needs before it can mint a connection link. The shared "Add an
+   * account" picker uses it to say "setting up" on its investment rows instead
+   * of offering a click that cannot go anywhere yet.
+   */
+  onReadyChange?: (ready: boolean) => void;
+}
+
+export interface SnapTradeButtonRef {
+  /**
+   * Open the SnapTrade portal, optionally already on one brokerage.
+   *
+   * `brokerSlug` is what the institution picker selected, so the portal does not
+   * ask the same question a second time.
+   */
+  connect: (brokerSlug?: string) => void;
+  /** Whether SnapTrade has registered this user yet; the portal needs that first. */
+  isReady: () => boolean;
 }
 
 // Balances are money: always two decimals. Number.toLocaleString() defaults to
@@ -62,7 +95,10 @@ const formatCurrency = (amount: number) =>
     maximumFractionDigits: 2,
   }).format(amount);
 
-export default function SnapTradeButton({ onAccountsUpdated, snapTradeStatus: snapTradeTokenStatus, reconnectAuthorizationId }: SnapTradeButtonProps) {
+const SnapTradeButton = forwardRef<SnapTradeButtonRef, SnapTradeButtonProps>(function SnapTradeButton(
+  { onAccountsUpdated, snapTradeStatus: snapTradeTokenStatus, reconnectAuthorizationId, headless = false, onReadyChange },
+  ref,
+) {
   const [status, setStatus] = useState<string>('loading');
   const [snapTradeStatus, setSnapTradeStatus] = useState<SnapTradeStatus | null>(null);
   const [connectedAccounts, setConnectedAccounts] = useState<SnapTradeAccount[]>([]);
@@ -143,6 +179,12 @@ export default function SnapTradeButton({ onAccountsUpdated, snapTradeStatus: sn
       checkConnectedAccounts();
     }
   }, [snapTradeStatus]);
+
+  // Registration state lives here, but the shared "Add an account" picker is
+  // what has to decide whether an investment row is clickable yet.
+  useEffect(() => {
+    onReadyChange?.(status === 'registered' || status === 'connected');
+  }, [status, onReadyChange]);
 
   const checkSnapTradeStatus = async () => {
     try {
@@ -252,8 +294,11 @@ export default function SnapTradeButton({ onAccountsUpdated, snapTradeStatus: sn
    * that brokerage authorization rather than adding another connection to the
    * same brokerage, which is what the plain connect flow would do when a user
    * is trying to fix a disabled connection.
+   *
+   * `brokerSlug` opens the portal on one brokerage, so a user who already named
+   * their institution in the shared "Add an account" search is not asked again.
    */
-  const connectSnapTrade = async (authorizationToReconnect?: string) => {
+  const connectSnapTrade = async (authorizationToReconnect?: string, brokerSlug?: string) => {
     try {
       // Check if other financial services are active
       if (financialServiceCoordinator.hasActiveServices()) {
@@ -280,9 +325,10 @@ export default function SnapTradeButton({ onAccountsUpdated, snapTradeStatus: sn
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify(
-          authorizationToReconnect ? { reconnect: authorizationToReconnect } : {}
-        )
+        body: JSON.stringify({
+          ...(authorizationToReconnect ? { reconnect: authorizationToReconnect } : {}),
+          ...(brokerSlug && !authorizationToReconnect ? { broker: brokerSlug } : {}),
+        })
       });
 
       if (response.ok) {
@@ -390,6 +436,27 @@ export default function SnapTradeButton({ onAccountsUpdated, snapTradeStatus: sn
     return status === 'loading' || isInitializing || status === 'not_authenticated' || status === 'not_initialized';
   };
 
+  /**
+   * Let the shared "Add an account" flow open the portal.
+   *
+   * `isReady` exists so the caller can tell "SnapTrade is still registering
+   * this user" apart from a click that did nothing: the portal cannot open
+   * before registration, and silently dropping the request is how the old
+   * disabled-button state read to users.
+   */
+  useImperativeHandle(ref, () => ({
+    connect: (brokerSlug?: string) => {
+      if (status === 'error' || status === 'disconnected' || status === 'not_initialized') {
+        // Registration has to land before a portal link can be minted. Kick it
+        // off so the next attempt succeeds rather than failing the same way.
+        initializeSnapTrade();
+        return;
+      }
+      connectSnapTrade(undefined, brokerSlug);
+    },
+    isReady: () => status === 'registered' || status === 'connected',
+  }));
+
   const handleClick = () => {
     if (status === 'error') {
       initializeSnapTrade();
@@ -407,26 +474,32 @@ export default function SnapTradeButton({ onAccountsUpdated, snapTradeStatus: sn
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center space-x-4">
-          <button
-            onClick={handleClick}
-            disabled={isButtonDisabled()}
-            className={`px-4 py-2 font-medium rounded-lg transition-colors ${getButtonColor()} ${
-              isButtonDisabled() ? 'cursor-not-allowed' : 'cursor-pointer'
-            }`}
-          >
-            {getButtonText()}
-          </button>
+      {/* In headless mode the shared "Add an account" flow owns connecting, so
+          the only button worth keeping is a repair: reconnecting a named
+          disabled authorization is not "add an account" and has nowhere else to
+          live. */}
+      {(!headless || needsReconnect) && (
+        <div className="flex items-center space-x-4">
+            <button
+              onClick={handleClick}
+              disabled={isButtonDisabled()}
+              className={`px-4 py-2 font-medium rounded-lg transition-colors ${getButtonColor()} ${
+                isButtonDisabled() ? 'cursor-not-allowed' : 'cursor-pointer'
+              }`}
+            >
+              {getButtonText()}
+            </button>
 
-          {status === 'loading' && (
-            <div className="text-sm text-gray-400 bg-gray-800 border border-gray-600 rounded-lg p-3">
-              <div className="flex items-center space-x-2">
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-400"></div>
-                <span>Checking SnapTrade status...</span>
+            {status === 'loading' && (
+              <div className="text-sm text-gray-400 bg-gray-800 border border-gray-600 rounded-lg p-3">
+                <div className="flex items-center space-x-2">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-400"></div>
+                  <span>Checking SnapTrade status...</span>
+                </div>
               </div>
-            </div>
-          )}
-      </div>
+            )}
+        </div>
+      )}
 
 
 
@@ -574,4 +647,6 @@ export default function SnapTradeButton({ onAccountsUpdated, snapTradeStatus: sn
       )}
     </div>
   );
-}
+});
+
+export default SnapTradeButton;
