@@ -197,7 +197,16 @@ const AddAccountButton = forwardRef<AddAccountButtonRef, AddAccountButtonProps>(
       }
     }, SEARCH_DEBOUNCE_MS);
 
-    return () => clearTimeout(timer);
+    // Abort any request already in flight, not only the debounce timer. Without
+    // this, a keystroke after the previous timer has fired leaves that request
+    // running for up to SEARCH_DEBOUNCE_MS and its response can briefly replace
+    // results under the newer query. Null the ref here so the aborted request's
+    // finally does not clear isSearching that the new effect just set.
+    return () => {
+      clearTimeout(timer);
+      inFlight.current?.abort();
+      inFlight.current = null;
+    };
   }, [API_URL, isOpen, queryIsSearchable, trimmedQuery]);
 
   useEffect(() => () => inFlight.current?.abort(), []);
