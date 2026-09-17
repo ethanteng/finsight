@@ -207,6 +207,30 @@ describe('the figures a Coast FIRE reading may state', () => {
       .not.toContain(Infinity);
   });
 
+  /*
+   * The same rule as the series names, one level up. The two rates the visitor
+   * typed are small integers, so licensing them as plain numbers would let a
+   * draft write "over the next 5 years" or "$4 a year" off the back of a 5%
+   * return and a 4% withdrawal rate. They are percentages and nothing else.
+   */
+  it('does not license a rate as a plain number', () => {
+    const facts = buildCoastFireFacts(result());
+
+    for (const borrowed of ['Over the next 5 years that compounds.', 'You could add $4 a year.']) {
+      expect(groundDraft(
+        { headline: 'A headline.', paragraphs: [borrowed], watchOuts: [] },
+        facts
+      ).grounded).toBe(false);
+    }
+
+    // Written as the rate it is, it still grounds.
+    expect(groundDraft({
+      headline: 'A headline.',
+      paragraphs: ['At the 5.0% you entered, and a 4.0% withdrawal rate.'],
+      watchOuts: [],
+    }, facts).grounded).toBe(true);
+  });
+
   it('names the rate the visitor typed as theirs, not as ours', () => {
     const labels = buildCoastFireFacts(result()).map((fact) => fact.label);
     expect(labels.some((label) => label.includes('entered by the visitor'))).toBe(true);

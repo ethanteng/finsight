@@ -89,14 +89,20 @@ export function percentFact(label: string, fraction: number, digits = 1): Calcul
 
 /**
  * A rate already expressed in percentage points — "5% real return" is stored
- * as 5, not as 0.05. Licensed as both, since a draft may write either the
- * rate or the fraction of the portfolio it describes.
+ * as 5, not as 0.05.
+ *
+ * The percentage-point figure is licensed as a *percentage* only, never as a
+ * plain number, for the reason the published-rate labels carry no digits: a
+ * bare 5 in the plain allowlist licenses "over the next 5 years" and "$5 a
+ * year", neither of which this run produced. A draft writing the rate without
+ * its sign — "a withdrawal rate of 4" — is rejected and asked again, which is
+ * the right trade for a phrasing nobody reaches for.
  */
 export function rateFact(label: string, percent: number, digits = 1): CalculatorFact {
   return {
     label,
     display: `${percent.toFixed(digits)}%`,
-    values: [percent, percent / 100],
+    values: [percent / 100],
     percentValues: [percent],
   };
 }
