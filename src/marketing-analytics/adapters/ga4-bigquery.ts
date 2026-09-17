@@ -51,6 +51,10 @@ const DIAGNOSTIC_EVENTS = [
   'retirement_model_requested', 'retirement_model_run', 'scroll',
   'coast_fire_calculated', 'coast_fire_results_emailed',
   'retirement_results_emailed', 'calculator_results_email_cta_opened',
+  // Its sibling: the same restoration reached without an inbox. Counted here
+  // so the no-inbox route is visible at all; which scorecard column its
+  // completions belong in is a separate question, still open.
+  'calculator_results_page_cta_opened',
 ] as const;
 
 /**
