@@ -267,11 +267,22 @@ export function buildPlanFacts(
   // Published rates, last so the plan's own figures lead. Each is licensed the
   // same way every other fact is, so a sentence about today's yields is held
   // to the number the series actually printed.
+  //
+  // The label itself carries digits — "30-year", "10-year", and the as-of date
+  // — and a draft that quotes the fact block back will repeat them. Those
+  // digits have to be licensed too, or the panel is rejected for restating the
+  // prompt, the same failure the asset-mix weights were fixed for above.
   for (const rate of marketRates(market)) {
+    const label = `Today, for context — ${rate.label} (${rate.source}, as of ${rate.asOf})`;
     facts.push({
-      label: `Today, for context — ${rate.label} (${rate.source}, as of ${rate.asOf})`,
+      label,
       display: `${rate.percent.toFixed(2)}%`,
-      values: [rate.percent / 100],
+      values: [
+        rate.percent / 100,
+        ...extractNumericTokens(`${rate.label} ${rate.asOf}`)
+          .filter((token) => !token.isPercent)
+          .map((token) => token.value),
+      ],
       percentValues: [rate.percent],
     });
   }

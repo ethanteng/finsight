@@ -393,6 +393,33 @@ describe('buildPlanFacts', () => {
     );
     expect(grounded.grounded).toBe(true);
   });
+
+  /*
+   * Same class of failure as the asset-mix weights: the prompt itself puts
+   * "30-year" and the as-of date in front of the model, so a draft that quotes
+   * the fact line back must not be rejected for those digits.
+   */
+  it('licenses the digits inside a published-rate label and its as-of date', () => {
+    const facts = buildPlanFacts(planResult(), {
+      fetchedAt: '2026-09-16T00:00:00.000Z',
+      treasury30Y: {
+        percent: 4.62,
+        asOf: '2026-09-15',
+        label: '30-year Treasury yield',
+        source: 'Massive',
+      },
+    });
+
+    const grounded = groundInterpretation(
+      {
+        headline: 'A headline.',
+        paragraphs: ['The 30-year Treasury yields 4.62% as of 2026-09-15.'],
+        watchOuts: [],
+      },
+      facts
+    );
+    expect(grounded).toEqual({ grounded: true, ungrounded: [] });
+  });
 });
 
 describe('interpretRetirementQuickPlan', () => {
