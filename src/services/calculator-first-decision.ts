@@ -54,24 +54,39 @@ function percent(value: number, digits = 1): string {
  */
 export function buildDecisionQuestion(lead: RetirementLeadRecord): string {
   const { inputs } = lead;
-  const parts = [
+
+  // One clause per figure, joined as a list rather than pushed into one run of
+  // commas: Social Security is a second independent clause, and comma-joining
+  // it to the first is a splice that reads as a typo in the user's own words.
+  const holdings = [
     `I have ${money(inputs.investableAssets)} invested`,
     `expect to spend ${money(inputs.annualSpending)} a year in retirement`,
   ];
   if (inputs.annualContributions > 0) {
-    parts.push(`and am saving ${money(inputs.annualContributions)} a year until then`);
+    holdings.push(`am saving ${money(inputs.annualContributions)} a year until then`);
   }
+
+  const sentences = [
+    `Can I retire at ${inputs.retirementAge}?`,
+    `I am ${inputs.currentAge} now.`,
+    `${joinClauses(holdings)}.`,
+  ];
+
   if (inputs.socialSecurityAnnual > 0) {
-    parts.push(
-      `I expect ${money(inputs.socialSecurityAnnual)} a year of Social Security from age ` +
-      `${inputs.socialSecurityStartAge}`
+    sentences.push(
+      `I also expect ${money(inputs.socialSecurityAnnual)} a year of Social Security from age ` +
+      `${inputs.socialSecurityStartAge}.`
     );
   }
 
-  return (
-    `Can I retire at ${inputs.retirementAge}? I am ${inputs.currentAge} now. ` +
-    `${parts.join(', ')}.`
-  );
+  return sentences.join(' ');
+}
+
+/** "a and b", or "a, b, and c" — never a bare run of commas. */
+function joinClauses(clauses: string[]): string {
+  if (clauses.length <= 1) return clauses[0] ?? '';
+  if (clauses.length === 2) return `${clauses[0]} and ${clauses[1]}`;
+  return `${clauses.slice(0, -1).join(', ')}, and ${clauses[clauses.length - 1]}`;
 }
 
 /**

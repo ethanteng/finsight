@@ -81,6 +81,29 @@ describe('the question a calculator run becomes', () => {
     expect(question).toContain('age 67');
   });
 
+  /*
+   * Asserted whole rather than by substring. The first version of this joined
+   * every clause with commas and read "...am saving $48,000 a year until then,
+   * I expect $41,400 of Social Security" — a comma splice that every
+   * `toContain` in this file still passed.
+   */
+  it('reads as sentences, with Social Security as its own', () => {
+    expect(buildDecisionQuestion(lead())).toBe(
+      'Can I retire at 60? I am 54 now. I have $2,273,872 invested, expect to spend $132,000 ' +
+      'a year in retirement, and am saving $48,000 a year until then. I also expect $41,400 ' +
+      'a year of Social Security from age 67.'
+    );
+  });
+
+  it('joins two clauses with "and" rather than a comma', () => {
+    expect(buildDecisionQuestion(lead({
+      inputs: { ...lead().inputs, annualContributions: 0, socialSecurityAnnual: 0 },
+    }))).toBe(
+      'Can I retire at 60? I am 54 now. I have $2,273,872 invested and expect to spend ' +
+      '$132,000 a year in retirement.'
+    );
+  });
+
   it('leaves out a contribution and a benefit the visitor did not enter', () => {
     const question = buildDecisionQuestion(lead({
       inputs: { ...lead().inputs, annualContributions: 0, socialSecurityAnnual: 0 },
