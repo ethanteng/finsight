@@ -19,7 +19,10 @@ import { sendContactEmail } from './resend-email';
 import { stripeService } from '../services/stripe';
 import { SubscriptionTier } from '../types/stripe';
 import { isValidTimeZone, normalizeTimeZone } from '../domain/time-zone';
-import { seedRetirementFirstDecision } from '../services/calculator-first-decision';
+import {
+  resolveCalculatorLead,
+  seedFirstDecisionFromLead,
+} from '../services/calculator-first-decision';
 
 const router = Router();
 const prisma = getPrismaClient();
@@ -123,6 +126,24 @@ router.post('/register', async (req: Request, res: Response) => {
     // Hash password
     const passwordHash = await hashPassword(password);
 
+    /*
+     * Resolved here, before the account exists, because the answer decides two
+     * things: what the first decision is written from, and whether this address
+     * still needs a verification code.
+     *
+     * A lead token is forty-eight random characters that only ever left this
+     * system inside an email to the lead's own address. Presenting one *and*
+     * registering that address demonstrates control of the inbox — the same
+     * thing the code demonstrates, established the same way, one round trip
+     * earlier. The check is made on the server from the token alone, so a
+     * client cannot declare itself verified by sending a flag.
+     */
+    const calculatorLead = await resolveCalculatorLead({
+      token: calculatorRef,
+      email: email.toLowerCase(),
+    });
+    const emailProvenByLink = calculatorLead !== null;
+
     // Create user
     const user = await prisma.user.create({
       data: {
@@ -130,6 +151,7 @@ router.post('/register', async (req: Request, res: Response) => {
         passwordHash,
         tier,
         timeZone: normalizeTimeZone(timeZone),
+        emailVerified: emailProvenByLink,
         subscriptionStatus: 'inactive'
       },
       select: {
@@ -137,6 +159,7 @@ router.post('/register', async (req: Request, res: Response) => {
         email: true,
         tier: true,
         timeZone: true,
+        emailVerified: true,
         createdAt: true
       }
     });
@@ -178,21 +201,27 @@ router.post('/register', async (req: Request, res: Response) => {
       }
     });
 
-    // Generate verification code
-    const verificationCode = generateRandomCode();
-    const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
+    /*
+     * Skipped entirely when the emailed link already proved the address. A
+     * code sent to an inbox we just demonstrated control of asks the visitor
+     * to do the same thing twice, and no row is created for it either — an
+     * unused code is one more live credential for an account that does not
+     * need it.
+     */
+    if (!emailProvenByLink) {
+      const verificationCode = generateRandomCode();
+      const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
 
-    // Create verification code
-    await prisma.emailVerificationCode.create({
-      data: {
-        code: verificationCode,
-        userId: user.id,
-        expiresAt
-      }
-    });
+      await prisma.emailVerificationCode.create({
+        data: {
+          code: verificationCode,
+          userId: user.id,
+          expiresAt
+        }
+      });
 
-    // Send verification email
-    await sendEmailVerificationCode(user.email, verificationCode);
+      await sendEmailVerificationCode(user.email, verificationCode);
+    }
 
     // Generate token
     const token = generateToken({
@@ -202,12 +231,17 @@ router.post('/register', async (req: Request, res: Response) => {
     });
 
     res.status(201).json({
-      message: 'User registered successfully. Please check your email for verification code.',
+      message: emailProvenByLink
+        ? 'User registered successfully. Your email was already confirmed by the link you followed.'
+        : 'User registered successfully. Please check your email for verification code.',
       user: {
         id: user.id,
         email: user.email,
         tier: user.tier,
         timeZone: user.timeZone,
+        // Lets the client skip the verification step it would otherwise send
+        // every new account to. Reported, never accepted: the server decided.
+        emailVerified: user.emailVerified,
         createdAt: user.createdAt
       },
       token
@@ -217,12 +251,11 @@ router.post('/register', async (req: Request, res: Response) => {
     // should find it waiting as their first decision, but a signup must never
     // wait on that write, and must never fail for it: the function returns a
     // reason rather than throwing, and the account is already created.
-    void seedRetirementFirstDecision({
+    void seedFirstDecisionFromLead({
       userId: user.id,
-      email: user.email,
-      token: calculatorRef,
+      lead: calculatorLead,
     }).then((outcome) => {
-      if (outcome !== 'seeded' && outcome !== 'no-token') {
+      if (outcome !== 'seeded' && outcome !== 'no-lead') {
         console.warn(`First decision not seeded for new account: ${outcome}`);
       }
     }).catch(error => {

@@ -4,10 +4,10 @@
  * "Save these results to your free account", under the model's answer.
  *
  * The ask is an account rather than an inbox copy. The email it sends carries
- * a link that lands on signup with this address already filled in, so what is
- * left is a password and the verification code every account sets up with —
- * and once that is done the run becomes the first decision in the new account.
- * See `docs/RETIREMENT_QUICKPLAN.md`.
+ * a link that lands on signup with this address already filled in, and
+ * following it is what proves the address — so a password is all that is left,
+ * and the run becomes the first decision in the new account. See
+ * `docs/RETIREMENT_QUICKPLAN.md`.
  *
  * It appears only once a plan has actually been run and returned a verdict.
  * A `rates` run has no survival figure to send — the model will not invent a
@@ -97,8 +97,8 @@ export function RetirementEmailCapture({
         <h3>Your link is on its way.</h3>
         <p>
           We sent it to <strong>{email.trim()}</strong>, along with the verdict and the figures
-          behind it. Open the link and set a password; once you confirm it is you, this run will
-          be waiting as your first decision. It can take a minute to arrive.
+          behind it. Open the link, pick a password, and this run will be waiting as your first
+          decision. It can take a minute to arrive.
         </p>
         <button
           className="qp-email-again"
@@ -120,9 +120,9 @@ export function RetirementEmailCapture({
         <p className="section-kicker">KEEP THIS ANSWER</p>
         <h3>Save this to a free account</h3>
         <p className="qp-email-lead">
-          We will email you a link. Set a password, confirm it is you, and this run is waiting as
-          your first decision — the verdict, the figures behind it, and the scenarios, ready to
-          pick up and ask questions about.
+          We will email you a link. Pick a password and this run is waiting as your first
+          decision — the verdict, the figures behind it, and the scenarios, ready to pick up and
+          ask questions about.
         </p>
 
       </div>

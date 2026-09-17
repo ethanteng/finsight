@@ -19,8 +19,17 @@
  *     holding a forwarded link could register under their own address and copy
  *     that person's plan into their own account.
  *
- * Nothing here may fail a registration. The caller runs it after responding,
- * and every path returns a reason instead of throwing.
+ * That second check is also what lets registration skip the verification code
+ * on this path. A lead token is forty-eight random characters that only ever
+ * left this system inside an email to the lead's own address, so presenting
+ * one *and* registering that address demonstrates control of the inbox —
+ * which is the entire thing the code demonstrates. `resolveCalculatorLead` is
+ * therefore resolved **before** the account is created, on the server, from
+ * the token alone: a client cannot declare itself verified.
+ *
+ * Writing the decision, by contrast, may never fail a registration. The caller
+ * runs it after responding, and every path returns a reason instead of
+ * throwing.
  */
 
 import { getPrismaClient } from '../prisma-client';
@@ -29,9 +38,8 @@ import { readRetirementLead, type RetirementLeadRecord } from './retirement-lead
 /** Why a run did not become a decision, for the log and for the tests. */
 export type FirstDecisionOutcome =
   | 'seeded'
-  | 'no-token'
-  | 'unknown-token'
-  | 'email-mismatch'
+  /** No token, or one that did not resolve to this address. */
+  | 'no-lead'
   | 'already-has-decisions'
   | 'failed';
 
@@ -147,27 +155,58 @@ export function buildDecisionAnswer(lead: RetirementLeadRecord): string {
  * succeeded by the time this runs, and a missing first decision is a worse
  * home screen, not a failed signup.
  */
-export async function seedRetirementFirstDecision(params: {
-  userId: string;
-  /** The address that just registered, lowercased by the caller. */
-  email: string;
-  /** The lead token from the emailed link, if this signup carried one. */
+/**
+ * The lead a signup is entitled to, or null.
+ *
+ * Resolved before the account exists, because two things hang off it: what the
+ * first decision is written from, and whether the address needs verifying by
+ * code. Both rest on the same check, and it is made here rather than trusted
+ * from the request.
+ *
+ * Returns null — never throws — for anything that is not a live token
+ * belonging to the address being registered.
+ */
+export async function resolveCalculatorLead(params: {
   token: unknown;
-}): Promise<FirstDecisionOutcome> {
-  const { userId, email } = params;
-  if (typeof params.token !== 'string' || params.token.trim() === '') return 'no-token';
+  /** The address being registered. */
+  email: string;
+}): Promise<RetirementLeadRecord | null> {
+  if (typeof params.token !== 'string' || params.token.trim() === '') return null;
 
   try {
     const lead = await readRetirementLead(params.token.trim());
-    if (!lead) return 'unknown-token';
+    if (!lead) return null;
 
     // The control that matters. See the header: a token is the only key to a
-    // lead, and a lead is somebody's retirement plan.
-    if (lead.email.trim().toLowerCase() !== email.trim().toLowerCase()) {
-      console.warn('⚠️  Retirement lead token did not match the registering address; not seeding.');
-      return 'email-mismatch';
+    // lead, a lead is somebody's retirement plan, and matching the address is
+    // what makes holding the token proof of controlling the inbox.
+    if (lead.email.trim().toLowerCase() !== params.email.trim().toLowerCase()) {
+      console.warn('⚠️  Retirement lead token did not match the registering address.');
+      return null;
     }
 
+    return lead;
+  } catch (error) {
+    console.error('⚠️  Could not resolve a calculator lead:', error);
+    return null;
+  }
+}
+
+/**
+ * Write a resolved lead as the account's first decision.
+ *
+ * Takes the lead rather than the token: the caller resolved it before creating
+ * the account, and reading it twice would mark the lead continued twice for
+ * one signup.
+ */
+export async function seedFirstDecisionFromLead(params: {
+  userId: string;
+  lead: RetirementLeadRecord | null;
+}): Promise<FirstDecisionOutcome> {
+  const { userId, lead } = params;
+  if (!lead) return 'no-lead';
+
+  try {
     const prisma = getPrismaClient();
 
     // A brand-new account has none, but registration can be retried and this

@@ -312,17 +312,28 @@ without affecting any answer in the product.
 The capture under the result asks for an account rather than an inbox copy:
 **"Save these results to your free account."** The email it sends carries a
 link labelled **"Finish creating your account"**, which lands on signup with
-the address already filled in; what is left is a password and the verification
-code every account sets up with. The run becomes the first decision in the new
-account.
+the address already filled in, and a password is the only thing left. The run
+becomes the first decision in the new account.
 
-**The copy says the code out loud.** `RegisterForm` sends every registration to
-`/verify-email` — "Always go through email verification for security" — so
-promising that a password is the only step left would misstate the flow to
-someone who just handed us their address. Note that clicking a link sent to
-that address is itself evidence of control, so the second code is arguably
-redundant on this path; skipping it would be a change to the auth flow rather
-than to this page, and has not been made.
+**This path skips the verification code, and that is the point of the token.**
+Every other registration goes to `/verify-email` and enters a mailed code. A
+lead token is forty-eight random characters that only ever left this system
+inside an email to the lead's own address, so presenting one *and* registering
+that address demonstrates control of the inbox — the same thing the code
+demonstrates, established the same way, one round trip earlier. Asking for it
+twice is not more proof, just more steps.
+
+Three things keep that honest:
+
+- `resolveCalculatorLead` runs **before** the account is created, on the
+  server, from the token alone. The client sends a token, never a claim; the
+  response reports `user.emailVerified` and `RegisterForm` reads that answer
+  rather than inferring it from what it sent.
+- The address match is what turns possession of the token into proof. A lead
+  sent to someone else proves nothing about the person registering, so it
+  resolves to null and the code is sent as usual.
+- No verification row is created on this path either. An unused code is one
+  more live credential on an account that has no need of it.
 
 Most of the path already existed for the results email. What is new is the last
 step.
@@ -335,7 +346,8 @@ step.
 | Token moved into a first-party cookie, URL cleaned | `app/retirement/continue/route.ts` |
 | Token exchanged, address prefilled | `RegisterForm.tsx` → `GET /signup-context/:token` |
 | Token sent with the registration | `RegisterForm.tsx` → `POST /auth/register` (`calculatorRef`) |
-| Run written as the first decision | `services/calculator-first-decision.ts` |
+| Token resolved, address proved | `resolveCalculatorLead` — before the account exists |
+| Run written as the first decision | `seedFirstDecisionFromLead` — after the response |
 
 Three things about that last step are load-bearing:
 

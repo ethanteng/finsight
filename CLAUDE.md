@@ -103,7 +103,7 @@ Supported what-if calculations run in application-owned scenario calculators aft
 
 The public calculator pages draw the same line. `/retirement-calculator` runs the deterministic engine for every figure and calls a model only to write the plain-language reading of that result; the reading is rejected outright if it states any number the engine did not produce, and a rejected one is dropped rather than shown. It runs with no user, no snapshot and no conversation history. See `docs/RETIREMENT_QUICKPLAN.md`.
 
-A visitor can save a `/retirement-calculator` run to a new account: the results email links to signup with their address prefilled, and on registration the run is written as the account's first decision from the stored lead rather than a fresh run. The lead's address must match the registering one — a token is the only key to a lead, and a lead holds someone's retirement figures.
+A visitor can save a `/retirement-calculator` run to a new account: the results email links to signup with their address prefilled, and on registration the run is written as the account's first decision from the stored lead rather than a fresh run. The lead's address must match the registering one — a token is the only key to a lead, and a lead holds someone's retirement figures. That same match lets this path skip the emailed verification code, since following a link sent to an address proves what the code proves; the check is made server-side before the account exists, and every other registration still verifies by code.
 
 ### Remembered personal context
 

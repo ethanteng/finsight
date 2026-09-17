@@ -27,7 +27,8 @@ jest.mock('../../prisma-client', () => ({
 import {
   buildDecisionAnswer,
   buildDecisionQuestion,
-  seedRetirementFirstDecision,
+  resolveCalculatorLead,
+  seedFirstDecisionFromLead,
 } from '../../services/calculator-first-decision';
 import type { RetirementLeadRecord } from '../../services/retirement-leads';
 
@@ -152,15 +153,72 @@ describe('the answer a calculator run becomes', () => {
   });
 });
 
-describe('seedRetirementFirstDecision', () => {
-  it('writes the run as the account’s first decision', async () => {
+/*
+ * Resolution is separate from writing because two things hang off it: what the
+ * first decision says, and whether the address still needs a code. It runs
+ * before the account exists, and the address match is what makes holding a
+ * token proof of controlling the inbox.
+ */
+describe('resolveCalculatorLead', () => {
+  it('returns the lead for a live token addressed to the registering email', async () => {
     leads.read.mockResolvedValue(lead());
 
-    const outcome = await seedRetirementFirstDecision({
-      userId: 'user-1',
-      email: 'reader@example.com',
+    const resolved = await resolveCalculatorLead({
       token: 'a'.repeat(48),
+      email: 'reader@example.com',
     });
+    expect(resolved?.email).toBe('reader@example.com');
+  });
+
+  /*
+   * The control that matters. A token is the only key to a lead, and a lead
+   * holds somebody's retirement figures — so a forwarded link must not let
+   * whoever received it copy that plan into an account of their own, nor
+   * count as proof of an address they do not control.
+   */
+  it('refuses a token whose lead was sent to a different address', async () => {
+    leads.read.mockResolvedValue(lead({ email: 'someone-else@example.com' }));
+
+    expect(await resolveCalculatorLead({
+      token: 'a'.repeat(48),
+      email: 'attacker@example.com',
+    })).toBeNull();
+  });
+
+  it('matches the address regardless of case or surrounding space', async () => {
+    leads.read.mockResolvedValue(lead({ email: 'Reader@Example.com' }));
+
+    expect(await resolveCalculatorLead({
+      token: 'a'.repeat(48),
+      email: ' reader@example.com ',
+    })).not.toBeNull();
+  });
+
+  it('returns null for an unknown or expired token, without reading one that is absent', async () => {
+    leads.read.mockResolvedValue(null);
+    expect(await resolveCalculatorLead({
+      token: 'b'.repeat(48), email: 'reader@example.com',
+    })).toBeNull();
+
+    leads.read.mockClear();
+    for (const token of [undefined, null, '', '   ', 42]) {
+      expect(await resolveCalculatorLead({ token, email: 'reader@example.com' })).toBeNull();
+    }
+    expect(leads.read).not.toHaveBeenCalled();
+  });
+
+  it('returns null rather than throwing when the lookup fails', async () => {
+    leads.read.mockRejectedValue(new Error('database down'));
+
+    expect(await resolveCalculatorLead({
+      token: 'a'.repeat(48), email: 'reader@example.com',
+    })).toBeNull();
+  });
+});
+
+describe('seedFirstDecisionFromLead', () => {
+  it('writes the run as the account\u2019s first decision', async () => {
+    const outcome = await seedFirstDecisionFromLead({ userId: 'user-1', lead: lead() });
 
     expect(outcome).toBe('seeded');
     const [call] = db.create.mock.calls as Array<[{ data: Record<string, string> }]>;
@@ -169,66 +227,17 @@ describe('seedRetirementFirstDecision', () => {
     expect(call[0].data.answer).toContain('619 of the 709');
   });
 
-  /*
-   * The control that matters. A token is the only key to a lead, and a lead
-   * holds somebody's retirement figures — so a forwarded link must not let
-   * whoever received it copy that plan into an account of their own.
-   */
-  it('refuses a token whose lead was sent to a different address', async () => {
-    leads.read.mockResolvedValue(lead({ email: 'someone-else@example.com' }));
-
-    const outcome = await seedRetirementFirstDecision({
-      userId: 'user-1',
-      email: 'attacker@example.com',
-      token: 'a'.repeat(48),
-    });
-
-    expect(outcome).toBe('email-mismatch');
+  it('does nothing, quietly, for a signup that resolved no lead', async () => {
+    expect(await seedFirstDecisionFromLead({ userId: 'user-1', lead: null })).toBe('no-lead');
     expect(db.create).not.toHaveBeenCalled();
-  });
-
-  it('matches the address regardless of case or surrounding space', async () => {
-    leads.read.mockResolvedValue(lead({ email: 'Reader@Example.com' }));
-
-    const outcome = await seedRetirementFirstDecision({
-      userId: 'user-1',
-      email: ' reader@example.com ',
-      token: 'a'.repeat(48),
-    });
-
-    expect(outcome).toBe('seeded');
   });
 
   /* Registration can be retried, and this runs unawaited on each attempt. */
   it('does not add a second copy to an account that already has decisions', async () => {
-    leads.read.mockResolvedValue(lead());
     db.count.mockResolvedValue(1);
 
-    const outcome = await seedRetirementFirstDecision({
-      userId: 'user-1',
-      email: 'reader@example.com',
-      token: 'a'.repeat(48),
-    });
-
-    expect(outcome).toBe('already-has-decisions');
-    expect(db.create).not.toHaveBeenCalled();
-  });
-
-  it('does nothing, quietly, for a signup that carried no token', async () => {
-    for (const token of [undefined, null, '', '   ', 42]) {
-      expect(await seedRetirementFirstDecision({
-        userId: 'user-1', email: 'reader@example.com', token,
-      })).toBe('no-token');
-    }
-    expect(leads.read).not.toHaveBeenCalled();
-  });
-
-  it('reports an unknown or expired token rather than writing anything', async () => {
-    leads.read.mockResolvedValue(null);
-
-    expect(await seedRetirementFirstDecision({
-      userId: 'user-1', email: 'reader@example.com', token: 'b'.repeat(48),
-    })).toBe('unknown-token');
+    expect(await seedFirstDecisionFromLead({ userId: 'user-1', lead: lead() }))
+      .toBe('already-has-decisions');
     expect(db.create).not.toHaveBeenCalled();
   });
 
@@ -237,11 +246,8 @@ describe('seedRetirementFirstDecision', () => {
    * will not take the row costs a better home screen, never the account.
    */
   it('swallows a write failure instead of escaping into the caller', async () => {
-    leads.read.mockResolvedValue(lead());
     db.create.mockRejectedValue(new Error('constraint violation'));
 
-    expect(await seedRetirementFirstDecision({
-      userId: 'user-1', email: 'reader@example.com', token: 'a'.repeat(48),
-    })).toBe('failed');
+    expect(await seedFirstDecisionFromLead({ userId: 'user-1', lead: lead() })).toBe('failed');
   });
 });
