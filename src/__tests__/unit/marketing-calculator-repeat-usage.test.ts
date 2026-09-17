@@ -31,6 +31,7 @@ describe('calculator repeat usage', () => {
       repeatSessions: 3, repeatRate: .75, averageRuns: 2.75,
       distribution: [1, 1, 1, 1], singleRunCtaSessions: 1, repeatRunCtaSessions: 1,
       singleRunCtaRate: 1, repeatRunCtaRate: 1 / 3,
+      limitReachedSessions: 0, accountsAfterLimitSessions: 0,
     });
   });
   it('splits devices and allows the same session to use both calculators', () => {
@@ -56,5 +57,21 @@ describe('calculator repeat usage', () => {
     expect(buildCalculatorRepeatUsage(sessions, false)).toMatchObject({
       state: 'unavailable', rows: [], bothCalculators: [],
     });
+  });
+
+  it('counts restored locks without runs, once per session, with ordered calculator-specific accounts', () => {
+    const restored = session('restored', 'mobile', 0, 0);
+    restored.eventCounts.retirement_run_limit_reached = 2;
+    restored.firstEventAt = { retirement_run_limit_reached: 10, retirement_account_created: 20 };
+    const earlierAccount = session('earlier', 'desktop', 3, 0);
+    earlierAccount.eventCounts.retirement_run_limit_reached = 1;
+    earlierAccount.firstEventAt = { retirement_run_limit_reached: 20, retirement_account_created: 10 };
+    const report = buildCalculatorRepeatUsage([restored, earlierAccount], true);
+    expect(report.rows.find(r => r.calculator === 'retirement' && r.device === 'all'))
+      .toMatchObject({ sessions: 1, limitReachedSessions: 2, accountsAfterLimitSessions: 1 });
+    expect(report.rows.find(r => r.calculator === 'retirement' && r.device === 'mobile'))
+      .toMatchObject({ sessions: 0, limitReachedSessions: 1, accountsAfterLimitSessions: 1 });
+    expect(report.rows.find(r => r.calculator === 'coast_fire' && r.device === 'all'))
+      .toMatchObject({ limitReachedSessions: 0, accountsAfterLimitSessions: 0 });
   });
 });

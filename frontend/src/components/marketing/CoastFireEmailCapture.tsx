@@ -85,9 +85,10 @@ export function CoastFireEmailCapture({ result }: { result: CoastFireResult }) {
         return;
       }
 
+      let tracking: Promise<void> | undefined;
       if (!reported.current) {
         reported.current = true;
-        pushCoastFireResultsEmailed(result.hasReachedCoastFire ? "reached" : "not_yet");
+        tracking = pushCoastFireResultsEmailed(result.hasReachedCoastFire ? "reached" : "not_yet");
       }
 
       const body = await response.json().catch(() => null) as { ref?: unknown } | null;
@@ -121,6 +122,7 @@ export function CoastFireEmailCapture({ result }: { result: CoastFireResult }) {
       );
 
       setStatus("leaving");
+      await tracking;
       leaveForSignup(resultsPageSignupHref(COAST_FIRE_SIGNUP_HREF));
     } catch {
       setError("Network error. Please check your connection and try again.");

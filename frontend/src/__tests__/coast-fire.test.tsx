@@ -9,6 +9,7 @@ import {
 } from "@/lib/coast-fire";
 import {
   pushCoastFireCalculated,
+  pushCalculatorRunLimitReached,
   pushCoastFireResultsEmailed,
   pushStartFreeClick,
 } from "@/lib/dataLayer";
@@ -20,6 +21,7 @@ import { leaveForSignup } from "@/lib/calculator-handover";
 
 jest.mock("@/lib/dataLayer", () => ({
   pushCoastFireCalculated: jest.fn(),
+  pushCalculatorRunLimitReached: jest.fn(),
   pushCoastFireResultsEmailed: jest.fn(),
   pushStartFreeClick: jest.fn(),
 }));
@@ -521,6 +523,8 @@ describe("Coast FIRE calculator page", () => {
 
       expect(screen.getByRole("button", { name: /calculate my coast fire number/i })).toBeDisabled();
       expect(screen.getByText(/that is 3 runs/i)).toBeInTheDocument();
+      expect(pushCalculatorRunLimitReached).toHaveBeenCalledTimes(1);
+      expect(pushCalculatorRunLimitReached).toHaveBeenCalledWith('coast_fire');
       // The save form is still there: it is what the lock is pointing at.
       expect(screen.getByRole("button", { name: "Save these results to your free account" })).toBeEnabled();
     });

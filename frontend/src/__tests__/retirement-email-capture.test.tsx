@@ -10,7 +10,7 @@
 import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { RetirementQuickPlan } from '@/components/marketing/RetirementQuickPlan';
-import { pushRetirementResultsEmailed } from '@/lib/dataLayer';
+import { pushRetirementResultsEmailed, pushCalculatorRunLimitReached } from '@/lib/dataLayer';
 import { leaveForSignup } from '@/lib/calculator-handover';
 
 /*
@@ -26,6 +26,7 @@ jest.mock('@/lib/calculator-handover', () => ({
 
 jest.mock('@/lib/dataLayer', () => ({
   pushRetirementInteraction: jest.fn(),
+  pushCalculatorRunLimitReached: jest.fn(),
   pushRetirementModelRun: jest.fn(),
   pushRetirementResultsEmailed: jest.fn(),
   pushStartFreeClick: jest.fn(),
@@ -330,6 +331,8 @@ it('locks the model after three runs and points at the save form', async () => {
   const button = screen.getByRole('button', { name: /run the model/i });
   expect(button).toBeDisabled();
   expect(screen.getByText(/that is 3 runs/i)).toBeInTheDocument();
+  await waitFor(() => expect(pushCalculatorRunLimitReached).toHaveBeenCalledTimes(1));
+  expect(pushCalculatorRunLimitReached).toHaveBeenCalledWith('retirement');
   // The save form is still there: it is what the lock is pointing at.
   expect(screen.getByRole('button', { name: 'Save these results to your free account' })).toBeEnabled();
 });

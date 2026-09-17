@@ -320,6 +320,21 @@ describe('Coast FIRE beachhead scorecard', () => {
     expect(report.leadCapture.coastFire.captureRate.value).toBe(1);
   });
 
+  it('keeps direct-save accounts and handoffs out of email-return outcomes', () => {
+    const direct = session('direct-save', { sessionDate: '2026-09-18', eventCounts: {
+      coast_fire_page_cta_opened: 2, coast_fire_page_account_created: 1,
+      coast_fire_page_trial_complete: 1, retirement_page_cta_opened: 1,
+    } });
+    const report = buildBeachheadScorecard({ current: [direct], previous: [],
+      ga4State: 'live', funnelCoverageComplete: false, previousFunnelCoverageComplete: false, firstParty });
+    expect(report.leadCapture.coastFire.pageCtaOpenedSessions.value).toBe(1);
+    expect(report.leadCapture.coastFire.pageAccountsCreatedSessions.value).toBe(1);
+    expect(report.leadCapture.coastFire.pageTrialCompletedSessions.value).toBe(1);
+    expect(report.leadCapture.coastFire.emailTrialCompletedSessions.value).toBe(0);
+    expect(report.leadCapture.retirement.pageCtaOpenedSessions.value).toBe(1);
+    expect(report.leadCapture.retirement.pageAccountsCreatedSessions.value).toBe(0);
+  });
+
   it('reconciles a raw email event that traffic-quality filtering excludes', () => {
     const internalRequest = session('internal-email-request', {
       sessionDate: '2026-09-13',

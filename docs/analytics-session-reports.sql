@@ -25,7 +25,10 @@ SELECT PARSE_DATE('%Y%m%d', event_date) AS event_day, event_timestamp,
   device.category AS device_category,
   clean_path((SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'page_location')) AS page_path,
   clean_path((SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'source_page')) AS source_path,
-  (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'signup_flow') AS signup_flow
+  (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'signup_flow') AS signup_flow,
+  (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'signup_origin') AS signup_origin,
+  (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'signup_entry') AS signup_entry,
+  (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'calculator_type') AS calculator_type
 FROM `gen-lang-client-0360308471.analytics_519498279.events_*`
 WHERE _TABLE_SUFFIX BETWEEN FORMAT_DATE('%Y%m%d', DATE_SUB(report_start, INTERVAL 1 DAY))
   AND FORMAT_DATE('%Y%m%d', DATE_ADD(report_end, INTERVAL 1 DAY))
@@ -51,6 +54,7 @@ SELECT user_pseudo_id, session_id,
   MIN(IF(event_name = 'retirement_calculator_field_edited' AND COALESCE(source_path, page_path) = '/retirement-calculator', event_order, NULL)) AS edit_order,
   MIN(IF(event_name = 'retirement_model_clicked' AND COALESCE(source_path, page_path) = '/retirement-calculator', event_order, NULL)) AS run_order,
   MIN(IF(event_name = 'retirement_model_requested' AND COALESCE(source_path, page_path) = '/retirement-calculator', event_order, NULL)) AS request_order,
+  MIN(IF(event_name = 'calculator_run_limit_reached' AND calculator_type = 'retirement', event_order, NULL)) AS limit_order,
   MIN(IF(event_name = 'retirement_model_run' AND COALESCE(source_path, page_path) = '/retirement-calculator', event_order, NULL)) AS result_order
 FROM events GROUP BY user_pseudo_id, session_id;
 
@@ -94,7 +98,7 @@ WHERE a.clicking_sessions>0 OR b.clicking_sessions>0;
 -- 3. /getstarted observed-session drop-off: no later confirmed sign_up in the same session.
 WITH signup AS (
   SELECT s.*, EXISTS(SELECT 1 FROM events e WHERE e.user_pseudo_id=s.user_pseudo_id AND e.session_id=s.session_id
-    AND e.event_name='sign_up' AND e.event_order>s.signup_page_order) AS registered
+    AND e.event_name='sign_up' AND e.signup_flow='free_trial' AND e.event_order>s.signup_page_order) AS registered
   FROM sessions s WHERE signup_page_order IS NOT NULL
 )
 SELECT 'signup_dropoff' AS report, device_category, COUNT(*) AS signup_page_sessions,
@@ -114,13 +118,18 @@ SELECT s.*,
 FROM sessions s LEFT JOIN events e USING(user_pseudo_id,session_id)
 WHERE s.landing_page='/retirement-calculator' GROUP BY ALL;
 
--- 4. Calculator landing-session conversion and abandonment. No Run anywhere in session = abandoned edit.
+-- 4. No Run anywhere in session = observed edit without run. Separate known locked
+-- sessions: inability to run is not voluntary abandonment. Limit tracking begins
+-- only after both the new frontend and GTM forwarding are deployed; older absence
+-- cannot prove the calculator was unlocked. Do not compare rates across that gap.
 SELECT 'calculator_landing_outcomes' AS report, device_category, COUNT(*) AS landing_sessions,
   COUNTIF(run_order IS NOT NULL) AS run_click_sessions,
   ROUND(100*SAFE_DIVIDE(COUNTIF(run_order IS NOT NULL),COUNT(*)),2) AS landing_to_run_pct,
   COUNTIF(edit_order IS NOT NULL) AS field_edit_sessions,
   COUNTIF(edit_order IS NOT NULL AND run_order IS NULL) AS edit_without_run_sessions,
-  ROUND(100*SAFE_DIVIDE(COUNTIF(edit_order IS NOT NULL AND run_order IS NULL),COUNTIF(edit_order IS NOT NULL)),2) AS field_edit_abandonment_pct,
+  COUNTIF(limit_order IS NOT NULL) AS known_limit_sessions,
+  COUNTIF(edit_order IS NOT NULL AND run_order IS NULL AND limit_order IS NOT NULL) AS locked_edit_without_run_sessions,
+  ROUND(100*SAFE_DIVIDE(COUNTIF(edit_order IS NOT NULL AND run_order IS NULL AND limit_order IS NULL),COUNTIF(edit_order IS NOT NULL AND limit_order IS NULL)),2) AS edit_without_run_excluding_known_locks_pct,
   COUNTIF(request_order IS NOT NULL) AS requested_sessions, COUNTIF(result_order IS NOT NULL) AS result_sessions,
   COUNTIF(any_start_free) AS start_free_any_page_sessions,
   ROUND(100*SAFE_DIVIDE(COUNTIF(any_start_free),COUNT(*)),2) AS landing_to_start_free_pct,
@@ -146,3 +155,47 @@ SELECT 'calculator_run_cohorts' AS report, device_category,
   ROUND(100*SAFE_DIVIDE(COUNTIF(any_start_free),COUNT(*)),2) AS any_start_free_pct,
   COUNTIF(run_order IS NOT NULL AND any_start_free AND NOT start_free_after_run) AS cta_only_before_run_sessions
 FROM calculator GROUP BY 2,3;
+
+-- 7. Observed signup routes by device. Direct save redirects are NOT literal
+-- Start free clicks or email CTA opens. These counts are outcomes observed in
+-- this window, not email-send cohorts. No new route rate until coverage verified.
+WITH routes AS (
+  SELECT user_pseudo_id, session_id, device_category,
+    COALESCE(signup_origin, 'unknown') AS signup_origin,
+    COALESCE(signup_entry, 'unknown') AS signup_entry,
+    COUNTIF(event_name='calculator_results_page_cta_opened') > 0 AS direct_arrival,
+    COUNTIF(event_name='calculator_results_email_cta_opened') > 0 AS email_arrival,
+    COUNTIF(event_name='trial_signup_viewed') > 0 AS viewed,
+    COUNTIF(event_name='sign_up' AND signup_flow='free_trial') > 0 AS registered,
+    COUNTIF(event_name='trial_signup_completed' AND signup_flow='free_trial') > 0 AS handoff
+  FROM events
+  WHERE event_name IN ('calculator_results_page_cta_opened', 'calculator_results_email_cta_opened',
+    'trial_signup_viewed', 'sign_up', 'trial_signup_completed')
+  GROUP BY 1,2,3,4,5
+)
+SELECT 'calculator_signup_routes' AS report, device_category, signup_origin, signup_entry,
+  COUNTIF(direct_arrival) AS direct_save_arrival_sessions,
+  COUNTIF(email_arrival) AS email_return_arrival_sessions,
+  COUNTIF(viewed) AS signup_view_sessions,
+  COUNTIF(registered) AS account_created_sessions,
+  COUNTIF(handoff) AS app_handoff_sessions
+FROM routes GROUP BY 2,3,4;
+
+-- 8. Limit exposure is per page mount (including restored locks), deduplicated
+-- per GA4 session. The product's three-run counter is per calculator per TAB.
+-- A session may span tabs; retain 4+ in repeat-run reports. No causal claim.
+WITH limits AS (
+  SELECT user_pseudo_id, session_id, device_category, calculator_type,
+    MIN(event_timestamp) AS limit_at
+  FROM events WHERE event_name='calculator_run_limit_reached'
+    AND calculator_type IN ('retirement','coast_fire')
+  GROUP BY 1,2,3,4
+)
+SELECT 'calculator_run_limit_outcomes' AS report, device_category, calculator_type,
+  COUNT(*) AS limit_shown_sessions,
+  COUNTIF(EXISTS(SELECT 1 FROM events e
+    WHERE e.user_pseudo_id=l.user_pseudo_id AND e.session_id=l.session_id
+      AND e.event_name='sign_up' AND e.signup_flow='free_trial'
+      AND e.signup_origin=CONCAT(l.calculator_type,'_calculator')
+      AND e.event_timestamp>l.limit_at)) AS accounts_after_limit_sessions
+FROM limits l GROUP BY 2,3;

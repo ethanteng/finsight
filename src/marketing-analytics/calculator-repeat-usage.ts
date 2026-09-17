@@ -25,8 +25,14 @@ export function buildCalculatorRepeatUsage(
   for (const calculator of ['retirement', 'coast_fire'] as const) {
     const event = EVENTS[calculator];
     for (const device of devices) {
-      const calculating = sessions.filter(s => (device === 'all' || s.device === device)
-        && (s.eventCounts[event] || 0) > 0);
+      const deviceSessions = sessions.filter(s => device === 'all' || s.device === device);
+      const limitSessions = deviceSessions.filter(s => (s.eventCounts[`${calculator}_run_limit_reached`] || 0) > 0);
+      const accountsAfterLimitSessions = limitSessions.filter(s => {
+        const limitAt = s.firstEventAt[`${calculator}_run_limit_reached`];
+        const accountAt = s.firstEventAt[`${calculator}_account_created`];
+        return limitAt !== undefined && accountAt !== undefined && accountAt > limitAt;
+      }).length;
+      const calculating = deviceSessions.filter(s => (s.eventCounts[event] || 0) > 0);
       const distribution: [number, number, number, number] = [0, 0, 0, 0];
       let runs = 0;
       let singleRunCtaSessions = 0;
@@ -47,6 +53,8 @@ export function buildCalculatorRepeatUsage(
         singleRunCtaSessions, repeatRunCtaSessions,
         singleRunCtaRate: ratio(singleRunCtaSessions, distribution[0]),
         repeatRunCtaRate: ratio(repeatRunCtaSessions, repeatSessions),
+        limitReachedSessions: limitSessions.length,
+        accountsAfterLimitSessions,
       });
     }
   }
@@ -56,6 +64,6 @@ export function buildCalculatorRepeatUsage(
       (device === 'all' || s.device === device)
       && (s.eventCounts[EVENTS.retirement] || 0) > 0
       && (s.eventCounts[EVENTS.coast_fire] || 0) > 0).length })),
-    note: 'Observed successful result events, grouped by visitor + GA4 session. Repeat means 2+ runs of the same calculator in one session, including unchanged inputs. Clicks, errors, and the Coast FIRE default example do not count. Start-free rates mean a click anywhere in the same session, not necessarily after a run; this is an association, not evidence that rerunning causes conversion. Uses the dashboard date and traffic filters. Missing or duplicate tracking can affect counts; zero observed runs does not verify tracking coverage.',
+    note: 'Observed successful result events, grouped by visitor + GA4 session. Repeat means 2+ runs of the same calculator in one session, including unchanged inputs. Clicks, errors, and the Coast FIRE default example do not count. The new limit allows three savable results per calculator per browser tab, not per GA4 session; retirement rates-only results do not consume the limit. Keep 4+ for older traffic, multiple tabs, and storage restrictions. Limit counts require the new limit event and include restored locks without a run in this session. Accounts after limit require a later free-trial sign_up attributed to that calculator in the same session; they do not prove the limit caused signup. Start-free rates still measure literal CTA clicks, not automatic save-results redirects. Missing tracking is not proof of zero usage.',
   };
 }

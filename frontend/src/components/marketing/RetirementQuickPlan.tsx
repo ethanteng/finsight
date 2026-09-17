@@ -26,6 +26,7 @@ import { RetirementEmailCapture } from "./RetirementEmailCapture";
 import { TRIAL_CTA_MICROCOPY } from "./trial-copy";
 import { SiteFooter, SiteHeader } from "./SiteShell";
 import { pushRetirementInteraction, pushRetirementModelRun } from "@/lib/dataLayer";
+import { useCalculatorLimitTracking } from "@/lib/use-calculator-limit-tracking";
 import {
   RETIREMENT_RUN_COUNT_KEY,
   CALCULATOR_RUN_LIMIT,
@@ -497,6 +498,7 @@ export function RetirementQuickPlan({
   /** Runs this visitor has spent in this tab. Hydrated from storage on mount. */
   const [runCount, setRunCount] = useState(0);
   const locked = isRunLimitReached(runCount);
+  useCalculatorLimitTracking('retirement', locked);
   const allocations = useAllocations();
   const { interpretation, isLoading: isInterpreting } = useInterpretation(submittedPlan);
   const resultsRef = useRef<HTMLDivElement | null>(null);

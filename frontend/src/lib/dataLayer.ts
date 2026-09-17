@@ -100,6 +100,23 @@ function pushToDataLayer(payload: Record<string, unknown>): void {
   win.dataLayer.push(payload);
 }
 
+/** Give GTM a bounded opportunity to dispatch before a full-page signup redirect.
+ * A callback means tag execution finished, not that GA4/Ads accepted the hit.
+ * The independent timeout also works when analytics is blocked or unavailable.
+ */
+function pushBeforeNavigation(payload: Record<string, unknown>): Promise<void> {
+  if (typeof window === 'undefined' || isInternalAnalyticsBrowser()) return Promise.resolve();
+  return new Promise(resolve => {
+    const finish = () => { clearTimeout(timer); resolve(); };
+    const timer = setTimeout(finish, 500);
+    try {
+      pushToDataLayer({ ...payload, eventCallback: finish, eventTimeout: 500 });
+    } catch {
+      finish(); // Analytics must never block signup.
+    }
+  });
+}
+
 function getContentType(pathname: string): string {
   if (pathname === '/retirement-answers') return 'retirement_answers_hub';
   if (pathname === '/demo') return 'product_demo';
@@ -195,10 +212,10 @@ export function pushCoastFireCalculated(
  * mark it a key event in GA4 Admin so it reports as a conversion. The address
  * itself is never pushed — only that one was given.
  */
-export function pushCoastFireResultsEmailed(status: CoastFireStatus): void {
-  if (typeof window === 'undefined') return;
+export function pushCoastFireResultsEmailed(status: CoastFireStatus): Promise<void> {
+  if (typeof window === 'undefined') return Promise.resolve();
   trackContentsquareEvent('coast_fire_results_emailed');
-  pushToDataLayer({
+  return pushBeforeNavigation({
     event: 'coast_fire_results_emailed',
     source_page: window.location.pathname,
     content_type: 'coast_fire_calculator',
@@ -216,10 +233,10 @@ export function pushCoastFireResultsEmailed(status: CoastFireStatus): void {
  * mark it a key event in GA4 Admin so it reports as a conversion. The address
  * is never pushed — only that one was given, and roughly how the plan did.
  */
-export function pushRetirementResultsEmailed(survivalRate: number): void {
-  if (typeof window === 'undefined') return;
+export function pushRetirementResultsEmailed(survivalRate: number): Promise<void> {
+  if (typeof window === 'undefined') return Promise.resolve();
   trackContentsquareEvent('retirement_results_emailed');
-  pushToDataLayer({
+  return pushBeforeNavigation({
     event: 'retirement_results_emailed',
     source_page: window.location.pathname,
     content_type: 'retirement_calculator',
@@ -276,6 +293,18 @@ export function pushCalculatorResultsPageCtaOpened(
     calculator_type: signupOrigin === 'coast_fire_calculator' ? 'coast_fire' : 'retirement',
     signup_origin: signupOrigin,
     signup_entry: 'results_page',
+  });
+}
+
+/** The three-run nudge is visible; this is not a failed calculation or a conversion. */
+export function pushCalculatorRunLimitReached(calculator: 'retirement' | 'coast_fire'): void {
+  if (typeof window === 'undefined') return;
+  trackContentsquareEvent('calculator_run_limit_reached');
+  pushToDataLayer({
+    event: 'calculator_run_limit_reached',
+    source_page: window.location.pathname,
+    content_type: `${calculator}_calculator`,
+    calculator_type: calculator,
   });
 }
 

@@ -19,6 +19,7 @@ import {
   type CoastFireResult,
 } from "@/lib/coast-fire";
 import { pushCoastFireCalculated } from "@/lib/dataLayer";
+import { useCalculatorLimitTracking } from "@/lib/use-calculator-limit-tracking";
 import {
   COAST_FIRE_RUN_COUNT_KEY,
   CALCULATOR_RUN_LIMIT,
@@ -541,6 +542,7 @@ export function CoastFireCalculator({ children }: { children?: ReactNode }) {
   /** Runs this visitor has spent in this tab. Hydrated from storage on mount. */
   const [runCount, setRunCount] = useState(0);
   const locked = isRunLimitReached(runCount);
+  useCalculatorLimitTracking('coast_fire', locked);
   const resultRef = useRef<HTMLDivElement>(null);
 
   const { interpretation, isLoading: isInterpreting } = useCoastFireInterpretation(submitted);

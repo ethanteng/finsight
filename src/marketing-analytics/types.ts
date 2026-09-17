@@ -271,6 +271,10 @@ export interface BeachheadLeadCaptureMetric {
   emailCtaOpenedSessions: MetricValue;
   /** Email-attributed sessions that reached the final tracked trial step. */
   emailTrialCompletedSessions: MetricValue;
+  /** Direct save-results route. Observed outcomes, not a closed email cohort. */
+  pageCtaOpenedSessions: MetricValue;
+  pageAccountsCreatedSessions: MetricValue;
+  pageTrialCompletedSessions: MetricValue;
   /** First-party rows after the settled GA4 cutoff, shown separately. */
   pendingFirstParty: CalculatorLeadSummary;
   firstParty: CalculatorLeadSummary;
@@ -299,6 +303,8 @@ export interface CalculatorRepeatRow {
   repeatRunCtaSessions: number;
   singleRunCtaRate: number | null;
   repeatRunCtaRate: number | null;
+  limitReachedSessions: number;
+  accountsAfterLimitSessions: number;
 }
 
 export interface CalculatorRepeatUsage {

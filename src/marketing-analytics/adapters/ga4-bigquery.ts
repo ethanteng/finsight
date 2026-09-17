@@ -51,10 +51,8 @@ const DIAGNOSTIC_EVENTS = [
   'retirement_model_requested', 'retirement_model_run', 'scroll',
   'coast_fire_calculated', 'coast_fire_results_emailed',
   'retirement_results_emailed', 'calculator_results_email_cta_opened',
-  // Its sibling: the same restoration reached without an inbox. Counted here
-  // so the no-inbox route is visible at all; which scorecard column its
-  // completions belong in is a separate question, still open.
   'calculator_results_page_cta_opened',
+  'calculator_run_limit_reached',
 ] as const;
 
 /**
@@ -212,6 +210,14 @@ export function buildQuery(projectId: string, datasetId: string, dates: ReturnTy
     "COUNTIF(event_name = 'calculator_results_email_cta_opened' AND calculator_type = 'retirement') AS count_retirement_email_cta_opened",
     ...['coast_fire', 'retirement'].map(calculator =>
       `COUNTIF(event_name IN ('trial_signup_completed', 'trial_verify_skipped', 'trial_login_success') AND signup_flow = 'free_trial' AND signup_origin = '${calculator}_calculator' AND signup_entry = 'results_email') AS count_${calculator}_email_trial_complete`),
+    ...['coast_fire', 'retirement'].flatMap(calculator => [
+      `COUNTIF(event_name = 'calculator_results_page_cta_opened' AND calculator_type = '${calculator}') AS count_${calculator}_page_cta_opened`,
+      `COUNTIF(event_name = 'sign_up' AND signup_flow = 'free_trial' AND signup_origin = '${calculator}_calculator' AND signup_entry = 'results_page') AS count_${calculator}_page_account_created`,
+      `COUNTIF(event_name = 'trial_signup_completed' AND signup_flow = 'free_trial' AND signup_origin = '${calculator}_calculator' AND signup_entry = 'results_page') AS count_${calculator}_page_trial_complete`,
+      `COUNTIF(event_name = 'calculator_run_limit_reached' AND calculator_type = '${calculator}') AS count_${calculator}_run_limit_reached`,
+      `MIN(IF(event_name = 'calculator_run_limit_reached' AND calculator_type = '${calculator}', event_timestamp, NULL)) AS first_${calculator}_run_limit_reached`,
+      `MIN(IF(event_name = 'sign_up' AND signup_flow = 'free_trial' AND signup_origin = '${calculator}_calculator', event_timestamp, NULL)) AS first_${calculator}_account_created`,
+    ]),
     ...['email_link', 'verification_code', 'verification_skipped', 'already_verified'].map(method =>
       `COUNTIF(event_name = 'trial_signup_completed' AND signup_flow = 'free_trial' AND completion_method = '${method}') AS count_signup_completed_${method}`),
   ].join(',\n    ');
@@ -384,6 +390,15 @@ function toSession(row: Record<string, string>): AnalyticsSession {
   eventCounts.retirement_email_cta_opened = Number(row.count_retirement_email_cta_opened || 0);
   eventCounts.coast_fire_email_trial_complete = Number(row.count_coast_fire_email_trial_complete || 0);
   eventCounts.retirement_email_trial_complete = Number(row.count_retirement_email_trial_complete || 0);
+  for (const calculator of ['coast_fire', 'retirement']) {
+    for (const suffix of ['page_cta_opened', 'page_account_created', 'page_trial_complete', 'run_limit_reached']) {
+      eventCounts[`${calculator}_${suffix}`] = Number(row[`count_${calculator}_${suffix}`] || 0);
+    }
+    for (const suffix of ['run_limit_reached', 'account_created']) {
+      const key = `${calculator}_${suffix}`;
+      if (row[`first_${key}`]) firstEventAt[key] = Number(row[`first_${key}`]);
+    }
+  }
   for (const method of ['email_link', 'verification_code', 'verification_skipped', 'already_verified']) {
     eventCounts[`signup_completed_${method}`] = Number(row[`count_signup_completed_${method}`] || 0);
   }
