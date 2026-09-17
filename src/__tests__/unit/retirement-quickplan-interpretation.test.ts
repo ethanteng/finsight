@@ -542,6 +542,44 @@ describe('interpretRetirementQuickPlan', () => {
     expect(model.ask).toHaveBeenCalledTimes(2);
   });
 
+  it('re-reads when a rate revises on the same observation date', async () => {
+    model.ask.mockResolvedValue(DRAFT('Your money lasted in 87.3% of tested retirements.'));
+
+    market.get.mockResolvedValue({
+      fetchedAt: '2026-09-16T00:00:00.000Z',
+      treasury30Y: { percent: 4.62, asOf: '2026-09-15', label: '30-year Treasury yield', source: 'Massive' },
+    } as never);
+    await interpretRetirementQuickPlan(planResult());
+
+    market.get.mockResolvedValue({
+      fetchedAt: '2026-09-16T01:00:00.000Z',
+      treasury30Y: { percent: 4.71, asOf: '2026-09-15', label: '30-year Treasury yield', source: 'Massive' },
+    } as never);
+    const second = await interpretRetirementQuickPlan(planResult());
+
+    expect(second?.cached).toBe(false);
+    expect(model.ask).toHaveBeenCalledTimes(2);
+  });
+
+  it('re-reads when the same label and date come from a different source', async () => {
+    model.ask.mockResolvedValue(DRAFT('Your money lasted in 87.3% of tested retirements.'));
+
+    market.get.mockResolvedValue({
+      fetchedAt: '2026-09-16T00:00:00.000Z',
+      treasury10Y: { percent: 4.10, asOf: '2026-09-15', label: '10-year Treasury yield', source: 'Massive' },
+    } as never);
+    await interpretRetirementQuickPlan(planResult());
+
+    market.get.mockResolvedValue({
+      fetchedAt: '2026-09-16T00:00:00.000Z',
+      treasury10Y: { percent: 4.10, asOf: '2026-09-15', label: '10-year Treasury yield', source: 'FRED' },
+    } as never);
+    const second = await interpretRetirementQuickPlan(planResult());
+
+    expect(second?.cached).toBe(false);
+    expect(model.ask).toHaveBeenCalledTimes(2);
+  });
+
   it('tells the model not to claim a verdict it does not have', async () => {
     model.ask.mockResolvedValue(DRAFT('What this mix sustained, as a share of the portfolio.'));
 

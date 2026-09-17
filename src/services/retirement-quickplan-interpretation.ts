@@ -599,10 +599,10 @@ function cacheKey(
     result.version,
     result.mode,
     getActiveModel('calculatorNarrative'),
-    // The observation dates, not the fetch time. A reading that has not been
-    // republished should keep serving the reading written about it; one that
-    // has must not be described with last week's yield.
-    marketRates(market).map((rate) => `${rate.label}@${rate.asOf}`),
+    // The observation dates, not the fetch time — and the percent and source
+    // too. A same-date revision (or Massive→FRED fallback with the same label
+    // and date) must not keep serving prose written about the previous value.
+    marketRates(market).map((rate) => `${rate.label}@${rate.asOf}@${rate.percent}@${rate.source}`),
     inputs.currentAge,
     inputs.retirementAge,
     inputs.investableAssets,
