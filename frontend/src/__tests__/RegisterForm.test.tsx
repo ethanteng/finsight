@@ -441,6 +441,22 @@ describe('RegisterForm', () => {
             }),
           };
         }
+        // Already-verified signups wait for the unawaited first-decision seed
+        // before opening /app, so the conversations probe must resolve.
+        if (String(url).includes('/conversations')) {
+          return {
+            ok: true,
+            json: async () => ({
+              conversations: [
+                {
+                  id: 'seeded-1',
+                  question: 'How does my retirement plan look?',
+                  answer: 'Seeded from your saved run.',
+                },
+              ],
+            }),
+          };
+        }
         return {
           ok: true,
           json: async () => ({
@@ -462,6 +478,12 @@ describe('RegisterForm', () => {
       // The session minted by registration is what opens the workspace; the
       // visitor never re-enters the password they just set.
       expect(localStorage.getItem('auth_token')).toBe('trial-token');
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.stringContaining('/conversations'),
+        expect.objectContaining({
+          headers: expect.objectContaining({ Authorization: 'Bearer trial-token' }),
+        }),
+      );
     });
 
     it('still verifies when the server does not say the address was proved', async () => {
@@ -940,8 +962,12 @@ describe('RegisterForm', () => {
       expect(body.stripeSessionId).toBe('cs_test_123');
 
       await waitFor(() =>
-        expect(push).toHaveBeenCalledWith(expect.stringContaining('/verify-email?subscription=active')),
+        expect(push).toHaveBeenCalledWith(
+          '/verify-email?subscription=active&tier=premium',
+        ),
       );
+      expect(push).not.toHaveBeenCalledWith(expect.stringContaining('email='));
+      expect(push).not.toHaveBeenCalledWith(expect.stringContaining('session_id='));
       expect(mockPushSignUp).toHaveBeenCalledWith({ signupFlow: 'paid_checkout' });
     });
 

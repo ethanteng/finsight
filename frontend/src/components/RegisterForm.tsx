@@ -621,11 +621,43 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
         // The funnel ends here for this account; nothing further will report
         // its completion, and a stale record would follow the tab for hours.
         if (isTrial) completeFreeTrialSignupFlow();
+        /*
+         * Registration responds before the unawaited seedFirstDecisionFromLead
+         * write finishes. The old sign-in step gave that write time to land;
+         * without it, /app's first /conversations fetch can win the race and
+         * leave the saved calculator run missing until a reload. Poll briefly
+         * so the workspace opens with the decision already there when the
+         * seed succeeds; still navigate if it never appears.
+         */
+        const seededDeadline = Date.now() + 2500;
+        while (Date.now() < seededDeadline) {
+          try {
+            const historyRes = await fetch(`${API_URL}/conversations`, {
+              headers: { Authorization: `Bearer ${data.token}` },
+            });
+            if (historyRes.ok) {
+              const historyData = (await historyRes.json().catch(() => ({}))) as {
+                conversations?: unknown[];
+              };
+              if (
+                Array.isArray(historyData.conversations) &&
+                historyData.conversations.length > 0
+              ) {
+                break;
+              }
+            }
+          } catch {
+            // Keep trying until the deadline; an empty sidebar is recoverable.
+          }
+          await new Promise((resolve) => setTimeout(resolve, 200));
+        }
         router.push(DEFAULT_POST_LOGIN_DESTINATION);
       } else if (isTrial) {
         router.push(withFreeTrialSignupFlow('/verify-email'));
       } else if (subscriptionContext) {
-        const verifyUrl = `/verify-email?subscription=${subscriptionContext.subscription}&tier=${subscriptionContext.tier}&email=${encodeURIComponent(email)}&session_id=${subscriptionContext.sessionId || ''}`;
+        // Banner on verify only needs subscription + tier; email/session_id
+        // used to ride onward to /login and no longer have a reader.
+        const verifyUrl = `/verify-email?subscription=${subscriptionContext.subscription}&tier=${subscriptionContext.tier}`;
         router.push(verifyUrl);
       } else {
         router.push('/verify-email');
