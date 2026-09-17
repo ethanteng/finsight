@@ -183,10 +183,6 @@ describe("Coast FIRE calculator page", () => {
   });
 
   /*
-   * The scorecard counts a plan CTA only when a result is timestamped ahead of
-   * it, and this page shows its default scenario before anyone submits.
-   */
-  /*
    * `type="number"` cannot show grouping, so the money boxes are text. The
    * figure a visitor is most likely to mistype is the one with the most
    * zeros in it.
@@ -240,7 +236,7 @@ describe("Coast FIRE calculator page", () => {
     expect(screen.getByLabelText("Expected real return")).toHaveValue(5);
   });
 
-  it("does not count the default scenario as an intentional calculation", () => {
+  it("does not count a page view as an intentional calculation", () => {
     render(<CoastFireCalculator />);
 
     expect(pushCoastFireCalculated).not.toHaveBeenCalled();
@@ -341,8 +337,8 @@ describe("Coast FIRE calculator page", () => {
     }
 
     /*
-     * The page opens with a default scenario already answered. Collecting an
-     * address against it would email someone a stranger's retirement.
+     * The page opens with no result. Collecting an address before anyone has
+     * asked for an answer would attach their address to figures they never ran.
      */
     it("asks for an address only after a scenario has been submitted", () => {
       const { container } = render(<CoastFireCalculator />);

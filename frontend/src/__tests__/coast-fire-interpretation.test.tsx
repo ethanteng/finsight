@@ -4,9 +4,8 @@
  * Three things are worth holding down here, and none of them is the prose.
  * The panel must not delay the browser's own answer, it must disappear rather
  * than apologise when no reading was produced, and it must not be requested at
- * all for the worked example the page opens with — that scenario is ours, not
- * the visitor's, and reading it would spend a model call and a slice of their
- * rate limit on figures nobody entered.
+ * all before a scenario is submitted — the page opens empty, and reading on
+ * load would spend a model call and a slice of their rate limit on every view.
  */
 
 import React from 'react';

@@ -186,9 +186,9 @@ interface Interpretation {
  * Ask for a reading of a submitted scenario.
  *
  * Only ever called for a scenario the visitor actually submitted. The page
- * opens with a worked example already answered, and reading that one would
- * spend a model call — and a slice of this visitor's rate limit — on figures
- * nobody entered.
+ * opens with empty personal figures and no result, so there is nothing to
+ * read until they ask — and asking on load would spend a model call and a
+ * slice of their rate limit on every page view.
  *
  * Everything here fails to `null`, which renders as nothing: a visitor who
  * never learns the panel exists has still had a complete answer, because the
@@ -368,17 +368,23 @@ function InterpretationPanel({
  * status pill, nothing a reader could mistake for theirs.
  */
 function EmptyResultPanel() {
+  /*
+   * Deliberately not `aria-live`. This panel is static until a run replaces it;
+   * a live region on mount would announce a waiting card on every page view.
+   * The answered card carries `aria-live` so the verdict is announced when it
+   * appears.
+   */
   return (
-    <aside className="cf-result-card is-empty" aria-live="polite">
+    <aside className="cf-result-card is-empty">
       <div className="cf-result-topline">
         <span>YOUR COAST FIRE STATUS</span>
       </div>
       <h2>Your number, once you fill in the form.</h2>
       <p className="cf-result-lead">
         Coast FIRE is the amount that, left alone and compounding, would reach your retirement
-        target without another dollar added. Enter your seven numbers and this card will show
-        that amount, how much of it your savings already cover, and what today&rsquo;s savings
-        would grow to if you never added to them again.
+        target without another dollar added. Fill in the form and this card will show that
+        amount, how much of it your savings already cover, and what today&rsquo;s savings would
+        grow to if you never added to them again.
       </p>
     </aside>
   );
@@ -521,7 +527,7 @@ export function CoastFireCalculator({ children }: { children?: ReactNode }) {
   /*
    * The scenario the reading is written from. Set only on submit, and only to
    * the seven numbers the calculator accepted — so the panel is always about
-   * the figures on screen, and the default example never costs a model call.
+   * the figures on screen, and a page view never costs a model call.
    */
   const [submitted, setSubmitted] = useState<CoastFireInputs | null>(null);
   const resultRef = useRef<HTMLDivElement>(null);
