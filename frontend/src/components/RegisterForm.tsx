@@ -612,6 +612,36 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
         // The funnel ends here for this account; nothing further will report
         // its completion, and a stale record would follow the tab for hours.
         if (isTrial) completeFreeTrialSignupFlow();
+        /*
+         * Registration responds before the unawaited seedFirstDecisionFromLead
+         * write finishes. The old sign-in step gave that write time to land;
+         * without it, /app's first /conversations fetch can win the race and
+         * leave the saved calculator run missing until a reload. Poll briefly
+         * so the workspace opens with the decision already there when the
+         * seed succeeds; still navigate if it never appears.
+         */
+        const seededDeadline = Date.now() + 2500;
+        while (Date.now() < seededDeadline) {
+          try {
+            const historyRes = await fetch(`${API_URL}/conversations`, {
+              headers: { Authorization: `Bearer ${data.token}` },
+            });
+            if (historyRes.ok) {
+              const historyData = (await historyRes.json().catch(() => ({}))) as {
+                conversations?: unknown[];
+              };
+              if (
+                Array.isArray(historyData.conversations) &&
+                historyData.conversations.length > 0
+              ) {
+                break;
+              }
+            }
+          } catch {
+            // Keep trying until the deadline; an empty sidebar is recoverable.
+          }
+          await new Promise((resolve) => setTimeout(resolve, 200));
+        }
         router.push(DEFAULT_POST_LOGIN_DESTINATION);
       } else if (isTrial) {
         router.push(withFreeTrialSignupFlow('/verify-email'));
