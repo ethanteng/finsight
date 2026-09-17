@@ -324,11 +324,17 @@ export async function resolveCalculatorLead(params: {
     return null;
   };
 
+  // Neither read counts as continuing from the email. `continuedAt` measures
+  // the signup page's own exchange, which has already happened by the time
+  // anyone reaches this; marking here would also mark it for a forwarded link
+  // the address check below is about to refuse.
+  const resolving = { markContinuation: false };
+
   try {
-    const retirement = await readRetirementLead(token);
+    const retirement = await readRetirementLead(token, new Date(), resolving);
     if (retirement) return claimable({ kind: 'retirement', lead: retirement });
 
-    const coastFire = await readCoastFireLead(token);
+    const coastFire = await readCoastFireLead(token, new Date(), resolving);
     if (coastFire) return claimable({ kind: 'coast-fire', lead: coastFire });
 
     return null;

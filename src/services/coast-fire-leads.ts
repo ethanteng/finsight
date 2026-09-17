@@ -108,6 +108,17 @@ export async function markCoastFireLeadDelivery(
 export async function readCoastFireLead(
   token: string,
   now: Date = new Date(),
+  /**
+   * Whether reading counts as the recipient continuing from the email.
+   *
+   * True for the signup page's own exchange, which is what `continuedAt`
+   * measures. False for registration, which resolves the token again to decide
+   * whether it may seed a first decision and skip the verification code — and
+   * gets there by way of an address match that can refuse. Marking before that
+   * refusal would count a forwarded link opened by somebody else as the
+   * recipient continuing.
+   */
+  options: { markContinuation?: boolean } = {},
 ): Promise<CoastFireLeadRecord | null> {
   if (!isLeadToken(token)) return null;
 
@@ -120,10 +131,12 @@ export async function readCoastFireLead(
     // continuation. `updateMany` makes the write idempotent across reloads and
     // concurrent requests while preserving the time of the first open.
     try {
-      await getPrismaClient().coastFireLead.updateMany({
-        where: { token, continuedAt: null },
-        data: { continuedAt: now },
-      });
+      if (options.markContinuation !== false) {
+        await getPrismaClient().coastFireLead.updateMany({
+          where: { token, continuedAt: null },
+          data: { continuedAt: now },
+        });
+      }
     } catch (error) {
       // Personalization is the product request; analytics bookkeeping cannot
       // turn a valid emailed link into a 404.

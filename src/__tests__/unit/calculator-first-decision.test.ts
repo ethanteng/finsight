@@ -381,6 +381,27 @@ describe('resolveCalculatorLead', () => {
     expect(leads.readCoastFire).not.toHaveBeenCalled();
   });
 
+  /*
+   * `continuedAt` measures the signup page's own exchange of the emailed link.
+   * Registration resolves the token a second time, and gets there by way of an
+   * address match that can refuse — so marking here would count a forwarded
+   * link opened by somebody else as the recipient continuing, in the figure
+   * the acquisition experiment reports.
+   */
+  it('does not record a continuation while deciding whether a token may be claimed', async () => {
+    leads.readCoastFire.mockResolvedValue(coastFireLead());
+
+    await resolveCalculatorLead({ token: 'c'.repeat(48), email: 'reader@example.com' });
+
+    for (const read of [leads.readRetirement, leads.readCoastFire]) {
+      expect(read).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.any(Date),
+        expect.objectContaining({ markContinuation: false }),
+      );
+    }
+  });
+
   it('returns null rather than throwing when the lookup fails', async () => {
     leads.readRetirement.mockRejectedValue(new Error('database down'));
 

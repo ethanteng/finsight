@@ -114,6 +114,17 @@ export async function markRetirementLeadDelivery(
 export async function readRetirementLead(
   token: string,
   now: Date = new Date(),
+  /**
+   * Whether reading counts as the recipient continuing from the email.
+   *
+   * True for the signup page's own exchange, which is what `continuedAt`
+   * measures. False for registration, which resolves the token again to decide
+   * whether it may seed a first decision and skip the verification code — and
+   * gets there by way of an address match that can refuse. Marking before that
+   * refusal would count a forwarded link opened by somebody else as the
+   * recipient continuing.
+   */
+  options: { markContinuation?: boolean } = {},
 ): Promise<RetirementLeadRecord | null> {
   if (!isLeadToken(token)) return null;
 
@@ -125,10 +136,12 @@ export async function readRetirementLead(
     // Persist the first successful emailed CTA continuation. Reloads and
     // concurrent exchanges do not move the timestamp forward.
     try {
-      await getPrismaClient().retirementLead.updateMany({
-        where: { token, continuedAt: null },
-        data: { continuedAt: now },
-      });
+      if (options.markContinuation !== false) {
+        await getPrismaClient().retirementLead.updateMany({
+          where: { token, continuedAt: null },
+          data: { continuedAt: now },
+        });
+      }
     } catch (error) {
       console.error('⚠️  Could not mark retirement lead continuation:', error);
     }
