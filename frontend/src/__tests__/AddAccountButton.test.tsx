@@ -157,19 +157,6 @@ describe('AddAccountButton', () => {
     expect(await screen.findByText(/could not search institutions/i)).toBeInTheDocument();
   });
 
-  it('holds back investment rows until SnapTrade has registered the user', async () => {
-    const user = userEvent.setup();
-    mockSearch({ institutions: [fidelityBrokerage], degradedProviders: [] });
-    const { onSelectSnapTrade } = renderPicker({ snapTradeReady: false });
-
-    await openAndSearch(user, 'fidelity');
-    const row = await screen.findByRole('button', { name: /Fidelity/ });
-
-    expect(row).toBeDisabled();
-    await user.click(row);
-    expect(onSelectSnapTrade).not.toHaveBeenCalled();
-  });
-
   it('closes on Escape without connecting anything', async () => {
     const user = userEvent.setup();
     const { onSelectPlaid, onSelectSnapTrade } = renderPicker();
@@ -182,5 +169,53 @@ describe('AddAccountButton', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     expect(onSelectPlaid).not.toHaveBeenCalled();
     expect(onSelectSnapTrade).not.toHaveBeenCalled();
+  });
+});
+
+describe('AddAccountButton search races', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    global.fetch = jest.fn();
+    Storage.prototype.getItem = jest.fn(() => 'test-token');
+  });
+
+  it('aborts an in-flight search when the query changes', async () => {
+    const user = userEvent.setup();
+    const signals: AbortSignal[] = [];
+
+    (global.fetch as jest.Mock).mockImplementation((_url, options) => {
+      signals.push(options.signal);
+      // Never settles: the only thing that ends this request is the abort.
+      return new Promise(() => {});
+    });
+
+    renderPicker();
+    await openAndSearch(user, 'chas');
+    await waitFor(() => expect(signals).toHaveLength(1));
+
+    // Typing again must not leave the first request free to land later and
+    // repaint the list with results for a query that is no longer typed.
+    await user.type(screen.getByLabelText('Search institutions'), 'e');
+    await waitFor(() => expect(signals[0].aborted).toBe(true));
+  });
+
+  it('keeps investment rows clickable while SnapTrade is still setting up', async () => {
+    const user = userEvent.setup();
+    mockSearch({ institutions: [fidelityBrokerage], degradedProviders: [] });
+    const { onSelectSnapTrade } = renderPicker({ snapTradeReady: false });
+
+    await openAndSearch(user, 'fidelity');
+    const row = await screen.findByRole('button', { name: /Fidelity/ });
+
+    // Disabling these meant one failed registration call left every brokerage
+    // unreachable, with no control left on the page to retry. The request is
+    // queued instead, so the row stays live and says what is happening.
+    expect(row).not.toBeDisabled();
+    expect(row).toHaveTextContent(/still setting up/);
+
+    await user.click(row);
+    expect(onSelectSnapTrade).toHaveBeenCalledWith(
+      expect.objectContaining({ providerInstitutionId: 'FIDELITY' }),
+    );
   });
 });

@@ -209,9 +209,11 @@ export default function ProfilePage() {
   const [retryCount, setRetryCount] = useState(0);
   const [isRetrying, setIsRetrying] = useState(false);
   const [retryMessage, setRetryMessage] = useState<string>('');
-  // Plaid Link's own progress/error text, lifted out of the (now hidden) button
-  // so it appears next to the picker the user actually clicked.
+  // Progress/error text from whichever provider flow the picker started, lifted
+  // out of the (now hidden) provider buttons so it appears next to the control
+  // the user actually clicked.
   const [plaidLinkStatus, setPlaidLinkStatus] = useState('');
+  const [snapTradeConnectStatus, setSnapTradeConnectStatus] = useState('');
   // Brokerage accounts, lifted out of SnapTradeButton so one list can hold every
   // account whichever provider reported it.
   const [snapTradeAccounts, setSnapTradeAccounts] = useState<SnapTradeAccount[]>([]);
@@ -1358,12 +1360,12 @@ export default function ProfilePage() {
               onSelectSnapTrade={handleConnectSnapTrade}
               snapTradeReady={snapTradeReady}
             />
-            {/* Plaid Link reports a failure to mint a token after this modal has
-                closed, so the message is surfaced here rather than beside the
+            {/* Both provider flows report progress and failure after this modal
+                has closed, so the message is surfaced here rather than beside a
                 hidden button further down the page. */}
-            {plaidLinkStatus && (
+            {(plaidLinkStatus || snapTradeConnectStatus) && (
               <div className="mt-3 rounded bg-gray-700 px-3 py-2 text-sm text-gray-300">
-                {plaidLinkStatus}
+                {plaidLinkStatus || snapTradeConnectStatus}
               </div>
             )}
           </div>
@@ -1402,6 +1404,7 @@ export default function ProfilePage() {
                 headless
                 onReadyChange={setSnapTradeReady}
                 onAccountsLoaded={setSnapTradeAccounts}
+                onConnectStatus={setSnapTradeConnectStatus}
                 snapTradeStatus={snapTradeStatus}
                 // Repairs a disabled authorization rather than adding a second
                 // connection to the same brokerage. Undefined when nothing is

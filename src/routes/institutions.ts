@@ -21,10 +21,19 @@ import {
 
 const router = express.Router();
 
-/** A picker types; a script hammers. 60/min is generous for the former. */
+/**
+ * A picker types; a script hammers. 60/min is generous for the former.
+ *
+ * Keyed by user, not by address: this route is authenticated, so the exact
+ * caller is known, and an address would share one window between everyone
+ * behind an office NAT. The `user:` prefix keeps those keys out of the address
+ * namespace the fallback uses, so an id shaped like an address cannot land in
+ * someone else's window.
+ */
 const searchRateLimit = createFixedWindowRateLimit({
   limit: positiveIntFromEnv('INSTITUTION_SEARCH_RATE_LIMIT', 60),
   trustedHops: positiveIntFromEnv('TRUSTED_PROXY_HOPS', 1),
+  keyBy: (req: any) => (req.user?.id ? `user:${req.user.id}` : undefined),
   message: 'Too many institution searches. Please wait a moment and try again.',
 });
 

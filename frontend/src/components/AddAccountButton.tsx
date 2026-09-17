@@ -38,7 +38,14 @@ interface AddAccountButtonProps {
   onSelectPlaid: (institution: InstitutionOption | null) => void;
   /** Open the SnapTrade portal, already on this brokerage's slug when one is given. */
   onSelectSnapTrade: (institution: InstitutionOption) => void;
-  /** False while SnapTrade is still registering the user; its rows say so instead of failing. */
+  /**
+   * False while SnapTrade is still registering the user.
+   *
+   * Only changes what an investment row *says*, never whether it can be
+   * clicked. Disabling them meant a transient failure during registration left
+   * every brokerage permanently unreachable, with no control anywhere on the
+   * page to retry; the request is now queued and retried instead.
+   */
   snapTradeReady?: boolean;
   className?: string;
 }
@@ -197,7 +204,16 @@ const AddAccountButton = forwardRef<AddAccountButtonRef, AddAccountButtonProps>(
       }
     }, SEARCH_DEBOUNCE_MS);
 
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+      // Abort here too, not only when the next debounce fires. Once the fetch
+      // has started, clearing the timer no longer stops anything: the reply for
+      // the old query could land during the debounce window and repaint the
+      // list with institutions that do not match what is now typed -- briefly
+      // clickable, and wrong.
+      inFlight.current?.abort();
+      inFlight.current = null;
+    };
   }, [API_URL, isOpen, queryIsSearchable, trimmedQuery]);
 
   useEffect(() => () => inFlight.current?.abort(), []);
@@ -311,14 +327,16 @@ const AddAccountButton = forwardRef<AddAccountButtonRef, AddAccountButtonProps>(
               ) : (
                 <ul className="space-y-2">
                   {results.map(institution => {
-                    const unavailable = institution.provider === 'snaptrade' && !snapTradeReady;
+                    // Still clickable: the request is queued and retried once
+                    // registration lands, so this is a note about what will
+                    // happen, not a closed door.
+                    const settingUp = institution.provider === 'snaptrade' && !snapTradeReady;
                     return (
                       <li key={institution.id}>
                         <button
                           type="button"
                           onClick={() => select(institution)}
-                          disabled={unavailable}
-                          className="flex w-full items-center gap-3 rounded-lg border border-gray-600 bg-gray-700 p-3 text-left transition-colors hover:border-green-600 hover:bg-gray-600 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:border-gray-600 disabled:hover:bg-gray-700"
+                          className="flex w-full items-center gap-3 rounded-lg border border-gray-600 bg-gray-700 p-3 text-left transition-colors hover:border-green-600 hover:bg-gray-600"
                         >
                           <InstitutionLogo institution={institution} />
                           <span className="min-w-0 flex-1">
@@ -326,8 +344,8 @@ const AddAccountButton = forwardRef<AddAccountButtonRef, AddAccountButtonProps>(
                               {institution.name}
                             </span>
                             <span className="block text-xs text-gray-400">
-                              {unavailable
-                                ? 'Setting up investment connections — try again in a moment'
+                              {settingUp
+                                ? `${institution.covers} — still setting up, this may take a moment`
                                 : institution.covers}
                             </span>
                           </span>

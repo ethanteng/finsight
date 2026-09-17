@@ -271,7 +271,16 @@ export async function cachedBrokerages(
     return brokerageCache.brokerages;
   }
   const brokerages = await fetchBrokerages();
-  brokerageCache = { fetchedAt: now, brokerages };
+
+  // An empty list is never the real answer -- SnapTrade supports roughly a
+  // hundred brokerages -- so it is a degraded response that happened to arrive
+  // as a 200. Caching it would hide every brokerage from the picker for the
+  // next six hours over one bad reply, with nothing in the logs to say why.
+  // Serving it once and retrying next search is the cheap, self-correcting
+  // choice.
+  if (brokerages.length > 0) {
+    brokerageCache = { fetchedAt: now, brokerages };
+  }
   return brokerages;
 }
 

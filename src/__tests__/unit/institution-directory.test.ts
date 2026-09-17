@@ -243,3 +243,24 @@ describe('result caps', () => {
     expect(result.institutions).toHaveLength(8);
   });
 });
+
+describe('cachedBrokerages degraded responses', () => {
+  beforeEach(() => resetBrokerageCache());
+  afterAll(() => resetBrokerageCache());
+
+  it('does not cache an empty brokerage list', async () => {
+    // Roughly a hundred brokerages exist, so empty is a degraded reply that
+    // happened to arrive as a 200. Caching it would hide every brokerage from
+    // the picker for the whole TTL over one bad response.
+    const fetchBrokerages = jest.fn()
+      .mockResolvedValueOnce([])
+      .mockResolvedValue([brokerage()]);
+
+    const first = await cachedBrokerages(fetchBrokerages, 0);
+    const second = await cachedBrokerages(fetchBrokerages, 1_000);
+
+    expect(first).toEqual([]);
+    expect(second).toHaveLength(1);
+    expect(fetchBrokerages).toHaveBeenCalledTimes(2);
+  });
+});

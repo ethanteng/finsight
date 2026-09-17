@@ -82,6 +82,14 @@ interface SnapTradeButtonProps {
    * changed, go refresh" signal several callers already depend on.
    */
   onAccountsLoaded?: (accounts: SnapTradeAccount[]) => void;
+  /**
+   * Progress and failure text for a connect request the parent started.
+   *
+   * Headless, the component has nowhere of its own to say "still setting up" or
+   * "that failed, try again" -- and the click happened in the shared picker, so
+   * the message belongs next to it.
+   */
+  onConnectStatus?: (message: string) => void;
 }
 
 export interface SnapTradeButtonRef {
@@ -97,7 +105,7 @@ export interface SnapTradeButtonRef {
 }
 
 const SnapTradeButton = forwardRef<SnapTradeButtonRef, SnapTradeButtonProps>(function SnapTradeButton(
-  { onAccountsUpdated, snapTradeStatus: snapTradeTokenStatus, reconnectAuthorizationId, headless = false, onReadyChange, onAccountsLoaded },
+  { onAccountsUpdated, snapTradeStatus: snapTradeTokenStatus, reconnectAuthorizationId, headless = false, onReadyChange, onAccountsLoaded, onConnectStatus },
   ref,
 ) {
   const [status, setStatus] = useState<string>('loading');
@@ -108,6 +116,11 @@ const SnapTradeButton = forwardRef<SnapTradeButtonRef, SnapTradeButtonProps>(fun
   // Modal state for SnapTrade connection portal
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [redirectLink, setRedirectLink] = useState<string | null>(null);
+  // A connect request that arrived before registration was ready, held until it
+  // is. See the imperative handle below for why this is not simply dropped.
+  const [pendingConnect, setPendingConnect] = useState<
+    { brokerSlug?: string; retried: boolean } | null
+  >(null);
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
@@ -182,10 +195,44 @@ const SnapTradeButton = forwardRef<SnapTradeButtonRef, SnapTradeButtonProps>(fun
   }, [snapTradeStatus]);
 
   // Registration state lives here, but the shared "Add an account" picker is
-  // what has to decide whether an investment row is clickable yet.
+  // what has to decide how to present an investment row.
   useEffect(() => {
     onReadyChange?.(status === 'registered' || status === 'connected');
   }, [status, onReadyChange]);
+
+  // Drain a connect request that arrived before registration was ready.
+  useEffect(() => {
+    if (!pendingConnect) return;
+
+    if (status === 'registered' || status === 'connected') {
+      setPendingConnect(null);
+      onConnectStatus?.('');
+      connectSnapTrade(undefined, pendingConnect.brokerSlug);
+      return;
+    }
+
+    // A read or a registration is in flight; wait for where it lands rather
+    // than starting a second one alongside it.
+    if (status === 'loading' || isInitializing) return;
+
+    // Registration is not in place and nothing is trying to establish it. One
+    // attempt is the whole reason for holding the request -- a single failed
+    // status read is all it used to take to strand the user -- so give up only
+    // once that attempt has also failed.
+    if (!pendingConnect.retried) {
+      setPendingConnect({ ...pendingConnect, retried: true });
+      initializeSnapTrade();
+      return;
+    }
+
+    // Out of options. Say so: a picker row that swallowed a click with nothing
+    // to show for it is the failure mode this whole path exists to avoid.
+    setPendingConnect(null);
+    onConnectStatus?.(
+      'We could not set up investment connections just now. Please try again.',
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status, isInitializing, pendingConnect]);
 
   const checkSnapTradeStatus = async () => {
     try {
@@ -443,20 +490,24 @@ const SnapTradeButton = forwardRef<SnapTradeButtonRef, SnapTradeButtonProps>(fun
   /**
    * Let the shared "Add an account" flow open the portal.
    *
-   * `isReady` exists so the caller can tell "SnapTrade is still registering
-   * this user" apart from a click that did nothing: the portal cannot open
-   * before registration, and silently dropping the request is how the old
-   * disabled-button state read to users.
+   * When registration has not landed -- or failed, which a transient
+   * `/snaptrade/status/user` error is enough to cause -- the request is
+   * remembered and retried rather than dropped. Dropping it was a dead end:
+   * this component is headless, so there is no button left for the user to
+   * press to retry, and every brokerage in the picker would stay unreachable
+   * for the rest of the session over one failed status call.
    */
   useImperativeHandle(ref, () => ({
     connect: (brokerSlug?: string) => {
-      if (status === 'error' || status === 'disconnected' || status === 'not_initialized') {
-        // Registration has to land before a portal link can be minted. Kick it
-        // off so the next attempt succeeds rather than failing the same way.
-        initializeSnapTrade();
+      if (status === 'registered' || status === 'connected') {
+        connectSnapTrade(undefined, brokerSlug);
         return;
       }
-      connectSnapTrade(undefined, brokerSlug);
+      // Hold it and let the effect below decide what registration needs. An
+      // undefined slug still means "asked, with no particular brokerage", which
+      // is why this is a record rather than a nullable slug.
+      setPendingConnect({ brokerSlug, retried: false });
+      onConnectStatus?.('Setting up your investment connection…');
     },
     isReady: () => status === 'registered' || status === 'connected',
   }));

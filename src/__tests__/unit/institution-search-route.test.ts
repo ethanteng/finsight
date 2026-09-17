@@ -146,3 +146,36 @@ describe('GET /api/institutions/search', () => {
     expect(institutionsSearch).toHaveBeenCalledTimes(2);
   });
 });
+
+describe('GET /api/institutions/search rate limiting', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    resetBrokerageCache();
+    institutionsSearch.mockResolvedValue({ data: { institutions: [] } });
+    listBrokerages.mockResolvedValue([]);
+  });
+
+  afterAll(() => resetBrokerageCache());
+
+  it('meters each user separately rather than sharing a window by address', async () => {
+    // Two people behind one office NAT are two callers. Keying by address would
+    // let the first exhaust the window for everyone else on that connection.
+    const callsFor = (userId: string) =>
+      requireAuthImpl.mockImplementation((req: any, _res: any, next: any) => {
+        req.user = { id: userId, email: `${userId}@example.com`, tier: 'premium' };
+        next();
+      });
+
+    callsFor('user-noisy');
+    let lastStatus = 200;
+    for (let i = 0; i < 65; i++) {
+      const response = await request(app).get('/api/institutions/search').query({ query: 'chase' });
+      lastStatus = response.status;
+    }
+    expect(lastStatus).toBe(429);
+
+    callsFor('user-quiet');
+    const quiet = await request(app).get('/api/institutions/search').query({ query: 'chase' });
+    expect(quiet.status).toBe(200);
+  });
+});
