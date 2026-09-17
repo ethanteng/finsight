@@ -2,10 +2,10 @@
  * The plain-language reading of a public Coast FIRE result.
  *
  * Same division as `/retirement-calculator`: the formula produces every
- * number, the model is only allowed to say what those numbers mean, and a
- * draft stating any figure the formula did not produce is rejected and
- * dropped. `calculator-interpretation` holds that machinery; this file holds
- * what is specific to a Coast FIRE run.
+ * number and the model is only allowed to say what those numbers mean. Asking
+ * is now all that enforces it — the figures are checked and the mismatches
+ * logged, but a reading is shown either way. `calculator-interpretation` holds
+ * that machinery; this file holds what is specific to a Coast FIRE run.
  *
  * Two things make this reading harder to write than the quick plan's, and the
  * prompt below is shaped around both:
@@ -31,7 +31,7 @@ import {
   percentFact,
   plainFact,
   rateFact,
-  runGroundedInterpretation,
+  runCalculatorInterpretation,
   signedMoneyFact,
   type CalculatorFact,
 } from './calculator-interpretation';
@@ -60,8 +60,8 @@ export interface CoastFireInterpretation {
  * Everything true about this run, and nothing else.
  *
  * Exported because the grounding suite asserts against it directly: the
- * guarantee this module makes is "no number outside this block reaches the
- * page", and that is only testable if the block is reachable.
+ * advisory check this module runs is "does every number fall inside this
+ * block", and that is only testable if the block is reachable.
  */
 export function buildCoastFireFacts(
   result: CoastFireResult,
@@ -190,14 +190,16 @@ A visitor has entered seven numbers. A deterministic formula has already produce
 
 # Non-negotiable rules
 
-1. Every number you write must come from the supplied figures. State them as given or rounded more coarsely; never add, subtract, divide, average or otherwise derive a new one. Output containing any other number is rejected and discarded.
-2. Write small counts as words ("two levers", "a third of"), so that every digit on the page is a figure from the list. But a *quantity* always goes in digits, exactly as the list gives it: "five years", "ninety percent" and "two million dollars" are rejected the same way an unlisted digit is, because they state a figure with nothing to check.
+1. Every number you write must come from the supplied figures. State them as given or rounded more coarsely; never add, subtract, divide, average or otherwise derive a new one. Nothing downstream checks this before the visitor reads it: a number you invent here is a number they are shown.
+2. Write small counts as words ("two levers", "a third of"). Rule 1 applies to a quantity however it is written: "seven years" and "7 years" are the same claim, and spelling one out does not make it a figure you may invent.
 3. Describe, do not prescribe. This is the rule that matters most here: reaching the number does not mean anyone should stop contributing, change jobs, take a pay cut, or spend more, and falling short does not mean anyone should save harder. Say what the figures show. Never tell the visitor what to do, what to buy or sell, when to retire, or to consult anyone.
 4. This is one projection at one constant rate, not a simulation and not a forecast. There is no probability here. Never write "chance", "likely", "should be fine", "on track to", or any phrasing that treats the result as an odds. Write "this projection", "at the return you entered", "on these assumptions".
 5. The return and the withdrawal rate are assumptions the visitor typed, not our estimates and not market predictions. Say so when the result leans on them, which it always does — a point either way compounds for the whole run, and the figures include what the answer becomes at a point above and below.
 6. Never claim to know anything the list does not contain — their actual holdings, contributions, taxes, fees, account types, healthcare, housing, employment, or any income not listed. Nothing here models taxes, fees, account types, a market that moves unevenly, spending that changes, or income that starts later than retirement.
 7. Figures labelled "Today, for context" are published rates as of the dates given. Use them only to locate today's conditions against the assumption the visitor typed — an inflation reading or a starting yield is a condition, never a forecast, never a reason the result is wrong, and never a reason to act. If they add nothing to this particular scenario, leave them out.
 8. Second person, plain words, short sentences. No headers, no bullets inside a paragraph, no markdown.
+9. Write a share as the percentage the list gives. Never turn one into a ratio of your own — "9 in 10", "8 out of 10" — because those digits are a figure you worked out, not one from the list. Where the list spells a proportion out, use its words.
+10. Never state a remainder, a complement or a difference you worked out yourself: the share that ran short when you were given the share that lasted, what is left after subtracting, how much more one figure is than another. If the list does not contain it, it does not go on the page.
 
 # Output
 
@@ -255,11 +257,10 @@ function cacheKey(result: CoastFireResult, market: CalculatorMarketConditions): 
 /**
  * Write the reading of one Coast FIRE result.
  *
- * Returns null when no grounded draft could be produced, which the route
- * serves as an empty body and the page renders as nothing at all. The result
- * panel is complete without this, so dropping it costs a paragraph; shipping
- * an ungrounded one would put an invented figure under our own branding on the
- * page that argues our numbers are real.
+ * Returns null only when the model returned nothing usable, which the route
+ * serves as an empty body and the page renders as nothing at all. A draft
+ * whose figures do not match the formula's is no longer one of those cases:
+ * it is shown, and the mismatch goes to the log instead.
  */
 export async function interpretCoastFire(
   result: CoastFireResult
@@ -275,7 +276,7 @@ export async function interpretCoastFire(
   if (hit) return { ...hit, cached: true };
 
   const facts = buildCoastFireFacts(result, market);
-  const written = await runGroundedInterpretation({
+  const written = await runCalculatorInterpretation({
     label: 'Coast FIRE',
     systemPrompt: SYSTEM_PROMPT,
     userMessage: buildUserMessage(result, facts),
@@ -288,6 +289,11 @@ export async function interpretCoastFire(
     model: written.model,
     cached: false,
   };
-  interpretationCache.set(key, interpretation);
+
+  // A reading whose figures did not check out is shown to the visitor who
+  // caused it and then forgotten. Caching it would serve one bad generation to
+  // everyone who enters the same round numbers, which is a different decision
+  // from showing it once — the next visitor gets a fresh attempt instead.
+  if (written.grounded) interpretationCache.set(key, interpretation);
   return interpretation;
 }

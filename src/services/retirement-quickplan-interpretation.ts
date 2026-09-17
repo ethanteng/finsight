@@ -20,10 +20,10 @@
  *     prompt is a handful of published rates from named series
  *     (`calculator-market-conditions`). Nothing third-party writes prose into
  *     it, so there is nothing to fence.
- *  3. **Every figure is checked.** A draft containing any number the engine did
- *     not compute is rejected, retried once, and then dropped: the page’s
- *     deterministic result is already complete without this, so the failure
- *     mode is a missing paragraph rather than a wrong one.
+ *  3. **Every figure is checked, and the check only reports.** A draft
+ *     containing a number the engine did not compute is logged and shown. It
+ *     used to be dropped; on a free, unauthenticated page an empty panel was
+ *     judged the worse outcome, so the prompt now carries this alone.
  *
  * What this file holds is the part specific to a quick plan — its figures, its
  * prompt, and its cache key. The grounding, the retry budget and the model call
@@ -40,7 +40,7 @@ import {
   moneyFact,
   percentFact,
   plainFact,
-  runGroundedInterpretation,
+  runCalculatorInterpretation,
   type CalculatorFact,
   type InterpretationDraft,
 } from './calculator-interpretation';
@@ -53,8 +53,8 @@ import type { RetirementQuickPlanResult } from './retirement-quickplan';
 
 /**
  * Re-exported because the grounding suite asserts against them directly: the
- * guarantee this module makes is "no number outside the fact block reaches the
- * page", and that is only testable through the tokenizer that enforces it.
+ * advisory check this module runs is "does every number fall inside the fact
+ * block", and that is only testable through the tokenizer that measures it.
  */
 export { extractNumericTokens };
 export type { GroundingResult } from './calculator-interpretation';
@@ -85,8 +85,8 @@ export function groundInterpretation(draft: InterpretationDraft, facts: PlanFact
  * Everything true about this run, and nothing else.
  *
  * Exported because the grounding test suite asserts against it directly: the
- * guarantee this module makes is "no number outside this block reaches the
- * page", and that is only testable if the block is reachable.
+ * advisory check this module runs is "does every number fall inside this
+ * block", and that is only testable if the block is reachable.
  */
 export function buildPlanFacts(
   result: RetirementQuickPlanResult,
@@ -261,13 +261,16 @@ A visitor has entered a handful of numbers. A deterministic engine has already r
 
 # Non-negotiable rules
 
-1. Every number you write must come from the supplied figures. State them as given or rounded more coarsely; never add, subtract, divide, average or otherwise derive a new one. Output containing any other number is rejected and discarded.
-2. Write small counts as words ("two levers", "a third of"), so that every digit on the page is a figure from the list. But a *quantity* always goes in digits, exactly as the list gives it: "five years", "ninety percent" and "two million dollars" are rejected the same way an unlisted digit is, because they state a figure with nothing to check.
+1. Every number you write must come from the supplied figures. State them as given or rounded more coarsely; never add, subtract, divide, average or otherwise derive a new one. Nothing downstream checks this before the visitor reads it: a number you invent here is a number they are shown.
+2. Write small counts as words ("two levers", "a third of"). Rule 1 applies to a quantity however it is written: "seven years" and "7 years" are the same claim, and spelling one out does not make it a figure you may invent.
 3. Describe, do not prescribe. Say what the tested histories did and what this plan's own numbers imply. Never tell the visitor what to do, what to buy or sell, when to retire, or to consult anyone.
 4. Never claim to know anything the list does not contain — their actual holdings, taxes, fees, account types, health, housing, or any income not listed. The asset mix is a preset the visitor picked from three, not their portfolio.
 5. A survival share is a count of historical stretches, never a probability of their future. Write "in 87% of the retirements we could test", not "you have an 87% chance".
 6. Figures labelled "Today, for context" are published rates as of the dates given. Use them only to locate today inside the tested record — a starting yield or an inflation reading is a condition this retirement would begin from, and the historical distribution averages over hundreds of such starting points. Never present one as a forecast, a reason the result is wrong, or a reason to act. If they add nothing to this particular plan, leave them out.
 7. Second person, plain words, short sentences. No headers, no bullets inside a paragraph, no markdown.
+8. Write a share as the percentage the list gives. Never turn one into a ratio of your own — "9 in 10", "8 out of 10" — because those digits are a figure you worked out, not one from the list. Where the list spells a proportion out, use its words.
+9. Never state a remainder, a complement or a difference you worked out yourself: the share that ran short when you were given the share that lasted, what is left after subtracting, how much more one figure is than another. If the list does not contain it, it does not go on the page.
+10. Never name a calendar year or a span of years — "2008", "the 1970s", "1966 to 1982". The tested record is described by the figures you have: how many retirements were tested, when the earliest and latest of them began, how long each ran. No individual year or crisis is among them, and naming one states something this run did not produce.
 
 # Output
 
@@ -354,7 +357,7 @@ function cacheKey(
     // provider revising a value in place, and misses the 10-year point falling
     // back from Massive to FRED — same label, possibly the same date, a
     // different number. Either would serve prose quoting a yield that is no
-    // longer the one in the facts, which is the guarantee this module makes.
+    // longer the one in the facts, which is what the advisory check measures.
     marketRates(market).map(
       (rate) => `${rate.label}@${rate.source}@${rate.asOf}@${rate.percent}`
     ),
@@ -373,11 +376,10 @@ function cacheKey(
 /**
  * Write the reading of one quick plan.
  *
- * Returns null when no grounded draft could be produced, which the route
- * serves as an empty body and the page renders as nothing at all. The
- * deterministic result is complete without this panel, so dropping it costs a
- * paragraph; shipping an ungrounded one would put an invented figure under our
- * own branding on the page that argues our numbers are real.
+ * Returns null only when the model returned nothing usable, which the route
+ * serves as an empty body and the page renders as nothing at all. A draft
+ * whose figures do not match the engine's is no longer one of those cases: it
+ * is shown, and the mismatch goes to the log instead.
  */
 export async function interpretRetirementQuickPlan(
   result: RetirementQuickPlanResult
@@ -393,7 +395,7 @@ export async function interpretRetirementQuickPlan(
   if (hit) return { ...hit, cached: true };
 
   const facts = buildPlanFacts(result, market);
-  const written = await runGroundedInterpretation({
+  const written = await runCalculatorInterpretation({
     label: 'Retirement',
     systemPrompt: SYSTEM_PROMPT,
     userMessage: buildUserMessage(result, facts),
@@ -406,6 +408,11 @@ export async function interpretRetirementQuickPlan(
     model: written.model,
     cached: false,
   };
-  interpretationCache.set(key, interpretation);
+
+  // A reading whose figures did not check out is shown to the visitor who
+  // caused it and then forgotten. Caching it would serve one bad generation to
+  // everyone who enters the same round numbers, which is a different decision
+  // from showing it once — the next visitor gets a fresh attempt instead.
+  if (written.grounded) interpretationCache.set(key, interpretation);
   return interpretation;
 }

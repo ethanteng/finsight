@@ -250,26 +250,106 @@ describe('the figures a Coast FIRE reading may state', () => {
 
   /*
    * The hole the digit tokenizer leaves. The prompts ask for small counts as
-   * words so that every digit on the page is a licensed figure, which means a
-   * figure spelled out carries nothing to check — and "a ninety percent
-   * chance" is the exact claim rule 4 of this prompt forbids.
+   * words, which means a figure spelled out carries no digit to check — and "a
+   * ninety percent chance" is the exact claim rule 4 of this prompt forbids.
    *
-   * The line is the unit: a quantity spelled out is refused, a count is not.
+   * They are read as numbers and held to the same list, rather than refused on
+   * sight. Refusing was the first attempt and it contradicted the instruction
+   * that produces them: a count written as a word is what rule 2 asks for, and
+   * rejecting it dropped panels that were telling the truth. See the
+   * "grounds a spelled figure the formula did produce" case below.
    */
-  it('refuses a quantity spelled out in words', () => {
+  it('refuses a spelled quantity the formula did not produce', () => {
     const facts = buildCoastFireFacts(result());
 
     for (const spelled of [
       'There is roughly a ninety percent chance this holds.',
-      'Over the next five years that compounds.',
       'You would need about two million dollars.',
-      'Left alone for twenty-five years it grows.',
+      'That is thirty-seven percent of the target.',
+      // Fifty is in no fact here; forty would be, as the visitor's age, which
+      // is the by-value gap `groundDraft` documents rather than a new one.
+      'Left alone for fifty years it grows.',
     ]) {
       const grounded = groundDraft(
         { headline: 'A headline.', paragraphs: [spelled], watchOuts: [] },
         facts
       );
       expect(grounded.grounded).toBe(false);
+    }
+  });
+
+  /*
+   * A spelled phrase may not be matched as the tail of a longer one. Both of
+   * these reduced to a bare "five percent" before the modifier was captured,
+   * so a draft stating the opposite of a licensed rate — or a materially
+   * different one — passed the check that exists to catch exactly that. The
+   * digit tokenizer captures its sign for the same reason.
+   */
+  it('does not read a spelled quantity as the tail of a longer one', () => {
+    const facts = buildCoastFireFacts(result());   // licenses 5% and 4%
+
+    for (const text of [
+      'Returns could come in at negative five percent.',
+      // 5.5% is a different rate than the licensed 5% — not a suffix restart.
+      'At five point five percent the picture changes.',
+    ]) {
+      expect(groundDraft(
+        { headline: 'A headline.', paragraphs: [text], watchOuts: [] },
+        facts
+      ).grounded).toBe(false);
+    }
+
+    // The unmodified phrase still grounds, so this is not a blanket refusal.
+    expect(groundDraft(
+      { headline: 'A headline.', paragraphs: ['At five percent after inflation, the savings do the rest.'], watchOuts: [] },
+      facts
+    ).grounded).toBe(true);
+
+    // And a spelled decimal that the formula did produce grounds too.
+    const withHalf = buildCoastFireFacts(result({ realReturnRate: 5.5 }));
+    expect(groundDraft(
+      { headline: 'A headline.', paragraphs: ['At five point five percent after inflation, the savings do the rest.'], watchOuts: [] },
+      withHalf
+    ).grounded).toBe(true);
+  });
+
+  /*
+   * A magnitude scales the group in front of it. Read as a running sum instead,
+   * "one hundred thousand dollars" came out as 1,100: it rejected a truthful
+   * figure and would have accepted the claim on any run that licensed $1,100.
+   */
+  it('reads a chained magnitude the way English does', () => {
+    const spending = result({ annualRetirementSpending: 100_000, annualRetirementIncome: 50_000 });
+    const facts = buildCoastFireFacts(spending);
+
+    expect(groundDraft(
+      { headline: 'A headline.', paragraphs: ['You plan to spend one hundred thousand dollars a year.'], watchOuts: [] },
+      facts
+    )).toEqual({ grounded: true, ungrounded: [] });
+
+    expect(groundDraft(
+      { headline: 'A headline.', paragraphs: ['You plan to spend three hundred million dollars a year.'], watchOuts: [] },
+      facts
+    ).grounded).toBe(false);
+  });
+
+  /*
+   * The other half of the same rule, and the one that was wrong before: this
+   * scenario runs from 40 to 65, so twenty-five years is a figure the formula
+   * produced. Spelling it does not make it a fabrication, and refusing it
+   * taught the model nothing it could act on.
+   */
+  it('grounds a spelled figure the formula did produce', () => {
+    const facts = buildCoastFireFacts(result());
+
+    for (const spelled of [
+      'Left alone for twenty-five years, your savings do the rest.',
+      'You have twenty-five years of compounding ahead of you.',
+    ]) {
+      expect(groundDraft(
+        { headline: 'A headline.', paragraphs: [spelled], watchOuts: [] },
+        facts
+      )).toEqual({ grounded: true, ungrounded: [] });
     }
   });
 
@@ -340,24 +420,52 @@ describe('interpretCoastFire', () => {
     expect(model.ask).toHaveBeenCalledTimes(2);
   });
 
-  it('retries once, naming the figure it would not accept', async () => {
-    model.ask
-      .mockResolvedValueOnce(DRAFT('That is $4,167 a month.'))
-      .mockResolvedValueOnce(DRAFT('Your Coast FIRE number is $369,128.'));
+  /*
+   * A figure the formula never produced no longer withholds the panel. These
+   * pages are free and unauthenticated, and the product call is that a visitor
+   * seeing no reading is worse than one that may misquote a number. The check
+   * still runs — it writes a warning naming the figure, so the rate stays
+   * visible — and the prompt is now the only thing asking for accuracy.
+   */
+  /*
+   * Shown once, not kept. The visitor who caused it sees it; caching it would
+   * hand the same bad generation to everyone entering the same round numbers,
+   * and landing-page visitors reach for round numbers.
+   */
+  it('does not cache a reading whose figures did not check out', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      model.ask.mockResolvedValue(DRAFT('That is $4,167 a month.'));
 
-    const interpretation = await interpretCoastFire(result());
-    expect(interpretation?.paragraphs[0]).toContain('$369,128');
+      const first = await interpretCoastFire(result());
+      const second = await interpretCoastFire(result());
 
-    const retryPrompt = String(model.ask.mock.calls[1][1]);
-    expect(retryPrompt).toContain('$4,167');
-    expect(retryPrompt).toContain('Do not compute anything.');
+      expect(first?.cached).toBe(false);
+      expect(second?.cached).toBe(false);
+      expect(model.ask).toHaveBeenCalledTimes(2);
+    } finally {
+      warn.mockRestore();
+    }
   });
 
-  it('gives up rather than shipping a figure it could not check', async () => {
-    model.ask.mockResolvedValue(DRAFT('That is $4,167 a month.'));
+  it('ships a figure it could not verify, and logs it', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      model.ask.mockResolvedValue(DRAFT('That is $4,167 a month.'));
 
-    expect(await interpretCoastFire(result())).toBeNull();
-    expect(model.ask).toHaveBeenCalledTimes(2);
+      const interpretation = await interpretCoastFire(result());
+      expect(interpretation?.paragraphs[0]).toContain('$4,167');
+
+      // Shown on the first attempt: there is nothing a retry would improve on
+      // once the draft is going out either way.
+      expect(model.ask).toHaveBeenCalledTimes(1);
+
+      const logged = warn.mock.calls.map((call) => call.join(' ')).join('\n');
+      expect(logged).toContain('shipped with unverified figures');
+      expect(logged).toContain('$4,167');
+    } finally {
+      warn.mockRestore();
+    }
   });
 
   it('returns null when the provider fails, without retrying it', async () => {

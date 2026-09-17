@@ -56,11 +56,16 @@ produces every number, the model only describes them.
 
 `src/services/coast-fire-interpretation.ts` builds a fact block — every figure
 this run produced, plus a handful of published rates from named series — and
-`src/services/calculator-interpretation.ts` checks the draft against it. Any
-number that is not one of those facts, at the precision the draft wrote it to,
-rejects the draft; it is sent back once naming the offending tokens, and then
-dropped. A dropped reading renders as nothing at all, which is why the endpoint
-answers `204` rather than an error.
+`src/services/calculator-interpretation.ts` checks the draft against it. That
+check now only reports: a number that is not one of those facts, at the
+precision the draft wrote it to, is logged as `shipped with unverified figures`
+and the reading is shown anyway. The prompt is the only thing asking the model
+to stay inside the block. See "Why nothing is withheld" in
+`docs/RETIREMENT_QUICKPLAN.md`, which both pages share.
+
+A reading is still dropped when the model returns nothing usable — a provider
+error, a stall, or a response that never parses. That renders as nothing at
+all, which is why the endpoint answers `204` rather than an error.
 
 Three things are specific to this page rather than inherited from the quick
 plan:

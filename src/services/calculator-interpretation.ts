@@ -9,11 +9,13 @@
  *
  *  - Every number in the draft is checked against the figures the engine
  *    produced, at the precision the draft actually wrote them to.
- *  - A draft that fails is sent back once with the offending tokens named,
- *    and then dropped. The page's deterministic answer is already complete, so
- *    a reading that cannot be grounded costs a paragraph rather than being
- *    shown wrong.
- *  - The whole thing sits behind one budget, because a visitor is waiting.
+ *  - The check reports; it does not gate. A mismatch is logged (and sent to
+ *    Sentry) and the reading is shown either way — these pages are free and
+ *    unauthenticated, and an empty panel was judged worse than a paragraph
+ *    that may misquote a number. The prompt is the only thing asking the
+ *    model to stay inside the fact block.
+ *  - A response that cannot be parsed is retried once. The whole thing sits
+ *    behind one budget, because a visitor is waiting.
  *
  * This module owns that contract. Each calculator supplies its own facts, its
  * own system prompt, and its own run block; nothing here knows what a Coast
@@ -274,44 +276,211 @@ export function extractNumericTokens(text: string): NumericToken[] {
   return tokens;
 }
 
+const NUMBER_WORDS: Record<string, number> = {
+  zero: 0, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8,
+  nine: 9, ten: 10, eleven: 11, twelve: 12, thirteen: 13, fourteen: 14, fifteen: 15,
+  sixteen: 16, seventeen: 17, eighteen: 18, nineteen: 19, twenty: 20, thirty: 30,
+  forty: 40, fifty: 50, sixty: 60, seventy: 70, eighty: 80, ninety: 90,
+};
+
+const MAGNITUDE_WORDS: Record<string, number> = {
+  hundred: 100, thousand: 1_000, million: 1_000_000, billion: 1_000_000_000,
+};
+
+const ANY_NUMBER_WORD = [...Object.keys(NUMBER_WORDS), ...Object.keys(MAGNITUDE_WORDS)].join('|');
+
 /**
- * A figure spelled out in words, attached to a unit that makes it a claim.
+ * The digits after a spelled decimal point.
+ *
+ * English says these two ways and means the same thing: "point twenty five" is
+ * a number, "point two five" is the digits read out one at a time. Summing the
+ * words handles the first and mangles the second — "two five" adds to 7, not
+ * 25 — so single digits are concatenated and anything else is read as a
+ * number, the way each was written.
+ */
+function fractionDigits(phrase: string): string {
+  const words = phrase.toLowerCase().split(/[-\s]+/).filter(Boolean);
+  const spelledOut = words.every((word) => word in NUMBER_WORDS && NUMBER_WORDS[word] < 10);
+  if (spelledOut && words.length > 1) return words.map((word) => NUMBER_WORDS[word]).join('');
+  const read = readNumberWords(phrase);
+  return read ? String(Math.round(Math.abs(read.value))) : '';
+}
+
+/**
+ * Whether the prose running up to a match ends in a number word, which is what
+ * separates a spelled decimal from the ordinary English noun: "five point five
+ * percent" is a figure, "at this point five years remain" is a sentence.
+ */
+function endsInNumberWord(before: string): boolean {
+  const word = /([a-z]+)[-\s]*$/i.exec(before)?.[1]?.toLowerCase();
+  return word !== undefined && (word in NUMBER_WORDS || word in MAGNITUDE_WORDS);
+}
+
+/**
+ * A quantity spelled out in words, attached to a unit that makes it a claim.
  *
  * The tokenizer above reads digits, and the prompts ask for small counts as
- * words precisely so that every digit on the page is a licensed figure. That
- * arrangement has a hole in it: "a ninety percent chance" and "over the next
- * five years" state figures this run never produced and contain no digit to
- * check, so they would reach the page unexamined — and rule 4 of the Coast
- * FIRE prompt forbids exactly the first of those.
+ * words so that every digit on the page is a licensed figure. That leaves
+ * spelled quantities unexamined: "a ninety percent chance" states a figure no
+ * run produced and contains no digit to check.
  *
- * The line drawn here is the unit. "Two levers" and "a third of the answer"
- * are the phrasings the prompts want and carry no quantity; "five years",
- * "ninety percent" and "two million dollars" are quantities, and every
- * quantity this run produced is in the fact block in digits. A draft that
- * spells one out is sent back to write it as a digit, where it is checked like
- * any other.
+ * These are read as numbers and checked like any other, rather than refused on
+ * sight. Refusing was the first attempt and it contradicted the instruction
+ * that produces them: "seven years between retiring and claiming" is a small
+ * count written as a word, exactly as rule 2 asks, and the figure behind it is
+ * licensed — so rejecting the draft taught the model nothing it could act on
+ * and dropped panels that were telling the truth.
  *
- * The separator is whitespace only, never a hyphen, so the compound adjective
- * in "the thirty-year Treasury yield" — which is how the fact block itself
- * names the series — stays prose rather than becoming a rejected figure.
+ * The line is still the unit. "Two levers" and "a third of the answer" carry no
+ * quantity and are not read at all; "seven years", "ninety percent" and "two
+ * million dollars" are quantities, and they now stand or fall on whether the
+ * engine produced them.
+ *
+ * The separator before the unit is whitespace, never a hyphen, so the compound
+ * adjective in "the thirty-year Treasury yield" — which is how the fact block
+ * names the series — stays prose rather than becoming a figure. A hyphen
+ * *inside* the number ("twenty-five years") is still read.
  */
 const SPELLED_FIGURE = new RegExp(
-  String.raw`\b(` +
-  String.raw`(?:zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|` +
-  String.raw`thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|` +
-  String.raw`thirty|forty|fifty|sixty|seventy|eighty|ninety|` +
-  String.raw`hundred|thousand|million|billion)` +
-  String.raw`(?:[-\s](?:zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|` +
-  String.raw`thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|` +
-  String.raw`thirty|forty|fifty|sixty|seventy|eighty|ninety|` +
-  String.raw`hundred|thousand|million|billion))*` +
-  String.raw`)\s+(%|percent|per cent|years?|months?|dollars?|hundred|thousand|million|billion)\b`,
+  // Captured, never skipped. Without this the match restarts inside the phrase
+  // and validates its tail: "negative five percent" and "five point five
+  // percent" both reduced to a bare "five percent", so a draft stating the
+  // opposite of a licensed rate, or a materially different one, passed the
+  // check that exists to catch exactly that. The digit tokenizer captures its
+  // sign for the same reason.
+  String.raw`\b(?:(negative|minus|plus|point)[-\s])?` +
+  String.raw`((?:${ANY_NUMBER_WORD})(?:[-\s](?:${ANY_NUMBER_WORD}))*)` +
+  String.raw`\s+(%|percent|per cent|years?|months?|dollars?|hundred|thousand|million|billion)\b`,
   'gi'
 );
 
-/** Every spelled-out quantity in a piece of prose, as written. */
-export function extractSpelledFigures(text: string): string[] {
-  return [...text.matchAll(SPELLED_FIGURE)].map((match) => match[0].trim());
+/**
+ * "twenty-five" -> 25, "one hundred thousand" -> 100000, and the magnitude the
+ * phrase was written to.
+ *
+ * Magnitudes scale the group in front of them rather than adding alongside it,
+ * which is how English works and is not what the first version did: it read
+ * "one hundred thousand dollars" as 1,100 and "three hundred million" as
+ * 1,000,300 — rejecting a truthful $100,000 while leaving a run that happened
+ * to license $1,100 able to accept it.
+ *
+ * "Hundred" scales the running group; a thousand or more closes it out.
+ */
+function readNumberWords(phrase: string): { value: number; multiplier: number } | null {
+  const words = phrase.toLowerCase().split(/[-\s]+/).filter(Boolean);
+  let total = 0;
+  let group = 0;
+  let multiplier = 1;
+  let sawNumber = false;
+
+  for (const word of words) {
+    if (word in NUMBER_WORDS) {
+      group += NUMBER_WORDS[word];
+      sawNumber = true;
+      continue;
+    }
+    const magnitude = MAGNITUDE_WORDS[word];
+    if (magnitude === undefined) return null;
+    // A bare "million dollars" reads as one of them, the way a writer means it.
+    if (magnitude >= 1_000) {
+      total += (group === 0 ? 1 : group) * magnitude;
+      group = 0;
+    } else {
+      group = (group === 0 ? 1 : group) * magnitude;
+    }
+    multiplier = Math.max(multiplier, magnitude);
+    sawNumber = true;
+  }
+
+  if (!sawNumber) return null;
+  return { value: total + group, multiplier };
+}
+
+/**
+ * Every spelled-out quantity in a piece of prose, as a token the grounder can
+ * check against the facts exactly like a written one.
+ */
+export function extractSpelledFigures(text: string): NumericToken[] {
+  const tokens: NumericToken[] = [];
+  for (const match of text.matchAll(SPELLED_FIGURE)) {
+    const modifier = match[1]?.toLowerCase();
+    const read = readNumberWords(match[2]);
+    if (!read) continue;
+
+    const unit = match[3].toLowerCase();
+    const isPercent = unit === '%' || unit === 'percent' || unit === 'per cent';
+
+    const matchIndex = match.index ?? 0;
+    const before = text.slice(Math.max(0, matchIndex - 64), matchIndex);
+    if (modifier === 'point' && !endsInNumberWord(before) && !/\w[-\s]*$/.test(before)) {
+      /*
+       * "point zero five percent" — a decimal with its integer part left off,
+       * and nothing in front of "point" to read it from. The English noun
+       * always has a word before it ("at this point"), so this is not that,
+       * and reading the fraction as a whole number would report 5 where the
+       * draft wrote 0.05. Skipped rather than measured wrong.
+       */
+      continue;
+    }
+
+    const decimal = modifier === 'point' && endsInNumberWord(before);
+    if (decimal) {
+      /*
+       * A decimal spelled out — "five point five percent" — only when a number
+       * word leads into "point". Otherwise "point" is ordinary English
+       * ("at this point five years remain") and falls through as the count.
+       *
+       * The integer sits before the match; the fractional words are match[2].
+       * Digits after the point set the place value the same way "5.25" does:
+       * "twenty five" is two places, so /100. There is no ungrounded-retry
+       * left to ask for digits, so an unreadable form is skipped rather than
+       * emitted as NaN (which would inflate the mismatch rate this check
+       * exists to measure).
+       */
+      const leading = new RegExp(
+        String.raw`((?:${ANY_NUMBER_WORD})(?:[-\s](?:${ANY_NUMBER_WORD}))*)[-\s]*$`,
+        'i'
+      ).exec(before);
+      const whole = leading ? readNumberWords(leading[1]) : null;
+      if (!leading || !whole) continue;
+
+      const fracDigits = fractionDigits(match[2]);
+      const places = Math.max(1, fracDigits.length);
+      const value = whole.value + Number(fracDigits) / Math.pow(10, places);
+      const raw = `${leading[1]} ${match[0]}`.replace(/\s+/g, ' ').trim();
+      tokens.push({
+        raw,
+        value,
+        halfWidth: 0.5 * writtenStep(fracDigits, places, 1, isPercent),
+        isPercent,
+      });
+      continue;
+    }
+
+    const negative = modifier === 'negative' || modifier === 'minus';
+    // When the unit itself is a magnitude ("two million" with no "dollars"),
+    // scale here — the capture group stops before the unit, so the reader
+    // above only saw "two".
+    const unitMagnitude = MAGNITUDE_WORDS[unit];
+    let value = read.value;
+    let multiplier = read.multiplier;
+    if (unitMagnitude !== undefined) {
+      value *= unitMagnitude;
+      multiplier = Math.max(multiplier, unitMagnitude);
+    }
+    if (negative) value = -value;
+
+    // Scored at the precision the words commit to, by the same rule a written
+    // figure gets: "two million" is as coarse as "$2M", "seven" is exact.
+    const digits = String(Math.round(Math.abs(value) / multiplier));
+    tokens.push({
+      raw: match[0].trim(),
+      value,
+      halfWidth: 0.5 * writtenStep(digits, 0, multiplier, isPercent),
+      isPercent,
+    });
+  }
+  return tokens;
 }
 
 export interface GroundingResult {
@@ -330,13 +499,16 @@ export interface InterpretationDraft {
 /**
  * Check every number in the draft against the figures the engine computed.
  *
+ * This reports; it does not gate. Its verdict is logged and the reading is
+ * shown either way — see `runCalculatorInterpretation` for why. Read a warning
+ * from it as "this reading quoted a figure no run produced", not as "this
+ * reading was withheld".
+ *
  * Percentage tokens are checked only against percentage facts, so a rate
  * cannot be satisfied by an unrelated dollar amount that shares its digits.
- * Within each kind the check is by value rather than by fact, which does leave
- * one gap worth naming: a draft can attach a true figure to the wrong label —
- * quoting the median portfolio as the first-year draw, say. Every number that
- * reaches the page is one this run produced; that it is the *right* one for
- * the sentence around it is what the prompt and the fact labels are for.
+ * Within each kind the check is by value rather than by fact, so a draft that
+ * attaches a true figure to the wrong label — quoting the median portfolio as
+ * the first-year draw, say — reads as grounded here.
  */
 export function groundDraft(draft: InterpretationDraft, facts: CalculatorFact[]): GroundingResult {
   const plain: number[] = [];
@@ -347,10 +519,10 @@ export function groundDraft(draft: InterpretationDraft, facts: CalculatorFact[])
   }
 
   const text = [draft.headline, ...draft.paragraphs, ...draft.watchOuts].join('\n');
-  // Spelled-out quantities first: they carry no digit to check, so they are
-  // refused outright rather than matched against anything.
-  const ungrounded: string[] = extractSpelledFigures(text);
-  for (const token of extractNumericTokens(text)) {
+  const ungrounded: string[] = [];
+  // Written and spelled figures are the same claim in two scripts, and are
+  // held to the same list.
+  for (const token of [...extractNumericTokens(text), ...extractSpelledFigures(text)]) {
     const allowed = token.isPercent ? percents : plain;
     // A hair over the half-width, so a value sitting exactly on a rounding
     // boundary is not rejected by floating-point noise.
@@ -400,28 +572,16 @@ export function parseDraft(raw: string): InterpretationDraft | null {
 }
 
 /**
- * Why a draft was sent back, when one was.
+ * Why a draft was sent back — and there is only one reason left.
  *
- * Two different mistakes need two different corrections: naming the offending
- * tokens teaches nothing to a model that never produced the object in the
- * first place.
+ * A response that is not the object asked for cannot be shown at all, so there
+ * is nothing to lose by asking again. A draft whose figures do not match the
+ * fact block used to be sent back the same way; it no longer is, and the
+ * second kind went with it. See `runCalculatorInterpretation`.
  */
-type DraftFeedback =
-  | { kind: 'ungrounded'; tokens: string[] }
-  | { kind: 'unparseable' };
+type DraftFeedback = { kind: 'unparseable' };
 
 function feedbackLines(feedback?: DraftFeedback): string[] {
-  if (feedback?.kind === 'ungrounded' && feedback.tokens.length > 0) {
-    return [
-      '',
-      'Your previous draft was rejected. These appear in it but are not figures from the list above:',
-      ...feedback.tokens.map((token) => `- ${token}`),
-      '',
-      'Rewrite it using only the figures listed. Do not compute anything. Write every figure in',
-      'digits exactly as the list gives it — a quantity spelled out in words ("five years", "ninety',
-      'percent") is rejected too, because it states a figure without one to check.',
-    ];
-  }
   if (feedback?.kind === 'unparseable') {
     return [
       '',
@@ -440,8 +600,8 @@ const DEFAULT_MAX_OUTPUT_TOKENS = 2_000;
  * Without it the SDK's own default applies — ten minutes per request, and it
  * retries a timeout — so a provider that stalls rather than refusing would
  * leave "Reading your result…" on the page and an unauthenticated request open
- * for as long as it cared to. The whole design is that a reading which cannot
- * be produced is dropped; a stall has to reach that same path, not hang.
+ * for as long as it cared to. A reading the model never returns is dropped; a
+ * stall has to reach that same path, not hang.
  */
 const TOTAL_BUDGET_MS = 25_000;
 
@@ -458,28 +618,38 @@ function maxOutputTokens(): number {
 }
 
 /**
- * Write a reading, or return null having tried twice.
+ * Write a reading, or return null if the model did not return one.
  *
  * The caller supplies what is specific to its calculator — the prompt, the
- * facts, and the block describing this particular run — and gets back either a
- * draft in which every number is one of those facts, or nothing.
+ * facts, and the block describing this particular run — and gets back whatever
+ * the model wrote, or nothing if it wrote nothing usable.
+ *
+ * The figures are checked against the fact block and the mismatches are
+ * logged, but they no longer decide whether the reading is shown. That is a
+ * deliberate product call: these are free, unauthenticated pages, and a
+ * visitor seeing no reading at all was judged worse than one that may carry a
+ * figure the engine did not produce. The prompt still asks for the figures
+ * from the list and nothing else, and it is the only thing asking.
+ *
+ * `groundDraft` stays wired in so the rate is visible in the logs rather than
+ * unknown. Nothing reads its verdict to gate on.
  */
-export async function runGroundedInterpretation(params: {
+export async function runCalculatorInterpretation(params: {
   /** Names this calculator in warnings and in Sentry. */
   label: string;
   systemPrompt: string;
   /** The run-specific block. Feedback for a retry is appended to it here. */
   userMessage: string;
   facts: CalculatorFact[];
-}): Promise<{ draft: InterpretationDraft; model: string } | null> {
+}): Promise<{ draft: InterpretationDraft; model: string; grounded: boolean } | null> {
   const model = getActiveModel('calculatorNarrative');
   let feedback: DraftFeedback | undefined;
 
   const deadline = Date.now() + TOTAL_BUDGET_MS;
 
-  // One retry, and only for a draft that was rejected for its numbers. A
-  // second failure means the model is not going to stay inside the block for
-  // this run, and a third call would spend a visitor's wait on the same odds.
+  // One retry, and only for a response that could not be read at all. An
+  // unparseable response leaves nothing to show, so asking again costs the
+  // visitor a wait for something rather than a wait for nothing.
   for (let attempt = 0; attempt < 2; attempt += 1) {
     // Each attempt gets what is left of the whole budget rather than a fixed
     // slice, so a fast first attempt leaves the retry room to finish and a
@@ -516,28 +686,34 @@ export async function runGroundedInterpretation(params: {
 
     const draft = parseDraft(raw);
     if (!draft) {
-      // Sent back for the same reason an ungrounded draft is: one more chance,
-      // inside the same budget and the same two-attempt ceiling. A response
-      // that is not the object asked for is usually a formatting slip, and the
-      // note above names that rather than naming figures.
+      // One more chance, inside the same budget and the same two-attempt
+      // ceiling. A response that is not the object asked for is usually a
+      // formatting slip, and there is nothing to show without it.
       console.warn('%s interpretation: response did not parse as the expected object.', params.label);
       feedback = { kind: 'unparseable' };
       continue;
     }
 
+    // Advisory only. Logged so that a model drifting off the fact block for a
+    // whole class of runs shows up as a rate rather than as nothing at all —
+    // the page itself now gives no sign either way.
     const grounding = groundDraft(draft, params.facts);
-    if (grounding.grounded) return { draft, model };
+    if (!grounding.grounded) {
+      const message =
+        `${params.label} interpretation: shipped with unverified figures ` +
+        `(tokens=${grounding.ungrounded.join(', ')}) (model=${model})`;
+      console.warn(message);
+      Sentry.captureMessage(message, 'warning');
+    }
 
-    feedback = { kind: 'ungrounded', tokens: grounding.ungrounded };
+    // Returned so the caller can decide whether to keep it. Showing this
+    // visitor an unverified reading is the call that was made; serving the
+    // same one to everyone who types the same round numbers afterwards is a
+    // different and larger one, and the cache would make it silently.
+    return { draft, model, grounded: grounding.grounded };
   }
 
-  // Worth a message rather than silence: a model that cannot stay inside the
-  // fact block for a whole class of runs shows up here as a rate, and the page
-  // gives no other sign that anything was dropped.
-  const reason = feedback?.kind === 'unparseable'
-    ? 'unparseable after retry'
-    : `ungrounded after retry (tokens=${feedback?.tokens.join(', ')})`;
-  const message = `${params.label} interpretation: ${reason} (model=${model})`;
+  const message = `${params.label} interpretation: unparseable after retry (model=${model})`;
   console.warn(message);
   Sentry.captureMessage(message, 'warning');
   return null;

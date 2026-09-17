@@ -280,9 +280,9 @@ export const INTERPRETATION_ID = "what-this-means";
  * Whether the reading panel will render anything at all.
  *
  * The panel and the chevrons that point at it both read this, so a chevron can
- * never be left pointing at a section that did not render — which is the
- * ordinary case, not an edge one: a reading that could not be grounded is
- * dropped and the panel disappears with it.
+ * never be left pointing at a section that did not render. A reading is
+ * dropped only when the model returns nothing usable, which is rarer than it
+ * once was but still has to render as nothing rather than as an empty box.
  */
 function hasInterpretation(interpretation: Interpretation | null, isInterpreting: boolean): boolean {
   return Boolean(interpretation) || isInterpreting;

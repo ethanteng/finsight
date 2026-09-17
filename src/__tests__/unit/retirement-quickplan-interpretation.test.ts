@@ -28,6 +28,7 @@ import {
   groundInterpretation,
   interpretRetirementQuickPlan,
 } from '../../services/retirement-quickplan-interpretation';
+import { extractSpelledFigures } from '../../services/calculator-interpretation';
 import type { RetirementQuickPlanResult } from '../../services/retirement-quickplan';
 
 /**
@@ -209,6 +210,84 @@ describe('extractNumericTokens', () => {
   });
 });
 
+describe('extractSpelledFigures', () => {
+  it('reads a licensed count and a magnitude quantity', () => {
+    expect(extractSpelledFigures('seven years')[0].value).toBe(7);
+    expect(extractSpelledFigures('twenty-five years')[0].value).toBe(25);
+    expect(extractSpelledFigures('two million dollars')[0].value).toBe(2_000_000);
+    // Unit is itself the magnitude when the writer stops at "million".
+    expect(extractSpelledFigures('about two million.')[0].value).toBe(2_000_000);
+  });
+
+  /*
+   * Hundred scales the current group; thousand/million flush it. Adding each
+   * magnitude independently turned "one hundred thousand" into 1,100.
+   */
+  it('parses chained magnitudes hierarchically', () => {
+    expect(extractSpelledFigures('one hundred thousand dollars')[0].value).toBe(100_000);
+    expect(extractSpelledFigures('three hundred million dollars')[0].value).toBe(300_000_000);
+  });
+
+  /*
+   * Same hole the digit tokenizer closed for "-5%": a sign or decimal word
+   * before the match must not let the suffix stand in for a different claim.
+   */
+  it('keeps a spelled sign and refuses a decimal suffix restart', () => {
+    expect(extractSpelledFigures('negative five percent')[0].value).toBe(-5);
+    expect(extractSpelledFigures('minus five percent')[0].value).toBe(-5);
+    const plus = extractSpelledFigures('plus five percent')[0];
+    expect(plus.value).toBe(5);
+    expect(plus.raw.toLowerCase()).toContain('plus');
+
+    // Spelled decimals are read, not refused: with no ungrounded-retry left to
+    // ask for digits, NaN would only inflate the mismatch rate.
+    expect(extractSpelledFigures('five point five percent')[0].value).toBe(5.5);
+    expect(extractSpelledFigures('twenty-five point five percent')[0].value).toBe(25.5);
+    expect(extractSpelledFigures('ninety eight point seven percent')[0].value).toBe(98.7);
+  });
+
+  /*
+   * English writes the fraction two ways and means the same thing: as a number
+   * ("point twenty five") or as digits read out one at a time ("point two
+   * five"). Summing the words handles the first and mangles the second — "two
+   * five" adds to 7 — reporting a figure the draft does not state, against
+   * facts it might match by accident.
+   */
+  it('reads a spelled fraction the way it was written', () => {
+    expect(extractSpelledFigures('twenty-five point twenty five percent')[0].value).toBeCloseTo(25.25);
+    expect(extractSpelledFigures('twenty-five point two five percent')[0].value).toBeCloseTo(25.25);
+  });
+
+  /*
+   * A decimal with its integer part left off has nothing in front of "point"
+   * to read it from, and reading the fraction as a whole number would report 5
+   * where the draft wrote 0.05 — against a block that usually licenses a 5% of
+   * some kind. Skipped rather than measured wrong.
+   */
+  it('skips a bare decimal rather than reading it a hundred times over', () => {
+    expect(extractSpelledFigures('point zero five percent')).toEqual([]);
+  });
+
+  it('leaves the thirty-year compound adjective alone', () => {
+    expect(extractSpelledFigures('the thirty-year Treasury yield')).toEqual([]);
+  });
+
+  /*
+   * "Point" is a decimal connector only when a number word leads into it.
+   * Treating every one as a decimal rejected "at this point five years",
+   * which is ordinary English about a licensed count — the false drop this
+   * whole path exists to stop.
+   */
+  it('reads the English noun "point" as prose, not as a decimal', () => {
+    const prose = extractSpelledFigures('At this point five years remain before you claim.');
+    expect(prose).toHaveLength(1);
+    expect(prose[0].value).toBe(5);
+
+    // A number word in front still marks a real decimal, and is read as one.
+    expect(extractSpelledFigures('five point five percent')[0].value).toBe(5.5);
+  });
+});
+
 describe('groundInterpretation', () => {
   const facts = () => buildPlanFacts(planResult());
 
@@ -265,6 +344,74 @@ describe('groundInterpretation', () => {
     );
     expect(result.grounded).toBe(false);
     expect(result.ungrounded).toContain('48%');
+  });
+
+  /*
+   * From production. Every dropped panel in the first day and a half of this
+   * feature failed grounding — no provider error, no timeout, no unparseable
+   * response — and the rejected tokens were mostly of two shapes.
+   *
+   * The first was a licensed count written the way rule 2 asks for, which the
+   * spelled-quantity check then refused. "Seven years between retiring and
+   * claiming" is a figure this plan produced, and the panel was dropped for
+   * saying so in words.
+   */
+  it('grounds a licensed count whether it is spelled or written', () => {
+    const facts = buildPlanFacts(planResult());
+
+    for (const phrasing of [
+      'Seven years pass between retiring at 60 and claiming at 67.',
+      'There are 7 years between retiring at 60 and claiming at 67.',
+    ]) {
+      expect(groundInterpretation(
+        { headline: 'A headline.', paragraphs: [phrasing], watchOuts: [] },
+        facts
+      )).toEqual({ grounded: true, ungrounded: [] });
+    }
+  });
+
+  /*
+   * The second shape, which the prompt now forbids rather than the grounder
+   * accommodating: a share turned into a ratio of the model's own, and a
+   * calendar year. Both state a figure the run did not produce, so both stay
+   * rejected — the fix for these is rules 8 and 10, not a wider allowlist.
+   */
+  it('still refuses a ratio of its own making, and a calendar year', () => {
+    const facts = buildPlanFacts(planResult());
+
+    const ratio = groundInterpretation(
+      { headline: 'A headline.', paragraphs: ['Your money lasted in 9 of every 10 tested retirements.'], watchOuts: [] },
+      facts
+    );
+    expect(ratio.grounded).toBe(false);
+
+    const year = groundInterpretation(
+      { headline: 'A headline.', paragraphs: ['Runs beginning near the 2008 downturn are the hard ones.'], watchOuts: [] },
+      facts
+    );
+    expect(year.grounded).toBe(false);
+    expect(year.ungrounded).toContain('2008');
+  });
+
+  /*
+   * Both still read as ungrounded, and both now reach the page anyway. What
+   * the verdict buys is the warning: the token is named in the log, which is
+   * the only remaining signal that a reading quoted something no run produced.
+   */
+  it('names the offending figure in the log rather than withholding the panel', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      model.ask.mockResolvedValue(DRAFT('That leaves 13% of them running short.'));
+
+      const shipped = await interpretRetirementQuickPlan(planResult());
+      expect(shipped?.headline).toContain('13%');
+
+      const logged = warn.mock.calls.map((call) => call.join(' ')).join('\n');
+      expect(logged).toContain('shipped with unverified figures');
+      expect(logged).toContain('13%');
+    } finally {
+      warn.mockRestore();
+    }
   });
 
   /*
@@ -550,25 +697,26 @@ describe('interpretRetirementQuickPlan', () => {
     expect(model.ask).toHaveBeenCalledTimes(1);
   });
 
-  it('retries once, naming the figures it would not accept', async () => {
-    model.ask
-      .mockResolvedValueOnce(DRAFT('You can spend $250,000 a year.'))
-      .mockResolvedValueOnce(DRAFT('Your money lasted in 87.3% of tested retirements.'));
+  /*
+   * The figures no longer decide whether the panel is shown. See the matching
+   * case in the Coast FIRE suite for why; the behaviour is shared, so both
+   * pages changed together.
+   */
+  it('ships a figure it could not verify, and logs it', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      model.ask.mockResolvedValue(DRAFT('You can spend $250,000 a year.'));
 
-    const result = await interpretRetirementQuickPlan(planResult());
-    expect(result?.headline).toContain('87.3%');
-    expect(model.ask).toHaveBeenCalledTimes(2);
+      const result = await interpretRetirementQuickPlan(planResult());
+      expect(result?.headline).toContain('$250,000');
+      expect(model.ask).toHaveBeenCalledTimes(1);
 
-    const retryMessage = String(model.ask.mock.calls[1][1]);
-    expect(retryMessage).toContain('$250,000');
-    expect(retryMessage).toContain('rejected');
-  });
-
-  it('gives up rather than shipping a figure it could not check', async () => {
-    model.ask.mockResolvedValue(DRAFT('You can spend $250,000 a year.'));
-
-    expect(await interpretRetirementQuickPlan(planResult())).toBeNull();
-    expect(model.ask).toHaveBeenCalledTimes(2);
+      const logged = warn.mock.calls.map((call) => call.join(' ')).join('\n');
+      expect(logged).toContain('shipped with unverified figures');
+      expect(logged).toContain('$250,000');
+    } finally {
+      warn.mockRestore();
+    }
   });
 
   it('returns null when the provider fails, without retrying it', async () => {
@@ -682,11 +830,11 @@ describe('interpretRetirementQuickPlan', () => {
   });
 
   it('does not start a retry it has no time to finish', async () => {
-    // A first attempt that eats the budget and comes back ungrounded: the
+    // A first attempt that eats the budget and comes back unreadable: the
     // retry is skipped rather than started and waited out.
     model.ask.mockImplementationOnce(async () => {
       jest.advanceTimersByTime(24_000);
-      return DRAFT('You can spend $250,000 a year.');
+      return 'I am afraid I cannot do that.';
     });
 
     jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate'] });
