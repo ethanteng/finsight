@@ -183,6 +183,35 @@ describe('extractNumericTokens', () => {
     const [rate] = extractNumericTokens('100% of them');
     expect(rate.halfWidth).toBe(0.5);
   });
+
+  /*
+   * Signs and leading decimals used to be stripped: "-5%" became 5, and a
+   * contradictory figure passed whenever the absolute value was allowlisted.
+   */
+  it('preserves a leading sign on percentages and money', () => {
+    const [rate] = extractNumericTokens('down -5% on the year');
+    expect(rate.value).toBe(-5);
+    expect(rate.isPercent).toBe(true);
+
+    const [money] = extractNumericTokens('a shortfall of $-48,000');
+    expect(money.value).toBe(-48_000);
+
+    const [leadingMinus] = extractNumericTokens('a shortfall of -$48,000');
+    expect(leadingMinus.value).toBe(-48_000);
+  });
+
+  it('reads a leading-decimal percentage as a fraction of one, not as its digit', () => {
+    const [token] = extractNumericTokens('only .5% cash');
+    expect(token.value).toBe(0.5);
+    expect(token.isPercent).toBe(true);
+  });
+
+  /* Hyphenated dates must not pick up the date separators as minus signs. */
+  it('does not treat hyphens inside a date as signs', () => {
+    expect(extractNumericTokens('as of 2026-09-15').map((token) => token.value)).toEqual([
+      2026, 9, 15,
+    ]);
+  });
 });
 
 describe('groundInterpretation', () => {
@@ -241,6 +270,20 @@ describe('groundInterpretation', () => {
     );
     expect(result.grounded).toBe(false);
     expect(result.ungrounded).toContain('48%');
+  });
+
+  it('does not let an allowlisted absolute satisfy a signed figure', () => {
+    // 5% cash is licensed; a draft that invents "-5%" must not ride that.
+    const result = groundInterpretation(
+      {
+        headline: 'A headline.',
+        paragraphs: ['The bond sleeve was down -5% in the worst year.'],
+        watchOuts: [],
+      },
+      facts()
+    );
+    expect(result.grounded).toBe(false);
+    expect(result.ungrounded).toContain('-5%');
   });
 
   /*

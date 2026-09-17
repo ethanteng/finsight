@@ -362,24 +362,37 @@ function writtenStep(digits: string, decimals: number, multiplier: number, isPer
  * for a figure it never wrote. A rate spelled out as "percent" is read as the
  * percentage it is, so it is checked against the percentage facts rather than
  * falling through to the dollar amounts.
+ *
+ * Signs and leading decimals are kept: "-5%", "$-48,000", and ".5%" used to
+ * start at the first digit and silently become 5 / 48,000 / 5, which lets a
+ * contradictory signed figure pass whenever the absolute value is allowlisted
+ * (cash weight, contribution amounts, and so on). A leading "-" is only a
+ * sign when it is not glued to a preceding digit, so date fragments like
+ * "2026-09-15" still parse as positive year / month / day.
  */
 export function extractNumericTokens(text: string): NumericToken[] {
-  const pattern = /(\$\s*)?(\d[\d,]*(?:\.(\d+))?)\s*(thousand|million|billion|[kmb])?(?![a-z])\s*(%|percent\b)?/gi;
+  const pattern =
+    /(?<![A-Za-z0-9])(-)?\s*(\$)?\s*(-)?\s*(?:(\d[\d,]*)(?:\.(\d+))?|\.(\d+))\s*(thousand|million|billion|[kmb])?(?![a-z])\s*(%|percent\b)?/gi;
   const tokens: NumericToken[] = [];
   for (const match of text.matchAll(pattern)) {
-    const [raw, , digits, fraction, magnitude, percent] = match;
+    const [raw, signBefore, , signAfterDollar, intPart, fracFromInt, fracOnly, magnitude, percent] = match;
+    const fraction = fracFromInt ?? fracOnly ?? '';
+    const digits = intPart != null
+      ? `${intPart}${fraction ? `.${fraction}` : ''}`
+      : `0.${fraction}`;
     const plain = digits.replace(/,/g, '');
     const base = Number(plain);
     if (!Number.isFinite(base)) continue;
+    const signed = (signBefore || signAfterDollar) ? -Math.abs(base) : base;
     const multiplier = magnitude ? MAGNITUDES[magnitude.toLowerCase()] ?? 1 : 1;
-    const decimals = fraction ? fraction.length : 0;
+    const decimals = fraction.length;
     const isPercent = Boolean(percent);
     // Trailing zeros are read off the integer part only: the "0" ending
     // "3.10" says something about the decimals, which are already counted.
     const integerDigits = decimals > 0 ? plain.slice(0, plain.indexOf('.')) : plain;
     tokens.push({
       raw: raw.trim(),
-      value: base * multiplier,
+      value: signed * multiplier,
       halfWidth: 0.5 * writtenStep(integerDigits, decimals, multiplier, isPercent),
       isPercent,
     });
