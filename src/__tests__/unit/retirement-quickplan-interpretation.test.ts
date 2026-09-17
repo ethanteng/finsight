@@ -28,6 +28,7 @@ import {
   groundInterpretation,
   interpretRetirementQuickPlan,
 } from '../../services/retirement-quickplan-interpretation';
+import { extractSpelledFigures } from '../../services/calculator-interpretation';
 import type { RetirementQuickPlanResult } from '../../services/retirement-quickplan';
 
 /**
@@ -206,6 +207,43 @@ describe('extractNumericTokens', () => {
     expect(extractNumericTokens('1926-1985').map((token) => token.value)).toEqual([1926, 1985]);
     expect(extractNumericTokens('a 30-year window').map((token) => token.value)).toEqual([30]);
     expect(extractNumericTokens('1926\u20131985').map((token) => token.value)).toEqual([1926, 1985]);
+  });
+});
+
+describe('extractSpelledFigures', () => {
+  it('reads a licensed count and a magnitude quantity', () => {
+    expect(extractSpelledFigures('seven years')[0].value).toBe(7);
+    expect(extractSpelledFigures('twenty-five years')[0].value).toBe(25);
+    expect(extractSpelledFigures('two million dollars')[0].value).toBe(2_000_000);
+    // Unit is itself the magnitude when the writer stops at "million".
+    expect(extractSpelledFigures('about two million.')[0].value).toBe(2_000_000);
+  });
+
+  /*
+   * Hundred scales the current group; thousand/million flush it. Adding each
+   * magnitude independently turned "one hundred thousand" into 1,100.
+   */
+  it('parses chained magnitudes hierarchically', () => {
+    expect(extractSpelledFigures('one hundred thousand dollars')[0].value).toBe(100_000);
+    expect(extractSpelledFigures('three hundred million dollars')[0].value).toBe(300_000_000);
+  });
+
+  /*
+   * Same hole the digit tokenizer closed for "-5%": a sign or decimal word
+   * before the match must not let the suffix stand in for a different claim.
+   */
+  it('keeps a spelled sign and refuses a decimal suffix restart', () => {
+    expect(extractSpelledFigures('negative five percent')[0].value).toBe(-5);
+    expect(extractSpelledFigures('minus five percent')[0].value).toBe(-5);
+    expect(extractSpelledFigures('plus five percent')[0].value).toBe(5);
+
+    const decimal = extractSpelledFigures('five point five percent')[0];
+    expect(decimal.raw.toLowerCase()).toContain('point');
+    expect(Number.isFinite(decimal.value)).toBe(false);
+  });
+
+  it('leaves the thirty-year compound adjective alone', () => {
+    expect(extractSpelledFigures('the thirty-year Treasury yield')).toEqual([]);
   });
 });
 

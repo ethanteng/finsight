@@ -318,33 +318,65 @@ const SPELLED_FIGURE = new RegExp(
   'gi'
 );
 
-/** "twenty-five" -> 25, "two million" -> 2000000, and the magnitude it used. */
+/**
+ * "twenty-five" -> 25, "two million" -> 2000000, "one hundred thousand" ->
+ * 100000. Hundred scales the current group; thousand/million/billion flush it.
+ */
 function readNumberWords(phrase: string): { value: number; multiplier: number } | null {
   const words = phrase.toLowerCase().split(/[-\s]+/).filter(Boolean);
-  let value = 0;
-  let pending = 0;
+  let total = 0;
+  let current = 0;
   let multiplier = 1;
   let sawNumber = false;
 
   for (const word of words) {
     if (word in NUMBER_WORDS) {
-      pending += NUMBER_WORDS[word];
+      current += NUMBER_WORDS[word];
       sawNumber = true;
       continue;
     }
     const magnitude = MAGNITUDE_WORDS[word];
     if (magnitude === undefined) return null;
-    // "two million" scales what came before it; a bare "million dollars" reads
-    // as one of them, the way a writer means it.
-    const scaled = (pending === 0 ? 1 : pending) * magnitude;
-    value += scaled;
+    // A bare "million dollars" reads as one of them, the way a writer means it.
+    const group = current === 0 ? 1 : current;
+    if (magnitude === 100) {
+      current = group * 100;
+    } else {
+      total += group * magnitude;
+      current = 0;
+    }
     multiplier = Math.max(multiplier, magnitude);
-    pending = 0;
     sawNumber = true;
   }
 
   if (!sawNumber) return null;
-  return { value: value + pending, multiplier };
+  return { value: total + current, multiplier };
+}
+
+/**
+ * Sign or decimal words that sit just before a spelled match. Without this,
+ * "negative five percent" and "five point five percent" both restart at
+ * "five" and read as +5 — the same hole the digit tokenizer closed for "-5%".
+ */
+function spelledPrefix(
+  text: string,
+  matchIndex: number
+): { kind: 'sign' | 'decimal'; sign: number; rawFrom: number } | null {
+  const before = text.slice(Math.max(0, matchIndex - 32), matchIndex);
+  const decimal = /(?:^|[^\w])((?:[\w]+\s+)?point\s+)$/i.exec(before);
+  if (decimal) {
+    return { kind: 'decimal', sign: 1, rawFrom: matchIndex - decimal[1].length };
+  }
+  const signed = /(?:^|[^\w])((?:negative|minus|plus)\s+)$/i.exec(before);
+  if (signed) {
+    const word = signed[1].trim().toLowerCase();
+    return {
+      kind: 'sign',
+      sign: word === 'plus' ? 1 : -1,
+      rawFrom: matchIndex - signed[1].length,
+    };
+  }
+  return null;
 }
 
 /**
@@ -354,18 +386,48 @@ function readNumberWords(phrase: string): { value: number; multiplier: number } 
 export function extractSpelledFigures(text: string): NumericToken[] {
   const tokens: NumericToken[] = [];
   for (const match of text.matchAll(SPELLED_FIGURE)) {
+    const matchIndex = match.index ?? 0;
+    const prefix = spelledPrefix(text, matchIndex);
+    const rawEnd = matchIndex + match[0].length;
+    const raw = text.slice(prefix?.rawFrom ?? matchIndex, rawEnd).trim();
+
+    // A decimal connector ("five point five percent") is not a number-word we
+    // can finish parsing from the suffix alone. Emit an unmatchable token so
+    // the draft is rejected rather than accepted as the trailing integer.
+    if (prefix?.kind === 'decimal') {
+      const unit = match[2].toLowerCase();
+      tokens.push({
+        raw,
+        value: Number.NaN,
+        halfWidth: 0,
+        isPercent: unit === '%' || unit === 'percent' || unit === 'per cent',
+      });
+      continue;
+    }
+
     const read = readNumberWords(match[1]);
     if (!read) continue;
 
     const unit = match[2].toLowerCase();
     const isPercent = unit === '%' || unit === 'percent' || unit === 'per cent';
+    // When the unit itself is a magnitude ("two million" with no "dollars"),
+    // scale here — the capture group stops before the unit, so the reader
+    // above only saw "two".
+    const unitMagnitude = MAGNITUDE_WORDS[unit];
+    let { value, multiplier } = read;
+    if (unitMagnitude !== undefined) {
+      value *= unitMagnitude;
+      multiplier = Math.max(multiplier, unitMagnitude);
+    }
+    if (prefix?.kind === 'sign') value *= prefix.sign;
+
     // Scored at the precision the words commit to, by the same rule a written
     // figure gets: "two million" is as coarse as "$2M", "seven" is exact.
-    const digits = String(Math.round(read.value / read.multiplier));
+    const digits = String(Math.round(Math.abs(value) / multiplier));
     tokens.push({
-      raw: match[0].trim(),
-      value: read.value,
-      halfWidth: 0.5 * writtenStep(digits, 0, read.multiplier, isPercent),
+      raw,
+      value,
+      halfWidth: 0.5 * writtenStep(digits, 0, multiplier, isPercent),
       isPercent,
     });
   }

@@ -299,6 +299,25 @@ describe('the figures a Coast FIRE reading may state', () => {
   });
 
   /*
+   * Sign and decimal words before a spelled match. Without them, both of these
+   * restart at "five" and pass against the licensed 5% return — the same hole
+   * the digit tokenizer closed for "-5%".
+   */
+  it('does not let a spelled modifier collapse onto a licensed suffix', () => {
+    const facts = buildCoastFireFacts(result());
+
+    for (const phrasing of [
+      'At a negative five percent return this falls apart.',
+      'At five point five percent the projection changes.',
+    ]) {
+      expect(groundDraft(
+        { headline: 'A headline.', paragraphs: [phrasing], watchOuts: [] },
+        facts
+      ).grounded).toBe(false);
+    }
+  });
+
+  /*
    * And does not refuse the phrasings the prompt asks for. The hyphenated
    * compound matters on its own account: it is how the fact block names the
    * published series, so flagging it would reject a draft for quoting the
