@@ -11,6 +11,12 @@ There is deliberately **no chat input anywhere on the page**. A visitor enters a
 plan and gets the deterministic engine's output — charts, scenarios, and the
 list of everything the model had to assume on their behalf.
 
+One block on the page is written by a language model rather than computed: the
+"What this result means" panel, which reads the engine's own figures back in
+plain language and may state no number the engine did not produce. It is
+labelled as model-written where it sits. See
+[The interpretation panel](#the-interpretation-panel).
+
 ## Pieces
 
 | Piece | Path |
@@ -24,8 +30,10 @@ list of everything the model had to assume on their behalf.
 | Example generator | `scripts/build-retirement-example.ts` (`npm run build:retirement-example`) |
 | Example drift check | `scripts/verify-retirement-example.sh` (`npm run verify:retirement-example`) |
 | Service | `src/services/retirement-quickplan.ts` |
+| Interpretation | `src/services/retirement-quickplan-interpretation.ts` |
+| Market conditions | `src/services/calculator-market-conditions.ts` |
 | Route | `src/routes/retirement-quickplan.ts` (mounted at `/api/retirement-quickplan`) |
-| Tests | `src/__tests__/unit/retirement-quickplan.test.ts`, `src/__tests__/unit/retirement-quickplan-route.test.ts`, `frontend/src/__tests__/retirement-landing.test.tsx` |
+| Tests | `src/__tests__/unit/retirement-quickplan.test.ts`, `src/__tests__/unit/retirement-quickplan-route.test.ts`, `src/__tests__/unit/retirement-quickplan-interpretation.test.ts`, `src/__tests__/unit/calculator-market-conditions.test.ts`, `frontend/src/__tests__/retirement-landing.test.tsx`, `frontend/src/__tests__/retirement-interpretation.test.tsx` |
 
 ## What it runs
 
@@ -257,6 +265,148 @@ Two consequences worth knowing:
 - Every variant declares the same canonical URL, so ad traffic does not split
   the page's ranking across parameter permutations.
 
+## The interpretation panel
+
+`POST /api/retirement-quickplan/interpretation` returns the model's reading of
+a run: a headline, two or three paragraphs, and a short list of watch-outs.
+The page renders it under the verdict.
+
+**It is a second request, on purpose.** The deterministic result is the page's
+answer and paints in a few hundred milliseconds; this takes a model round trip.
+Fusing them would trade the thing that converts for the thing that decorates
+it, and would let a provider outage take the answer down with the paragraph.
+
+**The plan is re-run here, never read out of the body.** Same rule as the
+results email: prose under our branding may only describe figures we computed.
+The run is served from the plan cache, since the page has just asked for it.
+The page posts *the body it submitted*, not `result.inputs` — a run with a
+blank box is simulated against a notional portfolio, and posting the normalized
+inputs back would re-run it as a verdict about money nobody entered.
+
+### What the model may say
+
+Everything it is allowed to state is assembled in `buildPlanFacts`, which
+produces both the prompt's fact lines and the grounding allowlist from one
+array — so a fact the model is shown is exactly a fact it may repeat, and there
+is no second list to drift.
+
+`groundInterpretation` then checks every number in the draft against that list.
+The tolerance scales to the precision written: `$3.3M` is any value within
+$50,000 of 3,300,000, while `$3,326,192` is within half a dollar. Trailing
+zeros count as a claim about precision too (`$140,000` is rounded to ten
+thousands), down to a floor of two significant figures — so `$3M` cannot stand
+for $3.36M. Percentage tokens are checked only against percentage facts, so a
+rate cannot be satisfied by an unrelated dollar amount sharing its digits, and
+trailing zeros never widen a rate.
+
+Signs are part of the figure. Reading `-5%` as `5%` would let a draft state the
+opposite of a fact and pass, since the positive figure is usually in the list —
+5% is the cash weight, $48,000 the contributions. A hyphen that follows a digit
+stays a hyphen, so `30-year` and `1926-1985` are not read as negatives, and an
+en dash is never a sign.
+
+Everything the prompt shows the model is something it will quote, so the digits
+inside those strings are licensed too: the asset-mix weights, the year delta in
+a variant's "2 more years of work", the `10%` of "Spend 10% less", and the
+`30-year` and as-of date in a published rate's label. Without that the panel is
+rejected for restating the fact block — on exactly the plans where the model
+did what it was told.
+
+A draft with an ungrounded figure is retried once, with the offending tokens
+named. A response that is not the object asked for at all gets the same one
+more chance, told what was wrong with the format rather than handed figures it
+never wrote — inside the same two-attempt ceiling, not on top of it. A second
+failure returns null, the route answers 204, and the page renders nothing — **the deterministic result is complete without this panel, so
+the failure mode is a missing paragraph rather than a wrong one.** The
+give-up is reported to Sentry, because the page gives no other sign it happened.
+
+One gap worth knowing: the check is by value, not by fact, so a draft can
+attach a true figure to the wrong label. Every number that reaches the page is
+one this run produced; that it is the *right* one for the sentence around it is
+what the prompt and the fact labels are for.
+
+Two figures are deliberately withheld. A blank portfolio or a blank spending
+level is simulated against a notional figure so the engine has dollars to move;
+`missing` names which, and that one is left out of the fact block entirely
+rather than described as the visitor's.
+
+### Today's rates
+
+`calculator-market-conditions.ts` adds a small fixed set of published rates:
+the 30-year and 10-year Treasury yields, CPI year-over-year, and the market's
+ten-year breakeven inflation. They let the interpretation locate today inside
+the tested record rather than describing the record alone — a starting yield is
+a condition a retirement actually begins from, and the historical distribution
+averages over hundreds of them.
+
+It is a fixed set chosen here, not a data-pack selection. Pack routing exists
+to answer *a question*, and this page has a form rather than a question, so
+there is nothing to route on; the useful set is the same for every plan.
+
+What is left out is deliberate:
+
+- **No equity prices, index levels or recent performance.** The page's argument
+  is that a thirty-year plan is judged against hundreds of sequences rather
+  than against this year. Putting "the S&P is up nine percent" beside a
+  survival rate invites exactly the update the model says not to make, and it
+  would be the most attention-grabbing number on the page.
+- **No web retrieval.** This endpoint is unauthenticated and carries no
+  third-party text at all: every value reaching the prompt is a number from a
+  named series or from our own engine, so there is nothing to fence. Brave
+  results would end that property for the slowest and least reliable source
+  available.
+- **No unemployment, mortgage or card rates.** They arrive in the same FRED
+  response and say nothing about whether this plan lasts.
+
+Each rate is optional and independently settled behind a 2.5s timeout, so an
+unconfigured or failing provider costs these sentences and nothing else. A set
+where *nothing* resolved is held for one minute rather than the full hour: an
+empty set is usually a cold start that ran past the deadline or an unset key,
+and holding it for an hour would cost every interpretation in that hour its
+rate context over one slow second. Re-checking is cheap, and with no key
+configured it costs nothing at all — the fetch is skipped outright. The
+set is cached for an hour; the *interpretation* cache keys on each rate's
+label, source, observation date **and value**, so a revision in place — or the
+10-year point falling back from Massive to FRED under the same label — is a
+different key rather than cached prose quoting a yield that is no longer in the
+facts.
+
+### The wait
+
+The whole panel is bounded at `TOTAL_BUDGET_MS` (25s) across both attempts.
+Each attempt gets what is left rather than a fixed slice, and an attempt is not
+started below `MIN_ATTEMPT_MS`. `maxRetries` is 0 and the timeout is passed
+through `askClaude`: the Anthropic SDK defaults to ten minutes per request
+*and retries a timeout*, so an unbounded call would hold an unauthenticated
+request open — and the page's placeholder spinning — long past the point this
+panel is worth having. A stall has to reach the same drop path as an error.
+
+The page carries its own `AbortController` at 30s, deliberately past the
+server's budget so the ordinary "no reading" outcome is the server's 204 rather
+than a client-side abort. It only catches a connection that never answers.
+
+### Why not the Ask pipeline
+
+`runAskLincAnalysis` is built around a user with a financial snapshot. Routing
+this through it — under a shared "test" account, as first proposed — would have
+put every anonymous visitor's plan into one `userId`: `src/routes/ask.ts` feeds
+that account's last ten conversations to the context planner, writes a
+`Conversation` row per question, fires `updateProfileFromAnsweredTurn` into the
+shared remembered context, and gathers that account's real accounts and
+transactions. Each of those leaks one visitor's figures into the next visitor's
+answer. With no account there is also nothing for pack selection to select, so
+the machinery costs two or three model round trips and buys nothing.
+
+This module instead has **no `userId`, no snapshot, no profile read or write,
+and no conversation row.**
+
+### Model slot
+
+The `calculatorNarrative` slot (`CALCULATOR_NARRATIVE_MODEL`, shipped default
+Haiku 4.5, thinking off) is admin-tunable like every other slot. It never sees
+a user account, so it can be a cheaper and faster model than primary analysis
+without affecting any answer in the product.
+
 ## Operational notes
 
 - Rate limited per caller: `RETIREMENT_QUICKPLAN_RATE_LIMIT` requests per
@@ -279,6 +429,12 @@ Two consequences worth knowing:
 - Variants run sequentially with a `setImmediate` yield between them. Each run
   is a few hundred milliseconds of straight CPU, and fusing them into one block
   would stall every other request behind it.
+- The interpretation endpoint has its own, much tighter window:
+  `RETIREMENT_INTERPRETATION_RATE_LIMIT` (default 8/minute). Every accepted
+  request that misses the cache is a model call we pay for on a page with no
+  account behind it, so the limit sits where a visitor trying two or three
+  variations never notices and a script generating text does. Readings are
+  cached in-process, bounded at 300 entries.
 - Analytics: the page pushes a `retirement_model_run` dataLayer event. GTM needs
   a Custom Event trigger and a GA4 tag for it, or the push goes nowhere.
 - The form's asset-mix presets come from `GET /api/retirement-quickplan/options`

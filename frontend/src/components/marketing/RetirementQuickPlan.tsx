@@ -120,6 +120,22 @@ interface QuickPlanResult {
   limitations: string[];
 }
 
+/**
+ * The model's reading of a run. Everything in it is prose; every figure inside
+ * that prose was checked against the engine's own output before it was sent,
+ * and a draft that failed that check is not sent at all — which is why this is
+ * optional everywhere below rather than part of the result.
+ */
+interface Interpretation {
+  headline: string;
+  paragraphs: string[];
+  watchOuts: string[];
+  model: string;
+}
+
+/** What the page posted, kept so the interpretation re-runs the same plan. */
+type SubmittedPlan = Record<string, number | string | undefined>;
+
 interface AllocationOption {
   id: AllocationId;
   label: string;
@@ -181,6 +197,130 @@ function useAllocations(): AllocationOption[] {
   return allocations;
 }
 
+/**
+ * Fetch the model's reading of a run, after the run itself has painted.
+ *
+ * Deliberately a second request. The deterministic result is the page's
+ * answer and arrives in a few hundred milliseconds; this takes a model round
+ * trip, and holding the verdict back to arrive with it would trade the thing
+ * that converts for the thing that decorates it. Everything here fails to
+ * `null`, which renders as nothing: a visitor who never learns the panel
+ * exists has still had a complete answer.
+ *
+ * The body is the plan as submitted, not `result.inputs`. A run where a box
+ * was left blank is simulated against a notional portfolio, and posting the
+ * normalized inputs back would re-run it as though the visitor had entered
+ * that figure — turning a rates answer into a verdict about money nobody has.
+ */
+function useInterpretation(submitted: SubmittedPlan | null): {
+  interpretation: Interpretation | null;
+  isLoading: boolean;
+} {
+  const [interpretation, setInterpretation] = useState<Interpretation | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    if (!submitted || typeof fetch !== "function") return;
+
+    let cancelled = false;
+    setInterpretation(null);
+    setIsLoading(true);
+
+    /*
+     * A deadline of our own, past the server's. The endpoint bounds its own
+     * model call and answers 204 when it gives up, so this should never fire
+     * on an ordinary slow reading — it is the backstop for a connection that
+     * stops answering, which would otherwise leave the placeholder spinning
+     * for as long as the browser's own timeout allows.
+     */
+    const controller = typeof AbortController === "function" ? new AbortController() : null;
+    const deadline = controller
+      ? setTimeout(() => controller.abort(), INTERPRETATION_TIMEOUT_MS)
+      : null;
+
+    fetch(`${API_URL}/api/retirement-quickplan/interpretation`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(submitted),
+      ...(controller ? { signal: controller.signal } : {}),
+    })
+      // 204 is the ordinary "nothing to show" answer and has no body to read.
+      .then((response) => (response.ok && response.status !== 204 ? response.json() : null))
+      .then((payload) => {
+        if (cancelled) return;
+        const usable =
+          payload &&
+          typeof payload.headline === "string" &&
+          Array.isArray(payload.paragraphs) &&
+          payload.paragraphs.length > 0;
+        setInterpretation(usable ? (payload as Interpretation) : null);
+      })
+      .catch(() => {
+        if (!cancelled) setInterpretation(null);
+      })
+      .finally(() => {
+        if (deadline !== null) clearTimeout(deadline);
+        if (!cancelled) setIsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+      if (deadline !== null) clearTimeout(deadline);
+      // A new run supersedes this one; nothing is waiting on the answer.
+      controller?.abort();
+    };
+  }, [submitted]);
+
+  return { interpretation, isLoading };
+}
+
+/**
+ * The model's reading, or nothing.
+ *
+ * The heading names the model as the author, next to a page whose entire
+ * argument is that its numbers are computed rather than generated. Blurring
+ * that line here would undo the argument everywhere else on the page.
+ */
+function InterpretationPanel({
+  interpretation,
+  isInterpreting,
+}: {
+  interpretation: Interpretation | null;
+  isInterpreting: boolean;
+}) {
+  if (!interpretation && !isInterpreting) return null;
+
+  return (
+    <section className="shell qp-interpretation" aria-live="polite" aria-busy={isInterpreting}>
+      <p className="section-kicker">WHAT THIS RESULT MEANS</p>
+      {isInterpreting || !interpretation ? (
+        <div className="qp-interpretation-loading" role="status">
+          <span className="qp-interpretation-pulse" aria-hidden="true" />
+          Reading your result&hellip;
+        </div>
+      ) : (
+        <>
+          <h3>{interpretation.headline}</h3>
+          {interpretation.paragraphs.map((paragraph) => (
+            <p key={paragraph}>{paragraph}</p>
+          ))}
+          {interpretation.watchOuts.length > 0 && (
+            <ul className="qp-interpretation-watch">
+              {interpretation.watchOuts.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
+          )}
+          <p className="qp-interpretation-note">
+            Written by a language model from the figures above and today&rsquo;s published rates.
+            It states no number the engine did not compute. Informational, not financial advice.
+          </p>
+        </>
+      )}
+    </section>
+  );
+}
+
 const SOCIAL_SECURITY_AGES = [62, 63, 64, 65, 66, 67, 68, 69, 70];
 
 /**
@@ -200,6 +340,15 @@ const FORM_FIELD_IDS = new Set([
 ]);
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
+
+/**
+ * How long the page waits for the interpretation before giving up on it.
+ *
+ * Deliberately longer than the server's own budget for the same work, so the
+ * ordinary "no reading" path is the server's 204 rather than a client-side
+ * abort — this only catches a connection that never answers at all.
+ */
+const INTERPRETATION_TIMEOUT_MS = 30_000;
 
 /**
  * What to send for a field the visitor left alone.
@@ -314,6 +463,12 @@ export function RetirementQuickPlan({
 }) {
   const [form, setForm] = useState<FormState>(() => initialForm(initialRetirementAge));
   const [result, setResult] = useState<QuickPlanResult | null>(null);
+  /**
+   * The body that produced `result`, kept so the interpretation runs against
+   * the plan the visitor submitted rather than the normalized one — see
+   * `useInterpretation`.
+   */
+  const [submittedPlan, setSubmittedPlan] = useState<SubmittedPlan | null>(null);
   const [error, setError] = useState<string | null>(null);
   /**
    * A rejection the model attributed to one input. Shown under that input
@@ -324,6 +479,7 @@ export function RetirementQuickPlan({
   const [fieldError, setFieldError] = useState<{ field: string; message: string } | null>(null);
   const [isRunning, setIsRunning] = useState(false);
   const allocations = useAllocations();
+  const { interpretation, isLoading: isInterpreting } = useInterpretation(submittedPlan);
   const resultsRef = useRef<HTMLDivElement | null>(null);
   const formRef = useRef<HTMLFormElement | null>(null);
   const startedRef = useRef(false);
@@ -401,19 +557,21 @@ export function RetirementQuickPlan({
     setIsRunning(true);
 
     try {
+      const plan: SubmittedPlan = {
+        currentAge: submitted(form.currentAge),
+        retirementAge: submitted(form.retirementAge),
+        investableAssets: submitted(form.investableAssets),
+        annualSpending: submitted(form.annualSpending),
+        annualContributions: submitted(form.annualContributions),
+        socialSecurityAnnual: submitted(form.socialSecurityAnnual),
+        socialSecurityStartAge: Number(form.socialSecurityStartAge),
+        allocation: form.allocation,
+      };
+
       const response = await fetch(`${API_URL}/api/retirement-quickplan`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          currentAge: submitted(form.currentAge),
-          retirementAge: submitted(form.retirementAge),
-          investableAssets: submitted(form.investableAssets),
-          annualSpending: submitted(form.annualSpending),
-          annualContributions: submitted(form.annualContributions),
-          socialSecurityAnnual: submitted(form.socialSecurityAnnual),
-          socialSecurityStartAge: Number(form.socialSecurityStartAge),
-          allocation: form.allocation,
-        }),
+        body: JSON.stringify(plan),
       });
 
       const payload = await response.json();
@@ -425,6 +583,8 @@ export function RetirementQuickPlan({
           errorField: payload?.field,
           errorStatus: response.status,
         });
+        // The old reading described the old run; a rejected submission leaves
+        // the previous result on screen, and its interpretation with it.
         const message = payload?.error || "Could not run this plan. Please check the numbers and try again.";
         const field = typeof payload?.field === 'string' ? payload.field : null;
         if (field && FORM_FIELD_IDS.has(field)) {
@@ -439,6 +599,9 @@ export function RetirementQuickPlan({
       }
 
       setResult(payload as QuickPlanResult);
+      // A new object every run, so an identical re-submission still retires the
+      // panel and asks again rather than leaving the previous reading in place.
+      setSubmittedPlan(plan);
       // Let the results render before scrolling to them.
       requestAnimationFrame(() => {
         resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -629,8 +792,17 @@ export function RetirementQuickPlan({
           Contentsquare session replay. Click events inside still report. */}
       <div ref={resultsRef} data-cs-mask>
         {result && (result.primary
-          ? <QuickPlanResults result={result} primary={result.primary} />
-          : <QuickPlanRateResults result={result} />)}
+          ? <QuickPlanResults
+              result={result}
+              primary={result.primary}
+              interpretation={interpretation}
+              isInterpreting={isInterpreting}
+            />
+          : <QuickPlanRateResults
+              result={result}
+              interpretation={interpretation}
+              isInterpreting={isInterpreting}
+            />)}
       </div>
 
       <RetirementConnectedExample />
@@ -772,7 +944,17 @@ function AssumedInputs({ assumed }: { assumed: QuickPlanResult["assumed"] | unde
   );
 }
 
-function QuickPlanResults({ result, primary }: { result: QuickPlanResult; primary: Scenario }) {
+function QuickPlanResults({
+  result,
+  primary,
+  interpretation,
+  isInterpreting,
+}: {
+  result: QuickPlanResult;
+  primary: Scenario;
+  interpretation: Interpretation | null;
+  isInterpreting: boolean;
+}) {
   const { alternatives, history, inputs, allocation } = result;
   // Plan mode is reached only with a real portfolio, which is also the
   // condition for the dollar distribution, so this is always populated here.
@@ -914,6 +1096,14 @@ function QuickPlanResults({ result, primary }: { result: QuickPlanResult; primar
           */}
         <JumpToConnectedExample />
       </section>
+
+      {/*
+        * Directly under the answer, because it is about the answer. It arrives
+        * after everything above it — a second request, deliberately — so it
+        * renders a placeholder here rather than reflowing the page from the
+        * top when it lands.
+        */}
+      <InterpretationPanel interpretation={interpretation} isInterpreting={isInterpreting} />
 
       <section className="shell qp-chart-block">
         <div className="qp-chart-copy">
@@ -1077,7 +1267,15 @@ const MISSING_FIELD_LABELS: Record<QuickPlanResult["missing"][number], string> =
  * true whatever the portfolio turns out to be, and the two missing numbers
  * become the reason to fill them in.
  */
-function QuickPlanRateResults({ result }: { result: QuickPlanResult }) {
+function QuickPlanRateResults({
+  result,
+  interpretation,
+  isInterpreting,
+}: {
+  result: QuickPlanResult;
+  interpretation: Interpretation | null;
+  isInterpreting: boolean;
+}) {
   const { history, inputs, allocation, sustainableSpendingRates, sustainableSpending, missing } = result;
   useReportedRun(result);
 
@@ -1151,6 +1349,14 @@ function QuickPlanRateResults({ result }: { result: QuickPlanResult }) {
 
         <JumpToConnectedExample />
       </section>
+
+      {/*
+        * Directly under the answer, because it is about the answer. It arrives
+        * after everything above it — a second request, deliberately — so it
+        * renders a placeholder here rather than reflowing the page from the
+        * top when it lands.
+        */}
+      <InterpretationPanel interpretation={interpretation} isInterpreting={isInterpreting} />
 
       <section className="shell qp-chart-block">
         <div className="qp-chart-copy">

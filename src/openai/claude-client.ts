@@ -11,6 +11,7 @@ import {
   getActiveGenerationSetting,
   getActiveModel,
   getActiveNumericGenerationSetting,
+  type ModelSlotId,
 } from './model-config';
 import {
   CONTEXT_PACK_IDS,
@@ -46,7 +47,31 @@ function getClient(): Anthropic {
 export interface AskClaudeOptions {
   model?: string;
   maxTokens?: number;
+  /**
+   * Which configured slot supplies the model and its generation settings.
+   * Defaults to the primary analysis slot, which is what every caller that
+   * predates the second Anthropic slot means.
+   */
+  slot?: AnthropicSlotId;
+  /**
+   * How long to wait on a single request before giving up, in milliseconds.
+   *
+   * Omitted, the SDK's own default applies — ten minutes. That is the right
+   * default for an authenticated answer someone is waiting on and the wrong
+   * one for an optional panel on a public page, where a stalled provider
+   * should drop the panel rather than hold the request open.
+   */
+  timeoutMs?: number;
+  /**
+   * Retries for this request. The SDK retries a *timeout* by default, so a
+   * caller bounding its total wait has to set this as well as `timeoutMs` —
+   * otherwise the ceiling it thinks it set is multiplied by the retry count.
+   */
+  maxRetries?: number;
 }
+
+/** The slots this client serves. Both are configured as Anthropic models. */
+export type AnthropicSlotId = Extract<ModelSlotId, 'analysis' | 'calculatorNarrative'>;
 
 export const DEFAULT_MAX_OUTPUT_TOKENS = 16_000;
 
@@ -88,8 +113,8 @@ const ADAPTIVE_THINKING = { type: 'adaptive' } as const;
 type EffortLevel = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 const EFFORT_LEVELS: readonly string[] = ['low', 'medium', 'high', 'xhigh', 'max'];
 
-function resolveEffort(): EffortLevel {
-  const value = getActiveGenerationSetting('analysis', 'effort');
+function resolveEffort(slot: AnthropicSlotId): EffortLevel {
+  const value = getActiveGenerationSetting(slot, 'effort');
   return EFFORT_LEVELS.includes(value) ? (value as EffortLevel) : 'medium';
 }
 
@@ -204,7 +229,7 @@ ${scenarioCalculatorRegistry.plannerInstructions()}`,
 }
 
 /** The reasoning parameters this model accepts — empty for pre-4.6 models. */
-function reasoningParams(model: string): {
+function reasoningParams(model: string, slot: AnthropicSlotId): {
   thinking?: typeof ADAPTIVE_THINKING | typeof DISABLED_THINKING;
   output_config?: { effort: EffortLevel };
 } {
@@ -214,13 +239,13 @@ function reasoningParams(model: string): {
   // tunes how much thinking happens, so it has nothing to act on — and the
   // combination is rejected outright above `high` on some models, which would
   // take the primary provider down for a setting that was doing nothing.
-  if (getActiveGenerationSetting('analysis', 'thinking') === 'disabled') {
+  if (getActiveGenerationSetting(slot, 'thinking') === 'disabled') {
     return { thinking: DISABLED_THINKING };
   }
 
   return {
     thinking: ADAPTIVE_THINKING,
-    output_config: { effort: resolveEffort() },
+    output_config: { effort: resolveEffort(slot) },
   };
 }
 
@@ -238,6 +263,19 @@ function reportIfTruncated(stopReason: string | null | undefined, model: string)
 }
 
 /**
+ * Per-request transport options, or none at all.
+ *
+ * Returning an empty object when a caller sets neither keeps the SDK's own
+ * defaults in place for every caller that predates these settings.
+ */
+function requestOptions(options: AskClaudeOptions): { timeout?: number; maxRetries?: number } {
+  return {
+    ...(options.timeoutMs !== undefined ? { timeout: options.timeoutMs } : {}),
+    ...(options.maxRetries !== undefined ? { maxRetries: options.maxRetries } : {}),
+  };
+}
+
+/**
  * Call Claude Sonnet with a pre-built prompt (system + user message).
  * Lets callers that already built the prompt (e.g. for Show the Math) avoid
  * rebuilding the large reasoning prompt a second time.
@@ -248,16 +286,17 @@ export async function askClaude(
   options: AskClaudeOptions = {}
 ): Promise<string> {
   const client = getClient();
-  const model = options.model || getActiveModel('analysis');
+  const slot = options.slot ?? 'analysis';
+  const model = options.model || getActiveModel(slot);
   const maxTokens = options.maxTokens ?? resolveAskLincMaxOutputTokens();
 
   const response = await client.messages.create({
     model,
     max_tokens: maxTokens,
-    ...reasoningParams(model),
+    ...reasoningParams(model, slot),
     system: systemPrompt,
     messages: [{ role: 'user', content: userMessage }]
-  });
+  }, requestOptions(options));
 
   reportIfTruncated(response.stop_reason, model);
 
@@ -277,16 +316,17 @@ export async function askClaudeStream(
   options: AskClaudeOptions = {}
 ): Promise<string> {
   const client = getClient();
-  const model = options.model || getActiveModel('analysis');
+  const slot = options.slot ?? 'analysis';
+  const model = options.model || getActiveModel(slot);
   const maxTokens = options.maxTokens ?? resolveAskLincMaxOutputTokens();
 
   const stream = client.messages.stream({
     model,
     max_tokens: maxTokens,
-    ...reasoningParams(model),
+    ...reasoningParams(model, slot),
     system: systemPrompt,
     messages: [{ role: 'user', content: userMessage }]
-  });
+  }, requestOptions(options));
 
   stream.on('text', (textDelta: string) => {
     try {
