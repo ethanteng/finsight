@@ -211,9 +211,10 @@ export default function ProfilePage() {
   const [retryMessage, setRetryMessage] = useState<string>('');
   // Progress/error text from whichever provider flow the picker started, lifted
   // out of the (now hidden) provider buttons so it appears next to the control
-  // the user actually clicked.
-  const [plaidLinkStatus, setPlaidLinkStatus] = useState('');
-  const [snapTradeConnectStatus, setSnapTradeConnectStatus] = useState('');
+  // the user actually clicked. One field, not two: a leftover Plaid failure
+  // must not mask a SnapTrade "setting up" / failure message (or the reverse)
+  // via `a || b` precedence.
+  const [providerConnectStatus, setProviderConnectStatus] = useState('');
   // Brokerage accounts, lifted out of SnapTradeButton so one list can hold every
   // account whichever provider reported it.
   const [snapTradeAccounts, setSnapTradeAccounts] = useState<SnapTradeAccount[]>([]);
@@ -1363,9 +1364,9 @@ export default function ProfilePage() {
             {/* Both provider flows report progress and failure after this modal
                 has closed, so the message is surfaced here rather than beside a
                 hidden button further down the page. */}
-            {(plaidLinkStatus || snapTradeConnectStatus) && (
+            {providerConnectStatus && (
               <div className="mt-3 rounded bg-gray-700 px-3 py-2 text-sm text-gray-300">
-                {plaidLinkStatus || snapTradeConnectStatus}
+                {providerConnectStatus}
               </div>
             )}
           </div>
@@ -1392,7 +1393,7 @@ export default function ProfilePage() {
                   console.log('Account linked, refreshing all data');
                   refreshAllData();
                 }}
-                onStatusChange={setPlaidLinkStatus}
+                onStatusChange={setProviderConnectStatus}
                 updateModeTokenId={tokenStatuses.find(t => t.lastError === 'ITEM_LOGIN_REQUIRED')?.id}
                 headless={!tokenStatuses.some(t => t.lastError === 'ITEM_LOGIN_REQUIRED')}
                 label="Reconnect account"
@@ -1404,7 +1405,7 @@ export default function ProfilePage() {
                 headless
                 onReadyChange={setSnapTradeReady}
                 onAccountsLoaded={setSnapTradeAccounts}
-                onConnectStatus={setSnapTradeConnectStatus}
+                onConnectStatus={setProviderConnectStatus}
                 snapTradeStatus={snapTradeStatus}
                 // Repairs a disabled authorization rather than adding a second
                 // connection to the same brokerage. Undefined when nothing is
