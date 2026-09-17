@@ -962,8 +962,12 @@ describe('RegisterForm', () => {
       expect(body.stripeSessionId).toBe('cs_test_123');
 
       await waitFor(() =>
-        expect(push).toHaveBeenCalledWith(expect.stringContaining('/verify-email?subscription=active')),
+        expect(push).toHaveBeenCalledWith(
+          '/verify-email?subscription=active&tier=premium',
+        ),
       );
+      expect(push).not.toHaveBeenCalledWith(expect.stringContaining('email='));
+      expect(push).not.toHaveBeenCalledWith(expect.stringContaining('session_id='));
       expect(mockPushSignUp).toHaveBeenCalledWith({ signupFlow: 'paid_checkout' });
     });
 

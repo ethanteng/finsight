@@ -646,7 +646,9 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
       } else if (isTrial) {
         router.push(withFreeTrialSignupFlow('/verify-email'));
       } else if (subscriptionContext) {
-        const verifyUrl = `/verify-email?subscription=${subscriptionContext.subscription}&tier=${subscriptionContext.tier}&email=${encodeURIComponent(email)}&session_id=${subscriptionContext.sessionId || ''}`;
+        // Banner on verify only needs subscription + tier; email/session_id
+        // used to ride onward to /login and no longer have a reader.
+        const verifyUrl = `/verify-email?subscription=${subscriptionContext.subscription}&tier=${subscriptionContext.tier}`;
         router.push(verifyUrl);
       } else {
         router.push('/verify-email');
