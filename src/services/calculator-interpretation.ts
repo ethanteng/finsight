@@ -313,38 +313,58 @@ const ANY_NUMBER_WORD = [...Object.keys(NUMBER_WORDS), ...Object.keys(MAGNITUDE_
  * *inside* the number ("twenty-five years") is still read.
  */
 const SPELLED_FIGURE = new RegExp(
-  String.raw`\b((?:${ANY_NUMBER_WORD})(?:[-\s](?:${ANY_NUMBER_WORD}))*)` +
+  // Captured, never skipped. Without this the match restarts inside the phrase
+  // and validates its tail: "negative five percent" and "five point five
+  // percent" both reduced to a bare "five percent", so a draft stating the
+  // opposite of a licensed rate, or a materially different one, passed the
+  // check that exists to catch exactly that. The digit tokenizer captures its
+  // sign for the same reason.
+  String.raw`\b(?:(negative|minus|point)[-\s])?` +
+  String.raw`((?:${ANY_NUMBER_WORD})(?:[-\s](?:${ANY_NUMBER_WORD}))*)` +
   String.raw`\s+(%|percent|per cent|years?|months?|dollars?|hundred|thousand|million|billion)\b`,
   'gi'
 );
 
-/** "twenty-five" -> 25, "two million" -> 2000000, and the magnitude it used. */
+/**
+ * "twenty-five" -> 25, "one hundred thousand" -> 100000, and the magnitude the
+ * phrase was written to.
+ *
+ * Magnitudes scale the group in front of them rather than adding alongside it,
+ * which is how English works and is not what the first version did: it read
+ * "one hundred thousand dollars" as 1,100 and "three hundred million" as
+ * 1,000,300 — rejecting a truthful $100,000 while leaving a run that happened
+ * to license $1,100 able to accept it.
+ *
+ * "Hundred" scales the running group; a thousand or more closes it out.
+ */
 function readNumberWords(phrase: string): { value: number; multiplier: number } | null {
   const words = phrase.toLowerCase().split(/[-\s]+/).filter(Boolean);
-  let value = 0;
-  let pending = 0;
+  let total = 0;
+  let group = 0;
   let multiplier = 1;
   let sawNumber = false;
 
   for (const word of words) {
     if (word in NUMBER_WORDS) {
-      pending += NUMBER_WORDS[word];
+      group += NUMBER_WORDS[word];
       sawNumber = true;
       continue;
     }
     const magnitude = MAGNITUDE_WORDS[word];
     if (magnitude === undefined) return null;
-    // "two million" scales what came before it; a bare "million dollars" reads
-    // as one of them, the way a writer means it.
-    const scaled = (pending === 0 ? 1 : pending) * magnitude;
-    value += scaled;
+    // A bare "million dollars" reads as one of them, the way a writer means it.
+    if (magnitude >= 1_000) {
+      total += (group === 0 ? 1 : group) * magnitude;
+      group = 0;
+    } else {
+      group = (group === 0 ? 1 : group) * magnitude;
+    }
     multiplier = Math.max(multiplier, magnitude);
-    pending = 0;
     sawNumber = true;
   }
 
   if (!sawNumber) return null;
-  return { value: value + pending, multiplier };
+  return { value: total + group, multiplier };
 }
 
 /**
@@ -354,17 +374,31 @@ function readNumberWords(phrase: string): { value: number; multiplier: number } 
 export function extractSpelledFigures(text: string): NumericToken[] {
   const tokens: NumericToken[] = [];
   for (const match of text.matchAll(SPELLED_FIGURE)) {
-    const read = readNumberWords(match[1]);
+    const modifier = match[1]?.toLowerCase();
+    const read = readNumberWords(match[2]);
     if (!read) continue;
 
-    const unit = match[2].toLowerCase();
+    const unit = match[3].toLowerCase();
     const isPercent = unit === '%' || unit === 'percent' || unit === 'per cent';
+
+    if (modifier === 'point') {
+      /*
+       * A decimal spelled out. Reading "five point five" back reliably is more
+       * than this is worth, and guessing is the one thing it must not do — so
+       * the phrase is reported as a figure that matches nothing, which names it
+       * in the retry and asks for digits instead.
+       */
+      tokens.push({ raw: match[0].trim(), value: Number.NaN, halfWidth: 0, isPercent });
+      continue;
+    }
+
+    const negative = modifier === 'negative' || modifier === 'minus';
     // Scored at the precision the words commit to, by the same rule a written
     // figure gets: "two million" is as coarse as "$2M", "seven" is exact.
     const digits = String(Math.round(read.value / read.multiplier));
     tokens.push({
       raw: match[0].trim(),
-      value: read.value,
+      value: negative ? -read.value : read.value,
       halfWidth: 0.5 * writtenStep(digits, 0, read.multiplier, isPercent),
       isPercent,
     });
