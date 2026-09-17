@@ -628,13 +628,20 @@ export function RetirementQuickPlan({
         return;
       }
 
-      setResult(payload as QuickPlanResult);
+      const answered = payload as QuickPlanResult;
+      setResult(answered);
       // A new object every run, so an identical re-submission still retires the
       // panel and asks again rather than leaving the previous reading in place.
       setSubmittedPlan(plan);
-      // Only a run the model answered counts. A validation refusal or an
-      // unreachable backend is not one of this visitor's three.
-      setRunCount(recordRun(RETIREMENT_RUN_COUNT_KEY, runCount));
+      /*
+       * Only a run that produced a verdict counts. A validation refusal or an
+       * unreachable backend is not one of this visitor's three — and neither
+       * is a rates-only answer, which has no capture form and is deliberately
+       * not handed to signup. Counting those would let three of them lock the
+       * page while telling the visitor to save a result they cannot save, with
+       * no way left to enter the full plan that would have been savable.
+       */
+      if (answered.primary) setRunCount(recordRun(RETIREMENT_RUN_COUNT_KEY, runCount));
       // Let the results render before scrolling to them.
       requestAnimationFrame(() => {
         resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });

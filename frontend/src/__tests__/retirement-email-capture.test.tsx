@@ -334,6 +334,25 @@ it('locks the model after three runs and points at the save form', async () => {
   expect(screen.getByRole('button', { name: 'Save these results to your free account' })).toBeEnabled();
 });
 
+/*
+ * A rates-only answer has no capture form, and the page deliberately refuses
+ * to hand one to signup. Counting them would let three spend the allowance and
+ * leave the visitor locked out of entering the full plan that *would* have
+ * been savable — while the lock tells them to save a result they cannot.
+ */
+it('does not spend a run on a result that cannot be saved', async () => {
+  mockApi(RATES_RESULT);
+  renderPage();
+
+  for (let run = 0; run < 4; run += 1) {
+    runTheModel();
+    await screen.findByText(/what this mix sustained/i);
+  }
+
+  expect(screen.getByRole('button', { name: /run the model/i })).toBeEnabled();
+  expect(screen.queryByText(/that is 3 runs/i)).not.toBeInTheDocument();
+});
+
 /* The count survives a reload, so it is not shrugged off by refreshing. */
 it('is still locked after the page is rendered again', async () => {
   const first = renderPage();

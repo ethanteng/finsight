@@ -46,6 +46,7 @@ import {
 } from '@/lib/coast-fire-signup-context';
 import {
   beginFreeTrialSignupFlow,
+  type CalculatorSignupEntry,
   type CalculatorSignupOrigin,
   completeFreeTrialSignupFlow,
   type TrialSignupAttribution,
@@ -193,18 +194,30 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
   useEffect(() => {
     if (!isTrial || trialViewedRef.current) return;
     trialViewedRef.current = true;
+    /*
+     * A token says a run was carried here; it does not say from where. The
+     * straight-from-the-page route carries the same token in the same cookie,
+     * so without the marker every event after this one — started, submitted,
+     * completed — would be filed under the email funnel and quietly corrupt
+     * the comparison this entry exists to make.
+     */
+    const carriedEntry = (fromEmail: boolean): CalculatorSignupEntry => {
+      if (searchParams.get(SIGNUP_ENTRY_PARAM) === SIGNUP_ENTRY_RESULTS_PAGE) return 'results_page';
+      return fromEmail ? 'results_email' : 'calculator_cta';
+    };
+
     let attribution: TrialSignupAttribution | undefined;
     if (hasCoastFireSignupSource(searchParams)) {
       const fromEmail = Boolean(readCoastFireSignupRef() || readCoastFireSignupContext()?.sourceToken);
       attribution = {
         signupOrigin: 'coast_fire_calculator',
-        signupEntry: fromEmail ? 'results_email' : 'calculator_cta',
+        signupEntry: carriedEntry(fromEmail),
       };
     } else if (hasRetirementSignupSource(searchParams)) {
       const fromEmail = Boolean(readRetirementSignupRef() || readRetirementSignupContext()?.sourceToken);
       attribution = {
         signupOrigin: 'retirement_calculator',
-        signupEntry: fromEmail ? 'results_email' : 'calculator_cta',
+        signupEntry: carriedEntry(fromEmail),
       };
     }
     beginFreeTrialSignupFlow(Date.now(), attribution);

@@ -128,6 +128,13 @@ The count is read after mount rather than during render, because the page is
 server-rendered and session storage does not exist there. A reload that should
 find the button locked therefore shows it live for one frame.
 
+**Only a run that produced a verdict is counted.** A validation refusal, an
+unreachable backend, and a rates-only answer are all free. The last of those is
+the one worth stating: a `rates` result has no capture form and is deliberately
+not handed to signup, so counting them would let three lock the page while the
+copy tells the visitor to save a result that cannot be saved — and leave no way
+to enter the full plan that would have been savable.
+
 ## The closing CTA
 
 One kicker, one line, one sentence, the button, and `TRIAL_CTA_MICROCOPY` —
@@ -381,9 +388,15 @@ way.
 
 Going straight there also means no `/signup-context` exchange: the page stores
 the run in sessionStorage next to the cookie, carrying the same token, so
-`RegisterForm` short-circuits the lookup. It is reported as
-`calculator_results_page_cta_opened` rather than the email event, so the two
-funnels — one that crossed an inbox, one that did not — stay apart in GA4.
+`RegisterForm` short-circuits the lookup.
+
+**The `entry=results_page` marker is what keeps the two funnels apart**, and it
+has to be on the URL because the cookie looks identical either way. It selects
+`calculator_results_page_cta_opened` over the email event, and — the part that
+matters more — it sets `signupEntry: 'results_page'` on the stored trial flow,
+which every later event reads. Without it a visitor who never opened an inbox
+would be filed under `results_email` from `trial_signup_viewed` all the way to
+`trial_signup_completed`.
 
 Three things keep that honest:
 
