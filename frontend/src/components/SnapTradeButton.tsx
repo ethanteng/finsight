@@ -479,10 +479,11 @@ const SnapTradeButton = forwardRef<SnapTradeButtonRef, SnapTradeButtonProps>(fun
   return (
     <div className="space-y-4">
       {/* In headless mode the shared "Add an account" flow owns connecting, so
-          the only button worth keeping is a repair: reconnecting a named
-          disabled authorization is not "add an account" and has nowhere else to
-          live. */}
-      {(!headless || needsReconnect) && (
+          the ordinary connect button stays hidden. Two exceptions still need a
+          visible control: repairing a named disabled authorization, and retrying
+          after registration/setup failed — otherwise investment search rows stay
+          disabled for the rest of the page session with nothing the user can click. */}
+      {(!headless || needsReconnect || status === 'error') && (
         <div className="flex items-center space-x-4">
             <button
               onClick={handleClick}

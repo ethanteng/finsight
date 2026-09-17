@@ -125,4 +125,20 @@ describe('SnapTradeButton account list', () => {
     await waitFor(() => expect(screen.getByText('Treasury Account')).toBeInTheDocument());
     expect(within(cardFor('Treasury Account')).getByTitle('Read directly from Public')).toBeInTheDocument();
   });
+
+  it('still offers a retry control in headless mode after setup fails', async () => {
+    // Without this, investment search rows stay disabled for the session with
+    // no button the user can click to re-run registration.
+    global.fetch = jest.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/snaptrade/status/user')) {
+        return { ok: false, status: 500, json: async () => ({}) } as Response;
+      }
+      return { ok: true, json: async () => ({}) } as Response;
+    }) as unknown as typeof fetch;
+
+    render(<SnapTradeButton headless />);
+
+    expect(await screen.findByRole('button', { name: /Error - Try Again/i })).toBeInTheDocument();
+  });
 });
