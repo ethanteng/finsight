@@ -517,11 +517,22 @@ function ratesModeInstructions(missing: RetirementQuickPlanResult['missing']): s
   );
 }
 
+/**
+ * Why a draft was sent back, when one was.
+ *
+ * Two different mistakes need two different corrections: naming the offending
+ * tokens teaches nothing to a model that never produced the object in the
+ * first place.
+ */
+type DraftFeedback =
+  | { kind: 'ungrounded'; tokens: string[] }
+  | { kind: 'unparseable' };
+
 /** Everything the model sees about this run, in one block. */
 function buildUserMessage(
   result: RetirementQuickPlanResult,
   facts: PlanFact[],
-  feedback?: string[]
+  feedback?: DraftFeedback
 ): string {
   const mode = result.mode === 'plan'
     ? 'The visitor gave both a portfolio and a spending level, so the engine produced a survival verdict for their own plan.'
@@ -534,13 +545,19 @@ function buildUserMessage(
     ...facts.map((fact) => `- ${fact.label}: ${fact.display}`),
   ];
 
-  if (feedback && feedback.length > 0) {
+  if (feedback?.kind === 'ungrounded' && feedback.tokens.length > 0) {
     lines.push(
       '',
       'Your previous draft was rejected. These numbers appear in it but are not in the list above:',
-      ...feedback.map((token) => `- ${token}`),
+      ...feedback.tokens.map((token) => `- ${token}`),
       '',
       'Rewrite it using only the figures listed. Do not compute anything.'
+    );
+  } else if (feedback?.kind === 'unparseable') {
+    lines.push(
+      '',
+      'Your previous response could not be read. Return the JSON object described above and',
+      'nothing else: no preamble, no explanation, no code fence, no trailing commentary.'
     );
   }
 
@@ -674,7 +691,7 @@ export async function interpretRetirementQuickPlan(
 
   const facts = buildPlanFacts(result, market);
   const model = getActiveModel('calculatorNarrative');
-  let feedback: string[] | undefined;
+  let feedback: DraftFeedback | undefined;
 
   const deadline = Date.now() + TOTAL_BUDGET_MS;
 
@@ -713,8 +730,13 @@ export async function interpretRetirementQuickPlan(
 
     const draft = parseDraft(raw);
     if (!draft) {
+      // Sent back for the same reason an ungrounded draft is: one more chance,
+      // inside the same budget and the same two-attempt ceiling. A response
+      // that is not the object asked for is usually a formatting slip, and the
+      // note below names that rather than naming figures.
       console.warn('Retirement interpretation: response did not parse as the expected object.');
-      return null;
+      feedback = { kind: 'unparseable' };
+      continue;
     }
 
     const grounding = groundInterpretation(draft, facts);
@@ -728,13 +750,16 @@ export async function interpretRetirementQuickPlan(
       return interpretation;
     }
 
-    feedback = grounding.ungrounded;
+    feedback = { kind: 'ungrounded', tokens: grounding.ungrounded };
   }
 
   // Worth a message rather than silence: a model that cannot stay inside the
   // fact block for a whole class of plans shows up here as a rate, and the
   // page gives no other sign that anything was dropped.
-  const message = `Retirement interpretation: ungrounded after retry (model=${model}, tokens=${feedback?.join(', ')})`;
+  const reason = feedback?.kind === 'unparseable'
+    ? 'unparseable after retry'
+    : `ungrounded after retry (tokens=${feedback?.tokens.join(', ')})`;
+  const message = `Retirement interpretation: ${reason} (model=${model})`;
   console.warn(message);
   Sentry.captureMessage(message, 'warning');
   return null;

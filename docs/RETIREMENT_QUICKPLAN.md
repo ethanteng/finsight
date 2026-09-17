@@ -33,7 +33,7 @@ labelled as model-written where it sits. See
 | Interpretation | `src/services/retirement-quickplan-interpretation.ts` |
 | Market conditions | `src/services/calculator-market-conditions.ts` |
 | Route | `src/routes/retirement-quickplan.ts` (mounted at `/api/retirement-quickplan`) |
-| Tests | `src/__tests__/unit/retirement-quickplan.test.ts`, `src/__tests__/unit/retirement-quickplan-route.test.ts`, `src/__tests__/unit/retirement-quickplan-interpretation.test.ts`, `frontend/src/__tests__/retirement-landing.test.tsx`, `frontend/src/__tests__/retirement-interpretation.test.tsx` |
+| Tests | `src/__tests__/unit/retirement-quickplan.test.ts`, `src/__tests__/unit/retirement-quickplan-route.test.ts`, `src/__tests__/unit/retirement-quickplan-interpretation.test.ts`, `src/__tests__/unit/calculator-market-conditions.test.ts`, `frontend/src/__tests__/retirement-landing.test.tsx`, `frontend/src/__tests__/retirement-interpretation.test.tsx` |
 
 ## What it runs
 
@@ -313,8 +313,10 @@ rejected for restating the fact block — on exactly the plans where the model
 did what it was told.
 
 A draft with an ungrounded figure is retried once, with the offending tokens
-named. A second failure returns null, the route answers 204, and the page
-renders nothing — **the deterministic result is complete without this panel, so
+named. A response that is not the object asked for at all gets the same one
+more chance, told what was wrong with the format rather than handed figures it
+never wrote — inside the same two-attempt ceiling, not on top of it. A second
+failure returns null, the route answers 204, and the page renders nothing — **the deterministic result is complete without this panel, so
 the failure mode is a missing paragraph rather than a wrong one.** The
 give-up is reported to Sentry, because the page gives no other sign it happened.
 
@@ -357,7 +359,12 @@ What is left out is deliberate:
   response and say nothing about whether this plan lasts.
 
 Each rate is optional and independently settled behind a 2.5s timeout, so an
-unconfigured or failing provider costs these sentences and nothing else. The
+unconfigured or failing provider costs these sentences and nothing else. A set
+where *nothing* resolved is held for one minute rather than the full hour: an
+empty set is usually a cold start that ran past the deadline or an unset key,
+and holding it for an hour would cost every interpretation in that hour its
+rate context over one slow second. Re-checking is cheap, and with no key
+configured it costs nothing at all — the fetch is skipped outright. The
 set is cached for an hour; the *interpretation* cache keys on each rate's
 label, source, observation date **and value**, so a revision in place — or the
 10-year point falling back from Massive to FRED under the same label — is a

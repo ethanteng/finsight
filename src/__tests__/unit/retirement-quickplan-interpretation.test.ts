@@ -506,9 +506,30 @@ describe('interpretRetirementQuickPlan', () => {
     expect(model.ask).toHaveBeenCalledTimes(1);
   });
 
-  it('returns null on a response that is not the expected object', async () => {
+  /*
+   * A response that is not the object asked for is usually a formatting slip,
+   * so it gets the same one more chance an ungrounded draft gets — inside the
+   * same two-attempt ceiling, not on top of it.
+   */
+  it('retries an unparseable response, telling it what was wrong', async () => {
+    model.ask
+      .mockResolvedValueOnce('Sure! Here is my analysis of your plan.')
+      .mockResolvedValueOnce(DRAFT('Your money lasted in 87.3% of tested retirements.'));
+
+    const result = await interpretRetirementQuickPlan(planResult());
+    expect(result?.headline).toContain('87.3%');
+    expect(model.ask).toHaveBeenCalledTimes(2);
+
+    // The correction names the format, not figures the model never wrote.
+    const retryMessage = String(model.ask.mock.calls[1][1]);
+    expect(retryMessage).toContain('could not be read');
+    expect(retryMessage).not.toContain('are not in the list above');
+  });
+
+  it('gives up on a response that never parses', async () => {
     model.ask.mockResolvedValue('I am afraid I cannot do that.');
     expect(await interpretRetirementQuickPlan(planResult())).toBeNull();
+    expect(model.ask).toHaveBeenCalledTimes(2);
   });
 
   it('reads a draft wrapped in a code fence', async () => {
