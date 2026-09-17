@@ -16,7 +16,13 @@ import { getPrismaClient } from '../prisma-client';
 
 export type ModelProvider = 'anthropic' | 'openai' | 'google';
 
-export type ModelSlotId = 'analysis' | 'fallback' | 'validation' | 'profile' | 'contextPlanner';
+export type ModelSlotId =
+  | 'analysis'
+  | 'fallback'
+  | 'validation'
+  | 'profile'
+  | 'contextPlanner'
+  | 'calculatorNarrative';
 
 export interface ModelSlotMeta {
   id: ModelSlotId;
@@ -99,6 +105,15 @@ export const MODEL_SLOTS: ModelSlotMeta[] = [
     shippedDefault: 'gpt-4o',
   },
   {
+    id: 'calculatorNarrative',
+    label: 'Calculator interpretation',
+    provider: 'anthropic',
+    description:
+      'Writes the plain-language reading of a public calculator result. It receives only the figures the deterministic engine already computed and may not state any other number — the application rejects output that does. It never sees a user account, so this slot can be a cheaper, faster model than primary analysis without affecting any answer in the product.',
+    envVar: 'CALCULATOR_NARRATIVE_MODEL',
+    shippedDefault: 'claude-haiku-4-5-20251001',
+  },
+  {
     id: 'contextPlanner',
     label: 'Context planning',
     provider: 'openai',
@@ -152,27 +167,34 @@ export interface GenerationSettingMeta {
   shippedDefault: string;
 }
 
-const THINKING_SETTING: GenerationSettingMeta = {
-  id: 'thinking',
-  label: 'Thinking',
-  description:
-    'Whether the model reasons before answering. Adaptive lets it decide per question; disabled trades answer quality for latency and cost. Never sent to models older than the 4.6 generation, which cannot accept it.',
-  kind: 'enum',
-  options: ['adaptive', 'disabled'],
-  omittable: false,
-  shippedDefault: 'adaptive',
-};
+function thinkingSetting(shippedDefault: string): GenerationSettingMeta {
+  return {
+    id: 'thinking',
+    label: 'Thinking',
+    description:
+      'Whether the model reasons before answering. Adaptive lets it decide per question; disabled trades answer quality for latency and cost. Never sent to models older than the 4.6 generation, which cannot accept it.',
+    kind: 'enum',
+    options: ['adaptive', 'disabled'],
+    omittable: false,
+    shippedDefault,
+  };
+}
 
-const EFFORT_SETTING: GenerationSettingMeta = {
-  id: 'effort',
-  label: 'Thinking effort',
-  description:
-    'How much reasoning to spend before answering. Higher settings cost more tokens and take longer. Only sent while thinking is adaptive.',
-  kind: 'enum',
-  options: ['low', 'medium', 'high', 'xhigh', 'max'],
-  omittable: false,
-  shippedDefault: 'medium',
-};
+function effortSetting(shippedDefault: string): GenerationSettingMeta {
+  return {
+    id: 'effort',
+    label: 'Thinking effort',
+    description:
+      'How much reasoning to spend before answering. Higher settings cost more tokens and take longer. Only sent while thinking is adaptive.',
+    kind: 'enum',
+    options: ['low', 'medium', 'high', 'xhigh', 'max'],
+    omittable: false,
+    shippedDefault,
+  };
+}
+
+const THINKING_SETTING = thinkingSetting('adaptive');
+const EFFORT_SETTING = effortSetting('medium');
 
 function maxOutputTokensSetting(options: {
   shippedDefault: string;
@@ -275,6 +297,21 @@ export const SLOT_GENERATION_SETTINGS: Record<ModelSlotId, GenerationSettingMeta
       description:
         'Ceiling on the small structured personal-context patch. The application rejects malformed '
         + 'or incomplete output instead of storing it.' + OPENAI_CEILING_NOTE,
+    }),
+  ],
+  calculatorNarrative: [
+    // Off by default. This slot restates figures the engine already computed
+    // in plain language; the reasoning budget buys nothing here and the page
+    // is waiting on the response.
+    thinkingSetting('disabled'),
+    effortSetting('low'),
+    maxOutputTokensSetting({
+      shippedDefault: '2000',
+      // Anthropic requires the parameter, so there is no provider default to
+      // hand back to.
+      omittable: false,
+      description:
+        'Ceiling on one calculator interpretation. The response is a small fixed JSON object, so this only has to be large enough for a few short paragraphs; a truncated one is rejected rather than shown.',
     }),
   ],
   contextPlanner: [

@@ -34,6 +34,25 @@ const leads = {
   mark: jest.fn<Promise<void>, [string, Record<string, boolean>]>(async () => undefined),
 };
 
+/**
+ * The interpretation, held the same way. Whether the model stays inside the
+ * fact block is covered where that check is defined; what matters here is that
+ * the route re-runs the plan, that a dropped reading is not an error, and that
+ * this endpoint has a window of its own.
+ */
+const interpretation = {
+  write: jest.fn<Promise<unknown>, unknown[]>(async () => ({
+    headline: 'A reading.',
+    paragraphs: ['A paragraph.'],
+    watchOuts: [],
+    model: 'test-model',
+    cached: false,
+  })),
+};
+jest.mock('../../services/retirement-quickplan-interpretation', () => ({
+  interpretRetirementQuickPlan: (...args: unknown[]) => interpretation.write(...(args as [])),
+}));
+
 jest.mock('../../auth/resend-email', () => ({
   sendRetirementResultsEmail: (...args: unknown[]) => email.send(...(args as [])),
 }));
@@ -126,6 +145,7 @@ describe('retirement quick plan route', () => {
     leads.read.mockClear();
     leads.read.mockResolvedValue(null);
     leads.mark.mockClear();
+    interpretation.write.mockClear();
   });
 
   afterEach(() => {
@@ -533,6 +553,71 @@ describe('retirement quick plan route', () => {
         .get(`/api/retirement-quickplan/signup-context/${'c'.repeat(48)}`);
 
       expect(context.status).toBe(404);
+    });
+  });
+
+  describe('POST /interpretation', () => {
+    it('re-runs the plan and returns the reading', async () => {
+      const response = await request(buildApp())
+        .post('/api/retirement-quickplan/interpretation')
+        .send(SHORT_PLAN);
+
+      expect(response.status).toBe(200);
+      expect(response.body.headline).toBe('A reading.');
+
+      // The figures handed to the writer are the ones we computed here, never
+      // anything the caller put in the body.
+      const [result] = interpretation.write.mock.calls[0] as [{ mode: string; inputs: unknown }];
+      expect(result.mode).toBe('plan');
+      expect(result.inputs).toMatchObject({ investableAssets: 500_000, annualSpending: 60_000 });
+    });
+
+    /*
+     * The page has already rendered a complete answer by the time this runs.
+     * A reading that could not be produced is a missing paragraph, and calling
+     * it an error would put a failure banner under a correct result.
+     */
+    it('answers a dropped reading with 204 and no body', async () => {
+      interpretation.write.mockResolvedValueOnce(null);
+
+      const response = await request(buildApp())
+        .post('/api/retirement-quickplan/interpretation')
+        .send(SHORT_PLAN);
+
+      expect(response.status).toBe(204);
+      expect(response.body).toEqual({});
+    });
+
+    it('rejects a bad figure by name, without calling the model', async () => {
+      const response = await request(buildApp())
+        .post('/api/retirement-quickplan/interpretation')
+        .send(REJECTED_PLAN);
+
+      expect(response.status).toBe(400);
+      expect(response.body.field).toBe('investableAssets');
+      expect(interpretation.write).not.toHaveBeenCalled();
+    });
+
+    /* Each accepted miss is a model call we pay for, on a page with no account. */
+    it('is limited far below the plan endpoint', async () => {
+      const app = buildApp('20', undefined, { RETIREMENT_INTERPRETATION_RATE_LIMIT: '1' });
+
+      const first = await request(app)
+        .post('/api/retirement-quickplan/interpretation').send(SHORT_PLAN);
+      const second = await request(app)
+        .post('/api/retirement-quickplan/interpretation').send(SHORT_PLAN);
+
+      expect(first.status).toBe(200);
+      expect(second.status).toBe(429);
+    });
+
+    it('counts against its own window, not the plan limit', async () => {
+      const app = buildApp(undefined, undefined, { RETIREMENT_INTERPRETATION_RATE_LIMIT: '1' });
+
+      await request(app).post('/api/retirement-quickplan/interpretation').send(SHORT_PLAN);
+      const plan = await request(app).post('/api/retirement-quickplan').send(SHORT_PLAN);
+
+      expect(plan.status).toBe(200);
     });
   });
 });

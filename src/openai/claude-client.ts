@@ -11,6 +11,7 @@ import {
   getActiveGenerationSetting,
   getActiveModel,
   getActiveNumericGenerationSetting,
+  type ModelSlotId,
 } from './model-config';
 import {
   CONTEXT_PACK_IDS,
@@ -46,7 +47,16 @@ function getClient(): Anthropic {
 export interface AskClaudeOptions {
   model?: string;
   maxTokens?: number;
+  /**
+   * Which configured slot supplies the model and its generation settings.
+   * Defaults to the primary analysis slot, which is what every caller that
+   * predates the second Anthropic slot means.
+   */
+  slot?: AnthropicSlotId;
 }
+
+/** The slots this client serves. Both are configured as Anthropic models. */
+export type AnthropicSlotId = Extract<ModelSlotId, 'analysis' | 'calculatorNarrative'>;
 
 export const DEFAULT_MAX_OUTPUT_TOKENS = 16_000;
 
@@ -88,8 +98,8 @@ const ADAPTIVE_THINKING = { type: 'adaptive' } as const;
 type EffortLevel = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 const EFFORT_LEVELS: readonly string[] = ['low', 'medium', 'high', 'xhigh', 'max'];
 
-function resolveEffort(): EffortLevel {
-  const value = getActiveGenerationSetting('analysis', 'effort');
+function resolveEffort(slot: AnthropicSlotId): EffortLevel {
+  const value = getActiveGenerationSetting(slot, 'effort');
   return EFFORT_LEVELS.includes(value) ? (value as EffortLevel) : 'medium';
 }
 
@@ -204,7 +214,7 @@ ${scenarioCalculatorRegistry.plannerInstructions()}`,
 }
 
 /** The reasoning parameters this model accepts — empty for pre-4.6 models. */
-function reasoningParams(model: string): {
+function reasoningParams(model: string, slot: AnthropicSlotId): {
   thinking?: typeof ADAPTIVE_THINKING | typeof DISABLED_THINKING;
   output_config?: { effort: EffortLevel };
 } {
@@ -214,13 +224,13 @@ function reasoningParams(model: string): {
   // tunes how much thinking happens, so it has nothing to act on — and the
   // combination is rejected outright above `high` on some models, which would
   // take the primary provider down for a setting that was doing nothing.
-  if (getActiveGenerationSetting('analysis', 'thinking') === 'disabled') {
+  if (getActiveGenerationSetting(slot, 'thinking') === 'disabled') {
     return { thinking: DISABLED_THINKING };
   }
 
   return {
     thinking: ADAPTIVE_THINKING,
-    output_config: { effort: resolveEffort() },
+    output_config: { effort: resolveEffort(slot) },
   };
 }
 
@@ -248,13 +258,14 @@ export async function askClaude(
   options: AskClaudeOptions = {}
 ): Promise<string> {
   const client = getClient();
-  const model = options.model || getActiveModel('analysis');
+  const slot = options.slot ?? 'analysis';
+  const model = options.model || getActiveModel(slot);
   const maxTokens = options.maxTokens ?? resolveAskLincMaxOutputTokens();
 
   const response = await client.messages.create({
     model,
     max_tokens: maxTokens,
-    ...reasoningParams(model),
+    ...reasoningParams(model, slot),
     system: systemPrompt,
     messages: [{ role: 'user', content: userMessage }]
   });
@@ -277,13 +288,14 @@ export async function askClaudeStream(
   options: AskClaudeOptions = {}
 ): Promise<string> {
   const client = getClient();
-  const model = options.model || getActiveModel('analysis');
+  const slot = options.slot ?? 'analysis';
+  const model = options.model || getActiveModel(slot);
   const maxTokens = options.maxTokens ?? resolveAskLincMaxOutputTokens();
 
   const stream = client.messages.stream({
     model,
     max_tokens: maxTokens,
-    ...reasoningParams(model),
+    ...reasoningParams(model, slot),
     system: systemPrompt,
     messages: [{ role: 'user', content: userMessage }]
   });

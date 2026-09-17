@@ -43,6 +43,7 @@ import {
   DEFAULT_SOCIAL_SECURITY_START_AGE,
   runRetirementQuickPlan,
 } from '../services/retirement-quickplan';
+import { interpretRetirementQuickPlan } from '../services/retirement-quickplan-interpretation';
 
 const router = express.Router();
 
@@ -158,6 +159,65 @@ router.post('/', quickPlanRateLimit, async (req: Request, res: Response) => {
     console.error('❌ Retirement quick plan failed:', error);
     res.status(500).json({ error: 'Could not run this plan right now. Please try again.' });
   }
+});
+
+/**
+ * Tighter again than the email window, and for a different cost.
+ *
+ * Every accepted request that misses the cache is a model call we pay for, on
+ * a page with no account behind it. The limit is set where a visitor trying
+ * two or three variations of their plan never notices it and a script paying
+ * us to generate text does.
+ */
+const INTERPRETATION_REQUESTS_PER_WINDOW = positiveIntFromEnv(
+  'RETIREMENT_INTERPRETATION_RATE_LIMIT',
+  8
+);
+
+const interpretationRateLimit = createFixedWindowRateLimit({
+  limit: INTERPRETATION_REQUESTS_PER_WINDOW,
+  trustedHops: TRUSTED_HOPS,
+});
+
+/**
+ * The plain-language reading of a plan, written by a model.
+ *
+ * Separate from `POST /` on purpose. The deterministic result is the page's
+ * answer and has to paint immediately; this takes a model round trip, so the
+ * page renders the verdict first and fills this in when it arrives. Splitting
+ * the routes is also what lets the interpretation fail — for a rate limit, a
+ * provider outage, or a draft that quoted a number the engine never computed —
+ * without taking the answer down with it.
+ *
+ * The plan is re-run here from the submitted figures rather than read out of
+ * the request body, for the same reason the email route re-runs it: prose
+ * under our branding may only describe figures we computed. The run itself is
+ * served from the plan cache, since the page has just asked for it.
+ *
+ * A null interpretation is a 204, not an error. There is nothing wrong with
+ * the request, and the page has nothing to show for it either way.
+ */
+router.post('/interpretation', interpretationRateLimit, async (req: Request, res: Response) => {
+  let result;
+  try {
+    result = await runRetirementQuickPlan(req.body);
+  } catch (error) {
+    if (error instanceof QuickPlanValidationError) {
+      res.status(400).json({ error: error.message, field: error.field });
+      return;
+    }
+    console.error('❌ Retirement interpretation failed to run the plan:', error);
+    res.status(500).json({ error: 'Could not run this plan right now. Please try again.' });
+    return;
+  }
+
+  const interpretation = await interpretRetirementQuickPlan(result);
+  if (!interpretation) {
+    res.status(204).end();
+    return;
+  }
+
+  res.json(interpretation);
 });
 
 /**

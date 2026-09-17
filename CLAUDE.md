@@ -101,6 +101,8 @@ Plaid/SnapTrade → financial-ingestion.ts → financial-calculations.ts
 
 Supported what-if calculations run in application-owned scenario calculators after context planning. Models may identify a typed scenario request, but they do not compute outcomes. See `docs/SCENARIO_MODELING.md`.
 
+The public calculator pages draw the same line. `/retirement-calculator` runs the deterministic engine for every figure and calls a model only to write the plain-language reading of that result; the reading is rejected outright if it states any number the engine did not produce, and a rejected one is dropped rather than shown. It runs with no user, no snapshot and no conversation history. See `docs/RETIREMENT_QUICKPLAN.md`.
+
 ### Remembered personal context
 
 “What Linc remembers about you” is a bounded, field-level memory of user-stated biographical details such as age, location, household, and employment. It is encrypted at rest. Financial facts, goals, risk tolerance, and scenario assumptions belong to canonical data or active conversation context and must not be added to this memory. The extractor emits validated set/clear operations; it never appends free-form summaries.
