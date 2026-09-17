@@ -289,6 +289,33 @@ describe("Coast FIRE calculator page", () => {
   });
 
   /*
+   * A stored scenario lives for two hours. Someone who ran one, came back to
+   * the page, and clicked through without running another would otherwise hand
+   * signup a run the page they just left was not showing — which is the same
+   * "answer you did not ask for" this page was emptied to avoid, one click
+   * further on.
+   */
+  it("does not hand signup a scenario this page is not showing", () => {
+    const { container, unmount } = render(<CoastFireCalculator />);
+
+    fillForm();
+    fireEvent.submit(container.querySelector("form")!);
+    const cta = screen.getByRole("link", { name: "Stress-test my Coast FIRE plan" });
+    cta.addEventListener("click", (event) => event.preventDefault(), { once: true });
+    fireEvent.click(cta);
+    expect(readCoastFireSignupContext()).not.toBeNull();
+
+    // Back to the page, nothing entered, straight to the CTA.
+    unmount();
+    render(<CoastFireCalculator />);
+    const secondCta = screen.getByRole("link", { name: "Stress-test my Coast FIRE plan" });
+    secondCta.addEventListener("click", (event) => event.preventDefault(), { once: true });
+    fireEvent.click(secondCta);
+
+    expect(readCoastFireSignupContext()).toBeNull();
+  });
+
+  /*
    * The retirement-shaped handoff this replaced floored assets at $1,000,
    * because its own validation rejected anything lower. The Coast FIRE context
    * accepts the figure as typed, so $0 saved has to survive the trip.
