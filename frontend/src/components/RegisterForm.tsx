@@ -538,6 +538,17 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
        */
       const alreadyVerified = data.user?.emailVerified === true;
 
+      // Match the verify-email success path: login must mint a fresh session.
+      // Leaving the registration JWT here would also let a half-finished tab
+      // skip the sign-in step the rest of the funnel expects.
+      if (alreadyVerified) {
+        try {
+          localStorage.removeItem('auth_token');
+        } catch {
+          // Continue to login; a fresh sign-in issues a new token.
+        }
+      }
+
       if (isTrial) {
         router.push(withFreeTrialSignupFlow(alreadyVerified ? '/login' : '/verify-email'));
       } else if (alreadyVerified) {

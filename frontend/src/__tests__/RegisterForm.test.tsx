@@ -423,6 +423,7 @@ describe('RegisterForm', () => {
 
       await waitFor(() => expect(push).toHaveBeenCalledWith('/login?signup_flow=free_trial'));
       expect(push).not.toHaveBeenCalledWith('/verify-email?signup_flow=free_trial');
+      expect(localStorage.getItem('auth_token')).toBeNull();
     });
 
     it('still verifies when the server does not say the address was proved', async () => {

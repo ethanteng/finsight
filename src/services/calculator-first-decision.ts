@@ -149,13 +149,6 @@ export function buildDecisionAnswer(lead: RetirementLeadRecord): string {
 }
 
 /**
- * Turn a saved calculator run into the account's first decision.
- *
- * Returns why it did or did not, and never throws: registration has already
- * succeeded by the time this runs, and a missing first decision is a worse
- * home screen, not a failed signup.
- */
-/**
  * The lead a signup is entitled to, or null.
  *
  * Resolved before the account exists, because two things hang off it: what the
@@ -196,8 +189,8 @@ export async function resolveCalculatorLead(params: {
  * Write a resolved lead as the account's first decision.
  *
  * Takes the lead rather than the token: the caller resolved it before creating
- * the account, and reading it twice would mark the lead continued twice for
- * one signup.
+ * the account. Reading it again here would be a second round trip for the same
+ * figures; continuation is already recorded on the first successful read.
  */
 export async function seedFirstDecisionFromLead(params: {
   userId: string;

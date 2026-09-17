@@ -93,7 +93,7 @@ router.post('/register', async (req: Request, res: Response) => {
       timeZone,
       // The lead token from a calculator results email, when the signup came
       // from one. Optional everywhere and never trusted on its own — see
-      // `seedRetirementFirstDecision` for why the address has to match it.
+      // `resolveCalculatorLead` for why the address has to match it.
       calculatorRef,
     } = req.body;
     

@@ -110,6 +110,26 @@ describe('VerifyEmailForm', () => {
     expect(push).toHaveBeenCalledWith('/login?signup_flow=free_trial');
   });
 
+  /*
+   * Link-proved calculator signups never receive a code. If a stale client (or a
+   * bookmark) still lands here, bounce to login instead of waiting forever.
+   */
+  it('sends an already-verified registration straight to login', async () => {
+    searchParams = new URLSearchParams('signup_flow=free_trial');
+    beginFreeTrialSignupFlow();
+    localStorage.setItem('auth_token', 'registration-token');
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ user: { emailVerified: true } }),
+    });
+
+    render(<VerifyEmailForm />);
+
+    await waitFor(() => expect(push).toHaveBeenCalledWith('/login?signup_flow=free_trial'));
+    expect(localStorage.getItem('auth_token')).toBeNull();
+    expect(mockPushTrialVerifySubmit).not.toHaveBeenCalled();
+  });
+
   it('uses the network category when the verification request cannot be sent', async () => {
     searchParams = new URLSearchParams('signup_flow=free_trial');
     beginFreeTrialSignupFlow();
