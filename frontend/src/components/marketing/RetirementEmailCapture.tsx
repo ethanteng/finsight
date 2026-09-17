@@ -1,7 +1,13 @@
 "use client";
 
 /**
- * "Email me my retirement results", under the model's answer.
+ * "Save these results to your free account", under the model's answer.
+ *
+ * The ask is an account rather than an inbox copy. The email it sends carries
+ * a link that lands on signup with this address already filled in, and
+ * following it is what proves the address — so a password is all that is left,
+ * and the run becomes the first decision in the new account. See
+ * `docs/RETIREMENT_QUICKPLAN.md`.
  *
  * It appears only once a plan has actually been run and returned a verdict.
  * A `rates` run has no survival figure to send — the model will not invent a
@@ -88,10 +94,11 @@ export function RetirementEmailCapture({
     return (
       <div className="qp-email-capture is-sent" role="status" aria-live="polite">
         <p className="section-kicker">CHECK YOUR INBOX</p>
-        <h3>Your results are on their way.</h3>
+        <h3>Your link is on its way.</h3>
         <p>
-          We sent the verdict, the figures behind it, and the scenario comparison to{" "}
-          <strong>{email.trim()}</strong>. It can take a minute to arrive.
+          We sent it to <strong>{email.trim()}</strong>, along with the verdict and the figures
+          behind it. Open the link, pick a password, and this run will be waiting as your first
+          decision. It can take a minute to arrive.
         </p>
         <button
           className="qp-email-again"
@@ -111,10 +118,11 @@ export function RetirementEmailCapture({
     <form className="qp-email-capture" onSubmit={handleSubmit} aria-busy={status === "sending"}>
       <div className="qp-email-copy">
         <p className="section-kicker">KEEP THIS ANSWER</p>
-        <h3>Want this model run in your inbox?</h3>
+        <h3>Save this to a free account</h3>
         <p className="qp-email-lead">
-          We will send the verdict, the four figures behind it, and what working longer or spending
-          less would have done to the same century of history.
+          We will email you a link. Pick a password and this run is waiting as your first
+          decision — the verdict, the figures behind it, and the scenarios, ready to pick up and
+          ask questions about.
         </p>
 
       </div>
@@ -145,7 +153,7 @@ export function RetirementEmailCapture({
             disabled={status === "sending"}
             data-cs-override-id="quickplan-email-results"
           >
-            {status === "sending" ? "Sending…" : "Email me my retirement results"}
+            {status === "sending" ? "Sending…" : "Save these results to your free account"}
           </button>
       </div>
 

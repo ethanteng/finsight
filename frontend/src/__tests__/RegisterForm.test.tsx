@@ -297,6 +297,210 @@ describe('RegisterForm', () => {
     });
 
     /*
+     * The registration body is what turns the emailed run into the account's
+     * first decision. Without `calculatorRef`, the backend has nothing to seed.
+     */
+    it('sends the emailed retirement token with registration as calculatorRef', async () => {
+      const token = 'f'.repeat(48);
+      searchParams = new URLSearchParams(`source=${RETIREMENT_SIGNUP_SOURCE}`);
+      handOverRetirementRef(token);
+      const fetchMock = jest.fn(async (url: RequestInfo | URL) => {
+        if (String(url).includes('/auth/register')) {
+          return {
+            ok: true,
+            json: async () => ({
+              token: 'trial-token',
+              user: { email: 'reader@example.com', timeZone: 'America/New_York' },
+            }),
+          };
+        }
+        return {
+          ok: true,
+          json: async () => ({
+            email: 'reader@example.com',
+            inputs: RETIREMENT_SCENARIO,
+            outcome: { survivalRate: 0.92, sequencesTested: 800, sequencesSurvived: 736 },
+          }),
+        };
+      }) as unknown as typeof fetch;
+      global.fetch = fetchMock;
+
+      render(<RegisterForm variant="trial" />);
+      await screen.findByRole('region', { name: 'Your modeled retirement scenario' });
+
+      fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'Password1' } });
+      fireEvent.click(screen.getByRole('button', { name: /Create account and continue/i }));
+
+      await waitFor(() => expect(push).toHaveBeenCalledWith('/verify-email?signup_flow=free_trial'));
+      const registerCall = (fetchMock as unknown as jest.Mock).mock.calls.find(
+        ([url]) => String(url).includes('/auth/register'),
+      );
+      expect(registerCall).toBeDefined();
+      const body = JSON.parse(registerCall![1].body as string);
+      expect(body.calculatorRef).toBe(token);
+      expect(body.email).toBe('reader@example.com');
+    });
+
+    /*
+     * The field is prefilled but editable, and the server refuses to seed a run
+     * onto an address its lead was never sent to. That refusal is right, but it
+     * is silent: the email and this page both said the run would be waiting, so
+     * a changed address would deliver an empty app and no explanation.
+     */
+    it('says where a saved run is attached when the address is changed away from it', async () => {
+      const token = 'e'.repeat(48);
+      searchParams = new URLSearchParams(`source=${RETIREMENT_SIGNUP_SOURCE}`);
+      handOverRetirementRef(token);
+      global.fetch = jest.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          email: 'reader@example.com',
+          inputs: RETIREMENT_SCENARIO,
+          outcome: { survivalRate: 0.92, sequencesTested: 800, sequencesSurvived: 736 },
+        }),
+      })) as unknown as typeof fetch;
+
+      render(<RegisterForm variant="trial" />);
+      await screen.findByRole('region', { name: 'Your modeled retirement scenario' });
+
+      // Prefilled and matching: nothing to warn about.
+      expect(screen.queryByText(/saved retirement run is attached/i)).not.toBeInTheDocument();
+
+      fireEvent.change(screen.getByLabelText('Email address'), {
+        target: { value: 'work@example.com' },
+      });
+
+      const note = await screen.findByText(/saved retirement run is attached/i);
+      expect(note).toHaveTextContent('reader@example.com');
+
+      // Changing back clears it; the mismatch is the only reason it is there.
+      fireEvent.change(screen.getByLabelText('Email address'), {
+        target: { value: 'READER@example.com ' },
+      });
+      await waitFor(() =>
+        expect(screen.queryByText(/saved retirement run is attached/i)).not.toBeInTheDocument(),
+      );
+    });
+
+    /*
+     * Following a link sent to an address proves the same thing a mailed code
+     * proves, so a signup that arrived holding a matching lead token skips the
+     * verification screen and goes straight to sign-in.
+     *
+     * The decision is the server's, and these two cases are the whole of it:
+     * the client reads `user.emailVerified` off the response and never infers
+     * it from the token it sent. Nothing a client can put in the request body
+     * skips the step on its own.
+     */
+    it('skips verification when the server says the link already proved the address', async () => {
+      const token = 'd'.repeat(48);
+      searchParams = new URLSearchParams(`source=${RETIREMENT_SIGNUP_SOURCE}`);
+      handOverRetirementRef(token);
+      global.fetch = jest.fn(async (url: RequestInfo | URL) => {
+        if (String(url).includes('/auth/register')) {
+          return {
+            ok: true,
+            json: async () => ({
+              token: 'trial-token',
+              user: { email: 'reader@example.com', emailVerified: true },
+            }),
+          };
+        }
+        return {
+          ok: true,
+          json: async () => ({
+            email: 'reader@example.com',
+            inputs: RETIREMENT_SCENARIO,
+            outcome: { survivalRate: 0.92, sequencesTested: 800, sequencesSurvived: 736 },
+          }),
+        };
+      }) as unknown as typeof fetch;
+
+      render(<RegisterForm variant="trial" />);
+      await screen.findByRole('region', { name: 'Your modeled retirement scenario' });
+      fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'Password1' } });
+      fireEvent.click(screen.getByRole('button', { name: /Create account and continue/i }));
+
+      await waitFor(() => expect(push).toHaveBeenCalledWith('/login?signup_flow=free_trial'));
+      expect(push).not.toHaveBeenCalledWith('/verify-email?signup_flow=free_trial');
+      expect(localStorage.getItem('auth_token')).toBeNull();
+    });
+
+    it('still verifies when the server does not say the address was proved', async () => {
+      const token = 'd'.repeat(48);
+      searchParams = new URLSearchParams(`source=${RETIREMENT_SIGNUP_SOURCE}`);
+      handOverRetirementRef(token);
+      global.fetch = jest.fn(async (url: RequestInfo | URL) => {
+        if (String(url).includes('/auth/register')) {
+          // A token went up, but the server did not accept it as proof — a
+          // lead sent to a different address, or an expired one.
+          return {
+            ok: true,
+            json: async () => ({
+              token: 'trial-token',
+              user: { email: 'reader@example.com', emailVerified: false },
+            }),
+          };
+        }
+        return {
+          ok: true,
+          json: async () => ({
+            email: 'reader@example.com',
+            inputs: RETIREMENT_SCENARIO,
+            outcome: { survivalRate: 0.92, sequencesTested: 800, sequencesSurvived: 736 },
+          }),
+        };
+      }) as unknown as typeof fetch;
+
+      render(<RegisterForm variant="trial" />);
+      await screen.findByRole('region', { name: 'Your modeled retirement scenario' });
+      fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'Password1' } });
+      fireEvent.click(screen.getByRole('button', { name: /Create account and continue/i }));
+
+      await waitFor(() => expect(push).toHaveBeenCalledWith('/verify-email?signup_flow=free_trial'));
+    });
+
+    /*
+     * The exchange paints the scenario; the cookie is what still holds the
+     * bearer while that request is in flight. A submit that wins the race must
+     * still carry the token, or the account is created without its first decision.
+     */
+    it('still sends calculatorRef when registration beats the emailed-token exchange', async () => {
+      const token = 'c'.repeat(48);
+      searchParams = new URLSearchParams(`source=${RETIREMENT_SIGNUP_SOURCE}`);
+      handOverRetirementRef(token);
+      // Never settles: the cookie is still the only copy of the bearer.
+      const fetchMock = jest.fn(async (url: RequestInfo | URL) => {
+        if (String(url).includes('/auth/register')) {
+          return {
+            ok: true,
+            json: async () => ({
+              token: 'trial-token',
+              user: { email: 'reader@example.com', timeZone: 'America/New_York' },
+            }),
+          };
+        }
+        return new Promise(() => undefined);
+      }) as unknown as typeof fetch;
+      global.fetch = fetchMock;
+
+      const { unmount } = render(<RegisterForm variant="trial" />);
+      // Exchange still pending — no scenario painted, cookie still present.
+      expect(screen.queryByRole('region', { name: 'Your modeled retirement scenario' })).not.toBeInTheDocument();
+
+      fireEvent.change(screen.getByLabelText('Email address'), { target: { value: 'reader@example.com' } });
+      fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'Password1' } });
+      fireEvent.click(screen.getByRole('button', { name: /Start planning/i }));
+
+      await waitFor(() => expect(push).toHaveBeenCalledWith('/verify-email?signup_flow=free_trial'));
+      const registerCall = (fetchMock as unknown as jest.Mock).mock.calls.find(
+        ([url]) => String(url).includes('/auth/register'),
+      );
+      expect(JSON.parse(registerCall![1].body as string).calculatorRef).toBe(token);
+      unmount();
+    });
+
+    /*
      * The email stated a survival figure. Both the engine and the market
      * dataset change inside the token's 90 days, so the page shows what was
      * sent rather than anything recomputed.

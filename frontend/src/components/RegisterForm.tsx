@@ -339,6 +339,23 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
     return () => controller.abort();
   }, [isTrial, searchParams]);
 
+  /*
+   * The prefilled address, when the typed one has moved away from it.
+   *
+   * The field is editable, and the server refuses to seed a run onto an
+   * address the lead was not sent to — rightly, since a token is the only key
+   * to somebody's figures. But the email and this page both promised the run
+   * would be waiting, so silently registering a different address delivers an
+   * empty app and no explanation. Saying it here is the whole fix: the
+   * mismatch is legitimate (a work address instead of a personal one), it is
+   * just not what was promised.
+   */
+  const savedRunAddress =
+    retirementContext?.email &&
+    email.trim().toLowerCase() !== retirementContext.email.trim().toLowerCase()
+      ? retirementContext.email
+      : null;
+
   const coastFireSummary = coastFireContext
     ? coastFireSignupSummary(coastFireContext.inputs, coastFireContext.emailedOutcome)
     : null;
@@ -429,7 +446,26 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
       tier?: string;
       stripeSessionId?: string;
       timeZone: string;
+      calculatorRef?: string;
     } = { email, password, timeZone: getBrowserTimeZone() };
+
+    /*
+     * The token from the results email, so the run they saved becomes the
+     * first decision in this account. Prefer the exchanged context; if the
+     * visitor submits before that lookup paints, the handover cookie still
+     * holds the same bearer — without this fallback a fast submit on a slow
+     * exchange would create the account and silently skip the seed. A
+     * same-tab click-through has neither, and the server refuses a token
+     * whose lead was sent to a different address anyway.
+     */
+    const calculatorRef =
+      retirementContext?.sourceToken
+      ?? (isTrial && hasRetirementSignupSource(searchParams)
+        ? readRetirementSignupRef()
+        : null);
+    if (calculatorRef) {
+      registrationData.calculatorRef = calculatorRef;
+    }
 
     // If coming from successful subscription, include tier and session info.
     if (subscriptionContext) {
@@ -457,7 +493,7 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
 
     let data: {
       token?: string;
-      user?: { timeZone?: string };
+      user?: { timeZone?: string; emailVerified?: boolean };
       error?: string;
     };
     try {
@@ -488,11 +524,35 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
         }
       }
 
-      // Always go through email verification for security. The no-card flow
-      // carries only a fixed attribution flag; no email or form value enters
-      // its URL or analytics payload.
+      /*
+       * Verification is skipped only when the server says this address is
+       * already verified — which it does for a signup that arrived holding a
+       * calculator lead token addressed to it, since following that link
+       * proved the same thing a code would. The decision is the server's; this
+       * reads the answer rather than deciding, so nothing the client sends can
+       * skip the step on its own.
+       *
+       * Everything else still goes through it. The no-card flow carries only a
+       * fixed attribution flag; no email or form value enters its URL or
+       * analytics payload.
+       */
+      const alreadyVerified = data.user?.emailVerified === true;
+
+      // Match the verify-email success path: login must mint a fresh session.
+      // Leaving the registration JWT here would also let a half-finished tab
+      // skip the sign-in step the rest of the funnel expects.
+      if (alreadyVerified) {
+        try {
+          localStorage.removeItem('auth_token');
+        } catch {
+          // Continue to login; a fresh sign-in issues a new token.
+        }
+      }
+
       if (isTrial) {
-        router.push(withFreeTrialSignupFlow('/verify-email'));
+        router.push(withFreeTrialSignupFlow(alreadyVerified ? '/login' : '/verify-email'));
+      } else if (alreadyVerified) {
+        router.push('/login');
       } else if (subscriptionContext) {
         const verifyUrl = `/verify-email?subscription=${subscriptionContext.subscription}&tier=${subscriptionContext.tier}&email=${encodeURIComponent(email)}&session_id=${subscriptionContext.sessionId || ''}`;
         router.push(verifyUrl);
@@ -661,6 +721,12 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
               placeholder="you@example.com"
             />
           </div>
+          {savedRunAddress && (
+            <p className="mt-2 text-sm text-[#8a6d2f]" role="status">
+              Your saved retirement run is attached to <strong>{savedRunAddress}</strong>. Register
+              with that address to find it waiting in your new account.
+            </p>
+          )}
         </div>
 
         <div>

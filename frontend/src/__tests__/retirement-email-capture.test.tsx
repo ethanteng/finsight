@@ -135,7 +135,7 @@ it('asks for an address only once a plan has produced a verdict', async () => {
   runTheModel();
 
   expect(await screen.findByLabelText('Email address')).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'Email me my retirement results' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Save these results to your free account' })).toBeInTheDocument();
 });
 
 /*
@@ -197,7 +197,7 @@ it('posts the plan inputs and never the figures computed from them', async () =>
   });
   fireEvent.submit(screen.getByLabelText('Email address').closest('form')!);
 
-  await screen.findByText(/on their way/i);
+  await screen.findByText(/on its way/i);
   const send = posts.find((post) => post.url.includes('/email-results'))!;
   expect(send.body).toEqual({
     email: 'Reader@Example.com',
@@ -218,7 +218,7 @@ it('reports the conversion as a band, never as the address or the exact rate', a
   });
   fireEvent.submit(screen.getByLabelText('Email address').closest('form')!);
 
-  await screen.findByText(/on their way/i);
+  await screen.findByText(/on its way/i);
   expect(emailed).toHaveBeenCalledTimes(1);
   expect(emailed).toHaveBeenCalledWith(0.92);
 });
@@ -237,7 +237,7 @@ it('surfaces a refusal and leaves the form ready to retry', async () => {
   fireEvent.submit(screen.getByLabelText('Email address').closest('form')!);
 
   expect(await screen.findByRole('alert')).toHaveTextContent('Enter a valid email address.');
-  expect(screen.getByRole('button', { name: 'Email me my retirement results' })).toBeEnabled();
+  expect(screen.getByRole('button', { name: 'Save these results to your free account' })).toBeEnabled();
   expect(emailed).not.toHaveBeenCalled();
 });
 
@@ -261,7 +261,7 @@ it('resets the capture when a new plan is run', async () => {
     target: { value: 'reader@example.com' },
   });
   fireEvent.submit(screen.getByLabelText('Email address').closest('form')!);
-  await screen.findByText(/on their way/i);
+  await screen.findByText(/on its way/i);
 
   mockApi({
     ...BASE_RESULT,
@@ -270,6 +270,6 @@ it('resets the capture when a new plan is run', async () => {
   });
   runTheModel();
 
-  await waitFor(() => expect(screen.queryByText(/on their way/i)).not.toBeInTheDocument());
+  await waitFor(() => expect(screen.queryByText(/on its way/i)).not.toBeInTheDocument());
   expect(screen.getByLabelText('Email address')).toHaveValue('');
 });

@@ -24,11 +24,8 @@ plain language and may state no number the engine did not produce. See
 | Client component | `frontend/src/components/marketing/RetirementQuickPlan.tsx` |
 | Styles | `frontend/src/components/marketing/retirement-quickplan.css` |
 | Ad-variant helpers | `frontend/src/lib/retirement-landing.ts` |
-| Connected-accounts example | `frontend/src/components/marketing/RetirementConnectedExample.tsx` |
-| Example data (generated) | `frontend/src/lib/retirement-calculator-example.generated.ts` |
-| Example generator | `scripts/build-retirement-example.ts` (`npm run build:retirement-example`) |
-| Example drift check | `scripts/verify-retirement-example.sh` (`npm run verify:retirement-example`) |
 | Service | `src/services/retirement-quickplan.ts` |
+| First decision on signup | `src/services/calculator-first-decision.ts` |
 | Interpretation | `src/services/retirement-quickplan-interpretation.ts` |
 | Market conditions | `src/services/calculator-market-conditions.ts` |
 | Route | `src/routes/retirement-quickplan.ts` (mounted at `/api/retirement-quickplan`) |
@@ -81,107 +78,20 @@ page with no room to explain that it would read as a market crash, so the
 service drops it.
 
 **The endpoint still returns `limitations`; the page no longer renders them.**
-They had a full-width dark section under the charts. It came out when the
-result was reordered so the methodology follows the scenarios directly, on the
-grounds that the connected-accounts panel below now *demonstrates* the same gap
-— a real book, with the part the engine would not model priced in dollars —
-where the list only asserted it. The field stays on the response: it is part of
-the API contract and is still covered by `buildLimitations` tests, and a caller
-other than this page may want it.
-
-## The connected-accounts example
-
-The page's own result is computed live from six numbers, and the CTA under it
-promised something better without showing it. `RetirementConnectedExample`
-is that something: the same shape of plan, run by the same engine, against a
-portfolio it actually read.
-
-It has to be static — a marketing page cannot hold someone's portfolio — but
-static is not invented. `npm run build:retirement-example` runs the real
-`analyzeRetirementPortfolio` against the book in
-`scripts/build-retirement-example.ts` and writes
-`frontend/src/lib/retirement-calculator-example.generated.ts`. The page imports
-that file and nothing else. To publish a different profile — a real account's
-holdings — edit the script and re-run it; never edit the generated file, since
-the panel's claim that these are engine outputs is only true while it is
-generated.
-
-CI runs `npm run verify:retirement-example` on every push. It regenerates to a
-temporary file and diffs, so a hand edit is reported rather than repaired, and
-a change to the engine or the return dataset that moves the answer fails the
-build instead of leaving the page presenting stale figures as current ones.
-That check is only meaningful because the generator is deterministic: the
-as-of date is pinned and there is no timestamp in the output, so the file
-changes when the model's answer changes and at no other time.
-
-The example book is deliberately awkward in the ways real feeds are: a
-single-stock position with no resolvable geography, a chunk the custodian never
-itemised, and two sleeves the engine has no return series for. Those produce one
-of the panel's two centrepieces — the share of the money left out of the
-simulation rather than guessed at, which the six-number version has no way to
-disclose because it invented the whole portfolio.
-
-**A jump link sits under the live result.** Three chevrons rather than a
-labelled pill: the pill sat directly under the email capture's own button, where
-two filled controls read as competing asks. They point at the interpretation
-panel, which is the next thing on the page and the one section that may not
-render at all — so `hasInterpretation` decides both the panel and the chevrons,
-and a link to an id nothing carries is impossible by construction. The cascade
-is off under `prefers-reduced-motion`, where three static chevrons still point
-down.
-
-**Its header is the page's pitch, so it is styled as one.** The section head is
-an inset dark panel rather than a dark full-bleed band: the cross-sell directly
-below is already full-bleed dark, and two of those in a row read as one block.
-Its kicker is a lime badge rather than the small caption `.section-kicker.light`
-gives it elsewhere, because it is what names the block for someone scrolling
-past before they read a word of the headline; it becomes a squarer tag on
-narrow screens, where it wraps to two lines and a stadium radius would read as
-a mistake. The copy is deliberately non-technical and deliberately short — what
-the six-number answer had to assume, why that assumption changes the answer, and
-what connecting accounts replaces it with — because it is the one part of this
-page addressed to someone who has not decided to care yet. The headline carries
-the argument on its own; the lede under it is one sentence naming the profile,
-because everything else it used to say is either in that headline or in the
-cards below it. It claims the model stops guessing *what you
-own*, never that nothing is assumed: the panel's own middle card prices what the
-model still cannot see.
-
-**The panel answers the question before it shows its work.** It leads with the
-result at the plan's own retirement age and a band of the same plan at each age
-in `RETIREMENT_AGE_LADDER` — a separate engine run apiece, identical in every
-respect but the date. One rate answers "can I retire at 60?" and says nothing
-about "when can I retire?", and the page is bought against both headlines, so
-the band is the answer to the second. Every age is tested over the same window
-(today through life expectancy), so the denominators match and the rates are
-directly comparable; each rung carries its own count anyway, so the panel never
-has to assume that.
-
-The "when" sentence under the band is derived from the band rather than written
-about it — the earliest age tested, the earliest that cleared nine in ten, and
-the earliest where nothing ran out at all. A regeneration that moves those ages
-moves the prose with them. "Nothing ran out" is stated as a fact about
-overlapping stretches of one country's record, not as a guarantee.
-
-The panel does not disclaim the comparison with the six-number result above:
-both runs now cover the same record.
-
-That used to be false, and the fix is in the engine rather than the copy. The
-international series starts in 1975, and the engine used to restrict every
-window to months where all active series existed — so a portfolio holding any
-international at all was tested only against retirements beginning between 1975
-and the early 1980s, the most favourable stretch of the record. The same plan
-looked materially safer in the authenticated product than on this page, and the
-difference was data availability rather than insight. `ShortSeriesPolicy` now
-extends the short series with a documented proxy instead, and the panel states
-which months of the window that covers.
+They had a full-width dark section under the charts, which came out when the
+result was reordered so the methodology follows the scenarios directly. What
+the list asserted is now said where it lands: the assumptions disclosure names
+every assumption the run made, and the saved first decision closes with the
+same point in the reader's own terms. The field stays on the response: it is
+part of the API contract and is still covered by `buildLimitations` tests, and
+a caller other than this page may want it.
 
 ## Page order
 
 Hero, form, result (verdict → jump link → "What this result means" →
 sustainable-spending chart → scenarios → methodology and the assumptions
-disclosure), then the connected-accounts panel, the cross-sell, and the always-present crawlable body
-— now just the FAQ ("Retirement FAQs") and the cluster links ("Read more about
+disclosure), then the cross-sell, and the always-present crawlable body — now
+just the FAQ ("Retirement FAQs") and the cluster links ("Read more about
 retirement").
 
 The methodology block sits directly under the scenarios because it explains the
@@ -396,6 +306,89 @@ The `calculatorNarrative` slot (`CALCULATOR_NARRATIVE_MODEL`, shipped default
 Haiku 4.5, thinking off) is admin-tunable like every other slot. It never sees
 a user account, so it can be a cheaper and faster model than primary analysis
 without affecting any answer in the product.
+
+## Saving a run to a new account
+
+The capture under the result asks for an account rather than an inbox copy:
+**"Save these results to your free account."** The email it sends carries a
+link labelled **"Finish creating your account"**, which lands on signup with
+the address already filled in, and a password is the only thing left. The run
+becomes the first decision in the new account.
+
+**This path skips the verification code, and that is the point of the token.**
+Every other registration goes to `/verify-email` and enters a mailed code. A
+lead token is forty-eight random characters that only ever left this system
+inside an email to the lead's own address, so presenting one *and* registering
+that address demonstrates control of the inbox — the same thing the code
+demonstrates, established the same way, one round trip earlier. Asking for it
+twice is not more proof, just more steps.
+
+Three things keep that honest:
+
+**Deploy the frontend first, or with the backend — never after.** This is the
+opposite of the usual order here, and it is worth stating because getting it
+wrong strands people silently.
+
+- *Frontend first* is safe. The new page sends `calculatorRef`, which an older
+  backend ignores as an unknown body field, and reads `user.emailVerified`,
+  which an older backend omits — so it falls through to the verification screen
+  and the older backend has mailed a code. Nothing breaks.
+- *Backend first* is not. The new backend stops mailing the code on this path
+  while the old page still sends every signup to `/verify-email`, where they
+  wait for mail that will never arrive. Nothing errors; it simply looks like a
+  broken email pipeline.
+
+`VerifyEmailForm` bounces an already-verified session to sign-in, which covers
+someone landing there later — but that bounce lives in the *frontend*, so it
+cannot rescue a backend-first rollout. Order is still the control.
+
+- `resolveCalculatorLead` runs **before** the account is created, on the
+  server, from the token alone. The client sends a token, never a claim; the
+  response reports `user.emailVerified` and `RegisterForm` reads that answer
+  rather than inferring it from what it sent.
+- The address match is what turns possession of the token into proof. A lead
+  sent to someone else proves nothing about the person registering, so it
+  resolves to null and the code is sent as usual.
+- No verification row is created on this path either. An unused code is one
+  more live credential on an account that has no need of it.
+
+Most of the path already existed for the results email. What is new is the last
+step.
+
+| Step | Where |
+|---|---|
+| Capture posts the six numbers | `RetirementEmailCapture.tsx` → `POST /api/retirement-quickplan/email-results` |
+| Lead stored with the plan and the verdict | `services/retirement-leads.ts` |
+| Email links to `/retirement/continue?ref=…` | `email/retirement-results.ts` |
+| Token moved into a first-party cookie, URL cleaned | `app/retirement/continue/route.ts` |
+| Token exchanged, address prefilled | `RegisterForm.tsx` → `GET /signup-context/:token` |
+| Token sent with the registration | `RegisterForm.tsx` → `POST /auth/register` (`calculatorRef`) |
+| Token resolved, address proved | `resolveCalculatorLead` — before the account exists |
+| Run written as the first decision | `seedFirstDecisionFromLead` — after the response |
+
+Three things about that last step are load-bearing:
+
+**The figures come from the lead, not from a fresh run.** A token lives ninety
+days; the engine and its dataset change inside that. Re-running would let the
+saved decision disagree with the email that produced it, over a difference the
+reader cannot see. Same reasoning the signup-context endpoint already follows.
+It also means no engine run and no model call on the registration path.
+
+**The address has to match the lead's.** A token is the only key to a lead, and
+a lead holds somebody's retirement figures. Without the check, anyone holding a
+forwarded link could register under their own address and copy that person's
+plan into their own account. The comparison is case- and whitespace-insensitive,
+since the two addresses arrive from different places.
+
+**It cannot fail a registration.** It runs after the response and unawaited,
+returns a reason rather than throwing, and skips an account that already has
+decisions — registration can be retried, and two attempts must not leave two
+copies of one run.
+
+The decision's question is synthesized, because a calculator is a form and
+there is no prompt to carry over. It states the plan back in the first person
+using only figures the visitor entered, so the answer under it answers
+something and a follow-up has a thread to continue.
 
 ## Operational notes
 

@@ -58,6 +58,66 @@ function VerifyEmailFormContent() {
     }
   }, [searchParams]);
 
+  /*
+   * Calculator-lead signups can arrive already verified — the emailed link
+   * proved the address, so registration never mailed a code. A stale frontend
+   * build (backend deployed first) still sends every account here; without this
+   * check the visitor waits for a code that will never arrive. Same bounce if
+   * they bookmarked the page after a link-proved signup.
+   */
+  useEffect(() => {
+    const token = localStorage.getItem('auth_token');
+    if (!token) return;
+
+    const API_URL = process.env.NEXT_PUBLIC_API_URL;
+    const controller = new AbortController();
+
+    void (async () => {
+      try {
+        const res = await fetch(`${API_URL}/auth/profile`, {
+          headers: { Authorization: `Bearer ${token}` },
+          signal: controller.signal,
+        });
+        if (!res.ok) return;
+        const data = (await res.json().catch(() => ({}))) as {
+          user?: { emailVerified?: boolean };
+        };
+        if (data.user?.emailVerified !== true) return;
+
+        try {
+          localStorage.removeItem('auth_token');
+        } catch {
+          // Continue to login; the account is already verified.
+        }
+
+        if (isFreeTrialSignupContinuation(searchParams)) {
+          router.push(withFreeTrialSignupFlow('/login'));
+          return;
+        }
+
+        const subscriptionParam = searchParams.get('subscription');
+        const tierParam = searchParams.get('tier');
+        if (subscriptionParam && tierParam) {
+          const emailParam = searchParams.get('email');
+          const sessionIdParam = searchParams.get('session_id');
+          router.push(
+            `/login?subscription=${subscriptionParam}&tier=${tierParam}` +
+              `&email=${encodeURIComponent(emailParam || '')}` +
+              `&session_id=${sessionIdParam || ''}`,
+          );
+          return;
+        }
+
+        router.push('/login');
+      } catch {
+        // Network blip or abort — leave them on the form; resend still works
+        // for accounts that actually need a code.
+      }
+    })();
+
+    return () => controller.abort();
+  }, [router, searchParams]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isFreeTrialFlow) pushTrialVerifySubmit();
