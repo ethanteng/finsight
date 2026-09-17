@@ -70,7 +70,14 @@ const FETCH_TIMEOUT_MS = 2_500;
  */
 const CACHE_TTL_MS = 60 * 60 * 1000;
 
-let cached: { at: number; value: CalculatorMarketConditions } | null = null;
+/**
+ * A fully empty set usually means a cold-start timeout or missing keys, not a
+ * day with no published rates. Caching that miss for a full hour leaves every
+ * visitor without market context until the process restarts or the hour ends.
+ */
+const EMPTY_CACHE_TTL_MS = 60 * 1000;
+
+let cached: { at: number; value: CalculatorMarketConditions; ttlMs: number } | null = null;
 
 export function clearMarketConditionsCache(): void {
   cached = null;
@@ -78,6 +85,15 @@ export function clearMarketConditionsCache(): void {
 
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value);
+}
+
+function hasAnyRate(conditions: CalculatorMarketConditions): boolean {
+  return Boolean(
+    conditions.treasury30Y
+    || conditions.treasury10Y
+    || conditions.inflationYoY
+    || conditions.inflationExpectation10Y
+  );
 }
 
 /** Resolve, or give up quietly at the deadline. */
@@ -100,7 +116,7 @@ async function withTimeout<T>(work: Promise<T>): Promise<T | null> {
 
 export async function getCalculatorMarketConditions(): Promise<CalculatorMarketConditions> {
   const now = Date.now();
-  if (cached && now - cached.at < CACHE_TTL_MS) return cached.value;
+  if (cached && now - cached.at < cached.ttlMs) return cached.value;
 
   const fredKey = (process.env.FRED_API_KEY || '').trim();
   const massiveKey = (process.env.MASSIVE_API_KEY || process.env.POLYGON_API_KEY || '').trim();
@@ -166,6 +182,10 @@ export async function getCalculatorMarketConditions(): Promise<CalculatorMarketC
     };
   }
 
-  cached = { at: now, value: conditions };
+  cached = {
+    at: now,
+    value: conditions,
+    ttlMs: hasAnyRate(conditions) ? CACHE_TTL_MS : EMPTY_CACHE_TTL_MS,
+  };
   return conditions;
 }
