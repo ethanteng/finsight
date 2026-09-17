@@ -73,7 +73,7 @@ export async function sendEmailVerificationCode(
       </div>
 
       <div class="security-note">
-        <p><strong>Security note:</strong> If you did not create an account with Ask Linc, you may safely ignore this email. Your address will not be used for any other purpose.</p>
+        <p><strong>Security note:</strong> If you did not create an account with Ask Linc, ignore this email and the account stays unverified. Signing up also subscribes the address to our email updates; every one of those carries an unsubscribe link, and using it removes the address for good.</p>
       </div>
     `;
 

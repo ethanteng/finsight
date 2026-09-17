@@ -13,12 +13,21 @@ MAILER_LITE_GROUP_ID=your_mailerlite_group_id_here
 ## Optional Environment Variables
 
 ```bash
+# The group a no-card signup joins the moment the account is created.
+# Unset means new accounts wait for the nightly sync, as they did before
+# registration subscribed anyone.
+MAILER_LITE_TRIAL_GROUP_ID=your_trial_group_id_here
+
 # Groups that calculator leads join when they ask for their results by
 # email. Unset means those addresses still reach the account's subscriber
 # list, just without a group.
 MAILER_LITE_COAST_FIRE_GROUP_ID=your_coast_fire_group_id_here
 MAILER_LITE_RETIREMENT_GROUP_ID=your_retirement_group_id_here
 ```
+
+A signup that continued from a calculator joins **both** the trial group and
+that calculator's group. `/getstarted` reached any other way joins the trial
+group alone.
 
 ## How to Get These Values
 
@@ -40,13 +49,26 @@ MAILER_LITE_RETIREMENT_GROUP_ID=your_retirement_group_id_here
 5. Copy the group ID number
 6. Paste it as the value for `MAILER_LITE_GROUP_ID`
 
-### 3. MAILER_LITE_COAST_FIRE_GROUP_ID and MAILER_LITE_RETIREMENT_GROUP_ID
+### 3. MAILER_LITE_TRIAL_GROUP_ID
+
+Same steps, using the **Trial** group. This one is for accounts that have just
+been created without a card, so a welcome sequence can trigger on joining it.
+Keep it out of `MAILER_LITE_GROUP_ID`: the nightly sync re-posts the entire
+user table into that group every morning, which is the wrong shape for anything
+that should fire once, at signup.
+
+### 4. MAILER_LITE_COAST_FIRE_GROUP_ID and MAILER_LITE_RETIREMENT_GROUP_ID
 
 Same steps as above, using the **Coast FIRE** and **Retirement** groups. Both
 are a different audience from `MAILER_LITE_GROUP_ID`: that group is every
 registered user, and these are calculator visitors who have not registered.
 Keep all three separate so a nurture campaign for one question does not go to
 paying customers or to people who asked a different one.
+
+A visitor who clicked through from a calculator page without ever asking for
+results by email is not on that calculator's list — the email-results endpoint
+is what normally adds them, and they skipped it. Registration adds them, which
+is why a signup can join a calculator group without a lead token ever existing.
 
 ## Environment-Specific Setup
 

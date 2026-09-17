@@ -40,6 +40,7 @@ import {
 } from '@/lib/coast-fire-signup-context';
 import {
   beginFreeTrialSignupFlow,
+  type CalculatorSignupOrigin,
   completeFreeTrialSignupFlow,
   type TrialSignupAttribution,
   withFreeTrialSignupFlow,
@@ -497,7 +498,32 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
       stripeSessionId?: string;
       timeZone: string;
       calculatorRef?: string;
+      signupOrigin?: CalculatorSignupOrigin;
     } = { email, password, timeZone: getBrowserTimeZone() };
+
+    /*
+     * Which calculator this signup continued from, so the new account joins
+     * that calculator's marketing group alongside the trial one.
+     *
+     * Read from the URL rather than the stored attribution: the source
+     * parameter is what put the tailored page on screen, and it is present for
+     * both doors — the results email and the calculator page's own CTA. The
+     * CTA is the one that needs this, since nobody who took it has given the
+     * calculator an address, so nothing has put them on its list yet.
+     *
+     * A signup from anywhere else sends nothing and joins the trial group
+     * alone. The server allowlists the value and prefers a lead it resolved
+     * itself, so this only ever selects among groups we already own.
+     */
+    const signupOrigin: CalculatorSignupOrigin | null =
+      hasCoastFireSignupSource(searchParams)
+        ? 'coast_fire_calculator'
+        : hasRetirementSignupSource(searchParams)
+          ? 'retirement_calculator'
+          : null;
+    if (signupOrigin) {
+      registrationData.signupOrigin = signupOrigin;
+    }
 
     /*
      * The token from the results email, so the run they saved becomes the

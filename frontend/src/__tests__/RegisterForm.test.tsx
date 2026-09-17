@@ -340,6 +340,9 @@ describe('RegisterForm', () => {
       const body = JSON.parse(registerCall![1].body as string);
       expect(body.calculatorRef).toBe(token);
       expect(body.email).toBe('reader@example.com');
+      // Which calculator this continued from, so the new account joins that
+      // calculator's marketing group alongside the trial one.
+      expect(body.signupOrigin).toBe('retirement_calculator');
     });
 
     /*
@@ -797,6 +800,51 @@ describe('RegisterForm', () => {
       expect(mockPushSignUp).toHaveBeenCalledWith({ signupFlow: 'free_trial' });
       expect(mockPushTrialSignupSubmit).toHaveBeenCalledTimes(1);
       expect(mockPushTrialSignupRegistrationError).not.toHaveBeenCalled();
+    });
+
+    /*
+     * The calculator page's own CTA, which carries no token — nothing was
+     * emailed, so nothing has put this address on that calculator's list yet.
+     * The source parameter is the only attribution the arrival has, and these
+     * are the signups the calculator groups otherwise never see.
+     */
+    it.each([
+      [RETIREMENT_SIGNUP_SOURCE, 'retirement_calculator'],
+      [COAST_FIRE_SIGNUP_SOURCE, 'coast_fire_calculator'],
+    ])('reports %s as the calculator a click-through continued from', async (source, origin) => {
+      searchParams = new URLSearchParams(`source=${source}`);
+      global.fetch = jest.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ token: 'trial-token', user: { email: 'new@example.com' } }),
+      });
+
+      render(<RegisterForm variant="trial" />);
+      fillForm();
+      fireEvent.click(screen.getByRole('button', { name: /Create account and continue|Start planning/i }));
+
+      await waitFor(() => expect(push).toHaveBeenCalledWith('/verify-email?signup_flow=free_trial'));
+      const registerCall = (global.fetch as jest.Mock).mock.calls.find(
+        ([url]) => String(url).includes('/auth/register'),
+      );
+      const body = JSON.parse(registerCall![1].body as string);
+      expect(body.signupOrigin).toBe(origin);
+      // A click-through has no emailed token to send.
+      expect(body).not.toHaveProperty('calculatorRef');
+    });
+
+    it('claims no calculator for a signup that reached the page any other way', async () => {
+      global.fetch = jest.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ token: 'trial-token', user: { email: 'new@example.com' } }),
+      });
+
+      render(<RegisterForm variant="trial" />);
+      fillForm();
+      fireEvent.click(screen.getByRole('button', { name: /Start planning/i }));
+
+      await waitFor(() => expect(push).toHaveBeenCalledWith('/verify-email?signup_flow=free_trial'));
+      const body = JSON.parse((global.fetch as jest.Mock).mock.calls[0][1].body as string);
+      expect(body).not.toHaveProperty('signupOrigin');
     });
 
     it('ignores checkout context on the URL rather than quietly charging a trial signup', async () => {
