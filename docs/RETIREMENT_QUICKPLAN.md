@@ -13,8 +13,7 @@ list of everything the model had to assume on their behalf.
 
 One block on the page is written by a language model rather than computed: the
 "What this result means" panel, which reads the engine's own figures back in
-plain language and may state no number the engine did not produce. It is
-labelled as model-written where it sits. See
+plain language and may state no number the engine did not produce. See
 [The interpretation panel](#the-interpretation-panel).
 
 ## Pieces
@@ -122,23 +121,14 @@ of the panel's two centrepieces — the share of the money left out of the
 simulation rather than guessed at, which the six-number version has no way to
 disclose because it invented the whole portfolio.
 
-**The seam is a handover, not a rule.** The section opens with a gradient that
-carries the page's background down into its own, broken by the line "Now,
-without the guesswork" — so the join reads as a turn in the argument rather than
-a boundary between two boxes. Not "a real answer": the six-number result above
-is a real calculation, and what it lacks is knowledge of the portfolio. The
-flanking rules are dropped under 620px, where the phrase wraps and rules centred
-against two lines read as a mis-drawn box.
-
-**A jump link sits under the live result.** The connected-accounts section is
-four blocks below the answer — past two charts and the methodology — so a
-visitor who reads their result and stops never reaches the argument for
-connecting anything. The link appears the moment they have an answer to compare
-against. It animates (a bob on the arrow, a breathing ring on the pill) because
-it competes with a chart already in view; both animations are transform and
-box-shadow only, and both are off under `prefers-reduced-motion`. The anchor id
-is exported as `CONNECTED_EXAMPLE_ID` and imported by both sides, because a link
-to an id nothing carries fails silently.
+**A jump link sits under the live result.** Three chevrons rather than a
+labelled pill: the pill sat directly under the email capture's own button, where
+two filled controls read as competing asks. They point at the interpretation
+panel, which is the next thing on the page and the one section that may not
+render at all — so `hasInterpretation` decides both the panel and the chevrons,
+and a link to an id nothing carries is impossible by construction. The cascade
+is off under `prefers-reduced-motion`, where three static chevrons still point
+down.
 
 **Its header is the page's pitch, so it is styled as one.** The section head is
 an inset dark panel rather than a dark full-bleed band: the cross-sell directly
@@ -188,9 +178,9 @@ which months of the window that covers.
 
 ## Page order
 
-Hero, form, result (verdict → jump link → sustainable-spending chart →
-scenarios → methodology and the assumptions disclosure), then the
-connected-accounts panel, the cross-sell, and the always-present crawlable body
+Hero, form, result (verdict → jump link → "What this result means" →
+sustainable-spending chart → scenarios → methodology and the assumptions
+disclosure), then the connected-accounts panel, the cross-sell, and the always-present crawlable body
 — now just the FAQ ("Retirement FAQs") and the cluster links ("Read more about
 retirement").
 

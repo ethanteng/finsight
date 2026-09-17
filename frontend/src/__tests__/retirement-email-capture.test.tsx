@@ -80,8 +80,10 @@ const RATES_RESULT = { ...BASE_RESULT, mode: 'rates', primary: null, missing: ['
 const posts: Array<{ url: string; body: Record<string, unknown> }> = [];
 
 /**
- * Three endpoints answer here: the form's allocation options on mount, the
- * model run, and the results email. Only the last two are POSTs.
+ * Four endpoints answer here: the form's allocation options on mount, the
+ * model run, the reading of it, and the results email. All but the first are
+ * POSTs. The reading answers with something usable because the chevrons below
+ * the capture only render when it does.
  */
 function mockApi(planResult: unknown, emailResponse: Partial<Response> = { ok: true }) {
   global.fetch = jest.fn().mockImplementation((url: string, init?: RequestInit) => {
@@ -89,6 +91,15 @@ function mockApi(planResult: unknown, emailResponse: Partial<Response> = { ok: t
       return Promise.resolve({ ok: true, json: async () => ({ allocations: [] }) });
     }
     posts.push({ url: String(url), body: JSON.parse(String(init.body)) });
+    if (String(url).includes('/interpretation')) {
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          headline: 'A reading.', paragraphs: ['A paragraph.'], watchOuts: [], model: 'test-model',
+        }),
+      });
+    }
     if (String(url).includes('/email-results')) {
       return Promise.resolve({
         ok: true,
@@ -133,13 +144,13 @@ it('asks for an address only once a plan has produced a verdict', async () => {
  * answer, above the jump link, and both inside the results block — not further
  * down past two charts.
  */
-it('puts the capture with the answer, above the shortcut to the connected example', async () => {
+it('puts the capture with the answer, above the shortcut below it', async () => {
   renderPage();
   runTheModel();
 
   const field = await screen.findByLabelText('Email address');
   const results = field.closest('section')!;
-  const jump = screen.getByRole('link', { name: /see what changes with your actual holdings/i });
+  const jump = await screen.findByRole('link', { name: /see what this result means/i });
 
   // Same block as the verdict, so it cannot drift back down the page.
   expect(results).toHaveTextContent(/retiring at 60 worked in/i);
@@ -157,7 +168,7 @@ it('keeps the shortcut named even though it renders as chevrons', async () => {
   runTheModel();
 
   await screen.findByLabelText('Email address');
-  const jump = screen.getByRole('link', { name: 'See what changes with your actual holdings' });
+  const jump = await screen.findByRole('link', { name: 'See what this result means' });
 
   expect(jump).toHaveTextContent('');
   expect(jump.querySelectorAll('svg')).toHaveLength(3);

@@ -2,7 +2,6 @@ import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { trackContentsquareEvent } from '@/lib/contentsquare';
 import { RetirementQuickPlan } from '@/components/marketing/RetirementQuickPlan';
-import { CONNECTED_EXAMPLE_ID } from '@/components/marketing/RetirementConnectedExample';
 import {
   MAX_RETIREMENT_AGE,
   MIN_RETIREMENT_AGE,
@@ -168,10 +167,10 @@ describe('retirement landing page', () => {
     }
   });
 
-  it('offers a jump from the result to the section that argues for connecting accounts', async () => {
-    // That section is four blocks below the result. Without this link a visitor
-    // who reads their answer and stops never reaches the pitch — and the link
-    // has to point at an id something on the page actually carries.
+  it('offers a jump from the result to the model\u2019s reading of it', async () => {
+    // The link has to point at an id something on the page actually carries,
+    // and the reading is the one section that may not render at all — so the
+    // mock answers the interpretation endpoint rather than handing it the plan.
     const result = {
       inputs: { retirementAge: 60, socialSecurityStartAge: 67, socialSecurityAnnual: 20000, annualSpending: 50000, lifeExpectancy: 95 },
       mode: 'plan', assumed: [], missing: [],
@@ -185,9 +184,18 @@ describe('retirement landing page', () => {
       alternatives: [], sustainableSpending: { p10: 30000, p25: 40000, p50: 50000, p75: 60000, p90: 70000, solverFloorRate: 0.01, solverCeilingRate: 0.15 },
       limitations: [], assumptions: [],
     };
-    global.fetch = jest.fn().mockImplementation((_url, init) => Promise.resolve({
-      ok: true, json: async () => init?.method ? { ...result } : { allocations: [] },
-    }));
+    const reading = {
+      headline: 'A reading.', paragraphs: ['A paragraph.'], watchOuts: [], model: 'test-model',
+    };
+    global.fetch = jest.fn().mockImplementation((url, init) => {
+      if (!init?.method) {
+        return Promise.resolve({ ok: true, json: async () => ({ allocations: [] }) });
+      }
+      if (String(url).includes('/interpretation')) {
+        return Promise.resolve({ ok: true, status: 200, json: async () => reading });
+      }
+      return Promise.resolve({ ok: true, status: 200, json: async () => ({ ...result }) });
+    });
     const originalScroll = Element.prototype.scrollIntoView;
     Element.prototype.scrollIntoView = jest.fn();
     try {
@@ -195,10 +203,13 @@ describe('retirement landing page', () => {
       fireEvent.submit(container.querySelector('form')!);
       await screen.findByText(/Based on the numbers you entered/);
 
-      const jump = container.querySelector('.qp-jump') as HTMLAnchorElement | null;
-      expect(jump).not.toBeNull();
-      expect(jump!.getAttribute('href')).toBe(`#${CONNECTED_EXAMPLE_ID}`);
-      expect(container.querySelector(`#${CONNECTED_EXAMPLE_ID}`)).not.toBeNull();
+      const jump = await waitFor(() => {
+        const link = container.querySelector('.qp-jump') as HTMLAnchorElement | null;
+        expect(link).not.toBeNull();
+        return link!;
+      });
+      const target = jump.getAttribute('href')!.slice(1);
+      expect(container.querySelector(`#${target}`)).not.toBeNull();
     } finally {
       Element.prototype.scrollIntoView = originalScroll;
     }

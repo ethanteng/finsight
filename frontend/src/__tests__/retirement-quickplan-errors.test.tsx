@@ -198,7 +198,7 @@ it('does not describe when a Social Security benefit of zero starts', async () =
   await screen.findByText(/the model's answer/i);
 
   expect(screen.getByText(/No Social Security offset in the first year/i)).toBeInTheDocument();
-  expect(screen.getByText(/This plan counts no Social Security/i)).toBeInTheDocument();
+  expect(screen.getByText(/This plan includes no Social Security/i)).toBeInTheDocument();
   expect(screen.queryByText(/Social Security starts at 67/i)).toBeNull();
   expect(screen.queryByText(/has already started at this retirement age/i)).toBeNull();
   expect(screen.queryByText(/counts your benefit/i)).toBeNull();

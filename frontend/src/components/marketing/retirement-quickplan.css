@@ -533,6 +533,9 @@
 .quickplan-page .qp-interpretation {
   padding-block: 44px;
   border-top: 1px solid rgba(16, 35, 25, 0.12);
+  /* The chevrons above jump here, and an anchored scroll would otherwise land
+     the kicker flush against the top of the viewport. */
+  scroll-margin-top: 24px;
 }
 
 .quickplan-page .qp-interpretation h3 {
@@ -571,15 +574,6 @@
 
 .quickplan-page .qp-interpretation-watch li:last-child {
   margin-bottom: 0;
-}
-
-/* Never the same weight as the reading itself: it qualifies, it does not lead. */
-.quickplan-page .qp-interpretation-note {
-  max-width: 760px;
-  margin: 20px 0 0;
-  color: #74807a;
-  font-size: 12.5px;
-  line-height: 1.6;
 }
 
 /*
@@ -860,13 +854,6 @@
   opacity: 0.65;
 }
 
-.quickplan-page .qp-email-note {
-  margin: 4px 0 0;
-  color: #68766e;
-  font-size: 12.5px;
-  line-height: 1.55;
-}
-
 .quickplan-page .qp-email-error {
   margin: 0;
   padding: 12px 14px;
@@ -1104,10 +1091,6 @@
     margin-top: 22px;
   }
 
-  .quickplan-page .qp-email-note {
-    margin-top: 14px;
-  }
-
   .quickplan-page .qp-scenarios {
     grid-template-columns: minmax(0, 1fr);
     gap: 30px;
@@ -1276,61 +1259,11 @@
 
 .quickplan-page .qp-example {
   scroll-margin-top: 18px;
-  padding-block: 0 84px;
+  /* The top padding used to come from the handover band above this section.
+     With that gone the section supplies its own, or its dark head sits flush
+     against the block before it. */
+  padding-block: 72px 84px;
   background: #eceadf;
-}
-
-/*
- * The handover, in place of a border.
- *
- * A rule between these two sections just stops the one above. This carries the
- * page's own background down into the section's, with the line broken by the
- * sentence that says what the next block is for — so the seam reads as a turn
- * in the argument rather than a boundary between two boxes.
- */
-.quickplan-page .qp-example-transition {
-  display: grid;
-  place-items: center;
-  padding: 78px 24px 30px;
-  background: linear-gradient(180deg, var(--paper) 0%, #f0eee2 46%, #eceadf 100%);
-}
-
-.quickplan-page .qp-example-transition span {
-  display: flex;
-  align-items: center;
-  gap: clamp(14px, 3vw, 28px);
-  color: #55635a;
-  font-family: var(--font-display);
-  font-size: clamp(19px, 2.2vw, 28px);
-  font-weight: 640;
-  letter-spacing: -0.035em;
-  text-align: center;
-}
-
-.quickplan-page .qp-example-transition span::before,
-.quickplan-page .qp-example-transition span::after {
-  content: "";
-  flex: 0 0 auto;
-  width: clamp(40px, 13vw, 200px);
-  height: 1px;
-  background: linear-gradient(90deg, rgba(23, 60, 44, 0) 0%, rgba(23, 60, 44, 0.32) 100%);
-}
-
-.quickplan-page .qp-example-transition span::after {
-  background: linear-gradient(90deg, rgba(23, 60, 44, 0.32) 0%, rgba(23, 60, 44, 0) 100%);
-}
-
-/* The phrase wraps here, and rules centred against two lines read as a
-   mis-drawn box. The gradient alone carries the handover at this width. */
-@media (max-width: 620px) {
-  .quickplan-page .qp-example-transition {
-    padding-top: 62px;
-  }
-
-  .quickplan-page .qp-example-transition span::before,
-  .quickplan-page .qp-example-transition span::after {
-    display: none;
-  }
 }
 
 /*

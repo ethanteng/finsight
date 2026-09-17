@@ -138,9 +138,6 @@ export function CoastFireEmailCapture({ result }: { result: CoastFireResult }) {
 
       {error && <p className="cf-email-error" role="alert">{error}</p>}
 
-      <p className="cf-email-note">
-        One email with your results, plus occasional Ask Linc updates. Unsubscribe anytime.
-      </p>
       </div>
     </form>
   );

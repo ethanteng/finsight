@@ -25,7 +25,7 @@ import { MarketingGetStartedButton } from "./MarketingGetStartedButton";
 import { RetirementEmailCapture } from "./RetirementEmailCapture";
 import { TRIAL_CTA_MICROCOPY } from "./trial-copy";
 import { SiteFooter, SiteHeader } from "./SiteShell";
-import { CONNECTED_EXAMPLE_ID, RetirementConnectedExample } from "./RetirementConnectedExample";
+import { RetirementConnectedExample } from "./RetirementConnectedExample";
 import { pushRetirementInteraction, pushRetirementModelRun } from "@/lib/dataLayer";
 import { numericInput, withCommas } from "@/lib/number-input";
 import {
@@ -274,13 +274,22 @@ function useInterpretation(submitted: SubmittedPlan | null): {
   return { interpretation, isLoading };
 }
 
+/** The anchor the result's chevrons jump to. */
+export const INTERPRETATION_ID = "what-this-means";
+
 /**
- * The model's reading, or nothing.
+ * Whether the reading panel will render anything at all.
  *
- * The heading names the model as the author, next to a page whose entire
- * argument is that its numbers are computed rather than generated. Blurring
- * that line here would undo the argument everywhere else on the page.
+ * The panel and the chevrons that point at it both read this, so a chevron can
+ * never be left pointing at a section that did not render — which is the
+ * ordinary case, not an edge one: a reading that could not be grounded is
+ * dropped and the panel disappears with it.
  */
+function hasInterpretation(interpretation: Interpretation | null, isInterpreting: boolean): boolean {
+  return Boolean(interpretation) || isInterpreting;
+}
+
+/** The model's reading, or nothing. */
 function InterpretationPanel({
   interpretation,
   isInterpreting,
@@ -288,10 +297,15 @@ function InterpretationPanel({
   interpretation: Interpretation | null;
   isInterpreting: boolean;
 }) {
-  if (!interpretation && !isInterpreting) return null;
+  if (!hasInterpretation(interpretation, isInterpreting)) return null;
 
   return (
-    <section className="shell qp-interpretation" aria-live="polite" aria-busy={isInterpreting}>
+    <section
+      className="shell qp-interpretation"
+      id={INTERPRETATION_ID}
+      aria-live="polite"
+      aria-busy={isInterpreting}
+    >
       <p className="section-kicker">WHAT THIS RESULT MEANS</p>
       {isInterpreting || !interpretation ? (
         <div className="qp-interpretation-loading" role="status">
@@ -311,10 +325,6 @@ function InterpretationPanel({
               ))}
             </ul>
           )}
-          <p className="qp-interpretation-note">
-            Written by a language model from the figures above and today&rsquo;s published rates.
-            It states no number the engine did not compute. Informational, not financial advice.
-          </p>
         </>
       )}
     </section>
@@ -1094,7 +1104,10 @@ function QuickPlanResults({
           * who reads their result and stops never sees it. This is the
           * shortcut, kept with the answer it invites a comparison against.
           */}
-        <JumpToConnectedExample />
+        <JumpToInterpretation
+          interpretation={interpretation}
+          isInterpreting={isInterpreting}
+        />
       </section>
 
       {/*
@@ -1110,37 +1123,43 @@ function QuickPlanResults({
           <p className="section-kicker">WHAT THE PORTFOLIO ALONE SUPPORTED</p>
           <h3>Spending history was willing to fund</h3>
           <p>
-            The engine solves, for each level of confidence, the constant inflation-adjusted spending
-            this mix sustained for {inputs.lifeExpectancy - inputs.retirementAge} years{" "}
-            <strong>with no other income</strong>. Your plan draws{" "}
-            <strong>{money(primary.firstYearPortfolioWithdrawal)}</strong> from the portfolio in its
-            first year.
+            Each bar is an amount you could spend in your first year of retirement and keep
+            spending — rising with inflation — for all{" "}
+            {inputs.lifeExpectancy - inputs.retirementAge} years, out of{" "}
+            <strong>your savings alone</strong>. The labels underneath say how often that worked:
+            &ldquo;9 in 10&rdquo; means the money lasted in nine of every ten stretches of history
+            we tested it against.
+          </p>
+          <p>
+            Your plan takes <strong>{money(primary.firstYearPortfolioWithdrawal)}</strong> out in
+            year one — the dotted line across the chart.
           </p>
           {claimsAfterRetiring ? (
             <p className="qp-chart-caveat">
-              Social Security is not in this chart, and it is the reason these bars and the survival
-              figure above can look like they disagree. Your plan draws that{" "}
-              {money(primary.firstYearPortfolioWithdrawal)} only until age {inputs.socialSecurityStartAge};
-              after that the portfolio covers{" "}
-              {money(Math.max(0, inputs.annualSpending - inputs.socialSecurityAnnual))}. A flat line
-              across the whole retirement is a harder test than your plan actually faces — the
-              survival figure above is the one that counts your benefit.
+              Social Security is left out of this chart, which is why it can look like it disagrees
+              with the result further up. You only take the full{" "}
+              {money(primary.firstYearPortfolioWithdrawal)} from savings until age{" "}
+              {inputs.socialSecurityStartAge}. Once your benefit starts, savings only have to cover{" "}
+              {money(Math.max(0, inputs.annualSpending - inputs.socialSecurityAnnual))} a year. So
+              these bars are a tougher test than your plan actually faces — the result above is the
+              one that counts your benefit.
             </p>
           ) : hasSocialSecurity ? (
             <p className="qp-chart-caveat">
-              Your Social Security has already started at this retirement age, so that draw is what
-              the portfolio funds for the whole retirement and this comparison is like for like.
+              Your Social Security has already started by the time you retire, so what you take from
+              savings stays the same for the whole retirement. The bars and your plan are a fair
+              comparison.
             </p>
           ) : (
             <p className="qp-chart-caveat">
-              This plan counts no Social Security, so the portfolio funds all of your spending for
-              the whole retirement and this comparison is like for like.
+              This plan includes no Social Security, so your savings cover everything for the whole
+              retirement. The bars and your plan are a fair comparison.
             </p>
           )}
           <p className="qp-chart-caveat">
-            The solver searches between {percent(sustainableSpending.solverFloorRate)} and{" "}
-            {percent(sustainableSpending.solverCeilingRate)} of the portfolio, so a bar at the top of
-            the range means &ldquo;at least this much&rdquo;.
+            We only test spending between {percent(sustainableSpending.solverFloorRate)} and{" "}
+            {percent(sustainableSpending.solverCeilingRate)} of your savings a year. A bar that
+            reaches the top of that range means &ldquo;at least this much&rdquo; — it could be more.
           </p>
         </div>
         <div className="qp-chart">
@@ -1186,9 +1205,10 @@ function QuickPlanResults({
           <p className="section-kicker">WHAT MOVES THE ANSWER</p>
           <h3>The two levers these numbers can pull</h3>
           <p>
-            Working longer and spending less are the only changes six numbers can express. Each row
-            is a full re-run of the model against the same century of history — not an adjustment of
-            the first answer.
+            There are only two things these six numbers can change: how long you keep working, and
+            how much you spend once you stop. Each row below is your whole plan run again from
+            scratch against the same century of history — not a quick adjustment of the first
+            answer.
           </p>
         </div>
         <ul className="qp-scenario-list">
@@ -1347,7 +1367,10 @@ function QuickPlanRateResults({
           </p>
         </div>
 
-        <JumpToConnectedExample />
+        <JumpToInterpretation
+          interpretation={interpretation}
+          isInterpreting={isInterpreting}
+        />
       </section>
 
       {/*
@@ -1363,14 +1386,20 @@ function QuickPlanRateResults({
           <p className="section-kicker">WHAT THE PORTFOLIO ALONE SUPPORTED</p>
           <h3>Spending history was willing to fund</h3>
           <p>
-            The engine solves, for each level of confidence, the constant inflation-adjusted
-            spending this mix sustained for {retirementYears} years{" "}
-            <strong>with no other income</strong>, as a share of the portfolio at retirement.
+            Each bar is a share of your savings you could spend in your first year of retirement and
+            keep spending — rising with inflation — for all {retirementYears} years, out of{" "}
+            <strong>your savings alone</strong>. The labels underneath say how often that worked:
+            &ldquo;9 in 10&rdquo; means the money lasted in nine of every ten stretches of history we
+            tested it against.
           </p>
           <p className="qp-chart-caveat">
-            The solver searches between {percent(sustainableSpendingRates.solverFloorRate)} and{" "}
-            {percent(sustainableSpendingRates.solverCeilingRate)} of the portfolio, so a bar at the
-            top of the range means &ldquo;at least this much&rdquo;.
+            These are percentages rather than dollars because you have not told us what you have
+            saved. Fill that in and the same answer comes back in dollars.
+          </p>
+          <p className="qp-chart-caveat">
+            We only test spending between {percent(sustainableSpendingRates.solverFloorRate)} and{" "}
+            {percent(sustainableSpendingRates.solverCeilingRate)} of your savings a year. A bar that
+            reaches the top of that range means &ldquo;at least this much&rdquo; — it could be more.
           </p>
         </div>
         <div className="qp-chart">
@@ -1432,7 +1461,7 @@ function QuickPlanRateResults({
 }
 
 /**
- * The shortcut from a result down to the connect-accounts section.
+ * The shortcut from the verdict down to what the model made of it.
  *
  * Three chevrons cascading downward rather than a labelled pill. The pill sat
  * directly under the email capture's own button, where two filled controls
@@ -1442,14 +1471,25 @@ function QuickPlanRateResults({
  * The name survives for anyone not looking at it — screen readers, and the
  * link's own title — and the cascade is off under prefers-reduced-motion,
  * where three static chevrons still point down.
+ *
+ * Renders nothing when the reading does not, so the gesture never invites a
+ * scroll to a section that is not on the page.
  */
-function JumpToConnectedExample() {
+function JumpToInterpretation({
+  interpretation,
+  isInterpreting,
+}: {
+  interpretation: Interpretation | null;
+  isInterpreting: boolean;
+}) {
+  if (!hasInterpretation(interpretation, isInterpreting)) return null;
+
   return (
     <a
       className="qp-jump"
-      href={`#${CONNECTED_EXAMPLE_ID}`}
-      aria-label="See what changes with your actual holdings"
-      title="See what changes with your actual holdings"
+      href={`#${INTERPRETATION_ID}`}
+      aria-label="See what this result means"
+      title="See what this result means"
     >
       {[0, 1, 2].map((index) => (
         <svg
