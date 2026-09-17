@@ -35,10 +35,9 @@ const prisma = getPrismaClient();
 
 /**
  * Fire-and-forget list join for a no-card account. Callers must only invoke
- * this after email ownership is proved — a resolved calculator lead at
- * register, or a successful `/auth/verify-email`. Skips entirely when every
- * group id is unset so an unconfigured trial group does not create a no-group
- * subscriber ahead of the nightly sync.
+ * this as the account is created, verified or not. Skips entirely when every
+ * group id is unset, so an unconfigured trial group does not create a
+ * no-group subscriber ahead of the nightly sync that would have added it.
  */
 function enqueueTrialSignupMailerLite(params: {
   email: string;
@@ -328,23 +327,34 @@ router.post('/register', async (req: Request, res: Response) => {
     });
 
     /*
-     * Put a no-card signup on the marketing list once we know the registrant
-     * owns the address — not before.
+     * Put a no-card signup on the marketing list now rather than whenever the
+     * nightly sync next runs.
      *
-     * A resolved calculator lead already proved inbox control (same bar as the
-     * verification code), so those accounts join immediately here. Everyone
-     * else waits for `/auth/verify-email`: the verification mail promises that
-     * an unintended recipient's address will not be used for any other
-     * purpose, and joining a welcome sequence would break that promise.
+     * `mailerlite-sync` walks the whole user table at 3am into its own group,
+     * so these addresses were never lost — they were just up to a day late,
+     * which is too late for anything that should greet a new account. A
+     * visitor who only used a calculator and left an address was on a list
+     * within eight seconds; someone who created an account waited until
+     * morning.
      *
-     * Paid checkouts are left to the nightly sync either way. The trial group
-     * exists to convert someone who has not paid.
+     * This does not wait for the verification code, and that is a decision
+     * rather than an oversight: the address joins the list before anyone has
+     * proved they own it, which is the same set of addresses `mailerlite-sync`
+     * has always sent, just sooner. What it adds is that the trial group can
+     * carry a welcome sequence, so an unintended recipient of a forged
+     * registration can receive one. `/auth/register` has no rate limit. The
+     * verification mail's security note is written to match — it says the
+     * address was subscribed and points at the unsubscribe link — rather than
+     * promising something this no longer honours.
+     *
+     * Paid checkouts are left to the nightly sync. The trial group exists to
+     * convert someone who has not paid.
      *
      * After the response and unawaited, for the same reason as the seed above:
      * the account exists, and an email list must never be able to fail or
      * delay a registration.
      */
-    if (emailProvenByLink && !stripeSessionIdToUse) {
+    if (!stripeSessionIdToUse) {
       enqueueTrialSignupMailerLite({
         email: user.email,
         tier: user.tier,
@@ -718,7 +728,7 @@ router.post('/send-verification', authenticateUser, async (req: AuthenticatedReq
 // Verify email with code
 router.post('/verify-email', authenticateUser, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const { code, signupOrigin } = req.body;
+    const { code } = req.body;
 
     if (!code) {
       return res.status(400).json({ error: 'Verification code is required' });
@@ -747,15 +757,9 @@ router.post('/verify-email', authenticateUser, async (req: AuthenticatedRequest,
     }
 
     // Mark email as verified
-    const user = await prisma.user.update({
+    await prisma.user.update({
       where: { id: req.user!.id },
-      data: { emailVerified: true },
-      select: {
-        email: true,
-        tier: true,
-        createdAt: true,
-        subscriptionStatus: true,
-      },
+      data: { emailVerified: true }
     });
 
     // Mark code as used
@@ -765,22 +769,6 @@ router.post('/verify-email', authenticateUser, async (req: AuthenticatedRequest,
     });
 
     res.json({ message: 'Email verified successfully' });
-
-    /*
-     * Ownership is proved only now for an ordinary no-card signup. Join the
-     * trial list (and the calculator group when the client still carries that
-     * attribution) after the response so a list outage cannot fail verify.
-     * Paid / incomplete checkouts stay on the nightly sync — same rule as
-     * register — and "Skip for now" never reaches this path.
-     */
-    if (user.subscriptionStatus === 'inactive') {
-      enqueueTrialSignupMailerLite({
-        email: user.email,
-        tier: user.tier,
-        createdAt: user.createdAt,
-        origin: normalizeCalculatorSignupOrigin(signupOrigin),
-      });
-    }
   } catch (error) {
     console.error('Verify email error:', error);
     res.status(500).json({ error: 'Failed to verify email' });

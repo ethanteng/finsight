@@ -117,13 +117,18 @@ Three paths put an address in MailerLite, and they are not interchangeable.
 `mailerlite-sync` re-posts the entire user table into `MAILER_LITE_GROUP_ID`
 nightly. The two calculator `email-results` endpoints subscribe a visitor who
 asked for results by email, into that calculator's group. Registration
-subscribes a no-card signup into `MAILER_LITE_TRIAL_GROUP_ID` (plus the
-calculator's group when the signup continued from one) only after email
-ownership is proved: a resolved lead token at register, or a successful
-verification code at `/auth/verify-email`. A click-through declares the
-calculator in `signupOrigin`, which the server allowlists and a resolved lead
-outranks. Paid checkouts are left to the nightly sync. Every one of these runs
-after the response and cannot fail or delay the request it follows.
+subscribes a no-card signup immediately into `MAILER_LITE_TRIAL_GROUP_ID`,
+plus the calculator's group when the signup continued from one — a resolved
+lead token names the calculator, and a click-through from the page declares it
+in `signupOrigin`, which the server allowlists and a resolved lead outranks.
+Paid checkouts are left to the nightly sync. Every one of these runs after the
+response and cannot fail or delay the request it follows.
+
+Registration deliberately does not wait for the verification code. The address
+joins the list before anyone proves they own it — the same set of addresses the
+nightly sync has always sent, just sooner — and the verification mail's security
+note is written to match rather than promising otherwise. Gating this on
+`/auth/verify-email` was considered and declined.
 
 ### Tier System
 

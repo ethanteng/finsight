@@ -13,8 +13,7 @@ MAILER_LITE_GROUP_ID=your_mailerlite_group_id_here
 ## Optional Environment Variables
 
 ```bash
-# The group a no-card signup joins once email ownership is proved
-# (resolved calculator lead at register, or successful verify-email).
+# The group a no-card signup joins the moment the account is created.
 # Unset means new accounts wait for the nightly sync, as they did before
 # registration subscribed anyone.
 MAILER_LITE_TRIAL_GROUP_ID=your_trial_group_id_here
@@ -53,10 +52,10 @@ group alone.
 ### 3. MAILER_LITE_TRIAL_GROUP_ID
 
 Same steps, using the **Trial** group. This one is for accounts that have just
-started without a card and whose email ownership is proved, so a welcome
-sequence can trigger on joining it. Keep it out of `MAILER_LITE_GROUP_ID`: the
-nightly sync re-posts the entire user table into that group every morning,
-which is the wrong shape for anything that should fire once, at signup.
+been created without a card, so a welcome sequence can trigger on joining it.
+Keep it out of `MAILER_LITE_GROUP_ID`: the nightly sync re-posts the entire
+user table into that group every morning, which is the wrong shape for anything
+that should fire once, at signup.
 
 ### 4. MAILER_LITE_COAST_FIRE_GROUP_ID and MAILER_LITE_RETIREMENT_GROUP_ID
 
