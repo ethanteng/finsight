@@ -40,16 +40,55 @@ interface PlaidLinkButtonProps {
   onExit?: () => void;
   forceReinitialize?: boolean; // New prop to force re-initialization
   updateModeTokenId?: string; // When set, use Link update mode to reconnect existing Item (preserves account_ids)
+  /**
+   * Hide the button and keep only the imperative handle.
+   *
+   * The accounts page now opens Link from one shared "Add an account" flow that
+   * already asked which institution this is, so a second Plaid-labelled button
+   * beside it is the provider choice we set out to remove. The component still
+   * mounts: all of the Link lifecycle, cleanup and service-coordination work
+   * below lives here, and the shared flow drives it through the ref.
+   */
+  headless?: boolean;
+  /** Overrides the button label, so a repair can say so instead of "Connect Account". */
+  label?: string;
+  /**
+   * Hand progress and failure text to the parent instead of rendering it here.
+   *
+   * In headless mode the button is hidden somewhere down the page while the
+   * click that started this happened in the shared picker, so "Failed to create
+   * link token" printed in place would be somewhere the user is not looking.
+   * When set, this component stops rendering the status itself -- the same
+   * message in two places is worse than in one.
+   */
+  onStatusChange?: (status: string) => void;
 }
 
 export interface PlaidLinkButtonRef {
-  createLinkToken: () => void;
+  /**
+   * Open Plaid Link.
+   *
+   * Pass `{ forceNew: true }` when the shared "Add an account" picker is starting
+   * a brand-new connection. This instance may also be wired with
+   * `updateModeTokenId` for a pending ITEM_LOGIN_REQUIRED repair, and without
+   * `forceNew` that repair id would ride along and open Link in update mode —
+   * reconnecting the broken Item instead of adding the institution the user
+   * just picked.
+   */
+  createLinkToken: (options?: { forceNew?: boolean }) => void;
 }
 
-const PlaidLinkButton = forwardRef<PlaidLinkButtonRef, PlaidLinkButtonProps>(({ onSuccess, onExit, forceReinitialize = false, updateModeTokenId }, ref) => {
+const PlaidLinkButton = forwardRef<PlaidLinkButtonRef, PlaidLinkButtonProps>(({ onSuccess, onExit, forceReinitialize = false, updateModeTokenId, headless = false, label, onStatusChange }, ref) => {
   const [linkToken, setLinkToken] = useState<string | null>(null);
   const [status, setStatus] = useState<string>('');
   const { trackEvent, trackConversion } = useAnalytics();
+
+  // Mirror every status transition upward. An effect rather than a wrapped
+  // setter, so the paths below that already call setStatus keep working and
+  // none can be missed.
+  useEffect(() => {
+    onStatusChange?.(status);
+  }, [status, onStatusChange]);
 
   // Utility function to clean up Plaid Link modal remnants
   const cleanupPlaidLink = useCallback(() => {
@@ -121,8 +160,8 @@ const PlaidLinkButton = forwardRef<PlaidLinkButtonRef, PlaidLinkButtonProps>(({ 
   }, [forceReinitialize, cleanupPlaidLink]);
 
   // Fetch link_token from backend
-  const createLinkToken = useCallback(async () => {
-    console.log('createLinkToken called with props:', { forceReinitialize });
+  const createLinkToken = useCallback(async (options?: { forceNew?: boolean }) => {
+    console.log('createLinkToken called with props:', { forceReinitialize, forceNew: options?.forceNew });
 
     // Check if other financial services are active
     if (financialServiceCoordinator.hasActiveServices()) {
@@ -145,13 +184,16 @@ const PlaidLinkButton = forwardRef<PlaidLinkButtonRef, PlaidLinkButtonProps>(({ 
       headers['Authorization'] = `Bearer ${token}`;
     }
 
+    // Add-account must not inherit a pending reconnect's accessTokenId.
+    const accessTokenIdForRequest = options?.forceNew ? undefined : updateModeTokenId;
+
     try {
-      console.log('Creating Plaid Link token...', { API_URL, hasToken: !!token });
+      console.log('Creating Plaid Link token...', { API_URL, hasToken: !!token, updateMode: Boolean(accessTokenIdForRequest) });
 
       const res = await fetch(`${API_URL}/plaid/create_link_token`, {
         method: 'POST',
         headers,
-        body: JSON.stringify({ accessTokenId: updateModeTokenId || undefined })
+        body: JSON.stringify({ accessTokenId: accessTokenIdForRequest || undefined })
       });
 
       console.log('Plaid Link token response status:', res.status);
@@ -160,6 +202,10 @@ const PlaidLinkButton = forwardRef<PlaidLinkButtonRef, PlaidLinkButtonProps>(({ 
         const errorText = await res.text();
         console.error('Plaid Link token creation failed:', res.status, errorText);
         setStatus(`Failed to create link token: ${res.status} ${errorText}`);
+        // Release the coordinator slot: a failed mint never opens Link, and
+        // leaving PLAID_LINK registered blocks SnapTrade opens from the shared
+        // "Add an account" picker until a full page reload.
+        financialServiceCoordinator.unregisterService(SERVICE_NAMES.PLAID_LINK);
         return;
       }
 
@@ -173,13 +219,16 @@ const PlaidLinkButton = forwardRef<PlaidLinkButtonRef, PlaidLinkButtonProps>(({ 
       } else if (data.error) {
         console.error('Plaid Link token creation error:', data.error, data.details);
         setStatus(`${data.error}: ${data.details || 'Failed to create link token'}`);
+        financialServiceCoordinator.unregisterService(SERVICE_NAMES.PLAID_LINK);
       } else {
         console.error('Plaid Link token creation failed - no link_token or error in response');
         setStatus('Failed to create link token.');
+        financialServiceCoordinator.unregisterService(SERVICE_NAMES.PLAID_LINK);
       }
     } catch (error) {
       console.error('Plaid Link token creation network error:', error);
       setStatus('Network error. Please try again.');
+      financialServiceCoordinator.unregisterService(SERVICE_NAMES.PLAID_LINK);
     }
   }, [forceReinitialize, updateModeTokenId]);
 
@@ -366,14 +415,18 @@ const PlaidLinkButton = forwardRef<PlaidLinkButtonRef, PlaidLinkButtonProps>(({ 
 
   return (
     <div className="space-y-3" data-plaid-modal={!!linkToken ? "true" : undefined}>
-      <button
-        onClick={createLinkToken}
-        disabled={!!linkToken}
-        className="bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-medium py-2 px-4 rounded-lg transition-colors duration-200"
-      >
-        Connect Account
-      </button>
-      {status && (
+      {!headless && (
+        <button
+          onClick={() => createLinkToken()}
+          disabled={!!linkToken}
+          className="bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-medium py-2 px-4 rounded-lg transition-colors duration-200"
+        >
+          {label || 'Connect Account'}
+        </button>
+      )}
+      {/* Skipped when the parent took the status: rendering it in both places
+          shows the user the same message twice. */}
+      {status && !onStatusChange && (
         <div className="text-sm text-gray-300 bg-gray-700 px-3 py-2 rounded">
           {status}
         </div>

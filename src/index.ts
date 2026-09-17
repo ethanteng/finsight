@@ -17,6 +17,7 @@ import askRoutes from './routes/ask';
 import retirementQuickPlanRoutes from './routes/retirement-quickplan';
 import coastFireRoutes from './routes/coast-fire';
 import adminMarketingRoutes from './routes/admin-marketing';
+import institutionRoutes from './routes/institutions';
 import { optionalAuth, requireAuth, adminAuth } from './auth/middleware';
 import { assertJwtSecretConfigured } from './auth/utils';
 import { UserTier } from './data/types';
@@ -339,6 +340,11 @@ app.use('/api/manual-accounts', manualAccountsRoutes);
 
 // Setup Accounts routes (for Plaid and SnapTrade accounts)
 app.use('/api/accounts', accountsRoutes);
+
+// One institution search across both providers, so the accounts page can offer
+// a single "Add an account" button and route by institution rather than making
+// the user work out which provider covers their bank.
+app.use('/api/institutions', institutionRoutes);
 
 // Setup user-chosen transaction category routes
 app.use('/api/transaction-categories', transactionCategoriesRoutes);

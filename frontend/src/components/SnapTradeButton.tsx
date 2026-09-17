@@ -1,9 +1,11 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, forwardRef, useImperativeHandle } from 'react';
 import { SnapTradeReact } from 'snaptrade-react';
 import { useWindowMessage } from 'snaptrade-react/hooks/useWindowMessage';
 import { financialServiceCoordinator, SERVICE_NAMES } from '../services/FinancialServiceCoordinator';
+import { snapTradeAccountHealth } from '../lib/snaptrade-account-health';
+import AccountCard from './AccountCard';
 
 interface SnapTradeStatus {
   status: string;
@@ -12,7 +14,7 @@ interface SnapTradeStatus {
   updatedAt?: string;
 }
 
-interface SnapTradeAccount {
+export interface SnapTradeAccount {
   id: string;
   name: string;
   type: string;
@@ -50,19 +52,62 @@ interface SnapTradeButtonProps {
    * disabled; leave unset for an ordinary new connection.
    */
   reconnectAuthorizationId?: string;
+  /**
+   * Hide the connect button and keep the account list plus the imperative
+   * handle.
+   *
+   * The accounts page now offers one "Add an account" flow that asks for the
+   * institution and routes from there, so a SnapTrade-labelled button beside it
+   * puts the provider choice back in front of the user. Registration, the
+   * portal, the window-message lifecycle and the account cards all still live
+   * here; only the button goes.
+   *
+   * A pending reconnect is the exception -- repairing a named connection is not
+   * "add an account" -- so the page leaves the button visible for that.
+   */
+  headless?: boolean;
+  /**
+   * Reports whether SnapTrade has registered this user, which is what the
+   * portal needs before it can mint a connection link. The shared "Add an
+   * account" picker uses it to say "setting up" on its investment rows instead
+   * of offering a click that cannot go anywhere yet.
+   */
+  onReadyChange?: (ready: boolean) => void;
+  /**
+   * Hands the brokerage accounts to the parent as they load.
+   *
+   * The accounts page lists every account together now, whichever provider
+   * reported it, so it needs these rows rather than a second list rendered
+   * down here. Separate from `onAccountsUpdated`, which is a "something
+   * changed, go refresh" signal several callers already depend on.
+   */
+  onAccountsLoaded?: (accounts: SnapTradeAccount[]) => void;
+  /**
+   * Progress and failure text for a connect request the parent started.
+   *
+   * Headless, the component has nowhere of its own to say "still setting up" or
+   * "that failed, try again" -- and the click happened in the shared picker, so
+   * the message belongs next to it.
+   */
+  onConnectStatus?: (message: string) => void;
 }
 
-// Balances are money: always two decimals. Number.toLocaleString() defaults to
-// three fraction digits, which rendered balances like "$123.456".
-const formatCurrency = (amount: number) =>
-  new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(amount);
+export interface SnapTradeButtonRef {
+  /**
+   * Open the SnapTrade portal, optionally already on one brokerage.
+   *
+   * `brokerSlug` is what the institution picker selected, so the portal does not
+   * ask the same question a second time.
+   */
+  connect: (brokerSlug?: string) => void;
+  /** Whether SnapTrade has registered this user yet; the portal needs that first. */
+  isReady: () => boolean;
+}
 
-export default function SnapTradeButton({ onAccountsUpdated, snapTradeStatus: snapTradeTokenStatus, reconnectAuthorizationId }: SnapTradeButtonProps) {
+const SnapTradeButton = forwardRef<SnapTradeButtonRef, SnapTradeButtonProps>(function SnapTradeButton(
+  { onAccountsUpdated, snapTradeStatus: snapTradeTokenStatus, reconnectAuthorizationId, headless = false, onReadyChange, onAccountsLoaded, onConnectStatus },
+  ref,
+) {
   const [status, setStatus] = useState<string>('loading');
   const [snapTradeStatus, setSnapTradeStatus] = useState<SnapTradeStatus | null>(null);
   const [connectedAccounts, setConnectedAccounts] = useState<SnapTradeAccount[]>([]);
@@ -71,6 +116,11 @@ export default function SnapTradeButton({ onAccountsUpdated, snapTradeStatus: sn
   // Modal state for SnapTrade connection portal
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [redirectLink, setRedirectLink] = useState<string | null>(null);
+  // A connect request that arrived before registration was ready, held until it
+  // is. See the imperative handle below for why this is not simply dropped.
+  const [pendingConnect, setPendingConnect] = useState<
+    { brokerSlug?: string; retried: boolean } | null
+  >(null);
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
@@ -144,6 +194,46 @@ export default function SnapTradeButton({ onAccountsUpdated, snapTradeStatus: sn
     }
   }, [snapTradeStatus]);
 
+  // Registration state lives here, but the shared "Add an account" picker is
+  // what has to decide how to present an investment row.
+  useEffect(() => {
+    onReadyChange?.(status === 'registered' || status === 'connected');
+  }, [status, onReadyChange]);
+
+  // Drain a connect request that arrived before registration was ready.
+  useEffect(() => {
+    if (!pendingConnect) return;
+
+    if (status === 'registered' || status === 'connected') {
+      setPendingConnect(null);
+      onConnectStatus?.('');
+      connectSnapTrade(undefined, pendingConnect.brokerSlug);
+      return;
+    }
+
+    // A read or a registration is in flight; wait for where it lands rather
+    // than starting a second one alongside it.
+    if (status === 'loading' || isInitializing) return;
+
+    // Registration is not in place and nothing is trying to establish it. One
+    // attempt is the whole reason for holding the request -- a single failed
+    // status read is all it used to take to strand the user -- so give up only
+    // once that attempt has also failed.
+    if (!pendingConnect.retried) {
+      setPendingConnect({ ...pendingConnect, retried: true });
+      initializeSnapTrade();
+      return;
+    }
+
+    // Out of options. Say so: a picker row that swallowed a click with nothing
+    // to show for it is the failure mode this whole path exists to avoid.
+    setPendingConnect(null);
+    onConnectStatus?.(
+      'We could not set up investment connections just now. Please try again.',
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status, isInitializing, pendingConnect]);
+
   const checkSnapTradeStatus = async () => {
     try {
       setStatus('loading');
@@ -197,6 +287,7 @@ export default function SnapTradeButton({ onAccountsUpdated, snapTradeStatus: sn
         console.log('SnapTrade accounts:', data);
         if (data.data?.accounts) {
           setConnectedAccounts(data.data.accounts);
+          onAccountsLoaded?.(data.data.accounts);
           // Notify parent component that accounts have been updated
           if (onAccountsUpdated) {
             onAccountsUpdated();
@@ -205,10 +296,12 @@ export default function SnapTradeButton({ onAccountsUpdated, snapTradeStatus: sn
       } else {
         console.log('No connected accounts found or error:', response.status);
         setConnectedAccounts([]);
+        onAccountsLoaded?.([]);
       }
     } catch (error) {
       console.error('Error checking connected accounts:', error);
       setConnectedAccounts([]);
+      onAccountsLoaded?.([]);
     }
   };
 
@@ -252,14 +345,21 @@ export default function SnapTradeButton({ onAccountsUpdated, snapTradeStatus: sn
    * that brokerage authorization rather than adding another connection to the
    * same brokerage, which is what the plain connect flow would do when a user
    * is trying to fix a disabled connection.
+   *
+   * `brokerSlug` opens the portal on one brokerage, so a user who already named
+   * their institution in the shared "Add an account" search is not asked again.
    */
-  const connectSnapTrade = async (authorizationToReconnect?: string) => {
+  const connectSnapTrade = async (authorizationToReconnect?: string, brokerSlug?: string) => {
     try {
       // Check if other financial services are active
       if (financialServiceCoordinator.hasActiveServices()) {
         const activeServices = financialServiceCoordinator.getActiveServices();
         console.log('Other financial services are active, cannot start SnapTrade:', activeServices);
-        setStatus('error');
+        // Do not demote registration to `error`: Plaid (or another flow) being
+        // open is temporary, and flipping status here would make every picker
+        // investment row look like SnapTrade itself failed. Say so next to the
+        // control the user clicked instead.
+        onConnectStatus?.('Please close other connection windows first…');
         return;
       }
 
@@ -280,9 +380,10 @@ export default function SnapTradeButton({ onAccountsUpdated, snapTradeStatus: sn
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify(
-          authorizationToReconnect ? { reconnect: authorizationToReconnect } : {}
-        )
+        body: JSON.stringify({
+          ...(authorizationToReconnect ? { reconnect: authorizationToReconnect } : {}),
+          ...(brokerSlug && !authorizationToReconnect ? { broker: brokerSlug } : {}),
+        })
       });
 
       if (response.ok) {
@@ -293,16 +394,32 @@ export default function SnapTradeButton({ onAccountsUpdated, snapTradeStatus: sn
         if (data.data?.redirectURI) {
           setRedirectLink(data.data.redirectURI);
           setIsModalOpen(true);
+          onConnectStatus?.('');
+        } else {
+          // Registered the coordinator for a portal that never opened -- release
+          // it or the next Plaid open from the shared picker will be blocked.
+          financialServiceCoordinator.unregisterService(SERVICE_NAMES.SNAPTRADE);
+          onConnectStatus?.(
+            'We could not open the investment connection. Please try again.',
+          );
         }
       } else {
-        const errorData = await response.json();
+        const errorData = await response.json().catch(() => ({}));
         console.error('SnapTrade login failed:', errorData);
-        setStatus('error');
+        // Login failed, not registration. Leaving SNAPTRADE registered blocked
+        // every later Plaid open from the shared picker, and setStatus('error')
+        // falsely reported a working registration as broken.
+        financialServiceCoordinator.unregisterService(SERVICE_NAMES.SNAPTRADE);
+        onConnectStatus?.(
+          'We could not open the investment connection. Please try again.',
+        );
       }
     } catch (error) {
       console.error('Error connecting SnapTrade:', error);
-      setStatus('error');
       financialServiceCoordinator.unregisterService(SERVICE_NAMES.SNAPTRADE);
+      onConnectStatus?.(
+        'We could not open the investment connection. Please try again.',
+      );
     } finally {
       setIsInitializing(false);
     }
@@ -390,6 +507,31 @@ export default function SnapTradeButton({ onAccountsUpdated, snapTradeStatus: sn
     return status === 'loading' || isInitializing || status === 'not_authenticated' || status === 'not_initialized';
   };
 
+  /**
+   * Let the shared "Add an account" flow open the portal.
+   *
+   * When registration has not landed -- or failed, which a transient
+   * `/snaptrade/status/user` error is enough to cause -- the request is
+   * remembered and retried rather than dropped. Dropping it was a dead end:
+   * this component is headless, so there is no button left for the user to
+   * press to retry, and every brokerage in the picker would stay unreachable
+   * for the rest of the session over one failed status call.
+   */
+  useImperativeHandle(ref, () => ({
+    connect: (brokerSlug?: string) => {
+      if (status === 'registered' || status === 'connected') {
+        connectSnapTrade(undefined, brokerSlug);
+        return;
+      }
+      // Hold it and let the effect below decide what registration needs. An
+      // undefined slug still means "asked, with no particular brokerage", which
+      // is why this is a record rather than a nullable slug.
+      setPendingConnect({ brokerSlug, retried: false });
+      onConnectStatus?.('Setting up your investment connection…');
+    },
+    isReady: () => status === 'registered' || status === 'connected',
+  }));
+
   const handleClick = () => {
     if (status === 'error') {
       initializeSnapTrade();
@@ -407,122 +549,71 @@ export default function SnapTradeButton({ onAccountsUpdated, snapTradeStatus: sn
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center space-x-4">
-          <button
-            onClick={handleClick}
-            disabled={isButtonDisabled()}
-            className={`px-4 py-2 font-medium rounded-lg transition-colors ${getButtonColor()} ${
-              isButtonDisabled() ? 'cursor-not-allowed' : 'cursor-pointer'
-            }`}
-          >
-            {getButtonText()}
-          </button>
+      {/* In headless mode the shared "Add an account" flow owns connecting, so
+          the ordinary connect button stays hidden. Two exceptions still need a
+          visible control: repairing a named disabled authorization, and retrying
+          after registration/setup failed — otherwise investment search rows stay
+          disabled for the rest of the page session with nothing the user can click. */}
+      {(!headless || needsReconnect || status === 'error') && (
+        <div className="flex items-center space-x-4">
+            <button
+              onClick={handleClick}
+              disabled={isButtonDisabled()}
+              className={`px-4 py-2 font-medium rounded-lg transition-colors ${getButtonColor()} ${
+                isButtonDisabled() ? 'cursor-not-allowed' : 'cursor-pointer'
+              }`}
+            >
+              {getButtonText()}
+            </button>
 
-          {status === 'loading' && (
-            <div className="text-sm text-gray-400 bg-gray-800 border border-gray-600 rounded-lg p-3">
-              <div className="flex items-center space-x-2">
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-400"></div>
-                <span>Checking SnapTrade status...</span>
+            {status === 'loading' && (
+              <div className="text-sm text-gray-400 bg-gray-800 border border-gray-600 rounded-lg p-3">
+                <div className="flex items-center space-x-2">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-400"></div>
+                  <span>Checking SnapTrade status...</span>
+                </div>
               </div>
-            </div>
-          )}
-      </div>
+            )}
+        </div>
+      )}
 
 
 
-      {connectedAccounts.length > 0 && (
+      {/* Headless means the page lists every account together, this component's
+          rows included, so rendering them again here would show each brokerage
+          account twice. */}
+      {!headless && connectedAccounts.length > 0 && (
         <div className="mt-4">
           <div className="space-y-3">
             {connectedAccounts.map((account) => {
-              // Health is per brokerage authorization. Reading LOGIN_REQUIRED off
-              // the SnapTrade *user* status marked every account broken the moment
-              // any one connection was disabled -- including healthy Fidelity
-              // accounts when only Public needed reconnecting.
-              // Read directly from Public, not through SnapTrade. Applying
-              // SnapTrade's health here would report a working feed as broken
-              // whenever the user's SnapTrade link happens to be disabled --
-              // and the direct feed is precisely what still works in that case.
-              const isDirect = account.source === 'public';
-              const connectionDisabled = !isDirect && (
-                account.connectionDisabled === true
-                || Boolean(
-                  account.brokerageAuthorizationId
-                  && snapTradeTokenStatus?.disabledConnections?.some(
-                    connection => connection.authorizationId === account.brokerageAuthorizationId
-                  )
-                )
+              // Shared with the accounts page's combined list, so the two
+              // renderings cannot disagree about whether a connection is broken.
+              const { isHealthy, isDirect, issue: accountIssue } = snapTradeAccountHealth(
+                account,
+                snapTradeTokenStatus,
               );
-              // Whole-user failure still applies across the board. LOGIN_REQUIRED
-              // does not: it means some authorization is disabled, and which ones
-              // is what connectionDisabled answers.
-              const connectionUnusable = !isDirect && (
-                !snapTradeTokenStatus?.connected
-                || snapTradeTokenStatus?.status === 'error'
-                || snapTradeTokenStatus?.status === 'ERROR'
-              );
-              const isHealthy = !connectionDisabled && !connectionUnusable;
-              const institutionName = account.institution || 'this brokerage';
-              const accountIssue = connectionDisabled
-                ? `SnapTrade connection disabled for ${institutionName}. Reconnect to resume updates.`
-                : connectionUnusable
-                  ? (snapTradeTokenStatus?.error || 'Connection issue')
-                  : null;
 
               return (
-                <div key={account.id} className="bg-gray-700 border border-gray-600 rounded-lg p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0 flex-1">
-                      <div className="break-words text-base font-semibold text-white">{account.name}</div>
-                      <div className="mt-1 flex min-w-0 items-start gap-2 text-sm text-gray-400">
-                        {/* Keep connection health in the same stable column as the other account cards. */}
-                        {isHealthy ? (
-                          <span
-                            className="w-4 shrink-0 text-center text-green-400"
-                            title={isDirect ? 'Read directly from Public' : 'Connection active'}
-                          >
-                            ✓
-                          </span>
-                        ) : (
-                          <span className="w-4 shrink-0 text-center text-red-400" title={`Connection issue: ${accountIssue || 'Unknown error'}`}>
-                            ✗
-                          </span>
-                        )}
-                        <div className="min-w-0 break-words">
-                          {account.institution && `${account.institution} • `}{account.type}
-                          {account.subtype && ` • ${account.subtype}`}
-                        </div>
-                      </div>
-                      {accountIssue && (
-                        <div className="text-xs text-red-400 mt-1">
-                          {accountIssue}
-                        </div>
-                      )}
-                    </div>
-                    {typeof account.balance === 'number' ? (
-                      <div className="shrink-0 text-right">
-                        <div className="font-semibold text-white text-base">
-                          {formatCurrency(account.balance)}
-                        </div>
-                        {/* A sum of positions is a floor: it cannot see uninvested
-                            cash, so presenting it as a reported total would
-                            overstate what is known. Same caveat the finances page
-                            carries for these accounts. */}
-                        {account.balanceDerivedFromPositions && (
-                          <div className="text-xs text-gray-400" title="Summed from this account's positions; any uninvested cash is not included.">
-                            from positions
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      /* Distinguish "we have no figure" from "$0". The old blank
-                         cell read as a rendering bug, which is how it was
-                         reported. */
-                      <div className="shrink-0 text-right text-sm text-gray-400" title="This provider did not report a balance for this account.">
-                        Not reported
-                      </div>
-                    )}
-                  </div>
-                </div>
+                <AccountCard
+                  key={account.id}
+                  name={account.name}
+                  health={{
+                    ok: isHealthy,
+                    title: isHealthy
+                      ? (isDirect ? 'Read directly from Public' : 'Connection active')
+                      : `Connection issue: ${accountIssue || 'Unknown error'}`,
+                  }}
+                  detail={`${account.institution ? `${account.institution} • ` : ''}${account.type}${account.subtype ? ` • ${account.subtype}` : ''}`}
+                  issue={accountIssue}
+                  balance={account.balance}
+                  balanceFallback="Not reported"
+                  balanceFallbackTitle="This provider did not report a balance for this account."
+                  /* A sum of positions is a floor: it cannot see uninvested cash,
+                     so presenting it as a reported total would overstate what is
+                     known. Same caveat the finances page carries. */
+                  balanceNote={account.balanceDerivedFromPositions ? 'from positions' : null}
+                  balanceNoteTitle="Summed from this account's positions; any uninvested cash is not included."
+                />
               );
             })}
           </div>
@@ -574,4 +665,6 @@ export default function SnapTradeButton({ onAccountsUpdated, snapTradeStatus: sn
       )}
     </div>
   );
-}
+});
+
+export default SnapTradeButton;

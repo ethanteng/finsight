@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import PlaidLinkButton, { PlaidLinkButtonRef, resetPlaidLinkInitialization } from '../../components/PlaidLinkButton';
 import SnapTradeConnections from '../../components/SnapTradeConnections';
@@ -8,7 +8,10 @@ import PublicDirectConnection from '../../components/PublicDirectConnection';
 import TransactionHistory from '../../components/TransactionHistory';
 import UserProfile from '../../components/UserProfile';
 import InvestmentPortfolio from '../../components/InvestmentPortfolio';
-import SnapTradeButton from '../../components/SnapTradeButton';
+import SnapTradeButton, { SnapTradeButtonRef, SnapTradeAccount } from '../../components/SnapTradeButton';
+import AccountCard, { AccountCardProps } from '../../components/AccountCard';
+import { snapTradeAccountHealth } from '../../lib/snaptrade-account-health';
+import AddAccountButton, { AddAccountButtonRef, InstitutionOption } from '../../components/AddAccountButton';
 import ManualAccountList from '../../components/ManualAccountList';
 import PageMeta from '../../components/PageMeta';
 import type { ManualAccount } from '../../types/manual-account';
@@ -17,9 +20,9 @@ import { normalizeAssetType } from '../../lib/asset-class';
 import { normalizeLabel } from '../../lib/label-normalization';
 import AuthenticatedPageHeader from '../../components/authenticated/AuthenticatedPageHeader';
 import {
+  CONNECT_ACCOUNTS_INTENT,
   CONNECT_ACCOUNTS_STORAGE_KEY,
   CONNECT_INTENT_PARAM,
-  CONNECT_PLAID_INTENT,
 } from '../../lib/connect-accounts';
 import { loginUrlFor } from '../../lib/post-login-redirect';
 
@@ -182,7 +185,6 @@ interface SnapTradeStatus {
 export default function ProfilePage() {
   const [connectedAccounts, setConnectedAccounts] = useState<Account[]>([]);
   const [investmentData, setInvestmentData] = useState<InvestmentData | null>(null);
-  const [snapTradeHoldings, setSnapTradeHoldings] = useState<Record<string, unknown>[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [tokenStatuses, setTokenStatuses] = useState<TokenStatus[]>([]);
@@ -207,14 +209,28 @@ export default function ProfilePage() {
   const [retryCount, setRetryCount] = useState(0);
   const [isRetrying, setIsRetrying] = useState(false);
   const [retryMessage, setRetryMessage] = useState<string>('');
-  const [forcePlaidReinitialize, setForcePlaidReinitialize] = useState(false);
+  // Progress/error text from whichever provider flow the picker started, lifted
+  // out of the (now hidden) provider buttons so it appears next to the control
+  // the user actually clicked. One field, not two: a leftover Plaid failure
+  // must not mask a SnapTrade "setting up" / failure message (or the reverse)
+  // via `a || b` precedence.
+  const [providerConnectStatus, setProviderConnectStatus] = useState('');
+  // Brokerage accounts, lifted out of SnapTradeButton so one list can hold every
+  // account whichever provider reported it.
+  const [snapTradeAccounts, setSnapTradeAccounts] = useState<SnapTradeAccount[]>([]);
+  // Whether SnapTrade has registered this user yet. Owned by SnapTradeButton,
+  // which is where the status call lives; mirrored here so the shared picker can
+  // grey out investment rows rather than offering a click that cannot land.
+  const [snapTradeReady, setSnapTradeReady] = useState(false);
   const [manualAccounts, setManualAccounts] = useState<ManualAccount[]>([]);
-  // Set from `?connect=plaid` on mount. The param stays in the URL until
-  // auto-connect consumes it, so a Strict Mode remount still sees the intent
-  // while a refresh after open does not reopen Plaid Link.
-  const [wantsToConnectPlaid, setWantsToConnectPlaid] = useState(false);
+  // Set from the add-accounts deep link on mount. The param stays in the URL
+  // until auto-connect consumes it, so a Strict Mode remount still sees the
+  // intent while a refresh after open does not reopen the picker.
+  const [wantsToAddAccount, setWantsToAddAccount] = useState(false);
   const autoConnectTriggeredRef = useRef(false);
   const plaidLinkButtonRef = useRef<PlaidLinkButtonRef>(null);
+  const snapTradeButtonRef = useRef<SnapTradeButtonRef>(null);
+  const addAccountButtonRef = useRef<AddAccountButtonRef>(null);
   const router = useRouter();
 
   // Ref for TransactionHistory component to trigger refresh
@@ -758,7 +774,6 @@ export default function ProfilePage() {
           };
 
           setInvestmentData(formattedData);
-          setSnapTradeHoldings(null);
 
           console.log('Investment portfolio loaded from summary:', {
             totalValue: portfolioData.totalValue,
@@ -802,7 +817,6 @@ export default function ProfilePage() {
         };
 
         setInvestmentData(formattedData);
-        setSnapTradeHoldings(null); // No longer needed since data is merged on backend
 
         console.log('Investment data loaded (fallback):', {
           totalValue: formattedData.portfolio?.totalValue,
@@ -934,12 +948,13 @@ export default function ProfilePage() {
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
 
-    // `?connect=plaid` opens Plaid Link on arrival. Keep the param in the URL
-    // until auto-connect consumes it below — stripping on read would lose the
-    // intent across a React Strict Mode remount (and would drop it from the
-    // signed-out auth redirect's returnTo if this effect won the race).
-    if (urlParams.get(CONNECT_INTENT_PARAM) === CONNECT_PLAID_INTENT) {
-      setWantsToConnectPlaid(true);
+    // The add-accounts deep link opens the institution picker on arrival. Keep
+    // the param in the URL until auto-connect consumes it below — stripping on
+    // read would lose the intent across a React Strict Mode remount (and would
+    // drop it from the signed-out auth redirect's returnTo if this effect won
+    // the race).
+    if (urlParams.get(CONNECT_INTENT_PARAM) === CONNECT_ACCOUNTS_INTENT) {
+      setWantsToAddAccount(true);
     }
 
     // Check for subscription-related URL parameters
@@ -1001,14 +1016,6 @@ export default function ProfilePage() {
     fetchUserData();
   }, [API_URL, loadSubscriptionStatus, loadTokenStatuses, loadSnapTradeStatus]);
 
-  // Reset Plaid Link flag when forcePlaidReinitialize becomes true
-  useEffect(() => {
-    if (forcePlaidReinitialize) {
-      console.log('forcePlaidReinitialize is true, resetting Plaid Link flag');
-      resetPlaidLinkInitialization();
-    }
-  }, [forcePlaidReinitialize]);
-
   // Log localStorage flag changes for debugging
   useEffect(() => {
     const checkFlag = () => {
@@ -1025,80 +1032,67 @@ export default function ProfilePage() {
     return () => window.removeEventListener('storage', checkFlag);
   }, []);
 
-  // Auto-trigger Plaid Link when user wants to connect accounts (either first time or add more)
+  // Open the institution picker for a visitor who arrived asking to add
+  // accounts, rather than dropping them into one provider's flow: the deep link
+  // is followed most often from an empty Finances page, by someone who has no
+  // way to know whether their institution is a bank or an investment
+  // connection.
   useEffect(() => {
-    console.log('Auto-trigger useEffect check:', {
-      loading,
-      connectedAccountsLength: connectedAccounts.length,
-      hasPlaidRef: !!plaidLinkButtonRef.current,
-      referrer: document.referrer,
-      forcePlaidReinitialize,
-      wantsToConnectPlaid,
-      wantsToConnectAccounts: localStorage.getItem(CONNECT_ACCOUNTS_STORAGE_KEY)
-    });
+    if (loading || autoConnectTriggeredRef.current) return;
 
-    if (!loading && plaidLinkButtonRef.current && !autoConnectTriggeredRef.current) {
-      // The intent arrives either as `?connect=plaid` (the deep link) or as the
-      // legacy in-tab flag still honored for navigations already in flight.
-      const wantsToConnectAccounts =
-        wantsToConnectPlaid || localStorage.getItem(CONNECT_ACCOUNTS_STORAGE_KEY) === 'true';
+    // The intent arrives either as the deep link's query param or as the legacy
+    // in-tab flag, still honored for navigations already in flight.
+    const wantsToConnectAccounts =
+      wantsToAddAccount || localStorage.getItem(CONNECT_ACCOUNTS_STORAGE_KEY) === 'true';
+    if (!wantsToConnectAccounts) return;
 
-      console.log('Auto-trigger conditions met:', {
-        wantsToConnectAccounts,
-        referrer: document.referrer,
-        willAutoTrigger: wantsToConnectAccounts,
-        forcePlaidReinitialize,
-        hasAccounts: connectedAccounts.length > 0
-      });
-
-      if (wantsToConnectAccounts) {
-        console.log('Auto-triggering Plaid Link for user who wants to connect accounts');
-
-        // Consume the intent from every source so nothing re-triggers once the
-        // modal has been asked to open. Strip `?connect=plaid` here (not on
-        // read) so a refresh after open does not reopen, while a remount
-        // before open can still see the param.
-        autoConnectTriggeredRef.current = true;
-        localStorage.removeItem(CONNECT_ACCOUNTS_STORAGE_KEY);
-        setWantsToConnectPlaid(false);
-        {
-          const url = new URL(window.location.href);
-          if (url.searchParams.has(CONNECT_INTENT_PARAM)) {
-            url.searchParams.delete(CONNECT_INTENT_PARAM);
-            window.history.replaceState({}, '', url.toString());
-          }
-        }
-
-        // Set the force flag first
-        setForcePlaidReinitialize(true);
-
-        // Add a delay to ensure the component re-renders with the new prop
-        setTimeout(() => {
-          console.log('Timeout executed, checking ref:', {
-            hasRef: !!plaidLinkButtonRef.current
-          });
-
-          if (plaidLinkButtonRef.current) {
-            console.log('Calling createLinkToken on PlaidLinkButton ref');
-            try {
-              plaidLinkButtonRef.current.createLinkToken();
-            } catch (error) {
-              console.error('Error calling createLinkToken:', error);
-            }
-          } else {
-            console.error('PlaidLinkButton ref is null when trying to auto-trigger');
-          }
-        }, 1000); // Increased delay to ensure state updates
-      }
+    // Consume the intent from every source so nothing re-triggers once the
+    // picker has been asked to open. Strip the param here (not on read) so a
+    // refresh after open does not reopen, while a remount before open can still
+    // see it.
+    autoConnectTriggeredRef.current = true;
+    localStorage.removeItem(CONNECT_ACCOUNTS_STORAGE_KEY);
+    setWantsToAddAccount(false);
+    const url = new URL(window.location.href);
+    if (url.searchParams.has(CONNECT_INTENT_PARAM)) {
+      url.searchParams.delete(CONNECT_INTENT_PARAM);
+      window.history.replaceState({}, '', url.toString());
     }
-  }, [loading, connectedAccounts.length, wantsToConnectPlaid]); // Removed forcePlaidReinitialize dependency to avoid infinite loops
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-    }).format(amount);
-  };
+    addAccountButtonRef.current?.open();
+  }, [loading, wantsToAddAccount]);
+
+  /**
+   * Open Plaid Link after the shared picker routed an institution here.
+   *
+   * Plaid has no general institution pre-selection -- `institution_id` on a link
+   * token is documented for Europe-only and legacy configurations -- so Link
+   * still opens on its own picker and the user names the bank once more there.
+   * What the picker bought is the routing: nobody had to work out that their
+   * bank is one integration and their brokerage another.
+   *
+   * `null` is the "browse all banks" escape hatch for a search that found
+   * nothing, since Plaid's own directory is larger than a name search surfaces.
+   */
+  const handleConnectPlaid = useCallback((institution: InstitutionOption | null) => {
+    console.log(
+      'Opening Plaid Link',
+      institution ? `after selecting ${institution.name}` : '(browse all)'
+    );
+    // Clear the module-level guard the way `forceReinitialize` would, but
+    // without the remount it causes: remounting swaps the ref out from under
+    // the call being made on the next line.
+    resetPlaidLinkInitialization();
+    // forceNew: this same PlaidLinkButton may be holding an ITEM_LOGIN_REQUIRED
+    // updateModeTokenId for the reconnect button. Adding an account must not
+    // open Link in update mode for that broken Item.
+    plaidLinkButtonRef.current?.createLinkToken({ forceNew: true });
+  }, []);
+
+  /** Open the SnapTrade portal already on the brokerage the picker selected. */
+  const handleConnectSnapTrade = useCallback((institution: InstitutionOption) => {
+    snapTradeButtonRef.current?.connect(institution.providerInstitutionId);
+  }, []);
 
   const formatLastSeen = (value?: string | null) => {
     if (!value) return null;
@@ -1106,12 +1100,115 @@ export default function ProfilePage() {
     return Number.isNaN(date.getTime()) ? null : date.toLocaleDateString();
   };
 
-  // Closed accounts stay in the list for reference but sit below the ones that
-  // still count toward the Finances totals.
-  const sortedConnectedAccounts = [...connectedAccounts].sort(
-    (a, b) => Number(Boolean(a.isClosed)) - Number(Boolean(b.isClosed))
-  );
   const closedAccountCount = connectedAccounts.filter(account => account.isClosed).length;
+
+  /**
+   * Every account, from both providers, as one list.
+   *
+   * Two sections split by provider made the user's own accounts look like two
+   * unrelated things, and the split was ours -- which integration reads the
+   * institution -- not theirs. One list sorted by institution puts a bank and a
+   * brokerage at the same firm next to each other, which is how someone
+   * actually thinks about their money.
+   *
+   * Health stays strictly per provider. A Plaid Item at Fidelity says nothing
+   * about a SnapTrade authorization at Fidelity: matching either one's trouble
+   * to the other by institution name would paint a working connection broken.
+   * So the Plaid rows read `tokenStatuses` only, and the brokerage rows go
+   * through `snapTradeAccountHealth` only.
+   */
+  const unifiedAccounts = useMemo(() => {
+    const rows: Array<{ key: string; institution: string; name: string; closed: boolean; card: AccountCardProps }> = [];
+
+    for (const account of connectedAccounts) {
+      // This list is Plaid-only (`/plaid/all-accounts` filters out SnapTrade).
+      // Never match SnapTrade's disabled connections by institution name here --
+      // a disabled SnapTrade Fidelity link would otherwise paint a healthy Plaid
+      // Fidelity Item as broken.
+      const tokenStatus = tokenStatuses.find(t => t.institutionName === account.institution);
+      const isClosed = Boolean(account.isClosed);
+      const lastSeen = formatLastSeen(account.lastSeenAt);
+      const balance = resolveAccountBalance(account);
+
+      rows.push({
+        key: `plaid:${account.id}`,
+        institution: account.institution || '',
+        name: account.name,
+        closed: isClosed,
+        card: {
+          name: account.name,
+          badge: isClosed ? 'Closed' : null,
+          badgeTitle: 'This account is no longer reported by the institution',
+          // A closed account's connection health is not the story; whether it
+          // still counts toward the totals is, and the note below says so.
+          health: tokenStatus && !isClosed
+            ? {
+                ok: tokenStatus.isActive,
+                title: tokenStatus.isActive
+                  ? 'Connection active'
+                  : `Connection issue: ${tokenStatus.lastError || 'Unknown error'}`,
+              }
+            : null,
+          detail: `${account.institution ? `${account.institution} • ` : ''}${account.type} • ${account.subtype}`,
+          note: isClosed
+            ? `Closed — not included in your Finances totals${lastSeen ? ` • Last reported ${lastSeen}` : ''}`
+            : null,
+          issue: tokenStatus && !isClosed && !tokenStatus.isActive && tokenStatus.lastError
+            ? (tokenStatus.lastError === 'ITEM_LOGIN_REQUIRED'
+              ? 'Re-authentication required'
+              : tokenStatus.lastError)
+            : null,
+          // Same rule as the Finances page: current is authoritative, available
+          // is only a fallback. Preferring available for depository accounts
+          // reported holds instead of the balance and disagreed with the totals.
+          balance,
+          balanceFallback: '—',
+          balanceNote: isClosed && balance !== null ? 'Last known balance' : null,
+          dimmed: isClosed,
+        },
+      });
+    }
+
+    for (const account of snapTradeAccounts) {
+      const { isHealthy, isDirect, issue } = snapTradeAccountHealth(account, snapTradeStatus);
+      rows.push({
+        key: `snaptrade:${account.id}`,
+        institution: account.institution || '',
+        name: account.name,
+        closed: false,
+        card: {
+          name: account.name,
+          health: {
+            ok: isHealthy,
+            title: isHealthy
+              ? (isDirect ? 'Read directly from Public' : 'Connection active')
+              : `Connection issue: ${issue || 'Unknown error'}`,
+          },
+          detail: `${account.institution ? `${account.institution} • ` : ''}${account.type}${account.subtype ? ` • ${account.subtype}` : ''}`,
+          issue,
+          balance: account.balance,
+          balanceFallback: 'Not reported',
+          balanceFallbackTitle: 'This provider did not report a balance for this account.',
+          balanceNote: account.balanceDerivedFromPositions ? 'from positions' : null,
+          balanceNoteTitle: "Summed from this account's positions; any uninvested cash is not included.",
+        },
+      });
+    }
+
+    // Closed accounts stay in the list for reference but sit below the ones that
+    // still count toward the Finances totals.
+    return rows.sort((a, b) => {
+      if (a.closed !== b.closed) return a.closed ? 1 : -1;
+      const byInstitution = a.institution.localeCompare(b.institution);
+      if (byInstitution !== 0) return byInstitution;
+      return a.name.localeCompare(b.name);
+    });
+  }, [connectedAccounts, tokenStatuses, snapTradeAccounts, snapTradeStatus]);
+
+  /** Plaid Items with no accounts left to hang their failure on. */
+  const orphanedTokens = tokenStatuses.filter(
+    token => !connectedAccounts.some(account => account.institution === token.institutionName)
+  );
 
   const handleDisconnectAccounts = async () => {
     setIsDeleting(true);
@@ -1248,224 +1345,67 @@ export default function ProfilePage() {
           {/* Remembered Personal Context Section */}
           <UserProfile userId={userEmail ? 'user' : undefined} />
 
-          {/* Account Management Section */}
+          {/* One entry point for both providers.
+              Two provider-labelled "Connect Account" buttons asked the user
+              which integration covers their bank, which is our plumbing and not
+              a question they can answer. This asks for the institution instead
+              and opens whichever connection actually supports it. */}
           <div className="bg-gray-800 rounded-lg p-6 mb-6">
-            <h2 className="text-xl font-semibold mb-4">Your Connected Accounts (Plaid)</h2>
+            <h2 className="text-xl font-semibold mb-2">Add an account</h2>
+            <p className="text-sm text-gray-400 mb-4">
+              Search for your bank or brokerage and we&apos;ll open the connection that supports it.
+            </p>
+            <AddAccountButton
+              ref={addAccountButtonRef}
+              onSelectPlaid={handleConnectPlaid}
+              onSelectSnapTrade={handleConnectSnapTrade}
+              snapTradeReady={snapTradeReady}
+            />
+            {/* Both provider flows report progress and failure after this modal
+                has closed, so the message is surfaced here rather than beside a
+                hidden button further down the page. */}
+            {providerConnectStatus && (
+              <div className="mt-3 rounded bg-gray-700 px-3 py-2 text-sm text-gray-300">
+                {providerConnectStatus}
+              </div>
+            )}
+          </div>
 
-            {/* Connect New Account */}
-            <div className="mb-6">
+          {/* Every connected account, in one list.
+              Splitting these into a Plaid section and a SnapTrade section made
+              a user's own accounts look like two unrelated things, over a
+              distinction that is ours and not theirs. Health is still derived
+              strictly per provider -- see `unifiedAccounts` -- because that is
+              the part the two integrations genuinely do not share. */}
+          <div className="bg-gray-800 rounded-lg p-6 mb-6">
+            <h2 className="text-xl font-semibold mb-4">Your connected accounts</h2>
+
+            {/* Repair controls. Both components are headless: "Add an account"
+                above owns connecting, and each renders a button only while one
+                of its connections needs re-authenticating, which is a repair of
+                a named connection rather than adding an account. They still
+                mount because the whole provider lifecycle lives inside them, and
+                the shared flow drives them through their refs. */}
+            <div className="mb-6 space-y-3">
               <PlaidLinkButton
-                key={forcePlaidReinitialize ? 'force-reinit' : 'normal'}
                 onSuccess={() => {
                   // Refresh all data when an account is successfully linked
                   console.log('Account linked, refreshing all data');
                   refreshAllData();
-                  // Reset the force flag after successful connection
-                  setForcePlaidReinitialize(false);
                 }}
-                forceReinitialize={forcePlaidReinitialize}
+                onStatusChange={setProviderConnectStatus}
                 updateModeTokenId={tokenStatuses.find(t => t.lastError === 'ITEM_LOGIN_REQUIRED')?.id}
+                headless={!tokenStatuses.some(t => t.lastError === 'ITEM_LOGIN_REQUIRED')}
+                label="Reconnect account"
                 ref={plaidLinkButtonRef}
               />
 
-              {/* Retry Status Messages */}
-              {retryMessage && (
-                <div className={`mt-3 p-3 rounded-lg text-sm ${
-                  retryMessage.includes('✅')
-                    ? 'bg-green-900/20 border border-green-700 text-green-300'
-                    : retryMessage.includes('❌')
-                    ? 'bg-red-900/20 border border-red-700 text-red-300'
-                    : retryMessage.includes('⏰')
-                    ? 'bg-yellow-900/20 border border-yellow-700 text-yellow-300'
-                    : 'bg-blue-900/20 border border-blue-700 text-blue-300'
-                }`}>
-                  {retryMessage}
-                </div>
-              )}
-
-              {/* Retry Progress Indicator */}
-              {isRetrying && (
-                <div className="mt-3 p-3 bg-blue-900/20 border border-blue-700 rounded-lg">
-                  <div className="flex items-center gap-2 text-blue-300 text-sm">
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-300"></div>
-                    <span>Waiting for data to be ready... (Retry {retryCount + 1}/5)</span>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Connected Accounts List */}
-            <div>
-              {loading ? (
-                <div className="text-gray-400">Loading accounts...</div>
-              ) : error ? (
-                <div className="text-gray-400">
-                  {error}
-                </div>
-              ) : connectedAccounts.length === 0 && tokenStatuses.length === 0 ? (
-                <div className="text-gray-400 text-sm">
-                  No accounts connected yet. Use the button above to connect your first account.
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {closedAccountCount > 0 && (
-                    <div className="text-xs text-gray-400 mb-1">
-                      {closedAccountCount === 1
-                        ? '1 account is closed and is not included in your Finances totals.'
-                        : `${closedAccountCount} accounts are closed and are not included in your Finances totals.`}
-                    </div>
-                  )}
-                  {/* Display connected accounts */}
-                  {sortedConnectedAccounts.map((account) => {
-                    // Find token status for this account's institution
-                    const tokenStatus = tokenStatuses.find(t =>
-                      t.institutionName === account.institution
-                    );
-                    // This list is Plaid-only (`/plaid/all-accounts` filters out
-                    // SnapTrade). Do not match SnapTrade `disabledConnections` by
-                    // institution name here -- a disabled SnapTrade Fidelity link
-                    // would otherwise paint a healthy Plaid Fidelity Item as broken.
-                    // SnapTrade attribution lives on SnapTradeButton's account cards.
-                    const isClosed = Boolean(account.isClosed);
-                    const lastSeen = formatLastSeen(account.lastSeenAt);
-
-                    return (
-                      <div
-                        key={account.id}
-                        className={`bg-gray-700 rounded-lg p-4 border border-gray-600${isClosed ? ' opacity-60' : ''}`}
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0 flex-1">
-                            <div className="flex min-w-0 flex-wrap items-center gap-2">
-                              <div className="min-w-0 break-words font-medium text-white">{account.name}</div>
-                              {isClosed && (
-                                <span
-                                  className="px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-900/20 text-yellow-300 border border-yellow-700"
-                                  title="This account is no longer reported by the institution"
-                                >
-                                  Closed
-                                </span>
-                              )}
-                            </div>
-                            <div className="mt-1 flex min-w-0 items-start gap-2 text-sm text-gray-400">
-                              {/* Keep connection health in a stable column instead of letting it wrap with the account name. */}
-                              {tokenStatus && !isClosed && (
-                                tokenStatus.isActive ? (
-                                  <span className="w-4 shrink-0 text-center text-green-400" title="Connection active">
-                                    ✓
-                                  </span>
-                                ) : (
-                                  <span className="w-4 shrink-0 text-center text-red-400" title={`Connection issue: ${tokenStatus.lastError || 'Unknown error'}`}>
-                                    ✗
-                                  </span>
-                                )
-                              )}
-                              <div className="min-w-0 break-words">
-                                {account.institution && `${account.institution} • `}{account.type} • {account.subtype}
-                              </div>
-                            </div>
-                            {isClosed && (
-                              <div className="text-xs text-yellow-300 mt-1">
-                                Closed — not included in your Finances totals
-                                {lastSeen ? ` • Last reported ${lastSeen}` : ''}
-                              </div>
-                            )}
-                            {/* Show error message if token is inactive */}
-                            {tokenStatus && !isClosed && !tokenStatus.isActive && tokenStatus.lastError && (
-                              <div className="text-xs text-red-400 mt-1">
-                                {tokenStatus.lastError === 'ITEM_LOGIN_REQUIRED' ?
-                                  'Re-authentication required' :
-                                  tokenStatus.lastError}
-                              </div>
-                            )}
-                          </div>
-                          <div className="shrink-0 text-right">
-                            <div className="font-semibold text-white">
-                              {/* Same rule as the Finances page: current is authoritative,
-                                  available is only a fallback. Preferring available for
-                                  depository accounts reported holds instead of the balance
-                                  and disagreed with the Finances totals. */}
-                              {(() => {
-                                const balance = resolveAccountBalance(account);
-                                return balance === null ? '—' : formatCurrency(balance);
-                              })()}
-                            </div>
-                            {isClosed && (
-                              <div className="text-xs text-gray-400">Last known balance</div>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-
-                  {/* Display orphaned tokens (tokens without accounts) */}
-                  {tokenStatuses
-                    .filter(token => {
-                      // Find tokens that don't have any associated accounts
-                      const hasAccounts = connectedAccounts.some(account =>
-                        account.institution === token.institutionName
-                      );
-                      return !hasAccounts;
-                    })
-                    .map(token => (
-                      <div
-                        key={token.id}
-                        className="bg-gray-800/50 rounded-lg p-4 border-2 border-red-500/30"
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0 flex-1">
-                            <div className="flex min-w-0 flex-wrap items-center gap-2">
-                              <div className="min-w-0 break-words font-medium text-white">{token.institutionName || 'Unknown Institution'}</div>
-                              <span className="text-red-400" title={`Connection issue: ${token.lastError || 'Unknown error'}`}>
-                                ✗
-                              </span>
-                            </div>
-                            <div className="text-sm text-gray-400 mt-1">
-                              No accounts available
-                            </div>
-                            <div className="text-xs text-red-400 mt-1">
-                              {token.lastError === 'ITEM_LOGIN_REQUIRED' ?
-                                'Re-authentication required - Click "Connect Account" above to reconnect' :
-                                token.lastError ? token.lastError :
-                                !token.isActive ? 'Connection inactive' :
-                                'No accounts available for this connection'}
-                            </div>
-                            <div className="text-xs text-gray-500 mt-1">
-                              Status: {token.isActive ? 'Active' : 'Inactive'} •
-                              Last checked: {token.lastChecked ? new Date(token.lastChecked).toLocaleString() : 'Never'}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    ))
-                  }
-                </div>
-              )}
-            </div>
-
-            {/* One row per bank connection, so a single bad link can be removed
-                without taking every other institution down with it. */}
-            <PlaidConnections
-              refreshKey={plaidConnectionsKey}
-              onConnectionRemoved={async () => {
-                // The disconnect already revoked the Item, removed the rows and
-                // queued a rebuild; these re-reads are what make the page stop
-                // showing the institution.
-                await Promise.all([
-                  loadConnectedAccounts(),
-                  loadTokenStatuses(),
-                  loadInvestmentData(),
-                ]);
-              }}
-            />
-          </div>
-
-          {/* Investment Accounts (SnapTrade) Section */}
-          <div className="bg-gray-800 rounded-lg p-6 mb-6">
-            <h2 className="text-xl font-semibold mb-4">Your Connected Accounts (SnapTrade)</h2>
-            <div className="mb-6">
               <SnapTradeButton
+                ref={snapTradeButtonRef}
+                headless
+                onReadyChange={setSnapTradeReady}
+                onAccountsLoaded={setSnapTradeAccounts}
+                onConnectStatus={setProviderConnectStatus}
                 snapTradeStatus={snapTradeStatus}
                 // Repairs a disabled authorization rather than adding a second
                 // connection to the same brokerage. Undefined when nothing is
@@ -1489,126 +1429,101 @@ export default function ProfilePage() {
                   setPublicDirectKey(key => key + 1);
                 }}
               />
+
+              {/* Retry Status Messages */}
+              {retryMessage && (
+                <div className={`p-3 rounded-lg text-sm ${
+                  retryMessage.includes('✅')
+                    ? 'bg-green-900/20 border border-green-700 text-green-300'
+                    : retryMessage.includes('❌')
+                    ? 'bg-red-900/20 border border-red-700 text-red-300'
+                    : retryMessage.includes('⏰')
+                    ? 'bg-yellow-900/20 border border-yellow-700 text-yellow-300'
+                    : 'bg-blue-900/20 border border-blue-700 text-blue-300'
+                }`}>
+                  {retryMessage}
+                </div>
+              )}
+
+              {/* Retry Progress Indicator */}
+              {isRetrying && (
+                <div className="p-3 bg-blue-900/20 border border-blue-700 rounded-lg">
+                  <div className="flex items-center gap-2 text-blue-300 text-sm">
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-300"></div>
+                    <span>Waiting for data to be ready... (Retry {retryCount + 1}/5)</span>
+                  </div>
+                </div>
+              )}
             </div>
 
-            {/* One row per institution, so a single bad brokerage can be removed
-                without taking every other connection down with it. */}
-            <SnapTradeConnections
-              refreshKey={snapTradeConnectionsKey}
-              onConnectionRemoved={async () => {
-                // The disconnect already removed the rows and queued a rebuild;
-                // these re-reads are what make the page stop showing them.
-                await Promise.all([
-                  loadConnectedAccounts(),
-                  loadInvestmentData(),
-                  loadSnapTradeStatus(),
-                ]);
-                // Removing the Public brokerage link changes whether the direct
-                // connection is on offer at all.
-                setPublicDirectKey(key => key + 1);
-              }}
-            />
+            {/* The combined account list */}
+            <div>
+              {loading ? (
+                <div className="text-gray-400">Loading accounts...</div>
+              ) : error ? (
+                <div className="text-gray-400">{error}</div>
+              ) : unifiedAccounts.length === 0 && orphanedTokens.length === 0 ? (
+                <div className="text-gray-400 text-sm">
+                  No accounts connected yet. Use &ldquo;Add an account&rdquo; above to connect your first one.
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {closedAccountCount > 0 && (
+                    <div className="text-xs text-gray-400 mb-1">
+                      {closedAccountCount === 1
+                        ? '1 account is closed and is not included in your Finances totals.'
+                        : `${closedAccountCount} accounts are closed and are not included in your Finances totals.`}
+                    </div>
+                  )}
 
-            {/* Renders nothing unless the user already has Public via SnapTrade.
-                A stopgap for Public's managed-yield accounts, which SnapTrade
-                cannot sync. */}
-            <PublicDirectConnection
-              refreshKey={publicDirectKey}
-              onChanged={async () => {
-                await Promise.all([
-                  loadConnectedAccounts(),
-                  loadInvestmentData(),
-                ]);
-              }}
-            />
+                  {unifiedAccounts.map(row => (
+                    <AccountCard key={row.key} {...row.card} />
+                  ))}
 
-            {/* Connected SnapTrade Accounts List */}
-            <div className="mb-6">
-              {snapTradeHoldings && snapTradeHoldings.length > 0 ? (
-                <>
-                  <h3 className="text-sm font-medium text-gray-300 mb-3">Connected Investment Accounts</h3>
-                  <div className="space-y-3">
-                    {snapTradeHoldings.map((holding: Record<string, unknown>, index: number) => {
-                      const account = holding.account as Record<string, unknown> | undefined;
-                      if (!account) return null;
-
-                      // Connection health belongs to a brokerage authorization, not
-                      // to the SnapTrade user. Reading it off the global status marked
-                      // every account broken -- and named the wrong institution -- the
-                      // moment any one connection was disabled, so a user with Public
-                      // disabled saw their healthy Fidelity accounts reported as
-                      // "disabled for Public".
-                      //
-                      // `undefined` means SnapTrade could not confirm this
-                      // authorization's health, which is not the same as knowing it is
-                      // broken, so only an explicit true counts against the account.
-                      const connectionDisabled = account.connectionDisabled === true;
-                      // A whole-connection failure -- credentials gone, SnapTrade
-                      // unreachable -- genuinely does affect every account, so it still
-                      // applies across the board. LOGIN_REQUIRED deliberately does not:
-                      // it means some authorization is disabled, and which ones is what
-                      // the per-account flag above answers.
-                      const connectionUnusable = !snapTradeStatus?.connected
-                        || snapTradeStatus?.status === 'error'
-                        || snapTradeStatus?.status === 'ERROR';
-                      const isHealthy = !connectionDisabled && !connectionUnusable;
-                      const institutionName = (account.institution_name as string) || 'this brokerage';
-                      const accountIssue = connectionDisabled
-                        ? `SnapTrade connection disabled for ${institutionName}. Reconnect to resume updates.`
-                        : connectionUnusable
-                          ? (snapTradeStatus?.error || 'Connection issue')
-                          : null;
-
-                      return (
-                        <div
-                          key={index}
-                          className="bg-gray-700 rounded-lg p-4 border border-gray-600"
-                        >
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="min-w-0 flex-1">
-                              <div className="min-w-0 break-words font-medium text-white">
-                                {account.name as string || 'Investment Account'}
-                              </div>
-                              <div className="mt-1 flex min-w-0 items-start gap-2 text-sm text-gray-400">
-                                {/* Keep connection health aligned with the account metadata on every card. */}
-                                {isHealthy ? (
-                                  <span className="w-4 shrink-0 text-center text-green-400" title="Connection active">
-                                    ✓
-                                  </span>
-                                ) : (
-                                  <span className="w-4 shrink-0 text-center text-red-400" title={`Connection issue: ${accountIssue || 'Unknown error'}`}>
-                                    ✗
-                                  </span>
-                                )}
-                                <div className="min-w-0 break-words">
-                                  {(account.institution_name as string) || 'Investment Account'}
-                                  {typeof account.number === 'string' && ` • ${account.number}`}
-                                </div>
-                              </div>
-                              {/* Name the brokerage this account actually belongs to,
-                                  not every brokerage with a disabled connection. */}
-                              {accountIssue && (
-                                <div className="text-xs text-red-400 mt-1">
-                                  {accountIssue}
-                                </div>
-                              )}
-                            </div>
+                  {/* Plaid Items whose accounts are all gone: the failure has no
+                      account card left to sit on, so it gets its own row rather
+                      than disappearing with them. */}
+                  {orphanedTokens.map(token => (
+                    <div
+                      key={token.id}
+                      className="bg-gray-800/50 rounded-lg p-4 border-2 border-red-500/30"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex min-w-0 flex-wrap items-center gap-2">
+                            <div className="min-w-0 break-words font-medium text-white">{token.institutionName || 'Unknown Institution'}</div>
+                            <span className="text-red-400" title={`Connection issue: ${token.lastError || 'Unknown error'}`}>
+                              ✗
+                            </span>
+                          </div>
+                          <div className="text-sm text-gray-400 mt-1">
+                            No accounts available
+                          </div>
+                          <div className="text-xs text-red-400 mt-1">
+                            {token.lastError === 'ITEM_LOGIN_REQUIRED' ?
+                              'Re-authentication required - Click "Reconnect account" above to reconnect' :
+                              token.lastError ? token.lastError :
+                              !token.isActive ? 'Connection inactive' :
+                              'No accounts available for this connection'}
+                          </div>
+                          <div className="text-xs text-gray-500 mt-1">
+                            Status: {token.isActive ? 'Active' : 'Inactive'} •
+                            Last checked: {token.lastChecked ? new Date(token.lastChecked).toLocaleString() : 'Never'}
                           </div>
                         </div>
-                      );
-                    })}
-                  </div>
-                </>
-              ) : snapTradeStatus?.connected
-                && (snapTradeStatus?.status === 'error' || snapTradeStatus?.status === 'ERROR') ? (
-                /* Whole-user SnapTrade failure with no per-account cards to show it on.
-                   LOGIN_REQUIRED is not orphaned: accounts still render in SnapTradeButton
-                   with per-authorization attribution, and the reconnect control above. */
-                <div className="bg-gray-800/50 rounded-lg p-4 border-2 border-red-500/30 mb-6">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0 flex-1">
+                      </div>
+                    </div>
+                  ))}
+
+                  {/* A whole-user SnapTrade failure with no account cards to show
+                      it on. LOGIN_REQUIRED is deliberately not orphaned: those
+                      accounts still render above with per-authorization
+                      attribution, and the reconnect control is at the top. */}
+                  {snapTradeStatus?.connected
+                    && (snapTradeStatus?.status === 'error' || snapTradeStatus?.status === 'ERROR') && (
+                    <div className="bg-gray-800/50 rounded-lg p-4 border-2 border-red-500/30">
                       <div className="flex min-w-0 flex-wrap items-center gap-2">
-                        <div className="font-medium text-white">SnapTrade Connection</div>
+                        <div className="font-medium text-white">Investment connection</div>
                         <span className="text-red-400" title={`Connection issue: ${snapTradeStatus.error || 'Unknown error'}`}>
                           ✗
                         </span>
@@ -1617,7 +1532,7 @@ export default function ProfilePage() {
                         No investment accounts available
                       </div>
                       <div className="text-xs text-red-400 mt-1">
-                        {snapTradeStatus.error || 'Connection issue - Click "Connect Account" above to reconnect'}
+                        {snapTradeStatus.error || 'Connection issue - Click "Reconnect Account" above to reconnect'}
                       </div>
                       {snapTradeStatus.lastChecked && (
                         <div className="text-xs text-gray-500 mt-1">
@@ -1625,39 +1540,63 @@ export default function ProfilePage() {
                         </div>
                       )}
                     </div>
-                  </div>
+                  )}
                 </div>
-              ) : null}
+              )}
             </div>
 
-            {/* Supported Financial Institutions */}
-            <div className="mt-6">
-              <h3 className="text-sm font-medium text-gray-300 mb-3">Supported Financial Institutions</h3>
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 text-xs text-gray-400">
-                <div>• TD Ameritrade</div>
-                <div>• Charles Schwab</div>
-                <div>• Fidelity</div>
-                <div>• E*TRADE</div>
-                <div>• Interactive Brokers</div>
-                <div>• Robinhood</div>
-                <div>• Webull</div>
-                <div>• Public.com</div>
-                <div>• Ally Invest</div>
-                <div>• Vanguard</div>
-                <div>• Merrill Edge</div>
-                <div>• Wells Fargo</div>
-                <div>• Chase</div>
-                <div>• Bank of America</div>
-                <div>• US Bank</div>
-                <div>• PNC Bank</div>
-                <div>• Capital One</div>
-                <div>• Citi</div>
-                <div>• HSBC</div>
-                <div>• And many more...</div>
+            {/* Manage connections: one row per institution for each provider, so
+                a single bad link can be removed without taking every other
+                connection down with it. Two components because the disconnect
+                paths genuinely differ (an Item must be revoked at Plaid; an
+                authorization must be removed at SnapTrade), but they read as one
+                list under one heading. */}
+            <div className="mt-6 border-t border-gray-700 pt-6">
+              <h3 className="text-sm font-medium text-gray-300 mb-3">Manage connections</h3>
+              <div className="space-y-3">
+                <PlaidConnections
+                  refreshKey={plaidConnectionsKey}
+                  onConnectionRemoved={async () => {
+                    // The disconnect already revoked the Item, removed the rows and
+                    // queued a rebuild; these re-reads are what make the page stop
+                    // showing the institution.
+                    await Promise.all([
+                      loadConnectedAccounts(),
+                      loadTokenStatuses(),
+                      loadInvestmentData(),
+                    ]);
+                  }}
+                />
+
+                <SnapTradeConnections
+                  refreshKey={snapTradeConnectionsKey}
+                  onConnectionRemoved={async () => {
+                    // The disconnect already removed the rows and queued a rebuild;
+                    // these re-reads are what make the page stop showing them.
+                    await Promise.all([
+                      loadConnectedAccounts(),
+                      loadInvestmentData(),
+                      loadSnapTradeStatus(),
+                    ]);
+                    // Removing the Public brokerage link changes whether the direct
+                    // connection is on offer at all.
+                    setPublicDirectKey(key => key + 1);
+                  }}
+                />
+
+                {/* Renders nothing unless the user already has Public via SnapTrade.
+                    A stopgap for Public's managed-yield accounts, which SnapTrade
+                    cannot sync. */}
+                <PublicDirectConnection
+                  refreshKey={publicDirectKey}
+                  onChanged={async () => {
+                    await Promise.all([
+                      loadConnectedAccounts(),
+                      loadInvestmentData(),
+                    ]);
+                  }}
+                />
               </div>
-              <p className="text-xs text-gray-500 mt-2">
-                View the complete list of <a href="https://snaptrade.com/brokerage-integrations" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300 underline">supported brokerages</a>
-              </p>
             </div>
           </div>
 

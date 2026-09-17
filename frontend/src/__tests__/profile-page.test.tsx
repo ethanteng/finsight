@@ -303,11 +303,13 @@ describe('ProfilePage', () => {
     });
   });
 
-  describe('Plaid connect deep link', () => {
+  describe('Add accounts deep link', () => {
     // jsdom keeps window.location non-configurable, so drive the real history
     // instead of stubbing it: the page reads the URL the same way a browser
     // would, and the strip-the-param behavior is observable on location itself.
     const visit = (url: string) => window.history.replaceState({}, '', url);
+
+    const pickerIsOpen = () => screen.queryByRole('dialog') !== null;
 
     const requestedLinkToken = () =>
       (global.fetch as jest.Mock).mock.calls.some(
@@ -330,15 +332,18 @@ describe('ProfilePage', () => {
 
     afterEach(() => visit('/'));
 
-    it('opens Plaid Link when arriving with ?connect=plaid', async () => {
+    it('opens the institution picker, not one provider\'s flow, when arriving with the deep link', async () => {
       visit('/profile?connect=plaid');
 
       render(<ProfilePage />);
 
-      await waitFor(() => expect(requestedLinkToken()).toBe(true), { timeout: 4000 });
+      await waitFor(() => expect(pickerIsOpen()).toBe(true), { timeout: 4000 });
+      // The point of the picker: nothing is committed to a provider until the
+      // visitor has named their institution.
+      expect(requestedLinkToken()).toBe(false);
     });
 
-    it('strips the param so a refresh does not reopen Plaid Link', async () => {
+    it('strips the param so a refresh does not reopen the picker', async () => {
       visit('/profile?connect=plaid');
 
       render(<ProfilePage />);
@@ -347,14 +352,14 @@ describe('ProfilePage', () => {
       expect(window.location.pathname).toBe('/profile');
     });
 
-    it('leaves Plaid Link closed on an ordinary visit', async () => {
+    it('leaves the picker closed on an ordinary visit', async () => {
       visit('/profile');
 
       render(<ProfilePage />);
 
       // Long enough to cover the delay the auto-open path waits out.
       await new Promise(resolve => setTimeout(resolve, 1500));
-      expect(requestedLinkToken()).toBe(false);
+      expect(pickerIsOpen()).toBe(false);
     });
 
     it('sends a signed-out visitor to sign in and back to the deep link', async () => {
@@ -368,7 +373,7 @@ describe('ProfilePage', () => {
           `/login?returnTo=${encodeURIComponent('/profile?connect=plaid')}`
         )
       );
-      expect(requestedLinkToken()).toBe(false);
+      expect(pickerIsOpen()).toBe(false);
     });
 
     it('leaves a signed-in visitor on the page', async () => {
@@ -376,8 +381,36 @@ describe('ProfilePage', () => {
 
       render(<ProfilePage />);
 
-      await waitFor(() => expect(requestedLinkToken()).toBe(true), { timeout: 4000 });
+      await waitFor(() => expect(pickerIsOpen()).toBe(true), { timeout: 4000 });
       expect(routerMock.replace).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('One entry point for both providers', () => {
+    beforeEach(() => {
+      clearAllFinancialServices();
+      resetPlaidLinkInitialization();
+      localStorageMock.getItem.mockImplementation((key) =>
+        key === 'auth_token' ? 'mock-auth-token' : null
+      );
+      (global.fetch as jest.Mock).mockImplementation(() =>
+        Promise.resolve({ ok: true, status: 200, json: async () => ({}) })
+      );
+    });
+
+    it('offers one "Add an account" button and no provider-labelled connect buttons', async () => {
+      render(<ProfilePage />);
+
+      expect(
+        await screen.findByRole('button', { name: 'Add an account' })
+      ).toBeInTheDocument();
+
+      // The two provider buttons this replaced. Their absence is the feature:
+      // nobody should have to know which integration reaches their bank.
+      await waitFor(() => {
+        expect(screen.queryByRole('button', { name: 'Connect Account' })).not.toBeInTheDocument();
+      });
+      expect(screen.queryByRole('button', { name: /Connect SnapTrade/ })).not.toBeInTheDocument();
     });
   });
 });

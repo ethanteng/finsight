@@ -1,11 +1,16 @@
 /**
- * A per-caller fixed-window limiter for the public marketing endpoints.
+ * A per-caller fixed-window limiter.
  *
- * These routes are unauthenticated by design — they are landing-page features
- * — so the only thing standing between them and a script is this. It was
- * written for the retirement quick plan, where the cost being protected is
- * CPU; the Coast FIRE results endpoint reuses it because there the cost is
- * outbound email in someone else's inbox, which is worth protecting more.
+ * Written for the public marketing endpoints, which are unauthenticated by
+ * design — they are landing-page features — so the only thing standing between
+ * them and a script is this. It began with the retirement quick plan, where the
+ * cost being protected is CPU; the Coast FIRE results endpoint reuses it
+ * because there the cost is outbound email in someone else's inbox, which is
+ * worth protecting more; the institution search reuses it because there the
+ * cost is a third party's API quota.
+ *
+ * Callers are identified by source address unless `keyBy` says otherwise. An
+ * authenticated route should say otherwise — see that option.
  *
  * Each limiter gets its own window map: sharing one would let a burst against
  * one endpoint lock a visitor out of the other.
@@ -44,6 +49,16 @@ interface WindowEntry {
 export interface FixedWindowRateLimitOptions {
   /** Requests allowed per window, per caller. */
   limit: number;
+  /**
+   * Identify the caller yourself instead of by source address.
+   *
+   * An address is the only handle an unauthenticated endpoint has, but it is
+   * the wrong one behind a shared NAT -- an office or a campus shares a window
+   * between unrelated people. An authenticated route knows exactly who is
+   * calling and should say so. Returning `undefined` falls back to the address,
+   * which is what an unauthenticated request on a mixed route gets.
+   */
+  keyBy?: (req: Request) => string | undefined;
   /**
    * How many proxies sit between a visitor and this process. On Render that is
    * the platform's single edge; behind an additional CDN it would be two.
@@ -117,6 +132,7 @@ export function createFixedWindowRateLimit(
   const {
     limit,
     trustedHops,
+    keyBy,
     windowMs = DEFAULT_WINDOW_MS,
     message = 'Too many requests. Please wait a moment and try again.',
   } = options;
@@ -125,7 +141,8 @@ export function createFixedWindowRateLimit(
   return function rateLimit(req: Request, res: Response, next: NextFunction): void {
     const now = Date.now();
 
-    const key = clientKey(req, trustedHops);
+    const callerKey = keyBy?.(req);
+    const key = callerKey ? callerKey.slice(0, MAX_KEY_LENGTH) : clientKey(req, trustedHops);
     let entry = windows.get(key);
     if (!entry || now >= entry.resetAt) {
       if (!entry && windows.size >= MAX_TRACKED_WINDOWS) {
