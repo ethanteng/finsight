@@ -183,6 +183,30 @@ describe('extractNumericTokens', () => {
     const [rate] = extractNumericTokens('100% of them');
     expect(rate.halfWidth).toBe(0.5);
   });
+
+  /*
+   * Starting the match at the first digit reads "-5%" as "5%". The positive
+   * figure is usually in the allowlist — 5% is the cash weight — so a draft
+   * stating the opposite of a fact would pass the check meant to catch it.
+   */
+  it('keeps the sign of a negative figure', () => {
+    expect(extractNumericTokens('-5%')[0].value).toBe(-5);
+    expect(extractNumericTokens('$-48,000')[0].value).toBe(-48_000);
+    expect(extractNumericTokens('down \u221260% this year')[0].value).toBe(-60);
+  });
+
+  it('reads a leading decimal as the fraction it is', () => {
+    const [token] = extractNumericTokens('.5% a year');
+    expect(token.value).toBe(0.5);
+    expect(token.isPercent).toBe(true);
+  });
+
+  /* A hyphen after a digit is a range or a compound word, never a minus. */
+  it('does not read a hyphen inside a range or a compound as a sign', () => {
+    expect(extractNumericTokens('1926-1985').map((token) => token.value)).toEqual([1926, 1985]);
+    expect(extractNumericTokens('a 30-year window').map((token) => token.value)).toEqual([30]);
+    expect(extractNumericTokens('1926\u20131985').map((token) => token.value)).toEqual([1926, 1985]);
+  });
 });
 
 describe('groundInterpretation', () => {
@@ -315,6 +339,25 @@ describe('groundInterpretation', () => {
     );
     expect(result.grounded).toBe(false);
     expect(result.ungrounded).toContain('100%');
+  });
+
+  /*
+   * The allocation weights and the contributions are in the allowlist as
+   * positive figures. Their negatives are not facts about this plan, and a
+   * sentence asserting one is the kind of contradiction that reads as
+   * authoritative on the page.
+   */
+  it('rejects a negated figure whose positive is a fact', () => {
+    const result = groundInterpretation(
+      {
+        headline: 'A headline.',
+        paragraphs: ['Your equity sleeve fell -60% in the worst stretch.'],
+        watchOuts: [],
+      },
+      facts()
+    );
+    expect(result.grounded).toBe(false);
+    expect(result.ungrounded).toContain('-60%');
   });
 
   it('checks the watch-outs too, not just the prose above them', () => {
@@ -497,6 +540,69 @@ describe('interpretRetirementQuickPlan', () => {
 
     expect(second?.cached).toBe(false);
     expect(model.ask).toHaveBeenCalledTimes(2);
+  });
+
+  /*
+   * A date alone misses a provider revising a value in place, and misses the
+   * 10-year point falling back from Massive to FRED under the same label. The
+   * cached prose would quote a yield that is no longer in the facts.
+   */
+  it('re-reads a plan when a rate is revised without its date moving', async () => {
+    model.ask.mockResolvedValue(DRAFT('Your money lasted in 87.3% of tested retirements.'));
+
+    market.get.mockResolvedValue({
+      fetchedAt: '2026-09-16T00:00:00.000Z',
+      treasury10Y: { percent: 4.21, asOf: '2026-09-15', label: '10-year Treasury yield', source: 'Massive' },
+    } as never);
+    await interpretRetirementQuickPlan(planResult());
+
+    market.get.mockResolvedValue({
+      fetchedAt: '2026-09-16T01:00:00.000Z',
+      treasury10Y: { percent: 4.24, asOf: '2026-09-15', label: '10-year Treasury yield', source: 'Massive' },
+    } as never);
+    expect((await interpretRetirementQuickPlan(planResult()))?.cached).toBe(false);
+
+    // Same value and date, different provider: also a different set of facts.
+    market.get.mockResolvedValue({
+      fetchedAt: '2026-09-16T02:00:00.000Z',
+      treasury10Y: { percent: 4.24, asOf: '2026-09-15', label: '10-year Treasury yield', source: 'FRED' },
+    } as never);
+    expect((await interpretRetirementQuickPlan(planResult()))?.cached).toBe(false);
+
+    expect(model.ask).toHaveBeenCalledTimes(3);
+  });
+
+  /*
+   * The SDK's default is ten minutes per request and it retries a timeout, so
+   * an unbounded call would hold an unauthenticated request open — and the
+   * page's placeholder with it — far past the point the panel is worth having.
+   */
+  it('bounds the model call so a stalled provider drops the panel', async () => {
+    model.ask.mockResolvedValue(DRAFT('Your money lasted in 87.3% of tested retirements.'));
+
+    await interpretRetirementQuickPlan(planResult());
+
+    const options = model.ask.mock.calls[0][2] as { timeoutMs: number; maxRetries: number };
+    expect(options.maxRetries).toBe(0);
+    expect(options.timeoutMs).toBeGreaterThan(0);
+    expect(options.timeoutMs).toBeLessThanOrEqual(25_000);
+  });
+
+  it('does not start a retry it has no time to finish', async () => {
+    // A first attempt that eats the budget and comes back ungrounded: the
+    // retry is skipped rather than started and waited out.
+    model.ask.mockImplementationOnce(async () => {
+      jest.advanceTimersByTime(24_000);
+      return DRAFT('You can spend $250,000 a year.');
+    });
+
+    jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate'] });
+    try {
+      expect(await interpretRetirementQuickPlan(planResult())).toBeNull();
+      expect(model.ask).toHaveBeenCalledTimes(1);
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   it('tells the model not to claim a verdict it does not have', async () => {

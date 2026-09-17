@@ -364,22 +364,48 @@ function writtenStep(digits: string, decimals: number, multiplier: number, isPer
  * falling through to the dollar amounts.
  */
 export function extractNumericTokens(text: string): NumericToken[] {
-  const pattern = /(\$\s*)?(\d[\d,]*(?:\.(\d+))?)\s*(thousand|million|billion|[kmb])?(?![a-z])\s*(%|percent\b)?/gi;
+  /*
+   * The sign is captured rather than skipped. Starting the match at the first
+   * digit reads "-5%" as "5%" and "$-48,000" as "$48,000", and since the
+   * positive figure is usually in the allowlist — 5% is the cash weight,
+   * $48,000 the contributions — a draft stating the opposite of a fact would
+   * pass the check that exists to catch exactly that.
+   *
+   * Both sign positions refuse a hyphen that follows a digit, so the one in
+   * "30-year" or "1926-1985" stays a hyphen. An en dash is never a sign, for
+   * the same reason: it is how a range is written.
+   */
+  const pattern = new RegExp(
+    String.raw`(?:(?<![\d.,])(?<neg>[-\u2212])\s*)?` +
+    String.raw`(?<dollar>\$\s*)?` +
+    String.raw`(?:(?<![\d.,])(?<negAfterDollar>[-\u2212])\s*)?` +
+    String.raw`(?<num>\d[\d,]*(?:\.\d+)?|\.\d+)` +
+    String.raw`\s*(?<magnitude>thousand|million|billion|[kmb])?(?![a-z])` +
+    String.raw`\s*(?<percent>%|percent\b)?`,
+    'gi'
+  );
+
   const tokens: NumericToken[] = [];
   for (const match of text.matchAll(pattern)) {
-    const [raw, , digits, fraction, magnitude, percent] = match;
-    const plain = digits.replace(/,/g, '');
+    const groups = match.groups ?? {};
+    const plain = (groups.num ?? '').replace(/,/g, '');
     const base = Number(plain);
     if (!Number.isFinite(base)) continue;
-    const multiplier = magnitude ? MAGNITUDES[magnitude.toLowerCase()] ?? 1 : 1;
-    const decimals = fraction ? fraction.length : 0;
-    const isPercent = Boolean(percent);
+
+    const multiplier = groups.magnitude
+      ? MAGNITUDES[groups.magnitude.toLowerCase()] ?? 1
+      : 1;
+    const dot = plain.indexOf('.');
+    const decimals = dot === -1 ? 0 : plain.length - dot - 1;
+    const isPercent = Boolean(groups.percent);
+    const negative = Boolean(groups.neg || groups.negAfterDollar);
     // Trailing zeros are read off the integer part only: the "0" ending
     // "3.10" says something about the decimals, which are already counted.
-    const integerDigits = decimals > 0 ? plain.slice(0, plain.indexOf('.')) : plain;
+    const integerDigits = dot === -1 ? plain : plain.slice(0, dot);
+
     tokens.push({
-      raw: raw.trim(),
-      value: base * multiplier,
+      raw: match[0].trim(),
+      value: (negative ? -base : base) * multiplier,
       halfWidth: 0.5 * writtenStep(integerDigits, decimals, multiplier, isPercent),
       isPercent,
     });
@@ -558,6 +584,24 @@ function parseDraft(raw: string): Pick<QuickPlanInterpretation, 'headline' | 'pa
 
 const DEFAULT_MAX_OUTPUT_TOKENS = 2_000;
 
+/**
+ * The hard ceiling on one visitor's wait for this panel, across both attempts.
+ *
+ * Without it the SDK's own default applies — ten minutes per request, and it
+ * retries a timeout — so a provider that stalls rather than refusing would
+ * leave "Reading your result…" on the page and an unauthenticated request open
+ * for as long as it cared to. The whole design is that a reading which cannot
+ * be produced is dropped; a stall has to reach that same path, not hang.
+ */
+const TOTAL_BUDGET_MS = 25_000;
+
+/**
+ * Below this, there is no point starting an attempt: the model cannot write
+ * and return a JSON object in the time left, and trying spends the budget on a
+ * request that will time out anyway.
+ */
+const MIN_ATTEMPT_MS = 4_000;
+
 function maxOutputTokens(): number {
   const configured = getActiveNumericGenerationSetting('calculatorNarrative', 'maxOutputTokens');
   return configured !== null && configured > 0 ? configured : DEFAULT_MAX_OUTPUT_TOKENS;
@@ -586,10 +630,14 @@ function cacheKey(
     result.version,
     result.mode,
     getActiveModel('calculatorNarrative'),
-    // The observation dates, not the fetch time. A reading that has not been
-    // republished should keep serving the reading written about it; one that
-    // has must not be described with last week's yield.
-    marketRates(market).map((rate) => `${rate.label}@${rate.asOf}`),
+    // The rates themselves, not just their dates. A date alone misses a
+    // provider revising a value in place, and misses the 10-year point falling
+    // back from Massive to FRED — same label, possibly the same date, a
+    // different number. Either would serve prose quoting a yield that is no
+    // longer the one in the facts, which is the guarantee this module makes.
+    marketRates(market).map(
+      (rate) => `${rate.label}@${rate.source}@${rate.asOf}@${rate.percent}`
+    ),
     inputs.currentAge,
     inputs.retirementAge,
     inputs.investableAssets,
@@ -628,15 +676,31 @@ export async function interpretRetirementQuickPlan(
   const model = getActiveModel('calculatorNarrative');
   let feedback: string[] | undefined;
 
+  const deadline = Date.now() + TOTAL_BUDGET_MS;
+
   // One retry, and only for a draft that was rejected for its numbers. A
   // second failure means the model is not going to stay inside the block for
   // this plan, and a third call would spend a visitor's wait on the same odds.
   for (let attempt = 0; attempt < 2; attempt += 1) {
+    // Each attempt gets what is left of the whole budget rather than a fixed
+    // slice, so a fast first attempt leaves the retry room to finish and a
+    // slow one cannot start a second request the visitor would wait out.
+    const remaining = deadline - Date.now();
+    if (remaining < MIN_ATTEMPT_MS) {
+      console.warn('Retirement interpretation: out of time before attempt %d.', attempt + 1);
+      return null;
+    }
+
     let raw: string;
     try {
       raw = await askClaude(SYSTEM_PROMPT, buildUserMessage(result, facts, feedback), {
         slot: 'calculatorNarrative',
         maxTokens: maxOutputTokens(),
+        timeoutMs: remaining,
+        // The SDK retries a timeout by default, which would multiply the
+        // ceiling just set. Retrying is also the wrong answer here: this panel
+        // is optional and the page is waiting.
+        maxRetries: 0,
       });
     } catch (error) {
       // The provider is the one thing here that fails for reasons unrelated to
