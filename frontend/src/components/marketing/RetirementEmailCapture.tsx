@@ -178,9 +178,9 @@ export function RetirementEmailCapture({
         <p className="section-kicker">KEEP THIS ANSWER</p>
         <h3>Save this to a free account</h3>
         <p className="qp-email-lead">
-          We will email you a link. Pick a password and this run is waiting as your first
-          decision — the verdict, the figures behind it, and the scenarios, ready to pick up and
-          ask questions about.
+          Pick a password on the next screen and this run is waiting as your first decision —
+          the verdict, the figures behind it, and the scenarios, ready to pick up and ask
+          questions about. We will email you a copy either way.
         </p>
 
       </div>

@@ -306,6 +306,29 @@ describe('RegisterForm', () => {
       expect(mockPushCalculatorResultsEmailCtaOpened).not.toHaveBeenCalled();
     });
 
+    /*
+     * The capture writes the cookie and the stored run together, and only one
+     * of them can be refused. When it is the cookie, the run still paints from
+     * session storage — so the funnel that measures this route must not lose
+     * exactly the visitors whose handover half-failed.
+     */
+    it('reports the page entry when the cookie was refused but the run survived', async () => {
+      searchParams = new URLSearchParams(`source=${RETIREMENT_SIGNUP_SOURCE}&entry=results_page`);
+      storeRetirementSignupContext(RETIREMENT_SCENARIO, {
+        email: 'reader@example.com',
+        sourceToken: 'b'.repeat(48),
+      });
+
+      render(<RegisterForm variant="trial" />);
+      await screen.findByLabelText('Email address');
+
+      expect(mockPushCalculatorResultsPageCtaOpened)
+        .toHaveBeenCalledWith('retirement_calculator');
+      // Once, however many effects looked.
+      expect(mockPushCalculatorResultsPageCtaOpened).toHaveBeenCalledTimes(1);
+      expect(mockPushCalculatorResultsEmailCtaOpened).not.toHaveBeenCalled();
+    });
+
     /* The same landing without the marker is still the emailed funnel. */
     it('still attributes an emailed token to the email entry', async () => {
       const token = 'd'.repeat(48);

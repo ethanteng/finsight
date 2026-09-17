@@ -186,6 +186,13 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
 
   const [retirementContext, setRetirementContext] = useState<RetirementSignupContext | null>(null);
   const [coastFireContext, setCoastFireContext] = useState<CoastFireSignupContext | null>(null);
+  /*
+   * The page-entry event reports one thing: a run carried straight from the
+   * calculator was restored here. It can be reached two ways — the cookie
+   * exchange, or the stored context alone when the cookie was refused — so it
+   * is guarded rather than left to whichever effect runs.
+   */
+  const pageEntryReported = useRef(false);
   const trialViewedRef = useRef(false);
   const trialStartedRef = useRef(false);
   const router = useRouter();
@@ -295,6 +302,25 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
    * them apart matters because the emailed one is a GA4 key event counting
    * email CTA opens, and this path crosses no inbox at all.
    */
+  /*
+   * Reported once per landing, whichever route restored the run.
+   *
+   * A browser that refuses the handover cookie still gets the scenario: the
+   * capture stored it in session storage as well, and the mount effect paints
+   * from there. Only the exchange below is skipped — so without this, exactly
+   * the visitors whose handover half-failed would be missing from the funnel
+   * that measures it.
+   */
+  const reportPageEntry = useCallback(
+    (origin: CalculatorSignupOrigin) => {
+      if (pageEntryReported.current) return;
+      if (searchParams.get(SIGNUP_ENTRY_PARAM) !== SIGNUP_ENTRY_RESULTS_PAGE) return;
+      pageEntryReported.current = true;
+      pushCalculatorResultsPageCtaOpened(origin);
+    },
+    [searchParams],
+  );
+
   const pushSignupEntryOpened = useCallback(
     (origin: CalculatorSignupOrigin) => {
       if (searchParams.get(SIGNUP_ENTRY_PARAM) === SIGNUP_ENTRY_RESULTS_PAGE) {
@@ -319,7 +345,12 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
     // URL: the token resolves to an address and seven figures, and this page
     // loads Google Tag Manager.
     const token = readCoastFireSignupRef();
-    if (!token) return;
+    if (!token) {
+      // No cookie, but the run may still be here: the capture writes both, and
+      // only one of them can be refused. The mount effect has painted it.
+      if (readCoastFireSignupContext()?.sourceToken) reportPageEntry('coast_fire_calculator');
+      return;
+    }
 
     // Prefer the emailed token over any cached same-tab scenario. A visitor who
     // stress-tested one run and later opens a different results email in this
@@ -334,9 +365,7 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
       // context and the cookie together, so the token already matches and no
       // lookup runs. Reporting only that entry leaves the emailed event
       // counting exactly what it counted before.
-      if (searchParams.get(SIGNUP_ENTRY_PARAM) === SIGNUP_ENTRY_RESULTS_PAGE) {
-        pushCalculatorResultsPageCtaOpened('coast_fire_calculator');
-      }
+      reportPageEntry('coast_fire_calculator');
       return;
     }
 
@@ -385,7 +414,7 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
     })();
 
     return () => controller.abort();
-  }, [isTrial, searchParams, pushSignupEntryOpened]);
+  }, [isTrial, searchParams, pushSignupEntryOpened, reportPageEntry]);
 
   /*
    * The emailed retirement link. Same shape as the Coast FIRE exchange above:
@@ -395,7 +424,12 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
   useEffect(() => {
     if (!isTrial || !hasRetirementSignupSource(searchParams)) return;
     const token = readRetirementSignupRef();
-    if (!token) return;
+    if (!token) {
+      // No cookie, but the run may still be here: the capture writes both, and
+      // only one of them can be refused. The mount effect has painted it.
+      if (readRetirementSignupContext()?.sourceToken) reportPageEntry('retirement_calculator');
+      return;
+    }
 
     // A stored plan only short-circuits the lookup when it came from this same
     // link. Opening a second results email in the same tab has to show that
@@ -410,9 +444,7 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
       // context and the cookie together, so the token already matches and no
       // lookup runs. Reporting only that entry leaves the emailed event
       // counting exactly what it counted before.
-      if (searchParams.get(SIGNUP_ENTRY_PARAM) === SIGNUP_ENTRY_RESULTS_PAGE) {
-        pushCalculatorResultsPageCtaOpened('retirement_calculator');
-      }
+      reportPageEntry('retirement_calculator');
       return;
     }
 
@@ -444,7 +476,7 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
     })();
 
     return () => controller.abort();
-  }, [isTrial, searchParams, pushSignupEntryOpened]);
+  }, [isTrial, searchParams, pushSignupEntryOpened, reportPageEntry]);
 
   /*
    * The prefilled address, when the typed one has moved away from it.
