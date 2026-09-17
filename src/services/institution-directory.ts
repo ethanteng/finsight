@@ -271,7 +271,12 @@ export async function cachedBrokerages(
     return brokerageCache.brokerages;
   }
   const brokerages = await fetchBrokerages();
-  brokerageCache = { fetchedAt: now, brokerages };
+  // Do not cache an empty list: a transient provider blip would blank every
+  // investment search row for the full TTL. Non-empty tables are stable enough
+  // that the ordinary TTL is fine.
+  if (brokerages.length > 0) {
+    brokerageCache = { fetchedAt: now, brokerages };
+  }
   return brokerages;
 }
 
