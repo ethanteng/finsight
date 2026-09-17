@@ -412,24 +412,31 @@ describe('interpretCoastFire', () => {
     expect(model.ask).toHaveBeenCalledTimes(2);
   });
 
-  it('retries once, naming the figure it would not accept', async () => {
-    model.ask
-      .mockResolvedValueOnce(DRAFT('That is $4,167 a month.'))
-      .mockResolvedValueOnce(DRAFT('Your Coast FIRE number is $369,128.'));
+  /*
+   * A figure the formula never produced no longer withholds the panel. These
+   * pages are free and unauthenticated, and the product call is that a visitor
+   * seeing no reading is worse than one that may misquote a number. The check
+   * still runs — it writes a warning naming the figure, so the rate stays
+   * visible — and the prompt is now the only thing asking for accuracy.
+   */
+  it('ships a figure it could not verify, and logs it', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      model.ask.mockResolvedValue(DRAFT('That is $4,167 a month.'));
 
-    const interpretation = await interpretCoastFire(result());
-    expect(interpretation?.paragraphs[0]).toContain('$369,128');
+      const interpretation = await interpretCoastFire(result());
+      expect(interpretation?.paragraphs[0]).toContain('$4,167');
 
-    const retryPrompt = String(model.ask.mock.calls[1][1]);
-    expect(retryPrompt).toContain('$4,167');
-    expect(retryPrompt).toContain('Do not compute anything.');
-  });
+      // Shown on the first attempt: there is nothing a retry would improve on
+      // once the draft is going out either way.
+      expect(model.ask).toHaveBeenCalledTimes(1);
 
-  it('gives up rather than shipping a figure it could not check', async () => {
-    model.ask.mockResolvedValue(DRAFT('That is $4,167 a month.'));
-
-    expect(await interpretCoastFire(result())).toBeNull();
-    expect(model.ask).toHaveBeenCalledTimes(2);
+      const logged = warn.mock.calls.map((call) => call.join(' ')).join('\n');
+      expect(logged).toContain('shipped with unverified figures');
+      expect(logged).toContain('$4,167');
+    } finally {
+      warn.mockRestore();
+    }
   });
 
   it('returns null when the provider fails, without retrying it', async () => {

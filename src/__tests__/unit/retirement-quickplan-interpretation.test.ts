@@ -371,19 +371,25 @@ describe('groundInterpretation', () => {
     expect(year.ungrounded).toContain('2008');
   });
 
-  /* And the retry has to say what to do about them, not just name them. */
-  it('tells a rejected draft which mistake it made', async () => {
-    model.ask
-      .mockResolvedValueOnce(DRAFT('That leaves 13% of them running short.'))
-      .mockResolvedValueOnce(DRAFT('Your money lasted in 87.3% of tested retirements.'));
+  /*
+   * Both still read as ungrounded, and both now reach the page anyway. What
+   * the verdict buys is the warning: the token is named in the log, which is
+   * the only remaining signal that a reading quoted something no run produced.
+   */
+  it('names the offending figure in the log rather than withholding the panel', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      model.ask.mockResolvedValue(DRAFT('That leaves 13% of them running short.'));
 
-    await interpretRetirementQuickPlan(planResult());
+      const shipped = await interpretRetirementQuickPlan(planResult());
+      expect(shipped?.headline).toContain('13%');
 
-    const retry = String(model.ask.mock.calls[1][1]);
-    expect(retry).toContain('13%');
-    expect(retry).toContain('a remainder, a complement, a difference');
-    expect(retry).toContain('Use the percentage the list gives');
-    expect(retry).toContain('"seven years" is read as 7');
+      const logged = warn.mock.calls.map((call) => call.join(' ')).join('\n');
+      expect(logged).toContain('shipped with unverified figures');
+      expect(logged).toContain('13%');
+    } finally {
+      warn.mockRestore();
+    }
   });
 
   /*
@@ -669,25 +675,26 @@ describe('interpretRetirementQuickPlan', () => {
     expect(model.ask).toHaveBeenCalledTimes(1);
   });
 
-  it('retries once, naming the figures it would not accept', async () => {
-    model.ask
-      .mockResolvedValueOnce(DRAFT('You can spend $250,000 a year.'))
-      .mockResolvedValueOnce(DRAFT('Your money lasted in 87.3% of tested retirements.'));
+  /*
+   * The figures no longer decide whether the panel is shown. See the matching
+   * case in the Coast FIRE suite for why; the behaviour is shared, so both
+   * pages changed together.
+   */
+  it('ships a figure it could not verify, and logs it', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      model.ask.mockResolvedValue(DRAFT('You can spend $250,000 a year.'));
 
-    const result = await interpretRetirementQuickPlan(planResult());
-    expect(result?.headline).toContain('87.3%');
-    expect(model.ask).toHaveBeenCalledTimes(2);
+      const result = await interpretRetirementQuickPlan(planResult());
+      expect(result?.headline).toContain('$250,000');
+      expect(model.ask).toHaveBeenCalledTimes(1);
 
-    const retryMessage = String(model.ask.mock.calls[1][1]);
-    expect(retryMessage).toContain('$250,000');
-    expect(retryMessage).toContain('rejected');
-  });
-
-  it('gives up rather than shipping a figure it could not check', async () => {
-    model.ask.mockResolvedValue(DRAFT('You can spend $250,000 a year.'));
-
-    expect(await interpretRetirementQuickPlan(planResult())).toBeNull();
-    expect(model.ask).toHaveBeenCalledTimes(2);
+      const logged = warn.mock.calls.map((call) => call.join(' ')).join('\n');
+      expect(logged).toContain('shipped with unverified figures');
+      expect(logged).toContain('$250,000');
+    } finally {
+      warn.mockRestore();
+    }
   });
 
   it('returns null when the provider fails, without retrying it', async () => {
@@ -801,11 +808,11 @@ describe('interpretRetirementQuickPlan', () => {
   });
 
   it('does not start a retry it has no time to finish', async () => {
-    // A first attempt that eats the budget and comes back ungrounded: the
+    // A first attempt that eats the budget and comes back unreadable: the
     // retry is skipped rather than started and waited out.
     model.ask.mockImplementationOnce(async () => {
       jest.advanceTimersByTime(24_000);
-      return DRAFT('You can spend $250,000 a year.');
+      return 'I am afraid I cannot do that.';
     });
 
     jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate'] });

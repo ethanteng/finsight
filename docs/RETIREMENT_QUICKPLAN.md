@@ -191,6 +191,11 @@ array — so a fact the model is shown is exactly a fact it may repeat, and ther
 is no second list to drift.
 
 `groundInterpretation` then checks every number in the draft against that list.
+**The check reports; it does not gate.** A draft that quotes a figure the
+engine never produced is logged and shown anyway — see "Why nothing is
+withheld" below. What follows describes what the check *reads*, which is what
+decides whether a warning is written, not whether a visitor sees a paragraph.
+
 The tolerance scales to the precision written: `$3.3M` is any value within
 $50,000 of 3,300,000, while `$3,326,192` is within half a dollar. Trailing
 zeros count as a claim about precision too (`$140,000` is rounded to ten
@@ -208,22 +213,33 @@ en dash is never a sign.
 Everything the prompt shows the model is something it will quote, so the digits
 inside those strings are licensed too: the asset-mix weights, the year delta in
 a variant's "2 more years of work", the `10%` of "Spend 10% less", and the
-`30-year` and as-of date in a published rate's label. Without that the panel is
-rejected for restating the fact block — on exactly the plans where the model
-did what it was told.
+`30-year` and as-of date in a published rate's label. Without that the log fills with
+warnings about the model restating the fact block — on exactly the plans where
+it did what it was told.
 
-A draft with an ungrounded figure is retried once, with the offending tokens
-named. A response that is not the object asked for at all gets the same one
-more chance, told what was wrong with the format rather than handed figures it
-never wrote — inside the same two-attempt ceiling, not on top of it. A second
-failure returns null, the route answers 204, and the page renders nothing — **the deterministic result is complete without this panel, so
-the failure mode is a missing paragraph rather than a wrong one.** The
-give-up is reported to Sentry, because the page gives no other sign it happened.
+### Why nothing is withheld
 
-One gap worth knowing: the check is by value, not by fact, so a draft can
-attach a true figure to the wrong label. Every number that reaches the page is
-one this run produced; that it is the *right* one for the sentence around it is
-what the prompt and the fact labels are for.
+A draft used to be retried once with the offending tokens named and then
+dropped if it still quoted a figure the engine had not produced. It no longer
+is. Both calculator pages are free and unauthenticated, and the product call
+was that a visitor seeing no reading at all is the worse outcome — so the draft
+is shown and the mismatch is written to the log and to Sentry as
+`shipped with unverified figures`, naming the tokens.
+
+**What this costs.** The prompt is now the only thing asking the model to stay
+inside the fact block. Nothing downstream stops a reading that states a figure
+no run produced — an invented probability, a calendar year, a complement it
+worked out — from reaching a public page under our own branding. The rate is
+visible in the logs and nowhere else.
+
+**What still returns null**: a provider error, a stall past the budget, and a
+response that never parses as the object asked for. Only the last of those is
+retried, once, inside the same two-attempt ceiling — there is nothing to show
+without it. A null returns 204 and the page renders nothing.
+
+One gap worth knowing about the check itself: it is by value, not by fact, so a
+draft can attach a true figure to the wrong label. That was true when it gated
+too.
 
 Two figures are deliberately withheld. A blank portfolio or a blank spending
 level is simulated against a notional figure so the engine has dollars to move;

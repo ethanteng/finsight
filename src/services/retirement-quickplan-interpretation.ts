@@ -20,10 +20,10 @@
  *     prompt is a handful of published rates from named series
  *     (`calculator-market-conditions`). Nothing third-party writes prose into
  *     it, so there is nothing to fence.
- *  3. **Every figure is checked.** A draft containing any number the engine did
- *     not compute is rejected, retried once, and then dropped: the page’s
- *     deterministic result is already complete without this, so the failure
- *     mode is a missing paragraph rather than a wrong one.
+ *  3. **Every figure is checked, and the check only reports.** A draft
+ *     containing a number the engine did not compute is logged and shown. It
+ *     used to be dropped; on a free, unauthenticated page an empty panel was
+ *     judged the worse outcome, so the prompt now carries this alone.
  *
  * What this file holds is the part specific to a quick plan — its figures, its
  * prompt, and its cache key. The grounding, the retry budget and the model call
@@ -40,7 +40,7 @@ import {
   moneyFact,
   percentFact,
   plainFact,
-  runGroundedInterpretation,
+  runCalculatorInterpretation,
   type CalculatorFact,
   type InterpretationDraft,
 } from './calculator-interpretation';
@@ -261,8 +261,8 @@ A visitor has entered a handful of numbers. A deterministic engine has already r
 
 # Non-negotiable rules
 
-1. Every number you write must come from the supplied figures. State them as given or rounded more coarsely; never add, subtract, divide, average or otherwise derive a new one. Output containing any other number is rejected and discarded.
-2. Write small counts as words ("two levers", "a third of"). A quantity is checked the same way whether you spell it or use digits, so "seven years" and "7 years" both pass when seven is a figure from the list, and both fail when it is not. Spelling a number does not get it past the check.
+1. Every number you write must come from the supplied figures. State them as given or rounded more coarsely; never add, subtract, divide, average or otherwise derive a new one. Nothing downstream checks this before the visitor reads it: a number you invent here is a number they are shown.
+2. Write small counts as words ("two levers", "a third of"). Rule 1 applies to a quantity however it is written: "seven years" and "7 years" are the same claim, and spelling one out does not make it a figure you may invent.
 3. Describe, do not prescribe. Say what the tested histories did and what this plan's own numbers imply. Never tell the visitor what to do, what to buy or sell, when to retire, or to consult anyone.
 4. Never claim to know anything the list does not contain — their actual holdings, taxes, fees, account types, health, housing, or any income not listed. The asset mix is a preset the visitor picked from three, not their portfolio.
 5. A survival share is a count of historical stretches, never a probability of their future. Write "in 87% of the retirements we could test", not "you have an 87% chance".
@@ -376,11 +376,10 @@ function cacheKey(
 /**
  * Write the reading of one quick plan.
  *
- * Returns null when no grounded draft could be produced, which the route
- * serves as an empty body and the page renders as nothing at all. The
- * deterministic result is complete without this panel, so dropping it costs a
- * paragraph; shipping an ungrounded one would put an invented figure under our
- * own branding on the page that argues our numbers are real.
+ * Returns null only when the model returned nothing usable, which the route
+ * serves as an empty body and the page renders as nothing at all. A draft
+ * whose figures do not match the engine's is no longer one of those cases: it
+ * is shown, and the mismatch goes to the log instead.
  */
 export async function interpretRetirementQuickPlan(
   result: RetirementQuickPlanResult
@@ -396,7 +395,7 @@ export async function interpretRetirementQuickPlan(
   if (hit) return { ...hit, cached: true };
 
   const facts = buildPlanFacts(result, market);
-  const written = await runGroundedInterpretation({
+  const written = await runCalculatorInterpretation({
     label: 'Retirement',
     systemPrompt: SYSTEM_PROMPT,
     userMessage: buildUserMessage(result, facts),

@@ -2,10 +2,10 @@
  * The plain-language reading of a public Coast FIRE result.
  *
  * Same division as `/retirement-calculator`: the formula produces every
- * number, the model is only allowed to say what those numbers mean, and a
- * draft stating any figure the formula did not produce is rejected and
- * dropped. `calculator-interpretation` holds that machinery; this file holds
- * what is specific to a Coast FIRE run.
+ * number and the model is only allowed to say what those numbers mean. Asking
+ * is now all that enforces it — the figures are checked and the mismatches
+ * logged, but a reading is shown either way. `calculator-interpretation` holds
+ * that machinery; this file holds what is specific to a Coast FIRE run.
  *
  * Two things make this reading harder to write than the quick plan's, and the
  * prompt below is shaped around both:
@@ -31,7 +31,7 @@ import {
   percentFact,
   plainFact,
   rateFact,
-  runGroundedInterpretation,
+  runCalculatorInterpretation,
   signedMoneyFact,
   type CalculatorFact,
 } from './calculator-interpretation';
@@ -190,8 +190,8 @@ A visitor has entered seven numbers. A deterministic formula has already produce
 
 # Non-negotiable rules
 
-1. Every number you write must come from the supplied figures. State them as given or rounded more coarsely; never add, subtract, divide, average or otherwise derive a new one. Output containing any other number is rejected and discarded.
-2. Write small counts as words ("two levers", "a third of"). A quantity is checked the same way whether you spell it or use digits, so "seven years" and "7 years" both pass when seven is a figure from the list, and both fail when it is not. Spelling a number does not get it past the check.
+1. Every number you write must come from the supplied figures. State them as given or rounded more coarsely; never add, subtract, divide, average or otherwise derive a new one. Nothing downstream checks this before the visitor reads it: a number you invent here is a number they are shown.
+2. Write small counts as words ("two levers", "a third of"). Rule 1 applies to a quantity however it is written: "seven years" and "7 years" are the same claim, and spelling one out does not make it a figure you may invent.
 3. Describe, do not prescribe. This is the rule that matters most here: reaching the number does not mean anyone should stop contributing, change jobs, take a pay cut, or spend more, and falling short does not mean anyone should save harder. Say what the figures show. Never tell the visitor what to do, what to buy or sell, when to retire, or to consult anyone.
 4. This is one projection at one constant rate, not a simulation and not a forecast. There is no probability here. Never write "chance", "likely", "should be fine", "on track to", or any phrasing that treats the result as an odds. Write "this projection", "at the return you entered", "on these assumptions".
 5. The return and the withdrawal rate are assumptions the visitor typed, not our estimates and not market predictions. Say so when the result leans on them, which it always does — a point either way compounds for the whole run, and the figures include what the answer becomes at a point above and below.
@@ -257,11 +257,10 @@ function cacheKey(result: CoastFireResult, market: CalculatorMarketConditions): 
 /**
  * Write the reading of one Coast FIRE result.
  *
- * Returns null when no grounded draft could be produced, which the route
- * serves as an empty body and the page renders as nothing at all. The result
- * panel is complete without this, so dropping it costs a paragraph; shipping
- * an ungrounded one would put an invented figure under our own branding on the
- * page that argues our numbers are real.
+ * Returns null only when the model returned nothing usable, which the route
+ * serves as an empty body and the page renders as nothing at all. A draft
+ * whose figures do not match the formula's is no longer one of those cases:
+ * it is shown, and the mismatch goes to the log instead.
  */
 export async function interpretCoastFire(
   result: CoastFireResult
@@ -277,7 +276,7 @@ export async function interpretCoastFire(
   if (hit) return { ...hit, cached: true };
 
   const facts = buildCoastFireFacts(result, market);
-  const written = await runGroundedInterpretation({
+  const written = await runCalculatorInterpretation({
     label: 'Coast FIRE',
     systemPrompt: SYSTEM_PROMPT,
     userMessage: buildUserMessage(result, facts),

@@ -451,13 +451,16 @@ export interface InterpretationDraft {
 /**
  * Check every number in the draft against the figures the engine computed.
  *
+ * This reports; it does not gate. Its verdict is logged and the reading is
+ * shown either way — see `runCalculatorInterpretation` for why. Read a warning
+ * from it as "this reading quoted a figure no run produced", not as "this
+ * reading was withheld".
+ *
  * Percentage tokens are checked only against percentage facts, so a rate
  * cannot be satisfied by an unrelated dollar amount that shares its digits.
- * Within each kind the check is by value rather than by fact, which does leave
- * one gap worth naming: a draft can attach a true figure to the wrong label —
- * quoting the median portfolio as the first-year draw, say. Every number that
- * reaches the page is one this run produced; that it is the *right* one for
- * the sentence around it is what the prompt and the fact labels are for.
+ * Within each kind the check is by value rather than by fact, so a draft that
+ * attaches a true figure to the wrong label — quoting the median portfolio as
+ * the first-year draw, say — reads as grounded here.
  */
 export function groundDraft(draft: InterpretationDraft, facts: CalculatorFact[]): GroundingResult {
   const plain: number[] = [];
@@ -521,33 +524,16 @@ export function parseDraft(raw: string): InterpretationDraft | null {
 }
 
 /**
- * Why a draft was sent back, when one was.
+ * Why a draft was sent back — and there is only one reason left.
  *
- * Two different mistakes need two different corrections: naming the offending
- * tokens teaches nothing to a model that never produced the object in the
- * first place.
+ * A response that is not the object asked for cannot be shown at all, so there
+ * is nothing to lose by asking again. A draft whose figures do not match the
+ * fact block used to be sent back the same way; it no longer is, and the
+ * second kind went with it. See `runCalculatorInterpretation`.
  */
-type DraftFeedback =
-  | { kind: 'ungrounded'; tokens: string[] }
-  | { kind: 'unparseable' };
+type DraftFeedback = { kind: 'unparseable' };
 
 function feedbackLines(feedback?: DraftFeedback): string[] {
-  if (feedback?.kind === 'ungrounded' && feedback.tokens.length > 0) {
-    return [
-      '',
-      'Your previous draft was rejected. These appear in it but are not figures from the list above:',
-      ...feedback.tokens.map((token) => `- ${token}`),
-      '',
-      'Rewrite it using only the figures listed. Do not compute anything. Each of these is one of a',
-      'few mistakes, so check which you made:',
-      '- A figure you worked out from the listed ones — a remainder, a complement, a difference, a',
-      '  monthly figure from an annual one. Drop the sentence or use a figure from the list.',
-      '- A share turned into a ratio of your own ("9 in 10"). Use the percentage the list gives.',
-      '- A calendar year or a span of them. The list does not contain years; do not name any.',
-      '- A figure rounded further than the list supports. Use it as given, or round more gently.',
-      'Spelling a number out does not get it past this check: "seven years" is read as 7.',
-    ];
-  }
   if (feedback?.kind === 'unparseable') {
     return [
       '',
@@ -566,8 +552,8 @@ const DEFAULT_MAX_OUTPUT_TOKENS = 2_000;
  * Without it the SDK's own default applies — ten minutes per request, and it
  * retries a timeout — so a provider that stalls rather than refusing would
  * leave "Reading your result…" on the page and an unauthenticated request open
- * for as long as it cared to. The whole design is that a reading which cannot
- * be produced is dropped; a stall has to reach that same path, not hang.
+ * for as long as it cared to. A reading the model never returns is dropped; a
+ * stall has to reach that same path, not hang.
  */
 const TOTAL_BUDGET_MS = 25_000;
 
@@ -584,13 +570,23 @@ function maxOutputTokens(): number {
 }
 
 /**
- * Write a reading, or return null having tried twice.
+ * Write a reading, or return null if the model did not return one.
  *
  * The caller supplies what is specific to its calculator — the prompt, the
- * facts, and the block describing this particular run — and gets back either a
- * draft in which every number is one of those facts, or nothing.
+ * facts, and the block describing this particular run — and gets back whatever
+ * the model wrote, or nothing if it wrote nothing usable.
+ *
+ * The figures are checked against the fact block and the mismatches are
+ * logged, but they no longer decide whether the reading is shown. That is a
+ * deliberate product call: these are free, unauthenticated pages, and a
+ * visitor seeing no reading at all was judged worse than one that may carry a
+ * figure the engine did not produce. The prompt still asks for the figures
+ * from the list and nothing else, and it is the only thing asking.
+ *
+ * `groundDraft` stays wired in so the rate is visible in the logs rather than
+ * unknown. Nothing reads its verdict to gate on.
  */
-export async function runGroundedInterpretation(params: {
+export async function runCalculatorInterpretation(params: {
   /** Names this calculator in warnings and in Sentry. */
   label: string;
   systemPrompt: string;
@@ -603,9 +599,9 @@ export async function runGroundedInterpretation(params: {
 
   const deadline = Date.now() + TOTAL_BUDGET_MS;
 
-  // One retry, and only for a draft that was rejected for its numbers. A
-  // second failure means the model is not going to stay inside the block for
-  // this run, and a third call would spend a visitor's wait on the same odds.
+  // One retry, and only for a response that could not be read at all. An
+  // unparseable response leaves nothing to show, so asking again costs the
+  // visitor a wait for something rather than a wait for nothing.
   for (let attempt = 0; attempt < 2; attempt += 1) {
     // Each attempt gets what is left of the whole budget rather than a fixed
     // slice, so a fast first attempt leaves the retry room to finish and a
@@ -642,28 +638,30 @@ export async function runGroundedInterpretation(params: {
 
     const draft = parseDraft(raw);
     if (!draft) {
-      // Sent back for the same reason an ungrounded draft is: one more chance,
-      // inside the same budget and the same two-attempt ceiling. A response
-      // that is not the object asked for is usually a formatting slip, and the
-      // note above names that rather than naming figures.
+      // One more chance, inside the same budget and the same two-attempt
+      // ceiling. A response that is not the object asked for is usually a
+      // formatting slip, and there is nothing to show without it.
       console.warn('%s interpretation: response did not parse as the expected object.', params.label);
       feedback = { kind: 'unparseable' };
       continue;
     }
 
+    // Advisory only. Logged so that a model drifting off the fact block for a
+    // whole class of runs shows up as a rate rather than as nothing at all —
+    // the page itself now gives no sign either way.
     const grounding = groundDraft(draft, params.facts);
-    if (grounding.grounded) return { draft, model };
+    if (!grounding.grounded) {
+      const message =
+        `${params.label} interpretation: shipped with unverified figures ` +
+        `(tokens=${grounding.ungrounded.join(', ')}) (model=${model})`;
+      console.warn(message);
+      Sentry.captureMessage(message, 'warning');
+    }
 
-    feedback = { kind: 'ungrounded', tokens: grounding.ungrounded };
+    return { draft, model };
   }
 
-  // Worth a message rather than silence: a model that cannot stay inside the
-  // fact block for a whole class of runs shows up here as a rate, and the page
-  // gives no other sign that anything was dropped.
-  const reason = feedback?.kind === 'unparseable'
-    ? 'unparseable after retry'
-    : `ungrounded after retry (tokens=${feedback?.tokens.join(', ')})`;
-  const message = `${params.label} interpretation: ${reason} (model=${model})`;
+  const message = `${params.label} interpretation: unparseable after retry (model=${model})`;
   console.warn(message);
   Sentry.captureMessage(message, 'warning');
   return null;
