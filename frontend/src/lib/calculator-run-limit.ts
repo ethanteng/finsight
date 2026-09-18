@@ -6,7 +6,8 @@
  * question it asks: one for the plan as it stands, and two for the obvious
  * what-ifs. Past that the page is being used as a free modelling tool rather
  * than as an argument for the product, and the argument is the reason it
- * exists.
+ * exists. Three is the default rather than a finding, which is why it is
+ * settable — see `CALCULATOR_RUN_LIMIT`.
  *
  * This is a nudge and is written as one. The count lives in session storage,
  * so it survives a reload and goes when the tab does; a visitor who wants
@@ -15,8 +16,35 @@
  * browser, and the endpoints behind the page have their own rate limits.
  */
 
-/** Runs allowed before the button locks. The fourth press is the one refused. */
-export const CALCULATOR_RUN_LIMIT = 3;
+const DEFAULT_CALCULATOR_RUN_LIMIT = 3;
+
+/**
+ * Runs allowed before the button locks. The next press is the one refused.
+ *
+ * Set with `NEXT_PUBLIC_CALCULATOR_RUN_LIMIT`. **It is read at build time, not
+ * at run time**: Next.js replaces the reference below with a literal while
+ * compiling, so changing the variable takes a rebuild and redeploy of the
+ * frontend, not a restart. Nothing reads it in the browser to notice a change.
+ *
+ * Anything that is not a positive integer — unset, empty, `0`, `-1`, `two`,
+ * `2.5` — falls back to the default, on the same principle as
+ * `positiveIntFromEnv` on the backend. There is deliberately no value meaning
+ * "no limit": switching the nudge off is a product decision that should be
+ * visible in the code rather than inferred from an unset variable.
+ *
+ * `Number` rather than `parseInt`, which truncates: `parseInt('2.5')` is 2,
+ * and an integer check downstream of it passes something nobody set.
+ *
+ * The reference has to be spelled out in full. Next.js inlines these by
+ * matching the literal text `process.env.NEXT_PUBLIC_...`, so reading it
+ * through a variable name would compile to `undefined` in the browser and
+ * silently give every visitor the default.
+ */
+export const CALCULATOR_RUN_LIMIT = ((): number => {
+  const raw = process.env.NEXT_PUBLIC_CALCULATOR_RUN_LIMIT?.trim();
+  const parsed = raw ? Number(raw) : Number.NaN;
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : DEFAULT_CALCULATOR_RUN_LIMIT;
+})();
 
 /**
  * Read a stored count, tolerating everything a browser can do to it.
@@ -44,7 +72,7 @@ export function recordRun(storageKey: string, current: number): number {
   try {
     window.sessionStorage.setItem(storageKey, String(next));
   } catch {
-    // A visitor who blocks storage simply keeps their three runs per page load.
+    // A visitor who blocks storage simply keeps their allowance per page load.
   }
   return next;
 }

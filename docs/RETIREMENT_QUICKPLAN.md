@@ -118,8 +118,20 @@ product.
 
 `lib/calculator-run-limit.ts` holds it, shared with the Coast FIRE page. The
 count lives in session storage, so it survives a reload and goes when the tab
-does: a new tab gets three more, and someone returning tomorrow is not still
-locked out. **It is a nudge, not a control.** The calculation itself runs in
+does: a new tab gets a fresh allowance, and someone returning tomorrow is not
+still locked out.
+
+**Three is the default, not a finding.** `NEXT_PUBLIC_CALCULATOR_RUN_LIMIT`
+sets it, and the copy under the button is built from whatever it says.
+Anything that is not a positive integer — unset, empty, `0`, `-1`, `2.5` —
+falls back to three, so a typo loosens nothing and tightens nothing.
+
+Two things about that variable are worth knowing before reaching for it.
+**It is read at build time**, the way every `NEXT_PUBLIC_` value is: Next.js
+compiles the reference into a literal, so changing it needs a frontend rebuild
+and redeploy, not a restart. And **there is no value meaning "no limit"** —
+turning the nudge off is a product decision that belongs in the code, where it
+is visible, rather than inferred from an unset variable. **It is a nudge, not a control.** The calculation itself runs in
 the browser, the count is client-side, and blocked storage reads as zero — the
 direction something persuasive should fail. The endpoints behind the page keep
 their own rate limits, which are the actual limits.

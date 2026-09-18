@@ -18,6 +18,7 @@ import {
   COAST_FIRE_SIGNUP_HREF,
 } from "@/lib/coast-fire-signup-context";
 import { leaveForSignup } from "@/lib/calculator-handover";
+import { CALCULATOR_RUN_LIMIT } from "@/lib/calculator-run-limit";
 
 jest.mock("@/lib/dataLayer", () => ({
   pushCoastFireCalculated: jest.fn(),
@@ -517,12 +518,13 @@ describe("Coast FIRE calculator page", () => {
       const { container } = render(<CoastFireCalculator />);
 
       fillForm();
-      for (let run = 0; run < 3; run += 1) {
+      for (let run = 0; run < CALCULATOR_RUN_LIMIT; run += 1) {
         fireEvent.submit(container.querySelector("form")!);
       }
 
       expect(screen.getByRole("button", { name: /calculate my coast fire number/i })).toBeDisabled();
-      expect(screen.getByText(/that is 3 runs/i)).toBeInTheDocument();
+      expect(screen.getByText(new RegExp(`that is ${CALCULATOR_RUN_LIMIT} runs`, "i")))
+        .toBeInTheDocument();
       expect(pushCalculatorRunLimitReached).toHaveBeenCalledTimes(1);
       expect(pushCalculatorRunLimitReached).toHaveBeenCalledWith('coast_fire');
       // The save form is still there: it is what the lock is pointing at.
