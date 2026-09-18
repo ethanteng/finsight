@@ -11,9 +11,9 @@
  *
  * This is a nudge and is written as one. The count lives in session storage,
  * so it survives a reload and goes when the tab does; a visitor who wants
- * another three can open a new tab, and one who returns tomorrow is not still
- * locked out. Nothing here is a security control — the calculation runs in the
- * browser, and the endpoints behind the page have their own rate limits.
+ * another allowance can open a new tab, and one who returns tomorrow is not
+ * still locked out. Nothing here is a security control — the calculation runs
+ * in the browser, and the endpoints behind the page have their own rate limits.
  */
 
 const DEFAULT_CALCULATOR_RUN_LIMIT = 3;
