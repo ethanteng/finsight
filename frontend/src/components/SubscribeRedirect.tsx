@@ -68,6 +68,9 @@ function SubscribeRedirectInner() {
   // remount that races the first fetch) must not mint another session while
   // one is already in flight.
   const inFlightRef = useRef(false);
+  // Footer links can navigate away while the mint is still in flight. Skip the
+  // Stripe replace if this page is no longer mounted.
+  const mountedRef = useRef(true);
 
   const startCheckout = useCallback(async () => {
     if (inFlightRef.current) return;
@@ -98,6 +101,8 @@ function SubscribeRedirectInner() {
         }),
       });
 
+      if (!mountedRef.current) return;
+
       if (!response.ok) {
         const error = await response.json().catch(() => ({}));
         console.error('Failed to create checkout session:', error);
@@ -113,8 +118,10 @@ function SubscribeRedirectInner() {
         return;
       }
 
+      if (!mountedRef.current) return;
       replaceLocation(url);
     } catch (error) {
+      if (!mountedRef.current) return;
       console.error('Error creating checkout session:', error);
       setFailed(true);
     } finally {
@@ -123,9 +130,13 @@ function SubscribeRedirectInner() {
   }, [searchParams]);
 
   useEffect(() => {
+    mountedRef.current = true;
     if (startedRef.current) return;
     startedRef.current = true;
     void startCheckout();
+    return () => {
+      mountedRef.current = false;
+    };
   }, [startCheckout]);
 
   return (

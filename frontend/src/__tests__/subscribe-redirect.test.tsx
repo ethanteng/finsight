@@ -144,6 +144,27 @@ describe('SubscribeRedirect', () => {
     expect(replace).not.toHaveBeenCalled();
   });
 
+  it('does not forward after the visitor has already left the page', async () => {
+    let resolveFetch: (value: unknown) => void = () => undefined;
+    global.fetch = jest.fn().mockReturnValue(
+      new Promise((resolve) => {
+        resolveFetch = resolve;
+      }),
+    );
+
+    const { unmount } = render(<SubscribeRedirect />);
+    await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(1));
+    unmount();
+
+    resolveFetch({
+      ok: true,
+      json: async () => ({ url: 'https://checkout.stripe.com/c/pay/cs_test_gone' }),
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(replace).not.toHaveBeenCalled();
+  });
+
   it('still reaches checkout when the browser refuses storage', async () => {
     const getItem = jest.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
       throw new DOMException('The operation is insecure.', 'SecurityError');
