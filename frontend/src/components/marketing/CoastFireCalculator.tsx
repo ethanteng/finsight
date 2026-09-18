@@ -617,7 +617,7 @@ export function CoastFireCalculator({ children }: { children?: ReactNode }) {
       setError(null);
       setSubmitted(signupContext(nextResult));
       // Only a run that produced a number counts. A refused form is not one of
-      // this visitor's three.
+      // this visitor's allowance.
       setRunCount(recordRun(COAST_FIRE_RUN_COUNT_KEY, runCount));
       pushCoastFireCalculated(
         nextResult.hasReachedCoastFire ? "reached" : "not_yet",

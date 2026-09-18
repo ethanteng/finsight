@@ -637,9 +637,9 @@ export function RetirementQuickPlan({
       setSubmittedPlan(plan);
       /*
        * Only a run that produced a verdict counts. A validation refusal or an
-       * unreachable backend is not one of this visitor's three — and neither
+       * unreachable backend is not one of this visitor's allowance — and neither
        * is a rates-only answer, which has no capture form and is deliberately
-       * not handed to signup. Counting those would let three of them lock the
+       * not handed to signup. Counting those would let enough of them lock the
        * page while telling the visitor to save a result they cannot save, with
        * no way left to enter the full plan that would have been savable.
        */
