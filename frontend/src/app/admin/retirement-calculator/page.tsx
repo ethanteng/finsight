@@ -95,19 +95,20 @@ export default function RetirementCalculatorAdminPage() {
   const load = useCallback(async () => {
     const request = ++requestId.current;
     setLoading(true); setError('');
-    setReport(null);
     try {
       const token = localStorage.getItem('auth_token');
       const response = await fetch(`${apiUrl}/admin/retirement-calculator?days=${days}`, {
         headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
       });
       if (response.status === 401 || response.status === 403) {
+        if (request === requestId.current) setReport(null);
         throw new Error('Sign in with an admin account to view calculator runs.');
       }
       if (!response.ok) throw new Error('Calculator runs could not be loaded.');
-      markInternalAnalyticsBrowser();
       const nextReport = await response.json() as Report;
-      if (request === requestId.current) setReport(nextReport);
+      if (request !== requestId.current) return;
+      markInternalAnalyticsBrowser();
+      setReport(nextReport);
     } catch (loadError) {
       if (request !== requestId.current) return;
       setError(loadError instanceof Error ? loadError.message : 'Calculator runs could not be loaded.');
@@ -153,10 +154,12 @@ export default function RetirementCalculatorAdminPage() {
         <RetirementVisitorJourney days={days} refreshKey={refreshKey} />
 
         {error && (
-          <div className="mt-6 rounded-2xl border border-[#b84a3d]/25 bg-[#f8e8e3] p-5 text-sm text-[#8b3027]">
+          <div role="alert" className="mt-6 rounded-2xl border border-[#b84a3d]/25 bg-[#f8e8e3] p-5 text-sm text-[#8b3027]">
             <ShieldAlert className="mr-2 inline" size={17} />{error}
+            {report && <p className="mt-2">Showing the last successful {report.windowDays}-day calculator-health report. These numbers have not been refreshed.</p>}
           </div>
         )}
+        {loading && report && <p role="status" className="mt-5 text-sm leading-6 text-[#66736b]">Updating calculator health… Showing the previous {report.windowDays}-day report until the new report arrives.</p>}
         {loading && !report && (
           <div className="grid min-h-[360px] place-items-center">
             <div className="flex items-center gap-3 text-sm font-bold text-[#486657]">
@@ -172,9 +175,9 @@ export default function RetirementCalculatorAdminPage() {
           </div>
         )}
 
-        {report && <section aria-label="Calculator health" className="mt-6 rounded-2xl border border-[#102319]/10 bg-white p-5 sm:p-6">
+        {report && <section aria-label="Calculator health" aria-busy={loading} className="mt-6 rounded-2xl border border-[#102319]/10 bg-white p-5 sm:p-6">
           <h2 className="text-xl font-semibold">Does the calculator work?</h2>
-          <p className="mt-2 text-sm leading-6 text-[#66736b]">Live · last {report.windowDays} days · submitted runs, not people or sessions. Each submission produces an answer or is rejected. This does not include visitors who leave before submitting.</p>
+          <p className="mt-2 text-sm leading-6 text-[#66736b]">{loading ? 'Updating' : error ? 'Last successful load' : 'Live'} · last {report.windowDays} days · submitted runs, not people or sessions. Each submission produces an answer or is rejected. This does not include visitors who leave before submitting.</p>
           {report.truncated && <p className="mt-3 text-sm text-[#76510f]">Only the most recent {number(report.totals.runs)} runs are included. Narrow the window for a complete picture.</p>}
           <div className="mt-5 grid gap-3 sm:grid-cols-3">
             <Kpi label="Submitted runs" value={number(report.totals.runs)} />

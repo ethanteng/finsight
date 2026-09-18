@@ -7,16 +7,24 @@ Both `/admin/marketing` and `/admin/retirement-calculator` now lead with
 
 - **Calculator paths:** landed on this calculator → got a result → saved results
   or chose to sign up → reached signup → created an account → continued to the app.
+  Expand **Signup form breakdown** under account creation to see reached signup
+  → started form → submitted form → created account for that exact calculator
+  path and device. The compact arrow explicitly covers the whole signup form.
 - **Signup paths:** reached `/getstarted` → started the form → submitted the form
   → created an account → continued to the app. Choose all signup visits, a
   calculator origin, or a specific Save results / email return / calculator CTA route.
 - Each arrow reports the share that continued and the count/share that did not
   reach the next step. The callout chooses the largest loss **by session count**,
-  not the highest percentage. It identifies where to investigate, not why people left.
+  not the highest percentage. It compares individual boundaries, including the
+  expanded form steps, rather than mistaking the combined signup span for an
+  account-creation failure. It identifies where to investigate, not why people left.
 - The compact device table compares end-to-end completion for the same selected path.
 - Calculator health is three live totals: submitted runs, answers, and rejected
   inputs. Repeated runs are not additional visitors. Financial-input distributions,
   performance, email delivery, and account matches remain in collapsed sections.
+  The last successful health report stays visible during refreshes and transient
+  failures, with an updating/stale label and its original `windowDays`. A failed
+  authorization clears it; an older response cannot replace a newer date window.
 
 `visitorJourneys` is an additive field in the existing authenticated marketing API.
 It uses already-loaded, quality-filtered GA4 sessions; no new events, GTM changes,
@@ -37,7 +45,11 @@ Signup arrivals must follow continuation with the matching calculator origin and
 `results_page` or `calculator_cta` entry. Email returns are reported separately;
 they are never divided by emails sent in the current date range. Account and app
 handoff counts also require the form-start and form-submit boundaries, shown in
-detail on the signup paths. Handoff still does not prove app load or email ownership.
+detail on the signup paths and the calculator's `account.breakdown` steps. The
+breakdown retains the calculator's upstream cohort; it is not copied from the
+broader signup-origin report. Its individual losses sum to the compact signup
+span, and the same tracking-coverage gate applies. Handoff still does not prove
+app load or email ownership.
 
 The first-event timestamp model is conservative: out-of-order retries, skipped
 steps, and people returning in another session may not finish a calculator path.

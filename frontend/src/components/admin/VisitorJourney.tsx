@@ -6,6 +6,7 @@ import { ArrowDown, ChevronDown } from 'lucide-react';
 type Step = {
   id: string; label: string; sessions: number;
   continuedRate: number | null; droppedSessions: number | null; dropoffRate: number | null;
+  breakdown?: Step[];
 };
 export type JourneyData = {
   state: 'available' | 'unavailable'; ratesAvailable: boolean;
@@ -41,10 +42,15 @@ export function VisitorJourney({ data, initialPath = 'retirement', retirementOnl
   const journey = data?.rows.find(row => row.id === activePath && row.device === activeDevice);
   const steps = journey?.steps || [];
   const first = steps[0]?.sessions || 0;
-  const biggestDrop = steps.slice(1).reduce<Step | null>((largest, step) =>
-    step.droppedSessions !== null && step.droppedSessions > (largest?.droppedSessions ?? 0) ? step : largest, null);
-  const beforeDrop = biggestDrop ? steps[steps.indexOf(biggestDrop) - 1] : null;
+  // Compare individual boundaries, not the combined signup span against other
+  // single steps. The same nested cohort supplies both overview and breakdown.
+  const diagnosticSteps = steps.flatMap(step => step.breakdown?.length ? step.breakdown.slice(1) : [step]);
+  const biggestDrop = data?.ratesAvailable ? diagnosticSteps.slice(1).reduce<Step | null>((largest, step) =>
+    step.droppedSessions !== null && step.droppedSessions > (largest?.droppedSessions ?? 0) ? step : largest, null) : null;
+  const beforeDrop = biggestDrop ? diagnosticSteps[diagnosticSteps.indexOf(biggestDrop) - 1] : null;
+  const dropInBreakdown = biggestDrop && steps.some(step => step.breakdown?.includes(biggestDrop));
   const isSignup = activePath?.startsWith('signup');
+  const legacySignupSpan = !isSignup && biggestDrop?.id === 'account' && !biggestDrop.breakdown?.length;
   const dateLabel = data ? `${data.period.start} to ${data.period.end}` : '';
 
   return <section aria-labelledby="visitor-journey-heading" className="mt-6 rounded-[24px] border border-[#102319]/10 bg-white p-5 sm:p-7">
@@ -80,7 +86,7 @@ export function VisitorJourney({ data, initialPath = 'retirement', retirementOnl
           {steps.map((step, index) => <li key={step.id}>
             {index > 0 && <div className="flex items-start gap-2 py-3 pl-3 text-xs leading-5 text-[#66736b]">
               <ArrowDown size={15} className="mt-0.5 shrink-0" aria-hidden="true" />
-              {step.dropoffRate !== null ? <p><span className="font-semibold text-[#315d45]">{percent(step.continuedRate)} continued</span><span className="mx-2">·</span><span>{count(step.droppedSessions!)} did not reach this step ({percent(step.dropoffRate)})</span></p>
+              {data.ratesAvailable && step.dropoffRate !== null ? <p><span className="font-semibold text-[#315d45]">{percent(step.continuedRate)} continued</span><span className="mx-2">·</span><span>{count(step.droppedSessions!)} {!isSignup && step.id === 'account' ? 'did not finish signup' : 'did not reach this step'} ({percent(step.dropoffRate)})</span></p>
                 : <p>{data.ratesAvailable ? 'No sessions in the previous step to compare.' : 'Drop-off not yet measurable'}</p>}
             </div>}
             <div className="relative overflow-hidden rounded-xl border border-[#102319]/10 bg-[#f8f7ef] p-4">
@@ -90,14 +96,31 @@ export function VisitorJourney({ data, initialPath = 'retirement', retirementOnl
                 <span className="shrink-0 text-xl font-semibold tabular-nums">{count(step.sessions)}<span className="ml-2 hidden text-xs font-normal text-[#66736b] sm:inline">sessions</span></span>
               </div>
             </div>
+            {!isSignup && step.id === 'account' && <p className="mt-2 px-3 text-xs leading-5 text-[#66736b]">Includes starting and submitting the signup form.</p>}
+            {step.breakdown && <details className="mt-2 rounded-xl border border-[#102319]/10 bg-[#f8f7ef] p-3">
+              <summary className="cursor-pointer text-sm font-semibold">Signup form breakdown</summary>
+              <p className="mt-3 text-xs leading-5 text-[#66736b]">Same calculator path and device. Each loss is measured from the step immediately above.</p>
+              <dl className="mt-3 space-y-3">
+                {step.breakdown.map((part, partIndex) => <div key={part.id} className="border-t border-[#102319]/10 pt-3">
+                  <dt className="text-sm font-semibold">{part.label}</dt>
+                  <dd className="mt-1 text-sm tabular-nums">{count(part.sessions)} {part.sessions === 1 ? 'session' : 'sessions'}</dd>
+                  {partIndex > 0 && <dd className="mt-1 text-xs leading-5 text-[#66736b]">{data.ratesAvailable && part.dropoffRate !== null
+                    ? `${percent(part.continuedRate)} continued · ${count(part.droppedSessions!)} did not reach this step (${percent(part.dropoffRate)})`
+                    : data.ratesAvailable ? 'No sessions in the previous step to compare.' : 'Drop-off not yet measurable'}</dd>}
+                </div>)}
+              </dl>
+            </details>}
           </li>)}
         </ol>
         <aside className="rounded-2xl bg-[#f8f7ef] p-5">
           <h3 className="text-base font-semibold">What to look at first</h3>
           {biggestDrop && beforeDrop ? <>
-            <p className="mt-3 text-sm leading-6">The largest loss of sessions is between <strong>{beforeDrop.label.toLowerCase()}</strong> and <strong>{biggestDrop.label.toLowerCase()}</strong>.</p>
+            {legacySignupSpan
+              ? <p className="mt-3 text-sm leading-6">The largest loss spans the signup form, from reaching signup through account creation. It includes starting and submitting the form.</p>
+              : <p className="mt-3 text-sm leading-6">The largest loss of sessions is between <strong>{beforeDrop.label.toLowerCase()}</strong> and <strong>{biggestDrop.label.toLowerCase()}</strong>.</p>}
             <p className="mt-3 text-3xl font-semibold">{count(biggestDrop.droppedSessions!)} <span className="text-sm font-normal text-[#66736b]">{biggestDrop.droppedSessions === 1 ? 'session' : 'sessions'} · {percent(biggestDrop.dropoffRate)}</span></p>
             <p className="mt-3 text-xs leading-5 text-[#66736b]">This identifies where to investigate, not why people left. Small samples can move sharply.</p>
+            {dropInBreakdown && <p className="mt-3 text-xs leading-5 text-[#315d45]">See “Signup form breakdown” for this step.</p>}
           </> : <p className="mt-3 text-sm leading-6 text-[#66736b]">{!data.ratesAvailable ? 'Wait for verified tracking before judging the largest drop-off.' : first ? 'No step-to-step loss was observed in this path.' : 'There is not enough activity to identify a drop-off.'}</p>}
           <p className="mt-5 border-t border-[#102319]/10 pt-4 text-xs leading-5 text-[#66736b]">“Continued to the app” is the signup handoff, not a confirmed app load. Verification can use an email link, a code, or be skipped.</p>
         </aside>

@@ -15,11 +15,24 @@ export const journeyFixture: JourneyData = {
     const values = counts.map(value => device === 'all' ? value : device === 'mobile' ? Math.ceil(value * .6) : Math.floor(value * .4));
     const labels = id.startsWith('signup') ? ['Reached signup', 'Started the form', 'Submitted the form', 'Created an account', 'Continued to the app']
       : ['Landed on the calculator', 'Got a result', 'Saved results or chose to sign up', 'Reached signup', 'Created an account', 'Continued to the app'];
-    return { id, label, device, steps: values.map((sessions, index) => ({ id: `step-${index}`, label: labels[index], sessions,
+    const ids = id.startsWith('signup') ? ['trial_signup_viewed', 'trial_signup_started', 'trial_signup_submit', 'sign_up', 'trial_signup_completed']
+      : ['landed', 'result', 'continue', 'signup', 'account', 'handoff'];
+    const steps: JourneyData['rows'][number]['steps'] = values.map((sessions, index) => ({ id: ids[index], label: labels[index], sessions,
       continuedRate: index ? sessions / values[index - 1] : null,
       droppedSessions: index ? values[index - 1] - sessions : null,
       dropoffRate: index ? (values[index - 1] - sessions) / values[index - 1] : null,
-    })) };
+    }));
+    if (!id.startsWith('signup')) {
+      const formCounts = [values[3], Math.ceil((values[3] + values[4]) / 2), values[4], values[4]];
+      steps[4].breakdown = formCounts.map((sessions, index) => ({
+        id: ['trial_signup_viewed', 'trial_signup_started', 'trial_signup_submit', 'sign_up'][index],
+        label: ['Reached signup', 'Started the form', 'Submitted the form', 'Created an account'][index], sessions,
+        continuedRate: index && formCounts[index - 1] ? sessions / formCounts[index - 1] : null,
+        droppedSessions: index && formCounts[index - 1] ? formCounts[index - 1] - sessions : null,
+        dropoffRate: index && formCounts[index - 1] ? (formCounts[index - 1] - sessions) / formCounts[index - 1] : null,
+      }));
+    }
+    return { id, label, device, steps };
   })),
 };
 

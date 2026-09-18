@@ -57,6 +57,27 @@ describe('visitor journeys', () => {
     expect(path([row]).steps.slice(-1)[0].sessions).toBe(1);
   });
 
+  it('breaks the compact signup span into the same ordered calculator/device cohort', () => {
+    const reached = { retirement_model_run: 1, retirement_results_emailed: 2, trial_signup_viewed: 4 };
+    const rows = [
+      session('viewed', reached),
+      session('started', { ...reached, trial_signup_started: 5 }),
+      session('submitted', { ...reached, trial_signup_started: 5, trial_signup_submit: 6 }),
+      session('completed', { ...reached, ...signup }),
+      session('email-return', { ...reached, ...signup }, { signupEntry: 'results_email' }),
+      session('desktop', { ...reached, ...signup }, { device: 'desktop' }),
+    ];
+    const account = path(rows).steps[4];
+    expect(account).toMatchObject({ sessions: 2, droppedSessions: 3 });
+    expect(account.breakdown?.map(step => [step.id, step.sessions, step.droppedSessions])).toEqual([
+      ['trial_signup_viewed', 5, null], ['trial_signup_started', 4, 1], ['trial_signup_submit', 3, 1], ['sign_up', 2, 1],
+    ]);
+    expect(account.breakdown?.slice(1).reduce((total, step) => total + step.droppedSessions!, 0)).toBe(account.droppedSessions);
+    expect(path(rows, 'retirement', 'mobile').steps[4].breakdown?.map(step => step.sessions)).toEqual([4, 3, 2, 1]);
+    expect(path(rows, 'retirement', 'desktop').steps[4].breakdown?.map(step => step.sessions)).toEqual([1, 1, 1, 1]);
+    expect(path(rows, 'signup').steps.every(step => step.breakdown === undefined)).toBe(true);
+  });
+
   it('keeps devices separate and landing cohorts exact, including a trailing slash', () => {
     const complete = session('m', { retirement_model_run: 1, retirement_results_emailed: 2, ...signup });
     const desktop = session('d', { retirement_model_run: 1 }, { device: 'desktop' });
@@ -78,9 +99,11 @@ describe('visitor journeys', () => {
   });
 
   it('withholds losses and rates, but retains observed counts when coverage is incomplete', () => {
-    const data = buildVisitorJourneys([session('no-result', {})], { ...options, ratesAvailable: false });
+    const data = buildVisitorJourneys([session('no-form', { retirement_model_run: 1, retirement_results_emailed: 2, trial_signup_viewed: 4 })], { ...options, ratesAvailable: false });
     expect(data.rows[0].steps[0].sessions).toBe(1);
     expect(data.rows.every(row => row.steps.every(step => step.dropoffRate === null && step.droppedSessions === null && step.continuedRate === null))).toBe(true);
+    expect(data.rows[0].steps[4].breakdown?.map(step => step.sessions)).toEqual([1, 0, 0, 0]);
+    expect(data.rows[0].steps[4].breakdown?.every(step => step.dropoffRate === null && step.droppedSessions === null && step.continuedRate === null)).toBe(true);
   });
 
   it('does not fabricate zeroes for unavailable data; zero denominators have no rates', () => {

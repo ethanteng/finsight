@@ -8,6 +8,8 @@ export interface VisitorJourneyStep {
   continuedRate: number | null;
   droppedSessions: number | null;
   dropoffRate: number | null;
+  /** Ordered boundaries inside a compact step, with the preceding step as base. */
+  breakdown?: VisitorJourneyStep[];
 }
 
 export interface VisitorJourney {
@@ -74,14 +76,21 @@ export function buildVisitorJourneys(
         && session.firstEventAt.trial_signup_viewed !== undefined
         && session.firstEventAt.trial_signup_viewed >= continueAt(session)!);
       const signup = aggregateTrialFunnel(viewed);
-      result.rows.push({ id: calculator, label, device, steps: steps([
+      const calculatorSteps = steps([
         ['landed', 'Landed on the calculator', landed.length],
         ['result', 'Got a result', calculated.length],
         ['continue', 'Saved results or chose to sign up', continued.length],
         ['signup', 'Reached signup', viewed.length],
         ['account', 'Created an account', signup[3].sessions!],
         ['handoff', 'Continued to the app', signup[4].sessions!],
-      ]) });
+      ]);
+      // Keep the overview compact without attributing form abandonment to the
+      // registration request. These use the SAME result/continuation cohort,
+      // not the broader signup-origin cohort reported separately below.
+      calculatorSteps[4].breakdown = steps(signup.slice(0, 4).map((step, index) => [
+        step.event, ['Reached signup', 'Started the form', 'Submitted the form', 'Created an account'][index], step.sessions!,
+      ]));
+      result.rows.push({ id: calculator, label, device, steps: calculatorSteps });
     }
 
     const signupPaths: Array<{ id: string; label: string; origin?: string; entry?: string }> = [
