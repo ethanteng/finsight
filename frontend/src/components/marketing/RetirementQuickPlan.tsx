@@ -636,12 +636,12 @@ export function RetirementQuickPlan({
       // panel and asks again rather than leaving the previous reading in place.
       setSubmittedPlan(plan);
       /*
-       * Only a run that produced a verdict counts. A validation refusal or an
-       * unreachable backend is not one of this visitor's allowance — and neither
-       * is a rates-only answer, which has no capture form and is deliberately
-       * not handed to signup. Counting those would let enough of them lock the
-       * page while telling the visitor to save a result they cannot save, with
-       * no way left to enter the full plan that would have been savable.
+       * Only a run that produced a verdict counts. A validation refusal and an
+       * unreachable backend do not come out of this visitor's allowance — and
+       * neither does a rates-only answer, which has no capture form and is
+       * deliberately not handed to signup. Counting those would let them lock
+       * the page while telling the visitor to save a result they cannot save,
+       * with no way left to enter the full plan that would have been savable.
        */
       if (answered.primary) setRunCount(recordRun(RETIREMENT_RUN_COUNT_KEY, runCount));
       // Let the results render before scrolling to them.
