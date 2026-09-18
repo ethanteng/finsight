@@ -15,6 +15,7 @@ const noindexRoutes = [
   "/profile/:path*",
   "/register/:path*",
   "/reset-password/:path*",
+  "/subscribe/:path*",
   "/transactions/:path*",
   "/verify-email/:path*",
 ];
