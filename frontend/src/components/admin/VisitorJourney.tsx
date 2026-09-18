@@ -42,6 +42,7 @@ export function VisitorJourney({ data, initialPath = 'retirement', retirementOnl
   const journey = data?.rows.find(row => row.id === activePath && row.device === activeDevice);
   const steps = journey?.steps || [];
   const first = steps[0]?.sessions || 0;
+  const shareOfStart = (sessions: number) => percent(data?.ratesAvailable && first > 0 ? sessions / first : null);
   // Compare individual boundaries, not the combined signup span against other
   // single steps. The same nested cohort supplies both overview and breakdown.
   const diagnosticSteps = steps.flatMap(step => step.breakdown?.length ? step.breakdown.slice(1) : [step]);
@@ -81,6 +82,7 @@ export function VisitorJourney({ data, initialPath = 'retirement', retirementOnl
         : 'Starts with sessions landing on this calculator. Saving results and the signup button below the result are alternative ways to continue. Later email returns are a separate signup path.'}
         {!isSignup && activePath === 'coast_fire' ? ' Only submitted calculations count; the initial default result does not.' : ''}</p>
       {first === 0 && <p className="mt-4 text-sm text-[#66736b]">No sessions entered this path for the selected device and dates. That alone does not confirm tracking is working.</p>}
+      <p className="mt-3 text-xs leading-5 text-[#66736b]">Step percentages use the sessions at the start of this path for the selected device. Arrows compare with the previous step.</p>
       <div className="mt-6 grid items-start gap-6 lg:grid-cols-[1.5fr_1fr]">
         <ol aria-label="Ordered session journey" className="min-w-0">
           {steps.map((step, index) => <li key={step.id}>
@@ -90,20 +92,23 @@ export function VisitorJourney({ data, initialPath = 'retirement', retirementOnl
                 : <p>{data.ratesAvailable ? 'No sessions in the previous step to compare.' : 'Drop-off not yet measurable'}</p>}
             </div>}
             <div className="relative overflow-hidden rounded-xl border border-[#102319]/10 bg-[#f8f7ef] p-4">
-              <div aria-hidden="true" className="absolute inset-y-0 left-0 bg-[#e1eedf]" style={{ width: `${first ? step.sessions / first * 100 : 0}%` }} />
-              <div className="relative flex items-center justify-between gap-3">
+              <div aria-hidden="true" className="absolute inset-y-0 left-0 bg-[#e1eedf]" style={{ width: `${data.ratesAvailable && first > 0 ? step.sessions / first * 100 : 0}%` }} />
+              <div className="relative flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <span className="flex items-center gap-3 text-sm font-semibold"><span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-white/80 text-xs">{index + 1}</span>{step.label}</span>
-                <span className="shrink-0 text-xl font-semibold tabular-nums">{count(step.sessions)}<span className="ml-2 hidden text-xs font-normal text-[#66736b] sm:inline">sessions</span></span>
+                <div className="shrink-0 pl-10 tabular-nums sm:pl-0 sm:text-right">
+                  <span className="text-xl font-semibold">{count(step.sessions)}<span className="ml-2 text-xs font-normal text-[#66736b]">{step.sessions === 1 ? 'session' : 'sessions'}</span></span>
+                  <p className="mt-1 text-xs text-[#486657]">{shareOfStart(step.sessions)} of starting sessions</p>
+                </div>
               </div>
             </div>
             {!isSignup && step.id === 'account' && <p className="mt-2 px-3 text-xs leading-5 text-[#66736b]">Includes starting and submitting the signup form.</p>}
             {step.breakdown && <details className="mt-2 rounded-xl border border-[#102319]/10 bg-[#f8f7ef] p-3">
               <summary className="cursor-pointer text-sm font-semibold">Signup form breakdown</summary>
-              <p className="mt-3 text-xs leading-5 text-[#66736b]">Same calculator path and device. Each loss is measured from the step immediately above.</p>
+              <p className="mt-3 text-xs leading-5 text-[#66736b]">Same calculator path and device. Percentages beside counts use the start of the calculator path. Each loss is measured from the step immediately above.</p>
               <dl className="mt-3 space-y-3">
                 {step.breakdown.map((part, partIndex) => <div key={part.id} className="border-t border-[#102319]/10 pt-3">
                   <dt className="text-sm font-semibold">{part.label}</dt>
-                  <dd className="mt-1 text-sm tabular-nums">{count(part.sessions)} {part.sessions === 1 ? 'session' : 'sessions'}</dd>
+                  <dd className="mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-1 text-sm tabular-nums"><span>{count(part.sessions)} {part.sessions === 1 ? 'session' : 'sessions'}</span><span className="text-xs text-[#486657]">{shareOfStart(part.sessions)} of starting sessions</span></dd>
                   {partIndex > 0 && <dd className="mt-1 text-xs leading-5 text-[#66736b]">{data.ratesAvailable && part.dropoffRate !== null
                     ? `${percent(part.continuedRate)} continued · ${count(part.droppedSessions!)} did not reach this step (${percent(part.dropoffRate)})`
                     : data.ratesAvailable ? 'No sessions in the previous step to compare.' : 'Drop-off not yet measurable'}</dd>}
@@ -137,7 +142,7 @@ export function VisitorJourney({ data, initialPath = 'retirement', retirementOnl
           })}</tbody>
         </table>
       </div>
-      <details className="mt-5 text-xs leading-5 text-[#66736b]"><summary className="cursor-pointer font-semibold">How these numbers relate</summary><p className="mt-2">{data.note} Calculator paths count account creation only after the signup form was started and submitted in order. These counts exclude email-return routes and CTA clicks before a result; choose a signup path to include those visits. Bars show the share of sessions that entered this path, not a separate conversion rate. First-party run and email totals below use different records and cutoffs, so they are not steps in this funnel.</p></details>
+      <details className="mt-5 text-xs leading-5 text-[#66736b]"><summary className="cursor-pointer font-semibold">How these numbers relate</summary><p className="mt-2">{data.note} Calculator paths count account creation only after the signup form was started and submitted in order. These counts exclude email-return routes and CTA clicks before a result; choose a signup path to include those visits. Bars and percentages beside counts show the share of sessions that entered this path; arrows use the previous step instead. Percentages show a dash when tracking is incomplete or no sessions entered the path. First-party run and email totals below use different records and cutoffs, so they are not steps in this funnel.</p></details>
     </>}
   </section>;
 }

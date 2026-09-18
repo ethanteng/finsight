@@ -13,6 +13,11 @@ Both `/admin/marketing` and `/admin/retirement-calculator` now lead with
 - **Signup paths:** reached `/getstarted` → started the form → submitted the form
   → created an account → continued to the app. Choose all signup visits, a
   calculator origin, or a specific Save results / email return / calculator CTA route.
+- Each step keeps its session count and adds **% of starting sessions** for the
+  selected path and device. The expanded signup breakdown uses that same path
+  denominator, not just signup arrivals. Shares show a dash when tracking is
+  incomplete or the path has no starting sessions; a tracked step with zero
+  sessions after a nonzero start shows 0.0%.
 - Each arrow reports the share that continued and the count/share that did not
   reach the next step. The callout chooses the largest loss **by session count**,
   not the highest percentage. It compares individual boundaries, including the
