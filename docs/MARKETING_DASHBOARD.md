@@ -9,9 +9,10 @@ Both `/admin/marketing` and `/admin/retirement-calculator` now lead with
   or chose to sign up → reached signup → created an account → continued to the app.
   Expand **Signup form breakdown** under account creation to see reached signup
   → started form → submitted form → created account for that exact calculator
-  path and device. The compact arrow explicitly covers the whole signup form.
-- **Signup paths:** reached `/getstarted` → started the form → submitted the form
-  → created an account → continued to the app. Choose all signup visits, a
+  path and device. Form interactions are diagnostics, not requirements for counting
+  a confirmed account. The compact arrow covers the whole signup form.
+- **Signup paths:** reached `/getstarted` → created an account → continued to
+  the app, with the same expandable form diagnostics. Choose all signup visits, a
   calculator origin, or a specific Save results / email return / calculator CTA route.
 - Each step keeps its session count and adds **% of starting sessions** for the
   selected path and device. The expanded signup breakdown uses that same path
@@ -21,8 +22,10 @@ Both `/admin/marketing` and `/admin/retirement-calculator` now lead with
 - Each arrow reports the share that continued and the count/share that did not
   reach the next step. The callout chooses the largest loss **by session count**,
   not the highest percentage. It compares individual boundaries, including the
-  expanded form steps, rather than mistaking the combined signup span for an
-  account-creation failure. It identifies where to investigate, not why people left.
+  expanded form steps when their tracking is complete. With form-tracking gaps,
+  it compares the confirmed main steps and labels a signup-span loss as the whole
+  signup span, not an account-creation request failure. It identifies where to
+  investigate, not why people left.
 - The compact device table compares end-to-end completion for the same selected path.
 - Calculator health is three live totals: submitted runs, answers, and rejected
   inputs. Repeated runs are not additional visitors. Financial-input distributions,
@@ -48,13 +51,26 @@ continuation step accepts that calculator's successful results-email event or
 result-specific signup CTA after the result, deduplicating sessions that do both.
 Signup arrivals must follow continuation with the matching calculator origin and
 `results_page` or `calculator_cta` entry. Email returns are reported separately;
-they are never divided by emails sent in the current date range. Account and app
-handoff counts also require the form-start and form-submit boundaries, shown in
-detail on the signup paths and the calculator's `account.breakdown` steps. The
-breakdown retains the calculator's upstream cohort; it is not copied from the
-broader signup-origin report. Its individual losses sum to the compact signup
-span, and the same tracking-coverage gate applies. Handoff still does not prove
-app load or email ownership.
+they are never divided by emails sent in the current date range. Account counts
+require signup view → `sign_up`; handoffs additionally require a later handoff
+event. Both are independent of form-start and form-submit events. A form submission
+does not prove account creation; account creation does not prove handoff.
+
+The form breakdown retains the exact upstream cohort and counts events observed
+after signup view; it is not copied from the broader signup-origin report.
+`breakdownTrackingGapSessions` counts sessions with form events before signup
+view, a submission lacking an earlier form start, or a confirmed account lacking
+an ordered start and submission.
+These checks are per-session, even when aggregate totals appear nested. When any
+such gaps exist, form-step losses/rates are null and a warning is shown; observed
+form counts and confirmed conversions remain visible. Nothing is backfilled.
+Without gaps, individual form losses sum to the compact signup span. The same
+full-window tracking-coverage gate still applies to all rates. Handoff does not
+prove app load or email ownership.
+
+Summary/intent/CTA completion metrics and signup-route abandonment use these
+confirmed boundaries too. The legacy API `funnel` array remains the strict five-step
+form-diagnostic chain for compatibility; it is not the confirmed conversion total.
 
 The first-event timestamp model is conservative: out-of-order retries, skipped
 steps, and people returning in another session may not finish a calculator path.
@@ -67,6 +83,11 @@ September 12 (the saved-results tracking boundary). Observed nested counts remai
 visible with a warning. Unavailable/truncated GA4 reports produce no fabricated
 zeroes. Zero denominators produce no percentage. Live first-party records are not
 inserted into the delayed GA4 funnel.
+
+The heading labels GA4 as **daily export · not live**. A conversion after the
+displayed end date cannot appear until that day's data is exported and included.
+This reporting correction needs only backend/frontend deployment, not event
+backfills, migrations, GTM/Ads changes, or a new tracking-coverage date.
 
 The previous Coast FIRE scorecard, signup outcome table, repeat-run diagnostics,
 downstream account metrics, and source notes are retained below the overview in

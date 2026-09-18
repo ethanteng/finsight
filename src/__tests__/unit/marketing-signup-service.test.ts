@@ -88,4 +88,29 @@ describe('signup reporting service', () => {
     expect(report.warnings.some(warning =>
       warning.includes('GA4_SIGNUP_HANDOFF_TRACKING_DATE must use YYYY-MM-DD'))).toBe(true);
   });
+
+  it('keeps confirmed conversions consistent across journeys, summary, intent and CTA reports despite form gaps', async () => {
+    process.env.GA4_SIGNUP_HANDOFF_TRACKING_DATE = '2026-09-10';
+    const current = session('missing-form-events', true, true);
+    delete current.firstEventAt.trial_signup_started;
+    delete current.firstEventAt.trial_signup_submit;
+    delete current.eventCounts.trial_signup_started;
+    delete current.eventCounts.trial_signup_submit;
+    Object.assign(current.firstEventAt, { retirement_model_run: 500_000, quickplan_cross_sell_click: 1_000_000 });
+    Object.assign(current.eventCounts, { retirement_model_run: 1, quickplan_cross_sell_click: 1 });
+    const previous = { ...current, id: 'previous-conversion', userId: 'previous', sessionDate: '2026-09-17' };
+    const excluded = { ...current, id: 'internal', userId: 'internal', trafficQuality: 'internal' as const };
+    const loaded = await loadGa4Sessions({ days: 7, compare: true });
+    jest.mocked(loadGa4Sessions).mockResolvedValue({ ...loaded, sessions: [current, previous, excluded] });
+    const report = await getMarketingDashboard({ days: 7, compare: true });
+    expect(report.summary.trialsCompleted).toMatchObject({ value: 1, previous: 1 });
+    expect(report.summary.clickToTrialRate).toMatchObject({ value: 1, previous: 1 });
+    expect(report.funnel.map(step => step.sessions)).toEqual([1, 0, 0, 0, 0]);
+    expect(report.intents[0]).toMatchObject({ signupStartRate: 0, accountCreatedRate: 1, trialCompleteRate: 1 });
+    expect(report.signupOutcomes.rows[0]).toMatchObject({ accountsCreated: 1, handoffs: 1, signupAbandonmentRate: 0 });
+    const journey = report.visitorJourneys.rows.find(row => row.id === 'retirement' && row.device === 'mobile')!;
+    expect(journey.steps.map(step => step.sessions)).toEqual([1, 1, 1, 1, 1, 1]);
+    expect(journey.steps[4]).toMatchObject({ droppedSessions: 0, breakdownTrackingGapSessions: 1 });
+    expect(report.beachhead.currentCalculatorBaseline.slice(-1)[0]).toMatchObject({ value: 1, previous: 1 });
+  });
 });

@@ -45,6 +45,28 @@ export function aggregateTrialFunnel(
   coverage: FunnelStepMetric['coverage'] = 'complete',
   ctaEvent?: string,
 ): FunnelStepMetric[] {
+  return aggregateOrderedFunnel(sessions, FUNNEL_EVENT_NAMES, coverage, ctaEvent);
+}
+
+/** Confirmed business outcomes, independent of optional form-interaction telemetry.
+ * Still requires signup view -> account creation -> handoff in the same session.
+ * Never infer an account from submission, or an app handoff from account creation.
+ */
+export function aggregateSignupConversionFunnel(
+  sessions: AnalyticsSession[],
+  coverage: FunnelStepMetric['coverage'] = 'complete',
+  ctaEvent?: string,
+): FunnelStepMetric[] {
+  return aggregateOrderedFunnel(sessions,
+    ['trial_signup_viewed', 'sign_up', 'trial_signup_completed'], coverage, ctaEvent);
+}
+
+function aggregateOrderedFunnel(
+  sessions: AnalyticsSession[],
+  events: readonly FunnelEventName[],
+  coverage: FunnelStepMetric['coverage'],
+  ctaEvent?: string,
+): FunnelStepMetric[] {
   const normalized = sessions.map(withSignupCompletion);
   let previousQualified = normalized.filter(session => !ctaEvent || (
     session.firstEventAt[ctaEvent] !== undefined
@@ -53,7 +75,7 @@ export function aggregateTrialFunnel(
   ));
   let previousEvent: FunnelEventName | null = null;
 
-  return FUNNEL_EVENT_NAMES.map((event, index) => {
+  return events.map((event, index) => {
     const priorEvent = previousEvent;
     const rawReached = normalized.filter(session => session.firstEventAt[event] !== undefined);
     const qualified = previousQualified.filter(session => {

@@ -7,6 +7,7 @@ type Step = {
   id: string; label: string; sessions: number;
   continuedRate: number | null; droppedSessions: number | null; dropoffRate: number | null;
   breakdown?: Step[];
+  breakdownTrackingGapSessions?: number;
 };
 export type JourneyData = {
   state: 'available' | 'unavailable'; ratesAvailable: boolean;
@@ -43,15 +44,18 @@ export function VisitorJourney({ data, initialPath = 'retirement', retirementOnl
   const steps = journey?.steps || [];
   const first = steps[0]?.sessions || 0;
   const shareOfStart = (sessions: number) => percent(data?.ratesAvailable && first > 0 ? sessions / first : null);
-  // Compare individual boundaries, not the combined signup span against other
-  // single steps. The same nested cohort supplies both overview and breakdown.
-  const diagnosticSteps = steps.flatMap(step => step.breakdown?.length ? step.breakdown.slice(1) : [step]);
+  // Use detailed form boundaries only when their telemetry forms a nested cohort.
+  // A missing form event must not become the highlighted business drop-off.
+  const diagnosticSteps = steps.flatMap(step => step.breakdown?.length && !step.breakdownTrackingGapSessions
+    ? step.breakdown.slice(1) : [step]);
   const biggestDrop = data?.ratesAvailable ? diagnosticSteps.slice(1).reduce<Step | null>((largest, step) =>
     step.droppedSessions !== null && step.droppedSessions > (largest?.droppedSessions ?? 0) ? step : largest, null) : null;
   const beforeDrop = biggestDrop ? diagnosticSteps[diagnosticSteps.indexOf(biggestDrop) - 1] : null;
   const dropInBreakdown = biggestDrop && steps.some(step => step.breakdown?.includes(biggestDrop));
   const isSignup = activePath?.startsWith('signup');
-  const legacySignupSpan = !isSignup && biggestDrop?.id === 'account' && !biggestDrop.breakdown?.length;
+  const signupSpan = biggestDrop && !dropInBreakdown && (biggestDrop.id === 'account'
+    || (biggestDrop.id === 'sign_up' && biggestDrop.breakdownTrackingGapSessions !== undefined));
+  const trackingGapSessions = steps.reduce((total, step) => total + (step.breakdownTrackingGapSessions || 0), 0);
   const dateLabel = data ? `${data.period.start} to ${data.period.end}` : '';
 
   return <section aria-labelledby="visitor-journey-heading" className="mt-6 rounded-[24px] border border-[#102319]/10 bg-white p-5 sm:p-7">
@@ -60,7 +64,7 @@ export function VisitorJourney({ data, initialPath = 'retirement', retirementOnl
         <h2 id="visitor-journey-heading" className="text-2xl font-semibold tracking-[-.035em]">Where do people stop?</h2>
         <p className="mt-2 max-w-3xl text-sm leading-6 text-[#66736b]">Follow the same sessions from one step to the next. Switch paths to see the signup form or email returns.</p>
       </div>
-      {data?.state === 'available' && <p className="text-xs text-[#66736b]">GA4 daily export<br />{dateLabel}</p>}
+      {data?.state === 'available' && <p className="text-xs text-[#66736b]">GA4 daily export · not live<br />{dateLabel}</p>}
     </div>
     {!data || data.state !== 'available' ? <p role="status" className="mt-5 rounded-xl bg-[#f8f1df] p-4 text-sm text-[#76510f]">Session journeys are unavailable. Check the data-source details; missing data is not zero traffic.</p> : <>
       <div className="mt-5 flex flex-wrap items-end gap-4">
@@ -77,6 +81,7 @@ export function VisitorJourney({ data, initialPath = 'retirement', retirementOnl
         </div>
       </div>
       {!data.ratesAvailable && <p role="status" className="mt-5 rounded-xl bg-[#f8f1df] p-4 text-sm leading-6 text-[#76510f]">Counts are observed, but drop-off rates are not ready. This date range needs verified tracking throughout. Missing events must not be treated as people leaving.</p>}
+      {trackingGapSessions > 0 && <p role="status" className="mt-5 rounded-xl bg-[#f8f1df] p-4 text-sm leading-6 text-[#76510f]">{count(trackingGapSessions)} {trackingGapSessions === 1 ? 'session has' : 'sessions have'} missing or out-of-order form tracking. Confirmed accounts and app handoffs still count. Form-step drop-offs are hidden because missing events do not mean people left.</p>}
       <p className="mt-5 text-sm leading-6 text-[#66736b]">{isSignup
         ? 'Starts at /getstarted. Includes direct visits and returns in a later session. No second login is required.'
         : 'Starts with sessions landing on this calculator. Saving results and the signup button below the result are alternative ways to continue. Later email returns are a separate signup path.'}
@@ -101,15 +106,20 @@ export function VisitorJourney({ data, initialPath = 'retirement', retirementOnl
                 </div>
               </div>
             </div>
-            {!isSignup && step.id === 'account' && <p className="mt-2 px-3 text-xs leading-5 text-[#66736b]">Includes starting and submitting the signup form.</p>}
+            {step.breakdownTrackingGapSessions !== undefined
+              ? <p className="mt-2 px-3 text-xs leading-5 text-[#66736b]">Confirmed account creation; missing form events do not remove it.</p>
+              : !isSignup && step.id === 'account' && <p className="mt-2 px-3 text-xs leading-5 text-[#66736b]">Includes starting and submitting the signup form.</p>}
             {step.breakdown && <details className="mt-2 rounded-xl border border-[#102319]/10 bg-[#f8f7ef] p-3">
               <summary className="cursor-pointer text-sm font-semibold">Signup form breakdown</summary>
-              <p className="mt-3 text-xs leading-5 text-[#66736b]">Same calculator path and device. Percentages beside counts use the start of the calculator path. Each loss is measured from the step immediately above.</p>
+              <p className="mt-3 text-xs leading-5 text-[#66736b]">Same path and device. Percentages beside counts use the start of this path. {step.breakdownTrackingGapSessions
+                ? 'These are observed form events after signup view, not a complete step-by-step funnel. Form-step drop-offs are unavailable due to tracking gaps.'
+                : 'Each loss is measured from the step immediately above.'}</p>
               <dl className="mt-3 space-y-3">
                 {step.breakdown.map((part, partIndex) => <div key={part.id} className="border-t border-[#102319]/10 pt-3">
                   <dt className="text-sm font-semibold">{part.label}</dt>
                   <dd className="mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-1 text-sm tabular-nums"><span>{count(part.sessions)} {part.sessions === 1 ? 'session' : 'sessions'}</span><span className="text-xs text-[#486657]">{shareOfStart(part.sessions)} of starting sessions</span></dd>
-                  {partIndex > 0 && <dd className="mt-1 text-xs leading-5 text-[#66736b]">{data.ratesAvailable && part.dropoffRate !== null
+                  {partIndex > 0 && <dd className="mt-1 text-xs leading-5 text-[#66736b]">{step.breakdownTrackingGapSessions
+                    ? 'Form-step drop-off unavailable: tracking gap.' : data.ratesAvailable && part.dropoffRate !== null
                     ? `${percent(part.continuedRate)} continued · ${count(part.droppedSessions!)} did not reach this step (${percent(part.dropoffRate)})`
                     : data.ratesAvailable ? 'No sessions in the previous step to compare.' : 'Drop-off not yet measurable'}</dd>}
                 </div>)}
@@ -120,8 +130,10 @@ export function VisitorJourney({ data, initialPath = 'retirement', retirementOnl
         <aside className="rounded-2xl bg-[#f8f7ef] p-5">
           <h3 className="text-base font-semibold">What to look at first</h3>
           {biggestDrop && beforeDrop ? <>
-            {legacySignupSpan
-              ? <p className="mt-3 text-sm leading-6">The largest loss spans the signup form, from reaching signup through account creation. It includes starting and submitting the form.</p>
+            {signupSpan
+              ? <p className="mt-3 text-sm leading-6">The largest loss spans the signup form, from reaching signup through account creation. {biggestDrop.breakdownTrackingGapSessions
+                ? 'Form tracking is incomplete, so the loss cannot be assigned to a specific form step.'
+                : 'It includes starting and submitting the form.'}</p>
               : <p className="mt-3 text-sm leading-6">The largest loss of sessions is between <strong>{beforeDrop.label.toLowerCase()}</strong> and <strong>{biggestDrop.label.toLowerCase()}</strong>.</p>}
             <p className="mt-3 text-3xl font-semibold">{count(biggestDrop.droppedSessions!)} <span className="text-sm font-normal text-[#66736b]">{biggestDrop.droppedSessions === 1 ? 'session' : 'sessions'} · {percent(biggestDrop.dropoffRate)}</span></p>
             <p className="mt-3 text-xs leading-5 text-[#66736b]">This identifies where to investigate, not why people left. Small samples can move sharply.</p>
@@ -142,7 +154,7 @@ export function VisitorJourney({ data, initialPath = 'retirement', retirementOnl
           })}</tbody>
         </table>
       </div>
-      <details className="mt-5 text-xs leading-5 text-[#66736b]"><summary className="cursor-pointer font-semibold">How these numbers relate</summary><p className="mt-2">{data.note} Calculator paths count account creation only after the signup form was started and submitted in order. These counts exclude email-return routes and CTA clicks before a result; choose a signup path to include those visits. Bars and percentages beside counts show the share of sessions that entered this path; arrows use the previous step instead. Percentages show a dash when tracking is incomplete or no sessions entered the path. First-party run and email totals below use different records and cutoffs, so they are not steps in this funnel.</p></details>
+      <details className="mt-5 text-xs leading-5 text-[#66736b]"><summary className="cursor-pointer font-semibold">How these numbers relate</summary><p className="mt-2">{data.note} Calculator paths exclude email-return routes and CTA clicks before a result; choose a signup path to include those visits. Bars and percentages beside counts show the share of sessions that entered this path; arrows use the previous step instead. Percentages show a dash when tracking is incomplete or no sessions entered the path. This daily export is not live: conversions after the end date will appear only after their data is exported. First-party run and email totals below use different records and cutoffs, so they are not steps in this funnel.</p></details>
     </>}
   </section>;
 }

@@ -245,6 +245,19 @@ describe('Coast FIRE beachhead scorecard', () => {
     expect(report.currentCalculatorBaseline[report.currentCalculatorBaseline.length - 1]?.value).toBeNull();
   });
 
+  it.each([false, true])('retains confirmed CTA conversions without form interaction events (Coast FIRE: %s)', coast => {
+    const converted = completedJourney('form-gap', coast ? 'coast_fire_plan_cta_click' : 'quickplan_cross_sell_click', coast);
+    for (const event of ['trial_signup_started', 'trial_signup_submit']) {
+      delete converted.firstEventAt[event];
+      delete converted.eventCounts[event];
+    }
+    const report = buildBeachheadScorecard({ current: [converted], previous: [converted],
+      ga4State: 'live', funnelCoverageComplete: true, previousFunnelCoverageComplete: true, firstParty });
+    const journey = coast ? report.coastFireJourney : report.currentCalculatorBaseline;
+    expect(journey.map(step => step.value)).toEqual([1, 1, 1, 1]);
+    expect(journey.slice(-1)[0]).toMatchObject({ previous: 1, conversionRate: 1, previousConversionRate: 1 });
+  });
+
   it('reports email capture as a branch and credits a later attributed return session', () => {
     const calculator = session('coast-email-request', {
       sessionDate: '2026-09-12',

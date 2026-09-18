@@ -344,6 +344,7 @@ export interface MarketingDashboardReport {
   retirementCalculatorHealth: RetirementCalculatorHealthSummary;
   beachhead: BeachheadScorecard;
   calculatorRepeatUsage: CalculatorRepeatUsage;
+  /** Legacy strict five-step form diagnostics; confirmed conversions are in visitorJourneys/summary. */
   funnel: FunnelStepMetric[];
   signupOutcomes: { state: 'available' | 'unavailable'; rows: SignupOutcomeRow[]; note: string; trackingStartedAt: string | null };
   funnelErrors: Array<{ event: string; sessions: number | null; events: number | null; rate: number | null }>;
