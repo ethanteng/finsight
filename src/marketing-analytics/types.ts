@@ -315,6 +315,7 @@ export interface CalculatorRepeatUsage {
 }
 
 export interface MarketingDashboardReport {
+  visitorJourneys: import('./visitor-journeys').VisitorJourneys;
   generatedAt: string;
   requested: MarketingFilters;
   period: { start: string; end: string; previousStart: string; previousEnd: string };
