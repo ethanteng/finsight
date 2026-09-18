@@ -6,8 +6,9 @@ import {
   unavailableCalculatorLeadSummary,
 } from '../services/calculator-lead-report';
 import { aggregateTrialFunnel, FUNNEL_LABELS } from './funnel';
+import { buildVisitorJourneys } from './visitor-journeys';
 import { buildSignupOutcomes } from './signup-outcomes';
-import { buildBeachheadScorecard } from './beachhead-scorecard';
+import { buildBeachheadScorecard, CALCULATOR_EMAIL_TRACKING_STARTED_AT } from './beachhead-scorecard';
 import { buildCalculatorRepeatUsage } from './calculator-repeat-usage';
 import { classifyIntent } from './intent-rules';
 import { loadGa4Sessions, parseFirstFullTrackingDate } from './adapters/ga4-bigquery';
@@ -543,6 +544,13 @@ export async function getMarketingDashboard(filters: MarketingFilters): Promise<
     firstParty,
     retirementCalculatorHealth: calculatorHealth,
     beachhead,
+    visitorJourneys: buildVisitorJourneys(current, {
+      available: hasLiveGa4 && !ga4.truncated,
+      // Save-result events started September 12. Handoff coverage is a separately
+      // verified gate; a deployment date alone never unlocks drop-off rates.
+      ratesAvailable: funnelCoverageComplete && period.start >= CALCULATOR_EMAIL_TRACKING_STARTED_AT,
+      period: { start: period.start, end: period.end },
+    }),
     calculatorRepeatUsage: buildCalculatorRepeatUsage(current, hasLiveGa4 && !ga4.truncated),
     funnel,
     signupOutcomes: {

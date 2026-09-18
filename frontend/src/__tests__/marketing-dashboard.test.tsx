@@ -273,10 +273,11 @@ describe('marketing scorecard data states', () => {
     fireEvent.click(screen.getByRole('button', { name: '7d' }));
 
     await waitFor(() => {
-      expect(within(repeatSection).getByLabelText('Device')).toHaveValue('all');
+      expect(within(screen.getByRole('region', { name: 'Do people run the calculators again?' })).getByLabelText('Device')).toHaveValue('all');
     });
-    expect(within(repeatSection).queryByRole('option', { name: 'Tablet' })).not.toBeInTheDocument();
-    expect(repeatSection).toHaveTextContent(/2 sessions ran both calculators/);
-    expect(within(repeatSection).getAllByText('4')).toHaveLength(2); // calculating sessions on both cards
+    const refreshedSection = screen.getByRole('region', { name: 'Do people run the calculators again?' });
+    expect(within(refreshedSection).queryByRole('option', { name: 'Tablet' })).not.toBeInTheDocument();
+    expect(refreshedSection).toHaveTextContent(/2 sessions ran both calculators/);
+    expect(within(refreshedSection).getAllByText('4')).toHaveLength(2); // calculating sessions on both cards
   });
 });

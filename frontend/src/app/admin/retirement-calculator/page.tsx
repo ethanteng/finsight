@@ -12,12 +12,13 @@
  * an answer out of is what prompted the logging.
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { AlertTriangle, ArrowLeft, BarChart3, Database, Mail, RefreshCw, ShieldAlert, SlidersHorizontal } from 'lucide-react';
 import PageMeta from '../../../components/PageMeta';
 import AuthenticatedPageHeader from '../../../components/authenticated/AuthenticatedPageHeader';
 import { markInternalAnalyticsBrowser } from '../../../lib/internal-analytics';
+import { ReportDetails, RetirementVisitorJourney } from '../../../components/admin/VisitorJourney';
 
 interface Band { label: string; count: number; share: number }
 
@@ -88,8 +89,11 @@ export default function RetirementCalculatorAdminPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const apiUrl = process.env.NEXT_PUBLIC_API_URL;
+  const requestId = useRef(0);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   const load = useCallback(async () => {
+    const request = ++requestId.current;
     setLoading(true); setError('');
     try {
       const token = localStorage.getItem('auth_token');
@@ -97,15 +101,19 @@ export default function RetirementCalculatorAdminPage() {
         headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
       });
       if (response.status === 401 || response.status === 403) {
+        if (request === requestId.current) setReport(null);
         throw new Error('Sign in with an admin account to view calculator runs.');
       }
       if (!response.ok) throw new Error('Calculator runs could not be loaded.');
+      const nextReport = await response.json() as Report;
+      if (request !== requestId.current) return;
       markInternalAnalyticsBrowser();
-      setReport(await response.json() as Report);
+      setReport(nextReport);
     } catch (loadError) {
+      if (request !== requestId.current) return;
       setError(loadError instanceof Error ? loadError.message : 'Calculator runs could not be loaded.');
     } finally {
-      setLoading(false);
+      if (request === requestId.current) setLoading(false);
     }
   }, [apiUrl, days]);
 
@@ -132,17 +140,26 @@ export default function RetirementCalculatorAdminPage() {
                 {option}d
               </button>
             ))}
-            <button type="button" onClick={() => void load()} disabled={loading} className="admin-button-secondary gap-2">
+            <button type="button" onClick={() => { void load(); setRefreshKey(value => value + 1); }} disabled={loading} className="admin-button-secondary gap-2">
               <RefreshCw size={14} className={loading ? 'animate-spin' : ''} /> Refresh
             </button>
           </div>
         </div>
 
+        <div className="rounded-2xl bg-[#102319] p-5 text-white sm:p-6">
+          <h2 className="text-2xl font-semibold">Are visitors getting a result—and taking the next step?</h2>
+          <p className="mt-3 text-sm leading-6 text-white/75">The session journey shows where people stop. Calculator health shows whether submitted runs work. A person can run more than once, so those totals will differ.</p>
+          <Link href="/admin/marketing" className="mt-4 inline-block text-sm font-semibold text-[#d8ff71]">Compare Coast FIRE and all signup paths →</Link>
+        </div>
+        <RetirementVisitorJourney days={days} refreshKey={refreshKey} />
+
         {error && (
-          <div className="mt-6 rounded-2xl border border-[#b84a3d]/25 bg-[#f8e8e3] p-5 text-sm text-[#8b3027]">
+          <div role="alert" className="mt-6 rounded-2xl border border-[#b84a3d]/25 bg-[#f8e8e3] p-5 text-sm text-[#8b3027]">
             <ShieldAlert className="mr-2 inline" size={17} />{error}
+            {report && <p className="mt-2">Showing the last successful {report.windowDays}-day calculator-health report. These numbers have not been refreshed.</p>}
           </div>
         )}
+        {loading && report && <p role="status" className="mt-5 text-sm leading-6 text-[#66736b]">Updating calculator health… Showing the previous {report.windowDays}-day report until the new report arrives.</p>}
         {loading && !report && (
           <div className="grid min-h-[360px] place-items-center">
             <div className="flex items-center gap-3 text-sm font-bold text-[#486657]">
@@ -158,7 +175,18 @@ export default function RetirementCalculatorAdminPage() {
           </div>
         )}
 
-        {report && (
+        {report && <section aria-label="Calculator health" aria-busy={loading} className="mt-6 rounded-2xl border border-[#102319]/10 bg-white p-5 sm:p-6">
+          <h2 className="text-xl font-semibold">Does the calculator work?</h2>
+          <p className="mt-2 text-sm leading-6 text-[#66736b]">{loading ? 'Updating' : error ? 'Last successful load' : 'Live'} · last {report.windowDays} days · submitted runs, not people or sessions. Each submission produces an answer or is rejected. This does not include visitors who leave before submitting.</p>
+          {report.truncated && <p className="mt-3 text-sm text-[#76510f]">Only the most recent {number(report.totals.runs)} runs are included. Narrow the window for a complete picture.</p>}
+          <div className="mt-5 grid gap-3 sm:grid-cols-3">
+            <Kpi label="Submitted runs" value={number(report.totals.runs)} />
+            <Kpi label="Got an answer" value={number(report.totals.answeredWithVerdict + report.totals.answeredWithRates)} note={`${report.totals.runs ? percent(report.totals.answerRate) : '—'} of submissions · ${number(report.totals.answeredWithVerdict)} full results, ${number(report.totals.answeredWithRates)} rates-only answers`} accent />
+            <Kpi label="Rejected inputs" value={number(report.totals.rejected)} note={`${report.totals.runs ? percent(report.totals.rejected / report.totals.runs) : '—'} of submissions · see input problems below`} />
+          </div>
+        </section>}
+
+        {report && <ReportDetails title="Saved results and account matches" description="Email delivery and saved results. These first-party records are not a session funnel.">
           <section className="mt-6 rounded-[22px] border border-[#102319]/10 bg-[#fffdf5] p-5 shadow-[0_18px_45px_rgba(16,35,25,.05)] sm:p-6">
             <div className="flex items-start gap-3">
               <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#102319] text-[#d8ff71]"><Mail size={18} /></span>
@@ -181,7 +209,7 @@ export default function RetirementCalculatorAdminPage() {
             </div>
             <p className="mt-4 text-xs leading-5 text-[#66736b]">No second login is required. <Link href="/admin/marketing" className="underline">See signup paths and desktop/mobile outcomes in Marketing.</Link> Calculator runs above measure deterministic results, not the optional AI interpretation.</p>
           </section>
-        )}
+        </ReportDetails>}
 
         {report && report.totals.runs > 0 && (
           <div className={loading ? 'pointer-events-none opacity-55 transition-opacity' : 'transition-opacity'}>
@@ -200,6 +228,7 @@ export default function RetirementCalculatorAdminPage() {
                 </div>
               </div>
             )}
+            <ReportDetails title="Run performance" description="Full results, rates-only answers, rejected inputs, speed, and caching.">
             <section className="mt-2">
               <div className="mb-4 flex items-end justify-between gap-4">
                 <div>
@@ -217,10 +246,12 @@ export default function RetirementCalculatorAdminPage() {
                 <Kpi label="Median run" value={report.totals.medianDurationMs === null ? '—' : `${report.totals.medianDurationMs} ms`} note={`${percent(report.totals.cachedShare)} served from cache`} />
               </div>
             </section>
+            </ReportDetails>
 
+            <ReportDetails title="Input problems and skipped fields" description="Which fields are rejected, left blank, or filled with defaults.">
             <section className="mt-10 grid gap-5 lg:grid-cols-3">
               <Panel eyebrow="Friction" title="Which figure the model refused"
-                subtitle="Every refusal is a visitor who asked and left without an answer.">
+                subtitle="Rejected submissions, not unique visitors. A visitor may correct an input and run again.">
                 <Bands bands={report.rejectionsByField} format={fieldLabel} tone="warn" />
               </Panel>
               <Panel eyebrow="Blanks" title="Which boxes people skip"
@@ -232,7 +263,9 @@ export default function RetirementCalculatorAdminPage() {
                 <Bands bands={report.assumptionsByField} format={fieldLabel} />
               </Panel>
             </section>
+            </ReportDetails>
 
+            <ReportDetails title="Inputs, results, and daily trends" description="Age, assets, spending, results, and runs over time.">
             <section className="mt-10 grid gap-5 lg:grid-cols-2">
               <Panel icon={<BarChart3 size={18} />} eyebrow="Who is arriving" title="Investment assets entered"
                 subtitle="Banded, not averaged: one large portfolio would decide a mean.">
@@ -272,6 +305,7 @@ export default function RetirementCalculatorAdminPage() {
                 </p>
               </Panel>
             </section>
+            </ReportDetails>
           </div>
         )}
       </main>

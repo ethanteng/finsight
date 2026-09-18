@@ -1,9 +1,79 @@
-# Coast FIRE go-to-market scorecard
+# Marketing journeys and calculator health
+
+## Reading the admin pages
+
+Both `/admin/marketing` and `/admin/retirement-calculator` now lead with
+**Where do people stop?** Pick a path, then All devices, Mobile, or Desktop.
+
+- **Calculator paths:** landed on this calculator → got a result → saved results
+  or chose to sign up → reached signup → created an account → continued to the app.
+  Expand **Signup form breakdown** under account creation to see reached signup
+  → started form → submitted form → created account for that exact calculator
+  path and device. The compact arrow explicitly covers the whole signup form.
+- **Signup paths:** reached `/getstarted` → started the form → submitted the form
+  → created an account → continued to the app. Choose all signup visits, a
+  calculator origin, or a specific Save results / email return / calculator CTA route.
+- Each arrow reports the share that continued and the count/share that did not
+  reach the next step. The callout chooses the largest loss **by session count**,
+  not the highest percentage. It compares individual boundaries, including the
+  expanded form steps, rather than mistaking the combined signup span for an
+  account-creation failure. It identifies where to investigate, not why people left.
+- The compact device table compares end-to-end completion for the same selected path.
+- Calculator health is three live totals: submitted runs, answers, and rejected
+  inputs. Repeated runs are not additional visitors. Financial-input distributions,
+  performance, email delivery, and account matches remain in collapsed sections.
+  The last successful health report stays visible during refreshes and transient
+  failures, with an updating/stale label and its original `windowDays`. A failed
+  authorization clears it; an older response cannot replace a newer date window.
+
+`visitorJourneys` is an additive field in the existing authenticated marketing API.
+It uses already-loaded, quality-filtered GA4 sessions; no new events, GTM changes,
+BigQuery tables, Ads goals, or environment variables are needed. The calculator
+admin page loads this report independently, so GA4 errors do not hide live run health.
+Both pages retain the existing admin API authorization; no preview/fixture route
+is deployed.
+
+### Denominators and limits
+
+These are nested **same-session** paths, not independent event totals. Each later
+count requires every earlier boundary in order. Calculator cohorts require the
+exact calculator landing path (a trailing slash is accepted). Coast FIRE results
+count submitted calculations only, not the automatic default result. The
+continuation step accepts that calculator's successful results-email event or
+result-specific signup CTA after the result, deduplicating sessions that do both.
+Signup arrivals must follow continuation with the matching calculator origin and
+`results_page` or `calculator_cta` entry. Email returns are reported separately;
+they are never divided by emails sent in the current date range. Account and app
+handoff counts also require the form-start and form-submit boundaries, shown in
+detail on the signup paths and the calculator's `account.breakdown` steps. The
+breakdown retains the calculator's upstream cohort; it is not copied from the
+broader signup-origin report. Its individual losses sum to the compact signup
+span, and the same tracking-coverage gate applies. Handoff still does not prove
+app load or email ownership.
+
+The first-event timestamp model is conservative: out-of-order retries, skipped
+steps, and people returning in another session may not finish a calculator path.
+The all-signup path includes visits that skip the calculator. Do not interpret a
+path drop-off as proof the person never created an account later.
+
+Drop-off counts **and** rates remain unavailable unless the entire date range
+meets the existing verified signup and handoff coverage gates and starts on/after
+September 12 (the saved-results tracking boundary). Observed nested counts remain
+visible with a warning. Unavailable/truncated GA4 reports produce no fabricated
+zeroes. Zero denominators produce no percentage. Live first-party records are not
+inserted into the delayed GA4 funnel.
+
+The previous Coast FIRE scorecard, signup outcome table, repeat-run diagnostics,
+downstream account metrics, and source notes are retained below the overview in
+collapsed sections. The previous-period checkbox applies to these detailed
+reports, not the new single-period journey.
+
+## Detailed Coast FIRE scorecard
 
 The authenticated scorecard lives at `/admin/marketing`. It uses the existing
 `ADMIN_EMAILS`/JWT admin boundary through `GET /admin/marketing`.
 
-The page is deliberately narrow. It tests the beachhead thesis in this order:
+The retained detailed scorecard tests the beachhead thesis in this order:
 
 1. explicit Coast FIRE positioning attracts qualified visits;
 2. a calculator result creates demand for a plan using actual finances;
@@ -12,7 +82,7 @@ The page is deliberately narrow. It tests the beachhead thesis in this order:
 
 Generic engagement, device, SEO, acquisition, and detailed signup diagnostics
 remain available in the normalized backend report and source tools, but are not
-promoted on this decision page. Calculator input quality, model outcomes,
+promoted within this detailed experiment scorecard. Calculator input quality, model outcomes,
 rejections, and performance live at `/admin/retirement-calculator`.
 The scorecard also repeats its headline submission, answer, answer-rate, and
 rejection totals as a clearly labeled first-party product-health reference.

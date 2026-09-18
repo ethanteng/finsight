@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import {
   AlertTriangle,
@@ -21,6 +21,7 @@ import {
 import PageMeta from '../../../components/PageMeta';
 import AuthenticatedPageHeader from '../../../components/authenticated/AuthenticatedPageHeader';
 import { markInternalAnalyticsBrowser } from '../../../lib/internal-analytics';
+import { VisitorJourney, ReportDetails, type JourneyData } from '../../../components/admin/VisitorJourney';
 
 type Metric = {
   value: number | null;
@@ -90,6 +91,7 @@ type LeadCapture = {
 };
 
 interface Report {
+  visitorJourneys?: JourneyData;
   calculatorRepeatUsage?: {
     state: 'available' | 'unavailable';
     note: string;
@@ -504,8 +506,10 @@ export default function MarketingDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const apiUrl = process.env.NEXT_PUBLIC_API_URL;
+  const requestId = useRef(0);
 
   const load = useCallback(async () => {
+    const request = ++requestId.current;
     setLoading(true);
     setError('');
     try {
@@ -517,12 +521,16 @@ export default function MarketingDashboardPage() {
       if (response.status === 401 || response.status === 403) throw new Error('Sign in with an admin account to view this scorecard.');
       if (!response.ok) throw new Error('Marketing data could not be loaded.');
       const nextReport = await response.json() as Report;
+      if (request !== requestId.current) return;
       markInternalAnalyticsBrowser();
       setReport(nextReport);
     } catch (loadError) {
+      if (request !== requestId.current) return;
+      // Keep the last good report on a failed refresh so a transient error does
+      // not wipe the journey and detailed sections the admin was already reading.
       setError(loadError instanceof Error ? loadError.message : 'Marketing data could not be loaded.');
     } finally {
-      setLoading(false);
+      if (request === requestId.current) setLoading(false);
     }
   }, [apiUrl, filters]);
 
@@ -543,9 +551,9 @@ export default function MarketingDashboardPage() {
         : 'Collecting';
 
   return <>
-    <PageMeta title="Coast FIRE GTM scorecard | Ask Linc" description="A focused scorecard for testing Ask Linc's Coast FIRE beachhead." />
+    <PageMeta title="Marketing journeys | Ask Linc" description="Follow calculator visitors through signup and find the biggest drop-offs." />
     <div className="authenticated-site min-h-screen bg-[#f2f1e8] text-[#102319]">
-      <AuthenticatedPageHeader activePage="admin" eyebrow="Go-to-market" title="Coast FIRE scorecard" />
+      <AuthenticatedPageHeader activePage="admin" eyebrow="Marketing" title="Visitor journeys" />
       <main className="mx-auto max-w-[1180px] px-4 pb-20 pt-7 sm:px-6">
         <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
           <Link href="/admin" className="inline-flex items-center gap-2 text-sm font-bold text-[#486657] hover:text-[#102319]"><ArrowLeft size={15} /> Back to administration</Link>
@@ -553,12 +561,11 @@ export default function MarketingDashboardPage() {
         </div>
 
         <section className="overflow-hidden rounded-[26px] bg-[#102319] text-white shadow-[0_26px_70px_rgba(16,35,25,.16)]">
-          <div className="grid gap-8 px-5 py-7 sm:px-8 lg:grid-cols-[1.35fr_.65fr] lg:px-10 lg:py-10">
+          <div className="grid gap-5 p-5 sm:p-7 lg:grid-cols-[1.35fr_.65fr]">
             <div>
-              <StatePill state={report?.beachhead.state || 'collecting'} />
-              <p className="mt-5 text-[10px] font-extrabold uppercase tracking-[.16em] text-[#d8ff71]">The decision this page should answer</p>
-              <h2 className="mt-3 max-w-3xl font-serif text-[clamp(2.15rem,5vw,4.2rem)] italic leading-[.96] tracking-[-.045em]">Are Coast FIRE planners moving from a free number to a real plan?</h2>
-              <p className="mt-5 max-w-2xl text-sm leading-6 text-white/65">Track calculator use, repeat runs, and the path from a result to a trial.</p>
+              <h2 className="text-2xl font-semibold tracking-[-.035em]">From calculator visit to account</h2>
+              <p className="mt-3 max-w-2xl text-sm leading-6 text-white/75">Start with the path below. See how many people continue, where they stop, and whether mobile differs from desktop.</p>
+              <Link href="/admin/retirement-calculator" className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-[#d8ff71]">Check calculator health <ArrowRight size={14} /></Link>
             </div>
             <div className="self-end rounded-2xl border border-white/10 bg-white/[.06] p-5">
               <div className="text-2xl font-semibold tracking-[-.05em]">{report ? `${shortDate(report.period.start)}–${shortDate(report.period.end)}` : '—'}</div>
@@ -566,7 +573,7 @@ export default function MarketingDashboardPage() {
               <div className="mt-5 flex flex-wrap gap-2">
                 {([7, 28, 90] as const).map(days => <button key={days} type="button" onClick={() => setFilters(current => ({ ...current, days }))} className={`min-h-9 rounded-full px-3 text-xs font-bold ${filters.days === days ? 'bg-[#d8ff71] text-[#102319]' : 'bg-white/10 text-white'}`}>{days}d</button>)}
               </div>
-              <label className="mt-3 inline-flex items-center gap-2 text-xs font-semibold text-white/70"><input type="checkbox" checked={filters.compare} onChange={event => setFilters(current => ({ ...current, compare: event.target.checked }))} /> Compare previous period</label>
+              <label className="mt-3 inline-flex items-center gap-2 text-xs font-semibold text-white/70"><input type="checkbox" checked={filters.compare} onChange={event => setFilters(current => ({ ...current, compare: event.target.checked }))} /> Compare periods in detailed reports</label>
             </div>
           </div>
         </section>
@@ -574,7 +581,12 @@ export default function MarketingDashboardPage() {
         {error && <div className="mt-6 rounded-2xl border border-[#b84a3d]/25 bg-[#f8e8e3] p-5 text-sm text-[#8b3027]"><AlertTriangle className="mr-2 inline" size={17} />{error}</div>}
         {loading && !report && <div className="grid min-h-[360px] place-items-center"><div className="flex items-center gap-3 text-sm font-bold text-[#486657]"><RefreshCw className="animate-spin" size={18} /> Loading the scorecard…</div></div>}
 
-        {report && <div className={loading ? 'pointer-events-none opacity-55 transition-opacity' : 'transition-opacity'}>
+        {loading && report && <p role="status" className="mt-4 text-sm text-[#66736b]">Updating report… The previous dates remain visible until the new report arrives.</p>}
+        {report && <div aria-busy={loading} className={loading ? 'pointer-events-none opacity-55 transition-opacity' : 'transition-opacity'}>
+          <VisitorJourney data={report.visitorJourneys} />
+          <h2 className="mt-9 text-xl font-semibold">Dig deeper when you need to</h2>
+          <p className="mt-2 text-sm text-[#66736b]">These reports answer different questions. Their totals are not additional steps in the journey.</p>
+          <ReportDetails title="Campaign comparison and saved-results detail" description="Coast FIRE vs retirement, email delivery, and first-party account matches.">
           <section className="mt-8 rounded-[24px] border border-[#102319]/10 bg-[#fffdf5] p-5 shadow-[0_18px_45px_rgba(16,35,25,.05)] sm:p-7">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div className="flex max-w-3xl gap-3">
@@ -657,10 +669,12 @@ export default function MarketingDashboardPage() {
             />
           </section>
 
-          <div className="mt-10">
+          </ReportDetails>
+          <ReportDetails title="Repeat runs and the free-run limit" description="How often sessions run each calculator again and whether they later create an account.">
             <CalculatorRepeatUsage data={report.calculatorRepeatUsage} observedThrough={ga4ObservedThrough} />
-          </div>
+          </ReportDetails>
 
+          <ReportDetails title="Signup route and verification detail" description="Raw observed events by device, including code verification and skipped verification.">
           {report.signupOutcomes && <section className="mt-10 rounded-[22px] border border-[#102319]/10 bg-[#fffdf5] p-5 sm:p-6">
             <h2 className="text-2xl font-semibold tracking-[-.035em]">Signup paths by device</h2>
             <p className="mt-2 max-w-4xl text-xs leading-5 text-[#66736b]">{report.signupOutcomes.note}</p>
@@ -679,7 +693,9 @@ export default function MarketingDashboardPage() {
             </div>
             {report.signupOutcomes.rows.length === 0 && <p className="mt-4 text-sm text-[#66736b]">{report.signupOutcomes.state === 'unavailable' ? 'Signup data is unavailable or the export was truncated; no zero counts have been substituted.' : 'No signup sessions observed in this reporting window.'}</p>}
           </section>}
+          </ReportDetails>
 
+          <ReportDetails title="What happens after signup" description="Financial connections, questions, and paying accounts. All new accounts, not just calculator visitors.">
           <section className="mt-10">
             <div className="max-w-3xl">
               <p className="text-[10px] font-extrabold uppercase tracking-[.14em] text-[#49725a]">Downstream value</p>
@@ -692,7 +708,9 @@ export default function MarketingDashboardPage() {
               <OutcomeCard icon={<CircleDollarSign size={18} />} label="Paid now" metric={report.beachhead.downstream.paidRate} numerator={report.firstParty.createdAccountsCurrentlyPaid} denominator={report.firstParty.accountsCreated} showLiveTiming={firstPartyLive} />
             </div>
           </section>
+          </ReportDetails>
 
+          <ReportDetails title="Measurement limits and experiment notes">
           <section className="mt-10 grid gap-5 lg:grid-cols-[1.1fr_.9fr]">
             <article className="rounded-[22px] bg-[#102319] p-6 text-white shadow-[0_18px_45px_rgba(16,35,25,.1)]">
               <div className="flex gap-3"><BarChart3 className="mt-0.5 shrink-0 text-[#d8ff71]" size={19} /><div><p className="text-[10px] font-extrabold uppercase tracking-[.14em] text-[#d8ff71]">How to read the test</p><h2 className="mt-1 text-xl font-semibold">The conversion hierarchy</h2></div></div>
@@ -712,6 +730,7 @@ export default function MarketingDashboardPage() {
               </ul>
             </article>
           </section>
+          </ReportDetails>
 
           <details className="group mt-8 rounded-[20px] border border-[#102319]/10 bg-[#fffdf5]">
             <summary className="flex cursor-pointer list-none items-center justify-between gap-4 p-5 text-sm font-bold">

@@ -57,6 +57,8 @@ describe('signup reporting service', () => {
     expect(report.summary.trialsCompleted.value).toBe(2);
     expect(report.summary.clickToTrialRate.value).toBeNull();
     expect(report.signupOutcomes.rows.every(row => row.signupAbandonmentRate === null)).toBe(true);
+    expect(report.visitorJourneys).toMatchObject({ state: 'available', ratesAvailable: false });
+    expect(report.visitorJourneys.rows.every(row => row.steps.every(step => step.droppedSessions === null))).toBe(true);
     expect(report.firstParty.createdAccountsWithConversation).toBe(0);
     expect(users).toHaveBeenCalledWith(expect.objectContaining({ select: expect.objectContaining({
       _count: { select: { conversations: { where: { origin: 'user' } } } },
@@ -68,11 +70,14 @@ describe('signup reporting service', () => {
     const report = await getMarketingDashboard({ days: 7, compare: true });
     expect(report.summary.trialsCompleted.value).toBe(2);
     expect(report.summary.clickToTrialRate.value).toBe(.5);
+    expect(report.visitorJourneys).toMatchObject({ state: 'available', ratesAvailable: true, period: { start: '2026-09-18', end: '2026-09-24' } });
+    expect(report.visitorJourneys.rows.find(row => row.id === 'signup' && row.device === 'mobile')?.steps.slice(-1)[0]).toMatchObject({ sessions: 2, dropoffRate: 0 });
     expect(report.signupOutcomes.rows.find(row => row.entry === 'results_email')?.signupAbandonmentRate).toBe(0);
     const loaded = await loadGa4Sessions({ days: 7, compare: true });
     jest.mocked(loadGa4Sessions).mockResolvedValue({ ...loaded, truncated: true });
     const truncated = await getMarketingDashboard({ days: 7, compare: true });
     expect(truncated.signupOutcomes).toMatchObject({ state: 'unavailable', rows: [] });
+    expect(truncated.visitorJourneys).toMatchObject({ state: 'unavailable', rows: [], ratesAvailable: false });
     expect(truncated.summary.clickToTrialRate.value).toBeNull();
   });
 
