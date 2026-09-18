@@ -34,6 +34,56 @@ describe('simplified admin journeys', () => {
     expect(within(mobileRow).getAllByRole('cell').map(cell => cell.textContent)).toEqual(['60', '6', '10.0%']);
   });
 
+  it.each([
+    ['retirement', 'All devices', 20, '20.0%'],
+    ['retirement', 'Mobile', 12, '20.0%'],
+    ['retirement', 'Desktop', 8, '20.0%'],
+    ['coast_fire', 'Mobile', 10, '20.8%'],
+    ['signup', 'All devices', 25, '62.5%'],
+    ['signup_retirement_results_email', 'Desktop', 1, '100.0%'],
+  ])('shows counts and shares of the selected %s path on %s', (pathId, device, sessions, share) => {
+    render(<VisitorJourney data={journeyFixture} initialPath={pathId} />);
+    fireEvent.click(screen.getByRole('button', { name: device }));
+    const steps = within(screen.getByRole('list', { name: 'Ordered session journey' })).getAllByRole('listitem');
+    expect(within(steps[0]).getByText('100.0% of starting sessions')).toBeInTheDocument();
+    expect(within(steps[2]).getByText(String(sessions))).toBeInTheDocument();
+    expect(within(steps[2]).getByText(`${share} of starting sessions`)).toBeInTheDocument();
+    if (pathId === 'retirement' && device === 'All devices') {
+      // 20/100 is the share of the start; 20/50 is the continuation rate.
+      expect(within(steps[2]).getByText('40.0% continued')).toBeInTheDocument();
+    }
+  });
+
+  it('uses the full calculator path as the expanded form percentage denominator', () => {
+    render(<VisitorJourney data={journeyFixture} />);
+    fireEvent.click(screen.getByText('Signup form breakdown'));
+    const details = screen.getByText('Signup form breakdown').closest('details')!;
+    expect(within(details).getByText('16 sessions')).toBeVisible();
+    expect(within(details).getByText('16.0% of starting sessions')).toBeVisible();
+    expect(within(details).getByText('14.0% of starting sessions')).toBeVisible();
+    expect(within(details).getAllByText('12.0% of starting sessions')).toHaveLength(2);
+    expect(within(details).getByText('87.5% continued · 2 did not reach this step (12.5%)')).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: 'Mobile' }));
+    expect(within(details).getByText('10 sessions')).toBeVisible();
+    expect(within(details).getByText('16.7% of starting sessions')).toBeVisible();
+  });
+
+  it('distinguishes an empty path from a tracked step with zero sessions', () => {
+    const calculator = journeyFixture.rows.find(row => row.id === 'retirement' && row.device === 'all')!;
+    const steps = calculator.steps.map(step => ({ ...step, sessions: 0, breakdown: undefined,
+      continuedRate: null, droppedSessions: null, dropoffRate: null,
+    }));
+    const { rerender } = render(<VisitorJourney data={{ ...journeyFixture, rows: [{ ...calculator, steps }] }} />);
+    const path = screen.getByRole('list', { name: 'Ordered session journey' });
+    expect(within(path).getAllByText('— of starting sessions')).toHaveLength(6);
+    expect(path).not.toHaveTextContent(/NaN|Infinity|0\.0% of starting sessions/);
+    rerender(<VisitorJourney data={{ ...journeyFixture, rows: [{ ...calculator,
+      steps: steps.map((step, index) => ({ ...step, sessions: index === 0 ? 10 : 0 })),
+    }] }} />);
+    expect(within(path).getByText('100.0% of starting sessions')).toBeInTheDocument();
+    expect(within(path).getAllByText('0.0% of starting sessions')).toHaveLength(5);
+  });
+
   it('switches devices and shows email returns as their own signup path', () => {
     render(<VisitorJourney data={journeyFixture} />);
     fireEvent.click(screen.getByRole('button', { name: 'Mobile' }));
@@ -86,6 +136,10 @@ describe('simplified admin journeys', () => {
     expect(screen.queryByText(/The largest loss of sessions/)).not.toBeInTheDocument();
     fireEvent.click(screen.getByText('Signup form breakdown'));
     expect(screen.queryByText(/did not reach this step/)).not.toBeInTheDocument();
+    const path = screen.getByRole('list', { name: 'Ordered session journey' });
+    expect(within(path).getByText('100')).toBeInTheDocument();
+    expect(within(path).queryByText(/\d+\.\d+% of starting sessions/)).not.toBeInTheDocument();
+    expect(within(path).getAllByText('— of starting sessions')).toHaveLength(10);
     rerender(<VisitorJourney />);
     expect(screen.getByRole('status')).toHaveTextContent('missing data is not zero traffic');
     expect(screen.queryByRole('list')).not.toBeInTheDocument();
