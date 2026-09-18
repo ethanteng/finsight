@@ -526,7 +526,8 @@ export default function MarketingDashboardPage() {
       setReport(nextReport);
     } catch (loadError) {
       if (request !== requestId.current) return;
-      setReport(null);
+      // Keep the last good report on a failed refresh so a transient error does
+      // not wipe the journey and detailed sections the admin was already reading.
       setError(loadError instanceof Error ? loadError.message : 'Marketing data could not be loaded.');
     } finally {
       if (request === requestId.current) setLoading(false);

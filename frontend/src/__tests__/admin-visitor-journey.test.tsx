@@ -58,6 +58,18 @@ describe('simplified admin journeys', () => {
     expect(screen.getByText('Repeat runs and the free-run limit').closest('details')).toHaveAttribute('open');
   });
 
+  it('keeps the last marketing report visible when a refresh fails', async () => {
+    global.fetch = jest.fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => marketingFixture })
+      .mockResolvedValueOnce({ ok: false, status: 500, json: async () => ({ error: 'fail' }) });
+    render(<MarketingDashboardPage />);
+    expect(await screen.findByRole('list', { name: 'Ordered session journey' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh' }));
+    expect(await screen.findByText(/Marketing data could not be loaded/)).toBeInTheDocument();
+    expect(screen.getByRole('list', { name: 'Ordered session journey' })).toBeInTheDocument();
+    expect(screen.getByText('50 did not reach this step (50.0%)')).toBeInTheDocument();
+  });
+
   it('keeps calculator health usable when GA4 fails and refreshes both sources', async () => {
     global.fetch = jest.fn(async input => ({ ok: !String(input).includes('/admin/marketing'), status: String(input).includes('/admin/marketing') ? 500 : 200, json: async () => retirementFixture })) as jest.Mock;
     render(<RetirementCalculatorAdminPage />);
