@@ -131,9 +131,16 @@ function SubscribeRedirectInner() {
 
   useEffect(() => {
     mountedRef.current = true;
-    if (startedRef.current) return;
-    startedRef.current = true;
-    void startCheckout();
+
+    // Guarded rather than an early return: returning before the cleanup below
+    // registers none at all, and StrictMode's remount takes exactly that path.
+    // The page would then be left marked mounted for good, and a real unmount
+    // after it would not stop the forward.
+    if (!startedRef.current) {
+      startedRef.current = true;
+      void startCheckout();
+    }
+
     return () => {
       mountedRef.current = false;
     };

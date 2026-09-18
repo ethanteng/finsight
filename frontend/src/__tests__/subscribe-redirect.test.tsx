@@ -4,6 +4,7 @@
  *
  * @jest-environment-options {"url": "https://asklinc.com/subscribe"}
  */
+import { StrictMode } from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import SubscribeRedirect, { campaignLocation } from '@/components/SubscribeRedirect';
 import { pushBeginCheckout } from '@/lib/dataLayer';
@@ -100,6 +101,60 @@ describe('SubscribeRedirect', () => {
 
     await waitFor(() => expect(replace).toHaveBeenCalled());
     expect(global.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('still forwards across the extra unmount StrictMode performs', async () => {
+    let resolveCheckout: (value: unknown) => void = () => {};
+    global.fetch = jest.fn().mockReturnValue(
+      new Promise((resolve) => {
+        resolveCheckout = resolve;
+      }),
+    );
+
+    render(
+      <StrictMode>
+        <SubscribeRedirect />
+      </StrictMode>,
+    );
+    await waitFor(() => expect(global.fetch).toHaveBeenCalled());
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+
+    resolveCheckout({
+      ok: true,
+      json: async () => ({ url: 'https://checkout.stripe.com/c/pay/cs_test_strict' }),
+    });
+
+    await waitFor(() =>
+      expect(replace).toHaveBeenCalledWith('https://checkout.stripe.com/c/pay/cs_test_strict'),
+    );
+  });
+
+  it('does not forward after an unmount that follows StrictMode\'s remount', async () => {
+    let resolveCheckout: (value: unknown) => void = () => {};
+    global.fetch = jest.fn().mockReturnValue(
+      new Promise((resolve) => {
+        resolveCheckout = resolve;
+      }),
+    );
+
+    const { unmount } = render(
+      <StrictMode>
+        <SubscribeRedirect />
+      </StrictMode>,
+    );
+    await waitFor(() => expect(global.fetch).toHaveBeenCalled());
+
+    // StrictMode has already unmounted and remounted by now. If that remount
+    // registered no cleanup, this unmount leaves the page marked mounted and
+    // the late response still forwards.
+    unmount();
+    resolveCheckout({
+      ok: true,
+      json: async () => ({ url: 'https://checkout.stripe.com/c/pay/cs_test_strict_gone' }),
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(replace).not.toHaveBeenCalled();
   });
 
   it('offers a retry instead of a dead end when the session cannot be created', async () => {
