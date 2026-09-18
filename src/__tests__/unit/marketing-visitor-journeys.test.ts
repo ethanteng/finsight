@@ -38,18 +38,19 @@ describe('visitor journeys', () => {
     const events = { retirement_model_run: 1, retirement_results_emailed: 2, ...signup };
     const sessions = [session('email', events, { signupEntry: 'results_email' }), session('other', events, { signupOrigin: 'coast_fire_calculator' })];
     expect(path(sessions).steps.map(step => step.sessions)).toEqual([2, 2, 2, 0, 0, 0]);
-    expect(path(sessions, 'signup_retirement_results_email').steps.map(step => step.sessions)).toEqual([1, 1, 1, 1, 1]);
+    expect(path(sessions, 'signup_retirement_results_email').steps.map(step => step.sessions)).toEqual([1, 1, 1]);
     expect(path(sessions, 'signup_retirement_results_page').steps[0].sessions).toBe(0);
   });
 
-  it('requires same-session ordered events and the full signup chain', () => {
+  it('requires ordered main steps but retains conversions with missing form events', () => {
     const sessions = [
       session('before-result', { retirement_model_run: 3, quickplan_cross_sell_click: 2, ...signup }, { signupEntry: 'calculator_cta' }),
       session('before-continue', { retirement_model_run: 1, retirement_results_emailed: 5, ...signup }),
       session('missing-start', { retirement_model_run: 1, retirement_results_emailed: 2, trial_signup_viewed: 4, sign_up: 7, trial_signup_completed: 8 }),
       session('account-only', { sign_up: 7, trial_signup_completed: 8 }),
     ];
-    expect(path(sessions).steps.map(step => step.sessions)).toEqual([4, 3, 2, 1, 0, 0]);
+    expect(path(sessions).steps.map(step => step.sessions)).toEqual([4, 3, 2, 1, 1, 1]);
+    expect(path(sessions).steps[4].breakdownTrackingGapSessions).toBe(1);
   });
 
   it('accepts a later alternative continuation when the other first event is too early', () => {
@@ -75,7 +76,51 @@ describe('visitor journeys', () => {
     expect(account.breakdown?.slice(1).reduce((total, step) => total + step.droppedSessions!, 0)).toBe(account.droppedSessions);
     expect(path(rows, 'retirement', 'mobile').steps[4].breakdown?.map(step => step.sessions)).toEqual([4, 3, 2, 1]);
     expect(path(rows, 'retirement', 'desktop').steps[4].breakdown?.map(step => step.sessions)).toEqual([1, 1, 1, 1]);
-    expect(path(rows, 'signup').steps.every(step => step.breakdown === undefined)).toBe(true);
+    expect(path(rows, 'signup').steps.map(step => step.sessions)).toEqual([6, 3, 3]);
+    expect(path(rows, 'signup').steps[1].breakdown?.map(step => step.sessions)).toEqual([6, 5, 4, 3]);
+    expect(account.breakdownTrackingGapSessions).toBe(0);
+  });
+
+  it.each([
+    [{ trial_signup_submit: 6 }, [1, 0, 1, 1]],
+    [{ trial_signup_started: 5 }, [1, 1, 0, 1]],
+    [{}, [1, 0, 0, 1]],
+    [{ trial_signup_started: 6, trial_signup_submit: 5 }, [1, 1, 1, 1]],
+    [{ trial_signup_started: 9, trial_signup_submit: 10 }, [1, 1, 1, 1]],
+  ])('separates confirmed conversions from incomplete or out-of-order form tracking (%j)', (formEvents, counts) => {
+    const rows = [session('gap', { retirement_model_run: 1, retirement_results_emailed: 2,
+      trial_signup_viewed: 4, sign_up: 7, trial_signup_completed: 8, ...formEvents })];
+    for (const id of ['retirement', 'signup_retirement_results_page']) {
+      const journey = path(rows, id);
+      const account = journey.steps.find(step => ['account', 'sign_up'].includes(step.id))!;
+      expect(account).toMatchObject({ sessions: 1, droppedSessions: 0, continuedRate: 1, breakdownTrackingGapSessions: 1 });
+      expect(journey.steps.slice(-1)[0].sessions).toBe(1);
+      expect(account.breakdown?.map(step => step.sessions)).toEqual(counts);
+      expect(account.breakdown?.every(step => step.dropoffRate === null && step.droppedSessions === null && step.continuedRate === null)).toBe(true);
+    }
+    expect(path(rows, 'retirement', 'desktop').steps[4].breakdownTrackingGapSessions).toBe(0);
+    expect(path(rows, 'retirement', 'mobile').steps[4].breakdownTrackingGapSessions).toBe(1);
+  });
+
+  it('detects gaps per session even when aggregate form counts look nested', () => {
+    const reached = { retirement_model_run: 1, retirement_results_emailed: 2, trial_signup_viewed: 4 };
+    const rows = [
+      session('started-only', { ...reached, trial_signup_started: 5 }),
+      session('submitted-only', { ...reached, trial_signup_submit: 6 }),
+      session('account-only-after-view', { ...reached, sign_up: 7 }),
+    ];
+    const account = path(rows).steps[4];
+    expect(account.breakdown?.map(step => step.sessions)).toEqual([3, 1, 1, 1]);
+    expect(account).toMatchObject({ sessions: 1, droppedSessions: 2, breakdownTrackingGapSessions: 2 });
+    expect(account.breakdown?.every(step => step.dropoffRate === null)).toBe(true);
+  });
+
+  it('flags form events before signup view instead of calling their absence abandonment', () => {
+    const account = path([session('early-form-events', { retirement_model_run: 1, retirement_results_emailed: 2,
+      trial_signup_started: 3, trial_signup_submit: 3, trial_signup_viewed: 4 })]).steps[4];
+    expect(account).toMatchObject({ sessions: 0, droppedSessions: 1, breakdownTrackingGapSessions: 1 });
+    expect(account.breakdown?.map(step => step.sessions)).toEqual([1, 0, 0, 0]);
+    expect(account.breakdown?.every(step => step.droppedSessions === null)).toBe(true);
   });
 
   it('keeps devices separate and landing cohorts exact, including a trailing slash', () => {

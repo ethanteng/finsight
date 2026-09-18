@@ -1,4 +1,4 @@
-import { aggregateTrialFunnel, signupCompletionAt } from './funnel';
+import { aggregateSignupConversionFunnel, signupCompletionAt } from './funnel';
 import type { AnalyticsSession, SignupOutcomeRow } from './types';
 
 /** Distinct sessions, never sums of overlapping completion events. */
@@ -15,7 +15,7 @@ export function buildSignupOutcomes(sessions: AnalyticsSession[], fullCoverage: 
   return [...groups.entries()].map(([key, rows]) => {
     const [device, origin, entry] = JSON.parse(key) as string[];
     const count = (event: string) => rows.filter(row => (row.eventCounts[event] || 0) > 0).length;
-    const funnel = aggregateTrialFunnel(rows, fullCoverage ? 'complete' : 'partial');
+    const funnel = aggregateSignupConversionFunnel(rows, fullCoverage ? 'complete' : 'partial');
     const viewed = count('trial_signup_viewed');
     const createdAfterView = funnel.find(step => step.event === 'sign_up')?.sessions || 0;
     return {

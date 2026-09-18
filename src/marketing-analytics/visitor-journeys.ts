@@ -1,4 +1,4 @@
-import { aggregateTrialFunnel } from './funnel';
+import { aggregateSignupConversionFunnel } from './funnel';
 import type { AnalyticsSession } from './types';
 
 export interface VisitorJourneyStep {
@@ -8,8 +8,10 @@ export interface VisitorJourneyStep {
   continuedRate: number | null;
   droppedSessions: number | null;
   dropoffRate: number | null;
-  /** Ordered boundaries inside a compact step, with the preceding step as base. */
+  /** Form events observed after signup view, in the same cohort as this step. */
   breakdown?: VisitorJourneyStep[];
+  /** Sessions with missing/out-of-order form events. Suppress diagnostic losses. */
+  breakdownTrackingGapSessions?: number;
 }
 
 export interface VisitorJourney {
@@ -39,14 +41,14 @@ export function buildVisitorJourneys(
     state: options.available ? 'available' : 'unavailable',
     ratesAvailable: options.available && options.ratesAvailable,
     period: options.period,
-    note: 'One count per session at each step. Every later step requires the earlier steps in order. Drop-off means the next step was not observed in that session, not that the person never returned. First-occurrence timestamps can undercount retries. Signup handoff is not proof the app loaded or the email was verified.',
+    note: 'One count per session at each main step. Every later main step requires the earlier main steps in order. Account creation requires an observed sign_up after signup view, not form-start or form-submit events. Form diagnostics are separate; missing or out-of-order form events suppress their drop-off rates, not confirmed conversions. Drop-off means the next step was not observed in that session, not that the person never returned. First-occurrence timestamps can undercount retries. Signup handoff is not proof the app loaded or the email was verified.',
     rows: [],
   };
   if (!options.available) return result;
   const devices = [...new Set(['all', 'mobile', 'desktop', ...sessions.map(session => session.device)])];
-  const steps = (counts: Array<[string, string, number]>): VisitorJourneyStep[] => counts.map(([id, label, count], index) => {
+  const steps = (counts: Array<[string, string, number]>, trackingComplete = true): VisitorJourneyStep[] => counts.map(([id, label, count], index) => {
     const prior = index ? counts[index - 1][2] : 0;
-    const measurable = index > 0 && prior > 0 && result.ratesAvailable;
+    const measurable = index > 0 && prior > 0 && result.ratesAvailable && trackingComplete;
     return {
       id, label, sessions: count,
       continuedRate: measurable ? count / prior : null,
@@ -54,6 +56,33 @@ export function buildVisitorJourneys(
       dropoffRate: measurable ? (prior - count) / prior : null,
     };
   });
+
+  const attachFormDiagnostics = (account: VisitorJourneyStep, cohort: AnalyticsSession[]) => {
+    const viewed = cohort.filter(session => session.firstEventAt.trial_signup_viewed !== undefined);
+    const afterView = (session: AnalyticsSession, event: string) => {
+      const at = session.firstEventAt[event];
+      return at !== undefined && at >= session.firstEventAt.trial_signup_viewed!;
+    };
+    // Check each session, not just aggregate counts: equal totals can hide gaps
+    // in different sessions. No synthetic start/submit events are inserted.
+    const gaps = viewed.filter(session => {
+      const started = afterView(session, 'trial_signup_started');
+      const submitted = afterView(session, 'trial_signup_submit');
+      const orderedSubmit = started && submitted
+        && session.firstEventAt.trial_signup_submit! >= session.firstEventAt.trial_signup_started!;
+      return (session.firstEventAt.trial_signup_started !== undefined && !started)
+        || (session.firstEventAt.trial_signup_submit !== undefined && !submitted)
+        || (submitted && !orderedSubmit) || (afterView(session, 'sign_up')
+        && (!orderedSubmit || session.firstEventAt.sign_up! < session.firstEventAt.trial_signup_submit!));
+    }).length;
+    account.breakdownTrackingGapSessions = gaps;
+    account.breakdown = steps([
+      ['trial_signup_viewed', 'Reached signup', viewed.length],
+      ['trial_signup_started', 'Started the form', viewed.filter(session => afterView(session, 'trial_signup_started')).length],
+      ['trial_signup_submit', 'Submitted the form', viewed.filter(session => afterView(session, 'trial_signup_submit')).length],
+      ['sign_up', 'Created an account', account.sessions],
+    ], gaps === 0);
+  };
 
   for (const device of devices) {
     const population = sessions.filter(session => device === 'all' || session.device === device);
@@ -75,21 +104,19 @@ export function buildVisitorJourneys(
         && ['results_page', 'calculator_cta'].includes(session.signupEntry || '')
         && session.firstEventAt.trial_signup_viewed !== undefined
         && session.firstEventAt.trial_signup_viewed >= continueAt(session)!);
-      const signup = aggregateTrialFunnel(viewed);
+      const signup = aggregateSignupConversionFunnel(viewed);
       const calculatorSteps = steps([
         ['landed', 'Landed on the calculator', landed.length],
         ['result', 'Got a result', calculated.length],
         ['continue', 'Saved results or chose to sign up', continued.length],
         ['signup', 'Reached signup', viewed.length],
-        ['account', 'Created an account', signup[3].sessions!],
-        ['handoff', 'Continued to the app', signup[4].sessions!],
+        ['account', 'Created an account', signup[1].sessions!],
+        ['handoff', 'Continued to the app', signup[2].sessions!],
       ]);
       // Keep the overview compact without attributing form abandonment to the
       // registration request. These use the SAME result/continuation cohort,
       // not the broader signup-origin cohort reported separately below.
-      calculatorSteps[4].breakdown = steps(signup.slice(0, 4).map((step, index) => [
-        step.event, ['Reached signup', 'Started the form', 'Submitted the form', 'Created an account'][index], step.sessions!,
-      ]));
+      attachFormDiagnostics(calculatorSteps[4], viewed);
       result.rows.push({ id: calculator, label, device, steps: calculatorSteps });
     }
 
@@ -108,11 +135,11 @@ export function buildVisitorJourneys(
     for (const path of signupPaths) {
       const cohort = population.filter(session => (!path.origin || session.signupOrigin === path.origin)
         && (!path.entry || session.signupEntry === path.entry));
-      const labels = ['Reached signup', 'Started the form', 'Submitted the form', 'Created an account', 'Continued to the app'];
-      const funnel = aggregateTrialFunnel(cohort);
-      result.rows.push({ id: path.id, label: path.label, device,
-        steps: steps(funnel.map((step, index) => [step.event, labels[index], step.sessions!])),
-      });
+      const labels = ['Reached signup', 'Created an account', 'Continued to the app'];
+      const funnel = aggregateSignupConversionFunnel(cohort);
+      const signupSteps = steps(funnel.map((step, index) => [step.event, labels[index], step.sessions!]));
+      attachFormDiagnostics(signupSteps[1], cohort);
+      result.rows.push({ id: path.id, label: path.label, device, steps: signupSteps });
     }
   }
   return result;

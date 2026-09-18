@@ -5,7 +5,7 @@ import {
   calculatorLeadSummary,
   unavailableCalculatorLeadSummary,
 } from '../services/calculator-lead-report';
-import { aggregateTrialFunnel, FUNNEL_LABELS } from './funnel';
+import { aggregateSignupConversionFunnel, aggregateTrialFunnel, FUNNEL_LABELS } from './funnel';
 import { buildVisitorJourneys } from './visitor-journeys';
 import { buildSignupOutcomes } from './signup-outcomes';
 import { buildBeachheadScorecard, CALCULATOR_EMAIL_TRACKING_STARTED_AT } from './beachhead-scorecard';
@@ -164,7 +164,9 @@ function aggregateIntents(sessions: AnalyticsSession[], conversionCoverageComple
   return [...groups.entries()].map(([intent, rows]) => {
     const label = classifyIntent(rows[0]?.acquisition || {}).label;
     const qualified = conversionCoverageComplete ? aggregateTrialFunnel(rows, 'complete') : null;
-    const stepCount = (event: FunnelEventName) => qualified?.find(step => step.event === event)?.sessions ?? 0;
+    const confirmed = conversionCoverageComplete ? aggregateSignupConversionFunnel(rows, 'complete') : null;
+    const stepCount = (event: FunnelEventName) => (event === 'trial_signup_started' ? qualified : confirmed)
+      ?.find(step => step.event === event)?.sessions ?? 0;
     return {
       intent,
       key: intent,
@@ -421,16 +423,18 @@ export async function getMarketingDashboard(filters: MarketingFilters): Promise<
     : null;
   const funnelStepCount = (steps: MarketingDashboardReport['funnel'], event: FunnelEventName) =>
     steps.find(step => step.event === event)?.sessions ?? 0;
-  const completed = hasLiveGa4 && trackingStartedAt ? funnelStepCount(funnel, 'trial_signup_completed') : null;
-  const previousCompleted = previousFunnel ? funnelStepCount(previousFunnel, 'trial_signup_completed') : null;
+  const completed = hasLiveGa4 && trackingStartedAt
+    ? funnelStepCount(aggregateSignupConversionFunnel(funnelSessions, funnelCoverage), 'trial_signup_completed') : null;
+  const previousCompleted = previousFunnel
+    ? funnelStepCount(aggregateSignupConversionFunnel(previousFunnelSessions, 'complete'), 'trial_signup_completed') : null;
   const clicks = countEvents(current, 'start_free_click');
   const previousClicks = countEvents(previous, 'start_free_click');
   const funnelClicks = hasLiveGa4 ? countSessionEvents(funnelSessions, 'start_free_click') : null;
   const previousFunnelClicks = previousFunnel ? countSessionEvents(previousFunnelSessions, 'start_free_click') : null;
   const ctaCompleted = funnelCoverageComplete
-    ? funnelStepCount(aggregateTrialFunnel(funnelSessions, 'complete', 'start_free_click'), 'trial_signup_completed') : null;
+    ? funnelStepCount(aggregateSignupConversionFunnel(funnelSessions, 'complete', 'start_free_click'), 'trial_signup_completed') : null;
   const previousCtaCompleted = previousFunnelCovered
-    ? funnelStepCount(aggregateTrialFunnel(previousFunnelSessions, 'complete', 'start_free_click'), 'trial_signup_completed') : null;
+    ? funnelStepCount(aggregateSignupConversionFunnel(previousFunnelSessions, 'complete', 'start_free_click'), 'trial_signup_completed') : null;
   const signupStarts = hasLiveGa4 && trackingStartedAt ? funnelStepCount(funnel, 'trial_signup_started') : null;
   const previousSignupStarts = previousFunnel ? funnelStepCount(previousFunnel, 'trial_signup_started') : null;
   const acquisition = hasLiveGa4
@@ -494,7 +498,7 @@ export async function getMarketingDashboard(filters: MarketingFilters): Promise<
   if (hasLiveGa4 && trafficQuality.excludedSessions > 0) warnings.push(`${trafficQuality.excludedSessions} bot, internal/developer, or non-production sessions are excluded from headline metrics and remain visible in Traffic quality.`);
   if (ga4.truncated) warnings.push('The GA4 query reached its 100,000-session safety cap. Narrow the date range before interpreting totals.');
   if (hasLiveGa4 && funnel.some(step => (step.rawEventSessions || 0) > (step.sessions || 0))) {
-    warnings.push('Some downstream funnel events occurred without every earlier event in the same session. Treat these as re-entry or instrumentation gaps, not drop-off.');
+    warnings.push('Some downstream form-diagnostic events occurred without every earlier event in the same session. Treat these as re-entry or instrumentation gaps, not drop-off. Confirmed accounts require signup view then account creation; handoffs additionally require a later handoff event. Neither requires form-start or form-submit events.');
   }
   const ga4FreeTrialAccounts = countSessionEvents(funnelSessions, 'sign_up');
   if (hasLiveGa4 && funnelCoverageComplete && firstParty.accountsCreated !== null && firstParty.accountsCreated > ga4FreeTrialAccounts) {
@@ -536,7 +540,7 @@ export async function getMarketingDashboard(filters: MarketingFilters): Promise<
       engagedSessionRate: metric(hasLiveGa4 ? ratio(current.filter(session => session.engaged).length, current.length) : canUseSnapshot ? 1 - VERIFIED_SNAPSHOT.contentsquare.reportingPopulation.bounceRate : null, hasLiveGa4 ? ratio(previous.filter(session => session.engaged).length, previous.length) : null, 'percent', hasLiveGa4 ? 'GA4 BigQuery · quality filtered' : canUseSnapshot ? 'Contentsquare inverse bounce rate · quality filtered' : 'Unavailable'),
       ctaClicks: metric(hasLiveGa4 ? clicks : null, hasLiveGa4 ? previousClicks : null, 'count', hasLiveGa4 ? 'GA4 BigQuery' : 'Collecting', 'Uses the deployed start_free_click event, not signup-page reach.'),
       signupStarts: metric(signupStarts, previousSignupStarts, 'count', hasLiveGa4 ? 'GA4 BigQuery · post-instrumentation only' : 'Collecting', 'Strict same-session funnel reach for trial_signup_started.'),
-      trialsCompleted: metric(completed, previousCompleted, 'count', hasLiveGa4 ? 'GA4 BigQuery · observed handoffs' : 'Collecting', 'Ordered signup to authenticated app handoff; includes skipped verification, excludes a mandatory login. Not proof the app loaded. Transitional history is incomplete.'),
+      trialsCompleted: metric(completed, previousCompleted, 'count', hasLiveGa4 ? 'GA4 BigQuery · observed handoffs' : 'Collecting', 'Ordered signup view to account creation to authenticated app handoff; missing form-start or form-submit events do not remove confirmed conversions. Includes skipped verification. Not proof the app loaded. Transitional history is incomplete.'),
       clickToTrialRate: metric(hasLiveGa4 && ctaCompleted !== null && funnelClicks !== null ? ratio(ctaCompleted, funnelClicks) : null, hasLiveGa4 && previousCtaCompleted !== null && previousFunnelClicks !== null ? ratio(previousCtaCompleted, previousFunnelClicks) : null, 'percent', hasLiveGa4 ? 'GA4 BigQuery · matched coverage' : 'Collecting'),
       paidSpend: metric(null, null, 'currency', 'Unavailable', 'No Google Ads spend connector is available to the runtime.'),
       cac: metric(null, null, 'currency', 'Unavailable', 'Requires paid spend plus an agreed acquisition boundary.'),
@@ -557,7 +561,7 @@ export async function getMarketingDashboard(filters: MarketingFilters): Promise<
       state: hasLiveGa4 && !ga4.truncated ? 'available' : 'unavailable',
       rows: hasLiveGa4 && !ga4.truncated ? buildSignupOutcomes(current, funnelCoverageComplete) : [],
       trackingStartedAt: handoffTrackingStartedAt,
-      note: 'Distinct observed sessions by device and signup entry. Handoff means signup is ready to open /app, not confirmed app load. Skipped verification is not a verified email. Branches may overlap on retries; never add them together. Unknown attribution is kept separate. Abandonment requires the ordered signup chain and verified full-window tracking coverage.',
+      note: 'Distinct observed sessions by device and signup entry. Handoff means signup is ready to open /app, not confirmed app load. Skipped verification is not a verified email. Branches may overlap on retries; never add them together. Unknown attribution is kept separate. Abandonment compares signup views with later account creations in the same session, independent of form-interaction events, and requires verified full-window tracking coverage.',
     },
     funnelErrors: ['trial_signup_validation_error', 'trial_signup_registration_error', 'trial_verify_error', 'trial_login_error'].map(event => ({
       event,

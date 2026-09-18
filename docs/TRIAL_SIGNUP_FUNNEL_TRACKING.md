@@ -5,10 +5,15 @@
 The main same-session funnel is:
 
 1. `trial_signup_viewed`
-2. `trial_signup_started`
-3. `trial_signup_submit`
-4. `sign_up`, with `signup_flow = free_trial`: the server created an account.
-5. `trial_signup_completed`: the authenticated signup is ready to hand off to `/app`.
+2. `sign_up`, with `signup_flow = free_trial`: the server created an account.
+3. `trial_signup_completed`: the authenticated signup is ready to hand off to `/app`.
+
+`trial_signup_started` and `trial_signup_submit` remain form diagnostics. Missing
+or out-of-order form interactions must not hide an observed account creation or
+handoff. Both admin pages expand these counts separately and suppress form-step
+drop-offs when the session-level form sequence has gaps. No missing events are
+fabricated. The legacy API `funnel` field retains the strict five-step diagnostic
+chain; confirmed conversion metrics use the three main boundaries above.
 
 A handoff is **not** proof that the app loaded, the user asked a question, or the email is verified.
 `start_free_click` is an optional preceding step for CTA-specific conversion rates.
@@ -75,9 +80,11 @@ event as another Ads primary conversion or sum it with sign_up.
 
 Register event-scoped GA4 custom dimensions for `completion_method` and
 `signup_flow_version` (existing origin/entry dimensions are reused). Native
-explorations use the five main steps above, with Device category breakdown
-and signup-origin/entry comparisons; optional verification belongs in a
-separate diagnostic tab. BigQuery parameters do not require custom dimensions.
+conversion explorations should use the three main steps above, with Device
+category breakdown and signup-origin/entry comparisons. A five-step form funnel
+is a separate diagnostic, not the source of confirmed account totals. Optional
+verification belongs in a separate diagnostic tab. This backend reporting fix
+does not modify saved GA4 explorations. BigQuery parameters do not require custom dimensions.
 
 Configuration verified: “Signup completion method” and “Signup flow version”
 were created as event-scoped custom dimensions on September 16, 2026 Pacific.

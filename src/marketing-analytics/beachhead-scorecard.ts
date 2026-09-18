@@ -1,4 +1,4 @@
-import { aggregateTrialFunnel } from './funnel';
+import { aggregateSignupConversionFunnel } from './funnel';
 import type {
   AnalyticsSession,
   BeachheadScorecard,
@@ -95,7 +95,7 @@ function completedTrialSessions(
     }];
   });
 
-  return aggregateTrialFunnel(anchoredSessions, 'complete', 'start_free_click')
+  return aggregateSignupConversionFunnel(anchoredSessions, 'complete', 'start_free_click')
     .find(step => step.event === 'trial_signup_completed')?.sessions ?? 0;
 }
 

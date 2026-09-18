@@ -39,8 +39,8 @@ describe('simplified admin journeys', () => {
     ['retirement', 'Mobile', 12, '20.0%'],
     ['retirement', 'Desktop', 8, '20.0%'],
     ['coast_fire', 'Mobile', 10, '20.8%'],
-    ['signup', 'All devices', 25, '62.5%'],
-    ['signup_retirement_results_email', 'Desktop', 1, '100.0%'],
+    ['signup', 'All devices', 18, '45.0%'],
+    ['signup_retirement_results_email', 'Desktop', 0, '0.0%'],
   ])('shows counts and shares of the selected %s path on %s', (pathId, device, sessions, share) => {
     render(<VisitorJourney data={journeyFixture} initialPath={pathId} />);
     fireEvent.click(screen.getByRole('button', { name: device }));
@@ -90,7 +90,7 @@ describe('simplified admin journeys', () => {
     expect(screen.getByRole('button', { name: 'Mobile' })).toHaveAttribute('aria-pressed', 'true');
     expect(within(screen.getByRole('list')).getByText('30 did not reach this step (50.0%)')).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText('Path'), { target: { value: 'signup_retirement_results_email' } });
-    expect(within(screen.getByRole('list')).getAllByRole('listitem')).toHaveLength(5);
+    expect(within(screen.getByRole('list')).getAllByRole('listitem')).toHaveLength(3);
     expect(within(screen.getByRole('list')).queryByText('Got a result')).not.toBeInTheDocument();
     expect(screen.getByText(/Starts at \/getstarted/)).toBeInTheDocument();
   });
@@ -121,9 +121,36 @@ describe('simplified admin journeys', () => {
     expect(within(details).getByText('13.3% continued · 78 did not reach this step (86.7%)')).toBeVisible();
     expect(within(details).getByText('83.3% continued · 2 did not reach this step (16.7%)')).toBeVisible();
     // Frontend-first deployment: an older API can only describe the full span.
-    rerender(<VisitorJourney data={{ ...data, rows: [{ ...calculator, steps: steps.map(step => ({ ...step, breakdown: undefined })) }] }} />);
+    rerender(<VisitorJourney data={{ ...data, rows: [{ ...calculator, steps: steps.map(step => ({ ...step, breakdown: undefined, breakdownTrackingGapSessions: undefined })) }] }} />);
     expect(screen.getByText(/The largest loss spans the signup form/)).toBeInTheDocument();
     expect(screen.queryByText('Signup form breakdown')).not.toBeInTheDocument();
+  });
+
+  it.each(['retirement', 'signup_retirement_results_page'])('keeps confirmed conversions visible with missing form tracking in %s', pathId => {
+    const row = journeyFixture.rows.find(row => row.id === pathId && row.device === 'all')!;
+    const steps = row.steps.map((step, index) => ({ ...step, sessions: 1,
+      continuedRate: index ? 1 : null, droppedSessions: index ? 0 : null, dropoffRate: index ? 0 : null,
+    }));
+    const account = steps.find(step => step.breakdown)!;
+    account.breakdownTrackingGapSessions = 1;
+    account.breakdown = account.breakdown!.map((part, index) => ({ ...part,
+      sessions: index === 1 ? 0 : 1, continuedRate: null, droppedSessions: null, dropoffRate: null,
+    }));
+    const cleanDesktop = journeyFixture.rows.find(row => row.id === pathId && row.device === 'desktop')!;
+    render(<VisitorJourney data={{ ...journeyFixture, rows: [{ ...row, steps }, cleanDesktop] }} initialPath={pathId} />);
+    expect(screen.getByRole('status')).toHaveTextContent('1 session has missing or out-of-order form tracking');
+    expect(screen.getByText(/GA4 daily export · not live/)).toBeInTheDocument();
+    expect(screen.getByText(/No step-to-step loss was observed/)).toBeInTheDocument();
+    const accountItem = screen.getAllByText('Created an account')[0].closest('li')!;
+    expect(within(accountItem).getByText('1')).toBeInTheDocument();
+    expect(within(accountItem).getAllByText('100.0% of starting sessions').length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByText('Signup form breakdown'));
+    const details = screen.getByText('Signup form breakdown').closest('details')!;
+    expect(within(details).getByText('0 sessions')).toBeVisible();
+    expect(within(details).getAllByText('Form-step drop-off unavailable: tracking gap.')).toHaveLength(3);
+    expect(details).not.toHaveTextContent(/did not reach this step|Infinity|NaN/);
+    fireEvent.click(screen.getByRole('button', { name: 'Desktop' }));
+    expect(screen.queryByText(/missing or out-of-order form tracking/)).not.toBeInTheDocument();
   });
 
   it('shows collecting and unavailable states without fabricated dropoffs', () => {
@@ -143,6 +170,24 @@ describe('simplified admin journeys', () => {
     rerender(<VisitorJourney />);
     expect(screen.getByRole('status')).toHaveTextContent('missing data is not zero traffic');
     expect(screen.queryByRole('list')).not.toBeInTheDocument();
+  });
+
+  it('identifies only the whole signup span when form gaps prevent a finer diagnosis', () => {
+    const row = journeyFixture.rows.find(row => row.id === 'retirement' && row.device === 'all')!;
+    const counts = [10, 10, 10, 10, 1, 1];
+    const steps = row.steps.map((step, index) => ({ ...step, sessions: counts[index],
+      continuedRate: index ? counts[index] / counts[index - 1] : null,
+      droppedSessions: index ? counts[index - 1] - counts[index] : null,
+      dropoffRate: index ? 1 - counts[index] / counts[index - 1] : null,
+    }));
+    steps[4].breakdownTrackingGapSessions = 1;
+    steps[4].breakdown = steps[4].breakdown!.map((part, index) => ({ ...part,
+      sessions: [10, 0, 1, 1][index], continuedRate: null, droppedSessions: null, dropoffRate: null,
+    }));
+    render(<VisitorJourney data={{ ...journeyFixture, rows: [{ ...row, steps }] }} />);
+    expect(screen.getByText(/The largest loss spans the signup form/)).toHaveTextContent('cannot be assigned to a specific form step');
+    expect(screen.getByText('9 did not finish signup (90.0%)')).toBeInTheDocument();
+    expect(screen.queryByText(/The largest loss of sessions/)).not.toBeInTheDocument();
   });
 
   it('starts marketing with the journey and collapses detailed reports', async () => {

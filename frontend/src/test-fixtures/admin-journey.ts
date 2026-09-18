@@ -17,14 +17,18 @@ export const journeyFixture: JourneyData = {
       : ['Landed on the calculator', 'Got a result', 'Saved results or chose to sign up', 'Reached signup', 'Created an account', 'Continued to the app'];
     const ids = id.startsWith('signup') ? ['trial_signup_viewed', 'trial_signup_started', 'trial_signup_submit', 'sign_up', 'trial_signup_completed']
       : ['landed', 'result', 'continue', 'signup', 'account', 'handoff'];
-    const steps: JourneyData['rows'][number]['steps'] = values.map((sessions, index) => ({ id: ids[index], label: labels[index], sessions,
-      continuedRate: index ? sessions / values[index - 1] : null,
-      droppedSessions: index ? values[index - 1] - sessions : null,
-      dropoffRate: index ? (values[index - 1] - sessions) / values[index - 1] : null,
+    const mainIndices = id.startsWith('signup') ? [0, 3, 4] : [0, 1, 2, 3, 4, 5];
+    const steps: JourneyData['rows'][number]['steps'] = mainIndices.map((valueIndex, index) => ({ id: ids[valueIndex], label: labels[valueIndex], sessions: values[valueIndex],
+      continuedRate: index && values[mainIndices[index - 1]] ? values[valueIndex] / values[mainIndices[index - 1]] : null,
+      droppedSessions: index && values[mainIndices[index - 1]] ? values[mainIndices[index - 1]] - values[valueIndex] : null,
+      dropoffRate: index && values[mainIndices[index - 1]] ? (values[mainIndices[index - 1]] - values[valueIndex]) / values[mainIndices[index - 1]] : null,
     }));
-    if (!id.startsWith('signup')) {
-      const formCounts = [values[3], Math.ceil((values[3] + values[4]) / 2), values[4], values[4]];
-      steps[4].breakdown = formCounts.map((sessions, index) => ({
+    {
+      const formCounts = id.startsWith('signup') ? values.slice(0, 4)
+        : [values[3], Math.ceil((values[3] + values[4]) / 2), values[4], values[4]];
+      const accountStep = steps[id.startsWith('signup') ? 1 : 4];
+      accountStep.breakdownTrackingGapSessions = 0;
+      accountStep.breakdown = formCounts.map((sessions, index) => ({
         id: ['trial_signup_viewed', 'trial_signup_started', 'trial_signup_submit', 'sign_up'][index],
         label: ['Reached signup', 'Started the form', 'Submitted the form', 'Created an account'][index], sessions,
         continuedRate: index && formCounts[index - 1] ? sessions / formCounts[index - 1] : null,
