@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import SiteFooter from './SiteFooter';
 import { pushBeginCheckout } from '@/lib/dataLayer';
-import { replaceLocation } from '@/lib/external-navigation';
+import { isStripeCheckoutUrl, replaceLocation } from '@/lib/external-navigation';
 
 /**
  * The landing page for a "subscribe" link in an email campaign.
@@ -64,8 +64,14 @@ function SubscribeRedirectInner() {
   // React runs effects twice in development StrictMode, and every run mints a
   // Stripe session. Without this guard a single page view creates two.
   const startedRef = useRef(false);
+  // Retries share startCheckout with the mount path. A second click (or a
+  // remount that races the first fetch) must not mint another session while
+  // one is already in flight.
+  const inFlightRef = useRef(false);
 
   const startCheckout = useCallback(async () => {
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
     setFailed(false);
     pushBeginCheckout(campaignLocation(searchParams.get('src')));
 
@@ -100,7 +106,9 @@ function SubscribeRedirectInner() {
       }
 
       const { url } = await response.json();
-      if (typeof url !== 'string' || url.length === 0) {
+      // Auto-forward pages must fail closed on a non-Stripe target: unlike a
+      // Buy click, the visitor never confirmed the navigation.
+      if (typeof url !== 'string' || !isStripeCheckoutUrl(url)) {
         setFailed(true);
         return;
       }
@@ -109,6 +117,8 @@ function SubscribeRedirectInner() {
     } catch (error) {
       console.error('Error creating checkout session:', error);
       setFailed(true);
+    } finally {
+      inFlightRef.current = false;
     }
   }, [searchParams]);
 

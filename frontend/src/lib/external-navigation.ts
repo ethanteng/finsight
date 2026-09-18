@@ -14,3 +14,20 @@
 export function replaceLocation(url: string): void {
   window.location.replace(url);
 }
+
+/**
+ * True only for a Stripe-hosted Checkout Session URL.
+ *
+ * `/subscribe` auto-forwards on mount (no click), so the response URL is not
+ * treated as opaque: a non-HTTPS or non-Stripe target must fail closed rather
+ * than navigate the visitor. Session URLs from the Stripe API are always on
+ * `checkout.stripe.com`.
+ */
+export function isStripeCheckoutUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === 'https:' && parsed.hostname === 'checkout.stripe.com';
+  } catch {
+    return false;
+  }
+}

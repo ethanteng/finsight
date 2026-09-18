@@ -7,7 +7,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import SubscribeRedirect, { campaignLocation } from '@/components/SubscribeRedirect';
 import { pushBeginCheckout } from '@/lib/dataLayer';
-import { replaceLocation } from '@/lib/external-navigation';
+import { isStripeCheckoutUrl, replaceLocation } from '@/lib/external-navigation';
 
 let searchParams = new URLSearchParams();
 
@@ -17,9 +17,13 @@ jest.mock('next/navigation', () => ({
 jest.mock('@/lib/dataLayer', () => ({
   pushBeginCheckout: jest.fn(),
 }));
-jest.mock('@/lib/external-navigation', () => ({
-  replaceLocation: jest.fn(),
-}));
+jest.mock('@/lib/external-navigation', () => {
+  const actual = jest.requireActual('@/lib/external-navigation') as typeof import('@/lib/external-navigation');
+  return {
+    ...actual,
+    replaceLocation: jest.fn(),
+  };
+});
 
 const mockPushBeginCheckout = jest.mocked(pushBeginCheckout);
 const replace = jest.mocked(replaceLocation);
@@ -128,6 +132,18 @@ describe('SubscribeRedirect', () => {
     expect(replace).not.toHaveBeenCalled();
   });
 
+  it('does not forward to a non-Stripe checkout url', async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ url: 'https://evil.example/phish' }),
+    });
+
+    render(<SubscribeRedirect />);
+
+    await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument());
+    expect(replace).not.toHaveBeenCalled();
+  });
+
   it('still reaches checkout when the browser refuses storage', async () => {
     const getItem = jest.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
       throw new DOMException('The operation is insecure.', 'SecurityError');
@@ -176,5 +192,20 @@ describe('campaignLocation', () => {
     '',
   ])('refuses %p rather than writing it into analytics', (src) => {
     expect(campaignLocation(src)).toBe('email');
+  });
+});
+
+describe('isStripeCheckoutUrl', () => {
+  it('accepts a Stripe-hosted Checkout Session URL', () => {
+    expect(isStripeCheckoutUrl('https://checkout.stripe.com/c/pay/cs_test_123')).toBe(true);
+  });
+
+  it.each([
+    'http://checkout.stripe.com/c/pay/cs_test_123',
+    'https://evil.example/c/pay/cs_test_123',
+    'javascript:alert(1)',
+    '',
+  ])('rejects %p', (url) => {
+    expect(isStripeCheckoutUrl(url)).toBe(false);
   });
 });
