@@ -77,6 +77,17 @@ export function recordRun(storageKey: string, current: number): number {
   return next;
 }
 
+/**
+ * The limit as the lock copy says it: "3 runs", or "1 run".
+ *
+ * Shared so both calculators agree, and a function because the number stopped
+ * being three. Hardcoding the plural was fine while it was; at a limit of one
+ * the page read "That is 1 runs."
+ */
+export function runLimitPhrase(): string {
+  return `${CALCULATOR_RUN_LIMIT} ${CALCULATOR_RUN_LIMIT === 1 ? 'run' : 'runs'}`;
+}
+
 export function isRunLimitReached(count: number): boolean {
   return count >= CALCULATOR_RUN_LIMIT;
 }

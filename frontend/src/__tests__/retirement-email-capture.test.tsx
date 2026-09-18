@@ -12,7 +12,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { RetirementQuickPlan } from '@/components/marketing/RetirementQuickPlan';
 import { pushRetirementResultsEmailed, pushCalculatorRunLimitReached } from '@/lib/dataLayer';
 import { leaveForSignup } from '@/lib/calculator-handover';
-import { CALCULATOR_RUN_LIMIT } from '@/lib/calculator-run-limit';
+import { CALCULATOR_RUN_LIMIT, runLimitPhrase } from '@/lib/calculator-run-limit';
 
 /*
  * jsdom implements neither navigation nor a `location` that can be replaced,
@@ -131,7 +131,7 @@ function mockApi(planResult: unknown, emailResponse: Partial<Response> = { ok: t
  * in a developer's environment would otherwise fail the suite.
  */
 function runLockCopy(): RegExp {
-  return new RegExp(`that is ${CALCULATOR_RUN_LIMIT} runs`, 'i');
+  return new RegExp(`that is ${runLimitPhrase()}`, 'i');
 }
 
 function runTheModel() {

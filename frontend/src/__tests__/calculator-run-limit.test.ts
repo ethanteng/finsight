@@ -57,6 +57,25 @@ it('does not silently truncate a fractional limit', () => {
   expect(limitFor('2.5')).not.toBe(2);
 });
 
+/*
+ * The plural was safe while the number was always three. It is not any more,
+ * and "That is 1 runs." is what a limit of one used to print on the page.
+ */
+it('says the limit the way the lock copy has to read it', () => {
+  jest.resetModules();
+  process.env[VARIABLE] = '1';
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    expect(require('@/lib/calculator-run-limit').runLimitPhrase()).toBe('1 run');
+  } finally {
+    delete process.env[VARIABLE];
+  }
+
+  jest.resetModules();
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  expect(require('@/lib/calculator-run-limit').runLimitPhrase()).toBe('3 runs');
+});
+
 it('clamps a stored count to whatever the limit currently is', () => {
   jest.resetModules();
   process.env[VARIABLE] = '2';

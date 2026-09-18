@@ -22,7 +22,7 @@ import { pushCoastFireCalculated } from "@/lib/dataLayer";
 import { useCalculatorLimitTracking } from "@/lib/use-calculator-limit-tracking";
 import {
   COAST_FIRE_RUN_COUNT_KEY,
-  CALCULATOR_RUN_LIMIT,
+  runLimitPhrase,
   isRunLimitReached,
   readRunCount,
   recordRun,
@@ -678,7 +678,7 @@ export function CoastFireCalculator({ children }: { children?: ReactNode }) {
           </button>
           {locked && (
             <p className="cf-form-locked" role="status">
-              That is {CALCULATOR_RUN_LIMIT} runs. Save this one to a free account to keep
+              That is {runLimitPhrase()}. Save this one to a free account to keep
               changing the numbers — you will get the same calculator with your own accounts
               behind it, and this run waiting as your first decision.
             </p>

@@ -18,7 +18,7 @@ import {
   COAST_FIRE_SIGNUP_HREF,
 } from "@/lib/coast-fire-signup-context";
 import { leaveForSignup } from "@/lib/calculator-handover";
-import { CALCULATOR_RUN_LIMIT } from "@/lib/calculator-run-limit";
+import { CALCULATOR_RUN_LIMIT, runLimitPhrase } from "@/lib/calculator-run-limit";
 
 jest.mock("@/lib/dataLayer", () => ({
   pushCoastFireCalculated: jest.fn(),
@@ -523,7 +523,7 @@ describe("Coast FIRE calculator page", () => {
       }
 
       expect(screen.getByRole("button", { name: /calculate my coast fire number/i })).toBeDisabled();
-      expect(screen.getByText(new RegExp(`that is ${CALCULATOR_RUN_LIMIT} runs`, "i")))
+      expect(screen.getByText(new RegExp(`that is ${runLimitPhrase()}`, "i")))
         .toBeInTheDocument();
       expect(pushCalculatorRunLimitReached).toHaveBeenCalledTimes(1);
       expect(pushCalculatorRunLimitReached).toHaveBeenCalledWith('coast_fire');

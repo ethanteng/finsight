@@ -29,7 +29,7 @@ import { pushRetirementInteraction, pushRetirementModelRun } from "@/lib/dataLay
 import { useCalculatorLimitTracking } from "@/lib/use-calculator-limit-tracking";
 import {
   RETIREMENT_RUN_COUNT_KEY,
-  CALCULATOR_RUN_LIMIT,
+  runLimitPhrase,
   isRunLimitReached,
   readRunCount,
   recordRun,
@@ -824,7 +824,7 @@ export function RetirementQuickPlan({
               */}
             <p className="qp-submit-note">
               {locked
-                ? `That is ${CALCULATOR_RUN_LIMIT} runs. Save this one to a free account to keep changing the numbers — the same model, with your own accounts behind it, and this run waiting as your first decision.`
+                ? `That is ${runLimitPhrase()}. Save this one to a free account to keep changing the numbers — the same model, with your own accounts behind it, and this run waiting as your first decision.`
                 : "No account, no email, nothing to sign. We keep the numbers to improve the model."}
             </p>
           </div>
