@@ -64,7 +64,8 @@ continue the same decision.
 
 The Calculate button locks after three completed runs, and a line under it
 points at the capture instead. Shared with `/retirement-calculator` through
-`lib/calculator-run-limit.ts`; the reasoning, and why it is a nudge rather than
+`lib/calculator-run-limit.ts`, including the `NEXT_PUBLIC_CALCULATOR_RUN_LIMIT`
+setting that moves the number; the reasoning, and why it is a nudge rather than
 a control, is in `docs/RETIREMENT_QUICKPLAN.md`.
 
 ## The reading under the number
@@ -217,6 +218,7 @@ mail, and the result card mirrors the one on the page.
 | `CALCULATOR_NARRATIVE_MODEL` | Haiku 4.5 | Shared with the retirement reading. See `src/openai/model-config.ts`. |
 | `COAST_FIRE_TRUSTED_PROXIES` | 1 | How many proxies sit in front of this process. See `routes/fixed-window-rate-limit.ts`. |
 | `RESEND_API_KEY` | — | Unset means no mail is sent and the endpoint reports success, matching the rest of the auth email path in development. |
+| `NEXT_PUBLIC_CALCULATOR_RUN_LIMIT` | 3 | Runs before the Calculate button locks, shared with the retirement calculator. **Frontend, so it is inlined at build time** — changing it needs a rebuild and redeploy, not a restart. Anything but a positive integer — unset, empty, `0`, `-1`, `2.5` — falls back to 3. There is no value meaning "no limit"; turning the nudge off belongs in code (or a very large number, which will read oddly in the lock copy). |
 
 ## Recalculating after sending
 

@@ -12,6 +12,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { RetirementQuickPlan } from '@/components/marketing/RetirementQuickPlan';
 import { pushRetirementResultsEmailed, pushCalculatorRunLimitReached } from '@/lib/dataLayer';
 import { leaveForSignup } from '@/lib/calculator-handover';
+import { CALCULATOR_RUN_LIMIT, runLimitPhrase } from '@/lib/calculator-run-limit';
 
 /*
  * jsdom implements neither navigation nor a `location` that can be replaced,
@@ -122,6 +123,15 @@ function mockApi(planResult: unknown, emailResponse: Partial<Response> = { ok: t
     }
     return Promise.resolve({ ok: true, json: async () => planResult });
   }) as unknown as typeof fetch;
+}
+
+/*
+ * Built from the constant rather than written out, so these keep testing the
+ * behaviour rather than the default — `NEXT_PUBLIC_CALCULATOR_RUN_LIMIT` set
+ * in a developer's environment would otherwise fail the suite.
+ */
+function runLockCopy(): RegExp {
+  return new RegExp(`that is ${runLimitPhrase()}`, 'i');
 }
 
 function runTheModel() {
@@ -323,14 +333,14 @@ it('stays on the page when no token comes back', async () => {
 it('locks the model after three runs and points at the save form', async () => {
   renderPage();
 
-  for (let run = 0; run < 3; run += 1) {
+  for (let run = 0; run < CALCULATOR_RUN_LIMIT; run += 1) {
     runTheModel();
     await screen.findByLabelText('Email address');
   }
 
   const button = screen.getByRole('button', { name: /run the model/i });
   expect(button).toBeDisabled();
-  expect(screen.getByText(/that is 3 runs/i)).toBeInTheDocument();
+  expect(screen.getByText(runLockCopy())).toBeInTheDocument();
   await waitFor(() => expect(pushCalculatorRunLimitReached).toHaveBeenCalledTimes(1));
   expect(pushCalculatorRunLimitReached).toHaveBeenCalledWith('retirement');
   // The save form is still there: it is what the lock is pointing at.
@@ -347,19 +357,19 @@ it('does not spend a run on a result that cannot be saved', async () => {
   mockApi(RATES_RESULT);
   renderPage();
 
-  for (let run = 0; run < 4; run += 1) {
+  for (let run = 0; run < CALCULATOR_RUN_LIMIT + 1; run += 1) {
     runTheModel();
     await screen.findByText(/what this mix sustained/i);
   }
 
   expect(screen.getByRole('button', { name: /run the model/i })).toBeEnabled();
-  expect(screen.queryByText(/that is 3 runs/i)).not.toBeInTheDocument();
+  expect(screen.queryByText(runLockCopy())).not.toBeInTheDocument();
 });
 
 /* The count survives a reload, so it is not shrugged off by refreshing. */
 it('is still locked after the page is rendered again', async () => {
   const first = renderPage();
-  for (let run = 0; run < 3; run += 1) {
+  for (let run = 0; run < CALCULATOR_RUN_LIMIT; run += 1) {
     runTheModel();
     await screen.findByLabelText('Email address');
   }
