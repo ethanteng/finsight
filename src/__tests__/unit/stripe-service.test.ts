@@ -1023,7 +1023,7 @@ describe('StripeService', () => {
 
       const result = await stripeService.getUserSubscriptionStatus('user123');
 
-        expect(result).toEqual({
+      expect(result).toEqual({
         tier: 'premium',
         status: 'active',
         accessLevel: 'full',
@@ -1182,6 +1182,21 @@ describe('StripeService', () => {
         expect(result.canUpgrade).toBe(false);
         expect(result.accessLevel).toBe('full');
         expect(retrieve).toHaveBeenCalledWith('sub_stripe_123', { expand: ['customer'] });
+      });
+
+      it.each([
+        ['the subscription\'s legacy default source', { default_payment_method: null, default_source: 'card_123', customer: { id: 'cus_1', invoice_settings: {} } }],
+        ['the customer\'s legacy default source', { default_payment_method: null, default_source: null, customer: { id: 'cus_1', invoice_settings: {}, default_source: 'card_123' } }],
+      ])('offers nothing to a trial Stripe will charge through %s', async (_label, stripeSubscription) => {
+        // Stripe falls back through default_source as well as the PaymentMethods
+        // fields, so a trial backed by the legacy Sources API converts on its
+        // own and must not be prompted to fix nothing.
+        const retrieve = trialingAccount();
+        retrieve.mockResolvedValue(stripeSubscription);
+
+        const result = await stripeService.getUserSubscriptionStatus('user123');
+
+        expect(result.upgradeAction).toBeNull();
       });
 
       it('offers nothing to a trial whose card is on the customer rather than the subscription', async () => {

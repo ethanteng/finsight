@@ -1799,8 +1799,13 @@ export class StripeService {
    * card": an upgrade prompt shown to somebody who already pays is worse than
    * one missing from somebody who does not.
    *
-   * Mirrors what Stripe itself checks for `missing_payment_method`: the
-   * subscription's own default, then the customer's invoice default.
+   * Mirrors the order Stripe itself resolves a subscription's payment source
+   * in, which is what `missing_payment_method` turns on: the subscription's
+   * `default_payment_method`, then its `default_source`, then the customer's
+   * `invoice_settings.default_payment_method`, then the customer's
+   * `default_source`. The two `default_source` fields are the legacy Sources
+   * API and are easy to forget, but Stripe will still charge them — a trial
+   * backed by one converts on its own and must not be prompted to fix nothing.
    */
   async subscriptionHasPaymentMethod(stripeSubscriptionId: string): Promise<boolean | null> {
     try {
@@ -1808,7 +1813,7 @@ export class StripeService {
         expand: ['customer']
       });
 
-      if (subscription.default_payment_method) {
+      if (subscription.default_payment_method || subscription.default_source) {
         return true;
       }
 
@@ -1818,7 +1823,9 @@ export class StripeService {
         return null;
       }
 
-      return Boolean(customer.invoice_settings?.default_payment_method);
+      return Boolean(
+        customer.invoice_settings?.default_payment_method || customer.default_source
+      );
     } catch (error) {
       console.warn(
         `Could not read the payment method for subscription ${stripeSubscriptionId}:`,
