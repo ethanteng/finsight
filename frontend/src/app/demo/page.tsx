@@ -87,12 +87,6 @@ export default function DemoPage() {
             <Link className="button button-primary" href="#interactive-demo">
               Explore the demo <span aria-hidden="true">↓</span>
             </Link>
-            <MarketingGetStartedButton
-              className="text-link"
-              trackingLocation="demo_hero"
-              csOverrideId="cta-start-free-trial-demo-hero"
-              label="Try it with my finances"
-            />
           </div>
           <p className="demo-sample-note"><span aria-hidden="true">✓</span> Sample data. Real product experience. No account required.</p>
         </div>

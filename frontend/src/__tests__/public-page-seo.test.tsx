@@ -16,7 +16,7 @@ describe('public page search contracts', () => {
     expect(schemas.some((schema) => schema['@type'] === 'Product')).toBe(true);
     expect(schemas.some((schema) => schema['@type'] === 'FAQPage')).toBe(false);
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
-    expect(screen.getByRole('link', { name: /see pricing details/i })).toHaveAttribute('href', '/pricing');
+    expect(screen.getAllByRole('link', { name: 'Pricing' })[0]).toHaveAttribute('href', '/pricing');
   });
 
   it('keeps every FAQ schema answer visible and uses the same resolved price', async () => {

@@ -13,7 +13,6 @@ import type { Pricing } from "@/config/pricing";
 import { getPricing } from "@/lib/pricing";
 import { buildFaqItems } from "@/data/faq";
 import { ShowTheMathPreview } from "./ShowTheMathPreview";
-import { RetirementDecisionCrossSell } from "./RetirementDecisionCrossSell";
 
 type RouteProps = { params: Promise<{ slug: string[] }>; pricing?: Pricing };
 
@@ -252,7 +251,7 @@ function FeaturesPage() {
   return (
     <StandardPage className="features-page">
       <section className="subhero shell split-subhero">
-        <div><p className="section-kicker">HOW ASK LINC WORKS</p><h1>See how one decision changes <em>the rest of your plan.</em></h1><p className="subhero-copy">Ask a question in your own words. Linc builds the relevant financial model, runs the calculations, and shows the scenarios and assumptions behind the answer.</p><div className="hero-actions"><MarketingGetStartedButton className="button button-primary" csOverrideId="cta-start-free-trial-hero" label="Build my plan" /><a className="text-link" href="#system">See what goes into an answer ↓</a></div></div>
+        <div><p className="section-kicker">HOW ASK LINC WORKS</p><h1>See how one decision changes <em>the rest of your plan.</em></h1><p className="subhero-copy">Ask a question in your own words. Linc builds the relevant financial model, runs the calculations, and shows the scenarios and assumptions behind the answer.</p><div className="hero-actions"><MarketingGetStartedButton className="button button-primary" csOverrideId="cta-start-free-trial-hero" label="Build my plan" /></div><p className="microcopy">{TRIAL_CTA_MICROCOPY}</p></div>
         <DecisionMiniature />
       </section>
       <section className="page-section shell" id="system">
@@ -394,14 +393,11 @@ function UseCasePage({ useCase }: { useCase: UseCaseKey }) {
               <p className="microcopy">{TRIAL_CTA_MICROCOPY}</p>
             </div>
           )}
-          {(useCase === "retirement" || isRetirementStressTest) && (
-            <Link className="text-link coast-fire-inline-link" href="/coast-fire-calculator">Start with the free Coast FIRE calculator →</Link>
-          )}
         </div>
         <article className="use-case-answer">
           <div className="miniature-top"><span className="brand-mark small">L</span><b>SAMPLE DECISION</b><span>ILLUSTRATIVE</span></div>
           <p>{item.question}</p>
-          <div className="use-case-verdict"><small>THE SHORT ANSWER</small><h2>{item.answer}</h2><details className="answer-details"><summary>See the assumptions</summary><p>{item.summary}</p></details></div>
+          <div className="use-case-verdict"><small>THE SHORT ANSWER</small><h2>{item.answer}</h2></div>
           <div className="use-case-metrics">{item.metrics.map(([label,value])=><span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
           <Link className="use-case-check" href="/trust">∑ &nbsp;See how Show the Math works →</Link>
         </article>
@@ -409,11 +405,6 @@ function UseCasePage({ useCase }: { useCase: UseCaseKey }) {
       <section className="decision-levers shell"><div className="editorial-heading"><p className="section-kicker">WHAT MOVES THE ANSWER</p><h2>Change the assumption,<br /><em>not the spreadsheet.</em></h2></div><div className="lever-grid">{item.levers.map(([title,copy],index)=><article key={title}><span>0{index+1}</span><h3>{title}</h3><p>{copy}</p></article>)}</div></section>
       <section className="case-context dark-band"><div className="shell case-context-inner"><div><p className="section-kicker light">WHAT LINC CHECKS FIRST</p><h2>The numbers that can change the answer.</h2></div><RotatingContextChips items={item.context} /></div></section>
       <PageCta title={`Keep testing your ${item.label.toLowerCase()} decision.`} label={isRetirementStressTest ? "Stress-test my plan" : "Model this decision"} csOverrideId="cta-start-free-trial-mid" />
-      <details className="related-decisions shell"><summary>More financial planning questions</summary>
-        <Link href="/use-cases" className="back-link">See all questions →</Link>
-        <section className="other-cases"><span>EXPLORE ANOTHER DECISION</span>{(useCase === "retirement" || isRetirementStressTest) && <Link href="/coast-fire-calculator">COAST FIRE<b>→</b></Link>}{Object.values(useCases).filter((candidate)=>candidate.slug!==item.slug).map((candidate)=><Link href={`/use-cases/${candidate.slug}`} key={candidate.slug}>{candidate.label}<b>→</b></Link>)}</section>
-        {useCase === "retirement" && <RetirementDecisionCrossSell />}
-      </details>
     </StandardPage>
   );
 }
@@ -477,17 +468,11 @@ function CompareIndexPage() {
 
   return (
     <StandardPage className="compare-index-page">
-      <section className="subhero comparison-hero shell">
-        <div>
-          <p className="section-kicker">COMPARE ASK LINC</p>
-          <h1>Compare your options.<br /><em>Check the work.</em></h1>
-          <p className="subhero-copy">A financial answer should come with the numbers behind it. Ask Linc’s Show the Math brings your inputs, assumptions, calculations, checks, and sources together so you can see why the plan works—and what could change it.</p>
-          <div className="hero-actions"><MarketingGetStartedButton className="button button-primary" csOverrideId="cta-start-free-trial-hero" label="Start free" /></div>
-          <p className="microcopy">{TRIAL_CTA_MICROCOPY}</p>
-        </div>
-        <ShowTheMathPreview />
+      <section className="subhero centered-subhero shell compare-index-intro">
+        <p className="section-kicker">FIND YOUR FIT</p>
+        <h1>How does Ask Linc compare?</h1>
+        <p className="subhero-copy">Explore the differences and find the right fit for your financial questions.</p>
       </section>
-      <div className="editorial-heading shell compare-index-heading"><p className="section-kicker">FIND YOUR FIT</p><h2>How does Ask Linc compare?</h2></div>
       <section className="compare-index-grid shell" aria-label="Ask Linc comparisons">
         {orderedComparisons.map((page, index) => (
           <Link href={`/vs/${page.slug}`} className="compare-index-card" key={page.slug}>
@@ -498,7 +483,16 @@ function CompareIndexPage() {
           </Link>
         ))}
       </section>
-      <PageCta title="Bring your question. Check the math behind the answer." label="Start free" csOverrideId="cta-start-free-trial-mid" />
+      <section className="comparison-proof comparison-index-proof shell" aria-labelledby="compare-work-title">
+        <div>
+          <p className="section-kicker">THE ASK LINC DIFFERENCE</p>
+          <h2 id="compare-work-title">Compare your options.<br /><em>Check the work.</em></h2>
+          <p><strong>With Ask Linc, the work comes with the answer.</strong> Open Show the Math to inspect the inputs, assumptions, calculations, checks, and sources—all in one place.</p>
+          <div className="hero-actions"><MarketingGetStartedButton className="button button-primary" csOverrideId="cta-start-free-trial-mid" label="Start free" /></div>
+          <p className="microcopy">{TRIAL_CTA_MICROCOPY}</p>
+        </div>
+        <ShowTheMathPreview />
+      </section>
     </StandardPage>
   );
 }
@@ -510,28 +504,34 @@ function ComparisonPage({ product, pricing }: { product: keyof typeof comparison
 
   return (
     <StandardPage className="comparison-page">
-      <section className="subhero shell comparison-hero">
+      <section className="subhero centered-subhero shell comparison-detail-hero">
         <div>
-          <p className="section-kicker">FINANCIAL ANSWERS YOU CAN CHECK</p>
+          <p className="section-kicker">COMPARE ASK LINC</p>
           <h1>Ask Linc <em>vs {page.competitorName}</em></h1>
-          <p className="comparison-promise">The answer comes with the work.</p>
           <p className="subhero-copy">{page.summary}</p>
           <div className="hero-actions"><MarketingGetStartedButton className="button button-primary" csOverrideId="cta-start-free-trial-hero" label="Start free" /></div>
           <p className="microcopy">{TRIAL_CTA_MICROCOPY}</p>
         </div>
-        <ShowTheMathPreview />
       </section>
       <section className="page-section shell comparison-section">
-        <div className="editorial-heading"><p className="section-kicker">THE SHORT VERSION</p><h2>Compare the tools.<br /><em>Look at the work behind the answer.</em></h2></div>
+        <div className="editorial-heading"><p className="section-kicker">THE SHORT VERSION</p><h2>At a glance.</h2></div>
         <div className="comparison-table" role="table" aria-label={`Ask Linc and ${page.competitorName} comparison`}>
           <div className="comparison-row comparison-head" role="row"><span role="columnheader">DIMENSION</span><b role="columnheader">ASK LINC</b><b role="columnheader">{page.competitorName.toUpperCase()}</b></div>
-          {page.rows.map(({ dimension, askLinc, competitor }) => <div className={`comparison-row${dimension === "Show the Math" ? " comparison-math-row" : ""}`} role="row" key={dimension}><span className="comparison-dimension" role="rowheader">{dimension}</span><div className="comparison-value" role="cell"><small>ASK LINC</small><b>{askLinc}</b></div><div className="comparison-value" role="cell"><small>{page.competitorName.toUpperCase()}</small><b>{competitor}</b></div></div>)}
+          {page.rows.map(({ dimension, askLinc, competitor }) => <div className="comparison-row" role="row" key={dimension}><span className="comparison-dimension" role="rowheader">{dimension}</span><div className="comparison-value" role="cell"><small>ASK LINC</small><b>{askLinc}</b></div><div className="comparison-value" role="cell"><small>{page.competitorName.toUpperCase()}</small><b>{competitor}</b></div></div>)}
         </div>
         <p className="comparison-sources">Product information reviewed September 19, 2026. See {page.sources.map((source, index) => <span key={source.href}>{index > 0 && " and "}<a href={source.href}>{source.label}</a></span>)} for current capabilities and availability.</p>
-        {page.relatedLinks?.length ? <nav className="comparison-reading-links" aria-label="Related reading">{page.relatedLinks.map((link) => <Link className="text-link" href={link.href} key={link.href}>{link.label}</Link>)}</nav> : null}
+      </section>
+      <section className="comparison-proof shell" aria-labelledby="comparison-proof-heading">
+        <div>
+          <p className="section-kicker">THE ASK LINC DIFFERENCE</p>
+          <h2 id="comparison-proof-heading">An answer<br /><em>you can check.</em></h2>
+          <p><strong>With Ask Linc, the work comes with the answer.</strong> Open Show the Math to inspect the inputs, assumptions, calculations, checks, and sources—all in one place.</p>
+        </div>
+        <ShowTheMathPreview />
       </section>
       <section className="fit-section"><div className="shell"><p className="section-kicker">OUR HONEST TAKE</p><h2>{design.fit.order === "competitor-first" ? <><span>{design.fit.competitor}</span>{" "}<em>{design.fit.askLinc}</em></> : <><em>{design.fit.askLinc}</em>{" "}<span>{design.fit.competitor}</span></>}</h2><p>{page.honestTake ?? "Ask Linc does not replace a budget app, investment platform, dedicated retirement planner, or human professional. It helps you compare options and see how the answer was worked out."}</p></div></section>
       <section className="page-section shell compact-faq comparison-faq"><div><p className="section-kicker">BEFORE YOU CHOOSE</p><h2>The questions people actually ask.</h2></div><div>{page.faqs.map((faq)=><details key={faq.question}><summary>{faq.question}<span>+</span></summary><p>{faq.answer}</p></details>)}</div></section>
+      {page.relatedLinks?.length ? <nav className="comparison-reading-links shell" aria-label="Related reading">{page.relatedLinks.map((link) => <Link className="text-link" href={link.href} key={link.href}>{link.label}</Link>)}</nav> : null}
       <section className="other-comparisons shell"><span>COMPARE ASK LINC WITH</span>{Object.keys(comparisonData).filter((key)=>key!==product).map((key)=>{ const other = getComparison(key, pricing); return other ? <Link href={`/vs/${key}`} key={key}>{other.competitorName} <b>→</b></Link> : null; })}</section>
       <PageCta title="Make your next decision with the math in view." label="Start free" csOverrideId="cta-start-free-trial-mid" />
     </StandardPage>
@@ -754,9 +754,6 @@ export function MarketingArticlePage({ post, processedHtml }: { post: GhostPost;
               <p>{calculatorBridge.description}</p>
               <div>
                 <Link className="button button-dark" href={calculatorBridge.href}>{calculatorBridge.label}</Link>
-                {calculatorBridge.secondary ? (
-                  <Link className="text-link" href={calculatorBridge.secondary.href}>{calculatorBridge.secondary.label}</Link>
-                ) : null}
               </div>
             </section>
           ) : null}

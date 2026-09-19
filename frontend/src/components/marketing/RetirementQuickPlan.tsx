@@ -1259,25 +1259,10 @@ function QuickPlanResults({
           </dl>
         </div>
 
-        <details className="qp-assumptions">
-          <summary>
-            Every assumption the calculation made
-            <span>
-              {allocation.label} mix · {history.sequencesTested.toLocaleString("en-US")} overlapping{" "}
-              {history.horizonYears}-year windows · {monthLabel(history.firstMonth)}–{monthLabel(history.lastMonth)}
-            </span>
-          </summary>
-          <ul>
-            {result.assumptions.map((assumption) => (
-              <li key={assumption}>{assumption}</li>
-            ))}
-          </ul>
-          <p className="qp-sources">
-            Market history: Kenneth R. French Data Library (US equity, Treasury bills) and Robert J.
-            Shiller (long-term government bonds, CPI). This is an informational model, not financial
-            advice.
-          </p>
-        </details>
+        <p className="qp-sources">
+          Based on the {allocation.label.toLowerCase()} mix and {history.sequencesTested.toLocaleString("en-US")} overlapping {history.horizonYears}-year market histories.
+          Sources: Kenneth R. French Data Library and Robert J. Shiller. Historical results are not a forecast.
+        </p>
       </section>
     </>
   );
@@ -1446,25 +1431,10 @@ function QuickPlanRateResults({
       </section>
 
       <section className="shell qp-methodology">
-        <details className="qp-assumptions">
-          <summary>
-            Every assumption the calculation made
-            <span>
-              {allocation.label} mix · {history.sequencesTested.toLocaleString("en-US")} overlapping{" "}
-              {history.horizonYears}-year windows · {monthLabel(history.firstMonth)}–{monthLabel(history.lastMonth)}
-            </span>
-          </summary>
-          <ul>
-            {result.assumptions.map((assumption) => (
-              <li key={assumption}>{assumption}</li>
-            ))}
-          </ul>
-          <p className="qp-sources">
-            Market history: Kenneth R. French Data Library (US equity, Treasury bills) and Robert J.
-            Shiller (long-term government bonds, CPI). This is an informational model, not financial
-            advice.
-          </p>
-        </details>
+        <p className="qp-sources">
+          Based on the {allocation.label.toLowerCase()} mix and {history.sequencesTested.toLocaleString("en-US")} overlapping {history.horizonYears}-year market histories.
+          Sources: Kenneth R. French Data Library and Robert J. Shiller. Historical results are not a forecast.
+        </p>
       </section>
     </>
   );

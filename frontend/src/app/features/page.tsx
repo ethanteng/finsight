@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { MarketingGetStartedButton } from '@/components/marketing/MarketingGetStartedButton';
+import { TRIAL_CTA_MICROCOPY } from '@/components/marketing/trial-copy';
 import { AnalysisVisual } from '@/components/marketing/PlanningStory';
 import { PageCta, SiteFooter, SiteHeader } from '@/components/marketing/SiteShell';
 
@@ -43,8 +44,8 @@ export default function FeaturesPageRoute() {
           <p className="subhero-copy">Connect your finances, tell Linc what you’re weighing, and explore the plan it builds. The numbers, tradeoffs, and next questions come together in one place.</p>
           <div className="hero-actions">
             <MarketingGetStartedButton className="button button-primary" csOverrideId="cta-start-free-trial-hero" label="Start free" />
-            <Link className="text-link" href="/use-cases">See what you can ask →</Link>
           </div>
+          <p className="microcopy">{TRIAL_CTA_MICROCOPY}</p>
         </div>
         <AnalysisVisual />
       </section>

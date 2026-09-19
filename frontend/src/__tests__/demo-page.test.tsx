@@ -36,7 +36,7 @@ describe("interactive demo landing page", () => {
     expect(demo.closest("details")).toBeNull();
     expect(within(demo).getByRole("button", { name: "Decisions" })).toHaveAttribute("aria-current", "page");
     expect(screen.getByRole("link", { name: "Explore accounts and data" })).toHaveAttribute("href", "/integrations");
-    expect(screen.getAllByRole("link", { name: "Try it with my finances" })).toHaveLength(3);
+    expect(screen.getAllByRole("link", { name: "Try it with my finances" })).toHaveLength(2);
     DEMO_FAQS.forEach(({ question }) => expect(screen.getByText(question)).toBeInTheDocument());
 
     const schemas = Array.from(container.querySelectorAll('script[type="application/ld+json"]')).map(

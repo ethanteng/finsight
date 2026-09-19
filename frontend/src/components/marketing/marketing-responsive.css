@@ -7,17 +7,14 @@
  */
 @scope (.marketing-site) {
   /* One responsive URL per page keeps content and canonicals consistent. */
-  .answer-details summary, .product-demo-disclosure summary, .related-decisions > summary {
+  .product-demo-disclosure summary {
     min-height: 44px; padding-block: 12px; cursor: pointer; font-size: 15px; font-weight: 700;
   }
-  .answer-details p { font-size: 16px; line-height: 1.6; font-weight: 400; }
   .rotating-hero-card > .hero-example-answer { min-height: 0; }
   .rotating-hero-card > .hero-example-answer > div { min-width: 0; }
   .rotating-hero-card > .hero-example-answer > div p { margin-block: 10px; font-size: 17px; line-height: 1.5; }
   .rotating-hero-card > .hero-example-answer small { font-size: 12px; font-weight: 700; }
   .product-demo-disclosure { border-block: 1px solid #ccd1c4; }
-  .related-decisions { padding-block: 20px; }
-  .related-decisions .other-cases { width: 100%; }
   :is(.conversion-home, .use-case-page) .site-header { position: sticky; top: 0; z-index: 30; background: #f3f2e9; }
   /* Six primary nav items have to clear the brand and the sign-in/CTA pair
      before the mobile menu takes over at 980px. Tighten the gap rather than

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { MarketingGetStartedButton } from "./MarketingGetStartedButton";
 import { PageCta, SiteFooter, SiteHeader } from "./SiteShell";
+import { TRIAL_CTA_MICROCOPY } from "./trial-copy";
 import { ConnectedLifeVisual } from "./PlanningScenes";
 
 const financialPicture = [
@@ -46,8 +47,8 @@ export default function IntegrationsPage() {
           <p className="subhero-copy">Connect bank and investment accounts, add your home and loans, and fill in any missing details. Linc brings the relevant numbers into your plan.</p>
           <div className="hero-actions">
             <MarketingGetStartedButton className="button button-primary" trackingLocation="integrations_hero" csOverrideId="cta-start-free-trial-hero" label="Start free" />
-            <Link className="text-link" href="/features">See how Linc builds an answer →</Link>
           </div>
+          <p className="microcopy">{TRIAL_CTA_MICROCOPY}</p>
         </div>
         <ConnectedLifeVisual />
       </section>

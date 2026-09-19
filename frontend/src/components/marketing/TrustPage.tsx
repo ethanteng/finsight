@@ -55,7 +55,6 @@ export default function TrustPage() {
           </p>
           <div className="hero-actions">
             <MarketingGetStartedButton className="button button-primary" trackingLocation="trust_hero" csOverrideId="cta-start-free-trial-hero" label="Build a plan I can check" />
-            <Link className="text-link" href="#how-it-works">See how an answer is built <span aria-hidden="true">↓</span></Link>
           </div>
           <p className="microcopy">{TRIAL_CTA_MICROCOPY}</p>
         </div>

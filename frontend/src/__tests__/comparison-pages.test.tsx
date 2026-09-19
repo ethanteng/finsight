@@ -17,7 +17,6 @@ describe("comparison pages", () => {
       ],
     });
     expect(chatgpt?.rows.map((row) => row.dimension)).toEqual([
-      "Show the Math",
       "Best for",
       "Starting point",
       "Financial context",
@@ -46,8 +45,9 @@ describe("comparison pages", () => {
 
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Ask Linc vs ChatGPT");
     const comparison = screen.getByRole("table");
-    expect(within(comparison).getByText("Show the Math")).toBeInTheDocument();
-    expect(within(comparison).getByText(/open the inputs, assumptions, calculations, checks, and sources attached to your answer/i)).toBeInTheDocument();
+    const proof = screen.getByRole("region", { name: "An answer you can check." });
+    expect(proof).toContainElement(screen.getByRole("article", { name: "Illustrative Show the Math overview" }));
+    expect(comparison.compareDocumentPosition(proof) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.getByText(/financial data is never used to train ai models/i)).toBeInTheDocument();
     expect(within(comparison).getByText("Important calculations")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /choose chatgpt for breadth.*show the math/i })).toBeInTheDocument();
@@ -74,7 +74,6 @@ describe("comparison pages", () => {
       headline: "Ask Linc vs Boldin",
     });
     expect(boldin?.rows.map((row) => row.dimension)).toEqual([
-      "Show the Math",
       "Best for",
       "Starting point",
       "Retirement",

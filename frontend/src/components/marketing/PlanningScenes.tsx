@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { ArrowUpRight, Check, LockKeyhole, Pause, Play, RotateCcw } from "lucide-react";
 import { RETIREMENT_STORY_EXAMPLE as example, storyPercent, storyPortfolio } from "@/data/retirement-story-example";
-import { RetirementExampleNotes } from "./RetirementExampleNotes";
 
 const [earlier, later] = example.scenarios;
 
@@ -122,7 +121,6 @@ export function AnalysisVisual() {
         </li>
       </ol>
       <p className="scene-caption">Illustrative household. Actual calculator output.<br />Past results are not a forecast.</p>
-      <RetirementExampleNotes />
     </div>
   );
 }

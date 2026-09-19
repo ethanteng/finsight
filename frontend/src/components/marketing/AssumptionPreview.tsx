@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { RETIREMENT_STORY_EXAMPLE as example, storyPercent, storyPortfolio } from "@/data/retirement-story-example";
-import { RetirementExampleNotes } from "./RetirementExampleNotes";
 
 /** Precomputed output from the real calculator, for one fictional household. */
 export function AssumptionPreview() {
@@ -23,7 +22,6 @@ export function AssumptionPreview() {
         <div className="example-insight"><strong>{later ? "Same travel budget. More breathing room." : "The pressure point: 12 years before Social Security."}</strong><p>{later ? "Two more years of work and saving lower the initial draw from 4.9% to 4.3%, while keeping the full $84,000 annual budget." : "Your portfolio covers the full $84,000/year until age 67. Then $36,000 of Social Security reduces that need to $48,000/year."}</p></div>
       </div>
       <p className="scene-caption">Illustrative household. Actual calculator output.<br />Past results are not a forecast.</p>
-      <RetirementExampleNotes />
     </div>
   );
 }

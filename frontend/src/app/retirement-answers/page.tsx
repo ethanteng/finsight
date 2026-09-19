@@ -108,7 +108,6 @@ export default function RetirementAnswersPage() {
           </p>
           <div className="answer-hub-hero-links">
             <a className="button button-dark" href="#by-portfolio">Explore the guides <span aria-hidden="true">↓</span></a>
-            <Link className="text-link" href="/coast-fire-calculator">Find my Coast FIRE number</Link>
           </div>
         </div>
         <aside className="answer-hub-method-card" aria-label="How to use these retirement guides">

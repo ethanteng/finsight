@@ -118,7 +118,7 @@ describe("marketing review fixes", () => {
     const user = userEvent.setup();
     render(<MarketingHome />);
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Tell Linc what you’re trying to figure out. It builds the financial plan.");
-    expect(screen.getByText(TRIAL_CTA_MICROCOPY)).toBeInTheDocument();
+    expect(screen.getAllByText(TRIAL_CTA_MICROCOPY)).toHaveLength(2);
     expect(screen.getByLabelText("Connect, ask, Linc does the work, explore your plan")).toBeInTheDocument();
     expect(screen.queryByLabelText("Interactive Ask Linc product demo")).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: /explore the full demo/i })).toHaveAttribute("href", "/demo");
