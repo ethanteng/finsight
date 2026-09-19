@@ -779,6 +779,14 @@
  * dropped on hover and on focus, where the focus ring has to win and the hint
  * has already done its job. The expanding ring is green rather than the lime
  * fill because lime on the cream card is nearly invisible.
+ *
+ * It pings three times and stops, inside five seconds. Motion that starts on
+ * its own and never ends needs a way to stop it (WCAG 2.2.2), and hover and
+ * focus are not that -- they hold only while the pointer is there. Ending on
+ * its own is also the better cue: the lime fill is what marks the button
+ * permanently, the halo only points at it on arrival, and an animation that
+ * repeats forever stops being noticed and starts being nagging. Keep the total
+ * run under five seconds if the timing is ever retuned.
  */
 @keyframes connect-accounts-halo {
   0% {
@@ -796,7 +804,7 @@
   /* The resting lift, restated here so the button looks the same when the
      animation is off as it does between pulses when it is on. */
   box-shadow: 0 8px 18px rgba(16, 35, 25, 0.12);
-  animation: connect-accounts-halo 2.8s cubic-bezier(0.22, 0.61, 0.36, 1) infinite;
+  animation: connect-accounts-halo 1.6s cubic-bezier(0.22, 0.61, 0.36, 1) 3;
 }
 
 .connect-accounts-cta:hover,

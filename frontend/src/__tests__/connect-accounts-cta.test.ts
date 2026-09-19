@@ -50,6 +50,19 @@ describe('connect-accounts attention cue', () => {
     );
   });
 
+  // WCAG 2.2.2: motion that starts on its own and runs past five seconds needs a
+  // way to stop it. Hover and focus are not that -- they hold only while the
+  // pointer or focus stays put -- so the run is finite instead.
+  it('stops on its own inside five seconds', () => {
+    const shorthand = ruleBody(CSS, '.connect-accounts-cta {').match(
+      /animation:\s*connect-accounts-halo\s+([\d.]+)s\s+[^;]*?\s(\d+);/,
+    );
+    expect(shorthand).not.toBeNull();
+
+    const [, seconds, iterations] = shorthand as RegExpMatchArray;
+    expect(Number(seconds) * Number(iterations)).toBeLessThan(5);
+  });
+
   it('drops the animation on hover and focus so the focus ring is not overridden', () => {
     expect(ruleBody(CSS, '.connect-accounts-cta:hover,')).toMatch(/animation:\s*none/);
   });
