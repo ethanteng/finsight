@@ -33,18 +33,18 @@ describe("retirement entry points", () => {
       .toBe("/coast-fire-calculator");
 
     render(<SiteFooter />);
-    expect(screen.getByRole("link", { name: "Coast FIRE" }))
+    expect(screen.getByRole("link", { name: "Coast FIRE calculator" }))
       .toHaveAttribute("href", "/coast-fire-calculator");
-    expect(screen.getByRole("link", { name: "Retirement" }))
+    expect(screen.getByRole("link", { name: "Retirement calculator" }))
       .toHaveAttribute("href", "/retirement-calculator");
   });
 
   it("sends homepage and use-case entries to the right free calculators", () => {
     const { unmount } = render(<MarketingHome />);
-    expect(screen.getByRole("link", { name: /calculate my coast fire number/i }))
+    expect(screen.getByRole("link", { name: "Coast FIRE calculator" }))
       .toHaveAttribute("href", "/coast-fire-calculator");
-    // By the card's own text, so a header or footer link cannot satisfy this.
-    expect(screen.getByRole("link", { name: /04 \/ RETIRE/ }))
+    // The concise homepage keeps free tools discoverable in its footer.
+    expect(screen.getByRole("link", { name: "Retirement calculator" }))
       .toHaveAttribute("href", "/retirement-calculator");
     unmount();
 
@@ -71,13 +71,10 @@ describe("retirement entry points", () => {
       .toHaveAttribute("href", "/retirement-calculator");
   });
 
-  it("offers full retirement as the secondary path out of the homepage Coast FIRE card", () => {
+  it("keeps the retirement guides and example questions discoverable in the footer", () => {
     render(<MarketingHome />);
-
-    const card = screen.getByLabelText("From a free Coast FIRE number to a stress-tested plan")
-      .closest("section") as HTMLElement;
-    expect(within(card).getByRole("link", { name: "Stress-test full retirement" }))
-      .toHaveAttribute("href", "/retirement-calculator");
+    expect(screen.getByRole("link", { name: "Retirement guides" })).toHaveAttribute("href", "/retirement-answers");
+    expect(screen.getByRole("link", { name: "Example questions" })).toHaveAttribute("href", "/prompts");
   });
 
   function readinessHref(page: AnswerPageData) {

@@ -28,6 +28,8 @@ const noindexHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  // Allow isolated local reviews while another dev server is using .next.
+  distDir: process.env.NEXT_DIST_DIR || ".next",
   outputFileTracingRoot: require("path").join(__dirname),
   async headers() {
     return [

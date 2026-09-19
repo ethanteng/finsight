@@ -102,6 +102,8 @@ describe("Coast FIRE calculator page", () => {
    * allocation preset does.
    */
   function fillForm(overrides: Record<string, string> = {}) {
+    const edit = screen.queryByRole('button', { name: /edit inputs.*run again/i });
+    if (edit) fireEvent.click(edit);
     const values: Record<string, string> = {
       "Your age today": "40",
       "Retirement age": "65",
@@ -132,7 +134,7 @@ describe("Coast FIRE calculator page", () => {
     expect(screen.queryByText("$369,128")).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: /reached Coast FIRE\./ })).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: /still building your coast/ })).not.toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: /Your number, once you fill in the form/ })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /Could your savings take it from here/ })).toBeInTheDocument();
   });
 
   /*
@@ -144,7 +146,7 @@ describe("Coast FIRE calculator page", () => {
   it("keeps the guidance the form note carried", () => {
     render(<CoastFireCalculator />);
 
-    expect(screen.getByText(/SEVEN NUMBERS \u00b7 TODAY\u2019S DOLLARS/)).toBeInTheDocument();
+    expect(screen.getByText(/Seven inputs. All amounts in today’s dollars./)).toBeInTheDocument();
     expect(screen.getByText(/income that starts on your retirement date/)).toBeInTheDocument();
     // And the reassurance the removed privacy note ended on is still on the page.
     expect(screen.getByText(/no account needed/i)).toBeInTheDocument();
@@ -210,7 +212,7 @@ describe("Coast FIRE calculator page", () => {
     expect(screen.getByRole("alert")).toHaveTextContent("Enter your retirement savings today");
     expect(screen.queryByText("$369,128")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Email address")).not.toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: /Your number, once you fill in the form/ })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /Could your savings take it from here/ })).toBeInTheDocument();
   });
 
   /* Same for a figure the formula refuses by name rather than a blank one. */
@@ -519,12 +521,14 @@ describe("Coast FIRE calculator page", () => {
 
       fillForm();
       for (let run = 0; run < CALCULATOR_RUN_LIMIT; run += 1) {
+        const edit = screen.queryByRole('button', { name: /edit inputs.*run again/i });
+        if (edit) fireEvent.click(edit);
         fireEvent.submit(container.querySelector("form")!);
       }
 
-      expect(screen.getByRole("button", { name: /calculate my coast fire number/i })).toBeDisabled();
-      expect(screen.getByText(new RegExp(`that is ${runLimitPhrase()}`, "i")))
-        .toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /calculate my coast fire number/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /edit inputs.*run again/i })).not.toBeInTheDocument();
+      expect(screen.getByText(/you’ve used your free runs/i)).toBeVisible();
       expect(pushCalculatorRunLimitReached).toHaveBeenCalledTimes(1);
       expect(pushCalculatorRunLimitReached).toHaveBeenCalledWith('coast_fire');
       // The save form is still there: it is what the lock is pointing at.
@@ -594,14 +598,14 @@ describe("Coast FIRE calculator page", () => {
      * band across both. Inside the result column it made that column taller
      * than the form and the row read as lopsided.
      */
-    it("sits across both cards rather than inside the result column", () => {
+    it("keeps the save action with the combined result", () => {
       const { container } = render(<CoastFireCalculator />);
       fillForm();
       fireEvent.submit(container.querySelector("form")!);
 
       const capture = screen.getByLabelText("Email address").closest("form")!;
       expect(container.querySelector(".cf-result-column")).not.toContainElement(capture);
-      expect(capture.closest(".cf-email-band")).toBeInTheDocument();
+      expect(capture.closest(".calculator-result-actions")).toBeInTheDocument();
     });
 
     it("keeps the typed address out of Contentsquare recordings", () => {

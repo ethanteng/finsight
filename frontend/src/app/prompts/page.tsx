@@ -18,7 +18,7 @@ export default function PromptsIndexPage() {
       <SiteHeader />
       <section className="subhero centered-subhero shell">
         <p className="section-kicker">ILLUSTRATIVE QUESTIONS</p>
-        <h1>See the kinds of questions <em>Ask Linc can work through.</em></h1>
+        <h1>A question. <em>A clearer way forward.</em></h1>
         <p className="subhero-copy">
           These examples use fictional numbers. They show how an answer connects one decision to cash flow, savings, debt, and the goals that follow.
         </p>

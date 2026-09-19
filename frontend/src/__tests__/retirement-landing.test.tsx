@@ -157,7 +157,7 @@ describe('retirement landing page', () => {
       const { container } = render(<React.StrictMode><RetirementQuickPlan headline="When can I retire?" initialRetirementAge={60} /></React.StrictMode>);
       expect(trackContentsquareEvent).not.toHaveBeenCalledWith('retirement_model_run');
       fireEvent.submit(container.querySelector('form')!);
-      await screen.findByText(/Based on the numbers you entered/);
+      await screen.findByText(/Retiring at .* worked in/);
       const successes = () => jest.mocked(trackContentsquareEvent).mock.calls.filter(([event]) => event === 'retirement_model_run');
       await waitFor(() => expect(successes()).toHaveLength(1));
       fireEvent.submit(container.querySelector('form')!);
@@ -167,7 +167,7 @@ describe('retirement landing page', () => {
     }
   });
 
-  it('offers a jump from the result to the model\u2019s reading of it', async () => {
+  it('shows the model\u2019s reading alongside the result', async () => {
     // The link has to point at an id something on the page actually carries,
     // and the reading is the one section that may not render at all — so the
     // mock answers the interpretation endpoint rather than handing it the plan.
@@ -201,15 +201,11 @@ describe('retirement landing page', () => {
     try {
       const { container } = render(<RetirementQuickPlan headline="When can I retire?" initialRetirementAge={60} />);
       fireEvent.submit(container.querySelector('form')!);
-      await screen.findByText(/Based on the numbers you entered/);
+      await screen.findByText(/Retiring at .* worked in/);
 
-      const jump = await waitFor(() => {
-        const link = container.querySelector('.qp-jump') as HTMLAnchorElement | null;
-        expect(link).not.toBeNull();
-        return link!;
-      });
-      const target = jump.getAttribute('href')!.slice(1);
-      expect(container.querySelector(`#${target}`)).not.toBeNull();
+      const answer = await screen.findByText(reading.headline);
+      expect(answer.closest('.calculator-result-grid')).toContainElement(container.querySelector('.qp-results'));
+      expect(container.querySelector('.qp-jump')).toBeNull();
     } finally {
       Element.prototype.scrollIntoView = originalScroll;
     }
@@ -256,7 +252,7 @@ describe('retirement landing page', () => {
     try {
       const { container } = render(<RetirementQuickPlan headline="When can I retire?" initialRetirementAge={60} />);
       fireEvent.submit(container.querySelector('form')!);
-      await screen.findByText(/Based on the numbers you entered/);
+      await screen.findByText(/Retiring at .* worked in/);
 
       expect(screen.getByText(/carry forward the retirement age, assets, and spending/i)).toBeInTheDocument();
       const cta = screen.getByRole('link', { name: 'Stress-test this with my actual finances' });

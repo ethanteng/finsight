@@ -5,6 +5,8 @@ import { CoastFireCalculatorSeoContent } from "@/components/marketing/CoastFireC
 import { COAST_FIRE_FAQ } from "@/lib/coast-fire";
 import "@/components/marketing/coast-fire.css";
 
+import "@/components/marketing/calculator-story.css";
+
 const canonical = "https://asklinc.com/coast-fire-calculator";
 
 // Kept under ~155 characters: past that a search result truncates the sentence

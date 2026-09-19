@@ -63,8 +63,8 @@ export default function UseCasesRoute() {
       <SiteHeader />
       <section className="subhero centered-subhero shell">
         <p className="section-kicker">WHAT YOU CAN ASK</p>
-        <h1>Know what your money lets you do <em>next.</em></h1>
-        <p className="subhero-copy">Coast toward retirement, work less, spend more, buy a home, grow a family, or change investments. Ask the question in your own words; Linc turns it into a model you can stress-test.</p>
+        <h1>What are you trying<em>to figure out?</em></h1>
+        <p className="subhero-copy">Start with a real question about your life. Linc brings your finances together, runs the analysis, and helps you explore what could change.</p>
       </section>
       <section className="use-case-index shell">
         {useCases.map((item) => (
@@ -79,11 +79,11 @@ export default function UseCasesRoute() {
       <section className="use-case-bridge">
         <div className="shell">
           <p className="section-kicker">WHY THE WHOLE PLAN MATTERS</p>
-          <h2>A Coast FIRE number is only the start of the decision.</h2>
-          <p><Link href="/coast-fire-calculator">The free Coast FIRE calculator</Link> answers whether your savings could grow to a retirement target without more contributions. Ask Linc helps model the consequential next question: what can you safely change about work, saving, spending, or retirement?</p>
+          <h2>One question. The rest of your life in view.</h2>
+          <p>Your home, family, work, and retirement share the same money. Explore one decision without losing sight of the others. Start with an <Link href="/prompts">example question</Link>, or try the <Link href="/coast-fire-calculator">free Coast FIRE calculator</Link>.</p>
         </div>
       </section>
-      <PageCta title="Turn your next move into a plan you can stress-test." label="Plan my next move" csOverrideId="cta-start-free-trial-mid" />
+      <PageCta title="Bring your own question." label="Start free" csOverrideId="cta-start-free-trial-mid" />
       <SiteFooter />
     </main>
   );

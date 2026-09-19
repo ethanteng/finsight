@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { MarketingGetStartedButton } from "./MarketingGetStartedButton";
 import { PageCta, SiteFooter, SiteHeader } from "./SiteShell";
+import { ConnectedLifeVisual } from "./PlanningScenes";
 
 const financialPicture = [
   {
@@ -23,24 +24,6 @@ const financialPicture = [
   },
 ] as const;
 
-const decisionExamples = [
-  {
-    label: "HOME",
-    question: "Can we afford a $700K home without pausing retirement savings?",
-    context: "Cash · spending · mortgage rates · property · retirement",
-  },
-  {
-    label: "CAREER",
-    question: "Can I take a year off without setting retirement back?",
-    context: "Cash · spending · income · benefits · retirement",
-  },
-  {
-    label: "RETIREMENT",
-    question: "Could we retire two years earlier without making the plan too tight?",
-    context: "Savings · spending · Social Security · investments · market history",
-  },
-] as const;
-
 const sources = [
   ["Plaid", "Banking, cards, loans, balances, and transactions"],
   ["SnapTrade", "Brokerage and retirement accounts, holdings, and cash"],
@@ -51,24 +34,6 @@ const sources = [
   ["Focused web sources", "Current rules, limits, and facts when the question needs them"],
 ] as const;
 
-function DecisionMap() {
-  return (
-    <div className="integration-map" aria-label="Ask Linc brings relevant financial information into the decision">
-      <div className="integration-map-top"><span>THE FINANCIAL PICTURE BEHIND THE ANSWER</span><small>BUILT AROUND YOUR QUESTION</small></div>
-      <div className="integration-map-stage">
-        <span className="integration-map-node map-cash"><small>YOUR MONEY</small><b>Cash + spending</b></span>
-        <span className="integration-map-node map-investments"><small>YOUR PLAN</small><b>Investments</b></span>
-        <span className="integration-map-node map-property"><small>YOUR LIFE</small><b>Property + goals</b></span>
-        <span className="integration-map-core"><i className="brand-mark" aria-hidden="true">L</i><b>Your decision</b><small>What could change it?</small></span>
-        <span className="integration-map-node map-rates"><small>RIGHT NOW</small><b>Rates + markets</b></span>
-        <span className="integration-map-node map-current"><small>RIGHT NOW</small><b>Current rules</b></span>
-        <span className="integration-map-node map-history"><small>THE LONG VIEW</small><b>Market history</b></span>
-      </div>
-      <div className="integration-map-output"><small>THE RESULT</small><strong>One answer that keeps the rest of your financial life in the decision.</strong></div>
-    </div>
-  );
-}
-
 export default function IntegrationsPage() {
   return (
     <main className="marketing-site subpage integrations-page">
@@ -77,14 +42,14 @@ export default function IntegrationsPage() {
       <section className="integration-hero shell">
         <div>
           <p className="section-kicker">ACCOUNTS &amp; DATA</p>
-          <h1>Accurate plans need <em>accurate inputs.</em></h1>
-          <p className="subhero-copy">Accounts, manual details, current context, and market history give the model a real starting point. Linc brings in what could change the decision—and leaves out what does not.</p>
+          <h1>Your financial life. <em>Finally together.</em></h1>
+          <p className="subhero-copy">Connect bank and investment accounts, add your home and loans, and fill in any missing details. Linc brings the relevant numbers into your plan.</p>
           <div className="hero-actions">
-            <MarketingGetStartedButton className="button button-primary" trackingLocation="integrations_hero" csOverrideId="cta-start-free-trial-hero" label="Build my financial model" />
+            <MarketingGetStartedButton className="button button-primary" trackingLocation="integrations_hero" csOverrideId="cta-start-free-trial-hero" label="Start free" />
             <Link className="text-link" href="/features">See how Linc builds an answer →</Link>
           </div>
         </div>
-        <DecisionMap />
+        <ConnectedLifeVisual />
       </section>
 
       <section className="integration-principles" aria-label="How Ask Linc handles financial data">
@@ -98,8 +63,8 @@ export default function IntegrationsPage() {
 
       <section className="integration-owned-section shell">
         <div className="integration-section-heading">
-          <div><p className="section-kicker">THE NUMBERS BEHIND THE DECISION</p><h2>Data is infrastructure for the plan.</h2></div>
-          <p>Connected accounts are one source of inputs, not the product. The value is a current financial model that shows which facts belong in this decision and how they affect one another.</p>
+          <div><p className="section-kicker">THE NUMBERS BEHIND THE DECISION</p><h2>Connect what matters to you.</h2></div>
+          <p>Use connected accounts and manual details together. Account availability depends on your institution and connection provider.</p>
         </div>
         <div className="connected-source-grid" aria-label="Financial information Ask Linc can use">
           {financialPicture.map((item) => (
@@ -113,29 +78,10 @@ export default function IntegrationsPage() {
         </div>
       </section>
 
-      <section className="integration-context-section dark-band">
-        <div className="shell">
-          <div className="integration-section-heading on-dark">
-            <div><p className="section-kicker light">START WITH THE QUESTION</p><h2>Different decisions need different facts.</h2></div>
-            <p>A home question needs mortgage rates and cash after closing. A career break needs income, spending, benefits, and runway. Retirement needs a longer view.</p>
-          </div>
-          <div className="outside-context-grid" aria-label="Examples of how Ask Linc routes data by decision">
-            {decisionExamples.map((item, index) => (
-              <article key={item.label}>
-                <div><span>{String(index + 1).padStart(2, "0")}</span><small>{item.label}</small></div>
-                <h3>{item.question}</h3>
-                <p>{item.context}</p>
-              </article>
-            ))}
-          </div>
-          <div className="integration-context-note"><span className="brand-mark" aria-hidden="true">L</span><p><small>ONLY WHAT MATTERS</small><strong>Linc does not use every available data point just because it can. It uses what could change the answer.</strong></p></div>
-        </div>
-      </section>
-
       <section className="integration-inventory-section">
         <div className="shell">
           <div className="integration-section-heading">
-            <div><p className="section-kicker">WHERE THE FACTS COME FROM</p><h2>Current inputs, historical data, and visible provenance.</h2></div>
+            <div><p className="section-kicker">WHERE THE FACTS COME FROM</p><h2>Know where the numbers come from.</h2></div>
             <p>You do not need to know the provider names to use Ask Linc. They are shown so you can inspect where an input came from and when current information was checked.</p>
           </div>
           <div className="coverage-grid" aria-label="Ask Linc data providers">
@@ -151,7 +97,7 @@ export default function IntegrationsPage() {
         </div>
       </section>
 
-      <PageCta title="Put accurate inputs behind the decision." label="Build my financial model" csOverrideId="cta-start-free-trial-mid" />
+      <PageCta title="Bring your finances together." label="Start free" csOverrideId="cta-start-free-trial-mid" />
       <SiteFooter />
     </main>
   );

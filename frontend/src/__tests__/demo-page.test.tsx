@@ -30,7 +30,7 @@ describe("interactive demo landing page", () => {
     const { container } = render(<DemoPage />);
 
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
-      "Explore an interactive AI financial planning software demo.",
+      "Your question. See where Linc takes it.",
     );
     const demo = screen.getByLabelText("Interactive Ask Linc product demo");
     expect(demo.closest("details")).toBeNull();

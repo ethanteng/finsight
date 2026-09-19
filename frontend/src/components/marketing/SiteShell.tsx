@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { TRIAL_CTA_MICROCOPY } from "./trial-copy";
 import { PRIMARY_NAV_LINKS } from "@/lib/site-nav";
 import { MarketingGetStartedButton } from "./MarketingGetStartedButton";
 import { MarketingMobileMenu } from "./MarketingMobileMenu";
@@ -35,8 +36,8 @@ export function SiteFooter() {
             <span className="brand-mark" aria-hidden="true">L</span>
             <span>Ask Linc</span>
           </Link>
-          <p>Self-directed financial planning for whatever your money lets you do next.</p>
-          <MarketingGetStartedButton className="footer-cta-link" trackingLocation="footer" csOverrideId="cta-start-free-trial-footer" />
+          <p>Your finances. Your questions. A clearer next move.</p>
+          <MarketingGetStartedButton className="button button-primary footer-start-button" trackingLocation="footer" csOverrideId="cta-start-free-trial-footer" />
         </div>
         <div className="footer-column">
           <b>PRODUCT</b>
@@ -46,22 +47,20 @@ export function SiteFooter() {
           <Link href="/integrations">Accounts &amp; Data</Link>
           <Link href="/pricing">Pricing</Link>
           <Link href="/faq">FAQ</Link>
-          <Link href="/coast-fire-calculator">Coast FIRE</Link>
-          <Link href="/retirement-calculator">Retirement</Link>
         </div>
         <div className="footer-column">
-          <b>COMPARE</b>
-          <Link href="/vs/monarch">vs Monarch</Link>
-          <Link href="/vs/origin">vs Origin</Link>
-          <Link href="/vs/chatgpt">vs ChatGPT</Link>
-          <Link href="/vs/portfoliopilot">vs PortfolioPilot</Link>
-          <Link href="/vs/boldin">vs Boldin</Link>
+          <b>FREE TOOLS &amp; GUIDES</b>
+          <Link href="/coast-fire-calculator">Coast FIRE calculator</Link>
+          <Link href="/retirement-calculator">Retirement calculator</Link>
+          <Link href="/retirement-answers">Retirement guides</Link>
+          <Link href="/prompts">Example questions</Link>
         </div>
         <div className="footer-column">
           <b>COMPANY</b>
           <Link href="/about" data-cs-override-id="nav-about-footer">About</Link>
           <Link href="/blog">Blog</Link>
           <Link href="/contact">Contact</Link>
+          <Link href="/vs">Compare Ask Linc</Link>
         </div>
         <div className="footer-column">
           <b>TRUST</b>
@@ -81,7 +80,7 @@ export function SiteFooter() {
 
 export function PageCta({
   title = "What are you trying to figure out?",
-  label = "Start planning",
+  label = "Start free",
   csOverrideId,
 }: {
   title?: string;
@@ -94,6 +93,7 @@ export function PageCta({
         <p className="section-kicker light">START WITH THE DECISION</p>
         <h2>{title}</h2>
         <MarketingGetStartedButton className="button button-primary" trackingLocation="page_cta" csOverrideId={csOverrideId} label={label} />
+        <p className="microcopy">{TRIAL_CTA_MICROCOPY}</p>
       </div>
     </section>
   );

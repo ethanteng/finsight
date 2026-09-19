@@ -3,6 +3,7 @@ import { ghost, getAllPosts, type GhostPost } from '@/lib/ghost';
 import { listBlogTopics } from '@/lib/blog-topics';
 
 const BASE_URL = 'https://asklinc.com';
+const REDIRECTED_POSTS = new Set(['standard-tier-welcome-to-the-juggle', 'today-in-markets-money-retirement-math-in-a-4-world', 'why-ask-linc-is-not-just-chatgpt-for-your-bank', 'the-feds-stuck-in-rate-limbo-cut-or-nah']);
 
 // Revalidate the sitemap hourly so newly published posts get picked up
 export const revalidate = 3600;
@@ -96,7 +97,7 @@ async function getBlogEntries(): Promise<MetadataRoute.Sitemap> {
     })) as GhostPost[];
 
     return posts
-      .filter((post) => Boolean(post?.slug))
+      .filter((post) => Boolean(post?.slug) && !REDIRECTED_POSTS.has(post.slug!))
       .map((post) => {
         const modified =
           (post as { updated_at?: string | null }).updated_at ??
@@ -105,7 +106,7 @@ async function getBlogEntries(): Promise<MetadataRoute.Sitemap> {
 
         return {
           url: `${BASE_URL}/blog/${post.slug}`,
-          lastModified: modified ? new Date(modified) : new Date(),
+          ...(modified ? { lastModified: new Date(modified) } : {}),
           changeFrequency: 'monthly' as const,
           priority: 0.7,
         };

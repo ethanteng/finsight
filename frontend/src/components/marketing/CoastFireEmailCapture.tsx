@@ -47,7 +47,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
 
 type Status = "idle" | "sending" | "sent" | "leaving";
 
-export function CoastFireEmailCapture({ result }: { result: CoastFireResult }) {
+export function CoastFireEmailCapture({ result, compact = false }: { result: CoastFireResult; compact?: boolean }) {
   const [email, setEmail] = useState("");
   const [status, setStatus] = useState<Status>("idle");
   const [error, setError] = useState<string | null>(null);
@@ -169,16 +169,18 @@ export function CoastFireEmailCapture({ result }: { result: CoastFireResult }) {
   }
 
   return (
-    <form className="cf-email-capture" onSubmit={handleSubmit} aria-busy={status === "sending"}>
+    <form className={`cf-email-capture${compact ? " is-compact" : ""}`} onSubmit={handleSubmit} aria-busy={status === "sending"}>
       <div className="cf-email-copy">
         <p className="section-kicker">KEEP THIS RESULT</p>
         <h3>Save this to a free account</h3>
+        {compact ? <p className="cf-email-lead">Keep this result and get an email copy.</p> : (
         <p className="cf-email-lead">
           Pick a password on the next screen and this run is waiting as your first decision —
           your number, every assumption behind it, and what it would look like if returns come in
           a point lower, ready to pick up and ask questions about. We will email you a copy
           either way.
         </p>
+        )}
 
       </div>
 

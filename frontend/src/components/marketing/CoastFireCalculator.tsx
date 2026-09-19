@@ -36,6 +36,7 @@ import {
 import { CoastFireEmailCapture } from "./CoastFireEmailCapture";
 import { MarketingGetStartedButton } from "./MarketingGetStartedButton";
 import { SiteFooter, SiteHeader } from "./SiteShell";
+import { CalculatorSteps, CalculatorPreview, CalculatorNextQuestion, CalculatorAnswer, CalculatorRunAgain } from "./CalculatorStory";
 import { TRIAL_CTA_MICROCOPY } from "./trial-copy";
 
 type FormState = Record<keyof CoastFireInputs, string>;
@@ -258,112 +259,34 @@ function useCoastFireInterpretation(submitted: CoastFireInputs | null): {
   return { interpretation, isLoading };
 }
 
-/** The anchor the chevrons under the result jump to. */
+/** Stable anchor for the Linc interpretation. */
 const INTERPRETATION_ID = "what-this-means";
 
-/**
- * Whether the reading panel will render anything at all.
- *
- * The panel and the chevrons that point at it both read this, so a chevron can
- * never be left pointing at a section that did not render. A reading is
- * dropped only when the model returns nothing usable, which is rarer than it
- * once was but still has to render as nothing rather than as an empty box.
- */
+/** Loading and completed readings share the same place beside the numerical result. */
 function hasInterpretation(interpretation: Interpretation | null, isInterpreting: boolean): boolean {
   return Boolean(interpretation) || isInterpreting;
-}
-
-/**
- * The shortcut from the result down to what the model made of it.
- *
- * Three chevrons cascading downward rather than a labelled pill: it sits under
- * the email capture's own button, and two filled controls stacked read as
- * competing asks. A wordless gesture says "keep going" without competing with
- * the thing being asked for. The name survives for anyone not looking at it —
- * screen readers, and the link's own title.
- *
- * Same component as `/retirement-calculator`, deliberately: it is the same
- * gesture doing the same job two clicks apart.
- */
-function JumpToInterpretation({
-  interpretation,
-  isInterpreting,
-}: {
-  interpretation: Interpretation | null;
-  isInterpreting: boolean;
-}) {
-  if (!hasInterpretation(interpretation, isInterpreting)) return null;
-
-  return (
-    <a
-      className="cf-jump"
-      href={`#${INTERPRETATION_ID}`}
-      aria-label="See what this result means"
-      title="See what this result means"
-    >
-      {[0, 1, 2].map((index) => (
-        <svg
-          key={index}
-          className="cf-chevron"
-          style={{ animationDelay: `${index * 0.16}s` }}
-          viewBox="0 0 24 14"
-          width="26"
-          height="15"
-          fill="none"
-          aria-hidden="true"
-          focusable="false"
-        >
-          <path
-            d="M2 2 L12 11 L22 2"
-            stroke="currentColor"
-            strokeWidth="3"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
-      ))}
-    </a>
-  );
 }
 
 /** The model's reading, or nothing. */
 function InterpretationPanel({
   interpretation,
   isInterpreting,
+  question,
 }: {
   interpretation: Interpretation | null;
   isInterpreting: boolean;
+  question: string;
 }) {
   if (!hasInterpretation(interpretation, isInterpreting)) return null;
 
   return (
     <section
-      className="shell cf-interpretation"
+      className="cf-interpretation calculator-result-answer"
       id={INTERPRETATION_ID}
       aria-live="polite"
       aria-busy={isInterpreting}
     >
-      <p className="section-kicker">WHAT THIS RESULT MEANS</p>
-      {isInterpreting || !interpretation ? (
-        <div className="cf-interpretation-loading" role="status">
-          <span className="cf-interpretation-pulse" aria-hidden="true" />
-          Reading your result&hellip;
-        </div>
-      ) : (
-        <>
-          <h3>{interpretation.headline}</h3>
-          {interpretation.paragraphs.map((paragraph) => (
-            <p key={paragraph}>{paragraph}</p>
-          ))}
-          {interpretation.watchOuts.length > 0 && (
-            <ul className="cf-interpretation-watch">
-              {interpretation.watchOuts.map((item) => (
-                <li key={item}>{item}</li>
-              ))}
-            </ul>
-          )}
-        </>
-      )}
+      <CalculatorAnswer question={question} interpretation={interpretation} isLoading={isInterpreting} compact />
     </section>
   );
 }
@@ -383,20 +306,7 @@ function EmptyResultPanel() {
    * The answered card carries `aria-live` so the verdict is announced when it
    * appears.
    */
-  return (
-    <aside className="cf-result-card is-empty">
-      <div className="cf-result-topline">
-        <span>YOUR COAST FIRE STATUS</span>
-      </div>
-      <h2>Your number, once you fill in the form.</h2>
-      <p className="cf-result-lead">
-        Coast FIRE is the amount that, left alone and compounding, would reach your retirement
-        target without another dollar added. Fill in the form and this card will show that
-        amount, how much of it your savings already cover, and what today&rsquo;s savings would
-        grow to if you never added to them again.
-      </p>
-    </aside>
-  );
+  return <CalculatorPreview coast />;
 }
 
 function ResultPanel({ result }: { result: CoastFireResult }) {
@@ -407,12 +317,11 @@ function ResultPanel({ result }: { result: CoastFireResult }) {
   return (
     <aside className="cf-result-card" aria-live="polite" data-cs-mask>
       <div className="cf-result-topline">
-        <span>YOUR COAST FIRE STATUS</span>
+        <h2>{result.hasReachedCoastFire ? "You’ve reached Coast FIRE." : "You’re still building your coast."}</h2>
         <strong className={result.hasReachedCoastFire ? "is-reached" : "is-building"}>
           {result.hasReachedCoastFire ? "Reached" : "Not yet"}
         </strong>
       </div>
-      <h2>{result.hasReachedCoastFire ? "You’ve reached Coast FIRE." : "You’re still building your coast."}</h2>
       <p className="cf-result-lead">
         {result.portfolioSpendingNeed === 0
           ? "The retirement income you entered covers your planned spending, so this formula asks nothing of your portfolio."
@@ -522,6 +431,8 @@ function CalculatorField({
 
 export function CoastFireCalculator({ children }: { children?: ReactNode }) {
   const [form, setForm] = useState<FormState>(INITIAL_FORM);
+  const [showInputs, setShowInputs] = useState(true);
+  const formRef = useRef<HTMLFormElement>(null);
   /*
    * Null until the visitor asks for an answer.
    *
@@ -580,6 +491,7 @@ export function CoastFireCalculator({ children }: { children?: ReactNode }) {
    */
   function refuse(message: string) {
     setError(message);
+    setShowInputs(true);
     setResult(null);
     setSubmitted(null);
   }
@@ -593,6 +505,15 @@ export function CoastFireCalculator({ children }: { children?: ReactNode }) {
   useEffect(() => {
     setRunCount(readRunCount(COAST_FIRE_RUN_COUNT_KEY));
   }, []);
+
+  function editInputs() {
+    if (locked) return;
+    setShowInputs(true);
+    requestAnimationFrame(() => {
+      formRef.current?.scrollIntoView({ behavior: "auto", block: "start" });
+      formRef.current?.querySelector<HTMLInputElement>("input")?.focus({ preventScroll: true });
+    });
+  }
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -614,6 +535,7 @@ export function CoastFireCalculator({ children }: { children?: ReactNode }) {
     try {
       const nextResult = calculateCoastFire(parseForm(form));
       setResult(nextResult);
+      setShowInputs(false);
       setError(null);
       setSubmitted(signupContext(nextResult));
       // Only a run that produced a number counts. A refused form does not come
@@ -623,27 +545,31 @@ export function CoastFireCalculator({ children }: { children?: ReactNode }) {
         nextResult.hasReachedCoastFire ? "reached" : "not_yet",
         nextResult.yearsToRetirement,
       );
-      requestAnimationFrame(() => resultRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" }));
+      requestAnimationFrame(() => {
+        resultRef.current?.focus({ preventScroll: true });
+        resultRef.current?.scrollIntoView({ behavior: "auto", block: "start" });
+      });
     } catch (caught) {
       refuse(caught instanceof Error ? caught.message : "Check your numbers and try again.");
     }
   }
 
   return (
-    <main className="marketing-site subpage coast-fire-page">
+    <main className={`marketing-site subpage coast-fire-page calculator-story${!showInputs ? " calculator-result-view" : ""}`}>
       <SiteHeader />
 
       <section className="shell cf-hero">
-        <p className="eyebrow"><span className="pulse" aria-hidden="true" /> Free calculator · no account needed</p>
-        <h1>Have I reached <em>Coast FIRE?</em></h1>
+        <p className="section-kicker">FREE COAST FIRE CALCULATOR</p>
+        <h1>{showInputs ? <>Have I reached <em>Coast FIRE?</em></> : "Your Coast FIRE result."}</h1>
         <p className="cf-hero-sub">
-          Find what you need invested today to reach retirement without adding another dollar.
-          Then see what that answer actually lets you change.
+          Add a few numbers. See whether your savings could grow to your retirement target without more contributions—and which assumptions make the difference.
         </p>
+        <p className="calculator-access">No account needed to try. Every assumption visible.</p>
+        <CalculatorSteps />
       </section>
 
-      <section className="shell cf-calculator" id="coast-calculator">
-        <form className="cf-form" onSubmit={handleSubmit}>
+      <section className="shell cf-calculator" id="coast-calculator" hidden={!showInputs}>
+        <form className="cf-form" ref={formRef} onSubmit={handleSubmit}>
           {/*
             * The standalone note this used to carry said two things. One
             * ("count only income that starts the day you retire") the income
@@ -653,8 +579,9 @@ export function CoastFireCalculator({ children }: { children?: ReactNode }) {
             * capture band below the result gets back, above the fold.
             */}
           <div className="cf-form-head">
-            <p className="section-kicker">SEVEN NUMBERS · TODAY’S DOLLARS</p>
-            <h2>Your coast</h2>
+            <p className="section-kicker">01 / YOUR STARTING POINT</p>
+            <h2>Start with your numbers.</h2>
+            <p className="cf-form-note">Seven inputs. All amounts in today’s dollars.</p>
           </div>
 
           <div className="cf-form-grid">
@@ -685,19 +612,21 @@ export function CoastFireCalculator({ children }: { children?: ReactNode }) {
           )}
         </form>
 
-        <div className="cf-result-column" ref={resultRef}>
-          {result ? <ResultPanel result={result} /> : <EmptyResultPanel />}
-        </div>
+        <div className="cf-result-column">{showInputs && <EmptyResultPanel />}</div>
+      </section>
 
-        {/*
-          * Full width beneath both cards rather than stacked under the result.
-          * The form and the result are a matched pair sized as one row; a
-          * third card inside the right column made that column the taller of
-          * the two and turned a balanced row into a lopsided one.
-          */}
-        {result && (
-          <div className="cf-email-band">
-            <CoastFireEmailCapture
+      <div ref={resultRef} className="calculator-result-focus" tabIndex={-1} hidden={showInputs} aria-label="Your Coast FIRE result">
+        {result && <div className="calculator-result-grid shell">
+          <div className="calculator-result-summary"><ResultPanel result={result} /></div>
+      <InterpretationPanel
+        interpretation={interpretation}
+        isInterpreting={isInterpreting}
+        question={submitted
+          ? `I have ${dollars(submitted.currentSavings)} saved. Could I stop contributing and retire at ${submitted.retirementAge}, spending ${dollars(submitted.annualRetirementSpending)} a year?`
+          : "Could my current savings grow enough to fund retirement without more contributions?"}
+      />
+          <div className="calculator-result-actions">
+            <CoastFireEmailCapture compact
               // Remount when the submitted scenario changes so a prior "sent"
               // state cannot claim to belong to a newly calculated result.
               key={[
@@ -711,18 +640,10 @@ export function CoastFireCalculator({ children }: { children?: ReactNode }) {
               ].join(':')}
               result={result}
             />
+            <CalculatorRunAgain locked={locked} onEdit={editInputs} />
           </div>
-        )}
-
-        {/*
-          * The reading is the next thing worth having, and it is below the
-          * fold from here — past the capture band someone has just finished
-          * with. This is the shortcut to it, kept with the result it reads.
-          */}
-        <JumpToInterpretation interpretation={interpretation} isInterpreting={isInterpreting} />
-      </section>
-
-      <InterpretationPanel interpretation={interpretation} isInterpreting={isInterpreting} />
+        </div>}
+      </div>
 
       {/*
         * Nothing but a comparison of computed answers, so it waits for one.
@@ -730,7 +651,7 @@ export function CoastFireCalculator({ children }: { children?: ReactNode }) {
         * than any run of it, and they are worth reading — and worth
         * indexing — before anyone has typed anything.
         */}
-      {result && (
+      {result && !showInputs && (
       <section className="shell cf-sensitivity">
         <div className="cf-section-head">
           <p className="section-kicker">SEE WHAT CHANGES</p>
@@ -760,6 +681,8 @@ export function CoastFireCalculator({ children }: { children?: ReactNode }) {
       </section>
       )}
 
+      {!result && <CalculatorNextQuestion coast />}
+
       <section className="shell cf-assumptions">
         <div className="cf-section-head">
           {/* Generic until there is a result, like the list beneath it. */}
@@ -786,9 +709,7 @@ export function CoastFireCalculator({ children }: { children?: ReactNode }) {
           <p className="section-kicker light">THE NUMBER IS THE EASY PART</p>
           <h2>Have you reached it—and can you really coast?</h2>
           <p>
-            Ask Linc replaces the flat return and withdrawal rate above with your actual holdings,
-            spending, income, and timing, then runs the change you are considering against a century
-            of real market history.
+            Connect your financial life and ask what working less could look like. Linc brings your holdings, spending, and income into the analysis, then helps you test the what-ifs against real market history.
           </p>
           <ul className="cf-decision-list">
             {DECISIONS.map((question) => <li key={question}>{question}</li>)}

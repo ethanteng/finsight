@@ -44,7 +44,7 @@ describe("financial stress testing landing page", () => {
     expect(within(benefits).getByText("Change inflation and spending")).toBeInTheDocument();
     expect(within(benefits).getByText("Try different retirement dates")).toBeInTheDocument();
 
-    expect(screen.getByText(TRIAL_CTA_MICROCOPY)).toBeInTheDocument();
+    expect(screen.getAllByText(TRIAL_CTA_MICROCOPY).length).toBeGreaterThan(0);
     // The CTA carries the trial promise alone now: no reassurance line beneath
     // it, and no claim that the trial bills itself when it ends.
     expect(screen.queryByText(/read-only connections.*never used to train ai/i)).not.toBeInTheDocument();

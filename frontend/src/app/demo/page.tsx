@@ -79,10 +79,9 @@ export default function DemoPage() {
       <section className="demo-landing-hero shell">
         <div className="demo-landing-hero-copy">
           <p className="section-kicker">INTERACTIVE PRODUCT DEMO</p>
-          <h1>Explore an interactive <em>AI financial planning software demo.</em></h1>
+          <h1>Your question. <em>See where Linc takes it.</em></h1>
           <p>
-            See how Ask Linc turns a real financial question into an answer grounded in accounts,
-            calculations, assumptions, checks, and sources—before you connect anything.
+            Explore a real financial planning example, from the first question to the numbers, assumptions, and sources behind the answer. No account needed.
           </p>
           <div className="hero-actions">
             <Link className="button button-primary" href="#interactive-demo">
