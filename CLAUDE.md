@@ -138,6 +138,12 @@ Starter / Standard / Premium tiers control feature access. Tier checks are embed
 
 An admin-created account — no Stripe subscription, `subscriptionStatus` `inactive` — reads as full access with no end to it. The admin panel can put an end date on one by converting it to a real Stripe trial (`/admin/user-trial`), because nothing here expires an account on a date: the only live gate blocks `canceled`, and Stripe is what produces that status when a trial with no payment method runs out. See `docs/admin/ADMIN_TRIALS.md`.
 
+Registration writes that same shape, so a no-card signup is indistinguishable from an admin-created account once it exists. Both are who the signed-in header's "Upgrade your account" CTA is for, and `canUpgrade` in `getUserSubscriptionStatus` is the one place that decides it — neither header re-derives the rule from a status string, and both fail closed. It is not the inverse of `upgradeRequired`, which means access is already denied and paying is the way back in.
+
+A `trialing` account is deliberately excluded. It holds a real Stripe subscription, and a second checkout on the same customer mints a second subscription beside the first rather than converting it: a checkout-started trial already has a card and converts on its own, and an admin-granted trial would be billed twice once checkout saves a default payment method for its `missing_payment_method: cancel` to find. Operator emails in `ADMIN_EMAILS` are excluded too; a comped account belonging to someone else cannot be, because nothing in the database marks it.
+
+The CTA links to `/subscribe`, the same page a mailed subscribe link uses, in a new tab. Stripe Checkout has no durable URL, and minting one before opening a tab is what popup blockers stop, so a plain link to a page that mints on mount is the only form that is both reliable and prefills the account's email — `/subscribe` sends the stored token, and the server fills `customerEmail` from the session rather than from anything the client says.
+
 ### Multi-AI Support
 
 The platform supports OpenAI (GPT-4), Anthropic (Claude), and Google (Gemini) with intelligent model selection. The `openai/` directory name is historical — it handles all AI providers.

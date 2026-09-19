@@ -8,11 +8,13 @@ import { pushBeginCheckout } from '@/lib/dataLayer';
 import { isStripeCheckoutUrl, replaceLocation } from '@/lib/external-navigation';
 
 /**
- * The landing page for a "subscribe" link in an email campaign.
+ * The landing page for a "subscribe" link in an email campaign, and for the
+ * signed-in header's "Upgrade your account" button.
  *
  * Stripe Checkout has no durable URL — a session is minted per checkout and
- * expires — so an email cannot link to it directly. This page stands in for
- * one: it mints a session on mount and forwards the visitor to it.
+ * expires — so an email cannot link to it directly, and neither can a button
+ * that has to open a new tab on click. This page stands in for one: it mints a
+ * session on mount and forwards the visitor to it.
  *
  * It deliberately does the minting in the browser rather than as a backend
  * redirect endpoint, for three reasons:
@@ -32,17 +34,26 @@ import { isStripeCheckoutUrl, replaceLocation } from '@/lib/external-navigation'
  */
 
 /**
- * Campaign label for the `begin_checkout` event, from `?src=`.
+ * Campaign label for the `begin_checkout` event, from `?src=` and `?channel=`.
  *
- * Allowlisted rather than passed through: this value is read from a URL that
- * anybody can edit and is then written into the analytics dataLayer, so it is
- * held to a short opaque slug. Anything else is reported as a generic email
- * click rather than rejected — the visitor still gets their checkout.
+ * Allowlisted rather than passed through: both values are read from a URL that
+ * anybody can edit and are then written into the analytics dataLayer, so the
+ * slug is held to a short opaque token and the channel to a known set.
+ * Anything else is reported as a generic email click rather than rejected —
+ * the visitor still gets their checkout.
+ *
+ * `email` remains the default because that is what this page was built for and
+ * what every existing link omits. `app` is the signed-in header's upgrade CTA,
+ * which forwards through this same page so the token, the reused Stripe
+ * customer and the `begin_checkout` event all work exactly as they do for a
+ * mailed link.
  */
 const CAMPAIGN_SLUG = /^[a-z0-9_-]{1,32}$/i;
+const CAMPAIGN_CHANNELS = ['email', 'app'] as const;
 
-export function campaignLocation(src: string | null): string {
-  return src && CAMPAIGN_SLUG.test(src) ? `email_${src}` : 'email';
+export function campaignLocation(src: string | null, channel: string | null = null): string {
+  const prefix = channel && (CAMPAIGN_CHANNELS as readonly string[]).includes(channel) ? channel : 'email';
+  return src && CAMPAIGN_SLUG.test(src) ? `${prefix}_${src}` : prefix;
 }
 
 /**
@@ -76,7 +87,7 @@ function SubscribeRedirectInner() {
     if (inFlightRef.current) return;
     inFlightRef.current = true;
     setFailed(false);
-    pushBeginCheckout(campaignLocation(searchParams.get('src')));
+    pushBeginCheckout(campaignLocation(searchParams.get('src'), searchParams.get('channel')));
 
     try {
       const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';

@@ -1,5 +1,8 @@
+"use client";
+
 import Link from 'next/link';
 import { MessageSquareText, Settings, WalletCards } from 'lucide-react';
+import UpgradeAccountButton, { useUpgradeEligibility } from './UpgradeAccountButton';
 
 type ActivePage = 'app' | 'finances' | 'profile' | 'admin';
 
@@ -27,6 +30,9 @@ export default function AuthenticatedPageHeader({
   onLogout,
 }: AuthenticatedPageHeaderProps) {
   const showNavLinks = activePage !== 'admin';
+  // Admin pages are operator tooling; an upgrade CTA there is noise, and asking
+  // for the account's billing state to decide that would be a wasted request.
+  const canUpgrade = useUpgradeEligibility(activePage !== 'admin');
 
   return (
     <header className="authenticated-header sticky top-0 z-30 border-b backdrop-blur">
@@ -53,6 +59,7 @@ export default function AuthenticatedPageHeader({
         )}
 
         <div className="ml-auto flex min-w-0 items-center gap-4">
+          {canUpgrade && <UpgradeAccountButton />}
           {email && <span className="hidden max-w-52 truncate text-xs text-[#66736b] xl:block">{email}</span>}
           {onLogout && (
             <button className="authenticated-sign-out" onClick={onLogout} type="button">

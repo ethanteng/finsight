@@ -250,6 +250,18 @@ describe('SubscribeRedirect', () => {
 
     await waitFor(() => expect(mockPushBeginCheckout).toHaveBeenCalledWith('email_trial-ending'));
   });
+
+  it('reports the header CTA separately from an email click', async () => {
+    searchParams = new URLSearchParams('channel=app&src=header');
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ url: 'https://checkout.stripe.com/c/pay/cs_test_header' }),
+    });
+
+    render(<SubscribeRedirect />);
+
+    await waitFor(() => expect(mockPushBeginCheckout).toHaveBeenCalledWith('app_header'));
+  });
 });
 
 describe('campaignLocation', () => {
@@ -268,6 +280,18 @@ describe('campaignLocation', () => {
     '',
   ])('refuses %p rather than writing it into analytics', (src) => {
     expect(campaignLocation(src)).toBe('email');
+  });
+
+  it('labels the signed-in header CTA as an in-app click', () => {
+    expect(campaignLocation('header', 'app')).toBe('app_header');
+  });
+
+  it('falls back to email for an unknown channel', () => {
+    expect(campaignLocation('header', 'carrier-pigeon')).toBe('email_header');
+  });
+
+  it('keeps existing email links unlabelled by channel', () => {
+    expect(campaignLocation('winback_q3', null)).toBe('email_winback_q3');
   });
 });
 
