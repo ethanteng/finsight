@@ -504,6 +504,32 @@ describe('StripeService', () => {
       expect(sendWelcomeEmail).not.toHaveBeenCalled();
     });
 
+    it('should not welcome an admin-granted trial even when the webhook claims first insert', async () => {
+      const { sendWelcomeEmail } = require('../../services/stripe-email');
+
+      mockPrisma.user.findFirst.mockResolvedValue({
+        id: 'user_comped',
+        email: 'comped@example.com'
+      });
+      mockPrisma.subscription.create.mockResolvedValue({ id: 'sub_admin' });
+      mockPrisma.user.update.mockResolvedValue({ id: 'user_comped' });
+
+      await stripeService.processWebhookEvent('customer.subscription.created', {
+        object: {
+          id: 'sub_admin_trial',
+          customer: 'cus_comped',
+          status: 'trialing',
+          current_period_start: Math.floor(Date.now() / 1000),
+          current_period_end: Math.floor(Date.now() / 1000) + 86400,
+          cancel_at_period_end: false,
+          metadata: { tier: 'premium', source: 'admin_trial' }
+        }
+      });
+
+      expect(mockPrisma.subscription.create).toHaveBeenCalled();
+      expect(sendWelcomeEmail).not.toHaveBeenCalled();
+    });
+
     it('should skip payment succeeded updates when the subscription record is not linked yet', async () => {
       const mockStripe = require('../../config/stripe');
 

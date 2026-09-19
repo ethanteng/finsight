@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import MarkdownRenderer from '../../components/MarkdownRenderer';
 import PageMeta from '../../components/PageMeta';
@@ -110,6 +110,14 @@ export default function AdminPage() {
   const [deletingAccount, setDeletingAccount] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
   const [refreshingUserSnapshot, setRefreshingUserSnapshot] = useState<string | null>(null);
+  const [savingTrial, setSavingTrial] = useState<string | null>(null);
+  // Per-user datetime-local drafts, so typing a date in one row leaves the others alone.
+  const [trialEndDrafts, setTrialEndDrafts] = useState<Record<string, string>>({});
+  const [trialNotice, setTrialNotice] = useState<{
+    userId: string;
+    ok: boolean;
+    message: string;
+  } | null>(null);
   const [snapshotRefreshNotice, setSnapshotRefreshNotice] = useState<{
     userId: string;
     ok: boolean;
@@ -687,6 +695,68 @@ export default function AdminPage() {
     }
   };
 
+  /**
+   * Start a trial on an admin-created account, or move the end date of one
+   * already running. `endsAtLocal` is what the row's picker is showing -- local
+   * time, including the default it was seeded with -- and the API takes an
+   * instant.
+   */
+  const saveUserTrial = async (userId: string, mode: 'grant' | 'update', endsAtLocal: string) => {
+    if (!endsAtLocal) {
+      setTrialNotice({ userId, ok: false, message: 'Pick a trial end date first.' });
+      return;
+    }
+
+    const trialEnd = new Date(endsAtLocal);
+    if (Number.isNaN(trialEnd.getTime())) {
+      setTrialNotice({ userId, ok: false, message: 'That is not a valid date.' });
+      return;
+    }
+
+    setSavingTrial(userId);
+    setTrialNotice(null);
+    try {
+      const response = await fetch(`${API_URL}/admin/user-trial`, {
+        method: mode === 'grant' ? 'POST' : 'PUT',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ userId, trialEndsAt: trialEnd.toISOString() }),
+      });
+      const data = await response.json().catch(() => ({}));
+
+      if (response.ok) {
+        setTrialNotice({
+          userId,
+          ok: true,
+          // Name the tier on a grant: the trial bills the single plan, so an
+          // account on a lower tier is moved onto it.
+          message: mode === 'grant'
+            ? `Trial started on the ${data.tier || 'premium'} plan, ends ${formatDate(data.trialEndsAt)}.`
+            : `Trial now ends ${formatDate(data.trialEndsAt)}.`,
+        });
+        setTrialEndDrafts(prev => {
+          const next = { ...prev };
+          delete next[userId];
+          return next;
+        });
+        await loadUsersForManagement();
+        await loadProductionData();
+      } else if (response.status === 401 || response.status === 403) {
+        setError('Authentication required for admin access');
+      } else {
+        setTrialNotice({
+          userId,
+          ok: false,
+          message: typeof data.error === 'string' ? data.error : 'Could not update the trial',
+        });
+      }
+    } catch (err) {
+      console.error('Error saving user trial:', err);
+      setTrialNotice({ userId, ok: false, message: 'Network error' });
+    } finally {
+      setSavingTrial(null);
+    }
+  };
+
   const refreshMarketContext = async (tier: string) => {
     setRefreshingContext(tier);
     setMarketRefreshNotice(null);
@@ -781,6 +851,50 @@ export default function AdminPage() {
   const formatDate = (dateString: string) => {
     if (!dateString) return 'Never';
     return new Date(dateString).toLocaleString();
+  };
+
+  /**
+   * A datetime-local input value for an instant, in the admin's own timezone --
+   * toISOString would shift the displayed date by the UTC offset.
+   */
+  const toDateTimeLocalValue = (date: Date) => {
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  };
+
+  // Fixed at mount: a default that recomputed every render would rewrite the
+  // input under the admin as the clock ticks.
+  const defaultTrialEndValue = useMemo(
+    () => toDateTimeLocalValue(new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)),
+    []
+  );
+  // Stripe refuses a trial ending sooner than this, so the picker will not offer it.
+  const minTrialEndValue = useMemo(
+    () => toDateTimeLocalValue(new Date(Date.now() + 48 * 60 * 60 * 1000)),
+    []
+  );
+  // The API's typo guard, mirrored so the picker refuses the same range it does.
+  const maxTrialEndValue = useMemo(
+    () => toDateTimeLocalValue(new Date(Date.now() + 365 * 24 * 60 * 60 * 1000)),
+    []
+  );
+
+  /**
+   * An account with full access and no Stripe subscription behind it -- the
+   * "Admin Created" badge -- which is what a trial can be started on.
+   */
+  const isAdminCreatedAccount = (user: UserForManagement) =>
+    user.isActive &&
+    user.accessLevel === 'full' &&
+    !['active', 'trialing'].includes(user.subscriptionStatus);
+
+  const trialEndDraftValue = (user: UserForManagement) => {
+    const draft = trialEndDrafts[user.id];
+    if (draft !== undefined) return draft;
+    if (user.subscriptionStatus === 'trialing' && user.trialExpiresAt) {
+      return toDateTimeLocalValue(new Date(user.trialExpiresAt));
+    }
+    return defaultTrialEndValue;
   };
 
   const truncateText = (text: string, maxLength: number = 100) => {
@@ -1595,6 +1709,59 @@ export default function AdminPage() {
                         <div className="text-xs text-yellow-400">Updating...</div>
                       )}
                     </div>
+
+                    {/* Trial: convert an admin-created account, or move an existing trial's end date */}
+                    {(isAdminCreatedAccount(user) || user.subscriptionStatus === 'trialing') && (
+                      <div className="flex w-full flex-col gap-1.5 lg:items-end">
+                        <label className="text-xs text-gray-400" htmlFor={`trial-end-${user.id}`}>
+                          {user.subscriptionStatus === 'trialing' ? 'Move trial end to' : 'Start trial ending'}
+                        </label>
+                        <input
+                          id={`trial-end-${user.id}`}
+                          type="datetime-local"
+                          value={trialEndDraftValue(user)}
+                          min={minTrialEndValue}
+                          max={maxTrialEndValue}
+                          onChange={(e) =>
+                            setTrialEndDrafts(prev => ({ ...prev, [user.id]: e.target.value }))
+                          }
+                          disabled={savingTrial === user.id}
+                          className="w-full rounded-lg border border-[#102319]/15 bg-[#fffdf5] px-3 py-1.5 text-sm text-[#102319] focus:outline-none lg:w-auto"
+                        />
+                        <button
+                          type="button"
+                          onClick={() =>
+                            saveUserTrial(
+                              user.id,
+                              user.subscriptionStatus === 'trialing' ? 'update' : 'grant',
+                              trialEndDraftValue(user)
+                            )
+                          }
+                          disabled={savingTrial === user.id}
+                          className="admin-button-secondary w-full text-xs disabled:cursor-not-allowed disabled:opacity-55 lg:w-auto"
+                          title={
+                            user.subscriptionStatus === 'trialing'
+                              ? 'Change when this trial ends (updates the Stripe subscription)'
+                              : 'Convert this admin-created account to a trial that ends on the chosen date'
+                          }
+                        >
+                          {savingTrial === user.id
+                            ? 'Saving…'
+                            : user.subscriptionStatus === 'trialing'
+                              ? 'Update trial end'
+                              : 'Start trial'}
+                        </button>
+                        {trialNotice?.userId === user.id && (
+                          <div
+                            className={`max-w-[220px] text-xs lg:text-right ${
+                              trialNotice.ok ? 'text-green-400' : 'text-red-400'
+                            }`}
+                          >
+                            {trialNotice.message}
+                          </div>
+                        )}
+                      </div>
+                    )}
 
                     {/* Ask Linc: rebuild cached financial snapshot (Plaid + SnapTrade) */}
                     <div className="flex flex-col gap-1 lg:items-end">

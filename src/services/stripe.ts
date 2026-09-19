@@ -20,6 +20,76 @@ function isUniqueConstraintError(error: unknown): error is { code: string } {
   return typeof error === 'object' && error !== null && 'code' in error && error.code === 'P2002';
 }
 
+/** A Stripe timestamp (seconds) as a Date, or null when the field is absent. */
+function fromStripeSeconds(value: unknown): Date | null {
+  return typeof value === 'number' && Number.isFinite(value) ? new Date(value * 1000) : null;
+}
+
+/**
+ * The billing period to store for a Stripe subscription.
+ *
+ * Stripe moved `current_period_start` / `current_period_end` off the
+ * subscription and onto its items in the Basil API version this account is
+ * pinned to, so reading only the top-level fields silently fell through to the
+ * "30 days from now" default -- which is why an admin-granted trial needs this:
+ * the panel would have shown a made-up end date rather than the one the admin
+ * chose. A trialing subscription reports the same instant as `trial_end`, and
+ * that is what "Trial ends" means, so it wins when present.
+ */
+export function resolveSubscriptionPeriod(subscription: any): {
+  currentPeriodStart: Date;
+  currentPeriodEnd: Date;
+} {
+  const item = subscription?.items?.data?.[0];
+  const trialing = subscription?.status === 'trialing';
+
+  const currentPeriodStart =
+    fromStripeSeconds(subscription?.current_period_start) ||
+    fromStripeSeconds(item?.current_period_start) ||
+    (trialing ? fromStripeSeconds(subscription?.trial_start) : null) ||
+    new Date();
+
+  const currentPeriodEnd =
+    (trialing ? fromStripeSeconds(subscription?.trial_end) : null) ||
+    fromStripeSeconds(subscription?.current_period_end) ||
+    fromStripeSeconds(item?.current_period_end) ||
+    new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+
+  return { currentPeriodStart, currentPeriodEnd };
+}
+
+/**
+ * Stripe refuses a trial that ends less than 48 hours out, and an admin who
+ * typed a date in the past means something this endpoint cannot do. Both are
+ * the admin's mistake to see, not a 500.
+ */
+const MIN_TRIAL_HOURS = 48;
+const MAX_TRIAL_DAYS = 365;
+
+export class AdminTrialError extends Error {
+  constructor(message: string, readonly statusCode: number = 400) {
+    super(message);
+    this.name = 'AdminTrialError';
+  }
+}
+
+function assertUsableTrialEnd(trialEndsAt: Date): void {
+  if (!(trialEndsAt instanceof Date) || Number.isNaN(trialEndsAt.getTime())) {
+    throw new AdminTrialError('Trial end date is not a valid date.');
+  }
+
+  const hoursOut = (trialEndsAt.getTime() - Date.now()) / (60 * 60 * 1000);
+
+  if (hoursOut < MIN_TRIAL_HOURS) {
+    throw new AdminTrialError(
+      `Stripe requires a trial to end at least ${MIN_TRIAL_HOURS} hours from now.`
+    );
+  }
+  if (hoursOut > MAX_TRIAL_DAYS * 24) {
+    throw new AdminTrialError(`A trial cannot run longer than ${MAX_TRIAL_DAYS} days.`);
+  }
+}
+
 export class StripeService {
   /**
    * Generate success URL for checkout session
@@ -330,12 +400,7 @@ export class StripeService {
       || (getTierFromPriceId(subscription.items?.data?.[0]?.price?.id) as SubscriptionTier | null)
       || 'premium';
     const status = subscription.status || 'incomplete';
-    const currentPeriodStart = subscription.current_period_start
-      ? new Date(subscription.current_period_start * 1000)
-      : new Date();
-    const currentPeriodEnd = subscription.current_period_end
-      ? new Date(subscription.current_period_end * 1000)
-      : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    const { currentPeriodStart, currentPeriodEnd } = resolveSubscriptionPeriod(subscription);
 
     const subscriptionData = {
       userId,
@@ -494,13 +559,7 @@ export class StripeService {
       return;
     }
 
-    // Validate and convert dates safely
-    const currentPeriodStart = subscription.current_period_start 
-      ? new Date(subscription.current_period_start * 1000)
-      : new Date();
-    const currentPeriodEnd = subscription.current_period_end 
-      ? new Date(subscription.current_period_end * 1000)
-      : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // Default to 30 days from now
+    const { currentPeriodStart, currentPeriodEnd } = resolveSubscriptionPeriod(subscription);
 
     const subscriptionData = {
       userId: user.id,
@@ -557,12 +616,22 @@ export class StripeService {
     }
 
     if (isNewSubscription) {
-      try {
-        await sendWelcomeEmail(user.email, tier);
-        console.log(`Welcome email sent to ${user.email} for ${tier} plan`);
-      } catch (emailError) {
-        console.error(`Failed to send welcome email to ${user.email}:`, emailError);
-        // Don't fail the webhook if email fails
+      // Admin-granted trials put an end date on an account that already had full
+      // access. The grant path writes the local row first when it can, but the
+      // webhook can still win the race and claim first insert — so the metadata
+      // stamp is what keeps this from looking like a brand-new paid signup.
+      if (subscription.metadata?.source === 'admin_trial') {
+        console.log(
+          `Skipped welcome email for admin_trial subscription ${subscriptionId} (user ${user.id})`
+        );
+      } else {
+        try {
+          await sendWelcomeEmail(user.email, tier);
+          console.log(`Welcome email sent to ${user.email} for ${tier} plan`);
+        } catch (emailError) {
+          console.error(`Failed to send welcome email to ${user.email}:`, emailError);
+          // Don't fail the webhook if email fails
+        }
       }
     } else {
       console.log(`Subscription ${subscriptionId} already exists; skipped welcome email`);
@@ -607,13 +676,7 @@ export class StripeService {
         return;
       }
 
-      // Validate and convert dates safely
-      const currentPeriodStart = subscription.current_period_start 
-        ? new Date(subscription.current_period_start * 1000)
-        : new Date();
-      const currentPeriodEnd = subscription.current_period_end 
-        ? new Date(subscription.current_period_end * 1000)
-        : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // Default to 30 days from now
+      const { currentPeriodStart, currentPeriodEnd } = resolveSubscriptionPeriod(subscription);
 
       // Create new subscription record
       subscriptionRecord = await prisma.subscription.create({
@@ -632,13 +695,7 @@ export class StripeService {
 
       console.log(`Created new subscription record: ${subscriptionRecord.id}`);
     } else {
-      // Validate and convert dates safely for update
-      const currentPeriodStart = subscription.current_period_start 
-        ? new Date(subscription.current_period_start * 1000)
-        : new Date();
-      const currentPeriodEnd = subscription.current_period_end 
-        ? new Date(subscription.current_period_end * 1000)
-        : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // Default to 30 days from now
+      const { currentPeriodStart, currentPeriodEnd } = resolveSubscriptionPeriod(subscription);
 
       // Update existing subscription record
       await prisma.subscription.update({
@@ -1241,6 +1298,269 @@ export class StripeService {
       console.error('Error logging webhook event:', error);
       // Don't throw here as this is just logging
     }
+  }
+
+  /**
+   * Convert an admin-created account into a trial that actually ends.
+   *
+   * An admin-created account is one with no Stripe subscription at all, which
+   * getUserSubscriptionStatus grants full access to forever. Handing it a real
+   * Stripe trial is what makes the chosen end date binding: Stripe transitions
+   * the subscription, the existing webhooks write the status back, and the only
+   * live access gate (`blocksProductAccess` in authenticateUser) sees
+   * `canceled` on its own. Storing an end date locally would have needed a
+   * second, parallel notion of expiry for the same account.
+   *
+   * No payment method is collected, so `missing_payment_method: cancel` is what
+   * ends it -- `pause` would leave the account in a status this codebase still
+   * admits, and `create_invoice` would bill someone who never gave a card.
+   */
+  async grantAdminTrial(params: {
+    userId: string;
+    trialEndsAt: Date;
+    grantedBy?: string;
+  }): Promise<{ trialEndsAt: Date; stripeSubscriptionId: string; status: string; tier: string }> {
+    const { userId, trialEndsAt, grantedBy } = params;
+    const prisma = getPrismaClient();
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        email: true,
+        tier: true,
+        isActive: true,
+        stripeCustomerId: true,
+        subscriptionStatus: true,
+        subscriptions: { select: { stripeSubscriptionId: true, status: true }, take: 1 }
+      }
+    });
+
+    if (!user) {
+      throw new AdminTrialError('User not found', 404);
+    }
+    if (!user.isActive) {
+      throw new AdminTrialError(
+        'This account has had access revoked. Restore access before starting a trial.',
+        409
+      );
+    }
+    if (user.subscriptions.length > 0 || user.subscriptionStatus !== 'inactive') {
+      throw new AdminTrialError(
+        `Only admin-created accounts can be converted to a trial. This account already has Stripe billing (status: ${user.subscriptionStatus}).`,
+        409
+      );
+    }
+
+    assertUsableTrialEnd(trialEndsAt);
+
+    const priceId = getStripePriceId((user.tier as SubscriptionTier) || 'premium');
+
+    // Under single-tier pricing there is one price and it is the premium plan,
+    // and the webhooks re-derive a subscription's tier from its price --
+    // autoSyncSubscriptionTier rewrites the tier, the user, and even the
+    // metadata (to `source: web_checkout`) on the first delivery. So a trial on
+    // a starter or standard account is not something Stripe can represent.
+    // Record the billed tier now and move the account to it here, where the
+    // admin sees it happen, rather than letting a webhook change it silently a
+    // second later.
+    const tier = (getTierFromPriceId(priceId) as SubscriptionTier | null)
+      || (user.tier as SubscriptionTier)
+      || 'premium';
+
+    const customerId = await this.resolveOrCreateCustomerId(user.id, user.email, user.stripeCustomerId);
+
+    // Point the user at this customer before Stripe creates the subscription so
+    // customer.subscription.created can resolve the account by customer id
+    // instead of racing through email adoption while stripeCustomerId is still null.
+    if (customerId !== user.stripeCustomerId) {
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { stripeCustomerId: customerId }
+      });
+    }
+
+    const subscription = await stripe.client.subscriptions.create(
+      {
+        customer: customerId,
+        items: [{ price: priceId }],
+        trial_end: Math.floor(trialEndsAt.getTime() / 1000),
+        trial_settings: { end_behavior: { missing_payment_method: 'cancel' } },
+        metadata: {
+          tier,
+          source: 'admin_trial',
+          ...(grantedBy ? { granted_by: grantedBy } : {})
+        }
+      },
+      // Two admins clicking at once would otherwise each get a subscription:
+      // the account check above passes for both before either writes a row. The
+      // key is scoped to the account and the date, so a double-click collapses
+      // into one subscription while a retry with a corrected date is not refused
+      // for the 24 hours Stripe remembers the key -- the re-read below is what
+      // covers two admins choosing different dates at once.
+      { idempotencyKey: `admin-trial-${user.id}-${Math.floor(trialEndsAt.getTime() / 1000)}` }
+    );
+
+    const period = resolveSubscriptionPeriod(subscription);
+    const subscriptionData = {
+      userId: user.id,
+      stripeCustomerId: customerId,
+      tier,
+      status: subscription.status,
+      currentPeriodStart: period.currentPeriodStart,
+      currentPeriodEnd: period.currentPeriodEnd,
+      cancelAtPeriodEnd: subscription.cancel_at_period_end === true
+    };
+
+    // Write the row here rather than waiting for customer.subscription.created:
+    // the admin panel reads it back immediately, and the webhook's own insert
+    // already falls back to an update when the row exists. Welcome mail is also
+    // suppressed when the webhook wins, via metadata.source === 'admin_trial'.
+    // One transaction: a failure between the two writes would leave the account
+    // holding a trial its own status does not know about.
+    //
+    // The re-read alone is not enough when two grants both finish Stripe create
+    // before either commits a row — both findFirsts would miss each other and
+    // both upserts would land. An account-scoped advisory lock serializes the
+    // claim so the loser sees the winner's row, cancels its own Stripe
+    // subscription, and leaves the account with exactly one trial.
+    let lostConcurrentRace = false;
+    try {
+      await prisma.$transaction(async (tx: any) => {
+        await tx.$executeRaw`
+          SELECT pg_advisory_xact_lock(872014271, hashtext(${user.id}))
+        `;
+
+        const competingSubscription = await tx.subscription.findFirst({
+          where: { userId: user.id, stripeSubscriptionId: { not: subscription.id } }
+        });
+        if (competingSubscription) {
+          lostConcurrentRace = true;
+          throw new AdminTrialError(
+            'Another subscription was created for this account at the same time. Reload the panel and check before retrying.',
+            409
+          );
+        }
+
+        await tx.subscription.upsert({
+          where: { stripeSubscriptionId: subscription.id },
+          create: { ...subscriptionData, stripeSubscriptionId: subscription.id },
+          update: subscriptionData
+        });
+
+        await tx.user.update({
+          where: { id: user.id },
+          data: {
+            stripeCustomerId: customerId,
+            subscriptionStatus: subscription.status,
+            tier
+          }
+        });
+      });
+    } catch (error) {
+      if (lostConcurrentRace) {
+        try {
+          await stripe.client.subscriptions.cancel(subscription.id);
+        } catch (cancelError) {
+          console.error(
+            `Could not cancel the redundant admin trial ${subscription.id} for user ${user.id}; cancel it in Stripe:`,
+            cancelError
+          );
+        }
+      }
+      throw error;
+    }
+
+    console.log(
+      `Admin trial granted to user ${user.id}: subscription ${subscription.id} (${subscription.status}) ending ${period.currentPeriodEnd.toISOString()} on tier ${tier}`
+    );
+
+    return {
+      trialEndsAt: period.currentPeriodEnd,
+      stripeSubscriptionId: subscription.id,
+      status: subscription.status,
+      tier
+    };
+  }
+
+  /**
+   * Move the end date of a trial that is still running.
+   *
+   * Stripe owns the date, so the update goes there first and the local row only
+   * mirrors what came back; writing our own date would put the panel and the
+   * cancellation on different days.
+   */
+  async updateTrialEnd(params: {
+    userId: string;
+    trialEndsAt: Date;
+  }): Promise<{ trialEndsAt: Date; stripeSubscriptionId: string; status: string }> {
+    const { userId, trialEndsAt } = params;
+    const prisma = getPrismaClient();
+
+    const trialingSubscription = await prisma.subscription.findFirst({
+      where: { userId, status: 'trialing' },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    if (!trialingSubscription) {
+      throw new AdminTrialError('This account has no trial in progress.', 409);
+    }
+
+    assertUsableTrialEnd(trialEndsAt);
+
+    const subscription = await stripe.client.subscriptions.update(
+      trialingSubscription.stripeSubscriptionId,
+      {
+        trial_end: Math.floor(trialEndsAt.getTime() / 1000),
+        proration_behavior: 'none'
+      }
+    );
+
+    const period = resolveSubscriptionPeriod(subscription);
+
+    await prisma.subscription.update({
+      where: { stripeSubscriptionId: trialingSubscription.stripeSubscriptionId },
+      data: {
+        status: subscription.status,
+        currentPeriodStart: period.currentPeriodStart,
+        currentPeriodEnd: period.currentPeriodEnd
+      }
+    });
+
+    console.log(
+      `Trial end for user ${userId} moved to ${period.currentPeriodEnd.toISOString()} (subscription ${trialingSubscription.stripeSubscriptionId})`
+    );
+
+    return {
+      trialEndsAt: period.currentPeriodEnd,
+      stripeSubscriptionId: trialingSubscription.stripeSubscriptionId,
+      status: subscription.status
+    };
+  }
+
+  /**
+   * The Stripe customer to bill this account, creating one when the account has
+   * never been through checkout -- which is the normal case for the
+   * admin-created accounts this path exists for.
+   */
+  private async resolveOrCreateCustomerId(
+    userId: string,
+    email: string,
+    existingCustomerId: string | null
+  ): Promise<string> {
+    if (existingCustomerId) {
+      const reusable = await this.getReusableCustomerId(existingCustomerId);
+      if (reusable) {
+        return reusable;
+      }
+    }
+
+    const customer = await stripe.client.customers.create({
+      email,
+      metadata: { userId, source: 'admin_trial' }
+    });
+
+    return customer.id;
   }
 
   /**

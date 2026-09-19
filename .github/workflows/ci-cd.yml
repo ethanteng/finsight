@@ -255,6 +255,13 @@ jobs:
 
       - name: Upload unit test coverage to Codecov
         uses: codecov/codecov-action@v3
+        # Coverage reporting must not gate a merge. CODECOV_TOKEN is unset, so
+        # this uploads tokenless, and codecov.io drops those connections often
+        # enough that green tests were failing the job on `read ECONNRESET`.
+        # The action's own fail_ci_if_error is already false and does not help:
+        # a socket error thrown inside the action fails the step before that
+        # flag is consulted.
+        continue-on-error: true
         with:
           file: ./coverage/lcov.info
           flags: unit
@@ -407,6 +414,13 @@ jobs:
 
       - name: Upload integration test coverage to Codecov
         uses: codecov/codecov-action@v3
+        # Coverage reporting must not gate a merge. CODECOV_TOKEN is unset, so
+        # this uploads tokenless, and codecov.io drops those connections often
+        # enough that green tests were failing the job on `read ECONNRESET`.
+        # The action's own fail_ci_if_error is already false and does not help:
+        # a socket error thrown inside the action fails the step before that
+        # flag is consulted.
+        continue-on-error: true
         with:
           file: ./coverage/lcov.info
           flags: integration

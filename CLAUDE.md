@@ -136,6 +136,8 @@ note is written to match rather than promising otherwise. Gating this on
 
 Starter / Standard / Premium tiers control feature access. Tier checks are embedded throughout routes and services (not a centralized middleware). Stripe handles subscriptions.
 
+An admin-created account — no Stripe subscription, `subscriptionStatus` `inactive` — reads as full access with no end to it. The admin panel can put an end date on one by converting it to a real Stripe trial (`/admin/user-trial`), because nothing here expires an account on a date: the only live gate blocks `canceled`, and Stripe is what produces that status when a trial with no payment method runs out. See `docs/admin/ADMIN_TRIALS.md`.
+
 ### Multi-AI Support
 
 The platform supports OpenAI (GPT-4), Anthropic (Claude), and Google (Gemini) with intelligent model selection. The `openai/` directory name is historical — it handles all AI providers.

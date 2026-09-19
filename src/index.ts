@@ -1486,6 +1486,79 @@ app.get('/sync/status', async (req: Request, res: Response) => {
       }
     });
 
+    // Admin endpoints to put an admin-created account on a real, ending trial.
+    // POST starts one; PUT moves the end date of a trial already running.
+    const handleAdminTrialRequest = async (
+      req: Request,
+      res: Response,
+      mode: 'grant' | 'update'
+    ) => {
+      const { userId, trialEndsAt } = req.body || {};
+
+      if (!userId || typeof userId !== 'string') {
+        return res.status(400).json({ error: 'Missing userId' });
+      }
+      if (!trialEndsAt || typeof trialEndsAt !== 'string') {
+        return res.status(400).json({ error: 'Missing trialEndsAt' });
+      }
+
+      const parsedTrialEnd = new Date(trialEndsAt);
+      if (Number.isNaN(parsedTrialEnd.getTime())) {
+        return res.status(400).json({ error: 'trialEndsAt is not a valid date' });
+      }
+
+      try {
+        const { stripeService, AdminTrialError } = await import('./services/stripe');
+
+        try {
+          const result = mode === 'grant'
+            ? await stripeService.grantAdminTrial({
+                userId,
+                trialEndsAt: parsedTrialEnd,
+                ...(req.user?.email ? { grantedBy: req.user.email } : {})
+              })
+            : await stripeService.updateTrialEnd({ userId, trialEndsAt: parsedTrialEnd });
+
+          console.log(`Admin: ${mode === 'grant' ? 'started' : 'updated'} trial for user ${userId}`);
+          return res.json({ success: true, ...result });
+        } catch (error) {
+          // The admin's own input problems (a date Stripe will not take, an
+          // account that is not admin-created) are answers, not failures.
+          if (error instanceof AdminTrialError) {
+            return res.status(error.statusCode).json({ error: error.message });
+          }
+          throw error;
+        }
+      } catch (error) {
+        console.error(`Error handling admin trial (${mode}):`, error);
+
+        if (error instanceof Error) {
+          Sentry.captureException(error);
+        } else {
+          Sentry.captureMessage('Unknown error in admin trial endpoint', 'error');
+        }
+
+        // A Stripe rejection is nearly always something about the request the
+        // admin can fix, and its message says what -- so pass it through rather
+        // than answering with a generic failure. Anything else stays opaque.
+        const stripeErrorType = (error as { type?: unknown })?.type;
+        const isStripeRejection =
+          typeof stripeErrorType === 'string' && stripeErrorType.startsWith('Stripe');
+
+        return isStripeRejection
+          ? res.status(400).json({ error: `Stripe rejected this: ${(error as Error).message}` })
+          : res.status(500).json({ error: 'Failed to update the trial' });
+      }
+    };
+
+    app.post('/admin/user-trial', adminAuth, async (req: Request, res: Response) => {
+      await handleAdminTrialRequest(req, res, 'grant');
+    });
+
+    app.put('/admin/user-trial', adminAuth, async (req: Request, res: Response) => {
+      await handleAdminTrialRequest(req, res, 'update');
+    });
+
     // Admin endpoint to get remembered personal context and linked institutions
     app.get('/admin/user-financial-data/:userId', adminAuth, async (req: Request, res: Response) => {
       try {
