@@ -34,9 +34,9 @@ describe("financial stress testing landing page", () => {
       "Stress-test your retirement plan before the market tests it.",
     );
     expect(screen.getByText(/turns your holdings, spending, income, and timeline into a model/i)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /start with the free coast fire calculator/i })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: /stress-test my retirement plan/i })).toHaveAttribute(
       "href",
-      "/coast-fire-calculator",
+      GET_STARTED_HREF,
     );
 
     const benefits = screen.getByRole("list", { name: "What you can test in your retirement plan" });
