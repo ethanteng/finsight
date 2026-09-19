@@ -11,6 +11,12 @@ interface AuthenticatedPageHeaderProps {
   eyebrow: string;
   title: string;
   email?: string;
+  /**
+   * Whether to offer this account a checkout, for a page that has already
+   * loaded its billing state. Left undefined, the header asks for it itself;
+   * passing it spares the page a second identical request.
+   */
+  canUpgrade?: boolean;
   homeHref?: string;
   onLogout?: () => void;
 }
@@ -26,13 +32,16 @@ export default function AuthenticatedPageHeader({
   eyebrow,
   title,
   email,
+  canUpgrade,
   homeHref = '/app',
   onLogout,
 }: AuthenticatedPageHeaderProps) {
   const showNavLinks = activePage !== 'admin';
   // Admin pages are operator tooling; an upgrade CTA there is noise, and asking
   // for the account's billing state to decide that would be a wasted request.
-  const canUpgrade = useUpgradeEligibility(activePage !== 'admin');
+  // A caller that already knows spares one too.
+  const fetchedCanUpgrade = useUpgradeEligibility(activePage !== 'admin' && canUpgrade === undefined);
+  const showUpgrade = canUpgrade ?? fetchedCanUpgrade;
 
   return (
     <header className="authenticated-header sticky top-0 z-30 border-b backdrop-blur">
@@ -59,7 +68,7 @@ export default function AuthenticatedPageHeader({
         )}
 
         <div className="ml-auto flex min-w-0 items-center gap-4">
-          {canUpgrade && <UpgradeAccountButton />}
+          {showUpgrade && <UpgradeAccountButton />}
           {email && <span className="hidden max-w-52 truncate text-xs text-[#66736b] xl:block">{email}</span>}
           {onLogout && (
             <button className="authenticated-sign-out" onClick={onLogout} type="button">

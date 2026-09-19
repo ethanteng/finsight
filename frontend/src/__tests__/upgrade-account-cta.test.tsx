@@ -99,6 +99,43 @@ describe('UpgradeAccountButton in the shared page header', () => {
     expect(upgradeLink()).toHaveLength(0);
   });
 
+  it('asks for nothing when the page already knows the answer', async () => {
+    // /profile loads billing state for its own subscription panel. Passing it
+    // down spares the heaviest page in the app a second identical request.
+    mockApi(noCardSignup);
+
+    render(
+      <AuthenticatedPageHeader
+        activePage="profile"
+        eyebrow="Accounts"
+        title="Accounts & context"
+        canUpgrade
+      />,
+    );
+
+    await waitFor(() => expect(upgradeLink()).toHaveLength(1));
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('honours a page that says this account cannot upgrade', async () => {
+    // Explicitly false is an answer, not an absent one: the header must not
+    // fall back to asking, or the saved request comes straight back.
+    mockApi(noCardSignup);
+
+    render(
+      <AuthenticatedPageHeader
+        activePage="profile"
+        eyebrow="Accounts"
+        title="Accounts & context"
+        canUpgrade={false}
+      />,
+    );
+
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Accounts & context' })).toBeInTheDocument());
+    expect(global.fetch).not.toHaveBeenCalled();
+    expect(upgradeLink()).toHaveLength(0);
+  });
+
   it('asks for nothing when there is no session to ask about', async () => {
     localStorage.clear();
     mockApi(noCardSignup);
