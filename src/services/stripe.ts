@@ -11,6 +11,7 @@ import {
 } from '../types/stripe';
 import { getPrismaClient } from '../prisma-client';
 import { sendWelcomeEmail, sendTierChangeEmail, sendCancellationEmail } from './stripe-email';
+import { isAdminOperatorEmail } from '../auth/admin-emails';
 
 // How many of an account's newest subscriptions getUserSubscriptionStatus reads
 // before it has to ask for a working one explicitly.
@@ -1573,6 +1574,24 @@ export class StripeService {
     gracePeriodDays?: number;
     accessLevel: 'full' | 'limited' | 'none';
     upgradeRequired: boolean;
+    /**
+     * Whether to offer this account a checkout, i.e. whether the signed-in
+     * header should show "Upgrade your account".
+     *
+     * Not the inverse of `upgradeRequired`, which means the opposite thing:
+     * that access is already denied and paying is the way back in. `canUpgrade`
+     * is about an account that has full access for free and no billing
+     * relationship at all -- the no-card signup funnel, which reaches
+     * `getUserSubscriptionStatus` as `inactive` with no `Subscription` rows.
+     *
+     * Deliberately false for a `trialing` account. Those hold a real Stripe
+     * subscription, and a second checkout on the same customer would mint a
+     * second subscription beside it rather than convert the first: a
+     * checkout-started trial already has a card and converts on its own, and an
+     * admin-granted trial would end up billed twice once checkout saves a
+     * default payment method its `missing_payment_method: cancel` then finds.
+     */
+    canUpgrade: boolean;
     message: string;
   }> {
     try {
@@ -1581,6 +1600,7 @@ export class StripeService {
         where: { id: userId },
         select: {
           id: true,
+          email: true,
           tier: true,
           subscriptionStatus: true,
           subscriptions: {
@@ -1609,6 +1629,7 @@ export class StripeService {
       // Determine access level and status
       let accessLevel: 'full' | 'none' = 'none';
       let upgradeRequired = false;
+      let canUpgrade = false;
       let message = '';
       
       // Get the actual subscription status from the subscription record if it exists
@@ -1664,9 +1685,14 @@ export class StripeService {
         upgradeRequired = false; // Not an upgrade issue
         message = 'Payment completed but account setup incomplete. Please complete your account setup to access Ask Linc.';
       } else if (user.subscriptions.length === 0 && subscriptionStatus === 'inactive') {
-        // Admin-created user - no Stripe subscription records exist
+        // Admin-created user - no Stripe subscription records exist. A no-card
+        // signup lands here too: registration writes exactly this shape, and
+        // nothing distinguishes the two afterwards.
         accessLevel = 'full';
         upgradeRequired = false;
+        // The only population an upgrade CTA is for: free access, no Stripe
+        // customer, no subscription to duplicate. Operators excepted.
+        canUpgrade = !isAdminOperatorEmail(user.email);
         message = `Admin-created ${currentTier} user. Full access granted.`;
       } else {
         // User has subscription history but status is not active - access revoked
@@ -1699,6 +1725,7 @@ export class StripeService {
       console.log(`  - Final decision:`);
       console.log(`    - accessLevel: ${accessLevel}`);
       console.log(`    - upgradeRequired: ${upgradeRequired}`);
+      console.log(`    - canUpgrade: ${canUpgrade}`);
       console.log(`    - message: ${message}`);
       console.log(`    - actualStatus: ${actualSubscriptionStatus}`);
 
@@ -1708,6 +1735,7 @@ export class StripeService {
           ...(expiresAt && { expiresAt }),
           accessLevel,
           upgradeRequired,
+          canUpgrade,
           message
         };
     } catch (error) {

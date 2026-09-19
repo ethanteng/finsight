@@ -8,11 +8,13 @@ import { pushBeginCheckout } from '@/lib/dataLayer';
 import { isStripeCheckoutUrl, replaceLocation } from '@/lib/external-navigation';
 
 /**
- * The landing page for a "subscribe" link in an email campaign.
+ * The landing page for a "subscribe" link in an email campaign, and for the
+ * signed-in header's "Upgrade your account" button.
  *
  * Stripe Checkout has no durable URL — a session is minted per checkout and
- * expires — so an email cannot link to it directly. This page stands in for
- * one: it mints a session on mount and forwards the visitor to it.
+ * expires — so an email cannot link to it directly, and neither can a button
+ * that has to open a new tab on click. This page stands in for one: it mints a
+ * session on mount and forwards the visitor to it.
  *
  * It deliberately does the minting in the browser rather than as a backend
  * redirect endpoint, for three reasons:
@@ -32,17 +34,26 @@ import { isStripeCheckoutUrl, replaceLocation } from '@/lib/external-navigation'
  */
 
 /**
- * Campaign label for the `begin_checkout` event, from `?src=`.
+ * Campaign label for the `begin_checkout` event, from `?src=` and `?channel=`.
  *
- * Allowlisted rather than passed through: this value is read from a URL that
- * anybody can edit and is then written into the analytics dataLayer, so it is
- * held to a short opaque slug. Anything else is reported as a generic email
- * click rather than rejected — the visitor still gets their checkout.
+ * Allowlisted rather than passed through: both values are read from a URL that
+ * anybody can edit and are then written into the analytics dataLayer, so the
+ * slug is held to a short opaque token and the channel to a known set.
+ * Anything else is reported as a generic email click rather than rejected —
+ * the visitor still gets their checkout.
+ *
+ * `email` remains the default because that is what this page was built for and
+ * what every existing link omits. `app` is the signed-in header's upgrade CTA,
+ * which forwards through this same page so the token, the reused Stripe
+ * customer and the `begin_checkout` event all work exactly as they do for a
+ * mailed link.
  */
 const CAMPAIGN_SLUG = /^[a-z0-9_-]{1,32}$/i;
+const CAMPAIGN_CHANNELS = ['email', 'app'] as const;
 
-export function campaignLocation(src: string | null): string {
-  return src && CAMPAIGN_SLUG.test(src) ? `email_${src}` : 'email';
+export function campaignLocation(src: string | null, channel: string | null = null): string {
+  const prefix = channel && (CAMPAIGN_CHANNELS as readonly string[]).includes(channel) ? channel : 'email';
+  return src && CAMPAIGN_SLUG.test(src) ? `${prefix}_${src}` : prefix;
 }
 
 /**
@@ -61,6 +72,14 @@ function storedAuthToken(): string | null {
 function SubscribeRedirectInner() {
   const searchParams = useSearchParams();
   const [failed, setFailed] = useState(false);
+  /*
+   * The one refusal that is not a failure. The server declines to mint a
+   * second subscription for an account that already has a working one, which
+   * is what a stale upgrade CTA in a tab left open behind a completed checkout
+   * would otherwise ask for. Telling that visitor something went wrong on our
+   * side would be untrue, and "Try again" would be the wrong thing to offer.
+   */
+  const [alreadySubscribed, setAlreadySubscribed] = useState(false);
   // React runs effects twice in development StrictMode, and every run mints a
   // Stripe session. Without this guard a single page view creates two.
   const startedRef = useRef(false);
@@ -76,7 +95,8 @@ function SubscribeRedirectInner() {
     if (inFlightRef.current) return;
     inFlightRef.current = true;
     setFailed(false);
-    pushBeginCheckout(campaignLocation(searchParams.get('src')));
+    setAlreadySubscribed(false);
+    pushBeginCheckout(campaignLocation(searchParams.get('src'), searchParams.get('channel')));
 
     try {
       const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
@@ -105,6 +125,10 @@ function SubscribeRedirectInner() {
 
       if (!response.ok) {
         const error = await response.json().catch(() => ({}));
+        if (error?.code === 'ALREADY_SUBSCRIBED') {
+          setAlreadySubscribed(true);
+          return;
+        }
         console.error('Failed to create checkout session:', error);
         setFailed(true);
         return;
@@ -151,7 +175,25 @@ function SubscribeRedirectInner() {
       <div className="flex-1 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
         <div className="sm:mx-auto sm:w-full sm:max-w-md">
           <div className="bg-white py-8 px-4 shadow sm:rounded-lg sm:px-10">
-            {failed ? (
+            {alreadySubscribed ? (
+              <div className="text-center" role="status">
+                <h1 className="text-lg font-medium text-gray-900">You are already subscribed</h1>
+                <p className="mt-2 text-sm text-gray-500">
+                  This account has an active subscription, so there is nothing to check out.
+                </p>
+                <div className="mt-6 space-y-3">
+                  <Link
+                    className="block w-full rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+                    href="/app"
+                  >
+                    Go to Ask Linc
+                  </Link>
+                  <Link className="block text-sm text-indigo-600 hover:text-indigo-500" href="/profile">
+                    Manage your subscription
+                  </Link>
+                </div>
+              </div>
+            ) : failed ? (
               <div className="text-center" role="alert">
                 <h1 className="text-lg font-medium text-gray-900">We could not start your checkout</h1>
                 <p className="mt-2 text-sm text-gray-500">
