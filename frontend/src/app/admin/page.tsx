@@ -873,6 +873,11 @@ export default function AdminPage() {
     () => toDateTimeLocalValue(new Date(Date.now() + 48 * 60 * 60 * 1000)),
     []
   );
+  // The API's typo guard, mirrored so the picker refuses the same range it does.
+  const maxTrialEndValue = useMemo(
+    () => toDateTimeLocalValue(new Date(Date.now() + 365 * 24 * 60 * 60 * 1000)),
+    []
+  );
 
   /**
    * An account with full access and no Stripe subscription behind it -- the
@@ -1716,6 +1721,7 @@ export default function AdminPage() {
                           type="datetime-local"
                           value={trialEndDraftValue(user)}
                           min={minTrialEndValue}
+                          max={maxTrialEndValue}
                           onChange={(e) =>
                             setTrialEndDrafts(prev => ({ ...prev, [user.id]: e.target.value }))
                           }

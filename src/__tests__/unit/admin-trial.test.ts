@@ -58,6 +58,9 @@ describe('admin-granted trials', () => {
     jest.spyOn(console, 'warn').mockImplementation(() => {});
 
     mockPrisma = {
+      // The grant writes the subscription row and the account in one
+      // transaction; the mock runs the callback against the same client.
+      $transaction: jest.fn(async (fn: any) => fn(mockPrisma)),
       user: { findUnique: jest.fn(), update: jest.fn().mockResolvedValue({}) },
       subscription: {
         findFirst: jest.fn().mockResolvedValue(null),

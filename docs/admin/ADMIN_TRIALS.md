@@ -56,7 +56,11 @@ webhook change the tier silently a second later.
 - An account with access revoked is refused; restore access first.
 - Stripe requires a trial to end at least **48 hours** out, so the picker and the API both
   enforce that. Trials longer than **365 days** are refused as a typo guard.
-- Errors from Stripe are returned with their message so the panel can show what to fix.
+- Errors from Stripe are returned with their message so the panel can show what to fix. The
+  picker's `min` / `max` mirror the 48-hour and 365-day bounds, so it offers only what the
+  API accepts.
+- The subscription row and the account are written in one transaction: a failure between
+  them would leave the account holding a trial its own status does not know about.
 - Concurrent grants: the create call carries an account-and-date idempotency key, so a
   double-click collapses into one subscription, and the call re-reads the account
   afterwards — if another subscription appeared while Stripe was answering, the one just

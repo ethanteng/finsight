@@ -1437,19 +1437,23 @@ export class StripeService {
     // the admin panel reads it back immediately, and the webhook's own insert
     // already falls back to an update when the row exists. Welcome mail is also
     // suppressed when the webhook wins, via metadata.source === 'admin_trial'.
-    await prisma.subscription.upsert({
-      where: { stripeSubscriptionId: subscription.id },
-      create: { ...subscriptionData, stripeSubscriptionId: subscription.id },
-      update: subscriptionData
-    });
+    // One transaction: a failure between the two writes would leave the account
+    // holding a trial its own status does not know about.
+    await prisma.$transaction(async (tx: any) => {
+      await tx.subscription.upsert({
+        where: { stripeSubscriptionId: subscription.id },
+        create: { ...subscriptionData, stripeSubscriptionId: subscription.id },
+        update: subscriptionData
+      });
 
-    await prisma.user.update({
-      where: { id: user.id },
-      data: {
-        stripeCustomerId: customerId,
-        subscriptionStatus: subscription.status,
-        tier
-      }
+      await tx.user.update({
+        where: { id: user.id },
+        data: {
+          stripeCustomerId: customerId,
+          subscriptionStatus: subscription.status,
+          tier
+        }
+      });
     });
 
     console.log(
