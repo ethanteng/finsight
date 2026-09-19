@@ -12,7 +12,10 @@ import { syncStoredUserTimeZoneFromAuthUser } from '../../lib/browser-time-zone'
 import { groupTurnsIntoDecisions } from '../../lib/decision-threads';
 import { takePendingFirstDecision } from '../../lib/pending-first-decision';
 import { relativeTurnTime } from '../../lib/relative-time';
-import UpgradeAccountButton, { type UpgradeAction } from '../../components/authenticated/UpgradeAccountButton';
+import UpgradeAccountButton, {
+  parseUpgradeAction,
+  type UpgradeAction,
+} from '../../components/authenticated/UpgradeAccountButton';
 import type { StructuredPromptHistory } from '../../lib/structured-answer';
 
 type PromptHistory = StructuredPromptHistory;
@@ -233,8 +236,8 @@ export default function AppPageClient() {
   // Decided by the server (`upgradeAction`), not inferred from the status
   // string here — see UpgradeAccountButton. Absent until the status call
   // answers, so the CTA appears with the rest of the chrome rather than
-  // flashing in.
-  const upgradeAction = subscriptionStatus?.upgradeAction ?? null;
+  // flashing in. Unknown values fail closed the same way the shared header does.
+  const upgradeAction = parseUpgradeAction(subscriptionStatus?.upgradeAction);
 
   if (isLoading) return (
     <main className="min-h-screen bg-[#f3f2e9] grid place-items-center text-[#102319]" aria-busy="true">

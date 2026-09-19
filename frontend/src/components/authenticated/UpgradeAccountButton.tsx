@@ -9,6 +9,17 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
 export type UpgradeAction = 'checkout' | 'billing_portal';
 
 /**
+ * Narrow a subscription-status payload to an action this build can honour.
+ *
+ * The status endpoint is JSON over the wire, so callers that already fetched
+ * billing state must not trust the field as typed — an unknown or absent value
+ * is "offer nothing", matching `useUpgradeEligibility`.
+ */
+export function parseUpgradeAction(value: unknown): UpgradeAction | null {
+  return value === 'checkout' || value === 'billing_portal' ? value : null;
+}
+
+/**
  * Where the header CTA sends someone, per the server's `upgradeAction`.
  *
  * Neither is a direct Stripe URL, because there is no such thing: Checkout
@@ -64,8 +75,8 @@ export function useUpgradeEligibility(enabled = true): UpgradeAction | null {
         });
         if (!response.ok) return;
         const data = await response.json();
-        const action = data?.upgradeAction;
-        if (active && (action === 'checkout' || action === 'billing_portal')) {
+        const action = parseUpgradeAction(data?.upgradeAction);
+        if (active && action) {
           setUpgradeAction(action);
         }
       } catch {

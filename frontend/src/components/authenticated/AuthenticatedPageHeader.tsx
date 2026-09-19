@@ -2,7 +2,11 @@
 
 import Link from 'next/link';
 import { MessageSquareText, Settings, WalletCards } from 'lucide-react';
-import UpgradeAccountButton, { useUpgradeEligibility, type UpgradeAction } from './UpgradeAccountButton';
+import UpgradeAccountButton, {
+  parseUpgradeAction,
+  useUpgradeEligibility,
+  type UpgradeAction,
+} from './UpgradeAccountButton';
 
 type ActivePage = 'app' | 'finances' | 'profile' | 'admin';
 
@@ -41,7 +45,9 @@ export default function AuthenticatedPageHeader({
   // for the account's billing state to decide that would be a wasted request.
   // A caller that already knows spares one too.
   const fetchedAction = useUpgradeEligibility(activePage !== 'admin' && upgradeAction === undefined);
-  const action = upgradeAction === undefined ? fetchedAction : upgradeAction;
+  // A page-supplied value is still wire JSON underneath — narrow it the same
+  // way the fetch path does, so an unknown action never becomes a link.
+  const action = upgradeAction === undefined ? fetchedAction : parseUpgradeAction(upgradeAction);
 
   return (
     <header className="authenticated-header sticky top-0 z-30 border-b backdrop-blur">
