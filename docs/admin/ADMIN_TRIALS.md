@@ -27,9 +27,9 @@ trial is a genuine Stripe subscription and Stripe is what moves it:
    by customer id. `customer.subscription.created` then updates the same row when it already
    exists; when the webhook wins the insert race instead, `metadata.source: admin_trial`
    still suppresses the welcome email — an account that already had full access does not
-   need one. Subscription creates also carry an idempotency key and re-read the
-   account afterwards, so overlapping grants cannot leave two trials behind (see
-   Constraints).
+   need one. Subscription creates also carry an account-and-date idempotency key, and the
+   local claim is serialized with an advisory lock plus a re-read, so overlapping grants
+   cannot leave two trials behind (see Constraints).
 3. No card is ever collected. At `trial_end` Stripe cancels the subscription,
    `customer.subscription.deleted` sets the account to `canceled`, and the next sign-in is
    refused with the standard "Subscription expired" message. The user can subscribe from
@@ -62,12 +62,13 @@ webhook change the tier silently a second later.
 - The subscription row and the account are written in one transaction: a failure between
   them would leave the account holding a trial its own status does not know about.
 - Concurrent grants: the create call carries an account-and-date idempotency key, so a
-  double-click collapses into one subscription, and the call re-reads the account
-  afterwards — if another subscription appeared while Stripe was answering, the one just
-  created is cancelled and the request is refused. Claiming the account by flipping
-  `subscriptionStatus` first was rejected: a crash between the claim and Stripe would leave
-  the account `trialing` with no subscription row, which reads as "account setup
-  incomplete" and locks the comped user out.
+  double-click collapses into one subscription. Claiming the local row is serialized with
+  a Postgres advisory lock and a re-read inside that transaction — if another subscription
+  appeared while Stripe was answering, the one just created is cancelled and the request
+  is refused. Claiming the account by flipping `subscriptionStatus` first was rejected: a
+  crash between the claim and Stripe would leave the account `trialing` with no
+  subscription row, which reads as "account setup incomplete" and locks the comped user
+  out.
 
 ## Testing
 

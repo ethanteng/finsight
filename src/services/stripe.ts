@@ -1401,27 +1401,6 @@ export class StripeService {
       { idempotencyKey: `admin-trial-${user.id}-${Math.floor(trialEndsAt.getTime() / 1000)}` }
     );
 
-    // A subscription that appeared while Stripe was answering means this call
-    // lost the race, and the subscription it just created has to go rather than
-    // sit in Stripe billing someone twice.
-    const competingSubscription = await prisma.subscription.findFirst({
-      where: { userId: user.id, stripeSubscriptionId: { not: subscription.id } }
-    });
-    if (competingSubscription) {
-      try {
-        await stripe.client.subscriptions.cancel(subscription.id);
-      } catch (cancelError) {
-        console.error(
-          `Could not cancel the redundant admin trial ${subscription.id} for user ${user.id}; cancel it in Stripe:`,
-          cancelError
-        );
-      }
-      throw new AdminTrialError(
-        'Another subscription was created for this account at the same time. Reload the panel and check before retrying.',
-        409
-      );
-    }
-
     const period = resolveSubscriptionPeriod(subscription);
     const subscriptionData = {
       userId: user.id,
@@ -1439,22 +1418,58 @@ export class StripeService {
     // suppressed when the webhook wins, via metadata.source === 'admin_trial'.
     // One transaction: a failure between the two writes would leave the account
     // holding a trial its own status does not know about.
-    await prisma.$transaction(async (tx: any) => {
-      await tx.subscription.upsert({
-        where: { stripeSubscriptionId: subscription.id },
-        create: { ...subscriptionData, stripeSubscriptionId: subscription.id },
-        update: subscriptionData
-      });
+    //
+    // The re-read alone is not enough when two grants both finish Stripe create
+    // before either commits a row — both findFirsts would miss each other and
+    // both upserts would land. An account-scoped advisory lock serializes the
+    // claim so the loser sees the winner's row, cancels its own Stripe
+    // subscription, and leaves the account with exactly one trial.
+    let lostConcurrentRace = false;
+    try {
+      await prisma.$transaction(async (tx: any) => {
+        await tx.$executeRaw`
+          SELECT pg_advisory_xact_lock(872014271, hashtext(${user.id}))
+        `;
 
-      await tx.user.update({
-        where: { id: user.id },
-        data: {
-          stripeCustomerId: customerId,
-          subscriptionStatus: subscription.status,
-          tier
+        const competingSubscription = await tx.subscription.findFirst({
+          where: { userId: user.id, stripeSubscriptionId: { not: subscription.id } }
+        });
+        if (competingSubscription) {
+          lostConcurrentRace = true;
+          throw new AdminTrialError(
+            'Another subscription was created for this account at the same time. Reload the panel and check before retrying.',
+            409
+          );
         }
+
+        await tx.subscription.upsert({
+          where: { stripeSubscriptionId: subscription.id },
+          create: { ...subscriptionData, stripeSubscriptionId: subscription.id },
+          update: subscriptionData
+        });
+
+        await tx.user.update({
+          where: { id: user.id },
+          data: {
+            stripeCustomerId: customerId,
+            subscriptionStatus: subscription.status,
+            tier
+          }
+        });
       });
-    });
+    } catch (error) {
+      if (lostConcurrentRace) {
+        try {
+          await stripe.client.subscriptions.cancel(subscription.id);
+        } catch (cancelError) {
+          console.error(
+            `Could not cancel the redundant admin trial ${subscription.id} for user ${user.id}; cancel it in Stripe:`,
+            cancelError
+          );
+        }
+      }
+      throw error;
+    }
 
     console.log(
       `Admin trial granted to user ${user.id}: subscription ${subscription.id} (${subscription.status}) ending ${period.currentPeriodEnd.toISOString()} on tier ${tier}`
