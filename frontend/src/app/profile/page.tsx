@@ -203,7 +203,7 @@ export default function ProfilePage() {
     cancelAtPeriodEnd?: boolean;
     stripeCustomerId?: string;
     accessLevel?: string;
-    canUpgrade?: boolean;
+    upgradeAction?: 'checkout' | 'billing_portal' | null;
   } | null>(null);
   const [isManagingSubscription, setIsManagingSubscription] = useState(false);
   const [subscriptionMessage, setSubscriptionMessage] = useState<string>('');
@@ -1335,7 +1335,7 @@ export default function ProfilePage() {
           email={userEmail}
           // This page already loads the billing state the header would
           // otherwise fetch for itself.
-          canUpgrade={subscriptionStatus?.canUpgrade === true}
+          upgradeAction={subscriptionStatus?.upgradeAction ?? null}
           homeHref="/app"
           onLogout={() => {
             resetPlaidLinkInitialization();

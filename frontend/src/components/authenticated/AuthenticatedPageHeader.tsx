@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { MessageSquareText, Settings, WalletCards } from 'lucide-react';
-import UpgradeAccountButton, { useUpgradeEligibility } from './UpgradeAccountButton';
+import UpgradeAccountButton, { useUpgradeEligibility, type UpgradeAction } from './UpgradeAccountButton';
 
 type ActivePage = 'app' | 'finances' | 'profile' | 'admin';
 
@@ -12,11 +12,11 @@ interface AuthenticatedPageHeaderProps {
   title: string;
   email?: string;
   /**
-   * Whether to offer this account a checkout, for a page that has already
-   * loaded its billing state. Left undefined, the header asks for it itself;
+   * What to offer this account, for a page that has already loaded its billing
+   * state; null for nothing. Left undefined, the header asks for it itself;
    * passing it spares the page a second identical request.
    */
-  canUpgrade?: boolean;
+  upgradeAction?: UpgradeAction | null;
   homeHref?: string;
   onLogout?: () => void;
 }
@@ -32,7 +32,7 @@ export default function AuthenticatedPageHeader({
   eyebrow,
   title,
   email,
-  canUpgrade,
+  upgradeAction,
   homeHref = '/app',
   onLogout,
 }: AuthenticatedPageHeaderProps) {
@@ -40,8 +40,8 @@ export default function AuthenticatedPageHeader({
   // Admin pages are operator tooling; an upgrade CTA there is noise, and asking
   // for the account's billing state to decide that would be a wasted request.
   // A caller that already knows spares one too.
-  const fetchedCanUpgrade = useUpgradeEligibility(activePage !== 'admin' && canUpgrade === undefined);
-  const showUpgrade = canUpgrade ?? fetchedCanUpgrade;
+  const fetchedAction = useUpgradeEligibility(activePage !== 'admin' && upgradeAction === undefined);
+  const action = upgradeAction === undefined ? fetchedAction : upgradeAction;
 
   return (
     <header className="authenticated-header sticky top-0 z-30 border-b backdrop-blur">
@@ -68,7 +68,7 @@ export default function AuthenticatedPageHeader({
         )}
 
         <div className="ml-auto flex min-w-0 items-center gap-4">
-          {showUpgrade && <UpgradeAccountButton />}
+          {action && <UpgradeAccountButton action={action} />}
           {email && <span className="hidden max-w-52 truncate text-xs text-[#66736b] xl:block">{email}</span>}
           {onLogout && (
             <button className="authenticated-sign-out" onClick={onLogout} type="button">

@@ -1575,23 +1575,32 @@ export class StripeService {
     accessLevel: 'full' | 'limited' | 'none';
     upgradeRequired: boolean;
     /**
-     * Whether to offer this account a checkout, i.e. whether the signed-in
-     * header should show "Upgrade your account".
+     * How this account would start paying, i.e. what the signed-in header's
+     * "Upgrade your account" button should do. Null means offer nothing.
      *
      * Not the inverse of `upgradeRequired`, which means the opposite thing:
-     * that access is already denied and paying is the way back in. `canUpgrade`
-     * is about an account that has full access for free and no billing
-     * relationship at all -- the no-card signup funnel, which reaches
-     * `getUserSubscriptionStatus` as `inactive` with no `Subscription` rows.
+     * that access is already denied and paying is the way back in. This is
+     * about an account that has full access without paying for it.
      *
-     * Deliberately false for a `trialing` account. Those hold a real Stripe
-     * subscription, and a second checkout on the same customer would mint a
-     * second subscription beside it rather than convert the first: a
-     * checkout-started trial already has a card and converts on its own, and an
-     * admin-granted trial would end up billed twice once checkout saves a
-     * default payment method its `missing_payment_method: cancel` then finds.
+     * Two such accounts exist and they need different things:
+     *
+     * - `checkout` -- the no-card signup funnel, which reaches here as
+     *   `inactive` with no `Subscription` rows. No Stripe customer, no
+     *   subscription to duplicate, so Checkout is exactly right.
+     * - `billing_portal` -- a trial with no payment method, which is what
+     *   `/admin/user-trial` grants. Its access really does stop at `trial_end`,
+     *   so it needs the prompt most, but Checkout is the wrong way to answer
+     *   it: a second Checkout on the same customer mints a second subscription
+     *   beside the first rather than converting it, and saving a card that way
+     *   also defeats the `missing_payment_method: 'cancel'` that was meant to
+     *   end the trial -- so Stripe would bill both. Adding a payment method to
+     *   the subscription that already exists converts it in place, keeps the
+     *   granted end date, and bills once.
+     *
+     * A trial that already has a card is converting on its own and is offered
+     * nothing, as is an account that is already paying.
      */
-    canUpgrade: boolean;
+    upgradeAction: 'checkout' | 'billing_portal' | null;
     message: string;
   }> {
     try {
@@ -1629,12 +1638,15 @@ export class StripeService {
       // Determine access level and status
       let accessLevel: 'full' | 'none' = 'none';
       let upgradeRequired = false;
-      let canUpgrade = false;
+      let upgradeAction: 'checkout' | 'billing_portal' | null = null;
       let message = '';
       
       // Get the actual subscription status from the subscription record if it exists
       let actualSubscriptionStatus = subscriptionStatus;
       let expiresAt: Date | undefined;
+      // Set only for a trialing subscription, which is the one case that has to
+      // ask Stripe whether a card is on file.
+      let trialingSubscriptionId: string | undefined;
       if (user.subscriptions.length > 0) {
         // An account can hold more than one subscription after a resubscribe, and
         // the newest row is not always the working one (a replacement checkout can
@@ -1663,6 +1675,7 @@ export class StripeService {
         actualSubscriptionStatus = latestSubscription.status;
         if (actualSubscriptionStatus === 'trialing') {
           expiresAt = latestSubscription.currentPeriodEnd;
+          trialingSubscriptionId = latestSubscription.stripeSubscriptionId;
         }
         console.log(`  - Actual subscription status from record: ${actualSubscriptionStatus}`);
       }
@@ -1673,6 +1686,19 @@ export class StripeService {
         // remains responsible for transitioning the status when the trial ends.
         accessLevel = 'full';
         upgradeRequired = false;
+
+        // A trial with no payment method is the one paying-customer-to-be who
+        // gets no prompt anywhere else: `missing_payment_method: 'cancel'` ends
+        // it on the granted date and the next sign-in is simply refused. Offer
+        // the billing portal, which converts the subscription that already
+        // exists instead of minting a rival one.
+        if (actualSubscriptionStatus === 'trialing' && trialingSubscriptionId && !isAdminOperatorEmail(user.email)) {
+          const hasPaymentMethod = await this.subscriptionHasPaymentMethod(trialingSubscriptionId);
+          if (hasPaymentMethod === false) {
+            upgradeAction = 'billing_portal';
+          }
+        }
+
         message = actualSubscriptionStatus === 'trialing'
           ? `${currentTier} trial is active`
           : `Active ${currentTier} subscription`;
@@ -1690,9 +1716,9 @@ export class StripeService {
         // nothing distinguishes the two afterwards.
         accessLevel = 'full';
         upgradeRequired = false;
-        // The only population an upgrade CTA is for: free access, no Stripe
-        // customer, no subscription to duplicate. Operators excepted.
-        canUpgrade = !isAdminOperatorEmail(user.email);
+        // Free access, no Stripe customer, no subscription to duplicate, so
+        // Checkout is the whole story here. Operators excepted.
+        upgradeAction = isAdminOperatorEmail(user.email) ? null : 'checkout';
         message = `Admin-created ${currentTier} user. Full access granted.`;
       } else {
         // User has subscription history but status is not active - access revoked
@@ -1725,7 +1751,7 @@ export class StripeService {
       console.log(`  - Final decision:`);
       console.log(`    - accessLevel: ${accessLevel}`);
       console.log(`    - upgradeRequired: ${upgradeRequired}`);
-      console.log(`    - canUpgrade: ${canUpgrade}`);
+      console.log(`    - upgradeAction: ${upgradeAction ?? 'none'}`);
       console.log(`    - message: ${message}`);
       console.log(`    - actualStatus: ${actualSubscriptionStatus}`);
 
@@ -1735,12 +1761,58 @@ export class StripeService {
           ...(expiresAt && { expiresAt }),
           accessLevel,
           upgradeRequired,
-          canUpgrade,
+          upgradeAction,
           message
         };
     } catch (error) {
       console.error('Error getting user subscription status:', error);
       throw error;
+    }
+  }
+
+  /**
+   * Whether Stripe holds a payment method that can keep this subscription alive
+   * past its trial.
+   *
+   * This is the one thing that separates the two kinds of `trialing` account,
+   * and it cannot be answered locally. An admin-granted trial (`/admin/user-trial`)
+   * collects no card and carries `missing_payment_method: 'cancel'`, so it stops
+   * dead at `trial_end`; a checkout-started trial has a card and converts on its
+   * own. Nothing in the `Subscription` row tells them apart, and the Stripe
+   * metadata does not either -- `autoSyncSubscriptionTier` rewrites
+   * `source: 'admin_trial'` to `'web_checkout'` on the first webhook delivery.
+   *
+   * Asked only for a trialing subscription, which is a small cohort. Returns
+   * null when Stripe cannot answer, and the caller treats that as "assume a
+   * card": an upgrade prompt shown to somebody who already pays is worse than
+   * one missing from somebody who does not.
+   *
+   * Mirrors what Stripe itself checks for `missing_payment_method`: the
+   * subscription's own default, then the customer's invoice default.
+   */
+  async subscriptionHasPaymentMethod(stripeSubscriptionId: string): Promise<boolean | null> {
+    try {
+      const subscription = await stripe.client.subscriptions.retrieve(stripeSubscriptionId, {
+        expand: ['customer']
+      });
+
+      if (subscription.default_payment_method) {
+        return true;
+      }
+
+      const customer = subscription.customer;
+      if (!customer || typeof customer === 'string' || customer.deleted) {
+        // Nothing left to read, so the answer is unknown rather than "no card".
+        return null;
+      }
+
+      return Boolean(customer.invoice_settings?.default_payment_method);
+    } catch (error) {
+      console.warn(
+        `Could not read the payment method for subscription ${stripeSubscriptionId}:`,
+        error
+      );
+      return null;
     }
   }
 
