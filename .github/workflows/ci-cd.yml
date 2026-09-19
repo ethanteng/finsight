@@ -169,8 +169,21 @@ jobs:
           # remain (e.g. axios via snaptrade SDK, handlebars, xlsx) without non-breaking fixes.
           # Using none avoids a failing mainline job while keeping npm audit output visible; track
           # upgrades in package-lock and re-tighten the threshold when the tree is clean.
-          npm audit --audit-level none
-          cd frontend && npm audit --audit-level none
+          #
+          # --audit-level only sets the severity threshold, so it does not cover the audit request
+          # itself failing. npm exits non-zero when the registry rejects the request, and that is
+          # what took this job down on a mainline push: /security/audits/quick, which npm's own
+          # notice says is being retired, answered 400 "Invalid package tree" for a tree npm ci
+          # had just built from the committed lockfile. Both lockfiles were in sync and the same
+          # audit passed locally, so the step failed for a reason outside this repository.
+          #
+          # A registry failure is therefore reported as a warning rather than failing the build,
+          # which is what the paragraph above already intended. This removes no gate: nothing here
+          # has failed on an advisory since --audit-level none went in, and a tree that genuinely
+          # cannot be installed still fails at npm ci above.
+          npm audit --audit-level none || echo "::warning title=npm audit::Audit did not complete for the backend tree; advisories were not reported"
+          cd frontend
+          npm audit --audit-level none || echo "::warning title=npm audit::Audit did not complete for the frontend tree; advisories were not reported"
 
   # Backend Tests
   backend-tests:
