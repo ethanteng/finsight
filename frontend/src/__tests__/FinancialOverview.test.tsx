@@ -205,6 +205,33 @@ describe('FinancialOverview', () => {
     expect(screen.getByText('Add Your Accounts')).toBeInTheDocument();
   });
 
+  // The empty state is the only place the cue belongs: once accounts exist,
+  // 'Add More Accounts' is one option among many and must not pulse.
+  it('marks the empty-state button as the attention cue and leaves the later one plain', async () => {
+    mockFinancialOverviewFetch({ accounts: [], summaryOk: false });
+    const { unmount } = render(<FinancialOverview />);
+    expect(await screen.findByRole('button', { name: 'Add Your Accounts' }))
+      .toHaveClass('connect-accounts-cta');
+    unmount();
+
+    mockFinancialOverviewFetch({
+      accounts: [
+        {
+          id: 'checking_1',
+          name: 'Chase Checking',
+          type: 'depository',
+          subtype: 'checking',
+          balance: { current: 5000, available: 4800 },
+          institution: 'Chase',
+        },
+      ],
+      summaryOk: true,
+    });
+    render(<FinancialOverview />);
+    expect(await screen.findByRole('button', { name: 'Add More Accounts' }))
+      .not.toHaveClass('connect-accounts-cta');
+  });
+
   it('shows financial overview when accounts exist', async () => {
     const mockAccounts = [
       {

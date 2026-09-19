@@ -51,7 +51,9 @@ describe('FinancesPageClient', () => {
 
     expect(await screen.findByRole('heading', { name: 'See your whole financial picture in one place.' })).toBeInTheDocument();
     expect(screen.queryByText('Failed to load financial data')).not.toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /Add your accounts/i })).toHaveAttribute('href', '/profile');
+    const connectCta = screen.getByRole('link', { name: /Add your accounts/i });
+    expect(connectCta).toHaveAttribute('href', '/profile');
+    expect(connectCta).toHaveClass('connect-accounts-cta');
     expect(screen.getByText('What you’ll see after setup')).toBeInTheDocument();
     expect(screen.getByText('Secure, read-only connections')).toBeInTheDocument();
     expect(parseEmptyOverview).not.toHaveBeenCalled();

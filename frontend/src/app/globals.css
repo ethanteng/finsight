@@ -767,3 +767,45 @@
 .ghost-content .kg-toggle-card .kg-toggle-content {
   padding: 1.5rem;
 }
+
+/*
+ * Attention cue for the "add your accounts" call to action, shown only to a user
+ * with nothing connected yet. On both empty states that button is the single
+ * thing worth clicking, but it otherwise wears the same dark pill as every
+ * secondary control, so it reads as one option among several.
+ *
+ * The halo is drawn with box-shadow, which means it replaces any ring or shadow
+ * utility on the same element for as long as it runs -- so the animation is
+ * dropped on hover and on focus, where the focus ring has to win and the hint
+ * has already done its job. The expanding ring is green rather than the lime
+ * fill because lime on the cream card is nearly invisible.
+ */
+@keyframes connect-accounts-halo {
+  0% {
+    box-shadow: 0 8px 18px rgba(16, 35, 25, 0.12), 0 0 6px 0 rgba(57, 112, 82, 0.38);
+  }
+  70% {
+    box-shadow: 0 8px 18px rgba(16, 35, 25, 0.12), 0 0 6px 11px rgba(57, 112, 82, 0);
+  }
+  100% {
+    box-shadow: 0 8px 18px rgba(16, 35, 25, 0.12), 0 0 6px 0 rgba(57, 112, 82, 0);
+  }
+}
+
+.connect-accounts-cta {
+  /* The resting lift, restated here so the button looks the same when the
+     animation is off as it does between pulses when it is on. */
+  box-shadow: 0 8px 18px rgba(16, 35, 25, 0.12);
+  animation: connect-accounts-halo 2.8s cubic-bezier(0.22, 0.61, 0.36, 1) infinite;
+}
+
+.connect-accounts-cta:hover,
+.connect-accounts-cta:focus-visible {
+  animation: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .connect-accounts-cta {
+    animation: none;
+  }
+}
