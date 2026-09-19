@@ -251,6 +251,38 @@ describe('SubscribeRedirect', () => {
     await waitFor(() => expect(mockPushBeginCheckout).toHaveBeenCalledWith('email_trial-ending'));
   });
 
+  it('says so plainly when the account is already subscribed', async () => {
+    // The stale-tab case: checkout completed in the new tab, and the tab that
+    // opened it still offers the CTA. The server refuses; this is not an error
+    // on our side, and "Try again" would be the wrong thing to offer.
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: false,
+      status: 409,
+      json: async () => ({ error: 'This account already has an active subscription.', code: 'ALREADY_SUBSCRIBED' }),
+    });
+
+    render(<SubscribeRedirect />);
+
+    await screen.findByText('You are already subscribed');
+    expect(screen.queryByText('We could not start your checkout')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Go to Ask Linc' })).toHaveAttribute('href', '/app');
+    expect(replace).not.toHaveBeenCalled();
+  });
+
+  it('still reports an ordinary failure as one', async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: false,
+      status: 500,
+      json: async () => ({ error: 'boom' }),
+    });
+
+    render(<SubscribeRedirect />);
+
+    await screen.findByText('We could not start your checkout');
+    expect(screen.queryByText('You are already subscribed')).not.toBeInTheDocument();
+  });
+
   it('reports the header CTA separately from an email click', async () => {
     searchParams = new URLSearchParams('channel=app&src=header');
     global.fetch = jest.fn().mockResolvedValue({

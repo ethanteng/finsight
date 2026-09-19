@@ -72,6 +72,14 @@ function storedAuthToken(): string | null {
 function SubscribeRedirectInner() {
   const searchParams = useSearchParams();
   const [failed, setFailed] = useState(false);
+  /*
+   * The one refusal that is not a failure. The server declines to mint a
+   * second subscription for an account that already has a working one, which
+   * is what a stale upgrade CTA in a tab left open behind a completed checkout
+   * would otherwise ask for. Telling that visitor something went wrong on our
+   * side would be untrue, and "Try again" would be the wrong thing to offer.
+   */
+  const [alreadySubscribed, setAlreadySubscribed] = useState(false);
   // React runs effects twice in development StrictMode, and every run mints a
   // Stripe session. Without this guard a single page view creates two.
   const startedRef = useRef(false);
@@ -87,6 +95,7 @@ function SubscribeRedirectInner() {
     if (inFlightRef.current) return;
     inFlightRef.current = true;
     setFailed(false);
+    setAlreadySubscribed(false);
     pushBeginCheckout(campaignLocation(searchParams.get('src'), searchParams.get('channel')));
 
     try {
@@ -116,6 +125,10 @@ function SubscribeRedirectInner() {
 
       if (!response.ok) {
         const error = await response.json().catch(() => ({}));
+        if (error?.code === 'ALREADY_SUBSCRIBED') {
+          setAlreadySubscribed(true);
+          return;
+        }
         console.error('Failed to create checkout session:', error);
         setFailed(true);
         return;
@@ -162,7 +175,25 @@ function SubscribeRedirectInner() {
       <div className="flex-1 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
         <div className="sm:mx-auto sm:w-full sm:max-w-md">
           <div className="bg-white py-8 px-4 shadow sm:rounded-lg sm:px-10">
-            {failed ? (
+            {alreadySubscribed ? (
+              <div className="text-center" role="status">
+                <h1 className="text-lg font-medium text-gray-900">You are already subscribed</h1>
+                <p className="mt-2 text-sm text-gray-500">
+                  This account has an active subscription, so there is nothing to check out.
+                </p>
+                <div className="mt-6 space-y-3">
+                  <Link
+                    className="block w-full rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+                    href="/app"
+                  >
+                    Go to Ask Linc
+                  </Link>
+                  <Link className="block text-sm text-indigo-600 hover:text-indigo-500" href="/profile">
+                    Manage your subscription
+                  </Link>
+                </div>
+              </div>
+            ) : failed ? (
               <div className="text-center" role="alert">
                 <h1 className="text-lg font-medium text-gray-900">We could not start your checkout</h1>
                 <p className="mt-2 text-sm text-gray-500">
