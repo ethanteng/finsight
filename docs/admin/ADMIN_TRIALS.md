@@ -78,3 +78,8 @@ what is sent to Stripe, what is written locally, and every refusal. Before using
 against production accounts, run it once against Stripe **test mode** and confirm in the
 Stripe dashboard that the subscription is `trialing` with the expected trial end, and that
 it cancels at that date.
+
+That one run is also the only thing that exercises the advisory lock: the tests mock
+`$executeRaw`, so the `pg_advisory_xact_lock` statement is never run against a real
+Postgres by CI. A successful test-mode grant proves it as a side effect — the grant cannot
+commit without it.
