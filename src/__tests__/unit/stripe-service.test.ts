@@ -1028,6 +1028,7 @@ describe('StripeService', () => {
         status: 'active',
         accessLevel: 'full',
         upgradeRequired: false,
+        upgradeAction: null,
         canUpgrade: false,
         message: 'Active premium subscription'
       });
@@ -1061,9 +1062,15 @@ describe('StripeService', () => {
         subscriptionStatus: 'trialing',
         subscriptions: [{
           id: 'sub123',
+          stripeSubscriptionId: 'sub_stripe_123',
           status: 'trialing',
           currentPeriodEnd: trialEnd
         }]
+      });
+      const mockStripe = require('../../config/stripe');
+      mockStripe.stripe.client.subscriptions.retrieve.mockResolvedValue({
+        default_payment_method: 'pm_123',
+        customer: { id: 'cus_1', invoice_settings: {} }
       });
 
       const result = await stripeService.getUserSubscriptionStatus('user123');
@@ -1074,8 +1081,8 @@ describe('StripeService', () => {
         expiresAt: trialEnd,
         accessLevel: 'full',
         upgradeRequired: false,
-        // A trial is a real Stripe subscription. Another checkout would mint a
-        // second one beside it, not convert this one, so the header offers none.
+        // This trial has a card, so it converts on its own and is offered nothing.
+        upgradeAction: null,
         canUpgrade: false,
         message: 'premium trial is active'
       });
@@ -1112,7 +1119,7 @@ describe('StripeService', () => {
       expect(result.message).toContain('Admin-created starter user');
     });
 
-    describe('canUpgrade', () => {
+    describe('upgradeAction', () => {
       const adminEmails = process.env.ADMIN_EMAILS;
 
       afterEach(() => {
@@ -1123,9 +1130,26 @@ describe('StripeService', () => {
         }
       });
 
+      /** A trialing account whose card status Stripe will be asked about. */
+      function trialingAccount(email = 'trial@example.com') {
+        mockPrisma.user.findUnique.mockResolvedValue({
+          id: 'user123',
+          email,
+          tier: 'premium',
+          subscriptionStatus: 'trialing',
+          subscriptions: [{
+            id: 'sub123',
+            stripeSubscriptionId: 'sub_stripe_123',
+            status: 'trialing',
+            currentPeriodEnd: new Date('2026-10-19T00:05:00.000Z')
+          }]
+        });
+        return require('../../config/stripe').stripe.client.subscriptions.retrieve;
+      }
+
       it('offers a checkout to a no-card signup', async () => {
         // What registration writes: full access, no Stripe customer, nothing to
-        // duplicate. The only population the upgrade CTA is for.
+        // duplicate.
         mockPrisma.user.findUnique.mockResolvedValue({
           id: 'user123',
           email: 'signup@example.com',
@@ -1136,8 +1160,84 @@ describe('StripeService', () => {
 
         const result = await stripeService.getUserSubscriptionStatus('user123');
 
+        expect(result.upgradeAction).toBe('checkout');
         expect(result.canUpgrade).toBe(true);
         expect(result.accessLevel).toBe('full');
+      });
+
+      it('offers the billing portal to an admin-granted trial with no card', async () => {
+        // The cohort this exists for. `missing_payment_method: 'cancel'` stops
+        // this account dead on its granted date, and Checkout cannot convert it
+        // — only adding a card to the subscription that already exists can.
+        const retrieve = trialingAccount();
+        retrieve.mockResolvedValue({
+          default_payment_method: null,
+          customer: { id: 'cus_1', invoice_settings: { default_payment_method: null } }
+        });
+
+        const result = await stripeService.getUserSubscriptionStatus('user123');
+
+        expect(result.upgradeAction).toBe('billing_portal');
+        // Old frontends must not treat this as a Checkout candidate.
+        expect(result.canUpgrade).toBe(false);
+        expect(result.accessLevel).toBe('full');
+        expect(retrieve).toHaveBeenCalledWith('sub_stripe_123', { expand: ['customer'] });
+      });
+
+      it.each([
+        ['the subscription\'s legacy default source', { default_payment_method: null, default_source: 'card_123', customer: { id: 'cus_1', invoice_settings: {} } }],
+        ['the customer\'s legacy default source', { default_payment_method: null, default_source: null, customer: { id: 'cus_1', invoice_settings: {}, default_source: 'card_123' } }],
+      ])('offers nothing to a trial Stripe will charge through %s', async (_label, stripeSubscription) => {
+        // Stripe falls back through default_source as well as the PaymentMethods
+        // fields, so a trial backed by the legacy Sources API converts on its
+        // own and must not be prompted to fix nothing.
+        const retrieve = trialingAccount();
+        retrieve.mockResolvedValue(stripeSubscription);
+
+        const result = await stripeService.getUserSubscriptionStatus('user123');
+
+        expect(result.upgradeAction).toBeNull();
+      });
+
+      it('offers nothing to a trial whose card is on the customer rather than the subscription', async () => {
+        // Stripe falls back to the customer's invoice default for
+        // `missing_payment_method`, so this trial converts on its own.
+        const retrieve = trialingAccount();
+        retrieve.mockResolvedValue({
+          default_payment_method: null,
+          customer: { id: 'cus_1', invoice_settings: { default_payment_method: 'pm_123' } }
+        });
+
+        const result = await stripeService.getUserSubscriptionStatus('user123');
+
+        expect(result.upgradeAction).toBeNull();
+      });
+
+      it('offers nothing when Stripe cannot say whether a card exists', async () => {
+        // Fails closed: prompting somebody who already pays is the worse error.
+        const retrieve = trialingAccount();
+        retrieve.mockRejectedValue(new Error('Stripe is down'));
+
+        const result = await stripeService.getUserSubscriptionStatus('user123');
+
+        expect(result.upgradeAction).toBeNull();
+        expect(result.accessLevel).toBe('full');
+      });
+
+      it('does not ask Stripe about an account that is not trialing', async () => {
+        const retrieve = require('../../config/stripe').stripe.client.subscriptions.retrieve;
+        mockPrisma.user.findUnique.mockResolvedValue({
+          id: 'user123',
+          email: 'paid@example.com',
+          tier: 'premium',
+          subscriptionStatus: 'active',
+          subscriptions: [{ id: 'sub123', stripeSubscriptionId: 'sub_stripe_123', status: 'active' }]
+        });
+
+        const result = await stripeService.getUserSubscriptionStatus('user123');
+
+        expect(result.upgradeAction).toBeNull();
+        expect(retrieve).not.toHaveBeenCalled();
       });
 
       it('does not offer one to an operator account', async () => {
@@ -1152,25 +1252,22 @@ describe('StripeService', () => {
 
         const result = await stripeService.getUserSubscriptionStatus('user123');
 
-        expect(result.canUpgrade).toBe(false);
+        expect(result.upgradeAction).toBeNull();
       });
 
-      it('does not offer one to a paying subscriber', async () => {
-        mockPrisma.user.findUnique.mockResolvedValue({
-          id: 'user123',
-          email: 'paid@example.com',
-          tier: 'premium',
-          subscriptionStatus: 'active',
-          subscriptions: [{ id: 'sub123', status: 'active' }]
-        });
+      it('does not offer the portal to an operator on a comped trial', async () => {
+        process.env.ADMIN_EMAILS = 'owner@asklinc.com';
+        const retrieve = trialingAccount('owner@asklinc.com');
+        retrieve.mockResolvedValue({ default_payment_method: null, customer: { id: 'cus_1', invoice_settings: {} } });
 
         const result = await stripeService.getUserSubscriptionStatus('user123');
 
-        expect(result.canUpgrade).toBe(false);
+        expect(result.upgradeAction).toBeNull();
+        expect(retrieve).not.toHaveBeenCalled();
       });
 
       it('does not offer one to a lapsed account, which must pay through the normal path', async () => {
-        // upgradeRequired is true here and canUpgrade is false: they are not
+        // upgradeRequired is true here and upgradeAction is null: they are not
         // inverses. A canceled account has no access, and the login screen —
         // not a header button it never sees — is where it is told to renew.
         mockPrisma.user.findUnique.mockResolvedValue({
@@ -1184,7 +1281,7 @@ describe('StripeService', () => {
         const result = await stripeService.getUserSubscriptionStatus('user123');
 
         expect(result.upgradeRequired).toBe(true);
-        expect(result.canUpgrade).toBe(false);
+        expect(result.upgradeAction).toBeNull();
       });
     });
 

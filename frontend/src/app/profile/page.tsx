@@ -19,6 +19,7 @@ import { resolveAccountBalance } from '../../lib/account-balance';
 import { normalizeAssetType } from '../../lib/asset-class';
 import { normalizeLabel } from '../../lib/label-normalization';
 import AuthenticatedPageHeader from '../../components/authenticated/AuthenticatedPageHeader';
+import { parseUpgradeAction } from '../../components/authenticated/UpgradeAccountButton';
 import {
   CONNECT_ACCOUNTS_INTENT,
   CONNECT_ACCOUNTS_STORAGE_KEY,
@@ -203,7 +204,7 @@ export default function ProfilePage() {
     cancelAtPeriodEnd?: boolean;
     stripeCustomerId?: string;
     accessLevel?: string;
-    canUpgrade?: boolean;
+    upgradeAction?: 'checkout' | 'billing_portal' | null;
   } | null>(null);
   const [isManagingSubscription, setIsManagingSubscription] = useState(false);
   const [subscriptionMessage, setSubscriptionMessage] = useState<string>('');
@@ -1334,8 +1335,9 @@ export default function ProfilePage() {
           title="Your accounts & context"
           email={userEmail}
           // This page already loads the billing state the header would
-          // otherwise fetch for itself.
-          canUpgrade={subscriptionStatus?.canUpgrade === true}
+          // otherwise fetch for itself. Narrow the wire value here so an
+          // unknown action cannot become a link.
+          upgradeAction={parseUpgradeAction(subscriptionStatus?.upgradeAction)}
           homeHref="/app"
           onLogout={() => {
             resetPlaidLinkInitialization();

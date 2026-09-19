@@ -12,11 +12,14 @@ import { syncStoredUserTimeZoneFromAuthUser } from '../../lib/browser-time-zone'
 import { groupTurnsIntoDecisions } from '../../lib/decision-threads';
 import { takePendingFirstDecision } from '../../lib/pending-first-decision';
 import { relativeTurnTime } from '../../lib/relative-time';
-import UpgradeAccountButton from '../../components/authenticated/UpgradeAccountButton';
+import UpgradeAccountButton, {
+  parseUpgradeAction,
+  type UpgradeAction,
+} from '../../components/authenticated/UpgradeAccountButton';
 import type { StructuredPromptHistory } from '../../lib/structured-answer';
 
 type PromptHistory = StructuredPromptHistory;
-interface SubscriptionStatus { status: string; tier: string; message: string; isActive: boolean; accessLevel: 'full' | 'none'; upgradeRequired: boolean; canUpgrade?: boolean; expiresAt?: string }
+interface SubscriptionStatus { status: string; tier: string; message: string; isActive: boolean; accessLevel: 'full' | 'none'; upgradeRequired: boolean; upgradeAction?: UpgradeAction | null; expiresAt?: string }
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
 
@@ -230,10 +233,11 @@ export default function AppPageClient() {
     router.push('/login');
   };
   const hasMarketNewsAccess = subscriptionStatus?.tier === 'standard' || subscriptionStatus?.tier === 'premium';
-  // Decided by the server (`canUpgrade`), not inferred from the status string
-  // here — see UpgradeAccountButton. Absent until the status call answers, so
-  // the CTA appears with the rest of the chrome rather than flashing in.
-  const canUpgrade = subscriptionStatus?.canUpgrade === true;
+  // Decided by the server (`upgradeAction`), not inferred from the status
+  // string here — see UpgradeAccountButton. Absent until the status call
+  // answers, so the CTA appears with the rest of the chrome rather than
+  // flashing in. Unknown values fail closed the same way the shared header does.
+  const upgradeAction = parseUpgradeAction(subscriptionStatus?.upgradeAction);
 
   if (isLoading) return (
     <main className="min-h-screen bg-[#f3f2e9] grid place-items-center text-[#102319]" aria-busy="true">
@@ -252,7 +256,7 @@ export default function AppPageClient() {
             still identifies the page. */}
         <span className="ml-3 flex items-center gap-2 whitespace-nowrap text-lg font-extrabold tracking-[-.04em]"><span className="grid h-8 w-8 shrink-0 place-items-center rounded-[9px_9px_9px_2px] bg-[#102319] text-sm font-extrabold text-[#d9ff6f]">L</span><span className="hidden min-[380px]:inline">Ask Linc</span></span>
         <div className="ml-auto flex shrink-0 items-center gap-2 pl-2">
-          {canUpgrade && <UpgradeAccountButton />}
+          {upgradeAction && <UpgradeAccountButton action={upgradeAction} />}
           <button onClick={() => { setSelectedPrompt(null); setNewDecisionNonce(nonce => nonce + 1); }} className="grid h-11 w-11 place-items-center rounded-full bg-[#d9ff6f] text-[#102319]" aria-label="Start a new decision"><Plus /></button>
         </div>
       </header>
@@ -269,9 +273,9 @@ export default function AppPageClient() {
         {/* The sidebar is this page's persistent chrome — there is no top bar on
             desktop — so the upgrade CTA lives here rather than in the brand row,
             which at 288px wide already holds the wordmark and the tier badge. */}
-        {canUpgrade && (
+        {upgradeAction && (
           <div className="hidden px-4 pb-5 lg:block">
-            <UpgradeAccountButton variant="dark" className="w-full justify-center" />
+            <UpgradeAccountButton action={upgradeAction} variant="dark" className="w-full justify-center" />
           </div>
         )}
         <section className="min-h-0 flex-1 overflow-y-auto border-t border-white/10 px-4 py-5" aria-labelledby="recent-decisions">

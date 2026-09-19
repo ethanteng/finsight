@@ -5,33 +5,55 @@ import { Sparkles } from 'lucide-react';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
 
-/**
- * Where the header CTA sends someone.
- *
- * Not a direct Stripe URL, because there is no such thing: a Checkout Session
- * is minted per checkout and expires. `/subscribe` is the page that already
- * mints one — it sends the stored auth token, so the server reuses this
- * account's Stripe customer and fills in their email, and it fires
- * `begin_checkout` from the browser that will go on to convert.
- *
- * Going through a page rather than minting here is also what lets this be a
- * plain link. Opening a tab from a callback that has already awaited a fetch is
- * what popup blockers exist to stop; a real link click is never blocked.
- */
-export const UPGRADE_CHECKOUT_HREF = '/subscribe?channel=app&src=header';
+/** How this account starts paying. Decided by the server, never inferred here. */
+export type UpgradeAction = 'checkout' | 'billing_portal';
 
 /**
- * Whether the signed-in header should offer this account a checkout.
+ * Narrow a subscription-status payload to an action this build can honour.
  *
- * The rule itself lives on the server (`canUpgrade` in
+ * The status endpoint is JSON over the wire, so callers that already fetched
+ * billing state must not trust the field as typed — an unknown or absent value
+ * is "offer nothing", matching `useUpgradeEligibility`.
+ */
+export function parseUpgradeAction(value: unknown): UpgradeAction | null {
+  return value === 'checkout' || value === 'billing_portal' ? value : null;
+}
+
+/**
+ * Where the header CTA sends someone, per the server's `upgradeAction`.
+ *
+ * Neither is a direct Stripe URL, because there is no such thing: Checkout
+ * Sessions and Billing Portal sessions are both minted per visit and expire.
+ * Each of these pages mints one on mount, sending the stored auth token so the
+ * server works from the session rather than anything the client claims.
+ *
+ * Going through a page rather than minting here is also what lets this stay a
+ * plain link. Opening a tab from a callback that has already awaited a fetch is
+ * what popup blockers exist to stop; a real link click is never blocked.
+ *
+ * The two destinations are not interchangeable. A no-card signup has no Stripe
+ * subscription, so Checkout is right. A trial that collects no card already has
+ * one, and checking out again would mint a rival subscription and bill twice
+ * rather than convert it — that account has to add a payment method to the
+ * subscription it already has, which is what the billing portal is for.
+ */
+export const UPGRADE_HREFS: Record<UpgradeAction, string> = {
+  checkout: '/subscribe?channel=app&src=header',
+  billing_portal: '/billing?src=header',
+};
+
+/**
+ * What the signed-in header should offer this account, or null for nothing.
+ *
+ * The rule itself lives on the server (`upgradeAction` in
  * `getUserSubscriptionStatus`), so the two headers that show this button do not
  * each re-derive a billing decision from a status string. Anything unexpected —
- * a failed request, an older backend that does not send the field — reads as
- * "no", because an upgrade CTA shown to a paying subscriber is worse than one
- * missing from a free account.
+ * a failed request, an older backend that does not send the field, a value this
+ * build does not know — reads as "offer nothing", because an upgrade CTA shown
+ * to a paying subscriber is worse than one missing from a free account.
  */
-export function useUpgradeEligibility(enabled = true): boolean {
-  const [canUpgrade, setCanUpgrade] = useState(false);
+export function useUpgradeEligibility(enabled = true): UpgradeAction | null {
+  const [upgradeAction, setUpgradeAction] = useState<UpgradeAction | null>(null);
 
   useEffect(() => {
     if (!enabled) return;
@@ -53,7 +75,10 @@ export function useUpgradeEligibility(enabled = true): boolean {
         });
         if (!response.ok) return;
         const data = await response.json();
-        if (active) setCanUpgrade(data?.canUpgrade === true);
+        const action = parseUpgradeAction(data?.upgradeAction);
+        if (active && action) {
+          setUpgradeAction(action);
+        }
       } catch {
         // Billing state is not this header's job to report. Stay quiet.
       }
@@ -64,10 +89,12 @@ export function useUpgradeEligibility(enabled = true): boolean {
     };
   }, [enabled]);
 
-  return canUpgrade;
+  return upgradeAction;
 }
 
 interface UpgradeAccountButtonProps {
+  /** Which destination this account needs. See `UPGRADE_HREFS`. */
+  action: UpgradeAction;
   /** `light` for the cream page chrome, `dark` for the /app sidebar. */
   variant?: 'light' | 'dark';
   className?: string;
@@ -88,12 +115,13 @@ const VARIANT_CLASSES = {
  * `useUpgradeEligibility`.
  */
 export default function UpgradeAccountButton({
+  action,
   variant = 'light',
   className = '',
 }: UpgradeAccountButtonProps) {
   return (
     <a
-      href={UPGRADE_CHECKOUT_HREF}
+      href={UPGRADE_HREFS[action]}
       target="_blank"
       rel="noopener"
       className={`inline-flex min-h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-3 py-1.5 text-xs font-semibold transition ${VARIANT_CLASSES[variant]} ${className}`}

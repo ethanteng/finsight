@@ -31,3 +31,19 @@ export function isStripeCheckoutUrl(url: string): boolean {
     return false;
   }
 }
+
+/**
+ * True only for a Stripe-hosted Billing Portal session URL.
+ *
+ * Same reasoning as `isStripeCheckoutUrl`: `/billing` forwards on mount with no
+ * click to confirm it, so a target that is not Stripe's must fail closed rather
+ * than navigate the visitor. Portal sessions are always on `billing.stripe.com`.
+ */
+export function isStripeBillingPortalUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === 'https:' && parsed.hostname === 'billing.stripe.com';
+  } catch {
+    return false;
+  }
+}

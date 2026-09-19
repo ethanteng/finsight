@@ -2,10 +2,11 @@
  * The signed-in "Upgrade your account" CTA.
  *
  * Who sees it is a billing decision, and it is made once on the server
- * (`canUpgrade` in `getUserSubscriptionStatus`). What these tests hold is that
- * neither header re-derives it: both show the button on the server's word and
- * on nothing else, and both fail closed — an account that is paying, or a
- * request that did not answer, gets no CTA.
+ * (`upgradeAction` in `getUserSubscriptionStatus`). What these tests hold is
+ * that neither header re-derives it: both show the button on the server's word
+ * and on nothing else, and both fail closed — an account that is paying, a
+ * request that did not answer, or an action this build does not know gets no
+ * CTA.
  */
 import React from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
@@ -21,7 +22,12 @@ jest.mock('@/components/PlaidLinkButton', () => ({ resetPlaidLinkInitialization:
 jest.mock('@/lib/browser-time-zone', () => ({ syncStoredUserTimeZoneFromAuthUser: jest.fn() }));
 
 /** The shape `/api/stripe/subscription-status` returns, narrowed to what matters here. */
-type StatusPayload = { status: string; tier: string; accessLevel: string; canUpgrade?: boolean };
+type StatusPayload = {
+  status: string;
+  tier: string;
+  accessLevel: string;
+  upgradeAction?: 'checkout' | 'billing_portal' | null;
+};
 
 function mockApi(subscriptionStatus: StatusPayload | 'fails') {
   global.fetch = jest.fn().mockImplementation((input: RequestInfo | URL) => {
@@ -41,8 +47,10 @@ function mockApi(subscriptionStatus: StatusPayload | 'fails') {
   });
 }
 
-const noCardSignup: StatusPayload = { status: 'inactive', tier: 'premium', accessLevel: 'full', canUpgrade: true };
-const paying: StatusPayload = { status: 'active', tier: 'premium', accessLevel: 'full', canUpgrade: false };
+const noCardSignup: StatusPayload = { status: 'inactive', tier: 'premium', accessLevel: 'full', upgradeAction: 'checkout' };
+/** What /admin/user-trial leaves behind: a real trial that collects no card. */
+const adminTrial: StatusPayload = { status: 'trialing', tier: 'premium', accessLevel: 'full', upgradeAction: 'billing_portal' };
+const paying: StatusPayload = { status: 'active', tier: 'premium', accessLevel: 'full', upgradeAction: null };
 
 const upgradeLink = () => screen.queryAllByRole('link', { name: /upgrade/i });
 
@@ -69,6 +77,28 @@ describe('UpgradeAccountButton in the shared page header', () => {
     expect(link).toHaveAttribute('href', '/subscribe?channel=app&src=header');
     expect(link).toHaveAttribute('target', '_blank');
     expect(link).toHaveAttribute('rel', 'noopener');
+  });
+
+  it('sends an admin-granted trial to billing, not to checkout', async () => {
+    // The whole point of the two destinations. Checkout would mint a second
+    // subscription beside this account's trial and bill it twice; the portal
+    // converts the one it already has.
+    mockApi(adminTrial);
+
+    render(<AuthenticatedPageHeader activePage="finances" eyebrow="Financial overview" title="Your finances" />);
+
+    await waitFor(() => expect(upgradeLink()).toHaveLength(1));
+    expect(upgradeLink()[0]).toHaveAttribute('href', '/billing?src=header');
+  });
+
+  it('ignores an upgrade action this build does not know', async () => {
+    // Fails closed rather than rendering a link to nowhere.
+    mockApi({ status: 'trialing', tier: 'premium', accessLevel: 'full', upgradeAction: 'teleport' as never });
+
+    render(<AuthenticatedPageHeader activePage="finances" eyebrow="Financial overview" title="Your finances" />);
+
+    await waitFor(() => expect(global.fetch).toHaveBeenCalled());
+    expect(upgradeLink()).toHaveLength(0);
   });
 
   it('shows nothing to a paying subscriber', async () => {
@@ -109,17 +139,18 @@ describe('UpgradeAccountButton in the shared page header', () => {
         activePage="profile"
         eyebrow="Accounts"
         title="Accounts & context"
-        canUpgrade
+        upgradeAction="billing_portal"
       />,
     );
 
     await waitFor(() => expect(upgradeLink()).toHaveLength(1));
+    expect(upgradeLink()[0]).toHaveAttribute('href', '/billing?src=header');
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
-  it('honours a page that says this account cannot upgrade', async () => {
-    // Explicitly false is an answer, not an absent one: the header must not
-    // fall back to asking, or the saved request comes straight back.
+  it('ignores a page-supplied action this build does not know', async () => {
+    // The page already fetched; the value is still wire JSON and must fail
+    // closed the same way the fetch path does.
     mockApi(noCardSignup);
 
     render(
@@ -127,7 +158,26 @@ describe('UpgradeAccountButton in the shared page header', () => {
         activePage="profile"
         eyebrow="Accounts"
         title="Accounts & context"
-        canUpgrade={false}
+        upgradeAction={'teleport' as never}
+      />,
+    );
+
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Accounts & context' })).toBeInTheDocument());
+    expect(global.fetch).not.toHaveBeenCalled();
+    expect(upgradeLink()).toHaveLength(0);
+  });
+
+  it('honours a page that says this account cannot upgrade', async () => {
+    // Explicit null is an answer, not an absent one: the header must not fall
+    // back to asking, or the saved request comes straight back.
+    mockApi(noCardSignup);
+
+    render(
+      <AuthenticatedPageHeader
+        activePage="profile"
+        eyebrow="Accounts"
+        title="Accounts & context"
+        upgradeAction={null}
       />,
     );
 
@@ -158,6 +208,24 @@ describe('UpgradeAccountButton in the decision workspace', () => {
     // no single header element that both breakpoints share.
     await waitFor(() => expect(upgradeLink()).toHaveLength(2));
     expect(upgradeLink()[0]).toHaveAttribute('href', '/subscribe?channel=app&src=header');
+  });
+
+  it('sends an admin-granted trial in the workspace to billing', async () => {
+    mockApi(adminTrial);
+
+    render(<AppPageClient />);
+
+    await waitFor(() => expect(upgradeLink()).toHaveLength(2));
+    upgradeLink().forEach(link => expect(link).toHaveAttribute('href', '/billing?src=header'));
+  });
+
+  it('ignores an upgrade action the workspace does not know', async () => {
+    mockApi({ status: 'trialing', tier: 'premium', accessLevel: 'full', upgradeAction: 'teleport' as never });
+
+    render(<AppPageClient />);
+
+    await waitFor(() => expect(screen.getByText('Decisions')).toBeInTheDocument());
+    expect(upgradeLink()).toHaveLength(0);
   });
 
   it('stays out of the way for a paying subscriber', async () => {
