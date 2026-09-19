@@ -148,7 +148,7 @@ export default function FinancialOverview({ tier: _tier }: FinancialOverviewProp
               e.stopPropagation();
               handleAddAccounts();
             }}
-            className="relative rounded-full bg-[#102319] px-6 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#173c2c] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#102319] focus-visible:ring-offset-2"
+            className="connect-accounts-cta relative rounded-full bg-[#d9ff6f] px-6 py-2.5 text-sm font-semibold text-[#102319] transition-colors hover:bg-[#cdef64] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#102319] focus-visible:ring-offset-2"
           >
             Add Your Accounts
           </button>

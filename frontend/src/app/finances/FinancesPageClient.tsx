@@ -19,6 +19,7 @@ import {
   clearStoredUserTimeZone,
   syncStoredUserTimeZoneFromAuthUser,
 } from '../../lib/browser-time-zone';
+import { CONNECT_ACCOUNTS_PATH } from '../../lib/connect-accounts';
 
 const ManualAccountList = lazy(() => import('../../components/ManualAccountList'));
 const AccountDetailModal = lazy(() => import('../../components/finances/AccountDetailModal'));
@@ -84,8 +85,8 @@ function FinancesEmptyState({ onLogout }: { onLogout: () => void }) {
 
               <div className="mt-8 flex flex-col items-start gap-4 sm:flex-row sm:items-center">
                 <Link
-                  href="/profile"
-                  className="inline-flex min-h-12 items-center gap-2 rounded-full bg-[#102319] px-6 py-3 text-sm font-bold text-white transition hover:bg-[#173c2c] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#102319] focus-visible:ring-offset-2"
+                  href={CONNECT_ACCOUNTS_PATH}
+                  className="connect-accounts-cta inline-flex min-h-12 items-center gap-2 rounded-full bg-[#d9ff6f] px-6 py-3 text-sm font-bold text-[#102319] transition-colors hover:bg-[#cdef64] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#102319] focus-visible:ring-offset-2"
                 >
                   Add your accounts
                   <ArrowRight size={17} aria-hidden="true" />
