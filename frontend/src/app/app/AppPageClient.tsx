@@ -12,10 +12,11 @@ import { syncStoredUserTimeZoneFromAuthUser } from '../../lib/browser-time-zone'
 import { groupTurnsIntoDecisions } from '../../lib/decision-threads';
 import { takePendingFirstDecision } from '../../lib/pending-first-decision';
 import { relativeTurnTime } from '../../lib/relative-time';
+import UpgradeAccountButton from '../../components/authenticated/UpgradeAccountButton';
 import type { StructuredPromptHistory } from '../../lib/structured-answer';
 
 type PromptHistory = StructuredPromptHistory;
-interface SubscriptionStatus { status: string; tier: string; message: string; isActive: boolean; accessLevel: 'full' | 'none'; upgradeRequired: boolean; expiresAt?: string }
+interface SubscriptionStatus { status: string; tier: string; message: string; isActive: boolean; accessLevel: 'full' | 'none'; upgradeRequired: boolean; canUpgrade?: boolean; expiresAt?: string }
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
 
@@ -229,6 +230,10 @@ export default function AppPageClient() {
     router.push('/login');
   };
   const hasMarketNewsAccess = subscriptionStatus?.tier === 'standard' || subscriptionStatus?.tier === 'premium';
+  // Decided by the server (`canUpgrade`), not inferred from the status string
+  // here — see UpgradeAccountButton. Absent until the status call answers, so
+  // the CTA appears with the rest of the chrome rather than flashing in.
+  const canUpgrade = subscriptionStatus?.canUpgrade === true;
 
   if (isLoading) return (
     <main className="min-h-screen bg-[#f3f2e9] grid place-items-center text-[#102319]" aria-busy="true">
@@ -241,8 +246,15 @@ export default function AppPageClient() {
     <div className="app-workspace min-h-screen bg-[#f3f2e9] text-[#102319]">
       <header className="sticky top-0 z-40 flex h-16 items-center border-b border-[#102319]/10 bg-[#f3f2e9]/95 px-4 backdrop-blur lg:hidden">
         <button onClick={() => setMobileNavOpen(!mobileNavOpen)} className="grid h-11 w-11 place-items-center rounded-full hover:bg-[#102319]/5" aria-label="Toggle navigation" aria-expanded={mobileNavOpen}>{mobileNavOpen ? <X /> : <Menu />}</button>
-        <span className="ml-3 flex items-center gap-2 text-lg font-extrabold tracking-[-.04em]"><span className="grid h-8 w-8 place-items-center rounded-[9px_9px_9px_2px] bg-[#102319] text-sm font-extrabold text-[#d9ff6f]">L</span>Ask Linc</span>
-        <button onClick={() => { setSelectedPrompt(null); setNewDecisionNonce(nonce => nonce + 1); }} className="ml-auto grid h-11 w-11 place-items-center rounded-full bg-[#d9ff6f] text-[#102319]" aria-label="Start a new decision"><Plus /></button>
+        {/* The wordmark yields below 380px rather than wrapping or being
+            clipped: the upgrade CTA, the menu and the new-decision button all
+            have to fit beside it on the narrowest phones, and the mark alone
+            still identifies the page. */}
+        <span className="ml-3 flex items-center gap-2 whitespace-nowrap text-lg font-extrabold tracking-[-.04em]"><span className="grid h-8 w-8 shrink-0 place-items-center rounded-[9px_9px_9px_2px] bg-[#102319] text-sm font-extrabold text-[#d9ff6f]">L</span><span className="hidden min-[380px]:inline">Ask Linc</span></span>
+        <div className="ml-auto flex shrink-0 items-center gap-2 pl-2">
+          {canUpgrade && <UpgradeAccountButton />}
+          <button onClick={() => { setSelectedPrompt(null); setNewDecisionNonce(nonce => nonce + 1); }} className="grid h-11 w-11 place-items-center rounded-full bg-[#d9ff6f] text-[#102319]" aria-label="Start a new decision"><Plus /></button>
+        </div>
       </header>
 
       <aside className={`${mobileNavOpen ? 'flex' : 'hidden'} fixed inset-y-16 left-0 z-30 w-full flex-col overscroll-contain bg-[#102319] text-[#f8f4e9] lg:inset-y-0 lg:flex lg:w-72`}>
@@ -254,6 +266,14 @@ export default function AppPageClient() {
           <Link href="/profile" className="flex items-center gap-3 rounded-xl px-4 py-3 text-white/70 hover:bg-white/10 hover:text-white"><Settings size={18} />Accounts & context</Link>
           {hasMarketNewsAccess && <button onClick={() => setShowMarketNewsModal(true)} className="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-white/70 hover:bg-white/10 hover:text-white"><Newspaper size={18} />Market context</button>}
         </nav>
+        {/* The sidebar is this page's persistent chrome — there is no top bar on
+            desktop — so the upgrade CTA lives here rather than in the brand row,
+            which at 288px wide already holds the wordmark and the tier badge. */}
+        {canUpgrade && (
+          <div className="hidden px-4 pb-5 lg:block">
+            <UpgradeAccountButton variant="dark" className="w-full justify-center" />
+          </div>
+        )}
         <section className="min-h-0 flex-1 overflow-y-auto border-t border-white/10 px-4 py-5" aria-labelledby="recent-decisions">
           <div className="mb-3 flex items-center justify-between px-2"><h2 id="recent-decisions" className="text-xs font-bold uppercase tracking-[0.16em] text-white/45">Recent decisions</h2><span className="text-xs text-white/40">{decisionThreads.length}</span></div>
           {historyError ? <button onClick={loadConversationHistory} className="rounded-xl border border-white/15 p-3 text-left text-sm text-white/70">History couldn’t load. <span className="text-[#d9ff6f]">Try again</span></button> : decisionThreads.length === 0 ? (awaitingFirstDecision ? <p className="px-2 text-sm leading-6 text-white/50" role="status">Saving the run you modeled…</p> : <p className="px-2 text-sm leading-6 text-white/50">Your completed questions will appear here.</p>) : (

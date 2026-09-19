@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { verifyToken, extractTokenFromHeader } from './utils';
 import { getPrismaClient } from '../prisma-client';
 import { blocksProductAccess } from '../services/subscription-refresh-eligibility';
+import { adminEmails } from './admin-emails';
 
 export interface AuthenticatedRequest extends Request {
   user?: {
@@ -189,7 +190,7 @@ export function adminAuth(
   }
 
   // Get allowed admin emails from environment variable
-  const allowedAdminEmails = process.env.ADMIN_EMAILS?.split(',').map(email => email.trim().toLowerCase()).filter(email => email.length > 0) || [];
+  const allowedAdminEmails = adminEmails();
   
   if (allowedAdminEmails.length === 0) {
     console.warn('ADMIN_EMAILS environment variable not set - admin access disabled');

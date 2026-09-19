@@ -301,6 +301,28 @@ router.post('/create-checkout-session', async (req, res) => {
       });
 
       if (user) {
+        // An active or trialing subscription already grants access. Minting
+        // another Checkout Session for the same customer creates a *second*
+        // subscription beside it (it does not convert the first) — including
+        // for an admin-granted trial, where saving a card then defeats
+        // `missing_payment_method: cancel`. The signed-in upgrade CTA hides
+        // itself via `canUpgrade`, but `/subscribe` is a plain URL (and the
+        // CTA opens it in a new tab), so the header can go stale after a
+        // successful checkout. Refuse here so the button is not the only gate.
+        const workingSubscription = await prisma.subscription.findFirst({
+          where: {
+            userId: user.id,
+            status: { in: ['active', 'trialing'] },
+          },
+          select: { id: true },
+        });
+        if (workingSubscription) {
+          return res.status(409).json({
+            error: 'This account already has an active subscription.',
+            code: 'ALREADY_SUBSCRIBED',
+          });
+        }
+
         checkoutRequest.customerEmail = user.email;
         if (user.stripeCustomerId) {
           checkoutRequest.customerId = user.stripeCustomerId;

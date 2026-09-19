@@ -1028,6 +1028,7 @@ describe('StripeService', () => {
         status: 'active',
         accessLevel: 'full',
         upgradeRequired: false,
+        canUpgrade: false,
         message: 'Active premium subscription'
       });
     });
@@ -1073,6 +1074,9 @@ describe('StripeService', () => {
         expiresAt: trialEnd,
         accessLevel: 'full',
         upgradeRequired: false,
+        // A trial is a real Stripe subscription. Another checkout would mint a
+        // second one beside it, not convert this one, so the header offers none.
+        canUpgrade: false,
         message: 'premium trial is active'
       });
     });
@@ -1095,6 +1099,7 @@ describe('StripeService', () => {
     it('should handle inactive subscription', async () => {
       mockPrisma.user.findUnique.mockResolvedValue({
         id: 'user123',
+        email: 'member@example.com',
         tier: 'starter',
         subscriptionStatus: 'inactive',
         subscriptions: []
@@ -1105,6 +1110,82 @@ describe('StripeService', () => {
       expect(result.accessLevel).toBe('full');
       expect(result.upgradeRequired).toBe(false);
       expect(result.message).toContain('Admin-created starter user');
+    });
+
+    describe('canUpgrade', () => {
+      const adminEmails = process.env.ADMIN_EMAILS;
+
+      afterEach(() => {
+        if (adminEmails === undefined) {
+          delete process.env.ADMIN_EMAILS;
+        } else {
+          process.env.ADMIN_EMAILS = adminEmails;
+        }
+      });
+
+      it('offers a checkout to a no-card signup', async () => {
+        // What registration writes: full access, no Stripe customer, nothing to
+        // duplicate. The only population the upgrade CTA is for.
+        mockPrisma.user.findUnique.mockResolvedValue({
+          id: 'user123',
+          email: 'signup@example.com',
+          tier: 'premium',
+          subscriptionStatus: 'inactive',
+          subscriptions: []
+        });
+
+        const result = await stripeService.getUserSubscriptionStatus('user123');
+
+        expect(result.canUpgrade).toBe(true);
+        expect(result.accessLevel).toBe('full');
+      });
+
+      it('does not offer one to an operator account', async () => {
+        process.env.ADMIN_EMAILS = 'ops@asklinc.com, owner@asklinc.com';
+        mockPrisma.user.findUnique.mockResolvedValue({
+          id: 'user123',
+          email: 'Owner@AskLinc.com',
+          tier: 'premium',
+          subscriptionStatus: 'inactive',
+          subscriptions: []
+        });
+
+        const result = await stripeService.getUserSubscriptionStatus('user123');
+
+        expect(result.canUpgrade).toBe(false);
+      });
+
+      it('does not offer one to a paying subscriber', async () => {
+        mockPrisma.user.findUnique.mockResolvedValue({
+          id: 'user123',
+          email: 'paid@example.com',
+          tier: 'premium',
+          subscriptionStatus: 'active',
+          subscriptions: [{ id: 'sub123', status: 'active' }]
+        });
+
+        const result = await stripeService.getUserSubscriptionStatus('user123');
+
+        expect(result.canUpgrade).toBe(false);
+      });
+
+      it('does not offer one to a lapsed account, which must pay through the normal path', async () => {
+        // upgradeRequired is true here and canUpgrade is false: they are not
+        // inverses. A canceled account has no access, and the login screen —
+        // not a header button it never sees — is where it is told to renew.
+        mockPrisma.user.findUnique.mockResolvedValue({
+          id: 'user123',
+          email: 'lapsed@example.com',
+          tier: 'premium',
+          subscriptionStatus: 'canceled',
+          subscriptions: [{ id: 'sub123', status: 'canceled' }]
+        });
+
+        const result = await stripeService.getUserSubscriptionStatus('user123');
+
+        expect(result.upgradeRequired).toBe(true);
+        expect(result.canUpgrade).toBe(false);
+      });
     });
 
     it('should report the working subscription when a newer one is incomplete', async () => {
