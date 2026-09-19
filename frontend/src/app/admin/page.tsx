@@ -727,8 +727,10 @@ export default function AdminPage() {
         setTrialNotice({
           userId,
           ok: true,
+          // Name the tier on a grant: the trial bills the single plan, so an
+          // account on a lower tier is moved onto it.
           message: mode === 'grant'
-            ? `Trial started, ends ${formatDate(data.trialEndsAt)}.`
+            ? `Trial started on the ${data.tier || 'premium'} plan, ends ${formatDate(data.trialEndsAt)}.`
             : `Trial now ends ${formatDate(data.trialEndsAt)}.`,
         });
         setTrialEndDrafts(prev => {

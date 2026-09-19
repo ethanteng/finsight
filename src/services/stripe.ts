@@ -1319,7 +1319,7 @@ export class StripeService {
     userId: string;
     trialEndsAt: Date;
     grantedBy?: string;
-  }): Promise<{ trialEndsAt: Date; stripeSubscriptionId: string; status: string }> {
+  }): Promise<{ trialEndsAt: Date; stripeSubscriptionId: string; status: string; tier: string }> {
     const { userId, trialEndsAt, grantedBy } = params;
     const prisma = getPrismaClient();
 
@@ -1354,7 +1354,20 @@ export class StripeService {
 
     assertUsableTrialEnd(trialEndsAt);
 
-    const tier = (user.tier as SubscriptionTier) || 'premium';
+    const priceId = getStripePriceId((user.tier as SubscriptionTier) || 'premium');
+
+    // Under single-tier pricing there is one price and it is the premium plan,
+    // and the webhooks re-derive a subscription's tier from its price --
+    // autoSyncSubscriptionTier rewrites the tier, the user, and even the
+    // metadata (to `source: web_checkout`) on the first delivery. So a trial on
+    // a starter or standard account is not something Stripe can represent.
+    // Record the billed tier now and move the account to it here, where the
+    // admin sees it happen, rather than letting a webhook change it silently a
+    // second later.
+    const tier = (getTierFromPriceId(priceId) as SubscriptionTier | null)
+      || (user.tier as SubscriptionTier)
+      || 'premium';
+
     const customerId = await this.resolveOrCreateCustomerId(user.id, user.email, user.stripeCustomerId);
 
     // Point the user at this customer before Stripe creates the subscription so
@@ -1370,7 +1383,7 @@ export class StripeService {
     const subscription = await stripe.client.subscriptions.create(
       {
         customer: customerId,
-        items: [{ price: getStripePriceId(tier) }],
+        items: [{ price: priceId }],
         trial_end: Math.floor(trialEndsAt.getTime() / 1000),
         trial_settings: { end_behavior: { missing_payment_method: 'cancel' } },
         metadata: {
@@ -1379,10 +1392,35 @@ export class StripeService {
           ...(grantedBy ? { granted_by: grantedBy } : {})
         }
       },
-      // One grant per account: a double-click or overlapping admin request must
-      // reuse the same Stripe subscription rather than mint a parallel trial.
-      { idempotencyKey: `admin-trial-grant-${userId}` }
+      // Two admins clicking at once would otherwise each get a subscription:
+      // the account check above passes for both before either writes a row. The
+      // key is scoped to the account and the date, so a double-click collapses
+      // into one subscription while a retry with a corrected date is not refused
+      // for the 24 hours Stripe remembers the key -- the re-read below is what
+      // covers two admins choosing different dates at once.
+      { idempotencyKey: `admin-trial-${user.id}-${Math.floor(trialEndsAt.getTime() / 1000)}` }
     );
+
+    // A subscription that appeared while Stripe was answering means this call
+    // lost the race, and the subscription it just created has to go rather than
+    // sit in Stripe billing someone twice.
+    const competingSubscription = await prisma.subscription.findFirst({
+      where: { userId: user.id, stripeSubscriptionId: { not: subscription.id } }
+    });
+    if (competingSubscription) {
+      try {
+        await stripe.client.subscriptions.cancel(subscription.id);
+      } catch (cancelError) {
+        console.error(
+          `Could not cancel the redundant admin trial ${subscription.id} for user ${user.id}; cancel it in Stripe:`,
+          cancelError
+        );
+      }
+      throw new AdminTrialError(
+        'Another subscription was created for this account at the same time. Reload the panel and check before retrying.',
+        409
+      );
+    }
 
     const period = resolveSubscriptionPeriod(subscription);
     const subscriptionData = {
@@ -1409,18 +1447,20 @@ export class StripeService {
       where: { id: user.id },
       data: {
         stripeCustomerId: customerId,
-        subscriptionStatus: subscription.status
+        subscriptionStatus: subscription.status,
+        tier
       }
     });
 
     console.log(
-      `Admin trial granted to user ${user.id}: subscription ${subscription.id} (${subscription.status}) ending ${period.currentPeriodEnd.toISOString()}`
+      `Admin trial granted to user ${user.id}: subscription ${subscription.id} (${subscription.status}) ending ${period.currentPeriodEnd.toISOString()} on tier ${tier}`
     );
 
     return {
       trialEndsAt: period.currentPeriodEnd,
       stripeSubscriptionId: subscription.id,
-      status: subscription.status
+      status: subscription.status,
+      tier
     };
   }
 

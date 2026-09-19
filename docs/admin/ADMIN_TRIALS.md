@@ -27,8 +27,9 @@ trial is a genuine Stripe subscription and Stripe is what moves it:
    by customer id. `customer.subscription.created` then updates the same row when it already
    exists; when the webhook wins the insert race instead, `metadata.source: admin_trial`
    still suppresses the welcome email — an account that already had full access does not
-   need one. Subscription creates also use a per-user idempotency key so a double-click
-   cannot mint a parallel trial.
+   need one. Subscription creates also carry an idempotency key and re-read the
+   account afterwards, so overlapping grants cannot leave two trials behind (see
+   Constraints).
 3. No card is ever collected. At `trial_end` Stripe cancels the subscription,
    `customer.subscription.deleted` sets the account to `canceled`, and the next sign-in is
    refused with the standard "Subscription expired" message. The user can subscribe from
@@ -38,6 +39,16 @@ trial is a genuine Stripe subscription and Stripe is what moves it:
 `PUT /admin/user-trial` moves the end date by updating `trial_end` on that same Stripe
 subscription. Stripe owns the date; the local row mirrors what Stripe returns.
 
+## Tier
+
+There is one Stripe price and under single-tier pricing it maps to `premium`. The webhooks
+re-derive a subscription's tier from its price — `autoSyncSubscriptionTier` rewrites the
+subscription's tier, the user's tier, and even the subscription metadata on the first
+delivery — so a trial on a `starter` or `standard` account is not something Stripe can
+represent. Starting a trial therefore moves the account onto the tier the trial actually
+bills, at the moment you click, and the panel says which. The alternative was letting a
+webhook change the tier silently a second later.
+
 ## Constraints
 
 - The account must be admin-created. An account with any Stripe billing history is refused
@@ -46,6 +57,13 @@ subscription. Stripe owns the date; the local row mirrors what Stripe returns.
 - Stripe requires a trial to end at least **48 hours** out, so the picker and the API both
   enforce that. Trials longer than **365 days** are refused as a typo guard.
 - Errors from Stripe are returned with their message so the panel can show what to fix.
+- Concurrent grants: the create call carries an account-and-date idempotency key, so a
+  double-click collapses into one subscription, and the call re-reads the account
+  afterwards — if another subscription appeared while Stripe was answering, the one just
+  created is cancelled and the request is refused. Claiming the account by flipping
+  `subscriptionStatus` first was rejected: a crash between the claim and Stripe would leave
+  the account `trialing` with no subscription row, which reads as "account setup
+  incomplete" and locks the comped user out.
 
 ## Testing
 

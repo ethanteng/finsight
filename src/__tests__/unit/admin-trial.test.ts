@@ -13,7 +13,7 @@ jest.mock('../../config/stripe', () => ({
   stripe: {
     client: {
       customers: { create: jest.fn(), retrieve: jest.fn() },
-      subscriptions: { create: jest.fn(), update: jest.fn(), retrieve: jest.fn() }
+      subscriptions: { create: jest.fn(), update: jest.fn(), retrieve: jest.fn(), cancel: jest.fn() }
     }
   },
   getStripePriceId: jest.fn().mockReturnValue('price_default'),
@@ -34,7 +34,7 @@ const whenSecondsFromNow = (ms: number) => new Date(Math.floor((Date.now() + ms)
 
 const stripeMock = stripe.client as unknown as {
   customers: { create: jest.Mock; retrieve: jest.Mock };
-  subscriptions: { create: jest.Mock; update: jest.Mock; retrieve: jest.Mock };
+  subscriptions: { create: jest.Mock; update: jest.Mock; retrieve: jest.Mock; cancel: jest.Mock };
 };
 
 /** An admin-created account: full access, no Stripe billing behind it. */
@@ -60,7 +60,7 @@ describe('admin-granted trials', () => {
     mockPrisma = {
       user: { findUnique: jest.fn(), update: jest.fn().mockResolvedValue({}) },
       subscription: {
-        findFirst: jest.fn(),
+        findFirst: jest.fn().mockResolvedValue(null),
         upsert: jest.fn().mockResolvedValue({}),
         update: jest.fn().mockResolvedValue({})
       }
@@ -133,7 +133,8 @@ describe('admin-granted trials', () => {
           trial_settings: { end_behavior: { missing_payment_method: 'cancel' } },
           metadata: expect.objectContaining({ source: 'admin_trial', granted_by: 'admin@example.com' })
         }),
-        { idempotencyKey: 'admin-trial-grant-user_1' }
+        // Keyed per account and date, so a double-click cannot buy two trials.
+        { idempotencyKey: `admin-trial-user_1-${Math.floor(trialEndsAt.getTime() / 1000)}` }
       );
 
       // Customer id is stored before Stripe creates the subscription so the
@@ -157,7 +158,7 @@ describe('admin-granted trials', () => {
       );
       expect(mockPrisma.user.update).toHaveBeenCalledWith({
         where: { id: 'user_1' },
-        data: { stripeCustomerId: 'cus_new', subscriptionStatus: 'trialing' }
+        data: { stripeCustomerId: 'cus_new', subscriptionStatus: 'trialing', tier: 'premium' }
       });
       expect(result.trialEndsAt.getTime()).toBe(trialEndsAt.getTime());
     });
@@ -172,13 +173,13 @@ describe('admin-granted trials', () => {
       expect(stripeMock.customers.create).not.toHaveBeenCalled();
       expect(stripeMock.subscriptions.create).toHaveBeenCalledWith(
         expect.objectContaining({ customer: 'cus_existing' }),
-        { idempotencyKey: 'admin-trial-grant-user_1' }
+        expect.anything()
       );
       // Existing customer id is already on the user row — no pre-create write.
       expect(mockPrisma.user.update).toHaveBeenCalledTimes(1);
       expect(mockPrisma.user.update).toHaveBeenCalledWith({
         where: { id: 'user_1' },
-        data: { stripeCustomerId: 'cus_existing', subscriptionStatus: 'trialing' }
+        data: { stripeCustomerId: 'cus_existing', subscriptionStatus: 'trialing', tier: 'premium' }
       });
     });
 
@@ -192,7 +193,7 @@ describe('admin-granted trials', () => {
 
       expect(stripeMock.subscriptions.create).toHaveBeenCalledWith(
         expect.objectContaining({ customer: 'cus_new' }),
-        { idempotencyKey: 'admin-trial-grant-user_1' }
+        expect.anything()
       );
     });
 
@@ -232,6 +233,45 @@ describe('admin-granted trials', () => {
 
       expect(stripeMock.subscriptions.create).not.toHaveBeenCalled();
       expect(stripeMock.customers.create).not.toHaveBeenCalled();
+    });
+
+    it('moves the account onto the tier the trial actually bills', async () => {
+      // Single-tier pricing has one price and it is premium, and the webhooks
+      // re-derive the tier from the price -- so the change happens here, where
+      // the admin sees it, instead of silently on the first delivery.
+      mockPrisma.user.findUnique.mockResolvedValue(adminCreatedUser({ tier: 'standard' }));
+      stripeMock.customers.create.mockResolvedValue({ id: 'cus_new' });
+      stripeMock.subscriptions.create.mockResolvedValue(stripeTrialSubscription(trialEndsAt));
+
+      const result = await stripeService.grantAdminTrial({ userId: 'user_1', trialEndsAt });
+
+      expect(result.tier).toBe('premium');
+      expect(mockPrisma.user.update).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ tier: 'premium' }) })
+      );
+      expect(mockPrisma.subscription.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({ create: expect.objectContaining({ tier: 'premium' }) })
+      );
+    });
+
+    it('cancels its own subscription when a concurrent grant won the account', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue(adminCreatedUser());
+      stripeMock.customers.create.mockResolvedValue({ id: 'cus_new' });
+      stripeMock.subscriptions.create.mockResolvedValue(stripeTrialSubscription(trialEndsAt));
+      // A row that was not there during the account check has appeared.
+      mockPrisma.subscription.findFirst.mockResolvedValue({ stripeSubscriptionId: 'sub_other' });
+
+      await expect(
+        stripeService.grantAdminTrial({ userId: 'user_1', trialEndsAt })
+      ).rejects.toMatchObject({ name: 'AdminTrialError', statusCode: 409 });
+
+      expect(stripeMock.subscriptions.cancel).toHaveBeenCalledWith('sub_admin_trial');
+      expect(mockPrisma.subscription.upsert).not.toHaveBeenCalled();
+      // The customer id is written before the create so the webhook can resolve
+      // the account; the loser must not go on to claim the trial itself.
+      expect(mockPrisma.user.update).not.toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ subscriptionStatus: 'trialing' }) })
+      );
     });
 
     it('refuses a trial longer than a year', async () => {
