@@ -30,11 +30,23 @@ trial is a genuine Stripe subscription and Stripe is what moves it:
    need one. Subscription creates also carry an account-and-date idempotency key, and the
    local claim is serialized with an advisory lock plus a re-read, so overlapping grants
    cannot leave two trials behind (see Constraints).
-3. No card is ever collected. At `trial_end` Stripe cancels the subscription,
+3. No card is ever collected, so the trial has somewhere to go and somewhere to stop.
+
+   **While it runs**, the signed-in header offers the account "Upgrade your account",
+   pointing at `/billing` rather than at checkout. The billing portal adds a payment
+   method to *this* subscription, which converts it in place and keeps the end date you
+   chose; Stripe then bills at `trial_end` instead of cancelling, because
+   `missing_payment_method` no longer finds one missing. Checkout cannot do this — a
+   second Checkout Session on the same customer mints a second subscription beside the
+   trial and would bill both — so `create-checkout-session` refuses an account that
+   already holds a working subscription (409 `ALREADY_SUBSCRIBED`). See the Tier System
+   section of `CLAUDE.md`.
+
+   **If it is left to run out**, Stripe cancels the subscription at `trial_end`,
    `customer.subscription.deleted` sets the account to `canceled`, and the next sign-in is
-   refused with the standard "Subscription expired" message. The user can subscribe from
-   the pricing page as anyone else would; having held this subscription makes them a
-   returning subscriber, so checkout will not hand them a second free trial.
+   refused with the standard "Subscription expired" message. From there the user can
+   subscribe from the pricing page as anyone else would; having held this subscription
+   makes them a returning subscriber, so checkout will not hand them a second free trial.
 
 `PUT /admin/user-trial` moves the end date by updating `trial_end` on that same Stripe
 subscription. Stripe owns the date; the local row mirrors what Stripe returns.
@@ -83,3 +95,10 @@ That one run is also the only thing that exercises the advisory lock: the tests 
 `$executeRaw`, so the `pg_advisory_xact_lock` statement is never run against a real
 Postgres by CI. A successful test-mode grant proves it as a side effect — the grant cannot
 commit without it.
+
+**Still unconfirmed against a real Stripe account:** that adding a default payment method
+through the billing portal converts a granted trial rather than letting it cancel. The
+`/billing` path above is built on that being true, and it is what Stripe documents for
+`missing_payment_method`, but nothing here has exercised it. The same test-mode run is the
+place to check it: add a card to the trialing subscription from the portal and confirm
+Stripe bills at `trial_end` instead of cancelling.
