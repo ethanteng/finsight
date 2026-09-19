@@ -31,7 +31,7 @@ export default function CareerChangeUseCaseRoute() {
             Changing jobs, taking a sabbatical, or going down to one income affects more than your paycheck.
             See what it does to cash, benefits, savings, and the plans that come after it.
           </p>
-          <MarketingGetStartedButton className="button button-primary" csOverrideId="cta-start-free-trial-hero" label="Model this career decision" />
+          <MarketingGetStartedButton className="button button-primary" csOverrideId="cta-start-free-trial-hero" label="Explore my career question" />
           <Link className="text-link coast-fire-inline-link" href="/coast-fire-calculator">See if you&apos;ve reached Coast FIRE →</Link>
         </div>
         <article className="use-case-answer">
@@ -54,7 +54,7 @@ export default function CareerChangeUseCaseRoute() {
       <section className="decision-levers shell">
         <div className="editorial-heading">
           <p className="section-kicker">WHAT COULD CHANGE THE ANSWER?</p>
-          <h2>Change one thing. See what happens.</h2>
+          <h2>Change the assumption,<br /><em>not the spreadsheet.</em></h2>
         </div>
         <div className="lever-grid">
           {levers.slice(0, 3).map(([title, copy], index) => (
@@ -83,7 +83,7 @@ export default function CareerChangeUseCaseRoute() {
         <Link href="/use-cases/portfolio-analysis">INVESTMENTS<b>→</b></Link>
       </section>
 
-      <PageCta title="Bring the work decision you are weighing to Linc." label="Model this decision" csOverrideId="cta-start-free-trial-mid" />
+      <PageCta title="Bring the work decision you are weighing to Linc." label="Start free" csOverrideId="cta-start-free-trial-mid" />
       <SiteFooter />
     </main>
   );

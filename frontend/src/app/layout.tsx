@@ -2,6 +2,7 @@ import { Inter } from 'next/font/google'
 import './globals.css'
 import '../components/marketing/marketing.css'
 import '../components/marketing/marketing-responsive.css'
+import '../components/marketing/planning-story.css'
 import StructuredData from '../components/StructuredData'
 import type { Metadata } from 'next'
 import VercelAnalytics from '../components/VercelAnalytics'
@@ -15,7 +16,7 @@ import {
 
 const GTM_CONTAINER_ID = 'GTM-PL362L36'
 
-const inter = Inter({ subsets: ['latin'] })
+const inter = Inter({ subsets: ['latin'], variable: '--font-inter' })
 
 // Organization structured data
 const organizationSchema = {
@@ -107,7 +108,7 @@ export default async function RootLayout({
         />
         */}
       </head>
-      <body className={inter.className}>
+      <body className={`${inter.className} ${inter.variable}`}>
         {/* Google Tag Manager (noscript) — gated on the build environment
             rather than the hostname, since a noscript fallback cannot run the
             hostname check. */}

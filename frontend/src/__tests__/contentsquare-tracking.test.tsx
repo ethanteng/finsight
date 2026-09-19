@@ -155,7 +155,6 @@ describe("Contentsquare element ids", () => {
       "cta-start-free-trial-nav",
       "cta-start-free-trial-hero",
       "cta-start-free-trial-pricing-premium",
-      "cta-start-free-trial-mid",
       "cta-start-free-trial-footer",
     ]);
     ctas.forEach((cta) => expect(cta).toHaveAttribute("href", GET_STARTED_HREF));

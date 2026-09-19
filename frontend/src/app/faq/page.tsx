@@ -36,7 +36,7 @@ export default async function FaqPage() {
   return (
     <>
       <StructuredData data={buildFaqPageSchema(buildFaqItems(pricing))} />
-      <MarketingSubpage params={Promise.resolve({ slug: ['faq'] })} />
+      <MarketingSubpage params={Promise.resolve({ slug: ['faq'] })} pricing={pricing} />
     </>
   );
 }

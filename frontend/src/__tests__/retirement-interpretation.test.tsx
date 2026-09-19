@@ -117,8 +117,9 @@ it('renders the reading under the verdict', async () => {
   run();
 
   expect(await screen.findByText(READING.headline)).toBeInTheDocument();
-  expect(screen.getByText(READING.paragraphs[0])).toBeInTheDocument();
-  expect(screen.getByText(READING.watchOuts[0])).toBeInTheDocument();
+  for (const paragraph of READING.paragraphs) expect(screen.getByText(paragraph)).toBeVisible();
+  expect(screen.queryByText(/Read Linc’s full answer/)).not.toBeInTheDocument();
+  expect(screen.getByText(READING.watchOuts[0])).toBeVisible();
 });
 
 /*
@@ -127,18 +128,18 @@ it('renders the reading under the verdict', async () => {
  * decided by the same condition — a gesture inviting a scroll to a section
  * that was dropped is worse than no gesture.
  */
-it('points the chevrons at the reading, and anchors it there', async () => {
+it('shows the reading together with the result without a jump link', async () => {
   mockApi(reading);
   const { container } = renderPage();
   run();
 
   await screen.findByText(READING.headline);
 
-  const jump = container.querySelector('.qp-jump') as HTMLAnchorElement | null;
-  expect(jump).not.toBeNull();
-  const target = jump!.getAttribute('href')!.slice(1);
-  expect(container.querySelector(`#${target}`)).not.toBeNull();
-  expect(container.querySelector(`#${target}`)).toHaveTextContent(/what this result means/i);
+  const view = container.querySelector('.calculator-result-grid');
+  expect(view).toContainElement(screen.getByText(READING.headline));
+  expect(view).toContainElement(container.querySelector('.qp-results'));
+  expect(container.querySelector('.qp-jump')).toBeNull();
+  expect(container.querySelector('#retirement-inputs')).not.toBeVisible();
 });
 
 /*

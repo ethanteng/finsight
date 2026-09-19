@@ -134,8 +134,11 @@ function runLockCopy(): RegExp {
   return new RegExp(`that is ${runLimitPhrase()}`, 'i');
 }
 
-function runTheModel() {
+async function runTheModel() {
+  const edit = screen.queryByRole('button', { name: /edit inputs.*run again/i });
+  if (edit) fireEvent.click(edit);
   fireEvent.submit(screen.getByRole('button', { name: /run the model/i }).closest('form')!);
+  await waitFor(() => expect(screen.queryByRole('button', { name: /run the model/i })).not.toBeInTheDocument());
 }
 
 beforeEach(() => {
@@ -156,7 +159,7 @@ it('asks for an address only once a plan has produced a verdict', async () => {
   renderPage();
   expect(screen.queryByLabelText('Email address')).not.toBeInTheDocument();
 
-  runTheModel();
+  await runTheModel();
 
   expect(await screen.findByLabelText('Email address')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Save these results to your free account' })).toBeInTheDocument();
@@ -168,34 +171,26 @@ it('asks for an address only once a plan has produced a verdict', async () => {
  * answer, above the jump link, and both inside the results block — not further
  * down past two charts.
  */
-it('puts the capture with the answer, above the shortcut below it', async () => {
+it('keeps saving next to the result in the combined view', async () => {
   renderPage();
-  runTheModel();
-
+  await runTheModel();
   const field = await screen.findByLabelText('Email address');
-  const results = field.closest('section')!;
-  const jump = await screen.findByRole('link', { name: /see what this result means/i });
-
-  // Same block as the verdict, so it cannot drift back down the page.
-  expect(results).toHaveTextContent(/retiring at 60 worked in/i);
-  expect(results).toContainElement(jump);
-  // Capture first, shortcut second.
-  expect(field.compareDocumentPosition(jump) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(field.closest('.calculator-result-grid')).toHaveTextContent(/retiring at 60 worked in/i);
+  expect(screen.queryByRole('link', { name: /see what this result means/i })).not.toBeInTheDocument();
 });
 
 /*
  * The shortcut is a graphic now, so its name lives on the anchor. Losing that
  * would leave a link a screen reader announces as nothing at all.
  */
-it('keeps the shortcut named even though it renders as chevrons', async () => {
+it('restores the entered numbers through the secondary edit action', async () => {
   renderPage();
-  runTheModel();
-
-  await screen.findByLabelText('Email address');
-  const jump = await screen.findByRole('link', { name: 'See what this result means' });
-
-  expect(jump).toHaveTextContent('');
-  expect(jump.querySelectorAll('svg')).toHaveLength(3);
+  fireEvent.change(screen.getByLabelText('Investment assets today'), { target: { value: '1200000' } });
+  await runTheModel();
+  expect(screen.queryByRole('button', { name: /run the model/i })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: /edit inputs.*run again/i }));
+  expect(screen.getByRole('button', { name: /run the model/i })).toBeEnabled();
+  expect(screen.getByLabelText('Investment assets today')).toHaveValue('1,200,000');
 });
 
 /*
@@ -206,7 +201,7 @@ it('stays away when the run produced no verdict to send', async () => {
   mockApi(RATES_RESULT);
   renderPage();
 
-  runTheModel();
+  await runTheModel();
 
   await screen.findByText(/what this mix sustained/i);
   expect(screen.queryByLabelText('Email address')).not.toBeInTheDocument();
@@ -214,7 +209,7 @@ it('stays away when the run produced no verdict to send', async () => {
 
 it('posts the plan inputs and never the figures computed from them', async () => {
   renderPage();
-  runTheModel();
+  await runTheModel();
 
   fireEvent.change(await screen.findByLabelText('Email address'), {
     target: { value: ' Reader@Example.com ' },
@@ -235,7 +230,7 @@ it('posts the plan inputs and never the figures computed from them', async () =>
 
 it('reports the conversion as a band, never as the address or the exact rate', async () => {
   renderPage();
-  runTheModel();
+  await runTheModel();
 
   fireEvent.change(await screen.findByLabelText('Email address'), {
     target: { value: 'reader@example.com' },
@@ -253,7 +248,7 @@ it('surfaces a refusal and leaves the form ready to retry', async () => {
     json: async () => ({ error: 'Enter a valid email address.' }),
   });
   renderPage();
-  runTheModel();
+  await runTheModel();
 
   fireEvent.change(await screen.findByLabelText('Email address'), {
     target: { value: 'reader@example.com' },
@@ -276,7 +271,7 @@ it('carries the run to signup instead of stopping at the inbox', async () => {
   const assign = jest.mocked(leaveForSignup);
 
   renderPage();
-  runTheModel();
+  await runTheModel();
 
   fireEvent.change(await screen.findByLabelText('Email address'), {
     target: { value: 'reader@example.com' },
@@ -314,7 +309,7 @@ it('stays on the page when no token comes back', async () => {
   const assign = jest.mocked(leaveForSignup);
 
   renderPage();
-  runTheModel();
+  await runTheModel();
 
   fireEvent.change(await screen.findByLabelText('Email address'), {
     target: { value: 'reader@example.com' },
@@ -334,13 +329,13 @@ it('locks the model after three runs and points at the save form', async () => {
   renderPage();
 
   for (let run = 0; run < CALCULATOR_RUN_LIMIT; run += 1) {
-    runTheModel();
+    await runTheModel();
     await screen.findByLabelText('Email address');
   }
 
-  const button = screen.getByRole('button', { name: /run the model/i });
-  expect(button).toBeDisabled();
-  expect(screen.getByText(runLockCopy())).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: /run the model/i })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: /edit inputs.*run again/i })).not.toBeInTheDocument();
+  expect(screen.getByText(/you’ve used your free runs/i)).toBeVisible();
   await waitFor(() => expect(pushCalculatorRunLimitReached).toHaveBeenCalledTimes(1));
   expect(pushCalculatorRunLimitReached).toHaveBeenCalledWith('retirement');
   // The save form is still there: it is what the lock is pointing at.
@@ -358,11 +353,11 @@ it('does not spend a run on a result that cannot be saved', async () => {
   renderPage();
 
   for (let run = 0; run < CALCULATOR_RUN_LIMIT + 1; run += 1) {
-    runTheModel();
+    await runTheModel();
     await screen.findByText(/what this mix sustained/i);
   }
 
-  expect(screen.getByRole('button', { name: /run the model/i })).toBeEnabled();
+  expect(screen.getByRole('button', { name: /edit inputs.*run again/i })).toBeEnabled();
   expect(screen.queryByText(runLockCopy())).not.toBeInTheDocument();
 });
 
@@ -370,7 +365,7 @@ it('does not spend a run on a result that cannot be saved', async () => {
 it('is still locked after the page is rendered again', async () => {
   const first = renderPage();
   for (let run = 0; run < CALCULATOR_RUN_LIMIT; run += 1) {
-    runTheModel();
+    await runTheModel();
     await screen.findByLabelText('Email address');
   }
   first.unmount();
@@ -384,7 +379,7 @@ it('is still locked after the page is rendered again', async () => {
 
 it('keeps the typed address out of Contentsquare recordings', async () => {
   renderPage();
-  runTheModel();
+  await runTheModel();
 
   expect(await screen.findByLabelText('Email address')).toHaveAttribute('data-cs-mask');
 });
@@ -396,7 +391,7 @@ it('keeps the typed address out of Contentsquare recordings', async () => {
  */
 it('resets the capture when a new plan is run', async () => {
   renderPage();
-  runTheModel();
+  await runTheModel();
 
   fireEvent.change(await screen.findByLabelText('Email address'), {
     target: { value: 'reader@example.com' },
@@ -409,7 +404,7 @@ it('resets the capture when a new plan is run', async () => {
     inputs: { ...INPUTS, retirementAge: 62 },
     primary: { ...BASE_RESULT.primary, retirementAge: 62, survivalRate: 0.97 },
   });
-  runTheModel();
+  await runTheModel();
 
   await waitFor(() => expect(screen.queryByText(/on its way/i)).not.toBeInTheDocument());
   expect(screen.getByLabelText('Email address')).toHaveValue('');

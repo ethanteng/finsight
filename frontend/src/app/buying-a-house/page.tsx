@@ -1,16 +1,12 @@
-import type { Metadata } from "next";
-import MarketingSubpage from "../../components/marketing/MarketingSubpage";
+import { permanentRedirect } from 'next/navigation';
+import { buildMarketingMetadata } from '@/lib/seo';
 
-export const metadata: Metadata = {
-  title: "How Much House Can You Afford? | Ask Linc",
-  description:
-    "Test a home price against your down payment, emergency fund, monthly costs, and retirement savings before you commit.",
-  alternates: {
-    canonical: "https://asklinc.com/buying-a-house",
-  },
-  robots: { index: true, follow: true },
-};
+export const metadata = buildMarketingMetadata({
+  title: 'Home Buying Planning | Ask Linc',
+  description: 'Explore a home purchase alongside cash reserves, monthly spending, and retirement. See what changes when the assumptions change.',
+  path: '/use-cases/home-buying',
+});
 
-export default function BuyingAHousePageRoute() {
-  return <MarketingSubpage params={Promise.resolve({ slug: ["use-cases", "home-buying"] })} />;
+export default function LegacyPage() {
+  permanentRedirect('/use-cases/home-buying');
 }

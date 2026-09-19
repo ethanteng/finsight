@@ -10,15 +10,17 @@ import {
   type RetirementLandingParams,
 } from "@/lib/retirement-landing";
 
+import "@/components/marketing/calculator-story.css";
+
 const canonical = "https://asklinc.com/retirement-calculator";
 // Kept under ~155 characters: past that a search result truncates the sentence
 // mid-claim, and the claim is the reason to click.
 const description =
-  "Free retirement calculator. Six numbers, tested against a century of real US market history, inflation and sequence-of-returns risk. No chat, no guesswork.";
+  "Free retirement calculator. Add your savings, spending, and retirement age. Test your plan against real market history and see what changes the answer.";
 
 // The longer version, for the schema description, which is not snippet-length.
 const applicationDescription =
-  "Answer six questions and run them through Ask Linc's deterministic retirement engine: a century of month-by-month market history, real inflation, and real sequence risk. No chat, no guesswork.";
+  "Add your savings, spending, and retirement timeline. Ask Linc tests your plan against a century of monthly market history, inflation, and sequence-of-returns risk, with the assumptions available to inspect.";
 
 export async function generateMetadata(
   { searchParams }: { searchParams: Promise<RetirementLandingParams> }

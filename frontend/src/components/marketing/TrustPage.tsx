@@ -18,13 +18,6 @@ const pipelineSteps = [
   ["04", "Check and explain the result", "Reasoning and calculation stay separate. Linc explains the tradeoffs and keeps the inputs, assumptions, checks, and sources attached."],
 ] as const;
 
-const trustQuestions = [
-  ["HOME", "Can we afford this house without becoming house poor?", "mint"],
-  ["WORK", "Can I take a year off without setting retirement back?", "blue"],
-  ["RETIREMENT", "Could we retire two years earlier?", "sand"],
-  ["INVESTING", "Are we taking more investment risk than we need?", "lime"],
-] as const;
-
 export const TRUST_FAQS = [
   {
     question: "Can AI get financial numbers wrong?",
@@ -58,12 +51,11 @@ export default function TrustPage() {
           <p className="section-kicker">ANSWERS YOU CAN CHECK</p>
           <h1>Don&apos;t trust the answer. <em>Check it.</em></h1>
           <p className="subhero-copy">
-            Your question defines the decision. Your real financial state supplies the inputs. Purpose-built tools run supported calculations, and the assumptions stay visible.
+            Open Show the Math to see your inputs, the assumptions, and how the result was calculated. Follow the sources when you want to go deeper.
           </p>
-          <p className="trust-hero-support">Show the Math keeps the numbers, assumptions, calculations, checks, and sources attached to the answer.</p>
           <div className="hero-actions">
             <MarketingGetStartedButton className="button button-primary" trackingLocation="trust_hero" csOverrideId="cta-start-free-trial-hero" label="Build a plan I can check" />
-            <Link className="text-link" href="#how-it-works">See how an answer is built ↓</Link>
+            <Link className="text-link" href="#how-it-works">See how an answer is built <span aria-hidden="true">↓</span></Link>
           </div>
           <p className="microcopy">{TRIAL_CTA_MICROCOPY}</p>
         </div>
@@ -79,50 +71,15 @@ export default function TrustPage() {
         </article>
       </section>
 
-      <section className="trust-opening page-section shell">
-        <div className="trust-opening-heading">
-          <div><p className="section-kicker">CONNECTED DATA IS ONLY THE BEGINNING</p><h2>Data supplies the inputs. <em>The planning system does the work.</em></h2></div>
-          <div>
-            <p>Facts are only the start. Linc separates what is known from what is assumed, separates calculation from inference, and shows what could change the result.</p>
-            <strong>That is the standard behind every answer.</strong>
-          </div>
-        </div>
-        <div className="trust-question-grid" aria-label="Financial questions where verifiability matters">
-          {trustQuestions.map(([label, question, tone]) => (
-            <blockquote className={`trust-question-card ${tone}`} key={label}><small>{label}</small><p>{question}</p></blockquote>
-          ))}
-        </div>
-      </section>
-
       <section className="trust-pipeline-section" id="how-it-works">
         <div className="shell">
-          <div className="editorial-heading trust-pipeline-heading"><p className="section-kicker">HOW AN ANSWER IS BUILT</p><h2>From the decision to the numbers to the recommendation.</h2></div>
+          <div className="editorial-heading trust-pipeline-heading"><p className="section-kicker">HOW AN ANSWER IS BUILT</p><h2>Here’s how Linc does the work.</h2></div>
           <div className="trust-pipeline-grid">
             {pipelineSteps.map(([number, title, description]) => (
               <article key={number}><div><span>{number}</span><small>ANSWER STEP</small></div><h3>{title}</h3><p>{description}</p></article>
             ))}
           </div>
           <p className="trust-pipeline-caveat">No product is perfect. That is why being able to inspect the work matters.</p>
-        </div>
-      </section>
-
-      <section className="trust-math-section dark-band">
-        <div className="shell trust-math-layout">
-          <div className="trust-math-copy">
-            <p className="section-kicker light">∑ SHOW THE MATH</p>
-            <h2>You do not have to take Linc&apos;s word for it.</h2>
-            <p>Open the work behind the conclusion, change an assumption, and see why the answer changes with it.</p>
-            <div className="trust-math-links">
-              <Link className="section-cta-link section-cta-link-on-dark" href="/features">
-                See how Ask Linc works <span aria-hidden="true">→</span>
-              </Link>
-            </div>
-          </div>
-          <article className="trust-math-panel" aria-label="What Show the Math includes">
-            <div className="trust-math-panel-top"><span>ANSWER</span><b>SHOW THE MATH</b><small>5 LAYERS</small></div>
-            {answerLayers.map(([label, description], index) => <div className="trust-math-row" key={label}><span>{String(index + 1).padStart(2, "0")}</span><div><strong>{label}</strong><small>{description}</small></div><i>+</i></div>)}
-            <p>Current financial and market sources show when they were checked.</p>
-          </article>
         </div>
       </section>
 

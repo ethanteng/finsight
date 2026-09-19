@@ -17,10 +17,10 @@ describe("comparison pages", () => {
       ],
     });
     expect(chatgpt?.rows.map((row) => row.dimension)).toEqual([
+      "Show the Math",
       "Best for",
       "Starting point",
       "Financial context",
-      "How the answer is checked",
       "Important calculations",
       "Price",
     ]);
@@ -46,11 +46,11 @@ describe("comparison pages", () => {
 
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Ask Linc vs ChatGPT");
     const comparison = screen.getByRole("table");
-    expect(within(comparison).getByText("How the answer is checked")).toBeInTheDocument();
-    expect(within(comparison).getByText(/show the math keeps your numbers, assumptions, deterministic calculations, checks, and sources/i)).toBeInTheDocument();
+    expect(within(comparison).getByText("Show the Math")).toBeInTheDocument();
+    expect(within(comparison).getByText(/open the inputs, assumptions, calculations, checks, and sources attached to your answer/i)).toBeInTheDocument();
     expect(screen.getByText(/financial data is never used to train ai models/i)).toBeInTheDocument();
     expect(within(comparison).getByText("Important calculations")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: /choose chatgpt for breadth.*inspectable model/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /choose chatgpt for breadth.*show the math/i })).toBeInTheDocument();
     expect(screen.getByText(/keep chatgpt for broad work and everyday finance questions/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "See how Ask Linc checks an answer" })).toHaveAttribute(
       "href",
@@ -74,13 +74,14 @@ describe("comparison pages", () => {
       headline: "Ask Linc vs Boldin",
     });
     expect(boldin?.rows.map((row) => row.dimension)).toEqual([
+      "Show the Math",
       "Best for",
       "Starting point",
       "Retirement",
       "Math and scenarios",
       "Price",
     ]);
-    expect(boldin?.faqs).toHaveLength(3);
+    expect(boldin?.faqs).toHaveLength(4);
     expect(generateStaticParams()).toContainEqual({ slug: "boldin" });
 
     await expect(

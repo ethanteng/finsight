@@ -3,11 +3,11 @@
 /**
  * The retirement decision page: six numbers in, the real model's output back.
  *
- * There is deliberately no chat box anywhere on this page. The visitor is not
- * asking a question and getting a paragraph — they are entering a plan and
- * getting the deterministic engine's answer, the same one the authenticated
- * product runs. Everything the model had to assume on their behalf is named on
- * the page, because that gap is the reason to connect real accounts.
+ * The visitor enters a plan and gets the deterministic engine's answer, the
+ * same one the authenticated product runs. Linc's explanation is presented as
+ * a conversation based on that submitted plan. Everything the model had to
+ * assume is named on the page, because that gap is the reason to connect real
+ * accounts.
  */
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -25,6 +25,7 @@ import { MarketingGetStartedButton } from "./MarketingGetStartedButton";
 import { RetirementEmailCapture } from "./RetirementEmailCapture";
 import { TRIAL_CTA_MICROCOPY } from "./trial-copy";
 import { SiteFooter, SiteHeader } from "./SiteShell";
+import { CalculatorSteps, CalculatorPreview, CalculatorNextQuestion, CalculatorAnswer, CalculatorRunAgain } from "./CalculatorStory";
 import { pushRetirementInteraction, pushRetirementModelRun } from "@/lib/dataLayer";
 import { useCalculatorLimitTracking } from "@/lib/use-calculator-limit-tracking";
 import {
@@ -281,17 +282,10 @@ function useInterpretation(submitted: SubmittedPlan | null): {
   return { interpretation, isLoading };
 }
 
-/** The anchor the result's chevrons jump to. */
+/** Stable anchor for the Linc interpretation. */
 export const INTERPRETATION_ID = "what-this-means";
 
-/**
- * Whether the reading panel will render anything at all.
- *
- * The panel and the chevrons that point at it both read this, so a chevron can
- * never be left pointing at a section that did not render. A reading is
- * dropped only when the model returns nothing usable, which is rarer than it
- * once was but still has to render as nothing rather than as an empty box.
- */
+/** Loading and completed readings share the same place beside the numerical result. */
 function hasInterpretation(interpretation: Interpretation | null, isInterpreting: boolean): boolean {
   return Boolean(interpretation) || isInterpreting;
 }
@@ -300,40 +294,22 @@ function hasInterpretation(interpretation: Interpretation | null, isInterpreting
 function InterpretationPanel({
   interpretation,
   isInterpreting,
+  question,
 }: {
   interpretation: Interpretation | null;
   isInterpreting: boolean;
+  question: string;
 }) {
   if (!hasInterpretation(interpretation, isInterpreting)) return null;
 
   return (
     <section
-      className="shell qp-interpretation"
+      className="qp-interpretation calculator-result-answer"
       id={INTERPRETATION_ID}
       aria-live="polite"
       aria-busy={isInterpreting}
     >
-      <p className="section-kicker">WHAT THIS RESULT MEANS</p>
-      {isInterpreting || !interpretation ? (
-        <div className="qp-interpretation-loading" role="status">
-          <span className="qp-interpretation-pulse" aria-hidden="true" />
-          Reading your result&hellip;
-        </div>
-      ) : (
-        <>
-          <h3>{interpretation.headline}</h3>
-          {interpretation.paragraphs.map((paragraph) => (
-            <p key={paragraph}>{paragraph}</p>
-          ))}
-          {interpretation.watchOuts.length > 0 && (
-            <ul className="qp-interpretation-watch">
-              {interpretation.watchOuts.map((item) => (
-                <li key={item}>{item}</li>
-              ))}
-            </ul>
-          )}
-        </>
-      )}
+      <CalculatorAnswer question={question} interpretation={interpretation} isLoading={isInterpreting} compact />
     </section>
   );
 }
@@ -480,6 +456,7 @@ export function RetirementQuickPlan({
 }) {
   const [form, setForm] = useState<FormState>(() => initialForm(initialRetirementAge));
   const [result, setResult] = useState<QuickPlanResult | null>(null);
+  const [showInputs, setShowInputs] = useState(true);
   /**
    * The body that produced `result`, kept so the interpretation runs against
    * the plan the visitor submitted rather than the normalized one — see
@@ -577,6 +554,15 @@ export function RetirementQuickPlan({
     setRunCount(readRunCount(RETIREMENT_RUN_COUNT_KEY));
   }, []);
 
+  function editInputs() {
+    if (locked) return;
+    setShowInputs(true);
+    requestAnimationFrame(() => {
+      formRef.current?.scrollIntoView({ behavior: "auto", block: "start" });
+      formRef.current?.querySelector<HTMLInputElement>("input")?.focus({ preventScroll: true });
+    });
+  }
+
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
     if (locked) return;
@@ -632,6 +618,7 @@ export function RetirementQuickPlan({
 
       const answered = payload as QuickPlanResult;
       setResult(answered);
+      setShowInputs(false);
       // A new object every run, so an identical re-submission still retires the
       // panel and asks again rather than leaving the previous reading in place.
       setSubmittedPlan(plan);
@@ -646,7 +633,8 @@ export function RetirementQuickPlan({
       if (answered.primary) setRunCount(recordRun(RETIREMENT_RUN_COUNT_KEY, runCount));
       // Let the results render before scrolling to them.
       requestAnimationFrame(() => {
-        resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+        resultsRef.current?.focus({ preventScroll: true });
+        resultsRef.current?.scrollIntoView({ behavior: "auto", block: "start" });
       });
     } catch {
       pushRetirementInteraction('retirement_request_error');
@@ -658,21 +646,18 @@ export function RetirementQuickPlan({
   }
 
   return (
-    <main className="marketing-site subpage quickplan-page">
+    <main className={`marketing-site subpage quickplan-page calculator-story${!showInputs ? " calculator-result-view" : ""}`}>
       <SiteHeader />
 
       <section className="shell qp-hero">
-        <p className="eyebrow"><span className="pulse" aria-hidden="true" /> Retirement model · no account needed</p>
-        <h1>{headline}</h1>
-        <p className="qp-hero-sub">
-          Enter six numbers. We run them through the same deterministic retirement engine Ask Linc
-          uses on real accounts — a century of month-by-month market history, real inflation, real
-          sequence risk — and show you what your plan would have done in every one of those
-          retirements.
-        </p>
+        <p className="section-kicker">FREE RETIREMENT CALCULATOR</p>
+        <h1>{showInputs ? <>{headline}<em>Let’s run the numbers.</em></> : "Your retirement result."}</h1>
+        <p className="qp-hero-sub">Tell Linc about your savings, spending, and timeline. See how your plan would have held up through real market history—and what could change the answer.</p>
+        <p className="calculator-access">No account needed to try. Assumptions included.</p>
+        <CalculatorSteps />
       </section>
 
-      <section className="shell qp-form-section">
+      <section className="shell qp-form-section" id="retirement-inputs" hidden={!showInputs}>
         <form className="qp-form" ref={formRef} onSubmit={handleSubmit}
           onChange={() => trackStarted()}
           onInvalid={(event) => {
@@ -682,16 +667,15 @@ export function RetirementQuickPlan({
             recordInvalidField((event.target as HTMLElement).id);
           }}>
           <div className="qp-form-head">
-            <p className="section-kicker">SIX NUMBERS</p>
-            <h2>Your plan</h2>
+            <p className="section-kicker">01 / YOUR STARTING POINT</p>
+            <h2>Start with what you know.</h2>
             {/*
               * Nothing on this form is mandatory. What the model can assume it
               * assumes and names; the two figures it cannot invent change the
               * question it answers rather than blocking the answer.
               */}
             <p className="qp-form-note">
-              Answer what you know. Anything you leave blank, the model either assumes from a stated
-              convention and tells you, or answers around.
+              Add the numbers you know. Linc explains any defaults and adapts the result when something is missing.
             </p>
           </div>
 
@@ -787,8 +771,8 @@ export function RetirementQuickPlan({
 
           <fieldset className="qp-allocation">
             <legend>
-              One thing we have to assume
-              <span>We don&apos;t know what you actually own, and sequence risk depends on it. Pick the closest.</span>
+              Choose your investment mix
+              <span>Pick the closest preset. Your result will show exactly what it assumes.</span>
             </legend>
             <div className="qp-allocation-options">
               {allocations.map((allocation) => (
@@ -829,25 +813,32 @@ export function RetirementQuickPlan({
             </p>
           </div>
         </form>
+        <CalculatorPreview />
       </section>
 
       {/* Calculator outputs repeat visitor-entered and derived financial
           values as ordinary DOM text, so mask the complete live result from
           Contentsquare session replay. Click events inside still report. */}
-      <div ref={resultsRef} data-cs-mask>
+      <div ref={resultsRef} className="calculator-result-focus" tabIndex={-1} hidden={showInputs} aria-label="Your retirement result" data-cs-mask>
         {result && (result.primary
           ? <QuickPlanResults
               result={result}
               primary={result.primary}
               interpretation={interpretation}
               isInterpreting={isInterpreting}
+              locked={locked}
+              onEdit={editInputs}
             />
           : <QuickPlanRateResults
               result={result}
               interpretation={interpretation}
               isInterpreting={isInterpreting}
+              locked={locked}
+              onEdit={editInputs}
             />)}
       </div>
+
+      {!result && <CalculatorNextQuestion />}
 
       <section className="qp-cross-sell">
         <div className="shell qp-cross-sell-inner">
@@ -855,12 +846,12 @@ export function RetirementQuickPlan({
           <h2>
             {carriedResult
               ? "Keep testing this retirement decision."
-              : "Model retirement with your actual finances."}
+              : "Your numbers are the start. Your whole life is the plan."}
           </h2>
           <p>
             {carriedResult
               ? "We'll carry forward the retirement age, assets, and spending you just modeled, then replace the calculator's portfolio preset with your actual holdings and add your real spending and income."
-              : "Ask Linc keeps your holdings, spending, income, Social Security timing, and scenarios in one retirement model you can keep changing."}
+              : "Connect your financial life, ask your retirement question, and let Linc bring the analysis together. Keep exploring with your real holdings, income, and spending."}
           </p>
           <MarketingGetStartedButton
             className="button button-primary"
@@ -991,11 +982,15 @@ function QuickPlanResults({
   primary,
   interpretation,
   isInterpreting,
+  locked,
+  onEdit,
 }: {
   result: QuickPlanResult;
   primary: Scenario;
   interpretation: Interpretation | null;
   isInterpreting: boolean;
+  locked: boolean;
+  onEdit: () => void;
 }) {
   const { alternatives, history, inputs, allocation } = result;
   // Plan mode is reached only with a real portfolio, which is also the
@@ -1035,20 +1030,20 @@ function QuickPlanResults({
 
   return (
     <>
-      <section className="shell qp-results" aria-live="polite">
+      <div className="calculator-result-grid shell" data-cs-mask>
+      <section className="qp-results calculator-result-summary" aria-live="polite">
         <p className="section-kicker">THE MODEL&apos;S ANSWER</p>
         <AssumedInputs assumed={result.assumed} />
         <h2 className="qp-verdict" data-outcome={band}>
-          Based on the numbers you entered, retiring at {inputs.retirementAge} worked in{" "}
-          <strong>{primary.sequencesSurvived.toLocaleString("en-US")} of the{" "}
+          Retiring at {inputs.retirementAge} worked in{" "}
+          <strong>{primary.sequencesSurvived.toLocaleString("en-US")} of{" "}
           {primary.sequencesTested.toLocaleString("en-US")}</strong>{" "}
-          retirements in market history we could test it against.
+          retirements in market history.
         </h2>
         <p className="qp-verdict-sub">
-          Each test is a real, month-by-month stretch of US market returns and inflation running from{" "}
-          {monthLabel(history.firstStartMonth)} onward — {history.horizonYears} years from today
-          through age {inputs.lifeExpectancy}, with your contributions before retirement and your
-          spending after it.
+          Your inputs, tested through age {inputs.lifeExpectancy} against US market returns and
+          inflation from {monthLabel(history.firstStartMonth)} onward. Past results do not predict
+          your future.
         </p>
 
         <div
@@ -1094,12 +1089,14 @@ function QuickPlanResults({
           />
         </div>
 
-        {/*
-          * The capture sits with the answer, not four blocks below it. This is
-          * the moment the visitor has something worth keeping, and someone who
-          * reads their verdict and stops never reaches anything further down.
-          */}
-        <RetirementEmailCapture
+      </section>
+      <InterpretationPanel
+        interpretation={interpretation}
+        isInterpreting={isInterpreting}
+        question={`I have ${money(inputs.investableAssets)} invested today. Could I retire at ${inputs.retirementAge} and spend ${money(inputs.annualSpending)} a year?`}
+      />
+      <div className="calculator-result-actions">
+        <RetirementEmailCapture compact
           /*
            * Remount when the run changes, so a prior "sent" state cannot claim
            * to belong to a plan it was never sent for — and so an in-flight
@@ -1129,26 +1126,9 @@ function QuickPlanResults({
           }}
           survivalRate={primary.survivalRate}
         />
-
-        {/*
-          * The section that argues for connecting accounts is four blocks
-          * further down — past two charts and the methodology — and someone
-          * who reads their result and stops never sees it. This is the
-          * shortcut, kept with the answer it invites a comparison against.
-          */}
-        <JumpToInterpretation
-          interpretation={interpretation}
-          isInterpreting={isInterpreting}
-        />
-      </section>
-
-      {/*
-        * Directly under the answer, because it is about the answer. It arrives
-        * after everything above it — a second request, deliberately — so it
-        * renders a placeholder here rather than reflowing the page from the
-        * top when it lands.
-        */}
-      <InterpretationPanel interpretation={interpretation} isInterpreting={isInterpreting} />
+        <CalculatorRunAgain locked={locked} onEdit={onEdit} />
+      </div>
+      </div>
 
       <section className="shell qp-chart-block">
         <div className="qp-chart-copy">
@@ -1323,10 +1303,14 @@ function QuickPlanRateResults({
   result,
   interpretation,
   isInterpreting,
+  locked,
+  onEdit,
 }: {
   result: QuickPlanResult;
   interpretation: Interpretation | null;
   isInterpreting: boolean;
+  locked: boolean;
+  onEdit: () => void;
 }) {
   const { history, inputs, allocation, sustainableSpendingRates, sustainableSpending, missing } = result;
   useReportedRun(result);
@@ -1346,7 +1330,8 @@ function QuickPlanRateResults({
 
   return (
     <>
-      <section className="shell qp-results" aria-live="polite">
+      <div className="calculator-result-grid shell" data-cs-mask>
+      <section className="qp-results calculator-result-summary" aria-live="polite">
         <p className="section-kicker">WHAT THIS MIX SUSTAINED</p>
         <AssumedInputs assumed={result.assumed} />
         {/*
@@ -1386,32 +1371,25 @@ function QuickPlanRateResults({
           })}
         </div>
 
-        {/*
-          * The one thing standing between this and a verdict on their own
-          * plan, said where they have just seen what the model can do.
-          */}
+      </section>
+      <InterpretationPanel
+        interpretation={interpretation}
+        isInterpreting={isInterpreting}
+        question={`What withdrawal rate could support retirement at ${inputs.retirementAge}, and what does the market history tell us?`}
+      />
+      <div className="calculator-result-actions">
         <div className="qp-missing" role="note">
           <strong>Want the answer for your plan?</strong>
           <p>
-            Fill in {missingList} above and run it again. The model will test your own numbers
+            Add {missingList} to get a plan you can save. The model will test your own numbers
             against the same {history.sequencesTested.toLocaleString("en-US")} retirements and tell
             you how many of them your money lasted through.
           </p>
         </div>
 
-        <JumpToInterpretation
-          interpretation={interpretation}
-          isInterpreting={isInterpreting}
-        />
-      </section>
-
-      {/*
-        * Directly under the answer, because it is about the answer. It arrives
-        * after everything above it — a second request, deliberately — so it
-        * renders a placeholder here rather than reflowing the page from the
-        * top when it lands.
-        */}
-      <InterpretationPanel interpretation={interpretation} isInterpreting={isInterpreting} />
+        <CalculatorRunAgain locked={locked} onEdit={onEdit} />
+      </div>
+      </div>
 
       <section className="shell qp-chart-block">
         <div className="qp-chart-copy">
@@ -1489,62 +1467,6 @@ function QuickPlanRateResults({
         </details>
       </section>
     </>
-  );
-}
-
-/**
- * The shortcut from the verdict down to what the model made of it.
- *
- * Three chevrons cascading downward rather than a labelled pill. The pill sat
- * directly under the email capture's own button, where two filled controls
- * read as competing asks; a wordless gesture says "keep going" without
- * competing with the thing being asked for.
- *
- * The name survives for anyone not looking at it — screen readers, and the
- * link's own title — and the cascade is off under prefers-reduced-motion,
- * where three static chevrons still point down.
- *
- * Renders nothing when the reading does not, so the gesture never invites a
- * scroll to a section that is not on the page.
- */
-function JumpToInterpretation({
-  interpretation,
-  isInterpreting,
-}: {
-  interpretation: Interpretation | null;
-  isInterpreting: boolean;
-}) {
-  if (!hasInterpretation(interpretation, isInterpreting)) return null;
-
-  return (
-    <a
-      className="qp-jump"
-      href={`#${INTERPRETATION_ID}`}
-      aria-label="See what this result means"
-      title="See what this result means"
-    >
-      {[0, 1, 2].map((index) => (
-        <svg
-          key={index}
-          className="qp-chevron"
-          style={{ animationDelay: `${index * 0.16}s` }}
-          viewBox="0 0 24 14"
-          width="26"
-          height="15"
-          fill="none"
-          aria-hidden="true"
-          focusable="false"
-        >
-          <path
-            d="M2 2 L12 11 L22 2"
-            stroke="currentColor"
-            strokeWidth="3"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
-      ))}
-    </a>
   );
 }
 

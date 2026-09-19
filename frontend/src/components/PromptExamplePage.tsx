@@ -36,11 +36,11 @@ export default function PromptExamplePage({
           <article className="prompt-answer-card">
             <div className="prompt-answer-top"><span className="brand-mark small">L</span><b>SAMPLE ANSWER</b><small>ILLUSTRATIVE</small></div>
             <section>
-              <span className="prompt-label">THE SHORT ANSWER</span>
+              <h2 className="prompt-label">THE SHORT ANSWER</h2>
               <p className="prompt-response">{example.response}</p>
             </section>
             <section>
-              <span className="prompt-label">KEY NUMBERS</span>
+              <h2 className="prompt-label">KEY NUMBERS</h2>
               <div className="prompt-number-grid">
                 {example.keyNumbers.map((item) => (
                   <div key={item.label}><span>{item.label}</span><b>{item.value}</b></div>
@@ -49,11 +49,11 @@ export default function PromptExamplePage({
             </section>
             <div className="prompt-detail-grid">
               <section>
-                <span className="prompt-label">WHAT MATTERS</span>
+                <h2 className="prompt-label">WHAT MATTERS</h2>
                 <ul>{example.insights.map((insight) => <li key={insight}>{insight}</li>)}</ul>
               </section>
               <section>
-                <span className="prompt-label">POSSIBLE NEXT STEPS</span>
+                <h2 className="prompt-label">POSSIBLE NEXT STEPS</h2>
                 <ul>{example.suggestedActions.map((action) => <li key={action}>{action}</li>)}</ul>
               </section>
             </div>

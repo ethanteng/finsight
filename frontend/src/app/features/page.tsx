@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { MarketingGetStartedButton } from '@/components/marketing/MarketingGetStartedButton';
-import RotatingHeroExamples from '@/components/marketing/RotatingHeroExamples';
+import { AnalysisVisual } from '@/components/marketing/PlanningStory';
 import { PageCta, SiteFooter, SiteHeader } from '@/components/marketing/SiteShell';
 
 export const metadata: Metadata = {
@@ -27,11 +27,9 @@ export const metadata: Metadata = {
 };
 
 const steps = [
-  ['01', 'Ask the question', 'Start with what you are trying to decide. No spreadsheet or financial model to build first.'],
-  ['02', 'Build the relevant model', 'Linc brings in the cash, spending, debt, investments, property, goals, rates, or history that could change this decision.'],
-  ['03', 'Run deterministic calculations', 'Purpose-built tools handle supported financial math so the same inputs produce the same calculated result.'],
-  ['04', 'Stress-test the scenarios', 'Change the date, income, spending, portfolio, or assumption in plain English and see what moves with it.'],
-  ['05', 'Inspect the answer', 'See what looks workable, what could break, and the numbers, assumptions, checks, and sources behind the conclusion.'],
+  ['01', 'Connect your financial life', 'Bring together your accounts, investments, and loans. Add any missing details yourself.'],
+  ['02', 'Ask your question', 'Tell Linc what you are trying to figure out. It asks for context, runs supported calculations, and explains the tradeoffs.'],
+  ['03', 'Change an assumption', 'Ask a follow-up. Compare retirement dates, spending, or a down payment, and inspect what changed.'],
 ] as const;
 
 export default function FeaturesPageRoute() {
@@ -41,20 +39,20 @@ export default function FeaturesPageRoute() {
       <section className="subhero shell split-subhero">
         <div>
           <p className="section-kicker">HOW ASK LINC WORKS</p>
-          <h1>From your question <em>to a financial model you can inspect.</em></h1>
-          <p className="subhero-copy">You should not have to build the spreadsheet before you can ask the question. Tell Linc what you are trying to decide; it builds the relevant model, runs the math, and lets you change the assumptions conversationally.</p>
+          <h1>You bring the question. <em>Linc brings it together.</em></h1>
+          <p className="subhero-copy">Connect your finances, tell Linc what you’re weighing, and explore the plan it builds. The numbers, tradeoffs, and next questions come together in one place.</p>
           <div className="hero-actions">
-            <MarketingGetStartedButton className="button button-primary" csOverrideId="cta-start-free-trial-hero" label="Build my plan" />
+            <MarketingGetStartedButton className="button button-primary" csOverrideId="cta-start-free-trial-hero" label="Start free" />
             <Link className="text-link" href="/use-cases">See what you can ask →</Link>
           </div>
         </div>
-        <RotatingHeroExamples />
+        <AnalysisVisual />
       </section>
 
       <section className="page-section shell" id="system">
         <div className="editorial-heading">
           <p className="section-kicker">START WITH THE DECISION, NOT THE DASHBOARD</p>
-          <h2>One question. One inspectable planning model.</h2>
+          <h2>Three steps to a clearer next move.</h2>
         </div>
         <ol className="fact-routing-steps" aria-label="How Ask Linc builds an answer">
           {steps.map(([number, title, description]) => (
@@ -68,9 +66,9 @@ export default function FeaturesPageRoute() {
           <div className="ecosystem-detail-heading">
             <div>
               <p className="section-kicker light">THE NUMBERS BEHIND THE DECISION</p>
-              <h2>Your real financial state stays attached to the model.</h2>
+              <h2>The right numbers. A plan you can check.</h2>
             </div>
-            <p>Accounts and data sources are infrastructure, not the product. Ask Linc uses only the cash, spending, debt, investments, property, goals, current rates, rules, and history that could change the decision.</p>
+            <p>Linc starts with your finances and adds current rates, rules, or market history when the question needs them. Open Show the Math to inspect the work.</p>
           </div>
           <div className="coverage-grid">
             <article className="coverage-card"><div className="coverage-card-top"><span>01</span><small>YOUR MONEY</small></div><h3>Cash, spending, and debt</h3><p>What you have available, what you owe, and what your current lifestyle costs.</p></article>
@@ -88,7 +86,7 @@ export default function FeaturesPageRoute() {
         </div>
       </section>
 
-      <PageCta title="Turn the decision into a model you can stress-test." label="Start planning" csOverrideId="cta-start-free-trial-mid" />
+      <PageCta title="Change the assumption, not the spreadsheet." label="Start planning" csOverrideId="cta-start-free-trial-mid" />
       <SiteFooter />
     </main>
   );
