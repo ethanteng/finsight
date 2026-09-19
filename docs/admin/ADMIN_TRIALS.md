@@ -22,10 +22,13 @@ trial is a genuine Stripe subscription and Stripe is what moves it:
    creates a subscription on the configured price with `trial_end` set to your date and
    `trial_settings.end_behavior.missing_payment_method: 'cancel'`.
 2. The local `Subscription` row and `User.subscriptionStatus` are written immediately so the
-   panel shows the trial without waiting for the webhook. The
-   `customer.subscription.created` webhook then updates the same row; because the row
-   already exists it does not re-send the welcome email, which an account that already had
-   full access does not need.
+   panel shows the trial without waiting for the webhook. The Stripe customer id is stored
+   on the user *before* the subscription is created so the webhook can resolve the account
+   by customer id. `customer.subscription.created` then updates the same row when it already
+   exists; when the webhook wins the insert race instead, `metadata.source: admin_trial`
+   still suppresses the welcome email — an account that already had full access does not
+   need one. Subscription creates also use a per-user idempotency key so a double-click
+   cannot mint a parallel trial.
 3. No card is ever collected. At `trial_end` Stripe cancels the subscription,
    `customer.subscription.deleted` sets the account to `canceled`, and the next sign-in is
    refused with the standard "Subscription expired" message. The user can subscribe from
