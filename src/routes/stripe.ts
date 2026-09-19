@@ -306,7 +306,7 @@ router.post('/create-checkout-session', async (req, res) => {
         // subscription beside it (it does not convert the first) — including
         // for an admin-granted trial, where saving a card then defeats
         // `missing_payment_method: cancel`. The signed-in upgrade CTA hides
-        // itself via `canUpgrade`, but `/subscribe` is a plain URL (and the
+        // itself via `upgradeAction`, but `/subscribe` is a plain URL (and the
         // CTA opens it in a new tab), so the header can go stale after a
         // successful checkout. Refuse here so the button is not the only gate.
         const workingSubscription = await prisma.subscription.findFirst({

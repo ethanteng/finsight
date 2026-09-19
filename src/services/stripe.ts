@@ -1599,8 +1599,16 @@ export class StripeService {
      *
      * A trial that already has a card is converting on its own and is offered
      * nothing, as is an account that is already paying.
+     *
+     * `canUpgrade` is kept beside this for one deploy cycle: Render and Vercel
+     * ship independently, and a frontend still reading the old boolean would
+     * otherwise hide the no-card signup CTA until both sides land. It is true
+     * only for `checkout` — never for `billing_portal` — so an old frontend
+     * cannot send an admin trial into Checkout.
      */
     upgradeAction: 'checkout' | 'billing_portal' | null;
+    /** @deprecated Prefer `upgradeAction`. True only when that is `checkout`. */
+    canUpgrade: boolean;
     message: string;
   }> {
     try {
@@ -1762,6 +1770,10 @@ export class StripeService {
           accessLevel,
           upgradeRequired,
           upgradeAction,
+          // Compat for frontends that still read the pre-`upgradeAction` boolean.
+          // Only `checkout` — an old client must not treat a portal trial as a
+          // Checkout candidate.
+          canUpgrade: upgradeAction === 'checkout',
           message
         };
     } catch (error) {

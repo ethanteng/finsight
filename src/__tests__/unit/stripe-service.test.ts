@@ -1023,12 +1023,13 @@ describe('StripeService', () => {
 
       const result = await stripeService.getUserSubscriptionStatus('user123');
 
-      expect(result).toEqual({
+        expect(result).toEqual({
         tier: 'premium',
         status: 'active',
         accessLevel: 'full',
         upgradeRequired: false,
         upgradeAction: null,
+        canUpgrade: false,
         message: 'Active premium subscription'
       });
     });
@@ -1082,6 +1083,7 @@ describe('StripeService', () => {
         upgradeRequired: false,
         // This trial has a card, so it converts on its own and is offered nothing.
         upgradeAction: null,
+        canUpgrade: false,
         message: 'premium trial is active'
       });
     });
@@ -1159,6 +1161,7 @@ describe('StripeService', () => {
         const result = await stripeService.getUserSubscriptionStatus('user123');
 
         expect(result.upgradeAction).toBe('checkout');
+        expect(result.canUpgrade).toBe(true);
         expect(result.accessLevel).toBe('full');
       });
 
@@ -1175,6 +1178,8 @@ describe('StripeService', () => {
         const result = await stripeService.getUserSubscriptionStatus('user123');
 
         expect(result.upgradeAction).toBe('billing_portal');
+        // Old frontends must not treat this as a Checkout candidate.
+        expect(result.canUpgrade).toBe(false);
         expect(result.accessLevel).toBe('full');
         expect(retrieve).toHaveBeenCalledWith('sub_stripe_123', { expand: ['customer'] });
       });
