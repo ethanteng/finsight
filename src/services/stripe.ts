@@ -616,12 +616,22 @@ export class StripeService {
     }
 
     if (isNewSubscription) {
-      try {
-        await sendWelcomeEmail(user.email, tier);
-        console.log(`Welcome email sent to ${user.email} for ${tier} plan`);
-      } catch (emailError) {
-        console.error(`Failed to send welcome email to ${user.email}:`, emailError);
-        // Don't fail the webhook if email fails
+      // Admin-granted trials put an end date on an account that already had full
+      // access. The grant path writes the local row first when it can, but the
+      // webhook can still win the race and claim first insert — so the metadata
+      // stamp is what keeps this from looking like a brand-new paid signup.
+      if (subscription.metadata?.source === 'admin_trial') {
+        console.log(
+          `Skipped welcome email for admin_trial subscription ${subscriptionId} (user ${user.id})`
+        );
+      } else {
+        try {
+          await sendWelcomeEmail(user.email, tier);
+          console.log(`Welcome email sent to ${user.email} for ${tier} plan`);
+        } catch (emailError) {
+          console.error(`Failed to send welcome email to ${user.email}:`, emailError);
+          // Don't fail the webhook if email fails
+        }
       }
     } else {
       console.log(`Subscription ${subscriptionId} already exists; skipped welcome email`);
@@ -1347,17 +1357,32 @@ export class StripeService {
     const tier = (user.tier as SubscriptionTier) || 'premium';
     const customerId = await this.resolveOrCreateCustomerId(user.id, user.email, user.stripeCustomerId);
 
-    const subscription = await stripe.client.subscriptions.create({
-      customer: customerId,
-      items: [{ price: getStripePriceId(tier) }],
-      trial_end: Math.floor(trialEndsAt.getTime() / 1000),
-      trial_settings: { end_behavior: { missing_payment_method: 'cancel' } },
-      metadata: {
-        tier,
-        source: 'admin_trial',
-        ...(grantedBy ? { granted_by: grantedBy } : {})
-      }
-    });
+    // Point the user at this customer before Stripe creates the subscription so
+    // customer.subscription.created can resolve the account by customer id
+    // instead of racing through email adoption while stripeCustomerId is still null.
+    if (customerId !== user.stripeCustomerId) {
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { stripeCustomerId: customerId }
+      });
+    }
+
+    const subscription = await stripe.client.subscriptions.create(
+      {
+        customer: customerId,
+        items: [{ price: getStripePriceId(tier) }],
+        trial_end: Math.floor(trialEndsAt.getTime() / 1000),
+        trial_settings: { end_behavior: { missing_payment_method: 'cancel' } },
+        metadata: {
+          tier,
+          source: 'admin_trial',
+          ...(grantedBy ? { granted_by: grantedBy } : {})
+        }
+      },
+      // One grant per account: a double-click or overlapping admin request must
+      // reuse the same Stripe subscription rather than mint a parallel trial.
+      { idempotencyKey: `admin-trial-grant-${userId}` }
+    );
 
     const period = resolveSubscriptionPeriod(subscription);
     const subscriptionData = {
@@ -1372,9 +1397,8 @@ export class StripeService {
 
     // Write the row here rather than waiting for customer.subscription.created:
     // the admin panel reads it back immediately, and the webhook's own insert
-    // already falls back to an update when the row exists. That fallback also
-    // swallows the welcome email, which is right for an account that has had
-    // full access all along and is only having an end date put on it.
+    // already falls back to an update when the row exists. Welcome mail is also
+    // suppressed when the webhook wins, via metadata.source === 'admin_trial'.
     await prisma.subscription.upsert({
       where: { stripeSubscriptionId: subscription.id },
       create: { ...subscriptionData, stripeSubscriptionId: subscription.id },

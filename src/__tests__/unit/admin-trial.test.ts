@@ -132,8 +132,16 @@ describe('admin-granted trials', () => {
           trial_end: Math.floor(trialEndsAt.getTime() / 1000),
           trial_settings: { end_behavior: { missing_payment_method: 'cancel' } },
           metadata: expect.objectContaining({ source: 'admin_trial', granted_by: 'admin@example.com' })
-        })
+        }),
+        { idempotencyKey: 'admin-trial-grant-user_1' }
       );
+
+      // Customer id is stored before Stripe creates the subscription so the
+      // webhook can resolve the account without an email-adoption race.
+      expect(mockPrisma.user.update).toHaveBeenCalledWith({
+        where: { id: 'user_1' },
+        data: { stripeCustomerId: 'cus_new' }
+      });
 
       // The panel reads the local row, so it carries the chosen end date without
       // waiting for the webhook.
@@ -163,8 +171,15 @@ describe('admin-granted trials', () => {
 
       expect(stripeMock.customers.create).not.toHaveBeenCalled();
       expect(stripeMock.subscriptions.create).toHaveBeenCalledWith(
-        expect.objectContaining({ customer: 'cus_existing' })
+        expect.objectContaining({ customer: 'cus_existing' }),
+        { idempotencyKey: 'admin-trial-grant-user_1' }
       );
+      // Existing customer id is already on the user row — no pre-create write.
+      expect(mockPrisma.user.update).toHaveBeenCalledTimes(1);
+      expect(mockPrisma.user.update).toHaveBeenCalledWith({
+        where: { id: 'user_1' },
+        data: { stripeCustomerId: 'cus_existing', subscriptionStatus: 'trialing' }
+      });
     });
 
     it('creates a customer when the stored one is gone from Stripe', async () => {
@@ -176,7 +191,8 @@ describe('admin-granted trials', () => {
       await stripeService.grantAdminTrial({ userId: 'user_1', trialEndsAt });
 
       expect(stripeMock.subscriptions.create).toHaveBeenCalledWith(
-        expect.objectContaining({ customer: 'cus_new' })
+        expect.objectContaining({ customer: 'cus_new' }),
+        { idempotencyKey: 'admin-trial-grant-user_1' }
       );
     });
 
