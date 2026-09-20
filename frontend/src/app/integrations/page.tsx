@@ -3,13 +3,13 @@ import IntegrationsPage from "@/components/marketing/IntegrationsPage";
 
 export const metadata: Metadata = {
   title: "Financial Data Sources for More Accurate Planning | Ask Linc",
-  description: "See how accounts, property, current rates, market data, rules, and long-term history become traceable inputs to an Ask Linc financial model.",
+  description: "See which accounts you can connect to Ask Linc and where its property estimates, interest rates, and market data come from.",
   alternates: {
     canonical: "https://asklinc.com/integrations",
   },
   openGraph: {
     title: "The Data Behind Your Financial Model — Ask Linc",
-    description: "See how Ask Linc turns real financial state, current context, and historical data into traceable planning inputs.",
+    description: "See how your accounts, current rates, and market history inform your financial plan.",
     type: "website",
     url: "https://asklinc.com/integrations",
     siteName: "Ask Linc",

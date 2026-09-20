@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
+import { DEMO_DECISIONS as decisions, type DemoDecision } from "@/data/product-demo-examples";
 import {
   pushProductDemoCompleted,
   pushProductDemoDetailViewed,
@@ -17,98 +19,6 @@ const decisionTabs: DecisionTab[] = ["answer", "math", "sources"];
 const autoTabDelay = 4300;
 const autoClickLead = 260;
 const autoClickDuration = 720;
-
-type DemoDecision = {
-  id: string;
-  shortTitle: string;
-  date: string;
-  question: string;
-  metrics: Array<{ label: string; value: string; source?: string }>;
-  summary: string;
-  takeaways: string[];
-  actions: string[];
-};
-
-const decisions: DemoDecision[] = [
-  {
-    id: "retirement",
-    shortTitle: "What should I consider for retirement?",
-    date: "Aug 25",
-    question: "What are the key factors I need to consider when planning for retirement?",
-    metrics: [
-      { label: "Net worth", value: "$3,645,158", source: "Net Worth" },
-      { label: "Total debt", value: "$351,484", source: "Total Debt" },
-      { label: "Current age", value: "48", source: "Profile Age" },
-      { label: "Savings rate", value: "35.42%", source: "Savings Rate" },
-      { label: "Total investments", value: "$2,274,872", source: "Total Investments" },
-    ],
-    summary:
-      "You’re in a strong position overall—$3.65M net worth, $2.27M invested, and a healthy 35% savings rate. The next step is to match your future income against spending, inflation, and how long the money needs to last.",
-    takeaways: [
-      "A 35% savings rate gives you a strong retirement engine, but your monthly cash flow still moves around.",
-      "Your retirement and taxable accounts give you several places to draw from over time.",
-      "About $351K of debt, mostly the mortgage, needs to be paid off or included in future spending.",
-      "Your target retirement age and annual spending goal will have the biggest effect on the answer.",
-    ],
-    actions: [
-      "Choose a target retirement age and annual spending goal.",
-      "Review the part of the retirement portfolio that is not itemized.",
-      "Decide whether paying off the mortgage before retirement is a goal.",
-    ],
-  },
-  {
-    id: "inflation",
-    shortTitle: "What if inflation stays high?",
-    date: "Aug 22",
-    question:
-      "If inflation stays high and the market underperforms for the next 5 years, what impact would that have on our retirement plan?",
-    metrics: [
-      { label: "Survival rate", value: "100%", source: "Survival Rate" },
-      { label: "Withdrawal rate", value: "3.61%", source: "Withdrawal Rate" },
-      { label: "CPI inflation YoY", value: "3.3%", source: "Market Context" },
-      { label: "Equity allocation", value: "82.14%", source: "Equity Allocation" },
-      { label: "Historical sequence count", value: "49", source: "Historical Sequence Count" },
-    ],
-    summary:
-      "Your existing retirement model tests 49 overlapping historical periods and shows a 100% survival rate at a 3.61% starting withdrawal rate. The bigger short-term risk is the 82% stock allocation swinging hard during a weak first five years.",
-    takeaways: [
-      "The long-term plan held up across all 49 historical periods tested.",
-      "An 82% stock allocation can still create a painful short-term drop even when the long-term plan works.",
-      "At 3.3% inflation, a $150K spending target may need to rise faster than expected.",
-      "A larger cash or bond buffer could reduce the need to sell stocks after a market drop.",
-    ],
-    actions: [
-      "Compare the current plan with a larger cash or bond buffer.",
-      "Test a slightly lower stock allocation before retirement.",
-      "Review the spending target against actual inflation each year.",
-    ],
-  },
-  {
-    id: "credit-cards",
-    shortTitle: "How much card debt do I have?",
-    date: "Aug 24",
-    question: "Are you able to see how much credit card debt I have, and what the interest rates are?",
-    metrics: [
-      { label: "Everyday card APR", value: "19.49%" },
-      { label: "Travel card balance", value: "$1,347" },
-      { label: "Everyday card balance", value: "$357" },
-      { label: "Travel card APR", value: "19.49%" },
-      { label: "Third card balance", value: "$0" },
-    ],
-    summary:
-      "Two cards carry balances: $356.67 and $1,347.26, both at 19.49% APR. A third card is at $0. The balances are manageable relative to your finances, but the rates are high enough to prioritize paying them off.",
-    takeaways: [
-      "The card with a $0 balance is not costing you interest right now.",
-      "Cash-advance rates are higher than purchase rates and worth avoiding.",
-      "The larger balance has fallen from its last statement, so it is already moving in the right direction.",
-    ],
-    actions: [
-      "Pay the $1,347.26 balance first because it creates the largest interest charge.",
-      "Avoid cash advances at rates near 30%.",
-      "If balances persist, compare lower-rate payoff options.",
-    ],
-  },
-];
 
 export { decisions as DEMO_DECISIONS };
 
@@ -129,14 +39,6 @@ const allocation = [
   ["Unrecognized holdings", "$57,697.10", "2.5%"],
   ["Manual Investments", "$45,894.76", "2.0%"],
   ["Cash", "$2,517.35", "0.1%"],
-] as const;
-
-const mathFacts = [
-  ["Net worth", "$3,645,158", "Financial snapshot"],
-  ["Total cash", "$76,970", "Connected cash accounts"],
-  ["Total debt", "$351,484", "Connected debt accounts"],
-  ["Total investments", "$2,274,872", "Investment snapshot"],
-  ["Current age", "48", "Profile"],
 ] as const;
 
 function DemoOverview({ onOpenFinances }: { onOpenFinances: () => void }) {
@@ -169,7 +71,8 @@ function DemoOverview({ onOpenFinances }: { onOpenFinances: () => void }) {
 function AnswerPanel({ decision }: { decision: DemoDecision }) {
   return (
     <div className="demo-answer-panel">
-      <div className="demo-current-answer"><span>✓</span> Current answer</div>
+      <div className="demo-current-answer"><span>✓</span> Linc’s answer</div>
+      <p className="demo-answer-summary"><strong>{decision.verdict}</strong> {decision.summary}</p>
       <section aria-label="Demo key metrics">
         <h3>Key metrics</h3>
         <div className="demo-metrics-grid">
@@ -182,83 +85,41 @@ function AnswerPanel({ decision }: { decision: DemoDecision }) {
           ))}
         </div>
       </section>
-      <p className="demo-answer-summary">{decision.summary}</p>
       <section className="demo-answer-list" aria-label="Demo takeaways">
-        <h3><span aria-hidden="true">♧</span> Takeaways</h3>
+        <h3><span aria-hidden="true">♧</span> What I’d pay attention to</h3>
         <ol>{decision.takeaways.map((item) => <li key={item}>{item}</li>)}</ol>
       </section>
       <section className="demo-answer-list demo-action-list" aria-label="Demo action items">
-        <h3><span aria-hidden="true">✓</span> Action items</h3>
+        <h3><span aria-hidden="true">✓</span> What I’d do next</h3>
         <ol>{decision.actions.map((item) => <li key={item}>{item}</li>)}</ol>
       </section>
     </div>
   );
 }
 
-function MathPanel() {
-  const [openSection, setOpenSection] = useState("facts");
-  const sections = [
-    ["facts", "Canonical facts and provenance"],
-    ["planning", "Context planning"],
-    ["validation", "Deterministic validation"],
-    ["snapshot", "Snapshot and selected context"],
-  ] as const;
-
+function MathPanel({ decision }: { decision: DemoDecision }) {
   return (
     <div className="demo-math-panel">
-      <div className="demo-panel-heading">
-        <div><span aria-hidden="true">▦</span><div><h3>Calculations and pipeline</h3><p>Inspect the context, intermediate work, and validation behind this answer.</p></div></div>
-      </div>
-      <div className="demo-accordion">
-        {sections.map(([id, label]) => {
-          const open = openSection === id;
-          return (
-            <section key={id}>
-              <button type="button" aria-expanded={open} onClick={() => setOpenSection(open ? "" : id)}>
-                <span>{label}</span><i>{open ? "−" : "+"}</i>
-              </button>
-              {open ? (
-                <div className="demo-accordion-content">
-                  {id === "facts" ? (
-                    <table><thead><tr><th>Number used</th><th>Value</th><th>Where it came from</th></tr></thead><tbody>{mathFacts.map(([label, value, source]) => <tr key={label}><td>{label}</td><td>{value}</td><td>{source}</td></tr>)}</tbody></table>
-                  ) : null}
-                  {id === "planning" ? <div className="demo-check-grid"><span><b>Goal</b>Retirement planning</span><span><b>Time horizon</b>10+ years</span><span><b>Spending assumption</b>$150,000/year</span><span><b>Inflation</b>3.3%</span></div> : null}
-                  {id === "validation" ? <div className="demo-validation"><strong>✓ 5 key figures checked</strong><p>Balances match the saved financial snapshot. No conflicting totals were used in the answer.</p></div> : null}
-                  {id === "snapshot" ? <div className="demo-check-grid"><span><b>Accounts</b>22</span><span><b>Holdings</b>118</span><span><b>Securities</b>79</span><span><b>Snapshot date</b>Aug 30, 2026</span></div> : null}
-                </div>
-              ) : null}
-            </section>
-          );
-        })}
-      </div>
+      <div className="demo-panel-heading"><div><span aria-hidden="true">▦</span><div><h3>The numbers behind this answer</h3><p>Inputs, assumptions, and calculations for this example.</p></div></div></div>
+      <section className="demo-answer-list">
+        <h3>Your numbers</h3>
+        <div className="demo-accordion-content"><table><thead><tr><th>Input</th><th>Value</th><th>Source</th></tr></thead><tbody>{decision.facts.map(([label, value, source]) => <tr key={label}><td>{label}</td><td>{value}</td><td>{source}</td></tr>)}</tbody></table></div>
+      </section>
+      <section className="demo-answer-list"><h3>Assumptions</h3><ul>{decision.assumptions.map(item => <li key={item}>{item}</li>)}</ul></section>
+      <section className="demo-answer-list">
+        <h3>Calculations</h3>
+        <div className="demo-accordion-content"><table><thead><tr><th>Calculation</th><th>Result</th><th>How it was worked out</th></tr></thead><tbody>{decision.calculations.map(([label, value, method]) => <tr key={label}><td>{label}</td><td>{value}</td><td>{method}</td></tr>)}</tbody></table></div>
+      </section>
+      <section className="demo-answer-list"><h3>Checks and limits</h3><ul>{decision.checks.map(item => <li key={item}>{item}</li>)}</ul></section>
     </div>
   );
 }
 
-function SourcesPanel() {
-  const [source, setSource] = useState<"facts" | "market">("facts");
+function SourcesPanel({ decision }: { decision: DemoDecision }) {
   return (
     <div className="demo-sources-panel">
-      <div className="demo-panel-heading">
-        <p>EVIDENCE BUNDLE</p>
-        <div><span aria-hidden="true">▤</span><div><h3>Supporting evidence</h3><p>These are the real data groups recorded with this answer.</p></div></div>
-      </div>
-      <div className="demo-source-cards">
-        <button type="button" className={source === "facts" ? "active" : ""} onClick={() => setSource("facts")}>
-          <small>SOURCE 01</small><strong>Canonical Facts</strong><span>344 recorded items</span><b>{source === "facts" ? "Hide source data" : "View source data"}</b>
-        </button>
-        <button type="button" className={source === "market" ? "active" : ""} onClick={() => setSource("market")}>
-          <small>SOURCE 02</small><strong>Market News History</strong><span>1 recorded item</span><b>{source === "market" ? "Hide source data" : "View source data"}</b>
-        </button>
-      </div>
-      <section className="demo-source-detail" aria-live="polite">
-        <div><strong>{source === "facts" ? "canonical facts" : "market news history"}</strong><span>−</span></div>
-        {source === "facts" ? (
-          <table><thead><tr><th>Recorded item</th><th>Value</th><th>Source</th></tr></thead><tbody>{mathFacts.slice(0, 4).map(([label, value, origin]) => <tr key={label}><td>{label}</td><td>{value}</td><td>{origin}</td></tr>)}</tbody></table>
-        ) : (
-          <div className="demo-market-source"><small>CHECKED AUG 25, 2026</small><strong>Current inflation and market context</strong><p>CPI inflation: 3.3% year over year. Current market information was attached to the saved answer.</p></div>
-        )}
-      </section>
+      <div className="demo-panel-heading"><div><span aria-hidden="true">▤</span><div><h3>Where the numbers came from</h3><p>Sample inputs and calculation sources for this answer.</p></div></div></div>
+      {decision.sources.map(source => <section className="demo-answer-list" key={source.title}><h3>{source.title}</h3><p>{source.detail}</p>{source.href ? <Link className="demo-text-button" href={source.href}>Explore this source <span aria-hidden="true">→</span></Link> : null}</section>)}
     </div>
   );
 }
@@ -352,16 +213,15 @@ function DecisionsView({
         ))}
       </aside>
       <div className="demo-decision-workspace">
-        <div className="demo-workspace-title"><div><span>DECISION WORKSPACE</span><h2>Make the next financial decision with context.</h2></div><button type="button" onClick={onOpenFinances}>Review connected data <span>›</span></button></div>
+        <div className="demo-workspace-title"><div><span>DECISION WORKSPACE</span><h2>Work through your next money decision.</h2></div><button type="button" onClick={onOpenFinances}>Review connected data <span>›</span></button></div>
         <section className="demo-question-card" aria-label="Demo decision analysis">
           <div className="demo-question-main">
             <span>ASK LINC</span>
-            <label htmlFor="demo-question">Your financial question</label>
-            <textarea id="demo-question" value={decision.question} readOnly />
-            <p>Uses connected accounts, calculations, and current context when available.</p>
+            <h3 className="demo-question-text" id="demo-question">{decision.question}</h3>
+            <p>Example answer based on the sample accounts and assumptions shown here.</p>
           </div>
           <button type="button" className="demo-ask-button" onClick={() => setAskNotice(true)}>Ask follow-up <span>↑</span></button>
-          {askNotice ? <div className="demo-ask-notice" role="status">Question asking is disabled in this demo. Start a free trial to ask your own.</div> : null}
+          {askNotice ? <div className="demo-ask-notice" role="status">This demo shows saved examples. Start free to ask Linc your own question.</div> : null}
           <div className="demo-tabs" role="tablist" aria-label="Demo decision details">
             {decisionTabs.map((item) => (
               <button
@@ -379,8 +239,8 @@ function DecisionsView({
           <div className="demo-decision-layout">
             <div className="demo-tab-content">
               {tab === "answer" ? <AnswerPanel decision={decision} /> : null}
-              {tab === "math" ? <MathPanel /> : null}
-              {tab === "sources" ? <SourcesPanel /> : null}
+              {tab === "math" ? <MathPanel decision={decision} /> : null}
+              {tab === "sources" ? <SourcesPanel decision={decision} /> : null}
             </div>
             <DemoOverview onOpenFinances={onOpenFinances} />
           </div>
@@ -429,7 +289,7 @@ function AccountsView() {
       <div className="demo-page-heading"><span>ACCOUNTS &amp; CONTEXT</span><h2>Your accounts &amp; context</h2><p>Keep the information behind every answer current.</p></div>
       <section className="demo-context-card">
         <div><span>WHAT LINC REMEMBERS</span><h3>Your household context</h3></div>
-        <dl><div><dt>Age</dt><dd>48</dd></div><div><dt>Household</dt><dd>Married</dd></div><div><dt>Home value</dt><dd>$1,644,800</dd></div><div><dt>Annual retirement spending</dt><dd>$150,000</dd></div></dl>
+        <dl><div><dt>Age</dt><dd>48</dd></div><div><dt>Household</dt><dd>Married</dd></div><div><dt>Home value</dt><dd>$1,644,800</dd></div><div><dt>Annual retirement spending</dt><dd>$150,000</dd></div><div><dt>Annual take-home pay</dt><dd>$195,000</dd></div><div><dt>Annual saving</dt><dd>$45,000</dd></div></dl>
       </section>
       <section className="demo-connected-summary">
         <div className="demo-section-title"><div><span>READ-ONLY CONNECTIONS</span><h3>Connected financial accounts</h3></div><b>22 accounts</b></div>
@@ -516,7 +376,7 @@ export default function StaticProductDemo({
           {view === "accounts" ? <AccountsView /> : null}
         </main>
       </div>
-      <figcaption>Interactive demo using real product output. Identifying details removed.</figcaption>
+      <figcaption>Illustrative household. Retirement results use Ask Linc’s calculator; home costs use the assumptions shown. Historical results are not forecasts.</figcaption>
     </figure>
   );
 }

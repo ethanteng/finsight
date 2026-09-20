@@ -1,3 +1,4 @@
+import { HOME_BUYING_EXAMPLE } from "@/lib/promptExamples";
 import Link from "next/link";
 import { MarketingGetStartedButton } from "./MarketingGetStartedButton";
 import { TRIAL_CTA_MICROCOPY } from "./trial-copy";
@@ -12,20 +13,20 @@ const answerLayers = [
 ] as const;
 
 const pipelineSteps = [
-  ["01", "Start with the decision", "Linc identifies what you are trying to decide before deciding which inputs or calculations matter."],
-  ["02", "Build the financial model", "Cash, spending, debt, investments, property, goals, rates, or market history are included only when they could change the answer."],
-  ["03", "Run deterministic calculations", "Purpose-built tools handle supported math and scenarios. The language model does not invent those calculated results."],
-  ["04", "Check and explain the result", "Reasoning and calculation stay separate. Linc explains the tradeoffs and keeps the inputs, assumptions, checks, and sources attached."],
+  ["01", "Start with the decision", "Linc reads your question and identifies the numbers needed to answer it."],
+  ["02", "Build the financial model", "Linc brings together the relevant accounts, spending, income, and assumptions for your plan."],
+  ["03", "Calculate the results", "For supported scenarios, dedicated calculators run the math. AI interprets the results."],
+  ["04", "Check and explain the result", "Linc checks the figures, explains the tradeoffs, and shows the information behind its answer."],
 ] as const;
 
 export const TRUST_FAQS = [
   {
     question: "Can AI get financial numbers wrong?",
-    answer: "Yes. A polished answer can still contain bad math, hidden assumptions, or unsupported conclusions. Ask Linc reduces that risk by grounding the answer in your financial data, using purpose-built calculations for supported scenarios, checking the result, and showing you the work.",
+    answer: "Yes. A confident answer can still be wrong. Ask Linc uses your financial data and dedicated calculators for supported scenarios, checks the results, and shows its work so you can check it too.",
   },
   {
     question: "Does Ask Linc use AI to perform financial calculations?",
-    answer: "AI helps understand the question, compare tradeoffs, and explain the result. Purpose-built tools handle supported financial calculations rather than asking a chatbot to make up the math in the conversation.",
+    answer: "AI helps understand the question, compare tradeoffs, and explain the result. Dedicated calculators handle the supported financial calculations, and AI explains their results.",
   },
   {
     question: "What is Show the Math?",
@@ -33,7 +34,7 @@ export const TRUST_FAQS = [
   },
   {
     question: "Why can an answer change over time?",
-    answer: "Because your finances or the world can change. Balances, spending, investments, rates, goals, or assumptions may move. Ask Linc shows what changed and why the answer moved with it.",
+    answer: "Your balances, spending, goals, or assumptions may change. Interest rates and market conditions can change too. Ask Linc explains how those changes affect the answer.",
   },
   {
     question: "Is Ask Linc an AI financial advisor?",
@@ -61,8 +62,8 @@ export default function TrustPage() {
 
         <article className="trust-audit-card" aria-label="Illustrative Ask Linc answer with checks">
           <div className="trust-audit-top"><div><span className="brand-mark small" aria-hidden="true">L</span><b>SHOW THE MATH</b></div><span>ILLUSTRATIVE</span></div>
-          <div className="trust-audit-question"><small>YOUR QUESTION</small><p>Can we afford this house without setting retirement back?</p></div>
-          <div className="trust-audit-verdict"><span>✓</span><div><small>CONCLUSION</small><strong>Yes—if you keep enough cash after closing and leave retirement contributions unchanged.</strong></div></div>
+          <div className="trust-audit-question"><small>YOUR QUESTION</small><p>{HOME_BUYING_EXAMPLE.prompt}</p></div>
+          <div className="trust-audit-verdict"><span>✓</span><div><small>CONCLUSION</small><strong>{HOME_BUYING_EXAMPLE.response}</strong></div></div>
           <div className="trust-audit-layers">
             {answerLayers.map(([label, description]) => <div key={label}><span>✓</span><b>{label}</b><small>{description}</small><i>VIEW</i></div>)}
           </div>
@@ -78,7 +79,7 @@ export default function TrustPage() {
               <article key={number}><div><span>{number}</span><small>ANSWER STEP</small></div><h3>{title}</h3><p>{description}</p></article>
             ))}
           </div>
-          <p className="trust-pipeline-caveat">No product is perfect. That is why being able to inspect the work matters.</p>
+          <p className="trust-pipeline-caveat">Linc can still make mistakes. Check the inputs and assumptions before acting on an answer.</p>
         </div>
       </section>
 
@@ -86,13 +87,13 @@ export default function TrustPage() {
         <div>
           <p className="section-kicker">TRUST INCLUDES YOUR DATA</p>
           <h2>Your financial data is never used to train AI models.</h2>
-          <p>Connections are read-only. Sensitive identifying labels are removed before AI analysis. You can disconnect accounts anytime.</p>
+          <p>Connections are read-only. Identifying details are removed before AI analysis. You can disconnect accounts anytime.</p>
         </div>
         <Link href="/how-we-protect-your-data">See how your data is protected <span>→</span></Link>
       </section>
 
       <section className="page-section shell compact-faq">
-        <div><p className="section-kicker">COMMON QUESTIONS</p><h2>Good skepticism is useful here.</h2></div>
+        <div><p className="section-kicker">COMMON QUESTIONS</p><h2>Questions about accuracy.</h2></div>
         <div>{TRUST_FAQS.map((item) => <details key={item.question}><summary>{item.question}<span>+</span></summary><p>{item.answer}</p></details>)}</div>
       </section>
 

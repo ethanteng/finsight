@@ -128,7 +128,7 @@ describe('RegisterForm', () => {
       render(<RegisterForm variant="trial" />);
 
       expect(await screen.findByRole('heading', {
-        name: 'Let’s make your retirement analysis more accurate.',
+        name: 'Save your retirement plan.',
       })).toBeInTheDocument();
       expect(screen.queryByRole('heading', { name: 'Try free for 30 days.' })).not.toBeInTheDocument();
 
@@ -163,7 +163,7 @@ describe('RegisterForm', () => {
       render(<RegisterForm variant="trial" />);
 
       expect(await screen.findByRole('heading', {
-        name: 'Now find out what coasting would actually cost you.',
+        name: 'Save your Coast FIRE result.',
       })).toBeInTheDocument();
 
       const summary = screen.getByRole('region', { name: 'Your Coast FIRE scenario' });

@@ -26,6 +26,13 @@ export const RETIREMENT_STORY_EXAMPLE = {
     "firstStartMonth": "1926-07",
     "lastStartMonth": "1983-07"
   },
+  "spendingAlternative": {
+  "retirementAge": 55,
+  "annualSpending": 72000,
+  "sequencesTested": 685,
+  "sequencesSurvived": 685,
+  "firstYearWithdrawalRate": 0.04189047109873808
+},
   "scenarios": [
     {
       "retirementAge": 55,

@@ -24,7 +24,7 @@ export const RETIREMENT_CALCULATOR_FAQ: RetirementCalculatorFaq[] = [
   {
     question: 'How much do I need to retire?',
     answer:
-      'There is no single number. It depends on what you spend, when you stop working, what other income arrives and when, and how markets behave in the first decade after you retire. This calculator works the question backwards: you give it your spending, investments, contributions and Social Security estimate, and it reports how many historical retirements that plan survived and what level of spending the same history was willing to fund.',
+      'There is no single number. It depends on what you spend, when you stop working, what other income arrives and when, and how markets behave in the first decade after you retire. This calculator works the question backwards: you give it your spending, investments, contributions and Social Security estimate, and it reports how many historical retirements that plan survived and what level of spending those historical returns could support.',
   },
   {
     question: 'Is the 4% rule still a safe withdrawal rate?',
@@ -49,11 +49,11 @@ export const RETIREMENT_CALCULATOR_FAQ: RetirementCalculatorFaq[] = [
   {
     question: 'What does this retirement calculator not model?',
     answer:
-      'Taxes, account types, required minimum distributions and Roth conversions are not modeled. Neither are fund fees, health insurance before Medicare, one-off expenses, changes in spending through retirement, home equity, or pensions other than the income you enter. Your asset mix is one of three presets rather than your real holdings. Every result lists these gaps rather than hiding them.',
+      'Taxes, account types, required minimum distributions and Roth conversions are not modeled. Neither are fund fees, health insurance before Medicare, one-off expenses, changes in spending through retirement, home equity, or pensions other than the income you enter. Your asset mix is one of three presets rather than your real holdings. These limits are listed with your result.',
   },
   {
     question: 'Is it free, and do I need an account?',
     answer:
-      'It is free and there is no sign-up. Nothing you type is saved; the six numbers are used for that one calculation. Connecting your real accounts to Ask Linc is what replaces the estimates with your actual holdings, spending, debts and income.',
+      'You can try the calculator free without an account. We keep calculator inputs and results to improve the model. Create a free account to save your result, keep exploring, and connect your accounts.',
   },
 ];

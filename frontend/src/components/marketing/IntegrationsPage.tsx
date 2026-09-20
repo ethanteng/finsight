@@ -8,19 +8,19 @@ const financialPicture = [
   {
     number: "01",
     title: "Cash, spending, and debt",
-    copy: "Checking, savings, cards, loans, income, and spending show what is available now and what the decision has to fit around.",
+    copy: "See your available cash, monthly spending, and debt payments together.",
     examples: ["Checking + savings", "Credit cards + loans", "Income + spending"],
   },
   {
     number: "02",
     title: "Investments, property, and goals",
-    copy: "Brokerage and retirement accounts, home value, and longer-term goals show what the decision could help—or set back.",
+    copy: "Include your investments and home value when planning for retirement, a move, or a change in income.",
     examples: ["Brokerage + retirement", "Home value", "Retirement + other goals"],
   },
   {
     number: "03",
-    title: "What is true now",
-    copy: "Rates, market prices, current rules, and long-term history are added when they can materially change the answer.",
+    title: "Current rates and market data",
+    copy: "Linc adds current rates, market prices, relevant rules, and historical returns when they affect your question.",
     examples: ["Mortgage + Treasury rates", "Market prices", "Rules + market history"],
   },
 ] as const;
@@ -56,8 +56,8 @@ export default function IntegrationsPage() {
       <section className="integration-principles" aria-label="How Ask Linc handles financial data">
         <div className="shell">
           <span><strong>READ-ONLY</strong><small>Linc cannot move your money</small></span>
-          <span><strong>MODEL INPUTS</strong><small>The decision determines what data matters</small></span>
-          <span><strong>ONLY WHAT MATTERS</strong><small>No need to throw every data point at every answer</small></span>
+          <span><strong>RELEVANT DATA</strong><small>Linc uses the numbers your question needs</small></span>
+          <span><strong>FILL IN THE GAPS</strong><small>Add details that connected accounts don’t include</small></span>
           <span><strong>CHECKABLE</strong><small>See the facts and sources behind the result</small></span>
         </div>
       </section>
@@ -83,7 +83,7 @@ export default function IntegrationsPage() {
         <div className="shell">
           <div className="integration-section-heading">
             <div><p className="section-kicker">WHERE THE FACTS COME FROM</p><h2>Know where the numbers come from.</h2></div>
-            <p>You do not need to know the provider names to use Ask Linc. They are shown so you can inspect where an input came from and when current information was checked.</p>
+            <p>These providers supply account data, property estimates, and market information. You can check the sources behind your answer in Show the Math.</p>
           </div>
           <div className="coverage-grid" aria-label="Ask Linc data providers">
             {sources.map(([name, description], index) => (

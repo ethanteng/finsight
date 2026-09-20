@@ -135,7 +135,7 @@ export const canIRetireWithTwoMillion: AnswerPageData = {
     tocLabel: "What $2M can support",
     heading: "What can $2 million support?",
     tableCaption: "First-year withdrawals from a $2 million portfolio",
-    noteTitle: "Keep the language precise.",
+    noteTitle: "A withdrawal rate is not an investment return.",
     noteBody: "“4%” describes an initial withdrawal equal to $80,000. It is not the same thing as earning 4%, and it is not a guarantee that the balance never falls.",
   },
   withdrawalScenarios: [
@@ -157,7 +157,7 @@ export const canIRetireWithTwoMillion: AnswerPageData = {
     ],
     result: "The initial portfolio withdrawal rate is 4%.",
     note:
-      "This is only a starting frame. It does not yet include your actual tax mix, investment fees, healthcare costs, spending changes, or the timing of each income source.",
+      "This is a starting estimate. It does not yet include your actual tax mix, investment fees, healthcare costs, spending changes, or the timing of each income source.",
   },
   scenarioTableCaption: "Illustrative income needs with $30,000 of annual income outside the portfolio",
   scenarioTableFootnote: "All scenarios use the same $2 million starting portfolio and $30,000 of illustrative annual income outside the portfolio. Gross income target means income before taxes. Real plans should model when each income source begins.",
@@ -183,7 +183,7 @@ export const canIRetireWithTwoMillion: AnswerPageData = {
     "Decide which expenses can flex if the plan falls outside its target range.",
   ],
   productBridge: {
-    heading: "$2 million is a number. Retirement is a connected plan.",
+    heading: "Test a retirement plan with your $2 million.",
     body: "Ask Linc can use your accounts, spending, income, and goals to compare retirement dates and show the assumptions and calculations behind the result.",
   },
   faqs: [
@@ -262,11 +262,11 @@ export const canIRetireWithThreeMillion: AnswerPageData = {
     ],
     result: "The initial portfolio withdrawal rate is 4% before tax.",
     note:
-      "This starting frame does not include the tax character of each withdrawal, investment fees, income-related Medicare premiums, healthcare costs, spending changes, or the date each income source begins.",
+      "This estimate does not include the tax treatment of each withdrawal, investment fees, income-related Medicare premiums, healthcare costs, spending changes, or the date each income source begins.",
   },
   scenarioTableCaption: "Illustrative income needs with $30,000 of annual income outside the portfolio",
   scenarioTableFootnote:
-    "All scenarios use the same $3 million starting portfolio and $30,000 of illustrative annual income outside the portfolio. Gross income target means income before taxes. Real plans should model when each income source begins and the tax character of withdrawals.",
+    "All scenarios use the same $3 million starting portfolio and $30,000 of illustrative annual income outside the portfolio. Gross income target means income before taxes. Real plans should model when each income source begins and the tax treatment of withdrawals.",
   retirementScenarios: [
     { label: "Lower spending", annualIncomeTarget: "$90,000", otherIncome: "$30,000", portfolioWithdrawal: "$60,000", initialRate: "2.0%" },
     { label: "Moderate spending", annualIncomeTarget: "$120,000", otherIncome: "$30,000", portfolioWithdrawal: "$90,000", initialRate: "3.0%" },
@@ -289,7 +289,7 @@ export const canIRetireWithThreeMillion: AnswerPageData = {
     "Define spending flexibility and any legacy, gifting, or charitable goals.",
   ],
   productBridge: {
-    heading: "$3 million is a balance. Retirement is an after-tax cash-flow plan.",
+    heading: "See what your $3 million could provide after taxes.",
     body:
       "Ask Linc can use your accounts, spending, income, and goals to compare retirement dates and show the assumptions and calculations behind the result.",
   },
@@ -369,7 +369,7 @@ export const canIRetireWithOneMillion: AnswerPageData = {
     ],
     result: "The initial portfolio withdrawal rate is 4%.",
     note:
-      "This starting frame does not yet include your actual tax mix, investment fees, healthcare costs, spending changes, or the date each income source begins.",
+      "This estimate does not yet include your actual tax mix, investment fees, healthcare costs, spending changes, or the date each income source begins.",
   },
   scenarioTableCaption: "Illustrative income needs with $30,000 of annual income outside the portfolio",
   scenarioTableFootnote: "All scenarios use the same $1 million starting portfolio and $30,000 of illustrative annual income outside the portfolio. Gross income target means income before taxes. Real plans should model when each income source begins.",
@@ -395,7 +395,7 @@ export const canIRetireWithOneMillion: AnswerPageData = {
     "Set clear spending adjustments before the portfolio falls outside its target range.",
   ],
   productBridge: {
-    heading: "$1 million is a milestone. Retirement is a connected plan.",
+    heading: "See how $1 million fits your retirement plans.",
     body: "Ask Linc can use your accounts, spending, income, and goals to compare retirement dates and show the assumptions and calculations behind the result.",
   },
   faqs: [
@@ -439,7 +439,7 @@ export const canIRetireAt55: AnswerPageData = {
   directAnswer:
     "Yes—retiring at 55 can be realistic when your savings can fund a long retirement and cover the years before Social Security and Medicare.",
   directAnswerDetail:
-    "The hard part is not the birthday itself. It is coordinating accessible savings, healthcare, taxes, spending, and investment risk across several different timelines. Start by sizing the income gap from age 55, then model when each account and benefit becomes available.",
+    "You need to coordinate access to your savings, healthcare, taxes, and spending over many years. Start by sizing the income gap from age 55, then model when each account and benefit becomes available.",
   keyNumbers: [
     { label: "Retirement account milestone", value: "59½", note: "Broader penalty-free access generally begins" },
     { label: "Earliest Social Security", value: "62", note: "Seven years after retiring at 55" },
@@ -530,7 +530,7 @@ export const canIRetireAt55: AnswerPageData = {
     "Define which expenses or retirement dates could change if the plan misses its target range.",
   ],
   productBridge: {
-    heading: "Age 55 is a date. Retirement is a connected timeline.",
+    heading: "Plan for the years after you retire at 55.",
     body:
       "Ask Linc can use your accounts, spending, income, and goals to compare retirement dates and show the assumptions and calculations behind the result.",
   },
@@ -669,7 +669,7 @@ export const canIRetireAt60: AnswerPageData = {
     "Define which expenses, income sources, or retirement dates could change if the plan misses its target range.",
   ],
   productBridge: {
-    heading: "Age 60 is a starting point. Retirement is a connected timeline.",
+    heading: "Plan for the years after you retire at 60.",
     body:
       "Ask Linc can use your accounts, spending, income, and goals to compare retirement dates and show the assumptions and calculations behind the result.",
   },

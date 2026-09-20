@@ -319,22 +319,29 @@
     min-height: 250px;
   }
 
-  /* The five steps previously reused dark-band colors on a light section,
-     leaving the labels nearly invisible. The compact desktop flow also cuts
-     a long vertical list down to one scannable row. */
+  /* Three steps fill the section; stack them at narrower widths. */
+  .features-start-section .editorial-heading {
+    display: block;
+    margin-bottom: 36px;
+  }
+
+  .features-start-section .editorial-heading h2 {
+    margin-top: 20px;
+    max-width: none;
+  }
+
   :scope.features-page .fact-routing-steps {
     display: grid;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     border-block: 1px solid #b7c1b5;
     border-top-color: #b7c1b5;
   }
 
   :scope.features-page .fact-routing-steps li {
     display: flex;
-    min-height: 230px;
     flex-direction: column;
-    gap: 0;
-    padding: 26px 22px;
+    gap: 18px;
+    padding: 30px;
     border-right: 1px solid #c5cdc2;
     border-bottom: 0;
   }
@@ -348,9 +355,10 @@
     color: #397052;
   }
 
-  :scope.features-page .fact-routing-steps strong {
-    margin-top: 54px;
+  :scope.features-page .fact-routing-steps h3 {
+    margin: 0;
     color: var(--ink);
+    font-size: 22px;
     line-height: 1.25;
   }
 
@@ -535,29 +543,8 @@
       min-height: 140px;
     }
 
-    :scope.features-page .fact-routing-steps {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-
     :scope.features-page .fact-routing-steps li {
-      min-height: 180px;
-      border-right: 1px solid #c5cdc2;
-      border-bottom: 1px solid #c5cdc2;
-    }
-
-    :scope.features-page .fact-routing-steps li:nth-child(2n) {
-      border-right: 0;
-    }
-
-    :scope.features-page .fact-routing-steps li:last-child {
-      grid-column: 1 / -1;
-      min-height: 155px;
-      border-right: 0;
-      border-bottom: 0;
-    }
-
-    :scope.features-page .fact-routing-steps strong {
-      margin-top: 34px;
+      padding: 24px 18px;
     }
 
     :scope.features-page .coverage-grid .coverage-card:last-child:nth-child(odd) {
@@ -717,8 +704,8 @@
       border-bottom: 0;
     }
 
-    :scope.features-page .fact-routing-steps strong {
-      margin-top: 0;
+    :scope.features-page .fact-routing-steps h3 {
+      font-size: 20px;
     }
 
     :scope.features-page .fact-routing-steps p {

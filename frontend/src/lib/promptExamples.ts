@@ -9,9 +9,9 @@ export interface PromptExample {
 }
 
 export const RETIREMENT_EXAMPLE: PromptExample = {
-  prompt: "We are 42 and 44. Are we saving enough to retire at 60 without cutting our current lifestyle?",
+  prompt: "We are 42 and 44. Are we saving enough to retire at 60 without cutting our spending?",
   response:
-    "You are close, but the current savings rate leaves the plan about $110,000 short at age 60. Increasing retirement contributions by $600 a month closes most of the gap. Retiring at 62 would also put the current plan on track without changing contributions.",
+    "I’d try the extra $600 a month before giving up two years of retirement. Your current plan is about $110,000 short at 60; increasing contributions from $2,400 to $3,000 a month closes most of that gap. If that squeeze isn’t realistic, 62 works in this example without changing contributions.",
   keyNumbers: [
     { label: "Saving now", value: "$2,400/mo" },
     { label: "Saving needed", value: "$3,000/mo" },
@@ -32,7 +32,7 @@ export const RETIREMENT_EXAMPLE: PromptExample = {
 export const HOME_BUYING_EXAMPLE: PromptExample = {
   prompt: "Can we afford a $700,000 home without pausing retirement savings or draining our emergency fund?",
   response:
-    "Yes, if you put 15% down and keep total housing costs below $4,800 a month. That leaves about $48,000 after closing—roughly six months of current spending—and lets both of you keep your existing retirement contributions.",
+    "I’d choose 15% down, not 20%. You’d keep $48,000 after closing, or six months of your $8,000 spending. Putting another $35,000 into the house leaves just $13,000 in cash. Keep the all-in housing payment within $4,800 a month to preserve your retirement contributions.",
   keyNumbers: [
     { label: "Home price", value: "$700,000" },
     { label: "Down payment", value: "$105,000" },
@@ -53,7 +53,7 @@ export const HOME_BUYING_EXAMPLE: PromptExample = {
 export const PORTFOLIO_EXAMPLE: PromptExample = {
   prompt: "Is our investment mix taking more risk than we need for retirement at 60?",
   response:
-    "Probably. At 88% stocks, a major downturn near retirement could delay the plan even though your savings rate is healthy. Moving toward 75% stocks over the next three years keeps the age-60 target while reducing the size of a likely drawdown.",
+    "I’d use new contributions to bring stocks from 88% toward 75%, rather than sell everything at once. The age-60 plan still works in this example at 75%. Your main issue is overlapping funds holding the same large companies: owning more funds hasn’t spread the risk as much as it looks.",
   keyNumbers: [
     { label: "Stocks now", value: "88%" },
     { label: "Three-year target", value: "75%" },
@@ -67,14 +67,14 @@ export const PORTFOLIO_EXAMPLE: PromptExample = {
   suggestedActions: [
     "Direct new workplace-plan contributions toward bonds and broad international funds.",
     "Review overlapping holdings before adding another fund.",
-    "Stress-test the age-60 plan against a 25% stock-market decline every year.",
+    "Each year, check how a 25% stock-market drop would affect the age-60 plan.",
   ],
 };
 
 export const GEOPOLITICAL_RETIREMENT_EXAMPLE: PromptExample = {
   prompt: "What would a 15% stock-market drop and a year of higher inflation do to our retirement plan?",
   response:
-    "The age-60 plan still works, but the cushion falls from about $200,000 to $45,000. The main risk is needing cash while investments are down. Keeping nine months of expenses outside the portfolio makes the plan much less sensitive to the timing of the drop.",
+    "I’d build the nine-month cash reserve before adding more stock exposure. In this example, the market drop and higher inflation shrink your projected cushion from $200,000 to $45,000. Age 60 still works, but a large expense could force you to sell investments while they’re down.",
   keyNumbers: [
     { label: "Stress decline", value: "−15%" },
     { label: "Cushion after stress", value: "$45,000" },
@@ -95,7 +95,7 @@ export const GEOPOLITICAL_RETIREMENT_EXAMPLE: PromptExample = {
 export const STRESS_TEST_EXAMPLE: PromptExample = {
   prompt: "Could we handle one income disappearing for a year while paying for childcare?",
   response:
-    "Yes, but only if you cut optional spending and build another $12,000 in cash first. With those changes, the emergency fund covers the one-income gap and childcare for 11 months without using retirement savings.",
+    "I wouldn’t commit to a full year yet. Even after cutting optional spending and adding $12,000 to your $42,000 cash reserve, you have 11 months covered. Close the final month’s gap and price replacement health insurance before one of you leaves; the current estimate doesn’t settle either cost.",
   keyNumbers: [
     { label: "Current cash", value: "$42,000" },
     { label: "Extra cash needed", value: "$12,000" },
@@ -126,7 +126,7 @@ export const PROMPT_PAGES = [
     slug: "home-buying",
     title: "How much house can we afford?",
     description: "See the home price, cash reserve, and monthly cost that fit the rest of the plan.",
-    cta: "Check Your Home Buying Readiness",
+    cta: "Check Your Home Budget",
     example: HOME_BUYING_EXAMPLE,
     useCaseHref: "/use-cases/home-buying",
   },

@@ -81,7 +81,7 @@ export default function DemoPage() {
           <p className="section-kicker">INTERACTIVE PRODUCT DEMO</p>
           <h1>Your question. <em>See where Linc takes it.</em></h1>
           <p>
-            Explore a real financial planning example, from the first question to the numbers, assumptions, and sources behind the answer. No account needed.
+            Retire early, take a pay cut, or buy a bigger home. See how Linc works through each decision, with the numbers behind its answer. No account needed.
           </p>
           <div className="hero-actions">
             <Link className="button button-primary" href="#interactive-demo">
@@ -109,8 +109,7 @@ export default function DemoPage() {
               <h2 id="demo-experience-title">Start with the decision. <em>Then inspect the answer.</em></h2>
             </div>
             <p>
-              Try the tabs, switch decisions, and explore the connected financial picture. Asking a
-              new question is the only thing disabled in this read-only example.
+              Try the tabs, switch between questions, and explore the sample accounts. You can browse the example, but you can’t submit a new question.
             </p>
           </div>
           <StaticProductDemo anchorId={null} trackAnalytics />
@@ -132,7 +131,7 @@ export default function DemoPage() {
       <section className="page-section demo-value-section shell" aria-labelledby="demo-value-title">
         <div className="editorial-heading">
           <p className="section-kicker">WHAT MAKES IT DIFFERENT</p>
-          <h2 id="demo-value-title">More than an answer. <em>A model you can examine.</em></h2>
+          <h2 id="demo-value-title">See the answer. <em>Then check the work.</em></h2>
         </div>
         <div className="demo-value-grid">
           <article>
@@ -143,7 +142,7 @@ export default function DemoPage() {
           </article>
           <article>
             <span>02 / CALCULATIONS</span>
-            <h3>Purpose-built math handles supported scenarios.</h3>
+            <h3>Dedicated calculators run the numbers.</h3>
             <p>For supported planning questions, calculations run outside the language model and remain available to inspect.</p>
             <Link href="/features">See how Ask Linc works <i aria-hidden="true">→</i></Link>
           </article>
@@ -187,7 +186,7 @@ export default function DemoPage() {
       <section className="page-cta">
         <div className="page-cta-inner shell">
           <p className="section-kicker light">START WITH YOUR DECISION</p>
-          <h2>What would you ask with your own financial picture?</h2>
+          <h2>What would you like to ask about your finances?</h2>
           <MarketingGetStartedButton
             className="button button-primary"
             trackingLocation="demo_page_cta"

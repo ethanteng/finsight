@@ -3,7 +3,7 @@ import MarketingSubpage from '../../components/marketing/MarketingSubpage';
 
 export const metadata: Metadata = {
   title: 'Privacy Policy | How Ask Linc Protects Your Financial Data',
-  description: 'Learn how Ask Linc protects your privacy and financial data. Our comprehensive privacy policy explains data collection, encryption, user rights, and security measures.',
+  description: 'Read how Ask Linc collects, uses, stores, and protects your financial data, and how to request access or deletion.',
   keywords: ['privacy policy', 'data protection', 'financial data security', 'privacy', 'data encryption'],
   alternates: {
     canonical: 'https://asklinc.com/privacy',

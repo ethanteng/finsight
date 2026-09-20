@@ -638,7 +638,7 @@ export function RetirementQuickPlan({
       });
     } catch {
       pushRetirementInteraction('retirement_request_error');
-      setError("Could not reach the model. Please try again in a moment.");
+      setError("We couldn’t run the calculation. Please try again in a moment.");
     } finally {
       requestInFlightRef.current = false;
       setIsRunning(false);
@@ -719,7 +719,7 @@ export function RetirementQuickPlan({
             <MoneyField
               id="annualContributions"
               label="Annual contributions until then"
-              hint="What you add each year between now and retiring. Blank counts as nothing."
+              hint="What you add each year between now and retiring. Leave blank to assume $0."
               value={form.annualContributions}
               onChange={setField("annualContributions")}
               placeholder="e.g. 35,000"
@@ -763,8 +763,7 @@ export function RetirementQuickPlan({
                 </p>
               )}
               <p className="qp-hint">
-                Your annual benefit from ssa.gov, and the age you plan to claim it. Blank counts as
-                none.
+                Your annual benefit from ssa.gov, and the age you plan to claim it. Leave blank to assume no Social Security income.
               </p>
             </div>
           </div>
@@ -808,8 +807,8 @@ export function RetirementQuickPlan({
               */}
             <p className="qp-submit-note">
               {locked
-                ? `That is ${runLimitPhrase()}. Save this one to a free account to keep changing the numbers — the same model, with your own accounts behind it, and this run waiting as your first decision.`
-                : "No account, no email, nothing to sign. We keep the numbers to improve the model."}
+                ? `That is ${runLimitPhrase()}. Save this result to a free account to keep exploring and add your connected accounts.`
+                : "No account or email required. We keep calculator inputs and results to improve the model."}
             </p>
           </div>
         </form>
@@ -846,7 +845,7 @@ export function RetirementQuickPlan({
           <h2>
             {carriedResult
               ? "Keep testing this retirement decision."
-              : "Your numbers are the start. Your whole life is the plan."}
+              : "Use your accounts to refine the plan."}
           </h2>
           <p>
             {carriedResult

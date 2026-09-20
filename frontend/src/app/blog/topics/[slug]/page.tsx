@@ -22,7 +22,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   if (!topic) return { title: 'Topic | Ask Linc Blog', robots: { index: false, follow: true } };
 
   const title = `${topic.name} | Ask Linc Blog`;
-  const description = `Ask Linc blog posts on ${topic.name.toLowerCase()} — field notes on the decisions, numbers, and assumptions behind them.`;
+  const description = `Ask Linc blog posts on ${topic.name.toLowerCase()} — guides and articles from Ask Linc.`;
   const url = `https://asklinc.com/blog/topics/${topic.slug}`;
 
   return {

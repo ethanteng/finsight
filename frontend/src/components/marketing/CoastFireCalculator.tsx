@@ -317,14 +317,14 @@ function ResultPanel({ result }: { result: CoastFireResult }) {
   return (
     <aside className="cf-result-card" aria-live="polite" data-cs-mask>
       <div className="cf-result-topline">
-        <h2>{result.hasReachedCoastFire ? "You’ve reached Coast FIRE." : "You’re still building your coast."}</h2>
+        <h2>{result.hasReachedCoastFire ? "You’ve reached Coast FIRE." : "You haven’t reached Coast FIRE yet."}</h2>
         <strong className={result.hasReachedCoastFire ? "is-reached" : "is-building"}>
           {result.hasReachedCoastFire ? "Reached" : "Not yet"}
         </strong>
       </div>
       <p className="cf-result-lead">
         {result.portfolioSpendingNeed === 0
-          ? "The retirement income you entered covers your planned spending, so this formula asks nothing of your portfolio."
+          ? "The retirement income you entered covers your planned spending, so this formula does not require portfolio withdrawals."
           : result.hasReachedCoastFire
             ? `You are ${dollars(result.differenceToday)} above the amount this formula says you need invested today.`
             : `You are ${dollars(Math.abs(result.differenceToday))} short of your Coast FIRE number today.`}
@@ -605,9 +605,7 @@ export function CoastFireCalculator({ children }: { children?: ReactNode }) {
           </button>
           {locked && (
             <p className="cf-form-locked" role="status">
-              That is {runLimitPhrase()}. Save this one to a free account to keep
-              changing the numbers — you will get the same calculator with your own accounts
-              behind it, and this run waiting as your first decision.
+              That is {runLimitPhrase()}. Save this result to a free account to keep exploring and add your connected accounts.
             </p>
           )}
         </form>
@@ -657,8 +655,8 @@ export function CoastFireCalculator({ children }: { children?: ReactNode }) {
           <p className="section-kicker">SEE WHAT CHANGES</p>
           <h2>Your return assumption does most of the work.</h2>
           <p>
-            One point either way compounds for {result?.yearsToRetirement} years. A single green
-            badge should never be the end of the decision.
+            A one-percentage-point change compounds over {result?.yearsToRetirement} years.
+            Compare the results below to see how much your target depends on the return you chose.
           </p>
         </div>
         <div className="cf-sensitivity-table" role="table" aria-label="Coast FIRE number by real return assumption" data-cs-mask>

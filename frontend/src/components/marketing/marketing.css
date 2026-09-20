@@ -1712,8 +1712,7 @@ footer { padding-block: 55px 28px; background: #0a1912; color: white; }.footer-i
 .demo-question-card { overflow: hidden; border: 1px solid #d0d4cc; border-radius: 16px; background: #fffdf5; }
 .demo-question-main { position: relative; padding: 24px 205px 21px 24px; }
 .demo-question-main > span { display: block; margin-bottom: 10px; color: #47745a; font-size: 12px; font-weight: 850; letter-spacing: .14em; }
-.demo-question-main label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
-.demo-question-main textarea { display: block; width: 100%; min-height: 64px; resize: none; border: 0; outline: 0; background: transparent; color: var(--ink); font-family: var(--font-display); font-size: 22px; font-weight: 620; line-height: 1.35; }
+.demo-question-main .demo-question-text { margin: 0; color: var(--ink); font-family: var(--font-display); font-size: 22px; font-weight: 620; line-height: 1.35; }
 .demo-question-main p { margin: 12px 0 0; color: #68766e; font-size: 12px; }
 .demo-ask-button { position: absolute; top: 82px; right: 30px; display: flex; gap: 8px; align-items: center; padding: 13px 18px; border: 0; border-radius: 999px; background: var(--ink); color: white; font-size: 12px; font-weight: 750; cursor: pointer; }
 .demo-question-card { position: relative; }
@@ -1759,13 +1758,22 @@ footer { padding-block: 55px 28px; background: #0a1912; color: white; }.footer-i
 .demo-current-answer { display: flex; gap: 9px; align-items: center; margin-bottom: 20px; color: #40745a; font-size: 12px; font-weight: 750; }
 .demo-current-answer span { display: grid; width: 19px; height: 19px; place-items: center; border: 1px solid #589174; border-radius: 50%; font-size: 12px; }
 .demo-answer-panel section > h3,.demo-allocation > h4,.demo-holdings-table > h4,.demo-transactions > h4 { margin: 0 0 12px; font-family: var(--font-display); font-size: 14px; }
-.demo-metrics-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 7px; }
+.demo-metrics-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 7px; }
 .demo-metrics-grid article { display: grid; gap: 7px; min-height: 104px; padding: 15px; border: 1px solid #dedfd8; border-radius: 10px; background: #f1f0e8; }
 .demo-metrics-grid article > span { color: #627269; font-size: 12px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; }
 .demo-metrics-grid article strong { font-family: var(--font-display); font-size: 21px; }
 .demo-metrics-grid article small { margin-top: auto; color: #75817a; font-size: 12px; }
 .demo-answer-summary { margin: 21px 0; color: #425c4d; font-size: 13px; line-height: 1.65; }
+.demo-answer-summary > strong { display: block; margin-bottom: 12px; color: var(--ink); font-size: 17px; line-height: 1.4; }
 .demo-answer-list { margin-top: 18px; }
+.demo-answer-list > h3 { margin-bottom: 12px; font-size: 14px; }
+.demo-answer-list > p { margin-top: 12px; color: #425c4d; font-size: 14px; line-height: 1.65; }
+.demo-answer-list ul { display: grid; gap: 8px; padding: 0; list-style: none; counter-reset: demo-list; }
+.demo-math-panel .demo-answer-list li { min-height: 0; }
+.demo-math-panel .demo-accordion-content { overflow-x: auto; border: 1px solid #d1d4cd; border-radius: 10px; }
+.demo-math-panel table { width: 100%; border-collapse: collapse; font-size: 13px; line-height: 1.5; }
+.demo-math-panel th, .demo-math-panel td { padding: 11px; border-bottom: 1px solid #e2e3dc; text-align: left; vertical-align: top; overflow-wrap: anywhere; }
+.demo-math-panel th { color: #425c4d; font-size: 12px; }
 .demo-answer-list h3 { display: flex; gap: 7px; align-items: center; }
 .demo-answer-list h3 span { color: #478163; }
 .demo-answer-list ol { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin: 0; padding: 0; counter-reset: demo-list; list-style: none; }
@@ -1934,7 +1942,7 @@ footer { padding-block: 55px 28px; background: #0a1912; color: white; }.footer-i
   .demo-workspace-title h2 { font-size: 26px; }
   .demo-workspace-title > button { margin-top: 8px; }
   .demo-question-main { padding: 17px 15px 12px; }
-  .demo-question-main textarea { min-height: 88px; font-size: 19px; }
+  .demo-question-main .demo-question-text { font-size: 19px; }
   .demo-ask-button { position: static; margin: 0 15px 14px; }
   .demo-tabs { overflow-x: auto; }
   .demo-tab-content { padding: 14px; }

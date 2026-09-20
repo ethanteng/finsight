@@ -88,29 +88,29 @@ const passwordInputClasses = `${inputBaseClasses} pr-12`;
 const TRIAL_COPY = {
   eyebrow: 'Start planning free',
   title: 'Build your plan free for 30 days.',
-  description: 'Bring the decision you are weighing. Turn your real finances into a model you can stress-test and inspect.',
+  description: 'Tell Linc what you’re trying to figure out. It uses your numbers to build a plan you can explore and check.',
   asideEyebrow: 'Self-directed financial planning',
-  asideTitle: 'From one question to a rigorous financial model.',
+  asideTitle: 'Your question. A plan you can work with.',
   asideDescription:
-    'Ask in your own words. Linc brings in the relevant numbers, runs supported calculations, and keeps the assumptions and sources attached to the answer.',
+    'Ask in your own words. Linc runs the numbers, explains your options, and shows how it reached the answer.',
   benefits: [
     'Full access for 30 days — no credit card',
-    'Model what-if scenarios using your real financial state',
+    'Try different scenarios with your own numbers',
     'Inspect the numbers, assumptions, and math',
   ],
   submit: 'Start planning',
-  submitting: 'Creating your planning workspace…',
+  submitting: 'Creating your account…',
 };
 
 const RETIREMENT_TRIAL_COPY = {
   eyebrow: 'Continue your retirement plan',
-  title: 'Let’s make your retirement analysis more accurate.',
+  title: 'Save your retirement plan.',
   description:
-    'Create your account to keep this plan in view and replace the calculator’s estimates with your actual holdings, spending, and income.',
-  asideEyebrow: 'From estimates to actuals',
-  asideTitle: 'Keep the plan. Replace the assumptions.',
+    'Save this result, then connect your accounts to explore a plan based on what you own, earn, and spend.',
+  asideEyebrow: 'USE YOUR OWN ACCOUNTS',
+  asideTitle: 'See how your accounts change the plan.',
   asideDescription:
-    'Ask Linc can rerun the decision with what you actually own, earn, and spend, then let you keep changing the scenario.',
+    'Linc uses your accounts to fill in the details. Ask a follow-up to try a different retirement date or spending budget.',
   benefits: [
     'Continue from the retirement scenario you just modeled',
     'Replace estimated assets and allocation with real holdings',
@@ -127,11 +127,11 @@ const RETIREMENT_TRIAL_COPY = {
  */
 const COAST_FIRE_TRIAL_COPY = {
   eyebrow: 'Continue your Coast FIRE plan',
-  title: 'Now find out what coasting would actually cost you.',
+  title: 'Save your Coast FIRE result.',
   description:
-    'Create your account to replace the calculator’s flat return and withdrawal rate with your real holdings, spending, and income.',
-  asideEyebrow: 'The number is the easy part',
-  asideTitle: 'Know what reaching it lets you change.',
+    'Keep your result and assumptions, then connect your accounts to explore what a pay cut or lower contributions would mean for you.',
+  asideEyebrow: 'WHAT COULD YOU CHANGE?',
+  asideTitle: 'Could you afford to work less?',
   asideDescription:
     'Ask Linc runs the change you are weighing — stopping contributions, a pay cut, one income instead of two — against your actual finances and a century of market history.',
   benefits: [
@@ -144,13 +144,13 @@ const COAST_FIRE_TRIAL_COPY = {
 };
 
 const ACCOUNT_COPY = {
-  asideTitle: 'Keep every decision in one planning model.',
+  asideTitle: 'Keep your plans together.',
   asideDescription:
-    'Your balances, holdings, history, goals, and assumptions stay available as inputs to the next decision you model.',
+    'Come back to your questions and update your plans as your finances change.',
   benefits: [
-    'Decision-ready answers grounded in your data',
-    'Calculations and supporting evidence one click away',
-    'Private, protected access to your financial context',
+    'Answers based on your own finances',
+    'The math and sources behind your answer',
+    'Read-only connections to your accounts',
   ],
 };
 
@@ -786,7 +786,7 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
           ? trialCopy.description
           : subscriptionContext
             ? 'Set a password to open your workspace. Verifying your email activates your subscription.'
-            : 'Join Ask Linc and start working through your financial decisions with your own data.'
+            : 'Create an account and ask Linc what you’d like to figure out.'
       }
       asideEyebrow={isTrial ? trialCopy.asideEyebrow : undefined}
       asideTitle={isTrial ? trialCopy.asideTitle : ACCOUNT_COPY.asideTitle}
@@ -903,7 +903,7 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
             Email address
           </label>
           <div className="relative">
-            <Mail className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[#71857f]" size={18} />
+            <Mail className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[#50695f]" size={18} />
             <input
               id="email"
               type="email"
@@ -932,7 +932,7 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
             Password
           </label>
           <div className="relative">
-            <LockKeyhole className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[#71857f]" size={18} />
+            <LockKeyhole className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[#50695f]" size={18} />
             <input
               id="password"
               type={showPassword ? 'text' : 'password'}
@@ -953,14 +953,14 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
               onClick={() => setShowPassword((shown) => !shown)}
               aria-label={showPassword ? 'Hide password' : 'Show password'}
               aria-pressed={showPassword}
-              className="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg p-1.5 text-[#71857f] transition hover:text-[#123c2f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#123c2f]/30"
+              className="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg p-1.5 text-[#50695f] transition hover:text-[#123c2f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#123c2f]/30"
             >
               {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
             </button>
           </div>
           {/* Mirrors validatePassword() in src/auth/utils.ts, so the rules are
               visible before the server rejects the form. */}
-          <p id="password-requirements" className="mt-2 text-xs leading-5 text-[#71857f]">
+          <p id="password-requirements" className="mt-2 text-xs leading-5 text-[#50695f]">
             At least 8 characters, with an uppercase letter, a lowercase letter, and a number.
           </p>
         </div>
@@ -971,7 +971,7 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
               Confirm password
             </label>
             <div className="relative">
-              <LockKeyhole className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[#71857f]" size={18} />
+              <LockKeyhole className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[#50695f]" size={18} />
               <input
                 id="confirmPassword"
                 type="password"
@@ -1007,7 +1007,7 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
         </button>
 
         {isTrial && (
-          <p className="text-center text-xs leading-5 text-[#71857f]">
+          <p className="text-center text-xs leading-5 text-[#50695f]">
             By starting a trial you agree to our{' '}
             <Link href="/terms" className="font-semibold underline underline-offset-2">Terms</Link>
             {' '}and{' '}
@@ -1017,7 +1017,7 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
       </form>
 
       <div className="mt-7 border-t border-[#123c2f]/10 pt-6 text-center">
-        <p className="text-sm text-[#607b72]">
+        <p className="text-sm text-[#50695f]">
           Already have an account?{' '}
           <Link
             href="/login"
@@ -1058,7 +1058,7 @@ function compactMoney(value: number): string {
 function ScenarioValue({ label, value }: { label: string; value: string }) {
   return (
     <div className="min-w-0 rounded-xl bg-[#edf1e9] px-3 py-3">
-      <dt className="text-[11px] font-semibold leading-4 text-[#607b72]">{label}</dt>
+      <dt className="text-[11px] font-semibold leading-4 text-[#50695f]">{label}</dt>
       <dd className="mt-1 truncate text-base font-bold text-[#123c2f]">{value}</dd>
     </div>
   );

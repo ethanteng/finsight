@@ -3,7 +3,7 @@ import ResetPasswordForm from '../../components/ResetPasswordForm';
 
 export const metadata: Metadata = {
   title: 'Set New Password | Ask Linc Account Security',
-  description: 'Create a new secure password for your Ask Linc account. Use the reset link from your email to securely update your password and regain access to your financial dashboard.',
+  description: 'Choose a new password for your Ask Linc account using the reset link in your email.',
   robots: { index: false, follow: false },
 };
 

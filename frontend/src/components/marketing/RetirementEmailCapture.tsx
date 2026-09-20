@@ -145,8 +145,8 @@ export function RetirementEmailCapture({
         <p className="section-kicker">SAVING THIS RUN</p>
         <h3>Taking you to your account…</h3>
         <p>
-          Your plan is on its way to <strong>{email.trim()}</strong> as well, so you can pick
-          this up later if you would rather not finish now.
+          We’re also emailing your result to <strong>{email.trim()}</strong>, so you can finish
+          creating your account later.
         </p>
       </div>
     );
@@ -183,9 +183,8 @@ export function RetirementEmailCapture({
         <h3>Save this to a free account</h3>
         {compact ? <p className="qp-email-lead">Keep this result and get an email copy.</p> : (
         <p className="qp-email-lead">
-          Pick a password on the next screen and this run is waiting as your first decision —
-          the verdict, the figures behind it, and the scenarios, ready to pick up and ask
-          questions about. We will email you a copy either way.
+          Create a password on the next screen to save your result, assumptions, and scenarios.
+          We’ll also email you a copy.
         </p>
         )}
 

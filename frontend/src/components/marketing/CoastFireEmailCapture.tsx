@@ -136,9 +136,8 @@ export function CoastFireEmailCapture({ result, compact = false }: { result: Coa
         <p className="section-kicker">SAVING THIS RUN</p>
         <h3>Taking you to your account…</h3>
         <p>
-          Your Coast FIRE number and the assumptions behind it are on their way to{" "}
-          <strong>{email.trim()}</strong> as well, so you can pick this up later if you would
-          rather not finish now.
+          We’re also emailing your result to <strong>{email.trim()}</strong>, so you can finish
+          creating your account later.
         </p>
       </div>
     );
@@ -175,10 +174,8 @@ export function CoastFireEmailCapture({ result, compact = false }: { result: Coa
         <h3>Save this to a free account</h3>
         {compact ? <p className="cf-email-lead">Keep this result and get an email copy.</p> : (
         <p className="cf-email-lead">
-          Pick a password on the next screen and this run is waiting as your first decision —
-          your number, every assumption behind it, and what it would look like if returns come in
-          a point lower, ready to pick up and ask questions about. We will email you a copy
-          either way.
+          Create a password on the next screen to save your Coast FIRE number, assumptions,
+          and return comparison. We’ll also email you a copy.
         </p>
         )}
 

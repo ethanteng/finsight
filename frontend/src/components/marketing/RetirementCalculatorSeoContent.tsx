@@ -41,7 +41,7 @@ export function RetirementCalculatorSeoContent() {
           <li>
             <Link href="/retirement-answers">
               <strong>Retirement guides</strong>
-              <span>The first-year math behind the questions people actually search for.</span>
+              <span>Explore how your savings and retirement date affect the plan.</span>
             </Link>
           </li>
           <li>
@@ -83,7 +83,7 @@ export function RetirementCalculatorSeoContent() {
           <li>
             <Link href="/blog/ai-financial-calculator">
               <strong>What makes an AI financial calculator trustworthy?</strong>
-              <span>Separate conversational help from the deterministic math a consequential decision needs.</span>
+              <span>Learn how to check a calculator’s inputs, assumptions, and results.</span>
             </Link>
           </li>
         </ul>

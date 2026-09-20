@@ -104,7 +104,7 @@ export default function RetirementAnswersPage() {
           <p className="section-kicker">RETIREMENT</p>
           <h1>Start with the math. <em>Then test the whole plan.</em></h1>
           <p className="answer-hub-standfirst">
-            A portfolio balance or retirement age is only the opening question. These guides show the first-year math, the assumptions that change the result, and the next questions worth testing.
+            See what different savings balances could provide and what retiring at 55 or 60 would require. Each guide explains the calculation and its limits.
           </p>
           <div className="answer-hub-hero-links">
             <a className="button button-dark" href="#by-portfolio">Explore the guides <span aria-hidden="true">↓</span></a>
@@ -114,7 +114,7 @@ export default function RetirementAnswersPage() {
           <span>HOW TO START</span>
           <ol>
             <li><b>01</b><div><strong>Set the spending need</strong><small>Include taxes, healthcare, and irregular costs.</small></div></li>
-            <li><b>02</b><div><strong>Subtract other income</strong><small>Time Social Security, pensions, and work by year.</small></div></li>
+            <li><b>02</b><div><strong>Subtract other income</strong><small>Include when Social Security, pensions, or work income begin.</small></div></li>
             <li><b>03</b><div><strong>Try a few what-ifs</strong><small>Change returns, inflation, timing, and flexibility.</small></div></li>
           </ol>
         </aside>
@@ -169,7 +169,7 @@ export default function RetirementAnswersPage() {
       <section className="answer-hub-age-section">
         <div className="shell">
           <div className="answer-hub-section-head">
-            <div><p className="section-kicker">BY RETIREMENT AGE</p><h2 id="age-heading">What must the early years bridge?</h2></div>
+            <div><p className="section-kicker">BY RETIREMENT AGE</p><h2 id="age-heading">How will you cover the early years?</h2></div>
             <p>Retiring before Medicare or Social Security changes what your plan needs to cover first. Start with the benefits and tax milestones that arrive after work stops.</p>
           </div>
           <div className="answer-hub-age-grid" aria-labelledby="age-heading">
@@ -192,13 +192,13 @@ export default function RetirementAnswersPage() {
         <div className="shell">
           <div>
             <p className="section-kicker light">SOURCES &amp; METHODOLOGY</p>
-            <h2>Useful estimates. Explicit limits.</h2>
+            <h2>How these estimates work.</h2>
             <p>Every answer separates the math from the judgment calls. Withdrawal examples use simple starting-balance math. They do not predict returns or guarantee how long a portfolio will last.</p>
           </div>
           <ol>
             <li><span>01</span><div><strong>Show the calculation</strong><p>Rates, amounts, income gaps, and assumptions stay visible.</p></div></li>
             <li><span>02</span><div><strong>Use primary sources</strong><p>Each guide links to relevant IRS, Social Security, Medicare, and federal data.</p></div></li>
-            <li><span>03</span><div><strong>Model the consequential decision</strong><p>Use Ask Linc to replace the examples with your real financial state, then change the date, spending, income, or assumptions.</p></div></li>
+            <li><span>03</span><div><strong>Try it with your own numbers</strong><p>Use Ask Linc to replace the examples with your own finances, then change the date, spending, income, or assumptions.</p></div></li>
           </ol>
           <div className="answer-hub-method-links">
             <Link href="/use-cases/retirement">Explore retirement planning <span aria-hidden="true">→</span></Link>

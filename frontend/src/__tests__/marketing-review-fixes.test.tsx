@@ -129,7 +129,7 @@ describe("marketing review fixes", () => {
     expect(screen.getByRole("button", { name: "Age 57" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByText("100%")).toBeInTheDocument();
     expect(screen.getByText(/685 of 685 tested histories/i)).toBeInTheDocument();
-    expect(screen.getByText(/same travel budget. more breathing room/i)).toBeInTheDocument();
+    expect(screen.getByText(/two more working years keep the travel budget/i)).toBeInTheDocument();
     expect(USE_CASE_LINKS).toContainEqual({ href: "/use-cases/career-change", label: "Career Change & Time Off" });
   });
 
@@ -260,17 +260,30 @@ describe("marketing review fixes", () => {
     render(<StaticProductDemo />);
 
     const demo = screen.getByLabelText("Interactive Ask Linc product demo");
-    expect(within(demo).getByText("Interactive demo using real product output. Identifying details removed.")).toBeInTheDocument();
+    expect(within(demo).getByText(/Illustrative household\. Retirement results use Ask Linc’s calculator/)).toBeInTheDocument();
     expect(within(demo).getByRole("tab", { name: "answer" })).toHaveAttribute("aria-selected", "true");
 
     await user.click(within(demo).getByRole("tab", { name: "math" }));
-    expect(within(demo).getByRole("heading", { name: "Calculations and pipeline" })).toBeInTheDocument();
-    expect(within(demo).getByRole("button", { name: "Canonical facts and provenance −" })).toHaveAttribute("aria-expanded", "true");
+    expect(within(demo).getByRole("heading", { name: "The numbers behind this answer" })).toBeInTheDocument();
+    expect(within(demo).getByText("609 of 637 lasted")).toBeInTheDocument();
 
     await user.click(within(demo).getByRole("tab", { name: "sources" }));
-    expect(within(demo).getByRole("heading", { name: "Supporting evidence" })).toBeInTheDocument();
-    await user.click(within(demo).getByRole("button", { name: /market news history/i }));
-    expect(within(demo).getByText("Current inflation and market context")).toBeInTheDocument();
+    expect(within(demo).getByRole("heading", { name: "Where the numbers came from" })).toBeInTheDocument();
+    expect(within(demo).getByRole("heading", { name: "Historical market data" })).toBeInTheDocument();
+
+    await user.click(within(demo).getByRole("button", { name: /Can I take a \$40K pay cut/ }));
+    expect(within(demo).getByRole("tab", { name: "answer" })).toHaveAttribute("aria-selected", "true");
+    await user.click(within(demo).getByRole("tab", { name: "math" }));
+    expect(within(demo).getByText("Saving after the pay cut")).toBeInTheDocument();
+    expect(within(demo).queryByText("609 of 637 lasted")).not.toBeInTheDocument();
+
+    await user.click(within(demo).getByRole("button", { name: /The bank says \$2M/ }));
+    await user.click(within(demo).getByRole("tab", { name: "math" }));
+    expect(within(demo).getByText("Net proceeds from current home")).toBeInTheDocument();
+    expect(within(demo).queryByText("Saving after the pay cut")).not.toBeInTheDocument();
+    await user.click(within(demo).getByRole("tab", { name: "sources" }));
+    expect(within(demo).getByRole("heading", { name: "Example purchase assumptions" })).toBeInTheDocument();
+    expect(within(demo).queryByRole("heading", { name: "Historical market data" })).not.toBeInTheDocument();
 
     await user.click(within(demo).getByRole("button", { name: "Finances" }));
     expect(within(demo).getByRole("heading", { name: "Your finances" })).toBeInTheDocument();
@@ -281,7 +294,7 @@ describe("marketing review fixes", () => {
 
     await user.click(within(demo).getByRole("button", { name: "Decisions" }));
     await user.click(within(demo).getByRole("button", { name: /ask follow-up/i }));
-    expect(within(demo).getByText(/question asking is disabled in this demo/i)).toBeInTheDocument();
+    expect(within(demo).getByText(/This demo shows saved examples/i)).toBeInTheDocument();
   });
 
   it("cycles the decision demo tabs and stops after a visitor takes control", () => {

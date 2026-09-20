@@ -10,7 +10,7 @@ export const metadata: Metadata = {
   },
   openGraph: {
     title: 'Get Help & Support | Ask Linc Customer Service',
-    description: 'Need help with Ask Linc? Our support team is here to assist you.',
+    description: 'Contact the Ask Linc founder with a question, feedback, or a problem with your account.',
     type: 'website',
     url: 'https://asklinc.com/contact',
     siteName: 'Ask Linc',
@@ -26,7 +26,7 @@ export const metadata: Metadata = {
   twitter: {
     card: 'summary_large_image',
     title: 'Get Help & Support | Ask Linc Customer Service',
-    description: 'Need help with Ask Linc? Our support team is here to assist you.',
+    description: 'Contact the Ask Linc founder with a question, feedback, or a problem with your account.',
     images: ['https://asklinc.com/og-image.jpg'],
   },
   robots: {

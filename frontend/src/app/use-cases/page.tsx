@@ -26,7 +26,7 @@ export const metadata: Metadata = {
 
 const useCases = [
   {
-    number: '01', label: 'COAST FIRE & OPTIONALITY', tone: 'lime', href: '/coast-fire-calculator',
+    number: '01', label: 'COAST FIRE & WORK', tone: 'lime', href: '/coast-fire-calculator',
     title: 'See what your savings could let you change before retirement.',
     question: 'Have I reached Coast FIRE—and can I really coast?',
   },
@@ -79,7 +79,7 @@ export default function UseCasesRoute() {
       <section className="use-case-bridge">
         <div className="shell">
           <p className="section-kicker">WHY THE WHOLE PLAN MATTERS</p>
-          <h2>One question. The rest of your life in view.</h2>
+          <h2>See how your plans affect each other.</h2>
           <p>Your home, family, work, and retirement share the same money. Explore one decision without losing sight of the others. Start with an <Link href="/prompts">example question</Link>, or try the <Link href="/coast-fire-calculator">free Coast FIRE calculator</Link>.</p>
         </div>
       </section>

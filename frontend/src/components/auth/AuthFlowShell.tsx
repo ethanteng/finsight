@@ -65,10 +65,10 @@ export default function AuthFlowShell({
               <div className="mb-9">
                 <p className="mb-3 text-xs font-bold uppercase tracking-[0.18em] text-[#477064]">{eyebrow}</p>
                 <h1 id="auth-flow-heading" className="text-4xl font-semibold tracking-[-0.04em] text-[#123c2f]">{title}</h1>
-                <p className="mt-3 text-base leading-7 text-[#607b72]">{description}</p>
+                <p className="mt-3 text-base leading-7 text-[#50695f]">{description}</p>
               </div>
               {children}
-              <div className="mt-8 flex items-center justify-center gap-2 text-xs text-[#71857f]">
+              <div className="mt-8 flex items-center justify-center gap-2 text-xs text-[#50695f]">
                 <ShieldCheck size={16} />
                 Encrypted access. Your financial data stays protected.
               </div>

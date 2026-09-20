@@ -11,13 +11,13 @@ export default function SiteFooter({ variant = 'default' }: { variant?: 'default
             <span className="grid h-8 w-8 place-items-center rounded-[9px_9px_9px_2px] bg-[#102319] text-sm font-bold text-[#d9ff6f]">L</span>
             <span>Ask Linc</span>
           </Link>
-          <nav className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-xs font-medium text-[#607b72]" aria-label="Account footer">
+          <nav className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-xs font-medium text-[#50695f]" aria-label="Account footer">
             <Link href="/how-we-protect-your-data" className="hover:text-[#123c2f]">Privacy &amp; Security</Link>
             <Link href="/privacy" className="hover:text-[#123c2f]">Privacy</Link>
             <Link href="/terms" className="hover:text-[#123c2f]">Terms</Link>
             <Link href="/contact" className="hover:text-[#123c2f]">Contact</Link>
           </nav>
-          <p className="text-center text-xs text-[#71857f] md:text-right">&copy; {new Date().getFullYear()} Ethan Teng Consulting LLC</p>
+          <p className="text-center text-xs text-[#50695f] md:text-right">&copy; {new Date().getFullYear()} Ethan Teng Consulting LLC</p>
         </div>
       </footer>
     );
@@ -70,7 +70,7 @@ export default function SiteFooter({ variant = 'default' }: { variant?: 'default
         <div className="mt-8 pt-8 border-t border-border">
           <div className="flex flex-col md:flex-row justify-between items-center space-y-4 md:space-y-0">
             <p className="text-sm text-muted-foreground">
-              &copy; {new Date().getFullYear()} Ask Linc. Self-directed financial planning for your next move.
+              &copy; {new Date().getFullYear()} Ask Linc. Self-directed financial planning for your next decision.
             </p>
             <div className="flex items-center space-x-4">
               <a

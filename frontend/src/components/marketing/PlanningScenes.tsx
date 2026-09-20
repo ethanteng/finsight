@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { ArrowUpRight, Check, LockKeyhole, Pause, Play, RotateCcw } from "lucide-react";
 import { RETIREMENT_STORY_EXAMPLE as example, storyPercent, storyPortfolio } from "@/data/retirement-story-example";
 
-const [earlier, later] = example.scenarios;
+const [earlier] = example.scenarios;
 
 const institutions = [
   "Chase", "Fidelity", "Schwab",
@@ -114,7 +114,7 @@ export function AnalysisVisual() {
           <div className="chat-answer-space">
             <div className="chat-working" aria-hidden={scene.step !== 4} hidden={scene.step !== 4}><span className="chat-typing" aria-hidden="true"><i /><i /><i /></span>Comparing retirement dates…</div>
             <div className={scene.step >= 5 ? "chat-finished is-visible" : "chat-finished"}>
-              <p>At 55, {earlier.sequencesTested - earlier.sequencesSurvived} of {earlier.sequencesTested} historical plans ran out before age 95. At 57, {later.sequencesSurvived === later.sequencesTested ? "none" : later.sequencesTested - later.sequencesSurvived} did—with the same $84,000/year budget. The vulnerable stretch is before Social Security starts at 67.</p>
+              <p><strong>I’d keep the travel budget and target 57.</strong> At 55, your $84,000/year plan ran out in {earlier.sequencesTested - earlier.sequencesSurvived} of {earlier.sequencesTested} historical tests. At 57, none ran out.</p><p>But 55 isn’t off the table: without the extra $12,000 for travel, all {example.spendingAlternative.sequencesSurvived} tests lasted to 95. The real choice is two years of work versus $1,000 a month for travel.</p>
               <div className="chat-plan-comparison"><span>MEDIAN PORTFOLIO AT RETIREMENT</span><div>{example.scenarios.map((result) => <div key={result.retirementAge}><small>Retire at {result.retirementAge}</small><strong>{storyPortfolio(result.projectedPortfolioAtRetirement)}</strong><span>{storyPercent(result.firstYearWithdrawalRate)} initial draw</span></div>)}</div><Link href="/retirement-calculator" className="chat-plan-link" tabIndex={scene.step >= 5 ? undefined : -1}>Try your own numbers <ArrowUpRight size={16} aria-hidden="true" /></Link></div>
             </div>
           </div>

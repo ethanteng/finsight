@@ -83,19 +83,19 @@ const factRoutingSteps = [
 
 const comparisonData = {
   chatgpt: {
-    fit: { competitor: "Choose ChatGPT for breadth.", askLinc: "Choose Ask Linc for a plan you can inspect with Show the Math.", order: "competitor-first" },
+    fit: { competitor: "Choose ChatGPT for general questions.", askLinc: "Choose Ask Linc for a plan you can inspect with Show the Math.", order: "competitor-first" },
   },
   origin: {
     fit: { competitor: "Choose Origin for broader, proactive money management.", askLinc: "Choose Ask Linc to direct the plan and inspect the math.", order: "ask-linc-first" },
   },
   portfoliopilot: {
-    fit: { competitor: "Choose PortfolioPilot when analyzing investments is the main job.", askLinc: "Choose Ask Linc to see how the math supports your household decision.", order: "ask-linc-first" },
+    fit: { competitor: "Choose PortfolioPilot for investment analysis.", askLinc: "Choose Ask Linc to see how your investments affect your other plans.", order: "ask-linc-first" },
   },
   monarch: {
     fit: { competitor: "Choose Monarch when shared budgeting and tracking are the priority.", askLinc: "Choose Ask Linc for the decision—and the math behind it.", order: "competitor-first" },
   },
   boldin: {
-    fit: { competitor: "Choose Boldin when you want to build and maintain a detailed retirement model.", askLinc: "Choose Ask Linc for a question-led plan with the work attached.", order: "competitor-first" },
+    fit: { competitor: "Choose Boldin when you want to build and maintain a detailed retirement model.", askLinc: "Choose Ask Linc to work through a specific question and check the math.", order: "competitor-first" },
   },
 } as const;
 
@@ -105,12 +105,12 @@ const useCases = {
     number: "01",
     label: "RETIREMENT PLANNING",
     title: "How long will my money last in retirement?",
-    question: "Are we saving enough to retire at 60 without cutting our lifestyle?",
+    question: "Are we saving enough to retire at 60 without cutting our spending?",
     answer: "You are close. Saving $600 more each month puts the plan on track.",
     summary: "At the current pace, the plan is short by about $110K. A small monthly increase closes most of the gap without changing the retirement date.",
     metrics: [["SAVING NOW", "$2.4K/mo"], ["SAVING NEEDED", "$3K/mo"], ["RETIREMENT AGE", "60"]],
     levers: [["Retirement age", "See how 58, 60, or 62 changes the cushion."], ["Spending", "Try different spending levels and see what your investments need to cover."], ["A bad start in the markets", "See how the plan holds up if markets fall early in retirement."]],
-    context: ["Current financial state", "Income + spending", "Social Security", "Rates + inflation", "Historical returns"],
+    context: ["Current finances", "Income + spending", "Social Security", "Rates + inflation", "Historical returns"],
     tone: "mint",
   },
   home: {
@@ -165,7 +165,7 @@ const useCases = {
     metrics: [["MARKET DROP", "−25%"], ["CASH BUFFER", "14 mo"], ["PLAN RESULT", "Still works"]],
     levers: [["Market downturns", "See what an early market drop does to withdrawals and how long the plan lasts."], ["Inflation and spending", "Test how higher prices and different spending levels change the retirement margin."], ["Retirement date", "Compare retiring earlier or later without rebuilding the plan from scratch."],
     ],
-    context: ["Current financial state", "Retirement spending", "Rates + inflation", "Historical returns", "Your holdings"],
+    context: ["Current finances", "Retirement spending", "Rates + inflation", "Historical returns", "Your holdings"],
     tone: "sand",
   },
 } as const;
@@ -258,7 +258,7 @@ function FeaturesPage() {
         <FeatureScenario />
         <div className="feature-proof-intro">
           <p className="section-kicker">WHAT THE ANSWER USES</p>
-          <h2>Your real financial state—and what could change the answer.</h2>
+          <h2>Your finances, and what could change the answer.</h2>
         </div>
         <div className="feature-proof-grid">
           <article className="feature-proof-card feature-model-card">
@@ -363,7 +363,7 @@ function UseCasePage({ useCase }: { useCase: UseCaseKey }) {
             {isRetirementStressTest
               ? "Start with the retirement decision you are weighing. Linc turns your holdings, spending, income, and timeline into a model you can test against market drops, inflation, and different retirement dates."
               : useCase === "retirement"
-                ? "Ask when you could retire or what working less would change. Linc builds the model from your retirement age, spending, Social Security, portfolio, and real historical sequences."
+                ? "Ask when you could retire or what working less would change. Linc tests your retirement age, spending, Social Security, and portfolio against historical market returns."
                 : useCase === "home"
                   ? "Ask how much house you can afford. Linc models the price, cash after closing, debt, monthly spending, and retirement impact together."
                   : "Connect your finances and ask your question. Linc brings the relevant numbers together, explains the tradeoffs, and lets you explore what changes."}
@@ -404,7 +404,7 @@ function UseCasePage({ useCase }: { useCase: UseCaseKey }) {
       </section>
       <section className="decision-levers shell"><div className="editorial-heading"><p className="section-kicker">WHAT MOVES THE ANSWER</p><h2>Change the assumption,<br /><em>not the spreadsheet.</em></h2></div><div className="lever-grid">{item.levers.map(([title,copy],index)=><article key={title}><span>0{index+1}</span><h3>{title}</h3><p>{copy}</p></article>)}</div></section>
       <section className="case-context dark-band"><div className="shell case-context-inner"><div><p className="section-kicker light">WHAT LINC CHECKS FIRST</p><h2>The numbers that can change the answer.</h2></div><RotatingContextChips items={item.context} /></div></section>
-      <PageCta title={`Keep testing your ${item.label.toLowerCase()} decision.`} label={isRetirementStressTest ? "Stress-test my plan" : "Model this decision"} csOverrideId="cta-start-free-trial-mid" />
+      <PageCta title={`See what works for your finances.`} label={isRetirementStressTest ? "Stress-test my plan" : "Start planning"} csOverrideId="cta-start-free-trial-mid" />
     </StandardPage>
   );
 }
@@ -439,7 +439,7 @@ function FaqPage({ pricing }: { pricing: Pricing }) {
   const faqs = buildFaqs(pricing);
   return (
     <StandardPage className="faq-page">
-      <section className="subhero centered-subhero shell"><p className="section-kicker">THE QUESTIONS BEHIND THE QUESTIONS</p><h1>Good skepticism is <em>welcome here.</em></h1><p className="subhero-copy">What Ask Linc does, how it reaches an answer, and what happens to your data.</p></section>
+      <section className="subhero centered-subhero shell"><p className="section-kicker">FREQUENTLY ASKED QUESTIONS</p><h1>Questions about <em>Ask Linc?</em></h1><p className="subhero-copy">What Ask Linc does, how it reaches an answer, and what happens to your data.</p></section>
       <section className="faq-layout shell"><aside><span>JUMP TO</span><a href="#product">Product</a><a href="#accuracy">Accuracy</a><a href="#privacy-faq">Privacy</a><a href="#billing">Billing</a></aside><div className="faq-list"><p className="faq-group" id="product">PRODUCT</p>{faqs.slice(0,2).map(([q,a])=><details key={q} open={q===faqs[0][0]}><summary>{q}<span>+</span></summary><p>{a}</p></details>)}<p className="faq-group" id="accuracy">ACCURACY &amp; SCOPE</p>{faqs.slice(2,4).map(([q,a])=><details key={q}><summary>{q}<span>+</span></summary><p>{a}</p></details>)}<p className="faq-group" id="privacy-faq">PRIVACY &amp; DATA</p>{faqs.slice(4,8).map(([q,a])=><details key={q}><summary>{q}<span>+</span></summary><p>{a}</p></details>)}<p className="faq-group" id="billing">BILLING</p><details><summary>{faqs[8][0]}<span aria-hidden="true">+</span></summary><p>{faqs[8][1]}</p></details></div></section>
       <section className="human-help shell"><div><span>STILL WONDERING?</span><h2>Ask the human who built it.</h2></div><Link className="button button-dark" href="/contact">Contact Ethan →</Link></section>
       <PageCta csOverrideId="cta-start-free-trial-mid" />
@@ -530,7 +530,7 @@ function ComparisonPage({ product, pricing }: { product: keyof typeof comparison
         <ShowTheMathPreview />
       </section>
       <section className="fit-section"><div className="shell"><p className="section-kicker">OUR HONEST TAKE</p><h2>{design.fit.order === "competitor-first" ? <><span>{design.fit.competitor}</span>{" "}<em>{design.fit.askLinc}</em></> : <><em>{design.fit.askLinc}</em>{" "}<span>{design.fit.competitor}</span></>}</h2><p>{page.honestTake ?? "Ask Linc does not replace a budget app, investment platform, dedicated retirement planner, or human professional. It helps you compare options and see how the answer was worked out."}</p></div></section>
-      <section className="page-section shell compact-faq comparison-faq"><div><p className="section-kicker">BEFORE YOU CHOOSE</p><h2>The questions people actually ask.</h2></div><div>{page.faqs.map((faq)=><details key={faq.question}><summary>{faq.question}<span>+</span></summary><p>{faq.answer}</p></details>)}</div></section>
+      <section className="page-section shell compact-faq comparison-faq"><div><p className="section-kicker">BEFORE YOU CHOOSE</p><h2>Common questions.</h2></div><div>{page.faqs.map((faq)=><details key={faq.question}><summary>{faq.question}<span>+</span></summary><p>{faq.answer}</p></details>)}</div></section>
       {page.relatedLinks?.length ? <nav className="comparison-reading-links shell" aria-label="Related reading">{page.relatedLinks.map((link) => <Link className="text-link" href={link.href} key={link.href}>{link.label}</Link>)}</nav> : null}
       <section className="other-comparisons shell"><span>COMPARE ASK LINC WITH</span>{Object.keys(comparisonData).filter((key)=>key!==product).map((key)=>{ const other = getComparison(key, pricing); return other ? <Link href={`/vs/${key}`} key={key}>{other.competitorName} <b>→</b></Link> : null; })}</section>
       <PageCta title="Make your next decision with the math in view." label="Start free" csOverrideId="cta-start-free-trial-mid" />
@@ -645,7 +645,7 @@ export function MarketingBlogPage({ ghostPosts }: { ghostPosts: GhostPost[] }) {
               <h2>{featured.title}</h2>
               <p>{featured.excerpt}</p>
               <div className="post-meta"><span><Image src="/images/ethan-teng-cartoon.webp" alt="" fill sizes="38px" /></span><p><b>{featured.authors?.[0]?.name || "Ethan Teng"}</b><small>{formatPostDate(featured.published_at)} · {featured.reading_time || 5} min read</small></p></div>
-              <Link className="text-link" href={`/blog/${featured.slug}`}>Read the analysis →</Link>
+              <Link className="text-link" href={`/blog/${featured.slug}`}>Read the article →</Link>
             </div>
           </section>
           <section className="post-grid shell">
@@ -661,9 +661,9 @@ export function MarketingBlogPage({ ghostPosts }: { ghostPosts: GhostPost[] }) {
           </section>
         </>
       ) : (
-        <section className="not-found shell"><span>BLOG</span><h2>New field notes are on the way.</h2></section>
+        <section className="not-found shell"><span>BLOG</span><h2>New articles are on the way.</h2></section>
       )}
-      <PageCta title="Turn the reading into a real decision." csOverrideId="blog-cta-end" />
+      <PageCta title="Try it with your own numbers." csOverrideId="blog-cta-end" />
     </StandardPage>
   );
 }
@@ -710,7 +710,7 @@ export function MarketingBlogTopicPage({
           </article>
         ))}
       </section>
-      <PageCta title="Turn the reading into a real decision." csOverrideId="blog-cta-end" />
+      <PageCta title="Try it with your own numbers." csOverrideId="blog-cta-end" />
     </StandardPage>
   );
 }
@@ -742,7 +742,7 @@ export function MarketingArticlePage({ post, processedHtml }: { post: GhostPost;
           />
         </div>
       ) : (
-        <div className="article-art post-art blue"><span>ASK LINC / FIELD NOTE</span><b>{postCategory(post)}</b><i>∑</i></div>
+        <div className="article-art post-art blue"><span>ASK LINC / ARTICLE</span><b>{postCategory(post)}</b><i>∑</i></div>
       )}
       <section className="article-layout shell marketing-article-layout">
         <aside><span>ASK LINC BLOG</span><Link href="/features">See how Linc works</Link><Link href="/use-cases">Explore use cases</Link></aside>

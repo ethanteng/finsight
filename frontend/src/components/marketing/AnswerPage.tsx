@@ -141,7 +141,7 @@ export default function AnswerPage({ page }: { page: AnswerPageData }) {
   const checklistSection = page.checklistSection ?? {
     kicker: "TURN THE RULE OF THUMB INTO A PLAN",
     heading: "Test the years, not just the first withdrawal.",
-    intro: "A useful retirement model follows cash flow over time and makes uncertainty visible. It should show which assumption moved the answer and what you could change.",
+    intro: "Track spending and income through retirement, then test how changes in returns, inflation, or timing affect the result.",
   };
   const methodology = page.methodology ?? [
     "This page uses simple math to illustrate first-year withdrawals. It does not assume a guaranteed return or label any withdrawal rate “safe.” Dollar examples are before fees and taxes unless stated otherwise.",
@@ -258,7 +258,7 @@ export default function AnswerPage({ page }: { page: AnswerPageData }) {
         <div className="shell">
           <div>
             <p className="section-kicker light">SOURCES + METHODOLOGY</p>
-            <h2>Built to show its assumptions.</h2>
+            <h2>Where these estimates come from.</h2>
             {methodology.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}
           </div>
           <ol>

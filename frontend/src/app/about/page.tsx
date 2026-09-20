@@ -5,7 +5,7 @@ import { PageCta, SiteFooter, SiteHeader } from '@/components/marketing/SiteShel
 
 export const metadata: Metadata = {
   title: 'About Ask Linc | Why We Built a Financial Planning Assistant',
-  description: 'Ask Linc was built to help people answer consequential money questions using their real financial picture—and inspect the work behind the answer.',
+  description: 'Ask Linc was built to help people answer financial questions using their own accounts and check the work behind each answer.',
   alternates: { canonical: 'https://asklinc.com/about' },
   openGraph: {
     title: 'About Ask Linc | Why We Built a Financial Planning Assistant',
@@ -33,7 +33,7 @@ export default function AboutPage() {
           <p className="section-kicker">WHY ASK LINC EXISTS</p>
           <h1>I needed to answer <em>one hard money question.</em></h1>
         </div>
-        <p className="about-lede">Financial planning should start with the decision you are trying to make—not a dashboard you have to interpret or a model you have to build first.</p>
+        <p className="about-lede">I wanted to understand what I could afford, how long my savings would last, and which assumptions the answer depended on.</p>
       </section>
 
       <section className="founder-origin shell">
@@ -57,7 +57,7 @@ export default function AboutPage() {
             </article>
             <article className="origin-story-need">
               <small>WHAT I NEEDED</small>
-              <p>Not another dashboard. I needed my whole financial picture in one answer—and a way to inspect the work.</p>
+              <p>I needed an answer based on my accounts, with the numbers and assumptions I could check.</p>
             </article>
           </div>
           <p className="origin-story-ending"><small>THE RESULT</small><strong>So I built Ask Linc.</strong></p>
@@ -71,7 +71,7 @@ export default function AboutPage() {
             <h2>The product follows four simple rules.</h2>
           </div>
           <div className="belief-grid">
-            <article><span>01</span><h3>Start with the decision</h3><p>Ask what you are trying to decide before asking you to learn a new financial planning workflow.</p></article>
+            <article><span>01</span><h3>Start with the decision</h3><p>Let people ask their question in their own words.</p></article>
             <article><span>02</span><h3>Keep the whole financial picture in view</h3><p>A house, a career break, a child, investments, and retirement share the same money.</p></article>
             <article><span>03</span><h3>Show the tradeoffs</h3><p>A useful answer says what works, what feels tight, and what could change the result.</p></article>
             <article><span>04</span><h3>Show the math</h3><p>You should be able to see the numbers, assumptions, calculations, checks, and sources behind the answer.</p><Link className="belief-link" href="/trust">See how answers are checked →</Link></article>

@@ -316,9 +316,9 @@ function LoginFormContent() {
             <div className="absolute -right-28 -top-28 h-80 w-80 rounded-full border border-[#c9f46b]/20" />
             <div className="absolute -right-10 top-10 h-80 w-80 rounded-full border border-[#c9f46b]/10" />
             <div className="relative max-w-xl">
-              <p className="mb-6 text-xs font-bold uppercase tracking-[0.2em] text-[#c9f46b]">Your financial decision workspace</p>
-              <h1 id="login-value-heading" className="text-5xl font-semibold leading-[1.04] tracking-[-0.045em]">Pick up where your last decision left off.</h1>
-              <p className="mt-6 max-w-lg text-lg leading-8 text-white/65">Your accounts, assumptions, calculations, and prior questions stay connected—so every answer starts with context.</p>
+              <p className="mb-6 text-xs font-bold uppercase tracking-[0.2em] text-[#c9f46b]">Your plans with Linc</p>
+              <h1 id="login-value-heading" className="text-5xl font-semibold leading-[1.04] tracking-[-0.045em]">Pick up where you left off.</h1>
+              <p className="mt-6 max-w-lg text-lg leading-8 text-white/65">Revisit a plan, update a number, or ask what’s on your mind. Your accounts and earlier questions are here when you need them.</p>
             </div>
             <ul className="relative space-y-5 text-sm text-white/80" aria-label="Workspace benefits">
               {['Decision-ready answers grounded in your data', 'Calculations and supporting evidence one click away', 'Private, protected access to your financial context'].map(item => <li key={item} className="flex items-center gap-3"><span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-[#c9f46b]/15 text-[#c9f46b]"><Check size={15} /></span>{item}</li>)}
@@ -330,7 +330,7 @@ function LoginFormContent() {
               <div className="mb-9">
                 <p className="mb-3 text-xs font-bold uppercase tracking-[0.18em] text-[#477064]">Secure sign in</p>
                 <h1 id="login-heading" className="text-4xl font-semibold tracking-[-0.04em] text-[#123c2f]">Welcome back.</h1>
-                <p className="mt-3 text-base leading-7 text-[#607b72]">Continue working through the decisions that matter to you.</p>
+                <p className="mt-3 text-base leading-7 text-[#50695f]">Sign in to see your plans and ask Linc a question.</p>
                 {subscriptionContext && <div className="mt-5 flex gap-3 rounded-2xl border border-[#719632]/25 bg-[#eaf5d5] p-4 text-sm text-[#34551c]" role="status"><Check className="mt-0.5 shrink-0" size={18} /><div><strong className="block">Your subscription is ready.</strong><span className="mt-1 block text-[#4d6a35]">Sign in to open your workspace.</span></div></div>}
               </div>
 
@@ -353,16 +353,16 @@ function LoginFormContent() {
                     </div>
                     <div suppressHydrationWarning>
                       <div className="mb-2 flex items-center justify-between"><label htmlFor="password" className="text-sm font-semibold text-[#29483f]">Password</label><Link href="/forgot-password" className="text-sm font-semibold text-[#175cce] hover:underline">Forgot password?</Link></div>
-                      <div className="relative"><LockKeyhole className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[#71857f]" size={18} /><input id="password" type="password" autoComplete="current-password" value={password} onChange={event => setPassword(event.target.value)} required className="h-13 w-full rounded-xl border border-[#123c2f]/20 bg-[#fffdf7] py-3 pl-11 pr-4 text-[#123c2f] shadow-sm outline-none placeholder:text-[#8a9b95] focus:border-[#123c2f] focus:ring-4 focus:ring-[#123c2f]/10" placeholder="Enter your password" /></div>
+                      <div className="relative"><LockKeyhole className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[#50695f]" size={18} /><input id="password" type="password" autoComplete="current-password" value={password} onChange={event => setPassword(event.target.value)} required className="h-13 w-full rounded-xl border border-[#123c2f]/20 bg-[#fffdf7] py-3 pl-11 pr-4 text-[#123c2f] shadow-sm outline-none placeholder:text-[#8a9b95] focus:border-[#123c2f] focus:ring-4 focus:ring-[#123c2f]/10" placeholder="Enter your password" /></div>
                     </div>
                     <button type="submit" data-cs-override-id="form-submit-sign-in" disabled={isLoading} className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-[#123c2f] px-5 py-3.5 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(18,60,47,.16)] transition hover:bg-[#1a5140] disabled:cursor-not-allowed disabled:opacity-60">{isLoading ? <><LoaderCircle className="animate-spin" size={17} />Signing in…</> : <>Sign in to your workspace <ArrowRight size={17} /></>}</button>
                   </form>
 
                   <div className="mt-7 border-t border-[#123c2f]/10 pt-6 text-center">
-                    <p className="text-sm text-[#607b72]">New to Ask Linc? <button data-cs-override-id="cta-start-free-trial-login-inline" onClick={() => handleBuyClick('premium')} disabled={isCheckoutLoading} className="font-semibold text-[#123c2f] underline decoration-[#9bc444] decoration-2 underline-offset-4 disabled:opacity-50">{isCheckoutLoading ? 'Opening checkout…' : 'Get started'}</button></p>
+                    <p className="text-sm text-[#50695f]">New to Ask Linc? <button data-cs-override-id="cta-start-free-trial-login-inline" onClick={() => handleBuyClick('premium')} disabled={isCheckoutLoading} className="font-semibold text-[#123c2f] underline decoration-[#9bc444] decoration-2 underline-offset-4 disabled:opacity-50">{isCheckoutLoading ? 'Opening checkout…' : 'Get started'}</button></p>
                     <button type="button" data-cs-override-id="cta-start-free-trial-login-inline-mobile" onClick={() => handleBuyClick('premium')} disabled={isCheckoutLoading} className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-[#175cce] hover:underline sm:hidden disabled:opacity-50">{isCheckoutLoading ? 'Loading...' : 'Get started'}</button>
                   </div>
-                  <div className="mt-8 flex items-center justify-center gap-2 text-xs text-[#71857f]"><ShieldCheck size={16} />Encrypted access. Your financial data stays protected.</div>
+                  <div className="mt-8 flex items-center justify-center gap-2 text-xs text-[#50695f]"><ShieldCheck size={16} />Encrypted access. Your financial data stays protected.</div>
                 </>
               )}
             </div>

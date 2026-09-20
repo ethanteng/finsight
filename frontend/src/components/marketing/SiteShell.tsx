@@ -36,7 +36,7 @@ export function SiteFooter() {
             <span className="brand-mark" aria-hidden="true">L</span>
             <span>Ask Linc</span>
           </Link>
-          <p>Your finances. Your questions. A clearer next move.</p>
+          <p>Your finances. Your questions. Your next decision.</p>
           <MarketingGetStartedButton className="button button-primary footer-start-button" trackingLocation="footer" csOverrideId="cta-start-free-trial-footer" />
         </div>
         <div className="footer-column">
