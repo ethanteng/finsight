@@ -86,6 +86,19 @@ describe("Contentsquare content security policy", () => {
     expect(connectSrc).toContain("https://pagead2.googlesyndication.com");
   });
 
+  it("allows Microsoft UET scripts and beacons without broadening unrelated directives", () => {
+    for (const name of ["script-src", "connect-src", "img-src"]) {
+      const sources = directive(production, name).split(" ");
+      expect(sources).toContain("https://bat.bing.com");
+      expect(sources).toContain("https://bat.bing.net");
+    }
+    for (const name of ["default-src", "frame-src", "form-action", "style-src"]) {
+      expect(directive(production, name)).not.toContain("bing");
+    }
+    expect(production).not.toContain("https://*.bing.com");
+    expect(production).not.toContain("https://*.bing.net");
+  });
+
   it("does not loosen any other directive between environments", () => {
     const withoutConnect = (policy: string) =>
       policy.split("; ").filter((entry) => !entry.startsWith("connect-src"));

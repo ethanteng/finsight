@@ -48,6 +48,9 @@ export function buildContentSecurityPolicy({ isDevelopment }: { isDevelopment: b
     "https://ads.reddit.com",
     "https://www.redditstatic.com",
     "https://alb.reddit.com",
+    // Microsoft UET: the current installer uses .net; GTM also supports .com.
+    "https://bat.bing.com",
+    "https://bat.bing.net",
     "https://*.asklinc.com",
     "wss://*.asklinc.com",
     "https://*.onrender.com",
@@ -62,7 +65,7 @@ export function buildContentSecurityPolicy({ isDevelopment }: { isDevelopment: b
 
   return [
     "default-src 'self'",
-    `script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.googletagmanager.com https://www.googleadservices.com https://www.google.com https://pagead2.googlesyndication.com ${CONTENTSQUARE} ${CONTENTSQUARE_APP} https://googleads.g.doubleclick.net https://cdn.plaid.com https://www.redditstatic.com`,
+    `script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.googletagmanager.com https://www.googleadservices.com https://www.google.com https://pagead2.googlesyndication.com ${CONTENTSQUARE} ${CONTENTSQUARE_APP} https://googleads.g.doubleclick.net https://cdn.plaid.com https://www.redditstatic.com https://bat.bing.com https://bat.bing.net`,
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://www.redditstatic.com",
     // No blanket `https:`. An answer is rendered as Markdown, so an
     // image URL that reached the model through a search snippet or a
@@ -71,7 +74,7 @@ export function buildContentSecurityPolicy({ isDevelopment }: { isDevelopment: b
     // ones the app actually renders: next/image remotePatterns, the
     // Plaid merchant logos on transaction rows, institution logos,
     // and analytics pixels.
-    `img-src 'self' data: blob: https://logo.clearbit.com https://*.plaid.com https://images.ghost.io https://static.ghost.org https://blog.asklinc.com https://*.ghost.io https://images.unsplash.com https://*.google-analytics.com https://www.googletagmanager.com https://*.g.doubleclick.net https://google.com https://www.google.com https://*.google.com https://pagead2.googlesyndication.com https://www.googleadservices.com ${CONTENTSQUARE} https://alb.reddit.com`,
+    `img-src 'self' data: blob: https://logo.clearbit.com https://*.plaid.com https://images.ghost.io https://static.ghost.org https://blog.asklinc.com https://*.ghost.io https://images.unsplash.com https://*.google-analytics.com https://www.googletagmanager.com https://*.g.doubleclick.net https://google.com https://www.google.com https://*.google.com https://pagead2.googlesyndication.com https://www.googleadservices.com ${CONTENTSQUARE} https://alb.reddit.com https://bat.bing.com https://bat.bing.net`,
     "font-src 'self' data: https://fonts.gstatic.com",
     connectSrc,
     `frame-src 'self' https://*.plaid.com https://cdn.plaid.com https://www.googletagmanager.com https://app.snaptrade.com https://*.snaptrade.com ${CONTENTSQUARE}`,
