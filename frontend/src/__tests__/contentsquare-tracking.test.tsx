@@ -94,6 +94,21 @@ describe("Contentsquare content security policy", () => {
     expect(directive(production, "default-src")).toBe("default-src 'self'");
     expect(directive(production, "object-src")).toBe("object-src 'none'");
   });
+
+  it("allows Reddit's pixel resources without allowing arbitrary Reddit hosts", () => {
+    // https://business.reddithelp.com/articles/Knowledge/reddit-pixel
+    expect(directive(production, "script-src")).toContain("https://www.redditstatic.com");
+    expect(directive(production, "style-src")).toContain("https://www.redditstatic.com");
+    expect(directive(production, "img-src")).toContain("https://alb.reddit.com");
+    for (const host of ["pixel-config.reddit.com", "ads.reddit.com", "www.redditstatic.com", "alb.reddit.com"]) {
+      expect(directive(production, "connect-src")).toContain(`https://${host}`);
+    }
+    expect(production).not.toContain("https://*.reddit.com");
+    expect(production).not.toContain("https://*.redditstatic.com");
+    for (const name of ["default-src", "frame-src", "form-action"]) {
+      expect(directive(production, name)).not.toContain("reddit");
+    }
+  });
 });
 
 describe("Contentsquare element ids", () => {
