@@ -42,6 +42,12 @@ export function buildContentSecurityPolicy({ isDevelopment }: { isDevelopment: b
     "https://*.g.doubleclick.net",
     "https://www.googleadservices.com",
     "https://pagead2.googlesyndication.com",
+    // Reddit's GTM pixel loads configuration and sends conversion beacons.
+    // Keep this to the documented hosts, rather than wildcarding reddit.com.
+    "https://pixel-config.reddit.com",
+    "https://ads.reddit.com",
+    "https://www.redditstatic.com",
+    "https://alb.reddit.com",
     "https://*.asklinc.com",
     "wss://*.asklinc.com",
     "https://*.onrender.com",
@@ -56,8 +62,8 @@ export function buildContentSecurityPolicy({ isDevelopment }: { isDevelopment: b
 
   return [
     "default-src 'self'",
-    `script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.googletagmanager.com https://www.googleadservices.com https://www.google.com https://pagead2.googlesyndication.com ${CONTENTSQUARE} ${CONTENTSQUARE_APP} https://googleads.g.doubleclick.net https://cdn.plaid.com`,
-    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+    `script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.googletagmanager.com https://www.googleadservices.com https://www.google.com https://pagead2.googlesyndication.com ${CONTENTSQUARE} ${CONTENTSQUARE_APP} https://googleads.g.doubleclick.net https://cdn.plaid.com https://www.redditstatic.com`,
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://www.redditstatic.com",
     // No blanket `https:`. An answer is rendered as Markdown, so an
     // image URL that reached the model through a search snippet or a
     // transaction description would otherwise load on sight and take
@@ -65,7 +71,7 @@ export function buildContentSecurityPolicy({ isDevelopment }: { isDevelopment: b
     // ones the app actually renders: next/image remotePatterns, the
     // Plaid merchant logos on transaction rows, institution logos,
     // and analytics pixels.
-    `img-src 'self' data: blob: https://logo.clearbit.com https://*.plaid.com https://images.ghost.io https://static.ghost.org https://blog.asklinc.com https://*.ghost.io https://images.unsplash.com https://*.google-analytics.com https://www.googletagmanager.com https://*.g.doubleclick.net https://google.com https://www.google.com https://*.google.com https://pagead2.googlesyndication.com https://www.googleadservices.com ${CONTENTSQUARE}`,
+    `img-src 'self' data: blob: https://logo.clearbit.com https://*.plaid.com https://images.ghost.io https://static.ghost.org https://blog.asklinc.com https://*.ghost.io https://images.unsplash.com https://*.google-analytics.com https://www.googletagmanager.com https://*.g.doubleclick.net https://google.com https://www.google.com https://*.google.com https://pagead2.googlesyndication.com https://www.googleadservices.com ${CONTENTSQUARE} https://alb.reddit.com`,
     "font-src 'self' data: https://fonts.gstatic.com",
     connectSrc,
     `frame-src 'self' https://*.plaid.com https://cdn.plaid.com https://www.googletagmanager.com https://app.snaptrade.com https://*.snaptrade.com ${CONTENTSQUARE}`,
