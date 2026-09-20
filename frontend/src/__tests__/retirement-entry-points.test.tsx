@@ -49,7 +49,7 @@ describe("retirement entry points", () => {
     unmount();
 
     render(<UseCasesRoute />);
-    expect(screen.getByRole("link", { name: /01 \/ COAST FIRE & OPTIONALITY/ }))
+    expect(screen.getByRole("link", { name: /01 \/ COAST FIRE & WORK/ }))
       .toHaveAttribute("href", "/coast-fire-calculator");
     expect(screen.getByRole("link", { name: /02 \/ RETIREMENT/ }))
       .toHaveAttribute("href", "/retirement-calculator");

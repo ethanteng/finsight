@@ -133,7 +133,7 @@ describe("Coast FIRE calculator page", () => {
     // No figure, no verdict, nothing that could be mistaken for an answer.
     expect(screen.queryByText("$369,128")).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: /reached Coast FIRE\./ })).not.toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: /still building your coast/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /haven’t reached Coast FIRE yet/ })).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /Could your savings take it from here/ })).toBeInTheDocument();
   });
 
@@ -261,7 +261,7 @@ describe("Coast FIRE calculator page", () => {
     fillForm({ "Retirement savings today": "100000" });
     fireEvent.submit(container.querySelector("form")!);
 
-    expect(screen.getByRole("heading", { name: "You’re still building your coast." })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "You haven’t reached Coast FIRE yet." })).toBeInTheDocument();
     expect(screen.getByText(/short of your Coast FIRE number today/i)).toBeInTheDocument();
     expect(pushCoastFireCalculated).toHaveBeenCalledWith("not_yet", 25);
     expect(JSON.stringify(jest.mocked(pushCoastFireCalculated).mock.calls)).not.toContain("100000");

@@ -50,7 +50,7 @@ describe("comparison pages", () => {
     expect(comparison.compareDocumentPosition(proof) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.getByText(/financial data is never used to train ai models/i)).toBeInTheDocument();
     expect(within(comparison).getByText("Important calculations")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: /choose chatgpt for breadth.*show the math/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /choose chatgpt for general questions.*show the math/i })).toBeInTheDocument();
     expect(screen.getByText(/keep chatgpt for broad work and everyday finance questions/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "See how Ask Linc checks an answer" })).toHaveAttribute(
       "href",

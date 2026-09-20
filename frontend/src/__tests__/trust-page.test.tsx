@@ -21,8 +21,8 @@ describe("trust page", () => {
       "Don't trust the answer. Check it.",
     );
     expect(screen.getByRole("heading", { name: /here’s how linc does the work/i })).toBeInTheDocument();
-    expect(screen.getByText(/no product is perfect/i)).toBeInTheDocument();
-    expect(screen.getByText(/purpose-built tools handle supported math/i)).toBeInTheDocument();
+    expect(screen.getByText(/linc can still make mistakes/i)).toBeInTheDocument();
+    expect(screen.getByText(/dedicated calculators run the math/i)).toBeInTheDocument();
 
     const answerCheck = screen.getByLabelText("Illustrative Ask Linc answer with checks");
     ["Your numbers", "Assumptions", "Math", "Checks", "Sources"].forEach((label) => {

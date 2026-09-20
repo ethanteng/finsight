@@ -67,7 +67,7 @@ describe("blog feature images", () => {
     expect(headerArtwork).toHaveClass("blue");
     expect(headerArtwork).not.toHaveClass("article-art-image");
     expect(within(headerArtwork as HTMLElement).queryByRole("img")).not.toBeInTheDocument();
-    expect(within(headerArtwork as HTMLElement).getByText("ASK LINC / FIELD NOTE")).toBeInTheDocument();
+    expect(within(headerArtwork as HTMLElement).getByText("ASK LINC / ARTICLE")).toBeInTheDocument();
   });
 
   it("offers the matching calculator before the body of a ranking article", () => {
