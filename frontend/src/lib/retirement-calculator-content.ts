@@ -54,6 +54,6 @@ export const RETIREMENT_CALCULATOR_FAQ: RetirementCalculatorFaq[] = [
   {
     question: 'Is it free, and do I need an account?',
     answer:
-      'You can try the calculator free without an account. We keep calculator inputs and results to improve the model. Create a free account to save your result, keep exploring, and connect your accounts.',
+      'The calculator is free and needs no account. We ask for your email before showing your result, and send you a copy of it. We keep calculator inputs and results to improve the model. Create a free account to save your result, keep exploring, and connect your accounts.',
   },
 ];

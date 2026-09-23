@@ -12,6 +12,7 @@
 import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { RetirementQuickPlan } from '@/components/marketing/RetirementQuickPlan';
+import { CALCULATOR_RESULTS_UNLOCK_KEY } from '@/lib/calculator-results-gate';
 
 jest.mock('@/lib/dataLayer', () => ({
   pushRetirementInteraction: jest.fn(),
@@ -107,6 +108,9 @@ function run() {
 
 beforeEach(() => {
   window.sessionStorage.clear();
+  // These cases are about the answer, so the results email has already been
+  // given. The gate in front of it has its own cases in calculator-results-gate.
+  window.sessionStorage.setItem(CALCULATOR_RESULTS_UNLOCK_KEY, 'reader@example.com');
   Element.prototype.scrollIntoView = jest.fn();
   global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({ allocations: [] }) });
 });

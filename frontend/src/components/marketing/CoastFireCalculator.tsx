@@ -28,6 +28,7 @@ import {
   recordRun,
 } from "@/lib/calculator-run-limit";
 import { fromGrouped, withCommas } from "@/lib/number-input";
+import { readUnlockedEmail } from "@/lib/calculator-results-gate";
 import {
   clearCoastFireSignupContext,
   COAST_FIRE_SIGNUP_HREF,
@@ -36,7 +37,7 @@ import {
 import { CoastFireEmailCapture } from "./CoastFireEmailCapture";
 import { MarketingGetStartedButton } from "./MarketingGetStartedButton";
 import { SiteFooter, SiteHeader } from "./SiteShell";
-import { CalculatorSteps, CalculatorPreview, CalculatorNextQuestion, CalculatorAnswer, CalculatorRunAgain } from "./CalculatorStory";
+import { CalculatorSteps, CalculatorPreview, CalculatorNextQuestion, CalculatorAnswer, CalculatorRunAgain, CalculatorLockedResult } from "./CalculatorStory";
 import { TRIAL_CTA_MICROCOPY } from "./trial-copy";
 
 type FormState = Record<keyof CoastFireInputs, string>;
@@ -455,8 +456,18 @@ export function CoastFireCalculator({ children }: { children?: ReactNode }) {
   const locked = isRunLimitReached(runCount);
   useCalculatorLimitTracking('coast_fire', locked);
   const resultRef = useRef<HTMLDivElement>(null);
+  /*
+   * Whether this visitor has given an address for their results. Until they
+   * have, a run renders the locked card and the email form in place of the
+   * answer, and nothing that restates the answer — the reading, the return
+   * comparison, the signup handoff — runs or renders either. See
+   * `lib/calculator-results-gate`.
+   */
+  const [unlocked, setUnlocked] = useState(false);
 
-  const { interpretation, isLoading: isInterpreting } = useCoastFireInterpretation(submitted);
+  // No reading until the result is visible: it restates the figures, and on a
+  // page nobody has given an address to it is a model call for nothing.
+  const { interpretation, isLoading: isInterpreting } = useCoastFireInterpretation(unlocked ? submitted : null);
 
   const sensitivity = useMemo(() => {
     if (!result) return [];
@@ -504,6 +515,7 @@ export function CoastFireCalculator({ children }: { children?: ReactNode }) {
    */
   useEffect(() => {
     setRunCount(readRunCount(COAST_FIRE_RUN_COUNT_KEY));
+    setUnlocked(readUnlockedEmail() !== null);
   }, []);
 
   function editInputs() {
@@ -564,7 +576,7 @@ export function CoastFireCalculator({ children }: { children?: ReactNode }) {
         <p className="cf-hero-sub">
           Add a few numbers. See whether your savings could grow to your retirement target without more contributions—and which assumptions make the difference.
         </p>
-        <p className="calculator-access">No account needed to try. Every assumption visible.</p>
+        <p className="calculator-access">Free, no account needed. Enter your email to see your result.</p>
         <CalculatorSteps />
       </section>
 
@@ -615,16 +627,26 @@ export function CoastFireCalculator({ children }: { children?: ReactNode }) {
 
       <div ref={resultRef} className="calculator-result-focus" tabIndex={-1} hidden={showInputs} aria-label="Your Coast FIRE result">
         {result && <div className="calculator-result-grid shell">
-          <div className="calculator-result-summary"><ResultPanel result={result} /></div>
-      <InterpretationPanel
+          <div className="calculator-result-summary">
+            {unlocked ? <ResultPanel result={result} /> : <CalculatorLockedResult coast />}
+          </div>
+      {/*
+        * Rendered as `false` while locked rather than moved, so the actions
+        * block below keeps its position and the capture inside it keeps its
+        * state across the unlock: its confirmation and the lead token it
+        * holds for signup are what the visitor sees next.
+        */}
+      {unlocked && <InterpretationPanel
         interpretation={interpretation}
         isInterpreting={isInterpreting}
         question={submitted
           ? `I have ${dollars(submitted.currentSavings)} saved. Could I stop contributing and retire at ${submitted.retirementAge}, spending ${dollars(submitted.annualRetirementSpending)} a year?`
           : "Could my current savings grow enough to fund retirement without more contributions?"}
-      />
+      />}
           <div className="calculator-result-actions">
             <CoastFireEmailCapture compact
+              gate={!unlocked}
+              onUnlock={() => setUnlocked(true)}
               // Remount when the submitted scenario changes so a prior "sent"
               // state cannot claim to belong to a newly calculated result.
               key={[
@@ -649,7 +671,7 @@ export function CoastFireCalculator({ children }: { children?: ReactNode }) {
         * than any run of it, and they are worth reading — and worth
         * indexing — before anyone has typed anything.
         */}
-      {result && !showInputs && (
+      {result && !showInputs && unlocked && (
       <section className="shell cf-sensitivity">
         <div className="cf-section-head">
           <p className="section-kicker">SEE WHAT CHANGES</p>
@@ -734,7 +756,9 @@ export function CoastFireCalculator({ children }: { children?: ReactNode }) {
              * -for this page was emptied to avoid.
              */
             onBeforeNavigate={() => {
-              if (result) storeCoastFireSignupContext(signupContext(result));
+              // A locked run is not handed over: signup would show the
+              // number the page is still holding back.
+              if (result && unlocked) storeCoastFireSignupContext(signupContext(result));
               else clearCoastFireSignupContext();
             }}
           />

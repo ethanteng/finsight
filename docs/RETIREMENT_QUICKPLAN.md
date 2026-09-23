@@ -108,6 +108,12 @@ same sourcing is still in the assumptions disclosure, which a visitor only
 reaches by running the model, so the page no longer credits its data sources to
 someone who reads it without running anything.
 
+## The email gate
+
+A plan result is held back until the visitor gives an email address, and a
+`rates` result is not. The same gate covers the Coast FIRE page. See **The email
+gate** in `COAST_FIRE_EMAIL_CAPTURE.md`.
+
 ## Three runs, then the save
 
 The Calculate button locks after three completed runs, and the sentence under

@@ -18,6 +18,12 @@
  * them there itself, straight away, rather than asking them to go and find it.
  * Either route restores the same run as the first decision in a new account.
  *
+ * As the gate (`gate`), it comes before the result instead of after it. The
+ * page holds the answer back until an address is given. Submitting sends the
+ * same email and creates the same lead, then reveals the result and stays on
+ * the page. Going to signup becomes a button beside the answer rather than
+ * the next thing that happens. See `lib/calculator-results-gate`.
+ *
  * The two are not equivalent in one respect, and deliberately so. Registration
  * skips the emailed verification code for a token that only ever left this
  * system inside a message to the address it names — holding one is evidence of
@@ -30,6 +36,7 @@
 import { useRef, useState } from "react";
 import type { CoastFireResult } from "@/lib/coast-fire";
 import { pushCoastFireResultsEmailed } from "@/lib/dataLayer";
+import { readUnlockedEmail, rememberUnlock } from "@/lib/calculator-results-gate";
 import { readCalculatorLeadAttribution } from "@/lib/calculator-lead-attribution";
 import {
   isHandoverToken,
@@ -45,14 +52,61 @@ import {
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
 
-type Status = "idle" | "sending" | "sent" | "leaving";
+type Status = "idle" | "sending" | "sent" | "unlocked" | "leaving";
 
-export function CoastFireEmailCapture({ result, compact = false }: { result: CoastFireResult; compact?: boolean }) {
-  const [email, setEmail] = useState("");
+export function CoastFireEmailCapture({
+  result,
+  compact = false,
+  gate = false,
+  onUnlock,
+}: {
+  result: CoastFireResult;
+  compact?: boolean;
+  /** Stand between the visitor and the result rather than under it. */
+  gate?: boolean;
+  /** Called once the address is accepted, so the page can reveal the result. */
+  onUnlock?: () => void;
+}) {
+  // Prefilled from an earlier unlock in this tab, so a later run's save does
+  // not ask for an address the visitor already gave.
+  const [email, setEmail] = useState(() => readUnlockedEmail() ?? "");
   const [status, setStatus] = useState<Status>("idle");
   const [error, setError] = useState<string | null>(null);
+  /** The lead token from a gated send, spent when the visitor asks to sign up. */
+  const [ref, setRef] = useState<string | null>(null);
   /** One conversion event per visitor, however many times they resend. */
   const reported = useRef(false);
+
+  /**
+   * Carry this run to signup.
+   *
+   * Both carriers, because they fail differently. The cookie is what
+   * /getstarted exchanges, and it cannot be read back from here to know it
+   * took. The stored context carries the same token and the figures, so a
+   * browser refusing the cookie costs the address prefill, not the run.
+   *
+   * No `emailedOutcome`: that field exists because a link opened days later
+   * may disagree with the figures its message quoted. Nothing has drifted
+   * between this result and this click.
+   */
+  async function leave(token: string | null, tracking?: Promise<void>) {
+    if (token) writeHandoverToken(COAST_FIRE_REF_COOKIE, token);
+    storeCoastFireSignupContext(
+      {
+        currentAge: result.currentAge,
+        retirementAge: result.retirementAge,
+        currentSavings: result.currentSavings,
+        annualRetirementSpending: result.annualRetirementSpending,
+        annualRetirementIncome: result.annualRetirementIncome,
+        realReturnRate: result.realReturnRate,
+        withdrawalRate: result.withdrawalRate,
+      },
+      { email: email.trim(), ...(token ? { sourceToken: token } : {}) },
+    );
+    setStatus("leaving");
+    await tracking;
+    leaveForSignup(resultsPageSignupHref(COAST_FIRE_SIGNUP_HREF));
+  }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -92,38 +146,27 @@ export function CoastFireEmailCapture({ result, compact = false }: { result: Coa
       }
 
       const body = await response.json().catch(() => null) as { ref?: unknown } | null;
-      const ref = isHandoverToken(body?.ref) ? body.ref : null;
-      if (!ref) {
+      const token = isHandoverToken(body?.ref) ? body.ref : null;
+      rememberUnlock(email);
+
+      if (gate) {
+        // The email went out, which is what the gate asked for, whether or not
+        // a token came back. Without one, signup still works; it just starts
+        // from the stored figures rather than the lead.
+        setRef(token);
+        setStatus("unlocked");
+        onUnlock?.();
+        return;
+      }
+
+      if (!token) {
         // The lead did not store, or its disclosure did not. Nothing to carry,
         // so this stays what it was before: the results are in their inbox.
         setStatus("sent");
         return;
       }
 
-      // Both, because they fail differently. The cookie is what /getstarted
-      // exchanges, and it cannot be read back from here to know it took; the
-      // stored context carries the same token and the figures, so a browser
-      // refusing the cookie costs the address prefill rather than the run.
-      writeHandoverToken(COAST_FIRE_REF_COOKIE, ref);
-      // No `emailedOutcome`: that field exists because a link opened days
-      // later may disagree with the figures its message quoted. Nothing has
-      // drifted between this result and this click.
-      storeCoastFireSignupContext(
-        {
-          currentAge: result.currentAge,
-          retirementAge: result.retirementAge,
-          currentSavings: result.currentSavings,
-          annualRetirementSpending: result.annualRetirementSpending,
-          annualRetirementIncome: result.annualRetirementIncome,
-          realReturnRate: result.realReturnRate,
-          withdrawalRate: result.withdrawalRate,
-        },
-        { email: email.trim(), sourceToken: ref },
-      );
-
-      setStatus("leaving");
-      await tracking;
-      leaveForSignup(resultsPageSignupHref(COAST_FIRE_SIGNUP_HREF));
+      await leave(token, tracking);
     } catch {
       setError("Network error. Please check your connection and try again.");
       setStatus("idle");
@@ -139,6 +182,25 @@ export function CoastFireEmailCapture({ result, compact = false }: { result: Coa
           We’re also emailing your result to <strong>{email.trim()}</strong>, so you can finish
           creating your account later.
         </p>
+      </div>
+    );
+  }
+
+  if (status === "unlocked") {
+    return (
+      <div className="cf-email-capture is-sent calculator-signup-cta" role="status" aria-live="polite">
+        <p className="cf-email-lead">
+          We emailed a copy to <strong>{email.trim()}</strong>. Save it to a free account to keep
+          exploring and add your connected accounts.
+        </p>
+        <button
+          className="button button-primary"
+          type="button"
+          onClick={() => { void leave(ref); }}
+          data-cs-override-id="coast-fire-unlocked-signup"
+        >
+          Save these results to your free account
+        </button>
       </div>
     );
   }
@@ -170,9 +232,9 @@ export function CoastFireEmailCapture({ result, compact = false }: { result: Coa
   return (
     <form className={`cf-email-capture${compact ? " is-compact" : ""}`} onSubmit={handleSubmit} aria-busy={status === "sending"}>
       <div className="cf-email-copy">
-        <p className="section-kicker">KEEP THIS RESULT</p>
-        <h3>Save this to a free account</h3>
-        {compact ? <p className="cf-email-lead">Keep this result and get an email copy.</p> : (
+        <p className="section-kicker">{gate ? "YOUR RESULT IS READY" : "KEEP THIS RESULT"}</p>
+        <h3>{gate ? "See your Coast FIRE number" : "Save this to a free account"}</h3>
+        {gate ? <p className="cf-email-lead">Enter your email to see your Coast FIRE number. We’ll send you a copy too.</p> : compact ? <p className="cf-email-lead">Keep this result and get an email copy.</p> : (
         <p className="cf-email-lead">
           Create a password on the next screen to save your Coast FIRE number, assumptions,
           and return comparison. We’ll also email you a copy.
@@ -207,7 +269,7 @@ export function CoastFireEmailCapture({ result, compact = false }: { result: Coa
             disabled={status === "sending"}
             data-cs-override-id="coast-fire-email-results"
           >
-            {status === "sending" ? "Sending…" : "Save these results to your free account"}
+            {status === "sending" ? "Sending…" : gate ? "Show my results" : "Save these results to your free account"}
           </button>
       </div>
 

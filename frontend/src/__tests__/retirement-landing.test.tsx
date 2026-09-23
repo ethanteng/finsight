@@ -12,6 +12,7 @@ import {
   RETIREMENT_SIGNUP_HREF,
   readRetirementSignupContext,
 } from '@/lib/retirement-signup-context';
+import { CALCULATOR_RESULTS_UNLOCK_KEY } from '@/lib/calculator-results-gate';
 
 jest.mock('@/lib/contentsquare', () => ({ trackContentsquareEvent: jest.fn() }));
 
@@ -66,6 +67,12 @@ describe('retirement landing ad parameter', () => {
 
 describe('retirement landing page', () => {
   const originalFetch = global.fetch;
+
+  beforeEach(() => {
+    // These cases are about the answer, so the results email has already been
+    // given. The gate in front of it has its own cases in calculator-results-gate.
+    window.sessionStorage.setItem(CALCULATOR_RESULTS_UNLOCK_KEY, 'reader@example.com');
+  });
 
   afterEach(() => {
     global.fetch = originalFetch;
