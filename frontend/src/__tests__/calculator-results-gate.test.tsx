@@ -242,7 +242,12 @@ describe('retirement calculator', () => {
     expect(leaveForSignup).not.toHaveBeenCalled();
   });
 
-  it('still reveals the verdict when the lead did not store', async () => {
+  /*
+   * The email went out, so the gate is satisfied. There is no lead to seed an
+   * account from, though, so no save is offered: signing up would arrive at an
+   * account without the run the button promised.
+   */
+  it('reveals the verdict but offers no save when the lead did not store', async () => {
     mockApi(PLAN, { message: 'sent' });
     renderPage();
     await runTheModel();
@@ -250,8 +255,8 @@ describe('retirement calculator', () => {
     giveEmail();
 
     expect(await screen.findByText(/retiring at 60 worked in/i)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Save these results to your free account' }));
-    await waitFor(() => expect(leaveForSignup).toHaveBeenCalled());
+    expect(screen.getByText(/we emailed a copy to/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Save these results to your free account' })).not.toBeInTheDocument();
   });
 
   /*

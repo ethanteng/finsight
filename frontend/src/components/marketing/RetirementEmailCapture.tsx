@@ -109,11 +109,11 @@ export function RetirementEmailCapture({
    * may disagree with the figures its message quoted. Nothing has drifted
    * between this result and this click.
    */
-  async function leave(token: string | null, tracking?: Promise<void>) {
-    if (token) writeHandoverToken(RETIREMENT_REF_COOKIE, token);
+  async function leave(token: string, tracking?: Promise<void>) {
+    writeHandoverToken(RETIREMENT_REF_COOKIE, token);
     storeRetirementSignupContext(inputs, {
       email: email.trim(),
-      ...(token ? { sourceToken: token } : {}),
+      sourceToken: token,
     });
     setStatus("leaving");
     await tracking;
@@ -157,8 +157,9 @@ export function RetirementEmailCapture({
 
       if (gate) {
         // The email went out, which is what the gate asked for, whether or not
-        // a token came back. Without one, signup still works; it just starts
-        // from the stored figures rather than the lead.
+        // a token came back. Without one there is no save to offer: the first
+        // decision is seeded from the stored lead and nothing else, so a
+        // signup would arrive at an empty account.
         setRef(token);
         setStatus("unlocked");
         onUnlock?.();
@@ -196,17 +197,17 @@ export function RetirementEmailCapture({
     return (
       <div className="qp-email-capture is-sent calculator-signup-cta" role="status" aria-live="polite">
         <p className="qp-email-lead">
-          We emailed a copy to <strong>{email.trim()}</strong>. Save it to a free account to keep
-          exploring and add your connected accounts.
+          We emailed a copy to <strong>{email.trim()}</strong>.
+          {ref && " Save it to a free account to keep exploring and add your connected accounts."}
         </p>
-        <button
+        {ref && <button
           className="button button-primary"
           type="button"
           onClick={() => { void leave(ref); }}
           data-cs-override-id="quickplan-unlocked-signup"
         >
           Save these results to your free account
-        </button>
+        </button>}
       </div>
     );
   }

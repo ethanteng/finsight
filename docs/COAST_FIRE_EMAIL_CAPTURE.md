@@ -33,9 +33,8 @@ result, which offers them an account rather than just an inbox copy.
    `/getstarted?source=coast-fire-calculator&entry=results_page`, the signup
    page the email would have taken them to, without waiting on their inbox.
    On a later, already-unlocked run the capture works as it used to: the
-   submit itself navigates. If the stamp fails, no `ref` is returned and the
-   signup carries only the stored figures. The results are in their inbox
-   either way.
+   submit itself navigates. If the stamp fails, no `ref` is returned and no
+   save is offered. The results are in their inbox either way.
 5. After the response, the address is added to MailerLite, in the Coast FIRE
    group.
 6. The email's call to action — "Finish creating your account" — links to
@@ -80,8 +79,9 @@ account" button that holds the lead token. Pressing it writes the handover
 cookie and the signup context, then leaves exactly as the old submit did. The
 cookie is written on the click, not on the send, because it lives ten minutes
 and the visitor may read their result for longer than that. If no token came
-back, the result is still revealed (the email went out) and the button carries
-the stored figures without one.
+back, the result is still revealed (the email went out) but no save is
+offered: the first decision is seeded only from a resolved lead, so a signup
+would arrive at an account without the run.
 
 Nothing that restates the answer runs while it is locked: not the figures, not
 the model reading (`/interpretation` is not called, which also saves a model
