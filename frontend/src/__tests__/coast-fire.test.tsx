@@ -19,6 +19,7 @@ import {
 } from "@/lib/coast-fire-signup-context";
 import { leaveForSignup } from "@/lib/calculator-handover";
 import { CALCULATOR_RUN_LIMIT, runLimitPhrase } from "@/lib/calculator-run-limit";
+import { CALCULATOR_RESULTS_UNLOCK_KEY } from '@/lib/calculator-results-gate';
 
 jest.mock("@/lib/dataLayer", () => ({
   pushCoastFireCalculated: jest.fn(),
@@ -82,6 +83,9 @@ describe("Coast FIRE calculator page", () => {
   beforeEach(() => {
     window.history.replaceState({}, "", "/coast-fire-calculator");
     window.sessionStorage.clear();
+    // These cases are about the answer, so the results email has already been
+    // given. The gate in front of it has its own cases in calculator-results-gate.
+    window.sessionStorage.setItem(CALCULATOR_RESULTS_UNLOCK_KEY, 'reader@example.com');
     global.requestAnimationFrame = (callback: FrameRequestCallback) => {
       callback(0);
       return 1;

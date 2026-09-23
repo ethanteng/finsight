@@ -129,6 +129,21 @@
 .marketing-site.calculator-story .calculator-result-actions :is(.qp-email-row, .cf-email-row) { display: grid; grid-template-columns: 1fr; gap: 10px; }
 .marketing-site.calculator-story .calculator-result-actions :is(.qp-email-row, .cf-email-row) input { min-height: 44px; padding: 10px 13px; }
 .marketing-site.calculator-story .calculator-result-actions .button-primary { font-size: 18px; padding: 16px 20px; min-height: 64px; }
+/* The result held back for an email address: an illustrative card, blurred, with the ask on top. */
+.calculator-locked-result { position: relative; overflow: hidden; border: 1px solid #d5dccf; border-radius: 20px; background: #fffdf5; min-height: 280px; }
+.calculator-locked-preview { padding: 20px; filter: blur(7px); opacity: .7; user-select: none; pointer-events: none; }
+.calculator-locked-preview .section-kicker { margin: 0 0 10px; }
+.calculator-locked-figure { display: block; font-size: 40px; line-height: 1.1; color: #173d2a; }
+.calculator-locked-bar { display: block; height: 14px; margin: 18px 0; border-radius: 999px; background: #dce0d4; }
+.calculator-locked-bar > i { display: block; width: 72%; height: 100%; border-radius: inherit; background: #2b8f5d; }
+.calculator-locked-preview dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 0; }
+.calculator-locked-preview dt { font-size: 12px; color: #52634f; }
+.calculator-locked-preview dd { margin: 4px 0 0; font-size: 22px; font-weight: 700; color: #173d2a; }
+.calculator-locked-message { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; padding: 20px; text-align: center; background: rgba(255, 253, 245, .55); color: #173d2a; }
+.marketing-site.calculator-story .calculator-locked-message h2 { margin: 4px 0 0; font-size: 24px; line-height: 1.2; }
+.calculator-locked-message p { margin: 0; max-width: 34ch; font-size: 14px; line-height: 1.5; color: #455b48; }
+.calculator-signup-cta { display: flex; flex-direction: column; gap: 10px; }
+.calculator-signup-cta p { margin: 0; font-size: 13px; line-height: 1.5; color: #455b48; }
 .marketing-site.calculator-story .calculator-run-again { display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 44px; width: 100%; margin-top: 12px; border: 0; background: transparent; color: #244632; font-size: 14px; font-weight: 650; text-decoration: none; cursor: pointer; }
 .calculator-run-again > span { text-decoration: underline; text-underline-offset: 4px; }
 .calculator-run-again > svg { flex: none; }

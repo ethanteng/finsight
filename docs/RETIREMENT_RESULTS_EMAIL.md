@@ -9,10 +9,11 @@ shares its machinery. This page covers what differs.
 
 ## The flow
 
-1. A visitor runs the model. The answer renders as before.
-2. An email capture appears between the scenario comparison and the
-   methodology: by there they have the verdict and have seen what moves it,
-   which is the point at which a copy in their inbox is worth an address.
+1. A visitor runs the model. A plan result is held behind the email gate
+   (`COAST_FIRE_EMAIL_CAPTURE.md`, **The email gate**): a locked card and the
+   capture render in its place, and nothing else about the verdict does.
+2. Giving the address sends the email and reveals the verdict on the page.
+   Signup is a button beside it rather than an automatic redirect.
 3. `POST /api/retirement-quickplan/email-results` re-runs the model from the
    submitted figures, stores a `RetirementLead` row with a random token, and
    sends through Resend as HTML and plain text.

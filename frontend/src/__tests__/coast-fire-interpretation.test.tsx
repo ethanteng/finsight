@@ -11,6 +11,7 @@
 import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { CoastFireCalculator } from '@/components/marketing/CoastFireCalculator';
+import { CALCULATOR_RESULTS_UNLOCK_KEY } from '@/lib/calculator-results-gate';
 
 jest.mock('@/lib/dataLayer', () => ({
   pushCoastFireCalculated: jest.fn(),
@@ -61,6 +62,9 @@ function submit(overrides: Record<string, string> = {}) {
 }
 
 beforeEach(() => {
+  // These cases are about the reading, so the results email has already been
+  // given. The gate in front of it has its own cases in calculator-results-gate.
+  window.sessionStorage.setItem(CALCULATOR_RESULTS_UNLOCK_KEY, 'reader@example.com');
   // jsdom has no layout, and the page scrolls the result into view on submit.
   Element.prototype.scrollIntoView = jest.fn();
   global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({}) });

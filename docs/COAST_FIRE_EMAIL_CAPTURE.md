@@ -6,17 +6,18 @@
 
 The `/coast-fire-calculator` page is the acquisition wedge for the Coast FIRE
 beachhead experiment. It answers the free question — "have I reached Coast
-FIRE?" — in the browser, with no account and no email. This document covers the
-two steps past that: the plain-language reading printed under the number, and
-turning an anonymous calculator visitor into a known prospect by emailing them
-their own result — which now offers them an account rather than just an inbox
-copy.
+FIRE?" — in the browser, with no account. It now asks for an email address
+before it shows the answer: see **The email gate**. This document covers that
+gate, the plain-language reading printed under the number, and turning an
+anonymous calculator visitor into a known prospect by emailing them their own
+result, which offers them an account rather than just an inbox copy.
 
 ## The flow
 
-1. A visitor submits the seven inputs. The number is calculated and rendered in
-   the browser, as before.
-2. An email capture appears under the result card. It appears only after a
+1. A visitor submits the seven inputs. The number is calculated in the browser
+   but not rendered: a locked card stands in for it until an address is given.
+   See **The email gate**.
+2. The email capture appears beside the locked card. It appears only after a
    submitted run: the page opens with empty personal figures and no result, so
    there is nothing to email until the visitor asks for an answer — and
    collecting an address against figures nobody entered would attach their
@@ -25,13 +26,15 @@ copy.
    address. It recomputes the result server-side, stores a `CoastFireLead` row
    with a random token, and sends the message through Resend.
 4. It then stamps `tokenDisclosedAt` on that row and returns the token as
-   `ref`. The page writes the same `/getstarted`-scoped cookie the emailed
-   route would have written, stores the run in sessionStorage beside it, and
-   navigates to
-   `/getstarted?source=coast-fire-calculator&entry=results_page` — so the
-   visitor lands on the signup page the email would have taken them to,
-   without waiting on their inbox. If the stamp fails, no `ref` is returned and
-   this step does not happen: the results are in their inbox either way.
+   `ref`, and the page reveals the result. When the visitor presses "Save
+   these results to your free account", the page writes the same
+   `/getstarted`-scoped cookie the emailed route would have written, stores
+   the run in sessionStorage beside it, and navigates to
+   `/getstarted?source=coast-fire-calculator&entry=results_page`, the signup
+   page the email would have taken them to, without waiting on their inbox.
+   On a later, already-unlocked run the capture works as it used to: the
+   submit itself navigates. If the stamp fails, no `ref` is returned and no
+   save is offered. The results are in their inbox either way.
 5. After the response, the address is added to MailerLite, in the Coast FIRE
    group.
 6. The email's call to action — "Finish creating your account" — links to
@@ -60,6 +63,47 @@ The page's own "Stress-test my Coast FIRE plan" button reaches the same
 tailored page through sessionStorage rather than a token, so both entry points
 continue the same decision.
 
+## The email gate
+
+Both calculators hold their answer back until the visitor gives an email
+address. A submitted run renders `CalculatorLockedResult` in place of the
+result card: an illustrative card, blurred, with fixed figures that are never
+the visitor's own, and "Your result is ready" on top. The capture sits beside
+it in gate mode, and its button reads "Show my results".
+
+Submitting it is the same request as before: the email goes out, the lead is
+stored and MailerLite is updated. What changes is what happens next. The page
+reveals the result and stays where it is, rather than navigating to
+`/getstarted`. The capture turns into a "Save these results to your free
+account" button that holds the lead token. Pressing it writes the handover
+cookie and the signup context, then leaves exactly as the old submit did. The
+cookie is written on the click, not on the send, because it lives ten minutes
+and the visitor may read their result for longer than that. If no token came
+back, the result is still revealed (the email went out) but no save is
+offered: the first decision is seeded only from a resolved lead, so a signup
+would arrive at an account without the run.
+
+Nothing that restates the answer runs while it is locked: not the figures, not
+the model reading (`/interpretation` is not called, which also saves a model
+call per anonymous run), not the return comparison or the retirement charts,
+and not the page's own signup CTA, which would otherwise carry the run to
+`/getstarted` where the signup page shows the number.
+
+One address unlocks every later run in the tab, on either calculator.
+`lib/calculator-results-gate.ts` keeps it in session storage under
+`asklinc.calculator-results-unlocked.v1`, and later captures prefill it. Later
+runs show their result straight away, with the ordinary capture beneath it.
+
+**It is a nudge, not a control**, like the run limit. The Coast FIRE formula
+runs in the browser, and the retirement model's response reaches the browser
+before the gate hides it. Anyone who opens devtools can read the answer. What
+the gate guarantees is only that the rendered page does not contain it.
+
+A retirement `rates` answer is not gated. It has no email to send, because the
+endpoint refuses a run with no portfolio or spending level. It says nothing
+about the visitor's own plan, and its job is to ask for the two numbers that
+produce a plan result, which is gated.
+
 ## Three runs, then the save
 
 The Calculate button locks after three completed runs, and a line under it
@@ -70,7 +114,7 @@ a control, is in `docs/RETIREMENT_QUICKPLAN.md`.
 
 ## The reading under the number
 
-Submitting a scenario also posts the same seven inputs to
+Once the result is unlocked, the page also posts the same seven inputs to
 `POST /api/coast-fire/interpretation`, which re-runs the formula server-side and
 asks a model to say what the figures mean. The division is the one
 `docs/SCENARIO_MODELING.md` draws for the authenticated product: the formula

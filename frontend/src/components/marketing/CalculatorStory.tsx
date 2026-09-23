@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowDown, ArrowUpRight, Check } from "lucide-react";
+import { ArrowDown, ArrowUpRight, Check, Lock } from "lucide-react";
 
 type CalculatorInterpretation = {
   headline: string;
@@ -78,4 +78,33 @@ export function CalculatorPreview({ coast = false }: { coast?: boolean }) {
 
 export function CalculatorNextQuestion({ coast = false }: { coast?: boolean }) {
   return <section className="calculator-next-question shell"><div><p className="section-kicker">KEEP EXPLORING</p><h2>Change the assumption,<br /><em>not the spreadsheet.</em></h2></div><div><p>{coast ? "Try another retirement age, spending level, or return. Recalculate to see how your target changes." : "Try another retirement date or spending level. Run the model again to see how the same plan holds up under different assumptions."}</p><Link className="text-link" href={coast ? "/retirement-calculator" : "/coast-fire-calculator"}>{coast ? "Stress-test retirement against market history" : "Explore your Coast FIRE number"} <span aria-hidden="true">→</span></Link></div></section>;
+}
+
+/**
+ * Where the result goes while it waits for an email address.
+ *
+ * The blurred card behind the message is illustration, never the visitor's
+ * answer: its figures are fixed and appear on every run. Rendering the real
+ * result under a CSS blur would put it in the DOM, where any inspector reads
+ * it. What the visitor gets from this is how much there is to see.
+ */
+export function CalculatorLockedResult({ coast = false }: { coast?: boolean }) {
+  return (
+    <aside className="calculator-locked-result" aria-labelledby="calculator-locked-title">
+      <div className="calculator-locked-preview" aria-hidden="true">
+        <p className="section-kicker">{coast ? "YOUR COAST FIRE NUMBER" : "THE MODEL’S ANSWER"}</p>
+        <strong className="calculator-locked-figure">{coast ? "$412,380" : "736 of 800"}</strong>
+        <span className="calculator-locked-bar"><i /></span>
+        <dl>
+          <div><dt>{coast ? "Target at retirement" : "Portfolio at retirement"}</dt><dd>$1,386,420</dd></div>
+          <div><dt>{coast ? "If you add $0" : "First-year draw"}</dt><dd>{coast ? "$1,418,960" : "$61,740"}</dd></div>
+        </dl>
+      </div>
+      <div className="calculator-locked-message">
+        <Lock size={20} aria-hidden="true" />
+        <h2 id="calculator-locked-title">Your result is ready.</h2>
+        <p>Enter your email below to see it.</p>
+      </div>
+    </aside>
+  );
 }

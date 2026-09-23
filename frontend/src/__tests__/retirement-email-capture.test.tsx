@@ -13,6 +13,7 @@ import { RetirementQuickPlan } from '@/components/marketing/RetirementQuickPlan'
 import { pushRetirementResultsEmailed, pushCalculatorRunLimitReached } from '@/lib/dataLayer';
 import { leaveForSignup } from '@/lib/calculator-handover';
 import { CALCULATOR_RUN_LIMIT, runLimitPhrase } from '@/lib/calculator-run-limit';
+import { CALCULATOR_RESULTS_UNLOCK_KEY } from '@/lib/calculator-results-gate';
 
 /*
  * jsdom implements neither navigation nor a `location` that can be replaced,
@@ -147,6 +148,9 @@ beforeEach(() => {
   jest.mocked(leaveForSignup).mockClear();
   window.history.replaceState({}, '', '/retirement-calculator');
   window.sessionStorage.clear();
+  // These cases are about the answer, so the results email has already been
+  // given. The gate in front of it has its own cases in calculator-results-gate.
+  window.sessionStorage.setItem(CALCULATOR_RESULTS_UNLOCK_KEY, 'reader@example.com');
   Element.prototype.scrollIntoView = jest.fn();
   mockApi(BASE_RESULT);
 });
@@ -407,5 +411,7 @@ it('resets the capture when a new plan is run', async () => {
   await runTheModel();
 
   await waitFor(() => expect(screen.queryByText(/on its way/i)).not.toBeInTheDocument());
-  expect(screen.getByLabelText('Email address')).toHaveValue('');
+  // The form is back for the new plan, holding the address already given in
+  // this tab rather than asking for it again.
+  expect(screen.getByLabelText('Email address')).toHaveValue('reader@example.com');
 });
