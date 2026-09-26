@@ -1,6 +1,7 @@
 "use client";
 import { Brain } from 'lucide-react';
 import Link from 'next/link';
+import { SocialLinks } from './SocialLinks';
 
 export default function SiteFooter({ variant = 'default' }: { variant?: 'default' | 'auth' }) {
   if (variant === 'auth') {
@@ -72,62 +73,12 @@ export default function SiteFooter({ variant = 'default' }: { variant?: 'default
             <p className="text-sm text-muted-foreground">
               &copy; {new Date().getFullYear()} Ask Linc. Self-directed financial planning for your next decision.
             </p>
-            <div className="flex items-center space-x-4">
-              <a
-                href="https://bsky.app/profile/asklinc.com"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center space-x-2 text-sm text-muted-foreground hover:text-primary transition-colors"
-              >
-                <img
-                  src="/logos/bluesky.jpeg"
-                  alt="Bluesky"
-                  className="w-4 h-4"
-                  onError={(e) => {
-                    e.currentTarget.style.display = 'none';
-                    e.currentTarget.nextElementSibling?.classList.remove('hidden');
-                  }}
-                />
-                <div className="w-4 h-4 bg-blue-500 rounded hidden"></div>
-                <span>Bluesky</span>
-              </a>
-              <a
-                href="https://asklinc.substack.com/"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center space-x-2 text-sm text-muted-foreground hover:text-primary transition-colors"
-              >
-                <img
-                  src="/logos/substack.png"
-                  alt="Substack"
-                  className="w-4 h-4"
-                  onError={(e) => {
-                    e.currentTarget.style.display = 'none';
-                    e.currentTarget.nextElementSibling?.classList.remove('hidden');
-                  }}
-                />
-                <div className="w-4 h-4 bg-orange-500 rounded hidden"></div>
-                <span>Substack</span>
-              </a>
-              <a
-                href="https://www.linkedin.com/company/ask-linc/"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center space-x-2 text-sm text-muted-foreground hover:text-primary transition-colors"
-              >
-                <img
-                  src="/logos/linkedin.png"
-                  alt="LinkedIn"
-                  className="w-4 h-4"
-                  onError={(e) => {
-                    e.currentTarget.style.display = 'none';
-                    e.currentTarget.nextElementSibling?.classList.remove('hidden');
-                  }}
-                />
-                <div className="w-4 h-4 bg-[#0A66C2] rounded hidden"></div>
-                <span>LinkedIn</span>
-              </a>
-            </div>
+            <SocialLinks
+              className="flex flex-wrap items-center justify-center gap-0.5"
+              linkClassName="grid h-11 w-11 place-items-center rounded-lg text-muted-foreground transition-colors hover:text-primary"
+              iconClassName="h-[18px] w-[18px] fill-current"
+              badgeClassName="h-9 w-9"
+            />
           </div>
         </div>
       </div>

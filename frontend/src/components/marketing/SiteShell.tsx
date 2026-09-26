@@ -3,6 +3,7 @@ import { TRIAL_CTA_MICROCOPY } from "./trial-copy";
 import { PRIMARY_NAV_LINKS } from "@/lib/site-nav";
 import { MarketingGetStartedButton } from "./MarketingGetStartedButton";
 import { MarketingMobileMenu } from "./MarketingMobileMenu";
+import { SocialLinks } from "@/components/SocialLinks";
 
 export function SiteHeader() {
   return (
@@ -38,6 +39,7 @@ export function SiteFooter() {
           </Link>
           <p>Your finances. Your questions. Your next decision.</p>
           <MarketingGetStartedButton className="button button-primary footer-start-button" trackingLocation="footer" csOverrideId="cta-start-free-trial-footer" />
+          <SocialLinks className="footer-social" badgeClassName="footer-social-taaft" />
         </div>
         <div className="footer-column">
           <b>PRODUCT</b>
