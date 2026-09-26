@@ -403,6 +403,12 @@ footer { padding-block: 55px 28px; background: #0a1912; color: white; }.footer-i
 .footer-column b { margin-bottom: 7px; color: #6f8177; font-size: 12px; letter-spacing: .16em; }
 .footer-column a { display: flex; min-height: 44px; align-items: center; color: #c3cec7; }
 .footer-column a:hover { color: var(--lime); }
+/* 44px hit areas like the column links; the negative margin lines the first icon up with the text above. */
+.footer-social { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; margin: 14px 0 0 -13px; }
+.footer-social a { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 10px; color: #c3cec7; transition: color .2s; }
+.footer-social a:hover { color: var(--lime); }
+.footer-social svg { width: 18px; height: 18px; fill: currentColor; }
+.footer-social-taaft { width: 36px; height: 36px; }
 .footer-bottom { display: flex; justify-content: space-between; gap: 30px; padding-block: 22px 4px; border-top: 1px solid rgba(255,255,255,.12); color: #718279; font-size: 12px; }
 .footer-bottom div { display: flex; gap: 18px; }
 

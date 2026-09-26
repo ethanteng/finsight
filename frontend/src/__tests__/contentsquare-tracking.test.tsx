@@ -108,6 +108,13 @@ describe("Contentsquare content security policy", () => {
     expect(directive(production, "object-src")).toBe("object-src 'none'");
   });
 
+  it("allows the TAAFT footer badge as an image only", () => {
+    expect(directive(production, "img-src").split(" ")).toContain("https://media.theresanaiforthat.com");
+    for (const name of ["default-src", "script-src", "connect-src", "frame-src", "style-src"]) {
+      expect(directive(production, name)).not.toContain("theresanaiforthat");
+    }
+  });
+
   it("allows Reddit's pixel resources without allowing arbitrary Reddit hosts", () => {
     // https://business.reddithelp.com/articles/Knowledge/reddit-pixel
     expect(directive(production, "script-src")).toContain("https://www.redditstatic.com");
