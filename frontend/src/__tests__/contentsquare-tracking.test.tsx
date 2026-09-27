@@ -115,6 +115,14 @@ describe("Contentsquare content security policy", () => {
     }
   });
 
+  it("allows the teaser video as a privacy-enhanced YouTube frame only", () => {
+    expect(directive(production, "frame-src").split(" ")).toContain("https://www.youtube-nocookie.com");
+    expect(production).not.toContain("https://www.youtube.com");
+    for (const name of ["default-src", "script-src", "connect-src", "img-src", "style-src"]) {
+      expect(directive(production, name)).not.toContain("youtube");
+    }
+  });
+
   it("allows Reddit's pixel resources without allowing arbitrary Reddit hosts", () => {
     // https://business.reddithelp.com/articles/Knowledge/reddit-pixel
     expect(directive(production, "script-src")).toContain("https://www.redditstatic.com");

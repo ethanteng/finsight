@@ -11,6 +11,13 @@
   .story-hero .hero-actions { flex-direction: row; align-items: center; flex-wrap: wrap; justify-content: center; gap: 28px; margin-top: 28px; }
   .story-hero .microcopy { font-size: 13px; margin-top: 22px; }
   .story-flow-section { padding-bottom: 24px; }
+  .teaser-video { max-width: 960px; margin-inline: auto; aspect-ratio: 16 / 9; overflow: hidden; border: 1px solid #bfc7ba; border-radius: 24px; background: var(--ink); box-shadow: 0 24px 60px rgba(20,47,32,.14); }
+  .teaser-video iframe { display: block; width: 100%; height: 100%; border: 0; }
+  .story-video-section { padding-bottom: 64px; }
+  @media (max-width: 760px) {
+    .teaser-video { border-radius: 16px; }
+    .story-video-section { padding-bottom: 40px; }
+  }
   .planning-flow { margin: 0; }
   .planning-flow ol { padding: 0; margin: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); list-style: none; gap: 12px; }
   .planning-flow li { position: relative; min-width: 0; display: flex; flex-direction: column; min-height: 270px; padding: 24px 22px 22px; border: 1px solid #c9d0c1; border-radius: 18px; background: #e9eee2; }

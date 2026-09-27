@@ -6,6 +6,7 @@ import { MarketingGetStartedButton } from "./MarketingGetStartedButton";
 import { TRIAL_CTA_MICROCOPY } from "./trial-copy";
 import { AnalysisVisual, ConnectedLifeVisual, PlanningFlow } from "./PlanningStory";
 import { AssumptionPreview } from "./AssumptionPreview";
+import { TeaserVideo } from "./TeaserVideo";
 
 export default function MarketingHome({ pricing = FALLBACK_PRICING }: { pricing?: Pricing }) {
   return (
@@ -18,6 +19,7 @@ export default function MarketingHome({ pricing = FALLBACK_PRICING }: { pricing?
         <div className="hero-actions"><MarketingGetStartedButton className="button button-primary" trackingLocation="homepage_hero" csOverrideId="cta-start-free-trial-hero" /></div>
         <p className="microcopy">{TRIAL_CTA_MICROCOPY}</p>
       </section>
+      <section className="story-video-section shell" aria-label="Watch the Ask Linc teaser"><TeaserVideo /></section>
       <section className="story-flow-section shell" aria-label="From your accounts to your next decision"><PlanningFlow /></section>
       <div className="story-narrative shell" id="how-it-works">
         <section className="story-chapter" aria-labelledby="connect-title">
