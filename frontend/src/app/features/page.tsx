@@ -4,6 +4,7 @@ import { MarketingGetStartedButton } from '@/components/marketing/MarketingGetSt
 import { TRIAL_CTA_MICROCOPY } from '@/components/marketing/trial-copy';
 import { AnalysisVisual } from '@/components/marketing/PlanningStory';
 import { PageCta, SiteFooter, SiteHeader } from '@/components/marketing/SiteShell';
+import { TeaserVideo } from '@/components/marketing/TeaserVideo';
 
 export const metadata: Metadata = {
   title: 'How Ask Linc Works | Self-Directed Financial Planning',
@@ -48,6 +49,10 @@ export default function FeaturesPageRoute() {
           <p className="microcopy">{TRIAL_CTA_MICROCOPY}</p>
         </div>
         <AnalysisVisual />
+      </section>
+
+      <section className="shell features-video-section" aria-label="Watch the Ask Linc teaser">
+        <TeaserVideo />
       </section>
 
       <section className="page-section shell features-start-section" id="system">
