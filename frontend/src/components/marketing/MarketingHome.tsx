@@ -18,8 +18,8 @@ export default function MarketingHome({ pricing = FALLBACK_PRICING }: { pricing?
         <p className="story-hero-copy">Connect your finances. Ask your question. Linc pulls it all together, runs the numbers, and gives you a plan you can explore.</p>
         <div className="hero-actions"><MarketingGetStartedButton className="button button-primary" trackingLocation="homepage_hero" csOverrideId="cta-start-free-trial-hero" /></div>
         <p className="microcopy">{TRIAL_CTA_MICROCOPY}</p>
+        <TeaserVideo />
       </section>
-      <section className="story-video-section shell" aria-label="Watch the Ask Linc teaser"><TeaserVideo /></section>
       <section className="story-flow-section shell" aria-label="From your accounts to your next decision"><PlanningFlow /></section>
       <div className="story-narrative shell" id="how-it-works">
         <section className="story-chapter" aria-labelledby="connect-title">
