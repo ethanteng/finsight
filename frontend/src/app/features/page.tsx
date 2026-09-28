@@ -38,8 +38,8 @@ export default function FeaturesPageRoute() {
   return (
     <main className="marketing-site subpage features-page">
       <SiteHeader />
-      <section className="subhero shell split-subhero">
-        <div>
+      <section className="subhero shell split-subhero features-hero">
+        <div className="features-hero-copy">
           <p className="section-kicker">HOW ASK LINC WORKS</p>
           <h1>You bring the question. <em>Linc brings it together.</em></h1>
           <p className="subhero-copy">Connect your finances and tell Linc what you’re weighing. It builds a plan, explains the tradeoffs, and helps you compare your options.</p>
@@ -49,9 +49,6 @@ export default function FeaturesPageRoute() {
           <p className="microcopy">{TRIAL_CTA_MICROCOPY}</p>
         </div>
         <AnalysisVisual />
-      </section>
-
-      <section className="shell features-video-section" aria-label="Watch the Ask Linc teaser">
         <TeaserVideo />
       </section>
 

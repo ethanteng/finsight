@@ -4,19 +4,32 @@
   :where(a, button, summary, input, textarea, select):focus-visible { outline: 3px solid #397052; outline-offset: 5px; }
   :where(section, div, p)[id] { scroll-margin-top: 28px; }
   .text-link { display: inline-flex; align-items: center; gap: 9px; }
-  .story-hero { padding-block: 76px 55px; text-align: center; }
+  .story-hero { padding-block: 76px 64px; text-align: center; }
   .story-hero h1 { max-width: 1040px; margin: 20px auto 26px; font-size: clamp(46px, 5.4vw, 76px); line-height: 1.04; letter-spacing: -.06em; }
   .story-hero h1 em { margin-top: 10px; font-size: .88em; letter-spacing: -.055em; }
   .story-hero-copy { max-width: 600px; margin: 0 auto; font-size: 18px; line-height: 1.6; color: #526257; }
   .story-hero .hero-actions { flex-direction: row; align-items: center; flex-wrap: wrap; justify-content: center; gap: 28px; margin-top: 28px; }
   .story-hero .microcopy { font-size: 13px; margin-top: 22px; }
   .story-flow-section { padding-bottom: 24px; }
-  .teaser-video { max-width: 960px; margin-inline: auto; aspect-ratio: 16 / 9; overflow: hidden; border: 1px solid #bfc7ba; border-radius: 24px; background: var(--ink); box-shadow: 0 24px 60px rgba(20,47,32,.14); }
+  .teaser-video { width: 100%; max-width: 960px; margin-inline: auto; aspect-ratio: 16 / 9; overflow: hidden; border: 1px solid #bfc7ba; border-radius: 24px; background: var(--ink); box-shadow: 0 24px 60px rgba(20,47,32,.14); }
   .teaser-video iframe { display: block; width: 100%; height: 100%; border: 0; }
-  .story-video-section { padding-bottom: 64px; }
+  /* The teaser sits inside each hero so a phone can lift it above the copy.
+     On wider screens it still follows the whole hero, full width. */
+  .story-hero .teaser-video { margin-top: 55px; }
+  .subhero.features-hero { padding-bottom: 0; }
+  .features-hero .teaser-video { grid-column: 1 / -1; }
   @media (max-width: 760px) {
     .teaser-video { border-radius: 16px; }
-    .story-video-section { padding-bottom: 40px; }
+    /* Kicker, headline, video, then the rest. Flattening the features copy
+       column lets its children share one flex order with the video. */
+    .story-hero, .split-subhero.features-hero { display: flex; flex-direction: column; align-items: stretch; gap: 0; }
+    .features-hero-copy { display: contents; }
+    :is(.story-hero, .features-hero-copy) > :is(.section-kicker, h1) { order: -2; }
+    :is(.story-hero, .features-hero) > .teaser-video { order: -1; margin-top: 0; }
+    /* Flex items' margins add instead of collapsing; the headline's top
+       margin alone keeps the kicker gap it had. */
+    :is(.story-hero, .features-hero-copy) > .section-kicker { margin-bottom: 0; }
+    .features-hero .analysis-visual { margin-top: 32px; }
   }
   .planning-flow { margin: 0; }
   .planning-flow ol { padding: 0; margin: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); list-style: none; gap: 12px; }
