@@ -180,7 +180,7 @@ export default function Retire55Vs57Page() {
           The snapshot was generated on {data.generatedOn}; its dataset fingerprint is <code>{data.datasetSha256}</code>.
         </p>
         <p>
-          See the broader study, <Link href="/research/historical-retirement-outcomes">what changed the outcome across all three scenarios →</Link>, or run your own inputs through the <Link href="/retirement-calculator">Ask Linc retirement calculator</Link>.
+          See the broader study, <Link href="/research/historical-retirement-outcomes">what changed the outcome across all three scenarios →</Link>, run your own inputs through the <Link href="/retirement-calculator">Ask Linc retirement calculator</Link>, or <Link href="/research">browse all Ask Linc research</Link>.
         </p>
       </section>
 
