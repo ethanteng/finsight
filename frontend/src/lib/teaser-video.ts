@@ -2,11 +2,14 @@
  * The marketing teaser video, swappable without a deploy.
  *
  * `TeaserVideo` doesn't name a video. Its player loads /video/embed, and that
- * route decides what the player shows. Which video is the `video` item in the
- * Vercel Global Config (formerly Edge Config) connected to the frontend
- * project: an item can be changed in the dashboard and is read on the next
- * request, where an environment variable only reaches deployments made after
- * it changed. The item is one of:
+ * route decides what the player shows. Once half the player is on screen,
+ * `TeaserVideo` swaps it to /video/embed?autoplay=1, which starts it muted: no
+ * browser lets a page start sound by itself.
+ *
+ * Which video is the `video` item in the Vercel Global Config (formerly Edge
+ * Config) connected to the frontend project: an item can be changed in the
+ * dashboard and is read on the next request, where an environment variable
+ * only reaches deployments made after it changed. The item is one of:
  *
  *   "GRBboPyuL5U" or any YouTube link   YouTube: /video/embed redirects there
  *   "https://…/teaser.mp4"              a video file, played by our own player page
@@ -142,12 +145,15 @@ export async function teaserVideo(env: NodeJS.ProcessEnv = process.env): Promise
 }
 
 /**
- * YouTube's privacy-enhanced host sets no cookies until the visitor presses
- * play. It is also the only YouTube host frame-src allows, so an embed from
- * youtube.com itself would be refused.
+ * YouTube's privacy-enhanced host, the only YouTube host frame-src allows, so
+ * an embed from youtube.com itself would be refused. It stores nothing about a
+ * visitor until a video plays. Inline, because iOS autoplays nothing else;
+ * muted when it starts by itself, because browsers autoplay nothing else, and
+ * the player's own control unmutes it.
  */
-export function teaserEmbedUrl(id: string): string {
-  return `https://www.youtube-nocookie.com/embed/${id}?rel=0`;
+export function teaserEmbedUrl(id: string, autoplay = false): string {
+  const start = autoplay ? '&autoplay=1&mute=1' : '';
+  return `https://www.youtube-nocookie.com/embed/${id}?rel=0&playsinline=1${start}`;
 }
 
 const attribute = (value: string) =>
@@ -156,15 +162,17 @@ const attribute = (value: string) =>
 /**
  * The page the iframe shows for a video file. Nothing but a <video>: native
  * controls, fullscreen through the iframe's `allowFullScreen`, and the frame's
- * own background around it. With a poster nothing is downloaded until somebody
- * presses Play; without one, just enough for a first frame.
+ * own background around it. Autoplay starts it muted (the only autoplay
+ * browsers allow) and inline (the only kind iOS allows). Otherwise, with a
+ * poster nothing is downloaded until somebody presses Play; without one, just
+ * enough for a first frame.
  */
-export function playerPage({
-  mp4,
-  poster,
-  captions,
-}: Extract<TeaserVideoSource, { mp4: string }>): string {
+export function playerPage(
+  { mp4, poster, captions }: Extract<TeaserVideoSource, { mp4: string }>,
+  autoplay = false,
+): string {
   const posterAttribute = poster ? ` poster="${attribute(poster)}"` : '';
+  const start = autoplay ? 'autoplay muted' : `preload="${poster ? 'none' : 'metadata'}"`;
   // Same-origin, relayed by /video/captions, so the captions never depend on
   // the file host's CORS.
   const track = captions
@@ -183,7 +191,7 @@ export function playerPage({
 </style>
 </head>
 <body>
-<video controls playsinline preload="${poster ? 'none' : 'metadata'}"${posterAttribute}>
+<video controls playsinline ${start}${posterAttribute}>
   <source src="${attribute(mp4)}" type="video/mp4">${track}
 </video>
 </body>

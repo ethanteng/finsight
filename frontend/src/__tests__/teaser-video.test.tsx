@@ -4,6 +4,7 @@
  * The route handlers run on the server, and `next/server` is built on the web
  * Request and Response, which jsdom does not provide.
  */
+import { NextRequest } from 'next/server';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { GET as captionsGET } from '@/app/video/captions/route';
 import { GET as embedGET } from '@/app/video/embed/route';
@@ -58,7 +59,8 @@ async function call(
   }
 }
 
-const visit = (options?: Parameters<typeof call>[1]) => call(embedGET, options);
+const visit = (options?: Parameters<typeof call>[1], path = '/video/embed') =>
+  call(() => embedGET(new NextRequest(`https://asklinc.com${path}`)), options);
 const captions = (options?: Parameters<typeof call>[1]) => call(captionsGET, options);
 
 /** Global Config answers with `item`; any other address answers with `files[address]`, or 404. */
@@ -69,14 +71,27 @@ function serving(item: unknown, files: Record<string, string> = {}) {
   };
 }
 
-const embedOf = (id: string) => `https://www.youtube-nocookie.com/embed/${id}?rel=0`;
+const embedOf = (id: string) =>
+  `https://www.youtube-nocookie.com/embed/${id}?rel=0&playsinline=1`;
+const autoplayOf = (id: string) => `${embedOf(id)}&autoplay=1&mute=1`;
 
 describe('/video/embed with a YouTube video', () => {
-  it('sends the player to the configured video', async () => {
+  it('sends the player to the configured video, waiting for Play', async () => {
     const { response } = await visit({ connection: CONNECTION, answer: OTHER });
 
     expect(response.status).toBe(302);
     expect(response.headers.get('location')).toBe(embedOf(OTHER));
+  });
+
+  /* Browsers autoplay only muted video; the player's own control unmutes it. */
+  it('starts by itself, muted, only when asked with autoplay=1', async () => {
+    const asked = await visit({ connection: CONNECTION, answer: OTHER }, '/video/embed?autoplay=1');
+    expect(asked.response.headers.get('location')).toBe(autoplayOf(OTHER));
+
+    for (const path of ['/video/embed?autoplay=true', '/video/embed?autoplay=0']) {
+      const { response } = await visit({ connection: CONNECTION, answer: OTHER }, path);
+      expect([path, response.headers.get('location')]).toEqual([path, embedOf(OTHER)]);
+    }
   });
 
   it("asks Global Config for the video item with the connection's token", async () => {
@@ -146,7 +161,7 @@ describe('/video/embed with a video file', () => {
     expect(response.headers.get('cache-control')).toMatch(/s-maxage=60/);
     expect(body).toContain(`<source src="${MP4}" type="video/mp4">`);
     expect(body).toContain('<video controls playsinline preload="metadata">');
-    expect(body).not.toMatch(/<track|poster=/);
+    expect(body).not.toMatch(/<track|poster=|autoplay/);
   });
 
   it('holds the download until Play with a poster, and takes captions from this site', async () => {
@@ -154,11 +169,29 @@ describe('/video/embed with a video file', () => {
     const { response } = await visit({ connection: CONNECTION, answer: serving(item) });
     const body = await response.text();
 
-    expect(body).toContain(`preload="none" poster="${POSTER}"`);
+    expect(body).toContain(`<video controls playsinline preload="none" poster="${POSTER}">`);
     expect(body).toContain(
       '<track kind="captions" src="/video/captions" srclang="en" label="English">',
     );
     expect(body).not.toContain('crossorigin');
+  });
+
+  /* Autoplay overrides preload anyway; the poster shows while the file loads. */
+  it('starts muted instead of waiting when asked with autoplay=1', async () => {
+    const plain = await visit(
+      { connection: CONNECTION, answer: serving(MP4) },
+      '/video/embed?autoplay=1',
+    );
+    expect(await plain.response.text()).toContain('<video controls playsinline autoplay muted>');
+
+    const item = { mp4: MP4, poster: POSTER };
+    const withPoster = await visit(
+      { connection: CONNECTION, answer: serving(item) },
+      '/video/embed?autoplay=1',
+    );
+    const body = await withPoster.response.text();
+    expect(body).toContain(`<video controls playsinline autoplay muted poster="${POSTER}">`);
+    expect(body).not.toContain('preload');
   });
 
   it('loads nothing but its media, runs no script, and can only be framed here', async () => {
@@ -289,8 +322,28 @@ describe('TeaserVideo', () => {
     const markup = renderToStaticMarkup(<TeaserVideo />);
 
     expect(markup).toContain('src="/video/embed"');
-    expect(markup).not.toContain('youtube');
+    expect(markup).not.toMatch(/src="[^"]*youtube/);
     expect(markup).toContain('referrerPolicy="strict-origin-when-cross-origin"');
+  });
+
+  /*
+   * A feature listed with no origins is granted only to the origin in `src`,
+   * ours, and would be lost on the redirect to YouTube; autoplay among them.
+   */
+  it('grants its player features to YouTube as well as the player page', () => {
+    const markup = renderToStaticMarkup(<TeaserVideo />);
+    const allow = /allow="([^"]*)"/.exec(markup)![1].replace(/&#x27;/g, "'");
+    const features = Object.fromEntries(
+      allow.split('; ').map((entry) => {
+        const [feature, ...origins] = entry.split(' ');
+        return [feature, origins];
+      }),
+    );
+
+    expect(Object.keys(features)).toContain('autoplay');
+    for (const [feature, origins] of Object.entries(features)) {
+      expect([feature, origins]).toEqual([feature, ["'self'", 'https://www.youtube-nocookie.com']]);
+    }
   });
 
   /* The frame starts on our own origin and, for YouTube, lands on its host. */

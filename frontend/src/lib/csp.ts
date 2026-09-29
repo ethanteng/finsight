@@ -89,8 +89,8 @@ export function buildContentSecurityPolicy({ isDevelopment }: { isDevelopment: b
     connectSrc,
     // The marketing teaser video's frame loads /video/embed ('self'), which
     // redirects to YouTube's privacy-enhanced host; frame-src must allow both
-    // ends of that redirect. youtube.com itself stays out so no embed can set
-    // cookies on load.
+    // ends of that redirect. youtube.com itself stays out, so an embed can only
+    // ever be the privacy-enhanced one.
     `frame-src 'self' https://*.plaid.com https://cdn.plaid.com https://www.googletagmanager.com https://app.snaptrade.com https://*.snaptrade.com ${CONTENTSQUARE} https://www.youtube-nocookie.com`,
     "worker-src 'self' blob:",
     "object-src 'none'",

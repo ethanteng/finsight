@@ -11,7 +11,7 @@
   .story-hero .hero-actions { flex-direction: row; align-items: center; flex-wrap: wrap; justify-content: center; gap: 28px; margin-top: 28px; }
   .story-hero .microcopy { font-size: 13px; margin-top: 22px; }
   .story-flow-section { padding-bottom: 24px; }
-  .teaser-video { width: 100%; max-width: 960px; margin-inline: auto; aspect-ratio: 16 / 9; overflow: hidden; border: 1px solid #bfc7ba; border-radius: 24px; background: var(--ink); box-shadow: 0 24px 60px rgba(20,47,32,.14); }
+  .teaser-video { width: 100%; max-width: 1200px; margin-inline: auto; aspect-ratio: 16 / 9; overflow: hidden; border: 1px solid #bfc7ba; border-radius: 24px; background: var(--ink); box-shadow: 0 24px 60px rgba(20,47,32,.14); }
   .teaser-video iframe { display: block; width: 100%; height: 100%; border: 0; }
   /* The teaser sits inside each hero so a phone can lift it above the copy.
      On wider screens it still follows the whole hero, full width. */
@@ -19,7 +19,10 @@
   .subhero.features-hero { padding-bottom: 0; }
   .features-hero .teaser-video { grid-column: 1 / -1; }
   @media (max-width: 760px) {
-    .teaser-video { border-radius: 16px; }
+    /* Edge to edge, out past the shell's gutter (which changes by breakpoint).
+       .marketing-site clips horizontal overflow, so a classic scrollbar
+       counted in 100vw can't make the page scroll sideways. */
+    .teaser-video { width: 100vw; max-width: none; margin-inline: calc(50% - 50vw); border-inline: 0; border-radius: 0; }
     /* Kicker, headline, video, then the rest. Flattening the features copy
        column lets its children share one flex order with the video. */
     .story-hero, .split-subhero.features-hero { display: flex; flex-direction: column; align-items: stretch; gap: 0; }
