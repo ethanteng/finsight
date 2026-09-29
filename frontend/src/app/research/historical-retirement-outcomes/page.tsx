@@ -217,7 +217,7 @@ export default function HistoricalRetirementOutcomesPage() {
           </div>
           <p>
             Snapshot generated {data.generatedOn}. Dataset fingerprint: <code>{data.datasetSha256}</code>.
-            {' '}Explore the <Link href="/retirement-calculator">retirement calculator</Link> or read how Ask Linc <Link href="/trust">shows the math behind its answers</Link>.
+            {' '}Explore the <Link href="/retirement-calculator">retirement calculator</Link>, read how Ask Linc <Link href="/trust">shows the math behind its answers</Link>, or <Link href="/research">browse all Ask Linc research</Link>.
           </p>
         </div>
       </section>
