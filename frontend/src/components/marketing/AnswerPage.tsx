@@ -4,6 +4,7 @@ import { MarketingGetStartedButton } from "./MarketingGetStartedButton";
 import { TRIAL_CTA_MICROCOPY } from "./trial-copy";
 import { SiteFooter, SiteHeader } from "./SiteShell";
 import { RetirementDecisionCrossSell } from "./RetirementDecisionCrossSell";
+import LincAvatar from "@/components/LincAvatar";
 
 export function AnswerBreadcrumbs({ items }: { items: AnswerPageData["breadcrumbs"] }) {
   return (
@@ -162,7 +163,7 @@ export default function AnswerPage({ page }: { page: AnswerPageData }) {
           <p className="answer-review-date">Reviewed {page.reviewedOn} · {page.readTime}</p>
         </div>
         <article className="answer-direct-card" aria-label="The short answer">
-          <div><span className="brand-mark small" aria-hidden="true">L</span><b>THE SHORT ANSWER</b><span>ILLUSTRATIVE</span></div>
+          <div><LincAvatar size={26} /><b>THE SHORT ANSWER</b><span>ILLUSTRATIVE</span></div>
           <h2>{page.directAnswer}</h2>
           <p>{page.directAnswerDetail}</p>
           <a href="#portfolio-support">{page.withdrawalSection.linkLabel ?? "See the numbers"} <span aria-hidden="true">↓</span></a>

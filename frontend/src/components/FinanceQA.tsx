@@ -1,8 +1,9 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { ArrowUp, Calculator, CheckCircle2, Database, Download, FileText, Lightbulb, ListChecks, LoaderCircle, MessageSquarePlus, Sparkles } from 'lucide-react';
+import { ArrowUp, Calculator, Database, Download, FileText, Lightbulb, ListChecks, LoaderCircle, Sparkles } from 'lucide-react';
 import MarkdownRenderer from './MarkdownRenderer';
+import LincAvatar from './LincAvatar';
 import { useAnalytics } from './Analytics';
 import { trackContentsquareEvent } from '@/lib/contentsquare';
 import Feedback from './Feedback';
@@ -411,7 +412,7 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, newDecisionNonc
 
       {!hasResult && !error && (
         <div className="grid min-h-80 place-items-center px-6 py-12 text-center">
-          <div className="max-w-md"><div className="mx-auto mb-5 grid h-12 w-12 place-items-center rounded-full bg-[#d9ff6f] text-[#102319]"><MessageSquarePlus /></div><h2 className="text-xl font-semibold text-[#102319]">Start with the decision in front of you</h2><p className="mt-2 text-sm leading-6 text-[#5e6b63]">Ask a specific question. Linc will lead with an answer, then keep the assumptions, calculations, and evidence close by.</p></div>
+          <div className="max-w-md"><div className="mx-auto mb-5 w-fit"><LincAvatar size={72} mood="pleased" wave /></div><h2 className="text-xl font-semibold text-[#102319]">Start with the decision in front of you</h2><p className="mt-2 text-sm leading-6 text-[#5e6b63]">Ask a specific question. Linc will lead with an answer, then keep the assumptions, calculations, and evidence close by.</p></div>
         </div>
       )}
 
@@ -430,7 +431,7 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, newDecisionNonc
           <div className="p-5 sm:p-8">
             {activeView === 'answer' && (
               <div className="space-y-7">
-                <div className="flex items-center gap-2 text-sm font-semibold text-[#49725a]">{loading ? <LoaderCircle className="animate-spin" size={17} /> : <CheckCircle2 size={17} />} {loading ? (progressMessage || 'Building your answer') : 'Current answer'}</div>
+                <div className="flex items-center gap-3 text-sm font-semibold text-[#49725a]"><LincAvatar key={loading ? 'working' : 'answered'} size={32} mood={loading ? 'skeptical' : 'deadpan'} thinking={loading} pop={!loading} />{loading ? (progressMessage || 'Building your answer') : 'Current answer'}</div>
                 {structuredResponse?.key_numbers && Object.keys(structuredResponse.key_numbers).length > 0 && (
                   <section aria-labelledby="key-metrics-heading">
                     <h3 id="key-metrics-heading" className="mb-3 text-sm font-semibold text-[#102319]">Key metrics</h3>

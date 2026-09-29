@@ -106,6 +106,7 @@
   .chat-turn.from-you { justify-self: end; }
   .chat-speaker { display: block; color: #526657; font-size: 12px; font-weight: 650; letter-spacing: .12em; margin-bottom: 6px; }
   .from-you .chat-speaker { text-align: right; }
+  .from-linc .chat-speaker { display: flex; align-items: center; gap: 8px; }
   .chat-turn p { margin: 0; padding: 14px 16px; border-radius: 3px 13px 13px; background: #fffdf5; border: 1px solid #ced6d9; color: #243e31; font-size: 14px; line-height: 1.5; }
   .from-you p { background: #d2e2c8; border-color: #b7cdae; border-radius: 13px 3px 13px 13px; }
   .chat-final { max-width: 100%; }
