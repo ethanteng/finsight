@@ -5,6 +5,7 @@
   :where(section, div, p)[id] { scroll-margin-top: 28px; }
   .text-link { display: inline-flex; align-items: center; gap: 9px; }
   .story-hero { padding-block: 76px 64px; text-align: center; }
+  .story-hero .section-kicker { text-wrap: balance; }
   .story-hero h1 { max-width: 1040px; margin: 20px auto 26px; font-size: clamp(46px, 5.4vw, 76px); line-height: 1.04; letter-spacing: -.06em; }
   .story-hero h1 em { margin-top: 10px; font-size: .88em; letter-spacing: -.055em; }
   .story-hero-copy { max-width: 600px; margin: 0 auto; font-size: 18px; line-height: 1.6; color: #526257; }

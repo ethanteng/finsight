@@ -13,7 +13,7 @@ export default function MarketingHome({ pricing = FALLBACK_PRICING }: { pricing?
     <main className="marketing-site story-home">
       <SiteHeader />
       <section className="story-hero shell" id="top">
-        <p className="section-kicker">SELF-DIRECTED FINANCIAL PLANNING</p>
+        <p className="section-kicker">FINANCIAL AI THAT DOESN’T HALLUCINATE THE MATH</p>
         <h1>Tell Linc what you’re<br className="desktop-break" /> trying to figure out. <em>It builds the financial plan.</em></h1>
         <p className="story-hero-copy">Connect your finances. Ask your question. Linc pulls it all together, runs the numbers, and gives you a plan you can explore.</p>
         <div className="hero-actions"><MarketingGetStartedButton className="button button-primary" trackingLocation="homepage_hero" csOverrideId="cta-start-free-trial-hero" /></div>
