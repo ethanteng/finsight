@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { DEMO_DECISIONS as decisions, type DemoDecision } from "@/data/product-demo-examples";
+import LincAvatar from "@/components/LincAvatar";
 import {
   pushProductDemoCompleted,
   pushProductDemoDetailViewed,
@@ -71,7 +72,7 @@ function DemoOverview({ onOpenFinances }: { onOpenFinances: () => void }) {
 function AnswerPanel({ decision }: { decision: DemoDecision }) {
   return (
     <div className="demo-answer-panel">
-      <div className="demo-current-answer"><span>✓</span> Linc’s answer</div>
+      <div className="demo-current-answer"><LincAvatar size={28} /> Linc’s answer</div>
       <p className="demo-answer-summary"><strong>{decision.verdict}</strong> {decision.summary}</p>
       <section aria-label="Demo key metrics">
         <h3>Key metrics</h3>

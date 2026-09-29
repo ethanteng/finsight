@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ArrowDown, ArrowUpRight, Check, Lock } from "lucide-react";
+import LincAvatar from "@/components/LincAvatar";
 
 type CalculatorInterpretation = {
   headline: string;
@@ -26,7 +27,7 @@ export function CalculatorAnswer({ question, interpretation, isLoading, compact 
           <p className="calculator-chat-bubble">{question}</p>
         </li>
         <li className="calculator-chat-turn calculator-chat-linc">
-          <span className="calculator-chat-speaker">LINC</span>
+          <span className="calculator-chat-speaker"><LincAvatar key={isLoading || !interpretation ? "working" : "answered"} size={30} mood={isLoading || !interpretation ? "skeptical" : "deadpan"} thinking={isLoading || !interpretation} pop={!isLoading && !!interpretation} />LINC</span>
           {isLoading || !interpretation ? (
             <div className="calculator-chat-bubble calculator-chat-loading" role="status">
               <span className="chat-typing" aria-hidden="true"><i /><i /><i /></span>

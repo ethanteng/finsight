@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { ArrowUpRight, Check, LockKeyhole, Pause, Play, RotateCcw } from "lucide-react";
 import { RETIREMENT_STORY_EXAMPLE as example, storyPercent, storyPortfolio } from "@/data/retirement-story-example";
+import LincAvatar from "@/components/LincAvatar";
 
 const [earlier] = example.scenarios;
 
@@ -107,10 +108,10 @@ export function AnalysisVisual() {
       </div>
       <ol className="story-conversation" aria-label="Example conversation with Ask Linc">
         <li className={`chat-turn from-you ${scene.step >= 1 ? "is-visible" : ""}`}><span className="chat-speaker">YOU</span><p>Could we retire at 55 and keep traveling?</p></li>
-        <li className={`chat-turn from-linc ${scene.step >= 2 ? "is-visible" : ""}`}><span className="chat-speaker">LINC</span><p>You have $1.4M invested and spend about $6,000/month. Keep saving $36,000/year until retirement?</p></li>
+        <li className={`chat-turn from-linc ${scene.step >= 2 ? "is-visible" : ""}`}><span className="chat-speaker"><LincAvatar size={28} mood="skeptical" />LINC</span><p>You have $1.4M invested and spend about $6,000/month. Keep saving $36,000/year until retirement?</p></li>
         <li className={`chat-turn from-you ${scene.step >= 3 ? "is-visible" : ""}`}><span className="chat-speaker">YOU</span><p>Yes. Add $12,000/year for travel—and compare retiring at 57.</p></li>
         <li className={`chat-turn from-linc chat-final ${scene.step >= 4 ? "is-visible" : ""}`}>
-          <span className="chat-speaker">LINC</span>
+          <span className="chat-speaker"><LincAvatar key={scene.step >= 5 ? "answered" : "working"} size={28} mood={scene.step >= 5 ? "pleased" : "skeptical"} thinking={scene.step === 4} pop={scene.step >= 5 && !scene.reducedMotion} />LINC</span>
           <div className="chat-answer-space">
             <div className="chat-working" aria-hidden={scene.step !== 4} hidden={scene.step !== 4}><span className="chat-typing" aria-hidden="true"><i /><i /><i /></span>Comparing retirement dates…</div>
             <div className={scene.step >= 5 ? "chat-finished is-visible" : "chat-finished"}>

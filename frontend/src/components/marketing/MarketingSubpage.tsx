@@ -6,6 +6,7 @@ import { MarketingContactForm } from "./MarketingContactForm";
 import { MarketingGetStartedButton } from "./MarketingGetStartedButton";
 import { RotatingContextChips } from "./RotatingContextChips";
 import { TRIAL_CTA_MICROCOPY } from "./trial-copy";
+import LincAvatar from "@/components/LincAvatar";
 import type { GhostPost } from "@/lib/ghost";
 import { primaryTopic, topicHref, type BlogTopic } from "@/lib/blog-topics";
 import { getComparison } from "@/lib/comparisons";
@@ -395,7 +396,7 @@ function UseCasePage({ useCase }: { useCase: UseCaseKey }) {
           )}
         </div>
         <article className="use-case-answer">
-          <div className="miniature-top"><span className="brand-mark small">L</span><b>SAMPLE DECISION</b><span>ILLUSTRATIVE</span></div>
+          <div className="miniature-top"><LincAvatar size={26} /><b>SAMPLE DECISION</b><span>ILLUSTRATIVE</span></div>
           <p>{item.question}</p>
           <div className="use-case-verdict"><small>THE SHORT ANSWER</small><h2>{item.answer}</h2></div>
           <div className="use-case-metrics">{item.metrics.map(([label,value])=><span key={label}><small>{label}</small><b>{value}</b></span>)}</div>

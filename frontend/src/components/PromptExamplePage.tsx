@@ -2,6 +2,7 @@ import Link from "next/link";
 import { PageCta, SiteFooter, SiteHeader } from "./marketing/SiteShell";
 import type { PromptExample } from "@/lib/promptExamples";
 import { RetirementDecisionCrossSell } from "./marketing/RetirementDecisionCrossSell";
+import LincAvatar from "./LincAvatar";
 
 interface PromptExamplePageProps {
   title: string;
@@ -34,7 +35,7 @@ export default function PromptExamplePage({
             <p>“{example.prompt}”</p>
           </aside>
           <article className="prompt-answer-card">
-            <div className="prompt-answer-top"><span className="brand-mark small">L</span><b>SAMPLE ANSWER</b><small>ILLUSTRATIVE</small></div>
+            <div className="prompt-answer-top"><LincAvatar size={26} /><b>SAMPLE ANSWER</b><small>ILLUSTRATIVE</small></div>
             <section>
               <h2 className="prompt-label">THE SHORT ANSWER</h2>
               <p className="prompt-response">{example.response}</p>

@@ -1,5 +1,6 @@
 import { HOME_BUYING_EXAMPLE } from "@/lib/promptExamples";
 import Link from "next/link";
+import LincAvatar from "@/components/LincAvatar";
 
 const answerLayers = [
   ["Your numbers", "The facts Linc used"],
@@ -13,7 +14,7 @@ const answerLayers = [
 export function ShowTheMathPreview() {
   return (
     <article className="trust-audit-card comparison-math-preview" aria-label="Illustrative Show the Math overview">
-      <div className="trust-audit-top"><div><span className="brand-mark small" aria-hidden="true">L</span><b>SHOW THE MATH</b></div><span>EXAMPLE</span></div>
+      <div className="trust-audit-top"><div><LincAvatar size={26} /><b>SHOW THE MATH</b></div><span>EXAMPLE</span></div>
       <div className="trust-audit-question"><small>YOUR QUESTION</small><p>{HOME_BUYING_EXAMPLE.prompt}</p></div>
       <div className="trust-audit-verdict"><span aria-hidden="true">✓</span><div><small>LINC’S ANSWER</small><strong>{HOME_BUYING_EXAMPLE.response}</strong></div></div>
       <div className="trust-audit-layers">

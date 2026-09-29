@@ -55,6 +55,8 @@ const websiteSchema = {
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://asklinc.com'),
+  // Only for pages that don't set their own title.
+  title: 'Ask Linc — AI Financial Planning',
   icons: {
     icon: '/favicon.ico',
     apple: '/apple-touch-icon.png',

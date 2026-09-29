@@ -5,7 +5,7 @@ import { getPricing } from '../lib/pricing';
 import { buildMarketingMetadata } from '../lib/seo';
 
 export const metadata = buildMarketingMetadata({
-  title: 'Ask Linc | Financial Planning That Starts With Your Question',
+  title: 'Ask Linc — AI Financial Planning',
   description: 'Connect your finances and tell Linc what you’re trying to figure out. Explore a financial plan, change assumptions, and see the math behind your next decision.',
   path: '',
 });

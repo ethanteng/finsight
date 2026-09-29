@@ -1,0 +1,43 @@
+/* Linc, the Ask Linc persona. Shared by the app and the marketing site, so it is
+   deliberately unscoped and every class carries the linc-avatar prefix. */
+.linc-avatar { position: relative; display: inline-block; flex-shrink: 0; vertical-align: middle; line-height: 0; }
+.linc-avatar-face { display: block; width: 100%; height: 100%; overflow: hidden; border-radius: 50%; }
+.linc-avatar-face > svg { display: block; width: 100%; height: 100%; }
+.linc-avatar-wave { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+
+/* SVG transform origins are percentages of the 200×200 view box. */
+.linc-avatar-head { transform-box: view-box; transform-origin: 50% 70%; }
+.linc-avatar-arm { transform-box: view-box; transform-origin: 75% 86%; opacity: 0; animation: linc-avatar-arm 3s .2s ease-in-out both; }
+.linc-avatar-hand { transform-box: view-box; transform-origin: 88% 75%; animation: linc-avatar-hand 3s .2s ease-in-out both; }
+
+.linc-avatar-eyes-closed { opacity: 0; }
+.linc-avatar.is-blinking .linc-avatar-eyes-open { animation: linc-avatar-blink-open 3.3s step-end infinite; }
+.linc-avatar.is-blinking .linc-avatar-eyes-closed { animation: linc-avatar-blink-closed 3.3s step-end infinite; }
+.linc-avatar.is-thinking .linc-avatar-head { animation: linc-avatar-think 1.8s ease-in-out infinite; }
+.linc-avatar.is-popping { animation: linc-avatar-pop .5s cubic-bezier(.34, 1.56, .64, 1) both; }
+
+@keyframes linc-avatar-blink-open { 0% { opacity: 1; } 95.5% { opacity: 0; } }
+@keyframes linc-avatar-blink-closed { 0% { opacity: 0; } 95.5% { opacity: 1; } }
+@keyframes linc-avatar-think { 0%, 100% { transform: rotate(0); } 30% { transform: rotate(-5deg); } 65% { transform: rotate(4deg); } }
+@keyframes linc-avatar-pop { 0% { opacity: 0; transform: scale(.8); } 60% { opacity: 1; transform: scale(1.06); } 100% { transform: scale(1); } }
+@keyframes linc-avatar-arm {
+  0% { opacity: 0; transform: rotate(40deg); }
+  14%, 86% { opacity: 1; transform: rotate(0); }
+  100% { opacity: 0; transform: rotate(40deg); }
+}
+@keyframes linc-avatar-hand {
+  0%, 12% { transform: rotate(0); }
+  20% { transform: rotate(18deg); }
+  29% { transform: rotate(-16deg); }
+  38% { transform: rotate(13deg); }
+  47% { transform: rotate(-11deg); }
+  56% { transform: rotate(9deg); }
+  65% { transform: rotate(-7deg); }
+  74% { transform: rotate(5deg); }
+  82%, 100% { transform: rotate(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .linc-avatar, .linc-avatar * { animation: none !important; }
+  .linc-avatar-wave { display: none; }
+}

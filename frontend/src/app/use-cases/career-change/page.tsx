@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { MarketingGetStartedButton } from '@/components/marketing/MarketingGetStartedButton';
 import { PageCta, SiteFooter, SiteHeader } from '@/components/marketing/SiteShell';
+import LincAvatar from '@/components/LincAvatar';
 import { buildMarketingMetadata } from '@/lib/seo';
 
 export const metadata: Metadata = buildMarketingMetadata({
@@ -35,7 +36,7 @@ export default function CareerChangeUseCaseRoute() {
           <Link className="text-link coast-fire-inline-link" href="/coast-fire-calculator">See if you&apos;ve reached Coast FIRE →</Link>
         </div>
         <article className="use-case-answer">
-          <div className="miniature-top"><span className="brand-mark small">L</span><b>SAMPLE DECISION</b><span>ILLUSTRATIVE</span></div>
+          <div className="miniature-top"><LincAvatar size={26} /><b>SAMPLE DECISION</b><span>ILLUSTRATIVE</span></div>
           <p>Can I take a year off without setting retirement back?</p>
           <div className="use-case-verdict">
             <small>THE SHORT ANSWER</small>

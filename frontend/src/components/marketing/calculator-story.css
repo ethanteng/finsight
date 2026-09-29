@@ -74,6 +74,7 @@
 .calculator-chat-you { justify-self: end; max-width: 78%; }
 .calculator-chat-speaker { display: block; margin-bottom: 8px; font-size: 12px; font-weight: 650; letter-spacing: .12em; color: #526657; }
 .calculator-chat-you .calculator-chat-speaker { text-align: right; }
+.calculator-chat-linc .calculator-chat-speaker { display: flex; align-items: center; gap: 8px; }
 .calculator-chat-replies { display: grid; gap: 10px; }
 .marketing-site.calculator-story .calculator-chat-bubble { max-width: none; margin: 0; padding: 18px 20px; border: 1px solid #ced6d9; border-radius: 3px 16px 16px; background: #fffdf5; color: #243e31; font-size: 16px; line-height: 1.65; overflow-wrap: anywhere; }
 .marketing-site.calculator-story .calculator-chat-you .calculator-chat-bubble { background: #d2e2c8; border-color: #b7cdae; border-radius: 16px 3px 16px 16px; }
