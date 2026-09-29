@@ -97,6 +97,48 @@ describe('FinanceQA decision workspace', () => {
     expect(screen.queryByText('Compatibility text.')).not.toBeInTheDocument();
   });
 
+  it('signs a saved answer as Linc, with when it was written', () => {
+    // An answer is only as current as the balances it read, so the byline says
+    // how old it is rather than calling every answer "current".
+    const answeredAt = Date.now() - 2 * 3_600_000;
+    const { container } = render(<FinanceQA selectedPrompt={{ id: 'conversation-1', question: 'Can I retire?', answer: 'You are on track.', timestamp: answeredAt }} />);
+    const byline = container.querySelector('.decision-byline')!;
+    expect(byline).toHaveTextContent('Linc');
+    expect(byline.querySelector('time')).toHaveTextContent('2h ago');
+    expect(byline.querySelector('time')).toHaveAttribute('dateTime', new Date(answeredAt).toISOString());
+    expect(byline.querySelector('.linc-avatar')).not.toHaveClass('is-thinking');
+  });
+
+  it('shows Linc working in the byline until the answer lands', async () => {
+    let respond: (value: unknown) => void = () => {};
+    (global.fetch as jest.Mock).mockImplementation((url: string) => {
+      if (url.includes('/ask/display-real')) return new Promise(resolve => { respond = resolve; });
+      return Promise.resolve({ ok: false, status: 404, headers: new Headers(), json: async () => ({}) });
+    });
+
+    const { container } = render(<FinanceQA newDecisionNonce={1} />);
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Can I retire at 62?' } });
+    fireEvent.submit(document.getElementById('finance-qa-form')!);
+
+    const byline = () => container.querySelector('.decision-byline')!;
+    expect(byline()).toHaveTextContent('Building your answer');
+    expect(byline().querySelector('.linc-avatar')).toHaveClass('is-thinking');
+    expect(byline().querySelector('.linc-avatar')).toHaveAttribute('data-mood', 'skeptical');
+
+    await act(async () => {
+      respond({
+        ok: true,
+        status: 200,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: async () => ({ answer: 'You are on track at $125K a year.', threadId: 'thread-a', conversationId: 'conversation-1' }),
+      });
+    });
+
+    expect(await screen.findByText('You are on track at $125K a year.')).toBeInTheDocument();
+    expect(byline().querySelector('.linc-avatar')).not.toHaveClass('is-thinking');
+    expect(byline().querySelector('time')).toHaveTextContent('Just now');
+  });
+
   it('empties the composer when a new decision starts', () => {
     // Opening a past turn pre-fills the composer with that question. "New
     // decision" clears the selection, and the previous question used to stay

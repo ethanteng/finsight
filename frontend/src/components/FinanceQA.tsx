@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { ArrowUp, Calculator, Database, Download, FileText, Lightbulb, ListChecks, LoaderCircle, Sparkles } from 'lucide-react';
+import { ArrowUp, Calculator, Database, Download, FileText, Lightbulb, ListChecks, LoaderCircle } from 'lucide-react';
 import MarkdownRenderer from './MarkdownRenderer';
 import LincAvatar from './LincAvatar';
 import { useAnalytics } from './Analytics';
@@ -9,6 +9,7 @@ import { trackContentsquareEvent } from '@/lib/contentsquare';
 import Feedback from './Feedback';
 import { ShowTheMathContent, DatabaseSourceSection, downloadShowTheMathAsText, type ShowTheMathData } from './ShowTheMathModal';
 import { formatKeyNumberValue, formatProvenance, type DisplayKeyNumber } from '@/lib/formatKeyNumber';
+import { relativeTurnTime } from '@/lib/relative-time';
 import type { DisplayStructuredResponse, StructuredPromptHistory } from '@/lib/structured-answer';
 
 type PromptHistory = StructuredPromptHistory;
@@ -49,6 +50,9 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, newDecisionNonc
   const [userTier, setUserTier] = useState<string>('starter');
   const [placeholderIndex, setPlaceholderIndex] = useState(0);
   const [conversationId, setConversationId] = useState<string | null>(null);
+  // When the answer on screen was written, for the byline. Balances move, so an
+  // old answer should say it is old.
+  const [answeredAt, setAnsweredAt] = useState<number | null>(null);
   // The line of questioning this composer is in. "New decision" clears it and
   // the next question mints a fresh one; a follow-up keeps it. That single value
   // is what tells the server which turns count as context, so it never has to
@@ -117,6 +121,7 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, newDecisionNonc
     setShowTheMathData(null);
     setShowTheMathError(null);
     setConversationId(null);
+    setAnsweredAt(null);
     setThreadId(null);
     setError('');
   }, []);
@@ -141,6 +146,7 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, newDecisionNonc
       setQuestion(selectedPrompt.question);
       setAnswer(selectedPrompt.answer);
       setConversationId(selectedPrompt.id);
+      setAnsweredAt(selectedPrompt.timestamp);
       // Opening a past turn resumes its line of questioning, so a follow-up
       // continues where that decision left off. Turns written before threads
       // existed are back-filled to their own id, so resuming one still puts
@@ -192,6 +198,7 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, newDecisionNonc
     setShowTheMathData(null);
     setShowTheMathError(null);
     setConversationId(null);
+    setAnsweredAt(null);
     setActiveView('answer');
     setSelectedSourceKey(null);
 
@@ -266,6 +273,7 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, newDecisionNonc
               } else if (currentEvent === 'result') {
                 if (data.answer) {
                   setAnswer(data.answer);
+                  setAnsweredAt(Date.now());
                   setStreamingAnswer('');
                   if (data.structuredResponse) setStructuredResponse(data.structuredResponse);
                   if (data.conversationId) setConversationId(data.conversationId);
@@ -317,6 +325,7 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, newDecisionNonc
         }
         if (data.answer) {
           setAnswer(data.answer);
+          setAnsweredAt(Date.now());
           if (data.structuredResponse) setStructuredResponse(data.structuredResponse);
           if (data.conversationId) setConversationId(data.conversationId);
           if (data.threadId) setThreadId(data.threadId);
@@ -390,7 +399,7 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, newDecisionNonc
   return (
     <section className="overflow-hidden rounded-[24px] border border-[#102319]/10 bg-[#fffdf5] shadow-[0_20px_60px_rgba(18,60,47,0.08)]" aria-label="Decision analysis">
       <div className="border-b border-[#102319]/10 px-5 py-5 sm:px-8 sm:py-7">
-        <div className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.16em] text-[#49725a]"><Sparkles size={14} />Ask Linc</div>
+        <div className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.16em] text-[#49725a]"><LincAvatar size={20} blink={false} />Ask Linc</div>
         <form id="finance-qa-form" onSubmit={askQuestion}>
           <label htmlFor="finance-question" className="sr-only">Your financial question</label>
           <textarea
@@ -422,6 +431,19 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, newDecisionNonc
 
       {hasResult && (
         <div>
+          {/* Linc signs the answer, so the byline sits above the tabs: the math and
+              the sources are Linc's work too. */}
+          <div className="decision-byline flex items-center gap-3 px-5 pt-5 sm:px-8 sm:pt-6">
+            <LincAvatar key={loading ? 'working' : 'answered'} size={44} mood={loading ? 'skeptical' : 'deadpan'} thinking={loading} pop={!loading} />
+            <div className="min-w-0">
+              <p className="text-[15px] font-semibold leading-5 text-[#102319]">Linc</p>
+              <p className="min-h-5 truncate text-sm leading-5 text-[#5e6b63]" aria-live="polite">
+                {loading
+                  ? (progressMessage || 'Building your answer')
+                  : answeredAt !== null && Number.isFinite(answeredAt) && <time dateTime={new Date(answeredAt).toISOString()} title={new Date(answeredAt).toLocaleString()}>{relativeTurnTime(answeredAt)}</time>}
+              </p>
+            </div>
+          </div>
           <div className="flex overflow-x-auto border-b border-[#102319]/10 px-5 sm:px-8" role="tablist" aria-label="Decision details">
             {(['answer', 'math', 'sources'] as const).map(view => (
               <button key={view} type="button" role="tab" aria-selected={activeView === view} onClick={() => { setActiveView(view); if (view !== 'sources') setSelectedSourceKey(null); if (view !== 'answer' && conversationId && !loading) loadShowTheMathData(); }} className={`border-b-2 px-4 py-4 text-sm font-semibold capitalize transition ${activeView === view ? 'border-[#102319] text-[#102319]' : 'border-transparent text-[#66736b] hover:text-[#102319]'}`}>{view}</button>
@@ -431,7 +453,6 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, newDecisionNonc
           <div className="p-5 sm:p-8">
             {activeView === 'answer' && (
               <div className="space-y-7">
-                <div className="flex items-center gap-3 text-sm font-semibold text-[#49725a]"><LincAvatar key={loading ? 'working' : 'answered'} size={32} mood={loading ? 'skeptical' : 'deadpan'} thinking={loading} pop={!loading} />{loading ? (progressMessage || 'Building your answer') : 'Current answer'}</div>
                 {structuredResponse?.key_numbers && Object.keys(structuredResponse.key_numbers).length > 0 && (
                   <section aria-labelledby="key-metrics-heading">
                     <h3 id="key-metrics-heading" className="mb-3 text-sm font-semibold text-[#102319]">Key metrics</h3>
