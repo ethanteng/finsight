@@ -60,7 +60,7 @@ export default function Retire55Vs57Page() {
   const failuresAt55 = age55.sequencesTested - age55.sequencesSurvived;
 
   return (
-    <main className="marketing-site subpage">
+    <main className="marketing-site subpage research-article">
       <StructuredData data={structuredData} />
       <SiteHeader />
 

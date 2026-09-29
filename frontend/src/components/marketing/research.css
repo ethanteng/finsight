@@ -1,0 +1,196 @@
+/*
+ * Research pages are long-form evidence, not landing-page sections.
+ * Keep the Ask Linc visual language while using a readable article measure.
+ */
+@scope (.marketing-site) {
+  :scope.research-hub .subhero,
+  :scope.research-article .subhero {
+    max-width: 1040px;
+  }
+
+  :scope.research-hub .subhero h1,
+  :scope.research-article .subhero h1 {
+    font-size: clamp(46px, 5.6vw, 74px);
+    line-height: 1.01;
+    letter-spacing: -.058em;
+  }
+
+  :scope.research-hub .subhero-copy,
+  :scope.research-article .subhero-copy {
+    max-width: 780px;
+    font-size: 19px;
+    line-height: 1.65;
+  }
+
+  :scope.research-article .page-section {
+    padding-block: 72px;
+  }
+
+  :scope.research-article .page-section.shell,
+  :scope.research-article .page-section > .shell {
+    width: min(calc(100% - 48px), 920px);
+  }
+
+  :scope.research-article .editorial-heading {
+    display: block;
+    margin-bottom: 30px;
+  }
+
+  :scope.research-article .editorial-heading .section-kicker {
+    margin-bottom: 14px;
+  }
+
+  :scope.research-article .editorial-heading h2 {
+    max-width: 820px;
+    margin: 0;
+    font-size: clamp(34px, 4vw, 52px);
+    line-height: 1.06;
+    letter-spacing: -.045em;
+  }
+
+  :scope.research-article .page-section > p,
+  :scope.research-article .page-section > .shell > p {
+    max-width: 780px;
+    margin: 18px 0 0;
+    font-size: 18px;
+    line-height: 1.72;
+  }
+
+  :scope.research-article .page-section > p + p,
+  :scope.research-article .page-section > .shell > p + p {
+    margin-top: 18px;
+  }
+
+  :scope.research-article .belief-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+    margin-top: 34px;
+  }
+
+  :scope.research-article .belief-grid article {
+    min-height: 0;
+    padding: 28px;
+    border: 1px solid #c9d1c7;
+    background: rgba(255, 255, 255, .45);
+  }
+
+  :scope.research-article .values-band .belief-grid article {
+    background: rgba(255, 255, 255, .28);
+  }
+
+  :scope.research-article .belief-grid h3 {
+    margin-top: 22px;
+    font-size: clamp(24px, 2.4vw, 34px);
+    line-height: 1.08;
+    letter-spacing: -.035em;
+  }
+
+  :scope.research-article .belief-grid p {
+    margin-top: 14px;
+    font-size: 15px;
+    line-height: 1.65;
+  }
+
+  :scope.research-article code {
+    overflow-wrap: anywhere;
+    font-size: .82em;
+  }
+
+  :scope.research-hub .page-section {
+    padding-block: 78px;
+  }
+
+  :scope.research-hub .editorial-heading {
+    display: block;
+    max-width: 900px;
+    margin-bottom: 38px;
+  }
+
+  :scope.research-hub .editorial-heading h2 {
+    max-width: 780px;
+    margin-top: 14px;
+    font-size: clamp(38px, 4.5vw, 58px);
+    line-height: 1.04;
+  }
+
+  :scope.research-hub .use-case-index {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+    padding-bottom: 0;
+  }
+
+  :scope.research-hub .use-case-tile {
+    min-height: 0;
+    padding: 30px;
+  }
+
+  :scope.research-hub .use-case-tile h2 {
+    margin-top: 46px;
+    font-size: clamp(31px, 3vw, 43px);
+    line-height: 1.02;
+  }
+
+  :scope.research-hub .use-case-tile > p {
+    margin-top: 18px;
+    font-size: 15px;
+    line-height: 1.6;
+  }
+
+  :scope.research-hub .use-case-question {
+    min-height: 0;
+    margin-top: 28px;
+  }
+
+  @media (max-width: 760px) {
+    :scope.research-hub .subhero,
+    :scope.research-article .subhero {
+      padding-block: 54px 62px;
+    }
+
+    :scope.research-hub .subhero h1,
+    :scope.research-article .subhero h1 {
+      font-size: clamp(38px, 10vw, 52px);
+    }
+
+    :scope.research-hub .subhero-copy,
+    :scope.research-article .subhero-copy {
+      font-size: 17px;
+    }
+
+    :scope.research-article .page-section,
+    :scope.research-hub .page-section {
+      padding-block: 54px;
+    }
+
+    :scope.research-article .page-section.shell,
+    :scope.research-article .page-section > .shell {
+      width: min(calc(100% - 32px), 920px);
+    }
+
+    :scope.research-article .editorial-heading h2,
+    :scope.research-hub .editorial-heading h2 {
+      font-size: clamp(32px, 8vw, 42px);
+    }
+
+    :scope.research-article .page-section > p,
+    :scope.research-article .page-section > .shell > p {
+      font-size: 16px;
+      line-height: 1.65;
+    }
+
+    :scope.research-article .belief-grid,
+    :scope.research-hub .use-case-index {
+      grid-template-columns: 1fr;
+    }
+
+    :scope.research-article .belief-grid article {
+      padding: 24px 0;
+      border-inline: 0;
+      background: transparent;
+    }
+
+    :scope.research-hub .use-case-tile {
+      padding: 24px;
+    }
+  }
+}

@@ -80,7 +80,7 @@ export default function SequenceOfReturnsRiskPage() {
   const failures = scenario.sequencesTested - scenario.sequencesSurvived;
 
   return (
-    <main className="marketing-site subpage">
+    <main className="marketing-site subpage research-article">
       <StructuredData data={structuredData} />
       <SiteHeader />
 

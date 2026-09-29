@@ -84,7 +84,7 @@ export default function HistoricalRetirementOutcomesPage() {
   const portfolioDifference = age57.projectedPortfolioAtRetirement - age55.projectedPortfolioAtRetirement;
 
   return (
-    <main className="marketing-site subpage">
+    <main className="marketing-site subpage research-article">
       <StructuredData data={structuredData} />
       <SiteHeader />
 
