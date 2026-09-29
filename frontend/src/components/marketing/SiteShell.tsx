@@ -55,7 +55,7 @@ export function SiteFooter() {
           <Link href="/coast-fire-calculator">Coast FIRE calculator</Link>
           <Link href="/retirement-calculator">Retirement calculator</Link>
           <Link href="/retirement-answers">Retirement guides</Link>
-          <Link href="/research/historical-retirement-outcomes">Retirement research</Link>
+          <Link href="/research">Research</Link>
           <Link href="/prompts">Example questions</Link>
         </div>
         <div className="footer-column">
