@@ -73,6 +73,10 @@ const STATIC_ROUTES: StaticRoute[] = [
   { path: '/can-i-retire-with-2-million', changeFrequency: 'monthly', priority: 0.9 },
   { path: '/can-i-retire-with-3-million', changeFrequency: 'monthly', priority: 0.9 },
 
+  // Proprietary research / evidence pages
+  { path: '/research/historical-retirement-outcomes', changeFrequency: 'monthly', priority: 0.9 },
+  { path: '/research/retire-55-vs-57', changeFrequency: 'monthly', priority: 0.9 },
+
   // Trust pages
   { path: '/trust', changeFrequency: 'monthly', priority: 0.9 },
   { path: '/how-we-protect-your-data', changeFrequency: 'monthly', priority: 0.7 },
