@@ -1,7 +1,7 @@
-// YouTube's privacy-enhanced host sets no cookies until the visitor presses
-// play. It is also the only YouTube host frame-src allows, so an embed from
-// youtube.com itself would be refused.
-const TEASER_VIDEO_SRC = "https://www.youtube-nocookie.com/embed/GRBboPyuL5U?rel=0";
+// The player loads /video/embed, which shows whichever video is configured in
+// Global Config: a redirect to YouTube, or our own player page for a video
+// file (see lib/teaser-video). The video can change without a deploy.
+const TEASER_VIDEO_SRC = "/video/embed";
 
 export function TeaserVideo() {
   return (
