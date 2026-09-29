@@ -62,7 +62,7 @@ export default function CoastFireContributionsPage() {
     lowSaving.result.firstYearWithdrawalRate - fullSaving.result.firstYearWithdrawalRate;
 
   return (
-    <main className="marketing-site subpage">
+    <main className="marketing-site subpage research-article">
       <StructuredData data={structuredData} />
       <SiteHeader />
 
