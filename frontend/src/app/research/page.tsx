@@ -75,7 +75,7 @@ const structuredData = {
 
 export default function ResearchPage() {
   return (
-    <main className="marketing-site subpage">
+    <main className="marketing-site subpage research-hub">
       <StructuredData data={structuredData} />
       <SiteHeader />
 
