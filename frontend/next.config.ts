@@ -1,5 +1,5 @@
 import type { NextConfig } from "next";
-import { buildContentSecurityPolicy } from "./src/lib/csp";
+import { CSP_HEADER_SOURCE, buildContentSecurityPolicy } from "./src/lib/csp";
 
 // Injected content by Sentry CLI
 const { withSentryConfig } = require("@sentry/nextjs");
@@ -34,7 +34,7 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       {
-        source: "/:path*",
+        source: CSP_HEADER_SOURCE,
         headers: [
           {
             key: "Content-Security-Policy",

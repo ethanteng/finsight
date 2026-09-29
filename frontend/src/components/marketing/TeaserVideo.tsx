@@ -1,6 +1,6 @@
-// The player loads /video/embed, which redirects to whichever video is
-// configured in Global Config (see lib/teaser-video), so the video can change
-// without a deploy.
+// The player loads /video/embed, which shows whichever video is configured in
+// Global Config: a redirect to YouTube, or our own player page for a video
+// file (see lib/teaser-video). The video can change without a deploy.
 const TEASER_VIDEO_SRC = "/video/embed";
 
 export function TeaserVideo() {

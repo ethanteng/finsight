@@ -16,6 +16,15 @@ const CONTENTSQUARE = "https://*.contentsquare.net";
 // directive.
 const CONTENTSQUARE_APP = "https://*.contentsquare.com";
 
+/**
+ * Where next.config.ts sends this policy: every path except the teaser video's
+ * player page and captions, which set their own (see lib/teaser-video). This
+ * policy's media sources (default-src 'self') and deliberately short img-src
+ * would refuse a video file and poster served from a file host. Only those two
+ * exact paths are left out, so any other /video address still gets the policy.
+ */
+export const CSP_HEADER_SOURCE = "/:path((?!video/(?:embed|captions)$).*)";
+
 // The dev frontend talks to a backend on localhost; production never should,
 // and listing it there would let a compromised page beacon to a local port.
 const LOCAL_API_ORIGINS = ["http://localhost:3000", "http://localhost:3001"];
