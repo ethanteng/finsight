@@ -1,5 +1,6 @@
 import { render } from "@testing-library/react";
-import { buildContentSecurityPolicy } from "@/lib/csp";
+import { DIRECTORY_BADGE_HOSTS, buildContentSecurityPolicy } from "@/lib/csp";
+import { LISTED_ON_BADGES } from "@/components/marketing/ListedOn";
 import MarketingHome from "@/components/marketing/MarketingHome";
 import MarketingSubpage from "@/components/marketing/MarketingSubpage";
 import IntegrationsPage from "@/components/marketing/IntegrationsPage";
@@ -112,6 +113,18 @@ describe("Contentsquare content security policy", () => {
     expect(directive(production, "img-src").split(" ")).toContain("https://media.theresanaiforthat.com");
     for (const name of ["default-src", "script-src", "connect-src", "frame-src", "style-src"]) {
       expect(directive(production, name)).not.toContain("theresanaiforthat");
+    }
+  });
+
+  it("allows every homepage directory badge as an image only", () => {
+    const imgSrc = directive(production, "img-src").split(" ");
+    for (const badge of LISTED_ON_BADGES) {
+      expect(imgSrc).toContain(new URL(badge.src).origin);
+    }
+    for (const host of DIRECTORY_BADGE_HOSTS) {
+      for (const name of ["default-src", "script-src", "connect-src", "frame-src", "style-src"]) {
+        expect(directive(production, name)).not.toContain(host);
+      }
     }
   });
 

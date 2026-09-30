@@ -7,6 +7,7 @@ import { TRIAL_CTA_MICROCOPY } from "./trial-copy";
 import { AnalysisVisual, ConnectedLifeVisual, PlanningFlow } from "./PlanningStory";
 import { AssumptionPreview } from "./AssumptionPreview";
 import { TeaserVideo } from "./TeaserVideo";
+import { ListedOn } from "./ListedOn";
 
 export default function MarketingHome({ pricing = FALLBACK_PRICING }: { pricing?: Pricing }) {
   return (
@@ -21,6 +22,7 @@ export default function MarketingHome({ pricing = FALLBACK_PRICING }: { pricing?
         <TeaserVideo />
       </section>
       <section className="story-flow-section shell" aria-label="From your accounts to your next decision"><PlanningFlow /></section>
+      <ListedOn />
       <div className="story-narrative shell" id="how-it-works">
         <section className="story-chapter" aria-labelledby="connect-title">
           <div className="story-chapter-copy"><p className="section-kicker">01 / BRING IT TOGETHER</p><h2 id="connect-title">Connect your<br />financial life.</h2><p>Connect your bank and investment accounts, then add your home, loans, or any missing details. Linc uses these numbers to build your plan.</p><Link className="text-link" href="/integrations">See what you can connect <ArrowRight size={16} aria-hidden="true" /></Link></div>
