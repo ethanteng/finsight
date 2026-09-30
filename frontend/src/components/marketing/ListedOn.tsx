@@ -78,13 +78,15 @@ function BadgeList({ hidden = false }: { hidden?: boolean }) {
 
 export function ListedOn() {
   return (
-    <section className="listed-on shell" aria-labelledby="listed-on-title">
-      <h2 className="section-kicker listed-on-title" id="listed-on-title">VERIFIED AND LISTED ON</h2>
-      {/* The second copy exists only so the scroll loops without a seam. */}
-      <div className="listed-on-viewport">
-        <div className="listed-on-track">
-          <BadgeList />
-          <BadgeList hidden />
+    <section className="listed-on" aria-labelledby="listed-on-title">
+      <div className="shell">
+        <h2 className="section-kicker listed-on-title" id="listed-on-title">VERIFIED AND LISTED ON</h2>
+        {/* The second copy exists only so the scroll loops without a seam. */}
+        <div className="listed-on-viewport">
+          <div className="listed-on-track">
+            <BadgeList />
+            <BadgeList hidden />
+          </div>
         </div>
       </div>
     </section>

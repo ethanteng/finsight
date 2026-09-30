@@ -187,7 +187,8 @@
    wider than the 1200px shell. It pauses under the pointer or keyboard focus,
    and with reduced motion it stops and wraps a single copy instead. */
 @scope (.marketing-site) {
-  .listed-on { padding-block: 36px 12px; text-align: center; }
+  /* A full-bleed band in the sage green the subpages alternate with. */
+  .listed-on { margin-top: 48px; padding-block: 44px 38px; border-block: 1px solid #c1d1c5; background: #dfe9df; text-align: center; }
   .listed-on-title { margin: 0 0 14px; font-size: 12px; line-height: 1.4; }
   .listed-on-viewport { overflow: hidden; mask-image: linear-gradient(90deg, transparent, #000 7%, #000 93%, transparent); }
   .listed-on-track { display: flex; width: max-content; animation: listed-on-scroll 50s linear infinite; }
@@ -196,7 +197,7 @@
   .listed-on-list a { display: block; border-radius: 10px; }
   .listed-on-list img { display: block; width: auto; height: 52px; }
   @media (max-width: 760px) {
-    .listed-on { padding-block: 24px 4px; }.listed-on-list { gap: 32px; padding-right: 32px; }.listed-on-list img { height: 44px; }
+    .listed-on { margin-top: 32px; padding-block: 32px 26px; }.listed-on-list { gap: 32px; padding-right: 32px; }.listed-on-list img { height: 44px; }
   }
   @media (prefers-reduced-motion: reduce) {
     .listed-on-viewport { mask-image: none; }.listed-on-track { width: auto; }.listed-on-list { flex-wrap: wrap; justify-content: center; gap: 20px 32px; padding-right: 0; }.listed-on-list[aria-hidden] { display: none; }
