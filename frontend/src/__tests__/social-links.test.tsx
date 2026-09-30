@@ -7,6 +7,7 @@ const PROFILES: Array<[string, string]> = [
   ["Ask Linc on Bluesky", "https://bsky.app/profile/asklinc.com"],
   ["Ask Linc on LinkedIn", "https://www.linkedin.com/company/asklinc/"],
   ["Ask Linc on Facebook", "https://www.facebook.com/asklinc/"],
+  ["Ask Linc on YouTube", "https://www.youtube.com/@asklinc"],
 ];
 
 describe.each([
@@ -20,6 +21,14 @@ describe.each([
       expect(link).toHaveAttribute("href", href);
       expect(link).toHaveAttribute("target", "_blank");
     }
+  });
+
+  it("shows the profiles in order", () => {
+    renderFooter();
+    const names = screen
+      .getAllByRole("link", { name: /^Ask Linc on / })
+      .map((link) => link.getAttribute("aria-label"));
+    expect(names).toEqual(PROFILES.map(([name]) => name));
   });
 
   it("keeps the TAAFT badge as supplied", () => {
