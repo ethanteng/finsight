@@ -182,6 +182,28 @@
   @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }
 }
 
+/* Directory badges between the flow and the story. The track holds the list
+   twice and slides one copy's width, so the loop has no seam; each copy is
+   wider than the 1200px shell. It pauses under the pointer or keyboard focus,
+   and with reduced motion it stops and wraps a single copy instead. */
+@scope (.marketing-site) {
+  .listed-on { padding-block: 36px 12px; text-align: center; }
+  .listed-on-title { margin: 0 0 14px; font-size: 12px; line-height: 1.4; }
+  .listed-on-viewport { overflow: hidden; mask-image: linear-gradient(90deg, transparent, #000 7%, #000 93%, transparent); }
+  .listed-on-track { display: flex; width: max-content; animation: listed-on-scroll 50s linear infinite; }
+  .listed-on-viewport:is(:hover, :focus-within) .listed-on-track { animation-play-state: paused; }
+  .listed-on-list { display: flex; align-items: center; gap: 48px; margin: 0; padding: 12px 48px 12px 0; list-style: none; }
+  .listed-on-list a { display: block; border-radius: 10px; }
+  .listed-on-list img { display: block; width: auto; height: 52px; }
+  @media (max-width: 760px) {
+    .listed-on { padding-block: 24px 4px; }.listed-on-list { gap: 32px; padding-right: 32px; }.listed-on-list img { height: 44px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .listed-on-viewport { mask-image: none; }.listed-on-track { width: auto; }.listed-on-list { flex-wrap: wrap; justify-content: center; gap: 20px 32px; padding-right: 0; }.listed-on-list[aria-hidden] { display: none; }
+  }
+}
+@keyframes listed-on-scroll { to { transform: translateX(-50%); } }
+
 /* Shared refinements carry the same calm hierarchy across public subpages. */
 @scope (.marketing-site) {
   .subhero { padding-block: 64px 58px; }
