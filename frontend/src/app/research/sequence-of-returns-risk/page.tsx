@@ -86,7 +86,7 @@ export default function SequenceOfReturnsRiskPage() {
 
       <section className="subhero centered-subhero shell">
         <p className="section-kicker">SEQUENCE-OF-RETURNS STUDY</p>
-        <h1>The household never changed.<em>The market sequence did—and 65 outcomes ran short.</em></h1>
+        <h1>Same plan. Different market sequence.<em>65 outcomes ran short.</em></h1>
         <p className="subhero-copy">
           We held retirement age, spending, Social Security, contributions, allocation, and life expectancy constant.
           Then Ask Linc replayed the plan across {scenario.sequencesTested} overlapping historical market sequences.
