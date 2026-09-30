@@ -90,7 +90,7 @@ export default function HistoricalRetirementOutcomesPage() {
 
       <section className="subhero centered-subhero shell">
         <p className="section-kicker">ASK LINC RESEARCH</p>
-        <h1>We tested 685 historical retirement starting points.<em>Two changes erased every shortfall in this example.</em></h1>
+        <h1>We tested the same retirement plan 685 times.<em>Two changes eliminated every shortfall.</em></h1>
         <p className="subhero-copy">
           One fictional household. The same portfolio, Social Security assumption, and life expectancy.
           We changed only retirement age or spending, then reran the plan across 685 overlapping historical market sequences.
@@ -216,8 +216,7 @@ export default function HistoricalRetirementOutcomesPage() {
             </article>
           </div>
           <p>
-            Snapshot generated {data.generatedOn}. Dataset fingerprint: <code>{data.datasetSha256}</code>.
-            {' '}Explore the <Link href="/retirement-calculator">retirement calculator</Link>, read how Ask Linc <Link href="/trust">shows the math behind its answers</Link>, or <Link href="/research">browse all Ask Linc research</Link>.
+            Explore the <Link href="/retirement-calculator">retirement calculator</Link>, read how Ask Linc <Link href="/trust">shows the math behind its answers</Link>, or <Link href="/research">browse all Ask Linc research</Link>.
           </p>
         </div>
       </section>
