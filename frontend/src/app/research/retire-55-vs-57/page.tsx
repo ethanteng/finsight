@@ -66,7 +66,7 @@ export default function Retire55Vs57Page() {
 
       <section className="subhero centered-subhero shell">
         <p className="section-kicker">RETIREMENT SCENARIO STUDY</p>
-        <h1>Retire at 55 or wait until 57?<em>We changed only the retirement date.</em></h1>
+        <h1>Retire at 55 or 57?<em>Two years changed the margin.</em></h1>
         <p className="subhero-copy">
           The household, spending, portfolio, Social Security, allocation, and life expectancy stayed the same.
           We moved retirement two years later and reran the plan across the same 685 historical sequences.
@@ -177,7 +177,6 @@ export default function Retire55Vs57Page() {
         </div>
         <p>
           The historical dataset spans July 1926 through June 2026. This example uses {data.history.sequencesTested} overlapping {data.history.horizonYears}-year retirement windows, with start months from July 1926 through July 1983.
-          The snapshot was generated on {data.generatedOn}; its dataset fingerprint is <code>{data.datasetSha256}</code>.
         </p>
         <p>
           See the broader study, <Link href="/research/historical-retirement-outcomes">what changed the outcome across all three scenarios →</Link>, run your own inputs through the <Link href="/retirement-calculator">Ask Linc retirement calculator</Link>, or <Link href="/research">browse all Ask Linc research</Link>.
