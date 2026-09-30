@@ -96,6 +96,21 @@
     font-size: .82em;
   }
 
+
+  :scope.research-article .page-section a {
+    color: #245b43;
+    font-weight: 700;
+    text-decoration: underline;
+    text-decoration-color: rgba(36, 91, 67, .42);
+    text-decoration-thickness: 1.5px;
+    text-underline-offset: 3px;
+  }
+
+  :scope.research-article .page-section a:hover {
+    color: #123c2f;
+    text-decoration-color: currentColor;
+  }
+
   :scope.research-hub .page-section {
     padding-block: 78px;
   }
