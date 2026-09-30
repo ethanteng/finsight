@@ -68,7 +68,7 @@ export default function CoastFireContributionsPage() {
 
       <section className="subhero centered-subhero shell">
         <p className="section-kicker">COAST FIRE CONTRIBUTION STUDY</p>
-        <h1>What if you nearly stop saving?<em>The answer is more useful than “yes, you’ve reached Coast FIRE.”</em></h1>
+        <h1>Coast FIRE isn’t binary.<em>We cut annual saving by $40,000.</em></h1>
         <p className="subhero-copy">
           We took the same fictional household retiring at age {fullSaving.inputs.retirementAge} and cut annual contributions from {money(fullSaving.inputs.annualContributions)} to {money(lowSaving.inputs.annualContributions)}.
           Everything else stayed the same.
