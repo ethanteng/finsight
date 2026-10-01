@@ -109,6 +109,30 @@ describe('Tiingo Power client', () => {
     const priorMonthEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 0));
     expect(covers([{ date: priorMonthEnd }], currentMonthEnd)).toBe(true);
   });
+
+  // Stepping back from the 31st used to overflow a shorter prior month
+  // (Oct 31 -> "Sep 31" -> Oct 1), so the cache read as stale all month.
+  it.each([
+    ['2026-10-01T18:00:00Z', '2026-09-30T00:00:00Z', '2026-10-31T23:59:59Z'],
+    ['2026-03-15T12:00:00Z', '2026-02-28T00:00:00Z', '2026-03-31T23:59:59Z'],
+    ['2026-12-31T23:00:00Z', '2026-11-30T00:00:00Z', '2026-12-31T23:59:59Z'],
+  ])('on %s, a cache through the prior short month covers this month-end', (now, latest, end) => {
+    const covers = (dbCache as any).coversLatestCompleteMonth.bind(dbCache);
+    jest.useFakeTimers({ now: new Date(now) });
+    try {
+      expect(covers([{ date: new Date(latest) }], new Date(end))).toBe(true);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('steps back from a mid-month 30th or 31st without overflowing', () => {
+    const covers = (dbCache as any).coversLatestCompleteMonth.bind(dbCache);
+    const february = [{ date: new Date('2026-02-28T00:00:00Z') }];
+    expect(covers(february, new Date('2026-03-30T00:00:00Z'))).toBe(true);
+    const september = [{ date: new Date('2025-09-30T00:00:00Z') }];
+    expect(covers(september, new Date('2025-10-31T00:00:00Z'))).toBe(false);
+  });
 });
 
 describe('Tiingo coverage gaps', () => {

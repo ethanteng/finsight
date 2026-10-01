@@ -124,11 +124,14 @@ export class DatabaseCache {
     const now = new Date();
     const isCurrentMonth = requestedMonth.getUTCFullYear() === now.getUTCFullYear()
       && requestedMonth.getUTCMonth() === now.getUTCMonth();
-    if (!endsAtMonthEnd || isCurrentMonth) requestedMonth.setUTCMonth(requestedMonth.getUTCMonth() - 1);
+    // Step back a month on the year*12+month key, not with setUTCMonth: on the
+    // 31st that overflows a shorter prior month (Oct 31 -> "Sep 31" -> Oct 1)
+    // and the step back never happens.
+    const monthKey = requestedMonth.getUTCFullYear() * 12 + requestedMonth.getUTCMonth();
+    const requestedKey = !endsAtMonthEnd || isCurrentMonth ? monthKey - 1 : monthKey;
 
     const latest = records[records.length - 1].date;
     const latestKey = latest.getUTCFullYear() * 12 + latest.getUTCMonth();
-    const requestedKey = requestedMonth.getUTCFullYear() * 12 + requestedMonth.getUTCMonth();
     return latestKey >= requestedKey;
   }
 
