@@ -27,24 +27,22 @@ export const CLICKS_SCRIPT_SRC = 'https://clicks.page/t.js';
 
 const MEASURED = new Set<string>(MEASURED_QUERY_PARAMS);
 
+function parse(href: string): URL | null {
+  try {
+    return new URL(href);
+  } catch {
+    return null;
+  }
+}
+
 /**
- * True when the tracker may report this URL exactly as it stands.
+ * Host, path and query: the parts of a URL the tracker may report as-is.
  *
  * Stricter than measuredUrl(), which can strip what it does not want: here an
  * unrecognised query parameter rules the whole URL out, because nothing will
- * strip it before it is sent. The fragment is allowed. Nothing on the
- * marketing site puts anything in one, and in-page anchor links change it
- * without leaving the page, so refusing it would reload the page on every
- * table-of-contents click.
+ * strip it before it is sent.
  */
-export function canCarryClicksTracker(href: string): boolean {
-  let url: URL;
-  try {
-    url = new URL(href);
-  } catch {
-    return false;
-  }
-
+function isReportableAddress(url: URL): boolean {
   if (!isAnalyticsHost(url.hostname)) return false;
   if (!isMarketingPath(url.pathname)) return false;
 
@@ -52,6 +50,32 @@ export function canCarryClicksTracker(href: string): boolean {
     if (!MEASURED.has(key)) return false;
   }
   return true;
+}
+
+/**
+ * True when the tracker may be loaded into a document at this URL.
+ *
+ * No fragment at all, the same as redactAnalyticsUrl(). A fragment on the
+ * URL a document loads at was written by whoever wrote the link —
+ * `/register#email=…` is as easy to send as `/register?email=…` — and the
+ * tracker would send it whole.
+ */
+export function canLoadClicksTracker(href: string): boolean {
+  const url = parse(href);
+  return url !== null && isReportableAddress(url) && url.hash === '';
+}
+
+/**
+ * True when a document already carrying the tracker may move to this URL.
+ *
+ * Here the fragment is allowed. The document loaded without one, so the only
+ * fragments it can reach come from this site's own in-page anchor links
+ * (`#sources`, `#by-portfolio`), and refusing them would reload the page on
+ * every table-of-contents click.
+ */
+export function canCarryClicksTracker(href: string): boolean {
+  const url = parse(href);
+  return url !== null && isReportableAddress(url);
 }
 
 type HistoryMethod = 'pushState' | 'replaceState';
@@ -122,7 +146,7 @@ export function startClicksTracker(
   win: Pick<Window, 'history' | 'location'>,
   doc: Pick<Document, 'createElement' | 'head' | 'querySelector'>,
 ): boolean {
-  if (!canCarryClicksTracker(win.location.href)) return false;
+  if (!canLoadClicksTracker(win.location.href)) return false;
   // The same opt-out that keeps our own browsing out of every other tag.
   if (isInternalAnalyticsBrowser()) return false;
   // Once per document, even if the component mounts twice.

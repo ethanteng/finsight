@@ -4,6 +4,7 @@ import {
   CLICKS_SCRIPT_SRC,
   CLICKS_SITE_ID,
   canCarryClicksTracker,
+  canLoadClicksTracker,
   installClicksNavigationGuard,
   startClicksTracker,
 } from "@/lib/clicks-analytics";
@@ -49,6 +50,26 @@ describe("canCarryClicksTracker", () => {
   });
 });
 
+describe("canLoadClicksTracker", () => {
+  it.each([`${SITE}/`, `${SITE}/pricing?utm_source=newsletter`])("loads on %s", (href) => {
+    expect(canLoadClicksTracker(href)).toBe(true);
+  });
+
+  it.each([
+    // Whoever wrote the link wrote the fragment, and the tracker sends it whole.
+    `${SITE}/register#email=someone%40example.com`,
+    `${SITE}/#token=live-single-use-token`,
+    `${SITE}/faq#cancel`,
+    // Everything canCarryClicksTracker refuses, too.
+    `${SITE}/app`,
+    `${SITE}/register?email=someone%40example.com`,
+    "https://finsight-abc123.vercel.app/",
+    "not a url",
+  ])("refuses %s", (href) => {
+    expect(canLoadClicksTracker(href)).toBe(false);
+  });
+});
+
 function fakeWindow(href: string) {
   const pushState = jest.fn();
   const replaceState = jest.fn();
@@ -60,6 +81,16 @@ function fakeWindow(href: string) {
 }
 
 describe("installClicksNavigationGuard", () => {
+  it("lets an in-page anchor link through without reloading", () => {
+    const { win, pushState } = fakeWindow(`${SITE}/retirement-answers`);
+    installClicksNavigationGuard(win as unknown as Window);
+
+    win.history.pushState({}, "", "#by-portfolio");
+
+    expect(pushState).toHaveBeenCalledWith({}, "", "#by-portfolio");
+    expect(win.location.assign).not.toHaveBeenCalled();
+  });
+
   it("lets a move to another reportable page through", () => {
     const { win, pushState } = fakeWindow(`${SITE}/`);
     installClicksNavigationGuard(win as unknown as Window);
@@ -148,6 +179,7 @@ describe("startClicksTracker", () => {
   it.each([
     `${SITE}/app`,
     `${SITE}/register?email=someone%40example.com`,
+    `${SITE}/register#email=someone%40example.com`,
     "https://finsight-abc123.vercel.app/",
   ])("loads nothing and guards nothing on %s", (href) => {
     const { win, pushState } = fakeWindow(href);
