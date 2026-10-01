@@ -171,6 +171,7 @@ The platform supports OpenAI (GPT-4), Anthropic (Claude), and Google (Gemini) wi
 | MailerLite | Email marketing (subscribe on no-card signup; daily sync at 3 AM EST) |
 | Resend | Transactional email |
 | Sentry | Error tracking (frontend + backend) |
+| clicks.page | Marketing-site analytics; loaded only on production marketing pages (`frontend/src/lib/clicks-analytics.ts`) |
 
 ### Deployment
 
