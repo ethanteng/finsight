@@ -58,6 +58,15 @@ export const LISTED_ON_BADGES = [
     width: 460,
     height: 130,
   },
+  {
+    name: "Smol Launch",
+    href: "https://smollaunch.com/products/ask-linc?utm_source=badge&utm_medium=referral&utm_campaign=featured&utm_content=ask-linc",
+    rel: "noopener",
+    src: "https://smollaunch.com/badges/featured.svg",
+    alt: "Ask Linc featured on Smol Launch",
+    width: 250,
+    height: 60,
+  },
 ] as const;
 
 function BadgeList({ hidden = false }: { hidden?: boolean }) {
