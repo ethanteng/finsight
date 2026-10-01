@@ -119,7 +119,9 @@ describe("Contentsquare content security policy", () => {
   it("allows every homepage directory badge as an image only", () => {
     const imgSrc = directive(production, "img-src").split(" ");
     for (const badge of LISTED_ON_BADGES) {
-      expect(imgSrc).toContain(new URL(badge.src).origin);
+      // A badge served from public/ is covered by 'self'.
+      const { origin } = new URL(badge.src, "https://self.invalid");
+      expect(imgSrc).toContain(origin === "https://self.invalid" ? "'self'" : origin);
     }
     for (const host of DIRECTORY_BADGE_HOSTS) {
       for (const name of ["default-src", "script-src", "connect-src", "frame-src", "style-src"]) {

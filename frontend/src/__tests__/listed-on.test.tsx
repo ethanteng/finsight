@@ -9,6 +9,7 @@ const BADGES: Array<[string, string]> = [
   ["Ask Linc on Peerlist", "https://peerlist.io/ethanteng/project/ask-linc"],
   ["Ask Linc on PeerPush", "https://peerpush.com/p/ask-linc"],
   ["Ask Linc featured on Smol Launch", "https://smollaunch.com/products/ask-linc?utm_source=badge&utm_medium=referral&utm_campaign=featured&utm_content=ask-linc"],
+  ["Ask Linc launched on Tiny Startups", "https://www.tinystartups.com/startup/ask-linc"],
 ];
 
 describe("homepage directory badges", () => {
