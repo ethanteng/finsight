@@ -8,6 +8,7 @@ import StructuredData from '../components/StructuredData'
 import type { Metadata } from 'next'
 import VercelAnalytics from '../components/VercelAnalytics'
 import VercelSpeedInsights from '../components/VercelSpeedInsights'
+import ClicksAnalytics from '../components/ClicksAnalytics'
 import { PricingProvider } from '../components/PricingProvider'
 import { getPricing } from '../lib/pricing'
 import {
@@ -129,6 +130,7 @@ export default async function RootLayout({
         <PricingProvider pricing={pricing}>{children}</PricingProvider>
         <VercelAnalytics />
         <VercelSpeedInsights />
+        <ClicksAnalytics />
       </body>
     </html>
   )
