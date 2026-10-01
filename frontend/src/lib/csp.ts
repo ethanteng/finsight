@@ -38,6 +38,7 @@ export const DIRECTORY_BADGE_HOSTS = [
   "https://www.uneed.best",
   "https://peerlist.io",
   "https://peerpush.com",
+  "https://smollaunch.com",
 ];
 
 // The dev frontend talks to a backend on localhost; production never should,
