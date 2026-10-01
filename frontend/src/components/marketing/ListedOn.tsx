@@ -3,6 +3,8 @@
 // Each directory's badge as that site supplies it: its hosted image and its
 // link with the tracking params. Alt text is ours, since it names the link.
 // Every image host here must also be in the CSP img-src (lib/csp.ts).
+// Tiny Startups supplies HTML rather than an image, so its badge is served
+// from public/badges as an SVG redrawn from that HTML.
 export const LISTED_ON_BADGES = [
   {
     name: "AlternativeTo",
@@ -66,6 +68,15 @@ export const LISTED_ON_BADGES = [
     alt: "Ask Linc featured on Smol Launch",
     width: 250,
     height: 60,
+  },
+  {
+    name: "Tiny Startups",
+    href: "https://www.tinystartups.com/startup/ask-linc",
+    rel: "noopener",
+    src: "/badges/tiny-startups.svg",
+    alt: "Ask Linc launched on Tiny Startups",
+    width: 255,
+    height: 88,
   },
 ] as const;
 
