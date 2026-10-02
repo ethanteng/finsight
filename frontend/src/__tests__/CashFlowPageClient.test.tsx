@@ -286,6 +286,23 @@ describe('CashFlowPageClient', () => {
       expect(posted(calls)).toEqual({ kind: 'exclude_transfer', flow: 'spending', key: 'vanguard buy transfer' });
     });
 
+    it('lists the first one-offs, shows the rest on request, and counts any of them', async () => {
+      const oneOffs = Array.from({ length: 10 }, (_, index) => ({
+        id: `one-off-${index}`, date: '2026-09-02', label: `Store ${index}`, flow: 'spending' as const, amount: 3000 - index * 100,
+      }));
+      const calls = adjusting(report({ oneOffs }));
+      render(<CashFlowPageClient />);
+      const section = await basis();
+      expect(within(section).getByRole('button', { name: 'Count it: Store 7' })).toBeInTheDocument();
+      expect(within(section).queryByRole('button', { name: 'Count it: Store 9' })).not.toBeInTheDocument();
+
+      fireEvent.click(within(section).getByRole('button', { name: 'Show 2 more' }));
+      fireEvent.click(within(section).getByRole('button', { name: 'Count it: Store 9' }));
+      await waitFor(() => expect(calls.some(call => call.init?.method === 'POST')).toBe(true));
+      expect(posted(calls)).toEqual({ kind: 'include_one_off', flow: 'spending', key: 'one-off-9' });
+      expect(within(section).getByRole('button', { name: 'Show fewer' })).toBeInTheDocument();
+    });
+
     it('lists the user’s changes and undoes one', async () => {
       const body = report({
         adjustments: [

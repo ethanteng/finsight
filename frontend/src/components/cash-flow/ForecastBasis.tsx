@@ -20,6 +20,9 @@ import {
 
 type Flow = 'income' | 'spending';
 
+/** One-offs listed before "Show more". */
+const ONE_OFFS_SHOWN = 8;
+
 /** What one button asks the server to change. */
 interface AdjustmentRequest {
   kind: ForecastAdjustmentKind;
@@ -133,6 +136,7 @@ export default function ForecastBasis({ report, apiUrl, onChanged }: {
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [allOneOffs, setAllOneOffs] = useState(false);
   const active = report.recurring.filter(item => item.status === 'active');
   const income = active.filter(item => item.flow === 'income');
   const bills = active.filter(item => item.flow === 'spending');
@@ -286,7 +290,7 @@ export default function ForecastBasis({ report, apiUrl, onChanged }: {
               it come that often. If you know when it will happen again, add it as a planned event instead.
             </p>
             <ul className="mt-2 divide-y divide-[#102319]/10">
-              {report.oneOffs.map(item => (
+              {(allOneOffs ? report.oneOffs : report.oneOffs.slice(0, ONE_OFFS_SHOWN)).map(item => (
                 <li key={item.id} className="flex items-center justify-between gap-3 py-2 text-sm">
                   <span className="min-w-0 line-clamp-2 break-words text-[#102319]">
                     {item.label} <span className="text-xs text-[#66736b]">· {formatCalendarDate(item.date)}</span>
@@ -307,6 +311,15 @@ export default function ForecastBasis({ report, apiUrl, onChanged }: {
                 </li>
               ))}
             </ul>
+            {report.oneOffs.length > ONE_OFFS_SHOWN && (
+              <button
+                type="button"
+                onClick={() => setAllOneOffs(shown => !shown)}
+                className="mt-2 text-xs font-bold text-[#102319] underline"
+              >
+                {allOneOffs ? 'Show fewer' : `Show ${report.oneOffs.length - ONE_OFFS_SHOWN} more`}
+              </button>
+            )}
           </Section>
         )}
 

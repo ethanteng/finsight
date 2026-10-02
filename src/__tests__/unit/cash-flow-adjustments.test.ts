@@ -115,6 +115,19 @@ describe('adjusting what the forecast counts', () => {
     expect(forecastTotals(adjusted, ...NEXT_12)).toEqual(forecastTotals(base, ...NEXT_12));
   });
 
+  it('lists every one-off in the report, so each can be counted', () => {
+    // Twelve large purchases from different stores in one week: each is a one-off,
+    // and keeping them in one week leaves the typical week, and so the threshold, alone.
+    const spree = Array.from({ length: 12 }, (_, index) =>
+      tx('card', `2026-09-0${1 + (index % 7)}`, 'expense', 1500 + index, `Store ${String.fromCharCode(65 + index)}`, {
+        merchant_name: `Store ${String.fromCharCode(65 + index)}`,
+      }));
+    const built = model([], { transactions: [...history, ...spree] });
+    const listed = buildCashFlowReport(built, { granularity: 'month', horizonMonths: 3 }).oneOffs;
+    expect(listed).toHaveLength(built.oneOffs.length);
+    expect(listed.length).toBeGreaterThan(10);
+  });
+
   it('ignores a choice whose item has gone from the data', () => {
     expect(forecastTotals(model([adjustment({ key: 'no such payee' })]), ...NEXT_12)).toEqual(forecastTotals(model(), ...NEXT_12));
   });

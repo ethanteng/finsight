@@ -950,6 +950,7 @@ export interface CashFlowReport {
     monthlyExpenseOverride: number | null;
   };
   recurring: CashFlowRecurringSummary[];
+  /** Every one-off in the basis, largest first, so each can be counted. */
   oneOffs: Array<{ id: string; date: CalendarDate; label: string; flow: CashFlowDirection; amount: number }>;
   /** Largest first, for the sides read from transactions. */
   typicalPayees: CashFlowTypicalPayeeSummary[];
@@ -1283,7 +1284,7 @@ export function buildCashFlowReport(model: CashFlowModel, request: CashFlowRepor
       replacedByOverride: (stream.flow === 'income' ? model.typical.incomeSource : model.typical.spendingSource) === 'override',
       continuedByUser: model.continuedStreamIds.has(stream.id),
     })),
-    oneOffs: model.oneOffs.slice(0, 10).map(entry => ({
+    oneOffs: model.oneOffs.map(entry => ({
       id: entry.id,
       date: entry.date,
       label: entry.label,
