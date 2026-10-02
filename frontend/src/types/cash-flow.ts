@@ -134,7 +134,15 @@ export interface CashFlowReport {
   recurring: CashFlowRecurringItem[];
   oneOffs: Array<{ id: string; date: string; label: string; flow: 'income' | 'spending'; amount: number }>;
   plannedEvents: CashFlowPlannedEventSummary[];
-  accounts: Array<{ id: string; name: string; institution: string | null; kind: 'cash' | 'credit'; subtype: string | null; mask: string | null }>;
+  accounts: Array<{
+    id: string;
+    name: string;
+    institution: string | null;
+    kind: 'cash' | 'credit';
+    subtype: string | null;
+    mask: string | null;
+    balance: number | null;
+  }>;
   excluded: { unclassified: number; currencyMismatch: number };
   cards: CashFlowCardSummary[];
   position: CashFlowPositionSummary;
