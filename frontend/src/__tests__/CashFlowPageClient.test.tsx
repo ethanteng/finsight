@@ -83,7 +83,8 @@ function report(overrides: Partial<CashFlowReport> = {}): CashFlowReport {
     cards: [{
       accountId: 'card', name: 'Rewards Card', mask: '9876', institution: 'Card Co', balance: 4000, apr: 24, minimumPayment: 80,
       paymentDay: 20, behavior: 'average_payment', usualMonthlyPayment: 1520.83, paymentSource: 'connected',
-      currentPace: pace('2027-03', 112.4, true, usualPayments), withPlans: null, interestSaved: null, planIds: [],
+      currentPace: pace('2027-03', 112.4, true, usualPayments), withPlans: null, interestSaved: null,
+      plansMatchCurrentPace: false, planIds: [],
     }],
     position: {
       available: true, startingCash: 5200, startingCardDebt: 4000,
@@ -767,6 +768,53 @@ describe('CashFlowPageClient', () => {
     expect(JSON.parse(String(calls.find(call => call.init?.method === 'POST')!.init!.body))).toEqual({
       label: 'Pay off Rewards Card', kind: 'card_payment', amount: 0, startDate: '2026-10-25', recurrence: 'once', endDate: null,
       accountId: 'card', paymentMode: 'full',
+    });
+  });
+
+  describe('a card already paid in full', () => {
+    // Like the user's Chase card: paid in full every month, so the usual pace already pays each statement.
+    const inFull = { nextPayment: { date: '2026-10-28', amount: 614 }, paymentsTwelveMonths: 2890.2 };
+    const chase = (overrides: Record<string, unknown> = {}) => ({
+      ...report().cards[0], accountId: 'chase', name: 'Chase Credit Card', mask: '4321', balance: 614,
+      behavior: 'pays_in_full' as const, usualMonthlyPayment: null,
+      currentPace: pace(null, 0, false, inFull), withPlans: null, interestSaved: null, plansMatchCurrentPace: false, planIds: [],
+      ...overrides,
+    });
+    const sameNote = 'Same as your current pace: you already pay this card in full, so your plan doesn’t change your forecast.';
+
+    it('says when a plan leaves the card where its usual pace does', async () => {
+      mockFetch(url => (url.includes('/api/cash-flow?')
+        ? { status: 200, body: report({ cards: [chase({ withPlans: pace(null, 0, false, inFull), interestSaved: { twelveMonths: 0, total: 0 }, plansMatchCurrentPace: true, planIds: ['chase'] })] }) }
+        : undefined));
+      render(<CashFlowPageClient />);
+      expect(await screen.findByText(sameNote)).toBeInTheDocument();
+    });
+
+    it('says nothing of the sort when the plan changes the card', async () => {
+      mockFetch(url => (url.includes('/api/cash-flow?')
+        ? { status: 200, body: report({ cards: [chase({ withPlans: pace(null, 0, false, inFull), plansMatchCurrentPace: false, planIds: ['chase'] })] }) }
+        : undefined));
+      render(<CashFlowPageClient />);
+      await screen.findByRole('heading', { name: 'Credit cards' });
+      expect(screen.queryByText(/^Same as your current pace/)).not.toBeInTheDocument();
+    });
+
+    it('warns in the form that paying it in full won’t change what you save', async () => {
+      mockFetch(url => (url.includes('/api/cash-flow?') ? { status: 200, body: report({ cards: [chase()] }) } : undefined));
+      render(<CashFlowPageClient />);
+      await screen.findByRole('heading', { name: 'Credit cards' });
+
+      fireEvent.click(screen.getByRole('button', { name: 'Plan a payment' }));
+      expect(screen.getByText(
+        'You already pay this card in full each month, so paying it off now only takes the money out of your cash sooner. It won’t change what you’re expected to save.'
+      )).toBeInTheDocument();
+      fireEvent.change(screen.getByLabelText('Repeats'), { target: { value: 'monthly' } });
+      expect(screen.getByText(
+        'You already pay this card in full each month, and your forecast already assumes you will, so this plan won’t change what you’re expected to save.'
+      )).toBeInTheDocument();
+      // A set amount can leave part of a statement unpaid, which does change it.
+      fireEvent.click(screen.getByRole('button', { name: 'A set amount' }));
+      expect(screen.queryByText(/You already pay this card in full each month/)).not.toBeInTheDocument();
     });
   });
 

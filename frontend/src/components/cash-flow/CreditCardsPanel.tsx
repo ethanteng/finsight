@@ -96,6 +96,14 @@ export default function CreditCardsPanel({
               </div>
             )}
 
+            {card.plansMatchCurrentPace && (
+              <p className="mt-3 text-sm text-[#5e6b63]">
+                {card.behavior === 'pays_in_full'
+                  ? 'Same as your current pace: you already pay this card in full, so your plan doesn’t change your forecast.'
+                  : 'Same as your current pace: your plan pays what you already pay each month, so it doesn’t change your forecast.'}
+              </p>
+            )}
+
             {!card.currentPace && (
               <p className="mt-3 text-xs leading-5 text-[#66736b]">
                 {card.balance === null

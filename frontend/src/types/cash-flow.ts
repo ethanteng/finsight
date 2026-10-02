@@ -246,6 +246,8 @@ export interface CashFlowCardSummary {
   currentPace: CardOutcome | null;
   withPlans: CardOutcome | null;
   interestSaved: { twelveMonths: number; total: number } | null;
+  /** The plans leave the card exactly where its usual pace does; false without plans or a usual pace. */
+  plansMatchCurrentPace: boolean;
   planIds: string[];
 }
 

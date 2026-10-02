@@ -239,6 +239,9 @@ export default function PlannedEventsPanel({
       && !events.some(event => event.kind === 'card_payment' && event.accountId === formCard.accountId
         && event.recurrence === 'monthly' && event.id !== form.id)
   );
+  // The forecast already pays this card's statements in full, so paying it in
+  // full adds nothing to savings: there is no interest for it to stop.
+  const alreadyPaidInFull = Boolean(form && formCard && formCard.behavior === 'pays_in_full' && form.paymentMode === 'full');
 
   return (
     <section ref={sectionRef} className="scroll-mt-28 rounded-[1.6rem] border border-[#102319]/10 bg-[#fffdf5] p-5 shadow-sm sm:p-7" aria-labelledby="planned-events-heading">
@@ -351,6 +354,14 @@ export default function PlannedEventsPanel({
           {(form.recurrence === 'once' ? form.startDate !== '' && form.startDate < forecastStart : form.endDate !== '' && form.endDate < forecastStart) && (
             <p className="text-xs leading-5 text-[#76510f] sm:col-span-2">
               The forecast starts on {formatCalendarDate(forecastStart)}, so this won’t change it.
+            </p>
+          )}
+
+          {alreadyPaidInFull && (
+            <p className="text-xs leading-5 text-[#76510f] sm:col-span-2">
+              {form.recurrence === 'once'
+                ? 'You already pay this card in full each month, so paying it off now only takes the money out of your cash sooner. It won’t change what you’re expected to save.'
+                : 'You already pay this card in full each month, and your forecast already assumes you will, so this plan won’t change what you’re expected to save.'}
             </p>
           )}
 

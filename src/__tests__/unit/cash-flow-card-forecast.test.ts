@@ -166,6 +166,31 @@ describe('the report’s cards and cash position', () => {
     );
     expect(planned.interestSaved!.twelveMonths).toBeGreaterThan(0);
     expect(planned.planIds).toEqual(['payoff']);
+    // Paying off a card that carries a balance changes what it costs.
+    expect(usual.plansMatchCurrentPace).toBe(false);
+    expect(planned.plansMatchCurrentPace).toBe(false);
+  });
+
+  it('says when a plan leaves a card exactly where its usual pace does', () => {
+    // Paid in full every month, as the user's Chase card is: no interest in the history.
+    const paidInFull = (plannedEvents: PlannedCashFlowEvent[]) => buildCashFlowReport(
+      model({ transactions: household, accounts: accountsWithCardTerms(614), plannedEvents }),
+      { granularity: 'month', horizonMonths: 6 }
+    ).cards[0];
+    const monthlyInFull: PlannedCashFlowEvent = { ...payoff, id: 'monthly', recurrence: 'monthly', startDate: '2026-10-02' };
+
+    const usual = paidInFull([]);
+    expect(usual.behavior).toBe('pays_in_full');
+    expect(usual.plansMatchCurrentPace).toBe(false);
+
+    const same = paidInFull([monthlyInFull]);
+    expect(same.withPlans!.months).toEqual(same.currentPace!.months);
+    expect(same.plansMatchCurrentPace).toBe(true);
+
+    // A set amount below the statement leaves a balance to carry, which costs interest.
+    const short = paidInFull([{ ...monthlyInFull, paymentMode: 'fixed', amount: 100 }]);
+    expect(short.withPlans!.interestTwelveMonths).toBeGreaterThan(0);
+    expect(short.plansMatchCurrentPace).toBe(false);
   });
 
   it('reports cash and card balances at each period end from the forecast on', () => {

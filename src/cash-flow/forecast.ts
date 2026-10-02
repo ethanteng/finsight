@@ -1117,6 +1117,12 @@ export interface CashFlowCardSummary {
   withPlans: CardOutcome | null;
   /** The usual pace's interest less the plans'; null without plans or an APR. */
   interestSaved: { twelveMonths: number; total: number } | null;
+  /**
+   * The plans leave the card exactly where its usual pace does: every month
+   * paid the same, charged the same interest and left owing the same. False
+   * without plans or a usual pace.
+   */
+  plansMatchCurrentPace: boolean;
   planIds: string[];
 }
 
@@ -1181,6 +1187,20 @@ export function summarizeCards(model: CashFlowModel): CashFlowCardSummary[] {
   return model.cards.map(card => cardSummary(card, model.forecastStart));
 }
 
+/**
+ * Whether two projections of a card agree month by month. A plan to pay in
+ * full a card already paid in full is the usual case: the page says the plan
+ * changes nothing rather than showing two identical outcomes side by side.
+ */
+function samePace(current: CardProjection | null, planned: CardProjection | null): boolean {
+  if (!current || !planned || current.months.length !== planned.months.length) return false;
+  return current.months.every((month, index) => {
+    const other = planned.months[index];
+    return month.month === other.month && month.payment === other.payment
+      && month.interest === other.interest && month.endBalance === other.endBalance;
+  });
+}
+
 function cardSummary(card: CardModel, forecastStart: CalendarDate): CashFlowCardSummary {
   const hasPlans = card.plans.length > 0;
   const current = card.currentPace;
@@ -1212,6 +1232,7 @@ function cardSummary(card: CardModel, forecastStart: CalendarDate): CashFlowCard
     currentPace: cardOutcome(current, forecastStart),
     withPlans,
     interestSaved: saved,
+    plansMatchCurrentPace: samePace(current, planned),
     planIds: card.plans.map(plan => plan.id),
   };
 }
