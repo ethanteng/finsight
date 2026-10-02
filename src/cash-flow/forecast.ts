@@ -187,17 +187,21 @@ export function buildCashFlowModel(input: CashFlowModelInput): CashFlowModel {
   const incomeSource: FlowSource = monthlyIncomeOverride !== null ? 'override' : 'transactions';
   const spendingSource: FlowSource = monthlyExpenseOverride !== null ? 'override' : 'transactions';
 
-  let reason: ForecastUnavailableReason | null = null;
-  if (ledger.accounts.length === 0) reason = 'no_accounts';
-  else if (!coverageStart) reason = 'no_history';
-
   const basisStart = coverageStart
     ? maxDate(coverageStart, addDays(forecastStart, -TYPICAL_BASIS_DAYS))
     : null;
   const basisDays = basisStart ? daysBetween(basisStart, forecastStart) : 0;
-  // Overrides on both sides make history unnecessary for the forecast.
+
+  // Every reason below is about history. Overrides on both sides say what the
+  // month looks like, so the forecast needs none: accounts, coverage and basis
+  // only matter for a side that is read from transactions.
   const needsHistory = incomeSource === 'transactions' || spendingSource === 'transactions';
-  if (!reason && needsHistory && basisDays < MIN_FORECAST_HISTORY_DAYS) reason = 'insufficient_history';
+  let reason: ForecastUnavailableReason | null = null;
+  if (needsHistory) {
+    if (ledger.accounts.length === 0) reason = 'no_accounts';
+    else if (!coverageStart) reason = 'no_history';
+    else if (basisDays < MIN_FORECAST_HISTORY_DAYS) reason = 'insufficient_history';
+  }
 
   let dailyIncome = 0;
   let dailySpending = 0;
@@ -452,8 +456,12 @@ function highlightWindows(model: CashFlowModel): Array<{ key: CashFlowHighlightK
 export function buildCashFlowHighlights(model: CashFlowModel): CashFlowHighlight[] {
   return highlightWindows(model).map(({ key, start, endExclusive }) => {
     const startsObserved = start < model.forecastStart;
-    const actualToDate = startsObserved ? actualTotals(model, start, endExclusive) ?? totals(0, 0) : null;
     const coverage = startsObserved ? actualCoverage(model, start, endExclusive) : null;
+    // With no history behind the observed part, what happened is unknown, not
+    // zero: no "so far" figure exists to report, or to publish as a fact.
+    const actualToDate = startsObserved && coverage !== 'none'
+      ? actualTotals(model, start, endExclusive)
+      : null;
     const remaining = forecastTotals(model, start, endExclusive);
     const wholeHistory = !startsObserved || coverage === 'full';
     const projected = remaining && wholeHistory ? combine(actualToDate, remaining) : null;
@@ -515,7 +523,13 @@ export interface CashFlowReport {
   coverageStart: CalendarDate | null;
   forecast: CashFlowModel['forecast'];
   periods: CashFlowPeriod[];
-  totals: { actual: CashFlowTotals | null; forecast: CashFlowTotals | null; total: CashFlowTotals | null };
+  totals: {
+    /** How much of the range's observed part has history; `partial` withholds the totals. */
+    coverage: 'full' | 'partial' | 'none';
+    actual: CashFlowTotals | null;
+    forecast: CashFlowTotals | null;
+    total: CashFlowTotals | null;
+  };
   highlights: CashFlowHighlight[];
   baseline: {
     typicalBasisStart: CalendarDate | null;
@@ -541,7 +555,13 @@ const DEFAULT_LOOKBACK_MONTHS: Record<CashFlowGranularity, number> = {
   year: 24,
 };
 
-/** The default range: recent history through the requested horizon, on period boundaries. */
+/**
+ * The default range: recent history through the requested horizon, on period
+ * boundaries -- except that it never starts before the history does. Rounding
+ * the first day back to its period boundary would count the days before the
+ * connection's history as days with no activity; the first period is clipped
+ * to the history instead.
+ */
 export function defaultReportRange(
   model: CashFlowModel,
   granularity: CashFlowGranularity,
@@ -555,7 +575,9 @@ export function defaultReportRange(
   );
   // Finish the period the horizon lands in, so the last bar is never a stub.
   const toExclusive = minDate(periodEndExclusive(addDays(horizonEnd, -1), granularity), model.forecastEndLimit);
-  return { from: periodStart(minDate(historyStart, model.forecastStart), granularity), toExclusive };
+  const firstPeriod = periodStart(minDate(historyStart, model.forecastStart), granularity);
+  const from = model.coverageStart ? maxDate(firstPeriod, minDate(model.coverageStart, model.forecastStart)) : firstPeriod;
+  return { from, toExclusive };
 }
 
 export function buildCashFlowReport(model: CashFlowModel, request: CashFlowReportRequest): CashFlowReport {
@@ -564,7 +586,10 @@ export function buildCashFlowReport(model: CashFlowModel, request: CashFlowRepor
     : defaultReportRange(model, request.granularity, request.horizonMonths);
   const periods = enumeratePeriods(range.from, range.toExclusive, request.granularity)
     .map(bounds => buildPeriod(model, bounds));
-  const actual = actualTotals(model, range.from, range.toExclusive);
+  // A range that reaches back before the history cannot be totalled: the
+  // uncovered days are unknown, so a sum would pass them off as zero.
+  const coverage = actualCoverage(model, range.from, range.toExclusive);
+  const actual = coverage === 'partial' ? null : actualTotals(model, range.from, range.toExclusive);
   const forecast = forecastTotals(model, range.from, range.toExclusive);
 
   const scheduledByStream = new Map<string, CalendarDate>();
@@ -585,9 +610,10 @@ export function buildCashFlowReport(model: CashFlowModel, request: CashFlowRepor
     forecast: model.forecast,
     periods,
     totals: {
+      coverage,
       actual,
       forecast: forecast ? totals(forecast.income, forecast.spending) : null,
-      total: combine(actual, forecast),
+      total: coverage === 'partial' ? null : combine(actual, forecast),
     },
     highlights: buildCashFlowHighlights(model),
     baseline: {

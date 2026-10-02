@@ -33,9 +33,13 @@ A forecast has three disclosed parts:
 
 The forecast starts the day after the snapshot's compute date, in the user's own calendar. A snapshot a few days old therefore forecasts the days it has not seen instead of reporting them as empty.
 
-A forecast needs at least 28 days of history. Without them the history is still shown and the forecast is reported as unavailable, with the reason.
+A forecast needs at least 28 days of history for any side read from transactions. Without them the history is still shown and the forecast is reported as unavailable, with the reason. When both income and spending are overridden, the forecast needs no history at all.
 
-Months before the connected history begins are unknown, not zero. Periods there have no figures, and a window that history only partly reaches is not totalled.
+Months before the connected history begins are unknown, not zero:
+
+- Periods there have no figures.
+- A highlight window that history only partly reaches is not totalled, and one with no history behind it reports nothing observed rather than $0.
+- The default range starts on the first day of history, so its first period may be clipped to a date range. A custom range that reaches back before the history keeps its per-period rows, marked partial, but withholds its totals.
 
 Plaid's Recurring Transactions add-on is deliberately not used. It is billed separately, and recognising streams here keeps the forecast explainable: the page lists every stream with its cadence, amount and next date.
 

@@ -34,7 +34,7 @@ function report(overrides: Partial<CashFlowReport> = {}): CashFlowReport {
       { key: '2026-10', start: '2026-10-01', endExclusive: '2026-11-01', clipped: false, phase: 'current', coverage: 'full', actual: totals(2500, 2400), forecast: { ...totals(2500, 1000), components }, total: totals(5000, 3400) },
       { key: '2026-11', start: '2026-11-01', endExclusive: '2026-12-01', clipped: false, phase: 'future', coverage: 'none', actual: null, forecast: { ...totals(5000, 3815.49), components }, total: totals(5000, 3815.49) },
     ],
-    totals: { actual: totals(7500, 6500), forecast: totals(7500, 4815.49), total: totals(15000, 11315.49) },
+    totals: { coverage: 'full', actual: totals(7500, 6500), forecast: totals(7500, 4815.49), total: totals(15000, 11315.49) },
     highlights: [
       { key: 'this_month', start: '2026-10-01', endExclusive: '2026-11-01', actualToDate: totals(2500, 2400), actualCoverage: 'full', remaining: { ...totals(2500, 1000), components }, projected: totals(5000, 3400), planned: totals(0, 0), projectedWithoutPlanned: totals(5000, 3400) },
       { key: 'this_quarter', start: '2026-10-01', endExclusive: '2027-01-01', actualToDate: totals(2500, 2400), actualCoverage: 'full', remaining: { ...totals(22500, 9000), components }, projected: totals(25000, 11400), planned: totals(10000, 0), projectedWithoutPlanned: totals(15000, 11400) },
@@ -197,6 +197,16 @@ describe('CashFlowPageClient', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Remove' }));
 
     await waitFor(() => expect(calls.some(call => call.init?.method === 'DELETE')).toBe(true));
+  });
+
+  it('withholds range totals that history does not fully cover, and says why', async () => {
+    mockFetch(url => (url.includes('/api/cash-flow?')
+      ? { status: 200, body: report({ totals: { coverage: 'partial', actual: null, forecast: totals(7500, 4815.49), total: null } }) }
+      : undefined));
+    render(<CashFlowPageClient />);
+
+    expect(await screen.findByText(/No totals for this range: your history starts Jun 3, 2026/)).toBeInTheDocument();
+    expect(screen.queryByRole('rowheader', { name: 'Total' })).not.toBeInTheDocument();
   });
 
   it('offers to connect accounts when there is no snapshot yet', async () => {

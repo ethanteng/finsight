@@ -80,6 +80,24 @@ describe('buildCashFlowModel', () => {
     expect(model({ accounts: [ACCOUNTS[2]] }).forecast).toEqual({ available: false, reason: 'no_accounts' });
   });
 
+  it('needs no history at all when both sides are overridden', () => {
+    const built = model({
+      transactions: [],
+      plannedEvents: [bonus],
+      overrides: { monthlyIncome: 6000, monthlyExpense: 4000 },
+    });
+    expect(built.forecast).toEqual({ available: true });
+    const december = forecastTotals(built, '2026-12-01', '2027-01-01')!;
+    expect(december.components.typicalIncome).toBe(roundCents((6000 / DAYS_PER_MONTH) * 31));
+    expect(december.components.typicalSpending).toBe(roundCents((4000 / DAYS_PER_MONTH) * 31));
+    expect(december.components.plannedIncome).toBe(10000);
+  });
+
+  it('still needs history for a side that is not overridden', () => {
+    expect(model({ transactions: [], overrides: { monthlyIncome: 6000, monthlyExpense: null } }).forecast)
+      .toEqual({ available: false, reason: 'no_history' });
+  });
+
   it('lets a monthly override replace detected income', () => {
     const built = model({ overrides: { monthlyIncome: 6000, monthlyExpense: null } });
     expect(built.typical.incomeSource).toBe('override');
@@ -116,6 +134,13 @@ describe('buildCashFlowHighlights', () => {
     expect(highlight(highlights, 'next_month').planned.net).toBe(0);
   });
 
+  it('reports nothing observed, rather than an observed zero, when there is no history', () => {
+    const year = highlight(buildCashFlowHighlights(model({ transactions: [] })), 'this_year');
+    expect(year.actualCoverage).toBe('none');
+    expect(year.actualToDate).toBeNull();
+    expect(year.projected).toBeNull();
+  });
+
   it('withholds a whole-year projection when history does not reach the start of the year', () => {
     const year = highlight(buildCashFlowHighlights(model()), 'this_year');
     expect(year.actualCoverage).toBe('partial');
@@ -133,11 +158,14 @@ describe('buildCashFlowHighlights', () => {
 });
 
 describe('buildCashFlowReport', () => {
-  it('shows recent history through the horizon on month boundaries', () => {
+  it('shows recent history through the horizon, starting where the history does', () => {
     const report = buildCashFlowReport(model(), { granularity: 'month', horizonMonths: 3 });
-    expect(report.range).toEqual({ from: '2026-06-01', toExclusive: '2027-02-01' });
+    expect(report.range).toEqual({ from: '2026-06-03', toExclusive: '2027-02-01' });
+    expect(report.periods[0]).toMatchObject({ key: '2026-06', start: '2026-06-03', clipped: true });
+    expect(report.totals.coverage).toBe('full');
+    expect(report.totals.total).not.toBeNull();
     expect(report.periods.map(period => [period.key, period.phase, period.coverage])).toEqual([
-      ['2026-06', 'past', 'partial'],
+      ['2026-06', 'past', 'full'],
       ['2026-07', 'past', 'full'],
       ['2026-08', 'past', 'full'],
       ['2026-09', 'past', 'full'],
@@ -180,6 +208,12 @@ describe('buildCashFlowReport', () => {
       ['2026-10-05', 'future'],
     ]);
     expect(report.range).toEqual({ from: '2026-09-21', toExclusive: '2026-10-12' });
+  });
+
+  it('withholds totals for a custom range that reaches back before the history', () => {
+    const report = buildCashFlowReport(model(), { granularity: 'month', horizonMonths: 1, from: '2026-05-01', to: '2026-09-30' });
+    expect(report.totals).toMatchObject({ coverage: 'partial', actual: null, total: null });
+    expect(report.periods[1]).toMatchObject({ key: '2026-06', coverage: 'partial' });
   });
 
   it('keeps unknown months unknown rather than zero', () => {

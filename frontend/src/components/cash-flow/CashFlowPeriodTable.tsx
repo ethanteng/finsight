@@ -1,7 +1,7 @@
 "use client";
 
 import type { CashFlowPeriod, CashFlowReport } from '../../types/cash-flow';
-import { formatMoney, formatSignedMoney, periodLabel } from '../../lib/cash-flow-format';
+import { formatCalendarDate, formatMoney, formatSignedMoney, periodLabel } from '../../lib/cash-flow-format';
 
 function basis(period: CashFlowPeriod): string {
   if (period.phase === 'future') return 'Forecast';
@@ -48,6 +48,12 @@ export default function CashFlowPeriodTable({ report }: { report: CashFlowReport
           </tfoot>
         )}
       </table>
+      {report.totals.coverage === 'partial' && report.coverageStart && (
+        <p className="mt-3 text-xs leading-5 text-[#76510f]">
+          No totals for this range: your history starts {formatCalendarDate(report.coverageStart)}, after the range begins,
+          so the days before it can’t be added up.
+        </p>
+      )}
     </div>
   );
 }

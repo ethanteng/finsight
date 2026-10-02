@@ -106,7 +106,13 @@ export interface CashFlowReport {
   coverageStart: string | null;
   forecast: { available: true } | { available: false; reason: ForecastUnavailableReason };
   periods: CashFlowPeriod[];
-  totals: { actual: CashFlowTotals | null; forecast: CashFlowTotals | null; total: CashFlowTotals | null };
+  totals: {
+    /** `partial` means the range reaches back before the history, so its totals are withheld. */
+    coverage: 'full' | 'partial' | 'none';
+    actual: CashFlowTotals | null;
+    forecast: CashFlowTotals | null;
+    total: CashFlowTotals | null;
+  };
   highlights: CashFlowHighlight[];
   baseline: {
     typicalBasisStart: string | null;

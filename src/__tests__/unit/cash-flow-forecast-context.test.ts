@@ -105,6 +105,14 @@ describe('cash flow forecast facts', () => {
     expect(facts.has('cash_flow_typical_monthly_other_spending')).toBe(true);
   });
 
+  it('publishes no observed figures at all when there is no history', () => {
+    const empty = cashFlowForecastFacts(buildCashFlowForecastContext(buildCashFlowModel({
+      transactions: [], accounts: ACCOUNTS, plannedEvents: [], dataThrough: '2026-10-14', today: '2026-10-15',
+    })));
+    expect(empty.some(fact => fact.id.includes('_so_far_'))).toBe(false);
+    expect(empty.every(fact => fact.value !== 0 || fact.provenance.kind !== 'snapshot')).toBe(true);
+  });
+
   it('publishes only observed figures when there is too little history to forecast', () => {
     const short = cashFlowForecastFacts(context({ transactionsFrom: '2026-10-01' }));
     expect(short.length).toBeGreaterThan(0);
