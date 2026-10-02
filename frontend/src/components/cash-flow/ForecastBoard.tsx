@@ -194,7 +194,10 @@ export default function ForecastBoard({ report, apiUrl, onChanged }: {
   const adjust = (request: AdjustmentRequest) => change('POST', '/api/cash-flow/adjustments', request);
   const undo = (adjustment: CashFlowAdjustment) => change('DELETE', `/api/cash-flow/adjustments/${encodeURIComponent(adjustment.id)}`);
   // Every change but a counted one-off names its payee by its key; an older
-  // report sends no payeeKey, so fall back to that.
+  // report sends no payeeKey, so fall back to that. A counted one-off only
+  // carries payeeKey while it still feeds the typical rate — otherwise the
+  // page would mark a later typical row as "counted by you" and Move back
+  // could undo the wrong change.
   const payeeOf = (adjustment: CashFlowAdjustment) =>
     adjustment.payeeKey ?? (adjustment.kind === 'include_one_off' ? null : adjustment.key);
   const saved = (kind: ForecastAdjustmentKind, flow: Flow, payeeKey: string) =>

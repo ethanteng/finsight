@@ -918,7 +918,12 @@ export interface CashFlowAdjustmentSummary extends ForecastAdjustment {
   /** For a counted one-off: when it happened and how much it was; otherwise null. */
   date: CalendarDate | null;
   amount: number | null;
-  /** The payee the change is about: its key, or a counted one-off's payee; null if that transaction is gone. */
+  /**
+   * The payee the change is about: its key, or a counted one-off's payee when
+   * that count still places the payee among the typical rates; null if the
+   * transaction is gone or no longer feeds typical (so the page does not mark
+   * a later typical row as "counted by you").
+   */
   payeeKey: string | null;
 }
 
@@ -1200,14 +1205,24 @@ function customReportRange(
 
 function summarizeAdjustments(model: CashFlowModel): CashFlowAdjustmentSummary[] {
   const entries = new Map(model.ledger.entries.map(entry => [entry.id, entry]));
+  const basisStart = model.typical.basisStart;
+  const feedsTypical = (flow: CashFlowDirection, counterpartyKey: string) =>
+    model.typicalPayees.some(payee => payee.flow === flow && payee.counterpartyKey === counterpartyKey);
   return model.adjustments.map(adjustment => {
     if (adjustment.kind !== 'include_one_off') return { ...adjustment, date: null, amount: null, payeeKey: adjustment.key };
     const entry = entries.get(adjustment.key);
+    // Only name the payee when this count still places it among the typical
+    // payees. A stale count whose transaction left the basis keeps date/amount
+    // for the change list, but must not mark a later typical row as "counted by you".
+    const inBasis = Boolean(entry && basisStart && entry.date >= basisStart && entry.date < model.forecastStart);
+    const payeeKey = inBasis && entry!.counterpartyKey && feedsTypical(entry!.flow, entry!.counterpartyKey)
+      ? entry!.counterpartyKey
+      : null;
     return {
       ...adjustment,
       date: entry?.date ?? null,
       amount: entry ? roundCents(entry.amount) : null,
-      payeeKey: entry?.counterpartyKey || null,
+      payeeKey,
     };
   });
 }

@@ -95,7 +95,11 @@ export interface CashFlowAdjustment {
   /** For a counted one-off: when it happened and how much it was. */
   date: string | null;
   amount: number | null;
-  /** The payee the change is about: its key, or a counted one-off's payee; null if that transaction is gone. */
+  /**
+   * The payee the change is about: its key, or a counted one-off's payee when
+   * that count still feeds the typical rate; null if the transaction is gone
+   * or no longer among the typical payees.
+   */
   payeeKey: string | null;
 }
 

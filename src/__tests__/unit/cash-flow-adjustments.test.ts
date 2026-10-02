@@ -95,6 +95,28 @@ describe('adjusting what the forecast counts', () => {
     expect(report.typicalPayees).toEqual(expect.arrayContaining([expect.objectContaining({ payeeKey: 'united airlines' })]));
   });
 
+  it('does not name a counted one-off’s payee once it has left the typical basis', () => {
+    // An old counted flight, then enough later United charges that the payee is
+    // a normal typical row after the flight ages out of the 90-day basis.
+    const oldFlight = tx('card', '2026-09-10', 'expense', 2400, 'UNITED AIRLINES', { merchant_name: 'United Airlines' });
+    const recentUnited = ['2026-11-05', '2026-11-20', '2026-12-05', '2026-12-20', '2027-01-05']
+      .map(date => tx('card', date, 'expense', 80, 'UNITED AIRLINES', { merchant_name: 'United Airlines' }));
+    const recent = householdTransactions('2026-10-20', '2027-01-14')
+      .filter(item => String(item.name) !== 'UNITED AIRLINES');
+    const built = model(
+      [adjustment({ kind: 'include_one_off', key: String(oldFlight.transaction_id), label: 'United Airlines' })],
+      { transactions: [...recent, oldFlight, ...recentUnited], dataThrough: '2027-01-14', today: '2027-01-15' },
+    );
+    expect(built.typical.basisStart! > '2026-09-10').toBe(true);
+    const report = buildCashFlowReport(built, { granularity: 'month', horizonMonths: 3 });
+    expect(report.typicalPayees).toEqual(expect.arrayContaining([expect.objectContaining({ payeeKey: 'united airlines' })]));
+    // Date and amount stay for the change list; payeeKey stays null so the page
+    // does not mark the later typical row as "counted by you".
+    expect(report.adjustments).toEqual([
+      expect.objectContaining({ kind: 'include_one_off', date: '2026-09-10', amount: 2400, payeeKey: null }),
+    ]);
+  });
+
   it('keeps projecting a regular item that had stopped, and says the user kept it', () => {
     const base = model();
     const gym = base.streams.find(stream => stream.label === 'Harbor Bay Club')!;
