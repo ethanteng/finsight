@@ -588,6 +588,11 @@ export function forecastTotals(
   const typicalIncome = model.typical.dailyIncome * days;
   const typicalSpending = model.typical.dailySpending * days;
   const planned = includePlans ? plannedTotals(model, from, to) : { income: 0, spending: 0 };
+  // A Finances spending override already replaces all spending, including
+  // interest. Projected card interest must not be stacked on top of it.
+  const cardInterest = model.typical.spendingSource === 'override'
+    ? 0
+    : cardInterestTotal(model, from, to, includePlans);
 
   const components: ForecastComponents = {
     recurringIncome: roundCents(recurringIncome),
@@ -596,7 +601,7 @@ export function forecastTotals(
     recurringSpending: roundCents(recurringSpending),
     typicalSpending: roundCents(typicalSpending),
     plannedSpending: roundCents(planned.spending),
-    cardInterest: roundCents(cardInterestTotal(model, from, to, includePlans)),
+    cardInterest: roundCents(cardInterest),
   };
   return {
     ...totals(

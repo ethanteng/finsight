@@ -106,6 +106,14 @@ describe('transfers in the forecast', () => {
     expect(cardShare).toBeGreaterThan(0);
     expect(cardShare).toBeLessThan(1);
   });
+
+  it('does not stack projected card interest on top of a spending override', () => {
+    const built = model({ overrides: { monthlyIncome: null, monthlyExpense: 6000 } });
+    const totals = forecastTotals(built, ...NEXT_12)!;
+    expect(built.cards[0].modelsInterest).toBe(true);
+    expect(totals.components.cardInterest).toBe(0);
+    expect(totals.spending).toBe(72000);
+  });
 });
 
 describe('the report’s cards and cash position', () => {
