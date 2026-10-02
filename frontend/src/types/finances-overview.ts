@@ -93,15 +93,17 @@ export interface FinancesOverview {
     debt: FinancesAccountGroup;
     other: FinancesAccountGroup;
   };
+  /** History: averages over the calendar months the snapshot covers in full. */
   cashFlow: {
     monthCount: number;
+    /** The first and last complete months averaged, as YYYY-MM. */
+    firstMonth: string | null;
+    lastMonth: string | null;
     calculatedMonthlyIncome: number | null;
     calculatedMonthlyExpense: number | null;
     calculatedMonthlyOperatingCashFlow: number | null;
     monthlyIncomeOverride: number | null;
     monthlyExpenseOverride: number | null;
-    effectiveMonthlyIncome: number | null;
-    effectiveMonthlyExpense: number | null;
   };
   home: FinancesHomeData | null;
   manualAccounts: ManualAccount[];

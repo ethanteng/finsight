@@ -15,6 +15,7 @@ import {
   deleteForecastAdjustment,
   deletePlannedEvent,
   getCashFlowReport,
+  getExpectedMonthly,
   isUserCreditCard,
   listPlannedEvents,
   loadCashFlowModel,
@@ -53,6 +54,19 @@ router.get('/', requireAuth, async (req: AuthenticatedRequest, res) => {
   } catch (error) {
     console.error('Failed to build cash flow report:', error);
     return res.status(500).json({ error: 'Failed to load cash flow' });
+  }
+});
+
+// The month the forecast expects, which the Finances page shows as monthly
+// income and expenses. Built by the same engine as the report above.
+router.get('/expected-monthly', requireAuth, async (req: AuthenticatedRequest, res) => {
+  try {
+    const expected = await getExpectedMonthly(req.user!.id);
+    if (!expected) return res.status(204).send();
+    return res.json(expected);
+  } catch (error) {
+    console.error('Failed to build expected monthly cash flow:', error);
+    return res.status(500).json({ error: 'Failed to load your expected month' });
   }
 });
 

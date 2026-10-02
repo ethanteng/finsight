@@ -173,15 +173,22 @@ export interface FinancesOverview {
     debt: FinancesAccountGroup;
     other: FinancesAccountGroup;
   };
+  /**
+   * History: what came in and went out on average over the calendar months the
+   * snapshot covers in full. What to expect from here on is the cash-flow
+   * forecast's (GET /api/cash-flow/expected-monthly), which the page shows as
+   * the monthly figures; these are what actually happened.
+   */
   cashFlow: {
     monthCount: number;
+    /** The first and last complete months averaged, as YYYY-MM. */
+    firstMonth: string | null;
+    lastMonth: string | null;
     calculatedMonthlyIncome: number | null;
     calculatedMonthlyExpense: number | null;
     calculatedMonthlyOperatingCashFlow: number | null;
     monthlyIncomeOverride: number | null;
     monthlyExpenseOverride: number | null;
-    effectiveMonthlyIncome: number | null;
-    effectiveMonthlyExpense: number | null;
   };
   home: FinancesHomeData | null;
   manualAccounts: FinancesManualAccount[];
@@ -607,7 +614,7 @@ export function buildFinancesOverview(input: FinancesOverviewInput): FinancesOve
   const totalDebt = requiredFinite(overview.totalDebt, 'totalDebt');
   const netWorth = requiredFinite(overview.netWorth, 'netWorth');
   const groups = groupAccounts(snapshot, input.accountNames);
-  const averages = averageCanonicalTransactionSummary(snapshot.transactionsSummary);
+  const averages = averageCanonicalTransactionSummary(snapshot.transactionsSummary, computedAt);
   const monthlyIncomeOverride = input.overrides?.monthlyIncome ?? null;
   const monthlyExpenseOverride = input.overrides?.monthlyExpense ?? null;
   const home = snapshotHome(snapshot, input.currentHome);
@@ -781,13 +788,13 @@ export function buildFinancesOverview(input: FinancesOverviewInput): FinancesOve
     },
     cashFlow: {
       monthCount: averages?.monthCount ?? 0,
+      firstMonth: averages?.firstMonth ?? null,
+      lastMonth: averages?.lastMonth ?? null,
       calculatedMonthlyIncome: averages?.averageIncome ?? null,
       calculatedMonthlyExpense: averages?.averageExpenses ?? null,
       calculatedMonthlyOperatingCashFlow: averages?.averageOperatingCashFlow ?? null,
       monthlyIncomeOverride,
       monthlyExpenseOverride,
-      effectiveMonthlyIncome: monthlyIncomeOverride ?? averages?.averageIncome ?? null,
-      effectiveMonthlyExpense: monthlyExpenseOverride ?? averages?.averageExpenses ?? null,
     },
     home,
     manualAccounts,

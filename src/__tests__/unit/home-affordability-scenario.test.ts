@@ -161,6 +161,63 @@ describe('home affordability scenario runner', () => {
     );
   });
 
+  describe('the monthly baseline', () => {
+    const plan = {
+      requested: true,
+      primary: variant(
+        { homePrice: 700_000, mortgageRatePercent: 6.5, currentHousingCostMonthly: 2_500 },
+        { homePrice: '$700,000 home', mortgageRatePercent: '6.5%', currentHousingCostMonthly: '$2,500 rent' }
+      ),
+    } as any;
+    const baseline = (scenario: any, key: string) => scenario.assumptions.find((item: any) => item.key === key);
+    const expectedMonthly = {
+      income: 11_662,
+      spending: 5_951.27,
+      incomeSource: 'transactions',
+      spendingSource: 'transactions',
+      typicalBasisDays: 90,
+      dataThrough: '2026-08-19',
+    };
+
+    it('plans with the month the cash-flow forecast expects', async () => {
+      const execution: any = await runHomeAffordabilityScenario(snapshot({ expectedMonthly }), plan);
+      const [scenario] = execution.scenarios;
+
+      expect(baseline(scenario, 'average_monthly_income')).toMatchObject({
+        value: 11_662,
+        label: 'Expected monthly connected-account income',
+        origin: 'snapshot',
+      });
+      expect(baseline(scenario, 'average_monthly_expenses')).toMatchObject({ value: 5_951.27, origin: 'snapshot' });
+      expect(scenario.metrics.postPurchaseMonthlyExpenses).toBeCloseTo(5_951.27 - 2_500 + scenario.metrics.allInHousingMonthly, 2);
+    });
+
+    it('takes a monthly figure the user set as theirs', async () => {
+      const execution: any = await runHomeAffordabilityScenario(
+        snapshot({ expectedMonthly: { ...expectedMonthly, spendingSource: 'override', spending: 9_000 } }),
+        plan
+      );
+      expect(baseline(execution.scenarios[0], 'average_monthly_expenses')).toMatchObject({
+        value: 9_000,
+        label: 'Monthly expenses the user set',
+        origin: 'user',
+      });
+    });
+
+    it('falls back to the observed average for a side the forecast has no figure for', async () => {
+      const execution: any = await runHomeAffordabilityScenario(
+        snapshot({ expectedMonthly: { ...expectedMonthly, spending: null } }),
+        plan
+      );
+      const [scenario] = execution.scenarios;
+      expect(baseline(scenario, 'average_monthly_income')?.value).toBe(11_662);
+      expect(baseline(scenario, 'average_monthly_expenses')).toMatchObject({
+        value: 8_000,
+        label: 'Average monthly connected-account expenses',
+      });
+    });
+  });
+
   it('keeps sum(inputs) facts consistent after rounding money components to cents', async () => {
     // round(sum(unrounded P&I + maintenance + ...)) disagreed with
     // sum(round(each component)) for many ordinary price/rate pairs, and

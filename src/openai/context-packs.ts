@@ -39,7 +39,7 @@ export const CONTEXT_PACKS: ContextPackMeta[] = [
   {
     id: 'transaction_details',
     label: 'Transaction details',
-    description: 'Recent individual transactions, merchants and merchant totals. Category totals and average monthly income/expenses are already always available.',
+    description: 'Recent individual transactions, merchants and merchant totals. Category totals, average monthly income/expenses and the expected monthly income/expenses from the cash-flow forecast are already always available.',
     cost: 'local',
     dependencies: [],
   },
@@ -60,7 +60,7 @@ export const CONTEXT_PACKS: ContextPackMeta[] = [
   {
     id: 'cash_flow_forecast',
     label: 'Cash flow forecast',
-    description: 'Projected income, spending and net cash flow (surplus or shortfall) for this month, next month, this and next quarter, this year, and the next 3, 6 and 12 months, beside what has already been observed so far in each. Built from the user\'s recurring paychecks and bills, their typical other spending, and planned income or expenses they saved, and lists those recurring items and planned events. Also projects each credit card: its balance, APR, usual payment, interest over the next 12 months and when it stops carrying a balance, at the usual pace and under any card payoff plan the user saved, with the interest that plan saves; and projected cash balances ahead, including the lowest point. Covers checking, savings and credit cards.',
+    description: 'Projected income, spending and net cash flow (surplus or shortfall) for this month, next month, this and next quarter, this year, and the next 3, 6 and 12 months, beside what has already been observed so far in each. Built from the user\'s recurring paychecks and bills, their typical other spending, and planned income or expenses they saved, and lists those recurring items and planned events. Also projects each credit card: its balance, APR, usual payment, interest over the next 12 months and when it stops carrying a balance, at the usual pace and under any card payoff plan the user saved, with the interest that plan saves; and projected cash balances ahead, including the lowest point. Covers checking, savings and credit cards. The expected monthly income, expenses and surplus are already always available without this pack.',
     cost: 'computed',
     dependencies: [],
   },

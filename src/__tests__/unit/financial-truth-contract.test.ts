@@ -116,7 +116,46 @@ describe('financial truth contract', () => {
         averageIncome: 1000,
         averageExpenses: 0,
         averageOperatingCashFlow: 1000,
+        firstMonth: '2026-01',
+        lastMonth: '2026-03',
       });
+    });
+
+    it('averages only the months a period covers in full', () => {
+      const income = (id: string, date: string, amount: number) => baseTransaction({
+        id,
+        effectiveDate: `${date}T12:00:00.000Z`,
+        type: 'income',
+        sourceAmount: -amount,
+        cashFlowAmount: amount,
+      });
+      const period = { start: '2026-01-15', endExclusive: '2026-04-10T09:00:00.000Z' };
+      const result = summarizeCashFlow(
+        [
+          income('january', '2026-01-20', 3000),
+          income('february', '2026-02-15', 1000),
+          income('march', '2026-03-15', 2000),
+          income('april', '2026-04-02', 4000),
+        ],
+        period,
+        'USD'
+      );
+
+      expect(Object.keys(result.byMonth)).toEqual(['2026-01', '2026-02', '2026-03', '2026-04']);
+      // History starts on January 15 and April is in progress: neither total is
+      // a month's worth, so averaging them as whole months would understate it.
+      expect(averageMonthlyCashFlow(result, period)).toMatchObject({
+        monthCount: 2,
+        averageIncome: 1500,
+        firstMonth: '2026-02',
+        lastMonth: '2026-03',
+      });
+      // A month that ends exactly where the period ends is whole.
+      expect(averageMonthlyCashFlow(result, { start: '2026-02-01', endExclusive: '2026-04-01T00:00:00.000Z' }))
+        .toMatchObject({ monthCount: 2, firstMonth: '2026-02', lastMonth: '2026-03' });
+      // With no complete month there is nothing to average.
+      expect(averageMonthlyCashFlow(result, { start: '2026-03-02', endExclusive: '2026-03-30' }))
+        .toMatchObject({ monthCount: 0, firstMonth: null, lastMonth: null });
     });
 
     it('rejects sign/type disagreements instead of silently flipping them', () => {

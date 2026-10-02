@@ -5,7 +5,7 @@ import { isProviderIdentifierLabel } from '../services/holding-label';
 import { scenarioCalculatorRegistry } from '../scenarios/calculator-registry';
 import { RETIREMENT_CALCULATOR_ID } from '../scenarios/retirement-scenario';
 import { questionMentionsSecurity } from './security-question-match';
-import { cashFlowForecastFacts } from './cash-flow-forecast-context';
+import { cashFlowForecastFacts, expectedMonthlyFacts, EXPECTED_MONTHLY_SURPLUS, EXPECTED_SAVINGS_RATE } from './cash-flow-forecast-context';
 
 export type CanonicalFactUnit = 'usd' | 'percent' | 'months' | 'years' | 'age' | 'count' | 'ratio';
 
@@ -61,6 +61,14 @@ function finite(value: unknown): value is number {
 
 function formatUsd(value: unknown): string {
   return finite(value) ? `$${Math.round(value).toLocaleString('en-US')}` : 'an unknown amount';
+}
+
+const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/** "Aug 2026" for a YYYY-MM month; anything else as given. */
+function monthName(month: string): string {
+  const [year, number] = month.split('-').map(Number);
+  return MONTH_NAMES[number - 1] && Number.isInteger(year) ? `${MONTH_NAMES[number - 1]} ${year}` : month;
 }
 
 function safeFactId(value: string): string {
@@ -314,15 +322,26 @@ export function buildCanonicalFactPack(
     );
   }
 
-  addSnapshotFact('average_monthly_income', 'Average monthly income', snapshot.averageMonthlyIncome, 'usd', 'contextSnapshot.averageMonthlyIncome');
-  addSnapshotFact('average_monthly_expenses', 'Average monthly expenses', snapshot.averageMonthlyExpense, 'usd', 'contextSnapshot.averageMonthlyExpense');
+  // Two monthly figures, always side by side. The averages are what happened,
+  // over the months the history covers in full. The expected figures are the
+  // month the cash-flow forecast expects -- regular items, typical spending,
+  // nothing the user left out and no planned events -- or the user's own
+  // figure on a side where they set one. Forward-looking answers use those.
+  const months = snapshot.averageMonthlyMonths;
+  const observed = months
+    ? months.count === 1
+      ? ` in ${monthName(months.firstMonth)}, the one complete month so far (observed)`
+      : ` over the ${months.count} complete months from ${monthName(months.firstMonth)} to ${monthName(months.lastMonth)} (observed)`
+    : ' (observed)';
+  addSnapshotFact('average_monthly_income', `Average monthly income${observed}`, snapshot.averageMonthlyIncome, 'usd', 'contextSnapshot.averageMonthlyIncome');
+  addSnapshotFact('average_monthly_expenses', `Average monthly expenses${observed}`, snapshot.averageMonthlyExpense, 'usd', 'contextSnapshot.averageMonthlyExpense');
   const income = facts.get('average_monthly_income')?.value;
   const expenses = facts.get('average_monthly_expenses')?.value;
   if (income !== undefined && expenses !== undefined) {
     const operatingCashFlow = income - expenses;
     addCalculatedFact(
       'average_monthly_operating_cash_flow',
-      'Average monthly operating cash flow',
+      `Average monthly operating cash flow${observed}`,
       operatingCashFlow,
       'usd',
       'average_monthly_income - average_monthly_expenses',
@@ -331,7 +350,7 @@ export function buildCanonicalFactPack(
     if (income > 0) {
       addCalculatedFact(
         'savings_rate',
-        'Savings rate',
+        `Savings rate${observed}`,
         (operatingCashFlow / income) * 100,
         'percent',
         '(average_monthly_operating_cash_flow / average_monthly_income) * 100',
@@ -339,6 +358,7 @@ export function buildCanonicalFactPack(
       );
     }
   }
+  for (const fact of expectedMonthlyFacts(snapshot.expectedMonthly)) facts.set(fact.id, fact);
 
   for (const [month, values] of Object.entries(snapshot.transactionSummary?.byMonth || {})) {
     const safeMonth = month.replace(/[^0-9-]/g, '');
@@ -975,9 +995,9 @@ export function validateCanonicalFactPack(pack: CanonicalFactPack): string[] {
       continue;
     }
     let expected: number | undefined;
-    if (fact.id === 'average_monthly_operating_cash_flow') {
+    if (fact.id === 'average_monthly_operating_cash_flow' || fact.id === EXPECTED_MONTHLY_SURPLUS) {
       expected = inputs[0]!.value - inputs[1]!.value;
-    } else if (fact.id === 'savings_rate' && inputs[1]!.value !== 0) {
+    } else if ((fact.id === 'savings_rate' || fact.id === EXPECTED_SAVINGS_RATE) && inputs[1]!.value !== 0) {
       expected = (inputs[0]!.value / inputs[1]!.value) * 100;
     } else if (fact.provenance.formula === 'abs(input)') {
       expected = Math.abs(inputs[0]!.value);

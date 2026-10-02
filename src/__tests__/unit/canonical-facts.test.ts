@@ -832,3 +832,81 @@ describe('buildCanonicalFactPack', () => {
     expect(holdingFacts.every((fact) => !/SPUSA061004C00000000|7dD8KV8owv|M654JE4yQd/.test(fact.label))).toBe(true);
   });
 });
+
+describe('the expected month', () => {
+  // Every question carries both monthly figures: what happened, averaged over
+  // complete months, and the month the cash-flow forecast expects, which is
+  // what anything forward-looking should use.
+  function withExpected(expectedMonthly: Record<string, unknown>) {
+    return {
+      ...snapshot(),
+      averageMonthlyMonths: { count: 2, firstMonth: '2026-06', lastMonth: '2026-07' },
+      expectedMonthly: {
+        income: 11_662,
+        spending: 5_951.27,
+        incomeSource: 'transactions',
+        spendingSource: 'transactions',
+        typicalBasisDays: 90,
+        dataThrough: '2026-08-13',
+        ...expectedMonthly,
+      },
+    } as any;
+  }
+  const fact = (pack: ReturnType<typeof buildCanonicalFactPack>, id: string) => pack.facts.find((item) => item.id === id);
+
+  it('publishes the expected month beside the observed averages', () => {
+    const pack = buildCanonicalFactPack(withExpected({}), 'How much can I save each month?', needs());
+
+    expect(fact(pack, 'average_monthly_expenses')).toMatchObject({
+      value: 7_500,
+      label: 'Average monthly expenses over the 2 complete months from Jun 2026 to Jul 2026 (observed)',
+      provenance: { kind: 'snapshot' },
+    });
+    expect(fact(pack, 'expected_monthly_expenses')).toMatchObject({
+      value: 5_951.27,
+      provenance: { kind: 'forecast', source: 'contextSnapshot.expectedMonthly.spending', asOf: '2026-08-13' },
+    });
+    expect(fact(pack, 'expected_monthly_expenses')?.caveat).toContain('typical other spending over the last 90 days');
+    expect(fact(pack, 'expected_monthly_expenses')?.caveat).toContain('planned events are not counted');
+    expect(fact(pack, 'expected_monthly_surplus')).toMatchObject({
+      value: 11_662 - 5_951.27,
+      provenance: { kind: 'forecast', inputFactIds: ['expected_monthly_income', 'expected_monthly_expenses'] },
+    });
+    expect(fact(pack, 'expected_savings_rate')?.value).toBeCloseTo(((11_662 - 5_951.27) / 11_662) * 100, 10);
+    expect(validateCanonicalFactPack(pack)).toEqual([]);
+  });
+
+  it('presents a side the user set as their own figure', () => {
+    const pack = buildCanonicalFactPack(withExpected({ incomeSource: 'override', income: 9_000 }), 'Can I afford it?', needs());
+
+    expect(fact(pack, 'expected_monthly_income')).toMatchObject({ value: 9_000, provenance: { kind: 'user_input' } });
+    expect(fact(pack, 'expected_monthly_income')?.caveat).toBeUndefined();
+    // Made from a projection, so still a projection.
+    expect(fact(pack, 'expected_monthly_surplus')?.provenance.kind).toBe('forecast');
+
+    const own = buildCanonicalFactPack(
+      withExpected({ incomeSource: 'override', spendingSource: 'override', income: 9_000, spending: 6_000 }),
+      'Can I afford it?',
+      needs()
+    );
+    expect(fact(own, 'expected_monthly_surplus')).toMatchObject({ value: 3_000, provenance: { kind: 'calculation' } });
+    expect(fact(own, 'expected_monthly_surplus')?.caveat).toBeUndefined();
+    expect(validateCanonicalFactPack(own)).toEqual([]);
+  });
+
+  it('publishes only the side the forecast has a figure for', () => {
+    const pack = buildCanonicalFactPack(withExpected({ spending: null }), 'What will I earn?', needs());
+    expect(fact(pack, 'expected_monthly_income')).toBeDefined();
+    expect(fact(pack, 'expected_monthly_expenses')).toBeUndefined();
+    expect(fact(pack, 'expected_monthly_surplus')).toBeUndefined();
+  });
+
+  it('checks the surplus against the figures it is made from', () => {
+    const pack = buildCanonicalFactPack(withExpected({}), 'How much can I save?', needs());
+    const tampered = {
+      ...pack,
+      facts: pack.facts.map((item) => (item.id === 'expected_monthly_surplus' ? { ...item, value: 9_999 } : item)),
+    };
+    expect(validateCanonicalFactPack(tampered)).toContain('expected_monthly_surplus does not match its deterministic formula.');
+  });
+});

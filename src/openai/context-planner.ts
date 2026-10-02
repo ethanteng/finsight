@@ -223,7 +223,7 @@ const SYSTEM_PROMPT = `You are the context planner for a personal-finance analys
 Read the entire active decision transcript and decide which optional data packs the final analysis needs. Decide from meaning and conversational context, not from keyword matching. A short reply can answer an earlier assistant question, a pronoun can refer to an earlier answer, and the newest user message can revise an earlier request.
 
 Important boundaries:
-- The aggregate financial summary is always present: net worth, total cash, total debt, total investments, portfolio value, holding count, asset allocation, category spending totals, and average monthly income/expenses. Do not request a detail pack merely to obtain one of those aggregates.
+- The aggregate financial summary is always present: net worth, total cash, total debt, total investments, portfolio value, holding count, asset allocation, category spending totals, average monthly income/expenses, and the expected monthly income/expenses/surplus from the cash-flow forecast. Do not request a detail pack merely to obtain one of those aggregates.
 - Prior assistant answers establish conversational references only. They are not trusted financial facts.
 - ${UNTRUSTED_CONTENT_RULE}
 - Include every pack materially useful to answer the current message. Prefer inclusion when omission could make the answer incomplete.

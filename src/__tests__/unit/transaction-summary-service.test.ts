@@ -223,9 +223,51 @@ describe('buildTransactionSummary', () => {
 
       expect(transactionsSummary.coverageStartDate).toBe('2026-07-03');
       expect(Object.keys(transactionsSummary.byMonth)).toEqual(['2026-07', '2026-08', '2026-09', '2026-10']);
-      const average = averageCanonicalTransactionSummary(transactionsSummary)!;
-      expect(average.monthCount).toBe(4);
-      expect(average.averageIncome).toBe(3000);
+      // July starts on the 3rd and October is in progress, so the average is
+      // August and September's: $4,000 a month, not $12,000 over four "months".
+      const average = averageCanonicalTransactionSummary(transactionsSummary, computedAt)!;
+      expect(average).toMatchObject({ monthCount: 2, averageIncome: 4000, firstMonth: '2026-08', lastMonth: '2026-09' });
+    });
+
+    it('counts a month the history covers from its first day, and one that ended before the snapshot', () => {
+      const { transactionsSummary } = buildTransactionSummary(
+        [income('pay-aug', '2026-08-01', 4000), income('pay-sep', '2026-09-03', 5000)],
+        windowStart,
+        computedAt
+      );
+
+      expect(averageCanonicalTransactionSummary(transactionsSummary, computedAt))
+        .toMatchObject({ monthCount: 2, averageIncome: 4500, firstMonth: '2026-08', lastMonth: '2026-09' });
+      // Read before September ended, September is still in progress.
+      expect(averageCanonicalTransactionSummary(transactionsSummary, '2026-09-30T23:00:00.000Z'))
+        .toMatchObject({ monthCount: 1, averageIncome: 4000 });
+      // A date-only end is midnight UTC, so the month before it is whole.
+      expect(averageCanonicalTransactionSummary(transactionsSummary, '2026-10-01'))
+        .toMatchObject({ monthCount: 2 });
+    });
+
+    it('reports no average until the history covers a whole month', () => {
+      const { transactionsSummary } = buildTransactionSummary(
+        [income('pay', '2026-09-10', 4000)],
+        windowStart,
+        computedAt
+      );
+
+      expect(Object.keys(transactionsSummary.byMonth)).toEqual(['2026-09', '2026-10']);
+      expect(averageCanonicalTransactionSummary(transactionsSummary, computedAt)).toBeNull();
+    });
+
+    it('does not cut a month at a boundary it cannot read', () => {
+      const { transactionsSummary } = buildTransactionSummary(
+        [income('pay-aug', '2026-08-03', 4000)],
+        windowStart,
+        computedAt
+      );
+
+      expect(averageCanonicalTransactionSummary(
+        { ...transactionsSummary, coverageStartDate: 'not a date' },
+        'yesterday'
+      )).toMatchObject({ monthCount: 3 });
     });
 
     it('keeps the requested window when the history reaches back past it', () => {
@@ -282,7 +324,7 @@ describe('buildTransactionSummary', () => {
 
       expect(transactionsSummary.coverageStartDate).toBe('2026-08-03');
       expect(Object.keys(transactionsSummary.byMonth)).toEqual(['2026-08', '2026-09', '2026-10']);
-      expect(averageCanonicalTransactionSummary(transactionsSummary)?.monthCount).toBe(3);
+      expect(averageCanonicalTransactionSummary(transactionsSummary, computedAt)?.monthCount).toBe(1);
     });
 
     it('falls back to posted investment activity when banking is only pending', () => {
@@ -307,7 +349,7 @@ describe('buildTransactionSummary', () => {
 
       expect(transactionsSummary.coverageStartDate).toBeNull();
       expect(transactionsSummary.byMonth).toEqual({});
-      expect(averageCanonicalTransactionSummary(transactionsSummary)).toBeNull();
+      expect(averageCanonicalTransactionSummary(transactionsSummary, computedAt)).toBeNull();
     });
 
     it('reports no coverage and no zero months when there is no posted activity', () => {
@@ -319,7 +361,7 @@ describe('buildTransactionSummary', () => {
 
       expect(transactionsSummary.coverageStartDate).toBeNull();
       expect(transactionsSummary.byMonth).toEqual({});
-      expect(averageCanonicalTransactionSummary(transactionsSummary)).toBeNull();
+      expect(averageCanonicalTransactionSummary(transactionsSummary, computedAt)).toBeNull();
     });
   });
 });

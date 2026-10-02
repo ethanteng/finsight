@@ -277,20 +277,49 @@ export interface MonthlyCashFlowAverage {
   averageIncome: number;
   averageExpenses: number;
   averageOperatingCashFlow: number;
+  /** The first and last months averaged, as YYYY-MM; null when no month was. */
+  firstMonth: string | null;
+  lastMonth: string | null;
 }
 
-/** Average over explicit months; zero-activity months remain in the denominator. */
-export function averageMonthlyCashFlow(summary: CashFlowSummary): MonthlyCashFlowAverage {
-  const months = Object.values(summary.byMonth);
-  if (months.length === 0) {
-    return { monthCount: 0, averageIncome: 0, averageExpenses: 0, averageOperatingCashFlow: 0 };
+/**
+ * Average over the calendar months the period covers in full. A month with no
+ * activity stays in the denominator, but one the period reaches only part of --
+ * the month the history starts in, the month in progress -- is left out: its
+ * total is a fraction of a month, and dividing by it as a whole one understates
+ * every average. A bound left out does not cut a month.
+ */
+export function averageMonthlyCashFlow(
+  summary: CashFlowSummary,
+  period: Partial<ReportingPeriod> = {}
+): MonthlyCashFlowAverage {
+  const start = period.start ? parseDate(period.start, 'period.start').getTime() : -Infinity;
+  const endExclusive = period.endExclusive ? parseDate(period.endExclusive, 'period.endExclusive').getTime() : Infinity;
+  const keys = Object.keys(summary.byMonth)
+    .filter((key) => {
+      const [year, month] = key.split('-').map(Number);
+      return Date.UTC(year, month - 1, 1) >= start && Date.UTC(year, month, 1) <= endExclusive;
+    })
+    .sort();
+  if (keys.length === 0) {
+    return {
+      monthCount: 0,
+      averageIncome: 0,
+      averageExpenses: 0,
+      averageOperatingCashFlow: 0,
+      firstMonth: null,
+      lastMonth: null,
+    };
   }
+  const months = keys.map((key) => summary.byMonth[key]);
   return {
     monthCount: months.length,
     averageIncome: months.reduce((total, month) => total + month.income, 0) / months.length,
     averageExpenses: months.reduce((total, month) => total + month.expenses, 0) / months.length,
     averageOperatingCashFlow:
       months.reduce((total, month) => total + month.operatingCashFlow, 0) / months.length,
+    firstMonth: keys[0],
+    lastMonth: keys[keys.length - 1],
   };
 }
 
@@ -359,8 +388,8 @@ export const CORE_METRIC_DEFINITIONS = {
   incomeTotal: 'Posted transactions classified as income within the reporting period.',
   expenseTotal: 'Posted expense and fee transactions, net of refunds, within the reporting period.',
   operatingCashFlow: 'incomeTotal - expenseTotal; transfers and investment trades are excluded.',
-  averageMonthlyIncome: 'incomeTotal divided by every calendar month in the explicit reporting window.',
-  averageMonthlyExpenses: 'expenseTotal divided by every calendar month in the explicit reporting window.',
+  averageMonthlyIncome: 'Income over the calendar months the reporting window covers in full, divided by their number; a partial first or last month is left out.',
+  averageMonthlyExpenses: 'Expenses over the calendar months the reporting window covers in full, divided by their number; a partial first or last month is left out.',
 } as const;
 
 export type SnapshotSourceStatus = 'available' | 'unavailable';

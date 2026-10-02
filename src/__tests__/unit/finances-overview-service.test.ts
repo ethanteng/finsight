@@ -494,13 +494,18 @@ describe('finances overview contract', () => {
       'card',
     ]);
     expect(overview.accountGroups.debt.totalBalance).toBe(28000);
+    // The snapshot was computed on Aug 14, so August is in progress: only July,
+    // the one month it covers in full, is averaged. The override is reported
+    // beside the history, never in place of it.
     expect(overview.cashFlow).toMatchObject({
-      monthCount: 2,
-      calculatedMonthlyIncome: 3000,
-      calculatedMonthlyExpense: 1200,
-      effectiveMonthlyIncome: 3000,
-      effectiveMonthlyExpense: 1500,
+      monthCount: 1,
+      firstMonth: '2026-07',
+      lastMonth: '2026-07',
+      calculatedMonthlyIncome: 2000,
+      calculatedMonthlyExpense: 1000,
+      monthlyExpenseOverride: 1500,
     });
+    expect(overview.cashFlow).not.toHaveProperty('effectiveMonthlyExpense');
     expect(overview.home).toMatchObject({
       value: 400000,
       valueLow: null,

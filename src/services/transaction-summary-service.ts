@@ -28,7 +28,27 @@ export interface TransactionSummaryResult {
   };
 }
 
-export function averageCanonicalTransactionSummary(value: unknown): MonthlyCashFlowAverage | null {
+/** A date-only or timestamp boundary that parses, or nothing. */
+function boundary(value: unknown): string | Date | undefined {
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? undefined : value;
+  if (typeof value !== 'string') return undefined;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return new Date(`${value}T00:00:00.000Z`).toISOString().slice(0, 10) === value ? value : undefined;
+  }
+  return /(?:Z|[+-]\d{2}:\d{2})$/i.test(value) && !Number.isNaN(new Date(value).getTime()) ? value : undefined;
+}
+
+/**
+ * The persisted summary's monthly averages, over the months it covers in full:
+ * from the day its history starts to `endExclusive`, the moment the snapshot
+ * was computed. The month in progress and a month the history starts partway
+ * through are left out, because averaging them as whole months understates
+ * every figure.
+ */
+export function averageCanonicalTransactionSummary(
+  value: unknown,
+  endExclusive: Date | string | null | undefined
+): MonthlyCashFlowAverage | null {
   if (!value || typeof value !== 'object') return null;
   const summary = value as any;
   if (!summary.byMonth || typeof summary.byMonth !== 'object') return null;
@@ -59,8 +79,11 @@ export function averageCanonicalTransactionSummary(value: unknown): MonthlyCashF
       ? summary.excludedTransactionIds
       : [],
   };
-  const average = averageMonthlyCashFlow(canonical);
-  // No covered months means cash flow is unknown, not a string of $0 averages.
+  const average = averageMonthlyCashFlow(canonical, {
+    start: boundary(summary.coverageStartDate),
+    endExclusive: boundary(endExclusive),
+  });
+  // No complete month means cash flow is unknown, not a string of $0 averages.
   return average.monthCount > 0 ? average : null;
 }
 
