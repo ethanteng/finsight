@@ -82,6 +82,8 @@ export interface CashFlowRecurringItem extends CashFlowItemTransactions {
   /** The payee's key, which a forecast adjustment names it by. */
   payeeKey: string;
   label: string;
+  /** The account it is expected in: a cash account, or a card for a charge on one. An older report leaves it out. */
+  accountId?: string;
   flow: 'income' | 'spending';
   cadence: RecurringCadence;
   amount: number;
@@ -312,6 +314,8 @@ export interface CashFlowPositionSummary {
       id: string;
       payeeKey: string;
       label: string;
+      /** The cash account it is expected in or out of. An older report leaves it out. */
+      accountId?: string;
       cadence: RecurringCadence;
       amount: number;
       direction: 'in' | 'out';

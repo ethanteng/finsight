@@ -16,6 +16,12 @@ import type { CashFlowDirection, CashFlowEntry } from './ledger';
  * with its cadence and amount. Annual charges are not recognized: a year of
  * history shows them once, which is no pattern at all, so they fall into
  * typical spending as a daily rate instead.
+ *
+ * A stream belongs to one account, because the cash position expects each
+ * occurrence where it was seen. A payee seen in several accounts at once -- a
+ * paycheck split between two accounts, a fee each account charges -- is a
+ * stream in each. A payee that moved, its history in one account ending before
+ * it begins in the next, is one stream, expected in the account it moved to.
  */
 export const RECURRING_CADENCES = ['weekly', 'biweekly', 'semimonthly', 'monthly', 'quarterly'] as const;
 export type RecurringCadence = (typeof RECURRING_CADENCES)[number];
@@ -49,7 +55,7 @@ const MONTH_END_DAY = 29;
 const TWO_WEEK_STEP_TOLERANCE_DAYS = 2;
 
 export interface RecurringStream {
-  /** Stable for a payee and direction, so the UI can key on it. */
+  /** Stable for a payee and direction, and its account when the payee is seen in several at once, so the UI can key on it. */
   id: string;
   /** The ledger's key for the payee, which the stream is grouped on. */
   counterpartyKey: string;
@@ -152,11 +158,35 @@ function classifyCadence(occurrences: readonly Occurrence[], gaps: readonly numb
   return null;
 }
 
-function streamId(flow: CashFlowDirection, key: string): string {
-  return `${flow}:${key.replace(/\s+/g, '-')}`;
+function streamId(flow: CashFlowDirection, key: string, accountId?: string): string {
+  const id = `${flow}:${key.replace(/\s+/g, '-')}`;
+  return accountId ? `${id}@${accountId}` : id;
+}
+
+/**
+ * One payee's entries, sorted by date, divided into the streams they can
+ * form: all of them when they are in one account, or when each account's run
+ * ends before the next begins (the payee moved); otherwise one part per
+ * account, since the accounts receive or pay it side by side.
+ */
+function accountParts(entries: readonly CashFlowEntry[]): CashFlowEntry[][] {
+  const byAccount = new Map<string, CashFlowEntry[]>();
+  for (const entry of entries) {
+    const part = byAccount.get(entry.accountId) ?? [];
+    part.push(entry);
+    byAccount.set(entry.accountId, part);
+  }
+  const parts = [...byAccount.values()];
+  if (parts.length < 2) return parts;
+  const runs = parts
+    .map(part => ({ first: part[0].date, last: part[part.length - 1].date }))
+    .sort((left, right) => left.first.localeCompare(right.first));
+  const moved = runs.every((run, index) => index === 0 || runs[index - 1].last < run.first);
+  return moved ? [[...entries]] : parts;
 }
 
 function evaluateGroup(
+  id: string,
   flow: CashFlowDirection,
   key: string,
   entries: readonly CashFlowEntry[],
@@ -193,7 +223,7 @@ function evaluateGroup(
   const lapsedAfter = Math.ceil(rule.nominalDays * 1.5) + rule.graceDays;
   const first = entries[0];
   return {
-    id: streamId(flow, key),
+    id,
     counterpartyKey: key,
     label: entries[entries.length - 1].label,
     flow,
@@ -230,8 +260,12 @@ export function detectRecurringStreams(
   const streams: RecurringStream[] = [];
   for (const group of groups.values()) {
     group.entries.sort((left, right) => left.date.localeCompare(right.date));
-    const stream = evaluateGroup(group.flow, group.key, group.entries, dataThrough);
-    if (stream) streams.push(stream);
+    const parts = accountParts(group.entries);
+    for (const part of parts) {
+      const id = streamId(group.flow, group.key, parts.length > 1 ? part[0].accountId : undefined);
+      const stream = evaluateGroup(id, group.flow, group.key, part, dataThrough);
+      if (stream) streams.push(stream);
+    }
   }
   return streams.sort((left, right) => right.amount - left.amount || left.id.localeCompare(right.id));
 }

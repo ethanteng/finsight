@@ -240,6 +240,43 @@ describe('CashFlowPageClient', () => {
       await waitFor(() => expect(calls.filter(call => call.url.includes('/api/cash-flow?'))).toHaveLength(2));
     });
 
+    it('says which account each regular item is expected in, once there is more than one', async () => {
+      const joint = { id: 'joint', name: 'Joint Checking', institution: 'Second Bank', subtype: 'checking', mask: null, balance: 3000, primary: false };
+      const [gusto, rent, gym] = report().recurring;
+      const body = report({
+        recurring: [
+          { ...gusto, accountId: 'checking' },
+          { ...gusto, id: 'income:gusto@joint', accountId: 'joint', amount: 1400 },
+          { ...rent, accountId: 'joint' },
+          { ...gym, accountId: 'card' },
+        ],
+        position: {
+          ...report().position,
+          accounts: [...report().position.accounts, joint],
+          transfers: {
+            typicalMonthlyNet: 0,
+            recurring: [{ id: 'spending:vanguard', payeeKey: 'vanguard buy transfer', label: 'VANGUARD', accountId: 'checking', cadence: 'monthly', amount: 400, direction: 'out', nextDate: '2026-11-05' }],
+          },
+        },
+      });
+      mockFetch(url => (url.includes('/api/cash-flow?') ? { status: 200, body } : undefined));
+      render(<CashFlowPageClient />);
+      const section = await basis();
+      expect(within(section).getByText('Every 2 weeks · next Oct 23, 2026 · Everyday Checking ••1234 · Wages')).toBeInTheDocument();
+      expect(within(section).getByText('Every 2 weeks · next Oct 23, 2026 · Joint Checking · Wages')).toBeInTheDocument();
+      expect(within(section).getByText('Every month · next Nov 1, 2026 · Joint Checking · Rent')).toBeInTheDocument();
+      expect(within(section).getByText('Every month · last Jul 5, 2026 · Rewards Card ••9876 · Gym')).toBeInTheDocument();
+      expect(within(section).getByText('Every month · next Nov 5, 2026 · Everyday Checking ••1234')).toBeInTheDocument();
+    });
+
+    it('names no account when there is only one', async () => {
+      const [gusto] = report().recurring;
+      const body = report({ cards: [], recurring: [{ ...gusto, accountId: 'checking' }] });
+      mockFetch(url => (url.includes('/api/cash-flow?') ? { status: 200, body } : undefined));
+      render(<CashFlowPageClient />);
+      expect(within(await basis()).getByText('Every 2 weeks · next Oct 23, 2026 · Wages')).toBeInTheDocument();
+    });
+
     it('lists what typical spending is made of, and leaves a payee out of it', async () => {
       const calls = adjusting();
       render(<CashFlowPageClient />);

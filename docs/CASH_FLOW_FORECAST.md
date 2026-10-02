@@ -26,6 +26,10 @@ A forecast has three disclosed parts:
    - One due shortly before the forecast starts and not yet posted is still expected on the first forecast day. One overdue past its grace period is treated as missed.
    - A stream that stopped is listed as lapsed and not projected.
    - Repeats are recognized by payee: a key from the merchant name, or else the bank description, with ACH boilerplate and every word containing a digit dropped (an ACH id like `ID:ABC123XYZ`, an order or confirmation number). Those words change with every payment, so keeping their letters would split one payee into many, as it did for payroll whose reference code changes each time. A name made only of such words (1Password, 7-Eleven) keeps its letters.
+   - A stream belongs to one account, where each occurrence is expected:
+     - A payee seen in several accounts at once is a stream in each, with its own amount. Examples: a paycheck split between two accounts, or a fee each account charges.
+     - Two banks often describe one employer's deposit in ways that reduce to the same payee. Grouping by payee alone once merged such a split paycheck into one stream and put all of it in one account, leaving the other with no pay at all.
+     - A payee that moved, its history in one account ending before it starts in the next, stays one stream, expected in the account it moved to.
    - Every two weeks or twice a month: semimonthly pay returns to the same two days of the month, while biweekly pay drifts through it.
      - A few months of biweekly paydays drift so little that they pass for two days of the month: the 17th, 31st, 14th, 28th, 11th and 25th look like "the 14th and the 28th".
      - Read that way, they would be projected on the wrong days and two paydays short a year.
@@ -74,6 +78,7 @@ The page lays out what the forecast is built from in two columns, "Counted in th
 Changes affect only the forecast. Past months stay as they happened, because those transactions did happen. Something that is not really income or spending, such as a transfer to the user's own account, is a category change instead: it is made in Accounts & context and corrects the history and every other part of Ask Linc.
 
 - **How items are named:** a payee by its direction and the ledger's counterparty key, which is what a recurring stream is grouped on; a one-off by its transaction id. A change therefore holds across refreshes for as long as the provider describes the payee the same way. If the payee disappears from the data, the change does nothing.
+- **A change names a payee, not an account:** leaving out a payee whose stream is split across accounts leaves out every part, and keeping a stopped one keeps every stopped part.
 - **Earlier keys:** keys once kept the letters of reference words. Each transaction also carries the key it had then (`legacyCounterpartyKey`, only where it differs), and a choice matches a payee by either, so changes saved before the keys changed keep applying. The report names the choice that keeps a stopped item (`continuedBy`), since that choice may hold the earlier key.
 - **Labels come from the server:** a change must name an item in the user's own data, found by `forecastAdjustmentTarget`. The server stores it under the item's own name, never a name the client sends.
 - **Repeats and limits:** saving the same change twice returns the one already saved. The cap is 200 per user, checked under a per-user advisory lock (namespace 872014273) like the planned-event cap.
@@ -81,6 +86,7 @@ Changes affect only the forecast. Past months stay as they happened, because tho
 The columns:
 
 - **Counted in the forecast:** money in and money out, each with its regular items and the payees behind its typical rate (`typicalPayees`, largest first, up to 25 a direction), then recurring transfers. A side the user overrode on Finances shows the override instead, since nothing learned on that side is used.
+  - With more than one account, each regular item and recurring transfer names the account it is expected in, or the card a charge is made on (`accountId` in the report), so the user can check where it lands.
 - **Left out:** one-offs, stopped items, and what the user left out. The column is always shown, empty groups included, so the user can see that nothing is left out and what would be. The one-off group states the actual thresholds the engine applied (`oneOffThresholds`: at least $1,000 and twice a typical week, by direction).
 
 An item the user moved stays where it now belongs, marked: a counted one-off among the typical payees ("counted by you"), a kept item among the regular ones ("kept by you"). Its button undoes the change. A typical payee lists the transactions it holds only because the user counted them (`countedOneOffIds`): ones that would otherwise have been one-offs. So a counted one-off that has aged out of the basis, or whose payee now repeats, is not credited, and undoing it from that row cannot remove a change that is doing something else. A collapsed list of every change, with undo, covers any change whose item is no longer in the data.
@@ -169,13 +175,13 @@ A plan can match the usual pace, and the page says so rather than showing two id
   - the card payments the card model schedules.
 - **Card balances** move with purchases, payments and projected interest.
 
-Both come from the same forecast as the savings view: each recurring stream belongs to the account of its latest occurrence, and typical spending is split by account in proportion to the history.
+Both come from the same forecast as the savings view: each recurring stream belongs to the account it was seen in, and typical spending is split by account in proportion to the history.
 
 ### By account
 
 Every flow lands in one cash account, so the position can be read for any account, or any set of them, as well as for all together:
 
-- **Income and bills:** in the account they were seen in.
+- **Income and bills:** in the account they were seen in. A paycheck split between two accounts is a stream in each, so each account gets its own part on payday.
 - **Transfers:** each leg in its own account. A move from checking to savings leaves one and reaches the other, and nets to nothing in the whole.
 - **Typical rates:** each account keeps its own share. An override sets a side's total, and the accounts keep the shares the history gave them.
 - **Planned income and expenses:** in the account the user chose.
@@ -246,7 +252,7 @@ Grounding checks every number by value, and the model may not add or net facts. 
 - **Projected total.** A forecast fact with a `sum(inputs)` formula over the two above, which the fact validator rechecks.
 - **Planned-event effect, and the projection without it.** Published only for windows the events fall in.
 
-Recurring item amounts, typical monthly spending, planned events (as `user_input`) and the one-offs left out are facts too.
+Recurring item amounts, typical monthly spending, planned events (as `user_input`) and the one-offs left out are facts too. With more than one account, each recurring item's fact label and details name the account it lands in, or the card it is charged to. A paycheck split between two accounts is then two items an answer can tell apart.
 
 Nothing in the pack is capped: every recurring item, planned event, one-off, card and cash account is listed. The user's own data bounds each list, an item left out would be one an answer could not speak to, and the reviewer sees the same facts.
 
