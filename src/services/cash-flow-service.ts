@@ -9,9 +9,12 @@ import { cashFlowAccounts } from '../cash-flow/ledger';
 import {
   buildCashFlowModel,
   buildCashFlowReport,
+  expectedMonthly,
   type CashFlowModel,
+  type CashFlowModelInput,
   type CashFlowReport,
   type CashFlowReportRequest,
+  type ExpectedMonthly,
 } from '../cash-flow/forecast';
 import type {
   ForecastAdjustment,
@@ -188,15 +191,20 @@ export async function deleteForecastAdjustment(userId: string, id: string): Prom
   return result.count > 0;
 }
 
+interface LoadedCashFlowInput {
+  input: CashFlowModelInput;
+  snapshot: CashFlowSnapshotMeta;
+}
+
 /**
- * Build the user's cash-flow model from their latest snapshot, overrides,
- * planned events and adjustments. Null when they have no snapshot yet.
+ * Everything the user's cash-flow model is built from: their latest snapshot,
+ * overrides, planned events and adjustments. Null when they have no snapshot yet.
  *
  * "Today" is the user's own calendar date. The data runs through the date the
  * snapshot was computed, never later than today; whatever lies between is
  * forecast, so a snapshot that is a few days old does not read as empty days.
  */
-export async function loadCashFlowModel(userId: string, now = new Date()): Promise<LoadedCashFlowModel | null> {
+async function loadCashFlowInput(userId: string, now: Date): Promise<LoadedCashFlowInput | null> {
   const prisma = getPrismaClient();
   const [snapshot, user, plannedEvents, adjustments] = await Promise.all([
     prisma.financialSummarySnapshot.findUnique({
@@ -214,25 +222,57 @@ export async function loadCashFlowModel(userId: string, now = new Date()): Promi
 
   const today = calendarDateInTimeZone(now, user.timeZone);
   const dataThrough = minDate(calendarDateInTimeZone(snapshot.computedAt, user.timeZone), today);
-  const model = buildCashFlowModel({
-    transactions: Array.isArray(snapshot.transactions) ? snapshot.transactions as any[] : [],
-    accounts: Array.isArray(snapshot.accounts) ? snapshot.accounts as any[] : [],
-    plannedEvents,
-    dataThrough,
-    today,
-    overrides: {
-      monthlyIncome: user.monthlyIncomeOverride,
-      monthlyExpense: user.monthlyExpenseOverride,
-    },
-    adjustments,
-  });
   return {
-    model,
+    input: {
+      transactions: Array.isArray(snapshot.transactions) ? snapshot.transactions as any[] : [],
+      accounts: Array.isArray(snapshot.accounts) ? snapshot.accounts as any[] : [],
+      plannedEvents,
+      dataThrough,
+      today,
+      overrides: {
+        monthlyIncome: user.monthlyIncomeOverride,
+        monthlyExpense: user.monthlyExpenseOverride,
+      },
+      adjustments,
+    },
     snapshot: {
       computedAt: snapshot.computedAt.toISOString(),
       asOf: snapshot.asOf ? snapshot.asOf.toISOString() : null,
       status: snapshot.status ?? null,
     },
+  };
+}
+
+/** Build the user's cash-flow model. Null when they have no snapshot yet. */
+export async function loadCashFlowModel(userId: string, now = new Date()): Promise<LoadedCashFlowModel | null> {
+  const loaded = await loadCashFlowInput(userId, now);
+  return loaded ? { model: buildCashFlowModel(loaded.input), snapshot: loaded.snapshot } : null;
+}
+
+export interface ExpectedMonthlySummary extends ExpectedMonthly {
+  forecast: CashFlowModel['forecast'];
+  /**
+   * What the forecast expects from the transactions alone, with no override:
+   * present only while an override replaces a side, so the user can see what
+   * the override stands in for.
+   */
+  learned: Pick<ExpectedMonthly, 'income' | 'spending'> | null;
+  snapshot: CashFlowSnapshotMeta;
+}
+
+/** The user's expected month, as the Finances page shows it. Null when they have no snapshot yet. */
+export async function getExpectedMonthly(userId: string, now = new Date()): Promise<ExpectedMonthlySummary | null> {
+  const loaded = await loadCashFlowInput(userId, now);
+  if (!loaded) return null;
+  const model = buildCashFlowModel(loaded.input);
+  const expected = expectedMonthly(model);
+  const overridden = expected.incomeSource === 'override' || expected.spendingSource === 'override';
+  const learned = overridden ? expectedMonthly(buildCashFlowModel({ ...loaded.input, overrides: undefined })) : null;
+  return {
+    ...expected,
+    forecast: model.forecast,
+    learned: learned && { income: learned.income, spending: learned.spending },
+    snapshot: loaded.snapshot,
   };
 }
 

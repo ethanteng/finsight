@@ -272,6 +272,41 @@ function roundPercent(value: number): number {
   return Number(value.toFixed(6));
 }
 
+/** One side of the baseline month, and where it came from. */
+function monthlyBaseline(
+  side: 'income' | 'expenses',
+  expected: number | null | undefined,
+  expectedSource: 'transactions' | 'override' | undefined,
+  observedAverage: number | null | undefined
+): { value: number; label: string; origin: HomeAffordabilityAssumptionOrigin; source: string } | undefined {
+  const forecast = finiteNumber(expected);
+  if (forecast !== undefined && expectedSource === 'override') {
+    return {
+      value: roundMoney(forecast),
+      label: `Monthly ${side} the user set`,
+      origin: 'user',
+      source: `The user’s own monthly ${side} figure, which their cash-flow forecast uses`,
+    };
+  }
+  if (forecast !== undefined) {
+    return {
+      value: roundMoney(forecast),
+      label: `Expected monthly connected-account ${side}`,
+      origin: 'snapshot',
+      source: 'Cash-flow forecast: the typical month it expects, before planned events',
+    };
+  }
+  const observed = finiteNumber(observedAverage);
+  return observed === undefined
+    ? undefined
+    : {
+        value: roundMoney(observed),
+        label: `Average monthly connected-account ${side}`,
+        origin: 'snapshot',
+        source: 'Canonical transaction cash-flow average over complete months',
+      };
+}
+
 function parseOverrides(value: unknown): PlannedHomeAffordabilityOverrides | undefined {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
   const record = value as Record<string, unknown>;
@@ -664,41 +699,56 @@ function resolveVariant(
     );
   }
 
-  const rawAverageMonthlyIncome = finiteNumber(snapshot.averageMonthlyIncome);
-  const averageMonthlyIncome = rawAverageMonthlyIncome !== undefined
-    ? roundMoney(rawAverageMonthlyIncome)
-    : undefined;
-  if (averageMonthlyIncome !== undefined) {
+  // The baseline month is the one the cash-flow forecast expects, which is what
+  // the user can count on from here on: one-off amounts and anything they left
+  // out of the forecast are set aside, and a monthly figure they set is used as
+  // given. The observed average over complete months stands in only for a side
+  // the forecast has no figure for. The assumption keys keep their names so
+  // executions saved before stay readable.
+  const incomeBaseline = monthlyBaseline(
+    'income',
+    snapshot.expectedMonthly?.income,
+    snapshot.expectedMonthly?.incomeSource,
+    snapshot.averageMonthlyIncome
+  );
+  const averageMonthlyIncome = incomeBaseline?.value;
+  if (incomeBaseline) {
     addAssumption(
       'average_monthly_income',
-      'Average monthly connected-account income',
-      averageMonthlyIncome,
+      incomeBaseline.label,
+      incomeBaseline.value,
       'usd',
-      'snapshot',
-      'Canonical transaction cash-flow average'
+      incomeBaseline.origin,
+      incomeBaseline.source
     );
   }
-  const observedMonthlyExpenses = finiteNumber(snapshot.averageMonthlyExpense);
+  const expenseBaseline = monthlyBaseline(
+    'expenses',
+    snapshot.expectedMonthly?.spending,
+    snapshot.expectedMonthly?.spendingSource,
+    snapshot.averageMonthlyExpense
+  );
+  const baselineMonthlyExpenses = expenseBaseline?.value;
   // A stated housing cost above the tracked spending baseline means the two
   // series disagree — housing paid from an unconnected account, or a
   // categorization gap. Subtracting it would understate post-purchase spending,
   // so drop the baseline and report the projection as missing rather than
   // discarding the upfront-cash and monthly-cost results the user can still use.
   const expenseBaselineConflict =
-    observedMonthlyExpenses !== undefined &&
+    baselineMonthlyExpenses !== undefined &&
     currentHousingCostMonthly !== undefined &&
-    currentHousingCostMonthly > observedMonthlyExpenses;
-  const averageMonthlyExpenses = expenseBaselineConflict || observedMonthlyExpenses === undefined
+    currentHousingCostMonthly > baselineMonthlyExpenses;
+  const averageMonthlyExpenses = expenseBaselineConflict || baselineMonthlyExpenses === undefined
     ? undefined
-    : roundMoney(observedMonthlyExpenses);
-  if (averageMonthlyExpenses !== undefined) {
+    : roundMoney(baselineMonthlyExpenses);
+  if (averageMonthlyExpenses !== undefined && expenseBaseline) {
     addAssumption(
       'average_monthly_expenses',
-      'Average monthly connected-account expenses',
+      expenseBaseline.label,
       averageMonthlyExpenses,
       'usd',
-      'snapshot',
-      'Canonical transaction cash-flow average'
+      expenseBaseline.origin,
+      expenseBaseline.source
     );
   }
 
@@ -766,11 +816,11 @@ function resolveVariant(
   const missingInputs = [
     ...missingRecurringCosts,
     ...(availableCash === undefined ? ['available cash'] : []),
-    ...(averageMonthlyIncome === undefined ? ['average monthly income'] : []),
+    ...(averageMonthlyIncome === undefined ? ['monthly income'] : []),
     ...(averageMonthlyExpenses === undefined
       ? [expenseBaselineConflict
           ? 'a tracked spending baseline that covers the stated current housing cost'
-          : 'average monthly expenses']
+          : 'monthly expenses']
       : []),
     ...(currentHousingCostMonthly === undefined ? ['current monthly housing cost'] : []),
   ];

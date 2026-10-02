@@ -1,4 +1,4 @@
-import { canonicalFactMap, validateCanonicalFactPack, type CanonicalFactPack } from './canonical-facts';
+import { canonicalFactMap, validateCanonicalFactPack, type CanonicalFact, type CanonicalFactPack } from './canonical-facts';
 import { omitInvalidKeyNumbers, sanitizeUngroundedResponse } from './response-grounding';
 import type { AskLincResponse, ResponseKeyNumber } from './structured-response';
 
@@ -13,12 +13,17 @@ export interface FactResponseValidationResult {
 export const UNVERIFIED_PROSE_NOTICE =
   'Note: some statements were removed from this answer because their figures could not be verified against your current financial snapshot.';
 
-const FACT_ALIASES: Record<string, string> = {
-  investment_total: 'total_investments',
-  portfolio_total: 'portfolio_value',
-  monthly_income: 'average_monthly_income',
-  monthly_expense: 'average_monthly_expenses',
-  monthly_expenses: 'average_monthly_expenses',
+/**
+ * Facts a bare key number may mean, in order. A monthly figure may be either
+ * the observed average or the month the cash-flow forecast expects, and is the
+ * one whose value it carries.
+ */
+const FACT_ALIASES: Record<string, string[]> = {
+  investment_total: ['total_investments'],
+  portfolio_total: ['portfolio_value'],
+  monthly_income: ['average_monthly_income', 'expected_monthly_income'],
+  monthly_expense: ['average_monthly_expenses', 'expected_monthly_expenses'],
+  monthly_expenses: ['average_monthly_expenses', 'expected_monthly_expenses'],
 };
 
 /**
@@ -89,11 +94,12 @@ export function canonicalizeResponseNumbers(
     const normalized = normalizedKey(key);
     const value = typeof metric === 'number' ? metric : metric.value;
     const provenance = typeof metric === 'number' ? '' : metric.provenance;
-    const factId = provenance || FACT_ALIASES[normalized] || normalized;
-    const fact = facts.get(factId);
+    const candidates = provenance ? [provenance] : FACT_ALIASES[normalized] ?? [normalized];
     // A cited fact rounded for readability still resolves to the exact fact.
-    const cites = fact && fact.displayable !== false &&
-      matchesAtWrittenPrecision(value, fact.value, displayStep(String(value), 1));
+    const citedBy = (candidate: CanonicalFact | undefined) => Boolean(candidate && candidate.displayable !== false &&
+      matchesAtWrittenPrecision(value, candidate.value, displayStep(String(value), 1)));
+    const fact = candidates.map(id => facts.get(id)).find(citedBy) ?? facts.get(candidates[0]);
+    const cites = citedBy(fact);
     keyNumbers[key] = cites
       // The label travels with the id rather than being looked up again at
       // render time: the fact pack is server-side, and the client has only

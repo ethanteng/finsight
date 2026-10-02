@@ -609,8 +609,13 @@ export default function FinancesPageClient() {
         </div>
 
         <IncomeExpenseOverrides
-          calculatedIncome={overview.cashFlow.calculatedMonthlyIncome}
-          calculatedExpense={overview.cashFlow.calculatedMonthlyExpense}
+          history={{
+            income: overview.cashFlow.calculatedMonthlyIncome,
+            expense: overview.cashFlow.calculatedMonthlyExpense,
+            monthCount: overview.cashFlow.monthCount,
+            firstMonth: overview.cashFlow.firstMonth,
+            lastMonth: overview.cashFlow.lastMonth,
+          }}
           initialMonthlyIncome={overview.cashFlow.monthlyIncomeOverride}
           initialMonthlyExpense={overview.cashFlow.monthlyExpenseOverride}
         />

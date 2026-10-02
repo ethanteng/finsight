@@ -128,7 +128,7 @@ export interface CashFlowModelInput {
   reportingCurrency?: string;
 }
 
-type FlowSource = 'transactions' | 'override';
+export type FlowSource = 'transactions' | 'override';
 
 export interface CashFlowModel {
   ledger: CashFlowLedger;
@@ -781,6 +781,47 @@ export function forecastTotals(
       components.recurringSpending + components.typicalSpending + components.plannedSpending + components.cardInterest
     ),
     components,
+  };
+}
+
+/**
+ * What the forecast expects in a typical month, before the user's planned
+ * events: every regular item still running at its monthly rate, the typical
+ * rates, and the card interest the usual pace runs up, averaged over the next
+ * twelve months. That is the month a Finances override replaces, so a side
+ * with an override is the override exactly. A side read from transactions has
+ * no figure while the forecast is unavailable.
+ */
+export interface ExpectedMonthly {
+  income: number | null;
+  spending: number | null;
+  incomeSource: FlowSource;
+  spendingSource: FlowSource;
+}
+
+export function expectedMonthly(model: CashFlowModel): ExpectedMonthly {
+  const { typical } = model;
+  const learned = (flow: CashFlowDirection, daily: number): number | null => {
+    if (!model.forecast.available) return null;
+    let monthly = daily * DAYS_PER_MONTH;
+    for (const stream of model.streams) {
+      if (stream.flow === flow && stream.status === 'active') monthly += streamMonthlyAmount(stream);
+    }
+    return monthly;
+  };
+  const income = typical.monthlyIncomeOverride ?? learned('income', typical.dailyIncome);
+  let spending = typical.monthlyExpenseOverride;
+  if (spending === null) {
+    const learnedSpending = learned('spending', typical.dailySpending);
+    spending = learnedSpending === null
+      ? null
+      : learnedSpending + cardInterestTotal(model, model.forecastStart, addMonths(model.forecastStart, 12), false) / 12;
+  }
+  return {
+    income: income === null ? null : roundCents(income),
+    spending: spending === null ? null : roundCents(spending),
+    incomeSource: typical.incomeSource,
+    spendingSource: typical.spendingSource,
   };
 }
 

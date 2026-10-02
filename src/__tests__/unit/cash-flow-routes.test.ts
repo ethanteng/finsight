@@ -138,6 +138,52 @@ describe('cash flow routes', () => {
     });
   });
 
+  describe('GET /api/cash-flow/expected-monthly', () => {
+    it('returns the month the forecast expects, which the Finances page shows', async () => {
+      const response = await request(app).get('/api/cash-flow/expected-monthly');
+
+      expect(response.status).toBe(200);
+      expect(response.body).toMatchObject({
+        incomeSource: 'transactions',
+        spendingSource: 'transactions',
+        forecast: { available: true },
+        learned: null,
+        snapshot: { computedAt: '2026-09-30T20:00:00.000Z' },
+      });
+      // Biweekly $2,500 pay is 26 paychecks a year.
+      expect(response.body.income).toBeCloseTo(2500 * 26 / 12, 0);
+      expect(response.body.spending).toBeGreaterThan(2000);
+    });
+
+    it('returns an override as the figure, beside what the transactions alone would give', async () => {
+      prisma.user.findUnique.mockResolvedValue({
+        timeZone: 'America/Los_Angeles',
+        monthlyIncomeOverride: null,
+        monthlyExpenseOverride: 9035,
+      });
+      const learned = (await request(app).get('/api/cash-flow/expected-monthly')).body;
+      expect(learned).toMatchObject({ spending: 9035, spendingSource: 'override', incomeSource: 'transactions' });
+      expect(learned.learned.spending).toBeGreaterThan(2000);
+      expect(learned.learned.spending).not.toBe(9035);
+      expect(learned.learned.income).toBe(learned.income);
+    });
+
+    it('is empty until there is a snapshot', async () => {
+      prisma.financialSummarySnapshot.findUnique.mockResolvedValue(null);
+      const response = await request(app).get('/api/cash-flow/expected-monthly');
+      expect(response.status).toBe(204);
+    });
+
+    it('fails without leaking the error', async () => {
+      prisma.financialSummarySnapshot.findUnique.mockRejectedValue(new Error('database down'));
+      const quiet = jest.spyOn(console, 'error').mockImplementation(() => {});
+      const response = await request(app).get('/api/cash-flow/expected-monthly');
+      quiet.mockRestore();
+      expect(response.status).toBe(500);
+      expect(response.body).toEqual({ error: 'Failed to load your expected month' });
+    });
+  });
+
   describe('planned events', () => {
     const body = { label: 'Year-end bonus', kind: 'income', amount: 10000, startDate: '2026-12-15', recurrence: 'once' };
 

@@ -22,28 +22,54 @@ describe('buildCanonicalCashFlowAnalyses', () => {
     currencyMismatchTransactionIds: ['eur'],
   };
 
-  it('uses persisted canonical monthly totals instead of recalculating raw transactions', () => {
-    const result = buildCanonicalCashFlowAnalyses(summary);
+  // Computed as March began, so January and February are both whole months.
+  const computedAt = '2026-03-01T00:00:00.000Z';
 
-    expect(result.incomeResult?.averageMonthly).toBe(6_000);
-    expect(result.expenseResult?.averageMonthly).toBe(3_750);
-    expect(result.expenseResult?.text).toContain('Excluded Transactions: 2');
-    expect(result.expenseResult?.text).toContain('Rent: $5000.00, Groceries: $2000.00');
+  it('uses persisted canonical monthly totals instead of recalculating raw transactions', () => {
+    const result = buildCanonicalCashFlowAnalyses(summary, computedAt);
+
+    expect(result.averages).toMatchObject({ averageIncome: 6_000, averageExpenses: 3_750, monthCount: 2 });
+    expect(result.incomeAnalysis).toContain('Average Monthly Income over 2 complete months (2026-01 to 2026-02): $6000.00');
+    expect(result.expenseAnalysis).toContain('Excluded Transactions: 2');
+    expect(result.expenseAnalysis).toContain('Rent: $5000.00, Groceries: $2000.00');
   });
 
-  it('honors manual overrides without replacing canonical totals', () => {
-    const result = buildCanonicalCashFlowAnalyses(summary, 8_000, 4_000);
+  it('lists what the forecast expects beside what happened, without replacing it', () => {
+    const result = buildCanonicalCashFlowAnalyses(summary, computedAt, {
+      income: 8_000,
+      spending: 4_250.5,
+      incomeSource: 'override',
+      spendingSource: 'transactions',
+      typicalBasisDays: 90,
+      dataThrough: '2026-02-28',
+    });
 
-    expect(result.incomeResult?.averageMonthly).toBe(8_000);
-    expect(result.incomeResult?.text).toContain('(Manual Override)');
-    expect(result.incomeResult?.text).toContain('Canonical Income Total: $12000.00');
-    expect(result.expenseResult?.averageMonthly).toBe(4_000);
+    expect(result.averages).toMatchObject({ averageIncome: 6_000, averageExpenses: 3_750 });
+    expect(result.incomeAnalysis).toContain('Expected Monthly Income (the user’s own monthly figure, which the cash-flow forecast uses): $8000.00');
+    expect(result.incomeAnalysis).toContain('Canonical Income Total: $12000.00');
+    expect(result.expenseAnalysis).toContain('Expected Monthly Expenses (cash-flow forecast, before planned events): $4250.50');
+  });
+
+  it('reports what the forecast expects even with no complete month of history', () => {
+    const result = buildCanonicalCashFlowAnalyses(summary, '2026-01-20T00:00:00.000Z', {
+      income: 5_000,
+      spending: null,
+      incomeSource: 'transactions',
+      spendingSource: 'transactions',
+      typicalBasisDays: 0,
+      dataThrough: null,
+    });
+
+    expect(result.averages).toBeNull();
+    expect(result.incomeAnalysis).toContain('Expected Monthly Income (cash-flow forecast, before planned events): $5000.00');
+    expect(result.incomeAnalysis).not.toContain('Average Monthly Income');
+    expect(result.expenseAnalysis).toBeUndefined();
   });
 
   it('includes persisted monthly aggregates only when requested', () => {
-    expect(buildCanonicalCashFlowAnalyses(summary).monthlyAnalysis).toBeUndefined();
+    expect(buildCanonicalCashFlowAnalyses(summary, computedAt).monthlyAnalysis).toBeUndefined();
 
-    const result = buildCanonicalCashFlowAnalyses(summary, null, null, true);
+    const result = buildCanonicalCashFlowAnalyses(summary, computedAt, null, true);
     expect(result.monthlyAnalysis).toContain(
       '2026-01: income $5000.00, expenses $3000.00, operating cash flow $2000.00'
     );
@@ -62,11 +88,11 @@ describe('buildCanonicalCashFlowAnalyses', () => {
       },
     };
 
-    const result = buildCanonicalCashFlowAnalyses(splitSummary);
+    const result = buildCanonicalCashFlowAnalyses(splitSummary, computedAt);
 
-    expect(result.expenseResult?.text).toContain('Food And Drink: $2000.00');
-    expect(result.expenseResult?.text).toContain('Rent: $500.00');
-    expect(result.expenseResult?.text).not.toContain('Food and Drink: $1200.00');
+    expect(result.expenseAnalysis).toContain('Food And Drink: $2000.00');
+    expect(result.expenseAnalysis).toContain('Rent: $500.00');
+    expect(result.expenseAnalysis).not.toContain('Food and Drink: $1200.00');
   });
 
   it('builds broad-question cash-flow context from deterministic transaction factories', () => {
@@ -106,10 +132,10 @@ describe('buildCanonicalCashFlowAnalyses', () => {
       new Date('2026-03-01T00:00:00.000Z'),
     );
 
-    const result = buildCanonicalCashFlowAnalyses(transactionsSummary);
+    const result = buildCanonicalCashFlowAnalyses(transactionsSummary, '2026-03-01T00:00:00.000Z');
 
-    expect(result.incomeResult?.averageMonthly).toBe(6_000);
-    expect(result.expenseResult?.averageMonthly).toBe(2_500);
+    // The history starts on January 15, so February is the one whole month.
+    expect(result.averages).toMatchObject({ averageIncome: 7_000, averageExpenses: 3_000, monthCount: 1 });
     expect(result.monthlyAnalysis).toBeUndefined();
   });
 });

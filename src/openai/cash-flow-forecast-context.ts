@@ -16,6 +16,7 @@ import { buildCashPosition, cashMilestones } from '../cash-flow/position';
 import { expandPlannedEvent } from '../cash-flow/planned-events';
 import { streamMonthlyAmount } from '../cash-flow/recurring';
 import type { CanonicalFact } from './canonical-facts';
+import type { FinancialContextSnapshot } from './types';
 
 /**
  * The `cash_flow_forecast` data pack: the same engine and the same figures the
@@ -490,6 +491,96 @@ export function cashFlowForecastFacts(context: CashFlowForecastContext | undefin
     );
   });
 
+  return Array.from(facts.values());
+}
+
+export const EXPECTED_MONTHLY_INCOME = 'expected_monthly_income';
+export const EXPECTED_MONTHLY_EXPENSES = 'expected_monthly_expenses';
+export const EXPECTED_MONTHLY_SURPLUS = 'expected_monthly_surplus';
+export const EXPECTED_SAVINGS_RATE = 'expected_savings_rate';
+
+/**
+ * The month the forecast expects, as facts every question carries rather than
+ * only those that ask for the forecast pack: expected income and expenses, and
+ * the surplus and savings rate they make. A side the forecast learned is a
+ * projection, with a caveat that says what it is built from; a side the user
+ * set is their own figure. The surplus and rate are given as facts because the
+ * model may not net two facts itself.
+ */
+export function expectedMonthlyFacts(expected: FinancialContextSnapshot['expectedMonthly'] | undefined): CanonicalFact[] {
+  if (!expected) return [];
+  const asOf = expected.dataThrough ?? undefined;
+  const basis = expected.typicalBasisDays > 0
+    ? ` and their typical other spending over the last ${expected.typicalBasisDays} days`
+    : '';
+  const caveat =
+    'Projection, not an observed amount and not a guarantee: the month the cash-flow forecast expects from the ' +
+    `regular income and bills in the user’s transaction history${basis}. Large one-off amounts, anything the ` +
+    'user left out of the forecast, and their planned events are not counted.';
+
+  const facts = new Map<string, CanonicalFact>();
+  const side = (
+    id: string,
+    value: number | null,
+    source: 'transactions' | 'override',
+    labels: { learned: string; own: string }
+  ) => {
+    if (value === null || !Number.isFinite(value)) return;
+    const path = `contextSnapshot.expectedMonthly.${id === EXPECTED_MONTHLY_INCOME ? 'income' : 'spending'}`;
+    facts.set(id, source === 'override'
+      ? { id, label: labels.own, value, unit: 'usd', provenance: { kind: 'user_input', source: path } }
+      : { id, label: labels.learned, value, unit: 'usd', caveat, provenance: { kind: 'forecast', source: path, ...(asOf && { asOf }) } });
+  };
+  side(EXPECTED_MONTHLY_INCOME, expected.income, expected.incomeSource, {
+    learned: 'Expected monthly income: what the cash-flow forecast expects in a typical month, regular income at its usual monthly rate plus typical other income, before planned events',
+    own: 'Expected monthly income: the user’s own monthly income figure, which the cash-flow forecast uses in place of their transactions',
+  });
+  side(EXPECTED_MONTHLY_EXPENSES, expected.spending, expected.spendingSource, {
+    learned: 'Expected monthly expenses: what the cash-flow forecast expects in a typical month, regular bills at their monthly rate plus typical other spending and card interest at the usual pace, before planned events',
+    own: 'Expected monthly expenses: the user’s own monthly spending figure, which the cash-flow forecast uses in place of their transactions',
+  });
+
+  const income = facts.get(EXPECTED_MONTHLY_INCOME);
+  const expenses = facts.get(EXPECTED_MONTHLY_EXPENSES);
+  if (income && expenses) {
+    // A figure made from a projection is a projection too, and keeps its caveat.
+    const projected = income.provenance.kind === 'forecast' || expenses.provenance.kind === 'forecast';
+    const derived = (id: string, label: string, value: number, unit: CanonicalFact['unit'], formula: string, inputFactIds: string[]) => {
+      facts.set(id, {
+        id,
+        label,
+        value,
+        unit,
+        ...(projected && { caveat }),
+        provenance: {
+          kind: projected ? 'forecast' : 'calculation',
+          source: `calculation.${id}`,
+          formula,
+          inputFactIds,
+          ...(asOf && { asOf }),
+        },
+      });
+    };
+    const surplus = income.value - expenses.value;
+    derived(
+      EXPECTED_MONTHLY_SURPLUS,
+      'Expected monthly surplus: expected monthly income minus expected monthly expenses (negative is a shortfall)',
+      surplus,
+      'usd',
+      `${EXPECTED_MONTHLY_INCOME} - ${EXPECTED_MONTHLY_EXPENSES}`,
+      [EXPECTED_MONTHLY_INCOME, EXPECTED_MONTHLY_EXPENSES]
+    );
+    if (income.value > 0) {
+      derived(
+        EXPECTED_SAVINGS_RATE,
+        'Expected savings rate: the expected monthly surplus as a share of expected monthly income',
+        (surplus / income.value) * 100,
+        'percent',
+        `(${EXPECTED_MONTHLY_SURPLUS} / ${EXPECTED_MONTHLY_INCOME}) * 100`,
+        [EXPECTED_MONTHLY_SURPLUS, EXPECTED_MONTHLY_INCOME]
+      );
+    }
+  }
   return Array.from(facts.values());
 }
 

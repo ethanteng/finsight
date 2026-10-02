@@ -273,10 +273,10 @@ describe('RentCast canonical estimate bounds', () => {
 });
 
 describe('negative canonical values written as magnitudes', () => {
-  // The reported failure: a user whose manual overrides put income below
-  // expenses. Both overrides reach the fact pack, and the derived cash-flow
-  // fact is -3000 -- but the answer says "a $3,000 monthly shortfall", which
-  // parsed as +3000 and took the whole cash-flow sentence out of the answer.
+  // The reported failure: a user whose income ran below their expenses. Both
+  // averages reach the fact pack, and the derived cash-flow fact is -3000 --
+  // but the answer says "a $3,000 monthly shortfall", which parsed as +3000
+  // and took the whole cash-flow sentence out of the answer.
   const negativeCashFlow = {
     accounts: [],
     bankingTransactions: [],
@@ -458,7 +458,7 @@ describe('rounded canonical values', () => {
         value: 995.5699999999997,
         unit: 'usd',
         provenance: 'average_monthly_operating_cash_flow',
-        provenanceLabel: 'Average monthly operating cash flow',
+        provenanceLabel: 'Average monthly operating cash flow (observed)',
       },
     });
     expect(validateResponseFacts(response, pack)).toMatchObject({ valid: true });
@@ -796,5 +796,38 @@ describe('rounded canonical values', () => {
 
     expect(salvaged.summary).toBe('Your portfolio is worth $1.92 million.');
     expect(salvaged.key_numbers).toBeUndefined();
+  });
+});
+
+describe('bare monthly key numbers', () => {
+  // A monthly figure may be either one: what happened or what to expect. A key
+  // number that names no fact resolves to the one whose value it carries.
+  const monthly = {
+    ...snapshot,
+    averageMonthlyIncome: 11_778,
+    averageMonthlyExpense: 12_712,
+    expectedMonthly: {
+      income: 11_662,
+      spending: 5_951.27,
+      incomeSource: 'transactions',
+      spendingSource: 'transactions',
+      typicalBasisDays: 90,
+      dataThrough: '2026-10-01',
+    },
+  } as any;
+  const pack = buildCanonicalFactPack(monthly, 'What will I spend each month?', questionNeedsFromPacks([], false));
+
+  it('cites the expected month when that is the value given', () => {
+    const response = canonicalizeResponseNumbers({
+      summary: 'Result.',
+      key_numbers: { monthly_expenses: 5951.27, monthly_income: 11778 },
+    }, pack);
+    expect(response.key_numbers?.monthly_expenses).toMatchObject({ provenance: 'expected_monthly_expenses', value: 5951.27 });
+    expect(response.key_numbers?.monthly_income).toMatchObject({ provenance: 'average_monthly_income', value: 11_778 });
+  });
+
+  it('cites nothing for a value that is neither', () => {
+    const response = canonicalizeResponseNumbers({ summary: 'Result.', key_numbers: { monthly_expenses: 7000 } }, pack);
+    expect(response.key_numbers?.monthly_expenses).toEqual({ value: 7000, unit: 'usd', provenance: '' });
   });
 });

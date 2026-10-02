@@ -111,9 +111,31 @@ export interface FinancialContextSnapshot {
   incomeAnalysis?: string;
   expenseAnalysis?: string;
   monthlyCashFlowAnalysis?: string;
-  /** Structured numeric values — use these instead of parsing incomeAnalysis/expenseAnalysis strings */
+  /**
+   * History: average income and expenses over the calendar months the snapshot
+   * covers in full -- what actually happened. Structured numeric values; use
+   * these instead of parsing incomeAnalysis/expenseAnalysis strings.
+   */
   averageMonthlyIncome?: number | null;
   averageMonthlyExpense?: number | null;
+  /** The complete months those averages cover. */
+  averageMonthlyMonths?: { count: number; firstMonth: string; lastMonth: string } | null;
+  /**
+   * What the cash-flow forecast expects in a typical month, before planned
+   * events -- the user's own monthly figure on a side where they set one. The
+   * figure for anything forward-looking. Built on every question, unlike the
+   * full forecast pack below.
+   */
+  expectedMonthly?: {
+    income: number | null;
+    spending: number | null;
+    incomeSource: 'transactions' | 'override';
+    spendingSource: 'transactions' | 'override';
+    /** Days of recent history the typical rates are read from; 0 without any. */
+    typicalBasisDays: number;
+    /** Last day of transactions the forecast was built on (YYYY-MM-DD); null without a snapshot. */
+    dataThrough: string | null;
+  } | null;
   /** Present only when the cash_flow_forecast pack was selected. */
   cashFlowForecast?: CashFlowForecastContext;
   transactionSummary?: {

@@ -276,11 +276,13 @@ export function buildSnapshotSummaryForValidation(snapshot: FinancialContextSnap
     }
   }
 
+  // Long enough for both the observed average and the expected month, the
+  // two figures an answer about monthly income or spending may quote.
   if (snapshot.incomeAnalysis) {
-    parts.push(`Income analysis: ${snapshot.incomeAnalysis.slice(0, 200)}`);
+    parts.push(`Income analysis: ${snapshot.incomeAnalysis.slice(0, 400)}`);
   }
   if (snapshot.expenseAnalysis) {
-    parts.push(`Expense analysis: ${snapshot.expenseAnalysis.slice(0, 200)}`);
+    parts.push(`Expense analysis: ${snapshot.expenseAnalysis.slice(0, 400)}`);
   }
   if (snapshot.monthlyCashFlowAnalysis) {
     parts.push(`Monthly cash flow: ${snapshot.monthlyCashFlowAnalysis.slice(0, 1_000)}`);

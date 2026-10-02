@@ -22,6 +22,7 @@ import { compactSearchQueryEvidence } from '../data/search-types';
 import type { SearchContext } from '../data/orchestrator';
 import type { PersonalContextValues } from '../profile/personal-context';
 import { buildCashFlowForecastContext, type CashFlowForecastContext } from './cash-flow-forecast-context';
+import { expectedMonthly } from '../cash-flow/forecast';
 
 interface GatherContextArgs {
   userId?: string;
@@ -367,19 +368,34 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
     }
   };
 
-  // The forecast pack runs the same engine the Cash flow page does. It never
-  // throws: a forecast that cannot be built is reported to the model as
+  // The cash-flow forecast runs the same engine the Cash flow page does, on
+  // every question: the month it expects is the figure for anything
+  // forward-looking, so like the history averages it is always available.
+  // The full forecast pack is built only when the plan asked for it. Neither
+  // ever throws: a forecast that cannot be built is reported to the model as
   // unavailable, so the answer explains why instead of estimating.
-  const loadCashFlowForecast = async (): Promise<CashFlowForecastContext | undefined> => {
-    if (!questionNeeds.needsCashFlowForecast) return undefined;
-    if (!userId) return { status: 'unavailable', reason: 'no_snapshot' };
+  const loadCashFlow = async (): Promise<{
+    expected?: NonNullable<FinancialContextSnapshot['expectedMonthly']>;
+    forecast?: CashFlowForecastContext;
+  }> => {
+    const unavailable = (reason: 'no_snapshot' | 'error') =>
+      questionNeeds.needsCashFlowForecast ? { status: 'unavailable' as const, reason } : undefined;
+    if (!userId) return { forecast: unavailable('no_snapshot') };
     try {
       const { loadCashFlowModel } = await import('../services/cash-flow-service');
       const loaded = await loadCashFlowModel(userId);
-      return loaded ? buildCashFlowForecastContext(loaded.model) : { status: 'unavailable', reason: 'no_snapshot' };
+      if (!loaded) return { forecast: unavailable('no_snapshot') };
+      return {
+        expected: {
+          ...expectedMonthly(loaded.model),
+          typicalBasisDays: loaded.model.typical.basisDays,
+          dataThrough: loaded.model.dataThrough,
+        },
+        forecast: questionNeeds.needsCashFlowForecast ? buildCashFlowForecastContext(loaded.model) : undefined,
+      };
     } catch (error) {
       console.error('Failed to build cash flow forecast context:', error);
-      return { status: 'unavailable', reason: 'error' };
+      return { forecast: unavailable('error') };
     }
   };
 
@@ -396,7 +412,7 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
 
   if (questionNeeds.needsCashFlowForecast) onProgress?.('Projecting your cash flow');
 
-  const [tierContext, searchRetrieval, marketContextResult, userOverrides, userProfile, investmentExternalData, cashFlowForecast] = await Promise.all([
+  const [tierContext, searchRetrieval, marketContextResult, userOverrides, userProfile, investmentExternalData, cashFlow] = await Promise.all([
     dataOrchestrator.buildTierAwareContext(
       tier,
       tierContextAccounts,
@@ -423,7 +439,7 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
           return undefined;
         })
       : Promise.resolve(undefined),
-    loadCashFlowForecast(),
+    loadCashFlow(),
   ]);
 
   if (investmentsSnapshot && investmentExternalData) {
@@ -432,17 +448,29 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
 
   const { context: searchContext, queryOutcomes: searchQueryOutcomes } = searchRetrieval;
 
-  const monthlyIncomeOverride = userOverrides.monthlyIncomeOverride;
-  const monthlyExpenseOverride = userOverrides.monthlyExpenseOverride;
+  const cashFlowForecast = cashFlow.forecast;
+  // With no snapshot to forecast from, a monthly figure the user set is still
+  // what they expect; a side without one has no expected figure.
+  const monthlyIncomeOverride = userOverrides.monthlyIncomeOverride ?? null;
+  const monthlyExpenseOverride = userOverrides.monthlyExpenseOverride ?? null;
+  const expected: FinancialContextSnapshot['expectedMonthly'] = cashFlow.expected
+    ?? (monthlyIncomeOverride !== null || monthlyExpenseOverride !== null
+      ? {
+          income: monthlyIncomeOverride,
+          spending: monthlyExpenseOverride,
+          incomeSource: monthlyIncomeOverride !== null ? 'override' : 'transactions',
+          spendingSource: monthlyExpenseOverride !== null ? 'override' : 'transactions',
+          typicalBasisDays: 0,
+          dataThrough: null,
+        }
+      : null);
 
-  const { incomeResult, expenseResult, monthlyAnalysis } = buildCanonicalCashFlowAnalyses(
+  const { averages, incomeAnalysis, expenseAnalysis, monthlyAnalysis } = buildCanonicalCashFlowAnalyses(
     transactionSummary,
-    monthlyIncomeOverride,
-    monthlyExpenseOverride,
+    financialSummary?.computedAt,
+    expected,
     questionNeeds.needsMonthlyCashFlow
   );
-  const incomeAnalysis = incomeResult?.text;
-  const expenseAnalysis = expenseResult?.text;
 
   const assembledSnapshot: FinancialContextSnapshot = {
     accounts: accountSummaries,
@@ -453,8 +481,12 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
     incomeAnalysis,
     expenseAnalysis,
     monthlyCashFlowAnalysis: monthlyAnalysis,
-    averageMonthlyIncome: incomeResult?.averageMonthly ?? null,
-    averageMonthlyExpense: expenseResult?.averageMonthly ?? null,
+    averageMonthlyIncome: averages?.averageIncome ?? null,
+    averageMonthlyExpense: averages?.averageExpenses ?? null,
+    averageMonthlyMonths: averages && averages.firstMonth && averages.lastMonth
+      ? { count: averages.monthCount, firstMonth: averages.firstMonth, lastMonth: averages.lastMonth }
+      : null,
+    expectedMonthly: expected,
     transactionSummary,
     ...(cashFlowForecast && { cashFlowForecast }),
     contextSelection: {

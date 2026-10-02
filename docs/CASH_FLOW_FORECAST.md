@@ -11,7 +11,7 @@ Cash in is canonical income and cash out is canonical spending, across cash acco
 - Investment accounts are out of scope: their dividends and interest mostly stay invested and never reach spending money.
 - Loan and mortgage accounts are out of scope. The payment that matters is already the expense on the checking account that sent it, so the loan-side leg would count it twice.
 
-Because of the narrower account set, these totals are not the Finances page's average monthly income and expenses, which also include investment income. The page says which accounts it covers.
+Because of the narrower account set, these totals are not the history averages beside the expected month on the Finances page, which come from the canonical transaction summary and also include investment income. The page says which accounts it covers.
 
 A card payment moves money between the user's accounts, so it changes balances but never savings. Card payoff therefore lives in the cash-position view and the credit cards panel, described below. Its one effect on savings is the interest it saves.
 
@@ -43,6 +43,18 @@ Months before the connected history begins are unknown, not zero:
 - The default range starts on the first day of history, so its first period may be clipped to a date range. A custom range that reaches back before the history keeps its per-period rows, marked partial, but withholds its totals.
 
 Plaid's Recurring Transactions add-on is deliberately not used. It is billed separately, and recognising streams here keeps the forecast explainable: the page lists every stream with its cadence, amount and next date.
+
+## The expected month
+
+`expectedMonthly(model)` is what the forecast expects in a typical month, before planned events. It is the app's expected monthly income and expenses: the Finances page shows it, and Ask Linc plans with it.
+
+- **Income:** every regular income still running, at its monthly rate (biweekly pay is 26 paychecks a year, not two a month), plus the typical rate.
+- **Spending:** every regular bill still running at its monthly rate, plus the typical rate, plus the interest projected cards run up at the usual pace, averaged over the next 12 months.
+- **Left out:** one-offs and everything the user left out of the forecast. A stopped item the user kept is counted.
+- **Planned events:** not counted, card payoff plans included, because they are dated and specific rather than typical.
+- **Overrides:** it is exactly the month a Finances override replaces, so a side with an override is the override to the cent. While the forecast is unavailable, a side read from transactions has no figure, and an override still does.
+
+The Finances page shows the expected month as Monthly Income and Monthly Expenses, from `GET /api/cash-flow/expected-monthly`. Beside each figure it shows what happened, averaged over the calendar months the snapshot covers in full. That history leaves out the month the connection's history starts partway through and the month in progress, because dividing a few days' total by a whole month understates every average. With an override set, the page also shows what the forecast would expect from the transactions alone.
 
 ## Adjusting what the forecast counts
 
@@ -165,9 +177,17 @@ All routes are under `/api/cash-flow` and use `requireAuth`:
 
 - `GET /?granularity=week|month|quarter|year&horizonMonths=1..12` returns the report. Optional `from` and `to` set a custom range, inclusive on both ends and at most about three years long. If the user has no snapshot yet, the route returns 204.
 - `GET /events`, `POST /events`, `PUT /events/:id` and `DELETE /events/:id` manage planned events. Updates and deletes match on both the event id and the user, so another user's event reads as not found. A card payment must name one of the user's own connected credit cards.
+- `GET /expected-monthly` returns the expected month: income and spending, which side an override sets, whether the forecast is available, and, while an override replaces a side, what the transactions alone would give (`learned`). It returns 204 with no snapshot.
 - `POST /adjustments` with `{kind, flow, key}` saves a change to what the forecast counts. It returns 201 when saved, 200 when the same change was already saved, 404 when the item is not in the user's data, and 409 at the cap. `DELETE /adjustments/:id` undoes a change and matches on the user like the event routes.
 
 ## Ask Linc
+
+Every question carries the expected month, beside the observed averages over complete months. `gatherContextSnapshot` builds the model on every question for it, in parallel with the rest of the context. The facts are:
+
+- `expected_monthly_income` and `expected_monthly_expenses`: a learned side is a forecast fact with its own caveat (what it is built from, and what it leaves out). An overridden side is the user's own figure (`user_input`).
+- `expected_monthly_surplus` and `expected_savings_rate`, which the fact validator rechecks against their inputs.
+
+The reasoning prompt tells the model to use the expected figures for anything forward-looking and the averages for what happened. Grounding accepts either one where an answer names a monthly income or expense figure. The home-affordability calculator takes its baseline month from the expected figures too, falling back to the observed average only for a side the forecast has no figure for.
 
 The `cash_flow_forecast` pack runs the same engine through `loadCashFlowModel`, so an answer quotes exactly what the page shows, the user's adjustments included. The pack's details list those adjustments by name (`userAdjustments`), with no amounts, so an answer can say what the user chose to leave out or count.
 

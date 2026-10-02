@@ -68,36 +68,35 @@ allocationPercentages[type] = { type, value, percentage }
 
 ## 4. Income and Expense Analysis
 
-**Source:** `buildIncomeAnalysis()`, `buildExpenseAnalysis()`
+**Source:** `buildCanonicalCashFlowAnalyses()` (`src/openai/cash-flow-context.ts`) and `expectedMonthly()` (`src/cash-flow/forecast.ts`)
 **File:** `src/openai/context-service.ts`
 
-### Income
+Every question carries two monthly figures for income and for expenses.
 
-- **Filter:** `transaction_type === 'income'` AND `amount > 0`
-- **Grouping:** By month `YYYY-MM`
+### History: average over complete months
+
+- **Source:** the persisted canonical transaction summary, through `averageCanonicalTransactionSummary(summary, computedAt)`.
 - **Formula:**
   ```
-  totalIncome = Σ amount  (for all income transactions)
-  dateSpanMonths = (maxYear - minYear) * 12 + (maxMonth - minMonth) + 1  (calendar months, inclusive)
-  averageMonthlyIncome = totalIncome / dateSpanMonths
+  completeMonths = months in summary.byMonth that lie wholly within [coverageStartDate, computedAt)
+  averageMonthlyIncome = Σ income over completeMonths / count(completeMonths)
+  averageMonthlyExpense = Σ expense over completeMonths / count(completeMonths)
   ```
-- **Note:** Uses **calendar months** (min to max inclusive), not day difference. E.g. Jan 31 → Feb 1 = 2 months (avoids 1-day span → 0 months → ∞ average). Jan $5k, Feb $0, Mar $5k → 3 months → $3,333/mo.
+- **Note:** A month with no activity still counts. A partial month does not: the one the connection's history starts partway through, and the one in progress. Averaging a few days as a whole month understates the figure. With no complete month, the average is unknown (null), not $0.
 
-### Expenses
+### Expected: the month the cash-flow forecast expects
 
-- **Filter:** `transaction_type === 'expense'` OR `transaction_type === 'fee'`
+- **Source:** `expectedMonthly(model)`, from the same model the Cash flow page uses.
 - **Formula:**
   ```
-  amount = Math.abs(transaction.amount)
-  totalExpense = Σ amount  (for all expense transactions)
-  dateSpanMonths = (maxYear - minYear) * 12 + (maxMonth - minMonth) + 1  (calendar months, inclusive)
-  averageMonthlyExpense = totalExpense / dateSpanMonths
+  expectedIncome = Σ monthly rate of each running regular income + typical daily income × 365/12
+  expectedSpending = Σ monthly rate of each running regular bill + typical daily spending × 365/12
+                     + projected card interest at the usual pace over the next 12 months / 12
   ```
+- **Overrides:** a side with a Finances override is exactly the override.
+- **Left out:** one-offs, anything the user left out of the forecast, and planned events.
 
-### Manual Override
-
-If `override` is provided (not null/undefined), the analysis string uses that value directly:
-`Average Monthly Income/Expenses: $X.XX (Manual Override)`.
+The facts are `average_monthly_*` (snapshot provenance) and `expected_monthly_*` (forecast provenance, or `user_input` for an override), plus the derived `average_monthly_operating_cash_flow`, `savings_rate`, `expected_monthly_surplus` and `expected_savings_rate`.
 
 ---
 
@@ -135,7 +134,7 @@ netWorth = totalAssets - totalDebt
 
 ### Income / Expenses
 
-**Uses structured numeric data** — never parses strings. Values come from `snapshot.averageMonthlyIncome` and `snapshot.averageMonthlyExpense`, populated by `buildIncomeAnalysis`/`buildExpenseAnalysis` in context-service.
+**Uses structured numeric data** — never parses strings. Values come from `snapshot.averageMonthlyIncome` and `snapshot.averageMonthlyExpense`, the averages over complete months that `gatherContextSnapshot` builds in context-service.
 
 ```
 income = (averageMonthlyIncome ?? 0) * 12

@@ -148,6 +148,18 @@ export interface CashFlowPlannedEventSummary extends PlannedCashFlowEvent {
 
 export type ForecastUnavailableReason = 'no_accounts' | 'no_history' | 'insufficient_history';
 
+/** GET /api/cash-flow/expected-monthly: the month the forecast expects, before planned events. */
+export interface ExpectedMonthlySummary {
+  /** The user's override on a side that has one; null on a learned side while there is no forecast. */
+  income: number | null;
+  spending: number | null;
+  incomeSource: 'transactions' | 'override';
+  spendingSource: 'transactions' | 'override';
+  forecast: { available: true } | { available: false; reason: ForecastUnavailableReason };
+  /** What the forecast expects from the transactions alone; present only while an override replaces a side. */
+  learned: { income: number | null; spending: number | null } | null;
+}
+
 export interface CashFlowReport {
   version: number;
   currency: string;
