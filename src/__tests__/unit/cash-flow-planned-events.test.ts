@@ -61,9 +61,14 @@ describe('validatePlannedEventInput for card payments', () => {
     expect(validatePlannedEventInput(input)).toEqual({ ok: false, error });
   });
 
-  it('never attaches a card to an income or expense event', () => {
-    const result = validatePlannedEventInput({ ...base, accountId: 'card', paymentMode: 'full' });
-    expect(result).toMatchObject({ ok: true, value: { accountId: null, paymentMode: null } });
+  it('keeps the account income or an expense names, and never a payment mode', () => {
+    // Which kind of account it is is checked against the user's own accounts when it is saved.
+    const result = validatePlannedEventInput({ ...base, accountId: ' checking ', paymentMode: 'full' });
+    expect(result).toMatchObject({ ok: true, value: { accountId: 'checking', paymentMode: null } });
+    expect(validatePlannedEventInput({ ...base, accountId: null })).toMatchObject({ ok: true, value: { accountId: null } });
+    expect(validatePlannedEventInput({ ...base, accountId: '' })).toMatchObject({ ok: true, value: { accountId: null } });
+    expect(validatePlannedEventInput({ ...base, accountId: 'x'.repeat(201) }).ok).toBe(false);
+    expect(validatePlannedEventInput({ ...base, accountId: 42 }).ok).toBe(false);
   });
 
   it('gives a card payment no effect on savings', () => {

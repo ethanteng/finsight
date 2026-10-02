@@ -1,6 +1,7 @@
 import type {
   CashFlowCardSummary,
   CashFlowGranularity,
+  CashFlowPositionAccount,
   CashFlowHighlightKey,
   CashFlowPeriod,
   CashFlowReport,
@@ -161,9 +162,25 @@ export function paceDescription(card: Pick<CashFlowCardSummary, 'behavior' | 'us
 }
 
 /** Whether the cash position carries any card's balance. */
-export function projectsCardDebt(report: Pick<CashFlowReport, 'cards' | 'position'>): boolean {
-  const leftOut = new Set(report.position.cardsLeftOut.map(card => card.accountId));
-  return report.cards.some(card => !leftOut.has(card.accountId));
+export function projectsCardDebt(report: Pick<CashFlowReport, 'position'>): boolean {
+  return report.position.cardIds.length > 0;
+}
+
+/** Whether the cash position covers every cash account rather than a chosen few. */
+export function coversAllCash(report: Pick<CashFlowReport, 'position'>): boolean {
+  return report.position.accountIds.length === report.position.accounts.length;
+}
+
+/** "Everyday Checking ••1234". */
+export function cashAccountName(account: Pick<CashFlowPositionAccount, 'name' | 'mask'>): string {
+  return account.mask ? `${account.name} ••${account.mask}` : account.name;
+}
+
+/** What the cash position covers, for a sentence: "your checking and savings", one account's name, or "2 accounts". */
+export function positionScope(report: Pick<CashFlowReport, 'position'>): string {
+  if (coversAllCash(report)) return 'your checking and savings';
+  const chosen = report.position.accounts.filter(account => report.position.accountIds.includes(account.id));
+  return chosen.length === 1 ? cashAccountName(chosen[0]) : `${chosen.length} accounts`;
 }
 
 const LEFT_OUT_REASONS: Record<CashFlowReport['position']['cardsLeftOut'][number]['reason'], string> = {

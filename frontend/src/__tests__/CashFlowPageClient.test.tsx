@@ -88,11 +88,17 @@ function report(overrides: Partial<CashFlowReport> = {}): CashFlowReport {
     }],
     position: {
       available: true, startingCash: 5200, startingCardDebt: 4000,
-      periods: [
-        { key: '2026-09', cash: null, cardDebt: null, cardPayments: null },
-        { key: '2026-10', cash: 3666.2, cardDebt: 3266.68, cardPayments: 1520.83 },
-        { key: '2026-11', cash: 4410.15, cardDebt: 2495.4, cardPayments: 1520.83 },
+      accounts: [
+        { id: 'checking', name: 'Everyday Checking', institution: 'First Bank', subtype: 'checking', mask: '1234', balance: 5200, primary: true },
       ],
+      accountIds: ['checking'],
+      cardIds: ['card'],
+      periods: [
+        { key: '2026-09', cash: null, cardDebt: null, cardPayments: null, moneyIn: null, moneyOut: null },
+        { key: '2026-10', cash: 3666.2, cardDebt: 3266.68, cardPayments: 1520.83, moneyIn: 4166.67, moneyOut: 4179.64 },
+        { key: '2026-11', cash: 4410.15, cardDebt: 2495.4, cardPayments: 1520.83, moneyIn: 5416.67, moneyOut: 3151.89 },
+      ],
+      upcoming: [],
       lowPoint: { date: '2026-10-22', cash: 1890.4 },
       milestones: [], lowNext12Months: { date: '2026-10-22', cash: 1890.4 },
       transfers: { typicalMonthlyNet: 0, recurring: [] },
@@ -625,6 +631,127 @@ describe('CashFlowPageClient', () => {
     expect(screen.queryByText('See every period')).not.toBeInTheDocument();
   });
 
+  describe('the cash position for chosen accounts', () => {
+    const savings = {
+      id: 'savings', name: 'High Yield Savings', institution: 'First Bank', subtype: 'savings', mask: '5678', balance: 10000, primary: false,
+    };
+    const both = (overrides: Partial<CashFlowReport['position']> = {}) => report({
+      position: {
+        ...report().position,
+        accounts: [...report().position.accounts, savings],
+        accountIds: ['checking', 'savings'],
+        startingCash: 15200,
+        ...overrides,
+      },
+    });
+    const checkingOnly = (overrides: Partial<CashFlowReport['position']> = {}) => both({ accountIds: ['checking'], startingCash: 5200, ...overrides });
+    const answer = (url: string) => {
+      if (!url.includes('/api/cash-flow?')) return undefined;
+      return { status: 200, body: url.includes('accounts=checking') ? checkingOnly() : both() };
+    };
+
+    it('shows one account on its own, and remembers the choice', async () => {
+      const calls = mockFetch(answer);
+      render(<CashFlowPageClient />);
+      await screen.findByRole('heading', { name: 'This month' });
+      fireEvent.click(screen.getByRole('button', { name: 'Cash position' }));
+      expect(screen.getByRole('button', { name: 'All accounts' })).toHaveAttribute('aria-pressed', 'true');
+      expect(screen.getByText(/Starts from \$15,200 across your checking and savings\./)).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Everyday Checking ••1234' }));
+      await waitFor(() => expect(calls.some(call => call.url.includes('accounts=checking'))).toBe(true));
+      expect(await screen.findByText(/Starts from \$5,200 in Everyday Checking ••1234\./)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Everyday Checking ••1234' })).toHaveAttribute('aria-pressed', 'true');
+      expect(screen.getByRole('button', { name: 'All accounts' })).toHaveAttribute('aria-pressed', 'false');
+      expect(JSON.parse(localStorage.getItem('cashFlow.positionAccounts')!)).toEqual(['checking']);
+
+      fireEvent.click(screen.getByRole('button', { name: 'All accounts' }));
+      expect(await screen.findByText(/Starts from \$15,200 across your checking and savings\./)).toBeInTheDocument();
+      expect(calls[calls.length - 1].url).not.toContain('accounts=');
+      expect(localStorage.getItem('cashFlow.positionAccounts')).toBeNull();
+    });
+
+    it('opens on the accounts chosen last time', async () => {
+      localStorage.setItem('cashFlow.positionAccounts', JSON.stringify(['checking']));
+      const calls = mockFetch(answer);
+      render(<CashFlowPageClient />);
+      await screen.findByRole('heading', { name: 'This month' });
+      expect(calls.find(call => call.url.includes('/api/cash-flow?'))!.url).toContain('accounts=checking');
+    });
+
+    it('still offers the accounts when the chosen one can’t be added up', async () => {
+      mockFetch(url => (url.includes('/api/cash-flow?')
+        ? { status: 200, body: both({ available: false, reason: 'unknown_balance', accountIds: ['savings'] }) }
+        : undefined));
+      render(<CashFlowPageClient />);
+      await screen.findByRole('heading', { name: 'This month' });
+      fireEvent.click(screen.getByRole('button', { name: 'Cash position' }));
+      expect(screen.getByText('One of the accounts you chose didn’t report a balance, so its cash position can’t be added up yet.')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'All accounts' })).toBeInTheDocument();
+    });
+
+    it('lists what is coming up, with the balance after each day', async () => {
+      const upcoming = Array.from({ length: 10 }, (_, index) => ({
+        date: `2026-10-${String(16 + index).padStart(2, '0')}`,
+        label: index === 0 ? 'Gusto Payroll' : `Bill ${index}`,
+        kind: index === 0 ? 'income' as const : 'bill' as const,
+        amount: index === 0 ? 2500 : -100,
+        balanceAfter: index === 0 ? 7700 : -100 * index,
+      }));
+      mockFetch(url => (url.includes('/api/cash-flow?') ? { status: 200, body: checkingOnly({ upcoming }) } : undefined));
+      render(<CashFlowPageClient />);
+      await screen.findByRole('heading', { name: 'This month' });
+      fireEvent.click(screen.getByRole('button', { name: 'Cash position' }));
+
+      const list = screen.getByRole('heading', { name: 'Coming up in the next month' }).closest('div')!;
+      expect(within(list).getByText('Gusto Payroll')).toBeInTheDocument();
+      expect(within(list).getByText('Oct 16, 2026 · Regular income')).toBeInTheDocument();
+      expect(within(list).getByText('+$2,500')).toBeInTheDocument();
+      expect(within(list).getByText('$7,700 after')).toBeInTheDocument();
+      expect(within(list).queryByText('Bill 9')).not.toBeInTheDocument();
+      fireEvent.click(within(list).getByRole('button', { name: 'Show all 10' }));
+      expect(within(list).getByText('Bill 9')).toBeInTheDocument();
+      expect(within(list).getByText('−$900 after')).toBeInTheDocument();
+    });
+
+    it('lets planned income land in a chosen account', async () => {
+      const calls = mockFetch((url, init) => {
+        if (url.endsWith('/api/cash-flow/events') && init?.method === 'POST') return { status: 201, body: { event: {} } };
+        return answer(url);
+      });
+      render(<CashFlowPageClient />);
+      await screen.findByRole('heading', { name: 'Credit cards' });
+
+      fireEvent.click(screen.getByRole('button', { name: 'Add planned event' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Money in' }));
+      expect(screen.getByLabelText('Account')).toHaveValue('checking');
+      fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Gift' } });
+      fireEvent.change(screen.getByLabelText('Amount'), { target: { value: '1000' } });
+      fireEvent.change(screen.getByLabelText('Account'), { target: { value: 'savings' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Add to forecast' }));
+
+      await waitFor(() => expect(calls.some(call => call.init?.method === 'POST')).toBe(true));
+      expect(JSON.parse(String(calls.find(call => call.init?.method === 'POST')!.init!.body))).toMatchObject({
+        label: 'Gift', kind: 'income', amount: 1000, accountId: 'savings',
+      });
+    });
+
+    it('names the account each planned income or expense lands in', async () => {
+      const gift = {
+        id: 'gift', label: 'Gift', kind: 'income', amount: 1000, startDate: '2026-11-01', recurrence: 'once', endDate: null,
+        accountId: 'savings', paymentMode: null, nextDate: '2026-11-01', occurrencesInRange: 1,
+      } as const;
+      mockFetch(url => (url.includes('/api/cash-flow?')
+        ? { status: 200, body: { ...both(), plannedEvents: [...report().plannedEvents, gift] } }
+        : undefined));
+      render(<CashFlowPageClient />);
+      const panel = (await screen.findByRole('heading', { name: 'Planned events' })).closest('section')!;
+      expect(within(panel).getByText(/Once on Nov 1, 2026 · High Yield Savings ••5678/)).toBeInTheDocument();
+      // The bonus was saved without an account, so it lands in the primary one.
+      expect(within(panel).getByText(/Once on Dec 15, 2026 · Everyday Checking ••1234/)).toBeInTheDocument();
+    });
+  });
+
   it('lists the cash position by period when the chart shows it', async () => {
     mockFetch(url => (url.includes('/api/cash-flow?') ? { status: 200, body: report() } : undefined));
     render(<CashFlowPageClient />);
@@ -635,23 +762,26 @@ describe('CashFlowPageClient', () => {
     expect(headers()).toEqual(['Period', 'Cash in', 'Cash out', 'Net', 'Based on']);
 
     fireEvent.click(screen.getByRole('button', { name: 'Cash position' }));
-    expect(headers()).toEqual(['Period', 'Paid to cards', 'Cash at end', 'Owed on cards at end']);
-    expect(cells('Oct 2026')).toEqual(['$1,521', '$3,666', '$3,267']);
-    expect(cells('Nov 2026')).toEqual(['$1,521', '$4,410', '$2,495']);
+    expect(headers()).toEqual(['Period', 'Money in', 'Money out', 'Paid to cards', 'Cash at end', 'Owed on cards at end']);
+    expect(cells('Oct 2026')).toEqual(['$4,167', '$4,180', '$1,521', '$3,666', '$3,267']);
+    expect(cells('Nov 2026')).toEqual(['$5,417', '$3,152', '$1,521', '$4,410', '$2,495']);
     // A month already over has nothing projected.
-    expect(cells('Sep 2026')).toEqual(['—', '—', '—']);
+    expect(cells('Sep 2026')).toEqual(['—', '—', '—', '—', '—']);
 
     fireEvent.click(screen.getByRole('button', { name: 'Savings' }));
     expect(headers()).toEqual(['Period', 'Cash in', 'Cash out', 'Net', 'Based on']);
   });
 
   it('leaves the card columns out of the cash table when no card is projected', async () => {
-    mockFetch(url => (url.includes('/api/cash-flow?') ? { status: 200, body: report({ cards: [] }) } : undefined));
+    mockFetch(url => (url.includes('/api/cash-flow?')
+      ? { status: 200, body: report({ cards: [], position: { ...report().position, cardIds: [], startingCardDebt: 0 } }) }
+      : undefined));
     render(<CashFlowPageClient />);
     await screen.findByRole('heading', { name: 'This month' });
     fireEvent.click(screen.getByRole('button', { name: 'Cash position' }));
-    expect(screen.getAllByRole('columnheader').map(header => header.textContent)).toEqual(['Period', 'Cash at end']);
-    expect(within(screen.getByRole('rowheader', { name: 'Oct 2026' }).closest('tr')!).getByRole('cell')).toHaveTextContent('$3,666');
+    expect(screen.getAllByRole('columnheader').map(header => header.textContent)).toEqual(['Period', 'Money in', 'Money out', 'Cash at end']);
+    expect(within(screen.getByRole('rowheader', { name: 'Oct 2026' }).closest('tr')!).getAllByRole('cell').map(cell => cell.textContent))
+      .toEqual(['$4,167', '$4,180', '$3,666']);
   });
 
   it('shows each card at its usual pace and with a plan, and what the plan saves', async () => {
@@ -700,7 +830,9 @@ describe('CashFlowPageClient', () => {
       usualMonthlyPayment: null, paymentSource: 'other' as const,
       currentPace: pace('2026-10', 0, false, { nextPayment: { date: '2026-10-10', amount: 1184 }, paymentsTwelveMonths: 5017.8 }),
     };
-    mockFetch(url => (url.includes('/api/cash-flow?') ? { status: 200, body: report({ cards: [...report().cards, amex] }) } : undefined));
+    mockFetch(url => (url.includes('/api/cash-flow?')
+      ? { status: 200, body: report({ cards: [...report().cards, amex], position: { ...report().position, cardIds: ['card', 'amex'] } }) }
+      : undefined));
     render(<CashFlowPageClient />);
 
     const panel = (await screen.findByRole('heading', { name: 'Credit cards' })).closest('section')!;

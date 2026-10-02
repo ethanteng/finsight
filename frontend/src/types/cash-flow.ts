@@ -136,7 +136,7 @@ export interface PlannedCashFlowEvent {
   startDate: string;
   recurrence: PlannedEventRecurrence;
   endDate: string | null;
-  /** The credit card a card payment pays. */
+  /** For a card payment, the card it pays; for income or an expense, the cash account it lands in, or null for the primary one. */
   accountId: string | null;
   paymentMode: CardPaymentMode | null;
 }
@@ -255,16 +255,54 @@ export interface CashFlowCardSummary {
   planIds: string[];
 }
 
+/** A dated amount entering or leaving the accounts the cash position covers. */
+export interface CashPositionItem {
+  date: string;
+  label: string;
+  kind: 'income' | 'bill' | 'transfer_in' | 'transfer_out' | 'card_payment' | 'planned_income' | 'planned_expense';
+  /** Signed: positive into the accounts, negative out of them. */
+  amount: number;
+  /** Cash at the end of the item's day, everything else that day included. */
+  balanceAfter: number;
+}
+
+export interface CashFlowPositionAccount {
+  id: string;
+  name: string;
+  institution: string | null;
+  subtype: string | null;
+  mask: string | null;
+  balance: number | null;
+  /** Where money that has no account of its own lands: planned events saved without one, for instance. */
+  primary: boolean;
+}
+
 export interface CashFlowPositionSummary {
   available: boolean;
   reason?: 'forecast_unavailable' | 'no_cash_accounts' | 'unknown_balance';
+  /** Every cash account, for choosing which the position covers. */
+  accounts: CashFlowPositionAccount[];
+  /** The cash accounts the figures cover: all of them unless some were chosen. */
+  accountIds: string[];
+  /** The cards whose balances `cardDebt` covers. */
+  cardIds: string[];
   startingCash: number | null;
   startingCardDebt: number | null;
   /**
-   * In step with `periods`: balances at each period's end, and what cash pays
-   * the cards in the period's forecast part. Null for a period over before the forecast.
+   * In step with `periods`: balances at each period's end, and what arrives,
+   * leaves and is paid to cards in the period's forecast part. Null for a
+   * period over before the forecast.
    */
-  periods: Array<{ key: string; cash: number | null; cardDebt: number | null; cardPayments: number | null }>;
+  periods: Array<{
+    key: string;
+    cash: number | null;
+    cardDebt: number | null;
+    cardPayments: number | null;
+    moneyIn: number | null;
+    moneyOut: number | null;
+  }>;
+  /** Dated amounts in the month from the forecast start, with the balance after each day. */
+  upcoming: CashPositionItem[];
   lowPoint: { date: string; cash: number } | null;
   milestones: Array<{ key: string; date: string; cash: number; cardDebt: number }>;
   lowNext12Months: { date: string; cash: number } | null;

@@ -138,6 +138,22 @@ describe('cash flow routes', () => {
     });
   });
 
+  describe('GET /api/cash-flow for chosen accounts', () => {
+    it('covers only the cash accounts asked for', async () => {
+      const response = await request(app).get('/api/cash-flow?granularity=month&horizonMonths=3&accounts=checking');
+      expect(response.status).toBe(200);
+      expect(response.body.position).toMatchObject({ available: true, accountIds: ['checking'], startingCash: 5200 });
+      expect(response.body.position.accounts).toEqual([expect.objectContaining({ id: 'checking', primary: true })]);
+    });
+
+    it('refuses an unreasonable number of accounts', async () => {
+      const accounts = Array.from({ length: 21 }, (_, index) => `account-${index}`).join(',');
+      const response = await request(app).get(`/api/cash-flow?accounts=${accounts}`);
+      expect(response.status).toBe(400);
+      expect(response.body).toEqual({ error: 'Choose at most 20 accounts' });
+    });
+  });
+
   describe('GET /api/cash-flow/expected-monthly', () => {
     it('returns the month the forecast expects, which the Finances page shows', async () => {
       const response = await request(app).get('/api/cash-flow/expected-monthly');
@@ -249,6 +265,28 @@ describe('cash flow routes', () => {
       const response = await request(app).post('/api/cash-flow/events').send({ ...cardPayment, accountId });
       expect(response.status).toBe(400);
       expect(response.body).toEqual({ error: 'Choose one of your connected credit cards' });
+      expect(prisma.plannedCashFlowEvent.create).not.toHaveBeenCalled();
+    });
+
+    it('saves income in the cash account the user chose', async () => {
+      prisma.plannedCashFlowEvent.count.mockResolvedValue(0);
+      prisma.plannedCashFlowEvent.create.mockResolvedValue(eventRow({ accountId: 'checking' }));
+
+      const response = await request(app).post('/api/cash-flow/events').send({ ...body, accountId: 'checking' });
+
+      expect(response.status).toBe(201);
+      expect(prisma.plannedCashFlowEvent.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ kind: 'income', accountId: 'checking', paymentMode: null }),
+      });
+    });
+
+    it.each([
+      ['a credit card', 'card'],
+      ['an account the user does not have', 'someone-elses-checking'],
+    ])('refuses to land income in %s', async (_label, accountId) => {
+      const response = await request(app).post('/api/cash-flow/events').send({ ...body, accountId });
+      expect(response.status).toBe(400);
+      expect(response.body).toEqual({ error: 'Choose one of your connected checking or savings accounts' });
       expect(prisma.plannedCashFlowEvent.create).not.toHaveBeenCalled();
     });
 

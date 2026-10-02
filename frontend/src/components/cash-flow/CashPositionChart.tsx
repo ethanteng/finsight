@@ -62,10 +62,10 @@ function PositionTooltip({ active, payload }: { active?: boolean; payload?: Arra
   );
 }
 
-export function CashPositionLegend({ hasCards }: { hasCards: boolean }) {
+export function CashPositionLegend({ hasCards, scope = 'checking and savings' }: { hasCards: boolean; scope?: string }) {
   return (
     <div className="flex flex-wrap gap-x-5 gap-y-2 text-xs font-semibold text-[#5e6b63]">
-      <span className="inline-flex items-center gap-2"><span className="h-0.5 w-4 bg-[#173c2c]" aria-hidden="true" />Cash in checking and savings</span>
+      <span className="inline-flex items-center gap-2"><span className="h-0.5 w-4 bg-[#173c2c]" aria-hidden="true" />Cash in {scope}</span>
       {hasCards && <span className="inline-flex items-center gap-2"><span className="h-0.5 w-4 border-t-2 border-dashed border-[#9b4137]" aria-hidden="true" />Owed on credit cards</span>}
     </div>
   );

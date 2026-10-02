@@ -10,6 +10,7 @@ import CashFlowChart, { CashFlowChartLegend } from '../../components/cash-flow/C
 import CashFlowHighlights from '../../components/cash-flow/CashFlowHighlights';
 import CashFlowPeriodTable, { CashPositionPeriodTable } from '../../components/cash-flow/CashFlowPeriodTable';
 import CashPositionChart, { CashPositionLegend } from '../../components/cash-flow/CashPositionChart';
+import { PositionAccountPicker, UpcomingItems } from '../../components/cash-flow/CashPositionAccounts';
 import CreditCardsPanel from '../../components/cash-flow/CreditCardsPanel';
 import ForecastBasis from '../../components/cash-flow/ForecastBasis';
 import ForecastBoard from '../../components/cash-flow/ForecastBoard';
@@ -18,9 +19,11 @@ import { clearStoredUserTimeZone } from '../../lib/browser-time-zone';
 import { CONNECT_ACCOUNTS_PATH } from '../../lib/connect-accounts';
 import {
   cardsLeftOutText,
+  coversAllCash,
   formatCalendarDate,
   formatMoney,
   lastIncludedDay,
+  positionScope,
   projectsCardDebt,
   unavailableMessage,
 } from '../../lib/cash-flow-format';
@@ -71,6 +74,28 @@ interface CustomRange {
 
 type LoadState = 'loading' | 'ready' | 'empty' | 'error';
 
+/** The cash accounts the user last chose for the cash position, kept in this browser. */
+const POSITION_ACCOUNTS_KEY = 'cashFlow.positionAccounts';
+
+function storedPositionAccounts(): string[] {
+  try {
+    if (typeof window === 'undefined') return [];
+    const parsed: unknown = JSON.parse(window.localStorage.getItem(POSITION_ACCOUNTS_KEY) ?? '[]');
+    return Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+function storePositionAccounts(accountIds: string[]): void {
+  try {
+    if (accountIds.length > 0) window.localStorage.setItem(POSITION_ACCOUNTS_KEY, JSON.stringify(accountIds));
+    else window.localStorage.removeItem(POSITION_ACCOUNTS_KEY);
+  } catch {
+    // Storage can be unavailable (private windows, blocked site data); the choice then lasts this visit.
+  }
+}
+
 function EmptyState() {
   return (
     <div className="rounded-[2rem] border border-[#102319]/10 bg-[#fffdf5] p-8 text-center shadow-sm sm:p-12">
@@ -99,6 +124,8 @@ export default function CashFlowPageClient() {
   const [customRange, setCustomRange] = useState<CustomRange | null>(null);
   const [customDraft, setCustomDraft] = useState<CustomRange | null>(null);
   const [chartView, setChartView] = useState<ChartView>('savings');
+  // Empty means every cash account.
+  const [positionAccounts, setPositionAccounts] = useState<string[]>(storedPositionAccounts);
   const [cardPaymentRequest, setCardPaymentRequest] = useState<CardPaymentRequest | null>(null);
   const requestRef = useRef(0);
 
@@ -112,8 +139,14 @@ export default function CashFlowPageClient() {
       params.set('granularity', view === 'custom' ? 'month' : view);
       params.set('horizonMonths', String(horizonMonths));
     }
+    if (positionAccounts.length > 0) params.set('accounts', positionAccounts.join(','));
     return params.toString();
-  }, [view, customRange, horizonMonths]);
+  }, [view, customRange, horizonMonths, positionAccounts]);
+
+  const choosePositionAccounts = (accountIds: string[]) => {
+    setPositionAccounts(accountIds);
+    storePositionAccounts(accountIds);
+  };
 
   const load = useCallback(async () => {
     const token = localStorage.getItem('auth_token');
@@ -350,7 +383,13 @@ export default function CashFlowPageClient() {
                 </div>
               ) : report.position.available ? (
                 <div className="mt-5">
-                  <CashPositionLegend hasCards={projectsCardDebt(report)} />
+                  <PositionAccountPicker report={report} onChange={choosePositionAccounts} />
+                  <div className={report.position.accounts.length > 1 ? 'mt-4' : ''}>
+                    <CashPositionLegend
+                      hasCards={projectsCardDebt(report)}
+                      scope={coversAllCash(report) ? 'checking and savings' : positionScope(report)}
+                    />
+                  </div>
                   {cardsLeftOutText(report) && (
                     <p className="mt-2 text-xs leading-5 text-[#76510f]">
                       {projectsCardDebt(report) ? 'Owed on credit cards leaves out ' : 'Credit card balances aren’t shown: '}
@@ -367,14 +406,22 @@ export default function CashFlowPageClient() {
                     </p>
                   )}
                   <p className="mt-1 text-xs leading-5 text-[#66736b]">
-                    Starts from {formatMoney(report.position.startingCash ?? 0)} across your checking and savings. Card payments
-                    come out of cash on their due days; planned income and expenses are assumed to go through cash.
+                    Starts from {formatMoney(report.position.startingCash ?? 0)} {coversAllCash(report) ? 'across' : 'in'} {positionScope(report)}.
+                    Card payments come out of the account that pays each card, on their due days; planned income and
+                    expenses land in the account you chose for them.
                   </p>
+                  <UpcomingItems report={report} />
                 </div>
               ) : (
-                <p className="mt-5 rounded-2xl border border-[#d4a72c]/30 bg-[#fff3ce] p-4 text-sm leading-6 text-[#76510f]" role="status">
-                  {POSITION_UNAVAILABLE[report.position.reason ?? ''] ?? 'Cash position isn’t available yet.'}
-                </p>
+                <div className="mt-5">
+                  {/* Still offered here, so a choice that can't be added up can be changed. */}
+                  <PositionAccountPicker report={report} onChange={choosePositionAccounts} />
+                  <p className={`${report.position.accounts.length > 1 ? 'mt-4' : ''} rounded-2xl border border-[#d4a72c]/30 bg-[#fff3ce] p-4 text-sm leading-6 text-[#76510f]`} role="status">
+                    {report.position.reason === 'unknown_balance' && !coversAllCash(report)
+                      ? 'One of the accounts you chose didn’t report a balance, so its cash position can’t be added up yet.'
+                      : POSITION_UNAVAILABLE[report.position.reason ?? ''] ?? 'Cash position isn’t available yet.'}
+                  </p>
+                </div>
               )}
 
               {/* Each view tabulates its own figures; with no cash position there is nothing to list. */}
@@ -399,6 +446,7 @@ export default function CashFlowPageClient() {
               apiUrl={API_URL}
               events={report.plannedEvents}
               cards={report.cards}
+              cashAccounts={report.position.accounts}
               cardPaymentRequest={cardPaymentRequest}
               today={report.today}
               forecastStart={report.forecastStart}

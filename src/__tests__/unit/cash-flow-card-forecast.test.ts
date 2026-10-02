@@ -208,7 +208,7 @@ describe('the report’s cards and cash position', () => {
     expect(position).toMatchObject({ available: true, startingCash: 5200, startingCardDebt: 4000 });
     expect(position.periods.map(period => period.key)).toEqual(report.periods.map(period => period.key));
     const past = position.periods.find(period => period.key === '2026-09')!;
-    expect(past).toEqual({ key: '2026-09', cash: null, cardDebt: null, cardPayments: null });
+    expect(past).toEqual({ key: '2026-09', cash: null, cardDebt: null, cardPayments: null, moneyIn: null, moneyOut: null });
     const october = position.periods.find(period => period.key === '2026-10')!;
     expect(october.cash).toBe(position.milestones[0].cash);
     expect(position.lowPoint).not.toBeNull();

@@ -344,3 +344,51 @@ describe('credit cards and cash position in the pack', () => {
   });
 });
 
+
+describe('each cash account in the pack', () => {
+  const SAVINGS = {
+    account_id: 'savings', name: 'High Yield Savings', type: 'depository', subtype: 'savings',
+    balance: { current: 10000 }, institution: 'First Bank', mask: '5678',
+  };
+  const withSavings = (plannedEvents: PlannedCashFlowEvent[] = []) => buildCashFlowForecastContext(buildCashFlowModel({
+    transactions: householdTransactions('2026-06-03', '2026-10-14'),
+    accounts: [...ACCOUNTS, SAVINGS],
+    plannedEvents,
+    dataThrough: '2026-10-14',
+    today: '2026-10-15',
+  }));
+
+  it('publishes what each account holds now and ahead, primary account first', () => {
+    const pack = withSavings([{ ...bonus, accountId: 'savings' }]);
+    const facts = byId(cashFlowForecastFacts(pack));
+    expect(facts.get('cash_flow_account_1_cash_now')).toMatchObject({
+      value: 5200,
+      label: 'Cash in account “Everyday Checking ending 1234” now, as last reported',
+      provenance: { kind: 'snapshot' },
+    });
+    expect(facts.get('cash_flow_account_2_cash_now')).toMatchObject({ value: 10000 });
+    // The accounts add up to the whole at every milestone.
+    for (const key of ['end_of_this_month', 'in_3_months', 'in_12_months']) {
+      const whole = facts.get(`cash_flow_cash_${key}`)!.value;
+      const parts = facts.get(`cash_flow_account_1_cash_${key}`)!.value + facts.get(`cash_flow_account_2_cash_${key}`)!.value;
+      expect(parts).toBeCloseTo(whole, 1);
+      expect(facts.get(`cash_flow_account_2_cash_${key}`)!.provenance.kind).toBe('forecast');
+    }
+    // The bonus planned into savings lands there, not in checking.
+    expect(facts.get('cash_flow_account_2_cash_in_12_months')!.value).toBeGreaterThanOrEqual(20000);
+    expect(facts.has('cash_flow_account_1_cash_low_point_next_12_months')).toBe(true);
+    expect(validateCanonicalFactPack({ version: 1, facts: [...facts.values()] })).toEqual([]);
+
+    const details = compactCashFlowForecastDetails(pack) as any;
+    expect(details.cashPosition.accounts).toEqual([
+      expect.objectContaining({ account: 'account “Everyday Checking ending 1234”', factIdPrefix: 'cash_flow_account_1_', primary: expect.any(String) }),
+      expect.objectContaining({ account: 'account “High Yield Savings ending 5678”', factIdPrefix: 'cash_flow_account_2_' }),
+    ]);
+    expect(details.cashPosition.accounts[1]).not.toHaveProperty('primary');
+  });
+
+  it('adds nothing when there is only one account, which the whole already is', () => {
+    const facts = byId(cashFlowForecastFacts(context()));
+    expect([...facts.keys()].some(id => id.startsWith('cash_flow_account_'))).toBe(false);
+  });
+});

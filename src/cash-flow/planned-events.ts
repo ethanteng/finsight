@@ -44,7 +44,10 @@ export interface PlannedCashFlowEvent {
   recurrence: PlannedEventRecurrence;
   /** Last day a recurring event can occur, inclusive. Always null for `once`. */
   endDate: CalendarDate | null;
-  /** The credit card a card payment pays; null for every other kind. */
+  /**
+   * For a card payment, the credit card it pays. For income or an expense, the
+   * cash account it lands in, or null to leave it to the primary account.
+   */
   accountId: string | null;
   /** How a card payment is sized; null for every other kind. */
   paymentMode: CardPaymentMode | null;
@@ -77,6 +80,10 @@ export function validatePlannedEventInput(raw: unknown): PlannedEventValidation 
 
   let accountId: string | null = null;
   let paymentMode: CardPaymentMode | null = null;
+  if (kind !== 'card_payment' && body.accountId !== undefined && body.accountId !== null && body.accountId !== '') {
+    accountId = typeof body.accountId === 'string' ? body.accountId.trim() : '';
+    if (!accountId || accountId.length > ACCOUNT_ID_MAX_LENGTH) return { ok: false, error: 'Choose one of your accounts' };
+  }
   if (kind === 'card_payment') {
     accountId = typeof body.accountId === 'string' ? body.accountId.trim() : '';
     if (!accountId || accountId.length > ACCOUNT_ID_MAX_LENGTH) return { ok: false, error: 'Choose a credit card to pay' };

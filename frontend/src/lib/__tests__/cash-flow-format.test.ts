@@ -1,6 +1,8 @@
 import {
   cardName,
   cardsLeftOutText,
+  cashAccountName,
+  coversAllCash,
   describeCardPlan,
   describeSchedule,
   monthLabel,
@@ -11,6 +13,7 @@ import {
   formatSignedMoney,
   lastIncludedDay,
   periodLabel,
+  positionScope,
   projectsCardDebt,
   shortPeriodLabel,
 } from '../cash-flow-format';
@@ -78,8 +81,12 @@ describe('card formatting', () => {
   });
 
   it('names the cards the cash position leaves out, and says whether it carries any', () => {
-    const view = (cards: Array<{ accountId: string; mask: string | null }>, cardsLeftOut: CashFlowReport['position']['cardsLeftOut']) =>
-      ({ cards, position: { cardsLeftOut } }) as unknown as Pick<CashFlowReport, 'cards' | 'position'>;
+    // The engine says which cards the position covers; those it leaves out are named.
+    const view = (cards: Array<{ accountId: string; mask: string | null }>, cardsLeftOut: CashFlowReport['position']['cardsLeftOut']) => {
+      const leftOutIds = new Set(cardsLeftOut.map(card => card.accountId));
+      const cardIds = cards.map(card => card.accountId).filter(id => !leftOutIds.has(id));
+      return ({ cards, position: { cardsLeftOut, cardIds } }) as unknown as Pick<CashFlowReport, 'cards' | 'position'>;
+    };
     const cards = [
       { accountId: 'rewards', mask: '9876' },
       { accountId: 'store', mask: '1234' },
@@ -95,6 +102,23 @@ describe('card formatting', () => {
     expect(projectsCardDebt(view(cards, leftOut))).toBe(true);
     expect(cardsLeftOutText(view(cards, []))).toBeNull();
     expect(projectsCardDebt(view(cards.slice(1), leftOut))).toBe(false);
+  });
+
+  it('says which cash accounts the position covers', () => {
+    const accounts = [
+      { id: 'checking', name: 'Everyday Checking', institution: null, subtype: 'checking', mask: '1234', balance: 5200, primary: true },
+      { id: 'savings', name: 'High Yield Savings', institution: null, subtype: 'savings', mask: '5678', balance: 10000, primary: false },
+      { id: 'cash', name: 'Cash Box', institution: null, subtype: null, mask: null, balance: 40, primary: false },
+    ];
+    const covering = (accountIds: string[]) =>
+      ({ position: { accounts, accountIds } }) as unknown as Pick<CashFlowReport, 'position'>;
+    expect(coversAllCash(covering(['checking', 'savings', 'cash']))).toBe(true);
+    expect(positionScope(covering(['checking', 'savings', 'cash']))).toBe('your checking and savings');
+    expect(coversAllCash(covering(['checking']))).toBe(false);
+    expect(positionScope(covering(['checking']))).toBe('Everyday Checking ••1234');
+    expect(positionScope(covering(['cash']))).toBe('Cash Box');
+    expect(positionScope(covering(['checking', 'savings']))).toBe('2 accounts');
+    expect(cashAccountName(accounts[1])).toBe('High Yield Savings ••5678');
   });
 
   it('describes each kind of card plan', () => {
