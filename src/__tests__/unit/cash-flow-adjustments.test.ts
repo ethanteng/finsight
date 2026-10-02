@@ -1,5 +1,5 @@
 import { validateForecastAdjustmentInput, type ForecastAdjustment } from '../../cash-flow/adjustments';
-import { addMonths } from '../../cash-flow/calendar';
+import { addDays, addMonths } from '../../cash-flow/calendar';
 import {
   actualTotals,
   buildCashFlowModel,
@@ -88,7 +88,11 @@ describe('adjusting what the forecast counts', () => {
     expect(adjusted.oneOffs.some(entry => entry.id === flight.id)).toBe(false);
     expect(adjusted.typical.dailySpending - base.typical.dailySpending).toBeCloseTo(2400 / base.typical.basisDays, 6);
     const report = buildCashFlowReport(adjusted, { granularity: 'month', horizonMonths: 3 });
-    expect(report.adjustments).toEqual([expect.objectContaining({ kind: 'include_one_off', date: flight.date, amount: 2400 })]);
+    // The change names the payee it now sits under among the typical payees.
+    expect(report.adjustments).toEqual([
+      expect.objectContaining({ kind: 'include_one_off', date: flight.date, amount: 2400, payeeKey: 'united airlines' }),
+    ]);
+    expect(report.typicalPayees).toEqual(expect.arrayContaining([expect.objectContaining({ payeeKey: 'united airlines' })]));
   });
 
   it('keeps projecting a regular item that had stopped, and says the user kept it', () => {
@@ -113,6 +117,20 @@ describe('adjusting what the forecast counts', () => {
     expect(adjusted.transfers.scheduled.some(item => item.streamId === vanguard.id)).toBe(false);
     // Savings never counted it: a transfer is neither income nor spending.
     expect(forecastTotals(adjusted, ...NEXT_12)).toEqual(forecastTotals(base, ...NEXT_12));
+  });
+
+  it('reports how large an amount must be to be a one-off', () => {
+    // Light everyday spending: the $1,000 floor applies in both directions.
+    expect(buildCashFlowReport(model(), { granularity: 'month', horizonMonths: 3 }).oneOffThresholds)
+      .toEqual({ income: 1000, spending: 1000 });
+    // $300 every day at rotating stores is $2,100 a typical week, so a one-off must be twice that.
+    const stores = ['Corner Market', 'Safeway', 'Whole Foods'];
+    const daily = Array.from({ length: 120 }, (_, index) => {
+      const date = addDays('2026-06-03', index);
+      return tx('card', date, 'expense', 300, stores[index % 3], { merchant_name: stores[index % 3] });
+    }).filter(item => String(item.date) <= THROUGH);
+    const heavy = model([], { transactions: [...householdTransactions(FROM, THROUGH).filter(item => !['Trader Joes', 'Safeway', 'Corner Market', 'Whole Foods'].includes(String(item.name))), ...daily] });
+    expect(buildCashFlowReport(heavy, { granularity: 'month', horizonMonths: 3 }).oneOffThresholds!.spending).toBe(4200);
   });
 
   it('lists every one-off in the report, so each can be counted', () => {

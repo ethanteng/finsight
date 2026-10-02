@@ -12,6 +12,7 @@ import CashFlowPeriodTable from '../../components/cash-flow/CashFlowPeriodTable'
 import CashPositionChart, { CashPositionLegend } from '../../components/cash-flow/CashPositionChart';
 import CreditCardsPanel from '../../components/cash-flow/CreditCardsPanel';
 import ForecastBasis from '../../components/cash-flow/ForecastBasis';
+import ForecastBoard from '../../components/cash-flow/ForecastBoard';
 import PlannedEventsPanel, { type CardPaymentRequest } from '../../components/cash-flow/PlannedEventsPanel';
 import { clearStoredUserTimeZone } from '../../lib/browser-time-zone';
 import { CONNECT_ACCOUNTS_PATH } from '../../lib/connect-accounts';
@@ -377,6 +378,8 @@ export default function CashFlowPageClient() {
               onPlanPayment={accountId => setCardPaymentRequest(current => ({ accountId, requestId: (current?.requestId ?? 0) + 1 }))}
             />
 
+            <ForecastBoard report={report} apiUrl={API_URL} onChanged={load} />
+
             <PlannedEventsPanel
               apiUrl={API_URL}
               events={report.plannedEvents}
@@ -387,7 +390,7 @@ export default function CashFlowPageClient() {
               onChanged={load}
             />
 
-            <ForecastBasis report={report} apiUrl={API_URL} onChanged={load} />
+            <ForecastBasis report={report} />
 
             <section className="flex flex-col gap-4 rounded-[1.6rem] bg-[#102319] p-6 text-white sm:flex-row sm:items-center sm:justify-between sm:p-8">
               <div>

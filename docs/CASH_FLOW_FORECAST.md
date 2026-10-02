@@ -45,7 +45,7 @@ Plaid's Recurring Transactions add-on is deliberately not used. It is billed sep
 
 ## Adjusting what the forecast counts
 
-The page lists everything the forecast is built from, and the user can move items in and out of it (`src/cash-flow/adjustments.ts`). Each change is stored in `cash_flow_forecast_adjustments`:
+The page lays out what the forecast is built from in two columns, "Counted in the forecast" and "Left out", and every item moves to the other column with its button (`ForecastBoard`; the engine side is `src/cash-flow/adjustments.ts`). Each change is stored in `cash_flow_forecast_adjustments`:
 
 | Kind | Applies to | Effect |
 |---|---|---|
@@ -60,7 +60,12 @@ Changes affect only the forecast. Past months stay as they happened, because tho
 - **Labels come from the server:** a change must name an item in the user's own data, found by `forecastAdjustmentTarget`. The server stores it under the item's own name, never a name the client sends.
 - **Repeats and limits:** saving the same change twice returns the one already saved. The cap is 200 per user, checked under a per-user advisory lock (namespace 872014273) like the planned-event cap.
 
-The report lists the payees behind each typical rate (`typicalPayees`, largest first, up to 25 a direction) so they can be left out one by one, and returns the user's changes (`adjustments`) so the page can undo them.
+The columns:
+
+- **Counted in the forecast:** money in and money out, each with its regular items and the payees behind its typical rate (`typicalPayees`, largest first, up to 25 a direction), then recurring transfers. A side the user overrode on Finances shows the override instead, since nothing learned on that side is used.
+- **Left out:** one-offs, stopped items, and what the user left out. The column is always shown, empty groups included, so the user can see that nothing is left out and what would be. The one-off group states the actual thresholds the engine applied (`oneOffThresholds`: at least $1,000 and twice a typical week, by direction).
+
+An item the user moved stays where it now belongs, marked: a counted one-off among the typical payees ("counted by you", matched by the change's `payeeKey`), a kept item among the regular ones ("kept by you"). Its button undoes the change. A collapsed list of every change, with undo, covers any change whose item is no longer in the data. Long lists show eight items and the rest on request.
 
 ## Planned events
 
