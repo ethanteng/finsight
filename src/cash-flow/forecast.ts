@@ -576,10 +576,12 @@ export function defaultReportRange(
   // Finish the period the horizon lands in, so the last bar is never a stub.
   const toExclusive = minDate(periodEndExclusive(addDays(horizonEnd, -1), granularity), model.forecastEndLimit);
   const firstPeriod = periodStart(minDate(historyStart, model.forecastStart), granularity);
-  // Always clamp to historyStart (coverage or, when there is none, forecastStart)
-  // so a dual-override forecast mid-month does not attribute a stub forecast to a
-  // full calendar period the way an unclamped firstPeriod would.
-  const from = maxDate(firstPeriod, minDate(historyStart, model.forecastStart));
+  // Clip to where known days begin: the history's first day or, with no
+  // history (a forecast built only on overrides), the forecast's first day.
+  // Clipping to the lookback instead would cut a period the history covers
+  // in full, turning the first bar into a stub on most days of the month.
+  const knownFrom = minDate(model.coverageStart ?? model.forecastStart, model.forecastStart);
+  const from = maxDate(firstPeriod, knownFrom);
   return { from, toExclusive };
 }
 

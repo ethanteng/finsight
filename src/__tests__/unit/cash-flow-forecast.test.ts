@@ -216,6 +216,23 @@ describe('buildCashFlowReport', () => {
     expect(report.periods[1]).toMatchObject({ key: '2026-06', coverage: 'partial' });
   });
 
+  it('keeps whole first periods when the history reaches back past the lookback', () => {
+    // History from June 2025; on Oct 15 the twelve-month and three-month
+    // lookbacks land mid-period, and the history covers the whole period.
+    const longHistory = model({
+      transactions: householdTransactions('2025-06-01', '2026-10-14'),
+      dataThrough: '2026-10-14',
+      today: '2026-10-15',
+    });
+    const monthly = buildCashFlowReport(longHistory, { granularity: 'month', horizonMonths: 3 });
+    expect(monthly.range.from).toBe('2025-10-01');
+    expect(monthly.periods[0]).toMatchObject({ key: '2025-10', clipped: false, coverage: 'full' });
+
+    const weekly = buildCashFlowReport(longHistory, { granularity: 'week', horizonMonths: 1 });
+    expect(weekly.range.from).toBe('2026-07-13'); // the Monday of the week holding Jul 15
+    expect(weekly.periods[0]).toMatchObject({ clipped: false, coverage: 'full' });
+  });
+
   it('clips the default range to forecastStart when there is no history', () => {
     const report = buildCashFlowReport(model({
       transactions: [],
