@@ -62,11 +62,24 @@ export function payeeKey(flow: CashFlowDirection, counterpartyKey: string): stri
   return `${flow}|${counterpartyKey}`;
 }
 
+/**
+ * Whether a set of payee choices names this payee, by its key or by the key
+ * it had before (src/cash-flow/ledger.ts), so a choice saved under the old
+ * key keeps applying.
+ */
+export function namesPayee(
+  choices: ReadonlySet<string>,
+  flow: CashFlowDirection,
+  payee: { counterpartyKey: string; legacyCounterpartyKey?: string }
+): boolean {
+  return Boolean(payee.counterpartyKey && choices.has(payeeKey(flow, payee.counterpartyKey)))
+    || Boolean(payee.legacyCounterpartyKey && choices.has(payeeKey(flow, payee.legacyCounterpartyKey)));
+}
+
 /** The choices as lookups the engine applies. */
 export interface ForecastAdjustmentSets {
   excludedPayees: ReadonlySet<string>;
   includedOneOffs: ReadonlySet<string>;
-  continuedStreams: ReadonlySet<string>;
   excludedTransfers: ReadonlySet<string>;
 }
 
@@ -78,7 +91,6 @@ export function forecastAdjustmentSets(adjustments: readonly ForecastAdjustment[
   return {
     excludedPayees: keys('exclude_payee', true),
     includedOneOffs: keys('include_one_off', false),
-    continuedStreams: keys('continue_stream', true),
     excludedTransfers: keys('exclude_transfer', true),
   };
 }

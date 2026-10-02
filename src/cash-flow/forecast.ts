@@ -9,6 +9,7 @@ import {
 } from './calendar';
 import {
   forecastAdjustmentSets,
+  namesPayee,
   payeeKey,
   type ForecastAdjustment,
   type ForecastAdjustmentInput,
@@ -155,8 +156,8 @@ export interface CashFlowModel {
   /** How large a non-repeating amount must be to be left out as a one-off; null without a basis. */
   oneOffThresholds: Record<CashFlowDirection, number> | null;
   adjustments: readonly ForecastAdjustment[];
-  /** Streams that had stopped and are projected because the user kept them. */
-  continuedStreamIds: ReadonlySet<string>;
+  /** Streams that had stopped and are projected because the user kept them: stream id to the id of that choice. */
+  continuedStreams: ReadonlyMap<string, string>;
   /** Projected stream occurrences over the whole forecast limit. */
   scheduled: Array<{
     streamId: string;
@@ -205,6 +206,10 @@ export interface TypicalPayee {
   label: string;
   /** Per day, over the basis. */
   daily: number;
+  /** Transactions in it only because the user counted them: they would have been one-offs. */
+  countedOneOffIds: string[];
+  /** Every transaction it is made of, in the basis. */
+  entryIds: string[];
 }
 
 export interface TransferModel {
@@ -214,6 +219,11 @@ export interface TransferModel {
   /** Net typical transfers per day; negative when more leaves than arrives. */
   dailyNet: number;
   oneOffs: CashFlowEntry[];
+  /**
+   * The cash movements transfers can be learned from, before the user's choices:
+   * a card payment matched to a projected card is the card's, not a transfer.
+   */
+  eligible: CashFlowEntry[];
 }
 
 export function roundCents(value: number): number {
@@ -313,15 +323,18 @@ function learnFlows(
     const key = `${entry.flow}|${entry.counterpartyKey}`;
     payeeCounts.set(key, (payeeCounts.get(key) ?? 0) + 1);
   }
-  const isOneOff = (entry: CashFlowEntry) => {
-    if (countedOneOffs.has(entry.id)) return false;
+  const looksOneOff = (entry: CashFlowEntry) => {
     const repeats = entry.counterpartyKey
       ? (payeeCounts.get(`${entry.flow}|${entry.counterpartyKey}`) ?? 0) > 1
       : false;
     return !repeats && Math.abs(entry.amount) >= oneOffThresholds[entry.flow];
   };
+  // A one-off the user counted joins the typical rate; it is recorded only
+  // while it would otherwise have been left out, so a counted one-off that
+  // aged out of the basis, or whose payee now repeats, is not.
+  const countedIds = new Set(residual.filter(entry => countedOneOffs.has(entry.id) && looksOneOff(entry)).map(entry => entry.id));
 
-  const oneOffs = residual.filter(isOneOff);
+  const oneOffs = residual.filter(entry => looksOneOff(entry) && !countedIds.has(entry.id));
   const oneOffIds = new Set(oneOffs.map(entry => entry.id));
   const totalsByAccount = new Map<string, Record<CashFlowDirection, number>>();
   const byPayee = new Map<string, TypicalPayee & { latest: CalendarDate }>();
@@ -335,8 +348,12 @@ function learnFlows(
     }
     if (!entry.counterpartyKey) continue;
     const key = payeeKey(entry.flow, entry.counterpartyKey);
-    const payee = byPayee.get(key) ?? { flow: entry.flow, counterpartyKey: entry.counterpartyKey, label: entry.label, daily: 0, latest: entry.date };
+    const payee = byPayee.get(key) ?? {
+      flow: entry.flow, counterpartyKey: entry.counterpartyKey, label: entry.label, daily: 0, countedOneOffIds: [], entryIds: [], latest: entry.date,
+    };
     payee.daily += entry.amount / basisDays;
+    if (countedIds.has(entry.id)) payee.countedOneOffIds.push(entry.id);
+    payee.entryIds.push(entry.id);
     if (entry.date >= payee.latest) {
       payee.latest = entry.date;
       payee.label = entry.label;
@@ -352,7 +369,10 @@ function learnFlows(
   const typicalPayees = [...byPayee.values()]
     .filter(payee => payee.daily > 0)
     .sort((left, right) => right.daily - left.daily)
-    .map(payee => ({ flow: payee.flow, counterpartyKey: payee.counterpartyKey, label: payee.label, daily: payee.daily }));
+    .map(payee => ({
+      flow: payee.flow, counterpartyKey: payee.counterpartyKey, label: payee.label, daily: payee.daily, countedOneOffIds: payee.countedOneOffIds,
+      entryIds: payee.entryIds,
+    }));
   return { streams, oneOffs, dailyByAccount, interestDailyByAccount, typicalPayees, oneOffThresholds };
 }
 
@@ -460,8 +480,8 @@ export function buildCashFlowModel(input: CashFlowModelInput): CashFlowModel {
   // leaves it out; the history the report shows still has it.
   const adjustments = input.adjustments ?? [];
   const adjustmentSets = forecastAdjustmentSets(adjustments);
-  const counted = observed.filter(entry =>
-    !(entry.counterpartyKey && adjustmentSets.excludedPayees.has(payeeKey(entry.flow, entry.counterpartyKey))));
+  // A choice may name a payee by its key or by the key it had before.
+  const counted = observed.filter(entry => !namesPayee(adjustmentSets.excludedPayees, entry.flow, entry));
   const modeledInterestCards = new Set(cardSetups.filter(card => card.modelsInterest).map(card => card.account.id));
   const entries = counted.filter(entry => !(entry.interest && modeledInterestCards.has(entry.accountId)));
   // Streams learned from interest charges (kept when modelsInterest is false)
@@ -470,11 +490,17 @@ export function buildCashFlowModel(input: CashFlowModelInput): CashFlowModel {
   const interestEntryIds = new Set(observed.filter(entry => entry.interest).map(entry => entry.id));
 
   const learned = learnFlows(entries, input.dataThrough, basisStart, forecastStart, adjustmentSets.includedOneOffs);
-  // A stopped stream the user kept is projected on its cadence like an active one.
-  const continuedStreamIds = new Set<string>();
+  // A stopped stream the user kept is projected on its cadence like an active
+  // one. The choice may name it by its key, or by a key its transactions had before.
+  const entriesById = new Map(entries.map(entry => [entry.id, entry]));
+  const continuedStreams = new Map<string, string>();
   const streams = learned.streams.map(stream => {
-    if (stream.status !== 'lapsed' || !adjustmentSets.continuedStreams.has(payeeKey(stream.flow, stream.counterpartyKey))) return stream;
-    continuedStreamIds.add(stream.id);
+    if (stream.status !== 'lapsed') return stream;
+    const keys = new Set([stream.counterpartyKey, ...stream.entryIds.flatMap(id => entriesById.get(id)?.legacyCounterpartyKey ?? [])]);
+    const kept = adjustments.find(adjustment =>
+      adjustment.kind === 'continue_stream' && adjustment.flow === stream.flow && keys.has(adjustment.key));
+    if (!kept) return stream;
+    continuedStreams.set(stream.id, kept.id);
     return { ...stream, status: 'active' as const };
   });
   let dailyIncome = sumDaily(learned.dailyByAccount, 'income');
@@ -582,7 +608,7 @@ export function buildCashFlowModel(input: CashFlowModelInput): CashFlowModel {
       .filter(movement => movement.cardPayment && movement.pairedWith && projectedCards.has(movement.accountId))
       .map(movement => movement.pairedWith as string)
   );
-  const transferEntries: CashFlowEntry[] = ledger.movements
+  const eligibleTransfers: CashFlowEntry[] = ledger.movements
     .filter(movement => cashIds.has(movement.accountId) && movement.date <= input.dataThrough && !pairedToProjectedCard.has(movement.id))
     .map((movement): CashFlowEntry => ({
       id: movement.id,
@@ -591,10 +617,11 @@ export function buildCashFlowModel(input: CashFlowModelInput): CashFlowModel {
       flow: movement.amount > 0 ? 'income' : 'spending',
       amount: Math.abs(movement.amount),
       counterpartyKey: movement.counterpartyKey,
+      ...(movement.legacyCounterpartyKey && { legacyCounterpartyKey: movement.legacyCounterpartyKey }),
       label: movement.label,
       category: 'Transfer',
-    }))
-    .filter(entry => !(entry.counterpartyKey && adjustmentSets.excludedTransfers.has(payeeKey(entry.flow, entry.counterpartyKey))));
+    }));
+  const transferEntries = eligibleTransfers.filter(entry => !namesPayee(adjustmentSets.excludedTransfers, entry.flow, entry));
   const learnedTransfers = learnFlows(transferEntries, input.dataThrough, basisStart, forecastStart);
   const transfers: TransferModel = {
     streams: learnedTransfers.streams,
@@ -608,6 +635,7 @@ export function buildCashFlowModel(input: CashFlowModelInput): CashFlowModel {
         }))),
     dailyNet: sumDaily(learnedTransfers.dailyByAccount, 'income') - sumDaily(learnedTransfers.dailyByAccount, 'spending'),
     oneOffs: learnedTransfers.oneOffs,
+    eligible: eligibleTransfers,
   };
 
   return {
@@ -634,7 +662,7 @@ export function buildCashFlowModel(input: CashFlowModelInput): CashFlowModel {
     typicalPayees: learned.typicalPayees.filter(payee => (payee.flow === 'income' ? incomeSource : spendingSource) === 'transactions'),
     oneOffThresholds: learned.oneOffThresholds,
     adjustments,
-    continuedStreamIds,
+    continuedStreams,
     scheduled,
     cardDailySpending,
     cards,
@@ -886,7 +914,44 @@ export interface CashFlowReportRequest {
   to?: CalendarDate;
 }
 
-export interface CashFlowRecurringSummary {
+/** One transaction behind an item on the page. */
+export interface CashFlowItemTransaction {
+  id: string;
+  date: CalendarDate;
+  amount: number;
+  /** Null when the transaction has no category. */
+  category: string | null;
+}
+
+/** The latest transactions behind an item, and how many there are in all. */
+export interface CashFlowItemTransactions {
+  /** Latest first, at most ITEM_TRANSACTIONS_LISTED. */
+  transactions: CashFlowItemTransaction[];
+  transactionCount: number;
+}
+
+/** An item lists at most this many of its transactions. */
+const ITEM_TRANSACTIONS_LISTED = 12;
+
+function categoryOf(category: string | undefined): string | null {
+  const value = category?.trim();
+  return value && value !== 'Uncategorized' ? value : null;
+}
+
+function itemTransactions(items: ReadonlyArray<{ id: string; date: CalendarDate; amount: number; category?: string }>): CashFlowItemTransactions {
+  const latest = [...items].sort((left, right) => right.date.localeCompare(left.date) || left.id.localeCompare(right.id));
+  return {
+    transactions: latest.slice(0, ITEM_TRANSACTIONS_LISTED).map(item => ({
+      id: item.id,
+      date: item.date,
+      amount: roundCents(item.amount),
+      category: categoryOf(item.category),
+    })),
+    transactionCount: items.length,
+  };
+}
+
+export interface CashFlowRecurringSummary extends CashFlowItemTransactions {
   id: string;
   /** The ledger's key for the payee, which an adjustment names it by. */
   payeeKey: string;
@@ -904,27 +969,24 @@ export interface CashFlowRecurringSummary {
   replacedByOverride: boolean;
   /** It had stopped, and is projected because the user kept it. */
   continuedByUser: boolean;
+  /** The id of the choice that keeps it; null when none does. */
+  continuedBy: string | null;
 }
 
 /** A payee behind a typical rate, and what it adds to it a month. */
-export interface CashFlowTypicalPayeeSummary {
+export interface CashFlowTypicalPayeeSummary extends CashFlowItemTransactions {
   flow: CashFlowDirection;
   payeeKey: string;
   label: string;
   monthlyAmount: number;
+  /** Transactions in it only because the user counted them, by transaction id. */
+  countedOneOffIds: string[];
 }
 
-export interface CashFlowAdjustmentSummary extends ForecastAdjustment {
+export interface CashFlowAdjustmentSummary extends ForecastAdjustment, CashFlowItemTransactions {
   /** For a counted one-off: when it happened and how much it was; otherwise null. */
   date: CalendarDate | null;
   amount: number | null;
-  /**
-   * The payee the change is about: its key, or a counted one-off's payee when
-   * that count still places the payee among the typical rates; null if the
-   * transaction is gone or no longer feeds typical (so the page does not mark
-   * a later typical row as "counted by you").
-   */
-  payeeKey: string | null;
 }
 
 /** The report lists at most this many typical payees in each direction. */
@@ -966,7 +1028,7 @@ export interface CashFlowReport {
   };
   recurring: CashFlowRecurringSummary[];
   /** Every one-off in the basis, largest first, so each can be counted. */
-  oneOffs: Array<{ id: string; date: CalendarDate; label: string; flow: CashFlowDirection; amount: number }>;
+  oneOffs: Array<{ id: string; date: CalendarDate; label: string; flow: CashFlowDirection; amount: number; category: string | null }>;
   /** How large a non-repeating amount must be to be a one-off, by direction; null without a basis. */
   oneOffThresholds: Record<CashFlowDirection, number> | null;
   /** Largest first, for the sides read from transactions. */
@@ -1026,7 +1088,7 @@ export interface CashFlowPositionSummary {
   lowNext12Months: { date: CalendarDate; cash: number } | null;
   transfers: {
     typicalMonthlyNet: number;
-    recurring: Array<{
+    recurring: Array<CashFlowItemTransactions & {
       id: string;
       payeeKey: string;
       label: string;
@@ -1097,6 +1159,7 @@ function cardSummary(card: CardModel): CashFlowCardSummary {
 
 function positionSummary(model: CashFlowModel, range: { from: CalendarDate; toExclusive: CalendarDate }, periods: readonly CashFlowPeriod[]): CashFlowPositionSummary {
   const position = buildCashPosition(model);
+  const movements = new Map(model.ledger.movements.map(movement => [movement.id, movement]));
   const nextDates = new Map<string, CalendarDate>();
   for (const item of model.transfers.scheduled) {
     const existing = nextDates.get(item.streamId);
@@ -1114,6 +1177,10 @@ function positionSummary(model: CashFlowModel, range: { from: CalendarDate; toEx
         amount: roundCents(stream.amount),
         direction: stream.flow === 'income' ? 'in' as const : 'out' as const,
         nextDate: nextDates.get(stream.id) ?? null,
+        ...itemTransactions(stream.entryIds.flatMap(id => {
+          const movement = movements.get(id);
+          return movement ? [{ id: movement.id, date: movement.date, amount: Math.abs(movement.amount) }] : [];
+        })),
       })),
   };
   if (!position.available) {
@@ -1205,24 +1272,28 @@ function customReportRange(
 
 function summarizeAdjustments(model: CashFlowModel): CashFlowAdjustmentSummary[] {
   const entries = new Map(model.ledger.entries.map(entry => [entry.id, entry]));
-  const basisStart = model.typical.basisStart;
-  const feedsTypical = (flow: CashFlowDirection, counterpartyKey: string) =>
-    model.typicalPayees.some(payee => payee.flow === flow && payee.counterpartyKey === counterpartyKey);
   return model.adjustments.map(adjustment => {
-    if (adjustment.kind !== 'include_one_off') return { ...adjustment, date: null, amount: null, payeeKey: adjustment.key };
-    const entry = entries.get(adjustment.key);
-    // Only name the payee when this count still places it among the typical
-    // payees. A stale count whose transaction left the basis keeps date/amount
-    // for the change list, but must not mark a later typical row as "counted by you".
-    const inBasis = Boolean(entry && basisStart && entry.date >= basisStart && entry.date < model.forecastStart);
-    const payeeKey = inBasis && entry!.counterpartyKey && feedsTypical(entry!.flow, entry!.counterpartyKey)
-      ? entry!.counterpartyKey
-      : null;
+    const counted = adjustment.kind === 'include_one_off' ? entries.get(adjustment.key) : undefined;
+    // A choice may name its payee by the key it has now or the key it had before.
+    const named = (item: { counterpartyKey: string; legacyCounterpartyKey?: string }) =>
+      item.counterpartyKey === adjustment.key || item.legacyCounterpartyKey === adjustment.key;
+    // The transactions the change is about: the counted one, a payee's in that
+    // direction, or a payee's transfers in or out of a cash account.
+    const behind = adjustment.kind === 'include_one_off'
+      ? (counted ? [counted] : [])
+      : adjustment.kind === 'exclude_transfer'
+        // Only movements the transfer model could learn from: a payment matched
+        // to a projected card was never a transfer, so the choice never touched it.
+        ? model.transfers.eligible
+          .filter(entry => entry.flow === adjustment.flow && named(entry))
+          .map(entry => ({ id: entry.id, date: entry.date, amount: entry.amount }))
+        : model.ledger.entries.filter(entry =>
+          entry.date <= model.dataThrough && entry.flow === adjustment.flow && named(entry));
     return {
       ...adjustment,
-      date: entry?.date ?? null,
-      amount: entry ? roundCents(entry.amount) : null,
-      payeeKey,
+      date: counted?.date ?? null,
+      amount: counted ? roundCents(counted.amount) : null,
+      ...itemTransactions(behind),
     };
   });
 }
@@ -1246,12 +1317,9 @@ export function forecastAdjustmentTarget(model: CashFlowModel, input: ForecastAd
     case 'continue_stream':
       return found(model.streams.find(stream =>
         stream.status === 'lapsed' && stream.flow === input.flow && stream.counterpartyKey === input.key)?.label ?? null);
-    case 'exclude_transfer': {
-      const cash = new Set(model.ledger.accounts.filter(account => account.kind === 'cash').map(account => account.id));
-      return found(latestLabel(model.ledger.movements.filter(movement =>
-        cash.has(movement.accountId) && movement.date <= model.dataThrough && movement.counterpartyKey === input.key
-        && (movement.amount > 0 ? 'income' : 'spending') === input.flow)));
-    }
+    case 'exclude_transfer':
+      return found(latestLabel(model.transfers.eligible.filter(entry =>
+        entry.flow === input.flow && entry.counterpartyKey === input.key)));
   }
 }
 
@@ -1267,6 +1335,7 @@ export function buildCashFlowReport(model: CashFlowModel, request: CashFlowRepor
   const actual = coverage === 'partial' ? null : actualTotals(model, range.from, range.toExclusive);
   const forecast = forecastTotals(model, range.from, range.toExclusive);
 
+  const entriesById = new Map(model.ledger.entries.map(entry => [entry.id, entry]));
   const scheduledByStream = new Map<string, CalendarDate>();
   for (const occurrence of model.scheduled) {
     const existing = scheduledByStream.get(occurrence.streamId);
@@ -1302,6 +1371,7 @@ export function buildCashFlowReport(model: CashFlowModel, request: CashFlowRepor
       monthlyExpenseOverride: model.typical.monthlyExpenseOverride,
     },
     recurring: model.streams.map(stream => ({
+      ...itemTransactions(stream.entryIds.flatMap(id => entriesById.get(id) ?? [])),
       id: stream.id,
       payeeKey: stream.counterpartyKey,
       label: stream.label,
@@ -1315,9 +1385,11 @@ export function buildCashFlowReport(model: CashFlowModel, request: CashFlowRepor
       status: stream.status,
       category: stream.category,
       replacedByOverride: (stream.flow === 'income' ? model.typical.incomeSource : model.typical.spendingSource) === 'override',
-      continuedByUser: model.continuedStreamIds.has(stream.id),
+      continuedByUser: model.continuedStreams.has(stream.id),
+      continuedBy: model.continuedStreams.get(stream.id) ?? null,
     })),
     oneOffs: model.oneOffs.map(entry => ({
+      category: categoryOf(entry.category),
       id: entry.id,
       date: entry.date,
       label: entry.label,
@@ -1336,6 +1408,8 @@ export function buildCashFlowReport(model: CashFlowModel, request: CashFlowRepor
         payeeKey: payee.counterpartyKey,
         label: payee.label,
         monthlyAmount: roundCents(payee.daily * DAYS_PER_MONTH),
+        countedOneOffIds: payee.countedOneOffIds,
+        ...itemTransactions(payee.entryIds.flatMap(id => entriesById.get(id) ?? [])),
       }))),
     adjustments: summarizeAdjustments(model),
     plannedEvents: model.plannedEvents.map(event => {

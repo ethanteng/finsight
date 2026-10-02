@@ -38,6 +38,8 @@ export interface CashFlowEntry {
   amount: number;
   /** Normalized counterparty used to recognize repeats; empty when unknown. */
   counterpartyKey: string;
+  /** The key this payee had before reference words were dropped whole; set only where it differs. */
+  legacyCounterpartyKey?: string;
   /** The provider's merchant or description, for display. */
   label: string;
   category: string;
@@ -66,6 +68,8 @@ export interface CashFlowMovement {
    */
   pairedWith: string | null;
   counterpartyKey: string;
+  /** The key this payee had before reference words were dropped whole; set only where it differs. */
+  legacyCounterpartyKey?: string;
   label: string;
 }
 
@@ -108,20 +112,39 @@ function text(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
 }
 
-/**
- * A key that stays the same across one payee's repeats. Digits carry dates,
- * check and reference numbers that change every time, so they are dropped
- * along with ACH boilerplate.
- */
-export function counterpartyKey(merchantName: unknown, name: unknown): string {
-  const raw = text(merchantName) || text(name);
-  return raw
+function lettersKey(value: string): string {
+  return value
     .toLowerCase()
     .replace(/[0-9]+/g, ' ')
     .replace(/[^a-z&]+/g, ' ')
     .split(' ')
     .filter(token => token && !COUNTERPARTY_NOISE.has(token))
     .join(' ');
+}
+
+/**
+ * A key that stays the same across one payee's repeats. A word with a digit
+ * in it is a reference, not part of the name: an ACH id ("ID:ABC123XYZ"), an
+ * order or confirmation number, a date. It changes with every payment, so it
+ * is dropped whole, as the display label drops it, along with ACH
+ * boilerplate. Dropping only its digits would keep letters that differ every
+ * time and split one payee into many. A name made only of such words
+ * (1Password, 7-Eleven) keeps its letters instead, so it still has a key.
+ */
+export function counterpartyKey(merchantName: unknown, name: unknown): string {
+  const raw = text(merchantName) || text(name);
+  const words = raw.toLowerCase().split(/[\s:#*/]+/).filter(word => word && !/\d/.test(word));
+  return lettersKey(words.join(' ')) || lettersKey(raw);
+}
+
+/**
+ * The key a payee had before reference words were dropped whole: only their
+ * digits went. Choices the user saved under it still apply. Undefined where
+ * it is the same as the current key.
+ */
+export function legacyCounterpartyKey(merchantName: unknown, name: unknown): string | undefined {
+  const legacy = lettersKey(text(merchantName) || text(name));
+  return legacy && legacy !== counterpartyKey(merchantName, name) ? legacy : undefined;
 }
 
 /**
@@ -135,6 +158,11 @@ function cleanDescription(name: string): string {
     .split(/[\s:#*/]+/)
     .filter(token => token && !/\d/.test(token) && !COUNTERPARTY_NOISE.has(token.toLowerCase()))
     .join(' ');
+}
+
+function withLegacyKey(transaction: any): { legacyCounterpartyKey?: string } {
+  const legacy = legacyCounterpartyKey(transaction?.merchant_name, transaction?.name);
+  return legacy ? { legacyCounterpartyKey: legacy } : {};
 }
 
 function displayLabel(transaction: any): string {
@@ -234,6 +262,7 @@ export function buildCashFlowLedger(
           : movementAmount < 0 && detailedCategory(transaction).includes('credit_card_payment'),
         pairedWith: null,
         counterpartyKey: counterpartyKey(transaction?.merchant_name, transaction?.name),
+        ...withLegacyKey(transaction),
         label: displayLabel(transaction),
       });
       continue;
@@ -261,6 +290,7 @@ export function buildCashFlowLedger(
       flow,
       amount,
       counterpartyKey: counterpartyKey(transaction?.merchant_name, transaction?.name),
+      ...withLegacyKey(transaction),
       label: displayLabel(transaction),
       category: canonical.category?.trim() || 'Uncategorized',
       ...(flow === 'spending' && creditIds.has(canonical.accountKey)

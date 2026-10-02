@@ -25,6 +25,7 @@ A forecast has three disclosed parts:
    - A payment that lands early or late still belongs to its own cycle.
    - One due shortly before the forecast starts and not yet posted is still expected on the first forecast day. One overdue past its grace period is treated as missed.
    - A stream that stopped is listed as lapsed and not projected.
+   - Repeats are recognized by payee: a key from the merchant name, or else the bank description, with ACH boilerplate and every word containing a digit dropped (an ACH id like `ID:ABC123XYZ`, an order or confirmation number). Those words change with every payment, so keeping their letters would split one payee into many, as it did for payroll whose reference code changes each time. A name made only of such words (1Password, 7-Eleven) keeps its letters.
    - Annual charges are not recognised, because a year of history shows them once. They fall into typical spending as a daily rate.
 2. **Typical**: everything else, as a daily rate over at most the last 90 days.
    - A large amount from a payee seen only once in that window is a one-off. It is left out of the rate and listed, because a past windfall or big purchase is not assumed to repeat.
@@ -57,6 +58,7 @@ The page lays out what the forecast is built from in two columns, "Counted in th
 Changes affect only the forecast. Past months stay as they happened, because those transactions did happen. Something that is not really income or spending, such as a transfer to the user's own account, is a category change instead: it is made in Accounts & context and corrects the history and every other part of Ask Linc.
 
 - **How items are named:** a payee by its direction and the ledger's counterparty key, which is what a recurring stream is grouped on; a one-off by its transaction id. A change therefore holds across refreshes for as long as the provider describes the payee the same way. If the payee disappears from the data, the change does nothing.
+- **Earlier keys:** keys once kept the letters of reference words. Each transaction also carries the key it had then (`legacyCounterpartyKey`, only where it differs), and a choice matches a payee by either, so changes saved before the keys changed keep applying. The report names the choice that keeps a stopped item (`continuedBy`), since that choice may hold the earlier key.
 - **Labels come from the server:** a change must name an item in the user's own data, found by `forecastAdjustmentTarget`. The server stores it under the item's own name, never a name the client sends.
 - **Repeats and limits:** saving the same change twice returns the one already saved. The cap is 200 per user, checked under a per-user advisory lock (namespace 872014273) like the planned-event cap.
 
@@ -65,7 +67,11 @@ The columns:
 - **Counted in the forecast:** money in and money out, each with its regular items and the payees behind its typical rate (`typicalPayees`, largest first, up to 25 a direction), then recurring transfers. A side the user overrode on Finances shows the override instead, since nothing learned on that side is used.
 - **Left out:** one-offs, stopped items, and what the user left out. The column is always shown, empty groups included, so the user can see that nothing is left out and what would be. The one-off group states the actual thresholds the engine applied (`oneOffThresholds`: at least $1,000 and twice a typical week, by direction).
 
-An item the user moved stays where it now belongs, marked: a counted one-off among the typical payees ("counted by you", matched by the change's `payeeKey` only while that count still feeds the typical rate), a kept item among the regular ones ("kept by you"). Its button undoes the change. A collapsed list of every change, with undo, covers any change whose item is no longer in the data. Long lists show eight items and the rest on request.
+An item the user moved stays where it now belongs, marked: a counted one-off among the typical payees ("counted by you"), a kept item among the regular ones ("kept by you"). Its button undoes the change. A typical payee lists the transactions it holds only because the user counted them (`countedOneOffIds`): ones that would otherwise have been one-offs. So a counted one-off that has aged out of the basis, or whose payee now repeats, is not credited, and undoing it from that row cannot remove a change that is doing something else. A collapsed list of every change, with undo, covers any change whose item is no longer in the data.
+
+Every item shows its category where its transactions have one, and the transactions behind it: the latest at a glance ("6 transactions · latest Sep 14, 2026: $81.20"), and on request each one's date, amount and category. The report carries up to 12 per item, latest first, with the total (`transactions`, `transactionCount`): a regular item's occurrences, the transactions a typical payee is made of in the basis, a left-out payee's transactions, a transfer's movements. A one-off is a single transaction, so it shows its date, amount and category inline.
+
+Long lists show eight items. "Show more" adds eight at a time and "Show all" shows the rest; "Show fewer" goes back to eight and "Hide all" folds the list away.
 
 ## Planned events
 

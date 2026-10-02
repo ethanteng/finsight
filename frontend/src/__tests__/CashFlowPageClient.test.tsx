@@ -60,8 +60,8 @@ function report(overrides: Partial<CashFlowReport> = {}): CashFlowReport {
     ],
     oneOffThresholds: { income: 1000, spending: 1000 },
     typicalPayees: [
-      { flow: 'spending', payeeKey: 'safeway', label: 'Safeway', monthlyAmount: 610.2 },
-      { flow: 'spending', payeeKey: 'trader joes', label: 'Trader Joes', monthlyAmount: 480 },
+      { flow: 'spending', payeeKey: 'safeway', label: 'Safeway', monthlyAmount: 610.2, countedOneOffIds: [] },
+      { flow: 'spending', payeeKey: 'trader joes', label: 'Trader Joes', monthlyAmount: 480, countedOneOffIds: [] },
     ],
     adjustments: [],
     oneOffs: [{ id: 'flight', date: '2026-09-10', label: 'United Airlines', flow: 'spending', amount: 2400 }],
@@ -328,11 +328,69 @@ describe('CashFlowPageClient', () => {
       expect(within(section).getByText('Store 11')).toBeInTheDocument();
     });
 
+    it('shows more eight at a time, all at once, fewer again, or none', async () => {
+      const typicalPayees = Array.from({ length: 20 }, (_, index) => ({
+        flow: 'spending' as const, payeeKey: `store ${index}`, label: `Store ${index}`, monthlyAmount: 500 - index * 10, countedOneOffIds: [],
+      }));
+      adjusting(report({ typicalPayees }));
+      render(<CashFlowPageClient />);
+      const section = await basis();
+      const button = (name: string) => within(section).getByRole('button', { name });
+      expect(within(section).queryByText('Store 8')).not.toBeInTheDocument();
+
+      fireEvent.click(button('Show 8 more'));
+      expect(within(section).getByText('Store 15')).toBeInTheDocument();
+      expect(within(section).queryByText('Store 16')).not.toBeInTheDocument();
+
+      fireEvent.click(button('Show all 20'));
+      expect(within(section).getByText('Store 19')).toBeInTheDocument();
+
+      fireEvent.click(button('Show fewer'));
+      expect(within(section).getByText('Store 7')).toBeInTheDocument();
+      expect(within(section).queryByText('Store 8')).not.toBeInTheDocument();
+
+      fireEvent.click(button('Hide all'));
+      expect(within(section).queryByText('Store 0')).not.toBeInTheDocument();
+      expect(within(section).getByText('20 hidden')).toBeInTheDocument();
+      fireEvent.click(button('Show 8 more'));
+      expect(within(section).getByText('Store 0')).toBeInTheDocument();
+    });
+
+    it('shows each item’s category and its transactions’ dates and amounts', async () => {
+      const [gusto, rent, gym] = report().recurring;
+      const body = report({
+        recurring: [gusto, {
+          ...rent,
+          transactions: [
+            { id: 'rent-oct', date: '2026-10-01', amount: 2000, category: 'Rent' },
+            { id: 'rent-sep', date: '2026-09-01', amount: 2000, category: 'Rent' },
+          ],
+          transactionCount: 5,
+        }, gym],
+        oneOffs: [{ ...report().oneOffs[0], category: 'Travel' }],
+      });
+      adjusting(body);
+      render(<CashFlowPageClient />);
+      const section = await basis();
+      expect(within(section).getByText('Every month · next Nov 1, 2026 · Rent')).toBeInTheDocument();
+      expect(within(section).getByText('Sep 10, 2026 · Travel')).toBeInTheDocument();
+
+      const toggle = within(section).getByRole('button', { name: '5 transactions · latest Oct 1, 2026: $2,000.00' });
+      expect(toggle).toHaveAttribute('aria-expanded', 'false');
+      fireEvent.click(toggle);
+      expect(toggle).toHaveAttribute('aria-expanded', 'true');
+      expect(within(section).getByText('Sep 1, 2026 · Rent')).toBeInTheDocument();
+      expect(within(section).getByText('Showing the latest 2 of 5.')).toBeInTheDocument();
+    });
+
     it('marks a one-off the user counted where it now sits, and moves it back', async () => {
       const body = report({
-        typicalPayees: [...report().typicalPayees, { flow: 'spending', payeeKey: 'united airlines', label: 'United Airlines', monthlyAmount: 811.11 }],
+        typicalPayees: [
+          ...report().typicalPayees,
+          { flow: 'spending', payeeKey: 'united airlines', label: 'United Airlines', monthlyAmount: 811.11, countedOneOffIds: ['flight'] },
+        ],
         oneOffs: [],
-        adjustments: [{ id: 'adj-flight', kind: 'include_one_off', flow: 'spending', key: 'flight', label: 'United Airlines', date: '2026-09-10', amount: 2400, payeeKey: 'united airlines' }],
+        adjustments: [{ id: 'adj-flight', kind: 'include_one_off', flow: 'spending', key: 'flight', label: 'United Airlines', date: '2026-09-10', amount: 2400 }],
       });
       const calls = adjusting(body);
       render(<CashFlowPageClient />);
@@ -343,9 +401,27 @@ describe('CashFlowPageClient', () => {
       expect(calls.find(call => call.init?.method === 'DELETE')!.url).toMatch(/adjustments\/adj-flight$/);
     });
 
+    it('does not credit a counted one-off that no longer puts anything in the typical rate', async () => {
+      // The user once counted a United flight; now the payee's spending is typical on its own.
+      const body = report({
+        typicalPayees: [
+          ...report().typicalPayees,
+          { flow: 'spending', payeeKey: 'united airlines', label: 'United Airlines', monthlyAmount: 120, countedOneOffIds: [] },
+        ],
+        // Even a change that names the payee is not credited unless the payee says it counts.
+        adjustments: [{ id: 'adj-old-flight', kind: 'include_one_off', flow: 'spending', key: 'old-flight', label: 'United Airlines', date: null, amount: null, payeeKey: 'united airlines' }],
+      });
+      adjusting(body);
+      render(<CashFlowPageClient />);
+      const section = await basis();
+      expect(within(section).queryByText('counted by you')).not.toBeInTheDocument();
+      expect(within(section).queryByRole('button', { name: 'Move back: United Airlines' })).not.toBeInTheDocument();
+      expect(within(section).getByRole('button', { name: 'Leave out: United Airlines' })).toBeInTheDocument();
+    });
+
     it('lists what the user left out, and puts it back', async () => {
       const body = report({
-        adjustments: [{ id: 'adj-consu', kind: 'exclude_payee', flow: 'spending', key: 'ethan teng consu', label: 'Ethan Teng Consu', date: null, amount: null, payeeKey: 'ethan teng consu' }],
+        adjustments: [{ id: 'adj-consu', kind: 'exclude_payee', flow: 'spending', key: 'ethan teng consu', label: 'Ethan Teng Consu', date: null, amount: null }],
       });
       const calls = adjusting(body);
       render(<CashFlowPageClient />);
@@ -377,10 +453,11 @@ describe('CashFlowPageClient', () => {
     });
 
     it('stops counting an item the user kept', async () => {
-      const kept = { ...report().recurring[2], status: 'active' as const, continuedByUser: true, nextDate: '2026-11-05' };
+      const kept = { ...report().recurring[2], status: 'active' as const, continuedByUser: true, continuedBy: 'adj-gym', nextDate: '2026-11-05' };
       const body = report({
         recurring: [report().recurring[0], report().recurring[1], kept],
-        adjustments: [{ id: 'adj-gym', kind: 'continue_stream', flow: 'spending', key: 'old gym', label: 'Old Gym', date: null, amount: null }],
+        // Saved under the payee's earlier key, which the report's continuedBy still names.
+        adjustments: [{ id: 'adj-gym', kind: 'continue_stream', flow: 'spending', key: 'old gym nd', label: 'Old Gym', date: null, amount: null }],
       });
       const calls = adjusting(body);
       render(<CashFlowPageClient />);

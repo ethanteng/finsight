@@ -1,5 +1,5 @@
-import type { CalendarDate } from '../../cash-flow/calendar';
-import { buildCashFlowLedger, counterpartyKey, type CashFlowEntry } from '../../cash-flow/ledger';
+import { addDays, type CalendarDate } from '../../cash-flow/calendar';
+import { buildCashFlowLedger, counterpartyKey, legacyCounterpartyKey, type CashFlowEntry } from '../../cash-flow/ledger';
 import { detectRecurringStreams, scheduleStream, type RecurringStream } from '../../cash-flow/recurring';
 import {
   ACCOUNTS,
@@ -137,6 +137,32 @@ describe('buildCashFlowLedger', () => {
     expect(counterpartyKey(null, 'GUSTO DES:PAYROLL ID:88231 INDN:SMITH')).toBe('gusto payroll smith');
     expect(counterpartyKey(null, 'GUSTO DES:PAYROLL ID:99102 INDN:SMITH')).toBe('gusto payroll smith');
     expect(counterpartyKey('Netflix', 'NETFLIX.COM 866-579')).toBe('netflix');
+  });
+
+  it('drops reference words whole, so a fresh ID code each time does not make a new payee', () => {
+    const navi = (code: string) => counterpartyKey(null, `Navi Nurses DES:PAYROLL ID:${code} INDN:David Teng CO ID:XXXXX12345 PPD`);
+    expect(navi('ABC123XYZ')).toBe('navi nurses payroll david teng');
+    expect(navi('QRS456TUV')).toBe('navi nurses payroll david teng');
+    expect(counterpartyKey(null, 'AMZN MKTP US*AB12C34D5')).toBe(counterpartyKey(null, 'AMZN MKTP US*ZZ98Y76X5'));
+    // A name made only of such words keeps its letters, so it still has a key.
+    expect(counterpartyKey('1Password', null)).toBe('password');
+    expect(counterpartyKey(null, '7-ELEVEN #1234')).toBe('eleven');
+  });
+
+  it('remembers the key a payee had before, only where it differs', () => {
+    expect(legacyCounterpartyKey(null, 'Navi Nurses DES:PAYROLL ID:ABC123XYZ INDN:David Teng')).toBe('navi nurses payroll abc xyz david teng');
+    expect(legacyCounterpartyKey(null, 'GUSTO DES:PAYROLL ID:88231 INDN:SMITH')).toBeUndefined();
+    expect(legacyCounterpartyKey('Netflix', null)).toBeUndefined();
+  });
+
+  it('finds one regular paycheck when each deposit carries a fresh reference code', () => {
+    const codes = ['ABC123XYZ', 'QRS456TUV', 'LMN789OPQ', 'DEF246GHI', 'JKL135MNO', 'PQR864STU', 'VWX975YZA'];
+    const paychecks = codes.map((code, index) => tx('checking', addDays('2026-07-03', index * 14), 'income', 3104.22,
+      `Navi Nurses DES:PAYROLL ID:${code} INDN:David Teng CO ID:XXXXX12345 PPD`));
+    const streams = detectRecurringStreams(buildCashFlowLedger(paychecks, ACCOUNTS).entries, '2026-09-30');
+    expect(streams).toEqual([
+      expect.objectContaining({ label: 'Navi Nurses PAYROLL David Teng', flow: 'income', cadence: 'biweekly', occurrences: 7, status: 'active' }),
+    ]);
   });
 });
 
