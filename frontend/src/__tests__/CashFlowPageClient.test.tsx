@@ -724,7 +724,9 @@ describe('CashFlowPageClient', () => {
 
       fireEvent.click(screen.getByRole('button', { name: 'Add planned event' }));
       fireEvent.click(screen.getByRole('button', { name: 'Money in' }));
-      expect(screen.getByLabelText('Account')).toHaveValue('checking');
+      // A new event follows the primary account until another is picked.
+      expect(screen.getByLabelText('Account')).toHaveValue('');
+      expect(screen.getByRole('option', { name: 'Primary account (Everyday Checking ••1234)' })).toBeInTheDocument();
       fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Gift' } });
       fireEvent.change(screen.getByLabelText('Amount'), { target: { value: '1000' } });
       fireEvent.change(screen.getByLabelText('Account'), { target: { value: 'savings' } });
@@ -767,7 +769,7 @@ describe('CashFlowPageClient', () => {
       expect(within(panel).getByText(/account no longer connected/)).toBeInTheDocument();
 
       fireEvent.click(screen.getByRole('button', { name: 'Edit Old gift' }));
-      expect(screen.getByLabelText('Account')).toHaveValue('checking');
+      expect(screen.getByLabelText('Account')).toHaveValue('');
       fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
 
       await waitFor(() => expect(calls.some(call => call.init?.method === 'PUT')).toBe(true));
@@ -788,7 +790,7 @@ describe('CashFlowPageClient', () => {
       await screen.findByRole('heading', { name: 'Planned events' });
 
       fireEvent.click(screen.getByRole('button', { name: `Edit ${bonus.label}` }));
-      expect(screen.getByLabelText('Account')).toHaveValue('checking');
+      expect(screen.getByLabelText('Account')).toHaveValue('');
       fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
       await waitFor(() => expect(calls.some(call => call.init?.method === 'PUT')).toBe(true));
       expect(saved(calls)).toMatchObject({ accountId: null });
@@ -798,6 +800,13 @@ describe('CashFlowPageClient', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
       await waitFor(() => expect(calls.filter(call => call.init?.method === 'PUT')).toHaveLength(2));
       expect(saved(calls)).toMatchObject({ accountId: 'savings' });
+
+      // Picking the primary account by name pins it there.
+      fireEvent.click(await screen.findByRole('button', { name: `Edit ${bonus.label}` }));
+      fireEvent.change(screen.getByLabelText('Account'), { target: { value: 'checking' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+      await waitFor(() => expect(calls.filter(call => call.init?.method === 'PUT')).toHaveLength(3));
+      expect(saved(calls)).toMatchObject({ accountId: 'checking' });
     });
   });
 
