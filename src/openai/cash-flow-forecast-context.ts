@@ -749,7 +749,7 @@ export function compactCashFlowForecastDetails(context: CashFlowForecastContext)
             ...((context.position.accounts ?? []).length > 0 && {
               accounts: (context.position.accounts ?? []).map((account, index) => ({
                 account: cashAccountLabel(account),
-                ...(account.primary && { primary: 'paychecks land here; planned income and expenses without an account go here too' }),
+                ...(account.primary && { primary: 'most historical income; planned income and expenses without an account land here' }),
                 factIdPrefix: `cash_flow_account_${index + 1}_`,
                 lowestPointDate: account.lowNext12Months?.date ?? null,
               })),

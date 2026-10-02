@@ -194,7 +194,7 @@ The cash position is unavailable when:
 
 - there is no forecast;
 - there are no cash accounts;
-- any cash account has no reported balance. A partial sum would be wrong, not smaller, because income keeps landing in the account it cannot see.
+- any account among those the position covers has no reported balance. A partial sum would be wrong, not smaller, because income keeps landing in the account it cannot see.
 
 The report gives balances at each period's end, the lowest point, and fixed milestones: the end of this month and next, and 3, 6 and 12 months out. Each period also says, for its forecast part:
 

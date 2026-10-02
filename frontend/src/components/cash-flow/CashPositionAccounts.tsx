@@ -4,7 +4,6 @@ import { useState } from 'react';
 import type { CashFlowReport, CashPositionItem } from '../../types/cash-flow';
 import {
   cashAccountName,
-  coversAllCash,
   formatCalendarDate,
   formatMoney,
   formatSignedMoney,
@@ -19,20 +18,26 @@ const chipClass = (on: boolean) =>
  * Which cash accounts the position covers: all of them, or any of them. From
  * "All accounts", choosing an account shows just that one; further choices add
  * to it, and clearing the last one returns to all.
+ *
+ * `selectedIds` is the choice in the browser (empty = all). Pressed state uses
+ * that rather than the last report, so a click looks selected before refetch.
  */
-export function PositionAccountPicker({ report, onChange }: {
+export function PositionAccountPicker({ report, selectedIds, onChange }: {
   report: Pick<CashFlowReport, 'position'>;
+  selectedIds: string[];
   onChange: (accountIds: string[]) => void;
 }) {
-  const { accounts, accountIds } = report.position;
+  const { accounts } = report.position;
   if (accounts.length < 2) return null;
-  const all = coversAllCash(report);
+  const known = new Set(accounts.map(account => account.id));
+  const chosen = selectedIds.filter(id => known.has(id));
+  const all = chosen.length === 0;
   const toggle = (accountId: string) => {
     if (all) {
       onChange([accountId]);
       return;
     }
-    const next = accountIds.includes(accountId) ? accountIds.filter(id => id !== accountId) : [...accountIds, accountId];
+    const next = chosen.includes(accountId) ? chosen.filter(id => id !== accountId) : [...chosen, accountId];
     onChange(next.length === accounts.length ? [] : next);
   };
   return (
@@ -41,7 +46,7 @@ export function PositionAccountPicker({ report, onChange }: {
         All accounts
       </button>
       {accounts.map(account => {
-        const on = !all && accountIds.includes(account.id);
+        const on = !all && chosen.includes(account.id);
         return (
           <button key={account.id} type="button" aria-pressed={on} onClick={() => toggle(account.id)} className={chipClass(on)}>
             {cashAccountName(account)}

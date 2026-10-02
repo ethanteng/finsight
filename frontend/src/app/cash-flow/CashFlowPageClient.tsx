@@ -383,7 +383,7 @@ export default function CashFlowPageClient() {
                 </div>
               ) : report.position.available ? (
                 <div className="mt-5">
-                  <PositionAccountPicker report={report} onChange={choosePositionAccounts} />
+                  <PositionAccountPicker report={report} selectedIds={positionAccounts} onChange={choosePositionAccounts} />
                   <div className={report.position.accounts.length > 1 ? 'mt-4' : ''}>
                     <CashPositionLegend
                       hasCards={projectsCardDebt(report)}
@@ -415,7 +415,7 @@ export default function CashFlowPageClient() {
               ) : (
                 <div className="mt-5">
                   {/* Still offered here, so a choice that can't be added up can be changed. */}
-                  <PositionAccountPicker report={report} onChange={choosePositionAccounts} />
+                  <PositionAccountPicker report={report} selectedIds={positionAccounts} onChange={choosePositionAccounts} />
                   <p className={`${report.position.accounts.length > 1 ? 'mt-4' : ''} rounded-2xl border border-[#d4a72c]/30 bg-[#fff3ce] p-4 text-sm leading-6 text-[#76510f]`} role="status">
                     {report.position.reason === 'unknown_balance' && !coversAllCash(report)
                       ? 'One of the accounts you chose didn’t report a balance, so its cash position can’t be added up yet.'
