@@ -26,6 +26,10 @@ A forecast has three disclosed parts:
    - One due shortly before the forecast starts and not yet posted is still expected on the first forecast day. One overdue past its grace period is treated as missed.
    - A stream that stopped is listed as lapsed and not projected.
    - Repeats are recognized by payee: a key from the merchant name, or else the bank description, with ACH boilerplate and every word containing a digit dropped (an ACH id like `ID:ABC123XYZ`, an order or confirmation number). Those words change with every payment, so keeping their letters would split one payee into many, as it did for payroll whose reference code changes each time. A name made only of such words (1Password, 7-Eleven) keeps its letters.
+   - Every two weeks or twice a month: semimonthly pay returns to the same two days of the month, while biweekly pay drifts through it.
+     - A few months of biweekly paydays drift so little that they pass for two days of the month: the 17th, 31st, 14th, 28th, 11th and 25th look like "the 14th and the 28th".
+     - Read that way, they would be projected on the wrong days and two paydays short a year.
+     - So dates that keep to a two-week step, each within two days of it, are biweekly however they fall in the month.
    - Annual charges are not recognised, because a year of history shows them once. They fall into typical spending as a daily rate.
 2. **Typical**: everything else, as a daily rate over at most the last 90 days.
    - A large amount from a payee seen only once in that window is a one-off. It is left out of the rate and listed, because a past windfall or big purchase is not assumed to repeat.

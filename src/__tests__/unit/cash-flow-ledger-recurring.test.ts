@@ -191,6 +191,21 @@ describe('detectRecurringStreams', () => {
     const dates = ['2026-06-15', '2026-06-30', '2026-07-15', '2026-07-31', '2026-08-14', '2026-08-31', '2026-09-15', '2026-09-30'];
     const [stream] = detectRecurringStreams(dates.map(date => entry(date, 3000, 'acme payroll', 'income')), '2026-09-30');
     expect(stream).toMatchObject({ cadence: 'semimonthly', anchorDays: [15, 31] });
+    // Four of them are enough, though the first three keep close to a two-week step.
+    const [short] = detectRecurringStreams(dates.slice(0, 4).map(date => entry(date, 3000, 'acme payroll', 'income')), '2026-08-05');
+    expect(short).toMatchObject({ cadence: 'semimonthly', anchorDays: [15, 31] });
+  });
+
+  it('reads a few months of biweekly paydays as biweekly, though they could pass for two days of the month', () => {
+    // Six paydays drift only six days through the month: the 17th, 31st,
+    // 14th, 28th, 11th and 25th look like "the 14th and the 28th".
+    const dates = ['2026-07-17', '2026-07-31', '2026-08-14', '2026-08-28', '2026-09-11', '2026-09-25'];
+    const [stream] = detectRecurringStreams(dates.map(date => entry(date, 1400, 'acme payroll', 'income')), '2026-09-30');
+    expect(stream).toMatchObject({ cadence: 'biweekly', anchorDays: [] });
+    expect([...scheduleStream(stream, '2026-10-01', '2026-11-01')].map(occurrence => occurrence.date)).toEqual(['2026-10-09', '2026-10-23']);
+    // A payday a day early for a holiday is still on the step.
+    const holiday = ['2026-07-17', '2026-07-31', '2026-08-13', '2026-08-28', '2026-09-11', '2026-09-25'];
+    expect(detectRecurringStreams(holiday.map(date => entry(date, 1400, 'acme payroll', 'income')), '2026-09-30')[0].cadence).toBe('biweekly');
   });
 
   it('accepts two occurrences of an identical charge but not two different ones', () => {

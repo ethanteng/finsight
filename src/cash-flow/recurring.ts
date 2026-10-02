@@ -45,6 +45,8 @@ const CONSISTENT_AMOUNT_RATIO = 1.1;
 const MAX_AMOUNT_VARIATION = 0.75;
 /** A day-of-month at or past this is treated as "the last day of the month". */
 const MONTH_END_DAY = 29;
+/** How far a biweekly payday may land from its two-week step: a holiday, an early deposit. */
+const TWO_WEEK_STEP_TOLERANCE_DAYS = 2;
 
 export interface RecurringStream {
   /** Stable for a payee and direction, so the UI can key on it. */
@@ -109,6 +111,19 @@ function semimonthlyAnchors(occurrences: readonly Occurrence[]): number[] | null
   return null;
 }
 
+/**
+ * Whether every occurrence keeps to a two-week step from the first. Semimonthly
+ * dates fall about a day further off it each time, so a run of them leaves it
+ * within a few occurrences.
+ */
+function keepsTwoWeekStep(occurrences: readonly Occurrence[]): boolean {
+  const step = CADENCE_RULES.biweekly.nominalDays;
+  return occurrences.every(occurrence => {
+    const offset = daysBetween(occurrences[0].date, occurrence.date) % step;
+    return Math.min(offset, step - offset) <= TWO_WEEK_STEP_TOLERANCE_DAYS;
+  });
+}
+
 function classifyCadence(occurrences: readonly Occurrence[], gaps: readonly number[]): {
   cadence: RecurringCadence;
   anchorDays: number[];
@@ -122,7 +137,11 @@ function classifyCadence(occurrences: readonly Occurrence[], gaps: readonly numb
   if (inBand('semimonthly')) {
     // A biweekly paycheck lands two weeks apart and drifts through the month;
     // a semimonthly one returns to the same two days. Only the second has
-    // anchors, so it is checked first.
+    // anchors, so it is checked first -- after a run that keeps to a two-week
+    // step, which is biweekly however it falls in the month. A few months of
+    // biweekly paydays drift so little they would pass for two days of the
+    // month, and be projected on the wrong days, two paydays short a year.
+    if (inBand('biweekly') && keepsTwoWeekStep(occurrences)) return { cadence: 'biweekly', anchorDays: [] };
     const anchors = semimonthlyAnchors(occurrences);
     if (anchors) return { cadence: 'semimonthly', anchorDays: anchors };
     if (inBand('biweekly')) return { cadence: 'biweekly', anchorDays: [] };
