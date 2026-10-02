@@ -13,6 +13,10 @@ import { FinancialContextSnapshot } from './types';
 import { mergeAssetAllocation } from '../services/asset-class';
 import { MAX_UNMODELED_REASON_FACTS } from './canonical-facts';
 import { getActiveModel, getActiveNumericGenerationSetting } from './model-config';
+import { cashFlowForecastFacts } from './cash-flow-forecast-context';
+
+/** Enough for every window's figures, recurring items and planned events. */
+const MAX_CASH_FLOW_FORECAST_LINES = 80;
 
 const GOOGLE_AI_API_KEY = process.env.GOOGLE_AI_API_KEY || process.env.GEMINI_API_KEY || '';
 
@@ -280,6 +284,19 @@ export function buildSnapshotSummaryForValidation(snapshot: FinancialContextSnap
   }
   if (snapshot.monthlyCashFlowAnalysis) {
     parts.push(`Monthly cash flow: ${snapshot.monthlyCashFlowAnalysis.slice(0, 1_000)}`);
+  }
+
+  // The forecast pack's figures are the ones an answer may quote, so the
+  // reviewer sees the same facts, labelled as projections where they are.
+  const forecast = snapshot.cashFlowForecast;
+  if (forecast) {
+    if (forecast.status === 'unavailable') {
+      parts.push(`Cash flow forecast: unavailable (${forecast.reason ?? 'unknown reason'})`);
+    }
+    const lines = cashFlowForecastFacts(forecast)
+      .slice(0, MAX_CASH_FLOW_FORECAST_LINES)
+      .map(fact => `- ${fact.label}: ${fact.value < 0 ? '-' : ''}$${Math.abs(fact.value).toFixed(2)}${fact.provenance.kind === 'forecast' ? ' (projection)' : ''}`);
+    if (lines.length > 0) parts.push(`Cash flow forecast facts:\n${lines.join('\n')}`);
   }
 
   return parts.length > 0 ? parts.join('\n') : '(no snapshot data)';

@@ -10,7 +10,7 @@ export interface CanonicalFact {
   /** Present when the value is exact but its basis is narrower than the label implies. */
   caveat?: string;
   provenance: {
-    kind: 'snapshot' | 'calculation' | 'user_input' | 'external_context' | 'scenario_input' | 'scenario_calculation';
+    kind: 'snapshot' | 'calculation' | 'user_input' | 'external_context' | 'scenario_input' | 'scenario_calculation' | 'forecast';
     source: string;
     asOf?: string;
     formula?: string;

@@ -21,7 +21,7 @@ type StaticRoute = {
  *  - Auth/utility routes (/login, /register, /getstarted, /forgot-password,
  *    /reset-password, /verify-email, /subscribe, /payment-success, /profile) —
  *    no search value, and they dilute crawl budget.
- *  - Authenticated app routes (/app, /finances, /transactions) — gated content.
+ *  - Authenticated app routes (/app, /finances, /cash-flow, /transactions) — gated content.
  *  - /admin and /sentry-test — internal.
  *  - /privacy-policy — duplicate of /privacy, which carries the canonical.
  */

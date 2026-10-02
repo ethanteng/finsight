@@ -131,6 +131,7 @@ describe("isMarketingPath", () => {
     "/app",
     "/app/settings",
     "/finances",
+    "/cash-flow",
     "/transactions",
     "/profile",
     "/admin/marketing",

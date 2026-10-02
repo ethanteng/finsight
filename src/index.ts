@@ -10,6 +10,7 @@ import manualAccountsRoutes from './auth/manual-accounts-routes';
 import accountsRoutes from './auth/accounts-routes';
 import transactionCategoriesRoutes from './auth/transaction-categories-routes';
 import financesRoutes from './auth/finances-routes';
+import cashFlowRoutes from './auth/cash-flow-routes';
 import stripeRoutes from './routes/stripe';
 import aiRoutes from './routes/ai';
 import aiPerformanceRoutes from './routes/ai-performance';
@@ -351,6 +352,9 @@ app.use('/api/transaction-categories', transactionCategoriesRoutes);
 
 // Setup the revisioned Finances overview and lazy account-detail routes
 app.use('/api/finances', financesRoutes);
+
+// Cash flow (beta): history, forecast and the user's planned events
+app.use('/api/cash-flow', cashFlowRoutes);
 
 // Setup AI routes
 app.use('/api/ai', aiRoutes);

@@ -5,11 +5,16 @@ import { isProviderIdentifierLabel } from '../services/holding-label';
 import { scenarioCalculatorRegistry } from '../scenarios/calculator-registry';
 import { RETIREMENT_CALCULATOR_ID } from '../scenarios/retirement-scenario';
 import { questionMentionsSecurity } from './security-question-match';
+import { cashFlowForecastFacts } from './cash-flow-forecast-context';
 
 export type CanonicalFactUnit = 'usd' | 'percent' | 'months' | 'years' | 'age' | 'count' | 'ratio';
 
 export interface CanonicalFactProvenance {
-  kind: 'snapshot' | 'calculation' | 'user_input' | 'external_context' | 'scenario_input' | 'scenario_calculation';
+  /**
+   * `forecast` is a deterministic projection of the user's own cash flow: an
+   * expected amount, never an observed or guaranteed one.
+   */
+  kind: 'snapshot' | 'calculation' | 'user_input' | 'external_context' | 'scenario_input' | 'scenario_calculation' | 'forecast';
   source: string;
   asOf?: string;
   formula?: string;
@@ -888,6 +893,11 @@ export function buildCanonicalFactPack(
     }
   }
 
+  // The forecast is computed only when the semantic plan asked for the
+  // cash_flow_forecast pack, so its presence is the routing decision, as with
+  // the remembered profile below.
+  for (const fact of cashFlowForecastFacts(snapshot.cashFlowForecast)) facts.set(fact.id, fact);
+
   // What Linc remembers about the user is loaded only when the semantic plan
   // asked for the user_profile pack, so its presence is the routing decision.
   // These are the user's own stated details, not derived financial truth: an
@@ -955,9 +965,10 @@ export function validateCanonicalFactPack(pack: CanonicalFactPack): string[] {
     if (!Number.isFinite(fact.value)) issues.push(`${fact.id} is not finite.`);
     if (
       fact.provenance.kind !== 'calculation' &&
-      fact.provenance.kind !== 'scenario_calculation'
+      fact.provenance.kind !== 'scenario_calculation' &&
+      fact.provenance.kind !== 'forecast'
     ) continue;
-    if (fact.provenance.kind === 'scenario_calculation' && !fact.provenance.formula) continue;
+    if (fact.provenance.kind !== 'calculation' && !fact.provenance.formula) continue;
     const inputs = fact.provenance.inputFactIds?.map((id) => facts.get(id));
     if (!inputs || inputs.some((input) => !input)) {
       issues.push(`${fact.id} references a missing calculation input.`);

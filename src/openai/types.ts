@@ -6,6 +6,7 @@ import type { PlannedSearchQuery, SearchQueryEvidence } from '../data/search-typ
 import type { PlaidLiabilityDetails } from '../services/plaid-liabilities';
 import type { UnmodeledInvestmentValue } from '../services/investment-coverage';
 import type { PersonalContextValues } from '../profile/personal-context';
+import type { CashFlowForecastContext } from './cash-flow-forecast-context';
 
 export interface QuestionNeeds {
   needsMarketContext: boolean;
@@ -16,6 +17,7 @@ export interface QuestionNeeds {
   needsAccountDetails: boolean;
   needsTransactionDetails: boolean;
   needsMonthlyCashFlow: boolean;
+  needsCashFlowForecast?: boolean;
   needsUserProfile: boolean;
   needsSecondaryValidation: boolean;
 }
@@ -112,6 +114,8 @@ export interface FinancialContextSnapshot {
   /** Structured numeric values — use these instead of parsing incomeAnalysis/expenseAnalysis strings */
   averageMonthlyIncome?: number | null;
   averageMonthlyExpense?: number | null;
+  /** Present only when the cash_flow_forecast pack was selected. */
+  cashFlowForecast?: CashFlowForecastContext;
   transactionSummary?: {
     reportingCurrency?: string;
     incomeTotal?: number;

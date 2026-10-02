@@ -3,6 +3,7 @@ import type { CanonicalFactPack } from './canonical-facts';
 import { RETIREMENT_CALCULATOR_ID } from '../scenarios/retirement-scenario';
 import { scenarioCalculatorRegistry } from '../scenarios/calculator-registry';
 import { questionMentionsSecurity } from './security-question-match';
+import { compactCashFlowForecastDetails } from './cash-flow-forecast-context';
 
 export interface QuestionContextPack {
   facts: CanonicalFactPack;
@@ -95,6 +96,9 @@ export function buildQuestionContextPack(
     };
   }
   if (needs.needsMonthlyCashFlow) details.monthlyCashFlow = snapshot.transactionSummary?.byMonth;
+  if (needs.needsCashFlowForecast && snapshot.cashFlowForecast) {
+    details.cashFlowForecast = compactCashFlowForecastDetails(snapshot.cashFlowForecast);
+  }
   if (needs.needsRetirement) {
     details.retirementAnalysis = compactRetirementAnalysis(snapshot);
     details.retirementAnalysisNeedsInfo = snapshot.retirementAnalysisNeedsInfo;

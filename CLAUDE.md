@@ -115,6 +115,10 @@ Only the emailed route skips the emailed verification code, and the difference i
 
 “What Linc remembers about you” is a bounded, field-level memory of user-stated biographical details such as age, location, household, and employment. It is encrypted at rest. Financial facts, goals, risk tolerance, and scenario assumptions belong to canonical data or active conversation context and must not be added to this memory. The extractor emits validated set/clear operations; it never appends free-form summaries.
 
+### Cash flow (beta)
+
+`/cash-flow` shows cash in (canonical income) and cash out (canonical spending) across cash accounts and credit cards, with a forecast from `src/cash-flow/`: recurring streams found in the user's history, a typical daily rate for everything else, and the user's planned events. Card purchases count when made; card payments and transfers are neither, so card payoff belongs to a cash-position view, not to savings. The `cash_flow_forecast` data pack runs the same engine and publishes every figure an answer could quote as a fact — projections carry `forecast` provenance and a caveat — because the model may not add or net facts. Months before the connected history begins are unknown, not zero. See `docs/CASH_FLOW_FORECAST.md`.
+
 ### Marketing list membership
 
 Three paths put an address in MailerLite, and they are not interchangeable.
