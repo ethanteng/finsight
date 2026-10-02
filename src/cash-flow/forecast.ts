@@ -1138,6 +1138,8 @@ export interface CashFlowRecurringSummary extends CashFlowItemTransactions {
   /** The ledger's key for the payee, which an adjustment names it by. */
   payeeKey: string;
   label: string;
+  /** The account it is expected in: a cash account, or a card for a charge on one. */
+  accountId: string;
   flow: CashFlowDirection;
   cadence: RecurringCadence;
   amount: number;
@@ -1308,6 +1310,8 @@ export interface CashFlowPositionSummary {
       id: string;
       payeeKey: string;
       label: string;
+      /** The cash account the transfer is expected in or out of. */
+      accountId: string;
       cadence: RecurringCadence;
       amount: number;
       direction: 'in' | 'out';
@@ -1446,6 +1450,7 @@ function positionSummary(
         id: stream.id,
         payeeKey: stream.counterpartyKey,
         label: stream.label,
+        accountId: stream.accountId,
         cadence: stream.cadence,
         amount: roundCents(stream.amount),
         direction: stream.flow === 'income' ? 'in' as const : 'out' as const,
@@ -1667,6 +1672,7 @@ export function buildCashFlowReport(model: CashFlowModel, request: CashFlowRepor
       id: stream.id,
       payeeKey: stream.counterpartyKey,
       label: stream.label,
+      accountId: stream.accountId,
       flow: stream.flow,
       cadence: stream.cadence,
       amount: roundCents(stream.amount),

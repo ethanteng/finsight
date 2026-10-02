@@ -176,6 +176,18 @@ export function cashAccountName(account: Pick<CashFlowPositionAccount, 'name' | 
   return account.mask ? `${account.name} ••${account.mask}` : account.name;
 }
 
+/**
+ * Every account's name by id, cash accounts and cards alike, for saying where
+ * a regular item is expected. Empty with a single account, where naming it
+ * would tell the user nothing.
+ */
+export function accountNamesById(report: Pick<CashFlowReport, 'position' | 'cards'>): Map<string, string> {
+  const names = new Map<string, string>();
+  for (const account of report.position.accounts) names.set(account.id, cashAccountName(account));
+  for (const card of report.cards) names.set(card.accountId, cardName(card));
+  return names.size > 1 ? names : new Map();
+}
+
 /** What the cash position covers, for a sentence: "your checking and savings", one account's name, or "2 accounts". */
 export function positionScope(report: Pick<CashFlowReport, 'position'>): string {
   if (coversAllCash(report)) return 'your checking and savings';

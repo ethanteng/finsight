@@ -12,7 +12,7 @@ import type {
   ForecastAdjustmentKind,
 } from '../../types/cash-flow';
 import { sendCashFlowRequest } from '../../lib/cash-flow-api';
-import { CADENCE_LABELS, formatCalendarDate, formatMoney } from '../../lib/cash-flow-format';
+import { CADENCE_LABELS, accountNamesById, formatCalendarDate, formatMoney } from '../../lib/cash-flow-format';
 
 type Flow = 'income' | 'spending';
 
@@ -271,13 +271,20 @@ export default function ForecastBoard({ report, apiUrl, onChanged }: {
   const countedBy = (payee: CashFlowTypicalPayee) => adjustments.find(adjustment =>
     adjustment.kind === 'include_one_off' && (payee.countedOneOffIds ?? []).includes(adjustment.key));
 
+  // Where each regular item is expected, once there is more than one account it could be.
+  const accountNames = accountNamesById(report);
+  const inAccount = (accountId: string | undefined) => {
+    const name = accountId ? accountNames.get(accountId) : undefined;
+    return name ? ` · ${name}` : '';
+  };
+
   const regularRow = (item: CashFlowRecurringItem) => {
     const keptBy = item.continuedByUser ? kept(item) : undefined;
     return (
       <ItemRow
         key={item.id}
         name={item.label}
-        detail={`${CADENCE_LABELS[item.cadence]}${item.nextDate ? ` · next ${formatCalendarDate(item.nextDate)}` : ''}`}
+        detail={`${CADENCE_LABELS[item.cadence]}${item.nextDate ? ` · next ${formatCalendarDate(item.nextDate)}` : ''}${inAccount(item.accountId)}`}
         category={categoryOf(item)}
         marker={item.continuedByUser ? 'kept by you' : undefined}
         amount={formatMoney(item.amount, true)}
@@ -386,7 +393,7 @@ export default function ForecastBoard({ report, apiUrl, onChanged }: {
                   <ItemRow
                     key={item.id}
                     name={item.label}
-                    detail={`${CADENCE_LABELS[item.cadence]}${item.nextDate ? ` · next ${formatCalendarDate(item.nextDate)}` : ''}`}
+                    detail={`${CADENCE_LABELS[item.cadence]}${item.nextDate ? ` · next ${formatCalendarDate(item.nextDate)}` : ''}${inAccount(item.accountId)}`}
                     amount={`${item.direction === 'in' ? '+' : '−'}${formatMoney(item.amount, true)}`}
                     transactions={item.transactions}
                     transactionCount={item.transactionCount}
@@ -443,7 +450,7 @@ export default function ForecastBoard({ report, apiUrl, onChanged }: {
                 <ItemRow
                   key={item.id}
                   name={item.label}
-                  detail={`${CADENCE_LABELS[item.cadence]} · last ${formatCalendarDate(item.lastDate)}`}
+                  detail={`${CADENCE_LABELS[item.cadence]} · last ${formatCalendarDate(item.lastDate)}${inAccount(item.accountId)}`}
                   category={categoryOf(item)}
                   amount={formatMoney(item.amount, true)}
                   transactions={item.transactions}

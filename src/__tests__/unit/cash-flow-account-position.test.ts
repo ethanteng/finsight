@@ -95,6 +95,23 @@ describe('the cash position, account by account', () => {
     expect(savings.cardPaymentsBetween('2026-10-01', '2027-10-01')).toBe(0);
   });
 
+  it('puts each part of a split paycheck in the account it is paid into', () => {
+    // The payroll that pays $2,500 into checking also sends $1,000 to savings
+    // on the same days; the savings bank describes it its own way.
+    const toSavings: Array<Record<string, unknown>> = [];
+    for (let pay = '2025-01-03'; pay <= THROUGH; pay = addDays(pay, 14)) {
+      if (pay >= FROM) toSavings.push(tx('savings', pay, 'income', 1000, `GUSTO PAYROLL ${pay.replace(/-/g, '')} SMITH`));
+    }
+    const built = model({ transactions: [...householdTransactions(FROM, THROUGH), ...savingsTransactions(), ...toSavings] });
+    const { checking, savings, whole } = expectSumsToWhole(built);
+    const paydays = (position: Extract<CashPosition, { available: true }>) => position.itemsBetween('2026-10-01', '2026-11-01')
+      .filter(item => item.kind === 'income' && item.label.startsWith('GUSTO'))
+      .map(item => `${item.date} ${item.amount}`);
+    expect(paydays(checking)).toEqual(['2026-10-09 2500', '2026-10-23 2500']);
+    expect(paydays(savings)).toEqual(['2026-10-09 1000', '2026-10-23 1000']);
+    expect(paydays(whole)).toEqual(['2026-10-09 2500', '2026-10-09 1000', '2026-10-23 2500', '2026-10-23 1000']);
+  });
+
   it('lists each item with the balance at the end of its day', () => {
     const checking = available(buildCashPosition(model(), ['checking']));
     for (const item of checking.itemsBetween('2026-10-01', '2026-11-01')) {
@@ -161,6 +178,16 @@ describe('the report’s cash position for chosen accounts', () => {
     expect(checking.position.accountIds).toEqual(['checking']);
     expect(checking.position.startingCash).toBe(5200);
     expect(checking.position.cardIds).toEqual(['card']);
+  });
+
+  it('says which account each recurring item is expected in', () => {
+    const report = buildCashFlowReport(model(), request);
+    const accountOf = (label: string) => report.recurring.find(item => item.label === label)?.accountId;
+    expect(accountOf('Oak Street Apartments')).toBe('checking');
+    expect(accountOf('Netflix')).toBe('card');
+    expect(accountOf('First Bank Interest')).toBe('savings');
+    const transfers = report.position.available ? report.position.transfers.recurring : [];
+    expect(transfers.map(item => [item.direction, item.accountId])).toEqual(expect.arrayContaining([['out', 'checking'], ['in', 'savings']]));
   });
 
   it('ignores ids that are not cash accounts', () => {

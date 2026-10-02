@@ -414,6 +414,30 @@ describe('each cash account in the pack', () => {
     const facts = byId(cashFlowForecastFacts(context()));
     expect([...facts.keys()].some(id => id.startsWith('cash_flow_account_'))).toBe(false);
   });
+
+  it('says which account each recurring item is expected in', () => {
+    const pack = withSavings();
+    const labels = cashFlowForecastFacts(pack).map(fact => fact.label);
+    expect(labels).toEqual(expect.arrayContaining([
+      'Typical amount of recurring bill “Oak Street Apartments” from account “Everyday Checking ending 1234” each time (monthly)',
+      'Typical amount of recurring bill “Netflix” on credit card “Rewards Card” each time (monthly)',
+      expect.stringMatching(/^Typical amount of recurring income “GUSTO PAYROLL SMITH” into account “Everyday Checking ending 1234”/),
+    ]));
+    const details = compactCashFlowForecastDetails(pack) as any;
+    expect(details.recurring).toEqual(expect.arrayContaining([
+      expect.objectContaining({ label: 'Oak Street Apartments', account: 'account “Everyday Checking ending 1234”' }),
+    ]));
+    // With one account there is nowhere else it could be.
+    const onlyChecking = buildCashFlowForecastContext(buildCashFlowModel({
+      transactions: householdTransactions('2026-06-03', '2026-10-14').filter(item => item.account_id === 'checking'),
+      accounts: [ACCOUNTS[0]],
+      plannedEvents: [],
+      dataThrough: '2026-10-14',
+      today: '2026-10-15',
+    }));
+    expect(onlyChecking.recurring!.length).toBeGreaterThan(0);
+    expect(onlyChecking.recurring!.every(item => !item.account)).toBe(true);
+  });
 });
 
 describe('every item in the pack', () => {

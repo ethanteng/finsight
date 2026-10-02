@@ -191,6 +191,21 @@ describe('detectRecurringStreams', () => {
     const dates = ['2026-06-15', '2026-06-30', '2026-07-15', '2026-07-31', '2026-08-14', '2026-08-31', '2026-09-15', '2026-09-30'];
     const [stream] = detectRecurringStreams(dates.map(date => entry(date, 3000, 'acme payroll', 'income')), '2026-09-30');
     expect(stream).toMatchObject({ cadence: 'semimonthly', anchorDays: [15, 31] });
+    // Four of them are enough, though the first three keep close to a two-week step.
+    const [short] = detectRecurringStreams(dates.slice(0, 4).map(date => entry(date, 3000, 'acme payroll', 'income')), '2026-08-05');
+    expect(short).toMatchObject({ cadence: 'semimonthly', anchorDays: [15, 31] });
+  });
+
+  it('reads a few months of biweekly paydays as biweekly, though they could pass for two days of the month', () => {
+    // Six paydays drift only six days through the month: the 17th, 31st,
+    // 14th, 28th, 11th and 25th look like "the 14th and the 28th".
+    const dates = ['2026-07-17', '2026-07-31', '2026-08-14', '2026-08-28', '2026-09-11', '2026-09-25'];
+    const [stream] = detectRecurringStreams(dates.map(date => entry(date, 1400, 'acme payroll', 'income')), '2026-09-30');
+    expect(stream).toMatchObject({ cadence: 'biweekly', anchorDays: [] });
+    expect([...scheduleStream(stream, '2026-10-01', '2026-11-01')].map(occurrence => occurrence.date)).toEqual(['2026-10-09', '2026-10-23']);
+    // A payday a day early for a holiday is still on the step.
+    const holiday = ['2026-07-17', '2026-07-31', '2026-08-13', '2026-08-28', '2026-09-11', '2026-09-25'];
+    expect(detectRecurringStreams(holiday.map(date => entry(date, 1400, 'acme payroll', 'income')), '2026-09-30')[0].cadence).toBe('biweekly');
   });
 
   it('accepts two occurrences of an identical charge but not two different ones', () => {
@@ -212,6 +227,57 @@ describe('detectRecurringStreams', () => {
     ]);
     const [stream] = detectRecurringStreams(entries, '2026-08-20');
     expect(stream).toMatchObject({ cadence: 'biweekly', amount: 2500, occurrences: 4 });
+  });
+});
+
+describe('detectRecurringStreams with a payee in more than one account', () => {
+  const JOINT = { account_id: 'joint', name: 'Joint Checking', type: 'depository', subtype: 'checking', balance: { current: 3000 }, institution: 'Second Bank' };
+  const PAYDAYS = ['2026-07-17', '2026-07-31', '2026-08-14', '2026-08-28', '2026-09-11', '2026-09-25'];
+  // Two banks describe one employer's deposits differently, with a fresh
+  // reference each time, and both come down to the same payee.
+  const toChecking = (date: CalendarDate, index: number, amount = 3030.86) =>
+    tx('checking', date, 'income', amount, `Acme Health DES:PAYROLL ID:6xq${index}k2 INDN:Sam Lee CO ID:XXXXX64001 PPD`);
+  const toJoint = (date: CalendarDate, index: number, amount = 1400) =>
+    tx('joint', date, 'income', amount, `Acme Health PAYROLL 2607${index} 6xq${index}rg Sam Lee`);
+  const streamsOf = (transactions: Array<Record<string, unknown>>) =>
+    detectRecurringStreams(buildCashFlowLedger(transactions, [...ACCOUNTS, JOINT]).entries, '2026-09-30');
+
+  it('gives a paycheck split between two accounts a stream in each', () => {
+    const streams = streamsOf(PAYDAYS.flatMap((date, index) => [toChecking(date, index), toJoint(date, index)]));
+    expect(streams.map(stream => [stream.accountId, stream.amount, stream.cadence, stream.occurrences, stream.status])).toEqual([
+      ['checking', 3030.86, 'biweekly', 6, 'active'],
+      ['joint', 1400, 'biweekly', 6, 'active'],
+    ]);
+    // One payee, so a choice about it covers both; two streams, so each has its own id.
+    expect(new Set(streams.map(stream => stream.counterpartyKey))).toEqual(new Set(['acme health payroll sam lee']));
+    expect(new Set(streams.map(stream => stream.id)).size).toBe(2);
+  });
+
+  it('keeps the parts apart when the two banks post them on different days', () => {
+    const streams = streamsOf(PAYDAYS.flatMap((date, index) => [toChecking(date, index), toJoint(addDays(date, 1), index)]));
+    expect(streams.map(stream => [stream.accountId, stream.amount, stream.cadence])).toEqual([
+      ['checking', 3030.86, 'biweekly'],
+      ['joint', 1400, 'biweekly'],
+    ]);
+  });
+
+  it('follows a payee that moved to another account, and expects it there', () => {
+    const moved = PAYDAYS.map((date, index) => (index < 4 ? toChecking(date, index, 1400) : toJoint(date, index)));
+    const streams = streamsOf(moved);
+    expect(streams).toEqual([expect.objectContaining({ accountId: 'joint', cadence: 'biweekly', occurrences: 6, status: 'active' })]);
+    expect(streams[0].id).toBe('income:acme-health-payroll-sam-lee');
+  });
+
+  it('finds each account’s own charge from a payee both accounts pay at once', () => {
+    // A monthly fee on each account: different days and amounts, one name.
+    const fees = ['2026-06', '2026-07', '2026-08', '2026-09'].flatMap(month => [
+      tx('checking', `${month}-03`, 'expense', 12, 'MONTHLY MAINTENANCE FEE'),
+      tx('joint', `${month}-20`, 'expense', 25, 'MONTHLY MAINTENANCE FEE'),
+    ]);
+    expect(streamsOf(fees).map(stream => [stream.accountId, stream.amount, stream.anchorDays])).toEqual([
+      ['joint', 25, [20]],
+      ['checking', 12, [3]],
+    ]);
   });
 });
 

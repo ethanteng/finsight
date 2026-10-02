@@ -54,6 +54,8 @@ export interface CashFlowForecastContext {
     amount: number;
     monthlyAmount: number;
     nextDate: string | null;
+    /** The account it is expected in; left out when the user has only one. */
+    account?: { name: string; mask: string | null; kind: 'cash' | 'credit' };
   }>;
   plannedEvents?: Array<{
     id: string;
@@ -135,17 +137,23 @@ export function buildCashFlowForecastContext(model: CashFlowModel): CashFlowFore
     const existing = scheduledNext.get(occurrence.streamId);
     if (!existing || occurrence.date < existing) scheduledNext.set(occurrence.streamId, occurrence.date);
   }
+  // Where each item is expected, once there is more than one account it could be.
+  const accounts = model.ledger.accounts.length > 1 ? new Map(model.ledger.accounts.map(account => [account.id, account])) : null;
   const recurring = model.streams
     .filter(stream => scheduledNext.has(stream.id))
-    .map(stream => ({
-      id: stream.id,
-      label: stream.label,
-      flow: stream.flow,
-      cadence: stream.cadence,
-      amount: Math.round(stream.amount * 100) / 100,
-      monthlyAmount: Math.round(streamMonthlyAmount(stream) * 100) / 100,
-      nextDate: scheduledNext.get(stream.id) ?? null,
-    }))
+    .map(stream => {
+      const account = accounts?.get(stream.accountId);
+      return {
+        id: stream.id,
+        label: stream.label,
+        flow: stream.flow,
+        cadence: stream.cadence,
+        amount: Math.round(stream.amount * 100) / 100,
+        monthlyAmount: Math.round(streamMonthlyAmount(stream) * 100) / 100,
+        nextDate: scheduledNext.get(stream.id) ?? null,
+        ...(account && { account: { name: account.name, mask: account.mask, kind: account.kind } }),
+      };
+    })
     .sort((left, right) => right.monthlyAmount - left.monthlyAmount);
 
   return {
@@ -422,7 +430,7 @@ export function cashFlowForecastFacts(context: CashFlowForecastContext | undefin
   (context.recurring ?? []).forEach((item, index) => {
     forecast(
       `cash_flow_recurring_${index + 1}_amount`,
-      `Typical amount of recurring ${item.flow === 'income' ? 'income' : 'bill'} “${item.label}” each time (${item.cadence})`,
+      `Typical amount of recurring ${item.flow === 'income' ? 'income' : 'bill'} “${item.label}”${recurringPlace(item)} each time (${item.cadence})`,
       item.amount,
       `cashFlowForecast.recurring.${index}.amount`
     );
@@ -653,6 +661,17 @@ function cardLabel(card: { name: string; mask: string | null }): string {
   return `credit card “${card.name}${card.mask ? ` ending ${card.mask}` : ''}”`;
 }
 
+function accountLabel(account: { name: string; mask: string | null; kind: 'cash' | 'credit' }): string {
+  return account.kind === 'credit' ? cardLabel(account) : cashAccountLabel(account);
+}
+
+/** " into account “Joint Checking”", " from account …", " on credit card …"; empty without an account. */
+function recurringPlace(item: NonNullable<CashFlowForecastContext['recurring']>[number]): string {
+  if (!item.account) return '';
+  const preposition = item.flow === 'income' ? 'into' : item.account.kind === 'credit' ? 'on' : 'from';
+  return ` ${preposition} ${accountLabel(item.account)}`;
+}
+
 /** Whole months from the month of `today` to `month` (YYYY-MM). */
 function monthsFrom(today: string, month: string): number {
   const [fromYear, fromMonth] = today.split('-').map(Number);
@@ -684,6 +703,7 @@ export function compactCashFlowForecastDetails(context: CashFlowForecastContext)
     recurring: (context.recurring ?? []).map((item, index) => ({
       label: item.label,
       kind: item.flow === 'income' ? 'income' : 'bill',
+      ...(item.account && { account: accountLabel(item.account) }),
       cadence: item.cadence,
       nextDate: item.nextDate,
       amountFactId: `cash_flow_recurring_${index + 1}_amount`,

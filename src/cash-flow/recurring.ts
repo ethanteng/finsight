@@ -16,6 +16,12 @@ import type { CashFlowDirection, CashFlowEntry } from './ledger';
  * with its cadence and amount. Annual charges are not recognized: a year of
  * history shows them once, which is no pattern at all, so they fall into
  * typical spending as a daily rate instead.
+ *
+ * A stream belongs to one account, because the cash position expects each
+ * occurrence where it was seen. A payee seen in several accounts at once -- a
+ * paycheck split between two accounts, a fee each account charges -- is a
+ * stream in each. A payee that moved, its history in one account ending before
+ * it begins in the next, is one stream, expected in the account it moved to.
  */
 export const RECURRING_CADENCES = ['weekly', 'biweekly', 'semimonthly', 'monthly', 'quarterly'] as const;
 export type RecurringCadence = (typeof RECURRING_CADENCES)[number];
@@ -45,9 +51,11 @@ const CONSISTENT_AMOUNT_RATIO = 1.1;
 const MAX_AMOUNT_VARIATION = 0.75;
 /** A day-of-month at or past this is treated as "the last day of the month". */
 const MONTH_END_DAY = 29;
+/** How far a biweekly payday may land from its two-week step: a holiday, an early deposit. */
+const TWO_WEEK_STEP_TOLERANCE_DAYS = 2;
 
 export interface RecurringStream {
-  /** Stable for a payee and direction, so the UI can key on it. */
+  /** Stable for a payee and direction, and its account when the payee is seen in several at once, so the UI can key on it. */
   id: string;
   /** The ledger's key for the payee, which the stream is grouped on. */
   counterpartyKey: string;
@@ -109,6 +117,19 @@ function semimonthlyAnchors(occurrences: readonly Occurrence[]): number[] | null
   return null;
 }
 
+/**
+ * Whether every occurrence keeps to a two-week step from the first. Semimonthly
+ * dates fall about a day further off it each time, so a run of them leaves it
+ * within a few occurrences.
+ */
+function keepsTwoWeekStep(occurrences: readonly Occurrence[]): boolean {
+  const step = CADENCE_RULES.biweekly.nominalDays;
+  return occurrences.every(occurrence => {
+    const offset = daysBetween(occurrences[0].date, occurrence.date) % step;
+    return Math.min(offset, step - offset) <= TWO_WEEK_STEP_TOLERANCE_DAYS;
+  });
+}
+
 function classifyCadence(occurrences: readonly Occurrence[], gaps: readonly number[]): {
   cadence: RecurringCadence;
   anchorDays: number[];
@@ -122,7 +143,11 @@ function classifyCadence(occurrences: readonly Occurrence[], gaps: readonly numb
   if (inBand('semimonthly')) {
     // A biweekly paycheck lands two weeks apart and drifts through the month;
     // a semimonthly one returns to the same two days. Only the second has
-    // anchors, so it is checked first.
+    // anchors, so it is checked first -- after a run that keeps to a two-week
+    // step, which is biweekly however it falls in the month. A few months of
+    // biweekly paydays drift so little they would pass for two days of the
+    // month, and be projected on the wrong days, two paydays short a year.
+    if (inBand('biweekly') && keepsTwoWeekStep(occurrences)) return { cadence: 'biweekly', anchorDays: [] };
     const anchors = semimonthlyAnchors(occurrences);
     if (anchors) return { cadence: 'semimonthly', anchorDays: anchors };
     if (inBand('biweekly')) return { cadence: 'biweekly', anchorDays: [] };
@@ -133,11 +158,35 @@ function classifyCadence(occurrences: readonly Occurrence[], gaps: readonly numb
   return null;
 }
 
-function streamId(flow: CashFlowDirection, key: string): string {
-  return `${flow}:${key.replace(/\s+/g, '-')}`;
+function streamId(flow: CashFlowDirection, key: string, accountId?: string): string {
+  const id = `${flow}:${key.replace(/\s+/g, '-')}`;
+  return accountId ? `${id}@${accountId}` : id;
+}
+
+/**
+ * One payee's entries, sorted by date, divided into the streams they can
+ * form: all of them when they are in one account, or when each account's run
+ * ends before the next begins (the payee moved); otherwise one part per
+ * account, since the accounts receive or pay it side by side.
+ */
+function accountParts(entries: readonly CashFlowEntry[]): CashFlowEntry[][] {
+  const byAccount = new Map<string, CashFlowEntry[]>();
+  for (const entry of entries) {
+    const part = byAccount.get(entry.accountId) ?? [];
+    part.push(entry);
+    byAccount.set(entry.accountId, part);
+  }
+  const parts = [...byAccount.values()];
+  if (parts.length < 2) return parts;
+  const runs = parts
+    .map(part => ({ first: part[0].date, last: part[part.length - 1].date }))
+    .sort((left, right) => left.first.localeCompare(right.first));
+  const moved = runs.every((run, index) => index === 0 || runs[index - 1].last < run.first);
+  return moved ? [[...entries]] : parts;
 }
 
 function evaluateGroup(
+  id: string,
   flow: CashFlowDirection,
   key: string,
   entries: readonly CashFlowEntry[],
@@ -174,7 +223,7 @@ function evaluateGroup(
   const lapsedAfter = Math.ceil(rule.nominalDays * 1.5) + rule.graceDays;
   const first = entries[0];
   return {
-    id: streamId(flow, key),
+    id,
     counterpartyKey: key,
     label: entries[entries.length - 1].label,
     flow,
@@ -211,8 +260,12 @@ export function detectRecurringStreams(
   const streams: RecurringStream[] = [];
   for (const group of groups.values()) {
     group.entries.sort((left, right) => left.date.localeCompare(right.date));
-    const stream = evaluateGroup(group.flow, group.key, group.entries, dataThrough);
-    if (stream) streams.push(stream);
+    const parts = accountParts(group.entries);
+    for (const part of parts) {
+      const id = streamId(group.flow, group.key, parts.length > 1 ? part[0].accountId : undefined);
+      const stream = evaluateGroup(id, group.flow, group.key, part, dataThrough);
+      if (stream) streams.push(stream);
+    }
   }
   return streams.sort((left, right) => right.amount - left.amount || left.id.localeCompare(right.id));
 }
