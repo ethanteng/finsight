@@ -8,7 +8,7 @@ import AuthenticatedPageHeader from '../../components/authenticated/Authenticate
 import BetaBadge from '../../components/authenticated/BetaBadge';
 import CashFlowChart, { CashFlowChartLegend } from '../../components/cash-flow/CashFlowChart';
 import CashFlowHighlights from '../../components/cash-flow/CashFlowHighlights';
-import CashFlowPeriodTable from '../../components/cash-flow/CashFlowPeriodTable';
+import CashFlowPeriodTable, { CashPositionPeriodTable } from '../../components/cash-flow/CashFlowPeriodTable';
 import CashPositionChart, { CashPositionLegend } from '../../components/cash-flow/CashPositionChart';
 import CreditCardsPanel from '../../components/cash-flow/CreditCardsPanel';
 import ForecastBasis from '../../components/cash-flow/ForecastBasis';
@@ -335,6 +335,12 @@ export default function CashFlowPageClient() {
                   <div className="mt-3">
                     <CashFlowChart report={report} />
                   </div>
+                  {report.plannedEvents.some(event => event.kind === 'card_payment') && (
+                    <p className="mt-3 text-xs leading-5 text-[#66736b]">
+                      Card payments aren’t cash out here: purchases already count when you make them. Your planned card
+                      payments show in Cash position.
+                    </p>
+                  )}
                 </div>
               ) : report.position.available ? (
                 <div className="mt-5">
@@ -365,12 +371,15 @@ export default function CashFlowPageClient() {
                 </p>
               )}
 
-              <details className="mt-4 rounded-2xl border border-[#102319]/10 bg-white/50 p-4">
-                <summary className="cursor-pointer text-sm font-bold text-[#102319]">See every period</summary>
-                <div className="mt-3">
-                  <CashFlowPeriodTable report={report} />
-                </div>
-              </details>
+              {/* Each view tabulates its own figures; with no cash position there is nothing to list. */}
+              {(chartView === 'savings' || report.position.available) && (
+                <details className="mt-4 rounded-2xl border border-[#102319]/10 bg-white/50 p-4">
+                  <summary className="cursor-pointer text-sm font-bold text-[#102319]">See every period</summary>
+                  <div className="mt-3">
+                    {chartView === 'savings' ? <CashFlowPeriodTable report={report} /> : <CashPositionPeriodTable report={report} />}
+                  </div>
+                </details>
+              )}
             </section>
 
             <CreditCardsPanel

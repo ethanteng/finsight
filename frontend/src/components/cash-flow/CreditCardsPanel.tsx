@@ -2,18 +2,37 @@
 
 import { CreditCard } from 'lucide-react';
 import type { CardOutcome, CashFlowCardSummary } from '../../types/cash-flow';
-import { cardName, formatMoney, monthLabel, paceDescription } from '../../lib/cash-flow-format';
+import { cardName, formatCalendarDate, formatMoney, monthLabel, paceDescription } from '../../lib/cash-flow-format';
 
 function payoffLine(outcome: CardOutcome): string {
   if (!outcome.carryingBalanceNow) return 'Not carrying a balance';
   return outcome.paidOffBy ? `Balance paid off by ${monthLabel(outcome.paidOffBy)}` : 'Still carrying a balance in two years';
 }
 
-function Outcome({ title, outcome, tone }: { title: string; outcome: CardOutcome; tone: 'muted' | 'plan' }) {
+/** "Next payment $614 from your cash on Oct 28, 2026 · $7,368 over the next 12 months"; null when nothing is paid. */
+function paymentLine(outcome: CardOutcome, paymentSource: CashFlowCardSummary['paymentSource']): string | null {
+  if (!outcome.nextPayment) return null;
+  // Only a card paid from the connected accounts takes its payments out of the projected cash.
+  const fromCash = paymentSource === 'connected' ? ' from your cash' : '';
+  const next = `Next payment ${formatMoney(outcome.nextPayment.amount)}${fromCash} on ${formatCalendarDate(outcome.nextPayment.date)}`;
+  // A first payment more than a year out leaves nothing to total over the next 12 months.
+  return outcome.paymentsTwelveMonths > 0
+    ? `${next} · ${formatMoney(outcome.paymentsTwelveMonths)} over the next 12 months`
+    : next;
+}
+
+function Outcome({ title, outcome, paymentSource, tone }: {
+  title: string;
+  outcome: CardOutcome;
+  paymentSource: CashFlowCardSummary['paymentSource'];
+  tone: 'muted' | 'plan';
+}) {
+  const payments = paymentLine(outcome, paymentSource);
   return (
     <div className={`rounded-2xl border p-4 ${tone === 'plan' ? 'border-[#28704d]/25 bg-[#c9f2df]/40' : 'border-[#102319]/10 bg-white/60'}`}>
       <p className="text-xs font-extrabold uppercase tracking-[0.12em] text-[#49725a]">{title}</p>
       <p className="mt-2 text-sm font-bold text-[#102319]">{payoffLine(outcome)}</p>
+      {payments && <p className="mt-1 text-sm text-[#5e6b63]">{payments}</p>}
       <p className="mt-1 text-sm text-[#5e6b63]">
         {outcome.interestTwelveMonths === null
           ? 'Interest unknown: the bank doesn’t share this card’s APR'
@@ -68,8 +87,12 @@ export default function CreditCardsPanel({
 
             {(card.currentPace || card.withPlans) && (
               <div className={`mt-4 grid gap-3 ${card.currentPace && card.withPlans ? 'md:grid-cols-2' : ''}`}>
-                {card.currentPace && <Outcome title="At your current pace" outcome={card.currentPace} tone="muted" />}
-                {card.withPlans && <Outcome title="With your plan" outcome={card.withPlans} tone="plan" />}
+                {card.currentPace && (
+                  <Outcome title="At your current pace" outcome={card.currentPace} paymentSource={card.paymentSource} tone="muted" />
+                )}
+                {card.withPlans && (
+                  <Outcome title="With your plan" outcome={card.withPlans} paymentSource={card.paymentSource} tone="plan" />
+                )}
               </div>
             )}
 

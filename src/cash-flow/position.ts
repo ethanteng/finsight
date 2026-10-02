@@ -30,6 +30,8 @@ export type CashPosition =
       /** Cash at the end of the day before `date`: everything before it has happened. */
       cashBefore(date: CalendarDate): number;
       cardDebtBefore(date: CalendarDate): number;
+      /** What the cash accounts pay the cards in `[from, toExclusive)`: exactly the payments that move the cash. */
+      cardPaymentsBetween(from: CalendarDate, toExclusive: CalendarDate): number;
       /** The lowest end-of-day cash in `[from, toExclusive)`. */
       lowPoint(from: CalendarDate, toExclusive: CalendarDate): { date: CalendarDate; cash: number } | null;
       /** Cards whose balances are not projected, and why. */
@@ -54,10 +56,18 @@ export function buildCashPosition(model: CashFlowModel): CashPosition {
   const days = daysBetween(start, model.forecastEndLimit);
   const cashDelta = new Float64Array(days);
   const cardDelta = new Float64Array(days);
+  // What cash pays the cards each day. It is recorded where it leaves the
+  // cash, so a sum of it always agrees with the cash it moved.
+  const paidToCards = new Float64Array(days);
   const indexOf = (date: CalendarDate) => daysBetween(start, date);
   const inWindow = (date: CalendarDate) => date >= start && date < model.forecastEndLimit;
   const addCash = (date: CalendarDate, amount: number) => { if (inWindow(date)) cashDelta[indexOf(date)] += amount; };
   const addCard = (date: CalendarDate, amount: number) => { if (inWindow(date)) cardDelta[indexOf(date)] += amount; };
+  const payCardFromCash = (date: CalendarDate, amount: number) => {
+    if (!inWindow(date)) return;
+    cashDelta[indexOf(date)] -= amount;
+    paidToCards[indexOf(date)] += amount;
+  };
 
   const cardIds = new Set(model.cards.map(card => card.account.id));
   const projected = model.cards.filter(card => card.projection);
@@ -93,7 +103,7 @@ export function buildCashPosition(model: CashFlowModel): CashPosition {
   for (const card of projected) {
     for (const payment of card.projection!.payments) {
       addCard(payment.date, -payment.amount);
-      if (card.paymentSource === 'connected') addCash(payment.date, -payment.amount);
+      if (card.paymentSource === 'connected') payCardFromCash(payment.date, payment.amount);
     }
     for (const posting of card.projection!.interestPostings) addCard(posting.date, posting.amount);
   }
@@ -122,6 +132,13 @@ export function buildCashPosition(model: CashFlowModel): CashPosition {
     startingCardDebt: round(startingCardDebt),
     cashBefore: date => valueBefore(cash, startingCash, date),
     cardDebtBefore: date => valueBefore(debt, startingCardDebt, date),
+    cardPaymentsBetween: (from, toExclusive) => {
+      const first = Math.max(0, indexOf(from));
+      const last = Math.min(days, indexOf(toExclusive));
+      let total = 0;
+      for (let index = first; index < last; index += 1) total += paidToCards[index];
+      return round(total);
+    },
     lowPoint: (from, toExclusive) => {
       const first = Math.max(0, indexOf(from));
       const last = Math.min(days, indexOf(toExclusive));
