@@ -717,11 +717,28 @@ describe('CashFlowPageClient', () => {
       id: 'payoff', label: 'Pay off Rewards Card', kind: 'card_payment', amount: 0, startDate: '2026-10-25', recurrence: 'monthly',
       endDate: null, accountId: 'card', paymentMode: 'full', nextDate: '2026-10-25', occurrencesInRange: 2,
     } as const;
+    const expired = { ...plan, id: 'expired', nextDate: null, occurrencesInRange: 0 };
+    const orphan = {
+      ...plan, id: 'orphan', accountId: 'mystery', label: 'Pay mystery card',
+    };
+    const mystery = {
+      ...report().cards[0], accountId: 'mystery', name: 'Mystery Card', mask: '0000', behavior: 'unknown' as const,
+      usualMonthlyPayment: null, currentPace: null, withPlans: null, planIds: ['orphan'],
+    };
     mockFetch(url => (url.includes('/api/cash-flow?') ? { status: 200, body: report() } : undefined));
     const { unmount } = render(<CashFlowPageClient />);
     await screen.findByRole('heading', { name: 'This month' });
     expect(screen.queryByText(note)).not.toBeInTheDocument();
     unmount();
+
+    // An expired plan, or a one-time plan on a card with no pace, never moves Cash position.
+    mockFetch(url => (url.includes('/api/cash-flow?')
+      ? { status: 200, body: report({ cards: [...report().cards, mystery], plannedEvents: [...report().plannedEvents, expired, orphan] }) }
+      : undefined));
+    const skipped = render(<CashFlowPageClient />);
+    await screen.findByRole('heading', { name: 'This month' });
+    expect(screen.queryByText(note)).not.toBeInTheDocument();
+    skipped.unmount();
 
     mockFetch(url => (url.includes('/api/cash-flow?') ? { status: 200, body: report({ plannedEvents: [...report().plannedEvents, plan] }) } : undefined));
     render(<CashFlowPageClient />);

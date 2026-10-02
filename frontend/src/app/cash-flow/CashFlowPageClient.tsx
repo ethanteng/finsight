@@ -335,7 +335,13 @@ export default function CashFlowPageClient() {
                   <div className="mt-3">
                     <CashFlowChart report={report} />
                   </div>
-                  {report.plannedEvents.some(event => event.kind === 'card_payment') && (
+                  {/* Only when Cash position will actually apply an upcoming plan: expired
+                      events and one-time plans on unprojected cards never move it. */}
+                  {report.position.available && report.plannedEvents.some(event => {
+                    if (event.kind !== 'card_payment' || event.nextDate === null || !event.accountId) return false;
+                    const card = report.cards.find(item => item.accountId === event.accountId);
+                    return Boolean(card && (card.currentPace || card.withPlans));
+                  }) && (
                     <p className="mt-3 text-xs leading-5 text-[#66736b]">
                       Card payments aren’t cash out here: purchases already count when you make them. Your planned card
                       payments show in Cash position.
