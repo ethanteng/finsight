@@ -1,7 +1,7 @@
 import type { PlannedCashFlowEvent as PlannedCashFlowEventRow } from '@prisma/client';
 import { getPrismaClient } from '../prisma-client';
 import { calendarDateInTimeZone } from '../domain/time-zone';
-import { minDate } from '../cash-flow/calendar';
+import { calendarDateFrom, minDate } from '../cash-flow/calendar';
 import {
   buildCashFlowModel,
   buildCashFlowReport,
@@ -27,8 +27,16 @@ export interface LoadedCashFlowModel {
   snapshot: CashFlowSnapshotMeta;
 }
 
+/**
+ * Prisma reads and writes a PostgreSQL DATE as UTC midnight, which is how the
+ * truth contract reads a date-only value too, so the calendar date is the UTC
+ * date. Going through the engine's one Date-to-calendar-date reader keeps that
+ * rule in a single place.
+ */
 function dateOnly(value: Date): string {
-  return value.toISOString().slice(0, 10);
+  const date = calendarDateFrom(value);
+  if (!date) throw new Error('Planned cash-flow event has an unreadable date');
+  return date;
 }
 
 function toPlannedEvent(row: PlannedCashFlowEventRow): PlannedCashFlowEvent {
@@ -62,13 +70,23 @@ export async function listPlannedEvents(userId: string): Promise<PlannedCashFlow
   return rows.map(toPlannedEvent);
 }
 
-export async function countPlannedEvents(userId: string): Promise<number> {
-  return getPrismaClient().plannedCashFlowEvent.count({ where: { userId } });
-}
-
-export async function createPlannedEvent(userId: string, input: PlannedEventInput): Promise<PlannedCashFlowEvent> {
-  const row = await getPrismaClient().plannedCashFlowEvent.create({ data: { userId, ...toRowData(input) } });
-  return toPlannedEvent(row);
+/**
+ * Create an event unless the user already has `limit` of them; null when they
+ * do. The count and the insert run under a per-user advisory lock (namespace
+ * 872014272, beside the Stripe trial lock's 872014271), so two simultaneous
+ * creates cannot both see room for one more and both land.
+ */
+export async function createPlannedEventWithinLimit(
+  userId: string,
+  input: PlannedEventInput,
+  limit: number
+): Promise<PlannedCashFlowEvent | null> {
+  return getPrismaClient().$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(872014272, hashtext(${userId}))`;
+    if (await tx.plannedCashFlowEvent.count({ where: { userId } }) >= limit) return null;
+    const row = await tx.plannedCashFlowEvent.create({ data: { userId, ...toRowData(input) } });
+    return toPlannedEvent(row);
+  });
 }
 
 /** Null when the event does not exist or belongs to someone else. */

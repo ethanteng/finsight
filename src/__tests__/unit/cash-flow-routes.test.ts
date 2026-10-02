@@ -8,7 +8,9 @@ import express from 'express';
 import request from 'supertest';
 import { ACCOUNTS, householdTransactions } from './factories/cash-flow.factory';
 
-const prisma = {
+const prisma: Record<string, any> = {
+  $transaction: jest.fn(async (work: (tx: unknown) => unknown) => work(prisma)),
+  $executeRaw: jest.fn().mockResolvedValue(1),
   financialSummarySnapshot: { findUnique: jest.fn() },
   user: { findUnique: jest.fn() },
   plannedCashFlowEvent: {
@@ -149,6 +151,20 @@ describe('cash flow routes', () => {
       expect(response.body.event).toEqual({
         id: 'event-1', label: 'Year-end bonus', kind: 'income', amount: 10000, startDate: '2026-12-15', recurrence: 'once', endDate: null,
       });
+    });
+
+    it('counts and creates under a per-user lock, so concurrent creates cannot pass the cap together', async () => {
+      prisma.plannedCashFlowEvent.count.mockResolvedValue(0);
+      prisma.plannedCashFlowEvent.create.mockResolvedValue(eventRow());
+
+      await request(app).post('/api/cash-flow/events').send(body);
+
+      const [sql, lockedUserId] = prisma.$executeRaw.mock.calls[0];
+      expect(sql.join('?')).toContain('pg_advisory_xact_lock');
+      expect(lockedUserId).toBe('user-1');
+      const lockOrder = prisma.$executeRaw.mock.invocationCallOrder[0];
+      expect(lockOrder).toBeLessThan(prisma.plannedCashFlowEvent.count.mock.invocationCallOrder[0]);
+      expect(prisma.plannedCashFlowEvent.count).toHaveBeenCalledWith({ where: { userId: 'user-1' } });
     });
 
     it('rejects an invalid event before touching the database', async () => {

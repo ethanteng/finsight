@@ -6,8 +6,7 @@ import {
   validatePlannedEventInput,
 } from '../cash-flow/planned-events';
 import {
-  countPlannedEvents,
-  createPlannedEvent,
+  createPlannedEventWithinLimit,
   deletePlannedEvent,
   getCashFlowReport,
   listPlannedEvents,
@@ -53,11 +52,11 @@ router.post('/events', requireAuth, async (req: AuthenticatedRequest, res) => {
   const validation = validatePlannedEventInput(req.body);
   if (!validation.ok) return res.status(400).json({ error: validation.error });
   try {
-    const userId = req.user!.id;
-    if (await countPlannedEvents(userId) >= PLANNED_EVENTS_PER_USER_LIMIT) {
+    const event = await createPlannedEventWithinLimit(req.user!.id, validation.value, PLANNED_EVENTS_PER_USER_LIMIT);
+    if (!event) {
       return res.status(409).json({ error: `You can plan up to ${PLANNED_EVENTS_PER_USER_LIMIT} events` });
     }
-    return res.status(201).json({ event: await createPlannedEvent(userId, validation.value) });
+    return res.status(201).json({ event });
   } catch (error) {
     console.error('Failed to create planned cash flow event:', error);
     return res.status(500).json({ error: 'Failed to save the event' });
