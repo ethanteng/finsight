@@ -240,8 +240,12 @@ export default function PlannedEventsPanel({
         && event.recurrence === 'monthly' && event.id !== form.id)
   );
   // The forecast already pays this card's statements in full, so paying it in
-  // full adds nothing to savings: there is no interest for it to stop.
-  const alreadyPaidInFull = Boolean(form && formCard && formCard.behavior === 'pays_in_full' && form.paymentMode === 'full');
+  // full adds nothing to savings: there is no interest for it to stop. Unless
+  // another plan sets a monthly amount, which can leave part of a statement
+  // unpaid; paying in full takes precedence over it and stops that interest.
+  const alreadyPaidInFull = Boolean(form && formCard && formCard.behavior === 'pays_in_full' && form.paymentMode === 'full'
+    && !events.some(event => event.kind === 'card_payment' && event.accountId === formCard.accountId
+      && event.id !== form.id && event.recurrence === 'monthly' && event.paymentMode === 'fixed'));
 
   return (
     <section ref={sectionRef} className="scroll-mt-28 rounded-[1.6rem] border border-[#102319]/10 bg-[#fffdf5] p-5 shadow-sm sm:p-7" aria-labelledby="planned-events-heading">

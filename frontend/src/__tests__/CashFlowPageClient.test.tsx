@@ -84,7 +84,7 @@ function report(overrides: Partial<CashFlowReport> = {}): CashFlowReport {
       accountId: 'card', name: 'Rewards Card', mask: '9876', institution: 'Card Co', balance: 4000, apr: 24, minimumPayment: 80,
       paymentDay: 20, behavior: 'average_payment', usualMonthlyPayment: 1520.83, paymentSource: 'connected',
       currentPace: pace('2027-03', 112.4, true, usualPayments), withPlans: null, interestSaved: null,
-      plansMatchCurrentPace: false, planIds: [],
+      plansMatchCurrentPace: null, planIds: [],
     }],
     position: {
       available: true, startingCash: 5200, startingCardDebt: 4000,
@@ -777,22 +777,34 @@ describe('CashFlowPageClient', () => {
     const chase = (overrides: Record<string, unknown> = {}) => ({
       ...report().cards[0], accountId: 'chase', name: 'Chase Credit Card', mask: '4321', balance: 614,
       behavior: 'pays_in_full' as const, usualMonthlyPayment: null,
-      currentPace: pace(null, 0, false, inFull), withPlans: null, interestSaved: null, plansMatchCurrentPace: false, planIds: [],
+      currentPace: pace(null, 0, false, inFull), withPlans: null, interestSaved: null, plansMatchCurrentPace: null, planIds: [],
       ...overrides,
     });
     const sameNote = 'Same as your current pace: you already pay this card in full, so your plan doesn’t change your forecast.';
 
     it('says when a plan leaves the card where its usual pace does', async () => {
       mockFetch(url => (url.includes('/api/cash-flow?')
-        ? { status: 200, body: report({ cards: [chase({ withPlans: pace(null, 0, false, inFull), interestSaved: { twelveMonths: 0, total: 0 }, plansMatchCurrentPace: true, planIds: ['chase'] })] }) }
+        ? { status: 200, body: report({ cards: [chase({ withPlans: pace(null, 0, false, inFull), interestSaved: { twelveMonths: 0, total: 0 }, plansMatchCurrentPace: 'exactly', planIds: ['chase'] })] }) }
         : undefined));
       render(<CashFlowPageClient />);
       expect(await screen.findByText(sameNote)).toBeInTheDocument();
     });
 
+    it('says when a plan only moves the day the payment goes out', async () => {
+      const earlier = { nextPayment: { date: '2026-11-02', amount: 731.91 }, paymentsTwelveMonths: 2890.2 };
+      mockFetch(url => (url.includes('/api/cash-flow?')
+        ? { status: 200, body: report({ cards: [chase({ withPlans: pace(null, 0, false, earlier), interestSaved: { twelveMonths: 0, total: 0 }, plansMatchCurrentPace: 'monthly', planIds: ['chase'] })] }) }
+        : undefined));
+      render(<CashFlowPageClient />);
+      expect(await screen.findByText(
+        'Same as your current pace: you already pay this card in full, so your plan only moves the day each payment leaves your cash. What you save and owe each month doesn’t change.'
+      )).toBeInTheDocument();
+      expect(screen.queryByText(sameNote)).not.toBeInTheDocument();
+    });
+
     it('says nothing of the sort when the plan changes the card', async () => {
       mockFetch(url => (url.includes('/api/cash-flow?')
-        ? { status: 200, body: report({ cards: [chase({ withPlans: pace(null, 0, false, inFull), plansMatchCurrentPace: false, planIds: ['chase'] })] }) }
+        ? { status: 200, body: report({ cards: [chase({ withPlans: pace(null, 0, false, inFull), plansMatchCurrentPace: null, planIds: ['chase'] })] }) }
         : undefined));
       render(<CashFlowPageClient />);
       await screen.findByRole('heading', { name: 'Credit cards' });
@@ -814,6 +826,23 @@ describe('CashFlowPageClient', () => {
       )).toBeInTheDocument();
       // A set amount can leave part of a statement unpaid, which does change it.
       fireEvent.click(screen.getByRole('button', { name: 'A set amount' }));
+      expect(screen.queryByText(/You already pay this card in full each month/)).not.toBeInTheDocument();
+    });
+
+    it('makes no such promise beside a plan that sets a monthly amount', async () => {
+      // Paying in full takes precedence over the set amount, so it can stop the interest that plan runs up.
+      const setAmount = {
+        id: 'set', label: 'Chase payment', kind: 'card_payment', amount: 100, startDate: '2026-10-20', recurrence: 'monthly',
+        endDate: null, accountId: 'chase', paymentMode: 'fixed', nextDate: '2026-10-20', occurrencesInRange: 2,
+      } as const;
+      mockFetch(url => (url.includes('/api/cash-flow?')
+        ? { status: 200, body: report({ cards: [chase({ planIds: ['set'] })], plannedEvents: [...report().plannedEvents, setAmount] }) }
+        : undefined));
+      render(<CashFlowPageClient />);
+      await screen.findByRole('heading', { name: 'Credit cards' });
+
+      fireEvent.click(screen.getByRole('button', { name: 'Plan a payment' }));
+      expect(screen.getByLabelText('Name')).toHaveValue('Pay off Chase Credit Card');
       expect(screen.queryByText(/You already pay this card in full each month/)).not.toBeInTheDocument();
     });
   });
