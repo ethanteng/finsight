@@ -300,6 +300,23 @@ describe('the report’s cards and cash position', () => {
       expect(built.cards[0].purchases.dailyRate).toBeGreaterThan(without.cards[0].purchases.dailyRate);
     });
 
+    it('treats a monthly plan that has ended like no plan when taking interest out of an override', () => {
+      // The plan paid nothing inside the forecast, so the card is not projected
+      // and posts no interest: its history's interest must stay in the override.
+      const charge = (date: string, amount: number) =>
+        tx('card', date, 'fee', amount, 'INTEREST CHARGE ON PURCHASES', { personal_finance_category: INTEREST_CHARGE_CATEGORY });
+      const base = noPayments.filter(item => !String(item.name).includes('INTEREST'));
+      const ended: PlannedCashFlowEvent = { ...monthly, id: 'ended', startDate: '2026-03-20', endDate: '2026-08-20' };
+      const built = model({
+        transactions: [...base, charge('2026-07-03', 23.5), charge('2026-08-19', 81.25), charge('2026-09-08', 47.1)],
+        accounts: noMinimum,
+        plannedEvents: [ended],
+        overrides: { monthlyIncome: null, monthlyExpense: 6000 },
+      });
+      expect(built.cards[0].projection).toBeNull();
+      expect(built.cardDailySpending.get('card')! - built.cards[0].purchases.dailyRate).toBeCloseTo(0, 6);
+    });
+
     it('is left out with only a one-time plan, and the position says so', () => {
       const report = buildCashFlowReport(
         model({ transactions: noPayments, accounts: noMinimum, plannedEvents: [payoff] }),

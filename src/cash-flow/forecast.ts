@@ -17,6 +17,7 @@ import {
 import {
   cardBaseline,
   cardTermsFromAccount,
+  canProjectCard,
   projectCard,
   type CardBaseline,
   type CardHistory,
@@ -393,13 +394,14 @@ export function buildCashFlowModel(input: CashFlowModelInput): CashFlowModel {
       // learns: with no usual pace there is no plan-free projection to carry
       // that interest, and the forecast without plans must not lose it.
       const modelsInterest = !reason && terms.apr !== null && terms.balance !== null && baseline.behavior !== 'unknown';
-      // projectCard posts APR interest whenever it can project and the APR is
-      // known — including from a monthly plan alone. Only then is learned
-      // interest safe to strip from purchases / an override; otherwise it
-      // would vanish with no APR posting to replace it.
-      const hasMonthlyPlan = plans.some(event => event.recurrence === 'monthly' && event.paymentMode !== null);
-      const postsAprInterest = !reason && terms.apr !== null && terms.balance !== null
-        && (baseline.behavior !== 'unknown' || hasMonthlyPlan);
+      // projectCard posts APR interest whenever it can project the card (with
+      // the user's plans, which the cash position runs on) and the APR is
+      // known, including from a monthly plan alone. Only then is learned
+      // interest safe to take off what the card is charged, or out of an
+      // override; otherwise it would vanish with no APR posting to replace it.
+      // The same check projectCard makes, so the two cannot disagree.
+      const postsAprInterest = !reason && terms.apr !== null
+        && canProjectCard({ terms, baseline, plans, forecastStart, forecastEndLimit });
       return { account, history, terms, baseline, plans, modelsInterest, postsAprInterest };
     });
   const modeledInterestCards = new Set(cardSetups.filter(card => card.modelsInterest).map(card => card.account.id));

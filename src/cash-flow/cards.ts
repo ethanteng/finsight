@@ -238,6 +238,26 @@ export interface CardProjectionInput {
   forecastEndLimit: CalendarDate;
 }
 
+/** The day after the last month a projection accounts: the month the window ends in is accounted whole. */
+function projectionEndFor(forecastEndLimit: CalendarDate): CalendarDate {
+  return addMonths(startOfMonth(addDays(forecastEndLimit, -1)), 1, 1);
+}
+
+/**
+ * Whether a card can be projected at all: it needs a balance to start from and
+ * a pace, which with no usual pace only a monthly plan in the window supplies.
+ * The forecast asks this before it projects, so it can tell which cards will
+ * post their own interest.
+ */
+export function canProjectCard(
+  input: Pick<CardProjectionInput, 'terms' | 'baseline' | 'plans' | 'forecastStart' | 'forecastEndLimit'>
+): boolean {
+  if (input.terms.balance === null) return false;
+  if (input.baseline.behavior !== 'unknown') return true;
+  const plans = plansByMonth(input.plans, input.forecastStart, projectionEndFor(input.forecastEndLimit));
+  return [...plans.values()].some(plan => plan.statementInFull !== null || plan.fixedMonthly !== null);
+}
+
 /**
  * Project one card month by month across the forecast window. Null when there
  * is no balance to start from or no pace to project: with no usual pace, only
@@ -249,11 +269,9 @@ export interface CardProjectionInput {
  */
 export function projectCard(input: CardProjectionInput): CardProjection | null {
   const { terms, baseline, forecastStart, forecastEndLimit } = input;
-  if (terms.balance === null) return null;
-  const projectionEnd = addMonths(startOfMonth(addDays(forecastEndLimit, -1)), 1, 1);
+  if (terms.balance === null || !canProjectCard(input)) return null;
+  const projectionEnd = projectionEndFor(forecastEndLimit);
   const plans = plansByMonth(input.plans, forecastStart, projectionEnd);
-  const monthlyPlan = [...plans.values()].some(plan => plan.statementInFull || plan.fixedMonthly);
-  if (baseline.behavior === 'unknown' && !monthlyPlan) return null;
   const inWindow = (date: CalendarDate) => date >= forecastStart && date < forecastEndLimit;
   const purchased = (from: CalendarDate, toExclusive: CalendarDate) =>
     purchasesBetween(input.purchases, forecastStart, from, toExclusive);

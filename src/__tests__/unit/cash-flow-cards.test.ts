@@ -1,5 +1,6 @@
 import { addDays, addMonths } from '../../cash-flow/calendar';
 import {
+  canProjectCard,
   cardBaseline,
   cardTermsFromAccount,
   projectCard,
@@ -279,6 +280,36 @@ describe('projectCard', () => {
     expect(projection.months.slice(0).every(month => month.carried === 0)).toBe(true);
     expect(projection.paidOffBy).toBe('2026-11');
     expect(projection.payments[0]).toEqual({ date: '2026-11-05', amount: 4000 });
+  });
+});
+
+describe('canProjectCard', () => {
+  const unknown: CardBaseline = { behavior: 'unknown', monthlyPayment: null };
+  const can = (baseline: CardBaseline, plans: PlannedCashFlowEvent[], overrides: Partial<CardTerms> = {}) => canProjectCard({
+    terms: terms(overrides), baseline, plans, forecastStart: '2026-11-01', forecastEndLimit: '2028-11-01',
+  });
+
+  it('needs a balance, and a usual pace or a monthly plan that pays inside the window', () => {
+    expect(can(carrying, [])).toBe(true);
+    expect(can(carrying, [], { balance: null })).toBe(false);
+    expect(can(unknown, [])).toBe(false);
+    expect(can(unknown, [plan({ startDate: '2026-11-20' })])).toBe(false);
+    expect(can(unknown, [plan({ recurrence: 'monthly', startDate: '2026-11-20' })])).toBe(true);
+    // A monthly plan that ended before the forecast, or starts after it, pays nothing in it.
+    expect(can(unknown, [plan({ recurrence: 'monthly', startDate: '2026-03-20', endDate: '2026-08-20' })])).toBe(false);
+    expect(can(unknown, [plan({ recurrence: 'monthly', startDate: '2029-01-20' })])).toBe(false);
+  });
+
+  it('agrees with whether projectCard projects', () => {
+    const cases: Array<[CardBaseline, PlannedCashFlowEvent[]]> = [
+      [carrying, []],
+      [unknown, []],
+      [unknown, [plan({ recurrence: 'monthly', startDate: '2026-11-20' })]],
+      [unknown, [plan({ recurrence: 'monthly', startDate: '2026-03-20', endDate: '2026-08-20' })]],
+    ];
+    for (const [baseline, plans] of cases) {
+      expect(can(baseline, plans)).toBe(project(baseline, plans) !== null);
+    }
   });
 });
 
