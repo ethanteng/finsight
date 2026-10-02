@@ -1,4 +1,7 @@
-import { buildTransactionSummary } from '../../services/transaction-summary-service';
+import {
+  averageCanonicalTransactionSummary,
+  buildTransactionSummary,
+} from '../../services/transaction-summary-service';
 
 describe('buildTransactionSummary', () => {
   const start = new Date('2026-05-01T00:00:00.000Z');
@@ -194,5 +197,84 @@ describe('buildTransactionSummary', () => {
 
     expect(transactionsSummary.expenseTotal).toBe(1800);
     expect(transactionsSummary.byCategory).toEqual({ 'Mortgage Payment': 1800 });
+  });
+
+  describe('history coverage', () => {
+    const windowStart = new Date('2025-10-01T15:00:00.000Z');
+    const computedAt = new Date('2026-10-01T15:00:00.000Z');
+    const expense = (id: string, date: string, amount = 100) => ({
+      transaction_id: id, account_id: 'checking', date, amount: -amount, transaction_type: 'expense', iso_currency_code: 'USD',
+    });
+    const income = (id: string, date: string, amount: number) => ({
+      transaction_id: id, account_id: 'checking', date, amount, transaction_type: 'income', iso_currency_code: 'USD',
+    });
+
+    it('does not report months before the connection history began as zero', () => {
+      const { transactionsSummary } = buildTransactionSummary(
+        [
+          income('pay-jul', '2026-07-03', 4000),
+          income('pay-aug', '2026-08-03', 4000),
+          income('pay-sep', '2026-09-03', 4000),
+          expense('rent-jul', '2026-07-05', 2000),
+        ],
+        windowStart,
+        computedAt
+      );
+
+      expect(transactionsSummary.coverageStartDate).toBe('2026-07-03');
+      expect(Object.keys(transactionsSummary.byMonth)).toEqual(['2026-07', '2026-08', '2026-09', '2026-10']);
+      const average = averageCanonicalTransactionSummary(transactionsSummary)!;
+      expect(average.monthCount).toBe(4);
+      expect(average.averageIncome).toBe(3000);
+    });
+
+    it('keeps the requested window when the history reaches back past it', () => {
+      const { transactionsSummary } = buildTransactionSummary(
+        [expense('oldest', '2025-10-02'), expense('latest', '2026-09-30')],
+        windowStart,
+        computedAt
+      );
+
+      expect(transactionsSummary.coverageStartDate).toBe('2025-10-02');
+      expect(Object.keys(transactionsSummary.byMonth)).toHaveLength(13);
+    });
+
+    it('lets banking activity, not an older brokerage feed, decide coverage', () => {
+      const banking = [income('pay', '2026-08-03', 4000)];
+      const { transactionsSummary } = buildTransactionSummary(
+        [
+          ...banking,
+          { investment_transaction_id: 'old-dividend', account_id: 'brokerage', date: '2025-11-15', amount: -40, type: 'cash', subtype: 'dividend', iso_currency_code: 'USD' },
+        ],
+        windowStart,
+        computedAt,
+        'USD',
+        { coverageTransactions: banking }
+      );
+
+      expect(transactionsSummary.coverageStartDate).toBe('2026-08-03');
+      expect(transactionsSummary.incomeTotal).toBe(4000);
+      expect(transactionsSummary.excludedTransactionIds).toContain('old-dividend');
+    });
+
+    it('uses investment activity when there is no banking activity', () => {
+      const { transactionsSummary } = buildTransactionSummary(
+        [{ investment_transaction_id: 'dividend', account_id: 'brokerage', date: '2026-03-15', amount: -40, type: 'cash', subtype: 'dividend', iso_currency_code: 'USD' }],
+        windowStart,
+        computedAt,
+        'USD',
+        { coverageTransactions: [] }
+      );
+
+      expect(transactionsSummary.coverageStartDate).toBe('2026-03-15');
+      expect(transactionsSummary.incomeTotal).toBe(40);
+    });
+
+    it('reports no coverage and keeps the full window when there is no activity', () => {
+      const { transactionsSummary } = buildTransactionSummary([], windowStart, computedAt);
+
+      expect(transactionsSummary.coverageStartDate).toBeNull();
+      expect(Object.keys(transactionsSummary.byMonth)).toHaveLength(13);
+    });
   });
 });

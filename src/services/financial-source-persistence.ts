@@ -2,6 +2,7 @@ import { Prisma } from '@prisma/client';
 import { getPrismaClient } from '../prisma-client';
 import { isNonPlaidAccountId } from './plaid-account-scope';
 import { TokenStatus, type PlaidTokenHealth } from './token-validation-service';
+import { transactionHistoryDays } from '../config/transaction-history';
 
 const prisma = getPrismaClient();
 
@@ -17,8 +18,7 @@ export async function loadPersistedPlaidData(
     options: { includeTransactions: boolean; includeInvestments: boolean; includeLiabilities?: boolean }
   ): Promise<{ data: any; lastSynced: Date | null; isFresh: boolean } | null> {
     try {
-      const historyDays = parseInt(process.env.TRANSACTION_HISTORY_DAYS || '90', 10);
-      const startDate = new Date(Date.now() - historyDays * 24 * 60 * 60 * 1000);
+      const startDate = new Date(Date.now() - transactionHistoryDays() * 24 * 60 * 60 * 1000);
       const accountInclude = options.includeTransactions
         ? {
             transactions: {

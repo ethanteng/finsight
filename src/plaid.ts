@@ -13,6 +13,7 @@ import { selectDeclaredAssetType } from './services/investment-holding-classific
 import { removePlaidItem, removePlaidItems } from './services/plaid-item-removal';
 import { latestObservedAt } from './services/account-observation-time';
 import { deleteTransactionsWithOverrides } from './services/transaction-cleanup';
+import { PLAID_TRANSACTIONS_DAYS_REQUESTED } from './config/transaction-history';
 
 // Initialize Prisma client lazily to avoid import issues during ts-node startup
 let prisma: PrismaClient | null = null;
@@ -444,6 +445,10 @@ export const setupPlaidRoutes = (app: any) => {
         ],
         // Optional: If you want certain scopes *when supported* (but not block Link), list them here:
         // required_if_supported_products: [Products.Investments],
+        // Plaid fixes an Item's history depth when Transactions initializes and
+        // never extends it backwards, so request the maximum up front. It does
+        // not change the price: Transactions is billed per Item per month.
+        transactions: { days_requested: PLAID_TRANSACTIONS_DAYS_REQUESTED },
         webhook: process.env.PLAID_WEBHOOK_URL || undefined,
       };
 
