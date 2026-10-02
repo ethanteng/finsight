@@ -138,9 +138,16 @@ The report gives each card's outcome at the usual pace and with the user's plans
 - the balance in 12 months;
 - the next payment: the first day the card is paid, and all it is paid that day (`nextPayment`);
 - what the card is paid in the 12 months from the forecast start (`paymentsTwelveMonths`);
-- the interest the plans save.
+- the interest the plans save;
+- how the plans compare with the usual pace (`plansMatchCurrentPace`): `exactly` when every payment goes out on the same day for the same amount, `monthly` when every month is paid, charged and left owing the same but a payment goes out on another day, and null when the plans change the card.
 
 The credit cards panel shows each pace's next payment and its 12-month total, and says it comes from the user's cash only for a card paid from the connected accounts.
+
+A plan can match the usual pace, and the page says so rather than showing two identical outcomes. The common case is paying in full a card already paid in full: the usual pace already pays each statement in full.
+
+- **Panel:** an exact match doesn't change the forecast. A monthly one only moves the day each payment leaves the cash; what the user saves and owes each month is unchanged.
+- **Plan form:** it warns as soon as "In full" is chosen for such a card. A one-time payoff of one only takes the money out of cash sooner, and neither changes savings, since there is no interest to stop.
+- **When the warning is held back:** the card has another plan that sets a monthly amount. Paying in full takes precedence over that amount, so it can stop interest the set amount would leave behind.
 
 "Without planned events" figures use every card's usual pace. The plans' effect on a window therefore includes the interest they change.
 

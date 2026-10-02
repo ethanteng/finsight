@@ -246,6 +246,12 @@ export interface CashFlowCardSummary {
   currentPace: CardOutcome | null;
   withPlans: CardOutcome | null;
   interestSaved: { twelveMonths: number; total: number } | null;
+  /**
+   * How the plans compare with the usual pace: `exactly` (same days and
+   * amounts), `monthly` (each month the same, a payment on another day), or
+   * null when they change the card or there is nothing to compare.
+   */
+  plansMatchCurrentPace: 'exactly' | 'monthly' | null;
   planIds: string[];
 }
 

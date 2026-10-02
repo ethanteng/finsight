@@ -21,6 +21,16 @@ function paymentLine(outcome: CardOutcome, paymentSource: CashFlowCardSummary['p
     : next;
 }
 
+/** What a plan that matches the card's usual pace changes: nothing, or only the day its payments go out. */
+function planMatchLine(card: CashFlowCardSummary): string {
+  const already = card.behavior === 'pays_in_full'
+    ? 'you already pay this card in full'
+    : 'your plan pays what you already pay each month';
+  return card.plansMatchCurrentPace === 'exactly'
+    ? `Same as your current pace: ${already}, so your plan doesn’t change your forecast.`
+    : `Same as your current pace: ${already}, so your plan only moves the day each payment leaves your cash. What you save and owe each month doesn’t change.`;
+}
+
 function Outcome({ title, outcome, paymentSource, tone }: {
   title: string;
   outcome: CardOutcome;
@@ -94,6 +104,10 @@ export default function CreditCardsPanel({
                   <Outcome title="With your plan" outcome={card.withPlans} paymentSource={card.paymentSource} tone="plan" />
                 )}
               </div>
+            )}
+
+            {card.plansMatchCurrentPace && (
+              <p className="mt-3 text-sm text-[#5e6b63]">{planMatchLine(card)}</p>
             )}
 
             {!card.currentPace && (

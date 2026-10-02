@@ -1117,6 +1117,14 @@ export interface CashFlowCardSummary {
   withPlans: CardOutcome | null;
   /** The usual pace's interest less the plans'; null without plans or an APR. */
   interestSaved: { twelveMonths: number; total: number } | null;
+  /**
+   * How the plans compare with the usual pace. `exactly`: every payment goes
+   * out on the same day for the same amount, so nothing in the forecast moves.
+   * `monthly`: every month is paid, charged and left owing the same, but a
+   * payment goes out on another day, which moves only the day-by-day cash.
+   * Null when the plans change the card, or without plans or a usual pace.
+   */
+  plansMatchCurrentPace: 'exactly' | 'monthly' | null;
   planIds: string[];
 }
 
@@ -1181,6 +1189,26 @@ export function summarizeCards(model: CashFlowModel): CashFlowCardSummary[] {
   return model.cards.map(card => cardSummary(card, model.forecastStart));
 }
 
+/**
+ * How two projections of a card compare (see `plansMatchCurrentPace`). A plan
+ * to pay in full a card already paid in full is the usual match: the page says
+ * what the plan changes, if anything, rather than showing two identical
+ * outcomes side by side.
+ */
+function paceMatch(current: CardProjection | null, planned: CardProjection | null): 'exactly' | 'monthly' | null {
+  if (!current || !planned || current.months.length !== planned.months.length) return null;
+  const sameMonths = current.months.every((month, index) => {
+    const other = planned.months[index];
+    return month.month === other.month && month.payment === other.payment
+      && month.interest === other.interest && month.endBalance === other.endBalance;
+  });
+  if (!sameMonths) return null;
+  // Payments are in date order and unrounded.
+  const sameDays = current.payments.length === planned.payments.length && current.payments.every((payment, index) =>
+    payment.date === planned.payments[index].date && roundCents(payment.amount) === roundCents(planned.payments[index].amount));
+  return sameDays ? 'exactly' : 'monthly';
+}
+
 function cardSummary(card: CardModel, forecastStart: CalendarDate): CashFlowCardSummary {
   const hasPlans = card.plans.length > 0;
   const current = card.currentPace;
@@ -1212,6 +1240,7 @@ function cardSummary(card: CardModel, forecastStart: CalendarDate): CashFlowCard
     currentPace: cardOutcome(current, forecastStart),
     withPlans,
     interestSaved: saved,
+    plansMatchCurrentPace: paceMatch(current, planned),
     planIds: card.plans.map(plan => plan.id),
   };
 }

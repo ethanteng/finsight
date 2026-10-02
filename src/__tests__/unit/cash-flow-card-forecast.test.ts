@@ -166,6 +166,40 @@ describe('the report’s cards and cash position', () => {
     );
     expect(planned.interestSaved!.twelveMonths).toBeGreaterThan(0);
     expect(planned.planIds).toEqual(['payoff']);
+    // Paying off a card that carries a balance changes what it costs.
+    expect(usual.plansMatchCurrentPace).toBeNull();
+    expect(planned.plansMatchCurrentPace).toBeNull();
+  });
+
+  it('says when a plan leaves a card exactly where its usual pace does', () => {
+    // Paid in full every month, as the user's Chase card is: no interest in the history.
+    const paidInFull = (plannedEvents: PlannedCashFlowEvent[]) => buildCashFlowReport(
+      model({ transactions: household, accounts: accountsWithCardTerms(614), plannedEvents }),
+      { granularity: 'month', horizonMonths: 6 }
+    ).cards[0];
+    // The card is due on the 20th.
+    const onDueDay: PlannedCashFlowEvent = { ...payoff, id: 'monthly', recurrence: 'monthly', startDate: '2026-10-20' };
+
+    const usual = paidInFull([]);
+    expect(usual.behavior).toBe('pays_in_full');
+    expect(usual.plansMatchCurrentPace).toBeNull();
+
+    const same = paidInFull([onDueDay]);
+    expect(same.withPlans!.months).toEqual(same.currentPace!.months);
+    expect(same.withPlans!.nextPayment).toEqual(same.currentPace!.nextPayment);
+    expect(same.plansMatchCurrentPace).toBe('exactly');
+
+    // Paid in full on the 2nd instead: each month is the same, but the money
+    // leaves the cash on another day.
+    const earlier = paidInFull([{ ...onDueDay, startDate: '2026-10-02' }]);
+    expect(earlier.withPlans!.months).toEqual(earlier.currentPace!.months);
+    expect(earlier.withPlans!.nextPayment!.date).not.toBe(earlier.currentPace!.nextPayment!.date);
+    expect(earlier.plansMatchCurrentPace).toBe('monthly');
+
+    // A set amount below the statement leaves a balance to carry, which costs interest.
+    const short = paidInFull([{ ...onDueDay, paymentMode: 'fixed', amount: 100 }]);
+    expect(short.withPlans!.interestTwelveMonths).toBeGreaterThan(0);
+    expect(short.plansMatchCurrentPace).toBeNull();
   });
 
   it('reports cash and card balances at each period end from the forecast on', () => {
