@@ -2301,8 +2301,8 @@ app.get('/api/finances/overrides', requireAuth, async (req: Request, res: Respon
     const { averageCanonicalTransactionSummary } = await import('./services/finances-overview-service');
     const snapshot = await getLatestFinancialSnapshot(req.user!.id, 'summary');
     const averages = averageCanonicalTransactionSummary(snapshot?.transactionsSummary);
-    const calculatedIncome = averages?.averageIncome;
-    const calculatedExpense = averages?.averageExpenses;
+    const calculatedIncome = averages?.averageIncome ?? null;
+    const calculatedExpense = averages?.averageExpenses ?? null;
 
     res.json({
       monthlyIncome: user.monthlyIncomeOverride,

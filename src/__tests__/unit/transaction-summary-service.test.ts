@@ -302,6 +302,14 @@ describe('buildTransactionSummary', () => {
       expect(transactionsSummary.incomeTotal).toBe(40);
     });
 
+    it('reports no months for a new connection that has returned no transactions yet', () => {
+      const { transactionsSummary } = buildTransactionSummary([], windowStart, computedAt);
+
+      expect(transactionsSummary.coverageStartDate).toBeNull();
+      expect(transactionsSummary.byMonth).toEqual({});
+      expect(averageCanonicalTransactionSummary(transactionsSummary)).toBeNull();
+    });
+
     it('reports no coverage and no zero months when there is no posted activity', () => {
       const { transactionsSummary } = buildTransactionSummary(
         [{ ...expense('pending-only', '2026-07-01'), pending: true }],

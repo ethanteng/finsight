@@ -252,7 +252,7 @@ export default function IncomeExpenseOverrides({
               <div className="text-white font-semibold text-xl mb-1">
                 {monthlyIncome !== null ? formatCurrency(monthlyIncome) : formatCurrency(calculatedIncome)}
               </div>
-              {monthlyIncome === null && calculatedIncome !== undefined && (
+              {monthlyIncome === null && calculatedIncome != null && (
                 <div className="text-gray-500 text-sm">
                   Calculated from transactions
                 </div>
@@ -336,7 +336,7 @@ export default function IncomeExpenseOverrides({
               <div className="text-white font-semibold text-xl mb-1">
                 {monthlyExpense !== null ? formatCurrency(monthlyExpense) : formatCurrency(calculatedExpense)}
               </div>
-              {monthlyExpense === null && calculatedExpense !== undefined && (
+              {monthlyExpense === null && calculatedExpense != null && (
                 <div className="text-gray-500 text-sm">
                   Calculated from transactions
                 </div>
