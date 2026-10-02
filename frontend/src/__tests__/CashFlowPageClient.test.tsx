@@ -60,8 +60,8 @@ function report(overrides: Partial<CashFlowReport> = {}): CashFlowReport {
     ],
     oneOffThresholds: { income: 1000, spending: 1000 },
     typicalPayees: [
-      { flow: 'spending', payeeKey: 'safeway', label: 'Safeway', monthlyAmount: 610.2 },
-      { flow: 'spending', payeeKey: 'trader joes', label: 'Trader Joes', monthlyAmount: 480 },
+      { flow: 'spending', payeeKey: 'safeway', label: 'Safeway', monthlyAmount: 610.2, countedOneOffIds: [] },
+      { flow: 'spending', payeeKey: 'trader joes', label: 'Trader Joes', monthlyAmount: 480, countedOneOffIds: [] },
     ],
     adjustments: [],
     oneOffs: [{ id: 'flight', date: '2026-09-10', label: 'United Airlines', flow: 'spending', amount: 2400 }],
@@ -330,9 +330,12 @@ describe('CashFlowPageClient', () => {
 
     it('marks a one-off the user counted where it now sits, and moves it back', async () => {
       const body = report({
-        typicalPayees: [...report().typicalPayees, { flow: 'spending', payeeKey: 'united airlines', label: 'United Airlines', monthlyAmount: 811.11 }],
+        typicalPayees: [
+          ...report().typicalPayees,
+          { flow: 'spending', payeeKey: 'united airlines', label: 'United Airlines', monthlyAmount: 811.11, countedOneOffIds: ['flight'] },
+        ],
         oneOffs: [],
-        adjustments: [{ id: 'adj-flight', kind: 'include_one_off', flow: 'spending', key: 'flight', label: 'United Airlines', date: '2026-09-10', amount: 2400, payeeKey: 'united airlines' }],
+        adjustments: [{ id: 'adj-flight', kind: 'include_one_off', flow: 'spending', key: 'flight', label: 'United Airlines', date: '2026-09-10', amount: 2400 }],
       });
       const calls = adjusting(body);
       render(<CashFlowPageClient />);
@@ -343,9 +346,27 @@ describe('CashFlowPageClient', () => {
       expect(calls.find(call => call.init?.method === 'DELETE')!.url).toMatch(/adjustments\/adj-flight$/);
     });
 
+    it('does not credit a counted one-off that no longer puts anything in the typical rate', async () => {
+      // The user once counted a United flight; now the payee's spending is typical on its own.
+      const body = report({
+        typicalPayees: [
+          ...report().typicalPayees,
+          { flow: 'spending', payeeKey: 'united airlines', label: 'United Airlines', monthlyAmount: 120, countedOneOffIds: [] },
+        ],
+        // Even a change that names the payee is not credited unless the payee says it counts.
+        adjustments: [{ id: 'adj-old-flight', kind: 'include_one_off', flow: 'spending', key: 'old-flight', label: 'United Airlines', date: null, amount: null, payeeKey: 'united airlines' }],
+      });
+      adjusting(body);
+      render(<CashFlowPageClient />);
+      const section = await basis();
+      expect(within(section).queryByText('counted by you')).not.toBeInTheDocument();
+      expect(within(section).queryByRole('button', { name: 'Move back: United Airlines' })).not.toBeInTheDocument();
+      expect(within(section).getByRole('button', { name: 'Leave out: United Airlines' })).toBeInTheDocument();
+    });
+
     it('lists what the user left out, and puts it back', async () => {
       const body = report({
-        adjustments: [{ id: 'adj-consu', kind: 'exclude_payee', flow: 'spending', key: 'ethan teng consu', label: 'Ethan Teng Consu', date: null, amount: null, payeeKey: 'ethan teng consu' }],
+        adjustments: [{ id: 'adj-consu', kind: 'exclude_payee', flow: 'spending', key: 'ethan teng consu', label: 'Ethan Teng Consu', date: null, amount: null }],
       });
       const calls = adjusting(body);
       render(<CashFlowPageClient />);

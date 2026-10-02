@@ -193,18 +193,15 @@ export default function ForecastBoard({ report, apiUrl, onChanged }: {
   };
   const adjust = (request: AdjustmentRequest) => change('POST', '/api/cash-flow/adjustments', request);
   const undo = (adjustment: CashFlowAdjustment) => change('DELETE', `/api/cash-flow/adjustments/${encodeURIComponent(adjustment.id)}`);
-  // Every change but a counted one-off names its payee by its key; an older
-  // report sends no payeeKey, so fall back to that. A counted one-off only
-  // carries payeeKey while it still feeds the typical rate — otherwise the
-  // page would mark a later typical row as "counted by you" and Move back
-  // could undo the wrong change.
-  const payeeOf = (adjustment: CashFlowAdjustment) =>
-    adjustment.payeeKey ?? (adjustment.kind === 'include_one_off' ? null : adjustment.key);
-  const saved = (kind: ForecastAdjustmentKind, flow: Flow, payeeKey: string) =>
-    adjustments.find(adjustment => adjustment.kind === kind && adjustment.flow === flow && payeeOf(adjustment) === payeeKey);
+  const kept = (item: CashFlowRecurringItem) => adjustments.find(adjustment =>
+    adjustment.kind === 'continue_stream' && adjustment.flow === item.flow && adjustment.key === item.payeeKey);
+  // Only a change that is what puts a transaction in the typical rate counts:
+  // one whose one-off aged out, or whose payee now repeats, does nothing here.
+  const countedBy = (payee: CashFlowTypicalPayee) => adjustments.find(adjustment =>
+    adjustment.kind === 'include_one_off' && (payee.countedOneOffIds ?? []).includes(adjustment.key));
 
   const regularRow = (item: CashFlowRecurringItem) => {
-    const kept = item.continuedByUser ? saved('continue_stream', item.flow, item.payeeKey) : undefined;
+    const keptBy = item.continuedByUser ? kept(item) : undefined;
     return (
       <ItemRow
         key={item.id}
@@ -212,15 +209,14 @@ export default function ForecastBoard({ report, apiUrl, onChanged }: {
         detail={`${CADENCE_LABELS[item.cadence]}${item.nextDate ? ` · next ${formatCalendarDate(item.nextDate)}` : ''}`}
         marker={item.continuedByUser ? 'kept by you' : undefined}
         amount={formatMoney(item.amount, true)}
-        action={kept
-          ? <MoveButton label="Stop counting" item={item.label} toward="out" disabled={busy} onClick={() => undo(kept)} />
+        action={keptBy
+          ? <MoveButton label="Stop counting" item={item.label} toward="out" disabled={busy} onClick={() => undo(keptBy)} />
           : <MoveButton label="Leave out" item={item.label} toward="out" disabled={busy} onClick={() => adjust({ kind: 'exclude_payee', flow: item.flow, key: item.payeeKey })} />}
       />
     );
   };
   const typicalRow = (payee: CashFlowTypicalPayee) => {
-    // A one-off the user counted is the only transaction of its payee in the basis.
-    const counted = saved('include_one_off', payee.flow, payee.payeeKey);
+    const counted = countedBy(payee);
     return (
       <ItemRow
         key={`${payee.flow}:${payee.payeeKey}`}

@@ -88,11 +88,27 @@ describe('adjusting what the forecast counts', () => {
     expect(adjusted.oneOffs.some(entry => entry.id === flight.id)).toBe(false);
     expect(adjusted.typical.dailySpending - base.typical.dailySpending).toBeCloseTo(2400 / base.typical.basisDays, 6);
     const report = buildCashFlowReport(adjusted, { granularity: 'month', horizonMonths: 3 });
-    // The change names the payee it now sits under among the typical payees.
-    expect(report.adjustments).toEqual([
-      expect.objectContaining({ kind: 'include_one_off', date: flight.date, amount: 2400, payeeKey: 'united airlines' }),
-    ]);
-    expect(report.typicalPayees).toEqual(expect.arrayContaining([expect.objectContaining({ payeeKey: 'united airlines' })]));
+    expect(report.adjustments).toEqual([expect.objectContaining({ kind: 'include_one_off', date: flight.date, amount: 2400 })]);
+    // The payee it now sits under says it is there because the user counted it.
+    expect(report.typicalPayees).toEqual(expect.arrayContaining([
+      expect.objectContaining({ payeeKey: 'united airlines', countedOneOffIds: [flight.id] }),
+    ]));
+  });
+
+  it('only says a one-off was counted while counting it is what puts it in the typical rate', () => {
+    const flight = model().oneOffs.find(entry => entry.label === 'United Airlines')!;
+    const counted = adjustment({ kind: 'include_one_off', key: flight.id, label: 'United Airlines' });
+    const unitedPayee = (built: ReturnType<typeof model>) =>
+      buildCashFlowReport(built, { granularity: 'month', horizonMonths: 3 }).typicalPayees.find(payee => payee.payeeKey === 'united airlines');
+
+    // The payee now flies twice in the basis, so the first flight is ordinary typical
+    // spending with or without the change, and the change takes no credit for it.
+    const again = tx('card', '2026-09-20', 'expense', 350, 'UNITED AIRLINES', { merchant_name: 'United Airlines' });
+    expect(unitedPayee(model([counted], { transactions: [...history, again] }))!.countedOneOffIds).toEqual([]);
+
+    // Months later the flight is before the 90-day basis: nothing is left to credit it to.
+    const later = model([counted], { dataThrough: '2026-12-15', today: '2026-12-16' });
+    expect(unitedPayee(later)?.countedOneOffIds ?? []).toEqual([]);
   });
 
   it('does not name a counted one-off’s payee once it has left the typical basis', () => {
@@ -109,11 +125,14 @@ describe('adjusting what the forecast counts', () => {
     );
     expect(built.typical.basisStart! > '2026-09-10').toBe(true);
     const report = buildCashFlowReport(built, { granularity: 'month', horizonMonths: 3 });
-    expect(report.typicalPayees).toEqual(expect.arrayContaining([expect.objectContaining({ payeeKey: 'united airlines' })]));
-    // Date and amount stay for the change list; payeeKey stays null so the page
-    // does not mark the later typical row as "counted by you".
+    // United is a typical payee on its own now, and the old count is not credited
+    // with any of it, so the page does not mark the row "counted by you".
+    expect(report.typicalPayees).toEqual(expect.arrayContaining([
+      expect.objectContaining({ payeeKey: 'united airlines', countedOneOffIds: [] }),
+    ]));
+    // Date and amount stay for the list of changes.
     expect(report.adjustments).toEqual([
-      expect.objectContaining({ kind: 'include_one_off', date: '2026-09-10', amount: 2400, payeeKey: null }),
+      expect.objectContaining({ kind: 'include_one_off', date: '2026-09-10', amount: 2400 }),
     ]);
   });
 

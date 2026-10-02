@@ -95,12 +95,6 @@ export interface CashFlowAdjustment {
   /** For a counted one-off: when it happened and how much it was. */
   date: string | null;
   amount: number | null;
-  /**
-   * The payee the change is about: its key, or a counted one-off's payee when
-   * that count still feeds the typical rate; null if the transaction is gone
-   * or no longer among the typical payees.
-   */
-  payeeKey: string | null;
 }
 
 export interface CashFlowTypicalPayee {
@@ -108,6 +102,8 @@ export interface CashFlowTypicalPayee {
   payeeKey: string;
   label: string;
   monthlyAmount: number;
+  /** Transactions in it only because the user counted them, by transaction id. */
+  countedOneOffIds: string[];
 }
 
 export type PlannedEventKind = 'income' | 'expense' | 'card_payment';

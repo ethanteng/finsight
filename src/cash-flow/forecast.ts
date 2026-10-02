@@ -205,6 +205,8 @@ export interface TypicalPayee {
   label: string;
   /** Per day, over the basis. */
   daily: number;
+  /** Transactions in it only because the user counted them: they would have been one-offs. */
+  countedOneOffIds: string[];
 }
 
 export interface TransferModel {
@@ -313,15 +315,18 @@ function learnFlows(
     const key = `${entry.flow}|${entry.counterpartyKey}`;
     payeeCounts.set(key, (payeeCounts.get(key) ?? 0) + 1);
   }
-  const isOneOff = (entry: CashFlowEntry) => {
-    if (countedOneOffs.has(entry.id)) return false;
+  const looksOneOff = (entry: CashFlowEntry) => {
     const repeats = entry.counterpartyKey
       ? (payeeCounts.get(`${entry.flow}|${entry.counterpartyKey}`) ?? 0) > 1
       : false;
     return !repeats && Math.abs(entry.amount) >= oneOffThresholds[entry.flow];
   };
+  // A one-off the user counted joins the typical rate; it is recorded only
+  // while it would otherwise have been left out, so a counted one-off that
+  // aged out of the basis, or whose payee now repeats, is not.
+  const countedIds = new Set(residual.filter(entry => countedOneOffs.has(entry.id) && looksOneOff(entry)).map(entry => entry.id));
 
-  const oneOffs = residual.filter(isOneOff);
+  const oneOffs = residual.filter(entry => looksOneOff(entry) && !countedIds.has(entry.id));
   const oneOffIds = new Set(oneOffs.map(entry => entry.id));
   const totalsByAccount = new Map<string, Record<CashFlowDirection, number>>();
   const byPayee = new Map<string, TypicalPayee & { latest: CalendarDate }>();
@@ -335,8 +340,11 @@ function learnFlows(
     }
     if (!entry.counterpartyKey) continue;
     const key = payeeKey(entry.flow, entry.counterpartyKey);
-    const payee = byPayee.get(key) ?? { flow: entry.flow, counterpartyKey: entry.counterpartyKey, label: entry.label, daily: 0, latest: entry.date };
+    const payee = byPayee.get(key) ?? {
+      flow: entry.flow, counterpartyKey: entry.counterpartyKey, label: entry.label, daily: 0, countedOneOffIds: [], latest: entry.date,
+    };
     payee.daily += entry.amount / basisDays;
+    if (countedIds.has(entry.id)) payee.countedOneOffIds.push(entry.id);
     if (entry.date >= payee.latest) {
       payee.latest = entry.date;
       payee.label = entry.label;
@@ -352,7 +360,9 @@ function learnFlows(
   const typicalPayees = [...byPayee.values()]
     .filter(payee => payee.daily > 0)
     .sort((left, right) => right.daily - left.daily)
-    .map(payee => ({ flow: payee.flow, counterpartyKey: payee.counterpartyKey, label: payee.label, daily: payee.daily }));
+    .map(payee => ({
+      flow: payee.flow, counterpartyKey: payee.counterpartyKey, label: payee.label, daily: payee.daily, countedOneOffIds: payee.countedOneOffIds,
+    }));
   return { streams, oneOffs, dailyByAccount, interestDailyByAccount, typicalPayees, oneOffThresholds };
 }
 
@@ -912,19 +922,14 @@ export interface CashFlowTypicalPayeeSummary {
   payeeKey: string;
   label: string;
   monthlyAmount: number;
+  /** Transactions in it only because the user counted them, by transaction id. */
+  countedOneOffIds: string[];
 }
 
 export interface CashFlowAdjustmentSummary extends ForecastAdjustment {
   /** For a counted one-off: when it happened and how much it was; otherwise null. */
   date: CalendarDate | null;
   amount: number | null;
-  /**
-   * The payee the change is about: its key, or a counted one-off's payee when
-   * that count still places the payee among the typical rates; null if the
-   * transaction is gone or no longer feeds typical (so the page does not mark
-   * a later typical row as "counted by you").
-   */
-  payeeKey: string | null;
 }
 
 /** The report lists at most this many typical payees in each direction. */
@@ -1209,21 +1214,8 @@ function summarizeAdjustments(model: CashFlowModel): CashFlowAdjustmentSummary[]
   const feedsTypical = (flow: CashFlowDirection, counterpartyKey: string) =>
     model.typicalPayees.some(payee => payee.flow === flow && payee.counterpartyKey === counterpartyKey);
   return model.adjustments.map(adjustment => {
-    if (adjustment.kind !== 'include_one_off') return { ...adjustment, date: null, amount: null, payeeKey: adjustment.key };
-    const entry = entries.get(adjustment.key);
-    // Only name the payee when this count still places it among the typical
-    // payees. A stale count whose transaction left the basis keeps date/amount
-    // for the change list, but must not mark a later typical row as "counted by you".
-    const inBasis = Boolean(entry && basisStart && entry.date >= basisStart && entry.date < model.forecastStart);
-    const payeeKey = inBasis && entry!.counterpartyKey && feedsTypical(entry!.flow, entry!.counterpartyKey)
-      ? entry!.counterpartyKey
-      : null;
-    return {
-      ...adjustment,
-      date: entry?.date ?? null,
-      amount: entry ? roundCents(entry.amount) : null,
-      payeeKey,
-    };
+    const entry = adjustment.kind === 'include_one_off' ? entries.get(adjustment.key) : undefined;
+    return { ...adjustment, date: entry?.date ?? null, amount: entry ? roundCents(entry.amount) : null };
   });
 }
 
@@ -1336,6 +1328,7 @@ export function buildCashFlowReport(model: CashFlowModel, request: CashFlowRepor
         payeeKey: payee.counterpartyKey,
         label: payee.label,
         monthlyAmount: roundCents(payee.daily * DAYS_PER_MONTH),
+        countedOneOffIds: payee.countedOneOffIds,
       }))),
     adjustments: summarizeAdjustments(model),
     plannedEvents: model.plannedEvents.map(event => {
