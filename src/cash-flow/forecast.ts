@@ -586,8 +586,16 @@ export function defaultReportRange(
 }
 
 export function buildCashFlowReport(model: CashFlowModel, request: CashFlowReportRequest): CashFlowReport {
+  // Custom ranges may reach back before history when coverage exists (those
+  // days stay unknown and totals.coverage becomes 'partial'). With no history
+  // at all — a dual-override forecast — days before forecastStart are not
+  // unknown zeros either: clamp so a mid-month stub is not labelled as a full
+  // calendar period the way defaultReportRange already avoids.
   const range = request.from && request.to
-    ? { from: request.from, toExclusive: minDate(addDays(request.to, 1), model.forecastEndLimit) }
+    ? {
+        from: model.coverageStart ? request.from : maxDate(request.from, model.forecastStart),
+        toExclusive: minDate(addDays(request.to, 1), model.forecastEndLimit),
+      }
     : defaultReportRange(model, request.granularity, request.horizonMonths);
   const periods = enumeratePeriods(range.from, range.toExclusive, request.granularity)
     .map(bounds => buildPeriod(model, bounds));

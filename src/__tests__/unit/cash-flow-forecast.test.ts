@@ -245,6 +245,20 @@ describe('buildCashFlowReport', () => {
     expect(report.periods[0].forecast).not.toBeNull();
   });
 
+  it('clips a custom range to forecastStart when there is no history', () => {
+    const report = buildCashFlowReport(model({
+      transactions: [],
+      overrides: { monthlyIncome: 6000, monthlyExpense: 4000 },
+      dataThrough: '2026-10-14',
+      today: '2026-10-15',
+    }), { granularity: 'month', horizonMonths: 3, from: '2026-10-01', to: '2026-12-31' });
+    expect(report.range.from).toBe('2026-10-15');
+    expect(report.periods[0]).toMatchObject({ key: '2026-10', start: '2026-10-15', clipped: true });
+    // A full-month override would be $6,000; the clipped stub must not be
+    // labelled as Oct 1–31 (clipped: false) while showing only Oct 15–31.
+    expect(report.periods[0].total!.income).toBeLessThan(6000);
+  });
+
   it('keeps unknown months unknown rather than zero', () => {
     const report = buildCashFlowReport(model(), { granularity: 'month', horizonMonths: 1, from: '2026-03-01', to: '2026-05-31' });
     expect(report.periods.every(period => period.coverage === 'none' && period.actual === null && period.total === null)).toBe(true);
