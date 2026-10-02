@@ -27,6 +27,7 @@ model User {
   accounts                     Account[]
   manualAccounts               ManualAccount[]
   plannedCashFlowEvents        PlannedCashFlowEvent[]
+  cashFlowForecastAdjustments  CashFlowForecastAdjustment[]
   conversations                Conversation[]
   privacySettings              PrivacySettings?
   syncStatuses                 SyncStatus[]
@@ -577,6 +578,28 @@ model PlannedCashFlowEvent {
 
   @@index([userId])
   @@map("planned_cash_flow_events")
+}
+
+/// A user's choice about what the cash-flow forecast counts: a payee left out,
+/// a one-off counted, a stopped item kept, or a transfer left out. It changes
+/// what the forecast learns from, never the history it shows.
+model CashFlowForecastAdjustment {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// 'exclude_payee', 'include_one_off', 'continue_stream' or 'exclude_transfer'.
+  kind      String
+  /// 'income' or 'spending'; for a transfer, 'income' is money in.
+  flow      String
+  /// The payee's ledger key, or a one-off's transaction id.
+  key       String
+  /// What the item was called when the user made the choice.
+  label     String
+  createdAt DateTime @default(now())
+
+  @@unique([userId, kind, flow, key])
+  @@index([userId])
+  @@map("cash_flow_forecast_adjustments")
 }
 
 /// Retirement portfolio analysis results

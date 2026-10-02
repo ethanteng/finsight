@@ -64,6 +64,8 @@ export type RecurringCadence = 'weekly' | 'biweekly' | 'semimonthly' | 'monthly'
 
 export interface CashFlowRecurringItem {
   id: string;
+  /** The payee's key, which a forecast adjustment names it by. */
+  payeeKey: string;
   label: string;
   flow: 'income' | 'spending';
   cadence: RecurringCadence;
@@ -75,6 +77,31 @@ export interface CashFlowRecurringItem {
   status: 'active' | 'lapsed';
   category: string;
   replacedByOverride: boolean;
+  /** It had stopped, and is projected because the user kept it. */
+  continuedByUser: boolean;
+}
+
+/** What a forecast adjustment does: leave a payee out, count a one-off, keep a stopped item, or leave a transfer out. */
+export type ForecastAdjustmentKind = 'exclude_payee' | 'include_one_off' | 'continue_stream' | 'exclude_transfer';
+
+export interface CashFlowAdjustment {
+  id: string;
+  kind: ForecastAdjustmentKind;
+  /** For a transfer, `income` is money in. */
+  flow: 'income' | 'spending';
+  /** A payee's key, or a one-off's transaction id. */
+  key: string;
+  label: string;
+  /** For a counted one-off: when it happened and how much it was. */
+  date: string | null;
+  amount: number | null;
+}
+
+export interface CashFlowTypicalPayee {
+  flow: 'income' | 'spending';
+  payeeKey: string;
+  label: string;
+  monthlyAmount: number;
 }
 
 export type PlannedEventKind = 'income' | 'expense' | 'card_payment';
@@ -133,6 +160,10 @@ export interface CashFlowReport {
   };
   recurring: CashFlowRecurringItem[];
   oneOffs: Array<{ id: string; date: string; label: string; flow: 'income' | 'spending'; amount: number }>;
+  /** The payees behind the typical rates, largest first. */
+  typicalPayees: CashFlowTypicalPayee[];
+  /** The user's choices about what the forecast counts. */
+  adjustments: CashFlowAdjustment[];
   plannedEvents: CashFlowPlannedEventSummary[];
   accounts: Array<{
     id: string;
@@ -192,7 +223,15 @@ export interface CashFlowPositionSummary {
   lowNext12Months: { date: string; cash: number } | null;
   transfers: {
     typicalMonthlyNet: number;
-    recurring: Array<{ id: string; label: string; cadence: RecurringCadence; amount: number; direction: 'in' | 'out'; nextDate: string | null }>;
+    recurring: Array<{
+      id: string;
+      payeeKey: string;
+      label: string;
+      cadence: RecurringCadence;
+      amount: number;
+      direction: 'in' | 'out';
+      nextDate: string | null;
+    }>;
   };
   cardsLeftOut: Array<{ accountId: string; name: string; reason: 'no_balance' | 'no_pace' }>;
 }

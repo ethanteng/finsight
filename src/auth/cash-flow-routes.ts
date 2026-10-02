@@ -1,5 +1,10 @@
 import express from 'express';
 import { requireAuth, type AuthenticatedRequest } from './middleware';
+import {
+  FORECAST_ADJUSTMENTS_PER_USER_LIMIT,
+  validateForecastAdjustmentInput,
+} from '../cash-flow/adjustments';
+import { forecastAdjustmentTarget } from '../cash-flow/forecast';
 import { parseCashFlowQuery } from '../cash-flow/report-query';
 import {
   PLANNED_EVENTS_PER_USER_LIMIT,
@@ -7,10 +12,13 @@ import {
 } from '../cash-flow/planned-events';
 import {
   createPlannedEventWithinLimit,
+  deleteForecastAdjustment,
   deletePlannedEvent,
   getCashFlowReport,
   isUserCreditCard,
   listPlannedEvents,
+  loadCashFlowModel,
+  saveForecastAdjustmentWithinLimit,
   updatePlannedEvent,
 } from '../services/cash-flow-service';
 import type { PlannedEventInput } from '../cash-flow/planned-events';
@@ -29,7 +37,7 @@ async function cardIsTheUsers(userId: string, input: PlannedEventInput): Promise
   return input.kind !== 'card_payment' || (input.accountId !== null && await isUserCreditCard(userId, input.accountId));
 }
 
-function eventId(req: AuthenticatedRequest): string {
+function routeId(req: AuthenticatedRequest): string {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   return typeof id === 'string' ? id : '';
 }
@@ -78,7 +86,7 @@ router.put('/events/:id', requireAuth, async (req: AuthenticatedRequest, res) =>
   if (!validation.ok) return res.status(400).json({ error: validation.error });
   try {
     if (!await cardIsTheUsers(req.user!.id, validation.value)) return res.status(400).json({ error: CARD_NOT_FOUND });
-    const event = await updatePlannedEvent(req.user!.id, eventId(req), validation.value);
+    const event = await updatePlannedEvent(req.user!.id, routeId(req), validation.value);
     if (!event) return res.status(404).json({ error: 'Event not found' });
     return res.json({ event });
   } catch (error) {
@@ -89,12 +97,51 @@ router.put('/events/:id', requireAuth, async (req: AuthenticatedRequest, res) =>
 
 router.delete('/events/:id', requireAuth, async (req: AuthenticatedRequest, res) => {
   try {
-    const deleted = await deletePlannedEvent(req.user!.id, eventId(req));
+    const deleted = await deletePlannedEvent(req.user!.id, routeId(req));
     if (!deleted) return res.status(404).json({ error: 'Event not found' });
     return res.status(204).send();
   } catch (error) {
     console.error('Failed to delete planned cash flow event:', error);
     return res.status(500).json({ error: 'Failed to delete the event' });
+  }
+});
+
+// Adjustments: the user's choices about what the forecast counts. The item a
+// choice names must be in the user's own data, and the server labels it from
+// there; a repeat of a saved choice returns the one already saved.
+const NOT_IN_FORECAST = 'That isn’t in your forecast anymore. Reload the page and try again.';
+
+router.post('/adjustments', requireAuth, async (req: AuthenticatedRequest, res) => {
+  const validation = validateForecastAdjustmentInput(req.body);
+  if (!validation.ok) return res.status(400).json({ error: validation.error });
+  const input = validation.value;
+  try {
+    const loaded = await loadCashFlowModel(req.user!.id);
+    if (!loaded) return res.status(404).json({ error: NOT_IN_FORECAST });
+    const saved = loaded.model.adjustments.find(adjustment =>
+      adjustment.kind === input.kind && adjustment.flow === input.flow && adjustment.key === input.key);
+    if (saved) return res.json({ adjustment: saved });
+    const target = forecastAdjustmentTarget(loaded.model, input);
+    if (!target) return res.status(404).json({ error: NOT_IN_FORECAST });
+    const result = await saveForecastAdjustmentWithinLimit(req.user!.id, input, target.label, FORECAST_ADJUSTMENTS_PER_USER_LIMIT);
+    if (!result) {
+      return res.status(409).json({ error: `You can make up to ${FORECAST_ADJUSTMENTS_PER_USER_LIMIT} changes to the forecast` });
+    }
+    return res.status(result.created ? 201 : 200).json({ adjustment: result.adjustment });
+  } catch (error) {
+    console.error('Failed to save cash flow forecast adjustment:', error);
+    return res.status(500).json({ error: 'Failed to save the change' });
+  }
+});
+
+router.delete('/adjustments/:id', requireAuth, async (req: AuthenticatedRequest, res) => {
+  try {
+    const deleted = await deleteForecastAdjustment(req.user!.id, routeId(req));
+    if (!deleted) return res.status(404).json({ error: 'Change not found' });
+    return res.status(204).send();
+  } catch (error) {
+    console.error('Failed to delete cash flow forecast adjustment:', error);
+    return res.status(500).json({ error: 'Failed to undo the change' });
   }
 });
 

@@ -1,4 +1,7 @@
-import type { PlannedCashFlowEvent as PlannedCashFlowEventRow } from '@prisma/client';
+import type {
+  CashFlowForecastAdjustment as CashFlowForecastAdjustmentRow,
+  PlannedCashFlowEvent as PlannedCashFlowEventRow,
+} from '@prisma/client';
 import { getPrismaClient } from '../prisma-client';
 import { calendarDateInTimeZone } from '../domain/time-zone';
 import { calendarDateFrom, minDate } from '../cash-flow/calendar';
@@ -10,6 +13,11 @@ import {
   type CashFlowReport,
   type CashFlowReportRequest,
 } from '../cash-flow/forecast';
+import type {
+  ForecastAdjustment,
+  ForecastAdjustmentInput,
+  ForecastAdjustmentKind,
+} from '../cash-flow/adjustments';
 import type {
   CardPaymentMode,
   PlannedCashFlowEvent,
@@ -127,9 +135,62 @@ export async function deletePlannedEvent(userId: string, id: string): Promise<bo
   return result.count > 0;
 }
 
+/** Longest label an adjustment is stored under; transaction descriptions can run long. */
+const ADJUSTMENT_LABEL_MAX_LENGTH = 120;
+
+function toAdjustment(row: CashFlowForecastAdjustmentRow): ForecastAdjustment {
+  return {
+    id: row.id,
+    kind: row.kind as ForecastAdjustmentKind,
+    flow: row.flow === 'income' ? 'income' : 'spending',
+    key: row.key,
+    label: row.label,
+  };
+}
+
+export async function listForecastAdjustments(userId: string): Promise<ForecastAdjustment[]> {
+  const rows = await getPrismaClient().cashFlowForecastAdjustment.findMany({
+    where: { userId },
+    orderBy: { createdAt: 'asc' },
+  });
+  return rows.map(toAdjustment);
+}
+
 /**
- * Build the user's cash-flow model from their latest snapshot, overrides and
- * planned events. Null when they have no snapshot yet.
+ * Save an adjustment under `label` unless the user already has `limit` of
+ * them; null when they do. Making the same choice twice returns the one
+ * already saved. The lookup, count and insert run under a per-user advisory
+ * lock (namespace 872014273, beside the planned-event lock's 872014272), so
+ * simultaneous saves cannot pass the cap or race the unique key.
+ */
+export async function saveForecastAdjustmentWithinLimit(
+  userId: string,
+  input: ForecastAdjustmentInput,
+  label: string,
+  limit: number
+): Promise<{ adjustment: ForecastAdjustment; created: boolean } | null> {
+  return getPrismaClient().$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(872014273, hashtext(${userId}))`;
+    const existing = await tx.cashFlowForecastAdjustment.findFirst({
+      where: { userId, kind: input.kind, flow: input.flow, key: input.key },
+    });
+    if (existing) return { adjustment: toAdjustment(existing), created: false };
+    if (await tx.cashFlowForecastAdjustment.count({ where: { userId } }) >= limit) return null;
+    const row = await tx.cashFlowForecastAdjustment.create({
+      data: { userId, kind: input.kind, flow: input.flow, key: input.key, label: label.slice(0, ADJUSTMENT_LABEL_MAX_LENGTH) },
+    });
+    return { adjustment: toAdjustment(row), created: true };
+  });
+}
+
+export async function deleteForecastAdjustment(userId: string, id: string): Promise<boolean> {
+  const result = await getPrismaClient().cashFlowForecastAdjustment.deleteMany({ where: { id, userId } });
+  return result.count > 0;
+}
+
+/**
+ * Build the user's cash-flow model from their latest snapshot, overrides,
+ * planned events and adjustments. Null when they have no snapshot yet.
  *
  * "Today" is the user's own calendar date. The data runs through the date the
  * snapshot was computed, never later than today; whatever lies between is
@@ -137,7 +198,7 @@ export async function deletePlannedEvent(userId: string, id: string): Promise<bo
  */
 export async function loadCashFlowModel(userId: string, now = new Date()): Promise<LoadedCashFlowModel | null> {
   const prisma = getPrismaClient();
-  const [snapshot, user, plannedEvents] = await Promise.all([
+  const [snapshot, user, plannedEvents, adjustments] = await Promise.all([
     prisma.financialSummarySnapshot.findUnique({
       where: { userId },
       select: { computedAt: true, asOf: true, status: true, accounts: true, transactions: true },
@@ -147,6 +208,7 @@ export async function loadCashFlowModel(userId: string, now = new Date()): Promi
       select: { timeZone: true, monthlyIncomeOverride: true, monthlyExpenseOverride: true },
     }),
     listPlannedEvents(userId),
+    listForecastAdjustments(userId),
   ]);
   if (!snapshot || !user) return null;
 
@@ -162,6 +224,7 @@ export async function loadCashFlowModel(userId: string, now = new Date()): Promi
       monthlyIncome: user.monthlyIncomeOverride,
       monthlyExpense: user.monthlyExpenseOverride,
     },
+    adjustments,
   });
   return {
     model,

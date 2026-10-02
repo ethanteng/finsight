@@ -49,6 +49,8 @@ const MONTH_END_DAY = 29;
 export interface RecurringStream {
   /** Stable for a payee and direction, so the UI can key on it. */
   id: string;
+  /** The ledger's key for the payee, which the stream is grouped on. */
+  counterpartyKey: string;
   label: string;
   flow: CashFlowDirection;
   cadence: RecurringCadence;
@@ -173,6 +175,7 @@ function evaluateGroup(
   const first = entries[0];
   return {
     id: streamId(flow, key),
+    counterpartyKey: key,
     label: entries[entries.length - 1].label,
     flow,
     cadence: classified.cadence,

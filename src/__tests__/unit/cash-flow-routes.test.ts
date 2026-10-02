@@ -21,6 +21,13 @@ const prisma: Record<string, any> = {
     findFirst: jest.fn(),
     deleteMany: jest.fn(),
   },
+  cashFlowForecastAdjustment: {
+    findMany: jest.fn(),
+    findFirst: jest.fn(),
+    count: jest.fn(),
+    create: jest.fn(),
+    deleteMany: jest.fn(),
+  },
 };
 
 jest.mock('../../prisma-client', () => ({ getPrismaClient: () => prisma }));
@@ -77,6 +84,8 @@ describe('cash flow routes', () => {
       monthlyExpenseOverride: null,
     });
     prisma.plannedCashFlowEvent.findMany.mockResolvedValue([]);
+    prisma.cashFlowForecastAdjustment.findMany.mockResolvedValue([]);
+    prisma.cashFlowForecastAdjustment.findFirst.mockResolvedValue(null);
   });
 
   describe('GET /api/cash-flow', () => {
@@ -250,6 +259,97 @@ describe('cash flow routes', () => {
       expect(response.body.events).toEqual([
         expect.objectContaining({ startDate: '2026-12-15', endDate: '2027-06-15', recurrence: 'monthly' }),
       ]);
+    });
+  });
+
+  describe('forecast adjustments', () => {
+    const adjustmentRow = (overrides: Record<string, unknown> = {}) => ({
+      id: 'adjustment-1',
+      userId: 'user-1',
+      kind: 'exclude_payee',
+      flow: 'spending',
+      key: 'oak street apartments',
+      label: 'Oak Street Apartments',
+      createdAt: new Date(),
+      ...overrides,
+    });
+    const leaveOutRent = { kind: 'exclude_payee', flow: 'spending', key: 'oak street apartments' };
+
+    it('leaves a payee out, labelled from the user’s own data under a per-user lock', async () => {
+      prisma.cashFlowForecastAdjustment.count.mockResolvedValue(0);
+      prisma.cashFlowForecastAdjustment.create.mockResolvedValue(adjustmentRow());
+
+      const response = await request(app).post('/api/cash-flow/adjustments').send({ ...leaveOutRent, label: 'Anything the client says' });
+
+      expect(response.status).toBe(201);
+      expect(response.body.adjustment).toEqual({
+        id: 'adjustment-1', kind: 'exclude_payee', flow: 'spending', key: 'oak street apartments', label: 'Oak Street Apartments',
+      });
+      expect(prisma.cashFlowForecastAdjustment.create).toHaveBeenCalledWith({
+        data: { userId: 'user-1', kind: 'exclude_payee', flow: 'spending', key: 'oak street apartments', label: 'Oak Street Apartments' },
+      });
+      const lock = prisma.$executeRaw.mock.calls[0];
+      expect(lock[0].join('?')).toContain('pg_advisory_xact_lock(872014273, hashtext(?))');
+      expect(lock[1]).toBe('user-1');
+    });
+
+    it('refuses an item that is not in the user’s data', async () => {
+      const response = await request(app).post('/api/cash-flow/adjustments').send({ ...leaveOutRent, key: 'someone else' });
+      expect(response.status).toBe(404);
+      expect(prisma.cashFlowForecastAdjustment.create).not.toHaveBeenCalled();
+    });
+
+    it('counts a one-off it found, and returns a saved choice instead of saving it twice', async () => {
+      const report = await request(app).get('/api/cash-flow?granularity=month&horizonMonths=3');
+      const flight = report.body.oneOffs.find((item: any) => item.label === 'United Airlines');
+      expect(flight).toBeDefined();
+      prisma.cashFlowForecastAdjustment.count.mockResolvedValue(0);
+      prisma.cashFlowForecastAdjustment.create.mockImplementation(async ({ data }: any) => adjustmentRow({ ...data, id: 'counted' }));
+
+      const counted = await request(app).post('/api/cash-flow/adjustments').send({ kind: 'include_one_off', flow: 'spending', key: flight.id });
+      expect(counted.status).toBe(201);
+      expect(counted.body.adjustment).toMatchObject({ kind: 'include_one_off', key: flight.id, label: 'United Airlines' });
+
+      prisma.cashFlowForecastAdjustment.findMany.mockResolvedValue([adjustmentRow({ id: 'counted', kind: 'include_one_off', key: flight.id, label: 'United Airlines' })]);
+      prisma.cashFlowForecastAdjustment.create.mockClear();
+      const again = await request(app).post('/api/cash-flow/adjustments').send({ kind: 'include_one_off', flow: 'spending', key: flight.id });
+      expect(again.status).toBe(200);
+      expect(again.body.adjustment.id).toBe('counted');
+      expect(prisma.cashFlowForecastAdjustment.create).not.toHaveBeenCalled();
+    });
+
+    it('rejects an invalid choice before loading anything', async () => {
+      const response = await request(app).post('/api/cash-flow/adjustments').send({ kind: 'delete_everything', flow: 'spending', key: 'x' });
+      expect(response.status).toBe(400);
+      expect(prisma.financialSummarySnapshot.findUnique).not.toHaveBeenCalled();
+    });
+
+    it('caps how many changes one user can make', async () => {
+      prisma.cashFlowForecastAdjustment.count.mockResolvedValue(200);
+      const response = await request(app).post('/api/cash-flow/adjustments').send(leaveOutRent);
+      expect(response.status).toBe(409);
+      expect(prisma.cashFlowForecastAdjustment.create).not.toHaveBeenCalled();
+    });
+
+    it('applies saved choices to the forecast, and lists them', async () => {
+      prisma.cashFlowForecastAdjustment.findMany.mockResolvedValue([adjustmentRow()]);
+      const response = await request(app).get('/api/cash-flow?granularity=month&horizonMonths=3');
+      expect(response.body.recurring.map((item: any) => item.label)).not.toContain('Oak Street Apartments');
+      expect(response.body.adjustments).toEqual([
+        expect.objectContaining({ id: 'adjustment-1', kind: 'exclude_payee', label: 'Oak Street Apartments', date: null, amount: null }),
+      ]);
+      // History still has the rent that was paid.
+      const september = response.body.periods.find((period: any) => period.key === '2026-09');
+      expect(september.actual.spending).toBeGreaterThan(2000);
+    });
+
+    it('only undoes a change the user made', async () => {
+      prisma.cashFlowForecastAdjustment.deleteMany.mockResolvedValue({ count: 0 });
+      expect((await request(app).delete('/api/cash-flow/adjustments/someone-elses')).status).toBe(404);
+      expect(prisma.cashFlowForecastAdjustment.deleteMany).toHaveBeenCalledWith({ where: { id: 'someone-elses', userId: 'user-1' } });
+
+      prisma.cashFlowForecastAdjustment.deleteMany.mockResolvedValue({ count: 1 });
+      expect((await request(app).delete('/api/cash-flow/adjustments/adjustment-1')).status).toBe(204);
     });
   });
 });

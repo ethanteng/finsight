@@ -43,6 +43,25 @@ Months before the connected history begins are unknown, not zero:
 
 Plaid's Recurring Transactions add-on is deliberately not used. It is billed separately, and recognising streams here keeps the forecast explainable: the page lists every stream with its cadence, amount and next date.
 
+## Adjusting what the forecast counts
+
+The page lists everything the forecast is built from, and the user can move items in and out of it (`src/cash-flow/adjustments.ts`). Each change is stored in `cash_flow_forecast_adjustments`:
+
+| Kind | Applies to | Effect |
+|---|---|---|
+| `exclude_payee` | A regular income or bill, or a payee behind typical spending | The payee's transactions in that direction are left out of what the forecast learns: no stream, no part of a typical rate, no one-off |
+| `include_one_off` | A one-off | Counted in the typical rate after all |
+| `continue_stream` | A regular item that has stopped | Projected on its cadence as if it had not |
+| `exclude_transfer` | A recurring transfer in or out | Left out of what the cash position learns about transfers |
+
+Changes affect only the forecast. Past months stay as they happened, because those transactions did happen. Something that is not really income or spending, such as a transfer to the user's own account, is a category change instead: it is made in Accounts & context and corrects the history and every other part of Ask Linc.
+
+- **How items are named:** a payee by its direction and the ledger's counterparty key, which is what a recurring stream is grouped on; a one-off by its transaction id. A change therefore holds across refreshes for as long as the provider describes the payee the same way. If the payee disappears from the data, the change does nothing.
+- **Labels come from the server:** a change must name an item in the user's own data, found by `forecastAdjustmentTarget`. The server stores it under the item's own name, never a name the client sends.
+- **Repeats and limits:** saving the same change twice returns the one already saved. The cap is 200 per user, checked under a per-user advisory lock (namespace 872014273) like the planned-event cap.
+
+The report lists the payees behind each typical rate (`typicalPayees`, largest first, up to 25 a direction) so they can be left out one by one, and returns the user's changes (`adjustments`) so the page can undo them.
+
 ## Planned events
 
 Planned events are stored in `planned_cash_flow_events`, are scoped to the user, and are capped at 100 per user. The cap is enforced under a per-user advisory lock, so simultaneous creates cannot pass it.
@@ -135,10 +154,11 @@ All routes are under `/api/cash-flow` and use `requireAuth`:
 
 - `GET /?granularity=week|month|quarter|year&horizonMonths=1..12` returns the report. Optional `from` and `to` set a custom range, inclusive on both ends and at most about three years long. If the user has no snapshot yet, the route returns 204.
 - `GET /events`, `POST /events`, `PUT /events/:id` and `DELETE /events/:id` manage planned events. Updates and deletes match on both the event id and the user, so another user's event reads as not found. A card payment must name one of the user's own connected credit cards.
+- `POST /adjustments` with `{kind, flow, key}` saves a change to what the forecast counts. It returns 201 when saved, 200 when the same change was already saved, 404 when the item is not in the user's data, and 409 at the cap. `DELETE /adjustments/:id` undoes a change and matches on the user like the event routes.
 
 ## Ask Linc
 
-The `cash_flow_forecast` pack runs the same engine through `loadCashFlowModel`, so an answer quotes exactly what the page shows.
+The `cash_flow_forecast` pack runs the same engine through `loadCashFlowModel`, so an answer quotes exactly what the page shows, the user's adjustments included. The pack's details list those adjustments by name (`userAdjustments`), with no amounts, so an answer can say what the user chose to leave out or count.
 
 Grounding checks every number by value, and the model may not add or net facts. So `src/openai/cash-flow-forecast-context.ts` publishes every figure an answer could need as its own fact, for this month, next month, this and next quarter, this year, and the next 3, 6 and 12 months:
 

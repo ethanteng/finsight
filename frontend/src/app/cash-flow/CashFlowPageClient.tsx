@@ -387,7 +387,7 @@ export default function CashFlowPageClient() {
               onChanged={load}
             />
 
-            <ForecastBasis report={report} />
+            <ForecastBasis report={report} apiUrl={API_URL} onChanged={load} />
 
             <section className="flex flex-col gap-4 rounded-[1.6rem] bg-[#102319] p-6 text-white sm:flex-row sm:items-center sm:justify-between sm:p-8">
               <div>
