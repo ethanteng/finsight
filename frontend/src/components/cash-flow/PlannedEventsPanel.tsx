@@ -182,6 +182,11 @@ export default function PlannedEventsPanel({
 
   const startEdit = (event: CashFlowPlannedEventSummary) => {
     setError('');
+    // A disconnected cash account is no longer in the picker; fall back so
+    // save does not send an id the server will reject.
+    const cashAccountId = event.accountId && cashAccountById.has(event.accountId)
+      ? event.accountId
+      : defaultCashAccountId;
     setForm({
       id: event.id,
       label: event.label,
@@ -192,7 +197,7 @@ export default function PlannedEventsPanel({
       recurrence: event.recurrence,
       endDate: event.endDate ?? '',
       accountId: event.kind === 'card_payment' ? event.accountId ?? '' : '',
-      cashAccountId: event.kind === 'card_payment' ? defaultCashAccountId : event.accountId ?? defaultCashAccountId,
+      cashAccountId: event.kind === 'card_payment' ? defaultCashAccountId : cashAccountId,
       paymentMode: event.paymentMode ?? 'full',
     });
   };

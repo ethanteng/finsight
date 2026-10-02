@@ -750,6 +750,30 @@ describe('CashFlowPageClient', () => {
       // The bonus was saved without an account, so it lands in the primary one.
       expect(within(panel).getByText(/Once on Dec 15, 2026 · Everyday Checking ••1234/)).toBeInTheDocument();
     });
+
+    it('falls back to the primary account when editing an event on a disconnected one', async () => {
+      const orphan = {
+        id: 'orphan', label: 'Old gift', kind: 'income', amount: 500, startDate: '2026-11-10', recurrence: 'once', endDate: null,
+        accountId: 'gone', paymentMode: null, nextDate: '2026-11-10', occurrencesInRange: 1,
+      } as const;
+      const calls = mockFetch((url, init) => {
+        if (url.includes('/api/cash-flow/events/') && init?.method === 'PUT') return { status: 200, body: { event: {} } };
+        if (url.includes('/api/cash-flow?')) return { status: 200, body: { ...both(), plannedEvents: [orphan] } };
+        return undefined;
+      });
+      render(<CashFlowPageClient />);
+      const panel = (await screen.findByRole('heading', { name: 'Planned events' })).closest('section')!;
+      expect(within(panel).getByText(/account no longer connected/)).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Edit Old gift' }));
+      expect(screen.getByLabelText('Account')).toHaveValue('checking');
+      fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+
+      await waitFor(() => expect(calls.some(call => call.init?.method === 'PUT')).toBe(true));
+      expect(JSON.parse(String(calls.find(call => call.init?.method === 'PUT')!.init!.body))).toMatchObject({
+        accountId: 'checking',
+      });
+    });
   });
 
   it('lists the cash position by period when the chart shows it', async () => {
