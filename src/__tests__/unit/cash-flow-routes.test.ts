@@ -46,6 +46,8 @@ const eventRow = (overrides: Record<string, unknown> = {}) => ({
   startDate: new Date('2026-12-15T00:00:00.000Z'),
   recurrence: 'once',
   endDate: null,
+  accountId: null,
+  paymentMode: null,
   createdAt: new Date(),
   updatedAt: new Date(),
   ...overrides,
@@ -146,10 +148,13 @@ describe('cash flow routes', () => {
           startDate: new Date('2026-12-15T00:00:00.000Z'),
           recurrence: 'once',
           endDate: null,
+          accountId: null,
+          paymentMode: null,
         },
       });
       expect(response.body.event).toEqual({
         id: 'event-1', label: 'Year-end bonus', kind: 'income', amount: 10000, startDate: '2026-12-15', recurrence: 'once', endDate: null,
+        accountId: null, paymentMode: null,
       });
     });
 
@@ -165,6 +170,37 @@ describe('cash flow routes', () => {
       const lockOrder = prisma.$executeRaw.mock.invocationCallOrder[0];
       expect(lockOrder).toBeLessThan(prisma.plannedCashFlowEvent.count.mock.invocationCallOrder[0]);
       expect(prisma.plannedCashFlowEvent.count).toHaveBeenCalledWith({ where: { userId: 'user-1' } });
+    });
+
+    const cardPayment = { label: 'Pay off Rewards Card', kind: 'card_payment', paymentMode: 'full', accountId: 'card', startDate: '2026-11-01', recurrence: 'once' };
+
+    it('creates a card payment for one of the user’s own cards', async () => {
+      prisma.plannedCashFlowEvent.count.mockResolvedValue(0);
+      prisma.plannedCashFlowEvent.create.mockResolvedValue(eventRow({ kind: 'card_payment', amount: 0, accountId: 'card', paymentMode: 'full' }));
+
+      const response = await request(app).post('/api/cash-flow/events').send(cardPayment);
+
+      expect(response.status).toBe(201);
+      expect(prisma.plannedCashFlowEvent.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ kind: 'card_payment', amount: 0, accountId: 'card', paymentMode: 'full' }),
+      });
+      expect(response.body.event).toMatchObject({ kind: 'card_payment', accountId: 'card', paymentMode: 'full' });
+    });
+
+    it.each([
+      ['an account that is not a card', 'checking'],
+      ['an account the user does not have', 'someone-elses-card'],
+    ])('refuses a card payment to %s', async (_label, accountId) => {
+      const response = await request(app).post('/api/cash-flow/events').send({ ...cardPayment, accountId });
+      expect(response.status).toBe(400);
+      expect(response.body).toEqual({ error: 'Choose one of your connected credit cards' });
+      expect(prisma.plannedCashFlowEvent.create).not.toHaveBeenCalled();
+    });
+
+    it('checks the card on update too', async () => {
+      const response = await request(app).put('/api/cash-flow/events/event-1').send({ ...cardPayment, accountId: 'checking' });
+      expect(response.status).toBe(400);
+      expect(prisma.plannedCashFlowEvent.updateMany).not.toHaveBeenCalled();
     });
 
     it('rejects an invalid event before touching the database', async () => {

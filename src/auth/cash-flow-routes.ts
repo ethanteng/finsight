@@ -9,9 +9,11 @@ import {
   createPlannedEventWithinLimit,
   deletePlannedEvent,
   getCashFlowReport,
+  isUserCreditCard,
   listPlannedEvents,
   updatePlannedEvent,
 } from '../services/cash-flow-service';
+import type { PlannedEventInput } from '../cash-flow/planned-events';
 
 /**
  * Cash flow (beta): history and forecast of cash in and out, plus the planned
@@ -19,6 +21,13 @@ import {
  * src/cash-flow; nothing here or in the browser does arithmetic on it.
  */
 const router = express.Router();
+
+const CARD_NOT_FOUND = 'Choose one of your connected credit cards';
+
+/** A card payment must name one of the user's own connected cards. */
+async function cardIsTheUsers(userId: string, input: PlannedEventInput): Promise<boolean> {
+  return input.kind !== 'card_payment' || (input.accountId !== null && await isUserCreditCard(userId, input.accountId));
+}
 
 function eventId(req: AuthenticatedRequest): string {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
@@ -52,6 +61,7 @@ router.post('/events', requireAuth, async (req: AuthenticatedRequest, res) => {
   const validation = validatePlannedEventInput(req.body);
   if (!validation.ok) return res.status(400).json({ error: validation.error });
   try {
+    if (!await cardIsTheUsers(req.user!.id, validation.value)) return res.status(400).json({ error: CARD_NOT_FOUND });
     const event = await createPlannedEventWithinLimit(req.user!.id, validation.value, PLANNED_EVENTS_PER_USER_LIMIT);
     if (!event) {
       return res.status(409).json({ error: `You can plan up to ${PLANNED_EVENTS_PER_USER_LIMIT} events` });
@@ -67,6 +77,7 @@ router.put('/events/:id', requireAuth, async (req: AuthenticatedRequest, res) =>
   const validation = validatePlannedEventInput(req.body);
   if (!validation.ok) return res.status(400).json({ error: validation.error });
   try {
+    if (!await cardIsTheUsers(req.user!.id, validation.value)) return res.status(400).json({ error: CARD_NOT_FOUND });
     const event = await updatePlannedEvent(req.user!.id, eventId(req), validation.value);
     if (!event) return res.status(404).json({ error: 'Event not found' });
     return res.json({ event });

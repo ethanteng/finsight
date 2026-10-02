@@ -11,12 +11,21 @@ jest.mock('@/components/cash-flow/CashFlowChart', () => ({
   default: () => <div data-testid="cash-flow-chart" />,
   CashFlowChartLegend: () => null,
 }));
+jest.mock('@/components/cash-flow/CashPositionChart', () => ({
+  __esModule: true,
+  default: () => <div data-testid="cash-position-chart" />,
+  CashPositionLegend: () => null,
+}));
 
 const totals = (income: number, spending: number) => ({ income, spending, net: income - spending });
 const components = {
   recurringIncome: 5000, typicalIncome: 0, plannedIncome: 0,
-  recurringSpending: 2015.49, typicalSpending: 1800, plannedSpending: 0,
+  recurringSpending: 2015.49, typicalSpending: 1800, plannedSpending: 0, cardInterest: 0,
 };
+
+const pace = (paidOffBy: string | null, interest: number | null, carrying = true) => ({
+  paidOffBy, carryingBalanceNow: carrying, interestTwelveMonths: interest, interestTotal: interest, balanceInTwelveMonths: 0, months: [],
+});
 
 function report(overrides: Partial<CashFlowReport> = {}): CashFlowReport {
   return {
@@ -51,13 +60,30 @@ function report(overrides: Partial<CashFlowReport> = {}): CashFlowReport {
     ],
     oneOffs: [{ id: 'flight', date: '2026-09-10', label: 'United Airlines', flow: 'spending', amount: 2400 }],
     plannedEvents: [
-      { id: 'bonus', label: 'Year-end bonus', kind: 'income', amount: 10000, startDate: '2026-12-15', recurrence: 'once', endDate: null, nextDate: '2026-12-15', occurrencesInRange: 0 },
+      { id: 'bonus', label: 'Year-end bonus', kind: 'income', amount: 10000, startDate: '2026-12-15', recurrence: 'once', endDate: null, accountId: null, paymentMode: null, nextDate: '2026-12-15', occurrencesInRange: 0 },
     ],
     accounts: [
       { id: 'checking', name: 'Everyday Checking', institution: 'First Bank', kind: 'cash', subtype: 'checking', mask: '1234' },
       { id: 'card', name: 'Rewards Card', institution: 'Card Co', kind: 'credit', subtype: 'credit card', mask: null },
     ],
     excluded: { unclassified: 2, currencyMismatch: 0 },
+    cards: [{
+      accountId: 'card', name: 'Rewards Card', mask: '9876', institution: 'Card Co', balance: 4000, apr: 24, minimumPayment: 80,
+      paymentDay: 20, behavior: 'average_payment', usualMonthlyPayment: 1520.83, paymentSource: 'connected',
+      currentPace: pace('2027-03', 112.4), withPlans: null, interestSaved: null, planIds: [],
+    }],
+    position: {
+      available: true, startingCash: 5200, startingCardDebt: 4000,
+      periods: [
+        { key: '2026-09', cash: null, cardDebt: null },
+        { key: '2026-10', cash: 3666.2, cardDebt: 3266.68 },
+        { key: '2026-11', cash: 4410.15, cardDebt: 2495.4 },
+      ],
+      lowPoint: { date: '2026-10-22', cash: 1890.4 },
+      milestones: [], lowNext12Months: { date: '2026-10-22', cash: 1890.4 },
+      transfers: { typicalMonthlyNet: 0, recurring: [] },
+      cardsLeftOut: [],
+    },
     snapshot: { computedAt: '2026-10-14T20:00:00.000Z', asOf: '2026-10-14T19:00:00.000Z', status: 'current' },
     ...overrides,
   };
@@ -207,6 +233,103 @@ describe('CashFlowPageClient', () => {
 
     expect(await screen.findByText(/No totals for this range: your history starts Jun 3, 2026/)).toBeInTheDocument();
     expect(screen.queryByRole('rowheader', { name: 'Total' })).not.toBeInTheDocument();
+  });
+
+  it('switches the chart to the cash position and names its lowest point', async () => {
+    mockFetch(url => (url.includes('/api/cash-flow?') ? { status: 200, body: report() } : undefined));
+    render(<CashFlowPageClient />);
+    await screen.findByRole('heading', { name: 'This month' });
+
+    expect(screen.getByTestId('cash-flow-chart')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Cash position' }));
+    expect(screen.getByTestId('cash-position-chart')).toBeInTheDocument();
+    expect(screen.getByText(/Lowest point: \$1,890 on Oct 22, 2026/)).toBeInTheDocument();
+  });
+
+  it('says why there is no cash position', async () => {
+    mockFetch(url => (url.includes('/api/cash-flow?')
+      ? { status: 200, body: report({ position: { ...report().position, available: false, reason: 'unknown_balance', lowPoint: null } }) }
+      : undefined));
+    render(<CashFlowPageClient />);
+    await screen.findByRole('heading', { name: 'This month' });
+    fireEvent.click(screen.getByRole('button', { name: 'Cash position' }));
+    expect(screen.getByText(/didn’t report a balance/)).toBeInTheDocument();
+  });
+
+  it('shows each card at its usual pace and with a plan, and what the plan saves', async () => {
+    const card = {
+      ...report().cards[0],
+      withPlans: pace('2026-10', 21.3),
+      interestSaved: { twelveMonths: 91.1, total: 91.1 },
+      planIds: ['payoff'],
+    };
+    mockFetch(url => (url.includes('/api/cash-flow?') ? { status: 200, body: report({ cards: [card] }) } : undefined));
+    render(<CashFlowPageClient />);
+
+    const panel = (await screen.findByRole('heading', { name: 'Credit cards' })).closest('section')!;
+    expect(within(panel).getByText('Rewards Card ••9876')).toBeInTheDocument();
+    expect(within(panel).getByText('You’ve been paying about $1,521 a month')).toBeInTheDocument();
+    expect(within(panel).getByText('Balance paid off by Mar 2027')).toBeInTheDocument();
+    expect(within(panel).getByText('Balance paid off by Oct 2026')).toBeInTheDocument();
+    expect(within(panel).getByText('Your plan saves $91 in interest over the next 12 months.')).toBeInTheDocument();
+  });
+
+  it('opens a card payment from the card and saves a full payoff', async () => {
+    const calls = mockFetch((url, init) => {
+      if (url.endsWith('/api/cash-flow/events') && init?.method === 'POST') return { status: 201, body: { event: {} } };
+      if (url.includes('/api/cash-flow?')) return { status: 200, body: report() };
+      return undefined;
+    });
+    render(<CashFlowPageClient />);
+    await screen.findByRole('heading', { name: 'Credit cards' });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Plan a payment' }));
+    expect(screen.getByLabelText('Name')).toHaveValue('Pay off Rewards Card');
+    expect(screen.queryByLabelText('Amount')).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Date'), { target: { value: '2026-10-25' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add to forecast' }));
+
+    await waitFor(() => expect(calls.some(call => call.init?.method === 'POST')).toBe(true));
+    expect(JSON.parse(String(calls.find(call => call.init?.method === 'POST')!.init!.body))).toEqual({
+      label: 'Pay off Rewards Card', kind: 'card_payment', amount: 0, startDate: '2026-10-25', recurrence: 'once', endDate: null,
+      accountId: 'card', paymentMode: 'full',
+    });
+  });
+
+  it('plans a set monthly card payment from the form', async () => {
+    const calls = mockFetch((url, init) => {
+      if (url.endsWith('/api/cash-flow/events') && init?.method === 'POST') return { status: 201, body: { event: {} } };
+      if (url.includes('/api/cash-flow?')) return { status: 200, body: report() };
+      return undefined;
+    });
+    render(<CashFlowPageClient />);
+    await screen.findByRole('heading', { name: 'Credit cards' });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add planned event' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Pay a card' }));
+    fireEvent.click(screen.getByRole('button', { name: 'A set amount' }));
+    expect(screen.getByLabelText('Name')).toHaveValue('Rewards Card payment');
+    fireEvent.change(screen.getByLabelText('Amount'), { target: { value: '750' } });
+    fireEvent.change(screen.getByLabelText('Repeats'), { target: { value: 'monthly' } });
+    fireEvent.change(screen.getByLabelText('First date'), { target: { value: '2026-11-01' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add to forecast' }));
+
+    await waitFor(() => expect(calls.some(call => call.init?.method === 'POST')).toBe(true));
+    expect(JSON.parse(String(calls.find(call => call.init?.method === 'POST')!.init!.body))).toMatchObject({
+      kind: 'card_payment', amount: 750, recurrence: 'monthly', startDate: '2026-11-01', accountId: 'card', paymentMode: 'fixed',
+    });
+  });
+
+  it('lists a card plan by what it does', async () => {
+    const plan = {
+      id: 'payoff', label: 'Pay off Rewards Card', kind: 'card_payment', amount: 0, startDate: '2026-10-25', recurrence: 'once',
+      endDate: null, accountId: 'card', paymentMode: 'full', nextDate: '2026-10-25', occurrencesInRange: 1,
+    } as const;
+    mockFetch(url => (url.includes('/api/cash-flow?') ? { status: 200, body: report({ plannedEvents: [plan] }) } : undefined));
+    render(<CashFlowPageClient />);
+
+    expect(await screen.findByText(/Pay off in full on Oct 25, 2026 · Rewards Card ••9876/)).toBeInTheDocument();
+    expect(screen.getByText('In full')).toBeInTheDocument();
   });
 
   it('offers to connect accounts when there is no snapshot yet', async () => {

@@ -554,22 +554,26 @@ model ManualAccount {
 /// cannot learn from transaction history: a bonus, a tuition bill, a purchase.
 /// Hypothetical amounts asked about in chat are never stored here.
 model PlannedCashFlowEvent {
-  id         String    @id @default(cuid())
-  userId     String
-  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  label      String
-  /// 'income' or 'expense'; decides the direction of `amount`.
-  kind       String
-  /// Positive magnitude in USD.
-  amount     Float
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  label       String
+  /// 'income', 'expense' or 'card_payment'; decides the direction of `amount`.
+  kind        String
+  /// Positive magnitude in USD. Zero for a card payment that pays in full.
+  amount      Float
   /// First (or only) occurrence, as a calendar date.
-  startDate  DateTime  @db.Date
+  startDate   DateTime  @db.Date
   /// 'once', 'weekly', 'biweekly', 'monthly', 'quarterly' or 'annually'.
-  recurrence String    @default("once")
+  recurrence  String    @default("once")
   /// Last date a recurring event can occur, inclusive. Null for open-ended or one-time events.
-  endDate    DateTime? @db.Date
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
+  endDate     DateTime? @db.Date
+  /// The provider account id of the credit card a card payment pays; null for other kinds.
+  accountId   String?
+  /// 'full' or 'fixed' for a card payment; null for other kinds.
+  paymentMode String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   @@index([userId])
   @@map("planned_cash_flow_events")

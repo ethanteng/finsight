@@ -8,6 +8,9 @@ export const ACCOUNTS = [
   { account_id: 'mortgage', name: 'Mortgage', type: 'loan', subtype: 'mortgage', balance: { current: 300000 } },
 ];
 
+export const CARD_PAYMENT_CATEGORY = { primary: 'LOAN_PAYMENTS', detailed: 'LOAN_PAYMENTS_CREDIT_CARD_PAYMENT' };
+export const INTEREST_CHARGE_CATEGORY = { primary: 'BANK_FEES', detailed: 'BANK_FEES_INTEREST_CHARGE' };
+
 let sequence = 0;
 
 export function tx(
@@ -66,11 +69,40 @@ export function householdTransactions(from: CalendarDate, through: CalendarDate)
   }
   const flight = addDays(through, -20);
   if (flight >= from) transactions.push(tx('card', flight, 'expense', 2400, 'UNITED AIRLINES', { merchant_name: 'United Airlines' }));
+  // A card payment has two legs, as Plaid reports them: money leaving checking
+  // (a positive provider amount) and money reaching the card (a negative one).
   for (let month = '2025-01-20'; month <= through; month = addMonths(month, 1)) {
     if (month >= from) {
-      transactions.push(tx('checking', month, 'transfer_out', 1500, 'CARD CO AUTOPAY'));
-      transactions.push(tx('card', month, 'transfer_out', 1500, 'PAYMENT THANK YOU'));
+      transactions.push(tx('checking', month, 'transfer_out', 1500, 'CARD CO AUTOPAY', { personal_finance_category: CARD_PAYMENT_CATEGORY }));
+      transactions.push(tx('card', month, 'transfer_out', -1500, 'PAYMENT THANK YOU', { personal_finance_category: CARD_PAYMENT_CATEGORY }));
     }
   }
   return transactions;
 }
+
+/** Provider terms for the rewards card: 24% purchase APR, $80 minimum, due on the 20th. */
+export const CARD_TERMS = {
+  kind: 'credit',
+  aprs: [{ type: 'purchase_apr', percentage: 24 }],
+  minimumPaymentAmount: 80,
+  nextPaymentDueDate: '2026-10-20',
+};
+
+/** The household's accounts, with the rewards card owing `balance` under real terms. */
+export function accountsWithCardTerms(balance = 4000): Array<Record<string, unknown>> {
+  return ACCOUNTS.map(account => account.account_id === 'card'
+    ? { ...account, balance: { current: balance }, liabilityDetails: [CARD_TERMS] }
+    : account);
+}
+
+/** The interest a card carrying a balance charges, on the 28th of each month. */
+export function interestCharges(from: CalendarDate, through: CalendarDate, amount = 60): Array<Record<string, unknown>> {
+  const charges: Array<Record<string, unknown>> = [];
+  for (let month = '2025-01-28'; month <= through; month = addMonths(month, 1, 28)) {
+    if (month >= from) {
+      charges.push(tx('card', month, 'fee', amount, 'INTEREST CHARGE ON PURCHASES', { personal_finance_category: INTEREST_CHARGE_CATEGORY }));
+    }
+  }
+  return charges;
+}
+

@@ -20,6 +20,8 @@ export interface ForecastComponents {
   recurringSpending: number;
   typicalSpending: number;
   plannedSpending: number;
+  /** Interest the card model projects, for cards whose APR and pace are known. */
+  cardInterest: number;
 }
 
 export type ForecastTotals = CashFlowTotals & { components: ForecastComponents };
@@ -75,17 +77,22 @@ export interface CashFlowRecurringItem {
   replacedByOverride: boolean;
 }
 
-export type PlannedEventKind = 'income' | 'expense';
+export type PlannedEventKind = 'income' | 'expense' | 'card_payment';
 export type PlannedEventRecurrence = 'once' | 'weekly' | 'biweekly' | 'monthly' | 'quarterly' | 'annually';
+export type CardPaymentMode = 'full' | 'fixed';
 
 export interface PlannedCashFlowEvent {
   id: string;
   label: string;
   kind: PlannedEventKind;
+  /** Zero for a card payment that pays in full: the balance sizes it. */
   amount: number;
   startDate: string;
   recurrence: PlannedEventRecurrence;
   endDate: string | null;
+  /** The credit card a card payment pays. */
+  accountId: string | null;
+  paymentMode: CardPaymentMode | null;
 }
 
 export interface CashFlowPlannedEventSummary extends PlannedCashFlowEvent {
@@ -129,5 +136,54 @@ export interface CashFlowReport {
   plannedEvents: CashFlowPlannedEventSummary[];
   accounts: Array<{ id: string; name: string; institution: string | null; kind: 'cash' | 'credit'; subtype: string | null; mask: string | null }>;
   excluded: { unclassified: number; currencyMismatch: number };
+  cards: CashFlowCardSummary[];
+  position: CashFlowPositionSummary;
   snapshot: { computedAt: string; asOf: string | null; status: string | null };
+}
+
+export type CardPaymentBehavior = 'pays_in_full' | 'average_payment' | 'minimum_payment' | 'unknown';
+
+export interface CardOutcome {
+  /** `YYYY-MM`: from this month on, no balance is carried; null if not within the projection. */
+  paidOffBy: string | null;
+  carryingBalanceNow: boolean;
+  interestTwelveMonths: number | null;
+  interestTotal: number | null;
+  balanceInTwelveMonths: number | null;
+  months: Array<{ month: string; payment: number; interest: number | null; endBalance: number }>;
+}
+
+export interface CashFlowCardSummary {
+  accountId: string;
+  name: string;
+  mask: string | null;
+  institution: string | null;
+  balance: number | null;
+  apr: number | null;
+  minimumPayment: number | null;
+  paymentDay: number;
+  behavior: CardPaymentBehavior;
+  usualMonthlyPayment: number | null;
+  paymentSource: 'connected' | 'other';
+  currentPace: CardOutcome | null;
+  withPlans: CardOutcome | null;
+  interestSaved: { twelveMonths: number; total: number } | null;
+  planIds: string[];
+}
+
+export interface CashFlowPositionSummary {
+  available: boolean;
+  reason?: 'forecast_unavailable' | 'no_cash_accounts' | 'unknown_balance';
+  startingCash: number | null;
+  startingCardDebt: number | null;
+  /** In step with `periods`; null for a period over before the forecast. */
+  periods: Array<{ key: string; cash: number | null; cardDebt: number | null }>;
+  lowPoint: { date: string; cash: number } | null;
+  milestones: Array<{ key: string; date: string; cash: number; cardDebt: number }>;
+  lowNext12Months: { date: string; cash: number } | null;
+  transfers: {
+    typicalMonthlyNet: number;
+    recurring: Array<{ id: string; label: string; cadence: RecurringCadence; amount: number; direction: 'in' | 'out'; nextDate: string | null }>;
+  };
+  cardsLeftOut: Array<{ accountId: string; name: string; reason: 'no_balance' | 'no_pace' }>;
 }

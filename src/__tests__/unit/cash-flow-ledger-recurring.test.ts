@@ -1,7 +1,13 @@
 import type { CalendarDate } from '../../cash-flow/calendar';
 import { buildCashFlowLedger, counterpartyKey, type CashFlowEntry } from '../../cash-flow/ledger';
 import { detectRecurringStreams, scheduleStream, type RecurringStream } from '../../cash-flow/recurring';
-import { ACCOUNTS, householdTransactions, tx } from './factories/cash-flow.factory';
+import {
+  ACCOUNTS,
+  CARD_PAYMENT_CATEGORY,
+  INTEREST_CHARGE_CATEGORY,
+  householdTransactions,
+  tx,
+} from './factories/cash-flow.factory';
 
 function entry(date: CalendarDate, amount: number, key = 'payee', flow: CashFlowEntry['flow'] = 'spending'): CashFlowEntry {
   return { id: `${key}-${date}`, accountId: 'checking', date, flow, amount, counterpartyKey: key, label: key, category: 'Test' };
@@ -78,6 +84,55 @@ describe('buildCashFlowLedger', () => {
     expect(ledger.entries.map(item => item.label)).toEqual(['GUSTO PAYROLL SMITH', 'Blue Bottle Coffee', 'Unnamed transaction']);
   });
 
+  it('records money moving between accounts by its effect on each account', () => {
+    const ledger = buildCashFlowLedger(
+      [
+        tx('checking', '2026-09-05', 'transfer_out', 500, 'TRANSFER TO SAVINGS'),
+        tx('checking', '2026-09-20', 'transfer_out', 1500, 'CARD CO AUTOPAY', { personal_finance_category: CARD_PAYMENT_CATEGORY }),
+        tx('card', '2026-09-21', 'transfer_out', -1500, 'PAYMENT THANK YOU', { personal_finance_category: CARD_PAYMENT_CATEGORY }),
+      ],
+      ACCOUNTS
+    );
+
+    expect(ledger.movements.map(movement => [movement.accountId, movement.amount, movement.cardPayment])).toEqual([
+      ['checking', -500, false],
+      ['checking', -1500, true],
+      ['card', 1500, true],
+    ]);
+    const [, sent, received] = ledger.movements;
+    expect(sent.pairedWith).toBe(received.id);
+    expect(received.pairedWith).toBe(sent.id);
+    expect(ledger.entries).toHaveLength(0);
+  });
+
+  it('leaves a card payment unmatched when the amounts or dates do not line up', () => {
+    const ledger = buildCashFlowLedger(
+      [
+        tx('checking', '2026-09-01', 'transfer_out', 400, 'STORE CARD PAYMENT', { personal_finance_category: CARD_PAYMENT_CATEGORY }),
+        tx('checking', '2026-09-10', 'transfer_out', 900, 'CARD CO AUTOPAY', { personal_finance_category: CARD_PAYMENT_CATEGORY }),
+        tx('card', '2026-09-17', 'transfer_out', -900, 'PAYMENT THANK YOU', { personal_finance_category: CARD_PAYMENT_CATEGORY }),
+      ],
+      ACCOUNTS
+    );
+    expect(ledger.movements.every(movement => movement.pairedWith === null)).toBe(true);
+  });
+
+  it('flags interest a card charged, and only on cards', () => {
+    const ledger = buildCashFlowLedger(
+      [
+        tx('card', '2026-09-28', 'fee', 62.5, 'INTEREST CHARGE ON PURCHASES', { personal_finance_category: INTEREST_CHARGE_CATEGORY }),
+        tx('checking', '2026-09-28', 'fee', 3, 'OVERDRAFT INTEREST', { personal_finance_category: INTEREST_CHARGE_CATEGORY }),
+        tx('card', '2026-09-29', 'expense', 40, 'Lunch'),
+      ],
+      ACCOUNTS
+    );
+    expect(ledger.entries.map(entry => [entry.accountId, entry.amount, entry.interest ?? false])).toEqual([
+      ['card', 62.5, true],
+      ['checking', 3, false],
+      ['card', 40, false],
+    ]);
+  });
+
   it('keys a payee the same way across reference numbers and ACH boilerplate', () => {
     expect(counterpartyKey(null, 'GUSTO DES:PAYROLL ID:88231 INDN:SMITH')).toBe('gusto payroll smith');
     expect(counterpartyKey(null, 'GUSTO DES:PAYROLL ID:99102 INDN:SMITH')).toBe('gusto payroll smith');
@@ -138,6 +193,7 @@ describe('scheduleStream', () => {
   const stream = (overrides: Partial<RecurringStream>): RecurringStream => ({
     id: 'spending:test', label: 'Test', flow: 'spending', cadence: 'monthly', amount: 100, occurrences: 3,
     firstDate: '2026-07-01', lastDate: '2026-09-01', anchorDays: [1], category: 'Test', status: 'active', entryIds: [],
+    accountId: 'checking',
     ...overrides,
   });
 

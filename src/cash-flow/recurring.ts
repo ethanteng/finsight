@@ -63,6 +63,8 @@ export interface RecurringStream {
   /** Lapsed streams stopped before the data ends and are not projected. */
   status: 'active' | 'lapsed';
   entryIds: string[];
+  /** Where the latest occurrence posted, which is where the next is expected. */
+  accountId: string;
 }
 
 interface Occurrence {
@@ -182,6 +184,7 @@ function evaluateGroup(
     category: first.category,
     status: daysBetween(latest.date, dataThrough) > lapsedAfter ? 'lapsed' : 'active',
     entryIds: occurrences.flatMap(occurrence => occurrence.entryIds),
+    accountId: entries[entries.length - 1].accountId,
   };
 }
 

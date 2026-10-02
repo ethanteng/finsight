@@ -2,6 +2,7 @@ import type { PlannedCashFlowEvent as PlannedCashFlowEventRow } from '@prisma/cl
 import { getPrismaClient } from '../prisma-client';
 import { calendarDateInTimeZone } from '../domain/time-zone';
 import { calendarDateFrom, minDate } from '../cash-flow/calendar';
+import { cashFlowAccounts } from '../cash-flow/ledger';
 import {
   buildCashFlowModel,
   buildCashFlowReport,
@@ -10,6 +11,7 @@ import {
   type CashFlowReportRequest,
 } from '../cash-flow/forecast';
 import type {
+  CardPaymentMode,
   PlannedCashFlowEvent,
   PlannedEventInput,
   PlannedEventKind,
@@ -48,6 +50,8 @@ function toPlannedEvent(row: PlannedCashFlowEventRow): PlannedCashFlowEvent {
     startDate: dateOnly(row.startDate),
     recurrence: row.recurrence as PlannedEventRecurrence,
     endDate: row.endDate ? dateOnly(row.endDate) : null,
+    accountId: row.accountId ?? null,
+    paymentMode: (row.paymentMode as CardPaymentMode | null) ?? null,
   };
 }
 
@@ -59,6 +63,8 @@ function toRowData(input: PlannedEventInput) {
     startDate: new Date(`${input.startDate}T00:00:00.000Z`),
     recurrence: input.recurrence,
     endDate: input.endDate ? new Date(`${input.endDate}T00:00:00.000Z`) : null,
+    accountId: input.accountId,
+    paymentMode: input.paymentMode,
   };
 }
 
@@ -68,6 +74,20 @@ export async function listPlannedEvents(userId: string): Promise<PlannedCashFlow
     orderBy: [{ startDate: 'asc' }, { createdAt: 'asc' }],
   });
   return rows.map(toPlannedEvent);
+}
+
+/**
+ * Whether `accountId` is one of the user's connected credit cards. A card
+ * payment names its card by provider account id, so the id must be checked
+ * against the user's own accounts before it is stored.
+ */
+export async function isUserCreditCard(userId: string, accountId: string): Promise<boolean> {
+  const snapshot = await getPrismaClient().financialSummarySnapshot.findUnique({
+    where: { userId },
+    select: { accounts: true },
+  });
+  const accounts = Array.isArray(snapshot?.accounts) ? snapshot.accounts as any[] : [];
+  return cashFlowAccounts(accounts).some(account => account.kind === 'credit' && account.id === accountId);
 }
 
 /**

@@ -1,6 +1,6 @@
 import { classifyAccount } from '../services/account-classifier';
 import { toCanonicalTransaction } from '../services/canonical-transaction-adapter';
-import { calendarDateFrom, type CalendarDate } from './calendar';
+import { calendarDateFrom, daysBetween, type CalendarDate } from './calendar';
 
 /**
  * The accounts everyday money moves through: cash accounts and credit cards.
@@ -20,6 +20,8 @@ export interface CashFlowAccount {
   kind: CashFlowAccountKind;
   subtype: string | null;
   mask: string | null;
+  /** The balance the provider reported: cash held, or what a card owes. Null when it gave none. */
+  balance: number | null;
 }
 
 export type CashFlowDirection = 'income' | 'spending';
@@ -39,11 +41,38 @@ export interface CashFlowEntry {
   /** The provider's merchant or description, for display. */
   label: string;
   category: string;
+  /** Interest a credit card charged. The card model can project it from the card's APR instead. */
+  interest?: boolean;
+}
+
+/**
+ * Money moving between accounts rather than earned or spent: transfers, and
+ * payments to credit cards. Neither income nor spending, but each one changes
+ * the balance of the account it touches.
+ */
+export interface CashFlowMovement {
+  id: string;
+  accountId: string;
+  date: CalendarDate;
+  /** Signed effect on the account: positive moves money into it, negative out of it. */
+  amount: number;
+  /** A card payment: money a credit card received, or money a cash account sent to a card. */
+  cardPayment: boolean;
+  /**
+   * The other leg of a card payment between two connected accounts, matched
+   * by amount and date. A cash account's card payment with no match paid
+   * something not connected here, so it leaves the user's cash like any
+   * outgoing transfer.
+   */
+  pairedWith: string | null;
+  counterpartyKey: string;
+  label: string;
 }
 
 export interface CashFlowLedger {
   accounts: CashFlowAccount[];
   entries: CashFlowEntry[];
+  movements: CashFlowMovement[];
   /**
    * Earliest day any in-scope account has history for, from every posted
    * transaction including transfers. Null when there is none.
@@ -65,6 +94,15 @@ const COUNTERPARTY_NOISE = new Set([
 ]);
 
 const LABEL_MAX_LENGTH = 60;
+/** Canonical types that move money between accounts. */
+const MOVEMENT_TYPES = new Set(['transfer_in', 'transfer_out', 'deposit', 'withdrawal']);
+/** A card payment's two legs post within this many days of each other. */
+const PAYMENT_PAIRING_DAYS = 5;
+
+function detailedCategory(transaction: any): string {
+  const category = transaction?.personal_finance_category || transaction?.enriched_data?.personal_finance_category;
+  return String(category?.detailed || '').trim().toLowerCase();
+}
 
 function text(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
@@ -104,6 +142,11 @@ function displayLabel(transaction: any): string {
   return label.length > LABEL_MAX_LENGTH ? `${label.slice(0, LABEL_MAX_LENGTH - 1)}…` : label;
 }
 
+function reportedBalance(account: any): number | null {
+  const current = account?.balance && typeof account.balance === 'object' ? account.balance.current : account?.balance;
+  return typeof current === 'number' && Number.isFinite(current) ? current : null;
+}
+
 function accountId(account: any): string {
   return text(account?.account_id) || text(account?.id);
 }
@@ -124,6 +167,7 @@ export function cashFlowAccounts(accounts: readonly any[]): CashFlowAccount[] {
       kind: category,
       subtype: text(account?.subtype) || null,
       mask: text(account?.mask) || null,
+      balance: reportedBalance(account),
     });
   }
   return inScope;
@@ -142,7 +186,9 @@ export function buildCashFlowLedger(
 ): CashFlowLedger {
   const inScopeAccounts = cashFlowAccounts(accounts);
   const inScopeIds = new Set(inScopeAccounts.map(account => account.id));
+  const creditIds = new Set(inScopeAccounts.filter(account => account.kind === 'credit').map(account => account.id));
   const entries: CashFlowEntry[] = [];
+  const movements: CashFlowMovement[] = [];
   const seenTransactionIds = new Set<string>();
   const excluded = { unclassified: 0, currencyMismatch: 0 };
   let coverageStart: CalendarDate | null = null;
@@ -172,6 +218,27 @@ export function buildCashFlowLedger(
       continue;
     }
 
+    if (MOVEMENT_TYPES.has(canonical.type)) {
+      // A provider amount is positive when money leaves the account, so the
+      // raw sign says which way a transfer went on either kind of account.
+      const movementAmount = -canonical.sourceAmount;
+      if (movementAmount === 0) continue;
+      const onCard = creditIds.has(canonical.accountKey);
+      movements.push({
+        id: canonical.id,
+        accountId: canonical.accountKey,
+        date,
+        amount: movementAmount,
+        cardPayment: onCard
+          ? movementAmount > 0
+          : movementAmount < 0 && detailedCategory(transaction).includes('credit_card_payment'),
+        pairedWith: null,
+        counterpartyKey: counterpartyKey(transaction?.merchant_name, transaction?.name),
+        label: displayLabel(transaction),
+      });
+      continue;
+    }
+
     let flow: CashFlowDirection;
     let amount: number;
     if (canonical.type === 'income') {
@@ -196,9 +263,36 @@ export function buildCashFlowLedger(
       counterpartyKey: counterpartyKey(transaction?.merchant_name, transaction?.name),
       label: displayLabel(transaction),
       category: canonical.category?.trim() || 'Uncategorized',
+      ...(flow === 'spending' && creditIds.has(canonical.accountKey)
+        && detailedCategory(transaction) === 'bank_fees_interest_charge' && { interest: true }),
     });
   }
 
-  entries.sort((left, right) => left.date.localeCompare(right.date) || left.id.localeCompare(right.id));
-  return { accounts: inScopeAccounts, entries, coverageStart, latestTransactionDate, excluded };
+  const byDate = (left: { date: string; id: string }, right: { date: string; id: string }) =>
+    left.date.localeCompare(right.date) || left.id.localeCompare(right.id);
+  entries.sort(byDate);
+  movements.sort(byDate);
+  pairCardPayments(movements, creditIds);
+  return { accounts: inScopeAccounts, entries, movements, coverageStart, latestTransactionDate, excluded };
+}
+
+/**
+ * Match each payment a card received to the cash account's payment that sent
+ * it: the same amount, within a few days. Nothing in the provider data links
+ * the two legs, and matching on similarity alone would be a guess, so only an
+ * exact amount close in time counts.
+ */
+function pairCardPayments(movements: CashFlowMovement[], creditIds: ReadonlySet<string>): void {
+  const sent = movements.filter(movement => movement.cardPayment && !creditIds.has(movement.accountId));
+  for (const received of movements) {
+    if (!received.cardPayment || !creditIds.has(received.accountId)) continue;
+    const match = sent.find(candidate =>
+      candidate.pairedWith === null &&
+      Math.abs(Math.abs(candidate.amount) - received.amount) < 0.005 &&
+      Math.abs(daysBetween(candidate.date, received.date)) <= PAYMENT_PAIRING_DAYS
+    );
+    if (!match) continue;
+    match.pairedWith = received.id;
+    received.pairedWith = match.id;
+  }
 }

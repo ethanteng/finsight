@@ -1,4 +1,5 @@
 import type {
+  CashFlowCardSummary,
   CashFlowGranularity,
   CashFlowHighlightKey,
   CashFlowPeriod,
@@ -136,3 +137,38 @@ export function unavailableMessage(reason: ForecastUnavailableReason): string {
       return 'A forecast needs about four weeks of transactions. Your history so far is shown below, and the forecast will appear as more arrives.';
   }
 }
+
+/** "Mar 2027" for a `YYYY-MM` month. */
+export function monthLabel(month: string): string {
+  const [year, monthNumber] = month.split('-').map(Number);
+  return `${MONTHS[monthNumber - 1]} ${year}`;
+}
+
+/** "Rewards Card ••9876". */
+export function cardName(card: Pick<CashFlowCardSummary, 'name' | 'mask'>): string {
+  return card.mask ? `${card.name} ••${card.mask}` : card.name;
+}
+
+/** How the user usually pays a card, in their terms. */
+export function paceDescription(card: Pick<CashFlowCardSummary, 'behavior' | 'usualMonthlyPayment'>): string {
+  switch (card.behavior) {
+    case 'pays_in_full': return 'You’ve been paying this card in full';
+    case 'average_payment': return `You’ve been paying about ${formatMoney(card.usualMonthlyPayment ?? 0)} a month`;
+    case 'minimum_payment': return `Assuming the minimum payment of ${formatMoney(card.usualMonthlyPayment ?? 0)} a month`;
+    case 'unknown': return 'Not enough payment history to project this card yet';
+  }
+}
+
+/** "Pay off in full on Oct 25, 2026", "Pay $500 every month from Nov 1, 2026". */
+export function describeCardPlan(event: Pick<PlannedCashFlowEvent, 'recurrence' | 'startDate' | 'endDate' | 'paymentMode' | 'amount'>): string {
+  const until = event.endDate ? ` until ${formatCalendarDate(event.endDate)}` : '';
+  if (event.paymentMode === 'full') {
+    return event.recurrence === 'once'
+      ? `Pay off in full on ${formatCalendarDate(event.startDate)}`
+      : `Pay the statement in full every month from ${formatCalendarDate(event.startDate)}${until}`;
+  }
+  return event.recurrence === 'once'
+    ? `Pay an extra ${formatMoney(event.amount)} on ${formatCalendarDate(event.startDate)}`
+    : `Pay ${formatMoney(event.amount)} every month from ${formatCalendarDate(event.startDate)}${until}`;
+}
+

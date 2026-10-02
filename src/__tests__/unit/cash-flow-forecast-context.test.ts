@@ -16,10 +16,11 @@ import { questionNeedsFromPacks } from '../../openai/context-packs';
 import { buildSnapshotSummaryForValidation } from '../../openai/response-validator';
 import { validateResponseFacts } from '../../openai/response-facts';
 import type { FinancialContextSnapshot } from '../../openai/types';
-import { ACCOUNTS, householdTransactions } from './factories/cash-flow.factory';
+import { ACCOUNTS, accountsWithCardTerms, householdTransactions, interestCharges } from './factories/cash-flow.factory';
 
 const bonus: PlannedCashFlowEvent = {
   id: 'bonus', label: 'Year-end bonus', kind: 'income', amount: 10000, startDate: '2026-12-15', recurrence: 'once', endDate: null,
+  accountId: null, paymentMode: null,
 };
 
 function context(overrides: { transactionsFrom?: string; plannedEvents?: PlannedCashFlowEvent[] } = {}): CashFlowForecastContext {
@@ -212,3 +213,73 @@ describe('grounding answers about the forecast', () => {
     expect(result.valid).toBe(false);
   });
 });
+
+describe('credit cards and cash position in the pack', () => {
+  const payoff: PlannedCashFlowEvent = {
+    id: 'payoff', label: 'Pay off Rewards Card', kind: 'card_payment', amount: 0, startDate: '2026-10-25', recurrence: 'once',
+    endDate: null, accountId: 'card', paymentMode: 'full',
+  };
+  const extra: PlannedCashFlowEvent = { ...payoff, id: 'extra', label: 'Extra card payment', paymentMode: 'fixed', amount: 500, startDate: '2026-11-25' };
+  const cardContext = (plannedEvents: PlannedCashFlowEvent[] = []) => buildCashFlowForecastContext(buildCashFlowModel({
+    transactions: [...householdTransactions('2026-06-03', '2026-10-14'), ...interestCharges('2026-06-03', '2026-10-14')],
+    accounts: accountsWithCardTerms(),
+    plannedEvents,
+    dataThrough: '2026-10-14',
+    today: '2026-10-15',
+  }));
+
+  it('publishes each card’s terms and its outlook at the usual pace', () => {
+    const facts = byId(cashFlowForecastFacts(cardContext()));
+    expect(facts.get('cash_flow_card_1_balance')).toMatchObject({ value: 4000, unit: 'usd', provenance: { kind: 'snapshot' } });
+    expect(facts.get('cash_flow_card_1_apr')).toMatchObject({ value: 24, unit: 'percent' });
+    expect(facts.get('cash_flow_card_1_usual_payment')!.label).toContain('averaged over the last');
+    expect(facts.get('cash_flow_card_1_current_pace_interest_12_months')!.provenance.kind).toBe('forecast');
+    expect(facts.get('cash_flow_card_1_current_pace_months_to_payoff')).toMatchObject({ unit: 'months' });
+    expect(facts.get('cash_flow_card_1_current_pace_interest_12_months')!.caveat).toContain('Card interest is estimated monthly');
+  });
+
+  it('publishes what a plan saves, checked against the two interest figures', () => {
+    const allFacts = cashFlowForecastFacts(cardContext([payoff]));
+    const facts = byId(allFacts);
+    const saved = facts.get('cash_flow_card_1_interest_saved_12_months')!;
+    expect(saved.provenance).toMatchObject({
+      formula: 'abs(input[0] - input[1])',
+      inputFactIds: ['cash_flow_card_1_current_pace_interest_12_months', 'cash_flow_card_1_with_plans_interest_12_months'],
+    });
+    expect(saved.value).toBeGreaterThan(0);
+    expect(validateCanonicalFactPack({ version: 1, facts: allFacts })).toEqual([]);
+  });
+
+  it('states a set card payment’s amount but not a full payoff’s', () => {
+    const context = cardContext([payoff, extra]);
+    const facts = byId(cashFlowForecastFacts(context));
+    expect(facts.has('cash_flow_planned_event_1_amount')).toBe(false);
+    expect(facts.get('cash_flow_planned_event_2_amount')).toMatchObject({ value: 500 });
+    expect(facts.get('cash_flow_planned_event_2_amount')!.label).toContain('payment to credit card “Rewards Card”');
+    const details = compactCashFlowForecastDetails(context) as any;
+    expect(details.plannedEvents[0]).toMatchObject({ paysCardInFull: true });
+    expect(details.plannedEvents[0]).not.toHaveProperty('amountFactId');
+  });
+
+  it('publishes cash now, at fixed points ahead, and at its lowest', () => {
+    const facts = byId(cashFlowForecastFacts(cardContext()));
+    expect(facts.get('cash_flow_cash_now')).toMatchObject({ value: 5200, provenance: { kind: 'snapshot' } });
+    for (const key of ['end_of_this_month', 'end_of_next_month', 'in_3_months', 'in_6_months', 'in_12_months']) {
+      expect(facts.get(`cash_flow_cash_${key}`)!.provenance.kind).toBe('forecast');
+    }
+    expect(facts.get('cash_flow_cash_low_point_next_12_months')!.label).toMatch(/Lowest projected cash in the next 12 months, on \d{4}-\d{2}-\d{2}/);
+  });
+
+  it('describes the cards and the cash position by fact id', () => {
+    const details = compactCashFlowForecastDetails(cardContext([payoff])) as any;
+    expect(details.creditCards[0]).toMatchObject({
+      card: 'credit card “Rewards Card”',
+      factIdPrefix: 'cash_flow_card_1_',
+      currentPace: { carryingBalanceNow: true },
+      withPlans: { stopsCarryingABalance: '2026-10' },
+      plans: [expect.objectContaining({ paysInFull: true, startDate: '2026-10-25' })],
+    });
+    expect(details.cashPosition).toMatchObject({ factIdPrefix: 'cash_flow_cash_' });
+  });
+});
+

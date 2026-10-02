@@ -7,17 +7,30 @@ import { addDays, addMonths, isCalendarDate, type CalendarDate } from './calenda
  * not, and are never written here.
  *
  * `kind` decides the effect. Income adds to cash in and expense to cash out.
- * Card payments will join as their own kind with the cash-position view: they
- * move money between the user's accounts, so they change balances but never
- * savings.
+ * A card payment moves money from the user's cash to one of their credit
+ * cards, so it changes balances and the interest the card charges, but it is
+ * never income or spending itself.
  */
-export const PLANNED_EVENT_KINDS = ['income', 'expense'] as const;
+export const PLANNED_EVENT_KINDS = ['income', 'expense', 'card_payment'] as const;
 export type PlannedEventKind = (typeof PLANNED_EVENT_KINDS)[number];
+
+/**
+ * How a card payment is sized. `full` pays what the card is owed: once, it
+ * clears the whole balance; every month, it pays each statement in full.
+ * `fixed` pays the event's amount: once, on top of the usual payment; every
+ * month, in place of it.
+ */
+export const CARD_PAYMENT_MODES = ['full', 'fixed'] as const;
+export type CardPaymentMode = (typeof CARD_PAYMENT_MODES)[number];
+
+/** A card plan is a single payment or a monthly one; other cadences do not match a card's cycle. */
+export const CARD_PAYMENT_RECURRENCES = ['once', 'monthly'] as const;
 
 export const PLANNED_EVENT_RECURRENCES = ['once', 'weekly', 'biweekly', 'monthly', 'quarterly', 'annually'] as const;
 export type PlannedEventRecurrence = (typeof PLANNED_EVENT_RECURRENCES)[number];
 
 export const PLANNED_EVENT_LABEL_MAX_LENGTH = 80;
+const ACCOUNT_ID_MAX_LENGTH = 200;
 export const PLANNED_EVENT_MAX_AMOUNT = 100_000_000;
 export const PLANNED_EVENTS_PER_USER_LIMIT = 100;
 
@@ -31,6 +44,10 @@ export interface PlannedCashFlowEvent {
   recurrence: PlannedEventRecurrence;
   /** Last day a recurring event can occur, inclusive. Always null for `once`. */
   endDate: CalendarDate | null;
+  /** The credit card a card payment pays; null for every other kind. */
+  accountId: string | null;
+  /** How a card payment is sized; null for every other kind. */
+  paymentMode: CardPaymentMode | null;
 }
 
 export type PlannedEventInput = Omit<PlannedCashFlowEvent, 'id'>;
@@ -54,17 +71,36 @@ export function validatePlannedEventInput(raw: unknown): PlannedEventValidation 
   }
 
   if (!isOneOf(PLANNED_EVENT_KINDS, body.kind)) {
-    return { ok: false, error: 'Choose whether the event is money in or money out' };
+    return { ok: false, error: 'Choose whether the event is money in, money out or a card payment' };
+  }
+  const kind = body.kind;
+
+  let accountId: string | null = null;
+  let paymentMode: CardPaymentMode | null = null;
+  if (kind === 'card_payment') {
+    accountId = typeof body.accountId === 'string' ? body.accountId.trim() : '';
+    if (!accountId || accountId.length > ACCOUNT_ID_MAX_LENGTH) return { ok: false, error: 'Choose a credit card to pay' };
+    if (!isOneOf(CARD_PAYMENT_MODES, body.paymentMode)) {
+      return { ok: false, error: 'Choose whether to pay the card in full or a set amount' };
+    }
+    paymentMode = body.paymentMode;
   }
 
-  const amount = typeof body.amount === 'number' ? body.amount : Number.NaN;
-  if (!Number.isFinite(amount) || amount <= 0) return { ok: false, error: 'Enter an amount greater than zero' };
-  if (amount > PLANNED_EVENT_MAX_AMOUNT) return { ok: false, error: 'That amount is too large' };
+  // Paying a card in full is sized by the balance, not by the event.
+  let amount = 0;
+  if (paymentMode !== 'full') {
+    amount = typeof body.amount === 'number' ? body.amount : Number.NaN;
+    if (!Number.isFinite(amount) || amount <= 0) return { ok: false, error: 'Enter an amount greater than zero' };
+    if (amount > PLANNED_EVENT_MAX_AMOUNT) return { ok: false, error: 'That amount is too large' };
+  }
 
   if (!isCalendarDate(body.startDate)) return { ok: false, error: 'Enter a valid date' };
 
   const recurrence = body.recurrence ?? 'once';
   if (!isOneOf(PLANNED_EVENT_RECURRENCES, recurrence)) return { ok: false, error: 'Choose how often it happens' };
+  if (kind === 'card_payment' && !isOneOf(CARD_PAYMENT_RECURRENCES, recurrence)) {
+    return { ok: false, error: 'A card payment happens once or every month' };
+  }
 
   let endDate: CalendarDate | null = null;
   if (recurrence !== 'once' && body.endDate !== undefined && body.endDate !== null && body.endDate !== '') {
@@ -77,11 +113,13 @@ export function validatePlannedEventInput(raw: unknown): PlannedEventValidation 
     ok: true,
     value: {
       label,
-      kind: body.kind,
+      kind,
       amount: Math.round(amount * 100) / 100,
       startDate: body.startDate,
       recurrence,
       endDate,
+      accountId,
+      paymentMode,
     },
   };
 }
@@ -115,7 +153,12 @@ export function expandPlannedEvent(
   return dates;
 }
 
-/** Signed effect on net cash flow: income adds, expenses subtract. */
+/**
+ * Signed effect on net cash flow: income adds, expenses subtract. A card
+ * payment moves money between the user's own accounts, so it has none; what it
+ * changes is the card's balance and the interest charged on it.
+ */
 export function plannedEventNetEffect(event: Pick<PlannedCashFlowEvent, 'kind' | 'amount'>): number {
+  if (event.kind === 'card_payment') return 0;
   return event.kind === 'income' ? event.amount : -event.amount;
 }

@@ -12,14 +12,17 @@ describe('validatePlannedEventInput', () => {
     const result = validatePlannedEventInput({ ...base, label: '  Holiday   bonus ', amount: 10000.456, endDate: '2027-01-01' });
     expect(result).toEqual({
       ok: true,
-      value: { label: 'Holiday bonus', kind: 'income', amount: 10000.46, startDate: '2026-12-15', recurrence: 'once', endDate: null },
+      value: {
+        label: 'Holiday bonus', kind: 'income', amount: 10000.46, startDate: '2026-12-15', recurrence: 'once', endDate: null,
+        accountId: null, paymentMode: null,
+      },
     });
   });
 
   it.each([
     [{ ...base, label: '' }, 'Give the event a name'],
     [{ ...base, label: 'x'.repeat(81) }, 'Keep the name under 80 characters'],
-    [{ ...base, kind: 'transfer' }, 'Choose whether the event is money in or money out'],
+    [{ ...base, kind: 'transfer' }, 'Choose whether the event is money in, money out or a card payment'],
     [{ ...base, amount: 0 }, 'Enter an amount greater than zero'],
     [{ ...base, amount: '100' }, 'Enter an amount greater than zero'],
     [{ ...base, amount: 2e8 }, 'That amount is too large'],
@@ -31,9 +34,47 @@ describe('validatePlannedEventInput', () => {
   });
 });
 
+describe('validatePlannedEventInput for card payments', () => {
+  const card = { label: 'Pay off Rewards Card', kind: 'card_payment', accountId: 'card', startDate: '2026-11-01', recurrence: 'once' };
+
+  it('sizes a full payment by the balance, not the event', () => {
+    expect(validatePlannedEventInput({ ...card, paymentMode: 'full', amount: 999 })).toEqual({
+      ok: true,
+      value: {
+        label: 'Pay off Rewards Card', kind: 'card_payment', amount: 0, startDate: '2026-11-01', recurrence: 'once', endDate: null,
+        accountId: 'card', paymentMode: 'full',
+      },
+    });
+  });
+
+  it('keeps the amount of a fixed payment', () => {
+    const result = validatePlannedEventInput({ ...card, paymentMode: 'fixed', amount: 500, recurrence: 'monthly', endDate: '2027-06-01' });
+    expect(result).toMatchObject({ ok: true, value: { amount: 500, recurrence: 'monthly', endDate: '2027-06-01', paymentMode: 'fixed' } });
+  });
+
+  it.each([
+    [{ ...card, paymentMode: 'full', accountId: '' }, 'Choose a credit card to pay'],
+    [{ ...card, paymentMode: 'half' }, 'Choose whether to pay the card in full or a set amount'],
+    [{ ...card, paymentMode: 'fixed' }, 'Enter an amount greater than zero'],
+    [{ ...card, paymentMode: 'full', recurrence: 'weekly' }, 'A card payment happens once or every month'],
+  ])('rejects %j', (input, error) => {
+    expect(validatePlannedEventInput(input)).toEqual({ ok: false, error });
+  });
+
+  it('never attaches a card to an income or expense event', () => {
+    const result = validatePlannedEventInput({ ...base, accountId: 'card', paymentMode: 'full' });
+    expect(result).toMatchObject({ ok: true, value: { accountId: null, paymentMode: null } });
+  });
+
+  it('gives a card payment no effect on savings', () => {
+    expect(plannedEventNetEffect({ kind: 'card_payment', amount: 500 })).toBe(0);
+  });
+});
+
 describe('expandPlannedEvent', () => {
   const event = (overrides: Partial<PlannedCashFlowEvent>): PlannedCashFlowEvent => ({
     id: 'event', label: 'Event', kind: 'expense', amount: 100, startDate: '2026-01-31', recurrence: 'monthly', endDate: null,
+    accountId: null, paymentMode: null,
     ...overrides,
   });
 

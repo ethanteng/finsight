@@ -41,6 +41,7 @@ function grocerySpending(from: string, to: string): number {
 
 const bonus: PlannedCashFlowEvent = {
   id: 'bonus', label: 'Year-end bonus', kind: 'income', amount: 10000, startDate: '2026-12-15', recurrence: 'once', endDate: null,
+  accountId: null, paymentMode: null,
 };
 
 describe('buildCashFlowModel', () => {
@@ -65,6 +66,7 @@ describe('buildCashFlowModel', () => {
       recurringSpending: 2015.49, // rent Oct 1, streaming Oct 12
       typicalSpending: roundCents(built.typical.dailySpending * 31),
       plannedSpending: 0,
+      cardInterest: 0, // the card has no APR, so its interest is not modeled
     });
     expect(october.income).toBe(5000);
     expect(october.net).toBe(roundCents(october.income - october.spending));
