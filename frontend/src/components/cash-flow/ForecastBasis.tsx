@@ -150,6 +150,12 @@ export default function ForecastBasis({ report, apiUrl, onChanged }: {
   // A monthly override from Finances replaces what that side learns from
   // transactions, so a change to what it learns would do nothing there.
   const learned = (flow: Flow) => (flow === 'income' ? baseline.incomeSource : baseline.spendingSource) === 'transactions';
+  // Whether a monthly override cancels a saved change. Leaving out spending
+  // still reshapes how a spending override is split between cash and cards;
+  // nothing else reads what an overridden side learns.
+  const cancelledByOverride = (adjustment: CashFlowAdjustment) => !learned(adjustment.flow)
+    && (adjustment.kind === 'include_one_off' || adjustment.kind === 'continue_stream'
+      || (adjustment.kind === 'exclude_payee' && adjustment.flow === 'income'));
   const showTypicalSpending = learned('spending');
   const showTypicalIncome = learned('income') && baseline.typicalMonthlyIncome >= 1;
 
@@ -219,12 +225,7 @@ export default function ForecastBasis({ report, apiUrl, onChanged }: {
                   <span className="line-clamp-2 break-words font-semibold text-[#102319]">{adjustment.label}</span>
                   <span className="text-xs text-[#66736b]">
                     {describeAdjustment(adjustment)}
-                    {/* exclude_payee still reshapes card purchase split under a
-                        spending override; only these two are fully cancelled. */}
-                    {(adjustment.kind === 'include_one_off' || adjustment.kind === 'continue_stream')
-                      && !learned(adjustment.flow)
-                      ? ` · no effect while your monthly ${adjustment.flow} from Finances is set`
-                      : ''}
+                    {cancelledByOverride(adjustment) ? ` · no effect while your monthly ${adjustment.flow} from Finances is set` : ''}
                   </span>
                 </span>
                 <ChangeButton label="Undo" item={adjustment.label} disabled={busy} onClick={() => undo(adjustment)} />

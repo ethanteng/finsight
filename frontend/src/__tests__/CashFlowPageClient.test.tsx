@@ -363,6 +363,7 @@ describe('CashFlowPageClient', () => {
         ],
         adjustments: [
           { id: 'adj-income', kind: 'include_one_off', flow: 'income', key: 'tax-refund', label: 'Tax refund', date: '2026-04-15', amount: 1850 },
+          { id: 'adj-employer', kind: 'exclude_payee', flow: 'income', key: 'old employer', label: 'Old Employer', date: null, amount: null },
           { id: 'adj-rent', kind: 'exclude_payee', flow: 'spending', key: 'oak street apartments', label: 'Oak Street Apartments', date: null, amount: null },
         ],
       });
@@ -376,6 +377,8 @@ describe('CashFlowPageClient', () => {
       expect(within(section).getByRole('button', { name: 'Count it: United Airlines' })).toBeInTheDocument();
       expect(within(section).getByRole('button', { name: 'Keep counting: Old Gym' })).toBeInTheDocument();
       expect(within(section).getByText(/Counted in typical income: \$1,850\.00 on Apr 15, 2026 · no effect while your monthly income from Finances is set/)).toBeInTheDocument();
+      // Nothing reads learned income under an income override, so leaving income out does nothing either.
+      expect(within(section).getByText('Income left out of the forecast · no effect while your monthly income from Finances is set')).toBeInTheDocument();
       expect(within(section).getByText('Spending left out of the forecast')).toBeInTheDocument();
     });
 
