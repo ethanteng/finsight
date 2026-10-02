@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { CalendarPlus, Pencil, Trash2 } from 'lucide-react';
 import { useDialog } from '../ui/dialog';
+import { sendCashFlowRequest as send } from '../../lib/cash-flow-api';
 import { fromGrouped, withCommas } from '../../lib/number-input';
 import {
   RECURRENCE_LABELS,
@@ -74,18 +75,6 @@ function emptyForm(today: string): FormState {
 function automaticLabel(card: CashFlowCardSummary | undefined, mode: CardPaymentMode): string {
   if (!card) return '';
   return mode === 'full' ? `Pay off ${card.name}` : `${card.name} payment`;
-}
-
-async function send(apiUrl: string, path: string, method: string, body?: unknown): Promise<Response> {
-  const token = localStorage.getItem('auth_token');
-  return fetch(`${apiUrl}${path}`, {
-    method,
-    headers: {
-      ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
 }
 
 function Toggle<T extends string>({ legend, options, value, onChange }: {

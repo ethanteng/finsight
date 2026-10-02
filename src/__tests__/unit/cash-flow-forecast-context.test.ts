@@ -1,4 +1,5 @@
 import { buildCashFlowModel } from '../../cash-flow/forecast';
+import type { ForecastAdjustment } from '../../cash-flow/adjustments';
 import type { PlannedCashFlowEvent } from '../../cash-flow/planned-events';
 import {
   buildCashFlowForecastContext,
@@ -23,13 +24,16 @@ const bonus: PlannedCashFlowEvent = {
   accountId: null, paymentMode: null,
 };
 
-function context(overrides: { transactionsFrom?: string; plannedEvents?: PlannedCashFlowEvent[] } = {}): CashFlowForecastContext {
+function context(
+  overrides: { transactionsFrom?: string; plannedEvents?: PlannedCashFlowEvent[]; adjustments?: ForecastAdjustment[] } = {}
+): CashFlowForecastContext {
   return buildCashFlowForecastContext(buildCashFlowModel({
     transactions: householdTransactions(overrides.transactionsFrom ?? '2026-06-03', '2026-10-14'),
     accounts: ACCOUNTS,
     plannedEvents: overrides.plannedEvents ?? [bonus],
     dataThrough: '2026-10-14',
     today: '2026-10-15',
+    adjustments: overrides.adjustments,
   }));
 }
 
@@ -138,6 +142,22 @@ describe('cash flow forecast facts', () => {
     const short = cashFlowForecastFacts(context({ transactionsFrom: '2026-10-01' }));
     expect(short.length).toBeGreaterThan(0);
     expect(short.every(fact => fact.provenance.kind !== 'forecast')).toBe(true);
+  });
+});
+
+describe('the user’s adjustments in the pack', () => {
+  it('names what the user moved in or out, and the figures already reflect it', () => {
+    const leftOut: ForecastAdjustment = {
+      id: 'rent', kind: 'exclude_payee', flow: 'spending', key: 'oak street apartments', label: 'Oak Street Apartments',
+    };
+    const adjusted = context({ adjustments: [leftOut] });
+    expect(adjusted.recurring!.some(item => item.label === 'Oak Street Apartments')).toBe(false);
+    const details = compactCashFlowForecastDetails(adjusted) as any;
+    expect(details.userAdjustments).toEqual({
+      note: expect.stringContaining('already reflects these choices'),
+      changes: [{ item: 'Oak Street Apartments', change: 'left out of the forecast: not projected as spending' }],
+    });
+    expect(compactCashFlowForecastDetails(context()) as any).not.toHaveProperty('userAdjustments');
   });
 });
 

@@ -191,7 +191,7 @@ describe('detectRecurringStreams', () => {
 
 describe('scheduleStream', () => {
   const stream = (overrides: Partial<RecurringStream>): RecurringStream => ({
-    id: 'spending:test', label: 'Test', flow: 'spending', cadence: 'monthly', amount: 100, occurrences: 3,
+    id: 'spending:test', counterpartyKey: 'test', label: 'Test', flow: 'spending', cadence: 'monthly', amount: 100, occurrences: 3,
     firstDate: '2026-07-01', lastDate: '2026-09-01', anchorDays: [1], category: 'Test', status: 'active', entryIds: [],
     accountId: 'checking',
     ...overrides,

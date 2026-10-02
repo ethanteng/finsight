@@ -9,6 +9,7 @@ import {
   type CashFlowTotals,
   type ForecastUnavailableReason,
 } from '../cash-flow/forecast';
+import type { ForecastAdjustmentKind } from '../cash-flow/adjustments';
 import { addDays } from '../cash-flow/calendar';
 import type { CardPaymentBehavior } from '../cash-flow/cards';
 import { buildCashPosition, cashMilestones } from '../cash-flow/position';
@@ -91,6 +92,8 @@ export interface CashFlowForecastContext {
     projectsCards: boolean;
     cardsLeftOut: Array<{ name: string; mask: string | null; reason: 'no_balance' | 'no_pace' }>;
   };
+  /** The user's choices about what the forecast counts; the figures already reflect them. */
+  adjustments?: Array<{ kind: ForecastAdjustmentKind; flow: 'income' | 'spending'; label: string }>;
 }
 
 type CardPace = Pick<CardOutcome, 'paidOffBy' | 'carryingBalanceNow' | 'interestTwelveMonths' | 'balanceInTwelveMonths'>;
@@ -180,6 +183,7 @@ export function buildCashFlowForecastContext(model: CashFlowModel): CashFlowFore
       withPlans: pace(card.withPlans),
     })),
     position: positionContext(model),
+    adjustments: model.adjustments.map(adjustment => ({ kind: adjustment.kind, flow: adjustment.flow, label: adjustment.label })),
   };
 }
 
@@ -596,7 +600,26 @@ export function compactCashFlowForecastDetails(context: CashFlowForecastContext)
           }
         : { unavailable: context.position.reason },
     }),
+    ...((context.adjustments ?? []).length > 0 && {
+      userAdjustments: {
+        note: 'The user chose what the forecast counts; every figure already reflects these choices, and past months are unchanged.',
+        changes: (context.adjustments ?? []).map(adjustment => ({
+          item: adjustment.label,
+          change: adjustmentWords(adjustment.kind, adjustment.flow),
+        })),
+      },
+    }),
   };
+}
+
+/** What an adjustment did, in words the model can repeat. */
+function adjustmentWords(kind: ForecastAdjustmentKind, flow: 'income' | 'spending'): string {
+  switch (kind) {
+    case 'exclude_payee': return `left out of the forecast: not projected as ${flow}`;
+    case 'include_one_off': return `counted in typical ${flow} although it looked like a one-off`;
+    case 'continue_stream': return `still projected as regular ${flow} although it had stopped`;
+    case 'exclude_transfer': return `left out of the cash position's transfers ${flow === 'income' ? 'in' : 'out'}`;
+  }
 }
 
 const PACE_WORDS: Record<CardPaymentBehavior, string> = {

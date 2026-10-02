@@ -54,10 +54,15 @@ function report(overrides: Partial<CashFlowReport> = {}): CashFlowReport {
       incomeSource: 'transactions', spendingSource: 'transactions', monthlyIncomeOverride: null, monthlyExpenseOverride: null,
     },
     recurring: [
-      { id: 'income:gusto', label: 'Gusto Payroll', flow: 'income', cadence: 'biweekly', amount: 2500, monthlyAmount: 5416.67, occurrences: 9, lastDate: '2026-10-09', nextDate: '2026-10-23', status: 'active', category: 'Wages', replacedByOverride: false },
-      { id: 'spending:rent', label: 'Oak Street Apartments', flow: 'spending', cadence: 'monthly', amount: 2000, monthlyAmount: 2000, occurrences: 5, lastDate: '2026-10-01', nextDate: '2026-11-01', status: 'active', category: 'Rent', replacedByOverride: false },
-      { id: 'spending:gym', label: 'Old Gym', flow: 'spending', cadence: 'monthly', amount: 40, monthlyAmount: 40, occurrences: 3, lastDate: '2026-07-05', nextDate: null, status: 'lapsed', category: 'Gym', replacedByOverride: false },
+      { id: 'income:gusto', payeeKey: 'gusto payroll', label: 'Gusto Payroll', flow: 'income', cadence: 'biweekly', amount: 2500, monthlyAmount: 5416.67, occurrences: 9, lastDate: '2026-10-09', nextDate: '2026-10-23', status: 'active', category: 'Wages', replacedByOverride: false, continuedByUser: false },
+      { id: 'spending:rent', payeeKey: 'oak street apartments', label: 'Oak Street Apartments', flow: 'spending', cadence: 'monthly', amount: 2000, monthlyAmount: 2000, occurrences: 5, lastDate: '2026-10-01', nextDate: '2026-11-01', status: 'active', category: 'Rent', replacedByOverride: false, continuedByUser: false },
+      { id: 'spending:gym', payeeKey: 'old gym', label: 'Old Gym', flow: 'spending', cadence: 'monthly', amount: 40, monthlyAmount: 40, occurrences: 3, lastDate: '2026-07-05', nextDate: null, status: 'lapsed', category: 'Gym', replacedByOverride: false, continuedByUser: false },
     ],
+    typicalPayees: [
+      { flow: 'spending', payeeKey: 'safeway', label: 'Safeway', monthlyAmount: 610.2 },
+      { flow: 'spending', payeeKey: 'trader joes', label: 'Trader Joes', monthlyAmount: 480 },
+    ],
+    adjustments: [],
     oneOffs: [{ id: 'flight', date: '2026-09-10', label: 'United Airlines', flow: 'spending', amount: 2400 }],
     plannedEvents: [
       { id: 'bonus', label: 'Year-end bonus', kind: 'income', amount: 10000, startDate: '2026-12-15', recurrence: 'once', endDate: null, accountId: null, paymentMode: null, nextDate: '2026-12-15', occurrencesInRange: 0 },
@@ -191,6 +196,116 @@ describe('CashFlowPageClient', () => {
       label: 'New laptop', kind: 'expense', amount: 2499.99, startDate: '2026-11-20', recurrence: 'once', endDate: null,
     });
     await waitFor(() => expect(calls.filter(call => call.url.includes('/api/cash-flow?'))).toHaveLength(2));
+  });
+
+  describe('changing what the forecast counts', () => {
+    const adjusting = (body = report()) => mockFetch((url, init) => {
+      if (url.endsWith('/api/cash-flow/adjustments') && init?.method === 'POST') return { status: 201, body: { adjustment: {} } };
+      if (url.includes('/api/cash-flow/adjustments/') && init?.method === 'DELETE') return { status: 204 };
+      if (url.includes('/api/cash-flow?')) return { status: 200, body };
+      return undefined;
+    });
+    const posted = (calls: ReturnType<typeof mockFetch>) =>
+      JSON.parse(String(calls.find(call => call.init?.method === 'POST')!.init!.body));
+    const basis = async () => (await screen.findByRole('heading', { name: 'How this forecast works' })).closest('section')!;
+
+    it.each([
+      ['Leave out: Oak Street Apartments', { kind: 'exclude_payee', flow: 'spending', key: 'oak street apartments' }],
+      ['Leave out: Gusto Payroll', { kind: 'exclude_payee', flow: 'income', key: 'gusto payroll' }],
+      ['Count it: United Airlines', { kind: 'include_one_off', flow: 'spending', key: 'flight' }],
+      ['Keep counting: Old Gym', { kind: 'continue_stream', flow: 'spending', key: 'old gym' }],
+    ])('%s saves the change and reloads the forecast', async (button, expected) => {
+      const calls = adjusting();
+      render(<CashFlowPageClient />);
+      fireEvent.click(within(await basis()).getByRole('button', { name: button }));
+
+      await waitFor(() => expect(calls.some(call => call.init?.method === 'POST')).toBe(true));
+      expect(posted(calls)).toEqual(expected);
+      await waitFor(() => expect(calls.filter(call => call.url.includes('/api/cash-flow?'))).toHaveLength(2));
+    });
+
+    it('lists what typical spending is made of, and leaves a payee out of it', async () => {
+      const calls = adjusting();
+      render(<CashFlowPageClient />);
+      const section = await basis();
+      fireEvent.click(within(section).getByText('What this is made of'));
+      expect(within(section).getByText('$610/mo')).toBeInTheDocument();
+      fireEvent.click(within(section).getByRole('button', { name: 'Leave out: Safeway' }));
+      await waitFor(() => expect(calls.some(call => call.init?.method === 'POST')).toBe(true));
+      expect(posted(calls)).toEqual({ kind: 'exclude_payee', flow: 'spending', key: 'safeway' });
+    });
+
+    it('leaves a transfer out of the cash position', async () => {
+      const body = report({
+        position: {
+          ...report().position,
+          transfers: {
+            typicalMonthlyNet: 0,
+            recurring: [{ id: 'spending:vanguard', payeeKey: 'vanguard buy transfer', label: 'VANGUARD', cadence: 'monthly', amount: 400, direction: 'out', nextDate: '2026-11-05' }],
+          },
+        },
+      });
+      const calls = adjusting(body);
+      render(<CashFlowPageClient />);
+      fireEvent.click(within(await basis()).getByRole('button', { name: 'Leave out: VANGUARD' }));
+      await waitFor(() => expect(calls.some(call => call.init?.method === 'POST')).toBe(true));
+      expect(posted(calls)).toEqual({ kind: 'exclude_transfer', flow: 'spending', key: 'vanguard buy transfer' });
+    });
+
+    it('lists the user’s changes and undoes one', async () => {
+      const body = report({
+        adjustments: [
+          { id: 'adj-1', kind: 'exclude_payee', flow: 'spending', key: 'oak street apartments', label: 'Oak Street Apartments', date: null, amount: null },
+          { id: 'adj-2', kind: 'include_one_off', flow: 'spending', key: 'flight', label: 'United Airlines', date: '2026-09-10', amount: 2400 },
+        ],
+      });
+      const calls = adjusting(body);
+      render(<CashFlowPageClient />);
+      const section = await basis();
+      expect(within(section).getByText('Spending left out of the forecast')).toBeInTheDocument();
+      expect(within(section).getByText('Counted in typical spending: $2,400.00 on Sep 10, 2026')).toBeInTheDocument();
+
+      fireEvent.click(within(section).getByRole('button', { name: 'Undo: Oak Street Apartments' }));
+      await waitFor(() => expect(calls.some(call => call.init?.method === 'DELETE')).toBe(true));
+      expect(calls.find(call => call.init?.method === 'DELETE')!.url).toMatch(/\/api\/cash-flow\/adjustments\/adj-1$/);
+      await waitFor(() => expect(calls.filter(call => call.url.includes('/api/cash-flow?'))).toHaveLength(2));
+    });
+
+    it('stops counting an item the user kept', async () => {
+      const kept = { ...report().recurring[2], status: 'active' as const, continuedByUser: true, nextDate: '2026-11-05' };
+      const body = report({
+        recurring: [report().recurring[0], report().recurring[1], kept],
+        adjustments: [{ id: 'adj-gym', kind: 'continue_stream', flow: 'spending', key: 'old gym', label: 'Old Gym', date: null, amount: null }],
+      });
+      const calls = adjusting(body);
+      render(<CashFlowPageClient />);
+      const section = await basis();
+      expect(within(section).getByText(/kept by you/)).toBeInTheDocument();
+      fireEvent.click(within(section).getByRole('button', { name: 'Stop counting: Old Gym' }));
+      await waitFor(() => expect(calls.some(call => call.init?.method === 'DELETE')).toBe(true));
+      expect(calls.find(call => call.init?.method === 'DELETE')!.url).toMatch(/adjustments\/adj-gym$/);
+    });
+
+    it('shows the server’s reason when a change is refused', async () => {
+      mockFetch((url, init) => {
+        if (url.endsWith('/api/cash-flow/adjustments') && init?.method === 'POST') {
+          return { status: 409, body: { error: 'You can make up to 200 changes to the forecast' } };
+        }
+        if (url.includes('/api/cash-flow?')) return { status: 200, body: report() };
+        return undefined;
+      });
+      render(<CashFlowPageClient />);
+      fireEvent.click(within(await basis()).getByRole('button', { name: 'Leave out: Oak Street Apartments' }));
+      expect(await screen.findByRole('alert')).toHaveTextContent('You can make up to 200 changes to the forecast');
+    });
+
+    it('sends what isn’t really income or spending to recategorizing, which fixes history too', async () => {
+      adjusting();
+      render(<CashFlowPageClient />);
+      const section = await basis();
+      const links = within(section).getAllByRole('link', { name: 'Accounts & context' });
+      expect(links[0]).toHaveAttribute('href', '/profile');
+    });
   });
 
   it('shows the server’s reason when an event is rejected', async () => {
