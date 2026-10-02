@@ -320,6 +320,48 @@ describe('CashFlowPageClient', () => {
       expect(calls.find(call => call.init?.method === 'DELETE')!.url).toMatch(/adjustments\/adj-gym$/);
     });
 
+    it('shows typical income and its payees when only spending is overridden', async () => {
+      const body = report({
+        baseline: { ...report().baseline, spendingSource: 'override', monthlyExpenseOverride: 6000, typicalMonthlyIncome: 3211 },
+        typicalPayees: [{ flow: 'income', payeeKey: 'acme corp consulting', label: 'ACME CORP CONSULTING', monthlyAmount: 3210.65 }],
+      });
+      const calls = adjusting(body);
+      render(<CashFlowPageClient />);
+      const section = await basis();
+      expect(within(section).getByText((_, element) =>
+        element?.tagName === 'P' && /^About \$3,211 a month of other income, spread evenly/.test(element.textContent ?? ''))).toBeInTheDocument();
+      fireEvent.click(within(section).getByText('What this is made of'));
+      fireEvent.click(within(section).getByRole('button', { name: 'Leave out: ACME CORP CONSULTING' }));
+      await waitFor(() => expect(calls.some(call => call.init?.method === 'POST')).toBe(true));
+      expect(posted(calls)).toEqual({ kind: 'exclude_payee', flow: 'income', key: 'acme corp consulting' });
+    });
+
+    it('offers no change a monthly override would cancel, and says which saved ones it does', async () => {
+      const body = report({
+        baseline: { ...report().baseline, incomeSource: 'override', monthlyIncomeOverride: 8000 },
+        oneOffs: [...report().oneOffs, { id: 'bonus-deposit', date: '2026-09-01', label: 'Signing bonus', flow: 'income', amount: 5000 }],
+        recurring: [
+          ...report().recurring,
+          { ...report().recurring[0], id: 'income:old-client', payeeKey: 'old client', label: 'Old Client', status: 'lapsed', nextDate: null },
+        ],
+        adjustments: [
+          { id: 'adj-income', kind: 'include_one_off', flow: 'income', key: 'tax-refund', label: 'Tax refund', date: '2026-04-15', amount: 1850 },
+          { id: 'adj-rent', kind: 'exclude_payee', flow: 'spending', key: 'oak street apartments', label: 'Oak Street Apartments', date: null, amount: null },
+        ],
+      });
+      adjusting(body);
+      render(<CashFlowPageClient />);
+      const section = await basis();
+      // Income is overridden: counting income or keeping it would change nothing.
+      expect(within(section).queryByRole('button', { name: 'Count it: Signing bonus' })).not.toBeInTheDocument();
+      expect(within(section).queryByRole('button', { name: 'Keep counting: Old Client' })).not.toBeInTheDocument();
+      // Spending is still learned from transactions.
+      expect(within(section).getByRole('button', { name: 'Count it: United Airlines' })).toBeInTheDocument();
+      expect(within(section).getByRole('button', { name: 'Keep counting: Old Gym' })).toBeInTheDocument();
+      expect(within(section).getByText(/Counted in typical income: \$1,850\.00 on Apr 15, 2026 · no effect while your monthly income from Finances is set/)).toBeInTheDocument();
+      expect(within(section).getByText('Spending left out of the forecast')).toBeInTheDocument();
+    });
+
     it('shows the server’s reason when a change is refused', async () => {
       mockFetch((url, init) => {
         if (url.endsWith('/api/cash-flow/adjustments') && init?.method === 'POST') {

@@ -143,8 +143,11 @@ export default function ForecastBasis({ report, apiUrl, onChanged }: {
   const typicalPayees = report.typicalPayees ?? [];
   const typicalSpending = typicalPayees.filter(payee => payee.flow === 'spending');
   const typicalIncome = typicalPayees.filter(payee => payee.flow === 'income');
-  const readsTypicalSpending = baseline.spendingSource === 'transactions';
-  const readsTypicalIncome = baseline.incomeSource === 'transactions';
+  // A monthly override from Finances replaces what that side learns from
+  // transactions, so a change to what it learns would do nothing there.
+  const learned = (flow: Flow) => (flow === 'income' ? baseline.incomeSource : baseline.spendingSource) === 'transactions';
+  const showTypicalSpending = learned('spending');
+  const showTypicalIncome = learned('income') && baseline.typicalMonthlyIncome >= 1;
 
   const change = async (method: 'POST' | 'DELETE', path: string, body?: AdjustmentRequest) => {
     if (busy) return;
@@ -210,7 +213,12 @@ export default function ForecastBasis({ report, apiUrl, onChanged }: {
               <li key={adjustment.id} className="flex items-center justify-between gap-3 py-2 text-sm">
                 <span className="min-w-0">
                   <span className="line-clamp-2 break-words font-semibold text-[#102319]">{adjustment.label}</span>
-                  <span className="text-xs text-[#66736b]">{describeAdjustment(adjustment)}</span>
+                  <span className="text-xs text-[#66736b]">
+                    {describeAdjustment(adjustment)}
+                    {adjustment.kind !== 'exclude_transfer' && !learned(adjustment.flow)
+                      ? ` · no effect while your monthly ${adjustment.flow} from Finances is set`
+                      : ''}
+                  </span>
                 </span>
                 <ChangeButton label="Undo" item={adjustment.label} disabled={busy} onClick={() => undo(adjustment)} />
               </li>
@@ -240,28 +248,26 @@ export default function ForecastBasis({ report, apiUrl, onChanged }: {
           )}
         </Section>
 
-        {(readsTypicalSpending || readsTypicalIncome) && (
+        {(showTypicalSpending || showTypicalIncome) && (
           <Section title="Everything else">
             <p className="mt-2 text-sm leading-6 text-[#5e6b63]">
-              {readsTypicalSpending && readsTypicalIncome && baseline.typicalMonthlyIncome >= 1 ? (
-                <>
-                  About <strong className="text-[#102319]">{formatMoney(baseline.typicalMonthlySpending)}</strong> a month of other spending
-                  {' '}and <strong className="text-[#102319]">{formatMoney(baseline.typicalMonthlyIncome)}</strong> of other income
-                </>
-              ) : readsTypicalSpending ? (
-                <>About <strong className="text-[#102319]">{formatMoney(baseline.typicalMonthlySpending)}</strong> a month of other spending</>
-              ) : (
-                <>About <strong className="text-[#102319]">{formatMoney(baseline.typicalMonthlyIncome)}</strong> a month of other income</>
+              About{' '}
+              {showTypicalSpending && (
+                <><strong className="text-[#102319]">{formatMoney(baseline.typicalMonthlySpending)}</strong> a month of other spending</>
+              )}
+              {showTypicalSpending && showTypicalIncome && ' and '}
+              {showTypicalIncome && (
+                <><strong className="text-[#102319]">{formatMoney(baseline.typicalMonthlyIncome)}</strong>{showTypicalSpending ? '' : ' a month'} of other income</>
               )}
               , spread evenly, based on your last {baseline.typicalBasisDays} days.
             </p>
-            {((readsTypicalSpending && typicalSpending.length > 0) || (readsTypicalIncome && typicalIncome.length > 0)) && (
+            {((showTypicalSpending && typicalSpending.length > 0) || (showTypicalIncome && typicalIncome.length > 0)) && (
               <details className="mt-2 rounded-xl border border-[#102319]/10 bg-white/50 px-3.5 py-2.5">
                 <summary className="cursor-pointer text-sm font-bold text-[#102319]">What this is made of</summary>
-                {readsTypicalSpending && typicalSpending.length > 0 && <PayeeList payees={typicalSpending} action={leaveOutPayee} />}
-                {readsTypicalIncome && typicalIncome.length > 0 && (
+                {showTypicalSpending && typicalSpending.length > 0 && <PayeeList payees={typicalSpending} action={leaveOutPayee} />}
+                {showTypicalIncome && typicalIncome.length > 0 && (
                   <>
-                    {readsTypicalSpending && typicalSpending.length > 0 && (
+                    {showTypicalSpending && typicalSpending.length > 0 && (
                       <p className="mt-3 text-xs font-extrabold uppercase tracking-[0.14em] text-[#49725a]">Other income</p>
                     )}
                     <PayeeList payees={typicalIncome} action={leaveOutPayee} />
@@ -289,12 +295,14 @@ export default function ForecastBasis({ report, apiUrl, onChanged }: {
                     <span className="font-bold tabular-nums text-[#102319]">
                       {item.flow === 'income' ? '+' : ''}{formatMoney(item.amount, true)}
                     </span>
-                    <ChangeButton
-                      label="Count it"
-                      item={item.label}
-                      disabled={busy}
-                      onClick={() => adjust({ kind: 'include_one_off', flow: item.flow, key: item.id })}
-                    />
+                    {learned(item.flow) && (
+                      <ChangeButton
+                        label="Count it"
+                        item={item.label}
+                        disabled={busy}
+                        onClick={() => adjust({ kind: 'include_one_off', flow: item.flow, key: item.id })}
+                      />
+                    )}
                   </span>
                 </li>
               ))}
@@ -363,12 +371,14 @@ export default function ForecastBasis({ report, apiUrl, onChanged }: {
               {lapsed.map(item => (
                 <li key={item.id} className="flex items-center justify-between gap-3 py-2 text-sm">
                   <span className="min-w-0 line-clamp-2 break-words text-[#5e6b63]">{item.label} · last {formatCalendarDate(item.lastDate)}</span>
-                  <ChangeButton
-                    label="Keep counting"
-                    item={item.label}
-                    disabled={busy}
-                    onClick={() => adjust({ kind: 'continue_stream', flow: item.flow, key: item.payeeKey })}
-                  />
+                  {learned(item.flow) && (
+                    <ChangeButton
+                      label="Keep counting"
+                      item={item.label}
+                      disabled={busy}
+                      onClick={() => adjust({ kind: 'continue_stream', flow: item.flow, key: item.payeeKey })}
+                    />
+                  )}
                 </li>
               ))}
             </ul>
