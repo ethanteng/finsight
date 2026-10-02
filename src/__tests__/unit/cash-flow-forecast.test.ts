@@ -259,6 +259,25 @@ describe('buildCashFlowReport', () => {
     expect(report.periods[0].total!.income).toBeLessThan(6000);
   });
 
+  it('keeps a past-only custom range intact when there is no history', () => {
+    const report = buildCashFlowReport(model({
+      transactions: [],
+      overrides: { monthlyIncome: 6000, monthlyExpense: 4000 },
+      dataThrough: '2026-10-14',
+      today: '2026-10-15',
+    }), { granularity: 'month', horizonMonths: 3, from: '2026-10-01', to: '2026-10-10' });
+    expect(report.range).toEqual({ from: '2026-10-01', toExclusive: '2026-10-11' });
+    expect(report.periods).toHaveLength(1);
+    expect(report.periods[0]).toMatchObject({ start: '2026-10-01', endExclusive: '2026-10-11', coverage: 'none', total: null });
+  });
+
+  it('never produces a period that ends before it starts', () => {
+    // From after the 24-month forecast limit: the end is capped below the start.
+    const report = buildCashFlowReport(model(), { granularity: 'month', horizonMonths: 3, from: '2028-10-20', to: '2028-12-31' });
+    expect(report.periods.every(period => period.start < period.endExclusive)).toBe(true);
+    expect(report.range.from <= report.range.toExclusive).toBe(true);
+  });
+
   it('keeps unknown months unknown rather than zero', () => {
     const report = buildCashFlowReport(model(), { granularity: 'month', horizonMonths: 1, from: '2026-03-01', to: '2026-05-31' });
     expect(report.periods.every(period => period.coverage === 'none' && period.actual === null && period.total === null)).toBe(true);

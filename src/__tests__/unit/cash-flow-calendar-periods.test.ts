@@ -72,6 +72,11 @@ describe('cash-flow periods', () => {
     expect(periodKey('2026-10-01', 'quarter')).toBe('2026-Q4');
   });
 
+  it('returns no periods for an empty or inverted range', () => {
+    expect(enumeratePeriods('2026-10-15', '2026-10-15', 'month')).toEqual([]);
+    expect(enumeratePeriods('2026-10-20', '2026-10-02', 'month')).toEqual([]);
+  });
+
   it('enumerates Monday-start weeks keyed by their Monday', () => {
     const weeks = enumeratePeriods('2026-09-28', '2026-10-12', 'week');
     expect(weeks.map(week => week.key)).toEqual(['2026-09-28', '2026-10-05']);

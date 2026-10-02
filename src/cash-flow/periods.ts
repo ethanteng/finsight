@@ -69,6 +69,8 @@ export function enumeratePeriods(
   toExclusive: CalendarDate,
   granularity: CashFlowGranularity
 ): PeriodBounds[] {
+  // An empty or inverted range has no periods; clipping one would invert them.
+  if (from >= toExclusive) return [];
   const periods: PeriodBounds[] = [];
   let cursor = periodStart(from, granularity);
   while (cursor < toExclusive) {

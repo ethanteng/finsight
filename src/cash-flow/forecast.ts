@@ -585,17 +585,29 @@ export function defaultReportRange(
   return { from, toExclusive };
 }
 
+/**
+ * A custom range, as asked for, within the forecast limit. With history, days
+ * before it stay in the range as unknown and totals.coverage reports 'partial'.
+ * With no history at all -- a forecast built only on overrides -- a range that
+ * reaches into the forecast is clipped to its first day, as the default range
+ * is, so a mid-month stub is never labelled as a whole calendar period. A range
+ * entirely before the forecast keeps its dates and shows no history. The end
+ * is never before the start.
+ */
+function customReportRange(
+  model: CashFlowModel,
+  from: CalendarDate,
+  to: CalendarDate
+): { from: CalendarDate; toExclusive: CalendarDate } {
+  const toExclusive = minDate(addDays(to, 1), model.forecastEndLimit);
+  const reachesForecast = toExclusive > model.forecastStart;
+  const start = !model.coverageStart && reachesForecast ? maxDate(from, model.forecastStart) : from;
+  return { from: start, toExclusive: maxDate(toExclusive, start) };
+}
+
 export function buildCashFlowReport(model: CashFlowModel, request: CashFlowReportRequest): CashFlowReport {
-  // Custom ranges may reach back before history when coverage exists (those
-  // days stay unknown and totals.coverage becomes 'partial'). With no history
-  // at all — a dual-override forecast — days before forecastStart are not
-  // unknown zeros either: clamp so a mid-month stub is not labelled as a full
-  // calendar period the way defaultReportRange already avoids.
   const range = request.from && request.to
-    ? {
-        from: model.coverageStart ? request.from : maxDate(request.from, model.forecastStart),
-        toExclusive: minDate(addDays(request.to, 1), model.forecastEndLimit),
-      }
+    ? customReportRange(model, request.from, request.to)
     : defaultReportRange(model, request.granularity, request.horizonMonths);
   const periods = enumeratePeriods(range.from, range.toExclusive, request.granularity)
     .map(bounds => buildPeriod(model, bounds));
