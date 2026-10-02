@@ -169,6 +169,8 @@ interface ProseClaim {
   negativeWording: boolean;
   identifier: boolean;
   calendarYear: boolean;
+  /** The fact the sentence names this number as, where it names one of the paired monthly figures. */
+  namedFact?: string;
 }
 
 // A bare number below the floor is still money when the sentence says so:
@@ -198,6 +200,47 @@ const NEGATIVE_WORDING_AFTER = new RegExp(
   String.raw`^\s*(?:${PERIOD_QUALIFIER}\s+)*(?:shortfall|deficit|shortage|negative|in\s+the\s+red)\b`,
   'i'
 );
+
+/**
+ * Monthly income, expenses and surplus are published twice: what happened
+ * (`average_monthly_*`, `savings_rate`) and what the cash-flow forecast
+ * expects (`expected_monthly_*`, `expected_savings_rate`). Matched on value
+ * alone, either would ground a sentence that names the other -- "average
+ * monthly expenses of $5,951" quoting the forecast. A number the sentence
+ * ties to one of them by name must be that one; a bare "monthly expenses"
+ * may be either.
+ */
+const OBSERVED_QUALIFIER = String.raw`(?:average|historical|actual|observed|past)`;
+const EXPECTED_QUALIFIER = String.raw`(?:expected|projected|forecast(?:ed)?|anticipated)`;
+const NAMED_FIGURES: Array<{ label: string; factId: string }> = [
+  { noun: 'income', observed: 'average_monthly_income', expected: 'expected_monthly_income' },
+  { noun: String.raw`(?:expenses?|spending)`, observed: 'average_monthly_expenses', expected: 'expected_monthly_expenses' },
+  { noun: String.raw`(?:surplus|cash\s+flow|savings)`, observed: 'average_monthly_operating_cash_flow', expected: 'expected_monthly_surplus' },
+].flatMap(({ noun, observed, expected }) => [
+  { label: String.raw`(?:${OBSERVED_QUALIFIER}\s+monthly|monthly\s+average)\s+${noun}`, factId: observed },
+  { label: String.raw`${EXPECTED_QUALIFIER}\s+monthly\s+${noun}`, factId: expected },
+]).concat([
+  { label: String.raw`${OBSERVED_QUALIFIER}\s+savings\s+rate`, factId: 'savings_rate' },
+  { label: String.raw`${EXPECTED_QUALIFIER}\s+savings\s+rate`, factId: 'expected_savings_rate' },
+]);
+const NAMING_CONNECTOR = String.raw`(?:\s+(?:is|are|was|were|of|at|currently|about|approximately|roughly|around|nearly|totals?|stands?|comes?\s+to))*\s*[:=]?\s*`;
+/** "average monthly expenses are $" -- the name, then the number it names. */
+const NAMED_BEFORE = NAMED_FIGURES.map(({ label, factId }) => ({
+  factId,
+  pattern: new RegExp(String.raw`\b${label}\b${NAMING_CONNECTOR}[-–—]?\s*\$?\s*$`, 'i'),
+}));
+/** "$5,951 in expected monthly expenses" -- the number, then its name. */
+const NAMED_AFTER = NAMED_FIGURES.map(({ label, factId }) => ({
+  factId,
+  pattern: new RegExp(String.raw`^\s*%?\s*(?:in|of|for)?\s*${label}\b`, 'i'),
+}));
+
+/** The paired monthly fact a number is named as, if the words around it name one. */
+function namedFigure(before: string, after: string): string | undefined {
+  const near = before.slice(-80);
+  return NAMED_BEFORE.find(({ pattern }) => pattern.test(near))?.factId
+    ?? NAMED_AFTER.find(({ pattern }) => pattern.test(after))?.factId;
+}
 
 const NUMBER_PATTERN = /\d[\d,]*(?:\.\d+)?/g;
 const MAGNITUDE_WORD = /^\s*(thousand|million|billion)\b/i;
@@ -268,6 +311,7 @@ function scanProseClaims(prose: string): ProseClaim[] {
         (NEGATIVE_WORDING_BEFORE.test(beforeDollar) || NEGATIVE_WORDING_AFTER.test(after)),
       identifier: isNumericIdentifier(prose, start, digits),
       calendarYear: !magnitude && !negative && Number.isInteger(value) && value >= 1900 && value <= 2099,
+      namedFact: namedFigure(before, after),
     });
   }
 
@@ -307,10 +351,20 @@ function claimIsSupported(claim: ProseClaim, pack: CanonicalFactPack): boolean {
   const candidates = claim.negativeWording && claim.value > 0
     ? [-claim.value]
     : [claim.value];
-  return pack.facts.some((fact) =>
+  const supports = (fact: CanonicalFact) =>
     fact.displayable !== false &&
     (claim.unit === undefined || fact.unit === claim.unit) &&
-    candidates.some((value) => matchesAtWrittenPrecision(value, fact.value, claim.step)));
+    candidates.some((value) => matchesAtWrittenPrecision(value, fact.value, claim.step));
+  // A number named as one of the paired monthly figures must be that figure.
+  const named = namedFactFor(claim, pack);
+  return named ? supports(named) : pack.facts.some(supports);
+}
+
+/** The named monthly fact a claim must match: present in the pack and in the claim's unit. */
+function namedFactFor(claim: ProseClaim, pack: CanonicalFactPack): CanonicalFact | undefined {
+  if (!claim.namedFact) return undefined;
+  const fact = pack.facts.find((candidate) => candidate.id === claim.namedFact && candidate.displayable !== false);
+  return fact && (claim.unit === undefined || fact.unit === claim.unit) ? fact : undefined;
 }
 
 function unsupportedClaims(prose: string, pack: CanonicalFactPack): ProseClaim[] {
@@ -326,8 +380,14 @@ function unsupportedValuePrefix(kind: string): string {
   return `User-facing ${kind} value `;
 }
 
-function claimIssue(claim: ProseClaim): string {
+function claimIssue(claim: ProseClaim, pack: CanonicalFactPack): string {
   const kind = claim.unit ?? 'numeric';
+  // Not a missing number: the figure the sentence names is in the pack, and
+  // this is not it. Saying so keeps it from reading as a missing fact.
+  const named = namedFactFor(claim, pack);
+  if (named) {
+    return `${unsupportedValuePrefix(kind)}${claim.value} is called ${named.id}, but that fact is ${named.value}; quote the figure the wording names.`;
+  }
   return `${unsupportedValuePrefix(kind)}${claim.value} ${UNSUPPORTED_VALUE_SUFFIX}`;
 }
 
@@ -391,7 +451,7 @@ export function validateResponseFacts(
   }
 
   for (const claim of unsupportedClaims(proseFields(response).join('\n'), pack)) {
-    issues.push(claimIssue(claim));
+    issues.push(claimIssue(claim, pack));
     invalidSummary = true;
   }
 

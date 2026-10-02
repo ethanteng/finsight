@@ -45,6 +45,17 @@ describe('deterministic response grounding', () => {
       }, withExpected, 'How much do I spend each month?')).toMatchObject({ valid: true, issues: [] });
     });
 
+    it('holds a named figure to the one it names', () => {
+      const result = validateResponseGrounding({
+        summary: 'Your average monthly expenses are $5,951.27.',
+        key_numbers: { expected_monthly_income: 11778 },
+      }, withExpected);
+
+      expect(result.valid).toBe(false);
+      expect(result.invalidKeyNumbers).toEqual(['expected_monthly_income']);
+      expect(result.issues.join(' ')).toContain('canonical average monthly expenses value 4200.');
+    });
+
     it('still rejects a monthly figure that is neither', () => {
       const result = validateResponseGrounding({
         summary: 'Your monthly expenses are $6,500.',

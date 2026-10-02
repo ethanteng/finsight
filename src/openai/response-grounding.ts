@@ -89,7 +89,8 @@ export function validateResponseGrounding(
   const overview = snapshot.financialSummary?.financialOverview;
   // Each metric names the values it may take. Monthly income and expenses have
   // two: what happened (the observed average) and what to expect (the month the
-  // cash-flow forecast expects), and an answer may quote either.
+  // cash-flow forecast expects). A name says which one it means; a bare
+  // monthly figure may be either.
   const knownMetrics = new Map<string, number[]>();
   if (overview) {
     knownMetrics.set('net_worth', [overview.netWorth]);
@@ -102,21 +103,21 @@ export function validateResponseGrounding(
   }
   const knownValues = (...values: Array<number | null | undefined>): number[] =>
     values.filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
-  const monthlyIncome = knownValues(snapshot.averageMonthlyIncome, snapshot.expectedMonthly?.income);
-  const monthlyExpenses = knownValues(snapshot.averageMonthlyExpense, snapshot.expectedMonthly?.spending);
-  if (monthlyIncome.length > 0) {
-    for (const key of ['average_monthly_income', 'monthly_income', 'expected_monthly_income']) {
-      knownMetrics.set(key, monthlyIncome);
-    }
-  }
-  if (monthlyExpenses.length > 0) {
-    for (const key of [
-      'average_monthly_expense', 'average_monthly_expenses', 'monthly_expense', 'monthly_expenses',
-      'expected_monthly_expense', 'expected_monthly_expenses',
-    ]) {
-      knownMetrics.set(key, monthlyExpenses);
-    }
-  }
+  const observedIncome = knownValues(snapshot.averageMonthlyIncome);
+  const expectedIncome = knownValues(snapshot.expectedMonthly?.income);
+  const observedExpenses = knownValues(snapshot.averageMonthlyExpense);
+  const expectedExpenses = knownValues(snapshot.expectedMonthly?.spending);
+  const monthlyIncome = [...observedIncome, ...expectedIncome];
+  const monthlyExpenses = [...observedExpenses, ...expectedExpenses];
+  const knownAs = (keys: string[], values: number[]) => {
+    if (values.length > 0) for (const key of keys) knownMetrics.set(key, values);
+  };
+  knownAs(['average_monthly_income'], observedIncome);
+  knownAs(['expected_monthly_income'], expectedIncome);
+  knownAs(['monthly_income'], monthlyIncome);
+  knownAs(['average_monthly_expense', 'average_monthly_expenses'], observedExpenses);
+  knownAs(['expected_monthly_expense', 'expected_monthly_expenses'], expectedExpenses);
+  knownAs(['monthly_expense', 'monthly_expenses'], monthlyExpenses);
 
   const retirement = snapshot.retirementAnalysis;
   if (retirement?.metrics) {
@@ -144,19 +145,19 @@ export function validateResponseGrounding(
       textualMetrics.push({ label: 'home value', pattern: String.raw`\bhome\s+value\b`, values: [overview.homeValue] });
     }
   }
-  if (monthlyIncome.length > 0) {
-    textualMetrics.push({
-      label: 'monthly income',
-      pattern: String.raw`\b(?:average\s+monthly|monthly\s+average|monthly)\s+income\b`,
-      values: monthlyIncome,
-    });
-  }
-  if (monthlyExpenses.length > 0) {
-    textualMetrics.push({
-      label: 'monthly expenses',
-      pattern: String.raw`\b(?:average\s+monthly|monthly\s+average|monthly)\s+expenses?\b`,
-      values: monthlyExpenses,
-    });
+  const qualified = String.raw`(?:average|expected|projected|forecast|forecasted)\s+`;
+  for (const [noun, pattern, observed, expected, either] of [
+    ['income', String.raw`income`, observedIncome, expectedIncome, monthlyIncome],
+    ['expenses', String.raw`expenses?`, observedExpenses, expectedExpenses, monthlyExpenses],
+  ] as const) {
+    const metrics = [
+      { label: `average monthly ${noun}`, pattern: String.raw`\b(?:average\s+monthly|monthly\s+average)\s+${pattern}\b`, values: observed },
+      { label: `expected monthly ${noun}`, pattern: String.raw`\b(?:expected|projected|forecast(?:ed)?)\s+monthly\s+${pattern}\b`, values: expected },
+      { label: `monthly ${noun}`, pattern: String.raw`(?<!${qualified})\bmonthly\s+${pattern}\b`, values: either },
+    ];
+    for (const metric of metrics) {
+      if (metric.values.length > 0) textualMetrics.push({ ...metric, values: [...metric.values] });
+    }
   }
   if (retirement?.metrics) {
     textualMetrics.push(
