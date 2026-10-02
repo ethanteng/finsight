@@ -244,6 +244,8 @@ Grounding checks every number by value, and the model may not add or net facts. 
 
 Recurring item amounts, typical monthly spending, planned events (as `user_input`) and the one-offs left out are facts too.
 
+Nothing in the pack is capped: every recurring item, planned event, one-off, card and cash account is listed. The user's own data bounds each list, an item left out would be one an answer could not speak to, and the reviewer sees the same facts.
+
 Credit cards and the cash position are facts as well:
 
 - **Each card:** balance and purchase APR (snapshot facts). The usual payment. At the usual pace and with the user's plans: interest over 12 months, balance in 12 months, and months until it stops carrying a balance (in `months`).

@@ -17,7 +17,7 @@ import { questionNeedsFromPacks } from '../../openai/context-packs';
 import { buildSnapshotSummaryForValidation } from '../../openai/response-validator';
 import { validateResponseFacts } from '../../openai/response-facts';
 import type { FinancialContextSnapshot } from '../../openai/types';
-import { ACCOUNTS, CARD_TERMS, accountsWithCardTerms, householdTransactions, interestCharges } from './factories/cash-flow.factory';
+import { ACCOUNTS, CARD_TERMS, accountsWithCardTerms, householdTransactions, interestCharges, tx } from './factories/cash-flow.factory';
 
 const bonus: PlannedCashFlowEvent = {
   id: 'bonus', label: 'Year-end bonus', kind: 'income', amount: 10000, startDate: '2026-12-15', recurrence: 'once', endDate: null,
@@ -413,5 +413,38 @@ describe('each cash account in the pack', () => {
   it('adds nothing when there is only one account, which the whole already is', () => {
     const facts = byId(cashFlowForecastFacts(context()));
     expect([...facts.keys()].some(id => id.startsWith('cash_flow_account_'))).toBe(false);
+  });
+});
+
+describe('every item in the pack', () => {
+  it('names every planned event, one-off and card, however many there are', () => {
+    // Thirty planned events, seven one-off purchases and seven cards: none left out.
+    const plannedEvents = Array.from({ length: 30 }, (_, index): PlannedCashFlowEvent => ({
+      ...bonus, id: `event-${index}`, label: `Event ${index}`, amount: 100 + index, startDate: '2026-12-01',
+    }));
+    const oneOffs = Array.from({ length: 7 }, (_, index) =>
+      tx('card', `2026-09-0${index + 1}`, 'expense', 3000 + index * 100, `BIG PURCHASE ${String.fromCharCode(65 + index)}`, { merchant_name: `Store ${String.fromCharCode(65 + index)}` }));
+    const moreCards = Array.from({ length: 6 }, (_, index) => ({
+      account_id: `card-${index}`, name: `Card ${index}`, type: 'credit', subtype: 'credit card', balance: { current: 500 + index },
+      mask: `70${index}0`, liabilityDetails: [{ ...CARD_TERMS, minimumPaymentAmount: 25 }],
+    }));
+    const pack = buildCashFlowForecastContext(buildCashFlowModel({
+      transactions: [...householdTransactions('2026-06-03', '2026-10-14'), ...oneOffs],
+      accounts: [...ACCOUNTS, ...moreCards],
+      plannedEvents,
+      dataThrough: '2026-10-14',
+      today: '2026-10-15',
+    }));
+
+    expect(pack.plannedEvents).toHaveLength(30);
+    expect(pack.oneOffs!.length).toBeGreaterThanOrEqual(7);
+    expect(pack.cards).toHaveLength(7);
+    const facts = byId(cashFlowForecastFacts(pack));
+    expect(facts.get('cash_flow_planned_event_30_amount')).toMatchObject({ value: 129, provenance: { kind: 'user_input' } });
+    expect(facts.has('cash_flow_one_off_7_amount')).toBe(true);
+    expect(facts.has('cash_flow_card_7_balance')).toBe(true);
+    const details = compactCashFlowForecastDetails(pack) as any;
+    expect(details.plannedEvents).toHaveLength(30);
+    expect(details.creditCards).toHaveLength(7);
   });
 });

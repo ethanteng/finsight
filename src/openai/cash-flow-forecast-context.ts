@@ -122,14 +122,13 @@ function pace(outcome: CardOutcome | null): CardPace | null {
   };
 }
 
-/** The pack names at most this many recurring items, largest monthly weight first. */
-const MAX_RECURRING_ITEMS = 12;
-const MAX_ONE_OFFS = 5;
-const MAX_PLANNED_EVENTS = 25;
-/** The pack covers at most this many cards. */
-const MAX_CARDS = 6;
 const DAYS_PER_MONTH = 365 / 12;
 
+/**
+ * Every recurring item (largest monthly weight first), planned event, one-off
+ * (largest first) and card, uncapped: the user's own data bounds each list,
+ * and an item left out is one an answer could not speak to.
+ */
 export function buildCashFlowForecastContext(model: CashFlowModel): CashFlowForecastContext {
   const scheduledNext = new Map<string, string>();
   for (const occurrence of model.scheduled) {
@@ -147,8 +146,7 @@ export function buildCashFlowForecastContext(model: CashFlowModel): CashFlowFore
       monthlyAmount: Math.round(streamMonthlyAmount(stream) * 100) / 100,
       nextDate: scheduledNext.get(stream.id) ?? null,
     }))
-    .sort((left, right) => right.monthlyAmount - left.monthlyAmount)
-    .slice(0, MAX_RECURRING_ITEMS);
+    .sort((left, right) => right.monthlyAmount - left.monthlyAmount);
 
   return {
     status: model.forecast.available ? 'available' : 'unavailable',
@@ -166,7 +164,7 @@ export function buildCashFlowForecastContext(model: CashFlowModel): CashFlowFore
       spendingSource: model.typical.spendingSource,
     },
     recurring,
-    plannedEvents: model.plannedEvents.slice(0, MAX_PLANNED_EVENTS).map(event => ({
+    plannedEvents: model.plannedEvents.map(event => ({
       id: event.id,
       label: event.label,
       kind: event.kind,
@@ -177,13 +175,13 @@ export function buildCashFlowForecastContext(model: CashFlowModel): CashFlowFore
       nextDate: expandPlannedEvent(event, model.forecastStart, model.forecastEndLimit)[0] ?? null,
       ...(event.kind === 'card_payment' && { accountId: event.accountId, paymentMode: event.paymentMode }),
     })),
-    oneOffs: model.oneOffs.slice(0, MAX_ONE_OFFS).map(entry => ({
+    oneOffs: model.oneOffs.map(entry => ({
       label: entry.label,
       date: entry.date,
       flow: entry.flow,
       amount: Math.round(entry.amount * 100) / 100,
     })),
-    cards: summarizeCards(model).slice(0, MAX_CARDS).map(card => ({
+    cards: summarizeCards(model).map(card => ({
       accountId: card.accountId,
       name: card.name,
       mask: card.mask,
