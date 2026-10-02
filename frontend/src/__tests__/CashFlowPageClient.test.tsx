@@ -235,6 +235,40 @@ describe('CashFlowPageClient', () => {
       expect(posted(calls)).toEqual({ kind: 'exclude_payee', flow: 'spending', key: 'safeway' });
     });
 
+    it('still offers typical income leave-out when spending is overridden', async () => {
+      const body = report({
+        baseline: {
+          ...report().baseline,
+          spendingSource: 'override',
+          monthlyExpenseOverride: 4000,
+          typicalMonthlySpending: 4000,
+          typicalMonthlyIncome: 200,
+        },
+        typicalPayees: [{ flow: 'income', payeeKey: 'venmo', label: 'Venmo', monthlyAmount: 200 }],
+      });
+      const calls = adjusting(body);
+      render(<CashFlowPageClient />);
+      const section = await basis();
+      expect(within(section).getByText(/other income/)).toBeInTheDocument();
+      fireEvent.click(within(section).getByText('What this is made of'));
+      fireEvent.click(within(section).getByRole('button', { name: 'Leave out: Venmo' }));
+      await waitFor(() => expect(calls.some(call => call.init?.method === 'POST')).toBe(true));
+      expect(posted(calls)).toEqual({ kind: 'exclude_payee', flow: 'income', key: 'venmo' });
+    });
+
+    it('shows the server’s reason when the item is no longer in the forecast', async () => {
+      mockFetch((url, init) => {
+        if (url.endsWith('/api/cash-flow/adjustments') && init?.method === 'POST') {
+          return { status: 404, body: { error: 'That isn’t in your forecast anymore. Reload the page and try again.' } };
+        }
+        if (url.includes('/api/cash-flow?')) return { status: 200, body: report() };
+        return undefined;
+      });
+      render(<CashFlowPageClient />);
+      fireEvent.click(within(await basis()).getByRole('button', { name: 'Leave out: Oak Street Apartments' }));
+      expect(await screen.findByRole('alert')).toHaveTextContent('That isn’t in your forecast anymore');
+    });
+
     it('leaves a transfer out of the cash position', async () => {
       const body = report({
         position: {

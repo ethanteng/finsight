@@ -137,9 +137,14 @@ export default function ForecastBasis({ report, apiUrl, onChanged }: {
   const income = active.filter(item => item.flow === 'income');
   const bills = active.filter(item => item.flow === 'spending');
   const lapsed = report.recurring.filter(item => item.status === 'lapsed');
-  const { baseline, adjustments } = report;
-  const typicalSpending = report.typicalPayees.filter(payee => payee.flow === 'spending');
-  const typicalIncome = report.typicalPayees.filter(payee => payee.flow === 'income');
+  const { baseline } = report;
+  // Defaults keep a newer page from crashing if the report is from an older API.
+  const adjustments = report.adjustments ?? [];
+  const typicalPayees = report.typicalPayees ?? [];
+  const typicalSpending = typicalPayees.filter(payee => payee.flow === 'spending');
+  const typicalIncome = typicalPayees.filter(payee => payee.flow === 'income');
+  const readsTypicalSpending = baseline.spendingSource === 'transactions';
+  const readsTypicalIncome = baseline.incomeSource === 'transactions';
 
   const change = async (method: 'POST' | 'DELETE', path: string, body?: AdjustmentRequest) => {
     if (busy) return;
@@ -147,7 +152,8 @@ export default function ForecastBasis({ report, apiUrl, onChanged }: {
     setError('');
     try {
       const response = await sendCashFlowRequest(apiUrl, path, method, body);
-      if (!response.ok && response.status !== 404) {
+      // Undo is idempotent: a missing change just means the list is already right.
+      if (!response.ok && !(method === 'DELETE' && response.status === 404)) {
         const data = await response.json().catch(() => ({}));
         setError(typeof data.error === 'string' ? data.error : 'We couldn’t change the forecast. Please try again.');
         return;
@@ -234,22 +240,30 @@ export default function ForecastBasis({ report, apiUrl, onChanged }: {
           )}
         </Section>
 
-        {baseline.spendingSource === 'transactions' && (
+        {(readsTypicalSpending || readsTypicalIncome) && (
           <Section title="Everything else">
             <p className="mt-2 text-sm leading-6 text-[#5e6b63]">
-              About <strong className="text-[#102319]">{formatMoney(baseline.typicalMonthlySpending)}</strong> a month of other spending
-              {baseline.incomeSource === 'transactions' && baseline.typicalMonthlyIncome >= 1
-                ? <> and <strong className="text-[#102319]">{formatMoney(baseline.typicalMonthlyIncome)}</strong> of other income</>
-                : null}
+              {readsTypicalSpending && readsTypicalIncome && baseline.typicalMonthlyIncome >= 1 ? (
+                <>
+                  About <strong className="text-[#102319]">{formatMoney(baseline.typicalMonthlySpending)}</strong> a month of other spending
+                  {' '}and <strong className="text-[#102319]">{formatMoney(baseline.typicalMonthlyIncome)}</strong> of other income
+                </>
+              ) : readsTypicalSpending ? (
+                <>About <strong className="text-[#102319]">{formatMoney(baseline.typicalMonthlySpending)}</strong> a month of other spending</>
+              ) : (
+                <>About <strong className="text-[#102319]">{formatMoney(baseline.typicalMonthlyIncome)}</strong> a month of other income</>
+              )}
               , spread evenly, based on your last {baseline.typicalBasisDays} days.
             </p>
-            {(typicalSpending.length > 0 || typicalIncome.length > 0) && (
+            {((readsTypicalSpending && typicalSpending.length > 0) || (readsTypicalIncome && typicalIncome.length > 0)) && (
               <details className="mt-2 rounded-xl border border-[#102319]/10 bg-white/50 px-3.5 py-2.5">
                 <summary className="cursor-pointer text-sm font-bold text-[#102319]">What this is made of</summary>
-                {typicalSpending.length > 0 && <PayeeList payees={typicalSpending} action={leaveOutPayee} />}
-                {typicalIncome.length > 0 && (
+                {readsTypicalSpending && typicalSpending.length > 0 && <PayeeList payees={typicalSpending} action={leaveOutPayee} />}
+                {readsTypicalIncome && typicalIncome.length > 0 && (
                   <>
-                    <p className="mt-3 text-xs font-extrabold uppercase tracking-[0.14em] text-[#49725a]">Other income</p>
+                    {readsTypicalSpending && typicalSpending.length > 0 && (
+                      <p className="mt-3 text-xs font-extrabold uppercase tracking-[0.14em] text-[#49725a]">Other income</p>
+                    )}
                     <PayeeList payees={typicalIncome} action={leaveOutPayee} />
                   </>
                 )}
