@@ -257,6 +257,27 @@ describe('the report’s cards and cash position', () => {
       expect(built.cards[0].projection!.months[11].endBalance).toBeCloseTo(without.cards[0].projection!.months[11].endBalance, 2);
     });
 
+    it('does not let residual interest inflate an APR card’s share of a spending override', () => {
+      // Under an expense override, purchases.dailyRate comes from history
+      // proportions (learnedInterestDaily is not subtracted). Interest on APR
+      // cards must not count in that share, or the override stacks them on APR.
+      const charge = (date: string, amount: number) =>
+        tx('card', date, 'fee', amount, 'INTEREST CHARGE ON PURCHASES', { personal_finance_category: INTEREST_CHARGE_CATEGORY });
+      const base = noPayments.filter(item => !String(item.name).includes('INTEREST'));
+      const overrides = { monthlyIncome: null as number | null, monthlyExpense: 6000 };
+      const built = model({
+        transactions: [...base, charge('2026-07-03', 23.5), charge('2026-08-19', 81.25), charge('2026-09-08', 47.1)],
+        accounts: noMinimum,
+        plannedEvents: [monthly],
+        overrides,
+      });
+      const without = model({ transactions: base, accounts: noMinimum, plannedEvents: [monthly], overrides });
+      expect(built.typical.spendingSource).toBe('override');
+      expect(built.cards[0].purchases.dailyRate).toBeCloseTo(without.cards[0].purchases.dailyRate, 6);
+      expect(built.cards[0].projection!.months[11].endBalance)
+        .toBeCloseTo(without.cards[0].projection!.months[11].endBalance, 2);
+    });
+
     it('is left out with only a one-time plan, and the position says so', () => {
       const report = buildCashFlowReport(
         model({ transactions: noPayments, accounts: noMinimum, plannedEvents: [payoff] }),

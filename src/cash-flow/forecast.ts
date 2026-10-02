@@ -413,9 +413,16 @@ export function buildCashFlowModel(input: CashFlowModelInput): CashFlowModel {
   if (monthlyIncomeOverride !== null) dailyIncome = monthlyIncomeOverride / DAYS_PER_MONTH;
   if (monthlyExpenseOverride !== null) {
     // An override says how much is spent, not where: spread it across the
-    // cards in the proportion the history spent on them.
+    // cards in the proportion the history spent on them. Interest on APR
+    // cards is not a purchase share — those cards post APR interest themselves.
     dailySpending = monthlyExpenseOverride / DAYS_PER_MONTH;
-    const basisSpending = entries.filter(entry => entry.flow === 'spending' && basisStart && entry.date >= basisStart);
+    const aprCards = new Set(cardSetups.filter(card => card.terms.apr !== null).map(card => card.account.id));
+    const basisSpending = entries.filter(entry =>
+      entry.flow === 'spending'
+      && basisStart
+      && entry.date >= basisStart
+      && !(entry.interest && aprCards.has(entry.accountId))
+    );
     const total = basisSpending.reduce((sum, entry) => sum + entry.amount, 0);
     for (const card of cardSetups) {
       const onCard = basisSpending.filter(entry => entry.accountId === card.account.id).reduce((sum, entry) => sum + entry.amount, 0);
