@@ -29,6 +29,12 @@ import {
   type PlaidLiabilityDetails,
 } from './plaid-liabilities';
 import { getProviderRequestTimeoutMs, withTransientProviderRetry } from './provider-request-policy';
+import { transactionHistoryDays } from '../config/transaction-history';
+import {
+  categorizationCachePolicy,
+  isCachedCategorizationFresh,
+  isManualCategorization,
+} from './categorization-cache-policy';
 
 const prisma = new PrismaClient();
 
@@ -465,8 +471,8 @@ export class FinancialDataService {
       let plaidFallbackCount = 0;
       let totalConfidence = 0;
       
-      const ttlParsed = parseInt(process.env.CATEGORIZATION_CACHE_TTL_HOURS || '24', 10);
-      const categorizationTtlMs = Number.isFinite(ttlParsed) && ttlParsed > 0 ? ttlParsed * 60 * 60 * 1000 : 0;
+      const cachePolicy = categorizationCachePolicy();
+      const categorizationTtlMs = cachePolicy.ttlMs;
       const now = Date.now();
       
       const existingCategorizationsMap = new Map<string, {
@@ -601,13 +607,8 @@ export class FinancialDataService {
                 return;
               }
               
-              const isManual = existing.aiCategoryReason?.toLowerCase().includes('manually corrected') ||
-                               existing.aiCategoryReason?.toLowerCase().includes('corrected by user');
-              
-              const isFresh = isManual ||
-                (existing.categoryComparedAt instanceof Date &&
-                  categorizationTtlMs > 0 &&
-                  now - existing.categoryComparedAt.getTime() <= categorizationTtlMs);
+              const isManual = isManualCategorization(existing);
+              const isFresh = isCachedCategorizationFresh(existing, tx, now, cachePolicy);
               
               if (!isFresh) {
                 const ageMs = existing.categoryComparedAt ? now - existing.categoryComparedAt.getTime() : Infinity;
@@ -1354,8 +1355,7 @@ export class FinancialDataService {
             asyncTasks.push((async () => {
             try {
               const endDate = new Date().toISOString().split('T')[0];
-              const transactionHistoryDays = parseInt(process.env.TRANSACTION_HISTORY_DAYS || '90', 10);
-              const startDate = new Date(Date.now() - transactionHistoryDays * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+              const startDate = new Date(Date.now() - transactionHistoryDays() * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
               
                 const mapTransaction = (tx: any) => ({
                     ...tx,

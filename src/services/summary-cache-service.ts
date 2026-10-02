@@ -1,4 +1,5 @@
 import { buildTransactionSummary } from './transaction-summary-service';
+import { transactionHistoryDays } from '../config/transaction-history';
 import { buildCanonicalSnapshotCore } from './canonical-financial-snapshot';
 import {
   buildAccountDisplayBalances,
@@ -166,7 +167,7 @@ export function refreshEligibleUserWhere() {
 
 export class SummaryCacheService {
   static getEnvWindows() {
-    const txDays = Number(process.env.TRANSACTION_HISTORY_DAYS || 365);
+    const txDays = transactionHistoryDays();
     const invYears = Number(process.env.INVESTMENT_HISTORY_YEARS || 5);
     const balanceHours = Number(process.env.BALANCE_REFRESH_HOURS || 24);
     return { txDays, invYears, balanceHours };
@@ -198,15 +199,17 @@ export class SummaryCacheService {
       reportingCurrency: 'USD',
       balanceMaxAgeMs: balanceHours * 60 * 60 * 1000,
     });
+    const bankingTransactions = Array.isArray(data?.bankingTransactions) ? data.bankingTransactions : [];
     const allTransactions = [
-      ...(Array.isArray(data?.bankingTransactions) ? data.bankingTransactions : []),
+      ...bankingTransactions,
       ...(Array.isArray(data?.investments?.transactions) ? data.investments.transactions : []),
     ];
     const { windowedTransactions, transactionsSummary } = buildTransactionSummary(
       allTransactions,
       txSince,
       computedAt,
-      'USD'
+      'USD',
+      { coverageTransactions: bankingTransactions }
     );
     const activities = extractWindowedInvestmentActivities(data, invSince);
 

@@ -123,6 +123,8 @@ export interface FinancialContextSnapshot {
     excludedTransactionIds?: string[];
     unclassifiedTransactionIds?: string[];
     currencyMismatchTransactionIds?: string[];
+    /** First date the summary covers; months before it are unknown, not zero. */
+    coverageStartDate?: string | null;
   };
   contextSelection?: {
     accountsIncluded: boolean;
