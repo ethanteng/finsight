@@ -234,6 +234,24 @@ describe('the transactions behind each item', () => {
       ['2026-09-05', 400], ['2026-08-05', 400], ['2026-07-05', 400], ['2026-06-05', 400],
     ]);
   });
+
+  it('does not attribute paired card payments to a left-out transfer', () => {
+    // CARD CO AUTOPAY is the cash leg of a payment to the projected card; the
+    // transfer model leaves it to the card, so leaving it out must not list it.
+    // (The key drops the noise word "co": "card autopay".)
+    const leftOut = buildCashFlowReport(
+      model([adjustment({ kind: 'exclude_transfer', key: 'card autopay', label: 'CARD CO AUTOPAY' })]),
+      { granularity: 'month', horizonMonths: 3 },
+    ).adjustments[0];
+    expect(leftOut.transactionCount).toBe(0);
+    expect(leftOut.transactions).toEqual([]);
+
+    const vanguard = buildCashFlowReport(
+      model([adjustment({ kind: 'exclude_transfer', key: 'vanguard buy transfer', label: 'VANGUARD BUY TRANSFER' })]),
+      { granularity: 'month', horizonMonths: 3 },
+    ).adjustments[0];
+    expect(vanguard.transactionCount).toBe(4);
+  });
 });
 
 describe('choices saved under a payee’s earlier key', () => {
@@ -285,5 +303,7 @@ describe('forecastAdjustmentTarget', () => {
     // A transaction that is not a one-off cannot be counted as one.
     const rent = built.ledger.entries.find(entry => entry.label === 'Oak Street Apartments')!;
     expect(forecastAdjustmentTarget(built, { kind: 'include_one_off', flow: 'spending', key: rent.id })).toBeNull();
+    // A paired payment to a projected card is not a transfer the user can leave out.
+    expect(forecastAdjustmentTarget(built, { kind: 'exclude_transfer', flow: 'spending', key: 'card autopay' })).toBeNull();
   });
 });
