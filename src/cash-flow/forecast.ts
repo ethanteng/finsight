@@ -410,23 +410,41 @@ export function buildCashFlowModel(input: CashFlowModelInput): CashFlowModel {
   for (const card of cardSetups) {
     cardDailySpending.set(card.account.id, learned.dailyByAccount.get(card.account.id)?.spending ?? 0);
   }
+  // The part of each card's typical spending that is interest charges. A card
+  // whose projection posts interest from its APR is not charged it again.
+  let typicalInterestDaily = learned.interestDailyByAccount;
   if (monthlyIncomeOverride !== null) dailyIncome = monthlyIncomeOverride / DAYS_PER_MONTH;
   if (monthlyExpenseOverride !== null) {
-    // An override says how much is spent, not where: spread it across the
-    // cards in the proportion the history spent on them. Interest on APR
-    // cards is not a purchase share — those cards post APR interest themselves.
+    // An override says how much is spent in all, card interest included, but
+    // not where. The interest the history charged on cards with an APR comes
+    // out first, at the rate it was charged, because their projections post
+    // interest of their own; the rest is spread across the cards in the
+    // proportion the history spent on them. Each card keeps its interest in
+    // what lands on it, so none of it is counted as cash spending.
     dailySpending = monthlyExpenseOverride / DAYS_PER_MONTH;
+    const inBasis = (entry: CashFlowEntry) => entry.flow === 'spending' && basisStart !== null && basisDays > 0
+      && entry.date >= basisStart && entry.date < forecastStart;
     const aprCards = new Set(cardSetups.filter(card => card.terms.apr !== null).map(card => card.account.id));
-    const basisSpending = entries.filter(entry =>
-      entry.flow === 'spending'
-      && basisStart
-      && entry.date >= basisStart
-      && !(entry.interest && aprCards.has(entry.accountId))
-    );
+    const isCardInterest = (entry: CashFlowEntry) => Boolean(entry.interest) && aprCards.has(entry.accountId);
+    const interestByCard = new Map<string, number>();
+    for (const entry of observed) {
+      if (inBasis(entry) && isCardInterest(entry)) {
+        interestByCard.set(entry.accountId, (interestByCard.get(entry.accountId) ?? 0) + entry.amount / basisDays);
+      }
+    }
+    // Never more interest than the override itself.
+    const historicalInterest = [...interestByCard.values()].reduce((sum, daily) => sum + daily, 0);
+    const scale = historicalInterest > dailySpending ? dailySpending / historicalInterest : 1;
+    typicalInterestDaily = new Map([...interestByCard].map(([accountId, daily]) => [accountId, daily * scale]));
+    const spread = dailySpending - historicalInterest * scale;
+    const basisSpending = observed.filter(entry => inBasis(entry) && !isCardInterest(entry));
     const total = basisSpending.reduce((sum, entry) => sum + entry.amount, 0);
     for (const card of cardSetups) {
       const onCard = basisSpending.filter(entry => entry.accountId === card.account.id).reduce((sum, entry) => sum + entry.amount, 0);
-      cardDailySpending.set(card.account.id, total > 0 ? dailySpending * Math.max(0, onCard / total) : 0);
+      cardDailySpending.set(
+        card.account.id,
+        (total > 0 ? spread * Math.max(0, onCard / total) : 0) + (typicalInterestDaily.get(card.account.id) ?? 0)
+      );
     }
   }
 
@@ -449,9 +467,7 @@ export function buildCashFlowModel(input: CashFlowModelInput): CashFlowModel {
     // typical rate. A card whose interest is not modelled keeps those charges
     // in the savings forecast; on the card they would count twice.
     const postsInterest = card.terms.apr !== null;
-    const learnedInterestDaily = postsInterest && spendingSource === 'transactions'
-      ? learned.interestDailyByAccount.get(card.account.id) ?? 0
-      : 0;
+    const learnedInterestDaily = postsInterest ? typicalInterestDaily.get(card.account.id) ?? 0 : 0;
     const purchases: CardPurchases = {
       dailyRate: Math.max(0, (cardDailySpending.get(card.account.id) ?? 0) - learnedInterestDaily),
       dated: scheduled

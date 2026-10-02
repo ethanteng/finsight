@@ -257,10 +257,10 @@ describe('the report’s cards and cash position', () => {
       expect(built.cards[0].projection!.months[11].endBalance).toBeCloseTo(without.cards[0].projection!.months[11].endBalance, 2);
     });
 
-    it('does not let residual interest inflate an APR card’s share of a spending override', () => {
-      // Under an expense override, purchases.dailyRate comes from history
-      // proportions (learnedInterestDaily is not subtracted). Interest on APR
-      // cards must not count in that share, or the override stacks them on APR.
+    it('does not let interest inflate an APR card’s share of a spending override', () => {
+      // The override includes the interest history charged ($151.85 over the
+      // 90-day basis); that comes out first, and the card's share of the rest
+      // is its share of the spending that was not interest.
       const charge = (date: string, amount: number) =>
         tx('card', date, 'fee', amount, 'INTEREST CHARGE ON PURCHASES', { personal_finance_category: INTEREST_CHARGE_CATEGORY });
       const base = noPayments.filter(item => !String(item.name).includes('INTEREST'));
@@ -273,9 +273,12 @@ describe('the report’s cards and cash position', () => {
       });
       const without = model({ transactions: base, accounts: noMinimum, plannedEvents: [monthly], overrides });
       expect(built.typical.spendingSource).toBe('override');
-      expect(built.cards[0].purchases.dailyRate).toBeCloseTo(without.cards[0].purchases.dailyRate, 6);
-      expect(built.cards[0].projection!.months[11].endBalance)
-        .toBeCloseTo(without.cards[0].projection!.months[11].endBalance, 2);
+      const interestDaily = 151.85 / 90;
+      // The card keeps the interest out of cash but is not charged it: its APR interest replaces it.
+      expect(built.cardDailySpending.get('card')! - built.cards[0].purchases.dailyRate).toBeCloseTo(interestDaily, 6);
+      const share = (dailyRate: number, spread: number) => dailyRate / spread;
+      expect(share(built.cards[0].purchases.dailyRate, built.typical.dailySpending - interestDaily))
+        .toBeCloseTo(share(without.cards[0].purchases.dailyRate, without.typical.dailySpending), 6);
     });
 
     it('is left out with only a one-time plan, and the position says so', () => {

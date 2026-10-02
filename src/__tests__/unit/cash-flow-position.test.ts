@@ -1,4 +1,4 @@
-import { addDays } from '../../cash-flow/calendar';
+import { addDays, daysBetween } from '../../cash-flow/calendar';
 import { buildCashFlowModel, type CashFlowModelInput } from '../../cash-flow/forecast';
 import { buildCashPosition, cashMilestones, type CashPosition } from '../../cash-flow/position';
 import type { PlannedCashFlowEvent } from '../../cash-flow/planned-events';
@@ -97,6 +97,36 @@ describe('buildCashPosition', () => {
     for (let date = built.forecastStart; date <= built.forecastEndLimit; date = addDays(date, 1)) {
       expect(position.cardDebtBefore(date)).toBeGreaterThanOrEqual(0);
     }
+  });
+
+  it('counts card interest once under a spending override, which already includes it', () => {
+    // With both overrides nothing is scheduled: income and spending are flat daily rates.
+    const built = model({ overrides: { monthlyIncome: 8000, monthlyExpense: 6000 } });
+    const card = built.cards[0];
+    expect(card.modelsInterest).toBe(true);
+    // History charged $60 on Jul 28, Aug 28 and Sep 28: $2 a day over the 90-day basis.
+    // It stays on the card, out of cash, and the card's APR interest replaces it.
+    expect(built.cardDailySpending.get('card')! - card.purchases.dailyRate).toBeCloseTo(2, 6);
+
+    const position = available(buildCashPosition(built));
+    const end = '2027-10-01';
+    const days = daysBetween(built.forecastStart, end);
+    const aprInterest = card.projection!.interestPostings
+      .filter(posting => posting.date < end)
+      .reduce((sum, posting) => sum + posting.amount, 0);
+    const transfers = days * built.transfers.dailyNet + built.transfers.scheduled
+      .filter(item => item.date < end)
+      .reduce((sum, item) => sum + item.amount, 0);
+    const net = (date: string) => position.cashBefore(date) - position.cardDebtBefore(date);
+    const expected = days * (built.typical.dailyIncome - (built.typical.dailySpending - 2)) - aprInterest + transfers;
+    expect(aprInterest).toBeGreaterThan(0);
+    expect(net(end) - net(built.forecastStart)).toBeCloseTo(expected, 1);
+  });
+
+  it('never takes more interest out of an override than the override itself', () => {
+    const built = model({ overrides: { monthlyIncome: null, monthlyExpense: 30 } });
+    expect(built.cardDailySpending.get('card')!).toBeCloseTo(30 / (365 / 12), 6);
+    expect(built.cards[0].purchases.dailyRate).toBeCloseTo(0, 6);
   });
 
   it('moves cash for planned income and expenses on their dates', () => {

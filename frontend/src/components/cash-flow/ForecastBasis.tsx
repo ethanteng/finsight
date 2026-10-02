@@ -1,7 +1,7 @@
 "use client";
 
 import Link from 'next/link';
-import type { CashFlowRecurringItem, CashFlowReport } from '../../types/cash-flow';
+import type { CashFlowCardSummary, CashFlowRecurringItem, CashFlowReport } from '../../types/cash-flow';
 import {
   CADENCE_LABELS,
   cardName,
@@ -27,6 +27,18 @@ function StreamList({ items, empty }: { items: CashFlowRecurringItem[]; empty: s
       ))}
     </ul>
   );
+}
+
+/** How the forecast treats one card's interest, in the user's terms. */
+function interestBasis(card: CashFlowCardSummary, spendingOverride: boolean): string {
+  const carriedForward = 'recent interest charges are carried forward like other spending.';
+  if (card.apr === null) return `the bank doesn’t share its APR, so ${carriedForward}`;
+  if (card.balance === null) return `its balance isn’t reported, so ${carriedForward}`;
+  if (!card.currentPace && !card.withPlans) return `there isn’t enough payment history to project its interest yet, so ${carriedForward}`;
+  const apr = `${card.apr}% APR on any part of a statement left unpaid`;
+  if (spendingOverride) return `your monthly spending from the Finances page already includes its interest; its balance is projected at ${apr}.`;
+  if (card.currentPace) return `projected at ${apr}.`;
+  return `recent interest charges stay in the forecast as they were; with your plan, its balance is projected at ${apr}.`;
 }
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
@@ -114,11 +126,7 @@ export default function ForecastBasis({ report }: { report: CashFlowReport }) {
                 <li key={card.accountId}>
                   <span className="font-semibold text-[#102319]">{cardName(card)}</span>
                   {': '}
-                  {card.apr !== null && card.currentPace
-                    ? `projected at ${card.apr}% APR on any part of a statement left unpaid.`
-                    : card.apr === null
-                      ? 'the bank doesn’t share its APR, so recent interest charges are carried forward like other spending.'
-                      : 'not enough payment history to project its interest yet.'}
+                  {interestBasis(card, baseline.spendingSource === 'override')}
                 </li>
               ))}
             </ul>

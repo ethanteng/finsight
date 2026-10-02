@@ -363,6 +363,22 @@ describe('CashFlowPageClient', () => {
     expect(screen.getByText(warning)).toBeInTheDocument();
   });
 
+  it('explains each card’s interest, including when a spending override already covers it', async () => {
+    mockFetch(url => (url.includes('/api/cash-flow?') ? { status: 200, body: report() } : undefined));
+    const { unmount } = render(<CashFlowPageClient />);
+    const basis = (await screen.findByRole('heading', { name: 'How this forecast works' })).closest('section')!;
+    expect(within(basis).getByText(/projected at 24% APR on any part of a statement left unpaid\./)).toBeInTheDocument();
+    unmount();
+
+    const overridden = report({
+      baseline: { ...report().baseline, spendingSource: 'override', monthlyExpenseOverride: 6000 },
+    });
+    mockFetch(url => (url.includes('/api/cash-flow?') ? { status: 200, body: overridden } : undefined));
+    render(<CashFlowPageClient />);
+    const overriddenBasis = (await screen.findByRole('heading', { name: 'How this forecast works' })).closest('section')!;
+    expect(within(overriddenBasis).getByText(/your monthly spending from the Finances page already includes its interest/)).toBeInTheDocument();
+  });
+
   it('names the cards the cash position leaves out of card balances', async () => {
     const store = {
       ...report().cards[0], accountId: 'store', name: 'Store Card', mask: '1234', balance: null,
