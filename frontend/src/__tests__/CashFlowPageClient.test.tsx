@@ -1,0 +1,225 @@
+import React from 'react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import CashFlowPageClient from '@/app/cash-flow/CashFlowPageClient';
+import type { CashFlowReport } from '@/types/cash-flow';
+
+const mockRouter = { push: jest.fn() };
+jest.mock('next/navigation', () => ({ useRouter: () => mockRouter }));
+// Recharts needs ResizeObserver and real layout; the figures are covered by the table.
+jest.mock('@/components/cash-flow/CashFlowChart', () => ({
+  __esModule: true,
+  default: () => <div data-testid="cash-flow-chart" />,
+  CashFlowChartLegend: () => null,
+}));
+
+const totals = (income: number, spending: number) => ({ income, spending, net: income - spending });
+const components = {
+  recurringIncome: 5000, typicalIncome: 0, plannedIncome: 0,
+  recurringSpending: 2015.49, typicalSpending: 1800, plannedSpending: 0,
+};
+
+function report(overrides: Partial<CashFlowReport> = {}): CashFlowReport {
+  return {
+    version: 1,
+    currency: 'USD',
+    today: '2026-10-15',
+    dataThrough: '2026-10-14',
+    forecastStart: '2026-10-15',
+    granularity: 'month',
+    range: { from: '2026-09-01', toExclusive: '2026-12-01' },
+    coverageStart: '2026-06-03',
+    forecast: { available: true },
+    periods: [
+      { key: '2026-09', start: '2026-09-01', endExclusive: '2026-10-01', clipped: false, phase: 'past', coverage: 'full', actual: totals(5000, 4100), forecast: null, total: totals(5000, 4100) },
+      { key: '2026-10', start: '2026-10-01', endExclusive: '2026-11-01', clipped: false, phase: 'current', coverage: 'full', actual: totals(2500, 2400), forecast: { ...totals(2500, 1000), components }, total: totals(5000, 3400) },
+      { key: '2026-11', start: '2026-11-01', endExclusive: '2026-12-01', clipped: false, phase: 'future', coverage: 'none', actual: null, forecast: { ...totals(5000, 3815.49), components }, total: totals(5000, 3815.49) },
+    ],
+    totals: { actual: totals(7500, 6500), forecast: totals(7500, 4815.49), total: totals(15000, 11315.49) },
+    highlights: [
+      { key: 'this_month', start: '2026-10-01', endExclusive: '2026-11-01', actualToDate: totals(2500, 2400), actualCoverage: 'full', remaining: { ...totals(2500, 1000), components }, projected: totals(5000, 3400), planned: totals(0, 0), projectedWithoutPlanned: totals(5000, 3400) },
+      { key: 'this_quarter', start: '2026-10-01', endExclusive: '2027-01-01', actualToDate: totals(2500, 2400), actualCoverage: 'full', remaining: { ...totals(22500, 9000), components }, projected: totals(25000, 11400), planned: totals(10000, 0), projectedWithoutPlanned: totals(15000, 11400) },
+      { key: 'next_12_months', start: '2026-10-15', endExclusive: '2027-10-15', actualToDate: null, actualCoverage: null, remaining: { ...totals(65000, 46000), components }, projected: totals(65000, 46000), planned: totals(10000, 0), projectedWithoutPlanned: totals(55000, 46000) },
+    ],
+    baseline: {
+      typicalBasisStart: '2026-07-17', typicalBasisDays: 90, typicalMonthlyIncome: 0, typicalMonthlySpending: 1825,
+      incomeSource: 'transactions', spendingSource: 'transactions', monthlyIncomeOverride: null, monthlyExpenseOverride: null,
+    },
+    recurring: [
+      { id: 'income:gusto', label: 'Gusto Payroll', flow: 'income', cadence: 'biweekly', amount: 2500, monthlyAmount: 5416.67, occurrences: 9, lastDate: '2026-10-09', nextDate: '2026-10-23', status: 'active', category: 'Wages', replacedByOverride: false },
+      { id: 'spending:rent', label: 'Oak Street Apartments', flow: 'spending', cadence: 'monthly', amount: 2000, monthlyAmount: 2000, occurrences: 5, lastDate: '2026-10-01', nextDate: '2026-11-01', status: 'active', category: 'Rent', replacedByOverride: false },
+      { id: 'spending:gym', label: 'Old Gym', flow: 'spending', cadence: 'monthly', amount: 40, monthlyAmount: 40, occurrences: 3, lastDate: '2026-07-05', nextDate: null, status: 'lapsed', category: 'Gym', replacedByOverride: false },
+    ],
+    oneOffs: [{ id: 'flight', date: '2026-09-10', label: 'United Airlines', flow: 'spending', amount: 2400 }],
+    plannedEvents: [
+      { id: 'bonus', label: 'Year-end bonus', kind: 'income', amount: 10000, startDate: '2026-12-15', recurrence: 'once', endDate: null, nextDate: '2026-12-15', occurrencesInRange: 0 },
+    ],
+    accounts: [
+      { id: 'checking', name: 'Everyday Checking', institution: 'First Bank', kind: 'cash', subtype: 'checking', mask: '1234' },
+      { id: 'card', name: 'Rewards Card', institution: 'Card Co', kind: 'credit', subtype: 'credit card', mask: null },
+    ],
+    excluded: { unclassified: 2, currencyMismatch: 0 },
+    snapshot: { computedAt: '2026-10-14T20:00:00.000Z', asOf: '2026-10-14T19:00:00.000Z', status: 'current' },
+    ...overrides,
+  };
+}
+
+type Handler = (url: string, init?: RequestInit) => { status: number; body?: unknown } | undefined;
+
+function mockFetch(handler: Handler) {
+  const calls: Array<{ url: string; init?: RequestInit }> = [];
+  global.fetch = jest.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    calls.push({ url, init });
+    const result = handler(url, init) ?? { status: 404, body: {} };
+    return Promise.resolve({
+      ok: result.status >= 200 && result.status < 300,
+      status: result.status,
+      json: async () => result.body,
+    });
+  }) as jest.Mock;
+  return calls;
+}
+
+describe('CashFlowPageClient', () => {
+  beforeEach(() => {
+    localStorage.setItem('auth_token', 'token');
+    mockRouter.push.mockReset();
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+    localStorage.clear();
+  });
+
+  it('shows the backend’s figures: highlights, periods, planned events and the forecast basis', async () => {
+    mockFetch(url => (url.includes('/api/cash-flow?') ? { status: 200, body: report() } : undefined));
+    render(<CashFlowPageClient />);
+
+    const thisMonth = await screen.findByRole('heading', { name: 'This month' });
+    const card = thisMonth.closest('article')!;
+    expect(within(card).getByText('+$1,600')).toBeInTheDocument();
+    expect(within(card).getByText('So far')).toBeInTheDocument();
+    expect(within(card).getByText('+$100')).toBeInTheDocument();
+    expect(within(card).getByText('Still expected')).toBeInTheDocument();
+
+    const quarter = screen.getByRole('heading', { name: 'This quarter' }).closest('article')!;
+    expect(within(quarter).getByText('From planned events')).toBeInTheDocument();
+    expect(within(quarter).getByText('+$10,000')).toBeInTheDocument();
+    expect(within(quarter).getByText('Without planned events')).toBeInTheDocument();
+
+    expect(screen.getByRole('rowheader', { name: 'Oct 2026' })).toBeInTheDocument();
+    expect(screen.getByText('Actual + forecast')).toBeInTheDocument();
+    expect(screen.getByText('Year-end bonus')).toBeInTheDocument();
+    expect(screen.getByText('Gusto Payroll')).toBeInTheDocument();
+    expect(screen.getByText('United Airlines')).toBeInTheDocument();
+    expect(screen.getByText(/Old Gym · last Jul 5, 2026/)).toBeInTheDocument();
+    expect(screen.getByText(/2 transactions couldn’t be classified/)).toBeInTheDocument();
+    expect(screen.getAllByText('Beta').length).toBeGreaterThan(0);
+  });
+
+  it('asks for the chosen grouping and forecast length', async () => {
+    const calls = mockFetch(url => (url.includes('/api/cash-flow?') ? { status: 200, body: report() } : undefined));
+    const reportUrls = () => calls.map(call => call.url).filter(url => url.includes('/api/cash-flow?'));
+    render(<CashFlowPageClient />);
+    await screen.findByRole('heading', { name: 'This month' });
+
+    expect(reportUrls()[0]).toContain('granularity=month&horizonMonths=6');
+    fireEvent.click(screen.getByRole('button', { name: 'Quarterly' }));
+    await waitFor(() => expect(reportUrls().at(-1)).toContain('granularity=quarter&horizonMonths=6'));
+    fireEvent.change(screen.getByLabelText('Forecast length'), { target: { value: '12' } });
+    await waitFor(() => expect(reportUrls().at(-1)).toContain('granularity=quarter&horizonMonths=12'));
+  });
+
+  it('requests a custom range once it is applied', async () => {
+    const calls = mockFetch(url => (url.includes('/api/cash-flow?') ? { status: 200, body: report() } : undefined));
+    render(<CashFlowPageClient />);
+    await screen.findByRole('heading', { name: 'This month' });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Custom' }));
+    fireEvent.change(screen.getByLabelText('From'), { target: { value: '2026-07-01' } });
+    fireEvent.change(screen.getByLabelText('To'), { target: { value: '2026-12-31' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Show range' }));
+
+    const reportUrls = () => calls.map(call => call.url).filter(url => url.includes('/api/cash-flow?'));
+    await waitFor(() => expect(reportUrls().at(-1)).toContain('granularity=month&from=2026-07-01&to=2026-12-31'));
+  });
+
+  it('adds a planned event and reloads the forecast', async () => {
+    const calls = mockFetch((url, init) => {
+      if (url.endsWith('/api/cash-flow/events') && init?.method === 'POST') return { status: 201, body: { event: {} } };
+      if (url.includes('/api/cash-flow?')) return { status: 200, body: report() };
+      return undefined;
+    });
+    render(<CashFlowPageClient />);
+    await screen.findByRole('heading', { name: 'This month' });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add planned event' }));
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'New laptop' } });
+    fireEvent.change(screen.getByLabelText('Amount'), { target: { value: '2499.99' } });
+    fireEvent.change(screen.getByLabelText('Date'), { target: { value: '2026-11-20' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add to forecast' }));
+
+    await waitFor(() => expect(calls.some(call => call.init?.method === 'POST')).toBe(true));
+    const post = calls.find(call => call.init?.method === 'POST')!;
+    expect(JSON.parse(String(post.init!.body))).toEqual({
+      label: 'New laptop', kind: 'expense', amount: 2499.99, startDate: '2026-11-20', recurrence: 'once', endDate: null,
+    });
+    await waitFor(() => expect(calls.filter(call => call.url.includes('/api/cash-flow?'))).toHaveLength(2));
+  });
+
+  it('shows the server’s reason when an event is rejected', async () => {
+    mockFetch((url, init) => {
+      if (url.endsWith('/api/cash-flow/events') && init?.method === 'POST') return { status: 400, body: { error: 'Enter a valid date' } };
+      if (url.includes('/api/cash-flow?')) return { status: 200, body: report() };
+      return undefined;
+    });
+    render(<CashFlowPageClient />);
+    await screen.findByRole('heading', { name: 'This month' });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add planned event' }));
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Trip' } });
+    fireEvent.change(screen.getByLabelText('Amount'), { target: { value: '800' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add to forecast' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Enter a valid date');
+  });
+
+  it('removes a planned event after confirmation', async () => {
+    const calls = mockFetch((url, init) => {
+      if (url.endsWith('/api/cash-flow/events/bonus') && init?.method === 'DELETE') return { status: 204 };
+      if (url.includes('/api/cash-flow?')) return { status: 200, body: report() };
+      return undefined;
+    });
+    render(<CashFlowPageClient />);
+    await screen.findByRole('heading', { name: 'This month' });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Remove Year-end bonus' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Remove' }));
+
+    await waitFor(() => expect(calls.some(call => call.init?.method === 'DELETE')).toBe(true));
+  });
+
+  it('offers to connect accounts when there is no snapshot yet', async () => {
+    mockFetch(url => (url.includes('/api/cash-flow?') ? { status: 204 } : undefined));
+    render(<CashFlowPageClient />);
+    expect(await screen.findByRole('heading', { name: 'Connect an account to see your cash flow' })).toBeInTheDocument();
+  });
+
+  it('explains why there is no forecast and still shows the history', async () => {
+    mockFetch(url => (url.includes('/api/cash-flow?')
+      ? { status: 200, body: report({ forecast: { available: false, reason: 'insufficient_history' } }) }
+      : undefined));
+    render(<CashFlowPageClient />);
+
+    expect(await screen.findByText(/A forecast needs about four weeks of transactions/)).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'This month' })).not.toBeInTheDocument();
+    expect(screen.getByRole('rowheader', { name: 'Sep 2026' })).toBeInTheDocument();
+  });
+
+  it('sends a signed-out visitor to log in', async () => {
+    localStorage.clear();
+    mockFetch(() => undefined);
+    render(<CashFlowPageClient />);
+    await waitFor(() => expect(mockRouter.push).toHaveBeenCalledWith('/login'));
+  });
+});

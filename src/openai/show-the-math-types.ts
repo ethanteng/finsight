@@ -23,7 +23,7 @@ export interface ShowTheMathDatabaseData {
 
 /**
  * Backward-compatible compact projection flags for the original five optional
- * context types. New evidence uses contextPlanning for the complete nine-pack
+ * context types. New evidence uses contextPlanning for the complete
  * semantic plan, while these flags still describe what the snapshot read.
  */
 export const ROUTED_CONTEXT_TIERS = [

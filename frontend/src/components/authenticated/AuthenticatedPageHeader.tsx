@@ -1,19 +1,23 @@
 "use client";
 
 import Link from 'next/link';
-import { MessageSquareText, Settings, WalletCards } from 'lucide-react';
+import type { ReactNode } from 'react';
+import { ChartNoAxesCombined, MessageSquareText, Settings, WalletCards } from 'lucide-react';
+import BetaBadge from './BetaBadge';
 import UpgradeAccountButton, {
   parseUpgradeAction,
   useUpgradeEligibility,
   type UpgradeAction,
 } from './UpgradeAccountButton';
 
-type ActivePage = 'app' | 'finances' | 'profile' | 'admin';
+type ActivePage = 'app' | 'finances' | 'cash-flow' | 'profile' | 'admin';
 
 interface AuthenticatedPageHeaderProps {
   activePage: ActivePage;
   eyebrow: string;
   title: string;
+  /** Shown beside the title, e.g. a Beta label. */
+  badge?: ReactNode;
   email?: string;
   /**
    * What to offer this account, for a page that has already loaded its billing
@@ -25,16 +29,19 @@ interface AuthenticatedPageHeaderProps {
   onLogout?: () => void;
 }
 
+// Four links share the phone-width row, so the longest gets a shorter name there.
 const links = [
   { href: '/app', label: 'Decisions', page: 'app' as const, icon: MessageSquareText },
   { href: '/finances', label: 'Finances', page: 'finances' as const, icon: WalletCards },
-  { href: '/profile', label: 'Accounts & context', page: 'profile' as const, icon: Settings },
+  { href: '/cash-flow', label: 'Cash flow', page: 'cash-flow' as const, icon: ChartNoAxesCombined, beta: true },
+  { href: '/profile', label: 'Accounts & context', mobileLabel: 'Accounts', page: 'profile' as const, icon: Settings },
 ];
 
 export default function AuthenticatedPageHeader({
   activePage,
   eyebrow,
   title,
+  badge,
   email,
   upgradeAction,
   homeHref = '/app',
@@ -59,7 +66,7 @@ export default function AuthenticatedPageHeader({
 
         {showNavLinks && (
           <nav className="hidden min-w-0 flex-1 items-center justify-center gap-1 lg:flex" aria-label="Workspace navigation">
-            {links.map(({ href, label, page, icon: Icon }) => (
+            {links.map(({ href, label, page, icon: Icon, beta }) => (
               <Link
                 key={href}
                 href={href}
@@ -68,6 +75,7 @@ export default function AuthenticatedPageHeader({
               >
                 <Icon size={16} aria-hidden="true" />
                 {label}
+                {beta && <BetaBadge tone={activePage === page ? 'dark' : 'light'} />}
               </Link>
             ))}
           </nav>
@@ -86,15 +94,15 @@ export default function AuthenticatedPageHeader({
 
       {showNavLinks && (
         <div className="border-t border-[#102319]/10 lg:hidden">
-          <nav className="authenticated-mobile-nav mx-auto grid max-w-[1200px] grid-cols-[repeat(3,minmax(0,1fr))] gap-1 px-3 py-2 sm:px-4" aria-label="Workspace navigation">
-            {links.map(({ href, label, page }) => (
+          <nav className="authenticated-mobile-nav mx-auto grid max-w-[1200px] grid-cols-[repeat(4,minmax(0,1fr))] gap-1 px-3 py-2 sm:px-4" aria-label="Workspace navigation">
+            {links.map(({ href, label, mobileLabel, page }) => (
               <Link
                 key={href}
                 href={href}
                 aria-current={activePage === page ? 'page' : undefined}
                 className={`authenticated-nav-link ${activePage === page ? 'is-active' : ''}`}
               >
-                {label}
+                {mobileLabel ?? label}
               </Link>
             ))}
           </nav>
@@ -104,7 +112,10 @@ export default function AuthenticatedPageHeader({
       <div className="mx-auto flex max-w-[1200px] items-end justify-between gap-4 px-5 py-5 sm:px-6">
         <div>
           <p className="authenticated-eyebrow">{eyebrow}</p>
-          <h1 className="authenticated-page-title">{title}</h1>
+          <div className="flex items-center gap-3">
+            <h1 className="authenticated-page-title">{title}</h1>
+            {badge && <span className="mt-1.5">{badge}</span>}
+          </div>
         </div>
       </div>
     </header>

@@ -143,6 +143,7 @@ const PACK_LABELS: Record<string, string> = {
   transaction_details: 'Transactions',
   investment_details: 'Investments',
   monthly_cash_flow: 'Monthly cash flow',
+  cash_flow_forecast: 'Cash flow forecast',
   user_profile: 'Profile',
   home_value: 'Home value',
   retirement_analysis: 'Retirement analysis',

@@ -7,7 +7,7 @@ import { auditDataPacksWithClaude } from '../../openai/claude-client';
 import { validateWithGemini } from '../../openai/response-validator';
 import { askOpenAIWithPreparedPrompt } from '../../openai/openai-fallback-client';
 import { planContext, type ContextPlan } from '../../openai/context-planner';
-import { normalizeContextPacks, questionNeedsFromPacks, type ContextPackId } from '../../openai/context-packs';
+import { CONTEXT_PACK_IDS, normalizeContextPacks, questionNeedsFromPacks, type ContextPackId } from '../../openai/context-packs';
 import { scenarioCalculatorRegistry } from '../../scenarios/calculator-registry';
 import { runHomeAffordabilityScenario } from '../../scenarios/home-affordability-scenario';
 
@@ -1531,10 +1531,7 @@ describe('runAskLincAnalysis validation routing', () => {
   });
 
   it('does not widen the context when every tier is already loaded', async () => {
-    mockedPlanContext.mockResolvedValue(contextPlan([
-      'account_details', 'transaction_details', 'investment_details', 'monthly_cash_flow',
-      'user_profile', 'home_value', 'retirement_analysis', 'market_context', 'search_context',
-    ], true));
+    mockedPlanContext.mockResolvedValue(contextPlan([...CONTEXT_PACK_IDS], true));
     mockedAskClaude.mockResolvedValue(JSON.stringify({
       summary: 'Your portfolio could reach $250,000.',
       insights: [],

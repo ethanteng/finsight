@@ -51,7 +51,7 @@ The provider receives the final query verbatim with Brave's `search_lang`, `ui_l
 
 Pack definitions live in `src/openai/context-packs.ts`. Their IDs, descriptions, costs, and dependencies are application contracts and are intentionally code-reviewed. This hard-coded allowlist is a security and data-access boundary; it does not encode assumptions about how a user asks a question.
 
-The optional packs are accounts, transactions, investments, monthly cash flow, profile, home value, deterministic retirement analysis, market context, and live rates/rules lookup.
+The optional packs are accounts, transactions, investments, monthly cash flow, cash flow forecast, profile, home value, deterministic retirement analysis, market context, and live rates/rules lookup. The cash flow forecast pack runs the same deterministic engine as the Cash flow page and publishes its projections as facts with `forecast` provenance; see `docs/CASH_FLOW_FORECAST.md`.
 
 ## Admin and measurement
 

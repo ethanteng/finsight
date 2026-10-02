@@ -21,6 +21,7 @@ import type { PlannedSearchQuery, SearchQueryEvidence } from '../data/search-typ
 import { compactSearchQueryEvidence } from '../data/search-types';
 import type { SearchContext } from '../data/orchestrator';
 import type { PersonalContextValues } from '../profile/personal-context';
+import { buildCashFlowForecastContext, type CashFlowForecastContext } from './cash-flow-forecast-context';
 
 interface GatherContextArgs {
   userId?: string;
@@ -366,6 +367,22 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
     }
   };
 
+  // The forecast pack runs the same engine the Cash flow page does. It never
+  // throws: a forecast that cannot be built is reported to the model as
+  // unavailable, so the answer explains why instead of estimating.
+  const loadCashFlowForecast = async (): Promise<CashFlowForecastContext | undefined> => {
+    if (!questionNeeds.needsCashFlowForecast) return undefined;
+    if (!userId) return { status: 'unavailable', reason: 'no_snapshot' };
+    try {
+      const { loadCashFlowModel } = await import('../services/cash-flow-service');
+      const loaded = await loadCashFlowModel(userId);
+      return loaded ? buildCashFlowForecastContext(loaded.model) : { status: 'unavailable', reason: 'no_snapshot' };
+    } catch (error) {
+      console.error('Failed to build cash flow forecast context:', error);
+      return { status: 'unavailable', reason: 'error' };
+    }
+  };
+
   // These operations are independent of one another — run them concurrently
   // instead of serially to cut the time spent gathering context before the LLM call.
   if (questionNeeds.needsSearchContext && !deferSearchContext) onProgress?.('Searching financial knowledge base');
@@ -377,7 +394,9 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
     ? sortedTransactions.slice(0, MAX_PROMPT_TRANSACTIONS)
     : [];
 
-  const [tierContext, searchRetrieval, marketContextResult, userOverrides, userProfile, investmentExternalData] = await Promise.all([
+  if (questionNeeds.needsCashFlowForecast) onProgress?.('Projecting your cash flow');
+
+  const [tierContext, searchRetrieval, marketContextResult, userOverrides, userProfile, investmentExternalData, cashFlowForecast] = await Promise.all([
     dataOrchestrator.buildTierAwareContext(
       tier,
       tierContextAccounts,
@@ -404,6 +423,7 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
           return undefined;
         })
       : Promise.resolve(undefined),
+    loadCashFlowForecast(),
   ]);
 
   if (investmentsSnapshot && investmentExternalData) {
@@ -436,6 +456,7 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
     averageMonthlyIncome: incomeResult?.averageMonthly ?? null,
     averageMonthlyExpense: expenseResult?.averageMonthly ?? null,
     transactionSummary,
+    ...(cashFlowForecast && { cashFlowForecast }),
     contextSelection: {
       accountsIncluded: questionNeeds.needsAccountDetails,
       transactionDetailsIncluded: questionNeeds.needsTransactionDetails,

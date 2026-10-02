@@ -72,7 +72,7 @@ export function shouldRenderNoscriptFallback(vercelEnv: string | undefined): boo
  * read before they sign up. Once someone is inside the product, their
  * pageviews say nothing about that, and the URLs start carrying things worth
  * keeping out of a third-party store: `/reset-password` puts a live
- * single-use token in the query string, and `/app` and `/finances` name what
+ * single-use token in the query string, and `/app`, `/finances` and `/cash-flow` name what
  * a signed-in person is looking at.
  *
  * `/register` and `/getstarted` are deliberately NOT here. They are noindexed,
@@ -82,6 +82,7 @@ export function shouldRenderNoscriptFallback(vercelEnv: string | undefined): boo
 export const PRODUCT_PATH_PREFIXES = [
   "/admin",
   "/app",
+  "/cash-flow",
   "/finances",
   "/forgot-password",
   "/login",
