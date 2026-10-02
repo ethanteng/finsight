@@ -114,6 +114,35 @@ describe('transfers in the forecast', () => {
     expect(totals.components.cardInterest).toBe(0);
     expect(totals.spending).toBe(72000);
   });
+
+  it('lets a payoff plan project a card that has no usual pace', () => {
+    const noPaceAccounts = ACCOUNTS.map(account => account.account_id === 'card'
+      ? {
+          ...account,
+          balance: { current: 2500 },
+          liabilityDetails: [{
+            kind: 'credit',
+            aprs: [{ type: 'purchase_apr', percentage: 22 }],
+            minimumPaymentAmount: null,
+            nextPaymentDueDate: '2026-10-20',
+          }],
+        }
+      : account);
+    const noPayments = household.filter(item => item.name !== 'CARD CO AUTOPAY' && item.name !== 'PAYMENT THANK YOU');
+    const monthlyFull: PlannedCashFlowEvent = {
+      ...payoff, id: 'monthly-full', recurrence: 'monthly', startDate: '2026-10-25',
+    };
+    const built = model({
+      transactions: noPayments,
+      accounts: noPaceAccounts,
+      plannedEvents: [monthlyFull],
+    });
+    expect(built.cards[0].baseline.behavior).toBe('unknown');
+    expect(built.cards[0].currentPace).toBeNull();
+    expect(built.cards[0].projection).not.toBeNull();
+    expect(built.cards[0].projection!.paidOffBy).toBe('2026-10');
+    expect(built.cards[0].projection!.payments.some(payment => payment.date === '2026-10-25')).toBe(true);
+  });
 });
 
 describe('the report’s cards and cash position', () => {

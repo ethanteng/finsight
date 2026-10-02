@@ -368,8 +368,13 @@ export function buildCashFlowModel(input: CashFlowModelInput): CashFlowModel {
       const history = cardHistory(ledger, account.id, basisStart, forecastStart);
       const terms = cardTermsFromAccount(rawAccounts.get(account.id), history.lastPaymentDate);
       const baseline = cardBaseline(terms, history);
-      const modelsInterest = !reason && terms.apr !== null && terms.balance !== null && baseline.behavior !== 'unknown';
-      return { account, history, terms, baseline, modelsInterest };
+      const plans = input.plannedEvents.filter(
+        event => event.kind === 'card_payment' && event.accountId === account.id
+      );
+      // A payment plan is enough to project even when there is no usual pace.
+      const canProject = terms.balance !== null && (baseline.behavior !== 'unknown' || plans.length > 0);
+      const modelsInterest = !reason && terms.apr !== null && canProject;
+      return { account, history, terms, baseline, plans, modelsInterest };
     });
   const modeledInterestCards = new Set(cardSetups.filter(card => card.modelsInterest).map(card => card.account.id));
   const entries = observed.filter(entry => !(entry.interest && modeledInterestCards.has(entry.accountId)));
@@ -403,7 +408,6 @@ export function buildCashFlowModel(input: CashFlowModelInput): CashFlowModel {
         .map(occurrence => ({ streamId: stream.id, flow: stream.flow, accountId: stream.accountId, ...occurrence })));
 
   const cards: CardModel[] = cardSetups.map(card => {
-    const plans = input.plannedEvents.filter(event => event.kind === 'card_payment' && event.accountId === card.account.id);
     const purchases = {
       dailyRate: cardDailySpending.get(card.account.id) ?? 0,
       dated: scheduled
@@ -427,9 +431,9 @@ export function buildCashFlowModel(input: CashFlowModelInput): CashFlowModel {
       paymentSource: card.history.paymentCount === 0 || card.history.pairedPaymentCount * 2 >= card.history.paymentCount
         ? 'connected'
         : 'other',
-      plans,
+      plans: card.plans,
       currentPace,
-      projection: plans.length > 0 ? projectWith(plans) : currentPace,
+      projection: card.plans.length > 0 ? projectWith(card.plans) : currentPace,
       modelsInterest: card.modelsInterest,
     };
   });

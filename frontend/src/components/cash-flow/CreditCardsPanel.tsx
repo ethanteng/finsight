@@ -66,9 +66,9 @@ export default function CreditCardsPanel({
               </button>
             </div>
 
-            {card.currentPace && (
-              <div className={`mt-4 grid gap-3 ${card.withPlans ? 'md:grid-cols-2' : ''}`}>
-                <Outcome title="At your current pace" outcome={card.currentPace} tone="muted" />
+            {(card.currentPace || card.withPlans) && (
+              <div className={`mt-4 grid gap-3 ${card.currentPace && card.withPlans ? 'md:grid-cols-2' : ''}`}>
+                {card.currentPace && <Outcome title="At your current pace" outcome={card.currentPace} tone="muted" />}
                 {card.withPlans && <Outcome title="With your plan" outcome={card.withPlans} tone="plan" />}
               </div>
             )}

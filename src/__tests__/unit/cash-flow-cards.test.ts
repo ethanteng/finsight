@@ -229,7 +229,7 @@ describe('projectCard', () => {
     expect(projection.months[0]).toMatchObject({ payment: 200, carried: 0, interest: 0 });
   });
 
-  it('projects nothing without a balance or a pace', () => {
+  it('projects nothing without a balance, or without a pace and no plan', () => {
     expect(projectCard({
       terms: terms({ balance: null }), baseline: carrying, purchases: steadyPurchases, plans: [],
       forecastStart: '2026-11-01', forecastEndLimit: '2028-11-01',
@@ -238,6 +238,18 @@ describe('projectCard', () => {
       terms: terms(), baseline: { behavior: 'unknown', monthlyPayment: null }, purchases: steadyPurchases, plans: [],
       forecastStart: '2026-11-01', forecastEndLimit: '2028-11-01',
     })).toBeNull();
+  });
+
+  it('projects from a payment plan alone when there is no usual pace', () => {
+    const projection = project(
+      { behavior: 'unknown', monthlyPayment: null },
+      [plan({ recurrence: 'monthly', startDate: '2026-11-05' })],
+    );
+    // Without a usual pace, months before the plan starts pay nothing and carry.
+    expect(projection.months[0]).toMatchObject({ month: '2026-11', payment: 4000, carried: 0, interest: 0 });
+    expect(projection.months.slice(0).every(month => month.carried === 0)).toBe(true);
+    expect(projection.paidOffBy).toBe('2026-11');
+    expect(projection.payments[0]).toEqual({ date: '2026-11-05', amount: 4000 });
   });
 });
 

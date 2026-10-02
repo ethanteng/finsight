@@ -238,7 +238,9 @@ export interface CardProjectionInput {
 
 /**
  * Project one card month by month across the forecast window. Null when there
- * is no balance to start from or no pace to project.
+ * is no balance to start from, or no pace and no payment plan to project from.
+ * A plan alone is enough: without a usual pace, months the plan does not cover
+ * pay nothing beyond what the plan schedules.
  *
  * Months are accounted whole, through the one the window ends in: a payment
  * due after the window still decides what that month carries. Only payments
@@ -246,7 +248,8 @@ export interface CardProjectionInput {
  */
 export function projectCard(input: CardProjectionInput): CardProjection | null {
   const { terms, baseline, forecastStart, forecastEndLimit } = input;
-  if (terms.balance === null || baseline.behavior === 'unknown') return null;
+  if (terms.balance === null) return null;
+  if (baseline.behavior === 'unknown' && input.plans.length === 0) return null;
   const projectionEnd = addMonths(startOfMonth(addDays(forecastEndLimit, -1)), 1, 1);
   const plans = plansByMonth(input.plans, forecastStart, projectionEnd);
   const inWindow = (date: CalendarDate) => date >= forecastStart && date < forecastEndLimit;
