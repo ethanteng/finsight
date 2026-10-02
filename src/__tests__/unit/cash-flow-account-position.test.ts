@@ -152,6 +152,17 @@ describe('the report’s cash position for chosen accounts', () => {
     expect(report.position.accountIds).toEqual(['checking', 'savings']);
   });
 
+  it('lists everything coming up in the month, however much there is', () => {
+    // Twelve weekly plans: some sixty items in the month, all of which the page offers to show.
+    const weekly = Array.from({ length: 12 }, (_, index) =>
+      event({ id: `weekly-${index}`, label: `Weekly ${index}`, kind: 'expense', amount: 10, startDate: '2026-10-01', recurrence: 'weekly' }));
+    const built = model({ plannedEvents: weekly });
+    const report = buildCashFlowReport(built, { ...request, accountIds: ['checking'] });
+    const inMonth = available(buildCashPosition(built, ['checking'])).itemsBetween(built.forecastStart, addDays(built.forecastStart, 31));
+    expect(report.position.upcoming.length).toBeGreaterThan(40);
+    expect(report.position.upcoming).toEqual(inMonth);
+  });
+
   it('reports what arrives and leaves in each period, and what is coming up', () => {
     const report = buildCashFlowReport(model(), { ...request, accountIds: ['savings'] });
     const october = report.position.periods.find(period => period.key === '2026-10')!;

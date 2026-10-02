@@ -95,7 +95,7 @@ export interface CashFlowForecastContext {
     /**
      * Each cash account on its own, when there is more than one: what it holds
      * now and at the same milestones, and its lowest point. The primary
-     * account (where paychecks land) comes first.
+     * account (where paychecks land) comes first, then the largest.
      */
     accounts?: Array<{
       name: string;
@@ -105,6 +105,8 @@ export interface CashFlowForecastContext {
       milestones: Array<{ key: string; date: string; cash: number }>;
       lowNext12Months: { date: string; cash: number } | null;
     }>;
+    /** Cash accounts left out of `accounts` by the cap; the whole still includes them. */
+    accountsNotListed?: number;
   };
   /** The user's choices about what the forecast counts; the figures already reflect them. */
   adjustments?: Array<{ kind: ForecastAdjustmentKind; flow: 'income' | 'spending'; label: string }>;
@@ -249,7 +251,10 @@ function positionContext(model: CashFlowModel): CashFlowForecastContext['positio
     lowNext12Months: milestones.lowNext12Months,
     projectsCards: model.cards.some(card => card.projection),
     cardsLeftOut: position.cardsLeftOut.map(card => ({ name: card.name, mask: masks.get(card.accountId) ?? null, reason: card.reason })),
-    ...(accounts && accounts.length > 0 && { accounts }),
+    ...(accounts && accounts.length > 0 && {
+      accounts,
+      ...(cashAccounts.length > accounts.length && { accountsNotListed: cashAccounts.length - accounts.length }),
+    }),
   };
 }
 
@@ -748,7 +753,9 @@ export function compactCashFlowForecastDetails(context: CashFlowForecastContext)
                 factIdPrefix: `cash_flow_account_${index + 1}_`,
                 lowestPointDate: account.lowNext12Months?.date ?? null,
               })),
-              accountsNote: 'Each account on its own; the cash figures above are their sum. Card payments come out of the account that pays each card.',
+              accountsNote: context.position.accountsNotListed
+                ? `Each listed account on its own. ${context.position.accountsNotListed} more cash account${context.position.accountsNotListed === 1 ? ' is' : 's are'} not listed but included in the cash figures above, so the listed accounts do not add up to them. Card payments come out of the account that pays each card.`
+                : 'Each account on its own; the cash figures above are their sum. Card payments come out of the account that pays each card.',
             }),
             ...(context.position.cardsLeftOut.length > 0 && {
               cardDebtLeavesOut: context.position.cardsLeftOut.map(card => ({

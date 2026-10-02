@@ -301,7 +301,7 @@ export interface CashFlowPositionSummary {
     moneyIn: number | null;
     moneyOut: number | null;
   }>;
-  /** Dated amounts in the month from the forecast start, with the balance after each day. */
+  /** Every dated amount in the month from the forecast start, with the balance after each day. */
   upcoming: CashPositionItem[];
   lowPoint: { date: string; cash: number } | null;
   milestones: Array<{ key: string; date: string; cash: number; cardDebt: number }>;

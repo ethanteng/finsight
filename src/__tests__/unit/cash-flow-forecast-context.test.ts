@@ -387,6 +387,25 @@ describe('each cash account in the pack', () => {
     expect(details.cashPosition.accounts[1]).not.toHaveProperty('primary');
   });
 
+  it('says how many accounts it leaves unlisted, which the whole still includes', () => {
+    const more = Array.from({ length: 4 }, (_, index) => ({
+      ...SAVINGS, account_id: `savings-${index}`, name: `Savings ${index}`, mask: `90${index}0`, balance: { current: 1000 * (index + 1) },
+    }));
+    const pack = buildCashFlowForecastContext(buildCashFlowModel({
+      transactions: householdTransactions('2026-06-03', '2026-10-14'),
+      accounts: [...ACCOUNTS, SAVINGS, ...more],
+      plannedEvents: [],
+      dataThrough: '2026-10-14',
+      today: '2026-10-15',
+    }));
+    // Six cash accounts: checking (primary) and the three largest are listed.
+    expect(pack.position!.accounts!.map(account => account.name)).toEqual(['Everyday Checking', 'High Yield Savings', 'Savings 3', 'Savings 2']);
+    expect(pack.position!.accountsNotListed).toBe(2);
+    const details = compactCashFlowForecastDetails(pack) as any;
+    expect(details.cashPosition.accountsNote).toContain('2 more cash accounts are not listed but included in the cash figures above');
+    expect(details.cashPosition.accountsNote).not.toContain('are their sum');
+  });
+
   it('adds nothing when there is only one account, which the whole already is', () => {
     const facts = byId(cashFlowForecastFacts(context()));
     expect([...facts.keys()].some(id => id.startsWith('cash_flow_account_'))).toBe(false);

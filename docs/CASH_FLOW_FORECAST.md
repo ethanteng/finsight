@@ -250,7 +250,10 @@ Credit cards and the cash position are facts as well:
 - **Interest a plan saves:** a forecast fact with an `abs(input[0] - input[1])` formula over the two interest figures, which the validator rechecks.
 - **Cash:** cash now, cash at each milestone, and the lowest point in the next 12 months.
 - **Card debt:** owed now and at each milestone, labelled as covering the cards the forecast projects. It is published only when the forecast projects at least one card, and the details name any card it leaves out.
-- **Each cash account**, when there is more than one (at most four, the primary account first): cash now, at each milestone, and the lowest point in the next 12 months. The details name each account and its fact id prefix, and mark the primary one.
+- **Each cash account**, when there is more than one: cash now, at each milestone, and the lowest point in the next 12 months.
+  - At most four are listed: the primary account first, then the largest.
+  - The details name each account and its fact id prefix, and mark the primary one.
+  - With more accounts than that, the details say how many are not listed, and that the whole still includes them, so the listed ones are never presented as adding up to it.
 
 The shared caveat says how card interest is estimated.
 

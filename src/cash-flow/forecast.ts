@@ -1284,7 +1284,7 @@ export interface CashFlowPositionSummary {
     moneyIn: number | null;
     moneyOut: number | null;
   }>;
-  /** Dated amounts in the month from the forecast start, with the balance after each day. */
+  /** Every dated amount in the month from the forecast start, with the balance after each day. */
   upcoming: CashPositionItem[];
   /** The lowest end-of-day cash within the range's forecast part. */
   lowPoint: { date: CalendarDate; cash: number } | null;
@@ -1392,9 +1392,12 @@ function cardSummary(card: CardModel, forecastStart: CalendarDate): CashFlowCard
   };
 }
 
-/** The position lists what is coming up over this many days from the forecast start, and at most this many items. */
+/**
+ * The position lists what is coming up over this many days from the forecast
+ * start. Every item, uncapped: the window bounds the list, and a list cut
+ * short would hide a bill while the page offers to show them all.
+ */
 const UPCOMING_DAYS = 31;
-const UPCOMING_ITEMS = 40;
 
 function positionSummary(
   model: CashFlowModel,
@@ -1481,7 +1484,7 @@ function positionSummary(
         moneyOut: position.moneyOutBetween(from, period.endExclusive),
       };
     }),
-    upcoming: position.itemsBetween(model.forecastStart, addDays(model.forecastStart, UPCOMING_DAYS)).slice(0, UPCOMING_ITEMS),
+    upcoming: position.itemsBetween(model.forecastStart, addDays(model.forecastStart, UPCOMING_DAYS)),
     lowPoint: position.lowPoint(maxDate(range.from, model.forecastStart), range.toExclusive),
     milestones: milestones.points,
     lowNext12Months: milestones.lowNext12Months,
