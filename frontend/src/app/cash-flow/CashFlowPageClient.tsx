@@ -9,11 +9,20 @@ import BetaBadge from '../../components/authenticated/BetaBadge';
 import CashFlowChart, { CashFlowChartLegend } from '../../components/cash-flow/CashFlowChart';
 import CashFlowHighlights from '../../components/cash-flow/CashFlowHighlights';
 import CashFlowPeriodTable from '../../components/cash-flow/CashFlowPeriodTable';
+import CashPositionChart, { CashPositionLegend } from '../../components/cash-flow/CashPositionChart';
+import CreditCardsPanel from '../../components/cash-flow/CreditCardsPanel';
 import ForecastBasis from '../../components/cash-flow/ForecastBasis';
-import PlannedEventsPanel from '../../components/cash-flow/PlannedEventsPanel';
+import PlannedEventsPanel, { type CardPaymentRequest } from '../../components/cash-flow/PlannedEventsPanel';
 import { clearStoredUserTimeZone } from '../../lib/browser-time-zone';
 import { CONNECT_ACCOUNTS_PATH } from '../../lib/connect-accounts';
-import { formatCalendarDate, lastIncludedDay, unavailableMessage } from '../../lib/cash-flow-format';
+import {
+  cardsLeftOutText,
+  formatCalendarDate,
+  formatMoney,
+  lastIncludedDay,
+  projectsCardDebt,
+  unavailableMessage,
+} from '../../lib/cash-flow-format';
 import type { CashFlowGranularity, CashFlowReport } from '../../types/cash-flow';
 
 type View = CashFlowGranularity | 'custom';
@@ -39,8 +48,16 @@ const GROUPINGS: Array<{ value: CashFlowGranularity; label: string }> = [
 const ASK_EXAMPLES = [
   'How much can I expect to save this month?',
   'How much will I save this quarter if my bonus comes through?',
-  'What should I do with my expected surplus: invest it, save it, or both?',
+  'What should I do with my expected surplus: pay down my card, invest it, or save it?',
 ];
+
+type ChartView = 'savings' | 'position';
+
+const POSITION_UNAVAILABLE: Record<string, string> = {
+  forecast_unavailable: 'Cash position needs a forecast first.',
+  no_cash_accounts: 'Connect a checking or savings account to see your cash position.',
+  unknown_balance: 'One of your cash accounts didn’t report a balance, so your cash position can’t be added up yet.',
+};
 
 const controlClass =
   'min-h-10 rounded-full border border-[#102319]/15 bg-[#fffdf5] px-4 py-2 text-sm font-bold text-[#102319] transition hover:border-[#102319]/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#102319] focus-visible:ring-offset-2';
@@ -80,6 +97,8 @@ export default function CashFlowPageClient() {
   const [horizonMonths, setHorizonMonths] = useState(6);
   const [customRange, setCustomRange] = useState<CustomRange | null>(null);
   const [customDraft, setCustomDraft] = useState<CustomRange | null>(null);
+  const [chartView, setChartView] = useState<ChartView>('savings');
+  const [cardPaymentRequest, setCardPaymentRequest] = useState<CardPaymentRequest | null>(null);
   const requestRef = useRef(0);
 
   const query = useMemo(() => {
@@ -295,12 +314,55 @@ export default function CashFlowPageClient() {
                 </form>
               )}
 
-              <div className="mt-5">
-                <CashFlowChartLegend />
-                <div className="mt-3">
-                  <CashFlowChart report={report} />
-                </div>
+              <div className="mt-5 grid w-full max-w-sm grid-cols-2 gap-1 rounded-xl border border-[#102319]/10 bg-[#f3f2e9] p-1" role="group" aria-label="Show">
+                {([['savings', 'Savings'], ['position', 'Cash position']] as Array<[ChartView, string]>).map(([value, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    aria-pressed={chartView === value}
+                    onClick={() => setChartView(value)}
+                    className={`rounded-md px-3 py-2 text-sm font-semibold transition-colors ${chartView === value ? 'bg-[#102319] text-white shadow-sm' : 'text-[#5e6b63] hover:bg-white/60 hover:text-[#102319]'}`}
+                  >
+                    {label}
+                  </button>
+                ))}
               </div>
+
+              {chartView === 'savings' ? (
+                <div className="mt-5">
+                  <CashFlowChartLegend />
+                  <div className="mt-3">
+                    <CashFlowChart report={report} />
+                  </div>
+                </div>
+              ) : report.position.available ? (
+                <div className="mt-5">
+                  <CashPositionLegend hasCards={projectsCardDebt(report)} />
+                  {cardsLeftOutText(report) && (
+                    <p className="mt-2 text-xs leading-5 text-[#76510f]">
+                      {projectsCardDebt(report) ? 'Owed on credit cards leaves out ' : 'Credit card balances aren’t shown: '}
+                      {cardsLeftOutText(report)}.
+                    </p>
+                  )}
+                  <div className="mt-3">
+                    <CashPositionChart report={report} />
+                  </div>
+                  {report.position.lowPoint && (
+                    <p className={`mt-3 text-sm ${report.position.lowPoint.cash < 0 ? 'font-bold text-[#9b4137]' : 'text-[#5e6b63]'}`}>
+                      Lowest point: {formatMoney(report.position.lowPoint.cash)} on {formatCalendarDate(report.position.lowPoint.date)}
+                      {report.position.lowPoint.cash < 0 ? ' — your cash is projected to run short.' : '.'}
+                    </p>
+                  )}
+                  <p className="mt-1 text-xs leading-5 text-[#66736b]">
+                    Starts from {formatMoney(report.position.startingCash ?? 0)} across your checking and savings. Card payments
+                    come out of cash on their due days; planned income and expenses are assumed to go through cash.
+                  </p>
+                </div>
+              ) : (
+                <p className="mt-5 rounded-2xl border border-[#d4a72c]/30 bg-[#fff3ce] p-4 text-sm leading-6 text-[#76510f]" role="status">
+                  {POSITION_UNAVAILABLE[report.position.reason ?? ''] ?? 'Cash position isn’t available yet.'}
+                </p>
+              )}
 
               <details className="mt-4 rounded-2xl border border-[#102319]/10 bg-white/50 p-4">
                 <summary className="cursor-pointer text-sm font-bold text-[#102319]">See every period</summary>
@@ -310,7 +372,20 @@ export default function CashFlowPageClient() {
               </details>
             </section>
 
-            <PlannedEventsPanel apiUrl={API_URL} events={report.plannedEvents} today={report.today} onChanged={load} />
+            <CreditCardsPanel
+              cards={report.cards}
+              onPlanPayment={accountId => setCardPaymentRequest(current => ({ accountId, requestId: (current?.requestId ?? 0) + 1 }))}
+            />
+
+            <PlannedEventsPanel
+              apiUrl={API_URL}
+              events={report.plannedEvents}
+              cards={report.cards}
+              cardPaymentRequest={cardPaymentRequest}
+              today={report.today}
+              forecastStart={report.forecastStart}
+              onChanged={load}
+            />
 
             <ForecastBasis report={report} />
 

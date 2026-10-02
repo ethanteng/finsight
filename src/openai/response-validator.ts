@@ -15,8 +15,8 @@ import { MAX_UNMODELED_REASON_FACTS } from './canonical-facts';
 import { getActiveModel, getActiveNumericGenerationSetting } from './model-config';
 import { cashFlowForecastFacts } from './cash-flow-forecast-context';
 
-/** Enough for every window's figures, recurring items and planned events. */
-const MAX_CASH_FLOW_FORECAST_LINES = 80;
+/** Enough for every window's figures, recurring items, planned events, cards and cash position. */
+const MAX_CASH_FLOW_FORECAST_LINES = 160;
 
 const GOOGLE_AI_API_KEY = process.env.GOOGLE_AI_API_KEY || process.env.GEMINI_API_KEY || '';
 

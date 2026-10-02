@@ -1,9 +1,10 @@
 "use client";
 
 import Link from 'next/link';
-import type { CashFlowRecurringItem, CashFlowReport } from '../../types/cash-flow';
+import type { CashFlowCardSummary, CashFlowRecurringItem, CashFlowReport } from '../../types/cash-flow';
 import {
   CADENCE_LABELS,
+  cardName,
   formatCalendarDate,
   formatMoney,
 } from '../../lib/cash-flow-format';
@@ -26,6 +27,18 @@ function StreamList({ items, empty }: { items: CashFlowRecurringItem[]; empty: s
       ))}
     </ul>
   );
+}
+
+/** How the forecast treats one card's interest, in the user's terms. */
+function interestBasis(card: CashFlowCardSummary, spendingOverride: boolean): string {
+  const carriedForward = 'recent interest charges are carried forward like other spending.';
+  if (card.apr === null) return `the bank doesn’t share its APR, so ${carriedForward}`;
+  if (card.balance === null) return `its balance isn’t reported, so ${carriedForward}`;
+  if (!card.currentPace && !card.withPlans) return `there isn’t enough payment history to project its interest yet, so ${carriedForward}`;
+  const apr = `${card.apr}% APR on any part of a statement left unpaid`;
+  if (spendingOverride) return `your monthly spending from the Finances page already includes its interest; its balance is projected at ${apr}.`;
+  if (card.currentPace) return `projected at ${apr}.`;
+  return `recent interest charges stay in the forecast as they were; with your plan, its balance is projected at ${apr}.`;
 }
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
@@ -103,6 +116,50 @@ export default function ForecastBasis({ report }: { report: CashFlowReport }) {
                 </li>
               ))}
             </ul>
+          </Section>
+        )}
+
+        {report.cards.length > 0 && (
+          <Section title="Credit card interest">
+            <ul className="mt-2 space-y-1.5 text-sm leading-6 text-[#5e6b63]">
+              {report.cards.map(card => (
+                <li key={card.accountId}>
+                  <span className="font-semibold text-[#102319]">{cardName(card)}</span>
+                  {': '}
+                  {interestBasis(card, baseline.spendingSource === 'override')}
+                </li>
+              ))}
+            </ul>
+          </Section>
+        )}
+
+        {report.position.available && (report.position.transfers.recurring.length > 0 || Math.round(report.position.transfers.typicalMonthlyNet) !== 0) && (
+          <Section title="Transfers (cash position)">
+            <p className="mt-2 text-sm leading-6 text-[#5e6b63]">
+              Money moving to or from accounts that aren’t connected here, such as investments, which changes your cash but
+              isn’t income or spending.
+            </p>
+            <ul className="mt-2 divide-y divide-[#102319]/10">
+              {report.position.transfers.recurring.map(item => (
+                <li key={item.id} className="flex items-baseline justify-between gap-4 py-2 text-sm">
+                  <span className="min-w-0">
+                    <span className="block truncate font-semibold text-[#102319]">{item.label}</span>
+                    <span className="text-xs text-[#66736b]">
+                      {CADENCE_LABELS[item.cadence]}{item.nextDate ? ` · next ${formatCalendarDate(item.nextDate)}` : ''}
+                    </span>
+                  </span>
+                  <span className="shrink-0 font-bold tabular-nums text-[#102319]">
+                    {item.direction === 'in' ? '+' : '\u2212'}{formatMoney(item.amount, true)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+            {Math.round(report.position.transfers.typicalMonthlyNet) !== 0 && (
+              <p className="mt-2 text-xs leading-5 text-[#66736b]">
+                Plus about {formatMoney(Math.abs(report.position.transfers.typicalMonthlyNet))} a month
+                {report.position.transfers.typicalMonthlyNet < 0 ? ' out' : ' in'} in other transfers, spread evenly.
+              </p>
+            )}
           </Section>
         )}
 

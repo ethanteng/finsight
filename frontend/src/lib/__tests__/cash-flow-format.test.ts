@@ -1,13 +1,20 @@
 import {
+  cardName,
+  cardsLeftOutText,
+  describeCardPlan,
   describeSchedule,
+  monthLabel,
+  paceDescription,
   formatCalendarDate,
   formatCompactMoney,
   formatMoney,
   formatSignedMoney,
   lastIncludedDay,
   periodLabel,
+  projectsCardDebt,
   shortPeriodLabel,
 } from '../cash-flow-format';
+import type { CashFlowReport } from '../../types/cash-flow';
 
 const period = (key: string, start: string, endExclusive: string, clipped = false) => ({ key, start, endExclusive, clipped });
 
@@ -55,3 +62,48 @@ describe('cash flow formatting', () => {
     expect(describeSchedule({ recurrence: 'biweekly', startDate: '2026-10-02', endDate: null })).toBe('Every 2 weeks from Oct 2, 2026');
   });
 });
+
+describe('card formatting', () => {
+  it('names cards and months', () => {
+    expect(cardName({ name: 'Rewards Card', mask: '9876' })).toBe('Rewards Card ••9876');
+    expect(cardName({ name: 'Store Card', mask: null })).toBe('Store Card');
+    expect(monthLabel('2027-03')).toBe('Mar 2027');
+  });
+
+  it('describes how a card is paid', () => {
+    expect(paceDescription({ behavior: 'pays_in_full', usualMonthlyPayment: null })).toBe('You’ve been paying this card in full');
+    expect(paceDescription({ behavior: 'average_payment', usualMonthlyPayment: 1520.83 })).toBe('You’ve been paying about $1,521 a month');
+    expect(paceDescription({ behavior: 'minimum_payment', usualMonthlyPayment: 80 })).toBe('Assuming the minimum payment of $80 a month');
+    expect(paceDescription({ behavior: 'unknown', usualMonthlyPayment: null })).toBe('Not enough payment history to know what you usually pay');
+  });
+
+  it('names the cards the cash position leaves out, and says whether it carries any', () => {
+    const view = (cards: Array<{ accountId: string; mask: string | null }>, cardsLeftOut: CashFlowReport['position']['cardsLeftOut']) =>
+      ({ cards, position: { cardsLeftOut } }) as unknown as Pick<CashFlowReport, 'cards' | 'position'>;
+    const cards = [
+      { accountId: 'rewards', mask: '9876' },
+      { accountId: 'store', mask: '1234' },
+      { accountId: 'travel', mask: null },
+    ];
+    const leftOut: CashFlowReport['position']['cardsLeftOut'] = [
+      { accountId: 'store', name: 'Store Card', reason: 'no_balance' },
+      { accountId: 'travel', name: 'Travel Card', reason: 'no_pace' },
+    ];
+    expect(cardsLeftOutText(view(cards, leftOut))).toBe(
+      'Store Card ••1234 (its balance isn’t reported), Travel Card (there’s no usual payment to project from)'
+    );
+    expect(projectsCardDebt(view(cards, leftOut))).toBe(true);
+    expect(cardsLeftOutText(view(cards, []))).toBeNull();
+    expect(projectsCardDebt(view(cards.slice(1), leftOut))).toBe(false);
+  });
+
+  it('describes each kind of card plan', () => {
+    const base = { startDate: '2026-11-01', endDate: null, amount: 0 };
+    expect(describeCardPlan({ ...base, recurrence: 'once', paymentMode: 'full' })).toBe('Pay off in full on Nov 1, 2026');
+    expect(describeCardPlan({ ...base, recurrence: 'monthly', paymentMode: 'full', endDate: '2027-06-01' }))
+      .toBe('Pay the statement in full every month from Nov 1, 2026 until Jun 1, 2027');
+    expect(describeCardPlan({ ...base, recurrence: 'once', paymentMode: 'fixed', amount: 500 })).toBe('Pay an extra $500 on Nov 1, 2026');
+    expect(describeCardPlan({ ...base, recurrence: 'monthly', paymentMode: 'fixed', amount: 750 })).toBe('Pay $750 every month from Nov 1, 2026');
+  });
+});
+

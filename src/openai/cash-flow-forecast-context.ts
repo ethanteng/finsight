@@ -1,6 +1,8 @@
 import {
   CASH_FLOW_HIGHLIGHT_KEYS,
   buildCashFlowHighlights,
+  summarizeCards,
+  type CardOutcome,
   type CashFlowHighlight,
   type CashFlowHighlightKey,
   type CashFlowModel,
@@ -8,6 +10,8 @@ import {
   type ForecastUnavailableReason,
 } from '../cash-flow/forecast';
 import { addDays } from '../cash-flow/calendar';
+import type { CardPaymentBehavior } from '../cash-flow/cards';
+import { buildCashPosition, cashMilestones } from '../cash-flow/position';
 import { expandPlannedEvent } from '../cash-flow/planned-events';
 import { streamMonthlyAmount } from '../cash-flow/recurring';
 import type { CanonicalFact } from './canonical-facts';
@@ -52,20 +56,61 @@ export interface CashFlowForecastContext {
   plannedEvents?: Array<{
     id: string;
     label: string;
-    kind: 'income' | 'expense';
+    kind: 'income' | 'expense' | 'card_payment';
     amount: number;
     startDate: string;
     recurrence: string;
     endDate: string | null;
     nextDate: string | null;
+    /** For a card payment: the card it pays and how it is sized. */
+    accountId?: string | null;
+    paymentMode?: 'full' | 'fixed' | null;
   }>;
   oneOffs?: Array<{ label: string; date: string; flow: 'income' | 'spending'; amount: number }>;
+  cards?: Array<{
+    accountId: string;
+    name: string;
+    mask: string | null;
+    balance: number | null;
+    apr: number | null;
+    behavior: CardPaymentBehavior;
+    usualMonthlyPayment: number | null;
+    paymentDay: number;
+    paymentSource: 'connected' | 'other';
+    currentPace: CardPace | null;
+    withPlans: CardPace | null;
+  }>;
+  position?: {
+    available: boolean;
+    reason?: string;
+    startingCash: number | null;
+    startingCardDebt: number | null;
+    milestones: Array<{ key: string; date: string; cash: number; cardDebt: number }>;
+    lowNext12Months: { date: string; cash: number } | null;
+    /** Whether any card's balance is projected; card debt figures cover only those cards. */
+    projectsCards: boolean;
+    cardsLeftOut: Array<{ name: string; mask: string | null; reason: 'no_balance' | 'no_pace' }>;
+  };
+}
+
+type CardPace = Pick<CardOutcome, 'paidOffBy' | 'carryingBalanceNow' | 'interestTwelveMonths' | 'balanceInTwelveMonths'>;
+
+function pace(outcome: CardOutcome | null): CardPace | null {
+  if (!outcome) return null;
+  return {
+    paidOffBy: outcome.paidOffBy,
+    carryingBalanceNow: outcome.carryingBalanceNow,
+    interestTwelveMonths: outcome.interestTwelveMonths,
+    balanceInTwelveMonths: outcome.balanceInTwelveMonths,
+  };
 }
 
 /** The pack names at most this many recurring items, largest monthly weight first. */
 const MAX_RECURRING_ITEMS = 12;
 const MAX_ONE_OFFS = 5;
 const MAX_PLANNED_EVENTS = 25;
+/** The pack covers at most this many cards. */
+const MAX_CARDS = 6;
 const DAYS_PER_MONTH = 365 / 12;
 
 export function buildCashFlowForecastContext(model: CashFlowModel): CashFlowForecastContext {
@@ -113,6 +158,7 @@ export function buildCashFlowForecastContext(model: CashFlowModel): CashFlowFore
       recurrence: event.recurrence,
       endDate: event.endDate,
       nextDate: expandPlannedEvent(event, model.forecastStart, model.forecastEndLimit)[0] ?? null,
+      ...(event.kind === 'card_payment' && { accountId: event.accountId, paymentMode: event.paymentMode }),
     })),
     oneOffs: model.oneOffs.slice(0, MAX_ONE_OFFS).map(entry => ({
       label: entry.label,
@@ -120,6 +166,47 @@ export function buildCashFlowForecastContext(model: CashFlowModel): CashFlowFore
       flow: entry.flow,
       amount: Math.round(entry.amount * 100) / 100,
     })),
+    cards: summarizeCards(model).slice(0, MAX_CARDS).map(card => ({
+      accountId: card.accountId,
+      name: card.name,
+      mask: card.mask,
+      balance: card.balance,
+      apr: card.apr,
+      behavior: card.behavior,
+      usualMonthlyPayment: card.usualMonthlyPayment,
+      paymentDay: card.paymentDay,
+      paymentSource: card.paymentSource,
+      currentPace: pace(card.currentPace),
+      withPlans: pace(card.withPlans),
+    })),
+    position: positionContext(model),
+  };
+}
+
+function positionContext(model: CashFlowModel): CashFlowForecastContext['position'] {
+  const position = buildCashPosition(model);
+  if (!position.available) {
+    return {
+      available: false,
+      reason: position.reason,
+      startingCash: null,
+      startingCardDebt: null,
+      milestones: [],
+      lowNext12Months: null,
+      projectsCards: false,
+      cardsLeftOut: [],
+    };
+  }
+  const milestones = cashMilestones(model, position);
+  const masks = new Map(model.cards.map(card => [card.account.id, card.terms.mask]));
+  return {
+    available: true,
+    startingCash: position.startingCash,
+    startingCardDebt: position.startingCardDebt,
+    milestones: milestones.points,
+    lowNext12Months: milestones.lowNext12Months,
+    projectsCards: model.cards.some(card => card.projection),
+    cardsLeftOut: position.cardsLeftOut.map(card => ({ name: card.name, mask: masks.get(card.accountId) ?? null, reason: card.reason })),
   };
 }
 
@@ -169,30 +256,42 @@ export function cashFlowForecastFacts(context: CashFlowForecastContext | undefin
   // One caveat is shared by every projection, so an answer can state it once.
   const caveat =
     `Projection, not an observed amount and not a guarantee. Built from ${method}; ` +
-    'large one-off amounts in the history are not assumed to repeat.';
+    'large one-off amounts in the history are not assumed to repeat.' +
+    (context.cards?.length
+      ? ' Card interest is estimated monthly at each card’s purchase APR on the part of each statement left unpaid.'
+      : '');
 
   const add = (fact: CanonicalFact) => {
     if (Number.isFinite(fact.value)) facts.set(fact.id, fact);
   };
-  const observed = (id: string, label: string, value: number, source: string) => add({
-    id, label, value, unit: 'usd', provenance: { kind: 'snapshot', source, ...(asOf && { asOf }) },
-  });
-  const forecast = (id: string, label: string, value: number, source: string, inputFactIds?: string[]) => add({
-    id,
-    label,
-    value,
-    unit: 'usd',
-    caveat,
-    provenance: {
-      kind: 'forecast',
-      source,
-      ...(asOf && { asOf }),
-      ...(inputFactIds && inputFactIds.every(inputId => facts.has(inputId)) && {
-        formula: 'sum(inputs)',
-        inputFactIds,
-      }),
-    },
-  });
+  const observed = (id: string, label: string, value: number | null, source: string, unit: CanonicalFact['unit'] = 'usd') => {
+    if (value === null) return;
+    add({ id, label, value, unit, provenance: { kind: 'snapshot', source, ...(asOf && { asOf }) } });
+  };
+  const forecast = (
+    id: string,
+    label: string,
+    value: number | null,
+    source: string,
+    inputFactIds?: string[],
+    unit: CanonicalFact['unit'] = 'usd',
+    formula = 'sum(inputs)'
+  ) => {
+    if (value === null) return;
+    add({
+      id,
+      label,
+      value,
+      unit,
+      caveat,
+      provenance: {
+        kind: 'forecast',
+        source,
+        ...(asOf && { asOf }),
+        ...(inputFactIds && inputFactIds.every(inputId => facts.has(inputId)) && { formula, inputFactIds }),
+      },
+    });
+  };
 
   const measures: Array<keyof CashFlowTotals> = ['income', 'spending', 'net'];
   for (const highlight of context.highlights) {
@@ -288,16 +387,95 @@ export function cashFlowForecastFacts(context: CashFlowForecastContext | undefin
     );
   });
 
+  const cardNames = new Map((context.cards ?? []).map(card => [card.accountId, cardLabel(card)]));
   (context.plannedEvents ?? []).forEach((event, index) => {
+    // A full card payment is sized by the balance, so it has no amount of its own to state.
+    if (event.kind === 'card_payment' && event.paymentMode === 'full') return;
+    const when = event.recurrence === 'once' ? `once on ${event.startDate}` : `${event.recurrence} from ${event.startDate}`;
+    const what = event.kind === 'card_payment'
+      ? `payment to ${cardNames.get(event.accountId ?? '') ?? 'a credit card'}`
+      : event.kind === 'income' ? 'income (money in)' : 'expense (money out)';
     add({
       id: `cash_flow_planned_event_${index + 1}_amount`,
-      label: `User-entered planned ${event.kind === 'income' ? 'income (money in)' : 'expense (money out)'} “${event.label}”, ` +
-        (event.recurrence === 'once' ? `once on ${event.startDate}` : `${event.recurrence} from ${event.startDate}`),
+      label: `User-entered planned ${what} “${event.label}”, ${when}`,
       value: event.amount,
       unit: 'usd',
       provenance: { kind: 'user_input', source: `cashFlowForecast.plannedEvents.${index}.amount` },
     });
   });
+
+  // Credit cards: what each owes, its terms, and what the usual pace and the
+  // user's plans do to it. Interest saved is checked as the difference of the
+  // two interest figures it comes from.
+  (context.cards ?? []).forEach((card, index) => {
+    const id = `cash_flow_card_${index + 1}`;
+    const name = cardLabel(card);
+    const source = `cashFlowForecast.cards.${index}`;
+    observed(`${id}_balance`, `Balance owed now on ${name}, as last reported`, card.balance, `${source}.balance`);
+    observed(`${id}_apr`, `Purchase APR on ${name}`, card.apr, `${source}.apr`, 'percent');
+    if (card.usualMonthlyPayment !== null) {
+      observed(
+        `${id}_usual_payment`,
+        card.behavior === 'minimum_payment'
+          ? `Minimum monthly payment on ${name}, which the forecast assumes the user pays`
+          : `Usual monthly payment to ${name}, averaged over the last ${basisDays} days`,
+        card.usualMonthlyPayment,
+        `${source}.usualMonthlyPayment`
+      );
+    }
+    const paceFacts = (key: 'current_pace' | 'with_plans', words: string, outcome: CardPace | null) => {
+      if (!outcome) return;
+      forecast(`${id}_${key}_interest_12_months`, `Projected interest charged on ${name} over the next 12 months ${words}`,
+        outcome.interestTwelveMonths, `${source}.${key}.interestTwelveMonths`);
+      forecast(`${id}_${key}_balance_in_12_months`, `Projected balance owed on ${name} in 12 months ${words}`,
+        outcome.balanceInTwelveMonths, `${source}.${key}.balanceInTwelveMonths`);
+      if (outcome.carryingBalanceNow && outcome.paidOffBy && context.today) {
+        forecast(`${id}_${key}_months_to_payoff`, `Months until ${name} stops carrying a balance ${words} (from ${outcome.paidOffBy})`,
+          monthsFrom(context.today, outcome.paidOffBy), `${source}.${key}.paidOffBy`, undefined, 'months');
+      }
+    };
+    paceFacts('current_pace', 'at the user’s usual pace', card.currentPace);
+    paceFacts('with_plans', 'with the user’s saved payment plan', card.withPlans);
+    const usual = card.currentPace?.interestTwelveMonths;
+    const planned = card.withPlans?.interestTwelveMonths;
+    if (typeof usual === 'number' && typeof planned === 'number' && Math.round(usual * 100) !== Math.round(planned * 100)) {
+      const saves = usual > planned;
+      forecast(
+        `${id}_interest_${saves ? 'saved' : 'added'}_12_months`,
+        `Interest the user’s saved payment plan ${saves ? 'saves' : 'adds'} on ${name} over the next 12 months, compared with the usual pace`,
+        Math.round(Math.abs(usual - planned) * 100) / 100,
+        `${source}.interestSaved`,
+        [`${id}_current_pace_interest_12_months`, `${id}_with_plans_interest_12_months`],
+        'usd',
+        'abs(input[0] - input[1])'
+      );
+    }
+  });
+
+  // Cash position: what the cash accounts hold now and at fixed points ahead.
+  const position = context.position;
+  if (position?.available) {
+    observed('cash_flow_cash_now', 'Cash across the user’s connected checking and savings accounts now, as last reported',
+      position.startingCash, 'cashFlowForecast.position.startingCash');
+    if (position.projectsCards) {
+      observed('cash_flow_card_debt_now', 'Total owed now on the credit cards the forecast covers, as last reported',
+        position.startingCardDebt, 'cashFlowForecast.position.startingCardDebt');
+    }
+    for (const milestone of position.milestones) {
+      const words = MILESTONE_WORDS[milestone.key] ?? milestone.key.replace(/_/g, ' ');
+      forecast(`cash_flow_cash_${milestone.key}`, `Projected cash ${words} (${milestone.date})`,
+        milestone.cash, `cashFlowForecast.position.milestones.${milestone.key}.cash`);
+      if (position.projectsCards) {
+        forecast(`cash_flow_card_debt_${milestone.key}`, `Projected total owed on the credit cards the forecast covers ${words} (${milestone.date})`,
+          milestone.cardDebt, `cashFlowForecast.position.milestones.${milestone.key}.cardDebt`);
+      }
+    }
+    if (position.lowNext12Months) {
+      forecast('cash_flow_cash_low_point_next_12_months',
+        `Lowest projected cash in the next 12 months, on ${position.lowNext12Months.date}`,
+        position.lowNext12Months.cash, 'cashFlowForecast.position.lowNext12Months.cash');
+    }
+  }
 
   (context.oneOffs ?? []).forEach((item, index) => {
     observed(
@@ -309,6 +487,25 @@ export function cashFlowForecastFacts(context: CashFlowForecastContext | undefin
   });
 
   return Array.from(facts.values());
+}
+
+const MILESTONE_WORDS: Record<string, string> = {
+  end_of_this_month: 'at the end of this month',
+  end_of_next_month: 'at the end of next month',
+  in_3_months: 'in 3 months',
+  in_6_months: 'in 6 months',
+  in_12_months: 'in 12 months',
+};
+
+function cardLabel(card: { name: string; mask: string | null }): string {
+  return `credit card “${card.name}${card.mask ? ` ending ${card.mask}` : ''}”`;
+}
+
+/** Whole months from the month of `today` to `month` (YYYY-MM). */
+function monthsFrom(today: string, month: string): number {
+  const [fromYear, fromMonth] = today.split('-').map(Number);
+  const [toYear, toMonth] = month.split('-').map(Number);
+  return (toYear - fromYear) * 12 + (toMonth - fromMonth);
 }
 
 /**
@@ -346,12 +543,75 @@ export function compactCashFlowForecastDetails(context: CashFlowForecastContext)
       startDate: event.startDate,
       endDate: event.endDate,
       nextDate: event.nextDate,
-      amountFactId: `cash_flow_planned_event_${index + 1}_amount`,
+      // A full card payment is sized by the balance, so there is no amount fact to point at.
+      ...(event.kind === 'card_payment' && event.paymentMode === 'full'
+        ? { paysCardInFull: true }
+        : { amountFactId: `cash_flow_planned_event_${index + 1}_amount` }),
     })),
     oneOffsLeftOut: (context.oneOffs ?? []).map((item, index) => ({
       label: item.label,
       date: item.date,
       amountFactId: `cash_flow_one_off_${index + 1}_amount`,
     })),
+    ...((context.cards ?? []).length > 0 && {
+      creditCards: (context.cards ?? []).map((card, index) => {
+        const id = `cash_flow_card_${index + 1}`;
+        const plans = (context.plannedEvents ?? []).filter(event => event.kind === 'card_payment' && event.accountId === card.accountId);
+        return {
+          card: cardLabel(card),
+          usualPace: PACE_WORDS[card.behavior],
+          dueDay: card.paymentDay,
+          ...(card.paymentSource === 'other' && { paidFromAccountsNotConnected: true }),
+          factIdPrefix: `${id}_`,
+          currentPace: paceDetails(card.currentPace),
+          ...(card.withPlans && {
+            withPlans: paceDetails(card.withPlans),
+            plans: plans.map(plan => ({
+              label: plan.label,
+              paysInFull: plan.paymentMode === 'full',
+              recurrence: plan.recurrence,
+              startDate: plan.startDate,
+              endDate: plan.endDate,
+            })),
+          }),
+          ...(!card.currentPace && (card.withPlans
+            ? { usualPaceUnknown: 'no payment history or minimum payment, so the plan projection counts only the payments the user planned' }
+            : { notProjected: card.balance === null ? 'no balance reported' : 'no payment history or minimum payment' })),
+        };
+      }),
+    }),
+    ...(context.position && {
+      cashPosition: context.position.available
+        ? {
+            scope: 'Cash across connected checking and savings accounts, from the balances last reported. Card payments come out of cash on their due days.',
+            factIdPrefix: 'cash_flow_cash_',
+            milestones: context.position.milestones.map(milestone => ({ key: milestone.key, date: milestone.date })),
+            lowestPointDate: context.position.lowNext12Months?.date ?? null,
+            ...(context.position.cardsLeftOut.length > 0 && {
+              cardDebtLeavesOut: context.position.cardsLeftOut.map(card => ({
+                card: cardLabel(card),
+                reason: card.reason === 'no_balance' ? 'no balance reported' : 'no usual payment to project from',
+              })),
+            }),
+          }
+        : { unavailable: context.position.reason },
+    }),
+  };
+}
+
+const PACE_WORDS: Record<CardPaymentBehavior, string> = {
+  pays_in_full: 'pays the statement in full each month (no interest charged lately)',
+  average_payment: 'pays about the same amount each month while carrying a balance',
+  minimum_payment: 'pays the minimum payment',
+  unknown: 'not enough payment history to tell',
+};
+
+function paceDetails(outcome: CardPace | null): Record<string, unknown> | null {
+  if (!outcome) return null;
+  return {
+    carryingBalanceNow: outcome.carryingBalanceNow,
+    stopsCarryingABalance: !outcome.carryingBalanceNow
+      ? 'not carrying a balance'
+      : outcome.paidOffBy ?? 'not within the 24-month projection',
   };
 }
