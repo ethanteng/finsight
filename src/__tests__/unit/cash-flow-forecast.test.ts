@@ -216,6 +216,18 @@ describe('buildCashFlowReport', () => {
     expect(report.periods[1]).toMatchObject({ key: '2026-06', coverage: 'partial' });
   });
 
+  it('clips the default range to forecastStart when there is no history', () => {
+    const report = buildCashFlowReport(model({
+      transactions: [],
+      overrides: { monthlyIncome: 6000, monthlyExpense: 4000 },
+      dataThrough: '2026-10-14',
+      today: '2026-10-15',
+    }), { granularity: 'month', horizonMonths: 3 });
+    expect(report.range.from).toBe('2026-10-15');
+    expect(report.periods[0]).toMatchObject({ key: '2026-10', start: '2026-10-15', clipped: true });
+    expect(report.periods[0].forecast).not.toBeNull();
+  });
+
   it('keeps unknown months unknown rather than zero', () => {
     const report = buildCashFlowReport(model(), { granularity: 'month', horizonMonths: 1, from: '2026-03-01', to: '2026-05-31' });
     expect(report.periods.every(period => period.coverage === 'none' && period.actual === null && period.total === null)).toBe(true);
