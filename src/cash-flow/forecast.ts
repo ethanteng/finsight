@@ -152,6 +152,8 @@ export interface CashFlowModel {
   oneOffs: CashFlowEntry[];
   /** The payees behind the typical rates, for the sides read from transactions. */
   typicalPayees: TypicalPayee[];
+  /** How large a non-repeating amount must be to be left out as a one-off; null without a basis. */
+  oneOffThresholds: Record<CashFlowDirection, number> | null;
   adjustments: readonly ForecastAdjustment[];
   /** Streams that had stopped and are projected because the user kept them. */
   continuedStreamIds: ReadonlySet<string>;
@@ -269,6 +271,8 @@ interface LearnedFlows {
   interestDailyByAccount: Map<string, number>;
   /** The named payees behind the typical rates, largest first. */
   typicalPayees: TypicalPayee[];
+  /** How large a non-repeating amount must be to be left out as a one-off; null without a basis. */
+  oneOffThresholds: Record<CashFlowDirection, number> | null;
 }
 
 /**
@@ -287,7 +291,7 @@ function learnFlows(
   const streams = detectRecurringStreams(entries, dataThrough);
   const dailyByAccount = new Map<string, Record<CashFlowDirection, number>>();
   const interestDailyByAccount = new Map<string, number>();
-  const empty = { streams, oneOffs: [], dailyByAccount, interestDailyByAccount, typicalPayees: [] };
+  const empty = { streams, oneOffs: [], dailyByAccount, interestDailyByAccount, typicalPayees: [], oneOffThresholds: null };
   if (!basisStart) return empty;
   const basisDays = daysBetween(basisStart, basisEndExclusive);
   if (basisDays <= 0) return empty;
@@ -296,6 +300,10 @@ function learnFlows(
   const basisEntries = entries.filter(entry => entry.date >= basisStart && entry.date < basisEndExclusive);
   const residual = basisEntries.filter(entry => !inStream.has(entry.id));
   const typicalWeek = typicalWeeklyTotals(residual, basisStart, basisEndExclusive);
+  const oneOffThresholds: Record<CashFlowDirection, number> = {
+    income: Math.max(ONE_OFF_FLOOR, ONE_OFF_TYPICAL_WEEKS * typicalWeek.income),
+    spending: Math.max(ONE_OFF_FLOOR, ONE_OFF_TYPICAL_WEEKS * typicalWeek.spending),
+  };
 
   // A one-off is large for this user and does not repeat: a payee seen more
   // than once in the basis is part of how they live, however large.
@@ -310,8 +318,7 @@ function learnFlows(
     const repeats = entry.counterpartyKey
       ? (payeeCounts.get(`${entry.flow}|${entry.counterpartyKey}`) ?? 0) > 1
       : false;
-    const threshold = Math.max(ONE_OFF_FLOOR, ONE_OFF_TYPICAL_WEEKS * typicalWeek[entry.flow]);
-    return !repeats && Math.abs(entry.amount) >= threshold;
+    return !repeats && Math.abs(entry.amount) >= oneOffThresholds[entry.flow];
   };
 
   const oneOffs = residual.filter(isOneOff);
@@ -346,7 +353,7 @@ function learnFlows(
     .filter(payee => payee.daily > 0)
     .sort((left, right) => right.daily - left.daily)
     .map(payee => ({ flow: payee.flow, counterpartyKey: payee.counterpartyKey, label: payee.label, daily: payee.daily }));
-  return { streams, oneOffs, dailyByAccount, interestDailyByAccount, typicalPayees };
+  return { streams, oneOffs, dailyByAccount, interestDailyByAccount, typicalPayees, oneOffThresholds };
 }
 
 function sumDaily(dailyByAccount: ReadonlyMap<string, Record<CashFlowDirection, number>>, flow: CashFlowDirection): number {
@@ -625,6 +632,7 @@ export function buildCashFlowModel(input: CashFlowModelInput): CashFlowModel {
     },
     oneOffs: learned.oneOffs.sort((left, right) => Math.abs(right.amount) - Math.abs(left.amount)),
     typicalPayees: learned.typicalPayees.filter(payee => (payee.flow === 'income' ? incomeSource : spendingSource) === 'transactions'),
+    oneOffThresholds: learned.oneOffThresholds,
     adjustments,
     continuedStreamIds,
     scheduled,
@@ -910,6 +918,13 @@ export interface CashFlowAdjustmentSummary extends ForecastAdjustment {
   /** For a counted one-off: when it happened and how much it was; otherwise null. */
   date: CalendarDate | null;
   amount: number | null;
+  /**
+   * The payee the change is about: its key, or a counted one-off's payee when
+   * that count still places the payee among the typical rates; null if the
+   * transaction is gone or no longer feeds typical (so the page does not mark
+   * a later typical row as "counted by you").
+   */
+  payeeKey: string | null;
 }
 
 /** The report lists at most this many typical payees in each direction. */
@@ -952,6 +967,8 @@ export interface CashFlowReport {
   recurring: CashFlowRecurringSummary[];
   /** Every one-off in the basis, largest first, so each can be counted. */
   oneOffs: Array<{ id: string; date: CalendarDate; label: string; flow: CashFlowDirection; amount: number }>;
+  /** How large a non-repeating amount must be to be a one-off, by direction; null without a basis. */
+  oneOffThresholds: Record<CashFlowDirection, number> | null;
   /** Largest first, for the sides read from transactions. */
   typicalPayees: CashFlowTypicalPayeeSummary[];
   /** The user's choices about what the forecast counts. */
@@ -1188,9 +1205,25 @@ function customReportRange(
 
 function summarizeAdjustments(model: CashFlowModel): CashFlowAdjustmentSummary[] {
   const entries = new Map(model.ledger.entries.map(entry => [entry.id, entry]));
+  const basisStart = model.typical.basisStart;
+  const feedsTypical = (flow: CashFlowDirection, counterpartyKey: string) =>
+    model.typicalPayees.some(payee => payee.flow === flow && payee.counterpartyKey === counterpartyKey);
   return model.adjustments.map(adjustment => {
-    const entry = adjustment.kind === 'include_one_off' ? entries.get(adjustment.key) : undefined;
-    return { ...adjustment, date: entry?.date ?? null, amount: entry ? roundCents(entry.amount) : null };
+    if (adjustment.kind !== 'include_one_off') return { ...adjustment, date: null, amount: null, payeeKey: adjustment.key };
+    const entry = entries.get(adjustment.key);
+    // Only name the payee when this count still places it among the typical
+    // payees. A stale count whose transaction left the basis keeps date/amount
+    // for the change list, but must not mark a later typical row as "counted by you".
+    const inBasis = Boolean(entry && basisStart && entry.date >= basisStart && entry.date < model.forecastStart);
+    const payeeKey = inBasis && entry!.counterpartyKey && feedsTypical(entry!.flow, entry!.counterpartyKey)
+      ? entry!.counterpartyKey
+      : null;
+    return {
+      ...adjustment,
+      date: entry?.date ?? null,
+      amount: entry ? roundCents(entry.amount) : null,
+      payeeKey,
+    };
   });
 }
 
@@ -1291,6 +1324,10 @@ export function buildCashFlowReport(model: CashFlowModel, request: CashFlowRepor
       flow: entry.flow,
       amount: roundCents(entry.amount),
     })),
+    oneOffThresholds: model.oneOffThresholds && {
+      income: roundCents(model.oneOffThresholds.income),
+      spending: roundCents(model.oneOffThresholds.spending),
+    },
     typicalPayees: (['income', 'spending'] as const).flatMap(flow => model.typicalPayees
       .filter(payee => payee.flow === flow)
       .slice(0, TYPICAL_PAYEES_LISTED)

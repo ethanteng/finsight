@@ -95,6 +95,12 @@ export interface CashFlowAdjustment {
   /** For a counted one-off: when it happened and how much it was. */
   date: string | null;
   amount: number | null;
+  /**
+   * The payee the change is about: its key, or a counted one-off's payee when
+   * that count still feeds the typical rate; null if the transaction is gone
+   * or no longer among the typical payees.
+   */
+  payeeKey: string | null;
 }
 
 export interface CashFlowTypicalPayee {
@@ -159,7 +165,10 @@ export interface CashFlowReport {
     monthlyExpenseOverride: number | null;
   };
   recurring: CashFlowRecurringItem[];
+  /** Every one-off in the basis, largest first, so each can be counted. */
   oneOffs: Array<{ id: string; date: string; label: string; flow: 'income' | 'spending'; amount: number }>;
+  /** How large a non-repeating amount must be to be a one-off, by direction; null without a basis. */
+  oneOffThresholds: { income: number; spending: number } | null;
   /** The payees behind the typical rates, largest first. */
   typicalPayees: CashFlowTypicalPayee[];
   /** The user's choices about what the forecast counts. */

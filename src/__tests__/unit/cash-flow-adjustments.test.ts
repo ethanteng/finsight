@@ -1,5 +1,5 @@
 import { validateForecastAdjustmentInput, type ForecastAdjustment } from '../../cash-flow/adjustments';
-import { addMonths } from '../../cash-flow/calendar';
+import { addDays, addMonths } from '../../cash-flow/calendar';
 import {
   actualTotals,
   buildCashFlowModel,
@@ -88,7 +88,33 @@ describe('adjusting what the forecast counts', () => {
     expect(adjusted.oneOffs.some(entry => entry.id === flight.id)).toBe(false);
     expect(adjusted.typical.dailySpending - base.typical.dailySpending).toBeCloseTo(2400 / base.typical.basisDays, 6);
     const report = buildCashFlowReport(adjusted, { granularity: 'month', horizonMonths: 3 });
-    expect(report.adjustments).toEqual([expect.objectContaining({ kind: 'include_one_off', date: flight.date, amount: 2400 })]);
+    // The change names the payee it now sits under among the typical payees.
+    expect(report.adjustments).toEqual([
+      expect.objectContaining({ kind: 'include_one_off', date: flight.date, amount: 2400, payeeKey: 'united airlines' }),
+    ]);
+    expect(report.typicalPayees).toEqual(expect.arrayContaining([expect.objectContaining({ payeeKey: 'united airlines' })]));
+  });
+
+  it('does not name a counted one-off’s payee once it has left the typical basis', () => {
+    // An old counted flight, then enough later United charges that the payee is
+    // a normal typical row after the flight ages out of the 90-day basis.
+    const oldFlight = tx('card', '2026-09-10', 'expense', 2400, 'UNITED AIRLINES', { merchant_name: 'United Airlines' });
+    const recentUnited = ['2026-11-05', '2026-11-20', '2026-12-05', '2026-12-20', '2027-01-05']
+      .map(date => tx('card', date, 'expense', 80, 'UNITED AIRLINES', { merchant_name: 'United Airlines' }));
+    const recent = householdTransactions('2026-10-20', '2027-01-14')
+      .filter(item => String(item.name) !== 'UNITED AIRLINES');
+    const built = model(
+      [adjustment({ kind: 'include_one_off', key: String(oldFlight.transaction_id), label: 'United Airlines' })],
+      { transactions: [...recent, oldFlight, ...recentUnited], dataThrough: '2027-01-14', today: '2027-01-15' },
+    );
+    expect(built.typical.basisStart! > '2026-09-10').toBe(true);
+    const report = buildCashFlowReport(built, { granularity: 'month', horizonMonths: 3 });
+    expect(report.typicalPayees).toEqual(expect.arrayContaining([expect.objectContaining({ payeeKey: 'united airlines' })]));
+    // Date and amount stay for the change list; payeeKey stays null so the page
+    // does not mark the later typical row as "counted by you".
+    expect(report.adjustments).toEqual([
+      expect.objectContaining({ kind: 'include_one_off', date: '2026-09-10', amount: 2400, payeeKey: null }),
+    ]);
   });
 
   it('keeps projecting a regular item that had stopped, and says the user kept it', () => {
@@ -113,6 +139,20 @@ describe('adjusting what the forecast counts', () => {
     expect(adjusted.transfers.scheduled.some(item => item.streamId === vanguard.id)).toBe(false);
     // Savings never counted it: a transfer is neither income nor spending.
     expect(forecastTotals(adjusted, ...NEXT_12)).toEqual(forecastTotals(base, ...NEXT_12));
+  });
+
+  it('reports how large an amount must be to be a one-off', () => {
+    // Light everyday spending: the $1,000 floor applies in both directions.
+    expect(buildCashFlowReport(model(), { granularity: 'month', horizonMonths: 3 }).oneOffThresholds)
+      .toEqual({ income: 1000, spending: 1000 });
+    // $300 every day at rotating stores is $2,100 a typical week, so a one-off must be twice that.
+    const stores = ['Corner Market', 'Safeway', 'Whole Foods'];
+    const daily = Array.from({ length: 120 }, (_, index) => {
+      const date = addDays('2026-06-03', index);
+      return tx('card', date, 'expense', 300, stores[index % 3], { merchant_name: stores[index % 3] });
+    }).filter(item => String(item.date) <= THROUGH);
+    const heavy = model([], { transactions: [...householdTransactions(FROM, THROUGH).filter(item => !['Trader Joes', 'Safeway', 'Corner Market', 'Whole Foods'].includes(String(item.name))), ...daily] });
+    expect(buildCashFlowReport(heavy, { granularity: 'month', horizonMonths: 3 }).oneOffThresholds!.spending).toBe(4200);
   });
 
   it('lists every one-off in the report, so each can be counted', () => {

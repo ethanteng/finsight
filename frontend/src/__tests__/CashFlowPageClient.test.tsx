@@ -58,6 +58,7 @@ function report(overrides: Partial<CashFlowReport> = {}): CashFlowReport {
       { id: 'spending:rent', payeeKey: 'oak street apartments', label: 'Oak Street Apartments', flow: 'spending', cadence: 'monthly', amount: 2000, monthlyAmount: 2000, occurrences: 5, lastDate: '2026-10-01', nextDate: '2026-11-01', status: 'active', category: 'Rent', replacedByOverride: false, continuedByUser: false },
       { id: 'spending:gym', payeeKey: 'old gym', label: 'Old Gym', flow: 'spending', cadence: 'monthly', amount: 40, monthlyAmount: 40, occurrences: 3, lastDate: '2026-07-05', nextDate: null, status: 'lapsed', category: 'Gym', replacedByOverride: false, continuedByUser: false },
     ],
+    oneOffThresholds: { income: 1000, spending: 1000 },
     typicalPayees: [
       { flow: 'spending', payeeKey: 'safeway', label: 'Safeway', monthlyAmount: 610.2 },
       { flow: 'spending', payeeKey: 'trader joes', label: 'Trader Joes', monthlyAmount: 480 },
@@ -143,7 +144,8 @@ describe('CashFlowPageClient', () => {
     expect(screen.getByText('Year-end bonus')).toBeInTheDocument();
     expect(screen.getByText('Gusto Payroll')).toBeInTheDocument();
     expect(screen.getByText('United Airlines')).toBeInTheDocument();
-    expect(screen.getByText(/Old Gym · last Jul 5, 2026/)).toBeInTheDocument();
+    expect(screen.getByText('Old Gym')).toBeInTheDocument();
+    expect(screen.getByText(/last Jul 5, 2026/)).toBeInTheDocument();
     expect(screen.getByText(/2 transactions couldn’t be classified/)).toBeInTheDocument();
     expect(screen.getAllByText('Beta').length).toBeGreaterThan(0);
   });
@@ -207,7 +209,7 @@ describe('CashFlowPageClient', () => {
     });
     const posted = (calls: ReturnType<typeof mockFetch>) =>
       JSON.parse(String(calls.find(call => call.init?.method === 'POST')!.init!.body));
-    const basis = async () => (await screen.findByRole('heading', { name: 'How this forecast works' })).closest('section')!;
+    const basis = async () => (await screen.findByRole('heading', { name: 'What the forecast counts' })).closest('section')!;
 
     it.each([
       ['Leave out: Oak Street Apartments', { kind: 'exclude_payee', flow: 'spending', key: 'oak street apartments' }],
@@ -228,7 +230,6 @@ describe('CashFlowPageClient', () => {
       const calls = adjusting();
       render(<CashFlowPageClient />);
       const section = await basis();
-      fireEvent.click(within(section).getByText('What this is made of'));
       expect(within(section).getByText('$610/mo')).toBeInTheDocument();
       fireEvent.click(within(section).getByRole('button', { name: 'Leave out: Safeway' }));
       await waitFor(() => expect(calls.some(call => call.init?.method === 'POST')).toBe(true));
@@ -249,8 +250,7 @@ describe('CashFlowPageClient', () => {
       const calls = adjusting(body);
       render(<CashFlowPageClient />);
       const section = await basis();
-      expect(within(section).getByText(/other income/)).toBeInTheDocument();
-      fireEvent.click(within(section).getByText('What this is made of'));
+      expect(within(section).getByText('Other income')).toBeInTheDocument();
       fireEvent.click(within(section).getByRole('button', { name: 'Leave out: Venmo' }));
       await waitFor(() => expect(calls.some(call => call.init?.method === 'POST')).toBe(true));
       expect(posted(calls)).toEqual({ kind: 'exclude_payee', flow: 'income', key: 'venmo' });
@@ -303,6 +303,60 @@ describe('CashFlowPageClient', () => {
       expect(within(section).getByRole('button', { name: 'Show fewer' })).toBeInTheDocument();
     });
 
+    it('always shows what is left out, and what would be, even when nothing is', async () => {
+      adjusting(report({ oneOffs: [], recurring: report().recurring.filter(item => item.status === 'active') }));
+      render(<CashFlowPageClient />);
+      const section = await basis();
+      expect(within(section).getByText(
+        'A large amount from a payee seen only once in your last 90 days: $1,000 or more spent, or $1,000 or more received. Counting one spreads it over those 90 days, as if amounts like it come that often.'
+      )).toBeInTheDocument();
+      expect(within(section).getByText('None in your last 90 days.')).toBeInTheDocument();
+      expect(within(section).getByText('Nothing has stopped.')).toBeInTheDocument();
+      expect(within(section).getByText('Nothing yet. Use Leave out on anything you don’t want projected.')).toBeInTheDocument();
+    });
+
+    it('shows the first eight of a long list, and the rest on request', async () => {
+      const typicalPayees = Array.from({ length: 12 }, (_, index) => ({
+        flow: 'spending' as const, payeeKey: `store ${index}`, label: `Store ${index}`, monthlyAmount: 500 - index * 10,
+      }));
+      adjusting(report({ typicalPayees }));
+      render(<CashFlowPageClient />);
+      const section = await basis();
+      expect(within(section).getByText('Store 7')).toBeInTheDocument();
+      expect(within(section).queryByText('Store 8')).not.toBeInTheDocument();
+      fireEvent.click(within(section).getByRole('button', { name: 'Show 4 more' }));
+      expect(within(section).getByText('Store 11')).toBeInTheDocument();
+    });
+
+    it('marks a one-off the user counted where it now sits, and moves it back', async () => {
+      const body = report({
+        typicalPayees: [...report().typicalPayees, { flow: 'spending', payeeKey: 'united airlines', label: 'United Airlines', monthlyAmount: 811.11 }],
+        oneOffs: [],
+        adjustments: [{ id: 'adj-flight', kind: 'include_one_off', flow: 'spending', key: 'flight', label: 'United Airlines', date: '2026-09-10', amount: 2400, payeeKey: 'united airlines' }],
+      });
+      const calls = adjusting(body);
+      render(<CashFlowPageClient />);
+      const section = await basis();
+      expect(within(section).getByText('counted by you')).toBeInTheDocument();
+      fireEvent.click(within(section).getByRole('button', { name: 'Move back: United Airlines' }));
+      await waitFor(() => expect(calls.some(call => call.init?.method === 'DELETE')).toBe(true));
+      expect(calls.find(call => call.init?.method === 'DELETE')!.url).toMatch(/adjustments\/adj-flight$/);
+    });
+
+    it('lists what the user left out, and puts it back', async () => {
+      const body = report({
+        adjustments: [{ id: 'adj-consu', kind: 'exclude_payee', flow: 'spending', key: 'ethan teng consu', label: 'Ethan Teng Consu', date: null, amount: null, payeeKey: 'ethan teng consu' }],
+      });
+      const calls = adjusting(body);
+      render(<CashFlowPageClient />);
+      const section = await basis();
+      // Under "Left out by you", and in the list of every change.
+      expect(within(section).getAllByText('Ethan Teng Consu')).toHaveLength(2);
+      fireEvent.click(within(section).getByRole('button', { name: 'Put back: Ethan Teng Consu' }));
+      await waitFor(() => expect(calls.some(call => call.init?.method === 'DELETE')).toBe(true));
+      expect(calls.find(call => call.init?.method === 'DELETE')!.url).toMatch(/adjustments\/adj-consu$/);
+    });
+
     it('lists the user’s changes and undoes one', async () => {
       const body = report({
         adjustments: [
@@ -346,8 +400,8 @@ describe('CashFlowPageClient', () => {
       render(<CashFlowPageClient />);
       const section = await basis();
       expect(within(section).getByText((_, element) =>
-        element?.tagName === 'P' && /^About \$3,211 a month of other income, spread evenly/.test(element.textContent ?? ''))).toBeInTheDocument();
-      fireEvent.click(within(section).getByText('What this is made of'));
+        element?.tagName === 'P' && /^Other income: about \$3,211 a month, spread evenly/.test(element.textContent ?? ''))).toBeInTheDocument();
+      expect(within(section).getByText('Your monthly spending of $6,000 from the Finances page is used instead.')).toBeInTheDocument();
       fireEvent.click(within(section).getByRole('button', { name: 'Leave out: ACME CORP CONSULTING' }));
       await waitFor(() => expect(calls.some(call => call.init?.method === 'POST')).toBe(true));
       expect(posted(calls)).toEqual({ kind: 'exclude_payee', flow: 'income', key: 'acme corp consulting' });
