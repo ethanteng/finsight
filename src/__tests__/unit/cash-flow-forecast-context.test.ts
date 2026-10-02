@@ -387,7 +387,7 @@ describe('each cash account in the pack', () => {
     expect(details.cashPosition.accounts[1]).not.toHaveProperty('primary');
   });
 
-  it('says how many accounts it leaves unlisted, which the whole still includes', () => {
+  it('lists every cash account, however many there are', () => {
     const more = Array.from({ length: 4 }, (_, index) => ({
       ...SAVINGS, account_id: `savings-${index}`, name: `Savings ${index}`, mask: `90${index}0`, balance: { current: 1000 * (index + 1) },
     }));
@@ -398,12 +398,16 @@ describe('each cash account in the pack', () => {
       dataThrough: '2026-10-14',
       today: '2026-10-15',
     }));
-    // Six cash accounts: checking (primary) and the three largest are listed.
-    expect(pack.position!.accounts!.map(account => account.name)).toEqual(['Everyday Checking', 'High Yield Savings', 'Savings 3', 'Savings 2']);
-    expect(pack.position!.accountsNotListed).toBe(2);
+    // Six cash accounts, all listed: the primary first, then the largest.
+    expect(pack.position!.accounts!.map(account => account.name)).toEqual([
+      'Everyday Checking', 'High Yield Savings', 'Savings 3', 'Savings 2', 'Savings 1', 'Savings 0',
+    ]);
+    const facts = byId(cashFlowForecastFacts(pack));
+    const listed = Array.from({ length: 6 }, (_, index) => facts.get(`cash_flow_account_${index + 1}_cash_in_3_months`)!.value);
+    expect(listed.reduce((sum, value) => sum + value, 0)).toBeCloseTo(facts.get('cash_flow_cash_in_3_months')!.value, 1);
     const details = compactCashFlowForecastDetails(pack) as any;
-    expect(details.cashPosition.accountsNote).toContain('2 more cash accounts are not listed but included in the cash figures above');
-    expect(details.cashPosition.accountsNote).not.toContain('are their sum');
+    expect(details.cashPosition.accounts).toHaveLength(6);
+    expect(details.cashPosition.accountsNote).toContain('the cash figures above are their sum');
   });
 
   it('adds nothing when there is only one account, which the whole already is', () => {
