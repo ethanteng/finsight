@@ -199,7 +199,12 @@ export function cashFlowForecastFacts(context: CashFlowForecastContext | undefin
     if (!(CASH_FLOW_HIGHLIGHT_KEYS as readonly string[]).includes(highlight.key)) continue;
     const window = cashFlowWindowLabel(highlight);
     const source = `cashFlowForecast.highlights.${highlight.key}`;
-    const startsObserved = highlight.actualToDate !== null;
+    // In-progress windows start before the forecast; "still expected" is for
+    // those even when history is missing (actualToDate null) so an override-only
+    // forecast can still ground "how much can I expect this month?".
+    const forecastStart = context.forecastStart;
+    const windowInProgress = typeof forecastStart === 'string' && highlight.start < forecastStart;
+    const hasObserved = highlight.actualToDate !== null;
     const partial = highlight.actualCoverage === 'partial';
 
     for (const measure of measures) {
@@ -212,7 +217,7 @@ export function cashFlowForecastFacts(context: CashFlowForecastContext | undefin
           `${source}.actualToDate.${measure}`
         );
       }
-      if (highlight.remaining && startsObserved) {
+      if (highlight.remaining && windowInProgress) {
         forecast(
           cashFlowFactId(highlight.key, 'still_expected', measure),
           `Forecast ${FLOW_WORDS[measure]} still expected for the rest of ${window}, from ${context.forecastStart}`,
@@ -223,12 +228,12 @@ export function cashFlowForecastFacts(context: CashFlowForecastContext | undefin
       if (highlight.projected) {
         forecast(
           cashFlowFactId(highlight.key, 'projected', measure),
-          startsObserved
+          hasObserved
             ? `Projected total ${FLOW_WORDS[measure]} for ${window}: observed so far plus forecast for the rest`
             : `Forecast ${FLOW_WORDS[measure]} for ${window}`,
           highlight.projected[measure],
           `${source}.projected.${measure}`,
-          startsObserved
+          hasObserved
             ? [cashFlowFactId(highlight.key, 'so_far', measure), cashFlowFactId(highlight.key, 'still_expected', measure)]
             : undefined
         );

@@ -113,6 +113,26 @@ describe('cash flow forecast facts', () => {
     expect(empty.every(fact => fact.value !== 0 || fact.provenance.kind !== 'snapshot')).toBe(true);
   });
 
+  it('publishes still_expected for in-progress windows when both overrides replace missing history', () => {
+    const overrideOnly = cashFlowForecastFacts(buildCashFlowForecastContext(buildCashFlowModel({
+      transactions: [],
+      accounts: ACCOUNTS,
+      plannedEvents: [],
+      dataThrough: '2026-10-14',
+      today: '2026-10-15',
+      overrides: { monthlyIncome: 6000, monthlyExpense: 4000 },
+    })));
+    const byFact = byId(overrideOnly);
+    expect(byFact.has('cash_flow_this_month_so_far_net')).toBe(false);
+    expect(byFact.has('cash_flow_this_month_projected_net')).toBe(false);
+    expect(byFact.get('cash_flow_this_month_still_expected_net')!.provenance.kind).toBe('forecast');
+    expect(byFact.get('cash_flow_this_quarter_still_expected_net')).toBeDefined();
+    expect(byFact.get('cash_flow_this_year_still_expected_net')).toBeDefined();
+    // Future windows keep a single projected fact, not a still_expected split.
+    expect(byFact.has('cash_flow_next_month_still_expected_net')).toBe(false);
+    expect(byFact.get('cash_flow_next_month_projected_net')).toBeDefined();
+  });
+
   it('publishes only observed figures when there is too little history to forecast', () => {
     const short = cashFlowForecastFacts(context({ transactionsFrom: '2026-10-01' }));
     expect(short.length).toBeGreaterThan(0);
