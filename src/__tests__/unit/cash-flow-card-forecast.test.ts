@@ -281,6 +281,25 @@ describe('the report’s cards and cash position', () => {
         .toBeCloseTo(share(without.cards[0].purchases.dailyRate, without.typical.dailySpending), 6);
     });
 
+    it('leaves override interest in the spread when an APR card is not projected', () => {
+      // No usual pace and no monthly plan: the card cannot post APR interest.
+      // Stripping historical interest from the override would drop it.
+      const charge = (date: string, amount: number) =>
+        tx('card', date, 'fee', amount, 'INTEREST CHARGE ON PURCHASES', { personal_finance_category: INTEREST_CHARGE_CATEGORY });
+      const base = noPayments.filter(item => !String(item.name).includes('INTEREST'));
+      const overrides = { monthlyIncome: null as number | null, monthlyExpense: 6000 };
+      const built = model({
+        transactions: [...base, charge('2026-07-03', 23.5), charge('2026-08-19', 81.25), charge('2026-09-08', 47.1)],
+        accounts: noMinimum,
+        plannedEvents: [],
+        overrides,
+      });
+      expect(built.cards[0].projection).toBeNull();
+      expect(built.cardDailySpending.get('card')! - built.cards[0].purchases.dailyRate).toBeCloseTo(0, 6);
+      const without = model({ transactions: base, accounts: noMinimum, plannedEvents: [], overrides });
+      expect(built.cards[0].purchases.dailyRate).toBeGreaterThan(without.cards[0].purchases.dailyRate);
+    });
+
     it('is left out with only a one-time plan, and the position says so', () => {
       const report = buildCashFlowReport(
         model({ transactions: noPayments, accounts: noMinimum, plannedEvents: [payoff] }),
