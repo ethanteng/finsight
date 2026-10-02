@@ -76,12 +76,16 @@ type LoadState = 'loading' | 'ready' | 'empty' | 'error';
 
 /** The cash accounts the user last chose for the cash position, kept in this browser. */
 const POSITION_ACCOUNTS_KEY = 'cashFlow.positionAccounts';
+/** The most accounts the API takes in one request. */
+const MAX_POSITION_ACCOUNTS = 20;
 
 function storedPositionAccounts(): string[] {
   try {
     if (typeof window === 'undefined') return [];
     const parsed: unknown = JSON.parse(window.localStorage.getItem(POSITION_ACCOUNTS_KEY) ?? '[]');
-    return Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === 'string') : [];
+    return Array.isArray(parsed)
+      ? parsed.filter((id): id is string => typeof id === 'string').slice(0, MAX_POSITION_ACCOUNTS)
+      : [];
   } catch {
     return [];
   }
@@ -139,7 +143,7 @@ export default function CashFlowPageClient() {
       params.set('granularity', view === 'custom' ? 'month' : view);
       params.set('horizonMonths', String(horizonMonths));
     }
-    if (positionAccounts.length > 0) params.set('accounts', positionAccounts.join(','));
+    if (positionAccounts.length > 0) params.set('accounts', positionAccounts.slice(0, MAX_POSITION_ACCOUNTS).join(','));
     return params.toString();
   }, [view, customRange, horizonMonths, positionAccounts]);
 

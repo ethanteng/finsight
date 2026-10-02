@@ -50,14 +50,16 @@ const COLORS = {
   grid: 'rgba(16, 35, 25, 0.11)',
 };
 
-function PositionTooltip({ active, payload }: { active?: boolean; payload?: Array<{ payload: CashPositionRow }> }) {
+function PositionTooltip({ active, payload, hasCards }: { active?: boolean; payload?: Array<{ payload: CashPositionRow }>; hasCards: boolean }) {
   const row = active ? payload?.[0]?.payload : undefined;
   if (!row) return null;
   return (
     <div className="min-w-[200px] space-y-1.5 rounded-lg border border-[#486657] bg-[#102319] p-3 text-xs text-white shadow-lg">
       <p className="text-sm font-bold">End of {row.label}</p>
       <p className="flex justify-between gap-6"><span className="text-white/70">Cash</span><span className="font-bold tabular-nums">{row.cash === null ? '—' : formatMoney(row.cash)}</span></p>
-      <p className="flex justify-between gap-6"><span className="text-white/70">Owed on cards</span><span className="font-bold tabular-nums">{row.cardDebt === null ? '—' : formatMoney(row.cardDebt)}</span></p>
+      {hasCards && (
+        <p className="flex justify-between gap-6"><span className="text-white/70">Owed on cards</span><span className="font-bold tabular-nums">{row.cardDebt === null ? '—' : formatMoney(row.cardDebt)}</span></p>
+      )}
     </div>
   );
 }
@@ -93,7 +95,7 @@ export default function CashPositionChart({ report }: { report: CashFlowReport }
             minTickGap={8}
           />
           <YAxis tickFormatter={formatCompactMoney} tickLine={false} axisLine={false} width={56} tick={{ fill: COLORS.axis, fontSize: 11 }} />
-          <Tooltip content={<PositionTooltip />} />
+          <Tooltip content={<PositionTooltip hasCards={hasCards} />} />
           {rows.some(row => (row.cash ?? 0) < 0) && <ReferenceLine y={0} stroke="#9b4137" strokeDasharray="4 4" />}
           <Line dataKey="cash" name="Cash" type="linear" stroke={COLORS.cash} strokeWidth={2.5} dot={{ r: 3, fill: COLORS.cash }} isAnimationActive={false} />
           {hasCards && (

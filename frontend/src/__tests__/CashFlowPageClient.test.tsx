@@ -752,6 +752,7 @@ describe('CashFlowPageClient', () => {
     });
 
     it('falls back to the primary account when editing an event on a disconnected one', async () => {
+      // Saved without an account, it follows the primary one rather than being pinned to it.
       const orphan = {
         id: 'orphan', label: 'Old gift', kind: 'income', amount: 500, startDate: '2026-11-10', recurrence: 'once', endDate: null,
         accountId: 'gone', paymentMode: null, nextDate: '2026-11-10', occurrencesInRange: 1,
@@ -771,8 +772,32 @@ describe('CashFlowPageClient', () => {
 
       await waitFor(() => expect(calls.some(call => call.init?.method === 'PUT')).toBe(true));
       expect(JSON.parse(String(calls.find(call => call.init?.method === 'PUT')!.init!.body))).toMatchObject({
-        accountId: 'checking',
+        accountId: null,
       });
+    });
+
+    it('keeps an event without an account following the primary one unless an account is picked', async () => {
+      const bonus = report().plannedEvents[0];
+      const saved = (calls: Array<{ url: string; init?: RequestInit }>) =>
+        JSON.parse(String(calls.filter(call => call.init?.method === 'PUT').pop()!.init!.body));
+      const calls = mockFetch((url, init) => {
+        if (url.includes('/api/cash-flow/events/') && init?.method === 'PUT') return { status: 200, body: { event: {} } };
+        return answer(url);
+      });
+      render(<CashFlowPageClient />);
+      await screen.findByRole('heading', { name: 'Planned events' });
+
+      fireEvent.click(screen.getByRole('button', { name: `Edit ${bonus.label}` }));
+      expect(screen.getByLabelText('Account')).toHaveValue('checking');
+      fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+      await waitFor(() => expect(calls.some(call => call.init?.method === 'PUT')).toBe(true));
+      expect(saved(calls)).toMatchObject({ accountId: null });
+
+      fireEvent.click(await screen.findByRole('button', { name: `Edit ${bonus.label}` }));
+      fireEvent.change(screen.getByLabelText('Account'), { target: { value: 'savings' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+      await waitFor(() => expect(calls.filter(call => call.init?.method === 'PUT')).toHaveLength(2));
+      expect(saved(calls)).toMatchObject({ accountId: 'savings' });
     });
   });
 
