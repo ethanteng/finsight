@@ -92,6 +92,19 @@ export interface CashFlowForecastContext {
     /** Whether any card's balance is projected; card debt figures cover only those cards. */
     projectsCards: boolean;
     cardsLeftOut: Array<{ name: string; mask: string | null; reason: 'no_balance' | 'no_pace' }>;
+    /**
+     * Each cash account on its own, when there is more than one: what it holds
+     * now and at the same milestones, and its lowest point. Every account, the
+     * primary one (where paychecks land) first, then the largest.
+     */
+    accounts?: Array<{
+      name: string;
+      mask: string | null;
+      primary: boolean;
+      startingCash: number;
+      milestones: Array<{ key: string; date: string; cash: number }>;
+      lowNext12Months: { date: string; cash: number } | null;
+    }>;
   };
   /** The user's choices about what the forecast counts; the figures already reflect them. */
   adjustments?: Array<{ kind: ForecastAdjustmentKind; flow: 'income' | 'spending'; label: string }>;
@@ -109,14 +122,13 @@ function pace(outcome: CardOutcome | null): CardPace | null {
   };
 }
 
-/** The pack names at most this many recurring items, largest monthly weight first. */
-const MAX_RECURRING_ITEMS = 12;
-const MAX_ONE_OFFS = 5;
-const MAX_PLANNED_EVENTS = 25;
-/** The pack covers at most this many cards. */
-const MAX_CARDS = 6;
 const DAYS_PER_MONTH = 365 / 12;
 
+/**
+ * Every recurring item (largest monthly weight first), planned event, one-off
+ * (largest first) and card, uncapped: the user's own data bounds each list,
+ * and an item left out is one an answer could not speak to.
+ */
 export function buildCashFlowForecastContext(model: CashFlowModel): CashFlowForecastContext {
   const scheduledNext = new Map<string, string>();
   for (const occurrence of model.scheduled) {
@@ -134,8 +146,7 @@ export function buildCashFlowForecastContext(model: CashFlowModel): CashFlowFore
       monthlyAmount: Math.round(streamMonthlyAmount(stream) * 100) / 100,
       nextDate: scheduledNext.get(stream.id) ?? null,
     }))
-    .sort((left, right) => right.monthlyAmount - left.monthlyAmount)
-    .slice(0, MAX_RECURRING_ITEMS);
+    .sort((left, right) => right.monthlyAmount - left.monthlyAmount);
 
   return {
     status: model.forecast.available ? 'available' : 'unavailable',
@@ -153,7 +164,7 @@ export function buildCashFlowForecastContext(model: CashFlowModel): CashFlowFore
       spendingSource: model.typical.spendingSource,
     },
     recurring,
-    plannedEvents: model.plannedEvents.slice(0, MAX_PLANNED_EVENTS).map(event => ({
+    plannedEvents: model.plannedEvents.map(event => ({
       id: event.id,
       label: event.label,
       kind: event.kind,
@@ -164,13 +175,13 @@ export function buildCashFlowForecastContext(model: CashFlowModel): CashFlowFore
       nextDate: expandPlannedEvent(event, model.forecastStart, model.forecastEndLimit)[0] ?? null,
       ...(event.kind === 'card_payment' && { accountId: event.accountId, paymentMode: event.paymentMode }),
     })),
-    oneOffs: model.oneOffs.slice(0, MAX_ONE_OFFS).map(entry => ({
+    oneOffs: model.oneOffs.map(entry => ({
       label: entry.label,
       date: entry.date,
       flow: entry.flow,
       amount: Math.round(entry.amount * 100) / 100,
     })),
-    cards: summarizeCards(model).slice(0, MAX_CARDS).map(card => ({
+    cards: summarizeCards(model).map(card => ({
       accountId: card.accountId,
       name: card.name,
       mask: card.mask,
@@ -204,6 +215,30 @@ function positionContext(model: CashFlowModel): CashFlowForecastContext['positio
   }
   const milestones = cashMilestones(model, position);
   const masks = new Map(model.cards.map(card => [card.account.id, card.terms.mask]));
+  // Each account on its own, from the same simulation: the accounts add up to
+  // the whole. With one account the whole already is that account. Every cash
+  // account has a balance here, or the whole would be unavailable. All of them,
+  // uncapped: the user's own accounts bound the list, and an account left out
+  // is one an answer could not speak to.
+  const cashAccounts = model.ledger.accounts
+    .filter(account => account.kind === 'cash')
+    .sort((left, right) => Number(right.id === model.primaryAccountId) - Number(left.id === model.primaryAccountId)
+      || (right.balance ?? 0) - (left.balance ?? 0));
+  const accounts = cashAccounts.length > 1
+    ? cashAccounts.flatMap(account => {
+        const own = buildCashPosition(model, [account.id]);
+        if (!own.available) return [];
+        const ownMilestones = cashMilestones(model, own);
+        return [{
+          name: account.name,
+          mask: account.mask,
+          primary: account.id === model.primaryAccountId,
+          startingCash: own.startingCash,
+          milestones: ownMilestones.points.map(point => ({ key: point.key, date: point.date, cash: point.cash })),
+          lowNext12Months: ownMilestones.lowNext12Months,
+        }];
+      })
+    : undefined;
   return {
     available: true,
     startingCash: position.startingCash,
@@ -212,6 +247,7 @@ function positionContext(model: CashFlowModel): CashFlowForecastContext['positio
     lowNext12Months: milestones.lowNext12Months,
     projectsCards: model.cards.some(card => card.projection),
     cardsLeftOut: position.cardsLeftOut.map(card => ({ name: card.name, mask: masks.get(card.accountId) ?? null, reason: card.reason })),
+    ...(accounts && accounts.length > 0 && { accounts }),
   };
 }
 
@@ -480,6 +516,23 @@ export function cashFlowForecastFacts(context: CashFlowForecastContext | undefin
         `Lowest projected cash in the next 12 months, on ${position.lowNext12Months.date}`,
         position.lowNext12Months.cash, 'cashFlowForecast.position.lowNext12Months.cash');
     }
+    // Each cash account on its own: the figures above are their sum.
+    (position.accounts ?? []).forEach((account, index) => {
+      const id = `cash_flow_account_${index + 1}`;
+      const name = cashAccountLabel(account);
+      const source = `cashFlowForecast.position.accounts.${index}`;
+      observed(`${id}_cash_now`, `Cash in ${name} now, as last reported`, account.startingCash, `${source}.startingCash`);
+      for (const milestone of account.milestones) {
+        const words = MILESTONE_WORDS[milestone.key] ?? milestone.key.replace(/_/g, ' ');
+        forecast(`${id}_cash_${milestone.key}`, `Projected cash in ${name} ${words} (${milestone.date})`,
+          milestone.cash, `${source}.milestones.${milestone.key}.cash`);
+      }
+      if (account.lowNext12Months) {
+        forecast(`${id}_cash_low_point_next_12_months`,
+          `Lowest projected cash in ${name} in the next 12 months, on ${account.lowNext12Months.date}`,
+          account.lowNext12Months.cash, `${source}.lowNext12Months.cash`);
+      }
+    });
   }
 
   (context.oneOffs ?? []).forEach((item, index) => {
@@ -592,6 +645,10 @@ const MILESTONE_WORDS: Record<string, string> = {
   in_12_months: 'in 12 months',
 };
 
+function cashAccountLabel(account: { name: string; mask: string | null }): string {
+  return `account “${account.name}${account.mask ? ` ending ${account.mask}` : ''}”`;
+}
+
 function cardLabel(card: { name: string; mask: string | null }): string {
   return `credit card “${card.name}${card.mask ? ` ending ${card.mask}` : ''}”`;
 }
@@ -682,6 +739,15 @@ export function compactCashFlowForecastDetails(context: CashFlowForecastContext)
             factIdPrefix: 'cash_flow_cash_',
             milestones: context.position.milestones.map(milestone => ({ key: milestone.key, date: milestone.date })),
             lowestPointDate: context.position.lowNext12Months?.date ?? null,
+            ...((context.position.accounts ?? []).length > 0 && {
+              accounts: (context.position.accounts ?? []).map((account, index) => ({
+                account: cashAccountLabel(account),
+                ...(account.primary && { primary: 'most historical income; planned income and expenses without an account land here' }),
+                factIdPrefix: `cash_flow_account_${index + 1}_`,
+                lowestPointDate: account.lowNext12Months?.date ?? null,
+              })),
+              accountsNote: 'Each account on its own; the cash figures above are their sum. Card payments come out of the account that pays each card.',
+            }),
             ...(context.position.cardsLeftOut.length > 0 && {
               cardDebtLeavesOut: context.position.cardsLeftOut.map(card => ({
                 card: cardLabel(card),

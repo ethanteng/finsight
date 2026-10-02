@@ -91,6 +91,8 @@ Planned events are stored in `planned_cash_flow_events`, are scoped to the user,
 
 Each event is `income`, `expense` or `card_payment`, has a start date, and recurs once, weekly, every two weeks, monthly, quarterly or annually, with an optional end date. Income and expenses carry a positive amount.
 
+Income or an expense may name the cash account it lands in (`accountId`, checked against the user's own checking and savings accounts). One saved without an account lands in the primary account, described under Cash position. The form offers the choice only when there is more than one cash account, so a single-account user never ties an event to an account that may not stay primary.
+
 A card payment names one of the user's connected credit cards (`accountId`, checked against the user's own accounts) and a `paymentMode`. It happens once or monthly:
 
 | | Once | Every month |
@@ -158,12 +160,28 @@ A plan can match the usual pace, and the page says so rather than showing two id
 - **Cash** (checking, savings and other cash accounts) moves with:
   - all income;
   - spending made from cash accounts;
-  - planned income and expenses (assumed to go through cash);
+  - planned income and expenses;
   - transfers;
   - the card payments the card model schedules.
 - **Card balances** move with purchases, payments and projected interest.
 
 Both come from the same forecast as the savings view: each recurring stream belongs to the account of its latest occurrence, and typical spending is split by account in proportion to the history.
+
+### By account
+
+Every flow lands in one cash account, so the position can be read for any account, or any set of them, as well as for all together:
+
+- **Income and bills:** in the account they were seen in.
+- **Transfers:** each leg in its own account. A move from checking to savings leaves one and reaches the other, and nets to nothing in the whole.
+- **Typical rates:** each account keeps its own share. An override sets a side's total, and the accounts keep the shares the history gave them.
+- **Planned income and expenses:** in the account the user chose.
+- **A card's payments:** from the account most of its matched payments came from (`paidFrom`).
+
+What has no account of its own goes to the primary account (`primaryAccountId`), the one that received the most income over the basis, then over the whole history, then the largest checking account. That covers a planned event saved without one, income seen on a card, and a card with no matched payments yet.
+
+The accounts' positions therefore add up exactly to the whole. The whole is computed as the sum of its accounts, and tests hold every figure to it.
+
+A chosen set covers the cards paid from it; the whole covers every projected card, including one paid from elsewhere. A chosen account with a reported balance can be shown even when another account has none, which leaves the whole unavailable.
 
 Transfers on cash accounts are learned the same way as spending: recurring streams plus a typical rate, with one-offs left out.
 
@@ -176,11 +194,24 @@ The cash position is unavailable when:
 
 - there is no forecast;
 - there are no cash accounts;
-- any cash account has no reported balance. A partial sum would be wrong, not smaller, because income keeps landing in the account it cannot see.
+- any account among those the position covers has no reported balance. A partial sum would be wrong, not smaller, because income keeps landing in the account it cannot see.
 
-The report gives balances at each period's end, the lowest point, and fixed milestones: the end of this month and next, and 3, 6 and 12 months out. Each period also says what cash pays the cards in its forecast part (`cardPayments`). That sum is kept where the payments leave the cash, so it always agrees with the cash line.
+The report gives balances at each period's end, the lowest point, and fixed milestones: the end of this month and next, and 3, 6 and 12 months out. Each period also says, for its forecast part:
 
-On the page, "See every period" follows the chart. Under Cash position it lists what each period pays the cards, and the cash and card balances at its end; the card columns appear only when a card is projected, and a card paid from elsewhere is named as missing from what is paid. Under Savings it lists cash in and out. A card payment is never cash out, so when the user has planned one, the Savings view says where it shows. A plan for a card already paid in full barely moves either chart: its payments are in the cash line with or without the plan, and its only effect on savings is the interest it saves.
+- what arrives (`moneyIn`: income, transfers in, planned income);
+- what leaves (`moneyOut`: spending from cash, transfers out, planned expenses);
+- what cash pays the cards (`cardPayments`).
+
+Each of these is kept where the money moves, so the cash at a period's end is always the cash before, plus money in, less money out and card payments.
+
+The report also lists every cash account (`accounts`, with the primary one marked) and the ones the figures cover (`accountIds`, all unless the request chose some). It lists what is coming up (`upcoming`): the dated amounts in the month from the forecast start, with the balance at the end of each day. Paychecks, bills, transfers, card payments and planned events are listed; everyday spending runs as a daily rate and is not.
+
+On the page, Cash position has an account picker when there is more than one cash account. "All accounts" is the whole. Choosing an account shows just that one, and further choices add to it. The browser remembers the choice.
+
+"See every period" follows the chart:
+
+- **Under Cash position:** it lists money in, money out and what each period pays the cards, and the cash and card balances at its end. The card columns appear only when a card is projected, and a card paid from elsewhere is named as missing from what is paid. For the whole, money in and out include moves between the user's own accounts.
+- **Under the chart:** "Coming up in the next month" lists the upcoming items with the balance after each. Under Savings it lists cash in and out. A card payment is never cash out, so when the user has planned one, the Savings view says where it shows. A plan for a card already paid in full barely moves either chart: its payments are in the cash line with or without the plan, and its only effect on savings is the interest it saves.
 
 Card balances cover only the cards the model projects. The report lists the cards it leaves out and why (`cardsLeftOut`: no reported balance, or no pace to project), and the page names them beside the chart, so a partial total is never shown as all card debt.
 
@@ -188,8 +219,8 @@ Card balances cover only the cards the model projects. The report lists the card
 
 All routes are under `/api/cash-flow` and use `requireAuth`:
 
-- `GET /?granularity=week|month|quarter|year&horizonMonths=1..12` returns the report. Optional `from` and `to` set a custom range, inclusive on both ends and at most about three years long. If the user has no snapshot yet, the route returns 204.
-- `GET /events`, `POST /events`, `PUT /events/:id` and `DELETE /events/:id` manage planned events. Updates and deletes match on both the event id and the user, so another user's event reads as not found. A card payment must name one of the user's own connected credit cards.
+- `GET /?granularity=week|month|quarter|year&horizonMonths=1..12` returns the report. `accounts=a,b` (up to 20) chooses the cash accounts the cash position covers; ids that are not the user's cash accounts are ignored, and none left means all. Optional `from` and `to` set a custom range, inclusive on both ends and at most about three years long. If the user has no snapshot yet, the route returns 204.
+- `GET /events`, `POST /events`, `PUT /events/:id` and `DELETE /events/:id` manage planned events. Updates and deletes match on both the event id and the user, so another user's event reads as not found. A card payment must name one of the user's own connected credit cards, and income or an expense that names an account one of their own cash accounts.
 - `GET /expected-monthly` returns the expected month: income and spending, which side an override sets, whether the forecast is available, and, while an override replaces a side, what the transactions alone would give (`learned`). It returns 204 with no snapshot.
 - `POST /adjustments` with `{kind, flow, key}` saves a change to what the forecast counts. It returns 201 when saved, 200 when the same change was already saved, 404 when the item is not in the user's data, and 409 at the cap. `DELETE /adjustments/:id` undoes a change and matches on the user like the event routes.
 
@@ -213,12 +244,17 @@ Grounding checks every number by value, and the model may not add or net facts. 
 
 Recurring item amounts, typical monthly spending, planned events (as `user_input`) and the one-offs left out are facts too.
 
+Nothing in the pack is capped: every recurring item, planned event, one-off, card and cash account is listed. The user's own data bounds each list, an item left out would be one an answer could not speak to, and the reviewer sees the same facts.
+
 Credit cards and the cash position are facts as well:
 
 - **Each card:** balance and purchase APR (snapshot facts). The usual payment. At the usual pace and with the user's plans: interest over 12 months, balance in 12 months, and months until it stops carrying a balance (in `months`).
 - **Interest a plan saves:** a forecast fact with an `abs(input[0] - input[1])` formula over the two interest figures, which the validator rechecks.
 - **Cash:** cash now, cash at each milestone, and the lowest point in the next 12 months.
 - **Card debt:** owed now and at each milestone, labelled as covering the cards the forecast projects. It is published only when the forecast projects at least one card, and the details name any card it leaves out.
+- **Each cash account**, when there is more than one: cash now, at each milestone, and the lowest point in the next 12 months.
+  - Every account is listed: the primary account first, then the largest. The user's own accounts bound the list, and an account left out would be one an answer could not speak to.
+  - The details name each account and its fact id prefix, and mark the primary one.
 
 The shared caveat says how card interest is estimated.
 

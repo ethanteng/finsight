@@ -88,17 +88,19 @@ export async function listPlannedEvents(userId: string): Promise<PlannedCashFlow
 }
 
 /**
- * Whether `accountId` is one of the user's connected credit cards. A card
- * payment names its card by provider account id, so the id must be checked
- * against the user's own accounts before it is stored.
+ * Which of the user's connected accounts `accountId` is: a credit card, a cash
+ * account, or none of theirs. A planned event names its account by provider
+ * account id -- the card a payment pays, or the cash account income or an
+ * expense lands in -- so the id is checked against the user's own accounts
+ * before it is stored.
  */
-export async function isUserCreditCard(userId: string, accountId: string): Promise<boolean> {
+export async function userCashFlowAccountKind(userId: string, accountId: string): Promise<'cash' | 'credit' | null> {
   const snapshot = await getPrismaClient().financialSummarySnapshot.findUnique({
     where: { userId },
     select: { accounts: true },
   });
   const accounts = Array.isArray(snapshot?.accounts) ? snapshot.accounts as any[] : [];
-  return cashFlowAccounts(accounts).some(account => account.kind === 'credit' && account.id === accountId);
+  return cashFlowAccounts(accounts).find(account => account.id === accountId)?.kind ?? null;
 }
 
 /**

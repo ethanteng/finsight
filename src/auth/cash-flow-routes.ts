@@ -16,11 +16,11 @@ import {
   deletePlannedEvent,
   getCashFlowReport,
   getExpectedMonthly,
-  isUserCreditCard,
   listPlannedEvents,
   loadCashFlowModel,
   saveForecastAdjustmentWithinLimit,
   updatePlannedEvent,
+  userCashFlowAccountKind,
 } from '../services/cash-flow-service';
 import type { PlannedEventInput } from '../cash-flow/planned-events';
 
@@ -31,11 +31,20 @@ import type { PlannedEventInput } from '../cash-flow/planned-events';
  */
 const router = express.Router();
 
-const CARD_NOT_FOUND = 'Choose one of your connected credit cards';
-
-/** A card payment must name one of the user's own connected cards. */
-async function cardIsTheUsers(userId: string, input: PlannedEventInput): Promise<boolean> {
-  return input.kind !== 'card_payment' || (input.accountId !== null && await isUserCreditCard(userId, input.accountId));
+/**
+ * A card payment must name one of the user's own connected cards, and income
+ * or an expense that names an account one of their own cash accounts. The
+ * error to show when it does not; null when it does.
+ */
+async function accountError(userId: string, input: PlannedEventInput): Promise<string | null> {
+  if (input.kind === 'card_payment') {
+    return input.accountId !== null && await userCashFlowAccountKind(userId, input.accountId) === 'credit'
+      ? null
+      : 'Choose one of your connected credit cards';
+  }
+  return input.accountId === null || await userCashFlowAccountKind(userId, input.accountId) === 'cash'
+    ? null
+    : 'Choose one of your connected checking or savings accounts';
 }
 
 function routeId(req: AuthenticatedRequest): string {
@@ -83,7 +92,8 @@ router.post('/events', requireAuth, async (req: AuthenticatedRequest, res) => {
   const validation = validatePlannedEventInput(req.body);
   if (!validation.ok) return res.status(400).json({ error: validation.error });
   try {
-    if (!await cardIsTheUsers(req.user!.id, validation.value)) return res.status(400).json({ error: CARD_NOT_FOUND });
+    const invalidAccount = await accountError(req.user!.id, validation.value);
+    if (invalidAccount) return res.status(400).json({ error: invalidAccount });
     const event = await createPlannedEventWithinLimit(req.user!.id, validation.value, PLANNED_EVENTS_PER_USER_LIMIT);
     if (!event) {
       return res.status(409).json({ error: `You can plan up to ${PLANNED_EVENTS_PER_USER_LIMIT} events` });
@@ -99,7 +109,8 @@ router.put('/events/:id', requireAuth, async (req: AuthenticatedRequest, res) =>
   const validation = validatePlannedEventInput(req.body);
   if (!validation.ok) return res.status(400).json({ error: validation.error });
   try {
-    if (!await cardIsTheUsers(req.user!.id, validation.value)) return res.status(400).json({ error: CARD_NOT_FOUND });
+    const invalidAccount = await accountError(req.user!.id, validation.value);
+    if (invalidAccount) return res.status(400).json({ error: invalidAccount });
     const event = await updatePlannedEvent(req.user!.id, routeId(req), validation.value);
     if (!event) return res.status(404).json({ error: 'Event not found' });
     return res.json({ event });

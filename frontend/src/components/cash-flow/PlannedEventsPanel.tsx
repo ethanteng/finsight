@@ -8,6 +8,7 @@ import { fromGrouped, withCommas } from '../../lib/number-input';
 import {
   RECURRENCE_LABELS,
   cardName,
+  cashAccountName,
   describeCardPlan,
   describeSchedule,
   formatCalendarDate,
@@ -17,6 +18,7 @@ import type {
   CardPaymentMode,
   CashFlowCardSummary,
   CashFlowPlannedEventSummary,
+  CashFlowPositionAccount,
   PlannedEventKind,
   PlannedEventRecurrence,
 } from '../../types/cash-flow';
@@ -32,6 +34,8 @@ interface PlannedEventsPanelProps {
   apiUrl: string;
   events: CashFlowPlannedEventSummary[];
   cards?: CashFlowCardSummary[];
+  /** The user's cash accounts, for choosing where planned income or an expense lands. */
+  cashAccounts?: CashFlowPositionAccount[];
   cardPaymentRequest?: CardPaymentRequest | null;
   today: string;
   /** The first day the forecast covers: anything planned before it doesn't change the forecast. */
@@ -49,7 +53,14 @@ interface FormState {
   startDate: string;
   recurrence: PlannedEventRecurrence;
   endDate: string;
+  /** The card a card payment pays. */
   accountId: string;
+  /**
+   * The cash account income or an expense lands in. Empty is "the primary
+   * account": the event is saved without one, so it keeps following the
+   * primary account rather than being pinned to whichever is primary today.
+   */
+  cashAccountId: string;
   paymentMode: CardPaymentMode;
 }
 
@@ -68,7 +79,7 @@ const fieldClass =
 function emptyForm(today: string): FormState {
   return {
     id: null, label: '', labelIsAutomatic: false, kind: 'expense', amount: '', startDate: today, recurrence: 'once',
-    endDate: '', accountId: '', paymentMode: 'full',
+    endDate: '', accountId: '', cashAccountId: '', paymentMode: 'full',
   };
 }
 
@@ -107,6 +118,7 @@ export default function PlannedEventsPanel({
   apiUrl,
   events,
   cards = [],
+  cashAccounts = [],
   cardPaymentRequest = null,
   today,
   forecastStart,
@@ -121,6 +133,10 @@ export default function PlannedEventsPanel({
   const sectionRef = useRef<HTMLElement>(null);
   const { showConfirm, showError, dialog } = useDialog();
   const cardById = new Map(cards.map(card => [card.accountId, card]));
+  const cashAccountById = new Map(cashAccounts.map(account => [account.id, account]));
+  // Planned income and expenses land in the primary account unless the user chooses another.
+  const primaryCashAccount = cashAccounts.find(account => account.primary) ?? cashAccounts[0];
+  const choosesAccount = cashAccounts.length > 1;
 
   const update = (changes: Partial<FormState>) => setForm(current => {
     if (!current) return current;
@@ -169,6 +185,12 @@ export default function PlannedEventsPanel({
 
   const startEdit = (event: CashFlowPlannedEventSummary) => {
     setError('');
+    // A disconnected cash account is no longer in the picker; such an event,
+    // like one saved without an account, follows the primary account, so save
+    // never sends an id the server would reject.
+    const cashAccountId = event.kind !== 'card_payment' && event.accountId && cashAccountById.has(event.accountId)
+      ? event.accountId
+      : '';
     setForm({
       id: event.id,
       label: event.label,
@@ -178,7 +200,8 @@ export default function PlannedEventsPanel({
       startDate: event.startDate,
       recurrence: event.recurrence,
       endDate: event.endDate ?? '',
-      accountId: event.accountId ?? '',
+      accountId: event.kind === 'card_payment' ? event.accountId ?? '' : '',
+      cashAccountId,
       paymentMode: event.paymentMode ?? 'full',
     });
   };
@@ -197,7 +220,11 @@ export default function PlannedEventsPanel({
         startDate: form.startDate,
         recurrence: form.recurrence,
         endDate: form.recurrence === 'once' ? null : form.endDate || null,
-        ...(isCard && { accountId: form.accountId, paymentMode: form.paymentMode }),
+        // With one cash account there is nothing to choose, and an event saved
+        // without one follows the primary account if more are connected later.
+        ...(isCard
+          ? { accountId: form.accountId, paymentMode: form.paymentMode }
+          : choosesAccount && { accountId: form.cashAccountId || null }),
       });
       if (!response.ok) {
         const data = await response.json().catch(() => ({}));
@@ -303,6 +330,20 @@ export default function PlannedEventsPanel({
               required
             />
           </label>
+
+          {!isCardForm && choosesAccount && (
+            <label className="text-sm font-semibold text-[#102319] sm:col-span-2">
+              Account
+              <select
+                className={fieldClass}
+                value={form.cashAccountId}
+                onChange={event => update({ cashAccountId: event.target.value })}
+              >
+                {primaryCashAccount && <option value="">Primary account ({cashAccountName(primaryCashAccount)})</option>}
+                {cashAccounts.map(account => <option key={account.id} value={account.id}>{cashAccountName(account)}</option>)}
+              </select>
+            </label>
+          )}
 
           {(!isCardForm || form.paymentMode === 'fixed') && (
             <label className="text-sm font-semibold text-[#102319]">
@@ -426,6 +467,10 @@ export default function PlannedEventsPanel({
                   <p className="mt-0.5 text-xs text-[#66736b]">
                     {event.kind === 'card_payment' ? describeCardPlan(event) : describeSchedule(event)}
                     {event.kind === 'card_payment' && (card ? ` · ${cardName(card)}` : ' · card no longer connected')}
+                    {event.kind !== 'card_payment' && choosesAccount && (() => {
+                      const account = event.accountId ? cashAccountById.get(event.accountId) : primaryCashAccount;
+                      return account ? ` · ${cashAccountName(account)}` : ' · account no longer connected';
+                    })()}
                     {event.nextDate && event.recurrence !== 'once' ? ` · next ${formatCalendarDate(event.nextDate)}` : ''}
                     {!event.nextDate ? ' · already passed' : ''}
                   </p>

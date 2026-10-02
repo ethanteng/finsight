@@ -17,7 +17,7 @@ import { questionNeedsFromPacks } from '../../openai/context-packs';
 import { buildSnapshotSummaryForValidation } from '../../openai/response-validator';
 import { validateResponseFacts } from '../../openai/response-facts';
 import type { FinancialContextSnapshot } from '../../openai/types';
-import { ACCOUNTS, CARD_TERMS, accountsWithCardTerms, householdTransactions, interestCharges } from './factories/cash-flow.factory';
+import { ACCOUNTS, CARD_TERMS, accountsWithCardTerms, householdTransactions, interestCharges, tx } from './factories/cash-flow.factory';
 
 const bonus: PlannedCashFlowEvent = {
   id: 'bonus', label: 'Year-end bonus', kind: 'income', amount: 10000, startDate: '2026-12-15', recurrence: 'once', endDate: null,
@@ -344,3 +344,107 @@ describe('credit cards and cash position in the pack', () => {
   });
 });
 
+
+describe('each cash account in the pack', () => {
+  const SAVINGS = {
+    account_id: 'savings', name: 'High Yield Savings', type: 'depository', subtype: 'savings',
+    balance: { current: 10000 }, institution: 'First Bank', mask: '5678',
+  };
+  const withSavings = (plannedEvents: PlannedCashFlowEvent[] = []) => buildCashFlowForecastContext(buildCashFlowModel({
+    transactions: householdTransactions('2026-06-03', '2026-10-14'),
+    accounts: [...ACCOUNTS, SAVINGS],
+    plannedEvents,
+    dataThrough: '2026-10-14',
+    today: '2026-10-15',
+  }));
+
+  it('publishes what each account holds now and ahead, primary account first', () => {
+    const pack = withSavings([{ ...bonus, accountId: 'savings' }]);
+    const facts = byId(cashFlowForecastFacts(pack));
+    expect(facts.get('cash_flow_account_1_cash_now')).toMatchObject({
+      value: 5200,
+      label: 'Cash in account “Everyday Checking ending 1234” now, as last reported',
+      provenance: { kind: 'snapshot' },
+    });
+    expect(facts.get('cash_flow_account_2_cash_now')).toMatchObject({ value: 10000 });
+    // The accounts add up to the whole at every milestone.
+    for (const key of ['end_of_this_month', 'in_3_months', 'in_12_months']) {
+      const whole = facts.get(`cash_flow_cash_${key}`)!.value;
+      const parts = facts.get(`cash_flow_account_1_cash_${key}`)!.value + facts.get(`cash_flow_account_2_cash_${key}`)!.value;
+      expect(parts).toBeCloseTo(whole, 1);
+      expect(facts.get(`cash_flow_account_2_cash_${key}`)!.provenance.kind).toBe('forecast');
+    }
+    // The bonus planned into savings lands there, not in checking.
+    expect(facts.get('cash_flow_account_2_cash_in_12_months')!.value).toBeGreaterThanOrEqual(20000);
+    expect(facts.has('cash_flow_account_1_cash_low_point_next_12_months')).toBe(true);
+    expect(validateCanonicalFactPack({ version: 1, facts: [...facts.values()] })).toEqual([]);
+
+    const details = compactCashFlowForecastDetails(pack) as any;
+    expect(details.cashPosition.accounts).toEqual([
+      expect.objectContaining({ account: 'account “Everyday Checking ending 1234”', factIdPrefix: 'cash_flow_account_1_', primary: expect.any(String) }),
+      expect.objectContaining({ account: 'account “High Yield Savings ending 5678”', factIdPrefix: 'cash_flow_account_2_' }),
+    ]);
+    expect(details.cashPosition.accounts[1]).not.toHaveProperty('primary');
+  });
+
+  it('lists every cash account, however many there are', () => {
+    const more = Array.from({ length: 4 }, (_, index) => ({
+      ...SAVINGS, account_id: `savings-${index}`, name: `Savings ${index}`, mask: `90${index}0`, balance: { current: 1000 * (index + 1) },
+    }));
+    const pack = buildCashFlowForecastContext(buildCashFlowModel({
+      transactions: householdTransactions('2026-06-03', '2026-10-14'),
+      accounts: [...ACCOUNTS, SAVINGS, ...more],
+      plannedEvents: [],
+      dataThrough: '2026-10-14',
+      today: '2026-10-15',
+    }));
+    // Six cash accounts, all listed: the primary first, then the largest.
+    expect(pack.position!.accounts!.map(account => account.name)).toEqual([
+      'Everyday Checking', 'High Yield Savings', 'Savings 3', 'Savings 2', 'Savings 1', 'Savings 0',
+    ]);
+    const facts = byId(cashFlowForecastFacts(pack));
+    const listed = Array.from({ length: 6 }, (_, index) => facts.get(`cash_flow_account_${index + 1}_cash_in_3_months`)!.value);
+    expect(listed.reduce((sum, value) => sum + value, 0)).toBeCloseTo(facts.get('cash_flow_cash_in_3_months')!.value, 1);
+    const details = compactCashFlowForecastDetails(pack) as any;
+    expect(details.cashPosition.accounts).toHaveLength(6);
+    expect(details.cashPosition.accountsNote).toContain('the cash figures above are their sum');
+  });
+
+  it('adds nothing when there is only one account, which the whole already is', () => {
+    const facts = byId(cashFlowForecastFacts(context()));
+    expect([...facts.keys()].some(id => id.startsWith('cash_flow_account_'))).toBe(false);
+  });
+});
+
+describe('every item in the pack', () => {
+  it('names every planned event, one-off and card, however many there are', () => {
+    // Thirty planned events, seven one-off purchases and seven cards: none left out.
+    const plannedEvents = Array.from({ length: 30 }, (_, index): PlannedCashFlowEvent => ({
+      ...bonus, id: `event-${index}`, label: `Event ${index}`, amount: 100 + index, startDate: '2026-12-01',
+    }));
+    const oneOffs = Array.from({ length: 7 }, (_, index) =>
+      tx('card', `2026-09-0${index + 1}`, 'expense', 3000 + index * 100, `BIG PURCHASE ${String.fromCharCode(65 + index)}`, { merchant_name: `Store ${String.fromCharCode(65 + index)}` }));
+    const moreCards = Array.from({ length: 6 }, (_, index) => ({
+      account_id: `card-${index}`, name: `Card ${index}`, type: 'credit', subtype: 'credit card', balance: { current: 500 + index },
+      mask: `70${index}0`, liabilityDetails: [{ ...CARD_TERMS, minimumPaymentAmount: 25 }],
+    }));
+    const pack = buildCashFlowForecastContext(buildCashFlowModel({
+      transactions: [...householdTransactions('2026-06-03', '2026-10-14'), ...oneOffs],
+      accounts: [...ACCOUNTS, ...moreCards],
+      plannedEvents,
+      dataThrough: '2026-10-14',
+      today: '2026-10-15',
+    }));
+
+    expect(pack.plannedEvents).toHaveLength(30);
+    expect(pack.oneOffs!.length).toBeGreaterThanOrEqual(7);
+    expect(pack.cards).toHaveLength(7);
+    const facts = byId(cashFlowForecastFacts(pack));
+    expect(facts.get('cash_flow_planned_event_30_amount')).toMatchObject({ value: 129, provenance: { kind: 'user_input' } });
+    expect(facts.has('cash_flow_one_off_7_amount')).toBe(true);
+    expect(facts.has('cash_flow_card_7_balance')).toBe(true);
+    const details = compactCashFlowForecastDetails(pack) as any;
+    expect(details.plannedEvents).toHaveLength(30);
+    expect(details.creditCards).toHaveLength(7);
+  });
+});

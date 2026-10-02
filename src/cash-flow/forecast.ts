@@ -46,6 +46,7 @@ import {
 import {
   buildCashPosition,
   cashMilestones,
+  type CashPositionItem,
   type CashPositionUnavailableReason,
 } from './position';
 import {
@@ -170,6 +171,22 @@ export interface CashFlowModel {
   }>;
   /** The typical spending rate that lands on each card, out of `typical.dailySpending`. */
   cardDailySpending: Map<string, number>;
+  /**
+   * The cash account the user's money usually lands in: the one that received
+   * the most income over the basis, then over the whole history, then the
+   * largest checking account. What the forecast cannot place in an account
+   * goes here: a planned event saved without one, income seen on a card, a
+   * card payment with no history of where it is paid from. Null without a
+   * cash account.
+   */
+  primaryAccountId: string | null;
+  /**
+   * Each cash account's share of the typical rates, per day: the income that
+   * lands in it and the spending paid straight from it. Card spending is not
+   * here: it reaches cash when the card is paid. Summed over the accounts,
+   * these are the typical rates less what lands on cards.
+   */
+  accountTypical: Map<string, { income: number; spending: number }>;
   cards: CardModel[];
   /** Money moving in and out of the user's cash besides income, spending and card payments. */
   transfers: TransferModel;
@@ -196,6 +213,12 @@ export interface CardModel {
   purchases: CardPurchases;
   /** Projected interest replaces the card's historical interest in the forecast. */
   modelsInterest: boolean;
+  /**
+   * The cash account the card's payments have come from: the one most of its
+   * matched payments were sent from. Null when none has been seen; the cash
+   * position then takes them from the primary account.
+   */
+  paidFrom: string | null;
 }
 
 /** What one payee adds to a typical rate. */
@@ -215,9 +238,11 @@ export interface TypicalPayee {
 export interface TransferModel {
   streams: RecurringStream[];
   /** Signed: positive into the user's cash, negative out of it. */
-  scheduled: Array<{ streamId: string; date: CalendarDate; amount: number }>;
+  scheduled: Array<{ streamId: string; accountId: string; date: CalendarDate; amount: number }>;
   /** Net typical transfers per day; negative when more leaves than arrives. */
   dailyNet: number;
+  /** The typical transfers into and out of each cash account, per day. */
+  dailyByAccount: Map<string, { in: number; out: number }>;
   oneOffs: CashFlowEntry[];
   /**
    * The cash movements transfers can be learned from, before the user's choices:
@@ -380,6 +405,69 @@ function sumDaily(dailyByAccount: ReadonlyMap<string, Record<CashFlowDirection, 
   let total = 0;
   for (const account of dailyByAccount.values()) total += account[flow];
   return total;
+}
+
+/**
+ * The cash account money usually lands in: the most income over the basis,
+ * then over the whole history, then the largest checking account, then the
+ * largest of the rest. Null without a cash account.
+ */
+function primaryCashAccount(ledger: CashFlowLedger, basisStart: CalendarDate | null, forecastStart: CalendarDate): string | null {
+  const cash = ledger.accounts.filter(account => account.kind === 'cash');
+  if (cash.length === 0) return null;
+  const cashIds = new Set(cash.map(account => account.id));
+  const mostIncome = (inWindow: (date: CalendarDate) => boolean): string | null => {
+    const totals = new Map<string, number>();
+    for (const entry of ledger.entries) {
+      if (entry.flow !== 'income' || !cashIds.has(entry.accountId) || !inWindow(entry.date)) continue;
+      totals.set(entry.accountId, (totals.get(entry.accountId) ?? 0) + entry.amount);
+    }
+    let best: [string, number] | null = null;
+    for (const total of totals) if (total[1] > 0 && (!best || total[1] > best[1])) best = total;
+    return best?.[0] ?? null;
+  };
+  const byBalance = [...cash].sort((left, right) =>
+    Number(right.subtype === 'checking') - Number(left.subtype === 'checking')
+    || (right.balance ?? -Infinity) - (left.balance ?? -Infinity));
+  return mostIncome(date => basisStart !== null && date >= basisStart && date < forecastStart)
+    ?? mostIncome(date => date < forecastStart)
+    ?? byBalance[0].id;
+}
+
+/**
+ * Split a daily total over accounts in proportion to their weights, so the
+ * parts always add back to it. With no positive weight it all goes to
+ * `fallback`.
+ */
+function spreadByWeight(total: number, weights: ReadonlyMap<string, number>, fallback: string | null): Map<string, number> {
+  const parts = new Map<string, number>();
+  const positive = [...weights].filter(([, weight]) => weight > 0);
+  const sum = positive.reduce((acc, [, weight]) => acc + weight, 0);
+  if (sum > 0) {
+    for (const [accountId, weight] of positive) parts.set(accountId, total * (weight / sum));
+  } else if (fallback) {
+    parts.set(fallback, total);
+  }
+  return parts;
+}
+
+/** The cash account most of a card's matched payments came from; null when none matched. */
+function cardPaidFrom(ledger: CashFlowLedger, cardId: string): string | null {
+  const sentFrom = new Map(ledger.movements.map(movement => [movement.id, movement.accountId]));
+  const counts = new Map<string, { count: number; latest: CalendarDate }>();
+  for (const movement of ledger.movements) {
+    if (movement.accountId !== cardId || !movement.cardPayment || !movement.pairedWith) continue;
+    const from = sentFrom.get(movement.pairedWith);
+    if (!from) continue;
+    const seen = counts.get(from) ?? { count: 0, latest: movement.date };
+    counts.set(from, { count: seen.count + 1, latest: movement.date > seen.latest ? movement.date : seen.latest });
+  }
+  let best: [string, { count: number; latest: CalendarDate }] | null = null;
+  for (const candidate of counts) {
+    if (!best || candidate[1].count > best[1].count
+      || (candidate[1].count === best[1].count && candidate[1].latest > best[1].latest)) best = candidate;
+  }
+  return best?.[0] ?? null;
 }
 
 /** A card's payments and interest over the basis window. */
@@ -549,6 +637,52 @@ export function buildCashFlowModel(input: CashFlowModelInput): CashFlowModel {
     }
   }
 
+  // Each cash account's share of the typical rates. Income seen on a card
+  // lands in the primary account, where the cash goes; spending on a card
+  // stays on the card until it is paid. An override sets a side's total, and
+  // the accounts keep the shares the history gave them — including income
+  // that lived in recurring streams, which the override suppresses.
+  const cashIds = new Set(ledger.accounts.filter(account => account.kind === 'cash').map(account => account.id));
+  const primaryAccountId = primaryCashAccount(ledger, basisStart, forecastStart);
+  const learnedIncome = new Map<string, number>();
+  const learnedSpending = new Map<string, number>();
+  for (const [accountId, daily] of learned.dailyByAccount) {
+    const incomeTo = cashIds.has(accountId) ? accountId : primaryAccountId;
+    if (incomeTo) learnedIncome.set(incomeTo, (learnedIncome.get(incomeTo) ?? 0) + daily.income);
+    if (cashIds.has(accountId)) learnedSpending.set(accountId, daily.spending);
+  }
+  let incomeByAccount: Map<string, number> = learnedIncome;
+  if (monthlyIncomeOverride !== null) {
+    // Weight by every counted income in the basis (paychecks in streams plus
+    // residual), not residual alone: under an override those streams are off,
+    // so residual-only weights would park the whole override in a side account.
+    const earnedIn = new Map<string, number>();
+    for (const entry of counted) {
+      if (entry.flow !== 'income' || !basisStart) continue;
+      if (entry.date < basisStart || entry.date >= forecastStart) continue;
+      const incomeTo = cashIds.has(entry.accountId) ? entry.accountId : primaryAccountId;
+      if (incomeTo) earnedIn.set(incomeTo, (earnedIn.get(incomeTo) ?? 0) + entry.amount);
+    }
+    incomeByAccount = spreadByWeight(dailyIncome, earnedIn, primaryAccountId);
+  }
+  let spendingByAccount: Map<string, number> = learnedSpending;
+  if (monthlyExpenseOverride !== null) {
+    // What the cards are not charged is paid from cash, in the proportion the
+    // history spent from each account.
+    const onCards = [...cardDailySpending.values()].reduce((sum, daily) => sum + daily, 0);
+    const spentFrom = new Map<string, number>();
+    for (const entry of counted) {
+      if (entry.flow !== 'spending' || !cashIds.has(entry.accountId) || !basisStart) continue;
+      if (entry.date < basisStart || entry.date >= forecastStart) continue;
+      spentFrom.set(entry.accountId, (spentFrom.get(entry.accountId) ?? 0) + entry.amount);
+    }
+    spendingByAccount = spreadByWeight(Math.max(0, dailySpending - onCards), spentFrom, primaryAccountId);
+  }
+  const accountTypical = new Map([...cashIds].map(accountId => [accountId, {
+    income: incomeByAccount.get(accountId) ?? 0,
+    spending: spendingByAccount.get(accountId) ?? 0,
+  }]));
+
   const scheduled = reason
     ? []
     : streams
@@ -596,12 +730,12 @@ export function buildCashFlowModel(input: CashFlowModelInput): CashFlowModel {
       projection: card.plans.length > 0 ? projectWith(card.plans) : currentPace,
       purchases,
       modelsInterest: card.modelsInterest,
+      paidFrom: cardPaidFrom(ledger, card.account.id),
     };
   });
 
   // Transfers on cash accounts, learned like spending. A card payment matched
   // to a projected card is the card's own payment and is left to the card.
-  const cashIds = new Set(ledger.accounts.filter(account => account.kind === 'cash').map(account => account.id));
   const projectedCards = new Set(cards.filter(card => card.projection && card.paymentSource === 'connected').map(card => card.account.id));
   const pairedToProjectedCard = new Set(
     ledger.movements
@@ -630,10 +764,13 @@ export function buildCashFlowModel(input: CashFlowModelInput): CashFlowModel {
       : learnedTransfers.streams.flatMap(stream => scheduleStream(stream, forecastStart, forecastEndLimit)
         .map(occurrence => ({
           streamId: stream.id,
+          accountId: stream.accountId,
           date: occurrence.date,
           amount: stream.flow === 'income' ? occurrence.amount : -occurrence.amount,
         }))),
     dailyNet: sumDaily(learnedTransfers.dailyByAccount, 'income') - sumDaily(learnedTransfers.dailyByAccount, 'spending'),
+    dailyByAccount: new Map([...learnedTransfers.dailyByAccount].map(([accountId, daily]) =>
+      [accountId, { in: daily.income, out: daily.spending }])),
     oneOffs: learnedTransfers.oneOffs,
     eligible: eligibleTransfers,
   };
@@ -665,6 +802,8 @@ export function buildCashFlowModel(input: CashFlowModelInput): CashFlowModel {
     continuedStreams,
     scheduled,
     cardDailySpending,
+    primaryAccountId,
+    accountTypical,
     cards,
     transfers,
   };
@@ -953,6 +1092,8 @@ export interface CashFlowReportRequest {
   /** Optional custom range, inclusive on both ends. */
   from?: CalendarDate;
   to?: CalendarDate;
+  /** Cash accounts the cash position covers; all of them when empty or left out. */
+  accountIds?: string[];
 }
 
 /** One transaction behind an item on the page. */
@@ -1131,14 +1272,32 @@ export interface CashFlowCardSummary {
 export interface CashFlowPositionSummary {
   available: boolean;
   reason?: CashPositionUnavailableReason;
+  /** Every cash account, for choosing which the position covers. */
+  accounts: Array<Pick<CashFlowAccount, 'id' | 'name' | 'institution' | 'subtype' | 'mask' | 'balance'> & {
+    /** Where money that has no account of its own lands (`primaryAccountId`). */
+    primary: boolean;
+  }>;
+  /** The cash accounts the figures below cover: every one, unless the request chose some. */
+  accountIds: string[];
+  /** The cards whose balances `cardDebt` covers: every projected card, or those paid from the chosen accounts. */
+  cardIds: string[];
   startingCash: number | null;
   startingCardDebt: number | null;
   /**
-   * In step with `periods`: balances at each period's end, and what cash pays
-   * the cards in the period's forecast part. Null for a period over before
-   * the forecast.
+   * In step with `periods`: balances at each period's end, and what arrives,
+   * leaves and is paid to cards in the period's forecast part. Null for a
+   * period over before the forecast.
    */
-  periods: Array<{ key: string; cash: number | null; cardDebt: number | null; cardPayments: number | null }>;
+  periods: Array<{
+    key: string;
+    cash: number | null;
+    cardDebt: number | null;
+    cardPayments: number | null;
+    moneyIn: number | null;
+    moneyOut: number | null;
+  }>;
+  /** Every dated amount in the month from the forecast start, with the balance after each day. */
+  upcoming: CashPositionItem[];
   /** The lowest end-of-day cash within the range's forecast part. */
   lowPoint: { date: CalendarDate; cash: number } | null;
   milestones: Array<{ key: string; date: CalendarDate; cash: number; cardDebt: number }>;
@@ -1245,8 +1404,34 @@ function cardSummary(card: CardModel, forecastStart: CalendarDate): CashFlowCard
   };
 }
 
-function positionSummary(model: CashFlowModel, range: { from: CalendarDate; toExclusive: CalendarDate }, periods: readonly CashFlowPeriod[]): CashFlowPositionSummary {
-  const position = buildCashPosition(model);
+/**
+ * The position lists what is coming up over this many days from the forecast
+ * start. Every item, uncapped: the window bounds the list, and a list cut
+ * short would hide a bill while the page offers to show them all.
+ */
+const UPCOMING_DAYS = 31;
+
+function positionSummary(
+  model: CashFlowModel,
+  range: { from: CalendarDate; toExclusive: CalendarDate },
+  periods: readonly CashFlowPeriod[],
+  accountIds: readonly string[] = []
+): CashFlowPositionSummary {
+  const accounts = model.ledger.accounts
+    .filter(account => account.kind === 'cash')
+    .map(account => ({
+      id: account.id,
+      name: account.name,
+      institution: account.institution,
+      subtype: account.subtype,
+      mask: account.mask,
+      balance: account.balance,
+      primary: account.id === model.primaryAccountId,
+    }));
+  // Ids that are not cash accounts are dropped, and choosing none means all.
+  const chosen = accounts.filter(account => accountIds.includes(account.id)).map(account => account.id);
+  const covered = chosen.length > 0 ? chosen : accounts.map(account => account.id);
+  const position = buildCashPosition(model, chosen);
   const movements = new Map(model.ledger.movements.map(movement => [movement.id, movement]));
   const nextDates = new Map<string, CalendarDate>();
   for (const item of model.transfers.scheduled) {
@@ -1275,9 +1460,13 @@ function positionSummary(model: CashFlowModel, range: { from: CalendarDate; toEx
     return {
       available: false,
       reason: position.reason,
+      accounts,
+      accountIds: covered,
+      cardIds: [],
       startingCash: null,
       startingCardDebt: null,
-      periods: periods.map(period => ({ key: period.key, cash: null, cardDebt: null, cardPayments: null })),
+      periods: periods.map(period => ({ key: period.key, cash: null, cardDebt: null, cardPayments: null, moneyIn: null, moneyOut: null })),
+      upcoming: [],
       lowPoint: null,
       milestones: [],
       lowNext12Months: null,
@@ -1288,16 +1477,26 @@ function positionSummary(model: CashFlowModel, range: { from: CalendarDate; toEx
   const milestones = cashMilestones(model, position);
   return {
     available: true,
+    accounts,
+    accountIds: position.accountIds,
+    cardIds: position.cardIds,
     startingCash: position.startingCash,
     startingCardDebt: position.startingCardDebt,
-    periods: periods.map(period => period.endExclusive <= model.forecastStart
-      ? { key: period.key, cash: null, cardDebt: null, cardPayments: null }
-      : {
-          key: period.key,
-          cash: position.cashBefore(period.endExclusive),
-          cardDebt: position.cardDebtBefore(period.endExclusive),
-          cardPayments: position.cardPaymentsBetween(maxDate(period.start, model.forecastStart), period.endExclusive),
-        }),
+    periods: periods.map(period => {
+      if (period.endExclusive <= model.forecastStart) {
+        return { key: period.key, cash: null, cardDebt: null, cardPayments: null, moneyIn: null, moneyOut: null };
+      }
+      const from = maxDate(period.start, model.forecastStart);
+      return {
+        key: period.key,
+        cash: position.cashBefore(period.endExclusive),
+        cardDebt: position.cardDebtBefore(period.endExclusive),
+        cardPayments: position.cardPaymentsBetween(from, period.endExclusive),
+        moneyIn: position.moneyInBetween(from, period.endExclusive),
+        moneyOut: position.moneyOutBetween(from, period.endExclusive),
+      };
+    }),
+    upcoming: position.itemsBetween(model.forecastStart, addDays(model.forecastStart, UPCOMING_DAYS)),
     lowPoint: position.lowPoint(maxDate(range.from, model.forecastStart), range.toExclusive),
     milestones: milestones.points,
     lowNext12Months: milestones.lowNext12Months,
@@ -1520,6 +1719,6 @@ export function buildCashFlowReport(model: CashFlowModel, request: CashFlowRepor
     accounts: model.ledger.accounts,
     excluded: model.ledger.excluded,
     cards: summarizeCards(model),
-    position: positionSummary(model, range, periods),
+    position: positionSummary(model, range, periods, request.accountIds),
   };
 }
