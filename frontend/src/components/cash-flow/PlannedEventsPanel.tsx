@@ -242,6 +242,14 @@ export default function PlannedEventsPanel({
 
   const kinds: PlannedEventKind[] = cards.length > 0 ? ['income', 'expense', 'card_payment'] : ['income', 'expense'];
   const isCardForm = form?.kind === 'card_payment';
+  // A card with no usual pace is projected only under a monthly plan; a
+  // one-time payment counts once one exists, and on its own does nothing.
+  const formCard = isCardForm ? cardById.get(form.accountId) : undefined;
+  const oneTimeAloneIgnored = Boolean(
+    form && formCard && formCard.behavior === 'unknown' && formCard.balance !== null && form.recurrence === 'once'
+      && !events.some(event => event.kind === 'card_payment' && event.accountId === formCard.accountId
+        && event.recurrence === 'monthly' && event.id !== form.id)
+  );
 
   return (
     <section ref={sectionRef} className="scroll-mt-28 rounded-[1.6rem] border border-[#102319]/10 bg-[#fffdf5] p-5 shadow-sm sm:p-7" aria-labelledby="planned-events-heading">
@@ -354,6 +362,13 @@ export default function PlannedEventsPanel({
           {(form.recurrence === 'once' ? form.startDate !== '' && form.startDate < forecastStart : form.endDate !== '' && form.endDate < forecastStart) && (
             <p className="text-xs leading-5 text-[#76510f] sm:col-span-2">
               The forecast starts on {formatCalendarDate(forecastStart)}, so this won’t change it.
+            </p>
+          )}
+
+          {oneTimeAloneIgnored && (
+            <p className="text-xs leading-5 text-[#76510f] sm:col-span-2">
+              We haven’t seen what you usually pay this card, so a one-time payment alone won’t project it. Add a monthly
+              payment to see its balance and interest.
             </p>
           )}
 

@@ -63,8 +63,8 @@ function report(overrides: Partial<CashFlowReport> = {}): CashFlowReport {
       { id: 'bonus', label: 'Year-end bonus', kind: 'income', amount: 10000, startDate: '2026-12-15', recurrence: 'once', endDate: null, accountId: null, paymentMode: null, nextDate: '2026-12-15', occurrencesInRange: 0 },
     ],
     accounts: [
-      { id: 'checking', name: 'Everyday Checking', institution: 'First Bank', kind: 'cash', subtype: 'checking', mask: '1234' },
-      { id: 'card', name: 'Rewards Card', institution: 'Card Co', kind: 'credit', subtype: 'credit card', mask: null },
+      { id: 'checking', name: 'Everyday Checking', institution: 'First Bank', kind: 'cash', subtype: 'checking', mask: '1234', balance: 5200 },
+      { id: 'card', name: 'Rewards Card', institution: 'Card Co', kind: 'credit', subtype: 'credit card', mask: null, balance: 4000 },
     ],
     excluded: { unclassified: 2, currencyMismatch: 0 },
     cards: [{
@@ -344,6 +344,23 @@ describe('CashFlowPageClient', () => {
     // A one-time plan can't project such a card, so the shortcut starts on a monthly one.
     fireEvent.click(within(panel).getByRole('button', { name: 'Plan a payment' }));
     expect(screen.getByLabelText('Repeats')).toHaveValue('monthly');
+  });
+
+  it('warns that a one-time payment alone won’t project a card with no usual pace', async () => {
+    const card = {
+      ...report().cards[0],
+      behavior: 'unknown' as const, usualMonthlyPayment: null, minimumPayment: null, currentPace: null, withPlans: null,
+    };
+    mockFetch(url => (url.includes('/api/cash-flow?') ? { status: 200, body: report({ cards: [card] }) } : undefined));
+    render(<CashFlowPageClient />);
+    const panel = (await screen.findByRole('heading', { name: 'Credit cards' })).closest('section')!;
+    expect(within(panel).getByText('Plan a monthly payment to project this card’s balance and interest.')).toBeInTheDocument();
+
+    fireEvent.click(within(panel).getByRole('button', { name: 'Plan a payment' }));
+    const warning = /a one-time payment alone won’t project it/;
+    expect(screen.queryByText(warning)).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Repeats'), { target: { value: 'once' } });
+    expect(screen.getByText(warning)).toBeInTheDocument();
   });
 
   it('names the cards the cash position leaves out of card balances', async () => {
