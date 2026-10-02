@@ -16,7 +16,7 @@ import { questionNeedsFromPacks } from '../../openai/context-packs';
 import { buildSnapshotSummaryForValidation } from '../../openai/response-validator';
 import { validateResponseFacts } from '../../openai/response-facts';
 import type { FinancialContextSnapshot } from '../../openai/types';
-import { ACCOUNTS, accountsWithCardTerms, householdTransactions, interestCharges } from './factories/cash-flow.factory';
+import { ACCOUNTS, CARD_TERMS, accountsWithCardTerms, householdTransactions, interestCharges } from './factories/cash-flow.factory';
 
 const bonus: PlannedCashFlowEvent = {
   id: 'bonus', label: 'Year-end bonus', kind: 'income', amount: 10000, startDate: '2026-12-15', recurrence: 'once', endDate: null,
@@ -220,9 +220,13 @@ describe('credit cards and cash position in the pack', () => {
     endDate: null, accountId: 'card', paymentMode: 'full',
   };
   const extra: PlannedCashFlowEvent = { ...payoff, id: 'extra', label: 'Extra card payment', paymentMode: 'fixed', amount: 500, startDate: '2026-11-25' };
-  const cardContext = (plannedEvents: PlannedCashFlowEvent[] = []) => buildCashFlowForecastContext(buildCashFlowModel({
-    transactions: [...householdTransactions('2026-06-03', '2026-10-14'), ...interestCharges('2026-06-03', '2026-10-14')],
-    accounts: accountsWithCardTerms(),
+  const carrying = [...householdTransactions('2026-06-03', '2026-10-14'), ...interestCharges('2026-06-03', '2026-10-14')];
+  const cardContext = (
+    plannedEvents: PlannedCashFlowEvent[] = [],
+    overrides: { accounts?: Array<Record<string, unknown>>; transactions?: Array<Record<string, unknown>> } = {}
+  ) => buildCashFlowForecastContext(buildCashFlowModel({
+    transactions: overrides.transactions ?? carrying,
+    accounts: overrides.accounts ?? accountsWithCardTerms(),
     plannedEvents,
     dataThrough: '2026-10-14',
     today: '2026-10-15',
@@ -280,6 +284,43 @@ describe('credit cards and cash position in the pack', () => {
       plans: [expect.objectContaining({ paysInFull: true, startDate: '2026-10-25' })],
     });
     expect(details.cashPosition).toMatchObject({ factIdPrefix: 'cash_flow_cash_' });
+    expect(details.cashPosition).not.toHaveProperty('cardDebtLeavesOut');
+  });
+
+  it('labels card debt as covering only the cards the forecast projects', () => {
+    const facts = byId(cashFlowForecastFacts(cardContext()));
+    expect(facts.get('cash_flow_card_debt_now')!.label).toContain('the credit cards the forecast covers');
+    expect(facts.get('cash_flow_card_debt_in_3_months')!.label).toContain('the credit cards the forecast covers');
+  });
+
+  it('names the cards card debt leaves out, and publishes no card debt when it covers none', () => {
+    const noBalance = accountsWithCardTerms().map(account => account.account_id === 'card' ? { ...account, balance: { current: null } } : account);
+    const context = cardContext([], { accounts: noBalance });
+    const facts = byId(cashFlowForecastFacts(context));
+    expect(facts.has('cash_flow_cash_now')).toBe(true);
+    expect(facts.has('cash_flow_card_debt_now')).toBe(false);
+    expect(facts.has('cash_flow_card_debt_in_3_months')).toBe(false);
+    const details = compactCashFlowForecastDetails(context) as any;
+    expect(details.cashPosition.cardDebtLeavesOut).toEqual([{ card: 'credit card “Rewards Card”', reason: 'no balance reported' }]);
+    expect(details.creditCards[0]).toMatchObject({ notProjected: 'no balance reported' });
+  });
+
+  it('says a card with no usual pace is projected from the planned payments alone', () => {
+    const noPayments = carrying.filter(item => item.name !== 'CARD CO AUTOPAY' && item.name !== 'PAYMENT THANK YOU');
+    const noMinimum = accountsWithCardTerms().map(account => account.account_id === 'card'
+      ? { ...account, liabilityDetails: [{ ...CARD_TERMS, minimumPaymentAmount: null }] }
+      : account);
+    const monthly: PlannedCashFlowEvent = { ...payoff, id: 'monthly', paymentMode: 'fixed', amount: 1500, recurrence: 'monthly' };
+    const context = cardContext([monthly], { accounts: noMinimum, transactions: noPayments });
+    const details = compactCashFlowForecastDetails(context) as any;
+    expect(details.creditCards[0].usualPaceUnknown).toContain('counts only the payments the user planned');
+    expect(details.creditCards[0]).not.toHaveProperty('notProjected');
+    expect(details.creditCards[0].withPlans).toMatchObject({ carryingBalanceNow: true });
+    const facts = byId(cashFlowForecastFacts(context));
+    expect(facts.has('cash_flow_card_1_with_plans_interest_12_months')).toBe(true);
+    expect(facts.has('cash_flow_card_1_current_pace_interest_12_months')).toBe(false);
+    expect(facts.has('cash_flow_card_1_interest_saved_12_months')).toBe(false);
+    expect(facts.has('cash_flow_card_debt_now')).toBe(true);
   });
 });
 

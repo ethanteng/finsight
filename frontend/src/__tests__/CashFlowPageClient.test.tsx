@@ -296,6 +296,75 @@ describe('CashFlowPageClient', () => {
     });
   });
 
+  it('starts a new plan on the first forecast day when today’s transactions are already in', async () => {
+    const calls = mockFetch((url, init) => {
+      if (url.endsWith('/api/cash-flow/events') && init?.method === 'POST') return { status: 201, body: { event: {} } };
+      if (url.includes('/api/cash-flow?')) return { status: 200, body: report({ today: '2026-10-14', dataThrough: '2026-10-14', forecastStart: '2026-10-15' }) };
+      return undefined;
+    });
+    render(<CashFlowPageClient />);
+    await screen.findByRole('heading', { name: 'Credit cards' });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Plan a payment' }));
+    expect(screen.getByLabelText('Date')).toHaveValue('2026-10-15');
+    expect(screen.queryByText(/so this won’t change it/)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Add to forecast' }));
+
+    await waitFor(() => expect(calls.some(call => call.init?.method === 'POST')).toBe(true));
+    expect(JSON.parse(String(calls.find(call => call.init?.method === 'POST')!.init!.body))).toMatchObject({ startDate: '2026-10-15' });
+  });
+
+  it('says when a planned date falls before the forecast starts', async () => {
+    mockFetch(url => (url.includes('/api/cash-flow?') ? { status: 200, body: report() } : undefined));
+    render(<CashFlowPageClient />);
+    await screen.findByRole('heading', { name: 'Credit cards' });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add planned event' }));
+    fireEvent.change(screen.getByLabelText('Date'), { target: { value: '2026-10-10' } });
+    expect(screen.getByText('The forecast starts on Oct 15, 2026, so this won’t change it.')).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Date'), { target: { value: '2026-10-15' } });
+    expect(screen.queryByText(/so this won’t change it/)).not.toBeInTheDocument();
+  });
+
+  it('shows a plan for a card with no usual pace, and what it counts', async () => {
+    const card = {
+      ...report().cards[0],
+      behavior: 'unknown' as const, usualMonthlyPayment: null, minimumPayment: null,
+      currentPace: null, withPlans: pace('2027-05', 210), planIds: ['monthly'],
+    };
+    mockFetch(url => (url.includes('/api/cash-flow?') ? { status: 200, body: report({ cards: [card] }) } : undefined));
+    render(<CashFlowPageClient />);
+
+    const panel = (await screen.findByRole('heading', { name: 'Credit cards' })).closest('section')!;
+    expect(within(panel).queryByText('At your current pace')).not.toBeInTheDocument();
+    expect(within(panel).getByText('With your plan')).toBeInTheDocument();
+    expect(within(panel).getByText('Balance paid off by May 2027')).toBeInTheDocument();
+    expect(within(panel).getByText('With no usual payment to go on, only the payments you plan are counted.')).toBeInTheDocument();
+
+    // A one-time plan can't project such a card, so the shortcut starts on a monthly one.
+    fireEvent.click(within(panel).getByRole('button', { name: 'Plan a payment' }));
+    expect(screen.getByLabelText('Repeats')).toHaveValue('monthly');
+  });
+
+  it('names the cards the cash position leaves out of card balances', async () => {
+    const store = {
+      ...report().cards[0], accountId: 'store', name: 'Store Card', mask: '1234', balance: null,
+      currentPace: null, withPlans: null,
+    };
+    const body = report({
+      cards: [...report().cards, store],
+      position: { ...report().position, cardsLeftOut: [{ accountId: 'store', name: 'Store Card', reason: 'no_balance' }] },
+    });
+    mockFetch(url => (url.includes('/api/cash-flow?') ? { status: 200, body } : undefined));
+    render(<CashFlowPageClient />);
+    await screen.findByRole('heading', { name: 'This month' });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cash position' }));
+    expect(screen.getByText('Owed on credit cards leaves out Store Card ••1234 (its balance isn’t reported).')).toBeInTheDocument();
+    const panel = screen.getByRole('heading', { name: 'Credit cards' }).closest('section')!;
+    expect(within(panel).getByText('This card’s balance isn’t reported, so it can’t be projected.')).toBeInTheDocument();
+  });
+
   it('plans a set monthly card payment from the form', async () => {
     const calls = mockFetch((url, init) => {
       if (url.endsWith('/api/cash-flow/events') && init?.method === 'POST') return { status: 201, body: { event: {} } };

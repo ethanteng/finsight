@@ -3,6 +3,7 @@ import type {
   CashFlowGranularity,
   CashFlowHighlightKey,
   CashFlowPeriod,
+  CashFlowReport,
   ForecastUnavailableReason,
   PlannedCashFlowEvent,
   PlannedEventRecurrence,
@@ -155,8 +156,28 @@ export function paceDescription(card: Pick<CashFlowCardSummary, 'behavior' | 'us
     case 'pays_in_full': return 'You’ve been paying this card in full';
     case 'average_payment': return `You’ve been paying about ${formatMoney(card.usualMonthlyPayment ?? 0)} a month`;
     case 'minimum_payment': return `Assuming the minimum payment of ${formatMoney(card.usualMonthlyPayment ?? 0)} a month`;
-    case 'unknown': return 'Not enough payment history to project this card yet';
+    case 'unknown': return 'Not enough payment history to know what you usually pay';
   }
+}
+
+/** Whether the cash position carries any card's balance. */
+export function projectsCardDebt(report: Pick<CashFlowReport, 'cards' | 'position'>): boolean {
+  const leftOut = new Set(report.position.cardsLeftOut.map(card => card.accountId));
+  return report.cards.some(card => !leftOut.has(card.accountId));
+}
+
+const LEFT_OUT_REASONS: Record<CashFlowReport['position']['cardsLeftOut'][number]['reason'], string> = {
+  no_balance: 'its balance isn’t reported',
+  no_pace: 'there’s no usual payment to project from',
+};
+
+/** "Store Card ••1234 (its balance isn’t reported)", for each card the cash position leaves out; null when none. */
+export function cardsLeftOutText(report: Pick<CashFlowReport, 'cards' | 'position'>): string | null {
+  if (report.position.cardsLeftOut.length === 0) return null;
+  const masks = new Map(report.cards.map(card => [card.accountId, card.mask]));
+  return report.position.cardsLeftOut
+    .map(card => `${cardName({ name: card.name, mask: masks.get(card.accountId) ?? null })} (${LEFT_OUT_REASONS[card.reason]})`)
+    .join(', ');
 }
 
 /** "Pay off in full on Oct 25, 2026", "Pay $500 every month from Nov 1, 2026". */

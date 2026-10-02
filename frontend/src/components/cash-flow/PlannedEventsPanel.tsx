@@ -33,6 +33,8 @@ interface PlannedEventsPanelProps {
   cards?: CashFlowCardSummary[];
   cardPaymentRequest?: CardPaymentRequest | null;
   today: string;
+  /** The first day the forecast covers: anything planned before it doesn't change the forecast. */
+  forecastStart: string;
   onChanged: () => Promise<void> | void;
 }
 
@@ -112,7 +114,18 @@ function Toggle<T extends string>({ legend, options, value, onChange }: {
   );
 }
 
-export default function PlannedEventsPanel({ apiUrl, events, cards = [], cardPaymentRequest = null, today, onChanged }: PlannedEventsPanelProps) {
+export default function PlannedEventsPanel({
+  apiUrl,
+  events,
+  cards = [],
+  cardPaymentRequest = null,
+  today,
+  forecastStart,
+  onChanged,
+}: PlannedEventsPanelProps) {
+  // A new event starts on the first day the forecast covers, which is
+  // tomorrow when today's transactions are already in.
+  const firstDate = forecastStart > today ? forecastStart : today;
   const [form, setForm] = useState<FormState | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -136,14 +149,16 @@ export default function PlannedEventsPanel({ apiUrl, events, cards = [], cardPay
     const card = cards.find(item => item.accountId === cardPaymentRequest.accountId);
     setError('');
     setForm({
-      ...emptyForm(today),
+      ...emptyForm(firstDate),
       kind: 'card_payment',
       accountId: cardPaymentRequest.accountId,
+      // With no usual pace, only a monthly plan lets the card be projected.
+      recurrence: card?.behavior === 'unknown' ? 'monthly' : 'once',
       label: automaticLabel(card, 'full'),
       labelIsAutomatic: true,
     });
     sectionRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
-    // Only a new request should reopen the form; cards and today change with every reload.
+    // Only a new request should reopen the form; cards and dates change with every reload.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cardPaymentRequest?.requestId]);
 
@@ -241,7 +256,7 @@ export default function PlannedEventsPanel({ apiUrl, events, cards = [], cardPay
         {!form && (
           <button
             type="button"
-            onClick={() => { setError(''); setForm(emptyForm(today)); }}
+            onClick={() => { setError(''); setForm(emptyForm(firstDate)); }}
             className="inline-flex min-h-10 shrink-0 items-center gap-2 rounded-full bg-[#102319] px-4 py-2 text-sm font-bold text-white transition hover:bg-[#173c2c] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#102319] focus-visible:ring-offset-2"
           >
             <CalendarPlus size={16} aria-hidden="true" />
@@ -334,6 +349,12 @@ export default function PlannedEventsPanel({ apiUrl, events, cards = [], cardPay
                 onChange={event => update({ endDate: event.target.value })}
               />
             </label>
+          )}
+
+          {(form.recurrence === 'once' ? form.startDate !== '' && form.startDate < forecastStart : form.endDate !== '' && form.endDate < forecastStart) && (
+            <p className="text-xs leading-5 text-[#76510f] sm:col-span-2">
+              The forecast starts on {formatCalendarDate(forecastStart)}, so this won’t change it.
+            </p>
           )}
 
           {isCardForm && (

@@ -16,6 +16,7 @@ import {
   formatCompactMoney,
   formatMoney,
   periodLabel,
+  projectsCardDebt,
   shortPeriodLabel,
 } from '../../lib/cash-flow-format';
 
@@ -72,7 +73,7 @@ export function CashPositionLegend({ hasCards }: { hasCards: boolean }) {
 
 export default function CashPositionChart({ report }: { report: CashFlowReport }) {
   const rows = buildPositionRows(report);
-  const hasCards = report.cards.some(card => card.currentPace);
+  const hasCards = projectsCardDebt(report);
   const lowPoint = report.position.lowPoint;
   const summary = `Projected cash${hasCards ? ' and credit card balances' : ''} at the end of each ${report.granularity}`
     + (lowPoint ? `, lowest ${formatMoney(lowPoint.cash)} on ${formatCalendarDate(lowPoint.date)}.` : '.');

@@ -87,6 +87,9 @@ export interface CashFlowForecastContext {
     startingCardDebt: number | null;
     milestones: Array<{ key: string; date: string; cash: number; cardDebt: number }>;
     lowNext12Months: { date: string; cash: number } | null;
+    /** Whether any card's balance is projected; card debt figures cover only those cards. */
+    projectsCards: boolean;
+    cardsLeftOut: Array<{ name: string; mask: string | null; reason: 'no_balance' | 'no_pace' }>;
   };
 }
 
@@ -183,15 +186,27 @@ export function buildCashFlowForecastContext(model: CashFlowModel): CashFlowFore
 function positionContext(model: CashFlowModel): CashFlowForecastContext['position'] {
   const position = buildCashPosition(model);
   if (!position.available) {
-    return { available: false, reason: position.reason, startingCash: null, startingCardDebt: null, milestones: [], lowNext12Months: null };
+    return {
+      available: false,
+      reason: position.reason,
+      startingCash: null,
+      startingCardDebt: null,
+      milestones: [],
+      lowNext12Months: null,
+      projectsCards: false,
+      cardsLeftOut: [],
+    };
   }
   const milestones = cashMilestones(model, position);
+  const masks = new Map(model.cards.map(card => [card.account.id, card.terms.mask]));
   return {
     available: true,
     startingCash: position.startingCash,
     startingCardDebt: position.startingCardDebt,
     milestones: milestones.points,
     lowNext12Months: milestones.lowNext12Months,
+    projectsCards: model.cards.some(card => card.projection),
+    cardsLeftOut: position.cardsLeftOut.map(card => ({ name: card.name, mask: masks.get(card.accountId) ?? null, reason: card.reason })),
   };
 }
 
@@ -442,16 +457,16 @@ export function cashFlowForecastFacts(context: CashFlowForecastContext | undefin
   if (position?.available) {
     observed('cash_flow_cash_now', 'Cash across the user’s connected checking and savings accounts now, as last reported',
       position.startingCash, 'cashFlowForecast.position.startingCash');
-    if ((context.cards ?? []).length > 0) {
-      observed('cash_flow_card_debt_now', 'Total owed now on the user’s projected credit cards, as last reported',
+    if (position.projectsCards) {
+      observed('cash_flow_card_debt_now', 'Total owed now on the credit cards the forecast covers, as last reported',
         position.startingCardDebt, 'cashFlowForecast.position.startingCardDebt');
     }
     for (const milestone of position.milestones) {
       const words = MILESTONE_WORDS[milestone.key] ?? milestone.key.replace(/_/g, ' ');
       forecast(`cash_flow_cash_${milestone.key}`, `Projected cash ${words} (${milestone.date})`,
         milestone.cash, `cashFlowForecast.position.milestones.${milestone.key}.cash`);
-      if ((context.cards ?? []).length > 0) {
-        forecast(`cash_flow_card_debt_${milestone.key}`, `Projected total owed on credit cards ${words} (${milestone.date})`,
+      if (position.projectsCards) {
+        forecast(`cash_flow_card_debt_${milestone.key}`, `Projected total owed on the credit cards the forecast covers ${words} (${milestone.date})`,
           milestone.cardDebt, `cashFlowForecast.position.milestones.${milestone.key}.cardDebt`);
       }
     }
@@ -559,7 +574,9 @@ export function compactCashFlowForecastDetails(context: CashFlowForecastContext)
               endDate: plan.endDate,
             })),
           }),
-          ...(!card.currentPace && { notProjected: card.balance === null ? 'no balance reported' : 'no payment history or minimum payment' }),
+          ...(!card.currentPace && (card.withPlans
+            ? { usualPaceUnknown: 'no payment history or minimum payment, so the plan projection counts only the payments the user planned' }
+            : { notProjected: card.balance === null ? 'no balance reported' : 'no payment history or minimum payment' })),
         };
       }),
     }),
@@ -570,6 +587,12 @@ export function compactCashFlowForecastDetails(context: CashFlowForecastContext)
             factIdPrefix: 'cash_flow_cash_',
             milestones: context.position.milestones.map(milestone => ({ key: milestone.key, date: milestone.date })),
             lowestPointDate: context.position.lowNext12Months?.date ?? null,
+            ...(context.position.cardsLeftOut.length > 0 && {
+              cardDebtLeavesOut: context.position.cardsLeftOut.map(card => ({
+                card: cardLabel(card),
+                reason: card.reason === 'no_balance' ? 'no balance reported' : 'no usual payment to project from',
+              })),
+            }),
           }
         : { unavailable: context.position.reason },
     }),

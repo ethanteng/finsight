@@ -73,6 +73,16 @@ export default function CreditCardsPanel({
               </div>
             )}
 
+            {!card.currentPace && (
+              <p className="mt-3 text-xs leading-5 text-[#66736b]">
+                {card.balance === null
+                  ? 'This card’s balance isn’t reported, so it can’t be projected.'
+                  : card.withPlans
+                    ? 'With no usual payment to go on, only the payments you plan are counted.'
+                    : 'Plan a monthly payment to project this card’s balance and interest.'}
+              </p>
+            )}
+
             {card.interestSaved && Math.round(card.interestSaved.twelveMonths) !== 0 && (
               <p className={`mt-3 text-sm font-bold ${card.interestSaved.twelveMonths > 0 ? 'text-[#28704d]' : 'text-[#9b4137]'}`}>
                 {card.interestSaved.twelveMonths > 0

@@ -28,7 +28,9 @@ import { expandPlannedEvent, type PlannedCashFlowEvent } from './planned-events'
  * Statement dates, daily balances and the interest new purchases attract once
  * a balance is carried are simplified away, and the interest disclosed as an
  * estimate. A card with no known APR still projects balances, with interest
- * reported as unknown rather than as zero.
+ * reported as unknown rather than as zero. A card with no usual pace is
+ * projected only under a monthly plan, which says what it is paid; it then
+ * counts only the payments the user plans.
  */
 
 const DAYS_PER_MONTH = 365 / 12;
@@ -159,14 +161,14 @@ interface MonthPlan {
   statementInFull: CalendarDate | null;
   /** A monthly plan pays a set amount in place of the usual payment. */
   fixedMonthly: { date: CalendarDate; amount: number } | null;
-  /** A one-time plan clears everything the card owes. */
-  clearDate: CalendarDate | null;
+  /** One-time plans that clear everything the card owes on their day. */
+  clearDates: CalendarDate[];
   /** One-time extra payments. */
   extras: Array<{ date: CalendarDate; amount: number }>;
 }
 
 function emptyPlan(): MonthPlan {
-  return { statementInFull: null, fixedMonthly: null, clearDate: null, extras: [] };
+  return { statementInFull: null, fixedMonthly: null, clearDates: [], extras: [] };
 }
 
 /** Each month's plan payments for one card, from the user's card-payment events. */
@@ -195,7 +197,7 @@ function plansByMonth(
             : { date, amount: event.amount };
         }
       } else if (event.paymentMode === 'full') {
-        plan.clearDate = plan.clearDate ? minDate(plan.clearDate, date) : date;
+        plan.clearDates.push(date);
       } else {
         plan.extras.push({ date, amount: event.amount });
       }
@@ -238,9 +240,8 @@ export interface CardProjectionInput {
 
 /**
  * Project one card month by month across the forecast window. Null when there
- * is no balance to start from, or no pace and no payment plan to project from.
- * A plan alone is enough: without a usual pace, months the plan does not cover
- * pay nothing beyond what the plan schedules.
+ * is no balance to start from or no pace to project: with no usual pace, only
+ * a monthly plan says what the card is paid.
  *
  * Months are accounted whole, through the one the window ends in: a payment
  * due after the window still decides what that month carries. Only payments
@@ -249,9 +250,10 @@ export interface CardProjectionInput {
 export function projectCard(input: CardProjectionInput): CardProjection | null {
   const { terms, baseline, forecastStart, forecastEndLimit } = input;
   if (terms.balance === null) return null;
-  if (baseline.behavior === 'unknown' && input.plans.length === 0) return null;
   const projectionEnd = addMonths(startOfMonth(addDays(forecastEndLimit, -1)), 1, 1);
   const plans = plansByMonth(input.plans, forecastStart, projectionEnd);
+  const monthlyPlan = [...plans.values()].some(plan => plan.statementInFull || plan.fixedMonthly);
+  if (baseline.behavior === 'unknown' && !monthlyPlan) return null;
   const inWindow = (date: CalendarDate) => date >= forecastStart && date < forecastEndLimit;
   const purchased = (from: CalendarDate, toExclusive: CalendarDate) =>
     purchasesBetween(input.purchases, forecastStart, from, toExclusive);
@@ -274,11 +276,13 @@ export function projectCard(input: CardProjectionInput): CardProjection | null {
     const dueDate = addMonths(monthStart, 0, terms.paymentDay);
     const paidBeforeForecast = dueDate < forecastStart;
 
-    // The regular payment: a monthly plan if one is running, otherwise the usual pace.
+    // The regular payment: a monthly plan if one is running, otherwise the
+    // usual pace. With no usual pace, a month the plan does not cover pays
+    // only what one-time plans pay.
     let regular: { date: CalendarDate; amount: number } | null = null;
     if (plan.statementInFull) regular = { date: plan.statementInFull, amount: Math.max(0, statement) };
     else if (plan.fixedMonthly) regular = plan.fixedMonthly;
-    else if (!paidBeforeForecast) {
+    else if (!paidBeforeForecast && baseline.behavior !== 'unknown') {
       regular = {
         date: dueDate,
         amount: baseline.behavior === 'pays_in_full' ? Math.max(0, statement) : baseline.monthlyPayment ?? 0,
@@ -288,7 +292,7 @@ export function projectCard(input: CardProjectionInput): CardProjection | null {
     // In date order; on a shared day the regular payment goes first.
     const due = [
       ...(regular ? [{ ...regular, kind: 'regular' as const }] : []),
-      ...(plan.clearDate ? [{ date: plan.clearDate, amount: 0, kind: 'clear' as const }] : []),
+      ...plan.clearDates.map(date => ({ date, amount: 0, kind: 'clear' as const })),
       ...plan.extras.map(extra => ({ ...extra, kind: 'extra' as const })),
     ].sort((left, right) => left.date.localeCompare(right.date));
 

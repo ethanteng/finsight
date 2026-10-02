@@ -15,7 +15,14 @@ import ForecastBasis from '../../components/cash-flow/ForecastBasis';
 import PlannedEventsPanel, { type CardPaymentRequest } from '../../components/cash-flow/PlannedEventsPanel';
 import { clearStoredUserTimeZone } from '../../lib/browser-time-zone';
 import { CONNECT_ACCOUNTS_PATH } from '../../lib/connect-accounts';
-import { formatCalendarDate, formatMoney, lastIncludedDay, unavailableMessage } from '../../lib/cash-flow-format';
+import {
+  cardsLeftOutText,
+  formatCalendarDate,
+  formatMoney,
+  lastIncludedDay,
+  projectsCardDebt,
+  unavailableMessage,
+} from '../../lib/cash-flow-format';
 import type { CashFlowGranularity, CashFlowReport } from '../../types/cash-flow';
 
 type View = CashFlowGranularity | 'custom';
@@ -330,7 +337,13 @@ export default function CashFlowPageClient() {
                 </div>
               ) : report.position.available ? (
                 <div className="mt-5">
-                  <CashPositionLegend hasCards={report.cards.some(card => card.currentPace)} />
+                  <CashPositionLegend hasCards={projectsCardDebt(report)} />
+                  {cardsLeftOutText(report) && (
+                    <p className="mt-2 text-xs leading-5 text-[#76510f]">
+                      {projectsCardDebt(report) ? 'Owed on credit cards leaves out ' : 'Credit card balances aren’t shown: '}
+                      {cardsLeftOutText(report)}.
+                    </p>
+                  )}
                   <div className="mt-3">
                     <CashPositionChart report={report} />
                   </div>
@@ -370,6 +383,7 @@ export default function CashFlowPageClient() {
               cards={report.cards}
               cardPaymentRequest={cardPaymentRequest}
               today={report.today}
+              forecastStart={report.forecastStart}
               onChanged={load}
             />
 

@@ -371,9 +371,11 @@ export function buildCashFlowModel(input: CashFlowModelInput): CashFlowModel {
       const plans = input.plannedEvents.filter(
         event => event.kind === 'card_payment' && event.accountId === account.id
       );
-      // A payment plan is enough to project even when there is no usual pace.
-      const canProject = terms.balance !== null && (baseline.behavior !== 'unknown' || plans.length > 0);
-      const modelsInterest = !reason && terms.apr !== null && canProject;
+      // Interest is modelled only from a usual pace. A card projected from a
+      // monthly plan alone keeps its past interest in what the savings forecast
+      // learns: with no usual pace there is no plan-free projection to carry
+      // that interest, and the forecast without plans must not lose it.
+      const modelsInterest = !reason && terms.apr !== null && terms.balance !== null && baseline.behavior !== 'unknown';
       return { account, history, terms, baseline, plans, modelsInterest };
     });
   const modeledInterestCards = new Set(cardSetups.filter(card => card.modelsInterest).map(card => card.account.id));
@@ -882,9 +884,10 @@ function cardSummary(card: CardModel): CashFlowCardSummary {
   const current = card.currentPace;
   const planned = hasPlans ? card.projection : null;
   // "Now" is today's state whatever the plans: a plan that clears the card this
-  // month still starts from a carried balance.
+  // month still starts from a carried balance. With no usual pace to say
+  // otherwise, a card that owes anything is carrying it.
   const withPlans = cardOutcome(planned);
-  if (withPlans && current) withPlans.carryingBalanceNow = current.carryingBalanceNow;
+  if (withPlans) withPlans.carryingBalanceNow = current ? current.carryingBalanceNow : (card.terms.balance ?? 0) > 0;
   const saved = current && planned && current.interestTwelveMonths !== null && planned.interestTwelveMonths !== null
     && current.interestTotal !== null && planned.interestTotal !== null
     ? {

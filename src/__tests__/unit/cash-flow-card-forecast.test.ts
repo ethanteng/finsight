@@ -10,6 +10,7 @@ import type { PlannedCashFlowEvent } from '../../cash-flow/planned-events';
 import {
   ACCOUNTS,
   CARD_PAYMENT_CATEGORY,
+  CARD_TERMS,
   accountsWithCardTerms,
   householdTransactions,
   interestCharges,
@@ -187,6 +188,47 @@ describe('the report’s cards and cash position', () => {
     expect(position.transfers.recurring).toEqual([
       expect.objectContaining({ label: 'VANGUARD BUY TRANSFER', cadence: 'monthly', amount: 500, direction: 'out', nextDate: '2026-10-05' }),
     ]);
+  });
+
+  describe('a card with no usual pace', () => {
+    // No payments seen and no minimum from the provider.
+    const noPayments = carrying.filter(item => item.name !== 'CARD CO AUTOPAY' && item.name !== 'PAYMENT THANK YOU');
+    const noMinimum = accountsWithCardTerms().map(account => account.account_id === 'card'
+      ? { ...account, liabilityDetails: [{ ...CARD_TERMS, minimumPaymentAmount: null }] }
+      : account);
+    const monthly: PlannedCashFlowEvent = {
+      ...payoff, id: 'monthly', label: 'Rewards Card payment', paymentMode: 'fixed', amount: 1500, recurrence: 'monthly', startDate: '2026-10-20',
+    };
+
+    it('is projected under a monthly plan, which supplies the pace', () => {
+      const built = model({ transactions: noPayments, accounts: noMinimum, plannedEvents: [monthly] });
+      expect(built.cards[0].baseline.behavior).toBe('unknown');
+      expect(built.cards[0].projection!.payments.slice(0, 2)).toEqual([
+        { date: '2026-10-20', amount: 1500 },
+        { date: '2026-11-20', amount: 1500 },
+      ]);
+      const report = buildCashFlowReport(built, { granularity: 'month', horizonMonths: 3 });
+      expect(report.cards[0]).toMatchObject({ currentPace: null, interestSaved: null, withPlans: { carryingBalanceNow: true } });
+      expect(report.position.cardsLeftOut).toEqual([]);
+      expect(report.position.startingCardDebt).toBe(4000);
+      // Its interest stays learned from history; the plan's is not added on top.
+      expect(built.cards[0].modelsInterest).toBe(false);
+      expect(forecastTotals(built, ...NEXT_12)!.components.cardInterest).toBe(0);
+      // And saving a plan leaves the forecast without plans exactly as it was.
+      const withoutPlan = model({ transactions: noPayments, accounts: noMinimum });
+      expect(forecastTotals(built, ...NEXT_12, { includePlans: false })!.spending)
+        .toBeCloseTo(forecastTotals(withoutPlan, ...NEXT_12)!.spending, 2);
+    });
+
+    it('is left out with only a one-time plan, and the position says so', () => {
+      const report = buildCashFlowReport(
+        model({ transactions: noPayments, accounts: noMinimum, plannedEvents: [payoff] }),
+        { granularity: 'month', horizonMonths: 3 }
+      );
+      expect(report.cards[0]).toMatchObject({ currentPace: null, withPlans: null });
+      expect(report.position.cardsLeftOut).toEqual([{ accountId: 'card', name: 'Rewards Card', reason: 'no_pace' }]);
+      expect(report.position.startingCardDebt).toBe(0);
+    });
   });
 
   it('says why there is no cash position', () => {

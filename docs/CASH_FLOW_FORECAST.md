@@ -79,7 +79,7 @@ The usual pace comes from the card's last 90 days:
 - **Paid in full:** payments were made and no interest was charged.
 - **Average payment:** payments were made but interest was still charged, so the card carries a balance. The pace is the average payment, never below the minimum.
 - **Minimum payment:** no payments were seen but the provider gives a minimum.
-- **Unknown:** no payments seen and no minimum. A card with an unknown pace, or no reported balance, is not projected.
+- **Unknown:** no payments seen and no minimum. Such a card is projected only under a monthly plan, which sets what it is paid, and then counts only the payments the user plans; a one-time plan alone says nothing about the months after it. A card with no reported balance is not projected.
 
 The APR, minimum and due day come from Plaid Liabilities. A card whose APR the provider does not share still projects its balance, with interest reported as unknown rather than zero.
 
@@ -123,6 +123,8 @@ The cash position is unavailable when:
 
 The report gives balances at each period's end, the lowest point, and fixed milestones: the end of this month and next, and 3, 6 and 12 months out.
 
+Card balances cover only the cards the model projects. The report lists the cards it leaves out and why (`cardsLeftOut`: no reported balance, or no pace to project), and the page names them beside the chart, so a partial total is never shown as all card debt.
+
 ## API
 
 All routes are under `/api/cash-flow` and use `requireAuth`:
@@ -148,6 +150,7 @@ Credit cards and the cash position are facts as well:
 - **Each card:** balance and purchase APR (snapshot facts). The usual payment. At the usual pace and with the user's plans: interest over 12 months, balance in 12 months, and months until it stops carrying a balance (in `months`).
 - **Interest a plan saves:** a forecast fact with an `abs(input[0] - input[1])` formula over the two interest figures, which the validator rechecks.
 - **Cash:** cash now, cash at each milestone, and the lowest point in the next 12 months.
+- **Card debt:** owed now and at each milestone, labelled as covering the cards the forecast projects. It is published only when the forecast projects at least one card, and the details name any card it leaves out.
 
 The shared caveat says how card interest is estimated.
 
