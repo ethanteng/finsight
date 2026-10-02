@@ -3,6 +3,7 @@ import { questionNeedsFromPacks } from '../../openai/context-packs';
 import {
   canonicalizeResponseNumbers,
   hasUnsupportedPercentValue,
+  hasUnsupportedValueIssue,
   salvageUngroundedResponse,
   salvageUngroundedResponseWithDetail,
   validateResponseFacts,
@@ -829,5 +830,58 @@ describe('bare monthly key numbers', () => {
   it('cites nothing for a value that is neither', () => {
     const response = canonicalizeResponseNumbers({ summary: 'Result.', key_numbers: { monthly_expenses: 7000 } }, pack);
     expect(response.key_numbers?.monthly_expenses).toEqual({ value: 7000, unit: 'usd', provenance: '' });
+  });
+});
+
+describe('named monthly figures in prose', () => {
+  // Each is published twice, as what happened and as what to expect. Matching
+  // on value alone, either would ground a sentence that names the other.
+  const monthly = {
+    ...snapshot,
+    averageMonthlyIncome: 11_778,
+    averageMonthlyExpense: 12_712,
+    expectedMonthly: {
+      income: 11_662,
+      spending: 5_951.27,
+      incomeSource: 'transactions',
+      spendingSource: 'transactions',
+      typicalBasisDays: 90,
+      dataThrough: '2026-10-01',
+    },
+  } as any;
+  const pack = buildCanonicalFactPack(monthly, 'What will I spend each month?', questionNeedsFromPacks([], false));
+
+  it('accepts each figure under its own name, and either one unnamed', () => {
+    expect(validateResponseFacts({
+      summary: 'Your expected monthly expenses are about $5,951, while your average monthly expenses were $12,712. '
+        + 'That leaves an expected monthly surplus of $5,710.73. Monthly expenses of $12,712 would leave far less.',
+    }, pack)).toMatchObject({ valid: true, issues: [] });
+    expect(validateResponseFacts({ summary: 'You can plan on $5,951 in expected monthly spending.' }, pack).valid).toBe(true);
+  });
+
+  it('rejects a figure named as the other one', () => {
+    const result = validateResponseFacts({ summary: 'Your average monthly expenses are $5,951.' }, pack);
+    expect(result.valid).toBe(false);
+    expect(result.issues).toContain(
+      'User-facing usd value 5951 is called average_monthly_expenses, but that fact is 12712; quote the figure the wording names.'
+    );
+    // It is a miscited name, not a missing number, so it does not ask for more context.
+    expect(hasUnsupportedValueIssue(result.issues)).toBe(false);
+    expect(validateResponseFacts({ summary: 'Your expected monthly income is $11,778.' }, pack).valid).toBe(false);
+    expect(validateResponseFacts({ summary: 'That is $12,712 in projected monthly expenses.' }, pack).valid).toBe(false);
+  });
+
+  it('removes only the misnamed sentence when salvaging', () => {
+    const response = {
+      summary: 'Your average monthly expenses are $5,951. You can expect $11,662 of income each month.',
+    };
+    const salvaged = salvageUngroundedResponse(response, pack, validateResponseFacts(response, pack));
+    expect(salvaged.summary).toContain('You can expect $11,662 of income each month.');
+    expect(salvaged.summary).not.toContain('$5,951');
+  });
+
+  it('leaves a figure in another unit to the usual check', () => {
+    expect(validateResponseFacts({ summary: 'Your expected savings rate is 48.97%.' }, pack).valid).toBe(true);
+    expect(validateResponseFacts({ summary: 'Your expected monthly savings of 49% of income is strong.' }, pack).valid).toBe(true);
   });
 });
