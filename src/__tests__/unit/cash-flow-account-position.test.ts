@@ -119,7 +119,24 @@ describe('the cash position, account by account', () => {
   });
 
   it('spreads an override over the accounts the way the history did', () => {
-    expectSumsToWhole(model({ overrides: { monthlyIncome: 9000, monthlyExpense: 7000 } }));
+    // Residual side income on savings alone must not claim the whole income
+    // override: paychecks lived on checking as a stream, and streams are off
+    // under an override, so weights come from every counted basis income.
+    const irregularSavingsIncome = [
+      tx('savings', '2026-06-15', 'income', 80, 'SIDE GIG A'),
+      tx('savings', '2026-07-22', 'income', 95, 'SIDE GIG B'),
+      tx('savings', '2026-08-10', 'income', 70, 'SIDE GIG C'),
+      tx('savings', '2026-09-18', 'income', 110, 'SIDE GIG D'),
+    ];
+    const { checking, savings, whole } = expectSumsToWhole(model({
+      transactions: [...householdTransactions(FROM, THROUGH), ...savingsTransactions(), ...irregularSavingsIncome],
+      overrides: { monthlyIncome: 9000, monthlyExpense: 7000 },
+    }));
+    const [from, to] = ['2026-10-01', '2027-04-01'];
+    const checkingIn = checking.moneyInBetween(from, to);
+    const savingsIn = savings.moneyInBetween(from, to);
+    expect(checkingIn).toBeGreaterThan(savingsIn);
+    expect(checkingIn + savingsIn).toBeCloseTo(whole.moneyInBetween(from, to), 1);
   });
 
   it('covers a chosen account even when another one has no balance', () => {

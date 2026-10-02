@@ -640,7 +640,8 @@ export function buildCashFlowModel(input: CashFlowModelInput): CashFlowModel {
   // Each cash account's share of the typical rates. Income seen on a card
   // lands in the primary account, where the cash goes; spending on a card
   // stays on the card until it is paid. An override sets a side's total, and
-  // the accounts keep the shares the history gave them.
+  // the accounts keep the shares the history gave them — including income
+  // that lived in recurring streams, which the override suppresses.
   const cashIds = new Set(ledger.accounts.filter(account => account.kind === 'cash').map(account => account.id));
   const primaryAccountId = primaryCashAccount(ledger, basisStart, forecastStart);
   const learnedIncome = new Map<string, number>();
@@ -650,9 +651,20 @@ export function buildCashFlowModel(input: CashFlowModelInput): CashFlowModel {
     if (incomeTo) learnedIncome.set(incomeTo, (learnedIncome.get(incomeTo) ?? 0) + daily.income);
     if (cashIds.has(accountId)) learnedSpending.set(accountId, daily.spending);
   }
-  const incomeByAccount = monthlyIncomeOverride === null
-    ? learnedIncome
-    : spreadByWeight(dailyIncome, learnedIncome, primaryAccountId);
+  let incomeByAccount: Map<string, number> = learnedIncome;
+  if (monthlyIncomeOverride !== null) {
+    // Weight by every counted income in the basis (paychecks in streams plus
+    // residual), not residual alone: under an override those streams are off,
+    // so residual-only weights would park the whole override in a side account.
+    const earnedIn = new Map<string, number>();
+    for (const entry of counted) {
+      if (entry.flow !== 'income' || !basisStart) continue;
+      if (entry.date < basisStart || entry.date >= forecastStart) continue;
+      const incomeTo = cashIds.has(entry.accountId) ? entry.accountId : primaryAccountId;
+      if (incomeTo) earnedIn.set(incomeTo, (earnedIn.get(incomeTo) ?? 0) + entry.amount);
+    }
+    incomeByAccount = spreadByWeight(dailyIncome, earnedIn, primaryAccountId);
+  }
   let spendingByAccount: Map<string, number> = learnedSpending;
   if (monthlyExpenseOverride !== null) {
     // What the cards are not charged is paid from cash, in the proportion the
