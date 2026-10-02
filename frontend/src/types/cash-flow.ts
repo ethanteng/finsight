@@ -141,6 +141,7 @@ export interface CashFlowReport {
     kind: 'cash' | 'credit';
     subtype: string | null;
     mask: string | null;
+    /** The balance the provider reported: cash held, or what a card owes. Null when it gave none. */
     balance: number | null;
   }>;
   excluded: { unclassified: number; currencyMismatch: number };

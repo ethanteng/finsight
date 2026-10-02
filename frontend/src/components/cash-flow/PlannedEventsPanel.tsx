@@ -165,18 +165,13 @@ export default function PlannedEventsPanel({
   const chooseKind = (kind: PlannedEventKind) => {
     if (kind === 'card_payment') {
       const accountId = form?.accountId || cards[0]?.accountId || '';
-      const card = cardById.get(accountId);
       const automatic = !form?.label || Boolean(form?.labelIsAutomatic);
-      // With no usual pace, only a monthly plan projects the card.
-      const recurrence = card?.behavior === 'unknown'
-        ? 'monthly'
-        : (CARD_RECURRENCES.includes(form?.recurrence ?? 'once') ? (form?.recurrence ?? 'once') : 'once');
       update({
         kind,
         accountId,
-        recurrence,
+        recurrence: CARD_RECURRENCES.includes(form?.recurrence ?? 'once') ? form?.recurrence : 'once',
         labelIsAutomatic: automatic,
-        ...(automatic && { label: automaticLabel(card, form?.paymentMode ?? 'full') }),
+        ...(automatic && { label: automaticLabel(cardById.get(accountId), form?.paymentMode ?? 'full') }),
       });
     } else {
       update({ kind, ...(form?.labelIsAutomatic && { label: '', labelIsAutomatic: false }) });
@@ -247,9 +242,14 @@ export default function PlannedEventsPanel({
 
   const kinds: PlannedEventKind[] = cards.length > 0 ? ['income', 'expense', 'card_payment'] : ['income', 'expense'];
   const isCardForm = form?.kind === 'card_payment';
-  const selectedCard = isCardForm && form ? cardById.get(form.accountId) : undefined;
-  // Unknown-pace cards need a monthly plan to be projected at all.
-  const cardRecurrences = selectedCard?.behavior === 'unknown' ? (['monthly'] as PlannedEventRecurrence[]) : CARD_RECURRENCES;
+  // A card with no usual pace is projected only under a monthly plan; a
+  // one-time payment counts once one exists, and on its own does nothing.
+  const formCard = isCardForm ? cardById.get(form.accountId) : undefined;
+  const oneTimeAloneIgnored = Boolean(
+    form && formCard && formCard.behavior === 'unknown' && formCard.balance !== null && form.recurrence === 'once'
+      && !events.some(event => event.kind === 'card_payment' && event.accountId === formCard.accountId
+        && event.recurrence === 'monthly' && event.id !== form.id)
+  );
 
   return (
     <section ref={sectionRef} className="scroll-mt-28 rounded-[1.6rem] border border-[#102319]/10 bg-[#fffdf5] p-5 shadow-sm sm:p-7" aria-labelledby="planned-events-heading">
@@ -283,19 +283,7 @@ export default function PlannedEventsPanel({
             <>
               <label className="text-sm font-semibold text-[#102319]">
                 Card
-                <select
-                  className={fieldClass}
-                  value={form.accountId}
-                  onChange={event => {
-                    const accountId = event.target.value;
-                    const card = cardById.get(accountId);
-                    update({
-                      accountId,
-                      ...(card?.behavior === 'unknown' && { recurrence: 'monthly' }),
-                    });
-                  }}
-                  required
-                >
+                <select className={fieldClass} value={form.accountId} onChange={event => update({ accountId: event.target.value })} required>
                   {cards.map(card => <option key={card.accountId} value={card.accountId}>{cardName(card)}</option>)}
                 </select>
               </label>
@@ -352,7 +340,7 @@ export default function PlannedEventsPanel({
               value={form.recurrence}
               onChange={event => update({ recurrence: event.target.value as PlannedEventRecurrence })}
             >
-              {(isCardForm ? cardRecurrences : RECURRENCES).map(recurrence => (
+              {(isCardForm ? CARD_RECURRENCES : RECURRENCES).map(recurrence => (
                 <option key={recurrence} value={recurrence}>{RECURRENCE_LABELS[recurrence]}</option>
               ))}
             </select>
@@ -374,6 +362,13 @@ export default function PlannedEventsPanel({
           {(form.recurrence === 'once' ? form.startDate !== '' && form.startDate < forecastStart : form.endDate !== '' && form.endDate < forecastStart) && (
             <p className="text-xs leading-5 text-[#76510f] sm:col-span-2">
               The forecast starts on {formatCalendarDate(forecastStart)}, so this won’t change it.
+            </p>
+          )}
+
+          {oneTimeAloneIgnored && (
+            <p className="text-xs leading-5 text-[#76510f] sm:col-span-2">
+              We haven’t seen what you usually pay this card, so a one-time payment alone won’t project it. Add a monthly
+              payment to see its balance and interest.
             </p>
           )}
 
