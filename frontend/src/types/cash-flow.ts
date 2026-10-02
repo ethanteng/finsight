@@ -94,6 +94,8 @@ export interface CashFlowRecurringItem extends CashFlowItemTransactions {
   replacedByOverride: boolean;
   /** It had stopped, and is projected because the user kept it. */
   continuedByUser: boolean;
+  /** The id of the choice that keeps it; null when none does. */
+  continuedBy: string | null;
 }
 
 /** What a forecast adjustment does: leave a payee out, count a one-off, keep a stopped item, or leave a transfer out. */

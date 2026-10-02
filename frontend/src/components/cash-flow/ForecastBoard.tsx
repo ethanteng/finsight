@@ -261,8 +261,11 @@ export default function ForecastBoard({ report, apiUrl, onChanged }: {
   };
   const adjust = (request: AdjustmentRequest) => change('POST', '/api/cash-flow/adjustments', request);
   const undo = (adjustment: CashFlowAdjustment) => change('DELETE', `/api/cash-flow/adjustments/${encodeURIComponent(adjustment.id)}`);
-  const kept = (item: CashFlowRecurringItem) => adjustments.find(adjustment =>
-    adjustment.kind === 'continue_stream' && adjustment.flow === item.flow && adjustment.key === item.payeeKey);
+  // The report names the choice that keeps a stopped item, which may hold the
+  // payee's earlier key; an older report does not, so fall back to the key.
+  const kept = (item: CashFlowRecurringItem) => adjustments.find(adjustment => (item.continuedBy
+    ? adjustment.id === item.continuedBy
+    : adjustment.kind === 'continue_stream' && adjustment.flow === item.flow && adjustment.key === item.payeeKey));
   // Only a change that is what puts a transaction in the typical rate counts:
   // one whose one-off aged out, or whose payee now repeats, does nothing here.
   const countedBy = (payee: CashFlowTypicalPayee) => adjustments.find(adjustment =>

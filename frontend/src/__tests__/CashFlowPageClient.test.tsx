@@ -453,10 +453,11 @@ describe('CashFlowPageClient', () => {
     });
 
     it('stops counting an item the user kept', async () => {
-      const kept = { ...report().recurring[2], status: 'active' as const, continuedByUser: true, nextDate: '2026-11-05' };
+      const kept = { ...report().recurring[2], status: 'active' as const, continuedByUser: true, continuedBy: 'adj-gym', nextDate: '2026-11-05' };
       const body = report({
         recurring: [report().recurring[0], report().recurring[1], kept],
-        adjustments: [{ id: 'adj-gym', kind: 'continue_stream', flow: 'spending', key: 'old gym', label: 'Old Gym', date: null, amount: null }],
+        // Saved under the payee's earlier key, which the report's continuedBy still names.
+        adjustments: [{ id: 'adj-gym', kind: 'continue_stream', flow: 'spending', key: 'old gym nd', label: 'Old Gym', date: null, amount: null }],
       });
       const calls = adjusting(body);
       render(<CashFlowPageClient />);

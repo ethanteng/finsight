@@ -236,6 +236,30 @@ describe('the transactions behind each item', () => {
   });
 });
 
+describe('choices saved under a payee’s earlier key', () => {
+  // The earlier key kept an ordinal's letters ("sq blue bottle nd st"); now the word is dropped whole.
+  const coffee = (date: string) => tx('card', date, 'expense', 120, 'SQ *BLUE BOTTLE 2ND ST');
+  const recent = ['2026-07-10', '2026-08-10', '2026-09-10'].map(coffee);
+  const stopped = ['2026-02-10', '2026-03-10', '2026-04-10', '2026-05-10', '2026-06-10'].map(coffee);
+
+  it('keeps leaving out a payee left out under its earlier key', () => {
+    const streamFor = (built: ReturnType<typeof model>) => built.streams.find(stream => stream.counterpartyKey === 'sq blue bottle st');
+    expect(streamFor(model([], { transactions: [...history, ...recent] }))).toBeDefined();
+    const leftOut = model([adjustment({ key: 'sq blue bottle nd st', label: 'SQ BLUE BOTTLE ST' })], { transactions: [...history, ...recent] });
+    expect(streamFor(leftOut)).toBeUndefined();
+    expect(buildCashFlowReport(leftOut, { granularity: 'month', horizonMonths: 3 }).adjustments[0].transactionCount).toBe(3);
+  });
+
+  it('keeps counting a stopped item kept under its earlier key, and names that choice', () => {
+    const kept = adjustment({ kind: 'continue_stream', key: 'sq blue bottle nd st', label: 'SQ BLUE BOTTLE ST' });
+    const built = model([kept], { transactions: [...history, ...stopped] });
+    const stream = built.streams.find(item => item.counterpartyKey === 'sq blue bottle st')!;
+    expect(stream.status).toBe('active');
+    expect(buildCashFlowReport(built, { granularity: 'month', horizonMonths: 3 }).recurring.find(item => item.id === stream.id))
+      .toMatchObject({ continuedByUser: true, continuedBy: kept.id });
+  });
+});
+
 describe('forecastAdjustmentTarget', () => {
   const built = model();
 
