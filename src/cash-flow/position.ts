@@ -66,7 +66,15 @@ export function buildCashPosition(model: CashFlowModel): CashPosition {
   for (const item of model.scheduled) {
     if (item.flow === 'income') addCash(item.date, item.amount);
     else if (!cardIds.has(item.accountId)) addCash(item.date, -item.amount);
-    else if (projected.some(card => card.account.id === item.accountId)) addCard(item.date, item.amount);
+    else {
+      const card = projected.find(entry => entry.account.id === item.accountId);
+      if (!card) continue;
+      // APR interest reaches the card via interestPostings. Learned interest
+      // charges stay in the savings forecast when modelsInterest is false, but
+      // must not also raise the projected balance here.
+      if (item.interest && card.terms.apr !== null) continue;
+      addCard(item.date, item.amount);
+    }
   }
   let cardDaily = 0;
   let allCardsDaily = 0;

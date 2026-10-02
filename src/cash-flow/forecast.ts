@@ -139,7 +139,15 @@ export interface CashFlowModel {
   };
   oneOffs: CashFlowEntry[];
   /** Projected stream occurrences over the whole forecast limit. */
-  scheduled: Array<{ streamId: string; flow: CashFlowDirection; accountId: string; date: CalendarDate; amount: number }>;
+  scheduled: Array<{
+    streamId: string;
+    flow: CashFlowDirection;
+    accountId: string;
+    date: CalendarDate;
+    amount: number;
+    /** True when the stream was learned from card interest charges. */
+    interest: boolean;
+  }>;
   /** The typical spending rate that lands on each card, out of `typical.dailySpending`. */
   cardDailySpending: Map<string, number>;
   cards: CardModel[];
@@ -380,6 +388,10 @@ export function buildCashFlowModel(input: CashFlowModelInput): CashFlowModel {
     });
   const modeledInterestCards = new Set(cardSetups.filter(card => card.modelsInterest).map(card => card.account.id));
   const entries = observed.filter(entry => !(entry.interest && modeledInterestCards.has(entry.accountId)));
+  // Streams learned from interest charges (kept when modelsInterest is false)
+  // must still be identifiable so a projected APR card does not also treat
+  // them as purchases on top of interestPostings.
+  const interestEntryIds = new Set(observed.filter(entry => entry.interest).map(entry => entry.id));
 
   const learned = learnFlows(entries, input.dataThrough, basisStart, forecastStart);
   const streams = learned.streams;
@@ -407,13 +419,22 @@ export function buildCashFlowModel(input: CashFlowModelInput): CashFlowModel {
     : streams
       .filter(stream => (stream.flow === 'income' ? incomeSource : spendingSource) === 'transactions')
       .flatMap(stream => scheduleStream(stream, forecastStart, forecastEndLimit)
-        .map(occurrence => ({ streamId: stream.id, flow: stream.flow, accountId: stream.accountId, ...occurrence })));
+        .map(occurrence => ({
+          streamId: stream.id,
+          flow: stream.flow,
+          accountId: stream.accountId,
+          interest: stream.entryIds.some(id => interestEntryIds.has(id)),
+          ...occurrence,
+        })));
 
   const cards: CardModel[] = cardSetups.map(card => {
     const purchases = {
       dailyRate: cardDailySpending.get(card.account.id) ?? 0,
       dated: scheduled
         .filter(item => item.flow === 'spending' && item.accountId === card.account.id)
+        // projectCard posts APR interest itself; feeding learned interest
+        // charges in as purchases would stack the two on the balance.
+        .filter(item => !(card.terms.apr !== null && item.interest))
         .map(item => ({ date: item.date, amount: item.amount })),
     };
     const projectWith = (cardPlans: PlannedCashFlowEvent[]) => reason ? null : projectCard({

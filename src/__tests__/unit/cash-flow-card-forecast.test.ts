@@ -220,6 +220,23 @@ describe('the report’s cards and cash position', () => {
         .toBeCloseTo(forecastTotals(withoutPlan, ...NEXT_12)!.spending, 2);
     });
 
+    it('does not feed learned interest charges into an APR card projection', () => {
+      // Savings still learns the $60/mo INTEREST stream (modelsInterest is false),
+      // but the card posts APR interest itself — the two must not stack.
+      const built = model({ transactions: noPayments, accounts: noMinimum, plannedEvents: [monthly] });
+      const withoutCharges = model({
+        transactions: noPayments.filter(item => !String(item.name).includes('INTEREST')),
+        accounts: noMinimum,
+        plannedEvents: [monthly],
+      });
+      expect(built.streams.some(stream => stream.label.includes('INTEREST'))).toBe(true);
+      expect(built.scheduled.some(item => item.interest && item.accountId === 'card')).toBe(true);
+      expect(built.cards[0].projection!.interestTwelveMonths)
+        .toBeCloseTo(withoutCharges.cards[0].projection!.interestTwelveMonths!, 2);
+      expect(built.cards[0].projection!.months[0].endBalance)
+        .toBeCloseTo(withoutCharges.cards[0].projection!.months[0].endBalance, 2);
+    });
+
     it('is left out with only a one-time plan, and the position says so', () => {
       const report = buildCashFlowReport(
         model({ transactions: noPayments, accounts: noMinimum, plannedEvents: [payoff] }),

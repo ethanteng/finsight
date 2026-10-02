@@ -4,6 +4,7 @@ import { buildCashPosition, cashMilestones, type CashPosition } from '../../cash
 import type { PlannedCashFlowEvent } from '../../cash-flow/planned-events';
 import {
   ACCOUNTS,
+  CARD_TERMS,
   accountsWithCardTerms,
   householdTransactions,
   interestCharges,
@@ -133,6 +134,30 @@ describe('buildCashPosition', () => {
     })));
     expect(position.cardsLeftOut).toEqual([{ accountId: 'card', name: 'Rewards Card', reason: 'no_balance' }]);
     expect(position.startingCardDebt).toBe(0);
+  });
+
+  it('does not stack learned interest charges on APR interest for a plan-only card', () => {
+    // Unknown pace + monthly plan: savings keeps the INTEREST stream, but the
+    // card posts APR interest. Card debt must match a history without charges.
+    const noPayments = carrying.filter(item => item.name !== 'CARD CO AUTOPAY' && item.name !== 'PAYMENT THANK YOU');
+    const noMinimum = accountsWithCardTerms().map(account => account.account_id === 'card'
+      ? { ...account, liabilityDetails: [{ ...CARD_TERMS, minimumPaymentAmount: null }] }
+      : account);
+    const monthly = event({
+      id: 'monthly', kind: 'card_payment', accountId: 'card', paymentMode: 'fixed', amount: 1500,
+      recurrence: 'monthly', startDate: '2026-10-20', label: 'Rewards Card payment',
+    });
+    const withCharges = model({ transactions: noPayments, accounts: noMinimum, plannedEvents: [monthly] });
+    const withoutCharges = model({
+      transactions: noPayments.filter(item => !String(item.name).includes('INTEREST')),
+      accounts: noMinimum,
+      plannedEvents: [monthly],
+    });
+    expect(withCharges.cards[0].modelsInterest).toBe(false);
+    expect(withCharges.cards[0].projection).not.toBeNull();
+    const debtWith = available(buildCashPosition(withCharges)).cardDebtBefore('2027-10-01');
+    const debtWithout = available(buildCashPosition(withoutCharges)).cardDebtBefore('2027-10-01');
+    expect(debtWith).toBeCloseTo(debtWithout, 2);
   });
 });
 
