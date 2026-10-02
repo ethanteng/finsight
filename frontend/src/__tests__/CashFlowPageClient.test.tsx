@@ -379,6 +379,23 @@ describe('CashFlowPageClient', () => {
       expect(within(section).getByText('Spending left out of the forecast')).toBeInTheDocument();
     });
 
+    it('does not claim a spending leave-out is inert under a spending override', async () => {
+      // Leaving a payee out still reshapes how an override is split across cards.
+      const body = report({
+        baseline: { ...report().baseline, spendingSource: 'override', monthlyExpenseOverride: 6000 },
+        adjustments: [
+          { id: 'adj-rent', kind: 'exclude_payee', flow: 'spending', key: 'oak street apartments', label: 'Oak Street Apartments', date: null, amount: null },
+          { id: 'adj-flight', kind: 'include_one_off', flow: 'spending', key: 'flight', label: 'United Airlines', date: '2026-09-10', amount: 2400 },
+        ],
+      });
+      adjusting(body);
+      render(<CashFlowPageClient />);
+      const section = await basis();
+      expect(within(section).getByText('Spending left out of the forecast')).toBeInTheDocument();
+      expect(within(section).queryByText(/Spending left out of the forecast · no effect/)).not.toBeInTheDocument();
+      expect(within(section).getByText(/Counted in typical spending: \$2,400\.00 on Sep 10, 2026 · no effect while your monthly spending from Finances is set/)).toBeInTheDocument();
+    });
+
     it('shows the server’s reason when a change is refused', async () => {
       mockFetch((url, init) => {
         if (url.endsWith('/api/cash-flow/adjustments') && init?.method === 'POST') {

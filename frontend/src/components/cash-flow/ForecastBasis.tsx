@@ -219,7 +219,10 @@ export default function ForecastBasis({ report, apiUrl, onChanged }: {
                   <span className="line-clamp-2 break-words font-semibold text-[#102319]">{adjustment.label}</span>
                   <span className="text-xs text-[#66736b]">
                     {describeAdjustment(adjustment)}
-                    {adjustment.kind !== 'exclude_transfer' && !learned(adjustment.flow)
+                    {/* exclude_payee still reshapes card purchase split under a
+                        spending override; only these two are fully cancelled. */}
+                    {(adjustment.kind === 'include_one_off' || adjustment.kind === 'continue_stream')
+                      && !learned(adjustment.flow)
                       ? ` · no effect while your monthly ${adjustment.flow} from Finances is set`
                       : ''}
                   </span>
