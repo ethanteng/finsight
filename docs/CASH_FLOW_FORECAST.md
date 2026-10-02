@@ -136,7 +136,11 @@ The report gives each card's outcome at the usual pace and with the user's plans
 - the month it stops carrying a balance;
 - interest over 12 months and over the projection;
 - the balance in 12 months;
+- the next payment: the first day the card is paid, and all it is paid that day (`nextPayment`);
+- what the card is paid in the 12 months from the forecast start (`paymentsTwelveMonths`);
 - the interest the plans save.
+
+The credit cards panel shows each pace's next payment and its 12-month total, and says it comes from the user's cash only for a card paid from the connected accounts.
 
 "Without planned events" figures use every card's usual pace. The plans' effect on a window therefore includes the interest they change.
 
@@ -167,7 +171,9 @@ The cash position is unavailable when:
 - there are no cash accounts;
 - any cash account has no reported balance. A partial sum would be wrong, not smaller, because income keeps landing in the account it cannot see.
 
-The report gives balances at each period's end, the lowest point, and fixed milestones: the end of this month and next, and 3, 6 and 12 months out.
+The report gives balances at each period's end, the lowest point, and fixed milestones: the end of this month and next, and 3, 6 and 12 months out. Each period also says what cash pays the cards in its forecast part (`cardPayments`). That sum is kept where the payments leave the cash, so it always agrees with the cash line.
+
+On the page, "See every period" follows the chart. Under Cash position it lists what each period pays the cards, and the cash and card balances at its end; the card columns appear only when a card is projected, and a card paid from elsewhere is named as missing from what is paid. Under Savings it lists cash in and out. A card payment is never cash out, so when the user has planned one, the Savings view says where it shows. A plan for a card already paid in full barely moves either chart: its payments are in the cash line with or without the plan, and its only effect on savings is the interest it saves.
 
 Card balances cover only the cards the model projects. The report lists the cards it leaves out and why (`cardsLeftOut`: no reported balance, or no pace to project), and the page names them beside the chart, so a partial total is never shown as all card debt.
 

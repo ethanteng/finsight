@@ -1093,6 +1093,10 @@ export interface CardOutcome {
   interestTotal: number | null;
   /** What the card owes at the end of the twelfth month. */
   balanceInTwelveMonths: number | null;
+  /** The first day this pace pays the card, and all it pays that day; null when it pays nothing. */
+  nextPayment: { date: CalendarDate; amount: number } | null;
+  /** What this pace pays the card in the 12 months from the forecast start. */
+  paymentsTwelveMonths: number;
   months: Array<{ month: string; payment: number; interest: number | null; endBalance: number }>;
 }
 
@@ -1121,8 +1125,12 @@ export interface CashFlowPositionSummary {
   reason?: CashPositionUnavailableReason;
   startingCash: number | null;
   startingCardDebt: number | null;
-  /** In step with `periods`: balances at each period's end; null for a period over before the forecast. */
-  periods: Array<{ key: string; cash: number | null; cardDebt: number | null }>;
+  /**
+   * In step with `periods`: balances at each period's end, and what cash pays
+   * the cards in the period's forecast part. Null for a period over before
+   * the forecast.
+   */
+  periods: Array<{ key: string; cash: number | null; cardDebt: number | null; cardPayments: number | null }>;
   /** The lowest end-of-day cash within the range's forecast part. */
   lowPoint: { date: CalendarDate; cash: number } | null;
   milestones: Array<{ key: string; date: CalendarDate; cash: number; cardDebt: number }>;
@@ -1142,14 +1150,24 @@ export interface CashFlowPositionSummary {
   cardsLeftOut: Array<{ accountId: string; name: string; reason: 'no_balance' | 'no_pace' }>;
 }
 
-function cardOutcome(projection: CardProjection | null): CardOutcome | null {
+function cardOutcome(projection: CardProjection | null, forecastStart: CalendarDate): CardOutcome | null {
   if (!projection) return null;
+  // Payments are in date order and unrounded; a day can hold more than one,
+  // such as the usual payment and a one-time extra.
+  const total = (payments: CardProjection['payments']) =>
+    roundCents(payments.reduce((sum, payment) => sum + payment.amount, 0));
+  const firstDate = projection.payments[0]?.date ?? null;
+  const twelveMonthsOut = addMonths(forecastStart, 12);
   return {
     paidOffBy: projection.paidOffBy,
     carryingBalanceNow: projection.carryingBalanceNow,
     interestTwelveMonths: projection.interestTwelveMonths,
     interestTotal: projection.interestTotal,
     balanceInTwelveMonths: projection.months[11]?.endBalance ?? projection.months[projection.months.length - 1]?.endBalance ?? null,
+    nextPayment: firstDate
+      ? { date: firstDate, amount: total(projection.payments.filter(payment => payment.date === firstDate)) }
+      : null,
+    paymentsTwelveMonths: total(projection.payments.filter(payment => payment.date < twelveMonthsOut)),
     months: projection.months.map(month => ({
       month: month.month,
       payment: month.payment,
@@ -1160,17 +1178,17 @@ function cardOutcome(projection: CardProjection | null): CardOutcome | null {
 }
 
 export function summarizeCards(model: CashFlowModel): CashFlowCardSummary[] {
-  return model.cards.map(cardSummary);
+  return model.cards.map(card => cardSummary(card, model.forecastStart));
 }
 
-function cardSummary(card: CardModel): CashFlowCardSummary {
+function cardSummary(card: CardModel, forecastStart: CalendarDate): CashFlowCardSummary {
   const hasPlans = card.plans.length > 0;
   const current = card.currentPace;
   const planned = hasPlans ? card.projection : null;
   // "Now" is today's state whatever the plans: a plan that clears the card this
   // month still starts from a carried balance. With no usual pace to say
   // otherwise, a card that owes anything is carrying it.
-  const withPlans = cardOutcome(planned);
+  const withPlans = cardOutcome(planned, forecastStart);
   if (withPlans) withPlans.carryingBalanceNow = current ? current.carryingBalanceNow : (card.terms.balance ?? 0) > 0;
   const saved = current && planned && current.interestTwelveMonths !== null && planned.interestTwelveMonths !== null
     && current.interestTotal !== null && planned.interestTotal !== null
@@ -1191,7 +1209,7 @@ function cardSummary(card: CardModel): CashFlowCardSummary {
     behavior: card.baseline.behavior,
     usualMonthlyPayment: card.baseline.monthlyPayment,
     paymentSource: card.paymentSource,
-    currentPace: cardOutcome(current),
+    currentPace: cardOutcome(current, forecastStart),
     withPlans,
     interestSaved: saved,
     planIds: card.plans.map(plan => plan.id),
@@ -1230,7 +1248,7 @@ function positionSummary(model: CashFlowModel, range: { from: CalendarDate; toEx
       reason: position.reason,
       startingCash: null,
       startingCardDebt: null,
-      periods: periods.map(period => ({ key: period.key, cash: null, cardDebt: null })),
+      periods: periods.map(period => ({ key: period.key, cash: null, cardDebt: null, cardPayments: null })),
       lowPoint: null,
       milestones: [],
       lowNext12Months: null,
@@ -1244,8 +1262,13 @@ function positionSummary(model: CashFlowModel, range: { from: CalendarDate; toEx
     startingCash: position.startingCash,
     startingCardDebt: position.startingCardDebt,
     periods: periods.map(period => period.endExclusive <= model.forecastStart
-      ? { key: period.key, cash: null, cardDebt: null }
-      : { key: period.key, cash: position.cashBefore(period.endExclusive), cardDebt: position.cardDebtBefore(period.endExclusive) }),
+      ? { key: period.key, cash: null, cardDebt: null, cardPayments: null }
+      : {
+          key: period.key,
+          cash: position.cashBefore(period.endExclusive),
+          cardDebt: position.cardDebtBefore(period.endExclusive),
+          cardPayments: position.cardPaymentsBetween(maxDate(period.start, model.forecastStart), period.endExclusive),
+        }),
     lowPoint: position.lowPoint(maxDate(range.from, model.forecastStart), range.toExclusive),
     milestones: milestones.points,
     lowNext12Months: milestones.lowNext12Months,

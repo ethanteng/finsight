@@ -71,6 +71,35 @@ describe('buildCashPosition', () => {
     expect(position.cardDebtBefore('2026-10-25') - position.cardDebtBefore('2026-10-26')).toBeCloseTo(payment - dayOfPurchases, 2);
   });
 
+  it('adds up what cash pays the cards from the payments that move it', () => {
+    const payoff = event({ kind: 'card_payment', accountId: 'card', paymentMode: 'full' });
+    const built = model({ plannedEvents: [payoff] });
+    const position = available(buildCashPosition(built));
+    const paid = (from: string, toExclusive: string) => built.cards[0].projection!.payments
+      .filter(payment => payment.date >= from && payment.date < toExclusive)
+      .reduce((total, payment) => total + payment.amount, 0);
+    // October holds the usual payment on the 20th and the payoff on the 25th.
+    expect(position.cardPaymentsBetween('2026-10-01', '2026-11-01')).toBeCloseTo(paid('2026-10-01', '2026-11-01'), 2);
+    expect(position.cardPaymentsBetween('2026-10-21', '2026-10-25')).toBe(0);
+    expect(position.cardPaymentsBetween('2026-09-01', built.forecastStart)).toBe(0);
+
+    // A card plan moves cash only through the payments, so the cash it leaves
+    // behind is exactly what it pays the card beyond the usual pace.
+    const usual = available(buildCashPosition(model()));
+    for (const end of ['2026-10-21', '2026-10-26', '2026-11-01', '2027-10-01']) {
+      const paidMore = position.cardPaymentsBetween(built.forecastStart, end) - usual.cardPaymentsBetween(built.forecastStart, end);
+      expect(usual.cashBefore(end) - position.cashBefore(end)).toBeCloseTo(paidMore, 1);
+    }
+    expect(position.cardPaymentsBetween('2026-10-25', '2026-10-26')).toBeGreaterThan(3000);
+  });
+
+  it('counts nothing paid from cash to a card paid from elsewhere', () => {
+    const built = model({ transactions: carrying.filter(item => item.name !== 'CARD CO AUTOPAY') });
+    expect(built.cards[0].paymentSource).toBe('other');
+    expect(built.cards[0].projection!.payments.length).toBeGreaterThan(0);
+    expect(available(buildCashPosition(built)).cardPaymentsBetween(built.forecastStart, built.forecastEndLimit)).toBe(0);
+  });
+
   it('clears the card on the payoff day and never shows a credit', () => {
     const payoff = event({ kind: 'card_payment', accountId: 'card', paymentMode: 'full' });
     const built = model({ plannedEvents: [payoff] });

@@ -3,9 +3,10 @@ import {
   buildCashFlowModel,
   buildCashFlowReport,
   forecastTotals,
+  roundCents,
   type CashFlowModelInput,
 } from '../../cash-flow/forecast';
-import { addMonths } from '../../cash-flow/calendar';
+import { addMonths, maxDate } from '../../cash-flow/calendar';
 import type { PlannedCashFlowEvent } from '../../cash-flow/planned-events';
 import {
   ACCOUNTS,
@@ -173,13 +174,76 @@ describe('the report’s cards and cash position', () => {
     expect(position).toMatchObject({ available: true, startingCash: 5200, startingCardDebt: 4000 });
     expect(position.periods.map(period => period.key)).toEqual(report.periods.map(period => period.key));
     const past = position.periods.find(period => period.key === '2026-09')!;
-    expect(past).toEqual({ key: '2026-09', cash: null, cardDebt: null });
+    expect(past).toEqual({ key: '2026-09', cash: null, cardDebt: null, cardPayments: null });
     const october = position.periods.find(period => period.key === '2026-10')!;
     expect(october.cash).toBe(position.milestones[0].cash);
     expect(position.lowPoint).not.toBeNull();
     expect(position.milestones.map(point => point.key)).toEqual([
       'end_of_this_month', 'end_of_next_month', 'in_3_months', 'in_6_months', 'in_12_months',
     ]);
+  });
+
+  it('says when each pace next pays a card, and what it pays over the next 12 months', () => {
+    const extra: PlannedCashFlowEvent = { ...payoff, id: 'extra', paymentMode: 'fixed', amount: 500, startDate: '2026-10-20' };
+    const built = model({ plannedEvents: [extra] });
+    const [card] = buildCashFlowReport(built, { granularity: 'month', horizonMonths: 6 }).cards;
+    const usual = built.cards[0].baseline.monthlyPayment!;
+    // The usual payment goes out on the due day, the 20th, and an extra
+    // payment planned for that day is paid with it.
+    expect(card.currentPace!.nextPayment).toEqual({ date: '2026-10-20', amount: usual });
+    expect(card.withPlans!.nextPayment).toEqual({ date: '2026-10-20', amount: roundCents(usual + 500) });
+
+    // Twelve due days from the forecast start, Oct 20 to Sep 20; the projection runs on past them.
+    const payments = built.cards[0].currentPace!.payments;
+    expect(payments.filter(payment => payment.date < '2027-10-01')).toHaveLength(12);
+    expect(payments.some(payment => payment.date >= '2027-10-01')).toBe(true);
+    for (const outcome of [card.currentPace!, card.withPlans!]) {
+      const byMonth = outcome.months.slice(0, 12).reduce((total, month) => total + month.payment, 0);
+      expect(outcome.paymentsTwelveMonths).toBeCloseTo(byMonth, 1);
+      expect(outcome.paymentsTwelveMonths).toBeLessThan(outcome.months.reduce((total, month) => total + month.payment, 0));
+    }
+  });
+
+  it('reports no next payment for a card that is never paid', () => {
+    const spare = { account_id: 'spare', name: 'Spare Card', type: 'credit', subtype: 'credit card', balance: { current: 0 } };
+    const { cards } = buildCashFlowReport(model({ accounts: [...accountsWithCardTerms(), spare] }), { granularity: 'month', horizonMonths: 3 });
+    expect(cards.find(card => card.accountId === 'spare')!.currentPace)
+      .toMatchObject({ carryingBalanceNow: false, nextPayment: null, paymentsTwelveMonths: 0 });
+  });
+
+  it('reports what cash pays the cards in each period, in step with the cash line', () => {
+    // The forecast starts mid-October, so October counts only its forecast part.
+    const through = '2026-10-14';
+    const inputs = {
+      transactions: [...householdTransactions(FROM, through), ...interestCharges(FROM, through)],
+      dataThrough: through,
+      today: '2026-10-15',
+    };
+    const built = model({ ...inputs, plannedEvents: [{ ...payoff, startDate: '2026-11-03' }] });
+    const request = { granularity: 'month' as const, horizonMonths: 6 };
+    const planned = buildCashFlowReport(built, request);
+    const usual = buildCashFlowReport(model(inputs), request);
+    const payments = built.cards[0].projection!.payments;
+
+    let paidMore = 0;
+    planned.periods.forEach((period, index) => {
+      const point = planned.position.periods[index];
+      if (period.phase === 'past') {
+        expect(point.cardPayments).toBeNull();
+        return;
+      }
+      const from = maxDate(period.start, built.forecastStart);
+      const expected = payments
+        .filter(payment => payment.date >= from && payment.date < period.endExclusive)
+        .reduce((total, payment) => total + payment.amount, 0);
+      expect(point.cardPayments).toBeCloseTo(roundCents(expected), 2);
+      // Whatever the plan pays beyond the usual pace is gone from the cash at each period's end.
+      paidMore += point.cardPayments! - usual.position.periods[index].cardPayments!;
+      expect(usual.position.periods[index].cash! - point.cash!).toBeCloseTo(paidMore, 1);
+    });
+    const october = planned.position.periods.find(period => period.key === '2026-10')!;
+    expect(october.cardPayments).toBe(built.cards[0].baseline.monthlyPayment);
+    expect(planned.position.periods.find(period => period.key === '2026-11')!.cardPayments).toBeGreaterThan(october.cardPayments!);
   });
 
   it('discloses the transfers the cash position assumes', () => {
@@ -331,6 +395,7 @@ describe('the report’s cards and cash position', () => {
   it('says why there is no cash position', () => {
     const { position } = buildCashFlowReport(model({ transactions: householdTransactions('2026-09-20', THROUGH) }), { granularity: 'month', horizonMonths: 3 });
     expect(position).toMatchObject({ available: false, reason: 'forecast_unavailable', milestones: [] });
+    expect(position.periods.every(period => period.cash === null && period.cardPayments === null)).toBe(true);
   });
 });
 

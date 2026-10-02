@@ -224,6 +224,10 @@ export interface CardOutcome {
   interestTwelveMonths: number | null;
   interestTotal: number | null;
   balanceInTwelveMonths: number | null;
+  /** The first day this pace pays the card, and all it pays that day; null when it pays nothing. */
+  nextPayment: { date: string; amount: number } | null;
+  /** What this pace pays the card in the 12 months from the forecast start. */
+  paymentsTwelveMonths: number;
   months: Array<{ month: string; payment: number; interest: number | null; endBalance: number }>;
 }
 
@@ -250,8 +254,11 @@ export interface CashFlowPositionSummary {
   reason?: 'forecast_unavailable' | 'no_cash_accounts' | 'unknown_balance';
   startingCash: number | null;
   startingCardDebt: number | null;
-  /** In step with `periods`; null for a period over before the forecast. */
-  periods: Array<{ key: string; cash: number | null; cardDebt: number | null }>;
+  /**
+   * In step with `periods`: balances at each period's end, and what cash pays
+   * the cards in the period's forecast part. Null for a period over before the forecast.
+   */
+  periods: Array<{ key: string; cash: number | null; cardDebt: number | null; cardPayments: number | null }>;
   lowPoint: { date: string; cash: number } | null;
   milestones: Array<{ key: string; date: string; cash: number; cardDebt: number }>;
   lowNext12Months: { date: string; cash: number } | null;

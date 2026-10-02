@@ -23,9 +23,16 @@ const components = {
   recurringSpending: 2015.49, typicalSpending: 1800, plannedSpending: 0, cardInterest: 0,
 };
 
-const pace = (paidOffBy: string | null, interest: number | null, carrying = true) => ({
+const pace = (
+  paidOffBy: string | null,
+  interest: number | null,
+  carrying = true,
+  payments: { nextPayment: { date: string; amount: number } | null; paymentsTwelveMonths: number } = { nextPayment: null, paymentsTwelveMonths: 0 },
+) => ({
   paidOffBy, carryingBalanceNow: carrying, interestTwelveMonths: interest, interestTotal: interest, balanceInTwelveMonths: 0, months: [],
+  ...payments,
 });
+const usualPayments = { nextPayment: { date: '2026-10-20', amount: 1520.83 }, paymentsTwelveMonths: 7349.62 };
 
 function report(overrides: Partial<CashFlowReport> = {}): CashFlowReport {
   return {
@@ -76,14 +83,14 @@ function report(overrides: Partial<CashFlowReport> = {}): CashFlowReport {
     cards: [{
       accountId: 'card', name: 'Rewards Card', mask: '9876', institution: 'Card Co', balance: 4000, apr: 24, minimumPayment: 80,
       paymentDay: 20, behavior: 'average_payment', usualMonthlyPayment: 1520.83, paymentSource: 'connected',
-      currentPace: pace('2027-03', 112.4), withPlans: null, interestSaved: null, planIds: [],
+      currentPace: pace('2027-03', 112.4, true, usualPayments), withPlans: null, interestSaved: null, planIds: [],
     }],
     position: {
       available: true, startingCash: 5200, startingCardDebt: 4000,
       periods: [
-        { key: '2026-09', cash: null, cardDebt: null },
-        { key: '2026-10', cash: 3666.2, cardDebt: 3266.68 },
-        { key: '2026-11', cash: 4410.15, cardDebt: 2495.4 },
+        { key: '2026-09', cash: null, cardDebt: null, cardPayments: null },
+        { key: '2026-10', cash: 3666.2, cardDebt: 3266.68, cardPayments: 1520.83 },
+        { key: '2026-11', cash: 4410.15, cardDebt: 2495.4, cardPayments: 1520.83 },
       ],
       lowPoint: { date: '2026-10-22', cash: 1890.4 },
       milestones: [], lowNext12Months: { date: '2026-10-22', cash: 1890.4 },
@@ -613,6 +620,37 @@ describe('CashFlowPageClient', () => {
     await screen.findByRole('heading', { name: 'This month' });
     fireEvent.click(screen.getByRole('button', { name: 'Cash position' }));
     expect(screen.getByText(/didn’t report a balance/)).toBeInTheDocument();
+    // With no cash position there are no figures to list by period.
+    expect(screen.queryByText('See every period')).not.toBeInTheDocument();
+  });
+
+  it('lists the cash position by period when the chart shows it', async () => {
+    mockFetch(url => (url.includes('/api/cash-flow?') ? { status: 200, body: report() } : undefined));
+    render(<CashFlowPageClient />);
+    await screen.findByRole('heading', { name: 'This month' });
+    const headers = () => screen.getAllByRole('columnheader').map(header => header.textContent);
+    const cells = (period: string) =>
+      within(screen.getByRole('rowheader', { name: period }).closest('tr')!).getAllByRole('cell').map(cell => cell.textContent);
+    expect(headers()).toEqual(['Period', 'Cash in', 'Cash out', 'Net', 'Based on']);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cash position' }));
+    expect(headers()).toEqual(['Period', 'Paid to cards', 'Cash at end', 'Owed on cards at end']);
+    expect(cells('Oct 2026')).toEqual(['$1,521', '$3,666', '$3,267']);
+    expect(cells('Nov 2026')).toEqual(['$1,521', '$4,410', '$2,495']);
+    // A month already over has nothing projected.
+    expect(cells('Sep 2026')).toEqual(['—', '—', '—']);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Savings' }));
+    expect(headers()).toEqual(['Period', 'Cash in', 'Cash out', 'Net', 'Based on']);
+  });
+
+  it('leaves the card columns out of the cash table when no card is projected', async () => {
+    mockFetch(url => (url.includes('/api/cash-flow?') ? { status: 200, body: report({ cards: [] }) } : undefined));
+    render(<CashFlowPageClient />);
+    await screen.findByRole('heading', { name: 'This month' });
+    fireEvent.click(screen.getByRole('button', { name: 'Cash position' }));
+    expect(screen.getAllByRole('columnheader').map(header => header.textContent)).toEqual(['Period', 'Cash at end']);
+    expect(within(screen.getByRole('rowheader', { name: 'Oct 2026' }).closest('tr')!).getByRole('cell')).toHaveTextContent('$3,666');
   });
 
   it('shows each card at its usual pace and with a plan, and what the plan saves', async () => {
@@ -631,6 +669,83 @@ describe('CashFlowPageClient', () => {
     expect(within(panel).getByText('Balance paid off by Mar 2027')).toBeInTheDocument();
     expect(within(panel).getByText('Balance paid off by Oct 2026')).toBeInTheDocument();
     expect(within(panel).getByText('Your plan saves $91 in interest over the next 12 months.')).toBeInTheDocument();
+  });
+
+  it('says what each pace pays a card next, and over the next 12 months', async () => {
+    const card = {
+      ...report().cards[0],
+      withPlans: pace('2026-10', 21.3, true, { nextPayment: { date: '2026-10-20', amount: 2020.83 }, paymentsTwelveMonths: 9120.4 }),
+      planIds: ['extra'],
+    };
+    const settled = {
+      ...report().cards[0], accountId: 'spare', name: 'Spare Card', mask: '5555', balance: 0, behavior: 'pays_in_full' as const,
+      usualMonthlyPayment: null, currentPace: pace(null, 0, false),
+    };
+    mockFetch(url => (url.includes('/api/cash-flow?') ? { status: 200, body: report({ cards: [card, settled] }) } : undefined));
+    render(<CashFlowPageClient />);
+
+    const panel = (await screen.findByRole('heading', { name: 'Credit cards' })).closest('section')!;
+    expect(within(panel).getByText('Next payment $1,521 from your cash on Oct 20, 2026 · $7,350 over the next 12 months')).toBeInTheDocument();
+    expect(within(panel).getByText('Next payment $2,021 from your cash on Oct 20, 2026 · $9,120 over the next 12 months')).toBeInTheDocument();
+    // A card nothing is paid to says nothing about payments.
+    const spare = within(panel).getByRole('heading', { name: 'Spare Card ••5555' }).closest('li')!;
+    expect(within(spare).getByText('Not carrying a balance')).toBeInTheDocument();
+    expect(within(spare).queryByText(/Next payment/)).not.toBeInTheDocument();
+  });
+
+  it('keeps a card paid from elsewhere out of what cash pays, and says so', async () => {
+    const amex = {
+      ...report().cards[0], accountId: 'amex', name: 'Marriott Amex', mask: '1005', balance: 1184, behavior: 'pays_in_full' as const,
+      usualMonthlyPayment: null, paymentSource: 'other' as const,
+      currentPace: pace('2026-10', 0, false, { nextPayment: { date: '2026-10-10', amount: 1184 }, paymentsTwelveMonths: 5017.8 }),
+    };
+    mockFetch(url => (url.includes('/api/cash-flow?') ? { status: 200, body: report({ cards: [...report().cards, amex] }) } : undefined));
+    render(<CashFlowPageClient />);
+
+    const panel = (await screen.findByRole('heading', { name: 'Credit cards' })).closest('section')!;
+    const card = within(panel).getByRole('heading', { name: 'Marriott Amex ••1005' }).closest('li')!;
+    expect(within(card).getByText('Next payment $1,184 on Oct 10, 2026 · $5,018 over the next 12 months')).toBeInTheDocument();
+    expect(within(card).getByText(/don’t seem to come from your connected accounts, so they aren’t taken out of your projected cash/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cash position' }));
+    expect(screen.getByText('Paid to cards leaves out Marriott Amex ••1005: its payments don’t seem to come from your connected accounts.')).toBeInTheDocument();
+  });
+
+  it('says in the savings view where planned card payments show', async () => {
+    const note = 'Card payments aren’t cash out here: purchases already count when you make them. Your planned card payments show in Cash position.';
+    const plan = {
+      id: 'payoff', label: 'Pay off Rewards Card', kind: 'card_payment', amount: 0, startDate: '2026-10-25', recurrence: 'monthly',
+      endDate: null, accountId: 'card', paymentMode: 'full', nextDate: '2026-10-25', occurrencesInRange: 2,
+    } as const;
+    const expired = { ...plan, id: 'expired', nextDate: null, occurrencesInRange: 0 };
+    const orphan = {
+      ...plan, id: 'orphan', accountId: 'mystery', label: 'Pay mystery card',
+    };
+    const mystery = {
+      ...report().cards[0], accountId: 'mystery', name: 'Mystery Card', mask: '0000', behavior: 'unknown' as const,
+      usualMonthlyPayment: null, currentPace: null, withPlans: null, planIds: ['orphan'],
+    };
+    mockFetch(url => (url.includes('/api/cash-flow?') ? { status: 200, body: report() } : undefined));
+    const { unmount } = render(<CashFlowPageClient />);
+    await screen.findByRole('heading', { name: 'This month' });
+    expect(screen.queryByText(note)).not.toBeInTheDocument();
+    unmount();
+
+    // An expired plan, or a one-time plan on a card with no pace, never moves Cash position.
+    mockFetch(url => (url.includes('/api/cash-flow?')
+      ? { status: 200, body: report({ cards: [...report().cards, mystery], plannedEvents: [...report().plannedEvents, expired, orphan] }) }
+      : undefined));
+    const skipped = render(<CashFlowPageClient />);
+    await screen.findByRole('heading', { name: 'This month' });
+    expect(screen.queryByText(note)).not.toBeInTheDocument();
+    skipped.unmount();
+
+    mockFetch(url => (url.includes('/api/cash-flow?') ? { status: 200, body: report({ plannedEvents: [...report().plannedEvents, plan] }) } : undefined));
+    render(<CashFlowPageClient />);
+    await screen.findByRole('heading', { name: 'This month' });
+    expect(screen.getByText(note)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Cash position' }));
+    expect(screen.queryByText(note)).not.toBeInTheDocument();
   });
 
   it('opens a card payment from the card and saves a full payoff', async () => {
