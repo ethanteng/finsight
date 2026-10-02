@@ -59,7 +59,9 @@ export function averageCanonicalTransactionSummary(value: unknown): MonthlyCashF
       ? summary.excludedTransactionIds
       : [],
   };
-  return averageMonthlyCashFlow(canonical);
+  const average = averageMonthlyCashFlow(canonical);
+  // No covered months means cash flow is unknown, not a string of $0 averages.
+  return average.monthCount > 0 ? average : null;
 }
 
 function transactionDate(transaction: any): Date | null {
@@ -75,15 +77,21 @@ function transactionDate(transaction: any): Date | null {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
+function isPendingTransaction(transaction: any): boolean {
+  return transaction?.pending === true || String(transaction?.pending || '').toLowerCase() === 'true';
+}
+
 /**
  * The earliest day the connected history reaches. A window wider than the
  * history a connection holds would otherwise report the months before it as
  * zero income and zero spending, and every monthly average would divide by them.
- * Those months are unknown, not zero.
+ * Those months are unknown, not zero. Pending observations do not count:
+ * they are excluded from cash-flow totals and from the persisted window.
  */
 function coverageStart(transactions: readonly any[], windowStart: Date, endExclusive: Date): Date | null {
   let earliest: Date | null = null;
   for (const transaction of transactions) {
+    if (isPendingTransaction(transaction)) continue;
     const date = transactionDate(transaction);
     if (!date || date < windowStart || date >= endExclusive) continue;
     if (!earliest || date < earliest) earliest = date;
@@ -126,7 +134,7 @@ export function buildTransactionSummary(
   // pending observation remains represented in excludedTransactionIds below,
   // while a later posted replacement is retained as the authoritative detail.
   const windowedTransactions = transactionsInWindow.filter(
-    transaction => transaction?.pending !== true && String(transaction?.pending || '').toLowerCase() !== 'true'
+    transaction => !isPendingTransaction(transaction)
   );
 
   const canonicalTransactions = [];
@@ -149,8 +157,33 @@ export function buildTransactionSummary(
     ? options.coverageTransactions
     : transactionsInWindow;
   const coveredFrom = coverageStart(coverageCandidates, start, endExclusive)
-    ?? coverageStart(transactionsInWindow, start, endExclusive)
-    ?? start;
+    ?? coverageStart(transactionsInWindow, start, endExclusive);
+
+  // No posted activity means coverage is unknown. Do not fill the requested
+  // window with zero months — consumers average byMonth directly and would
+  // report a year of $0 income and spending.
+  if (!coveredFrom) {
+    const reportingCurrencyCode = reportingCurrency.toUpperCase();
+    return {
+      windowedTransactions,
+      transactionsSummary: {
+        reportingCurrency: reportingCurrencyCode,
+        incomeTotal: 0,
+        expenseTotal: 0,
+        operatingCashFlow: 0,
+        byCategory: {},
+        byMonth: {},
+        includedTransactionIds: [],
+        excludedTransactionIds: canonicalTransactions
+          .filter((transaction) => transaction.pending)
+          .map((transaction) => transaction.id),
+        unclassifiedTransactionIds,
+        currencyMismatchTransactionIds,
+        coverageStartDate: null,
+      },
+    };
+  }
+
   const canonicalSummary = summarizeCashFlow(
     canonicalTransactions,
     { start: coveredFrom, endExclusive },
@@ -180,9 +213,7 @@ export function buildTransactionSummary(
       excludedTransactionIds: canonicalSummary.excludedTransactionIds,
       unclassifiedTransactionIds,
       currencyMismatchTransactionIds,
-      coverageStartDate: transactionsInWindow.length > 0
-        ? coveredFrom.toISOString().slice(0, 10)
-        : null,
+      coverageStartDate: coveredFrom.toISOString().slice(0, 10),
     },
   };
 }

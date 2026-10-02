@@ -270,11 +270,48 @@ describe('buildTransactionSummary', () => {
       expect(transactionsSummary.incomeTotal).toBe(40);
     });
 
-    it('reports no coverage and keeps the full window when there is no activity', () => {
-      const { transactionsSummary } = buildTransactionSummary([], windowStart, computedAt);
+    it('ignores pending observations when establishing coverage', () => {
+      const { transactionsSummary } = buildTransactionSummary(
+        [
+          { ...expense('pending-old', '2026-06-01'), pending: true },
+          income('pay', '2026-08-03', 4000),
+        ],
+        windowStart,
+        computedAt
+      );
+
+      expect(transactionsSummary.coverageStartDate).toBe('2026-08-03');
+      expect(Object.keys(transactionsSummary.byMonth)).toEqual(['2026-08', '2026-09', '2026-10']);
+      expect(averageCanonicalTransactionSummary(transactionsSummary)?.monthCount).toBe(3);
+    });
+
+    it('falls back to posted investment activity when banking is only pending', () => {
+      const pendingBanking = [{ ...income('pending-pay', '2026-07-01', 4000), pending: true }];
+      const { transactionsSummary } = buildTransactionSummary(
+        [
+          ...pendingBanking,
+          { investment_transaction_id: 'dividend', account_id: 'brokerage', date: '2026-03-15', amount: -40, type: 'cash', subtype: 'dividend', iso_currency_code: 'USD' },
+        ],
+        windowStart,
+        computedAt,
+        'USD',
+        { coverageTransactions: pendingBanking }
+      );
+
+      expect(transactionsSummary.coverageStartDate).toBe('2026-03-15');
+      expect(transactionsSummary.incomeTotal).toBe(40);
+    });
+
+    it('reports no coverage and no zero months when there is no posted activity', () => {
+      const { transactionsSummary } = buildTransactionSummary(
+        [{ ...expense('pending-only', '2026-07-01'), pending: true }],
+        windowStart,
+        computedAt
+      );
 
       expect(transactionsSummary.coverageStartDate).toBeNull();
-      expect(Object.keys(transactionsSummary.byMonth)).toHaveLength(13);
+      expect(transactionsSummary.byMonth).toEqual({});
+      expect(averageCanonicalTransactionSummary(transactionsSummary)).toBeNull();
     });
   });
 });
