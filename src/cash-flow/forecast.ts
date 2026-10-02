@@ -219,6 +219,11 @@ export interface TransferModel {
   /** Net typical transfers per day; negative when more leaves than arrives. */
   dailyNet: number;
   oneOffs: CashFlowEntry[];
+  /**
+   * The cash movements transfers can be learned from, before the user's choices:
+   * a card payment matched to a projected card is the card's, not a transfer.
+   */
+  eligible: CashFlowEntry[];
 }
 
 export function roundCents(value: number): number {
@@ -603,7 +608,7 @@ export function buildCashFlowModel(input: CashFlowModelInput): CashFlowModel {
       .filter(movement => movement.cardPayment && movement.pairedWith && projectedCards.has(movement.accountId))
       .map(movement => movement.pairedWith as string)
   );
-  const transferEntries: CashFlowEntry[] = ledger.movements
+  const eligibleTransfers: CashFlowEntry[] = ledger.movements
     .filter(movement => cashIds.has(movement.accountId) && movement.date <= input.dataThrough && !pairedToProjectedCard.has(movement.id))
     .map((movement): CashFlowEntry => ({
       id: movement.id,
@@ -615,8 +620,8 @@ export function buildCashFlowModel(input: CashFlowModelInput): CashFlowModel {
       ...(movement.legacyCounterpartyKey && { legacyCounterpartyKey: movement.legacyCounterpartyKey }),
       label: movement.label,
       category: 'Transfer',
-    }))
-    .filter(entry => !namesPayee(adjustmentSets.excludedTransfers, entry.flow, entry));
+    }));
+  const transferEntries = eligibleTransfers.filter(entry => !namesPayee(adjustmentSets.excludedTransfers, entry.flow, entry));
   const learnedTransfers = learnFlows(transferEntries, input.dataThrough, basisStart, forecastStart);
   const transfers: TransferModel = {
     streams: learnedTransfers.streams,
@@ -630,6 +635,7 @@ export function buildCashFlowModel(input: CashFlowModelInput): CashFlowModel {
         }))),
     dailyNet: sumDaily(learnedTransfers.dailyByAccount, 'income') - sumDaily(learnedTransfers.dailyByAccount, 'spending'),
     oneOffs: learnedTransfers.oneOffs,
+    eligible: eligibleTransfers,
   };
 
   return {
@@ -1266,7 +1272,6 @@ function customReportRange(
 
 function summarizeAdjustments(model: CashFlowModel): CashFlowAdjustmentSummary[] {
   const entries = new Map(model.ledger.entries.map(entry => [entry.id, entry]));
-  const cash = new Set(model.ledger.accounts.filter(account => account.kind === 'cash').map(account => account.id));
   return model.adjustments.map(adjustment => {
     const counted = adjustment.kind === 'include_one_off' ? entries.get(adjustment.key) : undefined;
     // A choice may name its payee by the key it has now or the key it had before.
@@ -1277,10 +1282,11 @@ function summarizeAdjustments(model: CashFlowModel): CashFlowAdjustmentSummary[]
     const behind = adjustment.kind === 'include_one_off'
       ? (counted ? [counted] : [])
       : adjustment.kind === 'exclude_transfer'
-        ? model.ledger.movements
-          .filter(movement => cash.has(movement.accountId) && movement.date <= model.dataThrough && named(movement)
-            && (movement.amount > 0 ? 'income' : 'spending') === adjustment.flow)
-          .map(movement => ({ id: movement.id, date: movement.date, amount: Math.abs(movement.amount) }))
+        // Only movements the transfer model could learn from: a payment matched
+        // to a projected card was never a transfer, so the choice never touched it.
+        ? model.transfers.eligible
+          .filter(entry => entry.flow === adjustment.flow && named(entry))
+          .map(entry => ({ id: entry.id, date: entry.date, amount: entry.amount }))
         : model.ledger.entries.filter(entry =>
           entry.date <= model.dataThrough && entry.flow === adjustment.flow && named(entry));
     return {
@@ -1311,12 +1317,9 @@ export function forecastAdjustmentTarget(model: CashFlowModel, input: ForecastAd
     case 'continue_stream':
       return found(model.streams.find(stream =>
         stream.status === 'lapsed' && stream.flow === input.flow && stream.counterpartyKey === input.key)?.label ?? null);
-    case 'exclude_transfer': {
-      const cash = new Set(model.ledger.accounts.filter(account => account.kind === 'cash').map(account => account.id));
-      return found(latestLabel(model.ledger.movements.filter(movement =>
-        cash.has(movement.accountId) && movement.date <= model.dataThrough && movement.counterpartyKey === input.key
-        && (movement.amount > 0 ? 'income' : 'spending') === input.flow)));
-    }
+    case 'exclude_transfer':
+      return found(latestLabel(model.transfers.eligible.filter(entry =>
+        entry.flow === input.flow && entry.counterpartyKey === input.key)));
   }
 }
 
