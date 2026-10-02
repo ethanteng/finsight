@@ -328,6 +328,61 @@ describe('CashFlowPageClient', () => {
       expect(within(section).getByText('Store 11')).toBeInTheDocument();
     });
 
+    it('shows more eight at a time, all at once, fewer again, or none', async () => {
+      const typicalPayees = Array.from({ length: 20 }, (_, index) => ({
+        flow: 'spending' as const, payeeKey: `store ${index}`, label: `Store ${index}`, monthlyAmount: 500 - index * 10, countedOneOffIds: [],
+      }));
+      adjusting(report({ typicalPayees }));
+      render(<CashFlowPageClient />);
+      const section = await basis();
+      const button = (name: string) => within(section).getByRole('button', { name });
+      expect(within(section).queryByText('Store 8')).not.toBeInTheDocument();
+
+      fireEvent.click(button('Show 8 more'));
+      expect(within(section).getByText('Store 15')).toBeInTheDocument();
+      expect(within(section).queryByText('Store 16')).not.toBeInTheDocument();
+
+      fireEvent.click(button('Show all 20'));
+      expect(within(section).getByText('Store 19')).toBeInTheDocument();
+
+      fireEvent.click(button('Show fewer'));
+      expect(within(section).getByText('Store 7')).toBeInTheDocument();
+      expect(within(section).queryByText('Store 8')).not.toBeInTheDocument();
+
+      fireEvent.click(button('Hide all'));
+      expect(within(section).queryByText('Store 0')).not.toBeInTheDocument();
+      expect(within(section).getByText('20 hidden')).toBeInTheDocument();
+      fireEvent.click(button('Show 8 more'));
+      expect(within(section).getByText('Store 0')).toBeInTheDocument();
+    });
+
+    it('shows each item’s category and its transactions’ dates and amounts', async () => {
+      const [gusto, rent, gym] = report().recurring;
+      const body = report({
+        recurring: [gusto, {
+          ...rent,
+          transactions: [
+            { id: 'rent-oct', date: '2026-10-01', amount: 2000, category: 'Rent' },
+            { id: 'rent-sep', date: '2026-09-01', amount: 2000, category: 'Rent' },
+          ],
+          transactionCount: 5,
+        }, gym],
+        oneOffs: [{ ...report().oneOffs[0], category: 'Travel' }],
+      });
+      adjusting(body);
+      render(<CashFlowPageClient />);
+      const section = await basis();
+      expect(within(section).getByText('Every month · next Nov 1, 2026 · Rent')).toBeInTheDocument();
+      expect(within(section).getByText('Sep 10, 2026 · Travel')).toBeInTheDocument();
+
+      const toggle = within(section).getByRole('button', { name: '5 transactions · latest Oct 1, 2026: $2,000.00' });
+      expect(toggle).toHaveAttribute('aria-expanded', 'false');
+      fireEvent.click(toggle);
+      expect(toggle).toHaveAttribute('aria-expanded', 'true');
+      expect(within(section).getByText('Sep 1, 2026 · Rent')).toBeInTheDocument();
+      expect(within(section).getByText('Showing the latest 2 of 5.')).toBeInTheDocument();
+    });
+
     it('marks a one-off the user counted where it now sits, and moves it back', async () => {
       const body = report({
         typicalPayees: [

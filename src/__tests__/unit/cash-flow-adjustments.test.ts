@@ -192,6 +192,50 @@ describe('adjusting what the forecast counts', () => {
   });
 });
 
+describe('the transactions behind each item', () => {
+  const groceries = { personal_finance_category: { primary: 'FOOD_AND_DRINK', detailed: 'FOOD_AND_DRINK_GROCERIES' } };
+  const safeway = ['2026-08-02', '2026-08-23', '2026-09-13']
+    .map(date => tx('card', date, 'expense', 61.5, 'Safeway', { merchant_name: 'Safeway', ...groceries }));
+  const report = (adjustments: ForecastAdjustment[] = []) => buildCashFlowReport(
+    model(adjustments, { transactions: [...history, ...safeway] }),
+    { granularity: 'month', horizonMonths: 3 },
+  );
+
+  it('lists a regular item’s transactions, latest first, with how many there are', () => {
+    // The history starts June 3, so rent was paid on the 1st of July, August and September.
+    const rent = report().recurring.find(item => item.label === 'Oak Street Apartments')!;
+    expect(rent.transactionCount).toBe(3);
+    expect(rent.transactions.map(item => [item.date, item.amount])).toEqual([
+      ['2026-09-01', 2000], ['2026-08-01', 2000], ['2026-07-01', 2000],
+    ]);
+  });
+
+  it('lists the transactions a typical payee is made of, with their category', () => {
+    const payee = report().typicalPayees.find(item => item.payeeKey === 'safeway')!;
+    expect(payee.transactionCount).toBeGreaterThanOrEqual(3);
+    const added = payee.transactions.filter(item => item.amount === 61.5);
+    expect(added.map(item => item.date)).toEqual(['2026-09-13', '2026-08-23', '2026-08-02']);
+    expect(added[0].category).toEqual(expect.any(String));
+    // A transaction with no category says so, rather than calling it "Uncategorized".
+    expect(payee.transactions.filter(item => item.amount !== 61.5).every(item => item.category === null)).toBe(true);
+  });
+
+  it('gives a one-off its category, and a left-out payee its transactions', () => {
+    const built = report([adjustment({ key: 'oak street apartments', label: 'Oak Street Apartments' })]);
+    expect(built.oneOffs.find(item => item.label === 'United Airlines')).toEqual(expect.objectContaining({ category: null }));
+    const leftOut = built.adjustments[0];
+    expect(leftOut.transactionCount).toBe(3);
+    expect(leftOut.transactions[0]).toEqual(expect.objectContaining({ date: '2026-09-01', amount: 2000 }));
+  });
+
+  it('lists a transfer’s movements', () => {
+    const vanguard = report().position.transfers.recurring.find(item => item.label === 'VANGUARD BUY TRANSFER')!;
+    expect(vanguard.transactions.map(item => [item.date, item.amount])).toEqual([
+      ['2026-09-05', 400], ['2026-08-05', 400], ['2026-07-05', 400], ['2026-06-05', 400],
+    ]);
+  });
+});
+
 describe('forecastAdjustmentTarget', () => {
   const built = model();
 

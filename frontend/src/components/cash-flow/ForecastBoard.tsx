@@ -2,9 +2,10 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, ArrowRight } from 'lucide-react';
+import { ArrowLeft, ArrowRight, ChevronRight } from 'lucide-react';
 import type {
   CashFlowAdjustment,
+  CashFlowItemTransaction,
   CashFlowRecurringItem,
   CashFlowReport,
   CashFlowTypicalPayee,
@@ -52,50 +53,111 @@ function MoveButton({ label, item, toward, disabled, onClick }: {
   );
 }
 
-function ItemRow({ name, detail, marker, amount, action }: {
+/** An item's transactions: the latest at a glance, and every listed one on request. */
+function Transactions({ items, count }: { items: readonly CashFlowItemTransaction[]; count: number }) {
+  const [open, setOpen] = useState(false);
+  const latest = items[0];
+  if (!latest) return null;
+  return (
+    <div className="mt-1">
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen(shown => !shown)}
+        className="inline-flex items-center gap-1 text-left text-xs font-semibold text-[#49725a] hover:text-[#102319]"
+      >
+        <ChevronRight size={12} className={`shrink-0 transition-transform ${open ? 'rotate-90' : ''}`} aria-hidden="true" />
+        {count === 1 ? '1 transaction' : `${count} transactions`} · latest {formatCalendarDate(latest.date)}: {formatMoney(latest.amount, true)}
+      </button>
+      {open && (
+        <ul className="mt-1.5 space-y-1 border-l-2 border-[#102319]/10 pl-3">
+          {items.map(item => (
+            <li key={item.id} className="flex items-baseline justify-between gap-3 text-xs">
+              <span className="min-w-0 text-[#5e6b63]">
+                {formatCalendarDate(item.date)}
+                {item.category ? ` · ${item.category}` : ''}
+              </span>
+              <span className="shrink-0 font-semibold tabular-nums text-[#102319]">{formatMoney(item.amount, true)}</span>
+            </li>
+          ))}
+          {count > items.length && <li className="text-xs text-[#66736b]">Showing the latest {items.length} of {count}.</li>}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function ItemRow({ name, detail, category, marker, amount, action, transactions, transactionCount }: {
   name: string;
   detail?: string;
+  /** Where the transactions are categorized; omitted when they are not. */
+  category?: string | null;
   /** Says the user moved it, e.g. "kept by you". */
   marker?: string;
   amount?: string;
   action?: React.ReactNode;
+  transactions?: readonly CashFlowItemTransaction[];
+  transactionCount?: number;
 }) {
+  const describe = [detail, category].filter(Boolean).join(' · ');
   return (
-    <li className="flex items-center justify-between gap-3 py-2.5 text-sm">
-      <span className="min-w-0">
-        <span className="line-clamp-2 break-words font-semibold text-[#102319]">{name}</span>
-        {(detail || marker) && (
-          <span className="text-xs text-[#66736b]">
-            {detail}
-            {detail && marker ? ' · ' : ''}
-            {marker && <span className="font-semibold text-[#28704d]">{marker}</span>}
-          </span>
-        )}
-      </span>
-      <span className="flex shrink-0 items-center gap-3">
-        {amount && <span className="font-bold tabular-nums text-[#102319]">{amount}</span>}
-        {action}
-      </span>
+    <li className="py-2.5 text-sm">
+      <div className="flex items-center justify-between gap-3">
+        <span className="min-w-0">
+          <span className="line-clamp-2 break-words font-semibold text-[#102319]">{name}</span>
+          {(describe || marker) && (
+            <span className="text-xs text-[#66736b]">
+              {describe}
+              {describe && marker ? ' · ' : ''}
+              {marker && <span className="font-semibold text-[#28704d]">{marker}</span>}
+            </span>
+          )}
+        </span>
+        <span className="flex shrink-0 items-center gap-3">
+          {amount && <span className="font-bold tabular-nums text-[#102319]">{amount}</span>}
+          {action}
+        </span>
+      </div>
+      {transactions && transactions.length > 0 && (
+        <Transactions items={transactions} count={transactionCount ?? transactions.length} />
+      )}
     </li>
   );
 }
 
-/** The first few items, and a button for the rest. */
+function ListButton({ onClick, children }: { onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button type="button" onClick={onClick} className="text-xs font-bold text-[#102319] underline">
+      {children}
+    </button>
+  );
+}
+
+/**
+ * A long list shows its first few items. "Show more" adds that many again and
+ * "Show all" the rest; "Show fewer" goes back to the first few and "Hide all"
+ * folds the list away.
+ */
 function CappedList<T>({ items, render, empty }: {
   items: readonly T[];
   render: (item: T) => React.ReactNode;
   empty?: string;
 }) {
-  const [all, setAll] = useState(false);
+  const [count, setCount] = useState(LIST_LIMIT);
   if (items.length === 0) return empty ? <p className="py-1.5 text-sm text-[#66736b]">{empty}</p> : null;
-  const hidden = items.length - LIST_LIMIT;
+  const total = items.length;
+  const shown = Math.min(count, total);
   return (
     <>
-      <ul className="divide-y divide-[#102319]/10">{(all || hidden <= 0 ? items : items.slice(0, LIST_LIMIT)).map(render)}</ul>
-      {hidden > 0 && (
-        <button type="button" onClick={() => setAll(shown => !shown)} className="mt-1 text-xs font-bold text-[#102319] underline">
-          {all ? 'Show fewer' : `Show ${hidden} more`}
-        </button>
+      {shown > 0 && <ul className="divide-y divide-[#102319]/10">{items.slice(0, shown).map(render)}</ul>}
+      {total > LIST_LIMIT && (
+        <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
+          {shown === 0 && <span className="text-xs text-[#66736b]">{total} hidden</span>}
+          {shown < total && <ListButton onClick={() => setCount(Math.min(total, shown + LIST_LIMIT))}>Show {Math.min(LIST_LIMIT, total - shown)} more</ListButton>}
+          {shown < total && <ListButton onClick={() => setCount(total)}>Show all {total}</ListButton>}
+          {shown > LIST_LIMIT && <ListButton onClick={() => setCount(LIST_LIMIT)}>Show fewer</ListButton>}
+          {shown > 0 && <ListButton onClick={() => setCount(0)}>Hide all</ListButton>}
+        </div>
       )}
     </>
   );
@@ -124,6 +186,12 @@ function Column({ title, description, tone, children }: {
       <div className="mt-4">{children}</div>
     </div>
   );
+}
+
+/** A regular item's category: its latest transaction's, else the stream's own; none when it has none. */
+function categoryOf(item: CashFlowRecurringItem): string | null {
+  const category = item.transactions?.[0]?.category ?? item.category;
+  return category && category !== 'Uncategorized' ? category : null;
 }
 
 /** What a saved change did, in the user's terms, for the full list of changes. */
@@ -207,8 +275,11 @@ export default function ForecastBoard({ report, apiUrl, onChanged }: {
         key={item.id}
         name={item.label}
         detail={`${CADENCE_LABELS[item.cadence]}${item.nextDate ? ` · next ${formatCalendarDate(item.nextDate)}` : ''}`}
+        category={categoryOf(item)}
         marker={item.continuedByUser ? 'kept by you' : undefined}
         amount={formatMoney(item.amount, true)}
+        transactions={item.transactions}
+        transactionCount={item.transactionCount}
         action={keptBy
           ? <MoveButton label="Stop counting" item={item.label} toward="out" disabled={busy} onClick={() => undo(keptBy)} />
           : <MoveButton label="Leave out" item={item.label} toward="out" disabled={busy} onClick={() => adjust({ kind: 'exclude_payee', flow: item.flow, key: item.payeeKey })} />}
@@ -221,8 +292,11 @@ export default function ForecastBoard({ report, apiUrl, onChanged }: {
       <ItemRow
         key={`${payee.flow}:${payee.payeeKey}`}
         name={payee.label}
+        category={payee.transactions?.[0]?.category}
         marker={counted ? 'counted by you' : undefined}
         amount={`${formatMoney(payee.monthlyAmount)}/mo`}
+        transactions={payee.transactions}
+        transactionCount={payee.transactionCount}
         action={counted
           ? <MoveButton label="Move back" item={payee.label} toward="out" disabled={busy} onClick={() => undo(counted)} />
           : <MoveButton label="Leave out" item={payee.label} toward="out" disabled={busy} onClick={() => adjust({ kind: 'exclude_payee', flow: payee.flow, key: payee.payeeKey })} />}
@@ -311,6 +385,8 @@ export default function ForecastBoard({ report, apiUrl, onChanged }: {
                     name={item.label}
                     detail={`${CADENCE_LABELS[item.cadence]}${item.nextDate ? ` · next ${formatCalendarDate(item.nextDate)}` : ''}`}
                     amount={`${item.direction === 'in' ? '+' : '−'}${formatMoney(item.amount, true)}`}
+                    transactions={item.transactions}
+                    transactionCount={item.transactionCount}
                     action={(
                       <MoveButton
                         label="Leave out"
@@ -348,6 +424,7 @@ export default function ForecastBoard({ report, apiUrl, onChanged }: {
                   key={item.id}
                   name={item.label}
                   detail={formatCalendarDate(item.date)}
+                  category={item.category}
                   amount={`${item.flow === 'income' ? '+' : ''}${formatMoney(item.amount, true)}`}
                   action={<MoveButton label="Count it" item={item.label} toward="in" disabled={busy} onClick={() => adjust({ kind: 'include_one_off', flow: item.flow, key: item.id })} />}
                 />
@@ -364,7 +441,10 @@ export default function ForecastBoard({ report, apiUrl, onChanged }: {
                   key={item.id}
                   name={item.label}
                   detail={`${CADENCE_LABELS[item.cadence]} · last ${formatCalendarDate(item.lastDate)}`}
+                  category={categoryOf(item)}
                   amount={formatMoney(item.amount, true)}
+                  transactions={item.transactions}
+                  transactionCount={item.transactionCount}
                   action={<MoveButton label="Keep counting" item={item.label} toward="in" disabled={busy} onClick={() => adjust({ kind: 'continue_stream', flow: item.flow, key: item.payeeKey })} />}
                 />
               )}
@@ -382,6 +462,9 @@ export default function ForecastBoard({ report, apiUrl, onChanged }: {
                   detail={`${adjustment.kind === 'exclude_transfer'
                     ? (adjustment.flow === 'income' ? 'Transfer in' : 'Transfer out')
                     : (adjustment.flow === 'income' ? 'Money in' : 'Money out')}${overrideNote(adjustment)}`}
+                  category={adjustment.transactions?.[0]?.category}
+                  transactions={adjustment.transactions}
+                  transactionCount={adjustment.transactionCount}
                   action={<MoveButton label="Put back" item={adjustment.label} toward="in" disabled={busy} onClick={() => undo(adjustment)} />}
                 />
               )}

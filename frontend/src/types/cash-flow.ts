@@ -62,7 +62,22 @@ export interface CashFlowHighlight {
 
 export type RecurringCadence = 'weekly' | 'biweekly' | 'semimonthly' | 'monthly' | 'quarterly';
 
-export interface CashFlowRecurringItem {
+/** One transaction behind an item on the page. */
+export interface CashFlowItemTransaction {
+  id: string;
+  date: string;
+  amount: number;
+  /** Null when the transaction has no category. */
+  category: string | null;
+}
+
+/** The latest transactions behind an item (at most 12, latest first), and how many there are in all. */
+export interface CashFlowItemTransactions {
+  transactions: CashFlowItemTransaction[];
+  transactionCount: number;
+}
+
+export interface CashFlowRecurringItem extends CashFlowItemTransactions {
   id: string;
   /** The payee's key, which a forecast adjustment names it by. */
   payeeKey: string;
@@ -84,7 +99,7 @@ export interface CashFlowRecurringItem {
 /** What a forecast adjustment does: leave a payee out, count a one-off, keep a stopped item, or leave a transfer out. */
 export type ForecastAdjustmentKind = 'exclude_payee' | 'include_one_off' | 'continue_stream' | 'exclude_transfer';
 
-export interface CashFlowAdjustment {
+export interface CashFlowAdjustment extends CashFlowItemTransactions {
   id: string;
   kind: ForecastAdjustmentKind;
   /** For a transfer, `income` is money in. */
@@ -97,7 +112,7 @@ export interface CashFlowAdjustment {
   amount: number | null;
 }
 
-export interface CashFlowTypicalPayee {
+export interface CashFlowTypicalPayee extends CashFlowItemTransactions {
   flow: 'income' | 'spending';
   payeeKey: string;
   label: string;
@@ -162,7 +177,7 @@ export interface CashFlowReport {
   };
   recurring: CashFlowRecurringItem[];
   /** Every one-off in the basis, largest first, so each can be counted. */
-  oneOffs: Array<{ id: string; date: string; label: string; flow: 'income' | 'spending'; amount: number }>;
+  oneOffs: Array<{ id: string; date: string; label: string; flow: 'income' | 'spending'; amount: number; category: string | null }>;
   /** How large a non-repeating amount must be to be a one-off, by direction; null without a basis. */
   oneOffThresholds: { income: number; spending: number } | null;
   /** The payees behind the typical rates, largest first. */
@@ -228,7 +243,7 @@ export interface CashFlowPositionSummary {
   lowNext12Months: { date: string; cash: number } | null;
   transfers: {
     typicalMonthlyNet: number;
-    recurring: Array<{
+    recurring: Array<CashFlowItemTransactions & {
       id: string;
       payeeKey: string;
       label: string;
