@@ -5,9 +5,11 @@ import type { PlannedCashFlowEvent } from '../../cash-flow/planned-events';
 import {
   ACCOUNTS,
   CARD_TERMS,
+  INTEREST_CHARGE_CATEGORY,
   accountsWithCardTerms,
   householdTransactions,
   interestCharges,
+  tx,
 } from './factories/cash-flow.factory';
 
 const FROM = '2026-06-03';
@@ -158,6 +160,29 @@ describe('buildCashPosition', () => {
     const debtWith = available(buildCashPosition(withCharges)).cardDebtBefore('2027-10-01');
     const debtWithout = available(buildCashPosition(withoutCharges)).cardDebtBefore('2027-10-01');
     expect(debtWith).toBeCloseTo(debtWithout, 2);
+  });
+
+  it('charges a card exactly what its projection was given, irregular interest included', () => {
+    const charge = (date: string, amount: number) =>
+      tx('card', date, 'fee', amount, 'INTEREST CHARGE ON PURCHASES', { personal_finance_category: INTEREST_CHARGE_CATEGORY });
+    const base = carrying.filter(item => !['CARD CO AUTOPAY', 'PAYMENT THANK YOU'].includes(String(item.name)) && !String(item.name).includes('INTEREST'));
+    const noMinimum = accountsWithCardTerms().map(account => account.account_id === 'card'
+      ? { ...account, liabilityDetails: [{ ...CARD_TERMS, minimumPaymentAmount: null }] }
+      : account);
+    const monthly = event({
+      id: 'monthly', kind: 'card_payment', accountId: 'card', paymentMode: 'fixed', amount: 1500,
+      recurrence: 'monthly', startDate: '2026-10-20', label: 'Rewards Card payment',
+    });
+    const built = model({
+      transactions: [...base, charge('2026-07-03', 23.5), charge('2026-08-19', 81.25), charge('2026-09-08', 47.1)],
+      accounts: noMinimum,
+      plannedEvents: [monthly],
+    });
+    const position = available(buildCashPosition(built));
+    for (const month of built.cards[0].projection!.months.slice(0, 12)) {
+      const nextMonth = addDays(`${month.month}-28`, 7).slice(0, 7);
+      expect(position.cardDebtBefore(`${nextMonth}-01`)).toBeCloseTo(month.endBalance, 2);
+    }
   });
 });
 

@@ -62,26 +62,19 @@ export function buildCashPosition(model: CashFlowModel): CashPosition {
   const cardIds = new Set(model.cards.map(card => card.account.id));
   const projected = model.cards.filter(card => card.projection);
 
-  // Income lands in cash; spending lands where it was made.
+  // Income lands in cash, and spending on a cash account leaves it. A
+  // projected card is charged exactly what its projection was given, so its
+  // balance here and in the card model agree.
   for (const item of model.scheduled) {
     if (item.flow === 'income') addCash(item.date, item.amount);
     else if (!cardIds.has(item.accountId)) addCash(item.date, -item.amount);
-    else {
-      const card = projected.find(entry => entry.account.id === item.accountId);
-      if (!card) continue;
-      // APR interest reaches the card via interestPostings. Learned interest
-      // charges stay in the savings forecast when modelsInterest is false, but
-      // must not also raise the projected balance here.
-      if (item.interest && card.terms.apr !== null) continue;
-      addCard(item.date, item.amount);
-    }
   }
   let cardDaily = 0;
   let allCardsDaily = 0;
-  for (const card of model.cards) {
-    const rate = model.cardDailySpending.get(card.account.id) ?? 0;
-    allCardsDaily += rate;
-    if (card.projection) cardDaily += rate;
+  for (const card of model.cards) allCardsDaily += model.cardDailySpending.get(card.account.id) ?? 0;
+  for (const card of projected) {
+    cardDaily += card.purchases.dailyRate;
+    for (const item of card.purchases.dated) addCard(item.date, item.amount);
   }
   const cashDaily = model.typical.dailyIncome - Math.max(0, model.typical.dailySpending - allCardsDaily) + model.transfers.dailyNet;
   for (let index = 0; index < days; index += 1) {

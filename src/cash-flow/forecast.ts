@@ -21,6 +21,7 @@ import {
   type CardBaseline,
   type CardHistory,
   type CardProjection,
+  type CardPurchases,
   type CardTerms,
 } from './cards';
 import {
@@ -172,6 +173,8 @@ export interface CardModel {
   currentPace: CardProjection | null;
   /** With the user's plans; the current pace when there are none. */
   projection: CardProjection | null;
+  /** What the card is charged in the forecast: what its projections are given, and what the cash position adds to its balance. */
+  purchases: CardPurchases;
   /** Projected interest replaces the card's historical interest in the forecast. */
   modelsInterest: boolean;
 }
@@ -236,6 +239,8 @@ interface LearnedFlows {
   oneOffs: CashFlowEntry[];
   /** Typical daily amount per account and flow, one-offs left out. */
   dailyByAccount: Map<string, Record<CashFlowDirection, number>>;
+  /** The part of each account's typical daily spending that is card interest charges. */
+  interestDailyByAccount: Map<string, number>;
 }
 
 /**
@@ -251,9 +256,10 @@ function learnFlows(
 ): LearnedFlows {
   const streams = detectRecurringStreams(entries, dataThrough);
   const dailyByAccount = new Map<string, Record<CashFlowDirection, number>>();
-  if (!basisStart) return { streams, oneOffs: [], dailyByAccount };
+  const interestDailyByAccount = new Map<string, number>();
+  if (!basisStart) return { streams, oneOffs: [], dailyByAccount, interestDailyByAccount };
   const basisDays = daysBetween(basisStart, basisEndExclusive);
-  if (basisDays <= 0) return { streams, oneOffs: [], dailyByAccount };
+  if (basisDays <= 0) return { streams, oneOffs: [], dailyByAccount, interestDailyByAccount };
 
   const inStream = new Set(streams.flatMap(stream => stream.entryIds));
   const basisEntries = entries.filter(entry => entry.date >= basisStart && entry.date < basisEndExclusive);
@@ -284,6 +290,9 @@ function learnFlows(
     const account = totalsByAccount.get(entry.accountId) ?? { income: 0, spending: 0 };
     account[entry.flow] += entry.amount;
     totalsByAccount.set(entry.accountId, account);
+    if (entry.interest && entry.flow === 'spending') {
+      interestDailyByAccount.set(entry.accountId, (interestDailyByAccount.get(entry.accountId) ?? 0) + entry.amount / basisDays);
+    }
   }
   for (const [accountId, account] of totalsByAccount) {
     dailyByAccount.set(accountId, {
@@ -291,7 +300,7 @@ function learnFlows(
       spending: Math.max(0, account.spending / basisDays),
     });
   }
-  return { streams, oneOffs, dailyByAccount };
+  return { streams, oneOffs, dailyByAccount, interestDailyByAccount };
 }
 
 function sumDaily(dailyByAccount: ReadonlyMap<string, Record<CashFlowDirection, number>>, flow: CashFlowDirection): number {
@@ -428,13 +437,18 @@ export function buildCashFlowModel(input: CashFlowModelInput): CashFlowModel {
         })));
 
   const cards: CardModel[] = cardSetups.map(card => {
-    const purchases = {
-      dailyRate: cardDailySpending.get(card.account.id) ?? 0,
+    // projectCard posts APR interest itself, so a card with an APR is charged
+    // without the interest its history learned: as a stream or inside the
+    // typical rate. A card whose interest is not modelled keeps those charges
+    // in the savings forecast; on the card they would count twice.
+    const postsInterest = card.terms.apr !== null;
+    const learnedInterestDaily = postsInterest && spendingSource === 'transactions'
+      ? learned.interestDailyByAccount.get(card.account.id) ?? 0
+      : 0;
+    const purchases: CardPurchases = {
+      dailyRate: Math.max(0, (cardDailySpending.get(card.account.id) ?? 0) - learnedInterestDaily),
       dated: scheduled
-        .filter(item => item.flow === 'spending' && item.accountId === card.account.id)
-        // projectCard posts APR interest itself; feeding learned interest
-        // charges in as purchases would stack the two on the balance.
-        .filter(item => !(card.terms.apr !== null && item.interest))
+        .filter(item => item.flow === 'spending' && item.accountId === card.account.id && !(postsInterest && item.interest))
         .map(item => ({ date: item.date, amount: item.amount })),
     };
     const projectWith = (cardPlans: PlannedCashFlowEvent[]) => reason ? null : projectCard({
@@ -457,6 +471,7 @@ export function buildCashFlowModel(input: CashFlowModelInput): CashFlowModel {
       plans: card.plans,
       currentPace,
       projection: card.plans.length > 0 ? projectWith(card.plans) : currentPace,
+      purchases,
       modelsInterest: card.modelsInterest,
     };
   });

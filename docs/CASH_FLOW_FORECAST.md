@@ -85,7 +85,7 @@ The APR, minimum and due day come from Plaid Liabilities. A card whose APR the p
 
 When the model projects a card's interest (APR known, a balance and a usual pace), that card's historical interest charges (`BANK_FEES_INTEREST_CHARGE`) are taken out of what the savings forecast learns. The projected interest is added back as the `cardInterest` component. So a payoff plan's interest saving reaches the savings forecast, and the interest is counted once. Without an APR, the charges stay in the history and are carried forward like any other spending.
 
-A card projected only from a monthly plan (no usual pace) keeps those charges in the savings forecast, so saving a plan does not change the forecast without plans. The card projection and cash position still use the APR for interest and do not also apply the learned charges as purchases — otherwise interest would be counted twice on the balance.
+A card projected only from a monthly plan (no usual pace) keeps those charges in the savings forecast, so saving a plan does not change the forecast without plans. Its projection still posts interest from the APR, so the card is charged without the learned charges, whether they were learned as a recurring stream or as part of the typical rate; otherwise interest would count twice on its balance. The cash position charges each card exactly what its projection was given.
 
 The report gives each card's outcome at the usual pace and with the user's plans:
 

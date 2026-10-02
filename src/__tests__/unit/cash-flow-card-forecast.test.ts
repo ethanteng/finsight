@@ -11,6 +11,7 @@ import {
   ACCOUNTS,
   CARD_PAYMENT_CATEGORY,
   CARD_TERMS,
+  INTEREST_CHARGE_CATEGORY,
   accountsWithCardTerms,
   householdTransactions,
   interestCharges,
@@ -235,6 +236,25 @@ describe('the report’s cards and cash position', () => {
         .toBeCloseTo(withoutCharges.cards[0].projection!.interestTwelveMonths!, 2);
       expect(built.cards[0].projection!.months[0].endBalance)
         .toBeCloseTo(withoutCharges.cards[0].projection!.months[0].endBalance, 2);
+    });
+
+    it('keeps irregular interest charges out of an APR card projection, not only a regular one', () => {
+      // Charges with no steady cadence are not a stream: they land in the card's typical daily rate.
+      const charge = (date: string, amount: number) =>
+        tx('card', date, 'fee', amount, 'INTEREST CHARGE ON PURCHASES', { personal_finance_category: INTEREST_CHARGE_CATEGORY });
+      const base = noPayments.filter(item => !String(item.name).includes('INTEREST'));
+      const built = model({
+        transactions: [...base, charge('2026-07-03', 23.5), charge('2026-08-19', 81.25), charge('2026-09-08', 47.1)],
+        accounts: noMinimum,
+        plannedEvents: [monthly],
+      });
+      const without = model({ transactions: base, accounts: noMinimum, plannedEvents: [monthly] });
+      expect(built.streams.some(stream => stream.label.includes('INTEREST'))).toBe(false);
+      // The savings forecast keeps them, as the card's interest is not modelled...
+      expect(built.cardDailySpending.get('card')!).toBeGreaterThan(without.cardDailySpending.get('card')!);
+      // ...but the card, which posts APR interest itself, is not charged them again.
+      expect(built.cards[0].purchases.dailyRate).toBeCloseTo(without.cards[0].purchases.dailyRate, 6);
+      expect(built.cards[0].projection!.months[11].endBalance).toBeCloseTo(without.cards[0].projection!.months[11].endBalance, 2);
     });
 
     it('is left out with only a one-time plan, and the position says so', () => {
