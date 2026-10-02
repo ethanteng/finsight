@@ -8,7 +8,7 @@ import {
   forecastTotals,
   type CashFlowModelInput,
 } from '../../cash-flow/forecast';
-import { ACCOUNTS, householdTransactions, tx } from './factories/cash-flow.factory';
+import { ACCOUNTS, CARD_PAYMENT_CATEGORY, householdTransactions, tx } from './factories/cash-flow.factory';
 
 const FROM = '2026-06-03';
 const THROUGH = '2026-09-30';
@@ -228,6 +228,20 @@ describe('the transactions behind each item', () => {
     expect(leftOut.transactions[0]).toEqual(expect.objectContaining({ date: '2026-09-01', amount: 2000 }));
   });
 
+  it('lists only the transfers a left-out transfer could have touched, not a card’s own payments', () => {
+    // CARD CO AUTOPAY pays the connected card each month, matched to the card's side, so
+    // it is the card's payment. Two more went to a card that is not connected: transfers.
+    const elsewhere = ['2026-08-15', '2026-09-15'].map(date =>
+      tx('checking', date, 'transfer_out', 300, 'CARD CO AUTOPAY', { personal_finance_category: CARD_PAYMENT_CATEGORY }));
+    const leftOut = adjustment({ kind: 'exclude_transfer', flow: 'spending', key: 'card autopay', label: 'CARD CO AUTOPAY' });
+    const built = buildCashFlowReport(
+      model([leftOut], { transactions: [...history, ...safeway, ...elsewhere] }),
+      { granularity: 'month', horizonMonths: 3 },
+    );
+    expect(built.adjustments[0].transactionCount).toBe(2);
+    expect(built.adjustments[0].transactions.map(item => [item.date, item.amount])).toEqual([['2026-09-15', 300], ['2026-08-15', 300]]);
+  });
+
   it('lists a transfer’s movements', () => {
     const vanguard = report().position.transfers.recurring.find(item => item.label === 'VANGUARD BUY TRANSFER')!;
     expect(vanguard.transactions.map(item => [item.date, item.amount])).toEqual([
@@ -235,23 +249,6 @@ describe('the transactions behind each item', () => {
     ]);
   });
 
-  it('does not attribute paired card payments to a left-out transfer', () => {
-    // CARD CO AUTOPAY is the cash leg of a payment to the projected card; the
-    // transfer model leaves it to the card, so leaving it out must not list it.
-    // (The key drops the noise word "co": "card autopay".)
-    const leftOut = buildCashFlowReport(
-      model([adjustment({ kind: 'exclude_transfer', key: 'card autopay', label: 'CARD CO AUTOPAY' })]),
-      { granularity: 'month', horizonMonths: 3 },
-    ).adjustments[0];
-    expect(leftOut.transactionCount).toBe(0);
-    expect(leftOut.transactions).toEqual([]);
-
-    const vanguard = buildCashFlowReport(
-      model([adjustment({ kind: 'exclude_transfer', key: 'vanguard buy transfer', label: 'VANGUARD BUY TRANSFER' })]),
-      { granularity: 'month', horizonMonths: 3 },
-    ).adjustments[0];
-    expect(vanguard.transactionCount).toBe(4);
-  });
 });
 
 describe('choices saved under a payee’s earlier key', () => {
