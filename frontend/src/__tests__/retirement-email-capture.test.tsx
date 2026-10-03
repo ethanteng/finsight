@@ -304,15 +304,15 @@ it('carries the run to signup instead of stopping at the inbox', async () => {
 });
 
 /*
- * No token came back — the lead did not store, or its disclosure did not — so
- * there is nothing to carry and the inbox is the only route left.
- */
-/*
- * No token means nothing was stored, so no account could open the run. The
- * verdict belongs in Ask Linc, not here, so the form asks for a retry.
+ * Nothing stored is a 503, so no account could open the run. The verdict
+ * belongs in Ask Linc, not here, so the form asks for a retry.
  */
 it('asks for a retry, and shows no verdict, when nothing was stored', async () => {
-  mockApi(BASE_RESULT, { ok: true, json: async () => ({ message: 'sent', ref: null }) });
+  mockApi(BASE_RESULT, {
+    ok: false,
+    status: 503,
+    json: async () => ({ error: 'We could not save your result just now. Please try again in a moment.' }),
+  });
   renderPage();
   await runTheModel();
 

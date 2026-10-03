@@ -519,11 +519,15 @@ describe("Coast FIRE calculator page", () => {
     });
 
     /*
-     * No token means nothing stored, so no account could open the run. The
-     * answer belongs in Ask Linc, not here, so the form asks for a retry.
+     * Nothing stored is a 503, so no account could open the run. The answer
+     * belongs in Ask Linc, not here, so the form asks for a retry.
      */
     it("asks for a retry, and shows no answer, when nothing was stored", async () => {
-      mockSend({ ok: true, json: async () => ({ message: "sent", ref: null }) } as Partial<Response>);
+      mockSend({
+        ok: false,
+        status: 503,
+        json: async () => ({ error: "We could not save your result just now. Please try again in a moment." }),
+      } as Partial<Response>);
       const { container } = render(<CoastFireCalculator />);
 
       fillForm();
