@@ -1162,6 +1162,8 @@ function QuickPlanResults({
             allocation: inputs.allocation,
           }}
           survivalRate={primary.survivalRate}
+          sequencesTested={primary.sequencesTested}
+          sequencesSurvived={primary.sequencesSurvived}
         />
         <CalculatorRunAgain locked={locked} onEdit={onEdit} />
       </div>

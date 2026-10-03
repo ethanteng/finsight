@@ -53,6 +53,7 @@ import {
 } from '@/lib/trial-signup-flow';
 import { DEFAULT_POST_LOGIN_DESTINATION } from '@/lib/post-login-redirect';
 import { markFirstDecisionPending } from '@/lib/pending-first-decision';
+import { calculateCoastFire } from '@/lib/coast-fire';
 
 interface SubscriptionContext {
   subscription: string;
@@ -203,6 +204,13 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
   const { showError, dialog } = useDialog();
   const [isCheckoutLoading, setIsCheckoutLoading] = useState(false);
   const [error, setError] = useState('');
+  /*
+   * Registration refused because the address already has an account. The
+   * calculators no longer show the answer on the page or in the ready email,
+   * so without a fallback here a returning visitor who typed their existing
+   * address would be stranded with no way to see the run they just asked for.
+   */
+  const [existingAccountResult, setExistingAccountResult] = useState(false);
   const [subscriptionContext, setSubscriptionContext] = useState<SubscriptionContext | null>(null);
   /*
    * The emailed token, held for as long as this page is open.
@@ -805,7 +813,17 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
       if (isTrial) {
         pushTrialSignupRegistrationError(res.ok ? 'unknown' : 'server_rejected');
       }
-      setError(data.error || 'Registration failed');
+      // An existing account cannot be seeded through /auth/register. Show the
+      // answer they were promised and send them to sign in, rather than leaving
+      // them with a figure-free inbox and a locked calculator page.
+      if (res.status === 409 && resultWaiting) {
+        setExistingAccountResult(true);
+        setError(
+          'You already have an Ask Linc account. Sign in to open your workspace — your result is below.',
+        );
+      } else {
+        setError(data.error || 'Registration failed');
+      }
     }
     setIsLoading(false);
   };
@@ -848,14 +866,65 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
           data-cs-mask
           className="mb-5 rounded-2xl border border-[#123c2f]/15 bg-[#fffdf7] p-4 shadow-sm"
         >
-          <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#477064]">
-            Your Coast FIRE scenario
-          </p>
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#477064]">
+              Your Coast FIRE scenario
+            </p>
+            {existingAccountResult && (() => {
+              const outcome = coastFireContext.emailedOutcome
+                ?? (() => {
+                  try {
+                    const computed = calculateCoastFire(coastFireContext.inputs);
+                    return {
+                      coastFireNumber: computed.coastFireNumber,
+                      hasReachedCoastFire: computed.hasReachedCoastFire,
+                    };
+                  } catch {
+                    return null;
+                  }
+                })();
+              if (!outcome) return null;
+              return (
+                <span
+                  className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-bold ${
+                    outcome.hasReachedCoastFire
+                      ? 'bg-[#eaf5d5] text-[#34551c]'
+                      : 'bg-[#f7e5c6] text-[#6b4a12]'
+                  }`}
+                >
+                  {outcome.hasReachedCoastFire ? 'Reached' : 'Not yet'}
+                </span>
+              );
+            })()}
+          </div>
           <dl className="mt-3 grid grid-cols-3 gap-2">
+            {existingAccountResult && (() => {
+              const number = coastFireContext.emailedOutcome?.coastFireNumber
+                ?? (() => {
+                  try {
+                    return calculateCoastFire(coastFireContext.inputs).coastFireNumber;
+                  } catch {
+                    return null;
+                  }
+                })();
+              return number == null
+                ? null
+                : <ScenarioValue label="Coast FIRE number" value={compactMoney(number)} />;
+            })()}
             <ScenarioValue label="Saved today" value={compactMoney(coastFireContext.inputs.currentSavings)} />
             <ScenarioValue label="Retire at" value={String(coastFireContext.inputs.retirementAge)} />
-            <ScenarioValue label="Annual spending" value={compactMoney(coastFireContext.inputs.annualRetirementSpending)} />
+            {!existingAccountResult && (
+              <ScenarioValue label="Annual spending" value={compactMoney(coastFireContext.inputs.annualRetirementSpending)} />
+            )}
           </dl>
+          {existingAccountResult && (
+            <p className="mt-3 text-sm leading-6 text-[#29483f]">
+              <Link href="/login" className="font-semibold underline underline-offset-2">
+                Sign in to your account
+              </Link>
+              {' '}to keep planning — this run could not be attached to an address that already has one.
+            </p>
+          )}
         </section>
       )}
 
@@ -865,14 +934,37 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
           data-cs-mask
           className="mb-5 rounded-2xl border border-[#123c2f]/15 bg-[#fffdf7] p-4 shadow-sm"
         >
-          <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#477064]">
-            Your modeled scenario
-          </p>
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#477064]">
+              Your modeled scenario
+            </p>
+            {existingAccountResult && retirementContext.emailedOutcome && (
+              <span
+                className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-bold ${
+                  retirementContext.emailedOutcome.survivalRate >= 0.9
+                    ? 'bg-[#eaf5d5] text-[#34551c]'
+                    : retirementContext.emailedOutcome.survivalRate >= 0.7
+                      ? 'bg-[#f7e5c6] text-[#6b4a12]'
+                      : 'bg-[#fde8e4] text-[#8b3027]'
+                }`}
+              >
+                {`${(retirementContext.emailedOutcome.survivalRate * 100).toFixed(1)}% lasted`}
+              </span>
+            )}
+          </div>
           <dl className="mt-3 grid grid-cols-3 gap-2">
             <ScenarioValue label="Retire at" value={String(retirementContext.inputs.retirementAge)} />
             <ScenarioValue label="Assets today" value={compactMoney(retirementContext.inputs.investableAssets)} />
             <ScenarioValue label="Annual spending" value={compactMoney(retirementContext.inputs.annualSpending)} />
           </dl>
+          {existingAccountResult && (
+            <p className="mt-3 text-sm leading-6 text-[#29483f]">
+              <Link href="/login" className="font-semibold underline underline-offset-2">
+                Sign in to your account
+              </Link>
+              {' '}to keep planning — this run could not be attached to an address that already has one.
+            </p>
+          )}
         </section>
       )}
 

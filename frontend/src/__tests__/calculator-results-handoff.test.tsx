@@ -75,6 +75,7 @@ function giveEmail(address = 'reader@example.com') {
 beforeEach(() => {
   posts.length = 0;
   window.sessionStorage.clear();
+  window.localStorage.clear();
   jest.mocked(leaveForSignup).mockClear();
   Element.prototype.scrollIntoView = jest.fn();
   mockApi();
@@ -127,8 +128,25 @@ describe('Coast FIRE calculator', () => {
     expect(jest.mocked(leaveForSignup).mock.calls[0][0]).toContain('entry=results_page');
     expect(readCoastFireSignupContext()?.sourceToken).toBe(REF);
     expect(readCoastFireSignupContext()?.email).toBe('reader@example.com');
+    expect(readCoastFireSignupContext()?.emailedOutcome?.coastFireNumber).toBeCloseTo(369_128, 0);
     expect(document.body).not.toHaveTextContent(COAST_FIRE_NUMBER);
     expect(posts.some((url) => url.includes('/interpretation'))).toBe(false);
+  });
+
+  /*
+   * Registration cannot seed an address that already has an account, and the
+   * ready email states no figures — so a signed-in visitor would otherwise
+   * leave for signup and never see the answer.
+   */
+  it('shows the answer on the page when the visitor is already signed in', async () => {
+    window.localStorage.setItem('auth_token', 'existing-session');
+    render(<CoastFireCalculator />);
+    calculate();
+    giveEmail();
+
+    expect((await screen.findAllByText(COAST_FIRE_NUMBER)).length).toBeGreaterThan(0);
+    expect(leaveForSignup).not.toHaveBeenCalled();
+    expect(await screen.findByText(/you’re already signed in/i)).toBeInTheDocument();
   });
 
   /*
@@ -267,6 +285,19 @@ describe('retirement calculator', () => {
     expect(await screen.findByText(READING.headline)).toBeInTheDocument();
     expect(screen.getByText(/so here is your result/i)).toBeInTheDocument();
     expect(leaveForSignup).not.toHaveBeenCalled();
+  });
+
+  it('shows the verdict on the page when the visitor is already signed in', async () => {
+    window.localStorage.setItem('auth_token', 'existing-session');
+    mockApi(PLAN);
+    renderPage();
+    await runTheModel();
+    await screen.findByText('Your result is ready.');
+    giveEmail();
+
+    expect(await screen.findByText(/retiring at 60 worked in/i)).toBeInTheDocument();
+    expect(leaveForSignup).not.toHaveBeenCalled();
+    expect(await screen.findByText(/you’re already signed in/i)).toBeInTheDocument();
   });
 
   /*

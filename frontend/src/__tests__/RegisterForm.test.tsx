@@ -607,6 +607,44 @@ describe('RegisterForm', () => {
       expect(sessionStorage.getItem(PENDING_FIRST_DECISION_STORAGE_KEY)).not.toBeNull();
     });
 
+    /*
+     * The ready email states no figures and the calculator page has already
+     * navigated away. If this address already has an account, registration
+     * cannot seed the lead — so the signup page must show the answer itself.
+     */
+    it('shows the result when registration refuses an existing account', async () => {
+      const token = 'd'.repeat(48);
+      searchParams = new URLSearchParams(`source=${RETIREMENT_SIGNUP_SOURCE}`);
+      handOverRetirementRef(token);
+      global.fetch = jest.fn(async (url: RequestInfo | URL) => {
+        if (String(url).includes('/auth/register')) {
+          return {
+            ok: false,
+            status: 409,
+            json: async () => ({ error: 'User with this email already exists' }),
+          };
+        }
+        return {
+          ok: true,
+          json: async () => ({
+            email: 'reader@example.com',
+            inputs: RETIREMENT_SCENARIO,
+            outcome: { survivalRate: 0.92, sequencesTested: 800, sequencesSurvived: 736 },
+          }),
+        };
+      }) as unknown as typeof fetch;
+
+      render(<RegisterForm variant="trial" />);
+      await screen.findByRole('region', { name: 'Your modeled retirement scenario' });
+      fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'Password1' } });
+      fireEvent.click(screen.getByRole('button', { name: /Create account and see my result/i }));
+
+      expect(await screen.findByText(/you already have an ask linc account/i)).toBeInTheDocument();
+      expect(screen.getByText('92.0% lasted')).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: /sign in to your account/i })).toHaveAttribute('href', '/login');
+      expect(push).not.toHaveBeenCalledWith('/app');
+    });
+
     it('still verifies when the server does not say the address was proved', async () => {
       const token = 'd'.repeat(48);
       searchParams = new URLSearchParams(`source=${RETIREMENT_SIGNUP_SOURCE}`);
