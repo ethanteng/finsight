@@ -68,6 +68,12 @@ export interface AskClaudeOptions {
    * otherwise the ceiling it thinks it set is multiplied by the retry count.
    */
   maxRetries?: number;
+  /**
+   * Receives the response's `stop_reason`. A reply that ends early reads like
+   * one that finished, and only the stop reason says which; the text alone
+   * cannot.
+   */
+  onStopReason?: (stopReason: string | null) => void;
 }
 
 /** The slots this client serves. Both are configured as Anthropic models. */
@@ -299,6 +305,7 @@ export async function askClaude(
   }, requestOptions(options));
 
   reportIfTruncated(response.stop_reason, model);
+  options.onStopReason?.(response.stop_reason ?? null);
 
   const textBlock = response.content.find((block): block is Anthropic.TextBlock => block.type === 'text');
   return textBlock?.text ?? '';
@@ -338,6 +345,7 @@ export async function askClaudeStream(
 
   const finalMessage = await stream.finalMessage();
   reportIfTruncated(finalMessage.stop_reason, model);
+  options.onStopReason?.(finalMessage.stop_reason ?? null);
 
   const textBlock = finalMessage.content.find((block): block is Anthropic.TextBlock => block.type === 'text');
   return textBlock?.text ?? '';

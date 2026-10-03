@@ -1,6 +1,7 @@
 import { runAskLincAnalysis, selectValidationFeedback } from '../../openai/analysis-pipeline';
 import { UNVERIFIED_PROSE_NOTICE } from '../../openai/response-facts';
-import { SECONDARY_REVIEW_CAVEAT } from '../../openai/response-grounding';
+import { SECONDARY_REVIEW_CAVEAT, UNVERIFIABLE_SUMMARY } from '../../openai/response-grounding';
+import { RESPONSE_FORMAT_ISSUES } from '../../openai/structured-response';
 import { completeRetirementAnalysis, gatherContextSnapshot } from '../../openai/context-service';
 import { askClaude } from '../../openai/claude-client';
 import { auditDataPacksWithClaude } from '../../openai/claude-client';
@@ -1200,6 +1201,129 @@ describe('runAskLincAnalysis validation routing', () => {
     expect(result.showTheMathData?.evidenceManifest.secondaryCaveat).toBe(true);
   });
 
+  it('keeps the first draft when the retry comes back with no answer in it', async () => {
+    // A full first draft with one unsupported figure, then a retry that was a
+    // single plain-text lead-in. Every figure in the lead-in was grounded, so
+    // it used to pass every check and ship as the whole answer.
+    mockedAskClaude
+      .mockImplementationOnce(async (_system, _user, options) => {
+        options?.onStopReason?.('end_turn');
+        return JSON.stringify({
+          summary: 'Your net worth is $100. Plan for $130,000 a year. Cash is $80.',
+          insights: ['Cash covers most of your net worth.'],
+          suggested_actions: ['Keep your cash where it is.'],
+        });
+      })
+      .mockImplementationOnce(async (_system, _user, options) => {
+        options?.onStopReason?.('end_turn');
+        return "Based on your net worth of $100, here's what the numbers show.";
+      });
+
+    const result = await runAskLincAnalysis({ question: 'What is my net worth?', userId: 'user-1' });
+
+    expect(mockedAskClaude).toHaveBeenCalledTimes(2);
+    expect(result.structuredResponse.summary).toBe(`Your net worth is $100. Cash is $80.\n\n${UNVERIFIED_PROSE_NOTICE}`);
+    expect(result.structuredResponse.insights).toEqual(['Cash covers most of your net worth.']);
+    expect(result.structuredResponse.suggested_actions).toEqual(['Keep your cash where it is.']);
+    const manifest = result.showTheMathData!.evidenceManifest;
+    expect(manifest.validation.deterministic).toMatchObject({ outcome: 'salvaged', shippedDraft: 'initial' });
+    expect(manifest.validation.initialIssues).toEqual([
+      'User-facing usd value 130000 is not present in the canonical fact pack.',
+    ]);
+    expect(manifest.validation.deterministic.removals?.sentences.map((sentence) => sentence.text))
+      .toEqual(['Plan for $130,000 a year.']);
+    expect(manifest.modelCalls.map(({ phase, stopReason, responseFormat }) => ({ phase, stopReason, responseFormat })))
+      .toEqual([
+        { phase: 'initial', stopReason: 'end_turn', responseFormat: 'structured' },
+        { phase: 'retry', stopReason: 'end_turn', responseFormat: 'unstructured' },
+      ]);
+  });
+
+  it('treats an empty retry like one in the wrong format', async () => {
+    mockedAskClaude
+      .mockResolvedValueOnce(JSON.stringify({
+        summary: 'Your net worth is $100. You could add $999.',
+        insights: [],
+        suggested_actions: [],
+      }))
+      .mockResolvedValueOnce(JSON.stringify({ summary: '', key_numbers: {}, insights: [], suggested_actions: [] }));
+
+    const result = await runAskLincAnalysis({ question: 'What is my net worth?', userId: 'user-1' });
+
+    expect(result.structuredResponse.summary).toBe(`Your net worth is $100.\n\n${UNVERIFIED_PROSE_NOTICE}`);
+    expect(result.showTheMathData?.evidenceManifest.validation.deterministic.shippedDraft).toBe('initial');
+    expect(result.showTheMathData?.evidenceManifest.modelCalls[1].responseFormat).toBe('empty');
+  });
+
+  it('retries a first reply that is not the required JSON, even when its figures are grounded', async () => {
+    mockedAskClaude
+      .mockResolvedValueOnce('Your retirement plan looks fine, and your net worth is $100.')
+      .mockResolvedValueOnce(JSON.stringify({
+        summary: 'Your net worth is $100.',
+        insights: ['Cash is $80.'],
+        suggested_actions: [],
+      }));
+
+    const result = await runAskLincAnalysis({
+      question: 'Am I on track for retirement?',
+      userId: 'user-1',
+      enableValidation: true,
+    });
+
+    expect(mockedAskClaude).toHaveBeenCalledTimes(2);
+    expect(mockedAskClaude.mock.calls[1][1]).toContain(RESPONSE_FORMAT_ISSUES.unstructured);
+    // A reply in the wrong format is not missing a fact, so nothing is widened,
+    // and it has no reasoning for the secondary reviewer to check.
+    expect(mockedGatherContext).toHaveBeenCalledTimes(1);
+    expect(mockedValidateWithGemini).toHaveBeenCalledTimes(1);
+    expect(result.showTheMathData?.evidenceManifest.validation.secondary?.map((entry) => entry.phase)).toEqual(['retry']);
+    expect(result.structuredResponse.summary).toContain('Your net worth is $100.');
+    expect(result.structuredResponse.insights).toEqual(['Cash is $80.']);
+    expect(result.showTheMathData?.evidenceManifest.validation.deterministic).toMatchObject({
+      outcome: 'passed',
+      shippedDraft: 'retry',
+    });
+    expect(result.showTheMathData?.evidenceManifest.validation.initialIssues).toEqual([
+      RESPONSE_FORMAT_ISSUES.unstructured,
+    ]);
+  });
+
+  it('gives the placeholder when neither generation is an answer', async () => {
+    mockedAskClaude
+      .mockResolvedValueOnce('Your net worth is $100.')
+      .mockResolvedValueOnce("Here's what the numbers show.");
+
+    const result = await runAskLincAnalysis({ question: 'What is my net worth?', userId: 'user-1' });
+
+    expect(result.structuredResponse).toEqual({ summary: UNVERIFIABLE_SUMMARY, insights: [], suggested_actions: [] });
+    const deterministic = result.showTheMathData!.evidenceManifest.validation.deterministic;
+    expect(deterministic).toMatchObject({
+      valid: false,
+      outcome: 'replaced',
+      issues: [RESPONSE_FORMAT_ISSUES.unstructured],
+      removals: { sentences: [], keyNumbers: [], replacedSummary: "Here's what the numbers show." },
+    });
+    expect(deterministic.shippedDraft).toBeUndefined();
+  });
+
+  it('does not claim a shipped draft when salvage of the first draft leaves nothing', async () => {
+    mockedAskClaude
+      .mockResolvedValueOnce(JSON.stringify({
+        summary: 'Your net worth is $999,999.',
+        insights: ['Act on $999,999.'],
+        suggested_actions: [],
+      }))
+      .mockResolvedValueOnce("Here's what the numbers show.");
+
+    const result = await runAskLincAnalysis({ question: 'What is my net worth?', userId: 'user-1' });
+
+    expect(result.structuredResponse.summary).toBe(UNVERIFIABLE_SUMMARY);
+    const deterministic = result.showTheMathData!.evidenceManifest.validation.deterministic;
+    expect(deterministic.outcome).toBe('replaced');
+    expect(deterministic.shippedDraft).toBeUndefined();
+    expect(deterministic.removals?.replacedSummary).toBe('Your net worth is $999,999.');
+  });
+
   it('asks for the input that blocked the retirement projection', async () => {
     // The missing input was only ever described to the model, buried in the
     // context pack. The user is the one who can supply it.
@@ -1632,6 +1756,9 @@ describe('runAskLincAnalysis validation routing', () => {
     expect(result.showTheMathData?.evidenceManifest.secondaryCaveat).toBe(true);
     // The objection itself stays in the evidence, not in the user's answer.
     expect(result.structuredResponse.summary).not.toContain('ignores the cash position');
+    expect(result.showTheMathData?.evidenceManifest.validation.initialIssues).toEqual([
+      'Initial answer is unsupported.',
+    ]);
     expect(result.showTheMathData?.evidenceManifest.validation.secondary).toEqual([
       { phase: 'initial', valid: false, issues: ['Initial answer is unsupported.'] },
       { phase: 'retry', valid: false, issues: ['The recommendation ignores the cash position.'] },
@@ -1702,10 +1829,13 @@ describe('runAskLincAnalysis validation routing', () => {
 
   it('reuses the prepared prompt and gathered snapshot when Claude fails', async () => {
     mockedAskClaude.mockRejectedValueOnce(new Error('Claude unavailable'));
-    mockedAskOpenAI.mockResolvedValueOnce(JSON.stringify({
-      summary: 'Your net worth is $100.',
-      key_numbers: { net_worth: 100 },
-    }));
+    mockedAskOpenAI.mockImplementationOnce(async (_system, _user, options) => {
+      options?.onFinishReason?.('stop');
+      return JSON.stringify({
+        summary: 'Your net worth is $100.',
+        key_numbers: { net_worth: 100 },
+      });
+    });
 
     const result = await runAskLincAnalysis({
       question: 'What is my net worth?',
@@ -1714,10 +1844,12 @@ describe('runAskLincAnalysis validation routing', () => {
 
     expect(mockedGatherContext).toHaveBeenCalledTimes(1);
     expect(mockedAskOpenAI).toHaveBeenCalledTimes(1);
-    expect(mockedAskOpenAI.mock.calls[0]).toEqual(mockedAskClaude.mock.calls[0]);
-    expect(result.showTheMathData?.evidenceManifest.modelCalls.map(({ provider, outcome }) => ({ provider, outcome }))).toEqual([
-      { provider: 'claude', outcome: 'failed' },
-      { provider: 'openai', outcome: 'success' },
+    expect(mockedAskOpenAI.mock.calls[0].slice(0, 2)).toEqual(mockedAskClaude.mock.calls[0].slice(0, 2));
+    expect(result.showTheMathData?.evidenceManifest.modelCalls.map(
+      ({ provider, outcome, stopReason, responseFormat }) => ({ provider, outcome, stopReason, responseFormat })
+    )).toEqual([
+      { provider: 'claude', outcome: 'failed', stopReason: undefined, responseFormat: undefined },
+      { provider: 'openai', outcome: 'success', stopReason: 'stop', responseFormat: 'structured' },
     ]);
   });
 

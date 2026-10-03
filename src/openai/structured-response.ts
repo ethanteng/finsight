@@ -114,16 +114,62 @@ export function extractPartialSummary(raw: string): string {
 }
 
 /**
+ * Whether a model reply was the answer the prompt asked for.
+ *
+ * Parsing never fails: whatever comes back, it yields something with a
+ * summary, so a reply that is not an answer reads downstream exactly like one
+ * that is. A lone plain-text sentence once passed grounding (its only figure
+ * was a known fact) and secondary review, and shipped as the whole answer. The
+ * format is how the pipeline tells the two apart.
+ *  - `structured`: the JSON object, or enough of one to recover its fields.
+ *  - `unstructured`: no JSON object at all; the text was wrapped as a summary.
+ *  - `empty`: nothing came back, or an object with nothing in it.
+ */
+export type ResponseFormat = 'structured' | 'unstructured' | 'empty';
+
+/** Retry feedback for a reply that was not an answer, in the voice of a validation issue. */
+export const RESPONSE_FORMAT_ISSUES: Record<Exclude<ResponseFormat, 'structured'>, string> = {
+  unstructured:
+    'The response was not the required JSON object. Return exactly one JSON object with summary, key_numbers, insights, and suggested_actions.',
+  empty: 'The response was empty. Answer the question in the required JSON object.',
+};
+
+const NO_RESPONSE_SUMMARY = 'No response generated.';
+const NO_SUMMARY_PROVIDED = 'No summary provided.';
+
+function hasContent(response: AskLincResponse): boolean {
+  const summary = response.summary?.trim();
+  return Boolean(summary && summary !== NO_SUMMARY_PROVIDED)
+    || Object.keys(response.key_numbers ?? {}).length > 0
+    || (response.insights ?? []).length > 0
+    || (response.suggested_actions ?? []).length > 0;
+}
+
+/** Parse a model reply and say whether it was an answer at all. */
+export function parseStructuredResponseWithFormat(
+  llmOutput: string
+): { response: AskLincResponse; format: ResponseFormat } {
+  const trimmed = typeof llmOutput === 'string' ? llmOutput.trim() : '';
+  if (!trimmed) return { response: { summary: NO_RESPONSE_SUMMARY }, format: 'empty' };
+  const parsed = parseJsonShapes(trimmed);
+  if (!parsed) {
+    return { response: { summary: trimmed, insights: [], suggested_actions: [] }, format: 'unstructured' };
+  }
+  return { response: parsed, format: hasContent(parsed) ? 'structured' : 'empty' };
+}
+
+/**
  * Parse LLM output to extract structured JSON response.
  * Handles: raw JSON, JSON in markdown code block, malformed/truncated JSON, duplicate keys.
+ * Text with no JSON in it is wrapped as the summary; callers that need to know
+ * whether that happened use `parseStructuredResponseWithFormat`.
  */
 export function parseStructuredResponse(llmOutput: string): AskLincResponse {
-  if (!llmOutput || typeof llmOutput !== 'string') {
-    return { summary: 'No response generated.' };
-  }
+  return parseStructuredResponseWithFormat(llmOutput).response;
+}
 
-  const trimmed = llmOutput.trim();
-
+/** Every JSON shape a reply has been seen in, most faithful first; null when there is none. */
+function parseJsonShapes(trimmed: string): AskLincResponse | null {
   // Try to extract JSON from markdown code block (```json ... ```)
   const jsonBlockMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/);
   if (jsonBlockMatch) {
@@ -150,15 +196,7 @@ export function parseStructuredResponse(llmOutput: string): AskLincResponse {
   }
 
   // Fallback: extract fields with regex when parse fails
-  const extracted = extractFieldsFromMalformedJson(trimmed);
-  if (extracted) return extracted;
-
-  // Last resort: wrap raw text in summary
-  return {
-    summary: trimmed,
-    insights: [],
-    suggested_actions: []
-  };
+  return extractFieldsFromMalformedJson(trimmed);
 }
 
 /**
@@ -281,7 +319,7 @@ function extractFieldsFromMalformedJson(str: string): AskLincResponse | null {
 
   if (summary || insights.length > 0 || suggested_actions.length > 0) {
     return {
-      summary: summary || 'No summary provided.',
+      summary: summary || NO_SUMMARY_PROVIDED,
       key_numbers: key_numbers && Object.keys(key_numbers).length > 0 ? key_numbers : undefined,
       insights: insights.length > 0 ? insights : undefined,
       suggested_actions: suggested_actions.length > 0 ? suggested_actions : undefined
@@ -339,7 +377,7 @@ function normalizeResponse(obj: Record<string, unknown>): AskLincResponse {
     : [];
 
   return {
-    summary: summary || 'No summary provided.',
+    summary: summary || NO_SUMMARY_PROVIDED,
     key_numbers: Object.keys(key_numbers).length > 0 ? key_numbers : undefined,
     insights: insights.length > 0 ? insights : undefined,
     suggested_actions: suggested_actions.length > 0 ? suggested_actions : undefined
@@ -529,7 +567,7 @@ export function parseDisplayText(responseText: string): AskLincResponse | null {
   const suggested_actions = sections.get('Suggested Actions');
 
   return {
-    summary: summary || 'No summary provided.',
+    summary: summary || NO_SUMMARY_PROVIDED,
     key_numbers: Object.keys(key_numbers).length > 0 ? key_numbers : undefined,
     insights,
     suggested_actions,

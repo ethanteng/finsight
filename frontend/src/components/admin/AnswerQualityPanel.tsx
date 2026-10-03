@@ -40,8 +40,24 @@ interface SearchQueryEvidence {
   results: SearchResultEvidence[];
 }
 
+type ResponseFormat = 'structured' | 'unstructured' | 'empty';
+
+interface ModelCall {
+  phase: 'initial' | 'retry';
+  provider: 'claude' | 'openai';
+  outcome: 'success' | 'failed';
+  responseCharacters: number;
+  durationMs: number;
+  stopReason?: string;
+  responseFormat?: ResponseFormat;
+}
+
 interface AnswerDetails {
   groundingIssues: string[];
+  /** The next three are absent on a report from a backend that predates them. */
+  initialIssues?: string[];
+  shippedDraft?: 'initial' | 'retry';
+  modelCalls?: ModelCall[];
   secondaryIssues: Array<{ phase: 'initial' | 'retry'; issues: string[] }>;
   removedSentences: RemovedSentence[];
   removedKeyNumbers: RemovedKeyNumber[];
@@ -186,6 +202,37 @@ const REMOVAL_REASONS: Record<RemovedSentence['reason'], string> = {
   dependent_on_removed: 'referred back to a sentence that was removed',
 };
 
+const FORMAT_LABELS: Record<ResponseFormat, string> = {
+  structured: 'JSON answer',
+  unstructured: 'not JSON',
+  empty: 'empty',
+};
+
+/** Claude's and OpenAI's ordinary "finished" values; anything else ended the reply early. */
+const NORMAL_STOP_REASONS = new Set(['end_turn', 'stop']);
+
+/**
+ * A single clean generation says nothing a reviewer needs; a retry, a failed
+ * call, a malformed reply or an early stop each do.
+ */
+function notableModelCalls(calls: ModelCall[] | undefined): ModelCall[] {
+  if (!calls) return [];
+  const notable = calls.length > 1 || calls.some((call) =>
+    call.outcome === 'failed'
+    || (call.responseFormat !== undefined && call.responseFormat !== 'structured')
+    || (call.stopReason !== undefined && !NORMAL_STOP_REASONS.has(call.stopReason))
+  );
+  return notable ? calls : [];
+}
+
+/** The first draft's failures, unless they are the same list the shipped answer already shows. */
+function distinctInitialIssues(details: AnswerDetails): string[] {
+  const initial = details.initialIssues ?? [];
+  const same = initial.length === details.groundingIssues.length
+    && initial.every((issue) => details.groundingIssues.includes(issue));
+  return same ? [] : initial;
+}
+
 const FRESHNESS_LABELS: Record<string, string> = {
   pd: 'past day',
   pw: 'past week',
@@ -200,6 +247,9 @@ function hasDetails(details: AnswerDetails | undefined): details is AnswerDetail
     || details.removedKeyNumbers.length > 0
     || Boolean(details.replacedSummary)
     || details.groundingIssues.length > 0
+    || distinctInitialIssues(details).length > 0
+    || details.shippedDraft === 'initial'
+    || notableModelCalls(details.modelCalls).length > 0
     || details.secondaryIssues.length > 0
     || details.searchQueryOutcomes.length > 0
     || details.plannedSearchQueries.length > 0;
@@ -278,11 +328,48 @@ function SearchQueryCard({ outcome }: { outcome: SearchQueryEvidence }) {
   );
 }
 
+function ModelCallRow({ call }: { call: ModelCall }) {
+  const earlyStop = call.stopReason !== undefined && !NORMAL_STOP_REASONS.has(call.stopReason);
+  const malformed = call.responseFormat !== undefined && call.responseFormat !== 'structured';
+  return (
+    <div className="flex flex-wrap items-center gap-2 text-sm text-gray-300">
+      <Chip>{call.phase}</Chip>
+      <span>{call.provider}</span>
+      {call.outcome === 'failed' ? (
+        <Chip tone="border-red-800 text-red-300">call failed</Chip>
+      ) : (
+        <>
+          <span className="text-xs text-gray-500">
+            {call.responseCharacters.toLocaleString()} chars · {(call.durationMs / 1000).toFixed(1)}s
+          </span>
+          {call.stopReason && (
+            <Chip tone={earlyStop ? 'border-red-800 text-red-300' : undefined}>stopped: {call.stopReason}</Chip>
+          )}
+          {call.responseFormat && (
+            <Chip tone={malformed ? 'border-red-800 text-red-300' : 'border-green-800 text-green-300'}>
+              {FORMAT_LABELS[call.responseFormat]}
+            </Chip>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 function AnswerDetailPanel({ details }: { details: AnswerDetails }) {
   const retrievedQueries = new Set(details.searchQueryOutcomes.map((outcome) => outcome.query));
   const unattempted = details.plannedSearchQueries.filter((planned) => !retrievedQueries.has(planned.query));
+  const initialIssues = distinctInitialIssues(details);
+  const modelCalls = notableModelCalls(details.modelCalls);
   return (
     <div className="mt-3 rounded border border-gray-700 bg-gray-950/60 p-3">
+      {details.shippedDraft === 'initial' && !details.replacedSummary && (
+        <div className="rounded border border-yellow-900/60 bg-yellow-950/10 p-2 text-xs leading-5 text-yellow-200">
+          Shipped the first draft: the retry came back with no answer in it, so the user received the first draft
+          instead, minus anything removed below.
+        </div>
+      )}
+
       {details.removedSentences.length > 0 && (
         <DetailSection
           title={`Removed from the answer (${details.removedSentences.length})`}
@@ -331,7 +418,7 @@ function AnswerDetailPanel({ details }: { details: AnswerDetails }) {
       {details.replacedSummary && (
         <DetailSection
           title="Replaced answer"
-          note="Nothing in this answer survived grounding, so the user received the fallback instead of the text below."
+          note="Nothing in this answer survived the checks, so the user received the fallback instead of the text below."
         >
           <div className="rounded border border-red-900/60 bg-red-950/10 p-2 text-sm leading-6 text-gray-300 whitespace-pre-wrap">
             {details.replacedSummary}
@@ -340,10 +427,27 @@ function AnswerDetailPanel({ details }: { details: AnswerDetails }) {
       )}
 
       {details.groundingIssues.length > 0 && (
-        <DetailSection title="Grounding checks that failed">
+        <DetailSection title="Checks the delivered answer failed">
           <ul className="list-disc space-y-1 pl-5 text-xs leading-5 text-gray-400">
             {details.groundingIssues.map((issue) => <li key={issue}>{issue}</li>)}
           </ul>
+        </DetailSection>
+      )}
+
+      {initialIssues.length > 0 && (
+        <DetailSection
+          title="Why the first draft was rejected"
+          note="What the first draft failed when it was first checked; this is what sent the answer into recovery."
+        >
+          <ul className="list-disc space-y-1 pl-5 text-xs leading-5 text-gray-400">
+            {initialIssues.map((issue) => <li key={issue}>{issue}</li>)}
+          </ul>
+        </DetailSection>
+      )}
+
+      {modelCalls.length > 0 && (
+        <DetailSection title={`Model calls (${modelCalls.length})`} note="How each generation ended.">
+          {modelCalls.map((call, index) => <ModelCallRow key={`${call.phase}-${index}`} call={call} />)}
         </DetailSection>
       )}
 

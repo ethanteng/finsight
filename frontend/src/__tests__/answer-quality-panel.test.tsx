@@ -203,6 +203,50 @@ describe('AnswerQualityPanel', () => {
     expect(screen.queryByText('The target range is unchanged at 4.25-4.50%.')).not.toBeInTheDocument();
   });
 
+  it('shows why the first draft was rejected and how each generation ended', async () => {
+    const [answer] = REPORT.recent;
+    const firstDraftReport = {
+      ...REPORT,
+      recent: [{
+        ...answer,
+        outcome: 'salvaged',
+        deliveryStatus: 'recovered',
+        statusReason: 'The retry came back with no answer in it, so the first draft shipped with its unsupported parts removed.',
+        details: {
+          ...answer.details,
+          replacedSummary: undefined,
+          groundingIssues: ['User-facing usd value 130000 is not present in the canonical fact pack.'],
+          initialIssues: [
+            'User-facing usd value 130000 is not present in the canonical fact pack.',
+            'User-facing usd value 2400000 is not present in the canonical fact pack.',
+          ],
+          shippedDraft: 'initial',
+          modelCalls: [
+            {
+              phase: 'initial', provider: 'claude', outcome: 'success',
+              responseCharacters: 3474, durationMs: 16_083, stopReason: 'end_turn', responseFormat: 'structured',
+            },
+            {
+              phase: 'retry', provider: 'claude', outcome: 'success',
+              responseCharacters: 122, durationMs: 1807, stopReason: 'end_turn', responseFormat: 'unstructured',
+            },
+          ],
+        },
+      }],
+    };
+    (global.fetch as jest.Mock).mockResolvedValue({ ok: true, json: async () => firstDraftReport });
+    render(<AnswerQualityPanel apiUrl="https://api.test" getAuthHeaders={() => ({})} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Show details' }));
+
+    expect(screen.getByText(/Shipped the first draft/)).toBeInTheDocument();
+    expect(screen.getByText('Why the first draft was rejected')).toBeInTheDocument();
+    expect(screen.getByText('User-facing usd value 2400000 is not present in the canonical fact pack.')).toBeInTheDocument();
+    expect(screen.getByText('Model calls (2)')).toBeInTheDocument();
+    expect(screen.getByText('122 chars · 1.8s')).toBeInTheDocument();
+    expect(screen.getByText('not JSON')).toBeInTheDocument();
+    expect(screen.getAllByText('stopped: end_turn')).toHaveLength(2);
+  });
+
   it('rolls removals and query failures into the summary cards', async () => {
     render(<AnswerQualityPanel apiUrl="https://api.test" getAuthHeaders={() => ({})} />);
     expect(await screen.findByText(/2 sentence\(s\) and 1 key number\(s\) removed/)).toBeInTheDocument();

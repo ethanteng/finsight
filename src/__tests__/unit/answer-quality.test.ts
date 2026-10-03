@@ -19,6 +19,9 @@ function conversation(options: {
   failedSearchOutcomes?: unknown[];
   removals?: unknown;
   secondaryIssues?: string[];
+  modelCalls?: unknown[];
+  initialIssues?: string[];
+  shippedDraft?: 'initial' | 'retry';
   manifest?: boolean;
 }): AnswerQualityConversation {
   const createdAt = new Date(Date.UTC(2026, 7, 17, 12, options.minute));
@@ -90,7 +93,7 @@ function conversation(options: {
           },
         }),
         ...(options.late && { contextEscalated: true }),
-        modelCalls: [],
+        modelCalls: options.modelCalls ?? [],
         timings: { contextGatherMs: 1, promptBuildMs: 1, totalMs: 2 },
         validation: {
           deterministic: {
@@ -98,7 +101,9 @@ function conversation(options: {
             issues: outcome === 'passed' ? [] : ['User-facing usd value 120000 is not present in the canonical fact pack.'],
             outcome,
             ...(options.removals ? { removals: options.removals } : {}),
+            ...(options.shippedDraft && { shippedDraft: options.shippedDraft }),
           },
+          ...(options.initialIssues && { initialIssues: options.initialIssues }),
           ...(options.secondaryIssues && {
             secondary: [{ phase: 'retry', valid: false, issues: options.secondaryIssues }],
           }),
@@ -340,6 +345,68 @@ describe('answer quality report', () => {
     ]);
 
     expect(report.recent[0].details.replacedSummary).toBe('You can retire in 2031 with $2.4M.');
+  });
+
+  it('shows why the first draft was rejected and that it shipped in place of an empty retry', () => {
+    const report = buildAnswerQualityReport([
+      conversation({
+        id: 'first-draft',
+        minute: 1,
+        outcome: 'salvaged',
+        late: true,
+        initialIssues: ['User-facing usd value 130000 is not present in the canonical fact pack.'],
+        shippedDraft: 'initial',
+        modelCalls: [
+          {
+            phase: 'initial', provider: 'claude', outcome: 'success', promptCharacters: 409_093,
+            responseCharacters: 3474, durationMs: 16_083, stopReason: 'end_turn', responseFormat: 'structured',
+          },
+          {
+            phase: 'retry', provider: 'claude', outcome: 'success', promptCharacters: 438_318,
+            responseCharacters: 122, durationMs: 1807, stopReason: 'end_turn', responseFormat: 'unstructured',
+          },
+        ],
+      }),
+    ]);
+
+    const [answer] = report.recent;
+    expect(answer.deliveryStatus).toBe('recovered');
+    expect(answer.statusReason).toBe(
+      'The retry came back with no answer in it, so the first draft shipped with its unsupported parts removed.'
+    );
+    expect(answer.details.shippedDraft).toBe('initial');
+    expect(answer.details.initialIssues).toEqual([
+      'User-facing usd value 130000 is not present in the canonical fact pack.',
+    ]);
+    expect(answer.details.modelCalls).toEqual([
+      {
+        phase: 'initial', provider: 'claude', outcome: 'success',
+        responseCharacters: 3474, durationMs: 16_083, stopReason: 'end_turn', responseFormat: 'structured',
+      },
+      {
+        phase: 'retry', provider: 'claude', outcome: 'success',
+        responseCharacters: 122, durationMs: 1807, stopReason: 'end_turn', responseFormat: 'unstructured',
+      },
+    ]);
+  });
+
+  it('reads manifests that predate the model-call and first-draft fields', () => {
+    const report = buildAnswerQualityReport([
+      conversation({
+        id: 'legacy',
+        minute: 1,
+        modelCalls: [
+          { phase: 'initial', provider: 'claude', outcome: 'success', promptCharacters: 10, responseCharacters: 20, durationMs: 30 },
+        ],
+      }),
+    ]);
+
+    expect(report.recent[0].details).toMatchObject({
+      initialIssues: [],
+      modelCalls: [{ phase: 'initial', provider: 'claude', outcome: 'success', responseCharacters: 20, durationMs: 30 }],
+    });
+    expect(report.recent[0].details.shippedDraft).toBeUndefined();
+    expect(report.recent[0].details.modelCalls[0]).not.toHaveProperty('stopReason');
   });
 
   it('records each Brave query, its routing, and the results it returned', () => {
