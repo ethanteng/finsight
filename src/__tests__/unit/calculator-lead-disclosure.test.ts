@@ -75,10 +75,11 @@ function buildApp() {
 
 const settle = () => new Promise((resolve) => setImmediate(resolve));
 
-function register() {
+/** What the current signup page sends: it opens /app on `firstDecisionPending`. */
+function register(body: Record<string, unknown> = { acceptsFirstDecisionHandoff: true }) {
   return request(buildApp())
     .post('/auth/register')
-    .send({ email: 'reader@example.com', password: 'Password1', calculatorRef: TOKEN });
+    .send({ email: 'reader@example.com', password: 'Password1', calculatorRef: TOKEN, ...body });
 }
 
 /** What the account was actually written with, rather than what was returned. */
@@ -124,6 +125,24 @@ describe('a calculator lead token and the verification code', () => {
     expect(sendVerificationCode).not.toHaveBeenCalled();
     expect(prisma.emailVerificationCode.create).not.toHaveBeenCalled();
     expect(res.body.firstDecisionPending).toBe(true);
+    expect(leads.seed).toHaveBeenCalled();
+  });
+
+  /*
+   * A signup page from before `firstDecisionPending` reads only
+   * `emailVerified` and sends this signup to /verify-email, so it must still
+   * get a code there — or a backend shipped ahead of the frontend strands it.
+   */
+  it('still sends the code to a page that does not take the handoff', async () => {
+    leads.resolve.mockResolvedValue(retirementLead(true));
+
+    const res = await register({});
+    await settle();
+
+    expect(res.status).toBe(201);
+    expect(sendVerificationCode).toHaveBeenCalled();
+    expect(res.body.firstDecisionPending).toBe(false);
+    // The run is still seeded; only the code step differs.
     expect(leads.seed).toHaveBeenCalled();
   });
 

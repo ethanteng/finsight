@@ -145,6 +145,16 @@ router.post('/register', async (req: Request, res: Response) => {
        * can do is put the registrant in one of our own groups.
        */
       signupOrigin,
+      /*
+       * Set by a signup page that opens the workspace on
+       * `firstDecisionPending`. A page from before that field reads only
+       * `emailVerified` and sends every other signup to /verify-email, so it
+       * must still be mailed a code: without one, a backend shipped ahead of
+       * the frontend would strand calculator signups waiting for mail that
+       * never comes. Skipping the code is friction, not security (see below),
+       * so a client is allowed to say this about itself.
+       */
+      acceptsFirstDecisionHandoff,
     } = req.body;
     
     // Handle both parameter names for Stripe session ID
@@ -218,6 +228,8 @@ router.post('/register', async (req: Request, res: Response) => {
      * password from their own inbox.
      */
     const firstDecisionPending = calculatorLead !== null;
+    const skipsVerificationCode = emailProvenByLink
+      || (firstDecisionPending && acceptsFirstDecisionHandoff === true);
 
     // Create user
     const user = await prisma.user.create({
@@ -277,11 +289,12 @@ router.post('/register', async (req: Request, res: Response) => {
     });
 
     /*
-     * Skipped entirely for a calculator signup (see `firstDecisionPending`). No
-     * row is created for it either: an unused code is one more live credential
-     * for an account that will never be asked for it.
+     * Skipped entirely for a calculator signup (see `firstDecisionPending` and
+     * `acceptsFirstDecisionHandoff`). No row is created for it either: an
+     * unused code is one more live credential for an account that will never
+     * be asked for it.
      */
-    if (!firstDecisionPending) {
+    if (!skipsVerificationCode) {
       const verificationCode = generateRandomCode();
       const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
 
@@ -316,7 +329,7 @@ router.post('/register', async (req: Request, res: Response) => {
     });
 
     res.status(201).json({
-      message: firstDecisionPending
+      message: skipsVerificationCode
         ? 'User registered successfully. Your calculator result is waiting in your account.'
         : 'User registered successfully. Please check your email for verification code.',
       user: {
@@ -335,7 +348,7 @@ router.post('/register', async (req: Request, res: Response) => {
        * which waits for that write. Reported, never accepted: the server
        * resolved the lead.
        */
-      firstDecisionPending,
+      firstDecisionPending: firstDecisionPending && skipsVerificationCode,
       token
     });
 

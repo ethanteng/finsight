@@ -32,6 +32,7 @@ import {
   subscribeToMailerLite,
 } from '../services/mailerlite-subscribe';
 import { parseCalculatorLeadAttribution } from '../services/calculator-lead-attribution';
+import { accountExistsForEmail } from '../services/calculator-account-lookup';
 import {
   readSubmittedPlan,
   recordQuickPlanRejection,
@@ -117,6 +118,10 @@ function readEmail(raw: unknown): string {
  * to a clean URL, so the token is never in the address of a rendered page,
  * where Google Tag Manager and every tag in the container would see it.
  */
+function loginUrl(): string {
+  return `${getBaseUrl()}/login`;
+}
+
 function signupUrl(token: string | null): string {
   const base = getBaseUrl();
   return token
@@ -271,18 +276,29 @@ router.post('/email-results', emailRateLimit, async (req: Request, res: Response
     firstYearWithdrawalRate: primary.firstYearWithdrawalRate,
   };
   const attribution = parseCalculatorLeadAttribution(req.body?.attribution);
-  const stored = await recordRetirementLead({ email, token, inputs: result.inputs, outcome, attribution });
+  const [stored, existingAccount] = await Promise.all([
+    recordRetirementLead({ email, token, inputs: result.inputs, outcome, attribution }),
+    accountExistsForEmail(email),
+  ]);
 
   // See the Coast FIRE route: the full results go out only when there is no
-  // stored lead to show them from.
-  const emailSent = stored
+  // account the run can open in — no stored lead, or an address that already
+  // has an account and cannot register again.
+  const handOff = stored && !existingAccount;
+  const emailSent = handOff
     ? await sendCalculatorReadyEmail({
       calculator: 'retirement',
       inputs: retirementInputRows(result),
       email,
       ctaUrl: signupUrl(token),
     })
-    : await sendRetirementResultsEmail(email, result, primary, signupUrl(null));
+    : await sendRetirementResultsEmail(
+      email,
+      result,
+      primary,
+      existingAccount ? loginUrl() : signupUrl(null),
+      { existingAccount },
+    );
 
   if (!emailSent) {
     res.status(502).json({
@@ -303,12 +319,17 @@ router.post('/email-results', emailRateLimit, async (req: Request, res: Response
    * emailed would record a stranger's address as verified. Without a ref the
    * page shows the result itself, and the emailed link still works.
    */
-  const ref = stored && (await markRetirementLeadTokenDisclosed(token)) ? token : null;
+  const ref = handOff && (await markRetirementLeadTokenDisclosed(token)) ? token : null;
 
   // The token is a bearer credential for this lead. Nothing about this
   // response may sit in a shared cache.
   res.setHeader('Cache-Control', 'no-store');
-  res.json({ message: 'Your retirement results are on their way.', ref });
+  res.json({
+    message: 'Your retirement results are on their way.',
+    ref,
+    // Lets the page say why it is showing the result rather than handing off.
+    ...(existingAccount ? { existingAccount: true } : {}),
+  });
 
   // After the response. Joining the list is what the form promised, but a slow
   // or failing MailerLite must not hold up the results the visitor asked for,

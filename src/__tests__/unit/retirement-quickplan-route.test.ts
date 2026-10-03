@@ -64,6 +64,12 @@ jest.mock('../../services/retirement-quickplan-interpretation', () => ({
   interpretRetirementQuickPlan: (...args: unknown[]) => interpretation.write(...(args as [])),
 }));
 
+/** Whether the address already has an account. Most cases are a new visitor. */
+const accounts = { exists: jest.fn(async () => false) };
+jest.mock('../../services/calculator-account-lookup', () => ({
+  accountExistsForEmail: (...args: unknown[]) => accounts.exists(...(args as [])),
+}));
+
 jest.mock('../../auth/resend-email', () => ({
   sendRetirementResultsEmail: (...args: unknown[]) => email.send(...(args as [])),
   sendCalculatorReadyEmail: (...args: unknown[]) => email.ready(...(args as [never])),
@@ -153,6 +159,8 @@ describe('retirement quick plan route', () => {
     email.send.mockResolvedValue(true);
     email.ready.mockClear();
     email.ready.mockResolvedValue(true);
+    accounts.exists.mockClear();
+    accounts.exists.mockResolvedValue(false);
     list.subscribe.mockClear();
     list.subscribe.mockResolvedValue('subscribed');
     leads.record.mockClear();
@@ -380,6 +388,29 @@ describe('retirement quick plan route', () => {
       expect(response.body.ref).toBeNull();
       // The lead stored, so its link still works: the ready email goes out.
       expect(email.ready).toHaveBeenCalled();
+    }, 60_000);
+
+    /*
+     * An address that already has an account cannot register again, and the
+     * ready email states no answer, so they get the full results and a
+     * sign-in link instead of a handoff.
+     */
+    it('mails the full results to an existing account and hands back no token', async () => {
+      accounts.exists.mockResolvedValue(true);
+
+      const response = await request(app)
+        .post('/api/retirement-quickplan/email-results')
+        .send({ ...SHORT_PLAN, email: 'reader@example.com' });
+
+      expect(response.status).toBe(200);
+      expect(response.body.ref).toBeNull();
+      expect(response.body.existingAccount).toBe(true);
+      expect(email.ready).not.toHaveBeenCalled();
+      const [, , , ctaUrl, options] = email.send.mock.calls[0] as unknown as [
+        string, unknown, unknown, string, { existingAccount: boolean },
+      ];
+      expect(ctaUrl).toBe('http://localhost:3001/login');
+      expect(options).toEqual({ existingAccount: true });
     }, 60_000);
 
     /*

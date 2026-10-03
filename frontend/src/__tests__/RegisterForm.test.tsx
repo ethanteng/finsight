@@ -756,6 +756,9 @@ describe('RegisterForm', () => {
         ([url]) => String(url).includes('/auth/register'),
       );
       expect(JSON.parse(registerCall![1].body as string).calculatorRef).toBe(token);
+      // This page opens the workspace on `firstDecisionPending`, and says so,
+      // so the server may skip the code for it.
+      expect(JSON.parse(registerCall![1].body as string).acceptsFirstDecisionHandoff).toBe(true);
       unmount();
     });
 

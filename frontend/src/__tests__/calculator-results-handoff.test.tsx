@@ -11,7 +11,7 @@
  */
 
 import React from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { CoastFireCalculator } from '@/components/marketing/CoastFireCalculator';
 import { RetirementQuickPlan } from '@/components/marketing/RetirementQuickPlan';
 import { leaveForSignup } from '@/lib/calculator-handover';
@@ -144,6 +144,23 @@ describe('Coast FIRE calculator', () => {
     // The card, and the return comparison's own row for the chosen rate.
     expect((await screen.findAllByText(COAST_FIRE_NUMBER)).length).toBeGreaterThan(0);
     expect(await screen.findByText(READING.headline)).toBeInTheDocument();
+    expect(leaveForSignup).not.toHaveBeenCalled();
+  });
+
+  /*
+   * An address that already has an account cannot register again, so the
+   * server hands back no token and says why. The page shows the result and
+   * points at sign-in rather than at a signup that would refuse them.
+   */
+  it('shows the answer and points an existing account at sign-in', async () => {
+    mockApi(null, { message: 'sent', ref: null, existingAccount: true });
+    render(<CoastFireCalculator />);
+    calculate();
+    giveEmail();
+
+    expect((await screen.findAllByText(COAST_FIRE_NUMBER)).length).toBeGreaterThan(0);
+    const note = screen.getByText(/you already have an Ask Linc account/i);
+    expect(within(note).getByRole('link', { name: 'Sign in' })).toHaveAttribute('href', '/login');
     expect(leaveForSignup).not.toHaveBeenCalled();
   });
 

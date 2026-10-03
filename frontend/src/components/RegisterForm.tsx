@@ -633,6 +633,7 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
       stripeSessionId?: string;
       timeZone: string;
       calculatorRef?: string;
+      acceptsFirstDecisionHandoff?: boolean;
       signupOrigin?: CalculatorSignupOrigin;
     } = { email, password, timeZone: getBrowserTimeZone() };
 
@@ -689,6 +690,9 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
         : null);
     if (calculatorRef) {
       registrationData.calculatorRef = calculatorRef;
+      // This page opens the workspace on `firstDecisionPending`, so the server
+      // may skip the code for it. See `acceptsFirstDecisionHandoff` there.
+      registrationData.acceptsFirstDecisionHandoff = true;
     }
 
     // If coming from successful subscription, include tier and session info.

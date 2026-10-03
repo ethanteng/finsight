@@ -37,6 +37,27 @@ export interface RetirementEmail {
  */
 const CTA_LABEL = 'Create your free account';
 
+/** The same message, sent to an address that already has an Ask Linc account. */
+const EXISTING_ACCOUNT_CTA_LABEL = 'Sign in to Ask Linc';
+
+interface ResultsEmailOptions {
+  email: string;
+  ctaUrl: string;
+  calculatorUrl: string;
+  /** The address already has an account, so the link signs in rather than signs up. */
+  existingAccount?: boolean;
+}
+
+function ctaLabel(options: ResultsEmailOptions): string {
+  return options.existingAccount ? EXISTING_ACCOUNT_CTA_LABEL : CTA_LABEL;
+}
+
+function nextStep(options: ResultsEmailOptions): string {
+  return options.existingAccount
+    ? 'Sign in to test the change you are weighing against your real numbers.'
+    : 'Connect your accounts and test the change you are weighing against your real numbers. Free for 30 days, no credit card required.';
+}
+
 /** What a six-number model cannot answer, as on the page's cross-sell. */
 const DECISIONS = [
   'What do my actual holdings do to this?',
@@ -293,7 +314,7 @@ function limitationsHtml(result: RetirementQuickPlanResult): string {
 export function buildRetirementResultsEmail(
   result: RetirementQuickPlanResult,
   primary: QuickPlanScenario,
-  options: { email: string; ctaUrl: string; calculatorUrl: string },
+  options: ResultsEmailOptions,
 ): RetirementEmail {
   // One decimal, matching the card. Rounding to whole percent turned 99.6%
   // into "100%" in the subject line while the message itself said 99.6% —
@@ -332,12 +353,11 @@ export function buildRetirementResultsEmail(
 
       <div class="button-wrap" style="margin: 28px 0; text-align: center;">
         <a href="${ctaUrl}" class="cta-button" style="display: inline-block; padding: 14px 26px; border: 1px solid #123c2f; border-radius: 999px; background-color: #123c2f; color: #ffffff; text-decoration: none; font-size: 15px; font-weight: 700;">
-          ${escapeHtml(CTA_LABEL)}
+          ${escapeHtml(ctaLabel(options))}
         </a>
       </div>
       <p style="margin: 0 0 10px; color: #71857f; font-size: 13px; line-height: 1.6; text-align: center;">
-        Connect your accounts and test the change you are weighing against your real numbers.
-        Free for 30 days, no credit card required.
+        ${escapeHtml(nextStep(options))}
       </p>
       <div class="fallback-link" style="margin: 22px 0; padding: 16px; border: 1px solid #d8d2c5; border-radius: 12px; background-color: #f8f5ed; color: #526d64; font-size: 12px; line-height: 1.6; word-break: break-all;">
         <strong style="color: #29483f; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;">If the button does not work, use this link:</strong><br />
@@ -360,7 +380,7 @@ export function buildRetirementResultsEmail(
 export function buildRetirementResultsText(
   result: RetirementQuickPlanResult,
   primary: QuickPlanScenario,
-  options: { email: string; ctaUrl: string; calculatorUrl: string },
+  options: ResultsEmailOptions,
 ): string {
   const stats = statRows(result, primary)
     .map((stat) => `  ${stat.label}: ${stat.value}\n    ${stat.note}`)
@@ -400,11 +420,10 @@ the model available for the next question you have about it.
 
 ${DECISIONS.map((decision) => `  - ${decision}`).join('\n')}
 
-${CTA_LABEL}:
+${ctaLabel(options)}:
 ${options.ctaUrl}
 
-Connect your accounts and test the change you are weighing against your real numbers.
-Free for 30 days, no credit card required.
+${nextStep(options)}
 
 Run the numbers again: ${options.calculatorUrl}
 

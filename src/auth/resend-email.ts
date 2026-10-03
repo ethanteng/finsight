@@ -252,7 +252,8 @@ export async function sendContactEmail(
 export async function sendCoastFireResultsEmail(
   email: string,
   result: CoastFireResult,
-  ctaUrl: string
+  ctaUrl: string,
+  { existingAccount = false }: { existingAccount?: boolean } = {},
 ): Promise<boolean> {
   try {
     const resend = getResendClient();
@@ -266,6 +267,7 @@ export async function sendCoastFireResultsEmail(
       email,
       ctaUrl,
       calculatorUrl: `${getBaseUrl()}/coast-fire-calculator`,
+      existingAccount,
     });
 
     const { error } = await resend.emails.send({
@@ -339,7 +341,8 @@ export async function sendRetirementResultsEmail(
   email: string,
   result: RetirementQuickPlanResult,
   primary: QuickPlanScenario,
-  ctaUrl: string
+  ctaUrl: string,
+  { existingAccount = false }: { existingAccount?: boolean } = {},
 ): Promise<boolean> {
   try {
     const resend = getResendClient();
@@ -353,6 +356,7 @@ export async function sendRetirementResultsEmail(
       email,
       ctaUrl,
       calculatorUrl: `${getBaseUrl()}/retirement-calculator`,
+      existingAccount,
     });
 
     const { error } = await resend.emails.send({

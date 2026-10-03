@@ -22,8 +22,9 @@
  * which is what someone who wanders off can come back to; and this page takes
  * them there itself, straight away. Either route restores the same run.
  *
- * When no token comes back (the lead did not store, or its disclosure mark
- * did not), there is no run to seed an account from. The page shows the result
+ * When no token comes back, there is no account the run can open in: the
+ * lead did not store, its disclosure mark did not, or the address already has
+ * an account and cannot register again (`existingAccount`). The page shows the result
  * itself instead, through `onReveal`, rather than sending the visitor to an
  * account that would open empty.
  */
@@ -64,6 +65,8 @@ export function CoastFireEmailCapture({
   const [email, setEmail] = useState(() => readRememberedEmail() ?? "");
   const [status, setStatus] = useState<Status>("idle");
   const [error, setError] = useState<string | null>(null);
+  /** The address already has an Ask Linc account, which cannot register again. */
+  const [existingAccount, setExistingAccount] = useState(false);
   /** One conversion event per visitor, however many times they resend. */
   const reported = useRef(false);
   /*
@@ -116,12 +119,13 @@ export function CoastFireEmailCapture({
         tracking = pushCoastFireResultsEmailed(result.hasReachedCoastFire ? "reached" : "not_yet");
       }
 
-      const body = await response.json().catch(() => null) as { ref?: unknown } | null;
+      const body = await response.json().catch(() => null) as { ref?: unknown; existingAccount?: unknown } | null;
       const token = isHandoverToken(body?.ref) ? body.ref : null;
       rememberEmail(email);
       if (!mounted.current) return;
 
       if (!token) {
+        setExistingAccount(body?.existingAccount === true);
         // Nothing to seed an account from, so the answer is shown here.
         setStatus("revealed");
         onReveal();
@@ -171,10 +175,18 @@ export function CoastFireEmailCapture({
   if (status === "revealed") {
     return (
       <div className="cf-email-capture is-sent" role="status" aria-live="polite">
-        <p className="cf-email-lead">
-          We couldn’t set up your account link just now, so here is your result. We’ve also
-          emailed <strong>{email.trim()}</strong>.
-        </p>
+        {existingAccount ? (
+          <p className="cf-email-lead">
+            You already have an Ask Linc account, so here is your result. We’ve also emailed it to{" "}
+            <strong>{email.trim()}</strong>. <a href="/login">Sign in</a> to keep exploring it with
+            your real numbers.
+          </p>
+        ) : (
+          <p className="cf-email-lead">
+            We couldn’t set up your account link just now, so here is your result. We’ve also
+            emailed <strong>{email.trim()}</strong>.
+          </p>
+        )}
       </div>
     );
   }

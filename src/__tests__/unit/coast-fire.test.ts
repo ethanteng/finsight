@@ -164,6 +164,17 @@ describe('the results email', () => {
     expect(message.html.match(/asklinc\.com\/getstarted/g)?.length).toBeGreaterThanOrEqual(2);
   });
 
+  it('signs an existing account in rather than offering it a new one', () => {
+    const message = buildCoastFireResultsEmail(calculateCoastFire(DEFAULTS), {
+      ...options,
+      existingAccount: true,
+    });
+
+    expect(message.html).toContain('Sign in to Ask Linc');
+    expect(message.html).not.toContain('Create your free account');
+    expect(message.text).not.toMatch(/30 days/);
+  });
+
   it('uses the brand shell, so the message is not a bare table', () => {
     const message = buildCoastFireResultsEmail(calculateCoastFire(DEFAULTS), options);
 

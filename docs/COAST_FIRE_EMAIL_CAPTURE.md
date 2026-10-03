@@ -86,11 +86,19 @@ numbers that produce a plan result, which is held back.
 
 ### When there is no run to hand off
 
-The endpoint returns no `ref` when the lead row did not store, or when the
-disclosure stamp did not. There is then no run for registration to seed, and
-sending the visitor to signup would open an empty workspace under a page that
-promised their result. So the page shows the result itself, with a line saying
-it could not set up the account link, and the reading under it as before.
+The endpoint returns no `ref` when the lead row did not store, when the
+disclosure stamp did not, or when the address already has an Ask Linc account.
+In the first two cases there is no run for registration to seed, and sending
+the visitor to signup would open an empty workspace under a page that promised
+their result. In the third, `/auth/register` would refuse the address with a
+409, and the ready email states no answer, so the visitor would have no way to
+see it at all. Either way the page shows the result itself, and the full
+results email goes out instead of the ready one. For an existing account the
+response carries `existingAccount: true`, the page says so and links to
+sign-in, and the email's button is "Sign in to Ask Linc"
+(`services/calculator-account-lookup.ts`; a failed lookup counts as an existing
+account). That response tells a caller whether an address has an account,
+which `/auth/register`'s 409 already does.
 
 The capture is keyed on each run rather than on its inputs, so an identical
 re-run is held back again rather than inheriting the previous run's revealed
@@ -159,10 +167,12 @@ with that token:
 
 - **The verification code is skipped, for any resolved lead.** A code between
   the password and the answer is where the visitor leaves, and the calculators
-  exist to get them in front of that answer in Ask Linc. `/auth/register`
-  creates no code row and sends no code mail, and reports
-  `firstDecisionPending: true` so the client opens `/app` rather than
-  `/verify-email`.
+  exist to get them in front of that answer in Ask Linc. When the signup page
+  sends `acceptsFirstDecisionHandoff: true`, `/auth/register` creates no code
+  row and sends no code mail, and reports `firstDecisionPending: true` so the
+  client opens `/app` rather than `/verify-email`. A page from before that
+  field reads only `emailVerified`, so it still gets a code for a disclosed
+  lead; that is what makes the deploy order free.
 
   This is a choice about friction, not about proof, and the account records the
   difference. A token that only ever left this system inside a message to the

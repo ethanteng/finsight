@@ -30,6 +30,27 @@ export interface CoastFireEmail {
 
 const CTA_LABEL = 'Create your free account';
 
+/** The same message, sent to an address that already has an Ask Linc account. */
+const EXISTING_ACCOUNT_CTA_LABEL = 'Sign in to Ask Linc';
+
+interface ResultsEmailOptions {
+  email: string;
+  ctaUrl: string;
+  calculatorUrl: string;
+  /** The address already has an account, so the link signs in rather than signs up. */
+  existingAccount?: boolean;
+}
+
+function ctaLabel(options: ResultsEmailOptions): string {
+  return options.existingAccount ? EXISTING_ACCOUNT_CTA_LABEL : CTA_LABEL;
+}
+
+function nextStep(options: ResultsEmailOptions): string {
+  return options.existingAccount
+    ? 'Sign in to test the change you are weighing against your real numbers.'
+    : 'Connect your accounts and test the change you are weighing against your real numbers. Free for 30 days, no credit card required.';
+}
+
 /** The decisions the number raises but cannot answer, as on the page. */
 const DECISIONS = [
   'Can I stop maxing my 401(k)?',
@@ -243,7 +264,7 @@ function inputsHtml(result: CoastFireResult): string {
 
 export function buildCoastFireResultsEmail(
   result: CoastFireResult,
-  options: { email: string; ctaUrl: string; calculatorUrl: string },
+  options: ResultsEmailOptions,
 ): CoastFireEmail {
   const subject = result.hasReachedCoastFire
     ? `Your Coast FIRE number: ${dollars(result.coastFireNumber)} — and you’ve passed it`
@@ -283,12 +304,11 @@ export function buildCoastFireResultsEmail(
 
       <div class="button-wrap" style="margin: 28px 0; text-align: center;">
         <a href="${ctaUrl}" class="cta-button" style="display: inline-block; padding: 14px 26px; border: 1px solid #123c2f; border-radius: 999px; background-color: #123c2f; color: #ffffff; text-decoration: none; font-size: 15px; font-weight: 700;">
-          ${escapeHtml(CTA_LABEL)}
+          ${escapeHtml(ctaLabel(options))}
         </a>
       </div>
       <p style="margin: 0 0 10px; color: #71857f; font-size: 13px; line-height: 1.6; text-align: center;">
-        Connect your accounts and test the change you are weighing against your real numbers.
-        Free for 30 days, no credit card required.
+        ${escapeHtml(nextStep(options))}
       </p>
       <div class="fallback-link" style="margin: 22px 0; padding: 16px; border: 1px solid #d8d2c5; border-radius: 12px; background-color: #f8f5ed; color: #526d64; font-size: 12px; line-height: 1.6; word-break: break-all;">
         <strong style="color: #29483f; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;">If the button does not work, use this link:</strong><br />
@@ -313,7 +333,7 @@ export function buildCoastFireResultsEmail(
 /** The same message for a client that will not render HTML. Content, not a stub. */
 export function buildCoastFireResultsText(
   result: CoastFireResult,
-  options: { email: string; ctaUrl: string; calculatorUrl: string },
+  options: ResultsEmailOptions,
 ): string {
   const sensitivity = coastFireSensitivity(result)
     .map((scenario) => `  ${scenario.rate.toFixed(1)}% real return${scenario.selected ? ' (yours)' : ''}: ${dollars(scenario.coastFireNumber)} — ${scenario.reached ? 'Reached' : 'Not yet'}`)
@@ -353,11 +373,10 @@ the change you are weighing against a century of market history.
 
 ${DECISIONS.map((decision) => `  - ${decision}`).join('\n')}
 
-${CTA_LABEL}:
+${ctaLabel(options)}:
 ${options.ctaUrl}
 
-Connect your accounts and test the change you are weighing against your real numbers.
-Free for 30 days, no credit card required.
+${nextStep(options)}
 
 Run the numbers again: ${options.calculatorUrl}
 

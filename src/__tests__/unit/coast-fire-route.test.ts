@@ -50,6 +50,12 @@ jest.mock('../../services/mailerlite-subscribe', () => ({
   ...jest.requireActual('../../services/mailerlite-subscribe'),
   subscribeToMailerLite: (...args: unknown[]) => list.subscribe(...(args as [])),
 }));
+/** Whether the address already has an account. Most cases are a new visitor. */
+const accounts = { exists: jest.fn(async () => false) };
+jest.mock('../../services/calculator-account-lookup', () => ({
+  accountExistsForEmail: (...args: unknown[]) => accounts.exists(...(args as [])),
+}));
+
 jest.mock('../../services/coast-fire-leads', () => ({
   ...jest.requireActual('../../services/coast-fire-leads'),
   recordCoastFireLead: (...args: unknown[]) => leads.record(...(args as [])),
@@ -105,6 +111,29 @@ describe('POST /api/coast-fire/email-results', () => {
     list.subscribe.mockResolvedValue('subscribed');
     leads.record.mockResolvedValue(true);
     leads.disclose.mockResolvedValue(true);
+    accounts.exists.mockResolvedValue(false);
+  });
+
+  /*
+   * An address that already has an account cannot register again, and the
+   * ready email states no answer — so handing off would leave them with no
+   * way to see it. They get the full results and a sign-in link instead.
+   */
+  it('mails the full results to an existing account and hands back no token', async () => {
+    accounts.exists.mockResolvedValue(true);
+
+    const response = await request(buildApp())
+      .post('/api/coast-fire/email-results')
+      .send({ ...SCENARIO, email: 'reader@example.com' });
+
+    expect(response.status).toBe(200);
+    expect(response.body.ref).toBeNull();
+    expect(response.body.existingAccount).toBe(true);
+    expect(leads.disclose).not.toHaveBeenCalled();
+    expect(email.ready).not.toHaveBeenCalled();
+    const [, , ctaUrl, options] = email.send.mock.calls[0] as unknown as [string, unknown, string, { existingAccount: boolean }];
+    expect(ctaUrl).toBe('http://localhost:3001/login');
+    expect(options).toEqual({ existingAccount: true });
   });
 
   /*

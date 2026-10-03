@@ -20,8 +20,9 @@
  * the visitor just made is still in the model's cache, so the re-run costs
  * nothing.
  *
- * When no token comes back (the lead did not store, or its disclosure mark
- * did not), there is no run to seed an account from. The page shows the
+ * When no token comes back, there is no account the run can open in: the
+ * lead did not store, its disclosure mark did not, or the address already has
+ * an account and cannot register again (`existingAccount`). The page shows the
  * verdict itself instead, through `onReveal`, rather than sending the visitor
  * to an account that would open empty.
  */
@@ -82,6 +83,8 @@ export function RetirementEmailCapture({
   const [email, setEmail] = useState(() => readRememberedEmail() ?? "");
   const [status, setStatus] = useState<Status>("idle");
   const [error, setError] = useState<string | null>(null);
+  /** The address already has an Ask Linc account, which cannot register again. */
+  const [existingAccount, setExistingAccount] = useState(false);
   /** One conversion event per visitor, however many times they resend. */
   const reported = useRef(false);
   /*
@@ -128,12 +131,13 @@ export function RetirementEmailCapture({
         tracking = pushRetirementResultsEmailed(survivalRate);
       }
 
-      const body = await response.json().catch(() => null) as { ref?: unknown } | null;
+      const body = await response.json().catch(() => null) as { ref?: unknown; existingAccount?: unknown } | null;
       const token = isHandoverToken(body?.ref) ? body.ref : null;
       rememberEmail(email);
       if (!mounted.current) return;
 
       if (!token) {
+        setExistingAccount(body?.existingAccount === true);
         // Nothing to seed an account from, so the verdict is shown here.
         setStatus("revealed");
         onReveal();
@@ -172,10 +176,18 @@ export function RetirementEmailCapture({
   if (status === "revealed") {
     return (
       <div className="qp-email-capture is-sent" role="status" aria-live="polite">
-        <p className="qp-email-lead">
-          We couldn’t set up your account link just now, so here is your result. We’ve also
-          emailed <strong>{email.trim()}</strong>.
-        </p>
+        {existingAccount ? (
+          <p className="qp-email-lead">
+            You already have an Ask Linc account, so here is your result. We’ve also emailed it to{" "}
+            <strong>{email.trim()}</strong>. <a href="/login">Sign in</a> to keep exploring it with
+            your real numbers.
+          </p>
+        ) : (
+          <p className="qp-email-lead">
+            We couldn’t set up your account link just now, so here is your result. We’ve also
+            emailed <strong>{email.trim()}</strong>.
+          </p>
+        )}
       </div>
     );
   }

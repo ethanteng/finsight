@@ -436,11 +436,13 @@ wrong strands people silently.
   `firstDecisionPending`, which an older backend omits or reports as false — so
   it falls through to the verification screen and the older backend has mailed
   a code. Nothing breaks.
-- *Backend first* is not. The new backend stops mailing the code for every
-  calculator lead, the page's own handoff included, while an old page that
-  reads only `emailVerified` still sends those signups to `/verify-email`,
-  where they wait for mail that will never arrive. Nothing errors; it simply
-  looks like a broken email pipeline.
+- *Backend first* was not, when the only skip was the emailed link's: the
+  backend stopped mailing the code while the old page still sent every signup
+  to `/verify-email`, where they waited for mail that never arrived. Nothing
+  errored; it simply looked like a broken email pipeline. The later skip for
+  the page's own handoff does not repeat that: the backend skips the code for
+  a disclosed lead only when the page sends `acceptsFirstDecisionHandoff`,
+  which an old page never does, so it still gets its code.
 
   The straight-to-signup step is safe in both orders on its own: an old page
   ignores the `ref` a new backend returns, and a new page gets no `ref` from an
