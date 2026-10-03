@@ -2,17 +2,17 @@
  * The calculator run a new account starts with.
  *
  * Someone who runs `/retirement-calculator` or `/coast-fire-calculator` and
- * asks us to save it gets an email with a link; the link lands on signup with
- * their address filled in, and choosing a password is the whole of what is
- * left. This turns the run they already saw into the first decision in that
- * account, so the app opens on their own question rather than on an empty
- * state.
+ * gives an address is taken to signup with it filled in; choosing a password
+ * is the whole of what is left. A figure-free email carries the same link for
+ * anyone who leaves before that. This turns the run into the first decision in
+ * that account, so the app opens on their own question rather than on an empty
+ * state — the first place they see the answer.
  *
  * Two properties are worth stating plainly, because both are load-bearing:
  *
  *  1. **The figures come from the lead, not from a fresh run.** The engines and
  *     their datasets change; a token lives for ninety days. Re-running would
- *     let the saved decision disagree with the email that produced it, over a
+ *     let the saved decision disagree with the figures the lead stored, over a
  *     difference the reader has no way to see. This is the same reasoning the
  *     signup-context endpoints already follow.
  *  2. **The address must match.** The token is the only key to a lead, and a
@@ -20,13 +20,13 @@
  *     holding a forwarded link could register under their own address and copy
  *     that person's plan into their own account.
  *
- * That second check is also what lets registration skip the verification code
- * on this path. A lead token is forty-eight random characters that only ever
- * left this system inside an email to the lead's own address, so presenting
- * one *and* registering that address demonstrates control of the inbox —
- * which is the entire thing the code demonstrates. `resolveCalculatorLead` is
- * therefore resolved **before** the account is created, on the server, from
- * the token alone: a client cannot declare itself verified.
+ * That second check is also what lets registration treat the signup as a
+ * calculator hand-off: any resolved lead skips the verification code and
+ * seeds the run. Whether the address is recorded as verified is narrower —
+ * only a token that was never handed to the calculator page proves the inbox.
+ * `resolveCalculatorLead` is therefore resolved **before** the account is
+ * created, on the server, from the token alone: a client cannot declare itself
+ * verified or skip the code by sending a flag.
  *
  * Writing the decision, by contrast, may never fail a registration. The caller
  * runs it after responding, and every path returns a reason instead of
@@ -293,10 +293,11 @@ function sameAddress(a: string, b: string): boolean {
 /**
  * The lead a signup is entitled to, or null.
  *
- * Resolved before the account exists, because two things hang off it: what the
- * first decision is written from, and whether the address needs verifying by
- * code. Both rest on the same check, and it is made here rather than trusted
- * from the request.
+ * Resolved before the account exists, because three things hang off it: what
+ * the first decision is written from, whether the code step is skipped, and
+ * whether the address is recorded as verified (only when the token was never
+ * disclosed to the calculator page). All rest on the same resolve, and it is
+ * made here rather than trusted from the request.
  *
  * Both calculators mint tokens from the same forty-eight-character space, so
  * the token alone says which table to look in — the tables are tried in turn

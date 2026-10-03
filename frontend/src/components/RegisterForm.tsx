@@ -750,33 +750,28 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
       }
 
       /*
-       * Verification is skipped only when the server says this address is
-       * already verified — which it does for a signup that arrived holding a
-       * calculator lead token addressed to it, since following that link
-       * proved the same thing a code would. The decision is the server's; this
-       * reads the answer rather than deciding, so nothing the client sends can
-       * skip the step on its own.
+       * Two server-reported flags, never client-declared:
        *
-       * Everything else still goes through it. The no-card flow carries only a
-       * fixed attribution flag; no email or form value enters its URL or
-       * analytics payload.
+       * - `emailVerified`: an emailed calculator link proved the inbox.
+       * - `firstDecisionPending`: a lead was resolved, the run is being written
+       *   as the first decision, and no code was sent — including when the
+       *   token was only handed to the calculator page (address still
+       *   unverified).
+       *
+       * Either one opens the workspace. Everything else still goes through
+       * `/verify-email`. The no-card flow carries only a fixed attribution
+       * flag; no email or form value enters its URL or analytics payload.
        */
       const alreadyVerified = data.user?.emailVerified === true;
-      /*
-       * A calculator signup: the server resolved a lead, is writing the run as
-       * the first decision, and sent no code. The calculators exist to put the
-       * visitor in front of their answer in Ask Linc, so nothing goes between
-       * the password and it. Reported by the server, which decided.
-       */
       const firstDecisionPending = data.firstDecisionPending === true;
 
       /*
-       * Nothing is left to do at the sign-in form once the address is proved:
-       * the response above carries a full session, so asking for the password
-       * that was set one field ago is friction, not a check. Keep the token
-       * and open the workspace. Access is still not granted here — /app
-       * re-verifies the token and the subscription on mount and bounces a
-       * session that fails either.
+       * Nothing is left to do at the sign-in form once the server skips the
+       * code step: the response above carries a full session, so asking for
+       * the password that was set one field ago is friction, not a check.
+       * Keep the token and open the workspace. Access is still not granted
+       * here — /app re-verifies the token and the subscription on mount and
+       * bounces a session that fails either.
        */
       if (alreadyVerified || firstDecisionPending) {
         /*
