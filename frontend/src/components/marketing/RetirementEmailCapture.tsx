@@ -46,7 +46,7 @@ import {
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
 
-type Status = "idle" | "sending" | "revealed" | "leaving";
+type Status = "idle" | "sending" | "revealed" | "revealed-signed-in" | "leaving";
 
 export interface RetirementEmailCaptureInputs {
   currentAge: number;
@@ -69,11 +69,15 @@ export interface RetirementEmailCaptureInputs {
 export function RetirementEmailCapture({
   inputs,
   survivalRate,
+  sequencesTested,
+  sequencesSurvived,
   compact = false,
   onReveal,
 }: {
   inputs: RetirementEmailCaptureInputs;
   survivalRate: number;
+  sequencesTested: number;
+  sequencesSurvived: number;
   compact?: boolean;
   /** Show the verdict on the page: the fallback when there is no run to carry. */
   onReveal: () => void;
@@ -145,12 +149,38 @@ export function RetirementEmailCapture({
         return;
       }
 
+      /*
+       * Registration is the only path that seeds a lead, and it refuses an
+       * address that already has an account. A visitor who is already signed
+       * in would leave for signup, hit that wall, and — because this email
+       * states no figures — have no way to see the answer. Show it here
+       * instead; the run stays in the lead table for a later new account.
+       */
+      let signedIn = false;
+      try {
+        signedIn = Boolean(window.localStorage.getItem("auth_token"));
+      } catch {
+        signedIn = false;
+      }
+      if (signedIn) {
+        setStatus("revealed-signed-in");
+        onReveal();
+        await tracking;
+        return;
+      }
+
       // Both carriers, because they fail differently. The cookie is what
       // /getstarted exchanges, and it cannot be read back from here to know it
       // took. The stored context carries the same token and the inputs, so a
       // browser refusing the cookie costs the address prefill, not the run.
       writeHandoverToken(RETIREMENT_REF_COOKIE, token);
-      storeRetirementSignupContext(inputs, { email: email.trim(), sourceToken: token });
+      storeRetirementSignupContext(inputs, {
+        email: email.trim(),
+        sourceToken: token,
+        // Kept so a 409 at signup can still show the answer — registration
+        // will not seed an address that already has an account.
+        emailedOutcome: { survivalRate, sequencesTested, sequencesSurvived },
+      });
       setStatus("leaving");
       await tracking;
       leaveForSignup(resultsPageSignupHref(RETIREMENT_SIGNUP_HREF));
@@ -168,6 +198,17 @@ export function RetirementEmailCapture({
         <p>
           Choose a password and your retirement result opens as your first decision. We’ve also
           emailed <strong>{email.trim()}</strong> a link back, in case you finish later.
+        </p>
+      </div>
+    );
+  }
+
+  if (status === "revealed-signed-in") {
+    return (
+      <div className="qp-email-capture is-sent" role="status" aria-live="polite">
+        <p className="qp-email-lead">
+          You’re already signed in, so here is your result on this page. We’ve also emailed{" "}
+          <strong>{email.trim()}</strong> a link you can use from another device.
         </p>
       </div>
     );

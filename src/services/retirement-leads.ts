@@ -40,12 +40,13 @@ export interface RetirementLeadRecord {
   /**
    * Whether this token has been handed to a browser as well as emailed.
    *
-   * Registration skips the emailed verification code for someone presenting a
-   * token whose lead names the address they are registering — holding one is
-   * evidence of controlling that inbox, because it went nowhere else. Once the
-   * page that asked for the email has been given the token too, that stops
-   * being true: whoever typed the address received it. The lead still seeds a
-   * first decision; it just cannot verify the address any more.
+   * Any resolved lead skips the verification code and seeds a first decision.
+   * `emailVerified` is the narrower question: a token that only ever left this
+   * system inside a message to the lead's own address demonstrates control of
+   * that inbox. Once the page that asked for the email has been given the
+   * token too, that stops being true — whoever typed the address received it —
+   * so a disclosed lead still seeds the run but records the address as
+   * unverified.
    */
   tokenDisclosed: boolean;
 }
@@ -103,10 +104,10 @@ export async function recordRetirementLead(params: {
  *
  * Unlike the delivery flags beside it, this one is allowed to fail the thing
  * it describes. The caller discloses the token only on true: the column is
- * what withholds the emailed verification code from a token its own page was
- * given, so a token disclosed while the mark was lost would be one that still
- * proves an address nobody proved. Failing closed costs the visitor a
- * redirect and nothing else — their results are still in their inbox.
+ * what keeps a page-handed token from recording the address as verified, so a
+ * token disclosed while the mark was lost would be one that still proves an
+ * address nobody proved. Failing closed costs the page hand-off — the capture
+ * shows the result on the page instead — and the emailed link still works.
  */
 export async function markRetirementLeadTokenDisclosed(token: string): Promise<boolean> {
   try {
@@ -118,8 +119,8 @@ export async function markRetirementLeadTokenDisclosed(token: string): Promise<b
       data: { tokenDisclosedAt: new Date() },
     });
     // updateMany does not throw on zero matches. Returning true for a missing
-    // row would hand the page a token the registration skip still treats as
-    // inbox-only — fail closed unless the stamp is actually on the row.
+    // row would hand the page a token registration still treats as inbox-only
+    // for `emailVerified` — fail closed unless the stamp is actually on the row.
     if (updated.count > 0) return true;
     const existing = await prisma.retirementLead.findUnique({
       where: { token },
@@ -165,10 +166,10 @@ export async function readRetirementLead(
    *
    * True for the signup page's own exchange, which is what `continuedAt`
    * measures. False for registration, which resolves the token again to decide
-   * whether it may seed a first decision and skip the verification code — and
-   * gets there by way of an address match that can refuse. Marking before that
-   * refusal would count a forwarded link opened by somebody else as the
-   * recipient continuing.
+   * whether it may seed a first decision, skip the code, and record the
+   * address as verified — and gets there by way of an address match that can
+   * refuse. Marking before that refusal would count a forwarded link opened by
+   * somebody else as the recipient continuing.
    */
   options: { markContinuation?: boolean } = {},
 ): Promise<RetirementLeadRecord | null> {

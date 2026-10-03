@@ -48,7 +48,7 @@ import {
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
 
-type Status = "idle" | "sending" | "revealed" | "leaving";
+type Status = "idle" | "sending" | "revealed" | "revealed-signed-in" | "leaving";
 
 export function CoastFireEmailCapture({
   result,
@@ -133,6 +133,26 @@ export function CoastFireEmailCapture({
         return;
       }
 
+      /*
+       * Registration is the only path that seeds a lead, and it refuses an
+       * address that already has an account. A visitor who is already signed
+       * in would leave for signup, hit that wall, and — because this email
+       * states no figures — have no way to see the answer. Show it here
+       * instead; the run stays in the lead table for a later new account.
+       */
+      let signedIn = false;
+      try {
+        signedIn = Boolean(window.localStorage.getItem("auth_token"));
+      } catch {
+        signedIn = false;
+      }
+      if (signedIn) {
+        setStatus("revealed-signed-in");
+        onReveal();
+        await tracking;
+        return;
+      }
+
       // Both carriers, because they fail differently. The cookie is what
       // /getstarted exchanges, and it cannot be read back from here to know it
       // took. The stored context carries the same token and the inputs, so a
@@ -148,7 +168,16 @@ export function CoastFireEmailCapture({
           realReturnRate: result.realReturnRate,
           withdrawalRate: result.withdrawalRate,
         },
-        { email: email.trim(), sourceToken: token },
+        {
+          email: email.trim(),
+          sourceToken: token,
+          // Kept so a 409 at signup can still show the answer — registration
+          // will not seed an address that already has an account.
+          emailedOutcome: {
+            coastFireNumber: result.coastFireNumber,
+            hasReachedCoastFire: result.hasReachedCoastFire,
+          },
+        },
       );
       setStatus("leaving");
       await tracking;
@@ -167,6 +196,17 @@ export function CoastFireEmailCapture({
         <p>
           Choose a password and your Coast FIRE result opens as your first decision. We’ve also
           emailed <strong>{email.trim()}</strong> a link back, in case you finish later.
+        </p>
+      </div>
+    );
+  }
+
+  if (status === "revealed-signed-in") {
+    return (
+      <div className="cf-email-capture is-sent" role="status" aria-live="polite">
+        <p className="cf-email-lead">
+          You’re already signed in, so here is your result on this page. We’ve also emailed{" "}
+          <strong>{email.trim()}</strong> a link you can use from another device.
         </p>
       </div>
     );
