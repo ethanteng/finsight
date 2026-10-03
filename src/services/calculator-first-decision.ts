@@ -358,6 +358,10 @@ function composeDecision(resolved: CalculatorLead): { question: string; answer: 
     };
 }
 
+function isUniqueViolation(error: unknown): boolean {
+  return typeof error === 'object' && error !== null && 'code' in error && error.code === 'P2002';
+}
+
 /**
  * Write a resolved lead as the account's first decision.
  *
@@ -389,13 +393,12 @@ export async function seedFirstDecisionFromLead(params: {
 
     return 'seeded';
   } catch (error) {
+    // Two unawaited seeds can both see an empty history; the unique index on
+    // (account, token) lets only one write land.
+    if (isUniqueViolation(error)) return 'already-has-decisions';
     console.error('⚠️  Could not seed the first decision from a calculator run:', error);
     return 'failed';
   }
-}
-
-function isUniqueViolation(error: unknown): boolean {
-  return typeof error === 'object' && error !== null && 'code' in error && error.code === 'P2002';
 }
 
 /** What attaching a run to an existing account did. */

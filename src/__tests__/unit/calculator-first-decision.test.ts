@@ -472,6 +472,21 @@ describe('seedFirstDecisionFromLead', () => {
       lead: { kind: 'retirement', lead: lead() },
     })).toBe('failed');
   });
+
+  /*
+   * Two unawaited seeds can both see an empty history; the unique index on
+   * (account, token) lets only one write land.
+   */
+  it('treats a unique conflict as already seeded', async () => {
+    db.create.mockRejectedValueOnce(
+      Object.assign(new Error('Unique constraint failed'), { code: 'P2002' }),
+    );
+
+    expect(await seedFirstDecisionFromLead({
+      userId: 'user-1',
+      lead: { kind: 'retirement', lead: lead() },
+    })).toBe('already-has-decisions');
+  });
 });
 
 /*
