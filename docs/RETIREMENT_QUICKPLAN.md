@@ -390,9 +390,11 @@ retirement-specific path is below.
 
 **Any resolved lead skips the verification code.** A code between the password
 and the answer is where the visitor leaves, and the calculators exist to get
-them in front of that answer in Ask Linc. `/auth/register` creates no code row
-and sends no code mail, and reports `firstDecisionPending: true` so the client
-opens `/app` rather than `/verify-email`.
+them in front of that answer in Ask Linc. When the signup page sends
+`acceptsFirstDecisionHandoff: true`, `/auth/register` creates no code row and
+sends no code mail, and reports `firstDecisionPending: true` so the client opens
+`/app` rather than `/verify-email`. A page that does not send it still gets a
+code for a disclosed lead (see the deploy note below).
 
 This is a choice about friction, not about proof, and the account records the
 difference. A lead token is forty-eight random characters. When the only place
@@ -450,12 +452,14 @@ wrong strands people silently.
 
   The straight-to-signup step is safe in both orders on its own: an old page
   ignores the `ref` a new backend returns, and a new page gets no `ref` from an
-  old backend and shows the result on the page. It is the verification skip
-  above that constrains the order.
+  old backend and shows the result on the page. With the handoff skip gated on
+  the page's opt-in, neither order strands anyone any more; frontend first
+  remains the conventional order.
 
 `VerifyEmailForm` bounces an already-verified session into the workspace, which
 covers someone landing there later — but that bounce lives in the *frontend*,
-so it cannot rescue a backend-first rollout. Order is still the control.
+so it could not rescue the original backend-first rollout. The opt-in is what
+does that now.
 
 - `resolveCalculatorLead` runs **before** the account is created, on the
   server, from the token alone. The client sends a token, never a claim; the
