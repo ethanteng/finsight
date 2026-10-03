@@ -1,5 +1,5 @@
 "use client";
-import { Brain } from 'lucide-react';
+import BrandMark from '@/components/BrandMark';
 import Link from 'next/link';
 import { SocialLinks } from './SocialLinks';
 
@@ -29,7 +29,7 @@ export default function SiteFooter({ variant = 'default' }: { variant?: 'default
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex flex-col md:flex-row justify-between items-center gap-5">
           <Link href="/" className="flex items-center space-x-2 hover:opacity-90 transition-opacity">
-            <Brain className="h-6 w-6 text-primary" />
+            <BrandMark size="sm" />
             <span className="text-lg font-bold gradient-text">Ask Linc</span>
           </Link>
           <div className="flex flex-wrap items-center justify-center md:justify-start gap-x-4 gap-y-1 md:gap-x-6 text-xs md:text-sm text-muted-foreground">
