@@ -89,7 +89,7 @@ read from the persisted manifest:
   it was first checked, before any widening re-judged it: grounding, format, and
   the secondary reviewer's objections, which together are the reason recovery
   or a retry ran (`validation.initialIssues`). Shown only when it differs from
-  the shipped answer's own grounding failures.
+  the delivered answer's own failed checks.
 - **Shipped the first draft** — the retry came back with no answer in it (not
   the JSON object, or empty), so the first draft shipped in its place with its
   unsupported parts removed (`validation.deterministic.shippedDraft`). A reply

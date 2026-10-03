@@ -427,7 +427,7 @@ function AnswerDetailPanel({ details }: { details: AnswerDetails }) {
       )}
 
       {details.groundingIssues.length > 0 && (
-        <DetailSection title="Grounding checks that failed">
+        <DetailSection title="Checks the delivered answer failed">
           <ul className="list-disc space-y-1 pl-5 text-xs leading-5 text-gray-400">
             {details.groundingIssues.map((issue) => <li key={issue}>{issue}</li>)}
           </ul>
