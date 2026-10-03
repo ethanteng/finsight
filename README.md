@@ -271,4 +271,4 @@ New scenario domains belong in the calculator registry with validated inputs, de
 
 ## License
 
-This project is proprietary software. All rights reserved. This software and its documentation are owned by the project maintainer and may not be reproduced, distributed, or used without explicit permission.
+This project is proprietary software. All rights reserved. See [LICENSE](LICENSE) for repository terms and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for third-party licenses. Product use is governed by the applicable product agreement.
