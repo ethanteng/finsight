@@ -54,6 +54,6 @@ export const RETIREMENT_CALCULATOR_FAQ: RetirementCalculatorFaq[] = [
   {
     question: 'Is it free, and do I need an account?',
     answer:
-      'The calculator is free and needs no account. We ask for your email before showing your result, and send you a copy of it. We keep calculator inputs and results to improve the model. Create a free account to save your result, keep exploring, and connect your accounts.',
+      'The calculator is free, and your result opens in Ask Linc: enter your email and choose a password. There is no code to enter and no credit card. We keep calculator inputs and results to improve the model. Once you are in, connect your accounts to keep exploring.',
   },
 ];

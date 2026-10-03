@@ -24,7 +24,8 @@
 import express, { Request, Response } from 'express';
 import { createFixedWindowRateLimit, positiveIntFromEnv } from './fixed-window-rate-limit';
 import { validateEmail } from '../auth/utils';
-import { sendCoastFireResultsEmail } from '../auth/resend-email';
+import { sendCalculatorReadyEmail, sendCoastFireResultsEmail } from '../auth/resend-email';
+import { coastFireInputRows } from '../email/coast-fire-results';
 import { getBaseUrl } from '../email/templates';
 import {
   calculateCoastFire,
@@ -42,6 +43,7 @@ import {
 import { interpretCoastFire } from '../services/coast-fire-interpretation';
 import { coastFireGroupIds, subscribeToMailerLite } from '../services/mailerlite-subscribe';
 import { parseCalculatorLeadAttribution } from '../services/calculator-lead-attribution';
+import { accountExistsForEmail } from '../services/calculator-account-lookup';
 
 const router = express.Router();
 
@@ -97,6 +99,10 @@ function readEmail(raw: unknown): string {
  * to a clean URL, so the token is never in the address of a rendered page,
  * where Google Tag Manager and every tag in the container would see it.
  */
+function loginUrl(): string {
+  return `${getBaseUrl()}/login`;
+}
+
 function signupUrl(token: string | null): string {
   const base = getBaseUrl();
   return token
@@ -128,13 +134,32 @@ router.post('/email-results', emailRateLimit, async (req: Request, res: Response
   // plain /getstarted.
   const token = generateLeadToken();
   const attribution = parseCalculatorLeadAttribution(req.body?.attribution);
-  const stored = await recordCoastFireLead({ email, token, result, attribution });
+  const [stored, existingAccount] = await Promise.all([
+    recordCoastFireLead({ email, token, result, attribution }),
+    accountExistsForEmail(email),
+  ]);
 
-  const emailSent = await sendCoastFireResultsEmail(
-    email,
-    result,
-    signupUrl(stored ? token : null),
-  );
+  /*
+   * A stored lead for a new address gets the "ready in Ask Linc" message,
+   * which states no figures: the answer is shown in the account the link
+   * creates. Otherwise there is no account the run can open in — the lead
+   * did not store, or the address already has an account and cannot register
+   * again — so the visitor gets the full results, and the page shows them too.
+   */
+  const handOff = stored && !existingAccount;
+  const emailSent = handOff
+    ? await sendCalculatorReadyEmail({
+      calculator: 'coast_fire',
+      inputs: coastFireInputRows(result),
+      email,
+      ctaUrl: signupUrl(token),
+    })
+    : await sendCoastFireResultsEmail(
+      email,
+      result,
+      existingAccount ? loginUrl() : signupUrl(null),
+      { existingAccount },
+    );
 
   if (!emailSent) {
     res.status(502).json({
@@ -147,21 +172,25 @@ router.post('/email-results', emailRateLimit, async (req: Request, res: Response
    * Handed back so the page can take this visitor straight to signup instead
    * of asking them to go and find the email. The same token the message
    * carries, so both routes restore the same run — but disclosed tokens are
-   * marked first, and registration reads that mark to withhold the emailed
-   * verification code. See `src/auth/routes.ts`.
+   * marked first, and registration reads that mark to decide whether the
+   * address is recorded as verified. See `src/auth/routes.ts`.
    *
    * Marked before it is returned, and not returned at all if the mark did not
    * take: a token loose in a page while the row still claims it was only
-   * emailed is exactly the bypass the column exists to prevent. The fallback
-   * is the behaviour that shipped before this — the results are in the inbox
-   * and the emailed link still works.
+   * emailed would record a stranger's address as verified. Without a ref the
+   * page shows the result itself, and the emailed link still works.
    */
-  const ref = stored && (await markCoastFireLeadTokenDisclosed(token)) ? token : null;
+  const ref = handOff && (await markCoastFireLeadTokenDisclosed(token)) ? token : null;
 
   // The token is a bearer credential for this lead. Nothing about this
   // response may sit in a shared cache.
   res.setHeader('Cache-Control', 'no-store');
-  res.json({ message: 'Your Coast FIRE results are on their way.', ref });
+  res.json({
+    message: 'Your Coast FIRE results are on their way.',
+    ref,
+    // Lets the page say why it is showing the result rather than handing off.
+    ...(existingAccount ? { existingAccount: true } : {}),
+  });
 
   // After the response. Joining the list is what the checkbox promised, but a
   // slow or failing MailerLite must not hold up the results the visitor asked

@@ -1,20 +1,22 @@
 /**
- * The results email in front of the answer.
+ * From a calculator answer into Ask Linc.
  *
- * Both public calculators compute a result and then hold it back until the
- * visitor gives an address. What matters here is that nothing restating the
- * answer reaches the page before that — not the figures, not the reading, not
- * the signup handoff — that giving the address reveals it without leaving the
- * page, and that one address is enough for the rest of the tab.
+ * Both public calculators compute a result and then hold it back. Giving an
+ * address sends the visitor to signup with the run, where a password is all
+ * that stands between them and seeing it as their account's first decision.
+ * What matters here is that nothing restating the answer reaches the page —
+ * not the figures, not the reading, not the signup handoff — that giving the
+ * address hands the run to signup rather than revealing it, and that the page
+ * shows the answer itself only when there is no run for an account to open.
  */
 
 import React from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { CoastFireCalculator } from '@/components/marketing/CoastFireCalculator';
 import { RetirementQuickPlan } from '@/components/marketing/RetirementQuickPlan';
 import { leaveForSignup } from '@/lib/calculator-handover';
 import { readCoastFireSignupContext } from '@/lib/coast-fire-signup-context';
-import { CALCULATOR_RESULTS_UNLOCK_KEY } from '@/lib/calculator-results-gate';
+import { CALCULATOR_EMAIL_STORAGE_KEY } from '@/lib/calculator-email-memory';
 
 jest.mock('@/lib/calculator-handover', () => ({
   ...jest.requireActual('@/lib/calculator-handover'),
@@ -73,6 +75,7 @@ function giveEmail(address = 'reader@example.com') {
 beforeEach(() => {
   posts.length = 0;
   window.sessionStorage.clear();
+  window.localStorage.clear();
   jest.mocked(leaveForSignup).mockClear();
   Element.prototype.scrollIntoView = jest.fn();
   mockApi();
@@ -103,7 +106,7 @@ describe('Coast FIRE calculator', () => {
     calculate();
 
     expect(screen.getByText('Your result is ready.')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Show my results' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'See my result in Ask Linc' })).toBeInTheDocument();
     // Not hidden: absent. A blurred copy of the real figure is one inspector away.
     expect(document.body).not.toHaveTextContent(COAST_FIRE_NUMBER);
     expect(screen.queryByText(/you haven’t reached coast fire yet|you’ve reached coast fire/i)).not.toBeInTheDocument();
@@ -112,35 +115,80 @@ describe('Coast FIRE calculator', () => {
     expect(posts.some((url) => url.includes('/interpretation'))).toBe(false);
   });
 
-  it('reveals the answer on the page once the address is accepted', async () => {
+  /*
+   * The answer opens in Ask Linc, so the address takes the visitor there with
+   * the run rather than revealing it here.
+   */
+  it('hands the run to signup instead of revealing it', async () => {
+    render(<CoastFireCalculator />);
+    calculate();
+    giveEmail();
+
+    await waitFor(() => expect(leaveForSignup).toHaveBeenCalled());
+    expect(jest.mocked(leaveForSignup).mock.calls[0][0]).toContain('entry=results_page');
+    expect(readCoastFireSignupContext()?.sourceToken).toBe(REF);
+    expect(readCoastFireSignupContext()?.email).toBe('reader@example.com');
+    expect(readCoastFireSignupContext()?.emailedOutcome?.coastFireNumber).toBeCloseTo(369_128, 0);
+    expect(document.body).not.toHaveTextContent(COAST_FIRE_NUMBER);
+    expect(posts.some((url) => url.includes('/interpretation'))).toBe(false);
+  });
+
+  /*
+   * Registration cannot seed an address that already has an account, and the
+   * ready email states no figures — so a signed-in visitor would otherwise
+   * leave for signup and never see the answer.
+   */
+  it('shows the answer on the page when the visitor is already signed in', async () => {
+    window.localStorage.setItem('auth_token', 'existing-session');
+    render(<CoastFireCalculator />);
+    calculate();
+    giveEmail();
+
+    expect((await screen.findAllByText(COAST_FIRE_NUMBER)).length).toBeGreaterThan(0);
+    expect(leaveForSignup).not.toHaveBeenCalled();
+    expect(await screen.findByText(/you’re already signed in/i)).toBeInTheDocument();
+  });
+
+  /*
+   * Without a token there is no run to seed an account from, and sending them
+   * to an empty one would be worse than showing the answer here.
+   */
+  it('shows the answer on the page only when no token comes back', async () => {
+    mockApi(null, { message: 'sent' });
     render(<CoastFireCalculator />);
     calculate();
     giveEmail();
 
     // The card, and the return comparison's own row for the chosen rate.
     expect((await screen.findAllByText(COAST_FIRE_NUMBER)).length).toBeGreaterThan(0);
-    expect(screen.queryByText('Your result is ready.')).not.toBeInTheDocument();
     expect(await screen.findByText(READING.headline)).toBeInTheDocument();
-    expect(screen.getByText(/we emailed a copy to/i)).toHaveTextContent('reader@example.com');
-    // Revealing is the whole response to the form. Signup is the visitor's
-    // next choice, not something done to them.
     expect(leaveForSignup).not.toHaveBeenCalled();
   });
 
-  it('carries the lead to signup when the visitor asks to save', async () => {
+  /*
+   * An address that already has an account cannot register again, so the
+   * server hands back no token and says why. The page shows the result and
+   * points at sign-in rather than at a signup that would refuse them.
+   */
+  it('shows the answer and points an existing account at sign-in', async () => {
+    mockApi(null, { message: 'sent', ref: null, existingAccount: true });
     render(<CoastFireCalculator />);
     calculate();
     giveEmail();
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Save these results to your free account' }));
-
-    await waitFor(() => expect(leaveForSignup).toHaveBeenCalled());
-    expect(jest.mocked(leaveForSignup).mock.calls[0][0]).toContain('entry=results_page');
-    expect(readCoastFireSignupContext()?.sourceToken).toBe(REF);
-    expect(readCoastFireSignupContext()?.email).toBe('reader@example.com');
+    expect((await screen.findAllByText(COAST_FIRE_NUMBER)).length).toBeGreaterThan(0);
+    const note = screen.getByText(/you already have an Ask Linc account/i);
+    expect(within(note).getByRole('link', { name: 'Sign in' })).toHaveAttribute('href', '/login');
+    expect(leaveForSignup).not.toHaveBeenCalled();
   });
 
-  it('does not ask again for the next run in the same tab', async () => {
+  /*
+   * Giving an address once is not a tab-wide unlock any more: every answer is
+   * meant to be seen in Ask Linc. The address is remembered so the next form
+   * does not ask for it again.
+   */
+  it('holds the next run back too, with the address already filled in', async () => {
+    mockApi(null, { message: 'sent' });
     render(<CoastFireCalculator />);
     calculate();
     giveEmail();
@@ -148,9 +196,10 @@ describe('Coast FIRE calculator', () => {
 
     calculate();
 
-    expect(screen.queryByText('Your result is ready.')).not.toBeInTheDocument();
-    expect(screen.getAllByText(COAST_FIRE_NUMBER).length).toBeGreaterThan(0);
-    expect(window.sessionStorage.getItem(CALCULATOR_RESULTS_UNLOCK_KEY)).toBe('reader@example.com');
+    expect(screen.getByText('Your result is ready.')).toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent(COAST_FIRE_NUMBER);
+    expect(screen.getByLabelText('Email address')).toHaveValue('reader@example.com');
+    expect(window.sessionStorage.getItem(CALCULATOR_EMAIL_STORAGE_KEY)).toBe('reader@example.com');
   });
 
   it('does not hand a locked run to signup through the page CTA', () => {
@@ -229,25 +278,20 @@ describe('retirement calculator', () => {
     expect(screen.getByRole('link', { name: 'Build my retirement plan' })).toBeInTheDocument();
   });
 
-  it('reveals the verdict on the page once the address is accepted', async () => {
+  it('hands the run to signup instead of revealing it', async () => {
     mockApi(PLAN);
     renderPage();
     await runTheModel();
     await screen.findByText('Your result is ready.');
     giveEmail();
 
-    expect(await screen.findByText(/retiring at 60 worked in/i)).toBeInTheDocument();
-    expect(await screen.findByText(READING.headline)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Save these results to your free account' })).toBeInTheDocument();
-    expect(leaveForSignup).not.toHaveBeenCalled();
+    await waitFor(() => expect(leaveForSignup).toHaveBeenCalled());
+    expect(jest.mocked(leaveForSignup).mock.calls[0][0]).toContain('/getstarted?source=retirement-calculator');
+    expect(screen.queryByText(/retiring at 60 worked in/i)).not.toBeInTheDocument();
+    expect(posts.some((url) => url.includes('/interpretation'))).toBe(false);
   });
 
-  /*
-   * The email went out, so the gate is satisfied. There is no lead to seed an
-   * account from, though, so no save is offered: signing up would arrive at an
-   * account without the run the button promised.
-   */
-  it('reveals the verdict but offers no save when the lead did not store', async () => {
+  it('shows the verdict on the page only when no token comes back', async () => {
     mockApi(PLAN, { message: 'sent' });
     renderPage();
     await runTheModel();
@@ -255,13 +299,27 @@ describe('retirement calculator', () => {
     giveEmail();
 
     expect(await screen.findByText(/retiring at 60 worked in/i)).toBeInTheDocument();
-    expect(screen.getByText(/we emailed a copy to/i)).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Save these results to your free account' })).not.toBeInTheDocument();
+    expect(await screen.findByText(READING.headline)).toBeInTheDocument();
+    expect(screen.getByText(/so here is your result/i)).toBeInTheDocument();
+    expect(leaveForSignup).not.toHaveBeenCalled();
+  });
+
+  it('shows the verdict on the page when the visitor is already signed in', async () => {
+    window.localStorage.setItem('auth_token', 'existing-session');
+    mockApi(PLAN);
+    renderPage();
+    await runTheModel();
+    await screen.findByText('Your result is ready.');
+    giveEmail();
+
+    expect(await screen.findByText(/retiring at 60 worked in/i)).toBeInTheDocument();
+    expect(leaveForSignup).not.toHaveBeenCalled();
+    expect(await screen.findByText(/you’re already signed in/i)).toBeInTheDocument();
   });
 
   /*
-   * A rates answer says nothing about the visitor's own plan and has no email
-   * to send, so there is nothing to gate and no way to unlock it.
+   * A rates answer says nothing about the visitor's own plan and has no run
+   * to save, so there is nothing to hold back.
    */
   it('does not gate a rates-only answer', async () => {
     mockApi(RATES);
@@ -272,13 +330,13 @@ describe('retirement calculator', () => {
     expect(screen.queryByText('Your result is ready.')).not.toBeInTheDocument();
   });
 
-  it('shares the unlock with the other calculator', async () => {
-    window.sessionStorage.setItem(CALCULATOR_RESULTS_UNLOCK_KEY, 'reader@example.com');
+  it('fills in the address the other calculator was given', async () => {
+    window.sessionStorage.setItem(CALCULATOR_EMAIL_STORAGE_KEY, 'reader@example.com');
     mockApi(PLAN);
     renderPage();
     await runTheModel();
 
-    expect(await screen.findByText(/retiring at 60 worked in/i)).toBeInTheDocument();
+    expect(await screen.findByText('Your result is ready.')).toBeInTheDocument();
     expect(screen.getByLabelText('Email address')).toHaveValue('reader@example.com');
   });
 });

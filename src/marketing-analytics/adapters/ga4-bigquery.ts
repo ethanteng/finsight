@@ -218,7 +218,7 @@ export function buildQuery(projectId: string, datasetId: string, dates: ReturnTy
       `MIN(IF(event_name = 'calculator_run_limit_reached' AND calculator_type = '${calculator}', event_timestamp, NULL)) AS first_${calculator}_run_limit_reached`,
       `MIN(IF(event_name = 'sign_up' AND signup_flow = 'free_trial' AND signup_origin = '${calculator}_calculator', event_timestamp, NULL)) AS first_${calculator}_account_created`,
     ]),
-    ...['email_link', 'verification_code', 'verification_skipped', 'already_verified'].map(method =>
+    ...['email_link', 'verification_code', 'verification_skipped', 'already_verified', 'calculator_handoff'].map(method =>
       `COUNTIF(event_name = 'trial_signup_completed' AND signup_flow = 'free_trial' AND completion_method = '${method}') AS count_signup_completed_${method}`),
   ].join(',\n    ');
 
@@ -399,7 +399,7 @@ function toSession(row: Record<string, string>): AnalyticsSession {
       if (row[`first_${key}`]) firstEventAt[key] = Number(row[`first_${key}`]);
     }
   }
-  for (const method of ['email_link', 'verification_code', 'verification_skipped', 'already_verified']) {
+  for (const method of ['email_link', 'verification_code', 'verification_skipped', 'already_verified', 'calculator_handoff']) {
     eventCounts[`signup_completed_${method}`] = Number(row[`count_signup_completed_${method}`] || 0);
   }
   if (row.first_quickplan_cross_sell_click) {

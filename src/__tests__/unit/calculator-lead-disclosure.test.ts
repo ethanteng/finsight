@@ -1,21 +1,16 @@
 /**
- * Whether a calculator lead token may stand in for the emailed verification
- * code.
+ * What a calculator lead token does at registration.
  *
- * It may when the token reached the visitor the only way it used to: inside a
- * message to the address the lead names. Holding one then means having read
- * that inbox, which is the same thing the code demonstrates.
+ * Any resolved lead skips the verification code and seeds the run as the
+ * account's first decision: the calculators send visitors into Ask Linc to see
+ * their answer, and a code in front of it is where they leave.
  *
- * It may not when the calculator page was handed the token so it could take
- * the visitor straight to signup. Anyone can type a stranger's address into a
- * public calculator, and returning the token to whoever did would let them
- * register that address with the code skipped — the lead's own address check
- * does not catch it, because the address matches by construction. The lead row
- * is stamped before the token is returned, and this is the test that the stamp
- * is what registration reads.
- *
- * Either way the run is still written as the account's first decision. The
- * figures are the figures; it is only the claim about the address that fails.
+ * Only a token that reached the visitor inside a message to the address it
+ * names records that address as verified. A token handed back to the
+ * calculator page proves nothing about the inbox, because anyone can type a
+ * stranger's address into a public calculator. The lead row is stamped before
+ * the token is returned, and this is the test that the stamp is what
+ * registration reads for `emailVerified`.
  */
 
 import express from 'express';
@@ -53,7 +48,12 @@ const created = {
 const prisma = {
   user: {
     findUnique: jest.fn(async () => null),
-    create: jest.fn(async () => created),
+    // Echo the verified bit the route wrote so the response body contract is
+    // tested, not just the create args.
+    create: jest.fn(async (args: { data: { emailVerified: boolean } }) => ({
+      ...created,
+      emailVerified: args.data.emailVerified,
+    })),
     update: jest.fn(async () => created),
   },
   privacySettings: { create: jest.fn(async () => ({})) },
@@ -80,10 +80,11 @@ function buildApp() {
 
 const settle = () => new Promise((resolve) => setImmediate(resolve));
 
-function register() {
+/** What the current signup page sends: it opens /app on `firstDecisionPending`. */
+function register(body: Record<string, unknown> = { acceptsFirstDecisionHandoff: true }) {
   return request(buildApp())
     .post('/auth/register')
-    .send({ email: 'reader@example.com', password: 'Password1', calculatorRef: TOKEN });
+    .send({ email: 'reader@example.com', password: 'Password1', calculatorRef: TOKEN, ...body });
 }
 
 /** What the account was actually written with, rather than what was returned. */
@@ -96,7 +97,10 @@ describe('a calculator lead token and the verification code', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     prisma.user.findUnique.mockResolvedValue(null as never);
-    prisma.user.create.mockResolvedValue(created as never);
+    prisma.user.create.mockImplementation(async (args: { data: { emailVerified: boolean } }) => ({
+      ...created,
+      emailVerified: args.data.emailVerified,
+    }));
   });
 
   it('accepts an emailed token as proof of the address', async () => {
@@ -107,16 +111,19 @@ describe('a calculator lead token and the verification code', () => {
 
     expect(res.status).toBe(201);
     expect(createdWithEmailVerified()).toBe(true);
+    expect(res.body.user.emailVerified).toBe(true);
     expect(sendVerificationCode).not.toHaveBeenCalled();
+    expect(res.body.firstDecisionPending).toBe(true);
     expect(leads.seed).toHaveBeenCalled();
   });
 
   /*
-   * The bypass this column exists to stop. Every other signal is identical to
-   * the case above — a live token, resolved, addressed to the person
-   * registering — so nothing but the stamp can tell them apart.
+   * Every other signal is identical to the case above — a live token,
+   * resolved, addressed to the person registering — so nothing but the stamp
+   * can tell them apart. It decides only what the account records about the
+   * address; the signup goes straight in either way.
    */
-  it('refuses a token its own page was given, and still saves the run', async () => {
+  it('skips the code for a token its own page was given, without recording the address as verified', async () => {
     leads.resolve.mockResolvedValue(retirementLead(true));
 
     const res = await register();
@@ -124,8 +131,42 @@ describe('a calculator lead token and the verification code', () => {
 
     expect(res.status).toBe(201);
     expect(createdWithEmailVerified()).toBe(false);
-    expect(sendVerificationCode).toHaveBeenCalled();
-    // The figures are not in question. Only the claim about the address was.
+    expect(res.body.user.emailVerified).toBe(false);
+    expect(sendVerificationCode).not.toHaveBeenCalled();
+    expect(prisma.emailVerificationCode.create).not.toHaveBeenCalled();
+    expect(res.body.firstDecisionPending).toBe(true);
     expect(leads.seed).toHaveBeenCalled();
+  });
+
+  /*
+   * A signup page from before `firstDecisionPending` reads only
+   * `emailVerified` and sends this signup to /verify-email, so it must still
+   * get a code there — or a backend shipped ahead of the frontend strands it.
+   */
+  it('still sends the code to a page that does not take the handoff', async () => {
+    leads.resolve.mockResolvedValue(retirementLead(true));
+
+    const res = await register({});
+    await settle();
+
+    expect(res.status).toBe(201);
+    expect(sendVerificationCode).toHaveBeenCalled();
+    expect(res.body.firstDecisionPending).toBe(false);
+    // The run is still seeded; only the code step differs.
+    expect(leads.seed).toHaveBeenCalled();
+  });
+
+  it('still sends a code to a signup with no calculator lead', async () => {
+    leads.resolve.mockResolvedValue(null);
+
+    const res = await request(buildApp())
+      .post('/auth/register')
+      .send({ email: 'reader@example.com', password: 'Password1' });
+    await settle();
+
+    expect(res.status).toBe(201);
+    expect(createdWithEmailVerified()).toBe(false);
+    expect(sendVerificationCode).toHaveBeenCalled();
+    expect(res.body.firstDecisionPending).toBe(false);
   });
 });

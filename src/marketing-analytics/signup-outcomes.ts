@@ -27,6 +27,8 @@ export function buildSignupOutcomes(sessions: AnalyticsSession[], fullCoverage: 
       verificationSkipped: rows.filter(row => (row.eventCounts.signup_completed_verification_skipped || 0) > 0
         || (row.eventCounts.trial_verify_skipped || 0) > 0).length,
       alreadyVerified: count('signup_completed_already_verified'),
+      // Straight from a calculator page into the workspace, with no code step.
+      calculatorHandoff: count('signup_completed_calculator_handoff'),
       legacyLogin: count('trial_login_success'),
       signupAbandonmentRate: fullCoverage && viewed > 0 ? 1 - createdAfterView / viewed : null,
     };

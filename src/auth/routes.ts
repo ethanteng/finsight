@@ -145,6 +145,16 @@ router.post('/register', async (req: Request, res: Response) => {
        * can do is put the registrant in one of our own groups.
        */
       signupOrigin,
+      /*
+       * Set by a signup page that opens the workspace on
+       * `firstDecisionPending`. A page from before that field reads only
+       * `emailVerified` and sends every other signup to /verify-email, so it
+       * must still be mailed a code: without one, a backend shipped ahead of
+       * the frontend would strand calculator signups waiting for mail that
+       * never comes. Skipping the code is friction, not security (see below),
+       * so a client is allowed to say this about itself.
+       */
+      acceptsFirstDecisionHandoff,
     } = req.body;
     
     // Handle both parameter names for Stripe session ID
@@ -177,9 +187,10 @@ router.post('/register', async (req: Request, res: Response) => {
     const passwordHash = await hashPassword(password);
 
     /*
-     * Resolved here, before the account exists, because the answer decides two
-     * things: what the first decision is written from, and whether this address
-     * still needs a verification code.
+     * Resolved here, before the account exists, because the answer decides
+     * three things: what the first decision is written from, whether the
+     * address is recorded as verified, and whether this signup is asked for a
+     * code at all.
      *
      * A lead token is forty-eight random characters. When the only place it
      * ever went is an email to the lead's own address, presenting one *and*
@@ -189,20 +200,36 @@ router.post('/register', async (req: Request, res: Response) => {
      * client cannot declare itself verified by sending a flag.
      *
      * `tokenDisclosed` is the case where that argument does not hold. The
-     * calculator page can ask for the token back so it can take the visitor
+     * calculator page asks for the token back so it can take the visitor
      * straight to signup rather than making them wait on their inbox, and a
      * token handed to a page proves nothing about who owns the address —
      * anyone can type someone else's into the form. Such a lead still writes
-     * the run as the first decision, because the figures are the figures; it
-     * just does not verify the address, and registration falls back to the
-     * emailed code like any other signup. The server decides this from the
-     * row, never from anything the client sends.
+     * the run as the first decision, because the figures are the figures, but
+     * the account is not recorded as verified. The server decides this from
+     * the row, never from anything the client sends.
      */
     const calculatorLead = await resolveCalculatorLead({
       token: calculatorRef,
       email: email.toLowerCase(),
     });
     const emailProvenByLink = calculatorLead !== null && !calculatorLead.lead.tokenDisclosed;
+    /*
+     * Any resolved lead, disclosed or not, skips the code step. The calculators
+     * exist to get a visitor into Ask Linc to see their answer, and a code
+     * standing between the password and that answer is where they leave.
+     *
+     * This is a choice about friction, not about proof. The disclosed case
+     * still proves nothing about the inbox, which is why `emailVerified` above
+     * stays false for it. The code was never what guarded the workspace
+     * either: nothing server-side checks `emailVerified`, and the verify page
+     * has always offered "Skip for now". What a stranger could do with someone
+     * else's address here they could already do through that skip, and the
+     * owner of the address can still take the account back by resetting the
+     * password from their own inbox.
+     */
+    const firstDecisionPending = calculatorLead !== null;
+    const skipsVerificationCode = emailProvenByLink
+      || (firstDecisionPending && acceptsFirstDecisionHandoff === true);
 
     // Create user
     const user = await prisma.user.create({
@@ -262,13 +289,12 @@ router.post('/register', async (req: Request, res: Response) => {
     });
 
     /*
-     * Skipped entirely when the emailed link already proved the address. A
-     * code sent to an inbox we just demonstrated control of asks the visitor
-     * to do the same thing twice, and no row is created for it either — an
-     * unused code is one more live credential for an account that does not
-     * need it.
+     * Skipped entirely for a calculator signup (see `firstDecisionPending` and
+     * `acceptsFirstDecisionHandoff`). No row is created for it either: an
+     * unused code is one more live credential for an account that will never
+     * be asked for it.
      */
-    if (!emailProvenByLink) {
+    if (!skipsVerificationCode) {
       const verificationCode = generateRandomCode();
       const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
 
@@ -303,19 +329,26 @@ router.post('/register', async (req: Request, res: Response) => {
     });
 
     res.status(201).json({
-      message: emailProvenByLink
-        ? 'User registered successfully. Your email was already confirmed by the link you followed.'
+      message: skipsVerificationCode
+        ? 'User registered successfully. Your calculator result is waiting in your account.'
         : 'User registered successfully. Please check your email for verification code.',
       user: {
         id: user.id,
         email: user.email,
         tier: user.tier,
         timeZone: user.timeZone,
-        // Lets the client skip the verification step it would otherwise send
-        // every new account to. Reported, never accepted: the server decided.
+        // Whether the address was proved, which an emailed calculator link
+        // does. Reported, never accepted: the server decided.
         emailVerified: user.emailVerified,
         createdAt: user.createdAt
       },
+      /*
+       * The run is being written as this account's first decision, after this
+       * response. The client skips the code step and opens the workspace,
+       * which waits for that write. Reported, never accepted: the server
+       * resolved the lead.
+       */
+      firstDecisionPending: firstDecisionPending && skipsVerificationCode,
       token
     });
 

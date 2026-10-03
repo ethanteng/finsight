@@ -11,7 +11,7 @@
 import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { CoastFireCalculator } from '@/components/marketing/CoastFireCalculator';
-import { CALCULATOR_RESULTS_UNLOCK_KEY } from '@/lib/calculator-results-gate';
+import { revealCalculatorResult } from '@/test-utils/calculator-reveal';
 
 jest.mock('@/lib/dataLayer', () => ({
   pushCoastFireCalculated: jest.fn(),
@@ -41,12 +41,15 @@ function mockApi(interpretation: () => Promise<Response>) {
 }
 
 /**
- * Fill the five figures that belong to the visitor, then ask for an answer.
+ * Fill the five figures that belong to the visitor, ask for an answer, and
+ * get it onto the page.
  *
  * Nothing is prefilled: the page opens with empty boxes and no result, so a
- * bare submit is refused and produces neither a run nor a reading.
+ * bare submit is refused and produces neither a run nor a reading. The answer
+ * itself is held back until the email form reveals it, which it does when no
+ * lead token comes back — as here, where the send answers without one.
  */
-function submit(overrides: Record<string, string> = {}) {
+async function submit(overrides: Record<string, string> = {}) {
   const values: Record<string, string> = {
     'Your age today': '40',
     'Retirement age': '65',
@@ -59,12 +62,10 @@ function submit(overrides: Record<string, string> = {}) {
     fireEvent.change(screen.getByLabelText(label), { target: { value } });
   }
   fireEvent.submit(document.querySelector('form')!);
+  await revealCalculatorResult();
 }
 
 beforeEach(() => {
-  // These cases are about the reading, so the results email has already been
-  // given. The gate in front of it has its own cases in calculator-results-gate.
-  window.sessionStorage.setItem(CALCULATOR_RESULTS_UNLOCK_KEY, 'reader@example.com');
   // jsdom has no layout, and the page scrolls the result into view on submit.
   Element.prototype.scrollIntoView = jest.fn();
   global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({}) });
@@ -73,7 +74,7 @@ beforeEach(() => {
 it('renders the reading under the result', async () => {
   mockApi(reading);
   render(<CoastFireCalculator />);
-  submit();
+  await submit();
 
   expect(await screen.findByText(READING.headline)).toBeInTheDocument();
   for (const paragraph of READING.paragraphs) expect(screen.getByText(paragraph)).toBeVisible();
@@ -91,7 +92,7 @@ it('renders the reading under the result', async () => {
 it('shows the reading together with the result without a jump link', async () => {
   mockApi(reading);
   const { container } = render(<CoastFireCalculator />);
-  submit();
+  await submit();
 
   await screen.findByText(READING.headline);
 
@@ -106,7 +107,7 @@ it('shows the reading together with the result without a jump link', async () =>
 it('shows no chevrons when no reading comes', async () => {
   mockApi(dropped);
   const { container } = render(<CoastFireCalculator />);
-  submit();
+  await submit();
 
   await waitFor(() => {
     expect(screen.queryByText(/reading your result/i)).not.toBeInTheDocument();
@@ -130,7 +131,7 @@ it('shows no chevrons before a scenario is submitted', () => {
 it('shows the number without waiting, and shows nothing when no reading comes', async () => {
   mockApi(dropped);
   render(<CoastFireCalculator />);
-  submit();
+  await submit();
 
   // The browser's own answer is on the page the moment it is asked for, with
   // no network round trip behind it.
@@ -145,7 +146,7 @@ it('shows the number without waiting, and shows nothing when no reading comes', 
 it('leaves the page intact when the request fails outright', async () => {
   mockApi(() => Promise.reject(new Error('offline')));
   render(<CoastFireCalculator />);
-  submit();
+  await submit();
 
   expect(screen.getByText(/Your Coast FIRE number/i)).toBeInTheDocument();
   await waitFor(() => {

@@ -28,7 +28,6 @@ import {
   recordRun,
 } from "@/lib/calculator-run-limit";
 import { fromGrouped, withCommas } from "@/lib/number-input";
-import { readUnlockedEmail } from "@/lib/calculator-results-gate";
 import {
   clearCoastFireSignupContext,
   COAST_FIRE_SIGNUP_HREF,
@@ -457,17 +456,25 @@ export function CoastFireCalculator({ children }: { children?: ReactNode }) {
   useCalculatorLimitTracking('coast_fire', locked);
   const resultRef = useRef<HTMLDivElement>(null);
   /*
-   * Whether this visitor has given an address for their results. Until they
-   * have, a run renders the locked card and the email form in place of the
-   * answer, and nothing that restates the answer — the reading, the return
-   * comparison, the signup handoff — runs or renders either. See
-   * `lib/calculator-results-gate`.
+   * Whether this run's answer is shown on the page. Ordinarily it never is: a
+   * run renders the locked card and the email form, and the answer opens in
+   * Ask Linc once the visitor chooses a password. The capture reveals it here
+   * only when it got no lead token back and so has no account to send the
+   * run to. Nothing that restates the answer — the reading, the return
+   * comparison, the signup handoff — runs or renders before then. Reset by
+   * every new run.
    */
-  const [unlocked, setUnlocked] = useState(false);
+  const [revealed, setRevealed] = useState(false);
+  /*
+   * Counts accepted runs, so the capture remounts for every one. Keying it on
+   * the inputs alone left an identical re-run holding the previous run's
+   * revealed state under a page that had locked again.
+   */
+  const [runId, setRunId] = useState(0);
 
   // No reading until the result is visible: it restates the figures, and on a
-  // page nobody has given an address to it is a model call for nothing.
-  const { interpretation, isLoading: isInterpreting } = useCoastFireInterpretation(unlocked ? submitted : null);
+  // page that is not showing them it is a model call for nothing.
+  const { interpretation, isLoading: isInterpreting } = useCoastFireInterpretation(revealed ? submitted : null);
 
   const sensitivity = useMemo(() => {
     if (!result) return [];
@@ -515,7 +522,6 @@ export function CoastFireCalculator({ children }: { children?: ReactNode }) {
    */
   useEffect(() => {
     setRunCount(readRunCount(COAST_FIRE_RUN_COUNT_KEY));
-    setUnlocked(readUnlockedEmail() !== null);
   }, []);
 
   function editInputs() {
@@ -547,6 +553,8 @@ export function CoastFireCalculator({ children }: { children?: ReactNode }) {
     try {
       const nextResult = calculateCoastFire(parseForm(form));
       setResult(nextResult);
+      setRevealed(false);
+      setRunId((current) => current + 1);
       setShowInputs(false);
       setError(null);
       setSubmitted(signupContext(nextResult));
@@ -576,7 +584,7 @@ export function CoastFireCalculator({ children }: { children?: ReactNode }) {
         <p className="cf-hero-sub">
           Add a few numbers. See whether your savings could grow to your retirement target without more contributions—and which assumptions make the difference.
         </p>
-        <p className="calculator-access">Free, no account needed. Enter your email to see your result.</p>
+        <p className="calculator-access">Free. Your result opens in Ask Linc with just your email and a password.</p>
         <CalculatorSteps />
       </section>
 
@@ -628,15 +636,15 @@ export function CoastFireCalculator({ children }: { children?: ReactNode }) {
       <div ref={resultRef} className="calculator-result-focus" tabIndex={-1} hidden={showInputs} aria-label="Your Coast FIRE result">
         {result && <div className="calculator-result-grid shell">
           <div className="calculator-result-summary">
-            {unlocked ? <ResultPanel result={result} /> : <CalculatorLockedResult coast />}
+            {revealed ? <ResultPanel result={result} /> : <CalculatorLockedResult coast />}
           </div>
       {/*
         * Rendered as `false` while locked rather than moved, so the actions
         * block below keeps its position and the capture inside it keeps its
-        * state across the unlock: its confirmation and the lead token it
-        * holds for signup are what the visitor sees next.
+        * state across the reveal: its explanation of why the result is here
+        * is what the visitor reads next.
         */}
-      {unlocked && <InterpretationPanel
+      {revealed && <InterpretationPanel
         interpretation={interpretation}
         isInterpreting={isInterpreting}
         question={submitted
@@ -645,19 +653,10 @@ export function CoastFireCalculator({ children }: { children?: ReactNode }) {
       />}
           <div className="calculator-result-actions">
             <CoastFireEmailCapture compact
-              gate={!unlocked}
-              onUnlock={() => setUnlocked(true)}
-              // Remount when the submitted scenario changes so a prior "sent"
-              // state cannot claim to belong to a newly calculated result.
-              key={[
-                result.currentAge,
-                result.retirementAge,
-                result.currentSavings,
-                result.annualRetirementSpending,
-                result.annualRetirementIncome,
-                result.realReturnRate,
-                result.withdrawalRate,
-              ].join(':')}
+              onReveal={() => setRevealed(true)}
+              // Remount for every run, so a prior run's state cannot claim to
+              // belong to the one now on screen.
+              key={runId}
               result={result}
             />
             <CalculatorRunAgain locked={locked} onEdit={editInputs} />
@@ -671,7 +670,7 @@ export function CoastFireCalculator({ children }: { children?: ReactNode }) {
         * than any run of it, and they are worth reading — and worth
         * indexing — before anyone has typed anything.
         */}
-      {result && !showInputs && unlocked && (
+      {result && !showInputs && revealed && (
       <section className="shell cf-sensitivity">
         <div className="cf-section-head">
           <p className="section-kicker">SEE WHAT CHANGES</p>
@@ -756,9 +755,9 @@ export function CoastFireCalculator({ children }: { children?: ReactNode }) {
              * -for this page was emptied to avoid.
              */
             onBeforeNavigate={() => {
-              // A locked run is not handed over: signup would show the
-              // number the page is still holding back.
-              if (result && unlocked) storeCoastFireSignupContext(signupContext(result));
+              // A run the page is not showing is not handed over: the email
+              // form is the way into Ask Linc with it.
+              if (result && revealed) storeCoastFireSignupContext(signupContext(result));
               else clearCoastFireSignupContext();
             }}
           />

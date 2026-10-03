@@ -11,11 +11,13 @@ import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { RetirementQuickPlan } from '@/components/marketing/RetirementQuickPlan';
 import { pushRetirementInteraction } from '@/lib/dataLayer';
-import { CALCULATOR_RESULTS_UNLOCK_KEY } from '@/lib/calculator-results-gate';
+import { revealCalculatorResult } from '@/test-utils/calculator-reveal';
 
 jest.mock('@/lib/dataLayer', () => ({
   pushRetirementInteraction: jest.fn(),
   pushRetirementModelRun: jest.fn(),
+  // Results are shown through the email form now, which reports the send.
+  pushRetirementResultsEmailed: jest.fn(),
 }));
 
 // Recharts needs a ResizeObserver jsdom does not provide, and these cases are
@@ -103,9 +105,6 @@ const PLAN_RESULT = {
 
 beforeEach(() => {
   window.sessionStorage.clear();
-  // These cases are about the answer, so the results email has already been
-  // given. The gate in front of it has its own cases in calculator-results-gate.
-  window.sessionStorage.setItem(CALCULATOR_RESULTS_UNLOCK_KEY, 'reader@example.com');
   interaction.mockClear();
   Element.prototype.scrollIntoView = jest.fn();
   global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({ allocations: [] }) });
@@ -199,6 +198,8 @@ it('does not describe when a Social Security benefit of zero starts', async () =
 
   renderPage();
   fireEvent.submit(screen.getByRole('button', { name: /run the model/i }).closest('form')!);
+  // The send answers with the plan, so no lead token: the page shows it.
+  await revealCalculatorResult();
   await screen.findByText(/the model's answer/i);
 
   expect(screen.getByText(/No Social Security offset in the first year/i)).toBeInTheDocument();
@@ -220,6 +221,7 @@ it('still renders a plan when the response omits the assumed list', async () => 
 
   renderPage();
   fireEvent.submit(screen.getByRole('button', { name: /run the model/i }).closest('form')!);
+  await revealCalculatorResult();
   expect(await screen.findByText(/the model's answer/i)).toBeInTheDocument();
   expect(screen.queryByText(/the model assumed/i)).toBeNull();
 });

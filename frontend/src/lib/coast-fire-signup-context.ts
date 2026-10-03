@@ -8,7 +8,7 @@ import {
   readHandoverToken,
   type HandoverLookup,
 } from './calculator-handover';
-import { calculateCoastFire, type CoastFireInputs, type CoastFireResult } from './coast-fire';
+import type { CoastFireInputs } from './coast-fire';
 
 /**
  * The Coast FIRE calculator's handoff into signup.
@@ -338,27 +338,3 @@ export async function fetchCoastFireSignupContext(
   }
 }
 
-/**
- * The figures the signup page shows back.
- *
- * Same-tab CTA handoffs recompute from the seven inputs (the calculator is the
- * definition of those). Emailed handoffs also pass the outcome the message
- * carried, so a formula change during the token's lifetime cannot show a
- * different Coast FIRE number than the inbox.
- */
-export function coastFireSignupSummary(
-  inputs: CoastFireInputs,
-  emailedOutcome?: CoastFireSignupContext['emailedOutcome'],
-): CoastFireResult | null {
-  try {
-    const computed = calculateCoastFire(inputs);
-    if (!emailedOutcome) return computed;
-    return {
-      ...computed,
-      coastFireNumber: emailedOutcome.coastFireNumber,
-      hasReachedCoastFire: emailedOutcome.hasReachedCoastFire,
-    };
-  } catch {
-    return null;
-  }
-}

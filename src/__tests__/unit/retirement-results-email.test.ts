@@ -147,7 +147,7 @@ describe('the retirement results email', () => {
     const message = buildRetirementResultsEmail(planResult(primary), primary, OPTIONS);
 
     expect(message.html).toContain(`href="${OPTIONS.ctaUrl}"`);
-    expect(message.html).toContain('Finish creating your account');
+    expect(message.html).toContain('Create your free account');
     expect(message.html.match(/retirement\/continue/g)?.length).toBeGreaterThanOrEqual(2);
   });
 

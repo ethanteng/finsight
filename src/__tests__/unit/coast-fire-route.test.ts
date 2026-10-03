@@ -10,7 +10,17 @@ const ROUTE_MODULE = '../../routes/coast-fire';
  * different copy of each dependency than the route sees. Everything delegates
  * to these holders instead.
  */
-const email = { send: jest.fn(async () => true) };
+const email = {
+  // The full results email: sent only when the lead did not store.
+  send: jest.fn(async () => true),
+  // The figure-free "ready in Ask Linc" email: the ordinary path.
+  ready: jest.fn<Promise<boolean>, [{ calculator: string; inputs: Array<[string, string]>; email: string; ctaUrl: string }]>(async () => true),
+};
+
+/** The link the ready email carried. */
+function readyCtaUrl(): string {
+  return email.ready.mock.calls[0][0].ctaUrl;
+}
 const list = {
   subscribe: jest.fn<Promise<'subscribed' | 'skipped' | 'failed'>, unknown[]>(
     async () => 'subscribed',
@@ -34,11 +44,18 @@ const leads = {
 
 jest.mock('../../auth/resend-email', () => ({
   sendCoastFireResultsEmail: (...args: unknown[]) => email.send(...(args as [])),
+  sendCalculatorReadyEmail: (...args: unknown[]) => email.ready(...(args as [never])),
 }));
 jest.mock('../../services/mailerlite-subscribe', () => ({
   ...jest.requireActual('../../services/mailerlite-subscribe'),
   subscribeToMailerLite: (...args: unknown[]) => list.subscribe(...(args as [])),
 }));
+/** Whether the address already has an account. Most cases are a new visitor. */
+const accounts = { exists: jest.fn(async () => false) };
+jest.mock('../../services/calculator-account-lookup', () => ({
+  accountExistsForEmail: (...args: unknown[]) => accounts.exists(...(args as [])),
+}));
+
 jest.mock('../../services/coast-fire-leads', () => ({
   ...jest.requireActual('../../services/coast-fire-leads'),
   recordCoastFireLead: (...args: unknown[]) => leads.record(...(args as [])),
@@ -90,9 +107,33 @@ describe('POST /api/coast-fire/email-results', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     email.send.mockResolvedValue(true);
+    email.ready.mockResolvedValue(true);
     list.subscribe.mockResolvedValue('subscribed');
     leads.record.mockResolvedValue(true);
     leads.disclose.mockResolvedValue(true);
+    accounts.exists.mockResolvedValue(false);
+  });
+
+  /*
+   * An address that already has an account cannot register again, and the
+   * ready email states no answer — so handing off would leave them with no
+   * way to see it. They get the full results and a sign-in link instead.
+   */
+  it('mails the full results to an existing account and hands back no token', async () => {
+    accounts.exists.mockResolvedValue(true);
+
+    const response = await request(buildApp())
+      .post('/api/coast-fire/email-results')
+      .send({ ...SCENARIO, email: 'reader@example.com' });
+
+    expect(response.status).toBe(200);
+    expect(response.body.ref).toBeNull();
+    expect(response.body.existingAccount).toBe(true);
+    expect(leads.disclose).not.toHaveBeenCalled();
+    expect(email.ready).not.toHaveBeenCalled();
+    const [, , ctaUrl, options] = email.send.mock.calls[0] as unknown as [string, unknown, string, { existingAccount: boolean }];
+    expect(ctaUrl).toBe('http://localhost:3001/login');
+    expect(options).toEqual({ existingAccount: true });
   });
 
   /*
@@ -106,7 +147,7 @@ describe('POST /api/coast-fire/email-results', () => {
 
     expect(response.body.ref).toMatch(/^[a-f0-9]{48}$/);
     // The same one the email links to, so both routes restore the same run.
-    const ctaUrl = new URL((email.send.mock.calls[0] as unknown as [string, unknown, string])[2]);
+    const ctaUrl = new URL(readyCtaUrl());
     expect(ctaUrl.searchParams.get('ref')).toBe(response.body.ref);
     // Marked before it was returned, never after.
     expect(leads.disclose).toHaveBeenCalledWith(response.body.ref);
@@ -128,7 +169,24 @@ describe('POST /api/coast-fire/email-results', () => {
 
     expect(response.status).toBe(200);
     expect(response.body.ref).toBeNull();
-    expect(email.send).toHaveBeenCalled();
+    // The lead stored, so its link still works: the ready email goes out.
+    expect(email.ready).toHaveBeenCalled();
+  });
+
+  /*
+   * The answer is shown in the account the link creates, so the ordinary
+   * message states none of it — only what the visitor typed, and the way in.
+   */
+  it('sends the figure-free ready email when the lead stored', async () => {
+    await request(buildApp())
+      .post('/api/coast-fire/email-results')
+      .send({ ...SCENARIO, email: 'reader@example.com' });
+
+    expect(email.send).not.toHaveBeenCalled();
+    const [options] = email.ready.mock.calls[0];
+    expect(options.calculator).toBe('coast_fire');
+    expect(options.email).toBe('reader@example.com');
+    expect(options.inputs).toContainEqual(['Retirement age', String(SCENARIO.retirementAge)]);
   });
 
   /* No lead row, nothing to continue from — and nothing to disclose. */
@@ -144,6 +202,8 @@ describe('POST /api/coast-fire/email-results', () => {
   });
 
   it('emails figures it computed rather than figures it was handed', async () => {
+    // Only the no-lead fallback mails figures at all.
+    leads.record.mockResolvedValue(false);
     const response = await request(buildApp())
       .post('/api/coast-fire/email-results')
       // A caller-supplied result must not be able to reach an inbox under our
@@ -164,8 +224,7 @@ describe('POST /api/coast-fire/email-results', () => {
   it('links the email at the token-stripping redirect, never at the figures', async () => {
     await request(buildApp()).post('/api/coast-fire/email-results').send({ ...SCENARIO, email: 'reader@example.com' });
 
-    const ctaUrl = (email.send.mock.calls[0] as unknown as [string, unknown, string])[2];
-    const parsedCtaUrl = new URL(ctaUrl);
+    const parsedCtaUrl = new URL(readyCtaUrl());
     expect(parsedCtaUrl.pathname).toBe('/coast-fire/continue');
     expect([...parsedCtaUrl.searchParams.keys()]).toEqual(['ref']);
     expect(parsedCtaUrl.searchParams.get('ref')).toMatch(/^[a-f0-9]{48}$/);
@@ -180,6 +239,8 @@ describe('POST /api/coast-fire/email-results', () => {
       .send({ ...SCENARIO, email: 'reader@example.com' });
 
     expect(response.status).toBe(200);
+    // No account-side copy to point at, so the full results go out instead.
+    expect(email.ready).not.toHaveBeenCalled();
     const ctaUrl = (email.send.mock.calls[0] as unknown as [string, unknown, string])[2];
     expect(ctaUrl).toBe('http://localhost:3001/getstarted?source=coast-fire-calculator');
   });
@@ -224,7 +285,7 @@ describe('POST /api/coast-fire/email-results', () => {
   });
 
   it('says so when the send itself failed, rather than claiming it sent', async () => {
-    email.send.mockResolvedValue(false);
+    email.ready.mockResolvedValue(false);
 
     const response = await request(buildApp())
       .post('/api/coast-fire/email-results')
@@ -245,6 +306,7 @@ describe('POST /api/coast-fire/email-results', () => {
     expect(response.status).toBe(400);
     expect(response.body.field).toBe(field);
     expect(email.send).not.toHaveBeenCalled();
+    expect(email.ready).not.toHaveBeenCalled();
   });
 
   it('names the figure it refused so the form can point at the box', async () => {
@@ -255,6 +317,7 @@ describe('POST /api/coast-fire/email-results', () => {
     expect(response.status).toBe(400);
     expect(response.body.field).toBe('retirementAge');
     expect(email.send).not.toHaveBeenCalled();
+    expect(email.ready).not.toHaveBeenCalled();
   });
 
   /*
@@ -269,7 +332,7 @@ describe('POST /api/coast-fire/email-results', () => {
 
     expect(first.status).toBe(200);
     expect(second.status).toBe(429);
-    expect(email.send).toHaveBeenCalledTimes(1);
+    expect(email.ready).toHaveBeenCalledTimes(1);
   });
 
   it('keeps a low default limit when the environment value is malformed', async () => {

@@ -138,7 +138,7 @@ describe('RegisterForm', () => {
       expect(within(summary).getByText('$1.2M')).toBeInTheDocument();
       expect(within(summary).getByText('$95K')).toBeInTheDocument();
       expect(screen.getByText('No credit card required')).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: /Create account and continue/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Create account and (continue|see my result)/i })).toBeInTheDocument();
     });
 
     /** What `/coast-fire/continue` leaves behind after stripping the URL. */
@@ -168,11 +168,11 @@ describe('RegisterForm', () => {
 
       const summary = screen.getByRole('region', { name: 'Your Coast FIRE scenario' });
       expect(summary).toHaveAttribute('data-cs-mask');
-      // $545,371 on these inputs — derived from the seven numbers, not stored
-      // alongside them, so the page cannot disagree with the calculator.
-      expect(within(summary).getByText('$545K')).toBeInTheDocument();
+      // What they entered, never what it produced: the answer opens in the
+      // account, so the $545,371 these inputs give is not stated here.
       expect(within(summary).getByText('$400K')).toBeInTheDocument();
-      expect(within(summary).getByText('Not yet')).toBeInTheDocument();
+      expect(within(summary).queryByText('$545K')).not.toBeInTheDocument();
+      expect(within(summary).queryByText(/reached|not yet/i)).not.toBeInTheDocument();
     });
 
     it('exchanges an emailed token for the scenario and prefills that address', async () => {
@@ -414,7 +414,7 @@ describe('RegisterForm', () => {
       await screen.findByRole('region', { name: 'Your modeled retirement scenario' });
 
       fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'Password1' } });
-      fireEvent.click(screen.getByRole('button', { name: /Create account and continue/i }));
+      fireEvent.click(screen.getByRole('button', { name: /Create account and (continue|see my result)/i }));
 
       await waitFor(() => expect(push).toHaveBeenCalledWith('/verify-email?signup_flow=free_trial'));
       const registerCall = (fetchMock as unknown as jest.Mock).mock.calls.find(
@@ -542,7 +542,7 @@ describe('RegisterForm', () => {
       render(<RegisterForm variant="trial" />);
       await screen.findByRole('region', { name: 'Your modeled retirement scenario' });
       fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'Password1' } });
-      fireEvent.click(screen.getByRole('button', { name: /Create account and continue/i }));
+      fireEvent.click(screen.getByRole('button', { name: /Create account and (continue|see my result)/i }));
 
       await waitFor(() => expect(push).toHaveBeenCalledWith('/app'));
       expect(push).not.toHaveBeenCalledWith('/verify-email?signup_flow=free_trial');
@@ -565,14 +565,95 @@ describe('RegisterForm', () => {
       );
     });
 
+    /*
+     * A token the calculator page was handed proves nothing about the inbox,
+     * so the server records the address as unverified — but it still resolved
+     * the lead and sent no code, and says so. Nothing should stand between
+     * the password and the result the calculator sent them here to see.
+     */
+    it('opens the workspace for a calculator handoff the server accepted', async () => {
+      const token = 'd'.repeat(48);
+      searchParams = new URLSearchParams(`source=${RETIREMENT_SIGNUP_SOURCE}`);
+      handOverRetirementRef(token);
+      global.fetch = jest.fn(async (url: RequestInfo | URL) => {
+        if (String(url).includes('/auth/register')) {
+          return {
+            ok: true,
+            json: async () => ({
+              token: 'trial-token',
+              user: { email: 'reader@example.com', emailVerified: false },
+              firstDecisionPending: true,
+            }),
+          };
+        }
+        return {
+          ok: true,
+          json: async () => ({
+            email: 'reader@example.com',
+            inputs: RETIREMENT_SCENARIO,
+            outcome: { survivalRate: 0.92, sequencesTested: 800, sequencesSurvived: 736 },
+          }),
+        };
+      }) as unknown as typeof fetch;
+
+      render(<RegisterForm variant="trial" />);
+      await screen.findByRole('region', { name: 'Your modeled retirement scenario' });
+      fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'Password1' } });
+      fireEvent.click(screen.getByRole('button', { name: /Create account and see my result/i }));
+
+      await waitFor(() => expect(push).toHaveBeenCalledWith('/app'));
+      expect(push).not.toHaveBeenCalledWith('/verify-email?signup_flow=free_trial');
+      expect(pushTrialSignupCompleted).toHaveBeenCalledWith('calculator_handoff');
+      expect(sessionStorage.getItem(PENDING_FIRST_DECISION_STORAGE_KEY)).not.toBeNull();
+    });
+
+    /*
+     * The ready email states no figures and the calculator page has already
+     * navigated away. If this address already has an account, registration
+     * cannot seed the lead — so the signup page must show the answer itself.
+     */
+    it('shows the result when registration refuses an existing account', async () => {
+      const token = 'd'.repeat(48);
+      searchParams = new URLSearchParams(`source=${RETIREMENT_SIGNUP_SOURCE}`);
+      handOverRetirementRef(token);
+      global.fetch = jest.fn(async (url: RequestInfo | URL) => {
+        if (String(url).includes('/auth/register')) {
+          return {
+            ok: false,
+            status: 409,
+            json: async () => ({ error: 'User with this email already exists' }),
+          };
+        }
+        return {
+          ok: true,
+          json: async () => ({
+            email: 'reader@example.com',
+            inputs: RETIREMENT_SCENARIO,
+            outcome: { survivalRate: 0.92, sequencesTested: 800, sequencesSurvived: 736 },
+          }),
+        };
+      }) as unknown as typeof fetch;
+
+      render(<RegisterForm variant="trial" />);
+      await screen.findByRole('region', { name: 'Your modeled retirement scenario' });
+      fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'Password1' } });
+      fireEvent.click(screen.getByRole('button', { name: /Create account and see my result/i }));
+
+      expect(await screen.findByText(/you already have an ask linc account/i)).toBeInTheDocument();
+      expect(screen.getByText('92.0% lasted')).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: /sign in to your account/i })).toHaveAttribute('href', '/login');
+      expect(push).not.toHaveBeenCalledWith('/app');
+    });
+
     it('still verifies when the server does not say the address was proved', async () => {
       const token = 'd'.repeat(48);
       searchParams = new URLSearchParams(`source=${RETIREMENT_SIGNUP_SOURCE}`);
       handOverRetirementRef(token);
       global.fetch = jest.fn(async (url: RequestInfo | URL) => {
         if (String(url).includes('/auth/register')) {
-          // A token went up, but the server did not accept it as proof — a
-          // lead sent to a different address, or an expired one.
+          // A token went up, but the server did not resolve it — a lead sent
+          // to a different address, or an expired one — so no first decision
+          // is coming and the signup verifies like any other.
           return {
             ok: true,
             json: async () => ({
@@ -594,7 +675,7 @@ describe('RegisterForm', () => {
       render(<RegisterForm variant="trial" />);
       await screen.findByRole('region', { name: 'Your modeled retirement scenario' });
       fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'Password1' } });
-      fireEvent.click(screen.getByRole('button', { name: /Create account and continue/i }));
+      fireEvent.click(screen.getByRole('button', { name: /Create account and (continue|see my result)/i }));
 
       await waitFor(() => expect(push).toHaveBeenCalledWith('/verify-email?signup_flow=free_trial'));
     });
@@ -663,7 +744,7 @@ describe('RegisterForm', () => {
         // claimed for whichever address is finally submitted.
         fireEvent.change(screen.getByLabelText('Email address'), { target: { value: 'reader@example.com' } });
         fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'Password1' } });
-        fireEvent.click(screen.getByRole('button', { name: /Create account and continue/i }));
+        fireEvent.click(screen.getByRole('button', { name: /Create account and (continue|see my result)/i }));
 
         await waitFor(() => expect(push).toHaveBeenCalled());
         const registerCall = (fetchMock as unknown as jest.Mock).mock.calls.find(
@@ -713,39 +794,17 @@ describe('RegisterForm', () => {
         ([url]) => String(url).includes('/auth/register'),
       );
       expect(JSON.parse(registerCall![1].body as string).calculatorRef).toBe(token);
+      // This page opens the workspace on `firstDecisionPending`, and says so,
+      // so the server may skip the code for it.
+      expect(JSON.parse(registerCall![1].body as string).acceptsFirstDecisionHandoff).toBe(true);
       unmount();
     });
 
     /*
-     * The email stated a survival figure. Both the engine and the market
-     * dataset change inside the token's 90 days, so the page shows what was
-     * sent rather than anything recomputed.
+     * The answer opens in the account, so the page before it states none —
+     * not even a verdict the lead carries from an older results email.
      */
-    /*
-     * Whole-percent rounding turned a 99.6% survival rate into "100% lasted"
-     * while the email said 99.6%. The figure is stored precisely so the page
-     * and the inbox agree; rounding it here gave that away.
-     */
-    it('never rounds the emailed verdict up to a stronger claim', async () => {
-      searchParams = new URLSearchParams(`source=${RETIREMENT_SIGNUP_SOURCE}`);
-      handOverRetirementRef('c'.repeat(48));
-      global.fetch = jest.fn(async () => ({
-        ok: true,
-        json: async () => ({
-          email: 'reader@example.com',
-          inputs: RETIREMENT_SCENARIO,
-          outcome: { survivalRate: 0.996, sequencesTested: 685, sequencesSurvived: 682 },
-        }),
-      })) as unknown as typeof fetch;
-
-      render(<RegisterForm variant="trial" />);
-
-      const summary = await screen.findByRole('region', { name: 'Your modeled retirement scenario' });
-      expect(within(summary).getByText('99.6% lasted')).toBeInTheDocument();
-      expect(within(summary).queryByText('100% lasted')).not.toBeInTheDocument();
-    });
-
-    it('shows the verdict the email stated', async () => {
+    it('states no verdict, even one the lead carries', async () => {
       searchParams = new URLSearchParams(`source=${RETIREMENT_SIGNUP_SOURCE}`);
       handOverRetirementRef('e'.repeat(48));
       global.fetch = jest.fn(async () => ({
@@ -760,7 +819,9 @@ describe('RegisterForm', () => {
       render(<RegisterForm variant="trial" />);
 
       const summary = await screen.findByRole('region', { name: 'Your modeled retirement scenario' });
-      expect(within(summary).getByText('62.0% lasted')).toBeInTheDocument();
+      expect(within(summary).queryByText(/lasted/)).not.toBeInTheDocument();
+      // A saved run is promised as waiting behind the password.
+      expect(screen.getByRole('heading', { name: 'Choose a password to see it.' })).toBeInTheDocument();
     });
 
     /* A same-tab click-through has no emailed verdict, so it claims none. */
@@ -906,7 +967,7 @@ describe('RegisterForm', () => {
 
       render(<RegisterForm variant="trial" />);
       fillForm();
-      fireEvent.click(screen.getByRole('button', { name: /Create account and continue|Start planning/i }));
+      fireEvent.click(screen.getByRole('button', { name: /Create account and (continue|see my result)|Start planning/i }));
 
       await waitFor(() => expect(push).toHaveBeenCalledWith('/verify-email?signup_flow=free_trial'));
       const registerCall = (global.fetch as jest.Mock).mock.calls.find(
@@ -1078,7 +1139,7 @@ describe('RegisterForm', () => {
       expect(screen.getByRole('heading', { name: 'Your subscription is ready.' })).toBeInTheDocument();
 
       fillForm();
-      fireEvent.click(screen.getByRole('button', { name: /Create account and continue/i }));
+      fireEvent.click(screen.getByRole('button', { name: /Create account and (continue|see my result)/i }));
 
       await waitFor(() => expect(global.fetch).toHaveBeenCalled());
       const body = JSON.parse((global.fetch as jest.Mock).mock.calls[0][1].body as string);

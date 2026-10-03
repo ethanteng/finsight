@@ -30,13 +30,33 @@ export interface RetirementEmail {
 }
 
 /*
- * The link lands on signup with this address already filled in, and following
- * it is what proves the address — so a password really is all that is left,
- * and the run below becomes the first decision in the new account. The label
- * says what pressing it does, rather than naming the benefit and leaving the
- * step a surprise.
+ * This message is now the fallback for a run whose lead did not store (see
+ * `email/calculator-ready.ts` for the ordinary one), so its link is plain
+ * signup with no run behind it. It promises an account, not this run as its
+ * first decision. The label says what pressing it does.
  */
-const CTA_LABEL = 'Finish creating your account';
+const CTA_LABEL = 'Create your free account';
+
+/** The same message, sent to an address that already has an Ask Linc account. */
+const EXISTING_ACCOUNT_CTA_LABEL = 'Sign in to Ask Linc';
+
+interface ResultsEmailOptions {
+  email: string;
+  ctaUrl: string;
+  calculatorUrl: string;
+  /** The address already has an account, so the link signs in rather than signs up. */
+  existingAccount?: boolean;
+}
+
+function ctaLabel(options: ResultsEmailOptions): string {
+  return options.existingAccount ? EXISTING_ACCOUNT_CTA_LABEL : CTA_LABEL;
+}
+
+function nextStep(options: ResultsEmailOptions): string {
+  return options.existingAccount
+    ? 'Sign in to test the change you are weighing against your real numbers.'
+    : 'Connect your accounts and test the change you are weighing against your real numbers. Free for 30 days, no credit card required.';
+}
 
 /** What a six-number model cannot answer, as on the page's cross-sell. */
 const DECISIONS = [
@@ -250,7 +270,7 @@ function inputsHtml(result: RetirementQuickPlanResult): string {
   <div class="feature-list" style="margin: 22px 0; padding: 20px; border: 1px solid #d8d2c5; border-radius: 14px; background-color: #f8f5ed;">
     ${kickerHtml('What you entered')}
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width: 100%;">
-      ${inputRows(result).map(([label, value]) => `
+      ${retirementInputRows(result).map(([label, value]) => `
       <tr>
         <td style="padding: 5px 0; color: #526d64; font-size: 14px;">${escapeHtml(label)}</td>
         <td align="right" style="padding: 5px 0; color: #123c2f; font-size: 14px; font-weight: 700;">${escapeHtml(value)}</td>
@@ -259,7 +279,8 @@ function inputsHtml(result: RetirementQuickPlanResult): string {
   </div>`;
 }
 
-function inputRows(result: RetirementQuickPlanResult): Array<[string, string]> {
+/** What the visitor entered, as label/value rows. Shared with the "result ready" email. */
+export function retirementInputRows(result: RetirementQuickPlanResult): Array<[string, string]> {
   const { inputs, allocation } = result;
   return [
     ['Your age today', `${inputs.currentAge}`],
@@ -293,7 +314,7 @@ function limitationsHtml(result: RetirementQuickPlanResult): string {
 export function buildRetirementResultsEmail(
   result: RetirementQuickPlanResult,
   primary: QuickPlanScenario,
-  options: { email: string; ctaUrl: string; calculatorUrl: string },
+  options: ResultsEmailOptions,
 ): RetirementEmail {
   // One decimal, matching the card. Rounding to whole percent turned 99.6%
   // into "100%" in the subject line while the message itself said 99.6% —
@@ -332,12 +353,11 @@ export function buildRetirementResultsEmail(
 
       <div class="button-wrap" style="margin: 28px 0; text-align: center;">
         <a href="${ctaUrl}" class="cta-button" style="display: inline-block; padding: 14px 26px; border: 1px solid #123c2f; border-radius: 999px; background-color: #123c2f; color: #ffffff; text-decoration: none; font-size: 15px; font-weight: 700;">
-          ${escapeHtml(CTA_LABEL)}
+          ${escapeHtml(ctaLabel(options))}
         </a>
       </div>
       <p style="margin: 0 0 10px; color: #71857f; font-size: 13px; line-height: 1.6; text-align: center;">
-        Your address is already confirmed by this link &mdash; just pick a password. This run
-        will be waiting as your first decision. Free for 30 days, no credit card required.
+        ${escapeHtml(nextStep(options))}
       </p>
       <div class="fallback-link" style="margin: 22px 0; padding: 16px; border: 1px solid #d8d2c5; border-radius: 12px; background-color: #f8f5ed; color: #526d64; font-size: 12px; line-height: 1.6; word-break: break-all;">
         <strong style="color: #29483f; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;">If the button does not work, use this link:</strong><br />
@@ -360,7 +380,7 @@ export function buildRetirementResultsEmail(
 export function buildRetirementResultsText(
   result: RetirementQuickPlanResult,
   primary: QuickPlanScenario,
-  options: { email: string; ctaUrl: string; calculatorUrl: string },
+  options: ResultsEmailOptions,
 ): string {
   const stats = statRows(result, primary)
     .map((stat) => `  ${stat.label}: ${stat.value}\n    ${stat.note}`)
@@ -391,7 +411,7 @@ Each row is a full re-run of the model against the same century of history.
 ${scenarios}
 
 WHAT YOU ENTERED
-${inputRows(result).map(([label, value]) => `  ${label}: ${value}`).join('\n')}
+${retirementInputRows(result).map(([label, value]) => `  ${label}: ${value}`).join('\n')}
 
 SIX NUMBERS ONLY GO SO FAR
 This run used an asset-mix preset and the figures you typed. Ask Linc replaces both
@@ -400,11 +420,10 @@ the model available for the next question you have about it.
 
 ${DECISIONS.map((decision) => `  - ${decision}`).join('\n')}
 
-${CTA_LABEL}:
+${ctaLabel(options)}:
 ${options.ctaUrl}
 
-Your address is already confirmed by this link - just pick a password. This run
-will be waiting as your first decision. Free for 30 days, no credit card required.
+${nextStep(options)}
 
 Run the numbers again: ${options.calculatorUrl}
 

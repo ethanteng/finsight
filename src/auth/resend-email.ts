@@ -3,6 +3,7 @@ import crypto from 'crypto';
 import { createEmailHtml, getBaseUrl } from '../email/templates';
 import { buildCoastFireResultsEmail } from '../email/coast-fire-results';
 import { buildRetirementResultsEmail } from '../email/retirement-results';
+import { buildCalculatorReadyEmail, type CalculatorReadyEmailOptions } from '../email/calculator-ready';
 import type { CoastFireResult } from '../services/coast-fire';
 import type {
   QuickPlanScenario,
@@ -251,7 +252,8 @@ export async function sendContactEmail(
 export async function sendCoastFireResultsEmail(
   email: string,
   result: CoastFireResult,
-  ctaUrl: string
+  ctaUrl: string,
+  { existingAccount = false }: { existingAccount?: boolean } = {},
 ): Promise<boolean> {
   try {
     const resend = getResendClient();
@@ -265,6 +267,7 @@ export async function sendCoastFireResultsEmail(
       email,
       ctaUrl,
       calculatorUrl: `${getBaseUrl()}/coast-fire-calculator`,
+      existingAccount,
     });
 
     const { error } = await resend.emails.send({
@@ -289,6 +292,45 @@ export async function sendCoastFireResultsEmail(
 }
 
 /**
+ * Tell a calculator visitor their result is waiting in Ask Linc, without
+ * stating it. See `email/calculator-ready.ts` for why the answer stays out of
+ * the inbox, and when the full results email is sent instead.
+ */
+export async function sendCalculatorReadyEmail(
+  options: CalculatorReadyEmailOptions,
+): Promise<boolean> {
+  try {
+    const resend = getResendClient();
+
+    if (!resend) {
+      console.log('Resend not configured, skipping calculator result-ready email');
+      return true;
+    }
+
+    const message = buildCalculatorReadyEmail(options);
+
+    const { error } = await resend.emails.send({
+      from: 'Ask Linc <noreply@asklinc.com>',
+      to: options.email,
+      subject: message.subject,
+      html: message.html,
+      text: message.text,
+    });
+
+    if (error) {
+      console.error('Resend error:', error);
+      return false;
+    }
+
+    console.log(`Calculator result-ready email sent to ${options.email}`);
+    return true;
+  } catch (error) {
+    console.error('Error sending calculator result-ready email:', error);
+    return false;
+  }
+}
+
+/**
  * Send someone the retirement quick-plan results they asked for.
  *
  * Both parts are sent, for the same reason as the Coast FIRE message: a client
@@ -299,7 +341,8 @@ export async function sendRetirementResultsEmail(
   email: string,
   result: RetirementQuickPlanResult,
   primary: QuickPlanScenario,
-  ctaUrl: string
+  ctaUrl: string,
+  { existingAccount = false }: { existingAccount?: boolean } = {},
 ): Promise<boolean> {
   try {
     const resend = getResendClient();
@@ -313,6 +356,7 @@ export async function sendRetirementResultsEmail(
       email,
       ctaUrl,
       calculatorUrl: `${getBaseUrl()}/retirement-calculator`,
+      existingAccount,
     });
 
     const { error } = await resend.emails.send({

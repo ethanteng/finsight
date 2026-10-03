@@ -442,7 +442,7 @@ export function pushTrialVerifySuccess(): void {
  * Emit before clearing same-tab attribution. Skipping is not email verification.
  */
 export function pushTrialSignupCompleted(
-  completionMethod: 'email_link' | 'verification_code' | 'verification_skipped' | 'already_verified',
+  completionMethod: 'email_link' | 'verification_code' | 'verification_skipped' | 'already_verified' | 'calculator_handoff',
 ): void {
   pushTrialFunnelEvent('trial_signup_completed', { completion_method: completionMethod });
 }

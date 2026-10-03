@@ -108,11 +108,13 @@ same sourcing is still in the assumptions disclosure, which a visitor only
 reaches by running the model, so the page no longer credits its data sources to
 someone who reads it without running anything.
 
-## The email gate
+## The answer opens in Ask Linc
 
-A plan result is held back until the visitor gives an email address, and a
-`rates` result is not. The same gate covers the Coast FIRE page. See **The email
-gate** in `COAST_FIRE_EMAIL_CAPTURE.md`.
+A plan result is not shown on this page. The visitor gives an email address,
+chooses a password, and sees it as the first decision in their account, with no
+verification code in between. A `rates` result is shown, because it has no run
+to save. The same applies to the Coast FIRE page. See **The answer opens in Ask
+Linc** in `COAST_FIRE_EMAIL_CAPTURE.md`.
 
 ## Three runs, then the save
 
@@ -377,32 +379,38 @@ without affecting any answer in the product.
 
 ## Saving a run to a new account
 
-The capture under the result asks for an account rather than an inbox copy:
-**"Save these results to your free account."** Submitting it does two things:
-it sends the email, whose **"Finish creating your account"** link lands on
-signup with the address already filled in, and it takes the visitor to that
-same page immediately rather than asking them to go and find the message. The
-run becomes the first decision in the new account either way, and a password is
-the only thing left.
+The capture under the locked result asks for an email, then takes the visitor
+straight to signup with the address prefilled ("See my result in Ask Linc").
+Submitting also sends a figure-free **"Your result is ready in Ask Linc"**
+email whose link lands on the same signup page — what someone who leaves before
+choosing a password comes back to. The run becomes the first decision in the
+new account either way, and a password is the only thing left. See **Saving a
+run to an account** in `COAST_FIRE_EMAIL_CAPTURE.md` for the shared rules; the
+retirement-specific path is below.
 
-**Only the emailed route skips the verification code, and the difference is the
-point of the token.** Every other registration goes to `/verify-email` and
-enters a mailed code. A lead token is forty-eight random characters, and when
-the only place it ever went is an email to the lead's own address, presenting
-one *and* registering that address demonstrates control of the inbox — the same
-thing the code demonstrates, one round trip earlier. Asking for it twice is not
-more proof, just more steps.
+**Any resolved lead skips the verification code.** A code between the password
+and the answer is where the visitor leaves, and the calculators exist to get
+them in front of that answer in Ask Linc. When the signup page sends
+`acceptsFirstDecisionHandoff: true`, `/auth/register` creates no code row and
+sends no code mail, and reports `firstDecisionPending: true` so the client opens
+`/app` rather than `/verify-email`. A page that does not send it still gets a
+code for a disclosed lead (see the deploy note below).
 
-The token handed back to the calculator page carries no such argument. Anyone
-can type a stranger's address into a public calculator, and returning the token
-to whoever did would let them register that address with the code skipped — the
-lead's own address check cannot catch it, because the address matches by
-construction. So `POST /email-results` stamps `tokenDisclosedAt` on the row
-before it returns the token, and `/auth/register` withholds the skip from any
-lead carrying the stamp. That signup still saves the run; it just verifies by
-code like every other one. If the stamp cannot be written, no token is
-returned and the page stays where it is — the results are in the inbox either
-way.
+This is a choice about friction, not about proof, and the account records the
+difference. A lead token is forty-eight random characters. When the only place
+it ever went is an email to the lead's own address, presenting one *and*
+registering that address demonstrates control of the inbox — so such a signup
+is stored with `emailVerified: true`. The token handed back to the calculator
+page proves nothing about the inbox: anyone can type a stranger's address into
+a public calculator, and the lead's own address check cannot catch it, because
+the address matches by construction. So `POST /email-results` stamps
+`tokenDisclosedAt` on the row before it returns the token, and a signup with a
+stamped lead is stored with `emailVerified: false`. Nothing server-side gates
+on `emailVerified`, and the verify page has always offered "Skip for now", so
+the code was never what guarded the workspace. The owner of an address someone
+else registered can take the account back by resetting the password from their
+own inbox. If the stamp cannot be written, no token is returned and the page
+shows the result itself — there is no run to seed an account from.
 
 Going straight there also means no `/signup-context` exchange: the page stores
 the run in sessionStorage next to the cookie, carrying the same token, so
@@ -421,56 +429,61 @@ Three things keep that honest:
 **The `tokenDisclosedAt` migration has to land with or before the backend.**
 Both directions fail safe, which is worth knowing rather than relying on: with
 the column missing, the disclosure write throws, no `ref` is returned, and the
-page stays on "check your inbox" — the behaviour that shipped before this. A
-lead read against a missing column errors too, which resolves to no lead, so
-the code is sent. More verification, never less.
+page shows the result itself rather than sending the visitor to an empty
+workspace. A lead read against a missing column errors too, which resolves to
+no lead, so the code is sent. More verification, never less.
 
 **Deploy the frontend first, or with the backend — never after.** This is the
 opposite of the usual order here, and it is worth stating because getting it
 wrong strands people silently.
 
 - *Frontend first* is safe. The new page sends `calculatorRef`, which an older
-  backend ignores as an unknown body field, and reads `user.emailVerified`,
-  which an older backend omits — so it falls through to the verification screen
-  and the older backend has mailed a code. Nothing breaks.
-- *Backend first* is not. The new backend stops mailing the code on this path
-  while the old page still sends every signup to `/verify-email`, where they
-  wait for mail that will never arrive. Nothing errors; it simply looks like a
-  broken email pipeline.
+  backend ignores as an unknown body field, and reads `user.emailVerified` and
+  `firstDecisionPending`, which an older backend omits or reports as false — so
+  it falls through to the verification screen and the older backend has mailed
+  a code. Nothing breaks.
+- *Backend first* was not, when the only skip was the emailed link's: the
+  backend stopped mailing the code while the old page still sent every signup
+  to `/verify-email`, where they waited for mail that never arrived. Nothing
+  errored; it simply looked like a broken email pipeline. The later skip for
+  the page's own handoff does not repeat that: the backend skips the code for
+  a disclosed lead only when the page sends `acceptsFirstDecisionHandoff`,
+  which an old page never does, so it still gets its code.
 
   The straight-to-signup step is safe in both orders on its own: an old page
   ignores the `ref` a new backend returns, and a new page gets no `ref` from an
-  old backend and stays where it is. It is the verification skip above that
-  constrains the order, and it always did.
+  old backend and shows the result on the page. With the handoff skip gated on
+  the page's opt-in, neither order strands anyone any more; frontend first
+  remains the conventional order.
 
 `VerifyEmailForm` bounces an already-verified session into the workspace, which
 covers someone landing there later — but that bounce lives in the *frontend*,
-so it cannot rescue a backend-first rollout. Order is still the control.
+so it could not rescue the original backend-first rollout. The opt-in is what
+does that now.
 
 - `resolveCalculatorLead` runs **before** the account is created, on the
   server, from the token alone. The client sends a token, never a claim; the
-  response reports `user.emailVerified` and `RegisterForm` reads that answer
-  rather than inferring it from what it sent.
-- The address match is what turns possession of the token into proof. A lead
-  sent to someone else proves nothing about the person registering, so it
-  resolves to null and the code is sent as usual.
+  response reports `user.emailVerified` and `firstDecisionPending`, and
+  `RegisterForm` reads those answers rather than inferring them from what it
+  sent.
+- The address match is what turns possession of the token into a resolved lead.
+  A lead sent to someone else proves nothing about the person registering, so
+  it resolves to null and the code is sent as usual.
 - No verification row is created on this path either. An unused code is one
   more live credential on an account that has no need of it.
-
-Most of the path already existed for the results email. What is new is the last
-step.
 
 | Step | Where |
 |---|---|
 | Capture posts the six numbers | `RetirementEmailCapture.tsx` → `POST /api/retirement-quickplan/email-results` |
 | Lead stored with the plan and the verdict | `services/retirement-leads.ts` |
+| Figure-free ready email (or full results if store failed) | `email/calculator-ready.ts` / `email/retirement-results.ts` |
 | Token stamped disclosed, then returned as `ref` | `markRetirementLeadTokenDisclosed` — before the response |
 | Page writes the same cookie and leaves for signup | `RetirementEmailCapture.tsx` → `writeHandoverToken`, `leaveForSignup` |
-| Email links to `/retirement/continue?ref=…` | `email/retirement-results.ts` |
+| Email links to `/retirement/continue?ref=…` | `email/calculator-ready.ts` |
 | Token moved into a first-party cookie, URL cleaned | `app/retirement/continue/route.ts` |
 | Token exchanged, address prefilled | `RegisterForm.tsx` → `GET /signup-context/:token` |
 | Token sent with the registration | `RegisterForm.tsx` → `POST /auth/register` (`calculatorRef`) |
-| Token resolved; address proved only if never disclosed | `resolveCalculatorLead` + `tokenDisclosed` — before the account exists |
+| Lead resolved; code skipped; address proved only if never disclosed | `resolveCalculatorLead` + `tokenDisclosed` — before the account exists |
 | Run written as the first decision | `seedFirstDecisionFromLead` — after the response |
 | Registration session carried into `/app` | `RegisterForm.tsx` — no re-entered password |
 
