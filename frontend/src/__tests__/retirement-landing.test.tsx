@@ -12,7 +12,7 @@ import {
   RETIREMENT_SIGNUP_HREF,
   readRetirementSignupContext,
 } from '@/lib/retirement-signup-context';
-import { CALCULATOR_RESULTS_UNLOCK_KEY } from '@/lib/calculator-results-gate';
+import { revealCalculatorResult } from '@/test-utils/calculator-reveal';
 
 jest.mock('@/lib/contentsquare', () => ({ trackContentsquareEvent: jest.fn() }));
 
@@ -69,9 +69,6 @@ describe('retirement landing page', () => {
   const originalFetch = global.fetch;
 
   beforeEach(() => {
-    // These cases are about the answer, so the results email has already been
-    // given. The gate in front of it has its own cases in calculator-results-gate.
-    window.sessionStorage.setItem(CALCULATOR_RESULTS_UNLOCK_KEY, 'reader@example.com');
   });
 
   afterEach(() => {
@@ -164,7 +161,9 @@ describe('retirement landing page', () => {
       const { container } = render(<React.StrictMode><RetirementQuickPlan headline="When can I retire?" initialRetirementAge={60} /></React.StrictMode>);
       expect(trackContentsquareEvent).not.toHaveBeenCalledWith('retirement_model_run');
       fireEvent.submit(container.querySelector('form')!);
-      await screen.findByText(/Retiring at .* worked in/);
+      // A run is counted when it commits, which no longer waits on the email
+      // form that stands in front of the answer.
+      await screen.findByText('Your result is ready.');
       const successes = () => jest.mocked(trackContentsquareEvent).mock.calls.filter(([event]) => event === 'retirement_model_run');
       await waitFor(() => expect(successes()).toHaveLength(1));
       fireEvent.submit(container.querySelector('form')!);
@@ -208,6 +207,7 @@ describe('retirement landing page', () => {
     try {
       const { container } = render(<RetirementQuickPlan headline="When can I retire?" initialRetirementAge={60} />);
       fireEvent.submit(container.querySelector('form')!);
+      await revealCalculatorResult();
       await screen.findByText(/Retiring at .* worked in/);
 
       const answer = await screen.findByText(reading.headline);
@@ -259,6 +259,7 @@ describe('retirement landing page', () => {
     try {
       const { container } = render(<RetirementQuickPlan headline="When can I retire?" initialRetirementAge={60} />);
       fireEvent.submit(container.querySelector('form')!);
+      await revealCalculatorResult();
       await screen.findByText(/Retiring at .* worked in/);
 
       expect(screen.getByText(/carry forward the retirement age, assets, and spending/i)).toBeInTheDocument();

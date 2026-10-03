@@ -5,104 +5,97 @@
 > handover, and what must not fail the visitor applies identically there.
 
 The `/coast-fire-calculator` page is the acquisition wedge for the Coast FIRE
-beachhead experiment. It answers the free question — "have I reached Coast
-FIRE?" — in the browser, with no account. It now asks for an email address
-before it shows the answer: see **The email gate**. This document covers that
-gate, the plain-language reading printed under the number, and turning an
-anonymous calculator visitor into a known prospect by emailing them their own
-result, which offers them an account rather than just an inbox copy.
+beachhead experiment. It computes the free question — "have I reached Coast
+FIRE?" — in the browser, but answers it in Ask Linc: the visitor gives an
+email address, chooses a password, and sees the result as their account's first
+decision. See **The answer opens in Ask Linc**. The goal is that more people
+experience the value inside the product, not in a calculator outside it. This
+document covers that hand-off, the email that brings back anyone who leaves
+before the password, and the plain-language reading the page still shows on
+the rare run it cannot hand off.
 
 ## The flow
 
 1. A visitor submits the seven inputs. The number is calculated in the browser
-   but not rendered: a locked card stands in for it until an address is given.
-   See **The email gate**.
+   but not rendered: a locked card stands in for it.
 2. The email capture appears beside the locked card. It appears only after a
    submitted run: the page opens with empty personal figures and no result, so
-   there is nothing to email until the visitor asks for an answer — and
+   there is nothing to save until the visitor asks for an answer — and
    collecting an address against figures nobody entered would attach their
    address to our assumptions, not theirs.
 3. `POST /api/coast-fire/email-results` receives the seven inputs and an email
    address. It recomputes the result server-side, stores a `CoastFireLead` row
-   with a random token, and sends the message through Resend.
+   with a random token, and sends the "result ready" email through Resend. That
+   email states no figures; see **The email**.
 4. It then stamps `tokenDisclosedAt` on that row and returns the token as
-   `ref`, and the page reveals the result. When the visitor presses "Save
-   these results to your free account", the page writes the same
-   `/getstarted`-scoped cookie the emailed route would have written, stores
-   the run in sessionStorage beside it, and navigates to
-   `/getstarted?source=coast-fire-calculator&entry=results_page`, the signup
-   page the email would have taken them to, without waiting on their inbox.
-   On a later, already-unlocked run the capture works as it used to: the
-   submit itself navigates. If the stamp fails, no `ref` is returned and no
-   save is offered. The results are in their inbox either way.
+   `ref`. The page writes the `/getstarted`-scoped cookie the emailed route
+   would have written, stores the run in sessionStorage beside it, and
+   navigates to `/getstarted?source=coast-fire-calculator&entry=results_page`.
+   If no `ref` comes back, the page shows the result itself instead; see
+   **When there is no run to hand off**.
 5. After the response, the address is added to MailerLite, in the Coast FIRE
    group.
-6. The email's call to action — "Finish creating your account" — links to
+6. `/getstarted` renders the Coast FIRE variant of the signup page with the
+   email prefilled: "Choose a password to see it", what they saved, their
+   retirement age and spending — and no result. Arriving straight from the
+   page skips the token exchange, because the stored context already carries
+   the same token, and is reported as `calculator_results_page_cta_opened`.
+7. Registering with that token writes the run as the account's first decision,
+   skips the verification code, skips the sign-in form, and opens `/app` on the
+   session registration returns. `/app` waits for the decision and opens it.
+   See **Saving a run to an account**.
+8. The email's call to action, "See my result in Ask Linc", links to
    `/coast-fire/continue?ref=<token>`. This is what someone who left the signup
    page comes back to, and the only route for a visitor whose browser refused
-   the cookie.
-7. That route handler runs server-side, moves the token into a short-lived
-   first-party cookie scoped to `/getstarted`, and redirects to a clean
-   `/getstarted?source=coast-fire-calculator`.
-8. `/getstarted` reads the cookie, exchanges it through
-   `GET /api/coast-fire/signup-context/:token`, clears the cookie, and renders
-   the Coast FIRE variant of the signup page: its own copy, the Coast FIRE
-   number the email stated, what they have saved, and their retirement age,
-   with their email prefilled. Arriving straight from the page skips the
-   exchange — the context stored alongside the cookie already carries the same
-   token — and is reported as `calculator_results_page_cta_opened` rather than
-   the email event.
+   the cookie. That route handler moves the token into a short-lived
+   first-party cookie scoped to `/getstarted` and redirects to a clean
+   `/getstarted?source=coast-fire-calculator`, which exchanges it through
+   `GET /api/coast-fire/signup-context/:token` and continues from step 6.
 
-9. Registering with that token in hand writes the run as the account's first
-   decision, and opens `/app` on the session registration returns rather than
-   sending them to the sign-in form. Whether it also skips the emailed
-   verification code depends on how the token was obtained. See
-   **Saving a run to an account** below.
+The page's own "Stress-test my Coast FIRE plan" button carries no run while
+the result is held back. It reaches signup like any other no-card visitor.
 
-The page's own "Stress-test my Coast FIRE plan" button reaches the same
-tailored page through sessionStorage rather than a token, so both entry points
-continue the same decision.
+## The answer opens in Ask Linc
 
-## The email gate
+Neither calculator shows its answer. A submitted run renders
+`CalculatorLockedResult` in place of the result card: an illustrative card,
+blurred, with fixed figures that are never the visitor's own, and "Your result
+is ready" on top. The capture beside it asks for an email address, and its
+button reads "See my result in Ask Linc".
 
-Both calculators hold their answer back until the visitor gives an email
-address. A submitted run renders `CalculatorLockedResult` in place of the
-result card: an illustrative card, blurred, with fixed figures that are never
-the visitor's own, and "Your result is ready" on top. The capture sits beside
-it in gate mode, and its button reads "Show my results".
+Nothing that restates the answer runs on the page: not the figures, not the
+model reading (`/interpretation` is not called, which also saves a model call
+per anonymous run), not the return comparison or the retirement charts, and
+not the page's own signup CTA. The signup page states no result either. The
+first place the visitor sees their answer is the first decision in their
+account.
 
-Submitting it is the same request as before: the email goes out, the lead is
-stored and MailerLite is updated. What changes is what happens next. The page
-reveals the result and stays where it is, rather than navigating to
-`/getstarted`. The capture turns into a "Save these results to your free
-account" button that holds the lead token. Pressing it writes the handover
-cookie and the signup context, then leaves exactly as the old submit did. The
-cookie is written on the click, not on the send, because it lives ten minutes
-and the visitor may read their result for longer than that. If no token came
-back, the result is still revealed (the email went out) but no save is
-offered: the first decision is seeded only from a resolved lead, so a signup
-would arrive at an account without the run.
-
-Nothing that restates the answer runs while it is locked: not the figures, not
-the model reading (`/interpretation` is not called, which also saves a model
-call per anonymous run), not the return comparison or the retirement charts,
-and not the page's own signup CTA, which would otherwise carry the run to
-`/getstarted` where the signup page shows the number.
-
-One address unlocks every later run in the tab, on either calculator.
-`lib/calculator-results-gate.ts` keeps it in session storage under
-`asklinc.calculator-results-unlocked.v1`, and later captures prefill it. Later
-runs show their result straight away, with the ordinary capture beneath it.
+Every run is held back, including a second run in the same tab: there is no
+tab-wide unlock. `lib/calculator-email-memory.ts` remembers the address in
+session storage so a later form on either calculator is prefilled.
 
 **It is a nudge, not a control**, like the run limit. The Coast FIRE formula
 runs in the browser, and the retirement model's response reaches the browser
-before the gate hides it. Anyone who opens devtools can read the answer. What
-the gate guarantees is only that the rendered page does not contain it.
+before the page hides it. Anyone who opens devtools can read the answer. What
+the page guarantees is only that its rendered content does not contain it.
 
-A retirement `rates` answer is not gated. It has no email to send, because the
-endpoint refuses a run with no portfolio or spending level. It says nothing
-about the visitor's own plan, and its job is to ask for the two numbers that
-produce a plan result, which is gated.
+A retirement `rates` answer is not held back. It has no run to save, because
+the email endpoint refuses a run with no portfolio or spending level. It says
+nothing about the visitor's own plan, and its job is to ask for the two
+numbers that produce a plan result, which is held back.
+
+### When there is no run to hand off
+
+The endpoint returns no `ref` when the lead row did not store, or when the
+disclosure stamp did not. There is then no run for registration to seed, and
+sending the visitor to signup would open an empty workspace under a page that
+promised their result. So the page shows the result itself, with a line saying
+it could not set up the account link, and the reading under it as before.
+
+The capture is keyed on each run rather than on its inputs, so an identical
+re-run is held back again rather than inheriting the previous run's revealed
+state. A send still in flight when the visitor re-runs is ignored when it
+returns.
 
 ## Three runs, then the save
 
@@ -114,7 +107,8 @@ a control, is in `docs/RETIREMENT_QUICKPLAN.md`.
 
 ## The reading under the number
 
-Once the result is unlocked, the page also posts the same seven inputs to
+On the rare run the page shows itself (see **When there is no run to hand
+off**), it also posts the same seven inputs to
 `POST /api/coast-fire/interpretation`, which re-runs the formula server-side and
 asks a model to say what the figures mean. The division is the one
 `docs/SCENARIO_MODELING.md` draws for the authenticated product: the formula
@@ -159,29 +153,37 @@ nothing else.
 
 ## Saving a run to an account
 
-The capture asks "Save these results to your free account", and the email links
-into signup with the address prefilled. Two things happen when someone
-registers with that token:
+The capture takes the visitor to signup with their address prefilled, and the
+email links back to the same place. Three things happen when someone registers
+with that token:
 
-- **The verification code is skipped — but only for a token that was emailed.**
-  A lead token is 48 random characters, and when the only place it ever went is
-  a message to the lead's own address, presenting one *and* registering that
-  address demonstrates exactly what the code demonstrates.
+- **The verification code is skipped, for any resolved lead.** A code between
+  the password and the answer is where the visitor leaves, and the calculators
+  exist to get them in front of that answer in Ask Linc. `/auth/register`
+  creates no code row and sends no code mail, and reports
+  `firstDecisionPending: true` so the client opens `/app` rather than
+  `/verify-email`.
 
-  That argument fails for the token handed back to the page in step 4: anyone
-  can type somebody else's address into the calculator, and returning the token
-  to them would otherwise let them register that address with the code skipped.
-  So the row is stamped `tokenDisclosedAt` before the token is returned, and
-  `/auth/register` withholds the skip from any lead carrying the stamp. Such a
-  signup still saves the run and still verifies by code, like every other one.
+  This is a choice about friction, not about proof, and the account records the
+  difference. A token that only ever left this system inside a message to the
+  lead's own address demonstrates control of that inbox, so such a signup is
+  stored with `emailVerified: true`. The token handed back to the page in step
+  4 demonstrates nothing — anyone can type somebody else's address into the
+  calculator — so the row is stamped `tokenDisclosedAt` before the token is
+  returned, and a signup with a stamped lead is stored with `emailVerified:
+  false`. Nothing server-side gates on `emailVerified`, and the verify page has
+  always offered "Skip for now", so the code was never what guarded the
+  workspace. The owner of an address someone else registered can take the
+  account back by resetting the password from their own inbox.
 
   `resolveCalculatorLead` is resolved on the server, before the account exists,
-  from the token alone — a client cannot declare itself verified — and the
-  addresses must match.
+  from the token alone — a client cannot declare itself verified or skip the
+  code by sending a flag — and the addresses must match.
 - **The run becomes the account's first decision.** `buildCoastFireQuestion`
   states the scenario back in the first person; `buildCoastFireAnswer` states
   the verdict from the *stored* figures, never a fresh run, for the same reason
-  the signup context does.
+  the signup context does. `/app` waits for that write (see
+  `lib/pending-first-decision.ts`) rather than rendering an empty workspace.
 - **The sign-in form is skipped with it.** `/auth/register` already returns a
   usable session, so re-collecting the password set one field earlier proves
   nothing. `/app` re-verifies the token and the subscription on mount, so the
@@ -226,11 +228,10 @@ calculated on the server before the email is built. An email carries Ask Linc
 branding into someone's inbox, so every figure in it has to be one we produced.
 A `coastFireNumber` posted by a caller is ignored.
 
-The figures are also *stored*, and an emailed scenario shows the stored copy
-rather than recomputing. The token lives for 90 days; if the formula changed
-inside that window, a recomputed headline would disagree with the message still
-sitting in the recipient's inbox. A same-tab click-through has nothing stored
-and nothing that could have drifted, so it derives from the seven inputs.
+The figures are also *stored*, and the first decision is written from the
+stored copy rather than a fresh run. The token lives for 90 days; if the
+formula changed inside that window, a recomputed answer could disagree with
+the one the lead was created with.
 
 `src/services/coast-fire.ts` is a deliberate second copy of
 `frontend/src/lib/coast-fire.ts` — the two are separate TypeScript projects and
@@ -238,17 +239,22 @@ cannot import each other. Both suites pin the same worked example
 (`$369,128` from the default scenario), so a change to one formula fails the
 other side's tests.
 
-## Both parts of the message
+## The email
 
-Every send includes an HTML part and a plain-text part with the same content:
-the status, the number, the funded ratio, the retirement target, the
-no-contribution projection, the return-sensitivity comparison, what was
-entered, and the limitations. A text-first client shows the results, not a
-"view this in a browser" stub.
+The ordinary message is `email/calculator-ready.ts`, shared by both
+calculators: "Your Coast FIRE result is ready in Ask Linc", the link back into
+signup, and what the visitor entered. It states no verdict and no figure the
+calculator produced. Mailing the answer would let the inbox stand in for the
+account, and the account is the point. It is sent only when the lead stored,
+because only then does its link resolve to a run an account can be seeded from.
 
-The HTML uses the shared email shell in `src/email/templates.ts`, so the
-message carries the same deep green, lime, and cream as the rest of Ask Linc's
-mail, and the result card mirrors the one on the page.
+When the lead did not store, the route sends the full results email
+(`email/coast-fire-results.ts`) instead: there is no account-side copy to
+point at, and the page shows the result in that case too.
+
+Every send includes an HTML part and a plain-text part with the same content,
+so a text-first client shows the message rather than a "view this in a
+browser" stub. The HTML uses the shared email shell in `src/email/templates.ts`.
 
 ## Environment variables
 
@@ -266,18 +272,20 @@ mail, and the result card mirrors the one on the page.
 
 ## Recalculating after sending
 
-The capture form is keyed on the submitted scenario, so changing the inputs and
-recalculating remounts it. Without that, a visitor who emailed one scenario and
-then recalculated would see the new result claiming its figures had been sent,
-and a response still in flight for the old scenario could confirm the new one.
+The capture form is keyed on each run, so recalculating remounts it. Without
+that, a visitor who saw one run's result and then recalculated would see the
+new run claiming its result was already shown, and a response still in flight
+for the old run could act on the new one. The capture also ignores a send that
+returns after it has been unmounted.
 
 ## What must not fail the visitor
 
-The visitor asked for their results. Neither the lead row nor the mailing list
+The visitor asked for their result. Neither the lead row nor the mailing list
 is allowed to stand between them and that:
 
-- A failed database write costs personalization only. The email still sends,
-  with its CTA pointing at plain `/getstarted`.
+- A failed database write means no run to hand off. The full results email
+  still sends, with its CTA pointing at plain `/getstarted`, and the page shows
+  the result.
 - MailerLite runs after the response and its outcome is recorded, never
   surfaced. A rejected address does not turn a delivered email into an error.
 - A failed *send* is the one case that returns an error (502), because there

@@ -1,6 +1,12 @@
 /**
  * The "email me my Coast FIRE results" message.
  *
+ * Now the fallback for a run whose lead did not store, when there is no
+ * account-side copy to send the visitor to. The ordinary message states no
+ * figures; see `email/calculator-ready.ts`. Its link is therefore plain
+ * signup, and it promises an account rather than this run as its first
+ * decision.
+ *
  * It renders what the page rendered — the same status, the same number, the
  * same funded ratio, the same one-point-either-way comparison, the same
  * assumptions and the same limitations — because the promise made on the
@@ -22,7 +28,7 @@ export interface CoastFireEmail {
   text: string;
 }
 
-const CTA_LABEL = 'Finish creating your account';
+const CTA_LABEL = 'Create your free account';
 
 /** The decisions the number raises but cannot answer, as on the page. */
 const DECISIONS = [
@@ -206,8 +212,9 @@ function sensitivityHtml(result: CoastFireResult): string {
   </table>`;
 }
 
-function inputsHtml(result: CoastFireResult): string {
-  const rows: Array<[string, string]> = [
+/** What the visitor entered, as label/value rows. Shared with the "result ready" email. */
+export function coastFireInputRows(result: CoastFireResult): Array<[string, string]> {
+  return [
     ['Your age today', `${result.currentAge}`],
     ['Retirement age', `${result.retirementAge}`],
     ['Retirement savings today', dollars(result.currentSavings)],
@@ -216,6 +223,10 @@ function inputsHtml(result: CoastFireResult): string {
     ['Expected real return', `${result.realReturnRate}%`],
     ['Withdrawal rate', `${result.withdrawalRate}%`],
   ];
+}
+
+function inputsHtml(result: CoastFireResult): string {
+  const rows = coastFireInputRows(result);
 
   return `
   <div class="feature-list" style="margin: 22px 0; padding: 20px; border: 1px solid #d8d2c5; border-radius: 14px; background-color: #f8f5ed;">
@@ -276,8 +287,8 @@ export function buildCoastFireResultsEmail(
         </a>
       </div>
       <p style="margin: 0 0 10px; color: #71857f; font-size: 13px; line-height: 1.6; text-align: center;">
-        Your address is already confirmed by this link &mdash; just pick a password. This run
-        will be waiting as your first decision. Free for 30 days, no credit card required.
+        Connect your accounts and test the change you are weighing against your real numbers.
+        Free for 30 days, no credit card required.
       </p>
       <div class="fallback-link" style="margin: 22px 0; padding: 16px; border: 1px solid #d8d2c5; border-radius: 12px; background-color: #f8f5ed; color: #526d64; font-size: 12px; line-height: 1.6; word-break: break-all;">
         <strong style="color: #29483f; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;">If the button does not work, use this link:</strong><br />
@@ -345,8 +356,8 @@ ${DECISIONS.map((decision) => `  - ${decision}`).join('\n')}
 ${CTA_LABEL}:
 ${options.ctaUrl}
 
-Your address is already confirmed by this link - just pick a password. This run
-will be waiting as your first decision. Free for 30 days, no credit card required.
+Connect your accounts and test the change you are weighing against your real numbers.
+Free for 30 days, no credit card required.
 
 Run the numbers again: ${options.calculatorUrl}
 

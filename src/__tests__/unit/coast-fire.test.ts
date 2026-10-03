@@ -157,10 +157,10 @@ describe('the results email', () => {
     const message = buildCoastFireResultsEmail(calculateCoastFire(DEFAULTS), options);
 
     expect(message.html).toContain(`href="${options.ctaUrl.replace(/&/g, '&amp;')}"`);
-    expect(message.html).toContain('Finish creating your account');
-    // The link is what proves the address, so the message has to say so: a
-    // recipient who is told to expect a code and never gets one is stuck.
-    expect(message.html).toContain('already confirmed by this link');
+    expect(message.html).toContain('Create your free account');
+    // Sent only when no lead stored, so the link has no run behind it and the
+    // message must not promise one.
+    expect(message.html).not.toContain('first decision');
     expect(message.html.match(/asklinc\.com\/getstarted/g)?.length).toBeGreaterThanOrEqual(2);
   });
 

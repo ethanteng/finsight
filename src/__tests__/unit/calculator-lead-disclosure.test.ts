@@ -1,21 +1,16 @@
 /**
- * Whether a calculator lead token may stand in for the emailed verification
- * code.
+ * What a calculator lead token does at registration.
  *
- * It may when the token reached the visitor the only way it used to: inside a
- * message to the address the lead names. Holding one then means having read
- * that inbox, which is the same thing the code demonstrates.
+ * Any resolved lead skips the verification code and seeds the run as the
+ * account's first decision: the calculators send visitors into Ask Linc to see
+ * their answer, and a code in front of it is where they leave.
  *
- * It may not when the calculator page was handed the token so it could take
- * the visitor straight to signup. Anyone can type a stranger's address into a
- * public calculator, and returning the token to whoever did would let them
- * register that address with the code skipped — the lead's own address check
- * does not catch it, because the address matches by construction. The lead row
- * is stamped before the token is returned, and this is the test that the stamp
- * is what registration reads.
- *
- * Either way the run is still written as the account's first decision. The
- * figures are the figures; it is only the claim about the address that fails.
+ * Only a token that reached the visitor inside a message to the address it
+ * names records that address as verified. A token handed back to the
+ * calculator page proves nothing about the inbox, because anyone can type a
+ * stranger's address into a public calculator. The lead row is stamped before
+ * the token is returned, and this is the test that the stamp is what
+ * registration reads for `emailVerified`.
  */
 
 import express from 'express';
@@ -108,15 +103,17 @@ describe('a calculator lead token and the verification code', () => {
     expect(res.status).toBe(201);
     expect(createdWithEmailVerified()).toBe(true);
     expect(sendVerificationCode).not.toHaveBeenCalled();
+    expect(res.body.firstDecisionPending).toBe(true);
     expect(leads.seed).toHaveBeenCalled();
   });
 
   /*
-   * The bypass this column exists to stop. Every other signal is identical to
-   * the case above — a live token, resolved, addressed to the person
-   * registering — so nothing but the stamp can tell them apart.
+   * Every other signal is identical to the case above — a live token,
+   * resolved, addressed to the person registering — so nothing but the stamp
+   * can tell them apart. It decides only what the account records about the
+   * address; the signup goes straight in either way.
    */
-  it('refuses a token its own page was given, and still saves the run', async () => {
+  it('skips the code for a token its own page was given, without recording the address as verified', async () => {
     leads.resolve.mockResolvedValue(retirementLead(true));
 
     const res = await register();
@@ -124,8 +121,23 @@ describe('a calculator lead token and the verification code', () => {
 
     expect(res.status).toBe(201);
     expect(createdWithEmailVerified()).toBe(false);
-    expect(sendVerificationCode).toHaveBeenCalled();
-    // The figures are not in question. Only the claim about the address was.
+    expect(sendVerificationCode).not.toHaveBeenCalled();
+    expect(prisma.emailVerificationCode.create).not.toHaveBeenCalled();
+    expect(res.body.firstDecisionPending).toBe(true);
     expect(leads.seed).toHaveBeenCalled();
+  });
+
+  it('still sends a code to a signup with no calculator lead', async () => {
+    leads.resolve.mockResolvedValue(null);
+
+    const res = await request(buildApp())
+      .post('/auth/register')
+      .send({ email: 'reader@example.com', password: 'Password1' });
+    await settle();
+
+    expect(res.status).toBe(201);
+    expect(createdWithEmailVerified()).toBe(false);
+    expect(sendVerificationCode).toHaveBeenCalled();
+    expect(res.body.firstDecisionPending).toBe(false);
   });
 });

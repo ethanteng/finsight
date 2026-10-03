@@ -13,7 +13,6 @@ import { RetirementQuickPlan } from '@/components/marketing/RetirementQuickPlan'
 import { pushRetirementResultsEmailed, pushCalculatorRunLimitReached } from '@/lib/dataLayer';
 import { leaveForSignup } from '@/lib/calculator-handover';
 import { CALCULATOR_RUN_LIMIT, runLimitPhrase } from '@/lib/calculator-run-limit';
-import { CALCULATOR_RESULTS_UNLOCK_KEY } from '@/lib/calculator-results-gate';
 
 /*
  * jsdom implements neither navigation nor a `location` that can be replaced,
@@ -148,9 +147,6 @@ beforeEach(() => {
   jest.mocked(leaveForSignup).mockClear();
   window.history.replaceState({}, '', '/retirement-calculator');
   window.sessionStorage.clear();
-  // These cases are about the answer, so the results email has already been
-  // given. The gate in front of it has its own cases in calculator-results-gate.
-  window.sessionStorage.setItem(CALCULATOR_RESULTS_UNLOCK_KEY, 'reader@example.com');
   Element.prototype.scrollIntoView = jest.fn();
   mockApi(BASE_RESULT);
 });
@@ -166,7 +162,7 @@ it('asks for an address only once a plan has produced a verdict', async () => {
   await runTheModel();
 
   expect(await screen.findByLabelText('Email address')).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'Save these results to your free account' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'See my result in Ask Linc' })).toBeInTheDocument();
 });
 
 /*
@@ -179,7 +175,8 @@ it('keeps saving next to the result in the combined view', async () => {
   renderPage();
   await runTheModel();
   const field = await screen.findByLabelText('Email address');
-  expect(field.closest('.calculator-result-grid')).toHaveTextContent(/retiring at 60 worked in/i);
+  // Beside the card that stands in for the verdict until Ask Linc shows it.
+  expect(field.closest('.calculator-result-grid')).toHaveTextContent(/your result is ready/i);
   expect(screen.queryByRole('link', { name: /see what this result means/i })).not.toBeInTheDocument();
 });
 
@@ -192,7 +189,7 @@ it('restores the entered numbers through the secondary edit action', async () =>
   fireEvent.change(screen.getByLabelText('Investment assets today'), { target: { value: '1200000' } });
   await runTheModel();
   expect(screen.queryByRole('button', { name: /run the model/i })).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', { name: /edit inputs.*run again/i }));
+  fireEvent.click(await screen.findByRole('button', { name: /edit inputs.*run again/i }));
   expect(screen.getByRole('button', { name: /run the model/i })).toBeEnabled();
   expect(screen.getByLabelText('Investment assets today')).toHaveValue('1,200,000');
 });
@@ -220,7 +217,7 @@ it('posts the plan inputs and never the figures computed from them', async () =>
   });
   fireEvent.submit(screen.getByLabelText('Email address').closest('form')!);
 
-  await screen.findByText(/on its way/i);
+  await screen.findByText(/so here is your result/i);
   const send = posts.find((post) => post.url.includes('/email-results'))!;
   expect(send.body).toEqual({
     email: 'Reader@Example.com',
@@ -241,7 +238,7 @@ it('reports the conversion as a band, never as the address or the exact rate', a
   });
   fireEvent.submit(screen.getByLabelText('Email address').closest('form')!);
 
-  await screen.findByText(/on its way/i);
+  await screen.findByText(/so here is your result/i);
   expect(emailed).toHaveBeenCalledTimes(1);
   expect(emailed).toHaveBeenCalledWith(0.92);
 });
@@ -260,7 +257,7 @@ it('surfaces a refusal and leaves the form ready to retry', async () => {
   fireEvent.submit(screen.getByLabelText('Email address').closest('form')!);
 
   expect(await screen.findByRole('alert')).toHaveTextContent('Enter a valid email address.');
-  expect(screen.getByRole('button', { name: 'Save these results to your free account' })).toBeEnabled();
+  expect(screen.getByRole('button', { name: 'See my result in Ask Linc' })).toBeEnabled();
   expect(emailed).not.toHaveBeenCalled();
 });
 
@@ -309,18 +306,21 @@ it('carries the run to signup instead of stopping at the inbox', async () => {
  * No token came back — the lead did not store, or its disclosure did not — so
  * there is nothing to carry and the inbox is the only route left.
  */
-it('stays on the page when no token comes back', async () => {
+it('shows the verdict on the page when no token comes back', async () => {
   const assign = jest.mocked(leaveForSignup);
 
   renderPage();
   await runTheModel();
+  expect(screen.queryByText(/retiring at 60 worked in/i)).not.toBeInTheDocument();
 
   fireEvent.change(await screen.findByLabelText('Email address'), {
     target: { value: 'reader@example.com' },
   });
   fireEvent.submit(screen.getByLabelText('Email address').closest('form')!);
 
-  await screen.findByText(/on its way/i);
+  await screen.findByText(/so here is your result/i);
+  // No run for an account to open with, so the page shows it instead.
+  expect(screen.getByText(/retiring at 60 worked in/i)).toBeInTheDocument();
   expect(assign).not.toHaveBeenCalled();
 });
 
@@ -343,7 +343,7 @@ it('locks the model after three runs and points at the save form', async () => {
   await waitFor(() => expect(pushCalculatorRunLimitReached).toHaveBeenCalledTimes(1));
   expect(pushCalculatorRunLimitReached).toHaveBeenCalledWith('retirement');
   // The save form is still there: it is what the lock is pointing at.
-  expect(screen.getByRole('button', { name: 'Save these results to your free account' })).toBeEnabled();
+  expect(screen.getByRole('button', { name: 'See my result in Ask Linc' })).toBeEnabled();
 });
 
 /*
@@ -401,7 +401,7 @@ it('resets the capture when a new plan is run', async () => {
     target: { value: 'reader@example.com' },
   });
   fireEvent.submit(screen.getByLabelText('Email address').closest('form')!);
-  await screen.findByText(/on its way/i);
+  await screen.findByText(/so here is your result/i);
 
   mockApi({
     ...BASE_RESULT,
@@ -410,7 +410,9 @@ it('resets the capture when a new plan is run', async () => {
   });
   await runTheModel();
 
-  await waitFor(() => expect(screen.queryByText(/on its way/i)).not.toBeInTheDocument());
+  // A new run is held back again: the earlier reveal belonged to that run.
+  await screen.findByText('Your result is ready.');
+  expect(screen.queryByText(/so here is your result/i)).not.toBeInTheDocument();
   // The form is back for the new plan, holding the address already given in
   // this tab rather than asking for it again.
   expect(screen.getByLabelText('Email address')).toHaveValue('reader@example.com');

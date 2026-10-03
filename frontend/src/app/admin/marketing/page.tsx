@@ -152,7 +152,7 @@ interface Report {
     rows: Array<{
       device: string; origin: string; entry: string; viewed: number; accountsCreated: number;
       handoffs: number; emailLink: number; verificationCode: number; verificationSkipped: number;
-      alreadyVerified: number; legacyLogin: number; signupAbandonmentRate: number | null;
+      alreadyVerified: number; calculatorHandoff?: number; legacyLogin: number; signupAbandonmentRate: number | null;
     }>;
   };
   warnings: string[];
@@ -682,11 +682,11 @@ export default function MarketingDashboardPage() {
             <div className="mt-5 overflow-x-auto">
               <table className="w-full min-w-[1020px] text-left text-xs">
                 <caption className="sr-only">Observed signup sessions by entry route and device</caption>
-                <thead><tr>{['Signup route', 'Device', 'Viewed signup', 'Accounts created', 'Handoffs', 'Email link verified', 'Code verified', 'Skipped verification', 'Already verified', 'Legacy login', 'Signup drop-off'].map(label => <th key={label} scope="col" className="p-2 font-semibold">{label}</th>)}</tr></thead>
+                <thead><tr>{['Signup route', 'Device', 'Viewed signup', 'Accounts created', 'Handoffs', 'Email link verified', 'Code verified', 'Skipped verification', 'Already verified', 'Calculator handoff', 'Legacy login', 'Signup drop-off'].map(label => <th key={label} scope="col" className="p-2 font-semibold">{label}</th>)}</tr></thead>
                 <tbody>{report.signupOutcomes.rows.map(row => <tr key={`${row.origin}:${row.entry}:${row.device}`} className="border-t border-[#102319]/10">
                   <th scope="row" className="p-2 font-medium">{row.origin.replaceAll('_', ' ')} / {row.entry.replaceAll('_', ' ')}</th>
                   <td className="p-2">{row.device}</td>
-                  {[row.viewed, row.accountsCreated, row.handoffs, row.emailLink, row.verificationCode, row.verificationSkipped, row.alreadyVerified, row.legacyLogin].map((value, index) => <td key={index} className="p-2 tabular-nums">{count(value)}</td>)}
+                  {[row.viewed, row.accountsCreated, row.handoffs, row.emailLink, row.verificationCode, row.verificationSkipped, row.alreadyVerified, row.calculatorHandoff ?? 0, row.legacyLogin].map((value, index) => <td key={index} className="p-2 tabular-nums">{count(value)}</td>)}
                   <td className="p-2 tabular-nums">{precisePercent(row.signupAbandonmentRate)}</td>
                 </tr>)}</tbody>
               </table>

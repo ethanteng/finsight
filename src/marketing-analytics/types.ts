@@ -158,6 +158,7 @@ export interface SignupOutcomeRow {
   verificationCode: number;
   verificationSkipped: number;
   alreadyVerified: number;
+  calculatorHandoff: number;
   legacyLogin: number;
   signupAbandonmentRate: number | null;
 }

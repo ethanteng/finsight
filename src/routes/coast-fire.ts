@@ -24,7 +24,8 @@
 import express, { Request, Response } from 'express';
 import { createFixedWindowRateLimit, positiveIntFromEnv } from './fixed-window-rate-limit';
 import { validateEmail } from '../auth/utils';
-import { sendCoastFireResultsEmail } from '../auth/resend-email';
+import { sendCalculatorReadyEmail, sendCoastFireResultsEmail } from '../auth/resend-email';
+import { coastFireInputRows } from '../email/coast-fire-results';
 import { getBaseUrl } from '../email/templates';
 import {
   calculateCoastFire,
@@ -130,11 +131,20 @@ router.post('/email-results', emailRateLimit, async (req: Request, res: Response
   const attribution = parseCalculatorLeadAttribution(req.body?.attribution);
   const stored = await recordCoastFireLead({ email, token, result, attribution });
 
-  const emailSent = await sendCoastFireResultsEmail(
-    email,
-    result,
-    signupUrl(stored ? token : null),
-  );
+  /*
+   * A stored lead gets the "ready in Ask Linc" message, which states no
+   * figures: the answer is shown in the account the link creates. Without a
+   * stored lead there is no account-side copy to point at, so the visitor gets
+   * the full results instead, and the page shows them too.
+   */
+  const emailSent = stored
+    ? await sendCalculatorReadyEmail({
+      calculator: 'coast_fire',
+      inputs: coastFireInputRows(result),
+      email,
+      ctaUrl: signupUrl(token),
+    })
+    : await sendCoastFireResultsEmail(email, result, signupUrl(null));
 
   if (!emailSent) {
     res.status(502).json({
@@ -147,14 +157,13 @@ router.post('/email-results', emailRateLimit, async (req: Request, res: Response
    * Handed back so the page can take this visitor straight to signup instead
    * of asking them to go and find the email. The same token the message
    * carries, so both routes restore the same run — but disclosed tokens are
-   * marked first, and registration reads that mark to withhold the emailed
-   * verification code. See `src/auth/routes.ts`.
+   * marked first, and registration reads that mark to decide whether the
+   * address is recorded as verified. See `src/auth/routes.ts`.
    *
    * Marked before it is returned, and not returned at all if the mark did not
    * take: a token loose in a page while the row still claims it was only
-   * emailed is exactly the bypass the column exists to prevent. The fallback
-   * is the behaviour that shipped before this — the results are in the inbox
-   * and the emailed link still works.
+   * emailed would record a stranger's address as verified. Without a ref the
+   * page shows the result itself, and the emailed link still works.
    */
   const ref = stored && (await markCoastFireLeadTokenDisclosed(token)) ? token : null;
 

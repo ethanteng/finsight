@@ -143,8 +143,6 @@
 .calculator-locked-message { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; padding: 20px; text-align: center; background: rgba(255, 253, 245, .55); color: #173d2a; }
 .marketing-site.calculator-story .calculator-locked-message h2 { margin: 4px 0 0; font-size: 24px; line-height: 1.2; }
 .calculator-locked-message p { margin: 0; max-width: 34ch; font-size: 14px; line-height: 1.5; color: #455b48; }
-.calculator-signup-cta { display: flex; flex-direction: column; gap: 10px; }
-.calculator-signup-cta p { margin: 0; font-size: 13px; line-height: 1.5; color: #455b48; }
 .marketing-site.calculator-story .calculator-run-again { display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 44px; width: 100%; margin-top: 12px; border: 0; background: transparent; color: #244632; font-size: 14px; font-weight: 650; text-decoration: none; cursor: pointer; }
 .calculator-run-again > span { text-decoration: underline; text-underline-offset: 4px; }
 .calculator-run-again > svg { flex: none; }

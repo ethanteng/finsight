@@ -36,7 +36,6 @@ import {
   recordRun,
 } from "@/lib/calculator-run-limit";
 import { numericInput, withCommas } from "@/lib/number-input";
-import { readUnlockedEmail } from "@/lib/calculator-results-gate";
 import {
   RETIREMENT_SIGNUP_HREF,
   storeRetirementSignupContext,
@@ -479,21 +478,28 @@ export function RetirementQuickPlan({
   useCalculatorLimitTracking('retirement', locked);
   const allocations = useAllocations();
   /*
-   * Whether this visitor has given an address for their results. Until they
-   * have, a plan run renders the locked card and the email form in place of
-   * the answer, and nothing that restates the answer — the reading, the
-   * charts, the signup handoff — runs or renders either. See
-   * `lib/calculator-results-gate`.
+   * Whether this run's answer is shown on the page. Ordinarily it never is: a
+   * plan run renders the locked card and the email form, and the answer opens
+   * in Ask Linc once the visitor chooses a password. The capture reveals it
+   * here only when it got no lead token back and so has no account to send
+   * the run to. Nothing that restates the answer — the reading, the charts,
+   * the signup handoff — runs or renders before then. Reset by every new run.
    *
-   * A rates-only answer is not held back. It has no email to send (the
+   * A rates-only answer is not held back. It has no run to save (the email
    * endpoint needs a portfolio and a spending level), says nothing about the
    * visitor's own plan, and its whole job is to ask for the two numbers that
-   * would produce a plan result — which is then gated.
+   * would produce a plan result — which is then held back.
    */
-  const [unlocked, setUnlocked] = useState(false);
-  const gated = Boolean(result?.primary) && !unlocked;
+  const [revealed, setRevealed] = useState(false);
+  /*
+   * Counts answered runs, so the capture remounts for every one. Keying it on
+   * the inputs alone left an identical re-run holding the previous run's
+   * revealed state under a page that had locked again.
+   */
+  const [runId, setRunId] = useState(0);
+  const gated = Boolean(result?.primary) && !revealed;
   // No reading of a locked result: it restates the figures, and on a page
-  // nobody has given an address to it is a model call for nothing.
+  // that is not showing them it is a model call for nothing.
   const { interpretation, isLoading: isInterpreting } = useInterpretation(gated ? null : submittedPlan);
   const resultsRef = useRef<HTMLDivElement | null>(null);
   const formRef = useRef<HTMLFormElement | null>(null);
@@ -547,8 +553,8 @@ export function RetirementQuickPlan({
    * onboarding as if they had — the same fabrication the rates answer exists
    * to avoid.
    *
-   * A locked run is not carried either: signup would show the verdict the
-   * page is still holding back.
+   * A run the page is not showing is not carried either: the email form is
+   * the way into Ask Linc with it.
    */
   const carriedResult = result?.primary && !gated ? result : null;
 
@@ -572,7 +578,6 @@ export function RetirementQuickPlan({
    */
   useEffect(() => {
     setRunCount(readRunCount(RETIREMENT_RUN_COUNT_KEY));
-    setUnlocked(readUnlockedEmail() !== null);
   }, []);
 
   function editInputs() {
@@ -639,6 +644,8 @@ export function RetirementQuickPlan({
 
       const answered = payload as QuickPlanResult;
       setResult(answered);
+      setRevealed(false);
+      setRunId((current) => current + 1);
       setShowInputs(false);
       // A new object every run, so an identical re-submission still retires the
       // panel and asks again rather than leaving the previous reading in place.
@@ -674,7 +681,7 @@ export function RetirementQuickPlan({
         <p className="section-kicker">FREE RETIREMENT CALCULATOR</p>
         <h1>{showInputs ? <>{headline}<em>Let’s run the numbers.</em></> : "Your retirement result."}</h1>
         <p className="qp-hero-sub">Tell Linc about your savings, spending, and timeline. See how your plan would have held up through real market history—and what could change the answer.</p>
-        <p className="calculator-access">Free, no account needed. Enter your email to see your result.</p>
+        <p className="calculator-access">Free. Your result opens in Ask Linc with just your email and a password.</p>
         <CalculatorSteps />
       </section>
 
@@ -829,7 +836,7 @@ export function RetirementQuickPlan({
             <p className="qp-submit-note">
               {locked
                 ? `That is ${runLimitPhrase()}. Save this result to a free account to keep exploring and add your connected accounts.`
-                : "No account needed. Enter your email to see your result. We keep calculator inputs and results to improve the model."}
+                : "Your result opens in Ask Linc with just your email and a password. We keep calculator inputs and results to improve the model."}
             </p>
           </div>
         </form>
@@ -849,7 +856,8 @@ export function RetirementQuickPlan({
               locked={locked}
               onEdit={editInputs}
               gated={gated}
-              onUnlock={() => setUnlocked(true)}
+              onReveal={() => setRevealed(true)}
+              runId={runId}
             />
           : <QuickPlanRateResults
               result={result}
@@ -1007,7 +1015,8 @@ function QuickPlanResults({
   locked,
   onEdit,
   gated,
-  onUnlock,
+  onReveal,
+  runId,
 }: {
   result: QuickPlanResult;
   primary: Scenario;
@@ -1017,7 +1026,9 @@ function QuickPlanResults({
   onEdit: () => void;
   /** Hold the answer back behind the email form. */
   gated: boolean;
-  onUnlock: () => void;
+  onReveal: () => void;
+  /** Changes with every answered run; keys the capture. */
+  runId: number;
 }) {
   const { alternatives, history, inputs, allocation } = result;
   // Plan mode is reached only with a real portfolio, which is also the
@@ -1124,8 +1135,8 @@ function QuickPlanResults({
       {/*
         * Rendered as `false` while locked rather than moved, so the actions
         * block below keeps its position and the capture inside it keeps its
-        * state across the unlock: its confirmation and the lead token it
-        * holds for signup are what the visitor sees next.
+        * state across the reveal: its explanation of why the result is here
+        * is what the visitor reads next.
         */}
       {!gated && <InterpretationPanel
         interpretation={interpretation}
@@ -1134,24 +1145,11 @@ function QuickPlanResults({
       />}
       <div className="calculator-result-actions">
         <RetirementEmailCapture compact
-          gate={gated}
-          onUnlock={onUnlock}
-          /*
-           * Remount when the run changes, so a prior "sent" state cannot claim
-           * to belong to a plan it was never sent for — and so an in-flight
-           * send for the old plan cannot confirm the new one.
-           */
-          key={[
-            inputs.currentAge,
-            inputs.retirementAge,
-            inputs.investableAssets,
-            inputs.annualSpending,
-            inputs.annualContributions,
-            inputs.socialSecurityAnnual,
-            inputs.socialSecurityStartAge,
-            inputs.lifeExpectancy,
-            inputs.allocation,
-          ].join(':')}
+          onReveal={onReveal}
+          // Remount for every run, so a prior run's state cannot claim to
+          // belong to the one now on screen, and an in-flight send for the
+          // old run cannot act on the new one.
+          key={runId}
           inputs={{
             currentAge: inputs.currentAge,
             retirementAge: inputs.retirementAge,

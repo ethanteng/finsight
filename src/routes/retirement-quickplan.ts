@@ -16,7 +16,8 @@
 import express, { Request, Response } from 'express';
 import { createFixedWindowRateLimit, positiveIntFromEnv } from './fixed-window-rate-limit';
 import { validateEmail } from '../auth/utils';
-import { sendRetirementResultsEmail } from '../auth/resend-email';
+import { sendCalculatorReadyEmail, sendRetirementResultsEmail } from '../auth/resend-email';
+import { retirementInputRows } from '../email/retirement-results';
 import { getBaseUrl } from '../email/templates';
 import {
   generateLeadToken,
@@ -272,12 +273,16 @@ router.post('/email-results', emailRateLimit, async (req: Request, res: Response
   const attribution = parseCalculatorLeadAttribution(req.body?.attribution);
   const stored = await recordRetirementLead({ email, token, inputs: result.inputs, outcome, attribution });
 
-  const emailSent = await sendRetirementResultsEmail(
-    email,
-    result,
-    primary,
-    signupUrl(stored ? token : null),
-  );
+  // See the Coast FIRE route: the full results go out only when there is no
+  // stored lead to show them from.
+  const emailSent = stored
+    ? await sendCalculatorReadyEmail({
+      calculator: 'retirement',
+      inputs: retirementInputRows(result),
+      email,
+      ctaUrl: signupUrl(token),
+    })
+    : await sendRetirementResultsEmail(email, result, primary, signupUrl(null));
 
   if (!emailSent) {
     res.status(502).json({
@@ -290,14 +295,13 @@ router.post('/email-results', emailRateLimit, async (req: Request, res: Response
    * Handed back so the page can take this visitor straight to signup instead
    * of asking them to go and find the email. The same token the message
    * carries, so both routes restore the same run — but disclosed tokens are
-   * marked first, and registration reads that mark to withhold the emailed
-   * verification code. See `src/auth/routes.ts`.
+   * marked first, and registration reads that mark to decide whether the
+   * address is recorded as verified. See `src/auth/routes.ts`.
    *
    * Marked before it is returned, and not returned at all if the mark did not
    * take: a token loose in a page while the row still claims it was only
-   * emailed is exactly the bypass the column exists to prevent. The fallback
-   * is the behaviour that shipped before this — the results are in the inbox
-   * and the emailed link still works.
+   * emailed would record a stranger's address as verified. Without a ref the
+   * page shows the result itself, and the emailed link still works.
    */
   const ref = stored && (await markRetirementLeadTokenDisclosed(token)) ? token : null;
 

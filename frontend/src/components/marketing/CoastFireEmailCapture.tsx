@@ -1,42 +1,37 @@
 "use client";
 
 /**
- * "Save these results to your free account", under the result the visitor just
- * ran.
+ * "See your result in Ask Linc": the form that stands where the result would.
+ *
+ * The page computes the answer but does not show it. Giving an address sends
+ * the visitor to signup with it prefilled, and the run opens in Ask Linc as
+ * the account's first decision. Registration skips the verification code for
+ * a calculator lead, so a password is all that stands between this form and
+ * the answer. See `auth/routes` and `docs/COAST_FIRE_EMAIL_CAPTURE.md`.
  *
  * It appears only after a submitted calculation. The page opens with empty
- * personal figures and no result, so there is nothing to email until the
+ * personal figures and no result, so there is nothing to save until the
  * visitor asks for an answer — and collecting an address against figures they
  * have not entered would attach their address to our assumptions, not theirs.
  *
  * The seven inputs are posted, never the computed result: the server
- * recalculates before it sends, so nothing this form does can put an arbitrary
- * figure in an email carrying our branding.
+ * recalculates before it stores the lead, so nothing this form does can put an
+ * arbitrary figure into an account or an email carrying our branding.
  *
  * Submitting does two things. An email goes out carrying a link into signup,
  * which is what someone who wanders off can come back to; and this page takes
- * them there itself, straight away, rather than asking them to go and find it.
- * Either route restores the same run as the first decision in a new account.
+ * them there itself, straight away. Either route restores the same run.
  *
- * As the gate (`gate`), it comes before the result instead of after it. The
- * page holds the answer back until an address is given. Submitting sends the
- * same email and creates the same lead, then reveals the result and stays on
- * the page. Going to signup becomes a button beside the answer rather than
- * the next thing that happens. See `lib/calculator-results-gate`.
- *
- * The two are not equivalent in one respect, and deliberately so. Registration
- * skips the emailed verification code for a token that only ever left this
- * system inside a message to the address it names — holding one is evidence of
- * reading that inbox. The token this page is handed proves no such thing:
- * whoever typed the address got it. The server marks a disclosed token and
- * withholds the skip, so this route saves the run and still verifies the
- * address. See `services/calculator-first-decision` and `auth/routes`.
+ * When no token comes back (the lead did not store, or its disclosure mark
+ * did not), there is no run to seed an account from. The page shows the result
+ * itself instead, through `onReveal`, rather than sending the visitor to an
+ * account that would open empty.
  */
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { CoastFireResult } from "@/lib/coast-fire";
 import { pushCoastFireResultsEmailed } from "@/lib/dataLayer";
-import { readUnlockedEmail, rememberUnlock } from "@/lib/calculator-results-gate";
+import { readRememberedEmail, rememberEmail } from "@/lib/calculator-email-memory";
 import { readCalculatorLeadAttribution } from "@/lib/calculator-lead-attribution";
 import {
   isHandoverToken,
@@ -52,61 +47,37 @@ import {
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
 
-type Status = "idle" | "sending" | "sent" | "unlocked" | "leaving";
+type Status = "idle" | "sending" | "revealed" | "leaving";
 
 export function CoastFireEmailCapture({
   result,
   compact = false,
-  gate = false,
-  onUnlock,
+  onReveal,
 }: {
   result: CoastFireResult;
   compact?: boolean;
-  /** Stand between the visitor and the result rather than under it. */
-  gate?: boolean;
-  /** Called once the address is accepted, so the page can reveal the result. */
-  onUnlock?: () => void;
+  /** Show the result on the page: the fallback when there is no run to carry. */
+  onReveal: () => void;
 }) {
-  // Prefilled from an earlier unlock in this tab, so a later run's save does
-  // not ask for an address the visitor already gave.
-  const [email, setEmail] = useState(() => readUnlockedEmail() ?? "");
+  // Prefilled from an earlier run in this tab, so the visitor is not asked
+  // for an address they already gave.
+  const [email, setEmail] = useState(() => readRememberedEmail() ?? "");
   const [status, setStatus] = useState<Status>("idle");
   const [error, setError] = useState<string | null>(null);
-  /** The lead token from a gated send, spent when the visitor asks to sign up. */
-  const [ref, setRef] = useState<string | null>(null);
   /** One conversion event per visitor, however many times they resend. */
   const reported = useRef(false);
-
-  /**
-   * Carry this run to signup.
-   *
-   * Both carriers, because they fail differently. The cookie is what
-   * /getstarted exchanges, and it cannot be read back from here to know it
-   * took. The stored context carries the same token and the figures, so a
-   * browser refusing the cookie costs the address prefill, not the run.
-   *
-   * No `emailedOutcome`: that field exists because a link opened days later
-   * may disagree with the figures its message quoted. Nothing has drifted
-   * between this result and this click.
+  /*
+   * The page remounts this form for every run. A send still in flight for
+   * the previous run must not reveal, or carry to signup, the run now on
+   * screen.
    */
-  async function leave(token: string, tracking?: Promise<void>) {
-    writeHandoverToken(COAST_FIRE_REF_COOKIE, token);
-    storeCoastFireSignupContext(
-      {
-        currentAge: result.currentAge,
-        retirementAge: result.retirementAge,
-        currentSavings: result.currentSavings,
-        annualRetirementSpending: result.annualRetirementSpending,
-        annualRetirementIncome: result.annualRetirementIncome,
-        realReturnRate: result.realReturnRate,
-        withdrawalRate: result.withdrawalRate,
-      },
-      { email: email.trim(), sourceToken: token },
-    );
-    setStatus("leaving");
-    await tracking;
-    leaveForSignup(resultsPageSignupHref(COAST_FIRE_SIGNUP_HREF));
-  }
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -147,27 +118,37 @@ export function CoastFireEmailCapture({
 
       const body = await response.json().catch(() => null) as { ref?: unknown } | null;
       const token = isHandoverToken(body?.ref) ? body.ref : null;
-      rememberUnlock(email);
-
-      if (gate) {
-        // The email went out, which is what the gate asked for, whether or not
-        // a token came back. Without one there is no save to offer: the first
-        // decision is seeded from the stored lead and nothing else, so a
-        // signup would arrive at an empty account.
-        setRef(token);
-        setStatus("unlocked");
-        onUnlock?.();
-        return;
-      }
+      rememberEmail(email);
+      if (!mounted.current) return;
 
       if (!token) {
-        // The lead did not store, or its disclosure did not. Nothing to carry,
-        // so this stays what it was before: the results are in their inbox.
-        setStatus("sent");
+        // Nothing to seed an account from, so the answer is shown here.
+        setStatus("revealed");
+        onReveal();
+        await tracking;
         return;
       }
 
-      await leave(token, tracking);
+      // Both carriers, because they fail differently. The cookie is what
+      // /getstarted exchanges, and it cannot be read back from here to know it
+      // took. The stored context carries the same token and the inputs, so a
+      // browser refusing the cookie costs the address prefill, not the run.
+      writeHandoverToken(COAST_FIRE_REF_COOKIE, token);
+      storeCoastFireSignupContext(
+        {
+          currentAge: result.currentAge,
+          retirementAge: result.retirementAge,
+          currentSavings: result.currentSavings,
+          annualRetirementSpending: result.annualRetirementSpending,
+          annualRetirementIncome: result.annualRetirementIncome,
+          realReturnRate: result.realReturnRate,
+          withdrawalRate: result.withdrawalRate,
+        },
+        { email: email.trim(), sourceToken: token },
+      );
+      setStatus("leaving");
+      await tracking;
+      leaveForSignup(resultsPageSignupHref(COAST_FIRE_SIGNUP_HREF));
     } catch {
       setError("Network error. Please check your connection and try again.");
       setStatus("idle");
@@ -177,55 +158,23 @@ export function CoastFireEmailCapture({
   if (status === "leaving") {
     return (
       <div className="cf-email-capture is-sent" role="status" aria-live="polite">
-        <p className="section-kicker">SAVING THIS RUN</p>
-        <h3>Taking you to your account…</h3>
+        <p className="section-kicker">OPENING ASK LINC</p>
+        <h3>Taking you to your result…</h3>
         <p>
-          We’re also emailing your result to <strong>{email.trim()}</strong>, so you can finish
-          creating your account later.
+          Choose a password and your Coast FIRE result opens as your first decision. We’ve also
+          emailed <strong>{email.trim()}</strong> a link back, in case you finish later.
         </p>
       </div>
     );
   }
 
-  if (status === "unlocked") {
-    return (
-      <div className="cf-email-capture is-sent calculator-signup-cta" role="status" aria-live="polite">
-        <p className="cf-email-lead">
-          We emailed a copy to <strong>{email.trim()}</strong>.
-          {ref && " Save it to a free account to keep exploring and add your connected accounts."}
-        </p>
-        {ref && <button
-          className="button button-primary"
-          type="button"
-          onClick={() => { void leave(ref); }}
-          data-cs-override-id="coast-fire-unlocked-signup"
-        >
-          Save these results to your free account
-        </button>}
-      </div>
-    );
-  }
-
-  if (status === "sent") {
+  if (status === "revealed") {
     return (
       <div className="cf-email-capture is-sent" role="status" aria-live="polite">
-        <p className="section-kicker">CHECK YOUR INBOX</p>
-        <h3>Your link is on its way.</h3>
-        <p>
-          We sent it to <strong>{email.trim()}</strong>, along with your Coast FIRE number, the
-          assumptions behind it, and the return comparison. Open the link, pick a password, and
-          this run will be waiting as your first decision. It can take a minute to arrive.
+        <p className="cf-email-lead">
+          We couldn’t set up your account link just now, so here is your result. We’ve also
+          emailed <strong>{email.trim()}</strong>.
         </p>
-        <button
-          className="cf-email-again"
-          type="button"
-          onClick={() => {
-            setStatus("idle");
-            setEmail("");
-          }}
-        >
-          Send to a different address
-        </button>
       </div>
     );
   }
@@ -233,15 +182,12 @@ export function CoastFireEmailCapture({
   return (
     <form className={`cf-email-capture${compact ? " is-compact" : ""}`} onSubmit={handleSubmit} aria-busy={status === "sending"}>
       <div className="cf-email-copy">
-        <p className="section-kicker">{gate ? "YOUR RESULT IS READY" : "KEEP THIS RESULT"}</p>
-        <h3>{gate ? "See your Coast FIRE number" : "Save this to a free account"}</h3>
-        {gate ? <p className="cf-email-lead">Enter your email to see your Coast FIRE number. We’ll send you a copy too.</p> : compact ? <p className="cf-email-lead">Keep this result and get an email copy.</p> : (
+        <p className="section-kicker">YOUR RESULT IS READY</p>
+        <h3>See your Coast FIRE number in Ask Linc</h3>
         <p className="cf-email-lead">
-          Create a password on the next screen to save your Coast FIRE number, assumptions,
-          and return comparison. We’ll also email you a copy.
+          Enter your email, then choose a password to see your result in Ask Linc. No code to
+          enter, no credit card.
         </p>
-        )}
-
       </div>
 
       <div className="cf-email-fields">
@@ -270,7 +216,7 @@ export function CoastFireEmailCapture({
             disabled={status === "sending"}
             data-cs-override-id="coast-fire-email-results"
           >
-            {status === "sending" ? "Sending…" : gate ? "Show my results" : "Save these results to your free account"}
+            {status === "sending" ? "Sending…" : "See my result in Ask Linc"}
           </button>
       </div>
 

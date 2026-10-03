@@ -36,7 +36,6 @@ import { isLookupSettled } from '@/lib/calculator-handover';
 import {
   buildCoastFireSignupContext,
   clearCoastFireSignupRef,
-  coastFireSignupSummary,
   fetchCoastFireSignupContext,
   hasCoastFireSignupSource,
   readCoastFireSignupContext,
@@ -141,6 +140,44 @@ const COAST_FIRE_TRIAL_COPY = {
   ],
   submit: 'Create account and continue',
   submitting: 'Creating your account…',
+};
+
+/**
+ * The two calculator arrivals that hold a saved run, and so arrive with a
+ * result waiting. The calculators no longer show their answer on the page or
+ * in the inbox; the account is where it opens, as the first decision. This
+ * page is the last step before it, so it says what is behind the password and
+ * that nothing else stands in the way: registration skips the code step for a
+ * resolved lead (see `auth/routes`).
+ */
+const COAST_FIRE_RESULT_WAITING_COPY = {
+  ...COAST_FIRE_TRIAL_COPY,
+  eyebrow: 'Your Coast FIRE result is ready',
+  title: 'Choose a password to see it.',
+  description:
+    'Your Coast FIRE number, and what it means for your plan, opens in Ask Linc as soon as your account exists. There is no code to enter.',
+  benefits: [
+    'See your Coast FIRE result as your first decision',
+    'Stress-test it against real market sequences, not one flat return',
+    'Full access for 30 days — no credit card',
+  ],
+  submit: 'Create account and see my result',
+  submitting: 'Opening your result…',
+};
+
+const RETIREMENT_RESULT_WAITING_COPY = {
+  ...RETIREMENT_TRIAL_COPY,
+  eyebrow: 'Your retirement result is ready',
+  title: 'Choose a password to see it.',
+  description:
+    'How your plan held up against market history opens in Ask Linc as soon as your account exists. There is no code to enter.',
+  benefits: [
+    'See your retirement result as your first decision',
+    'Replace estimated assets and allocation with real holdings',
+    'Full access for 30 days — no credit card',
+  ],
+  submit: 'Create account and see my result',
+  submitting: 'Opening your result…',
 };
 
 const ACCOUNT_COPY = {
@@ -502,18 +539,21 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
     };
   })();
 
-  const coastFireSummary = coastFireContext
-    ? coastFireSignupSummary(coastFireContext.inputs, coastFireContext.emailedOutcome)
-    : null;
+  /*
+   * A saved run (one with a lead token) is seeded as the account's first
+   * decision; a run carried by the page CTA alone is not, so only the former
+   * is promised as waiting.
+   */
+  const resultWaiting = Boolean(coastFireContext?.sourceToken || retirementContext?.sourceToken);
 
   /*
    * Coast FIRE wins when both are somehow present: it is the more specific
    * arrival, and the two sources are mutually exclusive in the URL anyway.
    */
   const trialCopy = coastFireContext
-    ? COAST_FIRE_TRIAL_COPY
+    ? (resultWaiting ? COAST_FIRE_RESULT_WAITING_COPY : COAST_FIRE_TRIAL_COPY)
     : retirementContext
-      ? RETIREMENT_TRIAL_COPY
+      ? (resultWaiting ? RETIREMENT_RESULT_WAITING_COPY : RETIREMENT_TRIAL_COPY)
       : TRIAL_COPY;
 
   const trackTrialStart = (value: string) => {
@@ -678,6 +718,7 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
     let data: {
       token?: string;
       user?: { timeZone?: string; emailVerified?: boolean };
+      firstDecisionPending?: boolean;
       error?: string;
     };
     try {
@@ -721,6 +762,13 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
        * analytics payload.
        */
       const alreadyVerified = data.user?.emailVerified === true;
+      /*
+       * A calculator signup: the server resolved a lead, is writing the run as
+       * the first decision, and sent no code. The calculators exist to put the
+       * visitor in front of their answer in Ask Linc, so nothing goes between
+       * the password and it. Reported by the server, which decided.
+       */
+      const firstDecisionPending = data.firstDecisionPending === true;
 
       /*
        * Nothing is left to do at the sign-in form once the address is proved:
@@ -730,7 +778,7 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
        * re-verifies the token and the subscription on mount and bounces a
        * session that fails either.
        */
-      if (alreadyVerified) {
+      if (alreadyVerified || firstDecisionPending) {
         /*
          * The server reports this only when it resolved a lead, which is
          * exactly when it is also writing that run as the account's first
@@ -742,7 +790,9 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
         // The funnel ends here for this account; nothing further will report
         // its completion, and a stale record would follow the tab for hours.
         if (isTrial) {
-          pushTrialSignupCompleted('email_link');
+          // An emailed link proved the address; a token the page was handed
+          // did not, and is counted as its own route.
+          pushTrialSignupCompleted(alreadyVerified ? 'email_link' : 'calculator_handoff');
           completeFreeTrialSignupFlow();
         }
         router.push(DEFAULT_POST_LOGIN_DESTINATION);
@@ -793,30 +843,23 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
       asideDescription={isTrial ? trialCopy.asideDescription : ACCOUNT_COPY.asideDescription}
       benefits={isTrial ? trialCopy.benefits : ACCOUNT_COPY.benefits}
     >
-      {coastFireSummary && (
+      {/*
+        * What they entered, never what it produced. The answer opens in the
+        * account, and showing it here would let this page stand in for it.
+        */}
+      {coastFireContext && (
         <section
           aria-label="Your Coast FIRE scenario"
           data-cs-mask
           className="mb-5 rounded-2xl border border-[#123c2f]/15 bg-[#fffdf7] p-4 shadow-sm"
         >
-          <div className="flex items-center justify-between gap-3">
-            <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#477064]">
-              Your Coast FIRE scenario
-            </p>
-            <span
-              className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-bold ${
-                coastFireSummary.hasReachedCoastFire
-                  ? 'bg-[#eaf5d5] text-[#34551c]'
-                  : 'bg-[#f7e5c6] text-[#6b4a12]'
-              }`}
-            >
-              {coastFireSummary.hasReachedCoastFire ? 'Reached' : 'Not yet'}
-            </span>
-          </div>
+          <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#477064]">
+            Your Coast FIRE scenario
+          </p>
           <dl className="mt-3 grid grid-cols-3 gap-2">
-            <ScenarioValue label="Coast FIRE number" value={compactMoney(coastFireSummary.coastFireNumber)} />
-            <ScenarioValue label="Saved today" value={compactMoney(coastFireSummary.currentSavings)} />
-            <ScenarioValue label="Retire at" value={String(coastFireSummary.retirementAge)} />
+            <ScenarioValue label="Saved today" value={compactMoney(coastFireContext.inputs.currentSavings)} />
+            <ScenarioValue label="Retire at" value={String(coastFireContext.inputs.retirementAge)} />
+            <ScenarioValue label="Annual spending" value={compactMoney(coastFireContext.inputs.annualRetirementSpending)} />
           </dl>
         </section>
       )}
@@ -827,36 +870,9 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
           data-cs-mask
           className="mb-5 rounded-2xl border border-[#123c2f]/15 bg-[#fffdf7] p-4 shadow-sm"
         >
-          <div className="flex items-center justify-between gap-3">
-            <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#477064]">
-              Your modeled scenario
-            </p>
-            {/*
-              * Only for a plan that arrived from an email. The figure is the
-              * one that message stated, not a fresh run: the link lives for 90
-              * days and both the engine and its market dataset change.
-              */}
-            {retirementContext.emailedOutcome && (
-              <span
-                className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-bold ${
-                  retirementContext.emailedOutcome.survivalRate >= 0.9
-                    ? 'bg-[#eaf5d5] text-[#34551c]'
-                    : retirementContext.emailedOutcome.survivalRate >= 0.7
-                      ? 'bg-[#f7e5c6] text-[#6b4a12]'
-                      : 'bg-[#f8dcd8] text-[#8b3027]'
-                }`}
-              >
-                {/*
-                  * One decimal, the same precision the email and the results
-                  * page use. Rounding to whole percent turned a 99.6% survival
-                  * rate into "100% lasted" here while the message in the
-                  * recipient's inbox said 99.6% — and the reason the figure is
-                  * stored at all is that the two must agree.
-                  */}
-                {`${(retirementContext.emailedOutcome.survivalRate * 100).toFixed(1)}% lasted`}
-              </span>
-            )}
-          </div>
+          <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#477064]">
+            Your modeled scenario
+          </p>
           <dl className="mt-3 grid grid-cols-3 gap-2">
             <ScenarioValue label="Retire at" value={String(retirementContext.inputs.retirementAge)} />
             <ScenarioValue label="Assets today" value={compactMoney(retirementContext.inputs.investableAssets)} />

@@ -1,30 +1,35 @@
 # Retirement results email
 
-`/retirement-calculator` answers its question and then lets the visitor leave
-anonymous. This is the step past that: turning a completed model run into a
-known prospect, without taking anything away from the free answer.
+`/retirement-calculator` runs its model but shows the answer in Ask Linc rather
+than on the page. This is the step that gets the visitor there: an email
+address, a password, and the run waiting as their first decision.
 
 It mirrors the Coast FIRE flow documented in `COAST_FIRE_EMAIL_CAPTURE.md` and
 shares its machinery. This page covers what differs.
 
 ## The flow
 
-1. A visitor runs the model. A plan result is held behind the email gate
-   (`COAST_FIRE_EMAIL_CAPTURE.md`, **The email gate**): a locked card and the
-   capture render in its place, and nothing else about the verdict does.
-2. Giving the address sends the email and reveals the verdict on the page.
-   Signup is a button beside it rather than an automatic redirect.
-3. `POST /api/retirement-quickplan/email-results` re-runs the model from the
+1. A visitor runs the model. A plan result is held back
+   (`COAST_FIRE_EMAIL_CAPTURE.md`, **The answer opens in Ask Linc**): a locked
+   card and the capture render in its place, and nothing else about the
+   verdict does.
+2. `POST /api/retirement-quickplan/email-results` re-runs the model from the
    submitted figures, stores a `RetirementLead` row with a random token, and
-   sends through Resend as HTML and plain text.
+   sends the figure-free "result ready" email through Resend as HTML and plain
+   text. Only when the lead did not store does it send the full results email
+   instead, and the page then shows the verdict itself.
+3. The page takes the returned token straight to
+   `/getstarted?source=retirement-calculator&entry=results_page`, where the
+   visitor chooses a password. Registration skips the code and opens `/app` on
+   the seeded first decision.
 4. After the response, the address is added to MailerLite, in the retirement
    group.
 5. The email's call to action links to `/retirement/continue?ref=<token>`,
    which moves the token into a short-lived first-party cookie and redirects to
    a clean `/getstarted?source=retirement-calculator`.
 6. `/getstarted` spends the cookie, exchanges it through
-   `GET /api/retirement-quickplan/signup-context/:token`, and shows the plan
-   with the survival figure the email stated and the address prefilled.
+   `GET /api/retirement-quickplan/signup-context/:token`, and shows what the
+   visitor entered with the address prefilled. It states no verdict.
 
 ## What differs from Coast FIRE
 
@@ -40,13 +45,11 @@ portfolio or spending level and will not invent one, so there is no survival
 figure to send. The endpoint returns 400 naming the box that would produce one,
 and the capture form does not render at all.
 
-**The stored outcome is the one that was sent.** The model is deterministic
-given its inputs, but both the engine and the checked-in market dataset change,
-so the signup page reads the survival rate back from the row rather than
-re-running. That figure is shown to one decimal everywhere it appears — the
-card, the subject line, and the signup badge — because rounding a 99.6%
-survival rate to "100%" overstates it, and the reason to store it at all is
-that those three must agree.
+**The stored outcome is the one the account shows.** The model is
+deterministic given its inputs, but both the engine and the checked-in market
+dataset change, so the first decision is written from the survival rate on the
+row rather than a fresh run. It is shown to one decimal, because rounding a
+99.6% survival rate to "100%" overstates it.
 
 ## Shared machinery
 

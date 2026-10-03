@@ -1,41 +1,34 @@
 "use client";
 
 /**
- * "Save these results to your free account", under the model's answer.
+ * "See your result in Ask Linc": the form that stands where the verdict would.
  *
- * The ask is an account rather than an inbox copy. Submitting sends the email,
- * whose link lands on signup with this address already filled in, and takes
- * the visitor there itself rather than asking them to go and find it. Either
- * route makes the run the first decision in the new account. See
- * `docs/RETIREMENT_QUICKPLAN.md`.
- *
- * Only the emailed route proves the address. Following a link sent to an inbox
- * demonstrates reading it, which is what lets registration skip the
- * verification code; a token handed to this page demonstrates nothing, since
- * whoever typed the address received it. The server marks a disclosed token
- * and withholds the skip, so going straight there saves the run and still
- * verifies by code.
+ * The page runs the model but does not show its answer. Giving an address
+ * sends the visitor to signup with it prefilled, and the run opens in Ask Linc
+ * as the account's first decision. Registration skips the verification code
+ * for a calculator lead, so a password is all that stands between this form
+ * and the answer. See `auth/routes` and `docs/RETIREMENT_QUICKPLAN.md`.
  *
  * It appears only once a plan has actually been run and returned a verdict.
- * A `rates` run has no survival figure to send — the model will not invent a
- * portfolio or a spending level — so there is nothing to put in an inbox and
- * the form stays away.
- *
- * As the gate (`gate`), it comes before the result instead of after it. The
- * page holds the answer back until an address is given. Submitting sends the
- * same email and creates the same lead, then reveals the result and stays on
- * the page. Going to signup becomes a button beside the answer rather than
- * the next thing that happens. See `lib/calculator-results-gate`.
+ * A `rates` run has no survival figure — the model will not invent a
+ * portfolio or a spending level — so there is no run to save and the form
+ * stays away.
  *
  * The six numbers are posted, never the computed result: the server re-runs
- * the model before it sends, so nothing this form does can put an arbitrary
- * figure in an email carrying our branding. The run the visitor just made is
- * still in the model's cache, so the re-run costs nothing.
+ * the model before it stores the lead, so nothing this form does can put an
+ * arbitrary figure into an account or an email carrying our branding. The run
+ * the visitor just made is still in the model's cache, so the re-run costs
+ * nothing.
+ *
+ * When no token comes back (the lead did not store, or its disclosure mark
+ * did not), there is no run to seed an account from. The page shows the
+ * verdict itself instead, through `onReveal`, rather than sending the visitor
+ * to an account that would open empty.
  */
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { pushRetirementResultsEmailed } from "@/lib/dataLayer";
-import { readUnlockedEmail, rememberUnlock } from "@/lib/calculator-results-gate";
+import { readRememberedEmail, rememberEmail } from "@/lib/calculator-email-memory";
 import { readCalculatorLeadAttribution } from "@/lib/calculator-lead-attribution";
 import {
   isHandoverToken,
@@ -52,7 +45,7 @@ import {
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
 
-type Status = "idle" | "sending" | "sent" | "unlocked" | "leaving";
+type Status = "idle" | "sending" | "revealed" | "leaving";
 
 export interface RetirementEmailCaptureInputs {
   currentAge: number;
@@ -76,49 +69,33 @@ export function RetirementEmailCapture({
   inputs,
   survivalRate,
   compact = false,
-  gate = false,
-  onUnlock,
+  onReveal,
 }: {
   inputs: RetirementEmailCaptureInputs;
   survivalRate: number;
   compact?: boolean;
-  /** Stand between the visitor and the result rather than under it. */
-  gate?: boolean;
-  /** Called once the address is accepted, so the page can reveal the result. */
-  onUnlock?: () => void;
+  /** Show the verdict on the page: the fallback when there is no run to carry. */
+  onReveal: () => void;
 }) {
-  // Prefilled from an earlier unlock in this tab, so a later run's save does
-  // not ask for an address the visitor already gave.
-  const [email, setEmail] = useState(() => readUnlockedEmail() ?? "");
+  // Prefilled from an earlier run in this tab, so the visitor is not asked
+  // for an address they already gave.
+  const [email, setEmail] = useState(() => readRememberedEmail() ?? "");
   const [status, setStatus] = useState<Status>("idle");
   const [error, setError] = useState<string | null>(null);
-  /** The lead token from a gated send, spent when the visitor asks to sign up. */
-  const [ref, setRef] = useState<string | null>(null);
   /** One conversion event per visitor, however many times they resend. */
   const reported = useRef(false);
-
-  /**
-   * Carry this run to signup.
-   *
-   * Both carriers, because they fail differently. The cookie is what
-   * /getstarted exchanges, and it cannot be read back from here to know it
-   * took. The stored context carries the same token and the figures, so a
-   * browser refusing the cookie costs the address prefill, not the run.
-   *
-   * No `emailedOutcome`: that field exists because a link opened days later
-   * may disagree with the figures its message quoted. Nothing has drifted
-   * between this result and this click.
+  /*
+   * The page remounts this form for every run. A send still in flight for
+   * the previous run must not reveal, or carry to signup, the run now on
+   * screen.
    */
-  async function leave(token: string, tracking?: Promise<void>) {
-    writeHandoverToken(RETIREMENT_REF_COOKIE, token);
-    storeRetirementSignupContext(inputs, {
-      email: email.trim(),
-      sourceToken: token,
-    });
-    setStatus("leaving");
-    await tracking;
-    leaveForSignup(resultsPageSignupHref(RETIREMENT_SIGNUP_HREF));
-  }
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -153,27 +130,26 @@ export function RetirementEmailCapture({
 
       const body = await response.json().catch(() => null) as { ref?: unknown } | null;
       const token = isHandoverToken(body?.ref) ? body.ref : null;
-      rememberUnlock(email);
-
-      if (gate) {
-        // The email went out, which is what the gate asked for, whether or not
-        // a token came back. Without one there is no save to offer: the first
-        // decision is seeded from the stored lead and nothing else, so a
-        // signup would arrive at an empty account.
-        setRef(token);
-        setStatus("unlocked");
-        onUnlock?.();
-        return;
-      }
+      rememberEmail(email);
+      if (!mounted.current) return;
 
       if (!token) {
-        // The lead did not store, or its disclosure did not. Nothing to carry,
-        // so this stays what it was before: the results are in their inbox.
-        setStatus("sent");
+        // Nothing to seed an account from, so the verdict is shown here.
+        setStatus("revealed");
+        onReveal();
+        await tracking;
         return;
       }
 
-      await leave(token, tracking);
+      // Both carriers, because they fail differently. The cookie is what
+      // /getstarted exchanges, and it cannot be read back from here to know it
+      // took. The stored context carries the same token and the inputs, so a
+      // browser refusing the cookie costs the address prefill, not the run.
+      writeHandoverToken(RETIREMENT_REF_COOKIE, token);
+      storeRetirementSignupContext(inputs, { email: email.trim(), sourceToken: token });
+      setStatus("leaving");
+      await tracking;
+      leaveForSignup(resultsPageSignupHref(RETIREMENT_SIGNUP_HREF));
     } catch {
       setError("Network error. Please check your connection and try again.");
       setStatus("idle");
@@ -183,55 +159,23 @@ export function RetirementEmailCapture({
   if (status === "leaving") {
     return (
       <div className="qp-email-capture is-sent" role="status" aria-live="polite">
-        <p className="section-kicker">SAVING THIS RUN</p>
-        <h3>Taking you to your account…</h3>
+        <p className="section-kicker">OPENING ASK LINC</p>
+        <h3>Taking you to your result…</h3>
         <p>
-          We’re also emailing your result to <strong>{email.trim()}</strong>, so you can finish
-          creating your account later.
+          Choose a password and your retirement result opens as your first decision. We’ve also
+          emailed <strong>{email.trim()}</strong> a link back, in case you finish later.
         </p>
       </div>
     );
   }
 
-  if (status === "unlocked") {
-    return (
-      <div className="qp-email-capture is-sent calculator-signup-cta" role="status" aria-live="polite">
-        <p className="qp-email-lead">
-          We emailed a copy to <strong>{email.trim()}</strong>.
-          {ref && " Save it to a free account to keep exploring and add your connected accounts."}
-        </p>
-        {ref && <button
-          className="button button-primary"
-          type="button"
-          onClick={() => { void leave(ref); }}
-          data-cs-override-id="quickplan-unlocked-signup"
-        >
-          Save these results to your free account
-        </button>}
-      </div>
-    );
-  }
-
-  if (status === "sent") {
+  if (status === "revealed") {
     return (
       <div className="qp-email-capture is-sent" role="status" aria-live="polite">
-        <p className="section-kicker">CHECK YOUR INBOX</p>
-        <h3>Your link is on its way.</h3>
-        <p>
-          We sent it to <strong>{email.trim()}</strong>, along with the verdict and the figures
-          behind it. Open the link, pick a password, and this run will be waiting as your first
-          decision. It can take a minute to arrive.
+        <p className="qp-email-lead">
+          We couldn’t set up your account link just now, so here is your result. We’ve also
+          emailed <strong>{email.trim()}</strong>.
         </p>
-        <button
-          className="qp-email-again"
-          type="button"
-          onClick={() => {
-            setStatus("idle");
-            setEmail("");
-          }}
-        >
-          Send to a different address
-        </button>
       </div>
     );
   }
@@ -239,15 +183,12 @@ export function RetirementEmailCapture({
   return (
     <form className={`qp-email-capture${compact ? " is-compact" : ""}`} onSubmit={handleSubmit} aria-busy={status === "sending"}>
       <div className="qp-email-copy">
-        <p className="section-kicker">{gate ? "YOUR RESULT IS READY" : "KEEP THIS ANSWER"}</p>
-        <h3>{gate ? "See your retirement result" : "Save this to a free account"}</h3>
-        {gate ? <p className="qp-email-lead">Enter your email to see how your plan held up. We’ll send you a copy too.</p> : compact ? <p className="qp-email-lead">Keep this result and get an email copy.</p> : (
+        <p className="section-kicker">YOUR RESULT IS READY</p>
+        <h3>See your retirement result in Ask Linc</h3>
         <p className="qp-email-lead">
-          Create a password on the next screen to save your result, assumptions, and scenarios.
-          We’ll also email you a copy.
+          Enter your email, then choose a password to see how your plan held up, in Ask Linc. No
+          code to enter, no credit card.
         </p>
-        )}
-
       </div>
 
       <div className="qp-email-fields">
@@ -276,12 +217,11 @@ export function RetirementEmailCapture({
             disabled={status === "sending"}
             data-cs-override-id="quickplan-email-results"
           >
-            {status === "sending" ? "Sending…" : gate ? "Show my results" : "Save these results to your free account"}
+            {status === "sending" ? "Sending…" : "See my result in Ask Linc"}
           </button>
-      </div>
+        </div>
 
-      {error && <p className="qp-email-error" role="alert">{error}</p>}
-
+        {error && <p className="qp-email-error" role="alert">{error}</p>}
       </div>
     </form>
   );

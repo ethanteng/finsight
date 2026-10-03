@@ -514,20 +514,6 @@
   word-break: break-word;
 }
 
-.coast-fire-page .cf-email-again {
-  margin-top: 16px;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--ink);
-  cursor: pointer;
-  font-size: 14px;
-  font-weight: 700;
-  text-decoration: underline;
-  text-decoration-color: rgba(16, 35, 25, 0.35);
-  text-underline-offset: 4px;
-}
-
 /* ------------------------------------------------------- section headings */
 
 /*

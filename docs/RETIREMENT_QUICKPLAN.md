@@ -108,11 +108,13 @@ same sourcing is still in the assumptions disclosure, which a visitor only
 reaches by running the model, so the page no longer credits its data sources to
 someone who reads it without running anything.
 
-## The email gate
+## The answer opens in Ask Linc
 
-A plan result is held back until the visitor gives an email address, and a
-`rates` result is not. The same gate covers the Coast FIRE page. See **The email
-gate** in `COAST_FIRE_EMAIL_CAPTURE.md`.
+A plan result is not shown on this page. The visitor gives an email address,
+chooses a password, and sees it as the first decision in their account, with no
+verification code in between. A `rates` result is shown, because it has no run
+to save. The same applies to the Coast FIRE page. See **The answer opens in Ask
+Linc** in `COAST_FIRE_EMAIL_CAPTURE.md`.
 
 ## Three runs, then the save
 
@@ -430,13 +432,15 @@ opposite of the usual order here, and it is worth stating because getting it
 wrong strands people silently.
 
 - *Frontend first* is safe. The new page sends `calculatorRef`, which an older
-  backend ignores as an unknown body field, and reads `user.emailVerified`,
-  which an older backend omits — so it falls through to the verification screen
-  and the older backend has mailed a code. Nothing breaks.
-- *Backend first* is not. The new backend stops mailing the code on this path
-  while the old page still sends every signup to `/verify-email`, where they
-  wait for mail that will never arrive. Nothing errors; it simply looks like a
-  broken email pipeline.
+  backend ignores as an unknown body field, and reads `user.emailVerified` and
+  `firstDecisionPending`, which an older backend omits or reports as false — so
+  it falls through to the verification screen and the older backend has mailed
+  a code. Nothing breaks.
+- *Backend first* is not. The new backend stops mailing the code for every
+  calculator lead, the page's own handoff included, while an old page that
+  reads only `emailVerified` still sends those signups to `/verify-email`,
+  where they wait for mail that will never arrive. Nothing errors; it simply
+  looks like a broken email pipeline.
 
   The straight-to-signup step is safe in both orders on its own: an old page
   ignores the `ref` a new backend returns, and a new page gets no `ref` from an

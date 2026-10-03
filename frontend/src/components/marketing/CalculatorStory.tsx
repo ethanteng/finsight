@@ -82,7 +82,7 @@ export function CalculatorNextQuestion({ coast = false }: { coast?: boolean }) {
 }
 
 /**
- * Where the result goes while it waits for an email address.
+ * What stands where the result would. The answer itself opens in Ask Linc.
  *
  * The blurred card behind the message is illustration, never the visitor's
  * answer: its figures are fixed and appear on every run. Rendering the real
@@ -104,7 +104,7 @@ export function CalculatorLockedResult({ coast = false }: { coast?: boolean }) {
       <div className="calculator-locked-message">
         <Lock size={20} aria-hidden="true" />
         <h2 id="calculator-locked-title">Your result is ready.</h2>
-        <p>Enter your email below to see it.</p>
+        <p>Enter your email below to see it in Ask Linc.</p>
       </div>
     </aside>
   );

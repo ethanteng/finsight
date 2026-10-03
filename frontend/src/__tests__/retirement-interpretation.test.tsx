@@ -12,11 +12,13 @@
 import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { RetirementQuickPlan } from '@/components/marketing/RetirementQuickPlan';
-import { CALCULATOR_RESULTS_UNLOCK_KEY } from '@/lib/calculator-results-gate';
+import { revealCalculatorResult } from '@/test-utils/calculator-reveal';
 
 jest.mock('@/lib/dataLayer', () => ({
   pushRetirementInteraction: jest.fn(),
   pushRetirementModelRun: jest.fn(),
+  // Results are shown through the email form now, which reports the send.
+  pushRetirementResultsEmailed: jest.fn(),
 }));
 
 // Recharts needs a ResizeObserver jsdom does not provide, and none of this is
@@ -99,18 +101,21 @@ function renderPage() {
   return render(<RetirementQuickPlan headline="Can I retire at 60?" initialRetirementAge={60} />);
 }
 
-function run() {
+/**
+ * Run the model and get its answer onto the page. The verdict is held back
+ * until the email form reveals it, which it does when no lead token comes
+ * back — as here, where the send answers with the plan rather than a `ref`.
+ */
+async function run() {
   fireEvent.change(screen.getByLabelText(/current age/i), { target: { value: '52' } });
   fireEvent.change(screen.getByLabelText(/investment assets today/i), { target: { value: '1200000' } });
   fireEvent.change(screen.getByLabelText(/annual spending in retirement/i), { target: { value: '95000' } });
   fireEvent.submit(screen.getByRole('button', { name: /run the model/i }).closest('form')!);
+  await revealCalculatorResult();
 }
 
 beforeEach(() => {
   window.sessionStorage.clear();
-  // These cases are about the answer, so the results email has already been
-  // given. The gate in front of it has its own cases in calculator-results-gate.
-  window.sessionStorage.setItem(CALCULATOR_RESULTS_UNLOCK_KEY, 'reader@example.com');
   Element.prototype.scrollIntoView = jest.fn();
   global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({ allocations: [] }) });
 });
@@ -118,7 +123,7 @@ beforeEach(() => {
 it('renders the reading under the verdict', async () => {
   mockApi(reading);
   renderPage();
-  run();
+  await run();
 
   expect(await screen.findByText(READING.headline)).toBeInTheDocument();
   for (const paragraph of READING.paragraphs) expect(screen.getByText(paragraph)).toBeVisible();
@@ -135,7 +140,7 @@ it('renders the reading under the verdict', async () => {
 it('shows the reading together with the result without a jump link', async () => {
   mockApi(reading);
   const { container } = renderPage();
-  run();
+  await run();
 
   await screen.findByText(READING.headline);
 
@@ -154,7 +159,7 @@ it('shows the reading together with the result without a jump link', async () =>
 it('shows the verdict without waiting, and shows nothing when no reading comes', async () => {
   mockApi(dropped);
   renderPage();
-  run();
+  await run();
 
   // The deterministic answer is on the page regardless.
   expect(await screen.findByText(/retirements in market history/i)).toBeInTheDocument();
@@ -171,7 +176,7 @@ it('shows the verdict without waiting, and shows nothing when no reading comes',
 it('leaves the page intact when the interpretation request fails outright', async () => {
   mockApi(() => Promise.reject(new Error('offline')));
   renderPage();
-  run();
+  await run();
 
   expect(await screen.findByText(/retirements in market history/i)).toBeInTheDocument();
   await waitFor(() => {
@@ -200,6 +205,9 @@ it('asks about the plan as submitted, not the normalized one', async () => {
   renderPage();
   fireEvent.change(screen.getByLabelText(/current age/i), { target: { value: '52' } });
   fireEvent.submit(screen.getByRole('button', { name: /run the model/i }).closest('form')!);
+  // No reading is asked for while the answer is held back.
+  expect(bodies).toHaveLength(0);
+  await revealCalculatorResult();
 
   await waitFor(() => expect(bodies).toHaveLength(1));
   // The blanks stay blank. PLAN_RESULT.inputs names 1,200,000 and 95,000;

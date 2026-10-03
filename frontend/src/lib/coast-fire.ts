@@ -158,6 +158,6 @@ export const COAST_FIRE_FAQ: CoastFireFaq[] = [
   {
     question: "Is the Coast FIRE calculator free?",
     answer:
-      "Yes. It is free and requires no account. We ask for your email before showing your result, and send you a copy of it. The calculation itself runs in your browser; the plain-language reading printed under your result is written on our server from the same seven numbers. Ask Linc's planning experience is the next step when you want to replace the simple assumptions with your actual holdings, spending, income, taxes, and scenarios.",
+      "Yes. The calculator is free, and your result opens in Ask Linc: enter your email and choose a password. There is no code to enter and no credit card. Ask Linc's planning experience is the next step when you want to replace the simple assumptions with your actual holdings, spending, income, taxes, and scenarios.",
   },
 ];
