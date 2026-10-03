@@ -328,6 +328,30 @@ it('asks for a retry, and shows no verdict, when nothing was stored', async () =
 });
 
 /*
+ * The run lands after an await, so its render is scheduled rather than flushed
+ * with the submit, and a frame callback can run before it does (Firefox's
+ * can). Scrolling from one found the results still hidden and left the
+ * visitor below them. With frame callbacks held back entirely, the page must
+ * still bring the results into view once they render.
+ */
+it('scrolls to the results once they render, not on the next frame', async () => {
+  const raf = jest.spyOn(window, 'requestAnimationFrame').mockImplementation(() => 0);
+  try {
+    renderPage();
+    await runTheModel();
+
+    const results = screen.getByLabelText('Your retirement result');
+    await waitFor(() => expect(Element.prototype.scrollIntoView).toHaveBeenCalled());
+    const scrolled = jest.mocked(Element.prototype.scrollIntoView).mock.contexts;
+    expect(scrolled).toContain(results);
+    expect(results).not.toHaveAttribute('hidden');
+    expect(document.activeElement).toBe(results);
+  } finally {
+    raf.mockRestore();
+  }
+});
+
+/*
  * Three runs answer the question the page asks. Past that it is being used as
  * a free modelling tool, and the only thing left to do is save the result —
  * which is the argument the page exists to make.
