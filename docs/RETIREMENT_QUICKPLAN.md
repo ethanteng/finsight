@@ -432,19 +432,23 @@ Three things keep that honest:
 **The `tokenDisclosedAt` migration has to land with or before the backend.**
 Both directions fail safe, which is worth knowing rather than relying on: with
 the column missing, the disclosure write throws, no `ref` is returned, and the
-page shows the result itself rather than sending the visitor to an empty
-workspace. A lead read against a missing column errors too, which resolves to
-no lead, so the code is sent. More verification, never less.
+page tells the visitor to use the emailed link rather than putting an
+undisclosed token in the page. A lead read against a missing column errors too,
+which resolves to no lead, so the code is sent. More verification, never less.
 
-**Deploy the frontend first, or with the backend — never after.** This is the
-opposite of the usual order here, and it is worth stating because getting it
-wrong strands people silently.
+**For this Ask Linc handoff, deploy the backend first (or with the frontend).**
+An older backend still returns no `ref` for an existing account (and used to
+mail the full results instead). A newer page that never reveals the answer would
+then tell that visitor to retry, with no token to attach. The new backend returns
+the token for every stored lead and links existing accounts through sign-in, so
+that path only works once the backend is live. The older “frontend first” rule
+still applies to the verification-code skip alone:
 
-- *Frontend first* is safe. The new page sends `calculatorRef`, which an older
-  backend ignores as an unknown body field, and reads `user.emailVerified` and
-  `firstDecisionPending`, which an older backend omits or reports as false — so
-  it falls through to the verification screen and the older backend has mailed
-  a code. Nothing breaks.
+- *Frontend first* is safe for registration fields. The new page sends
+  `calculatorRef`, which an older backend ignores as an unknown body field, and
+  reads `user.emailVerified` and `firstDecisionPending`, which an older backend
+  omits or reports as false — so it falls through to the verification screen and
+  the older backend has mailed a code. Nothing breaks.
 - *Backend first* was not, when the only skip was the emailed link's: the
   backend stopped mailing the code while the old page still sent every signup
   to `/verify-email`, where they waited for mail that never arrived. Nothing
@@ -452,12 +456,6 @@ wrong strands people silently.
   the page's own handoff does not repeat that: the backend skips the code for
   a disclosed lead only when the page sends `acceptsFirstDecisionHandoff`,
   which an old page never does, so it still gets its code.
-
-  The straight-to-signup step is safe in both orders on its own: an old page
-  ignores the `ref` a new backend returns, and a new page gets no `ref` from an
-  old backend and shows the result on the page. With the handoff skip gated on
-  the page's opt-in, neither order strands anyone any more; frontend first
-  remains the conventional order.
 
 `VerifyEmailForm` bounces an already-verified session into the workspace, which
 covers someone landing there later — but that bounce lives in the *frontend*,

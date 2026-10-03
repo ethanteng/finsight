@@ -121,8 +121,8 @@ router.post('/email-results', emailRateLimit, async (req: Request, res: Response
   }
 
   // The scenario is stored before the send so the link in that email resolves.
-  // A failed write costs personalization, not the email: the CTA falls back to
-  // plain /getstarted.
+  // A failed write is a 503 with no email: there is no account-side copy to
+  // point at, and the page shows no result itself.
   const token = generateLeadToken();
   const attribution = parseCalculatorLeadAttribution(req.body?.attribution);
   const [stored, existingAccount] = await Promise.all([

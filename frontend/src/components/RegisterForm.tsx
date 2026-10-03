@@ -816,8 +816,8 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
       if (isTrial) {
         pushTrialSignupRegistrationError(res.ok ? 'unknown' : 'server_rejected');
       }
-      // An existing account cannot be seeded through /auth/register. Show the
-      // answer they were promised and send them to sign in, rather than leaving
+      // An existing account cannot be seeded through /auth/register. Point them
+      // at sign-in with the run still in the stored context, rather than leaving
       // them with a figure-free inbox and a locked calculator page.
       if (res.status === 409 && resultWaiting) {
         setExistingAccountResult(true);

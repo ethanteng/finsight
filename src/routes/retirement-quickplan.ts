@@ -261,8 +261,8 @@ router.post('/email-results', emailRateLimit, async (req: Request, res: Response
   }
 
   // Stored before the send so the link in that email resolves. A failed write
-  // costs personalization, not the email: the CTA falls back to plain
-  // /getstarted.
+  // is a 503 with no email: there is no account-side copy to point at, and the
+  // page shows no result itself.
   const token = generateLeadToken();
   const outcome = {
     survivalRate: primary.survivalRate,

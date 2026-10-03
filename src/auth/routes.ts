@@ -476,7 +476,6 @@ router.post('/login', async (req: Request, res: Response) => {
   }
 });
 
-// Get current user profile
 /*
  * Attach a calculator run to the signed-in account.
  *
@@ -507,6 +506,7 @@ router.post('/calculator-lead', authenticateUser, async (req: AuthenticatedReque
   return res.json({ attached: outcome === 'attached' || outcome === 'already-attached' });
 });
 
+// Get current user profile
 router.get('/profile', authenticateUser, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const user = await prisma.user.findUnique({
