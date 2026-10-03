@@ -1737,6 +1737,9 @@ describe('runAskLincAnalysis validation routing', () => {
     expect(result.showTheMathData?.evidenceManifest.secondaryCaveat).toBe(true);
     // The objection itself stays in the evidence, not in the user's answer.
     expect(result.structuredResponse.summary).not.toContain('ignores the cash position');
+    expect(result.showTheMathData?.evidenceManifest.validation.deterministic.initialIssues).toEqual([
+      'Initial answer is unsupported.',
+    ]);
     expect(result.showTheMathData?.evidenceManifest.validation.secondary).toEqual([
       { phase: 'initial', valid: false, issues: ['Initial answer is unsupported.'] },
       { phase: 'retry', valid: false, issues: ['The recommendation ignores the cash position.'] },

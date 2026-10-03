@@ -161,10 +161,11 @@ export interface EvidenceManifest {
        */
       removals?: SalvageRemovals;
       /**
-       * What the first draft failed when it was first checked, before any
-       * widening re-judged it. This is why recovery ran; `issues` above
-       * describes only the answer that shipped. Absent when the first draft
-       * passed, and on manifests persisted before it was recorded.
+       * What the first draft failed when it was first checked — grounding,
+       * format, and secondary — before any widening re-judged it. This is why
+       * recovery ran; `issues` above describes only the answer that shipped.
+       * Absent when the first draft passed, and on manifests persisted before
+       * it was recorded.
        */
       initialIssues?: string[];
       /**

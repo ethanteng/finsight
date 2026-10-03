@@ -626,9 +626,7 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
 
   // A reply that is not an answer fails here even when every figure it
   // happens to contain is grounded; otherwise it ships as one.
-  const initialFormatIssues = formatIssues(initialReply.format);
-  const initialIssues = [...groundingResult.issues, ...initialFormatIssues];
-  let validationIssues = initialIssues;
+  let validationIssues = [...groundingResult.issues, ...formatIssues(initialReply.format)];
 
   const runSecondaryValidation = async (phase: 'initial' | 'retry'): Promise<string[]> => {
     if (!enableValidation || !questionNeeds.needsSecondaryValidation) return [];
@@ -653,6 +651,9 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
     // A reply that is not an answer has no reasoning to review.
     ...(initialReply.format === 'structured' ? await runSecondaryValidation('initial') : []),
   ]));
+  // Capture after the secondary merge and before widening re-judges grounding, so
+  // a Gemini-only rejection still records why recovery ran.
+  const initialIssues = [...validationIssues];
 
   if (validationIssues.length > 0) {
     console.warn('Ask Linc: Response validation failed, regenerating with feedback:', validationIssues);
