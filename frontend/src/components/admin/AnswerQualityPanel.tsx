@@ -363,7 +363,7 @@ function AnswerDetailPanel({ details }: { details: AnswerDetails }) {
   const modelCalls = notableModelCalls(details.modelCalls);
   return (
     <div className="mt-3 rounded border border-gray-700 bg-gray-950/60 p-3">
-      {details.shippedDraft === 'initial' && (
+      {details.shippedDraft === 'initial' && !details.replacedSummary && (
         <div className="rounded border border-yellow-900/60 bg-yellow-950/10 p-2 text-xs leading-5 text-yellow-200">
           Shipped the first draft: the retry came back with no answer in it, so the user received the first draft
           instead, minus anything removed below.

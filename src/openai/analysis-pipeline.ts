@@ -807,6 +807,8 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
         structuredResponse = salvage.response;
         salvageRemovals = salvage.removals;
         deterministicOutcome = structuredResponse.summary === UNVERIFIABLE_SUMMARY ? 'replaced' : 'salvaged';
+        // Salvage left nothing to ship; do not claim a draft that became the placeholder.
+        if (deterministicOutcome === 'replaced') shippedDraft = undefined;
       }
 
       // Salvaged prose reaches the user, so it owes the same secondary check as a

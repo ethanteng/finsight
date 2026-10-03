@@ -1305,6 +1305,24 @@ describe('runAskLincAnalysis validation routing', () => {
     expect(deterministic.shippedDraft).toBeUndefined();
   });
 
+  it('does not claim a shipped draft when salvage of the first draft leaves nothing', async () => {
+    mockedAskClaude
+      .mockResolvedValueOnce(JSON.stringify({
+        summary: 'Your net worth is $999,999.',
+        insights: ['Act on $999,999.'],
+        suggested_actions: [],
+      }))
+      .mockResolvedValueOnce("Here's what the numbers show.");
+
+    const result = await runAskLincAnalysis({ question: 'What is my net worth?', userId: 'user-1' });
+
+    expect(result.structuredResponse.summary).toBe(UNVERIFIABLE_SUMMARY);
+    const deterministic = result.showTheMathData!.evidenceManifest.validation.deterministic;
+    expect(deterministic.outcome).toBe('replaced');
+    expect(deterministic.shippedDraft).toBeUndefined();
+    expect(deterministic.removals?.replacedSummary).toBe('Your net worth is $999,999.');
+  });
+
   it('asks for the input that blocked the retirement projection', async () => {
     // The missing input was only ever described to the model, buried in the
     // context pack. The user is the one who can supply it.

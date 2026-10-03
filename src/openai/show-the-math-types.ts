@@ -172,8 +172,8 @@ export interface EvidenceManifest {
        * Which generation the delivered answer was built from once a retry ran.
        * `initial` means the retry came back with no answer in it and the first
        * draft shipped in its place, with any unsupported parts removed. Absent
-       * when no retry ran, or when neither generation was an answer and the
-       * user received the placeholder.
+       * when no retry ran, when neither generation was an answer, or when the
+       * chosen draft salvaged down to the placeholder.
        */
       shippedDraft?: 'initial' | 'retry';
     };
