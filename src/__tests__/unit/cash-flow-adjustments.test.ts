@@ -101,10 +101,11 @@ describe('adjusting what the forecast counts', () => {
     const unitedPayee = (built: ReturnType<typeof model>) =>
       buildCashFlowReport(built, { granularity: 'month', horizonMonths: 3 }).typicalPayees.find(payee => payee.payeeKey === 'united airlines');
 
-    // The payee now flies on another occasion in the basis, so the first flight is ordinary
+    // The payee now flies again, at a similar fare, so the first flight is ordinary
     // typical spending with or without the change, and the change takes no credit for it.
-    // (A charge within ten days of the flight would be the same trip, and still a one-off.)
-    const again = tx('card', '2026-07-20', 'expense', 350, 'UNITED AIRLINES', { merchant_name: 'United Airlines' });
+    // (A charge within ten days of the flight would be the same trip, and a much smaller
+    // fare would leave this one standing out: either way it would still be a one-off.)
+    const again = tx('card', '2026-07-20', 'expense', 1800, 'UNITED AIRLINES', { merchant_name: 'United Airlines' });
     expect(unitedPayee(model([counted], { transactions: [...history, again] }))!.countedOneOffIds).toEqual([]);
 
     // Months later the flight is before the 90-day basis: nothing is left to credit it to.

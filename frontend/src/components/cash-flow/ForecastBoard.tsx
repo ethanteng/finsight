@@ -423,7 +423,7 @@ export default function ForecastBoard({ report, apiUrl, onChanged }: {
           <Group
             title="One-offs"
             note={thresholdText
-              ? `A large amount from a payee seen on only one occasion in your last ${basisDays} days: ${thresholdText}. Amounts within ten days of each other, like a sum moved in pieces, are one occasion and count together. Counting one spreads it over those ${basisDays} days, as if amounts like it come that often.`
+              ? `A large amount that stands out from everything else from its payee in your last ${basisDays} days: ${thresholdText}, and at least twice the rest from that payee. Amounts within ten days of each other, like a sum moved in pieces, count together. Counting one spreads it over those ${basisDays} days, as if amounts like it come that often.`
               : undefined}
           >
             <CappedList

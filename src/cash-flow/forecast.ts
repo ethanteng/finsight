@@ -88,8 +88,10 @@ export const TYPICAL_BASIS_DAYS = 90;
 export const ONE_OFF_FLOOR = 1_000;
 /** ... once it is also this many typical weeks' worth. */
 const ONE_OFF_TYPICAL_WEEKS = 2;
-/** A payee's amounts no further apart than this, first to last, are one occasion. */
+/** A payee's amounts within this many days of an amount count with it, as one occasion. */
 const ONE_OCCASION_DAYS = 10;
+/** A large occasion is a one-off when it is at least this many times everything else from the payee. */
+const ONE_OFF_STANDS_OUT = 2;
 const DAYS_PER_MONTH = 365 / 12;
 
 export interface CashFlowTotals {
@@ -342,26 +344,45 @@ function learnFlows(
     spending: Math.max(ONE_OFF_FLOOR, ONE_OFF_TYPICAL_WEEKS * typicalWeek.spending),
   };
 
-  // A one-off is large for this user and does not repeat: a payee seen on
-  // more than one occasion in the basis is part of how they live, however
-  // large. Amounts a few days apart are one occasion -- a sum moved in pieces
-  // to stay under a transfer limit, a purchase paid in installments -- and it
-  // is their total that is large or not. Spread over the basis, four $20,000
-  // pieces of one move would otherwise read as $900 a day, every day.
-  const occasions = new Map<string, { first: CalendarDate; last: CalendarDate; total: number }>();
-  for (const entry of basisEntries) {
+  // A one-off is large for this user and not how they deal with the payee:
+  // with the payee's amounts within a few days of it, at least twice
+  // everything else the payee has in the basis. A payee whose large amounts
+  // recur is part of how they live, however large.
+  //
+  // Amounts a few days apart count together -- a sum moved in pieces to stay
+  // under a transfer limit, a purchase paid in installments -- so four
+  // $20,000 pieces of one move are one $80,000 occasion, not a payee seen four
+  // times, whose total spread over the basis would read as $900 a day, every
+  // day. Only what no stream projects is judged: a monthly contribution
+  // projected on its schedule, or a paycheck, does not make a lump to the same
+  // payee ordinary, and neither do the payee's everyday small amounts. The
+  // window is centred on each amount, so a regular amount just before a lump
+  // cannot split it, and a steady weekly payee never adds up to one.
+  const standsOut = new Set<string>();
+  const residualByPayee = new Map<string, CashFlowEntry[]>();
+  for (const entry of residual) {
     if (!entry.counterpartyKey) continue;
     const key = `${entry.flow}|${entry.counterpartyKey}`;
-    const seen = occasions.get(key);
-    occasions.set(key, seen
-      ? { first: minDate(seen.first, entry.date), last: maxDate(seen.last, entry.date), total: seen.total + entry.amount }
-      : { first: entry.date, last: entry.date, total: entry.amount });
+    residualByPayee.set(key, [...(residualByPayee.get(key) ?? []), entry]);
   }
-  const looksOneOff = (entry: CashFlowEntry) => {
-    const payee = entry.counterpartyKey ? occasions.get(`${entry.flow}|${entry.counterpartyKey}`) : undefined;
-    if (!payee) return Math.abs(entry.amount) >= oneOffThresholds[entry.flow];
-    return daysBetween(payee.first, payee.last) <= ONE_OCCASION_DAYS && Math.abs(payee.total) >= oneOffThresholds[entry.flow];
-  };
+  // What else the payee has is counted by sign: purchases against purchases,
+  // refunds against refunds. Netted, two unrelated $3,000 refunds would erase
+  // the evidence that three $3,000 purchases repeat; this way a refund of a
+  // one-off purchase is left out with it, not left to pull the rate down.
+  for (const entries of residualByPayee.values()) {
+    for (const entry of entries) {
+      const near = (other: CashFlowEntry) => Math.abs(daysBetween(entry.date, other.date)) <= ONE_OCCASION_DAYS;
+      const occasion = entries.filter(near).reduce((sum, other) => sum + other.amount, 0);
+      const rest = entries
+        .filter(other => !near(other) && Math.sign(other.amount) === Math.sign(occasion))
+        .reduce((sum, other) => sum + Math.abs(other.amount), 0);
+      const size = Math.abs(occasion);
+      if (size >= oneOffThresholds[entry.flow] && size >= ONE_OFF_STANDS_OUT * rest) standsOut.add(entry.id);
+    }
+  }
+  const looksOneOff = (entry: CashFlowEntry) => (entry.counterpartyKey
+    ? standsOut.has(entry.id)
+    : Math.abs(entry.amount) >= oneOffThresholds[entry.flow]);
   // A one-off the user counted joins the typical rate; it is recorded only
   // while it would otherwise have been left out, so a counted one-off that
   // aged out of the basis, or whose payee now repeats, is not.
