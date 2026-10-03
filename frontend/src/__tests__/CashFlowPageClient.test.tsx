@@ -359,7 +359,7 @@ describe('CashFlowPageClient', () => {
       render(<CashFlowPageClient />);
       const section = await basis();
       expect(within(section).getByText(
-        'A large amount from a payee seen only once in your last 90 days: $1,000 or more spent, or $1,000 or more received. Counting one spreads it over those 90 days, as if amounts like it come that often.'
+        'A large amount from a payee seen on only one occasion in your last 90 days: $1,000 or more spent, or $1,000 or more received. Amounts within ten days of each other, like a sum moved in pieces, are one occasion and count together. Counting one spreads it over those 90 days, as if amounts like it come that often.'
       )).toBeInTheDocument();
       expect(within(section).getByText('None in your last 90 days.')).toBeInTheDocument();
       expect(within(section).getByText('Nothing has stopped.')).toBeInTheDocument();

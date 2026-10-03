@@ -88,6 +88,8 @@ export const TYPICAL_BASIS_DAYS = 90;
 export const ONE_OFF_FLOOR = 1_000;
 /** ... once it is also this many typical weeks' worth. */
 const ONE_OFF_TYPICAL_WEEKS = 2;
+/** A payee's amounts no further apart than this, first to last, are one occasion. */
+const ONE_OCCASION_DAYS = 10;
 const DAYS_PER_MONTH = 365 / 12;
 
 export interface CashFlowTotals {
@@ -340,19 +342,25 @@ function learnFlows(
     spending: Math.max(ONE_OFF_FLOOR, ONE_OFF_TYPICAL_WEEKS * typicalWeek.spending),
   };
 
-  // A one-off is large for this user and does not repeat: a payee seen more
-  // than once in the basis is part of how they live, however large.
-  const payeeCounts = new Map<string, number>();
+  // A one-off is large for this user and does not repeat: a payee seen on
+  // more than one occasion in the basis is part of how they live, however
+  // large. Amounts a few days apart are one occasion -- a sum moved in pieces
+  // to stay under a transfer limit, a purchase paid in installments -- and it
+  // is their total that is large or not. Spread over the basis, four $20,000
+  // pieces of one move would otherwise read as $900 a day, every day.
+  const occasions = new Map<string, { first: CalendarDate; last: CalendarDate; total: number }>();
   for (const entry of basisEntries) {
     if (!entry.counterpartyKey) continue;
     const key = `${entry.flow}|${entry.counterpartyKey}`;
-    payeeCounts.set(key, (payeeCounts.get(key) ?? 0) + 1);
+    const seen = occasions.get(key);
+    occasions.set(key, seen
+      ? { first: minDate(seen.first, entry.date), last: maxDate(seen.last, entry.date), total: seen.total + entry.amount }
+      : { first: entry.date, last: entry.date, total: entry.amount });
   }
   const looksOneOff = (entry: CashFlowEntry) => {
-    const repeats = entry.counterpartyKey
-      ? (payeeCounts.get(`${entry.flow}|${entry.counterpartyKey}`) ?? 0) > 1
-      : false;
-    return !repeats && Math.abs(entry.amount) >= oneOffThresholds[entry.flow];
+    const payee = entry.counterpartyKey ? occasions.get(`${entry.flow}|${entry.counterpartyKey}`) : undefined;
+    if (!payee) return Math.abs(entry.amount) >= oneOffThresholds[entry.flow];
+    return daysBetween(payee.first, payee.last) <= ONE_OCCASION_DAYS && Math.abs(payee.total) >= oneOffThresholds[entry.flow];
   };
   // A one-off the user counted joins the typical rate; it is recorded only
   // while it would otherwise have been left out, so a counted one-off that
