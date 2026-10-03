@@ -61,6 +61,12 @@ export type CashPosition =
       lowPoint(from: CalendarDate, toExclusive: CalendarDate): { date: CalendarDate; cash: number } | null;
       /** Dated amounts in `[from, toExclusive)`, in date order. Everyday spending runs as a daily rate and is not listed. */
       itemsBetween(from: CalendarDate, toExclusive: CalendarDate): CashPositionItem[];
+      /**
+       * What arrives and leaves every day without being listed: the typical
+       * rates and the transfers that run as a rate. With the dated items, it
+       * is everything that moves the cash.
+       */
+      spreadPerDay: { in: number; out: number };
       /** Cards whose balances are not projected, and why. */
       cardsLeftOut: Array<{ accountId: string; name: string; reason: 'no_balance' | 'no_pace' }>;
     };
@@ -237,6 +243,7 @@ export function buildCashPosition(model: CashFlowModel, accountIds?: readonly st
     itemsBetween: (from, toExclusive) => items
       .filter(item => item.date >= from && item.date < toExclusive)
       .map(item => ({ ...item, amount: round(item.amount), balanceAfter: round(cash[indexOf(item.date)]) })),
+    spreadPerDay: { in: round(dailyIn), out: round(dailyOut) },
     cardsLeftOut: model.cards
       .filter(card => !card.projection && (whole || paysFromChosen(card)))
       .map(card => ({

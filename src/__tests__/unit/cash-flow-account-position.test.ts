@@ -112,6 +112,23 @@ describe('the cash position, account by account', () => {
     expect(paydays(whole)).toEqual(['2026-10-09 2500', '2026-10-09 1000', '2026-10-23 2500', '2026-10-23 1000']);
   });
 
+  it('says what moves the balance each day without being listed, so the list adds up', () => {
+    // Everyday spending from checking, at irregular amounts, runs as a rate.
+    const cafe = ['2026-07-08', '2026-07-11', '2026-07-25', '2026-08-01', '2026-08-19', '2026-08-23', '2026-09-09', '2026-09-12', '2026-09-27']
+      .map((date, index) => tx('checking', date, 'expense', [42, 18, 77, 35, 64, 23, 51, 90, 29][index], 'CORNER CAFE'));
+    const built = model({ transactions: [...householdTransactions(FROM, THROUGH), ...savingsTransactions(), ...cafe] });
+    const checking = available(buildCashPosition(built, ['checking']));
+    expect(checking.spreadPerDay.out).toBeGreaterThan(0);
+
+    const listed = new Set(checking.itemsBetween('2026-10-01', '2026-11-01').map(item => item.date));
+    const quiet = Array.from({ length: 30 }, (_, index) => addDays('2026-10-01', index)).find(date => !listed.has(date))!;
+    expect(checking.cashBefore(addDays(quiet, 1)) - checking.cashBefore(quiet))
+      .toBeCloseTo(checking.spreadPerDay.in - checking.spreadPerDay.out, 1);
+
+    const report = buildCashFlowReport(built, { granularity: 'month', horizonMonths: 3, accountIds: ['checking'] });
+    expect(report.position.spreadPerDay).toEqual(checking.spreadPerDay);
+  });
+
   it('lists each item with the balance at the end of its day', () => {
     const checking = available(buildCashPosition(model(), ['checking']));
     for (const item of checking.itemsBetween('2026-10-01', '2026-11-01')) {

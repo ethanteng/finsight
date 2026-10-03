@@ -56,6 +56,31 @@ describe('buildCashFlowModel', () => {
     expect(built.oneOffs.map(entry => [entry.label, entry.amount])).toEqual([['United Airlines', 2400]]);
   });
 
+  it('leaves out a sum moved in pieces a few days apart as one occasion', () => {
+    const toBrokerage = { personal_finance_category: { primary: 'TRANSFER_OUT', detailed: 'TRANSFER_OUT_INVESTMENT_AND_RETIREMENT_FUNDS' } };
+    const moved = [
+      // $80,000 to a brokerage in four pieces over a week, as a transfer limit splits it.
+      ...['2026-08-11', '2026-08-13', '2026-08-14', '2026-08-17'].map((date, index) =>
+        tx('checking', date, 'transfer_out', 20000, `BROKERAGE DES:ACH ID:XX${index}114`, toBrokerage)),
+      // Cash taken out of the brokerage in two pieces eight days apart: one small, one large.
+      tx('checking', '2026-07-22', 'income', 943.92, 'BROKERAGE CASH OUT ID:XX9045'),
+      tx('checking', '2026-07-30', 'income', 5000, 'BROKERAGE CASH OUT ID:XX2420'),
+      // A large payee seen on two occasions weeks apart is how the user lives.
+      tx('checking', '2026-07-10', 'expense', 3000, 'ACME ROOFING'),
+      tx('checking', '2026-08-20', 'expense', 3000, 'ACME ROOFING'),
+    ];
+    const before = model();
+    const built = model({ transactions: [...transactions, ...moved] });
+
+    expect(built.oneOffs.map(entry => [entry.label, entry.amount])).toEqual(expect.arrayContaining([
+      ['BROKERAGE CASH OUT', 5000], ['BROKERAGE CASH OUT', 943.92],
+    ]));
+    expect(built.typical.dailyIncome).toBe(0);
+    expect(built.transfers.oneOffs.map(entry => entry.amount)).toEqual([20000, 20000, 20000, 20000]);
+    expect(built.transfers.dailyByAccount.get('checking')?.out ?? 0).toBeCloseTo(before.transfers.dailyByAccount.get('checking')?.out ?? 0, 6);
+    expect(built.typical.dailySpending).toBeCloseTo(before.typical.dailySpending + 6000 / 90, 6);
+  });
+
   it('forecasts recurring items on their dates plus typical spending by the day', () => {
     const built = model();
     const october = forecastTotals(built, '2026-10-01', '2026-11-01')!;

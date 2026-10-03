@@ -305,6 +305,8 @@ export interface CashFlowPositionSummary {
   }>;
   /** Every dated amount in the month from the forecast start, with the balance after each day. */
   upcoming: CashPositionItem[];
+  /** What arrives and leaves every day without being listed in `upcoming`. Null when unavailable; an older report leaves it out. */
+  spreadPerDay?: { in: number; out: number } | null;
   lowPoint: { date: string; cash: number } | null;
   milestones: Array<{ key: string; date: string; cash: number; cardDebt: number }>;
   lowNext12Months: { date: string; cash: number } | null;

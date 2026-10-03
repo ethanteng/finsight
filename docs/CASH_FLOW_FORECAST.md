@@ -36,7 +36,10 @@ A forecast has three disclosed parts:
      - So dates that keep to a two-week step, each within two days of it, are biweekly however they fall in the month.
    - Annual charges are not recognised, because a year of history shows them once. They fall into typical spending as a daily rate.
 2. **Typical**: everything else, as a daily rate over at most the last 90 days.
-   - A large amount from a payee seen only once in that window is a one-off. It is left out of the rate and listed, because a past windfall or big purchase is not assumed to repeat.
+   - A large amount from a payee seen on only one occasion in that window is a one-off. It is left out of the rate and listed, because a past windfall or big purchase is not assumed to repeat.
+     - Amounts from one payee within ten days of each other, first to last, are one occasion, and their total is what counts as large. A sum moved in pieces is one move: a transfer limit can split $80,000 into four $20,000 transfers over a week.
+     - Before this rule, such pieces counted as a payee seen four times, and were spread over the window as a typical rate of about $900 a day, every day of the forecast. The same holds for transfers, which are learned the same way.
+     - A payee seen across more than ten days is part of how the user lives, however large.
    - A monthly income or expense override from the Finances page replaces the recurring and typical parts of that side.
 3. **Planned** (`planned-events.ts`): events the user saved.
 
@@ -214,14 +217,14 @@ The report gives balances at each period's end, the lowest point, and fixed mile
 
 Each of these is kept where the money moves, so the cash at a period's end is always the cash before, plus money in, less money out and card payments.
 
-The report also lists every cash account (`accounts`, with the primary one marked) and the ones the figures cover (`accountIds`, all unless the request chose some). It lists what is coming up (`upcoming`): the dated amounts in the month from the forecast start, with the balance at the end of each day. Paychecks, bills, transfers, card payments and planned events are listed; everyday spending runs as a daily rate and is not.
+The report also lists every cash account (`accounts`, with the primary one marked) and the ones the figures cover (`accountIds`, all unless the request chose some). It lists what is coming up (`upcoming`): the dated amounts in the month from the forecast start, with the balance at the end of each day. Paychecks, bills, transfers, card payments and planned events are listed; everyday spending runs as a daily rate and is not. `spreadPerDay` gives that rate for the accounts covered (`in` and `out`: typical income and spending, and transfers that run as a rate), so the list can be added up.
 
 On the page, Cash position has an account picker when there is more than one cash account. "All accounts" is the whole. Choosing an account shows just that one, and further choices add to it. The browser remembers the choice.
 
 "See every period" follows the chart:
 
 - **Under Cash position:** it lists money in, money out and what each period pays the cards, and the cash and card balances at its end. The card columns appear only when a card is projected, and a card paid from elsewhere is named as missing from what is paid. For the whole, money in and out include moves between the user's own accounts.
-- **Under the chart:** "Coming up in the next month" lists the upcoming items with the balance after each. Under Savings it lists cash in and out. A card payment is never cash out, so when the user has planned one, the Savings view says where it shows. A plan for a card already paid in full barely moves either chart: its payments are in the cash line with or without the plan, and its only effect on savings is the interest it saves.
+- **Under the chart:** "Coming up in the next month" lists the upcoming items with the balance after each, and says how much moves each day without being listed ("about $85 out and $12 in each day"). Without that, a balance after an item never matches the one before plus the item, and the list reads as wrong. Under Savings it lists cash in and out. A card payment is never cash out, so when the user has planned one, the Savings view says where it shows. A plan for a card already paid in full barely moves either chart: its payments are in the cash line with or without the plan, and its only effect on savings is the interest it saves.
 
 Card balances cover only the cards the model projects. The report lists the cards it leaves out and why (`cardsLeftOut`: no reported balance, or no pace to project), and the page names them beside the chart, so a partial total is never shown as all card debt.
 
