@@ -87,16 +87,11 @@ function LoginFormContent() {
     if (!isCoastFire && !hasRetirementSignupSource(searchParams)) return;
     const label = isCoastFire ? 'Coast FIRE' : 'retirement';
     const context = isCoastFire ? readCoastFireSignupContext() : readRetirementSignupContext();
-    if (context?.sourceToken) {
-      setCalculatorRun({ ref: context.sourceToken, label });
-      const storedEmail = context.email;
-      if (storedEmail) setEmail(current => current || storedEmail);
-      return;
-    }
 
-    // Arrived from the email instead. The cookie is spent here: the run is
-    // held for this page load (state + a remount-safe stash), and a later
-    // visit is an ordinary sign-in.
+    // An emailed link outranks whatever this tab carried from an earlier run:
+    // it is the run the visitor just chose to open. The cookie is spent here:
+    // the run is held for this page load (state + a remount-safe stash), and
+    // a later visit is an ordinary sign-in.
     const cookieName = isCoastFire ? COAST_FIRE_REF_COOKIE : RETIREMENT_REF_COOKIE;
     const fromCookie = readHandoverToken(cookieName);
     if (fromCookie) {
@@ -104,7 +99,14 @@ function LoginFormContent() {
       clearHandoverToken(cookieName, SIGN_IN_HANDOVER_COOKIE_PATH);
     }
     const emailedRef = fromCookie ?? recalledSignInHandover(cookieName);
-    if (!emailedRef) return;
+
+    if (!emailedRef || context?.sourceToken === emailedRef) {
+      if (!context?.sourceToken) return;
+      setCalculatorRun({ ref: context.sourceToken, label });
+      const storedEmail = context.email;
+      if (storedEmail) setEmail(current => current || storedEmail);
+      return;
+    }
     setCalculatorRun({ ref: emailedRef, label });
 
     // Best effort: the lookup only prefills the address.

@@ -4,16 +4,14 @@
  *
  * The calculators send a new visitor to signup to see their answer. Someone
  * who already has an account cannot register again (`/auth/register` answers
- * 409), and the "result ready" email states no answer, so handing them off
- * would leave them with no way to see it. Their result is shown on the page
- * and mailed in full instead.
+ * 409), so they are sent to sign in instead, where the run is attached.
  *
  * This says nothing registration does not already say: it answers 409 for an
  * address that is taken.
  *
- * A failed lookup reads as an existing account. The cost of that mistake is a
- * result shown on the page rather than in Ask Linc; the cost of the other is
- * a visitor stuck at a signup that refuses them.
+ * A failed lookup reads as a new address. Signup recovers from that mistake:
+ * its 409 links an existing account to sign-in with the run. Sign-in cannot
+ * recover from the other — a new visitor sent there has no account to open.
  */
 export async function accountExistsForEmail(email: string): Promise<boolean> {
   try {
@@ -25,6 +23,6 @@ export async function accountExistsForEmail(email: string): Promise<boolean> {
     return user !== null;
   } catch (error) {
     console.error('❌ Calculator account lookup failed:', error);
-    return true;
+    return false;
   }
 }

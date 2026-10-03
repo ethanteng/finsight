@@ -383,6 +383,8 @@ export async function seedFirstDecisionFromLead(params: {
     await prisma.conversation.create({ data: {
       userId, ...composeDecision(lead),
       origin: lead.kind === 'retirement' ? 'calculator_retirement' : 'calculator_coast_fire',
+      // So a later sign-in with the same link finds this run already here.
+      calculatorLeadToken: lead.lead.token,
     } });
 
     return 'seeded';
@@ -390,6 +392,10 @@ export async function seedFirstDecisionFromLead(params: {
     console.error('⚠️  Could not seed the first decision from a calculator run:', error);
     return 'failed';
   }
+}
+
+function isUniqueViolation(error: unknown): boolean {
+  return typeof error === 'object' && error !== null && 'code' in error && error.code === 'P2002';
 }
 
 /** What attaching a run to an existing account did. */
@@ -420,8 +426,11 @@ export type AttachLeadOutcome =
  * "nothing new" by waiting for an empty history to fill. The caller answers
  * once the run is written, and `/app` opens on it as the newest decision.
  *
- * Idempotent per run: signing in twice with the same token, or re-sending the
- * request, finds the decision it already wrote rather than adding a copy.
+ * Idempotent per run, keyed on the lead's token rather than on the decision's
+ * wording: two runs can read the same and still differ (the retirement
+ * question names neither the asset mix nor the planning horizon). The unique
+ * index on (account, token) makes it atomic, so signing in twice, re-sending
+ * the request, or attaching from two tabs at once writes the run once.
  */
 export async function attachCalculatorLeadToAccount(params: {
   userId: string;
@@ -437,15 +446,12 @@ export async function attachCalculatorLeadToAccount(params: {
     const decision = composeDecision(lead);
     const origin = lead.kind === 'retirement' ? 'calculator_retirement' : 'calculator_coast_fire';
 
-    const existing = await prisma.conversation.findFirst({
-      where: { userId: params.userId, origin, question: decision.question },
-      select: { id: true },
-    });
-    if (existing) return 'already-attached';
-
-    await prisma.conversation.create({ data: { userId: params.userId, ...decision, origin } });
+    await prisma.conversation.create({ data: {
+      userId: params.userId, ...decision, origin, calculatorLeadToken: lead.lead.token,
+    } });
     return 'attached';
   } catch (error) {
+    if (isUniqueViolation(error)) return 'already-attached';
     console.error('⚠️  Could not attach a calculator run to an existing account:', error);
     return 'failed';
   }

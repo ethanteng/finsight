@@ -98,7 +98,9 @@ lead is stored:
   the run follows the address they typed, below.
 - **An address that already has an account:** `email-results` says so
   (`existingAccount: true`, from `services/calculator-account-lookup.ts`; a
-  failed lookup counts as an existing account). Such an address cannot
+  failed lookup counts as a new address, because signup's 409 links a real
+  account to sign-in with the run and sign-in has nothing for a new visitor
+  to open). Such an address cannot
   register, so the page goes to `/login?source=coast-fire-calculator`. The
   sign-in form finds the run in the stored signup context, prefills the
   address, says the result is waiting, and after signing in attaches the run
@@ -111,7 +113,12 @@ Attaching (`attachCalculatorLeadToAccount`) makes the same address check
 registration makes, against the signed-in account, so a token for someone
 else's address writes nothing into this one. It is awaited, unlike seeding at
 registration: an existing account already has history, so `/app` cannot wait
-for an empty history to fill. It is idempotent per run.
+for an empty history to fill. It is idempotent per run: both it and seeding
+write the lead's token to `Conversation.calculatorLeadToken`, which is unique
+per account, so signing in twice or attaching from two tabs at once writes the
+run once. The key is the token rather than the decision's wording, because two
+runs can read the same — the retirement question names neither the asset mix
+nor the planning horizon.
 
 The page never falls back to showing the result. If the lead could not be
 stored, there is nothing any account could open, so `email-results` answers 503

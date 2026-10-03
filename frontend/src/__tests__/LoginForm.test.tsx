@@ -12,6 +12,7 @@ import {
   isFreeTrialSignupContinuation,
 } from '@/lib/trial-signup-flow';
 import { storeCoastFireSignupContext } from '@/lib/coast-fire-signup-context';
+import { storeRetirementSignupContext } from '@/lib/retirement-signup-context';
 import { resetSignInHandoverCache } from '@/lib/calculator-handover';
 
 const push = jest.fn();
@@ -388,6 +389,41 @@ describe('LoginForm', () => {
       expect(screen.getByText('Your retirement result is ready.')).toBeInTheDocument();
       await waitFor(() => expect(screen.getByLabelText('Email address')).toHaveValue('member@example.com'));
 
+      fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'correct-password' } });
+      fireEvent.click(screen.getByRole('button', { name: /Sign in to your workspace/i }));
+
+      await waitFor(() => expect(push).toHaveBeenCalledWith('/app'));
+      const attach = jest.mocked(global.fetch).mock.calls
+        .find(([url]) => String(url).includes('/auth/calculator-lead'))!;
+      expect(JSON.parse(String((attach[1] as RequestInit).body))).toEqual({ calculatorRef: TOKEN });
+    });
+
+    /*
+     * A tab that ran the calculator earlier still holds that run. The link the
+     * visitor just opened names a different one, and that is the one they
+     * came for.
+     */
+    it('opens the emailed run rather than an older one this tab carried', async () => {
+      storeRetirementSignupContext({
+        currentAge: 50, retirementAge: 62, investableAssets: 300_000,
+        annualSpending: 60_000, annualContributions: 10_000,
+        socialSecurityAnnual: 20_000, socialSecurityStartAge: 67,
+        lifeExpectancy: 90, allocation: 'growth',
+      }, { email: 'member@example.com', sourceToken: 'd'.repeat(48) });
+      global.fetch = jest.fn(async (url: RequestInfo | URL) => {
+        const target = String(url);
+        if (target.includes('/signup-context/')) return { ok: false, status: 404, json: async () => ({}) };
+        if (target.includes('/auth/login')) {
+          return { ok: true, json: async () => ({ token: 'secure-token', user: {} }) };
+        }
+        if (target.includes('/auth/calculator-lead')) {
+          return { ok: true, json: async () => ({ attached: true }) };
+        }
+        return { ok: true, json: async () => ({ status: 'active', accessLevel: 'full' }) };
+      }) as unknown as typeof fetch;
+
+      render(<LoginForm />);
+      fireEvent.change(screen.getByLabelText('Email address'), { target: { value: 'member@example.com' } });
       fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'correct-password' } });
       fireEvent.click(screen.getByRole('button', { name: /Sign in to your workspace/i }));
 
