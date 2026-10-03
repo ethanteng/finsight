@@ -16,11 +16,6 @@ const CONTENTSQUARE = "https://*.contentsquare.net";
 // directive.
 const CONTENTSQUARE_APP = "https://*.contentsquare.com";
 
-// clicks.page loads its tracker from here and sends its events back here
-// (fetch and sendBeacon both count as connect-src). The tracker is only ever
-// loaded on the production marketing site; see lib/clicks-analytics.ts.
-const CLICKS_PAGE = "https://clicks.page";
-
 /**
  * Where next.config.ts sends this policy: every path except the teaser video's
  * player page and captions, which set their own (see lib/teaser-video). This
@@ -82,7 +77,6 @@ export function buildContentSecurityPolicy({ isDevelopment }: { isDevelopment: b
     "https://production.plaid.com",
     "https://cdn.plaid.com",
     CONTENTSQUARE,
-    CLICKS_PAGE,
     "https://*.ghost.io",
     "https://blog.asklinc.com",
     "https://images.ghost.io",
@@ -91,7 +85,7 @@ export function buildContentSecurityPolicy({ isDevelopment }: { isDevelopment: b
 
   return [
     "default-src 'self'",
-    `script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.googletagmanager.com https://www.googleadservices.com https://www.google.com https://pagead2.googlesyndication.com ${CONTENTSQUARE} ${CONTENTSQUARE_APP} https://googleads.g.doubleclick.net https://cdn.plaid.com https://www.redditstatic.com https://bat.bing.com https://bat.bing.net ${CLICKS_PAGE}`,
+    `script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.googletagmanager.com https://www.googleadservices.com https://www.google.com https://pagead2.googlesyndication.com ${CONTENTSQUARE} ${CONTENTSQUARE_APP} https://googleads.g.doubleclick.net https://cdn.plaid.com https://www.redditstatic.com https://bat.bing.com https://bat.bing.net`,
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://www.redditstatic.com",
     // No blanket `https:`. An answer is rendered as Markdown, so an
     // image URL that reached the model through a search snippet or a
