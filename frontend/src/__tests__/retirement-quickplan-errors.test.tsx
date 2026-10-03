@@ -11,13 +11,10 @@ import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { RetirementQuickPlan } from '@/components/marketing/RetirementQuickPlan';
 import { pushRetirementInteraction } from '@/lib/dataLayer';
-import { revealCalculatorResult } from '@/test-utils/calculator-reveal';
 
 jest.mock('@/lib/dataLayer', () => ({
   pushRetirementInteraction: jest.fn(),
   pushRetirementModelRun: jest.fn(),
-  // Results are shown through the email form now, which reports the send.
-  pushRetirementResultsEmailed: jest.fn(),
 }));
 
 // Recharts needs a ResizeObserver jsdom does not provide, and these cases are
@@ -182,33 +179,6 @@ it('answers in rates, names what it assumed, and invents no dollar figure', asyn
   expect(panel.textContent).not.toContain('$');
 });
 
-it('does not describe when a Social Security benefit of zero starts', async () => {
-  // The claiming age defaults to 67, so a plan retiring at 60 with no benefit
-  // used to be told its Social Security "starts at 67" and that the survival
-  // figure counted it. Leaving the box blank is the ordinary path now.
-  const noBenefit = {
-    ...PLAN_RESULT,
-    inputs: { ...PLAN_RESULT.inputs, socialSecurityAnnual: 0, socialSecurityStartAge: 67, retirementAge: 60 },
-  };
-  (global.fetch as jest.Mock).mockImplementation((url: string, init?: RequestInit) =>
-    Promise.resolve(init?.method
-      ? { ok: true, json: async () => noBenefit }
-      : { ok: true, json: async () => ({ allocations: [] })})
-  );
-
-  renderPage();
-  fireEvent.submit(screen.getByRole('button', { name: /run the model/i }).closest('form')!);
-  // The send answers with the plan, so no lead token: the page shows it.
-  await revealCalculatorResult();
-  await screen.findByText(/the model's answer/i);
-
-  expect(screen.getByText(/No Social Security offset in the first year/i)).toBeInTheDocument();
-  expect(screen.getByText(/This plan includes no Social Security/i)).toBeInTheDocument();
-  expect(screen.queryByText(/Social Security starts at 67/i)).toBeNull();
-  expect(screen.queryByText(/has already started at this retirement age/i)).toBeNull();
-  expect(screen.queryByText(/counts your benefit/i)).toBeNull();
-});
-
 it('still renders a plan when the response omits the assumed list', async () => {
   // FE can land before BE on a rolling deploy; an older payload has primary
   // but no `assumed`. The page must not throw on assumed.length.
@@ -221,9 +191,9 @@ it('still renders a plan when the response omits the assumed list', async () => 
 
   renderPage();
   fireEvent.submit(screen.getByRole('button', { name: /run the model/i }).closest('form')!);
-  await revealCalculatorResult();
-  expect(await screen.findByText(/the model's answer/i)).toBeInTheDocument();
-  expect(screen.queryByText(/the model assumed/i)).toBeNull();
+  // The plan answer opens in Ask Linc; here it is the locked card and the form.
+  expect(await screen.findByText('Your result is ready.')).toBeInTheDocument();
+  expect(screen.getByLabelText('Email address')).toBeInTheDocument();
 });
 
 it('keeps a typed decimal instead of deleting the point', async () => {

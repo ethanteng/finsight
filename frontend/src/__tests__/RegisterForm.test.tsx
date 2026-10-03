@@ -184,8 +184,6 @@ describe('RegisterForm', () => {
         json: async () => ({
           email: 'reader@example.com',
           inputs: COAST_FIRE_SCENARIO,
-          coastFireNumber: 545_371,
-          hasReachedCoastFire: false,
         }),
       })) as unknown as typeof fetch;
       global.fetch = fetchMock;
@@ -223,8 +221,6 @@ describe('RegisterForm', () => {
         json: async () => ({
           email: 'from-email@example.com',
           inputs: COAST_FIRE_SCENARIO,
-          coastFireNumber: 545_371,
-          hasReachedCoastFire: false,
         }),
       })) as unknown as typeof fetch;
 
@@ -289,7 +285,6 @@ describe('RegisterForm', () => {
         json: async () => ({
           email: 'reader@example.com',
           inputs: RETIREMENT_SCENARIO,
-          outcome: { survivalRate: 0.92, sequencesTested: 800, sequencesSurvived: 736 },
         }),
       })) as unknown as typeof fetch;
 
@@ -339,7 +334,6 @@ describe('RegisterForm', () => {
         json: async () => ({
           email: 'reader@example.com',
           inputs: RETIREMENT_SCENARIO,
-          outcome: { survivalRate: 0.92, sequencesTested: 800, sequencesSurvived: 736 },
         }),
       })) as unknown as typeof fetch;
 
@@ -361,7 +355,6 @@ describe('RegisterForm', () => {
         json: async () => ({
           email: 'reader@example.com',
           inputs: RETIREMENT_SCENARIO,
-          outcome: { survivalRate: 0.92, sequencesTested: 800, sequencesSurvived: 736 },
         }),
       })) as unknown as typeof fetch;
       global.fetch = fetchMock;
@@ -404,7 +397,6 @@ describe('RegisterForm', () => {
           json: async () => ({
             email: 'reader@example.com',
             inputs: RETIREMENT_SCENARIO,
-            outcome: { survivalRate: 0.92, sequencesTested: 800, sequencesSurvived: 736 },
           }),
         };
       }) as unknown as typeof fetch;
@@ -444,7 +436,6 @@ describe('RegisterForm', () => {
         json: async () => ({
           email: 'reader@example.com',
           inputs: RETIREMENT_SCENARIO,
-          outcome: { survivalRate: 0.92, sequencesTested: 800, sequencesSurvived: 736 },
         }),
       })) as unknown as typeof fetch;
 
@@ -479,8 +470,6 @@ describe('RegisterForm', () => {
         json: async () => ({
           email: 'reader@example.com',
           inputs: COAST_FIRE_SCENARIO,
-          coastFireNumber: 545_371,
-          hasReachedCoastFire: false,
         }),
       })) as unknown as typeof fetch;
 
@@ -534,7 +523,6 @@ describe('RegisterForm', () => {
           json: async () => ({
             email: 'reader@example.com',
             inputs: RETIREMENT_SCENARIO,
-            outcome: { survivalRate: 0.92, sequencesTested: 800, sequencesSurvived: 736 },
           }),
         };
       }) as unknown as typeof fetch;
@@ -591,7 +579,6 @@ describe('RegisterForm', () => {
           json: async () => ({
             email: 'reader@example.com',
             inputs: RETIREMENT_SCENARIO,
-            outcome: { survivalRate: 0.92, sequencesTested: 800, sequencesSurvived: 736 },
           }),
         };
       }) as unknown as typeof fetch;
@@ -608,11 +595,11 @@ describe('RegisterForm', () => {
     });
 
     /*
-     * The ready email states no figures and the calculator page has already
-     * navigated away. If this address already has an account, registration
-     * cannot seed the lead — so the signup page must show the answer itself.
+     * An address with an account cannot register, so the run cannot be seeded
+     * here. Sign-in attaches it instead, so the page points there with the run
+     * — and states no result itself: the answer belongs in Ask Linc.
      */
-    it('shows the result when registration refuses an existing account', async () => {
+    it('points an existing account at sign-in with the run, showing no result', async () => {
       const token = 'd'.repeat(48);
       searchParams = new URLSearchParams(`source=${RETIREMENT_SIGNUP_SOURCE}`);
       handOverRetirementRef(token);
@@ -629,7 +616,6 @@ describe('RegisterForm', () => {
           json: async () => ({
             email: 'reader@example.com',
             inputs: RETIREMENT_SCENARIO,
-            outcome: { survivalRate: 0.92, sequencesTested: 800, sequencesSurvived: 736 },
           }),
         };
       }) as unknown as typeof fetch;
@@ -640,8 +626,9 @@ describe('RegisterForm', () => {
       fireEvent.click(screen.getByRole('button', { name: /Create account and see my result/i }));
 
       expect(await screen.findByText(/you already have an ask linc account/i)).toBeInTheDocument();
-      expect(screen.getByText('92.0% lasted')).toBeInTheDocument();
-      expect(screen.getByRole('link', { name: /sign in to your account/i })).toHaveAttribute('href', '/login');
+      expect(screen.queryByText(/lasted/)).not.toBeInTheDocument();
+      expect(screen.getByRole('link', { name: /sign in to your account/i }))
+        .toHaveAttribute('href', '/login?source=retirement-calculator');
       expect(push).not.toHaveBeenCalledWith('/app');
     });
 
@@ -667,7 +654,6 @@ describe('RegisterForm', () => {
           json: async () => ({
             email: 'reader@example.com',
             inputs: RETIREMENT_SCENARIO,
-            outcome: { survivalRate: 0.92, sequencesTested: 800, sequencesSurvived: 736 },
           }),
         };
       }) as unknown as typeof fetch;
@@ -721,7 +707,6 @@ describe('RegisterForm', () => {
             json: async () => ({
               email: 'reader@example.com',
               inputs: RETIREMENT_SCENARIO,
-              outcome: { survivalRate: 0.92, sequencesTested: 800, sequencesSurvived: 736 },
             }),
           };
         }) as unknown as typeof fetch;
@@ -802,9 +787,9 @@ describe('RegisterForm', () => {
 
     /*
      * The answer opens in the account, so the page before it states none —
-     * not even a verdict the lead carries from an older results email.
+     * not even a verdict an older backend still returns from the lookup.
      */
-    it('states no verdict, even one the lead carries', async () => {
+    it('states no verdict, even one an older lookup returns', async () => {
       searchParams = new URLSearchParams(`source=${RETIREMENT_SIGNUP_SOURCE}`);
       handOverRetirementRef('e'.repeat(48));
       global.fetch = jest.fn(async () => ({

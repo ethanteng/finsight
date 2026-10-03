@@ -1,11 +1,10 @@
 /**
- * The machinery both public calculators use to have a model read their result.
+ * The machinery a public calculator uses to have a model read its result.
  *
- * `/retirement-calculator` and `/coast-fire-calculator` each compute their own
- * figures deterministically and then ask a model to say what those figures
- * mean. The prose differs — one is a survival rate across a century of tested
- * histories, the other a single discounted target — but the contract around it
- * is identical, and it is the contract rather than the prose that is delicate:
+ * Only `/retirement-calculator`'s published-rates mode still does: it computes
+ * its figures deterministically and then asks a model to say what they mean.
+ * Kept separate from that page's prompt because the contract around the prose
+ * is what is delicate:
  *
  *  - Every number in the draft is checked against the figures the engine
  *    produced, at the precision the draft actually wrote them to.
@@ -17,9 +16,9 @@
  *  - A response that cannot be parsed is retried once. The whole thing sits
  *    behind one budget, because a visitor is waiting.
  *
- * This module owns that contract. Each calculator supplies its own facts, its
- * own system prompt, and its own run block; nothing here knows what a Coast
- * FIRE number or a survival rate is.
+ * This module owns that contract. The caller supplies its own facts, its own
+ * system prompt, and its own run block; nothing here knows what a survival
+ * rate is.
  */
 
 import * as Sentry from '@sentry/node';

@@ -7,7 +7,7 @@
  */
 
 import { buildCalculatorReadyEmail } from '../../email/calculator-ready';
-import { coastFireInputRows } from '../../email/coast-fire-results';
+import { coastFireInputRows } from '../../email/calculator-input-rows';
 import { calculateCoastFire } from '../../services/coast-fire';
 
 const RESULT = calculateCoastFire({
@@ -65,5 +65,21 @@ describe('calculator ready email', () => {
       email: 'reader@example.com',
       ctaUrl: CTA,
     }).subject).toBe('Your retirement result is ready in Ask Linc');
+  });
+
+  it('asks an existing account to sign in rather than choose a password', () => {
+    const message = buildCalculatorReadyEmail({
+      calculator: 'coast_fire',
+      inputs: [],
+      email: 'reader@example.com',
+      ctaUrl: CTA,
+      existingAccount: true,
+    });
+
+    for (const part of [message.html, message.text]) {
+      expect(part).toContain('Sign in to your Ask Linc account');
+      expect(part).not.toMatch(/choose a password|no credit card/i);
+    }
+    expect(build().text).toMatch(/Choose a password/);
   });
 });

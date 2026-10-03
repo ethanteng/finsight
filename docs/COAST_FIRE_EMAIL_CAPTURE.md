@@ -9,10 +9,10 @@ beachhead experiment. It computes the free question — "have I reached Coast
 FIRE?" — in the browser, but answers it in Ask Linc: the visitor gives an
 email address, chooses a password, and sees the result as their account's first
 decision. See **The answer opens in Ask Linc**. The goal is that more people
-experience the value inside the product, not in a calculator outside it. This
-document covers that hand-off, the email that brings back anyone who leaves
-before the password, and the plain-language reading the page still shows on
-the rare run it cannot hand off.
+experience the value inside the product, not in a calculator outside it. The
+page never shows the answer itself, in any case. This document covers that
+hand-off, the sign-in path for an address that already has an account, and
+the email that brings back anyone who leaves before the password.
 
 ## The flow
 
@@ -28,11 +28,13 @@ the rare run it cannot hand off.
    with a random token, and sends the "result ready" email through Resend. That
    email states no figures; see **The email**.
 4. It then stamps `tokenDisclosedAt` on that row and returns the token as
-   `ref`. The page writes the `/getstarted`-scoped cookie the emailed route
-   would have written, stores the run in sessionStorage beside it, and
-   navigates to `/getstarted?source=coast-fire-calculator&entry=results_page`.
-   If no `ref` comes back, the page shows the result itself instead; see
-   **When there is no run to hand off**.
+   `ref`. The page stores the run in sessionStorage and takes it to one of
+   three places (see **Where the run goes**): `/app` for a visitor already
+   signed in, sign-in for an address that already has an account, and
+   otherwise `/getstarted?source=coast-fire-calculator&entry=results_page`,
+   writing the `/getstarted`-scoped cookie the emailed route would have
+   written. If the lead could not be stored, the endpoint answers 503 and the
+   form asks the visitor to try again.
 5. After the response, the address is added to MailerLite, in the Coast FIRE
    group.
 6. `/getstarted` renders the Coast FIRE variant of the signup page with the
@@ -57,53 +59,76 @@ the result is held back. It reaches signup like any other no-card visitor.
 
 ## The answer opens in Ask Linc
 
-Neither calculator shows its answer. A submitted run renders
+Neither calculator shows its answer, in any case. A submitted run renders
 `CalculatorLockedResult` in place of the result card: an illustrative card,
 blurred, with fixed figures that are never the visitor's own, and "Your result
 is ready" on top. The capture beside it asks for an email address, and its
 button reads "See my result in Ask Linc".
 
 Nothing that restates the answer runs on the page: not the figures, not the
-model reading (`/interpretation` is not called, which also saves a model call
-per anonymous run), not the return comparison or the retirement charts, and
-not the page's own signup CTA. The signup page states no result either. The
-first place the visitor sees their answer is the first decision in their
-account.
+model reading, not the return comparison or the retirement charts, and not the
+page's own signup CTA, which carries no run. The signup and sign-in pages state
+no result either. The first place the visitor sees their answer is a decision
+in their account.
 
-Every run is held back, including a second run in the same tab: there is no
-tab-wide unlock. `lib/calculator-email-memory.ts` remembers the address in
-session storage so a later form on either calculator is prefilled.
+Every run is held back, including a second run in the same tab.
+`lib/calculator-email-memory.ts` remembers the address in session storage so a
+later form on either calculator is prefilled.
 
 **It is a nudge, not a control**, like the run limit. The Coast FIRE formula
 runs in the browser, and the retirement model's response reaches the browser
 before the page hides it. Anyone who opens devtools can read the answer. What
 the page guarantees is only that its rendered content does not contain it.
 
-A retirement `rates` answer is not held back. It has no run to save, because
-the email endpoint refuses a run with no portfolio or spending level. It says
-nothing about the visitor's own plan, and its job is to ask for the two
-numbers that produce a plan result, which is held back.
+A retirement `rates` answer is shown, with its reading. It has no run to save,
+because the email endpoint refuses a run with no portfolio or spending level.
+It says nothing about the visitor's own plan, and its job is to ask for the
+two numbers that produce a plan result, which is held back.
 
-### When there is no run to hand off
+### Where the run goes
 
-The endpoint returns no `ref` when the lead row did not store, when the
-disclosure stamp did not, or when the address already has an Ask Linc account.
-In the first two cases there is no run for registration to seed, and sending
-the visitor to signup would open an empty workspace under a page that promised
-their result. In the third, `/auth/register` would refuse the address with a
-409, and the ready email states no answer, so the visitor would have no way to
-see it at all. Either way the page shows the result itself, and the full
-results email goes out instead of the ready one. For an existing account the
-response carries `existingAccount: true`, the page says so and links to
-sign-in, and the email's button is "Sign in to Ask Linc"
-(`services/calculator-account-lookup.ts`; a failed lookup counts as an existing
-account). That response tells a caller whether an address has an account,
-which `/auth/register`'s 409 already does.
+`chooseCalculatorHandoff` (`lib/calculator-lead-attach.ts`) decides, once the
+lead is stored:
+
+- **Already signed in:** the run is attached to that account
+  (`POST /auth/calculator-lead`) and the page opens `/app`, which lands on it
+  as the newest decision. The form is prefilled with the session's own address
+  (`GET /auth/verify`), because attaching needs the lead to name this account.
+  If it does not — the visitor typed some other address — nothing attaches and
+  the run follows the address they typed, below.
+- **An address that already has an account:** `email-results` says so
+  (`existingAccount: true`, from `services/calculator-account-lookup.ts`; a
+  failed lookup counts as a new address, because signup's 409 links a real
+  account to sign-in with the run and sign-in has nothing for a new visitor
+  to open). Such an address cannot
+  register, so the page goes to `/login?source=coast-fire-calculator`. The
+  sign-in form finds the run in the stored signup context, prefills the
+  address, says the result is waiting, and after signing in attaches the run
+  and opens `/app` on it. That response tells a caller whether an address has
+  an account, which `/auth/register`'s 409 already does.
+- **Anyone else:** signup, where a password opens the run as the account's
+  first decision.
+
+Attaching (`attachCalculatorLeadToAccount`) makes the same address check
+registration makes, against the signed-in account, so a token for someone
+else's address writes nothing into this one. It is awaited, unlike seeding at
+registration: an existing account already has history, so `/app` cannot wait
+for an empty history to fill. It is idempotent per run: both it and seeding
+write the lead's token to `Conversation.calculatorLeadToken`, which is unique
+per account, so signing in twice or attaching from two tabs at once writes the
+run once. The key is the token rather than the decision's wording, because two
+runs can read the same — the retirement question names neither the asset mix
+nor the planning horizon.
+
+The page never falls back to showing the result. If the lead could not be
+stored, there is nothing any account could open, so `email-results` answers 503
+without sending anything and the form asks the visitor to retry. If signup
+still meets an existing address (arriving from the emailed link, say), it
+answers 409 and the signup page links to sign-in with the run.
 
 The capture is keyed on each run rather than on its inputs, so an identical
-re-run is held back again rather than inheriting the previous run's revealed
-state. A send still in flight when the visitor re-runs is ignored when it
-returns.
+re-run gets a fresh form. A send still in flight when the visitor re-runs is
+ignored when it returns.
 
 ## Three runs, then the save
 
@@ -113,51 +138,13 @@ points at the capture instead. Shared with `/retirement-calculator` through
 setting that moves the number; the reasoning, and why it is a nudge rather than
 a control, is in `docs/RETIREMENT_QUICKPLAN.md`.
 
-## The reading under the number
+## No reading on this page
 
-On the rare run the page shows itself (see **When there is no run to hand
-off**), it also posts the same seven inputs to
-`POST /api/coast-fire/interpretation`, which re-runs the formula server-side and
-asks a model to say what the figures mean. The division is the one
-`docs/SCENARIO_MODELING.md` draws for the authenticated product: the formula
-produces every number, the model only describes them.
-
-`src/services/coast-fire-interpretation.ts` builds a fact block — every figure
-this run produced, plus a handful of published rates from named series — and
-`src/services/calculator-interpretation.ts` checks the draft against it. That
-check now only reports: a number that is not one of those facts, at the
-precision the draft wrote it to, is logged as `shipped with unverified figures`
-and the reading is shown anyway. The prompt is the only thing asking the model
-to stay inside the block. See "Why nothing is withheld" in
-`docs/RETIREMENT_QUICKPLAN.md`, which both pages share.
-
-A reading is still dropped when the model returns nothing usable — a provider
-error, a stall, or a response that never parses. That renders as nothing at
-all, which is why the endpoint answers `204` rather than an error.
-
-Three things are specific to this page rather than inherited from the quick
-plan:
-
-- **"Reached" is not permission to stop saving.** A green badge reads as one,
-  and the prompt forbids prescribing anything — stopping contributions,
-  changing jobs, spending more — in either direction.
-- **There is no probability here.** The quick plan tests a plan against
-  hundreds of real historical stretches and can report how many lasted. This
-  compounds one assumed return for a fixed number of years. The prompt forbids
-  "chance", "likely", and "on track to".
-- **The return and the withdrawal rate are the visitor's assumptions**, not our
-  estimates, and the fact labels say so.
-
-The rate labels are stored without digits (`thirty-year Treasury yield`, not
-`30-year`) and the as-of date is given to the month. Everything a fact shows the
-model is a number the model may then write, so a label reading "30-year" would
-license a bare `30` — and a draft could then state a horizon this scenario never
-ran.
-
-This is the one part of the page that is not computed in the browser. The form's
-note and the "is it free?" FAQ entry both say so: the number appears with no
-network round trip, and the reading beneath it sends the seven inputs and
-nothing else.
+The Coast FIRE page shows no result, so it no longer asks a model to describe
+one, and the `POST /api/coast-fire/interpretation` endpoint that did so has
+been removed. The answer the visitor sees in Ask Linc is the deterministic
+first decision. The only calculator reading left is the retirement page's
+published-rates mode; see `docs/RETIREMENT_QUICKPLAN.md`.
 
 ## Saving a run to an account
 
@@ -206,7 +193,12 @@ it came from. Seeding runs after the response and unawaited, and returns a
 reason rather than throwing — it may never fail a registration.
 
 See `docs/RETIREMENT_QUICKPLAN.md` for the deploy-ordering constraint this
-creates: **the frontend must ship first, or with the backend, never after.**
+creates: **for this Ask Linc handoff, deploy the backend (and the
+`Conversation.calculatorLeadToken` migration) first, or with the frontend,
+never after.** An older backend returns no `ref` for an existing account and
+has no attach route; a newer page that never reveals the answer would then
+strand that visitor. The older “frontend first” rule still applies only to the
+verification-code skip — see that doc.
 
 ## Why a token, and why it is not in the URL either
 
@@ -224,8 +216,10 @@ page and a GA4 pageview records the full URL, so a token sitting in the address
 of a rendered page would be handed to analytics and to every other tag in the
 container. `/coast-fire/continue` therefore does the handover before any page
 exists: it reads the token server-side, sets it as a cookie that lives ten
-minutes and is only sent on `/getstarted`, and redirects to an address with no
-token in it. The signup page spends the cookie and deletes it. A blocked cookie
+minutes and is only sent on `/getstarted` (or on `/login`, for a sign-in link),
+and redirects to an address with no token in it. The page it lands on spends
+the cookie and deletes it. `to=sign-in` is the only destination the link can
+choose, and both destinations are constants. A blocked cookie
 costs the personalization, not the signup.
 
 The token does still appear in first-party server logs for that one redirect.
@@ -255,12 +249,16 @@ The ordinary message is `email/calculator-ready.ts`, shared by both
 calculators: "Your Coast FIRE result is ready in Ask Linc", the link back into
 signup, and what the visitor entered. It states no verdict and no figure the
 calculator produced. Mailing the answer would let the inbox stand in for the
-account, and the account is the point. It is sent only when the lead stored,
-because only then does its link resolve to a run an account can be seeded from.
+account, and the account is the point. It goes to every new address.
 
-When the lead did not store, the route sends the full results email
-(`email/coast-fire-results.ts`) instead: there is no account-side copy to
-point at, and the page shows the result in that case too.
+An address that already has an account gets the same message, worded for
+sign-in ("Sign in to your Ask Linc account and your result opens there as a new
+decision"), and its link carries `&to=sign-in`. `/coast-fire/continue` then
+redirects to `/login?source=coast-fire-calculator` instead of signup, with the
+handover cookie scoped to `/login`. The sign-in form spends that cookie, fills
+in the address from `GET /api/coast-fire/signup-context/:token`, and attaches
+the run after sign-in. No email carries the answer, whoever it goes to. Nothing
+is mailed when the lead did not store.
 
 Every send includes an HTML part and a plain-text part with the same content,
 so a text-first client shows the message rather than a "view this in a
@@ -274,8 +272,6 @@ browser" stub. The HTML uses the shared email shell in `src/email/templates.ts`.
 | `MAILER_LITE_COAST_FIRE_GROUP_ID` | — | The Coast FIRE group. Unset means the address reaches the subscriber list without a group. |
 | `COAST_FIRE_EMAIL_RATE_LIMIT` | 5 | Sends per caller per minute. Far below the quick plan's 20: every accepted request puts mail in an address the caller chose. |
 | `COAST_FIRE_CONTEXT_RATE_LIMIT` | 30 | Token lookups per caller per minute, on its own window so a send does not spend it. |
-| `COAST_FIRE_INTERPRETATION_RATE_LIMIT` | 8 | Readings per caller per minute, on its own window. Every request past the cache is a model call we pay for on a page with no account behind it. |
-| `CALCULATOR_NARRATIVE_MODEL` | Haiku 4.5 | Shared with the retirement reading. See `src/openai/model-config.ts`. |
 | `COAST_FIRE_TRUSTED_PROXIES` | 1 | How many proxies sit in front of this process. See `routes/fixed-window-rate-limit.ts`. |
 | `RESEND_API_KEY` | — | Unset means no mail is sent and the endpoint reports success, matching the rest of the auth email path in development. |
 | `NEXT_PUBLIC_CALCULATOR_RUN_LIMIT` | 3 | Runs before the Calculate button locks, shared with the retirement calculator. **Frontend, so it is inlined at build time** — changing it needs a rebuild and redeploy, not a restart. Anything but a positive integer — unset, empty, `0`, `-1`, `2.5` — falls back to 3. There is no value meaning "no limit"; turning the nudge off belongs in code (or a very large number, which will read oddly in the lock copy). |
@@ -290,12 +286,16 @@ returns after it has been unmounted.
 
 ## What must not fail the visitor
 
-The visitor asked for their result. Neither the lead row nor the mailing list
-is allowed to stand between them and that:
+The visitor asked for their result, and it opens in Ask Linc. The mailing list
+is not allowed to stand between them and that:
 
-- A failed database write means no run to hand off. The full results email
-  still sends, with its CTA pointing at plain `/getstarted`, and the page shows
-  the result.
+- A failed database write means no run for any account to open, so it is the
+  one case the visitor is asked to retry (503). Nothing is mailed for it: a
+  retry would send another.
+- A 200 with no `ref` means the lead stored and the ready email went out, but
+  the disclosure stamp did not, so the token must not sit in the page. The form
+  points at the inbox rather than inviting another lead; the emailed link still
+  opens the run.
 - MailerLite runs after the response and its outcome is recorded, never
   surfaced. A rejected address does not turn a delivered email into an error.
 - A failed *send* is the one case that returns an error (502), because there

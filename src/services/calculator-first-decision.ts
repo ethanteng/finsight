@@ -358,6 +358,10 @@ function composeDecision(resolved: CalculatorLead): { question: string; answer: 
     };
 }
 
+function isUniqueViolation(error: unknown): boolean {
+  return typeof error === 'object' && error !== null && 'code' in error && error.code === 'P2002';
+}
+
 /**
  * Write a resolved lead as the account's first decision.
  *
@@ -383,11 +387,75 @@ export async function seedFirstDecisionFromLead(params: {
     await prisma.conversation.create({ data: {
       userId, ...composeDecision(lead),
       origin: lead.kind === 'retirement' ? 'calculator_retirement' : 'calculator_coast_fire',
+      // So a later sign-in with the same link finds this run already here.
+      calculatorLeadToken: lead.lead.token,
     } });
 
     return 'seeded';
   } catch (error) {
+    // Two unawaited seeds can both see an empty history; the unique index on
+    // (account, token) lets only one write land.
+    if (isUniqueViolation(error)) return 'already-has-decisions';
     console.error('⚠️  Could not seed the first decision from a calculator run:', error);
+    return 'failed';
+  }
+}
+
+/** What attaching a run to an existing account did. */
+export type AttachLeadOutcome =
+  | 'attached'
+  /** This account already holds this run, from an earlier sign-in. */
+  | 'already-attached'
+  /** No token, or one that did not resolve to this account's address. */
+  | 'no-lead'
+  | 'failed';
+
+/**
+ * Add a calculator run to an account that already exists.
+ *
+ * The calculators send a new visitor to signup, where registration seeds the
+ * run as the account's first decision. An address that already has an account
+ * cannot register, so it signs in instead and the run is attached here: as a
+ * new decision beside whatever the account already holds, rather than only
+ * into an empty one.
+ *
+ * The address check is the same one registration makes, against the address
+ * of the account that is signed in. Signing in proves control of that
+ * account, and the lead has to name it, so holding someone else's token
+ * attaches nothing.
+ *
+ * Awaited rather than fire-and-forget, unlike seeding at registration: the
+ * account already has history, so `/app` cannot tell "not written yet" from
+ * "nothing new" by waiting for an empty history to fill. The caller answers
+ * once the run is written, and `/app` opens on it as the newest decision.
+ *
+ * Idempotent per run, keyed on the lead's token rather than on the decision's
+ * wording: two runs can read the same and still differ (the retirement
+ * question names neither the asset mix nor the planning horizon). The unique
+ * index on (account, token) makes it atomic, so signing in twice, re-sending
+ * the request, or attaching from two tabs at once writes the run once.
+ */
+export async function attachCalculatorLeadToAccount(params: {
+  userId: string;
+  /** The signed-in account's address. */
+  email: string;
+  token: unknown;
+}): Promise<AttachLeadOutcome> {
+  const lead = await resolveCalculatorLead({ token: params.token, email: params.email });
+  if (!lead) return 'no-lead';
+
+  try {
+    const prisma = getPrismaClient();
+    const decision = composeDecision(lead);
+    const origin = lead.kind === 'retirement' ? 'calculator_retirement' : 'calculator_coast_fire';
+
+    await prisma.conversation.create({ data: {
+      userId: params.userId, ...decision, origin, calculatorLeadToken: lead.lead.token,
+    } });
+    return 'attached';
+  } catch (error) {
+    if (isUniqueViolation(error)) return 'already-attached';
+    console.error('⚠️  Could not attach a calculator run to an existing account:', error);
     return 'failed';
   }
 }

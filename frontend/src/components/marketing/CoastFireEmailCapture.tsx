@@ -3,11 +3,17 @@
 /**
  * "See your result in Ask Linc": the form that stands where the result would.
  *
- * The page computes the answer but does not show it. Giving an address sends
- * the visitor to signup with it prefilled, and the run opens in Ask Linc as
- * the account's first decision. Registration skips the verification code for
- * a calculator lead, so a password is all that stands between this form and
- * the answer. See `auth/routes` and `docs/COAST_FIRE_EMAIL_CAPTURE.md`.
+ * Neither calculator shows its answer on its own page, in any case. The
+ * visitor gives an address and the run opens in Ask Linc as a decision in
+ * their account, which is the point of the page. Where it goes depends on who
+ * they are (`chooseCalculatorHandoff`):
+ *
+ * - Already signed in: the run is attached to that account and `/app` opens.
+ * - An address with an account: sign-in, which attaches the run.
+ * - Anyone else: signup with the address prefilled, where a password is all
+ *   that stands between them and the run as their first decision.
+ *
+ * See `auth/routes` and `docs/COAST_FIRE_EMAIL_CAPTURE.md`.
  *
  * It appears only after a submitted calculation. The page opens with empty
  * personal figures and no result, so there is nothing to save until the
@@ -18,15 +24,9 @@
  * recalculates before it stores the lead, so nothing this form does can put an
  * arbitrary figure into an account or an email carrying our branding.
  *
- * Submitting does two things. An email goes out carrying a link into signup,
- * which is what someone who wanders off can come back to; and this page takes
- * them there itself, straight away. Either route restores the same run.
- *
- * When no token comes back, there is no account the run can open in: the
- * lead did not store, its disclosure mark did not, or the address already has
- * an account and cannot register again (`existingAccount`). The page shows the result
- * itself instead, through `onReveal`, rather than sending the visitor to an
- * account that would open empty.
+ * The server answers without a lead token only when it could not store the
+ * run. There is then nothing any account could open, so the form says so and
+ * stays ready to retry, rather than showing the answer here.
  */
 
 import { useEffect, useRef, useState } from "react";
@@ -34,6 +34,12 @@ import type { CoastFireResult } from "@/lib/coast-fire";
 import { pushCoastFireResultsEmailed } from "@/lib/dataLayer";
 import { readRememberedEmail, rememberEmail } from "@/lib/calculator-email-memory";
 import { readCalculatorLeadAttribution } from "@/lib/calculator-lead-attribution";
+import {
+  chooseCalculatorHandoff,
+  readSignedInEmail,
+  COAST_FIRE_SIGN_IN_HREF,
+  type CalculatorHandoff,
+} from "@/lib/calculator-lead-attach";
 import {
   isHandoverToken,
   leaveForSignup,
@@ -48,37 +54,56 @@ import {
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
 
-type Status = "idle" | "sending" | "revealed" | "revealed-signed-in" | "leaving";
+type Status = "idle" | "sending" | "leaving";
 
 export function CoastFireEmailCapture({
   result,
   compact = false,
-  onReveal,
 }: {
   result: CoastFireResult;
   compact?: boolean;
-  /** Show the result on the page: the fallback when there is no run to carry. */
-  onReveal: () => void;
 }) {
+  const inputs = {
+    currentAge: result.currentAge,
+    retirementAge: result.retirementAge,
+    currentSavings: result.currentSavings,
+    annualRetirementSpending: result.annualRetirementSpending,
+    annualRetirementIncome: result.annualRetirementIncome,
+    realReturnRate: result.realReturnRate,
+    withdrawalRate: result.withdrawalRate,
+  };
   // Prefilled from an earlier run in this tab, so the visitor is not asked
   // for an address they already gave.
   const [email, setEmail] = useState(() => readRememberedEmail() ?? "");
   const [status, setStatus] = useState<Status>("idle");
   const [error, setError] = useState<string | null>(null);
-  /** The address already has an Ask Linc account, which cannot register again. */
-  const [existingAccount, setExistingAccount] = useState(false);
+  const [destination, setDestination] = useState<CalculatorHandoff>("signup");
   /** One conversion event per visitor, however many times they resend. */
   const reported = useRef(false);
   /*
    * The page remounts this form for every run. A send still in flight for
-   * the previous run must not reveal, or carry to signup, the run now on
-   * screen.
+   * the previous run must not carry the run now on screen anywhere.
    */
   const mounted = useRef(true);
   useEffect(() => {
     mounted.current = true;
     return () => {
       mounted.current = false;
+    };
+  }, []);
+
+  /*
+   * A signed-in visitor's own address, unless they already have one in the
+   * box. The run attaches to the session's account only when the lead names
+   * it, so starting from the right address is what keeps them on that path.
+   */
+  useEffect(() => {
+    let cancelled = false;
+    void readSignedInEmail().then((address) => {
+      if (!cancelled && address) setEmail((current) => current || address);
+    });
+    return () => {
+      cancelled = true;
     };
   }, []);
 
@@ -95,20 +120,33 @@ export function CoastFireEmailCapture({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           email: email.trim(),
-          currentAge: result.currentAge,
-          retirementAge: result.retirementAge,
-          currentSavings: result.currentSavings,
-          annualRetirementSpending: result.annualRetirementSpending,
-          annualRetirementIncome: result.annualRetirementIncome,
-          realReturnRate: result.realReturnRate,
-          withdrawalRate: result.withdrawalRate,
+          ...inputs,
           attribution: readCalculatorLeadAttribution(),
         }),
       });
 
       if (!response.ok) {
         const body = await response.json().catch(() => null) as { error?: string } | null;
-        setError(body?.error || "We could not send that just now. Please try again.");
+        // 503: the lead did not store, so nothing any account could open.
+        setError(body?.error || "We could not save that just now. Please try again.");
+        setStatus("idle");
+        return;
+      }
+
+      const body = await response.json().catch(() => null) as { ref?: unknown; existingAccount?: unknown } | null;
+      const token = isHandoverToken(body?.ref) ? body.ref : null;
+      if (!mounted.current) return;
+      if (!token) {
+        /*
+         * 200 without a ref: the lead stored and the ready email went out, but
+         * the disclosure stamp did not, so the token must not sit in this page.
+         * The emailed link still opens the run — a retry would only mint another.
+         */
+        setError(
+          body?.existingAccount === true
+            ? "Check your email for a sign-in link to open this result in Ask Linc."
+            : "Check your email for a link to open this result in Ask Linc.",
+        );
         setStatus("idle");
         return;
       }
@@ -118,70 +156,29 @@ export function CoastFireEmailCapture({
         reported.current = true;
         tracking = pushCoastFireResultsEmailed(result.hasReachedCoastFire ? "reached" : "not_yet");
       }
-
-      const body = await response.json().catch(() => null) as { ref?: unknown; existingAccount?: unknown } | null;
-      const token = isHandoverToken(body?.ref) ? body.ref : null;
       rememberEmail(email);
+
+      // The run and the address, for whichever page opens it: signup and
+      // sign-in both read this. The cookie is what /getstarted exchanges; a
+      // browser refusing it costs the address prefill there, not the run.
+      storeCoastFireSignupContext(inputs, { email: email.trim(), sourceToken: token });
+
+      const handoff = await chooseCalculatorHandoff(token, body?.existingAccount === true);
       if (!mounted.current) return;
-
-      if (!token) {
-        setExistingAccount(body?.existingAccount === true);
-        // Nothing to seed an account from, so the answer is shown here.
-        setStatus("revealed");
-        onReveal();
-        await tracking;
-        return;
-      }
-
-      /*
-       * Registration is the only path that seeds a lead, and it refuses an
-       * address that already has an account. A visitor who is already signed
-       * in would leave for signup, hit that wall, and — because this email
-       * states no figures — have no way to see the answer. Show it here
-       * instead; the run stays in the lead table for a later new account.
-       */
-      let signedIn = false;
-      try {
-        signedIn = Boolean(window.localStorage.getItem("auth_token"));
-      } catch {
-        signedIn = false;
-      }
-      if (signedIn) {
-        setStatus("revealed-signed-in");
-        onReveal();
-        await tracking;
-        return;
-      }
-
-      // Both carriers, because they fail differently. The cookie is what
-      // /getstarted exchanges, and it cannot be read back from here to know it
-      // took. The stored context carries the same token and the inputs, so a
-      // browser refusing the cookie costs the address prefill, not the run.
-      writeHandoverToken(COAST_FIRE_REF_COOKIE, token);
-      storeCoastFireSignupContext(
-        {
-          currentAge: result.currentAge,
-          retirementAge: result.retirementAge,
-          currentSavings: result.currentSavings,
-          annualRetirementSpending: result.annualRetirementSpending,
-          annualRetirementIncome: result.annualRetirementIncome,
-          realReturnRate: result.realReturnRate,
-          withdrawalRate: result.withdrawalRate,
-        },
-        {
-          email: email.trim(),
-          sourceToken: token,
-          // Kept so a 409 at signup can still show the answer — registration
-          // will not seed an address that already has an account.
-          emailedOutcome: {
-            coastFireNumber: result.coastFireNumber,
-            hasReachedCoastFire: result.hasReachedCoastFire,
-          },
-        },
-      );
+      setDestination(handoff);
       setStatus("leaving");
       await tracking;
-      leaveForSignup(resultsPageSignupHref(COAST_FIRE_SIGNUP_HREF));
+
+      // Whole loads rather than client navigations: /getstarted reads a
+      // cookie set just now, and /app and /login read their session on mount.
+      if (handoff === "app") {
+        leaveForSignup("/app");
+      } else if (handoff === "sign-in") {
+        leaveForSignup(COAST_FIRE_SIGN_IN_HREF);
+      } else {
+        writeHandoverToken(COAST_FIRE_REF_COOKIE, token);
+        leaveForSignup(resultsPageSignupHref(COAST_FIRE_SIGNUP_HREF));
+      }
     } catch {
       setError("Network error. Please check your connection and try again.");
       setStatus("idle");
@@ -193,38 +190,17 @@ export function CoastFireEmailCapture({
       <div className="cf-email-capture is-sent" role="status" aria-live="polite">
         <p className="section-kicker">OPENING ASK LINC</p>
         <h3>Taking you to your result…</h3>
-        <p>
-          Choose a password and your Coast FIRE result opens as your first decision. We’ve also
-          emailed <strong>{email.trim()}</strong> a link back, in case you finish later.
-        </p>
-      </div>
-    );
-  }
-
-  if (status === "revealed-signed-in") {
-    return (
-      <div className="cf-email-capture is-sent" role="status" aria-live="polite">
-        <p className="cf-email-lead">
-          You’re already signed in, so here is your result on this page. We’ve also emailed{" "}
-          <strong>{email.trim()}</strong> a link you can use from another device.
-        </p>
-      </div>
-    );
-  }
-
-  if (status === "revealed") {
-    return (
-      <div className="cf-email-capture is-sent" role="status" aria-live="polite">
-        {existingAccount ? (
-          <p className="cf-email-lead">
-            You already have an Ask Linc account, so here is your result. We’ve also emailed it to{" "}
-            <strong>{email.trim()}</strong>. <a href="/login">Sign in</a> to keep exploring it with
-            your real numbers.
+        {destination === "app" ? (
+          <p>Your Coast FIRE result is saved in your account. Opening it…</p>
+        ) : destination === "sign-in" ? (
+          <p>
+            You already have an Ask Linc account. Sign in and your Coast FIRE result opens as a new
+            decision in it.
           </p>
         ) : (
-          <p className="cf-email-lead">
-            We couldn’t set up your account link just now, so here is your result. We’ve also
-            emailed <strong>{email.trim()}</strong>.
+          <p>
+            Choose a password and your Coast FIRE result opens as your first decision. We’ve also
+            emailed <strong>{email.trim()}</strong> a link back, in case you finish later.
           </p>
         )}
       </div>
@@ -237,8 +213,7 @@ export function CoastFireEmailCapture({
         <p className="section-kicker">YOUR RESULT IS READY</p>
         <h3>See your Coast FIRE number in Ask Linc</h3>
         <p className="cf-email-lead">
-          Enter your email, then choose a password to see your result in Ask Linc. No code to
-          enter, no credit card.
+          Enter your email to see your result in Ask Linc. New here? Just choose a password, with no code to enter and no credit card.
         </p>
       </div>
 
@@ -268,12 +243,11 @@ export function CoastFireEmailCapture({
             disabled={status === "sending"}
             data-cs-override-id="coast-fire-email-results"
           >
-            {status === "sending" ? "Sending…" : "See my result in Ask Linc"}
+            {status === "sending" ? "Saving…" : "See my result in Ask Linc"}
           </button>
-      </div>
+        </div>
 
-      {error && <p className="cf-email-error" role="alert">{error}</p>}
-
+        {error && <p className="cf-email-error" role="alert">{error}</p>}
       </div>
     </form>
   );

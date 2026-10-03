@@ -67,4 +67,27 @@ describe('/coast-fire/continue', () => {
     expect(response.status).toBe(302);
     expect(response.headers.get('cache-control')).toBe('no-store');
   });
+
+  /*
+   * An existing account's email: the same handover, but to sign-in, which
+   * attaches the run. The cookie follows it there and goes nowhere else.
+   */
+  it('sends a sign-in link to sign-in, with the cookie scoped there', () => {
+    const response = visit(`https://asklinc.com/coast-fire/continue?ref=${TOKEN}&to=sign-in`);
+
+    expect(response.status).toBe(302);
+    const location = response.headers.get('location')!;
+    expect(location).toBe('https://asklinc.com/login?source=coast-fire-calculator');
+    expect(location).not.toContain(TOKEN);
+    const cookie = response.cookies.get(COAST_FIRE_REF_COOKIE)!;
+    expect(cookie.value).toBe(TOKEN);
+    expect(cookie.path).toBe('/login');
+  });
+
+  /* Only the one value picks sign-in; anything else is the signup link. */
+  it('ignores any other destination it is handed', () => {
+    const response = visit(`https://asklinc.com/coast-fire/continue?ref=${TOKEN}&to=https://evil.example`);
+
+    expect(response.headers.get('location')).toBe('https://asklinc.com/getstarted?source=coast-fire-calculator');
+  });
 });

@@ -19,12 +19,10 @@ jest.mock('../../services/retirement-quickplan-log', () => ({
   recordQuickPlanRejection: (...args: unknown[]) => log.reject(...(args as [])),
 }));
 
-/** The results-email dependencies, held the same way and for the same reason. */
+/** The email dependency, held the same way and for the same reason. */
 const email = {
-  // The full results email: sent only when the lead did not store.
-  send: jest.fn(async () => true),
   // The figure-free "ready in Ask Linc" email: the ordinary path.
-  ready: jest.fn<Promise<boolean>, [{ calculator: string; inputs: Array<[string, string]>; email: string; ctaUrl: string }]>(async () => true),
+  ready: jest.fn<Promise<boolean>, [{ calculator: string; inputs: Array<[string, string]>; email: string; ctaUrl: string; existingAccount?: boolean }]>(async () => true),
 };
 
 /** The link the ready email carried. */
@@ -71,7 +69,6 @@ jest.mock('../../services/calculator-account-lookup', () => ({
 }));
 
 jest.mock('../../auth/resend-email', () => ({
-  sendRetirementResultsEmail: (...args: unknown[]) => email.send(...(args as [])),
   sendCalculatorReadyEmail: (...args: unknown[]) => email.ready(...(args as [never])),
 }));
 jest.mock('../../services/mailerlite-subscribe', () => ({
@@ -155,8 +152,6 @@ describe('retirement quick plan route', () => {
   beforeEach(() => {
     log.run.mockClear();
     log.reject.mockClear();
-    email.send.mockClear();
-    email.send.mockResolvedValue(true);
     email.ready.mockClear();
     email.ready.mockResolvedValue(true);
     accounts.exists.mockClear();
@@ -326,23 +321,17 @@ describe('retirement quick plan route', () => {
     /** The send is fired, then MailerLite is called after the response. */
     const settle = () => new Promise((resolve) => setImmediate(resolve));
 
-    it('emails figures it computed rather than figures it was handed', async () => {
-      // Only the no-lead fallback mails figures at all.
-      leads.record.mockResolvedValue(false);
+    it('mails no verdict, even one it was handed', async () => {
       const response = await request(buildApp())
         .post('/api/retirement-quickplan/email-results')
         // A caller-supplied verdict must not be able to reach an inbox under
-        // our branding. Only the plan's own inputs are read.
+        // our branding, and neither may the one we compute.
         .send({ ...SHORT_PLAN, email: 'Reader@Example.com', survivalRate: 1 });
 
       expect(response.status).toBe(200);
-      const [address, result, primary] = email.send.mock.calls[0] as unknown as [
-        string, { inputs: { retirementAge: number } }, { survivalRate: number },
-      ];
-      expect(address).toBe('reader@example.com');
-      expect(result.inputs.retirementAge).toBe(SHORT_PLAN.retirementAge);
-      expect(primary.survivalRate).toBeGreaterThanOrEqual(0);
-      expect(primary.survivalRate).toBeLessThanOrEqual(1);
+      const [options] = email.ready.mock.calls[0];
+      expect(options.email).toBe('reader@example.com');
+      expect(JSON.stringify(options)).not.toMatch(/survival/i);
     }, 60_000);
 
     it('links the email at the token-stripping redirect, never at the figures', async () => {
@@ -391,11 +380,11 @@ describe('retirement quick plan route', () => {
     }, 60_000);
 
     /*
-     * An address that already has an account cannot register again, and the
-     * ready email states no answer, so they get the full results and a
-     * sign-in link instead of a handoff.
+     * An address that already has an account cannot register again. It gets
+     * the same figure-free message, linked to sign-in, where the run is
+     * attached — never the answer itself.
      */
-    it('mails the full results to an existing account and hands back no token', async () => {
+    it('sends an existing account to sign in with the run, mailing no figures', async () => {
       accounts.exists.mockResolvedValue(true);
 
       const response = await request(app)
@@ -403,14 +392,15 @@ describe('retirement quick plan route', () => {
         .send({ ...SHORT_PLAN, email: 'reader@example.com' });
 
       expect(response.status).toBe(200);
-      expect(response.body.ref).toBeNull();
+      // The page carries this to sign-in, which attaches the run to the account.
+      expect(response.body.ref).toMatch(/^[a-f0-9]{48}$/);
       expect(response.body.existingAccount).toBe(true);
-      expect(email.ready).not.toHaveBeenCalled();
-      const [, , , ctaUrl, options] = email.send.mock.calls[0] as unknown as [
-        string, unknown, unknown, string, { existingAccount: boolean },
-      ];
-      expect(ctaUrl).toBe('http://localhost:3001/login');
-      expect(options).toEqual({ existingAccount: true });
+      const [options] = email.ready.mock.calls[0];
+      expect(options.existingAccount).toBe(true);
+      const ctaUrl = new URL(options.ctaUrl);
+      expect(ctaUrl.pathname).toBe('/retirement/continue');
+      expect(ctaUrl.searchParams.get('ref')).toBe(response.body.ref);
+      expect(ctaUrl.searchParams.get('to')).toBe('sign-in');
     }, 60_000);
 
     /*
@@ -422,26 +412,26 @@ describe('retirement quick plan route', () => {
         .post('/api/retirement-quickplan/email-results')
         .send({ ...SHORT_PLAN, email: 'reader@example.com' });
 
-      expect(email.send).not.toHaveBeenCalled();
       const [options] = email.ready.mock.calls[0];
       expect(options.calculator).toBe('retirement');
       expect(options.email).toBe('reader@example.com');
       expect(options.inputs).toContainEqual(['Retirement age', String(SHORT_PLAN.retirementAge)]);
     }, 60_000);
 
-    /* Personalization is worth a database row; the results are not. */
-    it('still sends when the lead could not be stored, minus the personalization', async () => {
+    /*
+     * Nothing stored is nothing any account could open, and the page shows no
+     * result itself — so it is an error the visitor retries, and no mail goes
+     * out for it.
+     */
+    it('refuses rather than sends when the lead did not store', async () => {
       leads.record.mockResolvedValue(false);
 
       const response = await request(buildApp())
         .post('/api/retirement-quickplan/email-results')
         .send({ ...SHORT_PLAN, email: 'reader@example.com' });
 
-      expect(response.status).toBe(200);
-      // No account-side copy to point at, so the full results go out instead.
+      expect(response.status).toBe(503);
       expect(email.ready).not.toHaveBeenCalled();
-      const ctaUrl = (email.send.mock.calls[0] as unknown as [string, unknown, unknown, string])[3];
-      expect(ctaUrl).toBe('http://localhost:3001/getstarted?source=retirement-calculator');
     }, 60_000);
 
     it('adds the address to the retirement group after answering', async () => {
@@ -531,7 +521,6 @@ describe('retirement quick plan route', () => {
 
       expect(response.status).toBe(400);
       expect(response.body.field).toBe('email');
-      expect(email.send).not.toHaveBeenCalled();
       expect(email.ready).not.toHaveBeenCalled();
     });
 
@@ -542,7 +531,6 @@ describe('retirement quick plan route', () => {
 
       expect(response.status).toBe(400);
       expect(response.body.field).toBe('investableAssets');
-      expect(email.send).not.toHaveBeenCalled();
       expect(email.ready).not.toHaveBeenCalled();
     });
 
@@ -558,7 +546,6 @@ describe('retirement quick plan route', () => {
       expect(response.status).toBe(400);
       expect(response.body.field).toBe('investableAssets');
       expect(response.body.error).toMatch(/investments and annual spending/i);
-      expect(email.send).not.toHaveBeenCalled();
       expect(email.ready).not.toHaveBeenCalled();
     }, 60_000);
 
@@ -600,7 +587,7 @@ describe('retirement quick plan route', () => {
      * days, and re-running would let a change to the engine or its dataset put
      * a different number on the page than the one in the recipient's inbox.
      */
-    it('returns the plan and the verdict the email stated', async () => {
+    it('returns the plan behind a live token, never its verdict', async () => {
       const outcome = {
         survivalRate: 0.94,
         sequencesTested: 800,
@@ -622,7 +609,6 @@ describe('retirement quick plan route', () => {
       expect(response.body).toEqual({
         email: 'reader@example.com',
         inputs: SHORT_PLAN,
-        outcome,
       });
       // Personal to one link, so no intermediary may hold a copy.
       expect(response.headers['cache-control']).toBe('no-store');

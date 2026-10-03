@@ -1,24 +1,23 @@
 /**
  * The model's reading of a run, on the page.
  *
- * Three things are worth holding down here, and none of them is the prose.
- * The panel must not delay the deterministic answer, it must disappear rather
- * than apologise when no reading was produced, and it must ask about the plan
- * the visitor submitted rather than the normalized one — a run with a blank
- * box is simulated against a notional portfolio, and posting that back would
- * ask for a reading of money nobody has.
+ * Only a rates-only answer is shown on this page now: a plan answer opens in
+ * Ask Linc, and is never read here. Three things are worth holding down, and
+ * none of them is the prose. The panel must not delay the deterministic
+ * answer, it must disappear rather than apologise when no reading was
+ * produced, and it must ask about the plan the visitor submitted rather than
+ * the normalized one — a run with a blank box is simulated against a notional
+ * portfolio, and posting that back would ask for a reading of money nobody
+ * has.
  */
 
 import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { RetirementQuickPlan } from '@/components/marketing/RetirementQuickPlan';
-import { revealCalculatorResult } from '@/test-utils/calculator-reveal';
 
 jest.mock('@/lib/dataLayer', () => ({
   pushRetirementInteraction: jest.fn(),
   pushRetirementModelRun: jest.fn(),
-  // Results are shown through the email form now, which reports the send.
-  pushRetirementResultsEmailed: jest.fn(),
 }));
 
 // Recharts needs a ResizeObserver jsdom does not provide, and none of this is
@@ -72,6 +71,9 @@ const PLAN_RESULT = {
   limitations: [],
 };
 
+/** No portfolio given, so a rates answer: the one this page still shows. */
+const RATES_RESULT = { ...PLAN_RESULT, mode: 'rates', primary: null, missing: ['investableAssets'] };
+
 const READING = {
   headline: 'Your money lasted in 92% of the retirements we could test.',
   paragraphs: ['That is 736 of the 800 stretches of market history long enough to test.'],
@@ -83,13 +85,13 @@ const READING = {
  * Route each endpoint separately so a case can answer the interpretation
  * differently from the run — which is the whole point of the split.
  */
-function mockApi(interpretation: () => Promise<Response>) {
+function mockApi(interpretation: () => Promise<Response>, answer: unknown = RATES_RESULT) {
   global.fetch = jest.fn().mockImplementation((url: string, init?: RequestInit) => {
     if (!init?.method) {
       return Promise.resolve({ ok: true, json: async () => ({ allocations: [] }) });
     }
     if (String(url).includes('/interpretation')) return interpretation();
-    return Promise.resolve({ ok: true, status: 200, json: async () => PLAN_RESULT });
+    return Promise.resolve({ ok: true, status: 200, json: async () => answer });
   });
 }
 
@@ -102,16 +104,13 @@ function renderPage() {
 }
 
 /**
- * Run the model and get its answer onto the page. The verdict is held back
- * until the email form reveals it, which it does when no lead token comes
- * back — as here, where the send answers with the plan rather than a `ref`.
+ * Run the model without a portfolio, which answers in rates: the answer this
+ * page shows, and so the only one it reads.
  */
 async function run() {
   fireEvent.change(screen.getByLabelText(/current age/i), { target: { value: '52' } });
-  fireEvent.change(screen.getByLabelText(/investment assets today/i), { target: { value: '1200000' } });
-  fireEvent.change(screen.getByLabelText(/annual spending in retirement/i), { target: { value: '95000' } });
   fireEvent.submit(screen.getByRole('button', { name: /run the model/i }).closest('form')!);
-  await revealCalculatorResult();
+  await screen.findByText(/what this mix sustained/i);
 }
 
 beforeEach(() => {
@@ -120,7 +119,7 @@ beforeEach(() => {
   global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({ allocations: [] }) });
 });
 
-it('renders the reading under the verdict', async () => {
+it('renders the reading under the answer', async () => {
   mockApi(reading);
   renderPage();
   await run();
@@ -156,13 +155,13 @@ it('shows the reading together with the result without a jump link', async () =>
  * came is the ordinary case for a rate limit or a provider blip, and it must
  * not read as a broken calculator.
  */
-it('shows the verdict without waiting, and shows nothing when no reading comes', async () => {
+it('shows the answer without waiting, and shows nothing when no reading comes', async () => {
   mockApi(dropped);
   renderPage();
   await run();
 
   // The deterministic answer is on the page regardless.
-  expect(await screen.findByText(/retirements in market history/i)).toBeInTheDocument();
+  expect(await screen.findByText(/what this mix sustained/i)).toBeInTheDocument();
 
   await waitFor(() => {
     expect(screen.queryByText(/reading your result/i)).not.toBeInTheDocument();
@@ -178,7 +177,7 @@ it('leaves the page intact when the interpretation request fails outright', asyn
   renderPage();
   await run();
 
-  expect(await screen.findByText(/retirements in market history/i)).toBeInTheDocument();
+  expect(await screen.findByText(/what this mix sustained/i)).toBeInTheDocument();
   await waitFor(() => {
     expect(screen.queryByText(/what this result means/i)).not.toBeInTheDocument();
   });
@@ -199,20 +198,42 @@ it('asks about the plan as submitted, not the normalized one', async () => {
       bodies.push(JSON.parse(String(init.body)));
       return reading();
     }
-    return Promise.resolve({ ok: true, status: 200, json: async () => PLAN_RESULT });
+    return Promise.resolve({ ok: true, status: 200, json: async () => RATES_RESULT });
   });
 
   renderPage();
   fireEvent.change(screen.getByLabelText(/current age/i), { target: { value: '52' } });
   fireEvent.submit(screen.getByRole('button', { name: /run the model/i }).closest('form')!);
-  // No reading is asked for while the answer is held back.
-  expect(bodies).toHaveLength(0);
-  await revealCalculatorResult();
 
   await waitFor(() => expect(bodies).toHaveLength(1));
-  // The blanks stay blank. PLAN_RESULT.inputs names 1,200,000 and 95,000;
+  // The blanks stay blank. RATES_RESULT.inputs names 1,200,000 and 95,000;
   // neither was typed, and neither may be asked about.
   expect(bodies[0]).not.toHaveProperty('investableAssets');
   expect(bodies[0]).not.toHaveProperty('annualSpending');
   expect(bodies[0]).toMatchObject({ currentAge: 52 });
+});
+
+/*
+ * A plan answer opens in Ask Linc and is never shown here, so reading it
+ * would be a model call for a panel that does not exist.
+ */
+it('asks for no reading of a plan answer, which this page does not show', async () => {
+  const urls: string[] = [];
+  global.fetch = jest.fn().mockImplementation((url: string, init?: RequestInit) => {
+    if (!init?.method) {
+      return Promise.resolve({ ok: true, json: async () => ({ allocations: [] }) });
+    }
+    urls.push(String(url));
+    return Promise.resolve({ ok: true, status: 200, json: async () => PLAN_RESULT });
+  });
+
+  renderPage();
+  fireEvent.change(screen.getByLabelText(/current age/i), { target: { value: '52' } });
+  fireEvent.change(screen.getByLabelText(/investment assets today/i), { target: { value: '1200000' } });
+  fireEvent.change(screen.getByLabelText(/annual spending in retirement/i), { target: { value: '95000' } });
+  fireEvent.submit(screen.getByRole('button', { name: /run the model/i }).closest('form')!);
+
+  expect(await screen.findByText('Your result is ready.')).toBeInTheDocument();
+  expect(screen.queryByText(/retirements in market history/i)).not.toBeInTheDocument();
+  expect(urls.some((url) => url.includes('/interpretation'))).toBe(false);
 });

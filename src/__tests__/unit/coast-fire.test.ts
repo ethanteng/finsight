@@ -1,12 +1,10 @@
 import { describe, expect, it } from '@jest/globals';
 import {
   calculateCoastFire,
-  coastFireSensitivity,
   CoastFireValidationError,
   parseCoastFireInputs,
   type CoastFireInputs,
 } from '../../services/coast-fire';
-import { buildCoastFireResultsEmail } from '../../email/coast-fire-results';
 
 /**
  * The same worked example the frontend suite pins
@@ -106,94 +104,5 @@ describe('reading the seven inputs off a request', () => {
   it('ignores anything that is not one of the seven', () => {
     const parsed = parseCoastFireInputs({ ...DEFAULTS, coastFireNumber: 1, __proto__: {} });
     expect(Object.keys(parsed).sort()).toEqual(Object.keys(DEFAULTS).sort());
-  });
-});
-
-describe('the return-assumption comparison', () => {
-  it('brackets the chosen rate by a point either way', () => {
-    const rates = coastFireSensitivity(calculateCoastFire(DEFAULTS)).map((row) => row.rate);
-    expect(rates).toEqual([4, 5, 6]);
-  });
-
-  it('collapses duplicates at the ends of the allowed range', () => {
-    const rates = coastFireSensitivity(calculateCoastFire({ ...DEFAULTS, realReturnRate: 0 }))
-      .map((row) => row.rate);
-    expect(rates).toEqual([0, 1]);
-  });
-});
-
-describe('the results email', () => {
-  const options = {
-    email: 'reader@example.com',
-    ctaUrl: 'https://asklinc.com/getstarted?source=coast-fire-calculator&ref=abc',
-    calculatorUrl: 'https://asklinc.com/coast-fire-calculator',
-  };
-
-  it('leads with the number, in both parts', () => {
-    const message = buildCoastFireResultsEmail(calculateCoastFire(DEFAULTS), options);
-
-    expect(message.subject).toContain('$369,128');
-    expect(message.html).toContain('$369,128');
-    expect(message.text).toContain('$369,128');
-  });
-
-  /*
-   * A client that will not render HTML has to get the results, not a "view
-   * this in a browser" stub. Everything the card shows is in the text part.
-   */
-  it('carries the same figures and the same caveats in plain text', () => {
-    const message = buildCoastFireResultsEmail(calculateCoastFire(DEFAULTS), options);
-
-    expect(message.text).toContain('$1,250,000');
-    expect(message.text).toContain('$1,354,542');
-    expect(message.text).toContain('4.0% real return');
-    expect(message.text).toContain('6.0% real return');
-    expect(message.text).toContain('not financial advice');
-    expect(message.text).toContain(options.ctaUrl);
-    expect(message.text).not.toContain('<');
-  });
-
-  it('carries the signup link as a button and as a pasteable URL', () => {
-    const message = buildCoastFireResultsEmail(calculateCoastFire(DEFAULTS), options);
-
-    expect(message.html).toContain(`href="${options.ctaUrl.replace(/&/g, '&amp;')}"`);
-    expect(message.html).toContain('Create your free account');
-    // Sent only when no lead stored, so the link has no run behind it and the
-    // message must not promise one.
-    expect(message.html).not.toContain('first decision');
-    expect(message.html.match(/asklinc\.com\/getstarted/g)?.length).toBeGreaterThanOrEqual(2);
-  });
-
-  it('signs an existing account in rather than offering it a new one', () => {
-    const message = buildCoastFireResultsEmail(calculateCoastFire(DEFAULTS), {
-      ...options,
-      existingAccount: true,
-    });
-
-    expect(message.html).toContain('Sign in to Ask Linc');
-    expect(message.html).not.toContain('Create your free account');
-    expect(message.text).not.toMatch(/30 days/);
-  });
-
-  it('uses the brand shell, so the message is not a bare table', () => {
-    const message = buildCoastFireResultsEmail(calculateCoastFire(DEFAULTS), options);
-
-    // Deep green, lime, and the logo from `email/templates`.
-    expect(message.html).toContain('#123c2f');
-    expect(message.html).toContain('#cfff68');
-    expect(message.html).toContain('ask-linc-logo.png');
-  });
-
-  it('says which status it is reporting', () => {
-    const reached = buildCoastFireResultsEmail(calculateCoastFire(DEFAULTS), options);
-    const building = buildCoastFireResultsEmail(
-      calculateCoastFire({ ...DEFAULTS, currentSavings: 200_000 }),
-      options,
-    );
-
-    expect(reached.html).toContain('Reached');
-    expect(reached.text).toContain('You’ve reached Coast FIRE.');
-    expect(building.html).toContain('Not yet');
-    expect(building.text).toContain('You’re still building your coast.');
   });
 });

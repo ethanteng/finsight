@@ -380,14 +380,6 @@
 .quickplan-page .qp-verdict[data-outcome="mixed"] strong { color: #97600f; }
 .quickplan-page .qp-verdict[data-outcome="weak"] strong { color: #a8322a; }
 
-.quickplan-page .qp-survival-bar[data-outcome="mixed"] .qp-survival-fill {
-  background: linear-gradient(90deg, #c07c15, #d99b2f);
-}
-
-.quickplan-page .qp-survival-bar[data-outcome="weak"] .qp-survival-fill {
-  background: linear-gradient(90deg, #a8322a, #c14a3f);
-}
-
 .quickplan-page .qp-verdict-sub {
   max-width: 760px;
   margin: 0 0 30px;
@@ -396,85 +388,10 @@
   line-height: 1.65;
 }
 
-.quickplan-page .qp-survival-bar {
-  position: relative;
-  height: 42px;
-  overflow: hidden;
-  border: 1px solid #cfd6cb;
-  border-radius: 999px;
-  background: #e8e6da;
-}
-
-.quickplan-page .qp-survival-fill {
-  height: 100%;
-  background: linear-gradient(90deg, #2b8f5d, #3faa72);
-}
-
-.quickplan-page .qp-survival-label {
-  position: absolute;
-  top: 50%;
-  left: 18px;
-  transform: translateY(-50%);
-  color: white;
-  font-family: var(--font-display);
-  font-size: 15px;
-  font-weight: 780;
-  letter-spacing: -0.01em;
-  text-shadow: 0 1px 2px rgba(16, 35, 25, 0.35);
-}
-
-/*
- * The jump from the result to the connect-accounts section.
- *
- * Three chevrons cascading downward, not a labelled pill. It sits directly
- * under the email capture's own button, and two filled controls stacked read
- * as competing asks; this one says "keep going" without competing with the
- * thing being asked for. Its accessible name is on the anchor.
- *
- * The cascade is the only motion, it is transform and opacity only (no
- * layout), and it is off under prefers-reduced-motion — where three static
- * chevrons still point down.
- */
-.quickplan-page .qp-jump {
-  /* Centred under the full-width band above it, rather than hugging its left
-     edge where it read as a stray mark. */
-  display: flex;
-  width: fit-content;
-  flex-direction: column;
-  align-items: center;
-  gap: 1px;
-  margin: 22px auto 0;
-  padding: 12px 26px;
-  border-radius: 20px;
-  color: #52705f;
-  transition: color 0.15s, background-color 0.15s;
-}
-
-.quickplan-page .qp-jump:hover {
-  background: rgba(16, 35, 25, 0.05);
-  color: var(--ink);
-}
-
-.quickplan-page .qp-chevron {
-  display: block;
-  animation: qp-chevron-cascade 1.9s ease-in-out infinite;
-}
-
 /*
  * Each chevron fades and drifts in turn, so the group reads downward rather
  * than pulsing as one block. The stagger is set per element in the markup.
  */
-@keyframes qp-chevron-cascade {
-  0%, 60%, 100% { opacity: 0.28; transform: translateY(-2px); }
-  30% { opacity: 1; transform: translateY(2px); }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .quickplan-page .qp-chevron {
-    animation: none;
-    opacity: 0.7;
-  }
-}
 
 .quickplan-page .qp-stats {
   display: grid;
@@ -556,69 +473,9 @@
   line-height: 1.7;
 }
 
-.quickplan-page .qp-interpretation-watch {
-  max-width: 760px;
-  margin: 22px 0 0;
-  padding: 18px 22px 18px 38px;
-  border: 1px solid #d9ddd3;
-  border-radius: 16px;
-  background: var(--cream);
-}
-
-.quickplan-page .qp-interpretation-watch li {
-  margin: 0 0 10px;
-  color: #45564c;
-  font-size: 14.5px;
-  line-height: 1.65;
-}
-
-.quickplan-page .qp-interpretation-watch li:last-child {
-  margin-bottom: 0;
-}
-
-/*
- * The placeholder holds the block's vertical space while the model writes, so
- * the panel appears in place instead of pushing the page down under a reader
- * who has already started on the charts below it.
- */
-.quickplan-page .qp-interpretation-loading {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-  min-height: 96px;
-  margin-top: 10px;
-  color: #74807a;
-  font-size: 15px;
-}
-
-.quickplan-page .qp-interpretation-pulse {
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  background: var(--lime, #b8d94a);
-  animation: qp-interpretation-pulse 1.4s ease-in-out infinite;
-}
-
-@keyframes qp-interpretation-pulse {
-  0%, 100% { opacity: 0.35; transform: scale(0.85); }
-  50% { opacity: 1; transform: scale(1); }
-}
-
-/* Honours a reader who has asked the system for less motion. */
-@media (prefers-reduced-motion: reduce) {
-  .quickplan-page .qp-interpretation-pulse {
-    animation: none;
-    opacity: 0.7;
-  }
-}
-
 @media (max-width: 720px) {
   .quickplan-page .qp-interpretation h3 {
     font-size: 24px;
-  }
-
-  .quickplan-page .qp-interpretation-watch {
-    padding: 16px 18px 16px 32px;
   }
 }
 
@@ -631,10 +488,6 @@
   align-items: center;
   padding-block: 44px;
   border-top: 1px solid rgba(16, 35, 25, 0.12);
-}
-
-.quickplan-page .qp-chart-block-reverse .qp-chart-copy {
-  order: 2;
 }
 
 .quickplan-page .qp-chart-copy h3 {
@@ -663,97 +516,6 @@
   border: 1px solid #d9ddd3;
   border-radius: 18px;
   background: var(--cream);
-}
-
-/* ------------------------------------------------- scenario comparison rows */
-
-.quickplan-page .qp-scenarios {
-  display: grid;
-  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
-  gap: 60px;
-  align-items: center;
-  padding-block: 44px;
-  border-top: 1px solid rgba(16, 35, 25, 0.12);
-}
-
-.quickplan-page .qp-scenarios-copy h3 {
-  margin: 0 0 14px;
-  font-family: var(--font-display);
-  font-size: 31px;
-  font-weight: 700;
-  letter-spacing: -0.04em;
-}
-
-.quickplan-page .qp-scenarios-copy p {
-  margin: 0;
-  color: #55635a;
-  font-size: 15px;
-  line-height: 1.68;
-}
-
-.quickplan-page .qp-scenario-list {
-  margin: 0;
-  padding: 20px 24px;
-  border: 1px solid #d9ddd3;
-  border-radius: 18px;
-  background: var(--cream);
-  list-style: none;
-}
-
-.quickplan-page .qp-scenario-list li {
-  display: grid;
-  grid-template-columns: minmax(140px, 0.9fr) minmax(0, 1.4fr) 62px;
-  gap: 16px;
-  align-items: center;
-  padding: 13px 0;
-  border-bottom: 1px solid rgba(16, 35, 25, 0.09);
-}
-
-.quickplan-page .qp-scenario-list li:last-child {
-  border-bottom: 0;
-}
-
-.quickplan-page .qp-scenario-label {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  min-width: 0;
-}
-
-.quickplan-page .qp-scenario-label strong {
-  font-size: 14px;
-  font-weight: 750;
-}
-
-.quickplan-page .qp-scenario-label span {
-  color: #74807a;
-  font-size: 12px;
-  line-height: 1.4;
-}
-
-.quickplan-page .qp-scenario-track {
-  height: 14px;
-  overflow: hidden;
-  border-radius: 999px;
-  background: #e8e6da;
-}
-
-.quickplan-page .qp-scenario-fill {
-  height: 100%;
-  border-radius: 999px;
-  background: #8fbfa3;
-}
-
-.quickplan-page .qp-scenario-list li.is-primary .qp-scenario-fill {
-  background: var(--forest);
-}
-
-.quickplan-page .qp-scenario-list b {
-  font-family: var(--font-display);
-  font-size: 16px;
-  font-weight: 780;
-  letter-spacing: -0.03em;
-  text-align: right;
 }
 
 /* ------------------------------------------------------------ methodology */
@@ -886,66 +648,6 @@
   padding-block: 52px 76px;
 }
 
-.quickplan-page .qp-observation {
-  padding: 26px 28px;
-  border: 1px solid #d9ddd3;
-  border-radius: 18px;
-  background: var(--cream);
-}
-
-.quickplan-page .qp-observation-quote {
-  margin: 0 0 12px;
-  font-family: var(--font-display);
-  font-size: 26px;
-  font-weight: 700;
-  letter-spacing: -0.035em;
-}
-
-.quickplan-page .qp-observation-detail {
-  margin: 0;
-  color: #55635a;
-  font-size: 14.5px;
-  line-height: 1.65;
-}
-
-.quickplan-page .qp-characteristics {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 14px;
-  margin: 24px 0 0;
-}
-
-.quickplan-page .qp-characteristics div {
-  padding: 12px 14px;
-  border: 1px solid #e0e3da;
-  border-radius: 12px;
-  background: #f6f5ec;
-}
-
-.quickplan-page .qp-characteristics dt {
-  color: #778178;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.quickplan-page .qp-characteristics dd {
-  margin: 6px 0 0;
-  font-family: var(--font-display);
-  font-size: 17px;
-  font-weight: 750;
-  letter-spacing: -0.02em;
-  text-transform: capitalize;
-}
-
-.quickplan-page .qp-observation-scope {
-  margin: 14px 0 0;
-  color: #74807a;
-  font-size: 12.5px;
-  line-height: 1.6;
-}
-
 .quickplan-page .qp-sources {
   margin: 16px 0 0;
   padding-top: 14px;
@@ -1016,8 +718,7 @@
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .quickplan-page .qp-stats,
-  .quickplan-page .qp-characteristics {
+  .quickplan-page .qp-stats {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -1036,26 +737,8 @@
     padding: 26px 22px;
   }
 
-    .quickplan-page .qp-email-label {
+  .quickplan-page .qp-email-label {
     margin-top: 22px;
-  }
-
-  .quickplan-page .qp-scenarios {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 30px;
-  }
-
-  .quickplan-page .qp-scenario-list li {
-    grid-template-columns: minmax(0, 1fr) 62px;
-  }
-
-  .quickplan-page .qp-scenario-track {
-    grid-column: 1 / -1;
-    order: 3;
-  }
-
-  .quickplan-page .qp-chart-block-reverse .qp-chart-copy {
-    order: 0;
   }
 
   .quickplan-page .qp-form {
@@ -1075,10 +758,6 @@
 
   .quickplan-page .qp-stat:last-child {
     border-bottom: 0;
-  }
-
-  .quickplan-page .qp-characteristics {
-    grid-template-columns: minmax(0, 1fr);
   }
 }
 
@@ -1204,55 +883,6 @@
   }
 }
 
-.quickplan-page .qp-ladder-age {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  font-size: 14px;
-  font-weight: 750;
-}
-
-/* The visitor's own row is marked, not recoloured: on this band colour means
-   the outcome and nothing else, so a safer age never renders paler than a
-   riskier one merely because it is not the one asked about. */
-.quickplan-page .qp-ladder-tag {
-  color: var(--forest);
-  font-size: 11px;
-  font-style: normal;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-.quickplan-page .qp-ladder-track {
-  height: 14px;
-  overflow: hidden;
-  border-radius: 999px;
-  background: #e3e1d5;
-}
-
-.quickplan-page .qp-ladder-fill {
-  display: block;
-  height: 100%;
-  border-radius: 999px;
-  background: #3faa72;
-}
-
-.quickplan-page .qp-ladder-rate {
-  font-family: var(--font-display);
-  font-size: 16px;
-  font-weight: 780;
-  letter-spacing: -0.03em;
-  text-align: right;
-}
-
-.quickplan-page .qp-ladder-count {
-  grid-column: 2 / -1;
-  color: #74807a;
-  font-size: 12px;
-  line-height: 1.4;
-}
-
 @media (max-width: 900px) {
 
   /* Full width here rather than a pill floating in a narrow column. */
@@ -1260,15 +890,5 @@
     width: 100%;
     padding: 22px 28px;
     font-size: 19px;
-  }
-
-  .quickplan-page .qp-ladder-track {
-    grid-column: 1 / -1;
-    order: 3;
-  }
-
-  .quickplan-page .qp-ladder-count {
-    grid-column: 1 / -1;
-    order: 4;
   }
 }

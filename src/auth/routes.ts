@@ -20,6 +20,7 @@ import { stripeService } from '../services/stripe';
 import { SubscriptionTier } from '../types/stripe';
 import { isValidTimeZone, normalizeTimeZone } from '../domain/time-zone';
 import {
+  attachCalculatorLeadToAccount,
   resolveCalculatorLead,
   seedFirstDecisionFromLead,
 } from '../services/calculator-first-decision';
@@ -473,6 +474,36 @@ router.post('/login', async (req: Request, res: Response) => {
     console.error('Login error:', error);
     res.status(500).json({ error: 'Login failed' });
   }
+});
+
+/*
+ * Attach a calculator run to the signed-in account.
+ *
+ * The other half of registration's seeding, for an address that already has an
+ * account and so cannot register: the calculator sends that visitor to sign
+ * in, and the sign-in page posts the lead token here once it has a session. A
+ * visitor already signed in on the calculator page posts it directly. The run
+ * becomes a new decision in the account, and `/app` opens on it.
+ *
+ * The lead must name this account's address — see
+ * `attachCalculatorLeadToAccount` — so a token for anyone else attaches nothing.
+ */
+router.post('/calculator-lead', authenticateUser, async (req: AuthenticatedRequest, res: Response) => {
+  if (!req.user) {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
+
+  const outcome = await attachCalculatorLeadToAccount({
+    userId: req.user.id,
+    email: req.user.email,
+    token: req.body?.calculatorRef,
+  });
+  if (outcome === 'failed') {
+    return res.status(500).json({ error: 'Could not save that calculator run to your account.' });
+  }
+
+  res.setHeader('Cache-Control', 'no-store');
+  return res.json({ attached: outcome === 'attached' || outcome === 'already-attached' });
 });
 
 // Get current user profile

@@ -171,31 +171,3 @@ export function calculateCoastFire(inputs: CoastFireInputs): CoastFireResult {
     hasReachedCoastFire: differenceToday >= 0,
   };
 }
-
-/**
- * The same one-point-either-way comparison the page shows under the result.
- * A single rate is the assumption most likely to be wrong, and the email has
- * to carry that caveat as visibly as the page does.
- */
-export function coastFireSensitivity(result: CoastFireResult): Array<{
-  rate: number;
-  coastFireNumber: number;
-  reached: boolean;
-  selected: boolean;
-}> {
-  const rates = [
-    Math.max(0, result.realReturnRate - 1),
-    result.realReturnRate,
-    Math.min(12, result.realReturnRate + 1),
-  ];
-
-  return [...new Set(rates)].map((rate) => {
-    const coastFireNumber = calculateCoastFire({ ...result, realReturnRate: rate }).coastFireNumber;
-    return {
-      rate,
-      coastFireNumber,
-      reached: result.currentSavings >= coastFireNumber,
-      selected: rate === result.realReturnRate,
-    };
-  });
-}

@@ -50,15 +50,6 @@ export interface CoastFireSignupContext {
   email?: string;
   /** Token that produced this context, when it came from an emailed link. */
   sourceToken?: string;
-  /**
-   * Figures the email actually carried. When present, signup shows these
-   * instead of recomputing, so a later formula change cannot disagree with
-   * the inbox.
-   */
-  emailedOutcome?: {
-    coastFireNumber: number;
-    hasReachedCoastFire: boolean;
-  };
 }
 
 function numberInRange(
@@ -121,33 +112,10 @@ function removeStoredContext(): void {
   }
 }
 
-/**
- * Save a scenario the calculator accepted. Returns false if the values are
- * invalid or browser storage is unavailable; navigation must never depend on
- * this succeeding.
- */
-function parseEmailedOutcome(
-  value: unknown,
-): CoastFireSignupContext['emailedOutcome'] | undefined {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
-  const outcome = value as Record<string, unknown>;
-  if (
-    !numberInRange(outcome.coastFireNumber, 0, 1_000_000_000_000) ||
-    typeof outcome.hasReachedCoastFire !== 'boolean'
-  ) {
-    return undefined;
-  }
-  return {
-    coastFireNumber: outcome.coastFireNumber,
-    hasReachedCoastFire: outcome.hasReachedCoastFire,
-  };
-}
-
 interface CoastFireSignupOptions {
   email?: string;
   now?: number;
   sourceToken?: string;
-  emailedOutcome?: CoastFireSignupContext['emailedOutcome'];
 }
 
 /**
@@ -171,10 +139,6 @@ export function buildCoastFireSignupContext(
   const inputs = parseInputs(value);
   if (!inputs || !numberInRange(now, 0, Number.MAX_SAFE_INTEGER)) return null;
   if (options.sourceToken && !isHandoverToken(options.sourceToken)) return null;
-  const emailedOutcome = options.emailedOutcome
-    ? parseEmailedOutcome(options.emailedOutcome)
-    : undefined;
-  if (options.emailedOutcome && !emailedOutcome) return null;
 
   return {
     version: CONTEXT_VERSION,
@@ -182,7 +146,6 @@ export function buildCoastFireSignupContext(
     inputs,
     ...(options.email ? { email: options.email } : {}),
     ...(options.sourceToken ? { sourceToken: options.sourceToken } : {}),
-    ...(emailedOutcome ? { emailedOutcome } : {}),
   };
 }
 
@@ -200,6 +163,11 @@ export function clearCoastFireSignupContext(): void {
   removeStoredContext();
 }
 
+/**
+ * Save a scenario the calculator accepted. Returns false if the values are
+ * invalid or browser storage is unavailable; navigation must never depend on
+ * this succeeding.
+ */
 export function storeCoastFireSignupContext(
   value: CoastFireInputs,
   options: CoastFireSignupOptions = {},
@@ -239,7 +207,6 @@ export function readCoastFireSignupContext(
       return null;
     }
 
-    const emailedOutcome = parseEmailedOutcome(value.emailedOutcome);
     const sourceToken =
       isHandoverToken(value.sourceToken) ? value.sourceToken : undefined;
 
@@ -249,8 +216,7 @@ export function readCoastFireSignupContext(
       inputs,
       ...(typeof value.email === 'string' ? { email: value.email } : {}),
       ...(sourceToken ? { sourceToken } : {}),
-      ...(emailedOutcome ? { emailedOutcome } : {}),
-    };
+      };
   } catch {
     removeStoredContext();
     return null;
@@ -298,7 +264,6 @@ export async function fetchCoastFireSignupContext(
 ): Promise<HandoverLookup<{
   inputs: CoastFireInputs;
   email?: string;
-  emailedOutcome?: CoastFireSignupContext['emailedOutcome'];
 }>> {
   if (!isHandoverToken(token)) return { status: 'not-found' };
 
@@ -309,18 +274,12 @@ export async function fetchCoastFireSignupContext(
     const body = await response.json() as {
       inputs?: unknown;
       email?: unknown;
-      coastFireNumber?: unknown;
-      hasReachedCoastFire?: unknown;
     };
     const inputs = parseInputs(body?.inputs);
     // A 200 we cannot read is a problem with the stored row, not a passing
     // one, so the token is spent rather than retried forever.
     if (!inputs) return { status: 'not-found' };
 
-    const emailedOutcome = parseEmailedOutcome({
-      coastFireNumber: body.coastFireNumber,
-      hasReachedCoastFire: body.hasReachedCoastFire,
-    });
     return {
       status: 'resolved',
       context: {
@@ -328,7 +287,6 @@ export async function fetchCoastFireSignupContext(
         ...(typeof body.email === 'string' && body.email.includes('@')
           ? { email: body.email }
           : {}),
-        ...(emailedOutcome ? { emailedOutcome } : {}),
       },
     };
   } catch {

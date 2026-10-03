@@ -112,8 +112,11 @@ someone who reads it without running anything.
 
 A plan result is not shown on this page. The visitor gives an email address,
 chooses a password, and sees it as the first decision in their account, with no
-verification code in between. A `rates` result is shown, because it has no run
-to save. The same applies to the Coast FIRE page. See **The answer opens in Ask
+verification code in between. An address that already has an account signs in
+instead and the run is attached as a new decision; a visitor already signed in
+as that address goes straight to `/app`. If the run cannot be saved the page
+asks for a retry rather than showing the verdict. A `rates` result is shown,
+because it has no run to save. The same applies to the Coast FIRE page. See **The answer opens in Ask
 Linc** in `COAST_FIRE_EMAIL_CAPTURE.md`.
 
 ## Three runs, then the save
@@ -410,7 +413,8 @@ on `emailVerified`, and the verify page has always offered "Skip for now", so
 the code was never what guarded the workspace. The owner of an address someone
 else registered can take the account back by resetting the password from their
 own inbox. If the stamp cannot be written, no token is returned and the page
-shows the result itself — there is no run to seed an account from.
+asks the visitor to use the emailed link — there is no run to seed from the
+page, and the page never shows the result itself.
 
 Going straight there also means no `/signup-context` exchange: the page stores
 the run in sessionStorage next to the cookie, carrying the same token, so
@@ -429,19 +433,26 @@ Three things keep that honest:
 **The `tokenDisclosedAt` migration has to land with or before the backend.**
 Both directions fail safe, which is worth knowing rather than relying on: with
 the column missing, the disclosure write throws, no `ref` is returned, and the
-page shows the result itself rather than sending the visitor to an empty
-workspace. A lead read against a missing column errors too, which resolves to
-no lead, so the code is sent. More verification, never less.
+page tells the visitor to use the emailed link rather than putting an
+undisclosed token in the page. A lead read against a missing column errors too,
+which resolves to no lead, so the code is sent. More verification, never less.
 
-**Deploy the frontend first, or with the backend — never after.** This is the
-opposite of the usual order here, and it is worth stating because getting it
-wrong strands people silently.
+**For this Ask Linc handoff, deploy the backend first (or with the frontend),
+including the `Conversation.calculatorLeadToken` migration.** An older backend
+still returns no `ref` for an existing account (and used to mail the full
+results instead), and has no `POST /auth/calculator-lead`. A newer page that
+never reveals the answer would then point that visitor at an emailed link with
+no attach path behind it. The new backend returns the token for every stored
+lead, links existing accounts through sign-in, and writes
+`calculatorLeadToken` on seed and attach — so that path only works once the
+backend and its migration are live. The older “frontend first” rule still
+applies to the verification-code skip alone:
 
-- *Frontend first* is safe. The new page sends `calculatorRef`, which an older
-  backend ignores as an unknown body field, and reads `user.emailVerified` and
-  `firstDecisionPending`, which an older backend omits or reports as false — so
-  it falls through to the verification screen and the older backend has mailed
-  a code. Nothing breaks.
+- *Frontend first* is safe for registration fields. The new page sends
+  `calculatorRef`, which an older backend ignores as an unknown body field, and
+  reads `user.emailVerified` and `firstDecisionPending`, which an older backend
+  omits or reports as false — so it falls through to the verification screen and
+  the older backend has mailed a code. Nothing breaks.
 - *Backend first* was not, when the only skip was the emailed link's: the
   backend stopped mailing the code while the old page still sent every signup
   to `/verify-email`, where they waited for mail that never arrived. Nothing
@@ -449,12 +460,6 @@ wrong strands people silently.
   the page's own handoff does not repeat that: the backend skips the code for
   a disclosed lead only when the page sends `acceptsFirstDecisionHandoff`,
   which an old page never does, so it still gets its code.
-
-  The straight-to-signup step is safe in both orders on its own: an old page
-  ignores the `ref` a new backend returns, and a new page gets no `ref` from an
-  old backend and shows the result on the page. With the handoff skip gated on
-  the page's opt-in, neither order strands anyone any more; frontend first
-  remains the conventional order.
 
 `VerifyEmailForm` bounces an already-verified session into the workspace, which
 covers someone landing there later — but that bounce lives in the *frontend*,
@@ -476,7 +481,7 @@ does that now.
 |---|---|
 | Capture posts the six numbers | `RetirementEmailCapture.tsx` → `POST /api/retirement-quickplan/email-results` |
 | Lead stored with the plan and the verdict | `services/retirement-leads.ts` |
-| Figure-free ready email (or full results if store failed) | `email/calculator-ready.ts` / `email/retirement-results.ts` |
+| Figure-free ready email (signup or sign-in link) | `email/calculator-ready.ts` |
 | Token stamped disclosed, then returned as `ref` | `markRetirementLeadTokenDisclosed` — before the response |
 | Page writes the same cookie and leaves for signup | `RetirementEmailCapture.tsx` → `writeHandoverToken`, `leaveForSignup` |
 | Email links to `/retirement/continue?ref=…` | `email/calculator-ready.ts` |

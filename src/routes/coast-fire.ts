@@ -1,31 +1,27 @@
 /**
  * Public Coast FIRE endpoints.
  *
- * The seven-number formula itself still runs in the browser, and the result
- * panel still paints with no network at all. These routes exist for the three
- * things a browser cannot do on its own:
+ * The seven-number formula itself still runs in the browser. These routes
+ * exist for the two things a browser cannot do on its own:
  *
- *   POST /interpretation  have a model read the result back in plain language
- *   POST /email-results   send someone their result and put them on the list
- *   GET  /signup-context  hand the scenario back to /getstarted from the email
+ *   POST /email-results   store the run, email the visitor, put them on the list
+ *   GET  /signup-context  hand the scenario back to signup or sign-in
  *
- * All three are unauthenticated, because the whole point is reaching someone
- * who has no account yet. Each costs something different, so each has its own
- * window: the interpretation is a model call we pay for, the email puts mail
- * in an inbox chosen by the caller, and the context read is performed by a
- * recipient opening a link.
+ * Both are unauthenticated, because the whole point is reaching someone who
+ * has no account yet. Each costs something different, so each has its own
+ * window: the email puts mail in an inbox chosen by the caller, and the
+ * context read is performed by a recipient opening a link.
  *
- * Two of them recompute the result here rather than reading it out of the
- * request. Prose and mail carrying our branding may only describe figures we
- * calculated — otherwise either endpoint becomes a way to have Ask Linc state
- * an arbitrary number.
+ * The email route recomputes the result here rather than reading it out of
+ * the request: the run it stores becomes a decision in an account, so it may
+ * only hold figures we calculated.
  */
 
 import express, { Request, Response } from 'express';
 import { createFixedWindowRateLimit, positiveIntFromEnv } from './fixed-window-rate-limit';
 import { validateEmail } from '../auth/utils';
-import { sendCalculatorReadyEmail, sendCoastFireResultsEmail } from '../auth/resend-email';
-import { coastFireInputRows } from '../email/coast-fire-results';
+import { sendCalculatorReadyEmail } from '../auth/resend-email';
+import { coastFireInputRows } from '../email/calculator-input-rows';
 import { getBaseUrl } from '../email/templates';
 import {
   calculateCoastFire,
@@ -40,7 +36,6 @@ import {
   readCoastFireLead,
   recordCoastFireLead,
 } from '../services/coast-fire-leads';
-import { interpretCoastFire } from '../services/coast-fire-interpretation';
 import { coastFireGroupIds, subscribeToMailerLite } from '../services/mailerlite-subscribe';
 import { parseCalculatorLeadAttribution } from '../services/calculator-lead-attribution';
 import { accountExistsForEmail } from '../services/calculator-account-lookup';
@@ -99,15 +94,11 @@ function readEmail(raw: unknown): string {
  * to a clean URL, so the token is never in the address of a rendered page,
  * where Google Tag Manager and every tag in the container would see it.
  */
-function loginUrl(): string {
-  return `${getBaseUrl()}/login`;
-}
-
-function signupUrl(token: string | null): string {
-  const base = getBaseUrl();
-  return token
-    ? `${base}/coast-fire/continue?ref=${token}`
-    : `${base}/getstarted?source=coast-fire-calculator`;
+function continueUrl(token: string, existingAccount: boolean): string {
+  const url = `${getBaseUrl()}/coast-fire/continue?ref=${token}`;
+  // An address that already has an account cannot register again, so its
+  // link lands on sign-in, where the run is attached, instead of on signup.
+  return existingAccount ? `${url}&to=sign-in` : url;
 }
 
 router.post('/email-results', emailRateLimit, async (req: Request, res: Response) => {
@@ -130,8 +121,8 @@ router.post('/email-results', emailRateLimit, async (req: Request, res: Response
   }
 
   // The scenario is stored before the send so the link in that email resolves.
-  // A failed write costs personalization, not the email: the CTA falls back to
-  // plain /getstarted.
+  // A failed write is a 503 with no email: there is no account-side copy to
+  // point at, and the page shows no result itself.
   const token = generateLeadToken();
   const attribution = parseCalculatorLeadAttribution(req.body?.attribution);
   const [stored, existingAccount] = await Promise.all([
@@ -140,26 +131,30 @@ router.post('/email-results', emailRateLimit, async (req: Request, res: Response
   ]);
 
   /*
-   * A stored lead for a new address gets the "ready in Ask Linc" message,
-   * which states no figures: the answer is shown in the account the link
-   * creates. Otherwise there is no account the run can open in — the lead
-   * did not store, or the address already has an account and cannot register
-   * again — so the visitor gets the full results, and the page shows them too.
+   * Nothing stored means nothing any account could open, and the page shows
+   * no result itself, so it says so and the visitor retries. No email either:
+   * a retry would send another, and the answer belongs in Ask Linc.
    */
-  const handOff = stored && !existingAccount;
-  const emailSent = handOff
-    ? await sendCalculatorReadyEmail({
-      calculator: 'coast_fire',
-      inputs: coastFireInputRows(result),
-      email,
-      ctaUrl: signupUrl(token),
-    })
-    : await sendCoastFireResultsEmail(
-      email,
-      result,
-      existingAccount ? loginUrl() : signupUrl(null),
-      { existingAccount },
-    );
+  if (!stored) {
+    res.status(503).json({
+      error: 'We could not save your result just now. Please try again in a moment.',
+    });
+    return;
+  }
+
+  /*
+   * Every stored lead gets the "ready in Ask Linc" message, which states no
+   * figures: the answer is shown in the account. A new address is linked to
+   * signup; one that already has an account is linked to sign-in, where the
+   * run is attached.
+   */
+  const emailSent = await sendCalculatorReadyEmail({
+    calculator: 'coast_fire',
+    inputs: coastFireInputRows(result),
+    email,
+    ctaUrl: continueUrl(token, existingAccount),
+    existingAccount,
+  });
 
   if (!emailSent) {
     res.status(502).json({
@@ -169,26 +164,29 @@ router.post('/email-results', emailRateLimit, async (req: Request, res: Response
   }
 
   /*
-   * Handed back so the page can take this visitor straight to signup instead
-   * of asking them to go and find the email. The same token the message
-   * carries, so both routes restore the same run — but disclosed tokens are
-   * marked first, and registration reads that mark to decide whether the
-   * address is recorded as verified. See `src/auth/routes.ts`.
+   * Handed back so the page can take this visitor into Ask Linc with the run
+   * rather than asking them to go and find the email: to signup for a new
+   * address, to sign-in for an existing account, where it is attached
+   * (`POST /auth/calculator-lead`, which checks the lead's address against the
+   * signed-in account). Disclosed tokens are marked first, and registration
+   * reads that mark to decide whether the address is recorded as verified.
+   * See `src/auth/routes.ts`.
    *
    * Marked before it is returned, and not returned at all if the mark did not
    * take: a token loose in a page while the row still claims it was only
    * emailed would record a stranger's address as verified. Without a ref the
-   * page shows the result itself, and the emailed link still works.
+   * page asks the visitor to use the emailed link; that link still works.
    */
-  const ref = handOff && (await markCoastFireLeadTokenDisclosed(token)) ? token : null;
+  const ref = (await markCoastFireLeadTokenDisclosed(token)) ? token : null;
 
   // The token is a bearer credential for this lead. Nothing about this
   // response may sit in a shared cache.
   res.setHeader('Cache-Control', 'no-store');
   res.json({
-    message: 'Your Coast FIRE results are on their way.',
+    message: 'Your Coast FIRE result is ready in Ask Linc.',
     ref,
-    // Lets the page say why it is showing the result rather than handing off.
+    // Lets the page send this visitor to sign in rather than to a signup that
+    // would refuse the address.
     ...(existingAccount ? { existingAccount: true } : {}),
   });
 
@@ -220,67 +218,11 @@ router.post('/email-results', emailRateLimit, async (req: Request, res: Response
 });
 
 /**
- * Tighter again than the email window, and for a different cost.
- *
- * Every accepted request that misses the cache is a model call we pay for, on
- * a page with no account behind it. The limit is set where a visitor trying
- * two or three variations of their scenario never notices it and a script
- * paying us to generate text does.
- */
-const INTERPRETATION_REQUESTS_PER_WINDOW = positiveIntFromEnv(
-  'COAST_FIRE_INTERPRETATION_RATE_LIMIT',
-  8,
-);
-
-const interpretationRateLimit = createFixedWindowRateLimit({
-  limit: INTERPRETATION_REQUESTS_PER_WINDOW,
-  trustedHops: TRUSTED_HOPS,
-});
-
-/**
- * The plain-language reading of a result, written by a model.
- *
- * Separate from the browser's own calculation on purpose. The formula is the
- * page's answer and paints with no network; this takes a model round trip, so
- * the page shows the number first and fills this in when it arrives. That
- * split is also what lets the reading fail — for a rate limit, a provider
- * outage, or a draft that stated a figure the formula never produced — without
- * taking the answer down with it.
- *
- * The seven inputs are re-run here rather than read out of the request, for
- * the same reason the email route re-runs them.
- *
- * A null interpretation is a 204, not an error. There is nothing wrong with
- * the request, and the page has nothing to show for it either way.
- */
-router.post('/interpretation', interpretationRateLimit, async (req: Request, res: Response) => {
-  let result;
-  try {
-    result = calculateCoastFire(parseCoastFireInputs(req.body));
-  } catch (error) {
-    if (error instanceof CoastFireValidationError) {
-      res.status(400).json({ error: error.message, field: error.field });
-      return;
-    }
-    console.error('❌ Coast FIRE interpretation failed to run the formula:', error);
-    res.status(400).json({ error: 'Check your numbers and try again.' });
-    return;
-  }
-
-  const interpretation = await interpretCoastFire(result);
-  if (!interpretation) {
-    res.status(204).end();
-    return;
-  }
-
-  res.json(interpretation);
-});
-
-/**
- * The scenario behind an emailed link, for the signup page to continue.
+ * The scenario behind an emailed link, for signup or sign-in to continue.
  *
  * Returns the seven inputs and the address the email went to, which is exactly
- * what the holder of this link already has in their inbox. An unknown or
+ * what the holder of this link already has in their inbox. Never the result:
+ * the answer opens in Ask Linc, not on the page that asks for this. An unknown or
  * expired token is a 404 with no detail, so the endpoint cannot be used to
  * test whether a token ever existed.
  */
@@ -299,14 +241,7 @@ router.get('/signup-context/:token', contextRateLimit, async (req: Request, res:
 
   // Never cached by an intermediary: the response is personal to one link.
   res.setHeader('Cache-Control', 'no-store');
-  // Include the emailed outcome, not just the inputs: signup must show the
-  // same Coast FIRE number the inbox carried, even after a formula change.
-  res.json({
-    email: lead.email,
-    inputs: lead.inputs,
-    coastFireNumber: lead.coastFireNumber,
-    hasReachedCoastFire: lead.hasReachedCoastFire,
-  });
+  res.json({ email: lead.email, inputs: lead.inputs });
 });
 
 export default router;

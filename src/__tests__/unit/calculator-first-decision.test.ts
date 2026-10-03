@@ -32,6 +32,7 @@ jest.mock('../../prisma-client', () => ({
 }));
 
 import {
+  attachCalculatorLeadToAccount,
   buildCoastFireAnswer,
   buildCoastFireQuestion,
   buildDecisionAnswer,
@@ -426,6 +427,8 @@ describe('seedFirstDecisionFromLead', () => {
     expect(call[0].data.origin).toBe('calculator_retirement');
     expect(call[0].data.question).toContain('Can I retire at 60?');
     expect(call[0].data.answer).toContain('619 of the 709');
+    // So signing in later with the same link does not add the run again.
+    expect(call[0].data.calculatorLeadToken).toBe('a'.repeat(48));
   });
 
   it('writes a Coast FIRE run as the first decision too', async () => {
@@ -468,5 +471,106 @@ describe('seedFirstDecisionFromLead', () => {
       userId: 'user-1',
       lead: { kind: 'retirement', lead: lead() },
     })).toBe('failed');
+  });
+
+  /*
+   * Two unawaited seeds can both see an empty history; the unique index on
+   * (account, token) lets only one write land.
+   */
+  it('treats a unique conflict as already seeded', async () => {
+    db.create.mockRejectedValueOnce(
+      Object.assign(new Error('Unique constraint failed'), { code: 'P2002' }),
+    );
+
+    expect(await seedFirstDecisionFromLead({
+      userId: 'user-1',
+      lead: { kind: 'retirement', lead: lead() },
+    })).toBe('already-has-decisions');
+  });
+});
+
+/*
+ * An address that already has an account signs in rather than registering,
+ * and its run is attached as a new decision beside whatever it already holds.
+ */
+describe('attachCalculatorLeadToAccount', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    leads.readRetirement.mockResolvedValue(null);
+    leads.readCoastFire.mockResolvedValue(null);
+  });
+
+  it('adds the run to an account that already has decisions', async () => {
+    leads.readRetirement.mockResolvedValue(lead());
+    db.count.mockResolvedValue(12);
+
+    const outcome = await attachCalculatorLeadToAccount({
+      userId: 'user-1', email: 'Reader@Example.com', token: 'a'.repeat(48),
+    });
+
+    expect(outcome).toBe('attached');
+    expect(db.create).toHaveBeenCalledWith({ data: expect.objectContaining({
+      userId: 'user-1', origin: 'calculator_retirement', calculatorLeadToken: 'a'.repeat(48),
+    }) });
+  });
+
+  /*
+   * Signing in proves control of the account, and the lead has to name it.
+   * A token for someone else's address writes nothing into this one.
+   */
+  it('attaches nothing for a lead that names another address', async () => {
+    leads.readRetirement.mockResolvedValue(lead({ email: 'someone-else@example.com' }));
+
+    const outcome = await attachCalculatorLeadToAccount({
+      userId: 'user-1', email: 'reader@example.com', token: 'a'.repeat(48),
+    });
+
+    expect(outcome).toBe('no-lead');
+    expect(db.create).not.toHaveBeenCalled();
+  });
+
+  /*
+   * The unique index on (account, token) is what refuses the second copy, so
+   * two tabs attaching at once cannot both write it.
+   */
+  it('does not add a second copy when the same run is attached again', async () => {
+    leads.readRetirement.mockResolvedValue(lead());
+    db.create.mockRejectedValueOnce(Object.assign(new Error('Unique constraint failed'), { code: 'P2002' }));
+
+    const outcome = await attachCalculatorLeadToAccount({
+      userId: 'user-1', email: 'reader@example.com', token: 'a'.repeat(48),
+    });
+
+    expect(outcome).toBe('already-attached');
+  });
+
+  /*
+   * Keyed on the run, not its wording: a rerun that changes only the asset
+   * mix reads the same and is still a different run.
+   */
+  it('attaches a second run even when it reads the same as the first', async () => {
+    leads.readRetirement
+      .mockResolvedValueOnce(lead())
+      .mockResolvedValueOnce(lead({ token: 'b'.repeat(48) }));
+
+    await attachCalculatorLeadToAccount({ userId: 'user-1', email: 'reader@example.com', token: 'a'.repeat(48) });
+    const second = await attachCalculatorLeadToAccount({
+      userId: 'user-1', email: 'reader@example.com', token: 'b'.repeat(48),
+    });
+
+    expect(second).toBe('attached');
+    const tokens = db.create.mock.calls.map(([args]) => (args as { data: { calculatorLeadToken: string } }).data.calculatorLeadToken);
+    expect(tokens).toEqual(['a'.repeat(48), 'b'.repeat(48)]);
+  });
+
+  it('reports a failed write rather than throwing', async () => {
+    leads.readRetirement.mockResolvedValue(lead());
+    db.create.mockRejectedValueOnce(new Error('database down'));
+
+    const outcome = await attachCalculatorLeadToAccount({
+      userId: 'user-1', email: 'reader@example.com', token: 'a'.repeat(48),
+    });
+
+    expect(outcome).toBe('failed');
   });
 });

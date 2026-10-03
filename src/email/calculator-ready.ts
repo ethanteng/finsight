@@ -10,8 +10,10 @@
  * the account, and the account is the point.
  *
  * Sent only when the lead stored, because only then does the link resolve to a
- * run the new account can be seeded from. When the store fails the route sends
- * the full results email instead: there is no account-side copy to point at.
+ * run an account can open. A new address is linked to signup, where the run
+ * becomes the account's first decision; an address that already has an
+ * account is linked to sign-in, where the run is attached as a new decision.
+ * Either way the inbox never holds the answer.
  *
  * Every value shown is something the visitor typed, echoed back. The inputs
  * are not results, and they are what makes the message recognisably theirs.
@@ -33,6 +35,8 @@ export interface CalculatorReadyEmailOptions {
   inputs: Array<[string, string]>;
   email: string;
   ctaUrl: string;
+  /** The address already has an account, so the link signs in rather than up. */
+  existingAccount?: boolean;
 }
 
 const CTA_LABEL = 'See my result in Ask Linc';
@@ -53,6 +57,9 @@ const COPY: Record<ReadyCalculator, { subject: string; heading: string; calculat
 const NEXT_STEP =
   'Choose a password and your result opens as the first decision in your account. There is no code to enter. Free for 30 days, no credit card required.';
 
+const EXISTING_ACCOUNT_NEXT_STEP =
+  'Sign in to your Ask Linc account and your result opens there as a new decision.';
+
 function escapeHtml(value: string): string {
   return value
     .replace(/&/g, '&amp;')
@@ -64,6 +71,7 @@ function escapeHtml(value: string): string {
 
 export function buildCalculatorReadyEmail(options: CalculatorReadyEmailOptions): CalculatorReadyEmail {
   const copy = COPY[options.calculator];
+  const nextStep = options.existingAccount ? EXISTING_ACCOUNT_NEXT_STEP : NEXT_STEP;
   const ctaUrl = escapeHtml(options.ctaUrl);
   const footerNote = `This message was sent to ${options.email} at your request from the Ask Linc ${copy.calculatorName}.`;
 
@@ -82,7 +90,7 @@ export function buildCalculatorReadyEmail(options: CalculatorReadyEmailOptions):
         </a>
       </div>
       <p style="margin: 0 0 10px; color: #71857f; font-size: 13px; line-height: 1.6; text-align: center;">
-        ${escapeHtml(NEXT_STEP)}
+        ${escapeHtml(nextStep)}
       </p>
       <div class="fallback-link" style="margin: 22px 0; padding: 16px; border: 1px solid #d8d2c5; border-radius: 12px; background-color: #f8f5ed; color: #526d64; font-size: 12px; line-height: 1.6; word-break: break-all;">
         <strong style="color: #29483f; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;">If the button does not work, use this link:</strong><br />
@@ -113,7 +121,7 @@ We ran the numbers you entered. Your answer, and what it means for your plan, is
 ${CTA_LABEL}:
 ${options.ctaUrl}
 
-${NEXT_STEP}
+${nextStep}
 
 WHAT YOU ENTERED
 ${options.inputs.map(([label, value]) => `  ${label}: ${value}`).join('\n')}
