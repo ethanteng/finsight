@@ -1308,6 +1308,8 @@ export interface CashFlowPositionSummary {
   }>;
   /** Every dated amount in the month from the forecast start, with the balance after each day. */
   upcoming: CashPositionItem[];
+  /** What arrives and leaves every day without being listed in `upcoming`: typical rates and transfers that run as a rate. Null when unavailable. */
+  spreadPerDay: { in: number; out: number } | null;
   /** The lowest end-of-day cash within the range's forecast part. */
   lowPoint: { date: CalendarDate; cash: number } | null;
   milestones: Array<{ key: string; date: CalendarDate; cash: number; cardDebt: number }>;
@@ -1480,6 +1482,7 @@ function positionSummary(
       startingCardDebt: null,
       periods: periods.map(period => ({ key: period.key, cash: null, cardDebt: null, cardPayments: null, moneyIn: null, moneyOut: null })),
       upcoming: [],
+      spreadPerDay: null,
       lowPoint: null,
       milestones: [],
       lowNext12Months: null,
@@ -1510,6 +1513,7 @@ function positionSummary(
       };
     }),
     upcoming: position.itemsBetween(model.forecastStart, addDays(model.forecastStart, UPCOMING_DAYS)),
+    spreadPerDay: position.spreadPerDay,
     lowPoint: position.lowPoint(maxDate(range.from, model.forecastStart), range.toExclusive),
     milestones: milestones.points,
     lowNext12Months: milestones.lowNext12Months,

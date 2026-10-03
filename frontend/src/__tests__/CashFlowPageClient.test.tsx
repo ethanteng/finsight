@@ -751,6 +751,32 @@ describe('CashFlowPageClient', () => {
       expect(within(list).getByText('−$900 after')).toBeInTheDocument();
     });
 
+    it.each([
+      [{ in: 12.4, out: 85.2 }, 'Everything else isn’t listed: it’s spread evenly across the days, about $85 out and $12 in each day.'],
+      [{ in: 43.86, out: 0 }, 'Everything else isn’t listed: it’s spread evenly across the days, about $44 in each day.'],
+      [undefined, 'Everyday spending isn’t listed: it’s spread across the days.'],
+    ])('says what moves the balance between the listed items (%o)', async (spreadPerDay, note) => {
+      const upcoming = [{ date: '2026-10-16', label: 'Gusto Payroll', kind: 'income' as const, amount: 2500, balanceAfter: 7700 }];
+      mockFetch(url => (url.includes('/api/cash-flow?') ? { status: 200, body: checkingOnly({ upcoming, spreadPerDay }) } : undefined));
+      render(<CashFlowPageClient />);
+      await screen.findByRole('heading', { name: 'This month' });
+      fireEvent.click(screen.getByRole('button', { name: 'Cash position' }));
+      const list = screen.getByRole('heading', { name: 'Coming up in the next month' }).closest('div')!;
+      expect(within(list).getByText(`Paychecks, bills, transfers, card payments and planned events, with the balance at the end of each day. ${note}`))
+        .toBeInTheDocument();
+    });
+
+    it('says nothing more when nothing is spread', async () => {
+      const upcoming = [{ date: '2026-10-16', label: 'Gusto Payroll', kind: 'income' as const, amount: 2500, balanceAfter: 7700 }];
+      mockFetch(url => (url.includes('/api/cash-flow?') ? { status: 200, body: checkingOnly({ upcoming, spreadPerDay: { in: 0, out: 0.2 } }) } : undefined));
+      render(<CashFlowPageClient />);
+      await screen.findByRole('heading', { name: 'This month' });
+      fireEvent.click(screen.getByRole('button', { name: 'Cash position' }));
+      const list = screen.getByRole('heading', { name: 'Coming up in the next month' }).closest('div')!;
+      expect(within(list).getByText('Paychecks, bills, transfers, card payments and planned events, with the balance at the end of each day.'))
+        .toBeInTheDocument();
+    });
+
     it('lets planned income land in a chosen account', async () => {
       const calls = mockFetch((url, init) => {
         if (url.endsWith('/api/cash-flow/events') && init?.method === 'POST') return { status: 201, body: { event: {} } };

@@ -70,18 +70,36 @@ const KIND_WORDS: Record<CashPositionItem['kind'], string> = {
 /** How many coming-up items show before "Show all". */
 const UPCOMING_SHOWN = 8;
 
+/**
+ * What moves the balance between the listed items, so the list adds up:
+ * "Everything else isn’t listed: it’s spread evenly across the days, about
+ * $85 out and $12 in each day." Null when nothing is spread.
+ */
+export function spreadNote(spread: CashFlowReport['position']['spreadPerDay']): string | null {
+  // A report from before the figure was published.
+  if (spread === undefined) return 'Everyday spending isn’t listed: it’s spread across the days.';
+  if (spread === null) return null;
+  const parts = [
+    Math.round(spread.out) > 0 ? `${formatMoney(spread.out)} out` : null,
+    Math.round(spread.in) > 0 ? `${formatMoney(spread.in)} in` : null,
+  ].filter(Boolean);
+  if (parts.length === 0) return null;
+  return `Everything else isn’t listed: it’s spread evenly across the days, about ${parts.join(' and ')} each day.`;
+}
+
 /** The dated amounts coming up in the accounts the position covers, with the balance after each day. */
 export function UpcomingItems({ report }: { report: Pick<CashFlowReport, 'position'> }) {
   const [expanded, setExpanded] = useState(false);
   const items = report.position.upcoming;
   if (items.length === 0) return null;
   const shown = expanded ? items : items.slice(0, UPCOMING_SHOWN);
+  const note = spreadNote(report.position.spreadPerDay);
   return (
     <div className="mt-5 rounded-2xl border border-[#102319]/10 bg-white/50 p-4">
       <h4 className="text-sm font-bold text-[#102319]">Coming up in the next month</h4>
       <p className="mt-1 text-xs leading-5 text-[#66736b]">
-        Paychecks, bills, transfers, card payments and planned events, with the balance at the end of each day. Everyday
-        spending isn’t listed: it’s spread across the days.
+        Paychecks, bills, transfers, card payments and planned events, with the balance at the end of each day.
+        {note && ` ${note}`}
       </p>
       <ul className="mt-2 divide-y divide-[#102319]/10">
         {shown.map((item, index) => (
