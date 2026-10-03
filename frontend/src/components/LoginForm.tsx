@@ -22,6 +22,9 @@ import {
   POST_LOGIN_REDIRECT_PARAM,
   sanitizePostLoginRedirect,
 } from '@/lib/post-login-redirect';
+import { attachCalculatorLead } from '@/lib/calculator-lead-attach';
+import { hasCoastFireSignupSource, readCoastFireSignupContext } from '@/lib/coast-fire-signup-context';
+import { hasRetirementSignupSource, readRetirementSignupContext } from '@/lib/retirement-signup-context';
 
 interface SubscriptionContext {
   subscription: string;
@@ -30,8 +33,21 @@ interface SubscriptionContext {
   sessionId: string | null;
 }
 
+/** A calculator run this sign-in should attach to the account. */
+interface CalculatorRun {
+  ref: string;
+  label: 'Coast FIRE' | 'retirement';
+}
+
 function LoginFormContent() {
   const [email, setEmail] = useState('');
+  /*
+   * Set when a calculator sent an existing account here: the address cannot
+   * register again, so signing in is how its run reaches the account. Read
+   * from the stored signup context the calculator wrote, never from the URL,
+   * which carries only which calculator it was.
+   */
+  const [calculatorRun, setCalculatorRun] = useState<CalculatorRun | null>(null);
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const { showError, dialog } = useDialog();
@@ -47,6 +63,19 @@ function LoginFormContent() {
   const [lapsedToken, setLapsedToken] = useState<string | null>(null);
   const router = useRouter();
   const searchParams = useSearchParams();
+
+  useEffect(() => {
+    const isCoastFire = hasCoastFireSignupSource(searchParams);
+    const context = isCoastFire
+      ? readCoastFireSignupContext()
+      : hasRetirementSignupSource(searchParams)
+        ? readRetirementSignupContext()
+        : null;
+    if (!context?.sourceToken) return;
+    setCalculatorRun({ ref: context.sourceToken, label: isCoastFire ? 'Coast FIRE' : 'retirement' });
+    const storedEmail = context.email;
+    if (storedEmail) setEmail(current => current || storedEmail);
+  }, [searchParams]);
 
   // Check if user came from subscription context or has access denied message
   useEffect(() => {
@@ -278,6 +307,16 @@ function LoginFormContent() {
           pushTrialLoginSuccess();
           completeFreeTrialSignupFlow();
         }
+        /*
+         * Written before navigating, and awaited: this account already has
+         * history, so /app opens on its newest decision and cannot wait for one
+         * still being written. If it does not attach (a token for another
+         * address, an expired lead), signing in carries on as usual.
+         */
+        if (calculatorRun && await attachCalculatorLead(data.token, calculatorRun.ref)) {
+          router.push(DEFAULT_POST_LOGIN_DESTINATION);
+          return;
+        }
         // A deep link that bounced here carries where it was headed. The value
         // is untrusted, so it only survives if it sanitizes to a path of ours.
         router.push(
@@ -331,6 +370,7 @@ function LoginFormContent() {
                 <p className="mb-3 text-xs font-bold uppercase tracking-[0.18em] text-[#477064]">Secure sign in</p>
                 <h1 id="login-heading" className="text-4xl font-semibold tracking-[-0.04em] text-[#123c2f]">Welcome back.</h1>
                 <p className="mt-3 text-base leading-7 text-[#50695f]">Sign in to see your plans and ask Linc a question.</p>
+                {calculatorRun && <div className="mt-5 flex gap-3 rounded-2xl border border-[#719632]/25 bg-[#eaf5d5] p-4 text-sm text-[#34551c]" role="status"><Check className="mt-0.5 shrink-0" size={18} /><div><strong className="block">Your {calculatorRun.label} result is ready.</strong><span className="mt-1 block text-[#4d6a35]">Sign in and it opens as a new decision in your account.</span></div></div>}
                 {subscriptionContext && <div className="mt-5 flex gap-3 rounded-2xl border border-[#719632]/25 bg-[#eaf5d5] p-4 text-sm text-[#34551c]" role="status"><Check className="mt-0.5 shrink-0" size={18} /><div><strong className="block">Your subscription is ready.</strong><span className="mt-1 block text-[#4d6a35]">Sign in to open your workspace.</span></div></div>}
               </div>
 

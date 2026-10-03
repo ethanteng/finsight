@@ -608,11 +608,11 @@ describe('RegisterForm', () => {
     });
 
     /*
-     * The ready email states no figures and the calculator page has already
-     * navigated away. If this address already has an account, registration
-     * cannot seed the lead — so the signup page must show the answer itself.
+     * An address with an account cannot register, so the run cannot be seeded
+     * here. Sign-in attaches it instead, so the page points there with the run
+     * — and states no result itself: the answer belongs in Ask Linc.
      */
-    it('shows the result when registration refuses an existing account', async () => {
+    it('points an existing account at sign-in with the run, showing no result', async () => {
       const token = 'd'.repeat(48);
       searchParams = new URLSearchParams(`source=${RETIREMENT_SIGNUP_SOURCE}`);
       handOverRetirementRef(token);
@@ -640,8 +640,9 @@ describe('RegisterForm', () => {
       fireEvent.click(screen.getByRole('button', { name: /Create account and see my result/i }));
 
       expect(await screen.findByText(/you already have an ask linc account/i)).toBeInTheDocument();
-      expect(screen.getByText('92.0% lasted')).toBeInTheDocument();
-      expect(screen.getByRole('link', { name: /sign in to your account/i })).toHaveAttribute('href', '/login');
+      expect(screen.queryByText(/lasted/)).not.toBeInTheDocument();
+      expect(screen.getByRole('link', { name: /sign in to your account/i }))
+        .toHaveAttribute('href', '/login?source=retirement-calculator');
       expect(push).not.toHaveBeenCalledWith('/app');
     });
 

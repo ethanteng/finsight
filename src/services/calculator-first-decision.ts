@@ -391,3 +391,62 @@ export async function seedFirstDecisionFromLead(params: {
     return 'failed';
   }
 }
+
+/** What attaching a run to an existing account did. */
+export type AttachLeadOutcome =
+  | 'attached'
+  /** This account already holds this run, from an earlier sign-in. */
+  | 'already-attached'
+  /** No token, or one that did not resolve to this account's address. */
+  | 'no-lead'
+  | 'failed';
+
+/**
+ * Add a calculator run to an account that already exists.
+ *
+ * The calculators send a new visitor to signup, where registration seeds the
+ * run as the account's first decision. An address that already has an account
+ * cannot register, so it signs in instead and the run is attached here: as a
+ * new decision beside whatever the account already holds, rather than only
+ * into an empty one.
+ *
+ * The address check is the same one registration makes, against the address
+ * of the account that is signed in. Signing in proves control of that
+ * account, and the lead has to name it, so holding someone else's token
+ * attaches nothing.
+ *
+ * Awaited rather than fire-and-forget, unlike seeding at registration: the
+ * account already has history, so `/app` cannot tell "not written yet" from
+ * "nothing new" by waiting for an empty history to fill. The caller answers
+ * once the run is written, and `/app` opens on it as the newest decision.
+ *
+ * Idempotent per run: signing in twice with the same token, or re-sending the
+ * request, finds the decision it already wrote rather than adding a copy.
+ */
+export async function attachCalculatorLeadToAccount(params: {
+  userId: string;
+  /** The signed-in account's address. */
+  email: string;
+  token: unknown;
+}): Promise<AttachLeadOutcome> {
+  const lead = await resolveCalculatorLead({ token: params.token, email: params.email });
+  if (!lead) return 'no-lead';
+
+  try {
+    const prisma = getPrismaClient();
+    const decision = composeDecision(lead);
+    const origin = lead.kind === 'retirement' ? 'calculator_retirement' : 'calculator_coast_fire';
+
+    const existing = await prisma.conversation.findFirst({
+      where: { userId: params.userId, origin, question: decision.question },
+      select: { id: true },
+    });
+    if (existing) return 'already-attached';
+
+    await prisma.conversation.create({ data: { userId: params.userId, ...decision, origin } });
+    return 'attached';
+  } catch (error) {
+    console.error('⚠️  Could not attach a calculator run to an existing account:', error);
+    return 'failed';
+  }
+}

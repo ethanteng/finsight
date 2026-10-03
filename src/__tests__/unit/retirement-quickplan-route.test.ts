@@ -327,8 +327,8 @@ describe('retirement quick plan route', () => {
     const settle = () => new Promise((resolve) => setImmediate(resolve));
 
     it('emails figures it computed rather than figures it was handed', async () => {
-      // Only the no-lead fallback mails figures at all.
-      leads.record.mockResolvedValue(false);
+      // Only an existing account's fallback mails figures at all.
+      accounts.exists.mockResolvedValue(true);
       const response = await request(buildApp())
         .post('/api/retirement-quickplan/email-results')
         // A caller-supplied verdict must not be able to reach an inbox under
@@ -395,7 +395,7 @@ describe('retirement quick plan route', () => {
      * ready email states no answer, so they get the full results and a
      * sign-in link instead of a handoff.
      */
-    it('mails the full results to an existing account and hands back no token', async () => {
+    it('sends an existing account to sign in with the run, mailing the results as a fallback', async () => {
       accounts.exists.mockResolvedValue(true);
 
       const response = await request(app)
@@ -403,7 +403,8 @@ describe('retirement quick plan route', () => {
         .send({ ...SHORT_PLAN, email: 'reader@example.com' });
 
       expect(response.status).toBe(200);
-      expect(response.body.ref).toBeNull();
+      // The page carries this to sign-in, which attaches the run to the account.
+      expect(response.body.ref).toMatch(/^[a-f0-9]{48}$/);
       expect(response.body.existingAccount).toBe(true);
       expect(email.ready).not.toHaveBeenCalled();
       const [, , , ctaUrl, options] = email.send.mock.calls[0] as unknown as [
@@ -429,19 +430,21 @@ describe('retirement quick plan route', () => {
       expect(options.inputs).toContainEqual(['Retirement age', String(SHORT_PLAN.retirementAge)]);
     }, 60_000);
 
-    /* Personalization is worth a database row; the results are not. */
-    it('still sends when the lead could not be stored, minus the personalization', async () => {
+    /*
+     * Nothing stored is nothing any account could open, and the page shows no
+     * result itself — so it is an error the visitor retries, and no mail goes
+     * out for it.
+     */
+    it('refuses rather than sends when the lead did not store', async () => {
       leads.record.mockResolvedValue(false);
 
       const response = await request(buildApp())
         .post('/api/retirement-quickplan/email-results')
         .send({ ...SHORT_PLAN, email: 'reader@example.com' });
 
-      expect(response.status).toBe(200);
-      // No account-side copy to point at, so the full results go out instead.
+      expect(response.status).toBe(503);
+      expect(email.send).not.toHaveBeenCalled();
       expect(email.ready).not.toHaveBeenCalled();
-      const ctaUrl = (email.send.mock.calls[0] as unknown as [string, unknown, unknown, string])[3];
-      expect(ctaUrl).toBe('http://localhost:3001/getstarted?source=retirement-calculator');
     }, 60_000);
 
     it('adds the address to the retirement group after answering', async () => {

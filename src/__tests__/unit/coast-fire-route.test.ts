@@ -119,7 +119,7 @@ describe('POST /api/coast-fire/email-results', () => {
    * ready email states no answer — so handing off would leave them with no
    * way to see it. They get the full results and a sign-in link instead.
    */
-  it('mails the full results to an existing account and hands back no token', async () => {
+  it('sends an existing account to sign in with the run, mailing the results as a fallback', async () => {
     accounts.exists.mockResolvedValue(true);
 
     const response = await request(buildApp())
@@ -127,9 +127,10 @@ describe('POST /api/coast-fire/email-results', () => {
       .send({ ...SCENARIO, email: 'reader@example.com' });
 
     expect(response.status).toBe(200);
-    expect(response.body.ref).toBeNull();
+    // The page carries this to sign-in, which attaches the run to the account.
+    expect(response.body.ref).toMatch(/^[a-f0-9]{48}$/);
     expect(response.body.existingAccount).toBe(true);
-    expect(leads.disclose).not.toHaveBeenCalled();
+    expect(leads.disclose).toHaveBeenCalledWith(response.body.ref);
     expect(email.ready).not.toHaveBeenCalled();
     const [, , ctaUrl, options] = email.send.mock.calls[0] as unknown as [string, unknown, string, { existingAccount: boolean }];
     expect(ctaUrl).toBe('http://localhost:3001/login');
@@ -190,20 +191,28 @@ describe('POST /api/coast-fire/email-results', () => {
   });
 
   /* No lead row, nothing to continue from — and nothing to disclose. */
-  it('hands back no token when the lead did not store', async () => {
+  /*
+   * Nothing stored is nothing any account could open, and the page shows no
+   * result itself — so it is an error the visitor retries, and no mail goes
+   * out for it.
+   */
+  it('refuses rather than sends when the lead did not store', async () => {
     leads.record.mockResolvedValue(false);
 
     const response = await request(buildApp())
       .post('/api/coast-fire/email-results')
       .send({ ...SCENARIO, email: 'reader@example.com' });
 
-    expect(response.body.ref).toBeNull();
+    expect(response.status).toBe(503);
+    expect(response.body.ref).toBeUndefined();
     expect(leads.disclose).not.toHaveBeenCalled();
+    expect(email.send).not.toHaveBeenCalled();
+    expect(email.ready).not.toHaveBeenCalled();
   });
 
   it('emails figures it computed rather than figures it was handed', async () => {
-    // Only the no-lead fallback mails figures at all.
-    leads.record.mockResolvedValue(false);
+    // Only an existing account's fallback mails figures at all.
+    accounts.exists.mockResolvedValue(true);
     const response = await request(buildApp())
       .post('/api/coast-fire/email-results')
       // A caller-supplied result must not be able to reach an inbox under our
@@ -228,21 +237,6 @@ describe('POST /api/coast-fire/email-results', () => {
     expect(parsedCtaUrl.pathname).toBe('/coast-fire/continue');
     expect([...parsedCtaUrl.searchParams.keys()]).toEqual(['ref']);
     expect(parsedCtaUrl.searchParams.get('ref')).toMatch(/^[a-f0-9]{48}$/);
-  });
-
-  /* Personalization is worth a database row; the results are not. */
-  it('still sends when the lead could not be stored, minus the personalization', async () => {
-    leads.record.mockResolvedValue(false);
-
-    const response = await request(buildApp())
-      .post('/api/coast-fire/email-results')
-      .send({ ...SCENARIO, email: 'reader@example.com' });
-
-    expect(response.status).toBe(200);
-    // No account-side copy to point at, so the full results go out instead.
-    expect(email.ready).not.toHaveBeenCalled();
-    const ctaUrl = (email.send.mock.calls[0] as unknown as [string, unknown, string])[2];
-    expect(ctaUrl).toBe('http://localhost:3001/getstarted?source=coast-fire-calculator');
   });
 
   it('adds the address to the Coast FIRE group after answering', async () => {

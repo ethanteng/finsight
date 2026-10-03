@@ -122,11 +122,8 @@ function loginUrl(): string {
   return `${getBaseUrl()}/login`;
 }
 
-function signupUrl(token: string | null): string {
-  const base = getBaseUrl();
-  return token
-    ? `${base}/retirement/continue?ref=${token}`
-    : `${base}/getstarted?source=retirement-calculator`;
+function signupUrl(token: string): string {
+  return `${getBaseUrl()}/retirement/continue?ref=${token}`;
 }
 
 /** Everything the form needs to render without hardcoding the model's bounds. */
@@ -281,10 +278,21 @@ router.post('/email-results', emailRateLimit, async (req: Request, res: Response
     accountExistsForEmail(email),
   ]);
 
-  // See the Coast FIRE route: the full results go out only when there is no
-  // account the run can open in — no stored lead, or an address that already
-  // has an account and cannot register again.
-  const handOff = stored && !existingAccount;
+  /*
+   * Nothing stored means nothing any account could open, and the page shows
+   * no result itself, so it says so and the visitor retries. No email either:
+   * a retry would send another, and the answer belongs in Ask Linc.
+   */
+  if (!stored) {
+    res.status(503).json({
+      error: 'We could not save your result just now. Please try again in a moment.',
+    });
+    return;
+  }
+
+  // See the Coast FIRE route: the full results go out only to an address that
+  // already has an account, which the page sends to sign in instead.
+  const handOff = !existingAccount;
   const emailSent = handOff
     ? await sendCalculatorReadyEmail({
       calculator: 'retirement',
@@ -296,8 +304,8 @@ router.post('/email-results', emailRateLimit, async (req: Request, res: Response
       email,
       result,
       primary,
-      existingAccount ? loginUrl() : signupUrl(null),
-      { existingAccount },
+      loginUrl(),
+      { existingAccount: true },
     );
 
   if (!emailSent) {
@@ -308,26 +316,33 @@ router.post('/email-results', emailRateLimit, async (req: Request, res: Response
   }
 
   /*
-   * Handed back so the page can take this visitor straight to signup instead
-   * of asking them to go and find the email. The same token the message
-   * carries, so both routes restore the same run — but disclosed tokens are
-   * marked first, and registration reads that mark to decide whether the
-   * address is recorded as verified. See `src/auth/routes.ts`.
+   * Handed back so the page can take this visitor into Ask Linc with the run
+   * rather than asking them to go and find the email: to signup for a new
+   * address, to sign-in for an existing account, where it is attached
+   * (`POST /auth/calculator-lead`, which checks the lead's address against the
+   * signed-in account). Disclosed tokens are marked first, and registration
+   * reads that mark to decide whether the address is recorded as verified.
+   * See `src/auth/routes.ts`.
    *
    * Marked before it is returned, and not returned at all if the mark did not
    * take: a token loose in a page while the row still claims it was only
    * emailed would record a stranger's address as verified. Without a ref the
-   * page shows the result itself, and the emailed link still works.
+   * page asks the visitor to try again; the emailed link still works.
    */
-  const ref = handOff && (await markRetirementLeadTokenDisclosed(token)) ? token : null;
+  const ref = (await markRetirementLeadTokenDisclosed(token)) ? token : null;
 
   // The token is a bearer credential for this lead. Nothing about this
   // response may sit in a shared cache.
   res.setHeader('Cache-Control', 'no-store');
   res.json({
-    message: 'Your retirement results are on their way.',
+    // A new address was sent the figure-free ready email; only the fallback
+    // mails the results themselves.
+    message: handOff
+      ? 'Your retirement result is ready in Ask Linc.'
+      : 'Your retirement results are on their way.',
     ref,
-    // Lets the page say why it is showing the result rather than handing off.
+    // Lets the page send this visitor to sign in rather than to a signup that
+    // would refuse the address.
     ...(existingAccount ? { existingAccount: true } : {}),
   });
 

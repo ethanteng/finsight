@@ -8,11 +8,7 @@ import {
   readRetirementAge,
   retirementHeadline,
 } from '@/lib/retirement-landing';
-import {
-  RETIREMENT_SIGNUP_HREF,
-  readRetirementSignupContext,
-} from '@/lib/retirement-signup-context';
-import { revealCalculatorResult } from '@/test-utils/calculator-reveal';
+import { readRetirementSignupContext } from '@/lib/retirement-signup-context';
 
 jest.mock('@/lib/contentsquare', () => ({ trackContentsquareEvent: jest.fn() }));
 
@@ -173,52 +169,12 @@ describe('retirement landing page', () => {
     }
   });
 
-  it('shows the model\u2019s reading alongside the result', async () => {
-    // The link has to point at an id something on the page actually carries,
-    // and the reading is the one section that may not render at all — so the
-    // mock answers the interpretation endpoint rather than handing it the plan.
-    const result = {
-      inputs: { retirementAge: 60, socialSecurityStartAge: 67, socialSecurityAnnual: 20000, annualSpending: 50000, lifeExpectancy: 95 },
-      mode: 'plan', assumed: [], missing: [],
-      allocation: { label: 'Balanced' },
-      history: { firstMonth: '1926-01', lastMonth: '2025-12', firstStartMonth: '1926-01', horizonYears: 45, sequencesTested: 100 },
-      primary: {
-        id: 'primary', label: 'Your plan', survivalRate: 0.9, sequencesTested: 100, sequencesSurvived: 90,
-        projectedPortfolioAtRetirement: 1000000, firstYearPortfolioWithdrawal: 50000, firstYearWithdrawalRate: 0.05,
-        primaryObservation: 'Example', tradeoffs: { upside: 'Example', downside: 'Example' }, characteristics: {},
-      },
-      alternatives: [], sustainableSpending: { p10: 30000, p25: 40000, p50: 50000, p75: 60000, p90: 70000, solverFloorRate: 0.01, solverCeilingRate: 0.15 },
-      limitations: [], assumptions: [],
-    };
-    const reading = {
-      headline: 'A reading.', paragraphs: ['A paragraph.'], watchOuts: [], model: 'test-model',
-    };
-    global.fetch = jest.fn().mockImplementation((url, init) => {
-      if (!init?.method) {
-        return Promise.resolve({ ok: true, json: async () => ({ allocations: [] }) });
-      }
-      if (String(url).includes('/interpretation')) {
-        return Promise.resolve({ ok: true, status: 200, json: async () => reading });
-      }
-      return Promise.resolve({ ok: true, status: 200, json: async () => ({ ...result }) });
-    });
-    const originalScroll = Element.prototype.scrollIntoView;
-    Element.prototype.scrollIntoView = jest.fn();
-    try {
-      const { container } = render(<RetirementQuickPlan headline="When can I retire?" initialRetirementAge={60} />);
-      fireEvent.submit(container.querySelector('form')!);
-      await revealCalculatorResult();
-      await screen.findByText(/Retiring at .* worked in/);
-
-      const answer = await screen.findByText(reading.headline);
-      expect(answer.closest('.calculator-result-grid')).toContainElement(container.querySelector('.qp-results'));
-      expect(container.querySelector('.qp-jump')).toBeNull();
-    } finally {
-      Element.prototype.scrollIntoView = originalScroll;
-    }
-  });
-
-  it('continues a completed model with its validated inputs and no financial analytics fields', async () => {
+  /*
+   * The page's own CTA carries no run any more: a plan answer is never shown
+   * here, and the email form is the way into Ask Linc with one. What it still
+   * owes is clean analytics — no financial figure in the event.
+   */
+  it('reports the plan CTA without carrying the run or any financial field', async () => {
     const result = {
       inputs: {
         currentAge: 48,
@@ -259,21 +215,18 @@ describe('retirement landing page', () => {
     try {
       const { container } = render(<RetirementQuickPlan headline="When can I retire?" initialRetirementAge={60} />);
       fireEvent.submit(container.querySelector('form')!);
-      await revealCalculatorResult();
-      await screen.findByText(/Retiring at .* worked in/);
+      await screen.findByText('Your result is ready.');
 
-      expect(screen.getByText(/carry forward the retirement age, assets, and spending/i)).toBeInTheDocument();
-      const cta = screen.getByRole('link', { name: 'Stress-test this with my actual finances' });
-      expect(cta).toHaveAttribute('href', RETIREMENT_SIGNUP_HREF);
+      const cta = screen.getByRole('link', { name: 'Build my retirement plan' });
       expect(cta).toHaveAttribute('data-cs-override-id', 'cta-start-free-trial-quickplan');
-      expect(container.querySelector('.qp-results')?.parentElement).toHaveAttribute('data-cs-mask');
+      expect(container.querySelector('.calculator-result-grid')).toHaveAttribute('data-cs-mask');
 
       // Isolate the CTA event from the model-run events that preceded it.
       analyticsWindow.dataLayer = [];
       cta.addEventListener('click', (event) => event.preventDefault(), { once: true });
       fireEvent.click(cta);
 
-      expect(readRetirementSignupContext()?.inputs).toEqual(result.inputs);
+      expect(readRetirementSignupContext()).toBeNull();
       expect(analyticsWindow.dataLayer).toEqual([{
         event: 'start_free_click',
         source_page: '/retirement-calculator',

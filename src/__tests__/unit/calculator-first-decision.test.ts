@@ -21,17 +21,20 @@ jest.mock('../../services/coast-fire-leads', () => ({
 const db = {
   count: jest.fn<Promise<number>, unknown[]>(async () => 0),
   create: jest.fn<Promise<unknown>, unknown[]>(async () => ({ id: 'conversation-1' })),
+  findFirst: jest.fn<Promise<unknown>, unknown[]>(async () => null),
 };
 jest.mock('../../prisma-client', () => ({
   getPrismaClient: () => ({
     conversation: {
       count: (...args: unknown[]) => db.count(...args),
       create: (...args: unknown[]) => db.create(...args),
+      findFirst: (...args: unknown[]) => db.findFirst(...args),
     },
   }),
 }));
 
 import {
+  attachCalculatorLeadToAccount,
   buildCoastFireAnswer,
   buildCoastFireQuestion,
   buildDecisionAnswer,
@@ -468,5 +471,70 @@ describe('seedFirstDecisionFromLead', () => {
       userId: 'user-1',
       lead: { kind: 'retirement', lead: lead() },
     })).toBe('failed');
+  });
+});
+
+/*
+ * An address that already has an account signs in rather than registering,
+ * and its run is attached as a new decision beside whatever it already holds.
+ */
+describe('attachCalculatorLeadToAccount', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    leads.readRetirement.mockResolvedValue(null);
+    leads.readCoastFire.mockResolvedValue(null);
+    db.findFirst.mockResolvedValue(null);
+  });
+
+  it('adds the run to an account that already has decisions', async () => {
+    leads.readRetirement.mockResolvedValue(lead());
+    db.count.mockResolvedValue(12);
+
+    const outcome = await attachCalculatorLeadToAccount({
+      userId: 'user-1', email: 'Reader@Example.com', token: 'a'.repeat(48),
+    });
+
+    expect(outcome).toBe('attached');
+    expect(db.create).toHaveBeenCalledWith({ data: expect.objectContaining({
+      userId: 'user-1', origin: 'calculator_retirement',
+    }) });
+  });
+
+  /*
+   * Signing in proves control of the account, and the lead has to name it.
+   * A token for someone else's address writes nothing into this one.
+   */
+  it('attaches nothing for a lead that names another address', async () => {
+    leads.readRetirement.mockResolvedValue(lead({ email: 'someone-else@example.com' }));
+
+    const outcome = await attachCalculatorLeadToAccount({
+      userId: 'user-1', email: 'reader@example.com', token: 'a'.repeat(48),
+    });
+
+    expect(outcome).toBe('no-lead');
+    expect(db.create).not.toHaveBeenCalled();
+  });
+
+  it('does not add a second copy when the same run is attached again', async () => {
+    leads.readRetirement.mockResolvedValue(lead());
+    db.findFirst.mockResolvedValue({ id: 'conversation-1' });
+
+    const outcome = await attachCalculatorLeadToAccount({
+      userId: 'user-1', email: 'reader@example.com', token: 'a'.repeat(48),
+    });
+
+    expect(outcome).toBe('already-attached');
+    expect(db.create).not.toHaveBeenCalled();
+  });
+
+  it('reports a failed write rather than throwing', async () => {
+    leads.readRetirement.mockResolvedValue(lead());
+    db.create.mockRejectedValueOnce(new Error('database down'));
+
+    const outcome = await attachCalculatorLeadToAccount({
+      userId: 'user-1', email: 'reader@example.com', token: 'a'.repeat(48),
+    });
+
+    expect(outcome).toBe('failed');
   });
 });

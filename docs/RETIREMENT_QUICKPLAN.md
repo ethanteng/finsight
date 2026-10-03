@@ -112,8 +112,11 @@ someone who reads it without running anything.
 
 A plan result is not shown on this page. The visitor gives an email address,
 chooses a password, and sees it as the first decision in their account, with no
-verification code in between. A `rates` result is shown, because it has no run
-to save. The same applies to the Coast FIRE page. See **The answer opens in Ask
+verification code in between. An address that already has an account signs in
+instead and the run is attached as a new decision; a visitor already signed in
+as that address goes straight to `/app`. If the run cannot be saved the page
+asks for a retry rather than showing the verdict. A `rates` result is shown,
+because it has no run to save. The same applies to the Coast FIRE page. See **The answer opens in Ask
 Linc** in `COAST_FIRE_EMAIL_CAPTURE.md`.
 
 ## Three runs, then the save

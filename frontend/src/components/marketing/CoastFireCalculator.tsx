@@ -10,7 +10,7 @@
  * split the ranking for the same query.
  */
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import {
   calculateCoastFire,
@@ -31,12 +31,11 @@ import { fromGrouped, withCommas } from "@/lib/number-input";
 import {
   clearCoastFireSignupContext,
   COAST_FIRE_SIGNUP_HREF,
-  storeCoastFireSignupContext,
 } from "@/lib/coast-fire-signup-context";
 import { CoastFireEmailCapture } from "./CoastFireEmailCapture";
 import { MarketingGetStartedButton } from "./MarketingGetStartedButton";
 import { SiteFooter, SiteHeader } from "./SiteShell";
-import { CalculatorSteps, CalculatorPreview, CalculatorNextQuestion, CalculatorAnswer, CalculatorRunAgain, CalculatorLockedResult } from "./CalculatorStory";
+import { CalculatorSteps, CalculatorPreview, CalculatorNextQuestion, CalculatorRunAgain, CalculatorLockedResult } from "./CalculatorStory";
 import { TRIAL_CTA_MICROCOPY } from "./trial-copy";
 
 type FormState = Record<keyof CoastFireInputs, string>;
@@ -117,11 +116,6 @@ function dollars(value: number): string {
   }).format(Math.round(value));
 }
 
-function percent(value: number): string {
-  if (!Number.isFinite(value)) return "Fully covered";
-  return `${Math.round(value * 100)}%`;
-}
-
 /**
  * Read the form back as numbers.
  *
@@ -146,152 +140,6 @@ function parseForm(form: FormState): CoastFireInputs {
 }
 
 /**
- * The handoff into signup: the seven numbers as entered, nothing derived.
- *
- * This used to translate them into the retirement calculator's scenario shape,
- * which meant a Coast FIRE visitor landed on a page framed around a retirement
- * plan they had not run. The signup page recomputes the Coast FIRE figures
- * from these inputs instead, so both entry points — this button and the link
- * in the results email — continue the same decision.
- */
-function signupContext(result: CoastFireResult): CoastFireInputs {
-  return {
-    currentAge: result.currentAge,
-    retirementAge: result.retirementAge,
-    currentSavings: result.currentSavings,
-    annualRetirementSpending: result.annualRetirementSpending,
-    annualRetirementIncome: result.annualRetirementIncome,
-    realReturnRate: result.realReturnRate,
-    withdrawalRate: result.withdrawalRate,
-  };
-}
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
-
-/**
- * How long the page waits for the reading before giving up on it.
- *
- * A deadline of our own, past the server's. The endpoint bounds its own model
- * call and answers 204 when it gives up, so this should never fire on an
- * ordinarily slow reading — it is the backstop for a connection that stops
- * answering, which would otherwise leave the placeholder spinning for as long
- * as the browser's own timeout allows.
- */
-const INTERPRETATION_TIMEOUT_MS = 30_000;
-
-/**
- * The model's reading of a result. Everything in it is prose; every figure
- * inside that prose was checked against the formula's own output before it was
- * sent, and a draft that failed that check is not sent at all — which is why
- * this is optional everywhere below rather than part of the result.
- */
-interface Interpretation {
-  headline: string;
-  paragraphs: string[];
-  watchOuts: string[];
-  model: string;
-}
-
-/**
- * Ask for a reading of a submitted scenario.
- *
- * Only ever called for a scenario the visitor actually submitted. The page
- * opens with empty personal figures and no result, so there is nothing to
- * read until they ask — and asking on load would spend a model call and a
- * slice of their rate limit on every page view.
- *
- * Everything here fails to `null`, which renders as nothing: a visitor who
- * never learns the panel exists has still had a complete answer, because the
- * answer was computed in their browser before this request was made.
- */
-function useCoastFireInterpretation(submitted: CoastFireInputs | null): {
-  interpretation: Interpretation | null;
-  isLoading: boolean;
-} {
-  const [interpretation, setInterpretation] = useState<Interpretation | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-
-  useEffect(() => {
-    if (!submitted || typeof fetch !== "function") return;
-
-    let cancelled = false;
-    setInterpretation(null);
-    setIsLoading(true);
-
-    const controller = typeof AbortController === "function" ? new AbortController() : null;
-    const deadline = controller
-      ? setTimeout(() => controller.abort(), INTERPRETATION_TIMEOUT_MS)
-      : null;
-
-    fetch(`${API_URL}/api/coast-fire/interpretation`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(submitted),
-      ...(controller ? { signal: controller.signal } : {}),
-    })
-      // 204 is the ordinary "nothing to show" answer and has no body to read.
-      .then((response) => (response.ok && response.status !== 204 ? response.json() : null))
-      .then((payload) => {
-        if (cancelled) return;
-        const usable =
-          payload &&
-          typeof payload.headline === "string" &&
-          Array.isArray(payload.paragraphs) &&
-          payload.paragraphs.length > 0;
-        setInterpretation(usable ? (payload as Interpretation) : null);
-      })
-      .catch(() => {
-        if (!cancelled) setInterpretation(null);
-      })
-      .finally(() => {
-        if (deadline !== null) clearTimeout(deadline);
-        if (!cancelled) setIsLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-      if (deadline !== null) clearTimeout(deadline);
-      // A new scenario supersedes this one; nothing is waiting on the answer.
-      controller?.abort();
-    };
-  }, [submitted]);
-
-  return { interpretation, isLoading };
-}
-
-/** Stable anchor for the Linc interpretation. */
-const INTERPRETATION_ID = "what-this-means";
-
-/** Loading and completed readings share the same place beside the numerical result. */
-function hasInterpretation(interpretation: Interpretation | null, isInterpreting: boolean): boolean {
-  return Boolean(interpretation) || isInterpreting;
-}
-
-/** The model's reading, or nothing. */
-function InterpretationPanel({
-  interpretation,
-  isInterpreting,
-  question,
-}: {
-  interpretation: Interpretation | null;
-  isInterpreting: boolean;
-  question: string;
-}) {
-  if (!hasInterpretation(interpretation, isInterpreting)) return null;
-
-  return (
-    <section
-      className="cf-interpretation calculator-result-answer"
-      id={INTERPRETATION_ID}
-      aria-live="polite"
-      aria-busy={isInterpreting}
-    >
-      <CalculatorAnswer question={question} interpretation={interpretation} isLoading={isInterpreting} compact />
-    </section>
-  );
-}
-
-/**
  * What the card says before there is anything to say.
  *
  * The card holds its place rather than disappearing: the form and the result
@@ -307,64 +155,6 @@ function EmptyResultPanel() {
    * appears.
    */
   return <CalculatorPreview coast />;
-}
-
-function ResultPanel({ result }: { result: CoastFireResult }) {
-  const progress = Number.isFinite(result.fundedRatio)
-    ? Math.min(100, Math.max(0, result.fundedRatio * 100))
-    : 100;
-
-  return (
-    <aside className="cf-result-card" aria-live="polite" data-cs-mask>
-      <div className="cf-result-topline">
-        <h2>{result.hasReachedCoastFire ? "You’ve reached Coast FIRE." : "You haven’t reached Coast FIRE yet."}</h2>
-        <strong className={result.hasReachedCoastFire ? "is-reached" : "is-building"}>
-          {result.hasReachedCoastFire ? "Reached" : "Not yet"}
-        </strong>
-      </div>
-      <p className="cf-result-lead">
-        {result.portfolioSpendingNeed === 0
-          ? "The retirement income you entered covers your planned spending, so this formula does not require portfolio withdrawals."
-          : result.hasReachedCoastFire
-            ? `You are ${dollars(result.differenceToday)} above the amount this formula says you need invested today.`
-            : `You are ${dollars(Math.abs(result.differenceToday))} short of your Coast FIRE number today.`}
-      </p>
-
-      <div className="cf-number-block">
-        <span>Your Coast FIRE number</span>
-        <strong>{dollars(result.coastFireNumber)}</strong>
-        <small>in today’s dollars</small>
-      </div>
-
-      <div className="cf-progress-label">
-        <span>Current retirement savings</span>
-        <b>{percent(result.fundedRatio)}</b>
-      </div>
-      <div
-        className="cf-progress"
-        role="img"
-        aria-label={`${percent(result.fundedRatio)} of the Coast FIRE number funded`}
-      >
-        <span style={{ width: `${progress}%` }} />
-      </div>
-      <strong className="cf-current-savings">{dollars(result.currentSavings)}</strong>
-
-      <dl className="cf-result-metrics">
-        <div>
-          <dt>Target at {result.retirementAge}</dt>
-          <dd>{dollars(result.retirementTarget)}</dd>
-        </div>
-        <div>
-          <dt>If you add $0</dt>
-          <dd>{dollars(result.projectedSavingsAtRetirement)}</dd>
-        </div>
-      </dl>
-      <p className="cf-result-note">
-        Assumes {result.realReturnRate}% annual growth after inflation for {result.yearsToRetirement} years
-        and a {result.withdrawalRate}% starting withdrawal rate.
-      </p>
-    </aside>
-  );
 }
 
 function CalculatorField({
@@ -438,57 +228,21 @@ export function CoastFireCalculator({ children }: { children?: ReactNode }) {
    *
    * The page used to open on a worked example already answered, which reads as
    * a result they have rather than an illustration of one — and everything
-   * downstream inherited that: the email capture, the reading, and the
-   * sensitivity table all had figures to talk about before anyone had entered
-   * anything. One piece of state now gates all of it.
+   * downstream inherited that. The answer itself is never shown here now; it
+   * opens in Ask Linc. This gates the locked card and the email form.
    */
   const [result, setResult] = useState<CoastFireResult | null>(null);
   const [error, setError] = useState<string | null>(null);
-  /*
-   * The scenario the reading is written from. Set only on submit, and only to
-   * the seven numbers the calculator accepted — so the panel is always about
-   * the figures on screen, and a page view never costs a model call.
-   */
-  const [submitted, setSubmitted] = useState<CoastFireInputs | null>(null);
   /** Runs this visitor has spent in this tab. Hydrated from storage on mount. */
   const [runCount, setRunCount] = useState(0);
   const locked = isRunLimitReached(runCount);
   useCalculatorLimitTracking('coast_fire', locked);
   const resultRef = useRef<HTMLDivElement>(null);
   /*
-   * Whether this run's answer is shown on the page. Ordinarily it never is: a
-   * run renders the locked card and the email form, and the answer opens in
-   * Ask Linc once the visitor chooses a password. The capture reveals it here
-   * only when it got no lead token back and so has no account to send the
-   * run to. Nothing that restates the answer — the reading, the return
-   * comparison, the signup handoff — runs or renders before then. Reset by
-   * every new run.
-   */
-  const [revealed, setRevealed] = useState(false);
-  /*
-   * Counts accepted runs, so the capture remounts for every one. Keying it on
-   * the inputs alone left an identical re-run holding the previous run's
-   * revealed state under a page that had locked again.
+   * Counts accepted runs, so the capture remounts for every one, even for an
+   * identical re-run: a prior run's form state never belongs to this one.
    */
   const [runId, setRunId] = useState(0);
-
-  // No reading until the result is visible: it restates the figures, and on a
-  // page that is not showing them it is a model call for nothing.
-  const { interpretation, isLoading: isInterpreting } = useCoastFireInterpretation(revealed ? submitted : null);
-
-  const sensitivity = useMemo(() => {
-    if (!result) return [];
-    const rates = [
-      Math.max(0, result.realReturnRate - 1),
-      result.realReturnRate,
-      Math.min(12, result.realReturnRate + 1),
-    ];
-    return [...new Set(rates)].map((rate) => ({
-      rate,
-      coastFireNumber: calculateCoastFire({ ...result, realReturnRate: rate }).coastFireNumber,
-      selected: rate === result.realReturnRate,
-    }));
-  }, [result]);
 
   const setField = (field: keyof CoastFireInputs) => (value: string) => {
     setForm((current) => ({ ...current, [field]: value }));
@@ -511,7 +265,6 @@ export function CoastFireCalculator({ children }: { children?: ReactNode }) {
     setError(message);
     setShowInputs(true);
     setResult(null);
-    setSubmitted(null);
   }
 
   /*
@@ -553,11 +306,9 @@ export function CoastFireCalculator({ children }: { children?: ReactNode }) {
     try {
       const nextResult = calculateCoastFire(parseForm(form));
       setResult(nextResult);
-      setRevealed(false);
       setRunId((current) => current + 1);
       setShowInputs(false);
       setError(null);
-      setSubmitted(signupContext(nextResult));
       // Only a run that produced a number counts. A refused form does not come
       // out of this visitor's allowance.
       setRunCount(recordRun(COAST_FIRE_RUN_COUNT_KEY, runCount));
@@ -636,24 +387,10 @@ export function CoastFireCalculator({ children }: { children?: ReactNode }) {
       <div ref={resultRef} className="calculator-result-focus" tabIndex={-1} hidden={showInputs} aria-label="Your Coast FIRE result">
         {result && <div className="calculator-result-grid shell">
           <div className="calculator-result-summary">
-            {revealed ? <ResultPanel result={result} /> : <CalculatorLockedResult coast />}
+            <CalculatorLockedResult coast />
           </div>
-      {/*
-        * Rendered as `false` while locked rather than moved, so the actions
-        * block below keeps its position and the capture inside it keeps its
-        * state across the reveal: its explanation of why the result is here
-        * is what the visitor reads next.
-        */}
-      {revealed && <InterpretationPanel
-        interpretation={interpretation}
-        isInterpreting={isInterpreting}
-        question={submitted
-          ? `I have ${dollars(submitted.currentSavings)} saved. Could I stop contributing and retire at ${submitted.retirementAge}, spending ${dollars(submitted.annualRetirementSpending)} a year?`
-          : "Could my current savings grow enough to fund retirement without more contributions?"}
-      />}
           <div className="calculator-result-actions">
             <CoastFireEmailCapture compact
-              onReveal={() => setRevealed(true)}
               // Remount for every run, so a prior run's state cannot claim to
               // belong to the one now on screen.
               key={runId}
@@ -663,42 +400,6 @@ export function CoastFireCalculator({ children }: { children?: ReactNode }) {
           </div>
         </div>}
       </div>
-
-      {/*
-        * Nothing but a comparison of computed answers, so it waits for one.
-        * The assumptions below it do not: they describe the formula rather
-        * than any run of it, and they are worth reading — and worth
-        * indexing — before anyone has typed anything.
-        */}
-      {result && !showInputs && revealed && (
-      <section className="shell cf-sensitivity">
-        <div className="cf-section-head">
-          <p className="section-kicker">SEE WHAT CHANGES</p>
-          <h2>Your return assumption does most of the work.</h2>
-          <p>
-            A one-percentage-point change compounds over {result?.yearsToRetirement} years.
-            Compare the results below to see how much your target depends on the return you chose.
-          </p>
-        </div>
-        <div className="cf-sensitivity-table" role="table" aria-label="Coast FIRE number by real return assumption" data-cs-mask>
-          <div className="cf-sensitivity-row cf-sensitivity-head" role="row">
-            <span role="columnheader">Real return</span>
-            <span role="columnheader">Coast FIRE number today</span>
-            <span role="columnheader">Status</span>
-          </div>
-          {sensitivity.map((scenario) => {
-            const reached = result.currentSavings >= scenario.coastFireNumber;
-            return (
-              <div className={`cf-sensitivity-row${scenario.selected ? " is-selected" : ""}`} role="row" key={scenario.rate}>
-                <span role="cell">{scenario.rate.toFixed(1)}%{scenario.selected ? " · yours" : ""}</span>
-                <strong role="cell">{dollars(scenario.coastFireNumber)}</strong>
-                <span role="cell" className={reached ? "is-reached" : "is-building"}>{reached ? "Reached" : "Not yet"}</span>
-              </div>
-            );
-          })}
-        </div>
-      </section>
-      )}
 
       {!result && <CalculatorNextQuestion coast />}
 
@@ -748,18 +449,12 @@ export function CoastFireCalculator({ children }: { children?: ReactNode }) {
             label="Stress-test my Coast FIRE plan"
             href={COAST_FIRE_SIGNUP_HREF}
             /*
-             * The handoff carries what this page is showing, including when
-             * that is nothing. A scenario stored by an earlier run lives for
-             * two hours, so leaving it in place here would hand signup a run
-             * the visitor did not just see — the same answer-they-did-not-ask
-             * -for this page was emptied to avoid.
+             * Carries no run. The email form is the way into Ask Linc with
+             * one, and a scenario stored by an earlier run lives for two
+             * hours, so leaving it in place would hand signup a run this
+             * click did not ask for.
              */
-            onBeforeNavigate={() => {
-              // A run the page is not showing is not handed over: the email
-              // form is the way into Ask Linc with it.
-              if (result && revealed) storeCoastFireSignupContext(signupContext(result));
-              else clearCoastFireSignupContext();
-            }}
+            onBeforeNavigate={clearCoastFireSignupContext}
           />
           <p className="microcopy">{TRIAL_CTA_MICROCOPY}</p>
         </div>

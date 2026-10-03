@@ -14,14 +14,19 @@ shares its machinery. This page covers what differs.
    card and the capture render in its place, and nothing else about the
    verdict does.
 2. `POST /api/retirement-quickplan/email-results` re-runs the model from the
-   submitted figures, stores a `RetirementLead` row with a random token, and
-   sends the figure-free "result ready" email through Resend as HTML and plain
-   text. Only when the lead did not store does it send the full results email
-   instead, and the page then shows the verdict itself.
-3. The page takes the returned token straight to
-   `/getstarted?source=retirement-calculator&entry=results_page`, where the
-   visitor chooses a password. Registration skips the code and opens `/app` on
-   the seeded first decision.
+   submitted figures and stores a `RetirementLead` row with a random token. If
+   the lead does not store, it answers 503, sends nothing, and the page asks
+   the visitor to try again: the page never shows the verdict itself.
+3. For a new address it sends the figure-free "result ready" email through
+   Resend as HTML and plain text, and the page takes the returned token
+   straight to `/getstarted?source=retirement-calculator&entry=results_page`,
+   where the visitor chooses a password. Registration skips the code and opens
+   `/app` on the seeded first decision. An address that already has an account
+   gets the full results email with a sign-in link instead, and the page sends
+   it to `/login?source=retirement-calculator`, which attaches the run through
+   `POST /auth/calculator-lead` after sign-in and opens `/app`. A visitor
+   already signed in as that address skips both: the run is attached and the
+   page opens `/app` directly.
 4. After the response, the address is added to MailerLite, in the retirement
    group.
 5. The email's call to action links to `/retirement/continue?ref=<token>`,

@@ -19,7 +19,6 @@ import {
 } from "@/lib/coast-fire-signup-context";
 import { leaveForSignup } from "@/lib/calculator-handover";
 import { CALCULATOR_RUN_LIMIT, runLimitPhrase } from "@/lib/calculator-run-limit";
-import { revealCalculatorResult } from "@/test-utils/calculator-reveal";
 
 jest.mock("@/lib/dataLayer", () => ({
   pushCoastFireCalculated: jest.fn(),
@@ -89,15 +88,11 @@ describe("Coast FIRE calculator page", () => {
       return 1;
     };
     Element.prototype.scrollIntoView = jest.fn();
-    /*
-     * Sent with no lead token and no reading: the email form then reveals the
-     * result on the page, which is the only way these cases can see one. See
-     * `revealCalculatorResult`.
-     */
+    // The run stores and a token comes back: the ordinary hand-off to Ask Linc.
     global.fetch = jest.fn(async () => ({
       ok: true,
-      status: 204,
-      json: async () => ({ message: "sent" }),
+      status: 200,
+      json: async () => ({ message: "sent", ref: "c".repeat(48) }),
     })) as unknown as typeof fetch;
     jest.clearAllMocks();
   });
@@ -114,6 +109,22 @@ describe("Coast FIRE calculator page", () => {
    * those open on a stated convention, the way the retirement calculator's
    * allocation preset does.
    */
+  /**
+   * Give the email form an address and return the inputs it sent.
+   *
+   * The page never shows its answer, so what it computed from the form is
+   * checked where it goes: the run posted to the server, which opens it in
+   * Ask Linc.
+   */
+  async function sendToAskLinc(): Promise<Record<string, unknown>> {
+    fireEvent.change(screen.getByLabelText("Email address"), { target: { value: "reader@example.com" } });
+    fireEvent.submit(screen.getByLabelText("Email address").closest("form")!);
+    await waitFor(() => expect(jest.mocked(leaveForSignup)).toHaveBeenCalled());
+    const call = (jest.mocked(global.fetch).mock.calls as unknown as Array<[string, RequestInit]>)
+      .find(([url]) => String(url).includes("/email-results"));
+    return JSON.parse(String(call![1].body));
+  }
+
   function fillForm(overrides: Record<string, string> = {}) {
     const edit = screen.queryByRole('button', { name: /edit inputs.*run again/i });
     if (edit) fireEvent.click(edit);
@@ -177,15 +188,19 @@ describe("Coast FIRE calculator page", () => {
     expect(screen.getByLabelText("Withdrawal rate")).toHaveValue(4);
   });
 
-  it("answers once the visitor has entered their own numbers", async () => {
+  /*
+   * The answer is computed, and held for Ask Linc: the page shows the locked
+   * card and the form that takes it there, never the figure.
+   */
+  it("answers once the visitor has entered their own numbers, in Ask Linc", () => {
     const { container } = render(<CoastFireCalculator />);
 
     fillForm();
     fireEvent.submit(container.querySelector("form")!);
-    await revealCalculatorResult();
 
-    expect(screen.getAllByText("$369,128").length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByRole("heading", { name: "You’ve reached Coast FIRE." })).toBeInTheDocument();
+    expect(screen.getByText("Your result is ready.")).toBeInTheDocument();
+    expect(pushCoastFireCalculated).toHaveBeenCalledWith("reached", 25);
+    expect(document.body).not.toHaveTextContent("$369,128");
   });
 
   /*
@@ -217,33 +232,31 @@ describe("Coast FIRE calculator page", () => {
     fillForm();
     fireEvent.submit(container.querySelector("form")!);
     expect(screen.getByLabelText("Email address")).toBeInTheDocument();
-    await revealCalculatorResult();
-    expect(screen.getAllByText("$369,128").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText("Your result is ready.")).toBeInTheDocument();
 
     // Clear a figure the formula needs and ask again.
     fireEvent.change(screen.getByLabelText("Retirement savings today"), { target: { value: "" } });
     fireEvent.submit(container.querySelector("form")!);
 
     expect(screen.getByRole("alert")).toHaveTextContent("Enter your retirement savings today");
-    expect(screen.queryByText("$369,128")).not.toBeInTheDocument();
+    expect(screen.queryByText("Your result is ready.")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Email address")).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /Could your savings take it from here/ })).toBeInTheDocument();
   });
 
   /* Same for a figure the formula refuses by name rather than a blank one. */
-  it("takes it down for an out-of-range figure too", async () => {
+  it("takes it down for an out-of-range figure too", () => {
     const { container } = render(<CoastFireCalculator />);
 
     fillForm();
     fireEvent.submit(container.querySelector("form")!);
-    await revealCalculatorResult();
-    expect(screen.getAllByText("$369,128").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText("Your result is ready.")).toBeInTheDocument();
 
     fillForm({ "Annual spending in retirement": "50000000" });
     fireEvent.submit(container.querySelector("form")!);
 
     expect(screen.getByRole("alert")).toHaveTextContent("Annual spending must be $10,000,000 or less.");
-    expect(screen.queryByText("$369,128")).not.toBeInTheDocument();
+    expect(screen.queryByText("Your result is ready.")).not.toBeInTheDocument();
   });
 
   /* The kicker generalises with the list under it. */
@@ -265,22 +278,18 @@ describe("Coast FIRE calculator page", () => {
 
     fillForm({ "Annual income available at retirement": "" });
     fireEvent.submit(container.querySelector("form")!);
-    await revealCalculatorResult();
 
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
-    // $80,000 at a 4% withdrawal rate, with nothing offsetting it.
-    expect(screen.getAllByText("$2,000,000").length).toBeGreaterThanOrEqual(1);
+    // Sent as no income, not as a missing figure.
+    expect((await sendToAskLinc()).annualRetirementIncome).toBe(0);
   });
 
-  it("recalculates a not-yet result and tracks only the outcome", async () => {
+  it("recalculates a not-yet result and tracks only the outcome", () => {
     const { container } = render(<CoastFireCalculator />);
 
     fillForm({ "Retirement savings today": "100000" });
     fireEvent.submit(container.querySelector("form")!);
-    await revealCalculatorResult();
 
-    expect(screen.getByRole("heading", { name: "You haven’t reached Coast FIRE yet." })).toBeInTheDocument();
-    expect(screen.getByText(/short of your Coast FIRE number today/i)).toBeInTheDocument();
     expect(pushCoastFireCalculated).toHaveBeenCalledWith("not_yet", 25);
     expect(JSON.stringify(jest.mocked(pushCoastFireCalculated).mock.calls)).not.toContain("100000");
   });
@@ -297,11 +306,10 @@ describe("Coast FIRE calculator page", () => {
     expect(savings).toHaveValue("1,500,000");
 
     fireEvent.submit(container.querySelector("form")!);
-    await revealCalculatorResult();
 
     // Read back as 1.5M, not rejected as NaN and not truncated at the comma.
     expect(pushCoastFireCalculated).toHaveBeenLastCalledWith("reached", 25);
-    expect(screen.getAllByText("$1,500,000").length).toBeGreaterThanOrEqual(1);
+    expect((await sendToAskLinc()).currentSavings).toBe(1_500_000);
   });
 
   /*
@@ -375,48 +383,37 @@ describe("Coast FIRE calculator page", () => {
   });
 
   /*
-   * Only for a result the page is showing, which now means one the email form
-   * revealed because it had no lead to send into Ask Linc.
+   * The run reaches signup through the email form, which stores it with its
+   * token; that is what lets registration open it as the first decision.
    */
   it("carries the seven numbers into the Coast FIRE signup flow", async () => {
     const { container } = render(<CoastFireCalculator />);
 
     fillForm();
     fireEvent.submit(container.querySelector("form")!);
-    await revealCalculatorResult();
+    await sendToAskLinc();
+
+    expect(readCoastFireSignupContext()?.inputs).toEqual(DEFAULT_COAST_FIRE_INPUTS);
+    expect(readCoastFireSignupContext()?.sourceToken).toBe("c".repeat(48));
+  });
+
+  /*
+   * The page CTA carries no run. The email form is the way into Ask Linc with
+   * one, and a stored scenario lives for two hours, so leaving it in place
+   * would hand signup a run this click did not ask for.
+   */
+  it("does not hand signup a run through the page CTA", async () => {
+    const { container } = render(<CoastFireCalculator />);
+
+    fillForm();
+    fireEvent.submit(container.querySelector("form")!);
+    await sendToAskLinc();
+    expect(readCoastFireSignupContext()).not.toBeNull();
 
     const cta = screen.getByRole("link", { name: "Stress-test my Coast FIRE plan" });
     expect(cta).toHaveAttribute("href", COAST_FIRE_SIGNUP_HREF);
     cta.addEventListener("click", (event) => event.preventDefault(), { once: true });
     fireEvent.click(cta);
-
-    expect(readCoastFireSignupContext()?.inputs).toEqual(DEFAULT_COAST_FIRE_INPUTS);
-  });
-
-  /*
-   * A stored scenario lives for two hours. Someone who ran one, came back to
-   * the page, and clicked through without running another would otherwise hand
-   * signup a run the page they just left was not showing — which is the same
-   * "answer you did not ask for" this page was emptied to avoid, one click
-   * further on.
-   */
-  it("does not hand signup a scenario this page is not showing", async () => {
-    const { container, unmount } = render(<CoastFireCalculator />);
-
-    fillForm();
-    fireEvent.submit(container.querySelector("form")!);
-    await revealCalculatorResult();
-    const cta = screen.getByRole("link", { name: "Stress-test my Coast FIRE plan" });
-    cta.addEventListener("click", (event) => event.preventDefault(), { once: true });
-    fireEvent.click(cta);
-    expect(readCoastFireSignupContext()).not.toBeNull();
-
-    // Back to the page, nothing entered, straight to the CTA.
-    unmount();
-    render(<CoastFireCalculator />);
-    const secondCta = screen.getByRole("link", { name: "Stress-test my Coast FIRE plan" });
-    secondCta.addEventListener("click", (event) => event.preventDefault(), { once: true });
-    fireEvent.click(secondCta);
 
     expect(readCoastFireSignupContext()).toBeNull();
   });
@@ -431,11 +428,7 @@ describe("Coast FIRE calculator page", () => {
 
     fillForm({ "Retirement savings today": "0" });
     fireEvent.submit(container.querySelector("form")!);
-    await revealCalculatorResult();
-
-    const cta = screen.getByRole("link", { name: "Stress-test my Coast FIRE plan" });
-    cta.addEventListener("click", (event) => event.preventDefault(), { once: true });
-    fireEvent.click(cta);
+    await sendToAskLinc();
 
     expect(readCoastFireSignupContext()?.inputs).toMatchObject({
       currentAge: 40,
@@ -455,7 +448,8 @@ describe("Coast FIRE calculator page", () => {
     function mockSend(response: Partial<Response> = { ok: true }) {
       const fetchMock = jest.fn(async () => ({
         ok: true,
-        json: async () => ({ message: "sent" }),
+        // Stored, so a token comes back: the ordinary case.
+        json: async () => ({ message: "sent", ref: "c".repeat(48) }),
         ...response,
       })) as unknown as typeof fetch;
       global.fetch = fetchMock;
@@ -525,20 +519,20 @@ describe("Coast FIRE calculator page", () => {
     });
 
     /*
-     * No token came back, so there is no run for an account to open with.
-     * Sending them to one anyway would show an empty workspace, so the page
-     * shows the answer itself.
+     * No token means nothing stored, so no account could open the run. The
+     * answer belongs in Ask Linc, not here, so the form asks for a retry.
      */
-    it("shows the answer on the page when no token comes back", async () => {
-      mockSend();
+    it("asks for a retry, and shows no answer, when nothing was stored", async () => {
+      mockSend({ ok: true, json: async () => ({ message: "sent", ref: null }) } as Partial<Response>);
       const { container } = render(<CoastFireCalculator />);
 
       fillForm();
       fireEvent.submit(container.querySelector("form")!);
-      expect(screen.queryByText("$369,128")).not.toBeInTheDocument();
-      await revealCalculatorResult();
+      fireEvent.change(screen.getByLabelText("Email address"), { target: { value: "reader@example.com" } });
+      fireEvent.submit(screen.getByLabelText("Email address").closest("form")!);
 
-      expect(screen.getAllByText("$369,128").length).toBeGreaterThanOrEqual(1);
+      expect(await screen.findByRole("alert")).toHaveTextContent(/could not save your result/i);
+      expect(document.body).not.toHaveTextContent("$369,128");
       expect(jest.mocked(leaveForSignup)).not.toHaveBeenCalled();
     });
 
@@ -574,7 +568,7 @@ describe("Coast FIRE calculator page", () => {
       fireEvent.change(screen.getByLabelText("Email address"), { target: { value: " Reader@Example.com " } });
       fireEvent.submit(screen.getByLabelText("Email address").closest("form")!);
 
-      await screen.findByText(/so here is your result/i);
+      await waitFor(() => expect(jest.mocked(leaveForSignup)).toHaveBeenCalled());
 
       const [url, request] = sendCall(fetchMock);
       expect(url).toMatch(/\/api\/coast-fire\/email-results$/);
@@ -604,7 +598,7 @@ describe("Coast FIRE calculator page", () => {
       fireEvent.change(screen.getByLabelText("Email address"), { target: { value: "reader@example.com" } });
       fireEvent.submit(screen.getByLabelText("Email address").closest("form")!);
 
-      await screen.findByText(/so here is your result/i);
+      await waitFor(() => expect(jest.mocked(leaveForSignup)).toHaveBeenCalled());
       expect(pushCoastFireResultsEmailed).toHaveBeenCalledTimes(1);
       expect(pushCoastFireResultsEmailed).toHaveBeenCalledWith("reached");
     });

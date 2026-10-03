@@ -11,6 +11,7 @@ import {
   beginFreeTrialSignupFlow,
   isFreeTrialSignupContinuation,
 } from '@/lib/trial-signup-flow';
+import { storeCoastFireSignupContext } from '@/lib/coast-fire-signup-context';
 
 const push = jest.fn();
 let searchParams = new URLSearchParams();
@@ -196,5 +197,91 @@ describe('LoginForm', () => {
     expect(JSON.parse(checkoutInit.body).cancelUrl).toContain(
       `/login?returnTo=${encodeURIComponent('/profile?connect=plaid')}`
     );
+  });
+
+  /*
+   * A calculator sends an address that already has an account here, with the
+   * run in the stored signup context. Signing in attaches it to the account,
+   * and the workspace opens on it — the answer is seen in Ask Linc, never on
+   * the calculator page.
+   */
+  describe('arriving from a calculator with a run', () => {
+    const TOKEN = 'e'.repeat(48);
+    const INPUTS = {
+      currentAge: 40, retirementAge: 65, currentSavings: 400_000,
+      annualRetirementSpending: 80_000, annualRetirementIncome: 30_000,
+      realReturnRate: 5, withdrawalRate: 4,
+    };
+
+    function signIn() {
+      fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'correct-password' } });
+      fireEvent.click(screen.getByRole('button', { name: /Sign in to your workspace/i }));
+    }
+
+    function mockLogin(attached: boolean) {
+      global.fetch = jest.fn(async (url: RequestInfo | URL) => {
+        if (String(url).includes('/auth/login')) {
+          return { ok: true, json: async () => ({ token: 'secure-token', user: {} }) };
+        }
+        if (String(url).includes('/auth/calculator-lead')) {
+          return { ok: true, json: async () => ({ attached }) };
+        }
+        return { ok: true, json: async () => ({ status: 'active', accessLevel: 'full' }) };
+      }) as unknown as typeof fetch;
+    }
+
+    beforeEach(() => {
+      searchParams = new URLSearchParams('source=coast-fire-calculator');
+      storeCoastFireSignupContext(INPUTS, { email: 'member@example.com', sourceToken: TOKEN });
+    });
+
+    it('says the result is waiting and fills in the address', () => {
+      render(<LoginForm />);
+
+      expect(screen.getByText('Your Coast FIRE result is ready.')).toBeInTheDocument();
+      expect(screen.getByLabelText('Email address')).toHaveValue('member@example.com');
+    });
+
+    it('attaches the run with the new session, then opens the workspace', async () => {
+      mockLogin(true);
+      render(<LoginForm />);
+      signIn();
+
+      await waitFor(() => expect(push).toHaveBeenCalledWith('/app'));
+      const attach = jest.mocked(global.fetch).mock.calls
+        .find(([url]) => String(url).includes('/auth/calculator-lead'))!;
+      const init = attach[1] as RequestInit;
+      expect((init.headers as Record<string, string>).Authorization).toBe('Bearer secure-token');
+      expect(JSON.parse(String(init.body))).toEqual({ calculatorRef: TOKEN });
+    });
+
+    /*
+     * Attaching wins over a return destination: the run is why they came.
+     */
+    it('opens the workspace on the run rather than a deep link', async () => {
+      searchParams = new URLSearchParams('source=coast-fire-calculator&returnTo=%2Fapp%2Ffinances');
+      mockLogin(true);
+      render(<LoginForm />);
+      signIn();
+
+      await waitFor(() => expect(push).toHaveBeenCalledWith('/app'));
+      expect(push).not.toHaveBeenCalledWith('/app/finances');
+    });
+
+    it('signs in as usual when the run does not attach', async () => {
+      mockLogin(false);
+      render(<LoginForm />);
+      signIn();
+
+      await waitFor(() => expect(push).toHaveBeenCalledWith('/app'));
+      expect(localStorage.getItem('auth_token')).toBe('secure-token');
+    });
+
+    it('asks for nothing when no calculator sent the visitor', () => {
+      searchParams = new URLSearchParams();
+      render(<LoginForm />);
+
+      expect(screen.queryByText(/result is ready/i)).not.toBeInTheDocument();
+    });
   });
 });

@@ -117,7 +117,8 @@ function mockApi(planResult: unknown, emailResponse: Partial<Response> = { ok: t
     if (String(url).includes('/email-results')) {
       return Promise.resolve({
         ok: true,
-        json: async () => ({ message: 'sent' }),
+        // Stored, so a token comes back: the ordinary case.
+        json: async () => ({ message: 'sent', ref: 'b'.repeat(48) }),
         ...emailResponse,
       });
     }
@@ -217,7 +218,7 @@ it('posts the plan inputs and never the figures computed from them', async () =>
   });
   fireEvent.submit(screen.getByLabelText('Email address').closest('form')!);
 
-  await screen.findByText(/so here is your result/i);
+  await waitFor(() => expect(leaveForSignup).toHaveBeenCalled());
   const send = posts.find((post) => post.url.includes('/email-results'))!;
   expect(send.body).toEqual({
     email: 'Reader@Example.com',
@@ -238,7 +239,7 @@ it('reports the conversion as a band, never as the address or the exact rate', a
   });
   fireEvent.submit(screen.getByLabelText('Email address').closest('form')!);
 
-  await screen.findByText(/so here is your result/i);
+  await waitFor(() => expect(leaveForSignup).toHaveBeenCalled());
   expect(emailed).toHaveBeenCalledTimes(1);
   expect(emailed).toHaveBeenCalledWith(0.92);
 });
@@ -306,22 +307,24 @@ it('carries the run to signup instead of stopping at the inbox', async () => {
  * No token came back — the lead did not store, or its disclosure did not — so
  * there is nothing to carry and the inbox is the only route left.
  */
-it('shows the verdict on the page when no token comes back', async () => {
-  const assign = jest.mocked(leaveForSignup);
-
+/*
+ * No token means nothing was stored, so no account could open the run. The
+ * verdict belongs in Ask Linc, not here, so the form asks for a retry.
+ */
+it('asks for a retry, and shows no verdict, when nothing was stored', async () => {
+  mockApi(BASE_RESULT, { ok: true, json: async () => ({ message: 'sent', ref: null }) });
   renderPage();
   await runTheModel();
-  expect(screen.queryByText(/retiring at 60 worked in/i)).not.toBeInTheDocument();
 
   fireEvent.change(await screen.findByLabelText('Email address'), {
     target: { value: 'reader@example.com' },
   });
   fireEvent.submit(screen.getByLabelText('Email address').closest('form')!);
 
-  await screen.findByText(/so here is your result/i);
-  // No run for an account to open with, so the page shows it instead.
-  expect(screen.getByText(/retiring at 60 worked in/i)).toBeInTheDocument();
-  expect(assign).not.toHaveBeenCalled();
+  expect(await screen.findByRole('alert')).toHaveTextContent(/could not save your result/i);
+  expect(screen.queryByText(/retiring at 60 worked in/i)).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'See my result in Ask Linc' })).toBeEnabled();
+  expect(leaveForSignup).not.toHaveBeenCalled();
 });
 
 /*
@@ -401,7 +404,7 @@ it('resets the capture when a new plan is run', async () => {
     target: { value: 'reader@example.com' },
   });
   fireEvent.submit(screen.getByLabelText('Email address').closest('form')!);
-  await screen.findByText(/so here is your result/i);
+  await waitFor(() => expect(leaveForSignup).toHaveBeenCalled());
 
   mockApi({
     ...BASE_RESULT,
@@ -410,9 +413,9 @@ it('resets the capture when a new plan is run', async () => {
   });
   await runTheModel();
 
-  // A new run is held back again: the earlier reveal belonged to that run.
+  // A fresh form for the new plan: the earlier hand-off belonged to that run.
   await screen.findByText('Your result is ready.');
-  expect(screen.queryByText(/so here is your result/i)).not.toBeInTheDocument();
+  expect(screen.queryByText(/taking you to your result/i)).not.toBeInTheDocument();
   // The form is back for the new plan, holding the address already given in
   // this tab rather than asking for it again.
   expect(screen.getByLabelText('Email address')).toHaveValue('reader@example.com');

@@ -14,9 +14,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   Bar,
   BarChart,
-  Cell,
   LabelList,
-  ReferenceLine,
   ResponsiveContainer,
   XAxis,
   YAxis,
@@ -36,10 +34,6 @@ import {
   recordRun,
 } from "@/lib/calculator-run-limit";
 import { numericInput, withCommas } from "@/lib/number-input";
-import {
-  RETIREMENT_SIGNUP_HREF,
-  storeRetirementSignupContext,
-} from "@/lib/retirement-signup-context";
 
 type AllocationId = "conservative" | "balanced" | "growth";
 
@@ -366,22 +360,6 @@ function money(value: number): string {
   return `$${Math.round(value).toLocaleString("en-US")}`;
 }
 
-function compactMoney(value: number): string {
-  if (value >= 1_000_000) return `$${(value / 1_000_000).toFixed(value >= 10_000_000 ? 0 : 1)}M`;
-  if (value >= 1_000) return `$${Math.round(value / 1_000)}k`;
-  return `$${Math.round(value)}`;
-}
-
-/**
- * Colour the headline by what the number actually says. A 45% survival rate
- * rendered in the same confident green as a 99% one is a lie of presentation.
- */
-function outcomeBand(survivalRate: number): "strong" | "mixed" | "weak" {
-  if (survivalRate >= 0.9) return "strong";
-  if (survivalRate >= 0.7) return "mixed";
-  return "weak";
-}
-
 function percent(value: number, digits = 0): string {
   return `${(value * 100).toFixed(digits)}%`;
 }
@@ -478,29 +456,20 @@ export function RetirementQuickPlan({
   useCalculatorLimitTracking('retirement', locked);
   const allocations = useAllocations();
   /*
-   * Whether this run's answer is shown on the page. Ordinarily it never is: a
-   * plan run renders the locked card and the email form, and the answer opens
-   * in Ask Linc once the visitor chooses a password. The capture reveals it
-   * here only when it got no lead token back and so has no account to send
-   * the run to. Nothing that restates the answer — the reading, the charts,
-   * the signup handoff — runs or renders before then. Reset by every new run.
-   *
-   * A rates-only answer is not held back. It has no run to save (the email
-   * endpoint needs a portfolio and a spending level), says nothing about the
-   * visitor's own plan, and its whole job is to ask for the two numbers that
-   * would produce a plan result — which is then held back.
-   */
-  const [revealed, setRevealed] = useState(false);
-  /*
-   * Counts answered runs, so the capture remounts for every one. Keying it on
-   * the inputs alone left an identical re-run holding the previous run's
-   * revealed state under a page that had locked again.
+   * Counts answered runs, so the capture remounts for every one, even for an
+   * identical re-run: a prior run's form state never belongs to this one.
    */
   const [runId, setRunId] = useState(0);
-  const gated = Boolean(result?.primary) && !revealed;
-  // No reading of a locked result: it restates the figures, and on a page
-  // that is not showing them it is a model call for nothing.
-  const { interpretation, isLoading: isInterpreting } = useInterpretation(gated ? null : submittedPlan);
+  /*
+   * A plan answer is never shown on this page — it opens in Ask Linc — so it
+   * is never read either. A rates-only answer is shown: it has no run to save
+   * (the email endpoint needs a portfolio and a spending level), says nothing
+   * about the visitor's own plan, and its whole job is to ask for the two
+   * numbers that would produce a plan result.
+   */
+  const { interpretation, isLoading: isInterpreting } = useInterpretation(
+    result?.primary ? null : submittedPlan,
+  );
   const resultsRef = useRef<HTMLDivElement | null>(null);
   const formRef = useRef<HTMLFormElement | null>(null);
   const startedRef = useRef(false);
@@ -545,18 +514,6 @@ export function RetirementQuickPlan({
 
   const errorFor = (field: string): string | undefined =>
     fieldError?.field === field ? fieldError.message : undefined;
-
-  /**
-   * A result whose inputs are all the visitor's own, and the only kind the
-   * signup handoff may carry. A rates-mode run is simulated against a notional
-   * portfolio, and forwarding that would put a figure nobody entered into
-   * onboarding as if they had — the same fabrication the rates answer exists
-   * to avoid.
-   *
-   * A run the page is not showing is not carried either: the email form is
-   * the way into Ask Linc with it.
-   */
-  const carriedResult = result?.primary && !gated ? result : null;
 
   const setField = (field: keyof FormState) => (value: string) => {
     // Count actual user changes, not prefills, focus, validation, or submission.
@@ -644,7 +601,6 @@ export function RetirementQuickPlan({
 
       const answered = payload as QuickPlanResult;
       setResult(answered);
-      setRevealed(false);
       setRunId((current) => current + 1);
       setShowInputs(false);
       // A new object every run, so an identical re-submission still retires the
@@ -851,12 +807,8 @@ export function RetirementQuickPlan({
           ? <QuickPlanResults
               result={result}
               primary={result.primary}
-              interpretation={interpretation}
-              isInterpreting={isInterpreting}
               locked={locked}
               onEdit={editInputs}
-              gated={gated}
-              onReveal={() => setRevealed(true)}
               runId={runId}
             />
           : <QuickPlanRateResults
@@ -873,25 +825,19 @@ export function RetirementQuickPlan({
       <section className="qp-cross-sell">
         <div className="shell qp-cross-sell-inner">
           <p className="section-kicker light">CONTINUE THE DECISION WITH REAL INPUTS</p>
-          <h2>
-            {carriedResult
-              ? "Keep testing this retirement decision."
-              : "Use your accounts to refine the plan."}
-          </h2>
+          <h2>Use your accounts to refine the plan.</h2>
           <p>
-            {carriedResult
-              ? "We'll carry forward the retirement age, assets, and spending you just modeled, then replace the calculator's portfolio preset with your actual holdings and add your real spending and income."
-              : "Connect your financial life, ask your retirement question, and let Linc bring the analysis together. Keep exploring with your real holdings, income, and spending."}
+            Connect your financial life, ask your retirement question, and let Linc bring the
+            analysis together. Keep exploring with your real holdings, income, and spending.
           </p>
+          {/*
+            * Carries no run: the email form is the way into Ask Linc with one.
+            */}
           <MarketingGetStartedButton
             className="button button-primary"
             trackingLocation="quickplan_cross_sell"
             csOverrideId="cta-start-free-trial-quickplan"
-            label={carriedResult ? "Stress-test this with my actual finances" : "Build my retirement plan"}
-            href={carriedResult ? RETIREMENT_SIGNUP_HREF : undefined}
-            onBeforeNavigate={
-              carriedResult ? () => { storeRetirementSignupContext(carriedResult.inputs); } : undefined
-            }
+            label="Build my retirement plan"
           />
           {/* The same promise every CTA on the site makes; kept in one place. */}
           <p className="microcopy">{TRIAL_CTA_MICROCOPY}</p>
@@ -1007,145 +953,35 @@ function AssumedInputs({ assumed }: { assumed: QuickPlanResult["assumed"] | unde
   );
 }
 
+/**
+ * A plan answer, which this page never shows.
+ *
+ * The verdict opens in Ask Linc as a decision in the visitor's account; here
+ * there is the locked card and the form that takes them there. The run still
+ * counts as a run the moment it commits, which is what `useReportedRun` keeps.
+ */
 function QuickPlanResults({
   result,
   primary,
-  interpretation,
-  isInterpreting,
   locked,
   onEdit,
-  gated,
-  onReveal,
   runId,
 }: {
   result: QuickPlanResult;
   primary: Scenario;
-  interpretation: Interpretation | null;
-  isInterpreting: boolean;
   locked: boolean;
   onEdit: () => void;
-  /** Hold the answer back behind the email form. */
-  gated: boolean;
-  onReveal: () => void;
   /** Changes with every answered run; keys the capture. */
   runId: number;
 }) {
-  const { alternatives, history, inputs, allocation } = result;
-  // Plan mode is reached only with a real portfolio, which is also the
-  // condition for the dollar distribution, so this is always populated here.
-  const sustainableSpending = result.sustainableSpending ?? result.sustainableSpendingRates;
+  const { inputs } = result;
   useReportedRun(result);
 
-  const sustainableData = useMemo(
-    () =>
-      SUSTAINABLE_BANDS.map((band) => ({
-        name: band.label,
-        value: sustainableSpending[band.key],
-      })),
-    [sustainableSpending]
-  );
-
-  const scenarioRows = useMemo(
-    () =>
-      [primary, ...alternatives].map((scenario) => ({
-        id: scenario.id,
-        label: scenario.label,
-        change: scenario.change,
-        survivalRate: scenario.survivalRate,
-        isPrimary: scenario.id === primary.id,
-      })),
-    [primary, alternatives]
-  );
-
-  const ranOut = primary.sequencesTested - primary.sequencesSurvived;
-  const band = outcomeBand(primary.survivalRate);
-  // A claiming age says nothing on its own: with no benefit entered there is
-  // no Social Security to start, and copy about when it starts describes
-  // income the engine never modeled. Leaving it blank is now the ordinary
-  // path, so both timing branches have to answer to the amount first.
-  const hasSocialSecurity = inputs.socialSecurityAnnual > 0;
-  const claimsAfterRetiring = hasSocialSecurity && inputs.socialSecurityStartAge > inputs.retirementAge;
-
   return (
-    <>
-      <div className="calculator-result-grid shell" data-cs-mask>
-      {gated ? (
-        <div className="calculator-result-summary"><CalculatorLockedResult /></div>
-      ) : (
-      <section className="qp-results calculator-result-summary" aria-live="polite">
-        <p className="section-kicker">THE MODEL&apos;S ANSWER</p>
-        <AssumedInputs assumed={result.assumed} />
-        <h2 className="qp-verdict" data-outcome={band}>
-          Retiring at {inputs.retirementAge} worked in{" "}
-          <strong>{primary.sequencesSurvived.toLocaleString("en-US")} of{" "}
-          {primary.sequencesTested.toLocaleString("en-US")}</strong>{" "}
-          retirements in market history.
-        </h2>
-        <p className="qp-verdict-sub">
-          Your inputs, tested through age {inputs.lifeExpectancy} against US market returns and
-          inflation from {monthLabel(history.firstStartMonth)} onward. Past results do not predict
-          your future.
-        </p>
-
-        <div
-          className="qp-survival-bar"
-          data-outcome={band}
-          role="img"
-          aria-label={`${percent(primary.survivalRate, 1)} of tested histories lasted`}
-        >
-          <div className="qp-survival-fill" style={{ width: `${primary.survivalRate * 100}%` }} />
-          <span className="qp-survival-label">{percent(primary.survivalRate, 1)} lasted</span>
-        </div>
-
-        <div className="qp-stats">
-          <Stat
-            label={`Portfolio at age ${inputs.retirementAge}`}
-            value={money(primary.projectedPortfolioAtRetirement)}
-            note="Median across tested histories, in today's dollars"
-          />
-          <Stat
-            label="First-year draw"
-            value={money(primary.firstYearPortfolioWithdrawal)}
-            note={
-              claimsAfterRetiring
-                ? `All of it from the portfolio — Social Security starts at ${inputs.socialSecurityStartAge}`
-                : hasSocialSecurity
-                  ? `Your spending less ${money(inputs.socialSecurityAnnual)} of Social Security`
-                  : "No Social Security offset in the first year"
-            }
-          />
-          <Stat
-            label="Withdrawal rate"
-            value={percent(primary.firstYearWithdrawalRate, 2)}
-            note="First-year draw as a share of the portfolio"
-          />
-          <Stat
-            label="Histories that ran short"
-            value={ranOut.toLocaleString("en-US")}
-            note={
-              primary.depletionYears?.p50 != null
-                ? `Money lasted about ${Math.round(primary.depletionYears.p50)} years in the median failure`
-                : "The portfolio lasted in every tested history"
-            }
-          />
-        </div>
-
-      </section>
-      )}
-      {/*
-        * Rendered as `false` while locked rather than moved, so the actions
-        * block below keeps its position and the capture inside it keeps its
-        * state across the reveal: its explanation of why the result is here
-        * is what the visitor reads next.
-        */}
-      {!gated && <InterpretationPanel
-        interpretation={interpretation}
-        isInterpreting={isInterpreting}
-        question={`I have ${money(inputs.investableAssets)} invested today. Could I retire at ${inputs.retirementAge} and spend ${money(inputs.annualSpending)} a year?`}
-      />}
+    <div className="calculator-result-grid shell" data-cs-mask>
+      <div className="calculator-result-summary"><CalculatorLockedResult /></div>
       <div className="calculator-result-actions">
         <RetirementEmailCapture compact
-          onReveal={onReveal}
           // Remount for every run, so a prior run's state cannot claim to
           // belong to the one now on screen, and an in-flight send for the
           // old run cannot act on the new one.
@@ -1162,150 +998,10 @@ function QuickPlanResults({
             allocation: inputs.allocation,
           }}
           survivalRate={primary.survivalRate}
-          sequencesTested={primary.sequencesTested}
-          sequencesSurvived={primary.sequencesSurvived}
         />
         <CalculatorRunAgain locked={locked} onEdit={onEdit} />
       </div>
-      </div>
-
-      {!gated && <>
-      <section className="shell qp-chart-block">
-        <div className="qp-chart-copy">
-          <p className="section-kicker">WHAT YOUR SAVINGS ALONE COULD COVER</p>
-          <h3>How much you could spend each year</h3>
-          <p>
-            Each bar is an amount you could spend in your first year of retirement and keep
-            spending — rising with inflation — for all{" "}
-            {inputs.lifeExpectancy - inputs.retirementAge} years, out of{" "}
-            <strong>your savings alone</strong>. The labels underneath say how often that worked:
-            &ldquo;9 in 10&rdquo; means the money lasted in nine of every ten stretches of history
-            we tested it against.
-          </p>
-          <p>
-            Your plan takes <strong>{money(primary.firstYearPortfolioWithdrawal)}</strong> out in
-            year one — the dotted line across the chart.
-          </p>
-          {claimsAfterRetiring ? (
-            <p className="qp-chart-caveat">
-              Social Security is left out of this chart, which is why it can look like it disagrees
-              with the result further up. You only take the full{" "}
-              {money(primary.firstYearPortfolioWithdrawal)} from savings until age{" "}
-              {inputs.socialSecurityStartAge}. Once your benefit starts, savings only have to cover{" "}
-              {money(Math.max(0, inputs.annualSpending - inputs.socialSecurityAnnual))} a year. So
-              these bars are a tougher test than your plan actually faces — the result above is the
-              one that counts your benefit.
-            </p>
-          ) : hasSocialSecurity ? (
-            <p className="qp-chart-caveat">
-              Your Social Security has already started by the time you retire, so what you take from
-              savings stays the same for the whole retirement. The bars and your plan are a fair
-              comparison.
-            </p>
-          ) : (
-            <p className="qp-chart-caveat">
-              This plan includes no Social Security, so your savings cover everything for the whole
-              retirement. The bars and your plan are a fair comparison.
-            </p>
-          )}
-          <p className="qp-chart-caveat">
-            We only test spending between {percent(sustainableSpending.solverFloorRate)} and{" "}
-            {percent(sustainableSpending.solverCeilingRate)} of your savings a year. A bar that
-            reaches the top of that range means &ldquo;at least this much&rdquo; — it could be more.
-          </p>
-        </div>
-        <div className="qp-chart">
-          <ResponsiveContainer width="100%" height={280}>
-            <BarChart data={sustainableData} margin={{ top: 24, right: 84, bottom: 8, left: 0 }}>
-              <XAxis
-                dataKey="name"
-                tickLine={false}
-                axisLine={{ stroke: "#ccd1c4" }}
-                tick={{ fill: "#52705f", fontSize: 12 }}
-                label={{ value: "histories that lasted", position: "insideBottom", offset: -4, fill: "#7d8a82", fontSize: 11 }}
-              />
-              <YAxis
-                tickFormatter={compactMoney}
-                tickLine={false}
-                axisLine={false}
-                width={58}
-                tick={{ fill: "#7d8a82", fontSize: 11 }}
-              />
-              <ReferenceLine
-                y={primary.firstYearPortfolioWithdrawal}
-                stroke="#b4352b"
-                strokeDasharray="5 4"
-                label={{ value: "first year", position: "right", fill: "#b4352b", fontSize: 11 }}
-              />
-              <Bar dataKey="value" radius={[6, 6, 0, 0]} isAnimationActive={false}>
-                {sustainableData.map((entry) => (
-                  <Cell
-                    key={entry.name}
-                    fill={entry.value >= primary.firstYearPortfolioWithdrawal ? "#2b8f5d" : "#d99b6f"}
-                  />
-                ))}
-                {/* Inside the bar: above it, the shortest bar's label collides with the reference line. */}
-                <LabelList dataKey="value" position="insideTop" offset={10} formatter={compactMoney} fill="#ffffff" fontSize={12} fontWeight={700} />
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </section>
-
-      <section className="shell qp-scenarios">
-        <div className="qp-scenarios-copy">
-          <p className="section-kicker">WHAT MOVES THE ANSWER</p>
-          <h3>The two levers these numbers can pull</h3>
-          <p>
-            There are only two things these six numbers can change: how long you keep working, and
-            how much you spend once you stop. Each row below is your whole plan run again from
-            scratch against the same century of history — not a quick adjustment of the first
-            answer.
-          </p>
-        </div>
-        <ul className="qp-scenario-list">
-          {scenarioRows.map((scenario) => (
-            <li key={scenario.id} className={scenario.isPrimary ? "is-primary" : undefined}>
-              <div className="qp-scenario-label">
-                <strong>{scenario.label}</strong>
-                <span>{scenario.change ?? "as you entered it"}</span>
-              </div>
-              <div className="qp-scenario-track">
-                <div className="qp-scenario-fill" style={{ width: `${scenario.survivalRate * 100}%` }} />
-              </div>
-              <b>{percent(scenario.survivalRate, 1)}</b>
-            </li>
-          ))}
-        </ul>
-      </section>
-
-      <section className="shell qp-methodology">
-        <div className="qp-observation">
-          <p className="section-kicker">HOW THE ENGINE READ THIS ASSET MIX</p>
-          <p className="qp-observation-quote">{primary.primaryObservation}.</p>
-          <p className="qp-observation-detail">
-            <strong>Upside:</strong> {primary.tradeoffs.upside}.{" "}
-            <strong>Downside:</strong> {primary.tradeoffs.downside}.
-          </p>
-          <p className="qp-observation-scope">
-            This describes the {allocation.label.toLowerCase()} mix we assumed for you across the
-            tested history — not the outcome of your plan, and not your actual portfolio.
-          </p>
-          <dl className="qp-characteristics">
-            <div><dt>Growth potential</dt><dd>{primary.characteristics.growthPotential}</dd></div>
-            <div><dt>Drawdown resistance</dt><dd>{primary.characteristics.drawdownResistance}</dd></div>
-            <div><dt>Withdrawal fragility</dt><dd>{primary.characteristics.withdrawalFragility}</dd></div>
-            <div><dt>Inflation protection</dt><dd>{primary.characteristics.inflationProtection}</dd></div>
-          </dl>
-        </div>
-
-        <p className="qp-sources">
-          Based on the {allocation.label.toLowerCase()} mix and {history.sequencesTested.toLocaleString("en-US")} overlapping {history.horizonYears}-year market histories.
-          Sources: Kenneth R. French Data Library and Robert J. Shiller. Historical results are not a forecast.
-        </p>
-      </section>
-      </>}
-    </>
+    </div>
   );
 }
 

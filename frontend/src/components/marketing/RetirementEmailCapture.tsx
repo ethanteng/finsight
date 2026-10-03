@@ -3,11 +3,17 @@
 /**
  * "See your result in Ask Linc": the form that stands where the verdict would.
  *
- * The page runs the model but does not show its answer. Giving an address
- * sends the visitor to signup with it prefilled, and the run opens in Ask Linc
- * as the account's first decision. Registration skips the verification code
- * for a calculator lead, so a password is all that stands between this form
- * and the answer. See `auth/routes` and `docs/RETIREMENT_QUICKPLAN.md`.
+ * Neither calculator shows its answer on its own page, in any case. The
+ * visitor gives an address and the run opens in Ask Linc as a decision in
+ * their account, which is the point of the page. Where it goes depends on who
+ * they are (`chooseCalculatorHandoff`):
+ *
+ * - Already signed in: the run is attached to that account and `/app` opens.
+ * - An address with an account: sign-in, which attaches the run.
+ * - Anyone else: signup with the address prefilled, where a password is all
+ *   that stands between them and the run as their first decision.
+ *
+ * See `auth/routes` and `docs/COAST_FIRE_EMAIL_CAPTURE.md`.
  *
  * It appears only once a plan has actually been run and returned a verdict.
  * A `rates` run has no survival figure — the model will not invent a
@@ -20,17 +26,21 @@
  * the visitor just made is still in the model's cache, so the re-run costs
  * nothing.
  *
- * When no token comes back, there is no account the run can open in: the
- * lead did not store, its disclosure mark did not, or the address already has
- * an account and cannot register again (`existingAccount`). The page shows the
- * verdict itself instead, through `onReveal`, rather than sending the visitor
- * to an account that would open empty.
+ * The server answers without a lead token only when it could not store the
+ * run. There is then nothing any account could open, so the form says so and
+ * stays ready to retry, rather than showing the answer here.
  */
 
 import { useEffect, useRef, useState } from "react";
 import { pushRetirementResultsEmailed } from "@/lib/dataLayer";
 import { readRememberedEmail, rememberEmail } from "@/lib/calculator-email-memory";
 import { readCalculatorLeadAttribution } from "@/lib/calculator-lead-attribution";
+import {
+  chooseCalculatorHandoff,
+  readSignedInEmail,
+  RETIREMENT_SIGN_IN_HREF,
+  type CalculatorHandoff,
+} from "@/lib/calculator-lead-attach";
 import {
   isHandoverToken,
   leaveForSignup,
@@ -46,7 +56,7 @@ import {
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
 
-type Status = "idle" | "sending" | "revealed" | "revealed-signed-in" | "leaving";
+type Status = "idle" | "sending" | "leaving";
 
 export interface RetirementEmailCaptureInputs {
   currentAge: number;
@@ -69,38 +79,44 @@ export interface RetirementEmailCaptureInputs {
 export function RetirementEmailCapture({
   inputs,
   survivalRate,
-  sequencesTested,
-  sequencesSurvived,
   compact = false,
-  onReveal,
 }: {
   inputs: RetirementEmailCaptureInputs;
   survivalRate: number;
-  sequencesTested: number;
-  sequencesSurvived: number;
   compact?: boolean;
-  /** Show the verdict on the page: the fallback when there is no run to carry. */
-  onReveal: () => void;
 }) {
   // Prefilled from an earlier run in this tab, so the visitor is not asked
   // for an address they already gave.
   const [email, setEmail] = useState(() => readRememberedEmail() ?? "");
   const [status, setStatus] = useState<Status>("idle");
   const [error, setError] = useState<string | null>(null);
-  /** The address already has an Ask Linc account, which cannot register again. */
-  const [existingAccount, setExistingAccount] = useState(false);
+  const [destination, setDestination] = useState<CalculatorHandoff>("signup");
   /** One conversion event per visitor, however many times they resend. */
   const reported = useRef(false);
   /*
    * The page remounts this form for every run. A send still in flight for
-   * the previous run must not reveal, or carry to signup, the run now on
-   * screen.
+   * the previous run must not carry the run now on screen anywhere.
    */
   const mounted = useRef(true);
   useEffect(() => {
     mounted.current = true;
     return () => {
       mounted.current = false;
+    };
+  }, []);
+
+  /*
+   * A signed-in visitor's own address, unless they already have one in the
+   * box. The run attaches to the session's account only when the lead names
+   * it, so starting from the right address is what keeps them on that path.
+   */
+  useEffect(() => {
+    let cancelled = false;
+    void readSignedInEmail().then((address) => {
+      if (!cancelled && address) setEmail((current) => current || address);
+    });
+    return () => {
+      cancelled = true;
     };
   }, []);
 
@@ -124,7 +140,18 @@ export function RetirementEmailCapture({
 
       if (!response.ok) {
         const body = await response.json().catch(() => null) as { error?: string } | null;
-        setError(body?.error || "We could not send that just now. Please try again.");
+        setError(body?.error || "We could not save that just now. Please try again.");
+        setStatus("idle");
+        return;
+      }
+
+      const body = await response.json().catch(() => null) as { ref?: unknown; existingAccount?: unknown } | null;
+      const token = isHandoverToken(body?.ref) ? body.ref : null;
+      if (!mounted.current) return;
+      if (!token) {
+        // Nothing stored, so no account could open it. Not shown here either:
+        // the result belongs in Ask Linc, and a retry usually stores it.
+        setError("We could not save your result just now. Please try again in a moment.");
         setStatus("idle");
         return;
       }
@@ -134,56 +161,29 @@ export function RetirementEmailCapture({
         reported.current = true;
         tracking = pushRetirementResultsEmailed(survivalRate);
       }
-
-      const body = await response.json().catch(() => null) as { ref?: unknown; existingAccount?: unknown } | null;
-      const token = isHandoverToken(body?.ref) ? body.ref : null;
       rememberEmail(email);
+
+      // The run and the address, for whichever page opens it: signup and
+      // sign-in both read this. The cookie is what /getstarted exchanges; a
+      // browser refusing it costs the address prefill there, not the run.
+      storeRetirementSignupContext(inputs, { email: email.trim(), sourceToken: token });
+
+      const handoff = await chooseCalculatorHandoff(token, body?.existingAccount === true);
       if (!mounted.current) return;
-
-      if (!token) {
-        setExistingAccount(body?.existingAccount === true);
-        // Nothing to seed an account from, so the verdict is shown here.
-        setStatus("revealed");
-        onReveal();
-        await tracking;
-        return;
-      }
-
-      /*
-       * Registration is the only path that seeds a lead, and it refuses an
-       * address that already has an account. A visitor who is already signed
-       * in would leave for signup, hit that wall, and — because this email
-       * states no figures — have no way to see the answer. Show it here
-       * instead; the run stays in the lead table for a later new account.
-       */
-      let signedIn = false;
-      try {
-        signedIn = Boolean(window.localStorage.getItem("auth_token"));
-      } catch {
-        signedIn = false;
-      }
-      if (signedIn) {
-        setStatus("revealed-signed-in");
-        onReveal();
-        await tracking;
-        return;
-      }
-
-      // Both carriers, because they fail differently. The cookie is what
-      // /getstarted exchanges, and it cannot be read back from here to know it
-      // took. The stored context carries the same token and the inputs, so a
-      // browser refusing the cookie costs the address prefill, not the run.
-      writeHandoverToken(RETIREMENT_REF_COOKIE, token);
-      storeRetirementSignupContext(inputs, {
-        email: email.trim(),
-        sourceToken: token,
-        // Kept so a 409 at signup can still show the answer — registration
-        // will not seed an address that already has an account.
-        emailedOutcome: { survivalRate, sequencesTested, sequencesSurvived },
-      });
+      setDestination(handoff);
       setStatus("leaving");
       await tracking;
-      leaveForSignup(resultsPageSignupHref(RETIREMENT_SIGNUP_HREF));
+
+      // Whole loads rather than client navigations: /getstarted reads a
+      // cookie set just now, and /app and /login read their session on mount.
+      if (handoff === "app") {
+        leaveForSignup("/app");
+      } else if (handoff === "sign-in") {
+        leaveForSignup(RETIREMENT_SIGN_IN_HREF);
+      } else {
+        writeHandoverToken(RETIREMENT_REF_COOKIE, token);
+        leaveForSignup(resultsPageSignupHref(RETIREMENT_SIGNUP_HREF));
+      }
     } catch {
       setError("Network error. Please check your connection and try again.");
       setStatus("idle");
@@ -195,38 +195,17 @@ export function RetirementEmailCapture({
       <div className="qp-email-capture is-sent" role="status" aria-live="polite">
         <p className="section-kicker">OPENING ASK LINC</p>
         <h3>Taking you to your result…</h3>
-        <p>
-          Choose a password and your retirement result opens as your first decision. We’ve also
-          emailed <strong>{email.trim()}</strong> a link back, in case you finish later.
-        </p>
-      </div>
-    );
-  }
-
-  if (status === "revealed-signed-in") {
-    return (
-      <div className="qp-email-capture is-sent" role="status" aria-live="polite">
-        <p className="qp-email-lead">
-          You’re already signed in, so here is your result on this page. We’ve also emailed{" "}
-          <strong>{email.trim()}</strong> a link you can use from another device.
-        </p>
-      </div>
-    );
-  }
-
-  if (status === "revealed") {
-    return (
-      <div className="qp-email-capture is-sent" role="status" aria-live="polite">
-        {existingAccount ? (
-          <p className="qp-email-lead">
-            You already have an Ask Linc account, so here is your result. We’ve also emailed it to{" "}
-            <strong>{email.trim()}</strong>. <a href="/login">Sign in</a> to keep exploring it with
-            your real numbers.
+        {destination === "app" ? (
+          <p>Your retirement result is saved in your account. Opening it…</p>
+        ) : destination === "sign-in" ? (
+          <p>
+            You already have an Ask Linc account. Sign in and your retirement result opens as a new
+            decision in it.
           </p>
         ) : (
-          <p className="qp-email-lead">
-            We couldn’t set up your account link just now, so here is your result. We’ve also
-            emailed <strong>{email.trim()}</strong>.
+          <p>
+            Choose a password and your retirement result opens as your first decision. We’ve also
+            emailed <strong>{email.trim()}</strong> a link back, in case you finish later.
           </p>
         )}
       </div>
@@ -239,8 +218,7 @@ export function RetirementEmailCapture({
         <p className="section-kicker">YOUR RESULT IS READY</p>
         <h3>See your retirement result in Ask Linc</h3>
         <p className="qp-email-lead">
-          Enter your email, then choose a password to see how your plan held up, in Ask Linc. No
-          code to enter, no credit card.
+          Enter your email to see how your plan held up, in Ask Linc. New here? Just choose a password, with no code to enter and no credit card.
         </p>
       </div>
 
@@ -270,7 +248,7 @@ export function RetirementEmailCapture({
             disabled={status === "sending"}
             data-cs-override-id="quickplan-email-results"
           >
-            {status === "sending" ? "Sending…" : "See my result in Ask Linc"}
+            {status === "sending" ? "Saving…" : "See my result in Ask Linc"}
           </button>
         </div>
 
