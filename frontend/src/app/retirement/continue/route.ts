@@ -7,6 +7,7 @@
 
 import type { NextRequest } from 'next/server';
 import { handoverRedirect } from '@/lib/calculator-handover-redirect';
+import { RETIREMENT_SIGN_IN_HREF } from '@/lib/calculator-lead-attach';
 import {
   RETIREMENT_REF_COOKIE,
   RETIREMENT_SIGNUP_HREF,
@@ -19,5 +20,6 @@ export function GET(request: NextRequest) {
   return handoverRedirect(request, {
     cookieName: RETIREMENT_REF_COOKIE,
     destination: RETIREMENT_SIGNUP_HREF,
+    signInDestination: RETIREMENT_SIGN_IN_HREF,
   });
 }

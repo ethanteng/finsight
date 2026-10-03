@@ -24,7 +24,7 @@
 import express, { Request, Response } from 'express';
 import { createFixedWindowRateLimit, positiveIntFromEnv } from './fixed-window-rate-limit';
 import { validateEmail } from '../auth/utils';
-import { sendCalculatorReadyEmail, sendCoastFireResultsEmail } from '../auth/resend-email';
+import { sendCalculatorReadyEmail } from '../auth/resend-email';
 import { coastFireInputRows } from '../email/coast-fire-results';
 import { getBaseUrl } from '../email/templates';
 import {
@@ -99,12 +99,11 @@ function readEmail(raw: unknown): string {
  * to a clean URL, so the token is never in the address of a rendered page,
  * where Google Tag Manager and every tag in the container would see it.
  */
-function loginUrl(): string {
-  return `${getBaseUrl()}/login`;
-}
-
-function signupUrl(token: string): string {
-  return `${getBaseUrl()}/coast-fire/continue?ref=${token}`;
+function continueUrl(token: string, existingAccount: boolean): string {
+  const url = `${getBaseUrl()}/coast-fire/continue?ref=${token}`;
+  // An address that already has an account cannot register again, so its
+  // link lands on sign-in, where the run is attached, instead of on signup.
+  return existingAccount ? `${url}&to=sign-in` : url;
 }
 
 router.post('/email-results', emailRateLimit, async (req: Request, res: Response) => {
@@ -149,26 +148,18 @@ router.post('/email-results', emailRateLimit, async (req: Request, res: Response
   }
 
   /*
-   * A stored lead for a new address gets the "ready in Ask Linc" message,
-   * which states no figures: the answer is shown in the account the link
-   * creates. An address that already has an account cannot register again,
-   * so the page sends it to sign in, where the run is attached, and the full
-   * results email is its fallback.
+   * Every stored lead gets the "ready in Ask Linc" message, which states no
+   * figures: the answer is shown in the account. A new address is linked to
+   * signup; one that already has an account is linked to sign-in, where the
+   * run is attached.
    */
-  const handOff = !existingAccount;
-  const emailSent = handOff
-    ? await sendCalculatorReadyEmail({
-      calculator: 'coast_fire',
-      inputs: coastFireInputRows(result),
-      email,
-      ctaUrl: signupUrl(token),
-    })
-    : await sendCoastFireResultsEmail(
-      email,
-      result,
-      loginUrl(),
-      { existingAccount: true },
-    );
+  const emailSent = await sendCalculatorReadyEmail({
+    calculator: 'coast_fire',
+    inputs: coastFireInputRows(result),
+    email,
+    ctaUrl: continueUrl(token, existingAccount),
+    existingAccount,
+  });
 
   if (!emailSent) {
     res.status(502).json({
@@ -197,11 +188,7 @@ router.post('/email-results', emailRateLimit, async (req: Request, res: Response
   // response may sit in a shared cache.
   res.setHeader('Cache-Control', 'no-store');
   res.json({
-    // A new address was sent the figure-free ready email; only the fallback
-    // mails the results themselves.
-    message: handOff
-      ? 'Your Coast FIRE result is ready in Ask Linc.'
-      : 'Your Coast FIRE results are on their way.',
+    message: 'Your Coast FIRE result is ready in Ask Linc.',
     ref,
     // Lets the page send this visitor to sign in rather than to a signup that
     // would refuse the address.

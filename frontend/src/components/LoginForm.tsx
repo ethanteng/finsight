@@ -23,8 +23,23 @@ import {
   sanitizePostLoginRedirect,
 } from '@/lib/post-login-redirect';
 import { attachCalculatorLead } from '@/lib/calculator-lead-attach';
-import { hasCoastFireSignupSource, readCoastFireSignupContext } from '@/lib/coast-fire-signup-context';
-import { hasRetirementSignupSource, readRetirementSignupContext } from '@/lib/retirement-signup-context';
+import {
+  COAST_FIRE_REF_COOKIE,
+  fetchCoastFireSignupContext,
+  hasCoastFireSignupSource,
+  readCoastFireSignupContext,
+} from '@/lib/coast-fire-signup-context';
+import {
+  RETIREMENT_REF_COOKIE,
+  fetchRetirementSignupContext,
+  hasRetirementSignupSource,
+  readRetirementSignupContext,
+} from '@/lib/retirement-signup-context';
+import {
+  SIGN_IN_HANDOVER_COOKIE_PATH,
+  clearHandoverToken,
+  readHandoverToken,
+} from '@/lib/calculator-handover';
 
 interface SubscriptionContext {
   subscription: string;
@@ -44,8 +59,9 @@ function LoginFormContent() {
   /*
    * Set when a calculator sent an existing account here: the address cannot
    * register again, so signing in is how its run reaches the account. Read
-   * from the stored signup context the calculator wrote, never from the URL,
-   * which carries only which calculator it was.
+   * from the stored signup context the calculator wrote, or from the handover
+   * cookie the emailed link left (`/<calculator>/continue?to=sign-in`), never
+   * from the URL, which carries only which calculator it was.
    */
   const [calculatorRun, setCalculatorRun] = useState<CalculatorRun | null>(null);
   const [password, setPassword] = useState('');
@@ -66,15 +82,35 @@ function LoginFormContent() {
 
   useEffect(() => {
     const isCoastFire = hasCoastFireSignupSource(searchParams);
-    const context = isCoastFire
-      ? readCoastFireSignupContext()
-      : hasRetirementSignupSource(searchParams)
-        ? readRetirementSignupContext()
-        : null;
-    if (!context?.sourceToken) return;
-    setCalculatorRun({ ref: context.sourceToken, label: isCoastFire ? 'Coast FIRE' : 'retirement' });
-    const storedEmail = context.email;
-    if (storedEmail) setEmail(current => current || storedEmail);
+    if (!isCoastFire && !hasRetirementSignupSource(searchParams)) return;
+    const label = isCoastFire ? 'Coast FIRE' : 'retirement';
+    const context = isCoastFire ? readCoastFireSignupContext() : readRetirementSignupContext();
+    if (context?.sourceToken) {
+      setCalculatorRun({ ref: context.sourceToken, label });
+      const storedEmail = context.email;
+      if (storedEmail) setEmail(current => current || storedEmail);
+      return;
+    }
+
+    // Arrived from the email instead. The cookie is spent here: the run is
+    // held in state for this visit, and a later visit is an ordinary sign-in.
+    const cookieName = isCoastFire ? COAST_FIRE_REF_COOKIE : RETIREMENT_REF_COOKIE;
+    const emailedRef = readHandoverToken(cookieName);
+    if (!emailedRef) return;
+    clearHandoverToken(cookieName, SIGN_IN_HANDOVER_COOKIE_PATH);
+    setCalculatorRun({ ref: emailedRef, label });
+
+    // Best effort: the lookup only prefills the address.
+    const controller = new AbortController();
+    const lookup = isCoastFire
+      ? fetchCoastFireSignupContext(emailedRef, controller.signal)
+      : fetchRetirementSignupContext(emailedRef, controller.signal);
+    void lookup.then((result) => {
+      if (result.status !== 'resolved') return;
+      const leadEmail = result.context.email;
+      if (leadEmail) setEmail(current => current || leadEmail);
+    }).catch(() => undefined);
+    return () => controller.abort();
   }, [searchParams]);
 
   // Check if user came from subscription context or has access denied message

@@ -21,10 +21,10 @@ jest.mock('../../services/retirement-quickplan-log', () => ({
 
 /** The results-email dependencies, held the same way and for the same reason. */
 const email = {
-  // The full results email: sent only when the lead did not store.
+  // The full results email. These routes never send it; kept as a guard.
   send: jest.fn(async () => true),
   // The figure-free "ready in Ask Linc" email: the ordinary path.
-  ready: jest.fn<Promise<boolean>, [{ calculator: string; inputs: Array<[string, string]>; email: string; ctaUrl: string }]>(async () => true),
+  ready: jest.fn<Promise<boolean>, [{ calculator: string; inputs: Array<[string, string]>; email: string; ctaUrl: string; existingAccount?: boolean }]>(async () => true),
 };
 
 /** The link the ready email carried. */
@@ -326,23 +326,18 @@ describe('retirement quick plan route', () => {
     /** The send is fired, then MailerLite is called after the response. */
     const settle = () => new Promise((resolve) => setImmediate(resolve));
 
-    it('emails figures it computed rather than figures it was handed', async () => {
-      // Only an existing account's fallback mails figures at all.
-      accounts.exists.mockResolvedValue(true);
+    it('mails no verdict, even one it was handed', async () => {
       const response = await request(buildApp())
         .post('/api/retirement-quickplan/email-results')
         // A caller-supplied verdict must not be able to reach an inbox under
-        // our branding. Only the plan's own inputs are read.
+        // our branding, and neither may the one we compute.
         .send({ ...SHORT_PLAN, email: 'Reader@Example.com', survivalRate: 1 });
 
       expect(response.status).toBe(200);
-      const [address, result, primary] = email.send.mock.calls[0] as unknown as [
-        string, { inputs: { retirementAge: number } }, { survivalRate: number },
-      ];
-      expect(address).toBe('reader@example.com');
-      expect(result.inputs.retirementAge).toBe(SHORT_PLAN.retirementAge);
-      expect(primary.survivalRate).toBeGreaterThanOrEqual(0);
-      expect(primary.survivalRate).toBeLessThanOrEqual(1);
+      expect(email.send).not.toHaveBeenCalled();
+      const [options] = email.ready.mock.calls[0];
+      expect(options.email).toBe('reader@example.com');
+      expect(JSON.stringify(options)).not.toMatch(/survival/i);
     }, 60_000);
 
     it('links the email at the token-stripping redirect, never at the figures', async () => {
@@ -391,11 +386,11 @@ describe('retirement quick plan route', () => {
     }, 60_000);
 
     /*
-     * An address that already has an account cannot register again, and the
-     * ready email states no answer, so they get the full results and a
-     * sign-in link instead of a handoff.
+     * An address that already has an account cannot register again. It gets
+     * the same figure-free message, linked to sign-in, where the run is
+     * attached — never the answer itself.
      */
-    it('sends an existing account to sign in with the run, mailing the results as a fallback', async () => {
+    it('sends an existing account to sign in with the run, mailing no figures', async () => {
       accounts.exists.mockResolvedValue(true);
 
       const response = await request(app)
@@ -406,12 +401,13 @@ describe('retirement quick plan route', () => {
       // The page carries this to sign-in, which attaches the run to the account.
       expect(response.body.ref).toMatch(/^[a-f0-9]{48}$/);
       expect(response.body.existingAccount).toBe(true);
-      expect(email.ready).not.toHaveBeenCalled();
-      const [, , , ctaUrl, options] = email.send.mock.calls[0] as unknown as [
-        string, unknown, unknown, string, { existingAccount: boolean },
-      ];
-      expect(ctaUrl).toBe('http://localhost:3001/login');
-      expect(options).toEqual({ existingAccount: true });
+      expect(email.send).not.toHaveBeenCalled();
+      const [options] = email.ready.mock.calls[0];
+      expect(options.existingAccount).toBe(true);
+      const ctaUrl = new URL(options.ctaUrl);
+      expect(ctaUrl.pathname).toBe('/retirement/continue');
+      expect(ctaUrl.searchParams.get('ref')).toBe(response.body.ref);
+      expect(ctaUrl.searchParams.get('to')).toBe('sign-in');
     }, 60_000);
 
     /*

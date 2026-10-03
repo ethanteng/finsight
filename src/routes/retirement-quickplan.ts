@@ -16,7 +16,7 @@
 import express, { Request, Response } from 'express';
 import { createFixedWindowRateLimit, positiveIntFromEnv } from './fixed-window-rate-limit';
 import { validateEmail } from '../auth/utils';
-import { sendCalculatorReadyEmail, sendRetirementResultsEmail } from '../auth/resend-email';
+import { sendCalculatorReadyEmail } from '../auth/resend-email';
 import { retirementInputRows } from '../email/retirement-results';
 import { getBaseUrl } from '../email/templates';
 import {
@@ -118,12 +118,11 @@ function readEmail(raw: unknown): string {
  * to a clean URL, so the token is never in the address of a rendered page,
  * where Google Tag Manager and every tag in the container would see it.
  */
-function loginUrl(): string {
-  return `${getBaseUrl()}/login`;
-}
-
-function signupUrl(token: string): string {
-  return `${getBaseUrl()}/retirement/continue?ref=${token}`;
+function continueUrl(token: string, existingAccount: boolean): string {
+  const url = `${getBaseUrl()}/retirement/continue?ref=${token}`;
+  // An address that already has an account cannot register again, so its
+  // link lands on sign-in, where the run is attached, instead of on signup.
+  return existingAccount ? `${url}&to=sign-in` : url;
 }
 
 /** Everything the form needs to render without hardcoding the model's bounds. */
@@ -290,23 +289,14 @@ router.post('/email-results', emailRateLimit, async (req: Request, res: Response
     return;
   }
 
-  // See the Coast FIRE route: the full results go out only to an address that
-  // already has an account, which the page sends to sign in instead.
-  const handOff = !existingAccount;
-  const emailSent = handOff
-    ? await sendCalculatorReadyEmail({
-      calculator: 'retirement',
-      inputs: retirementInputRows(result),
-      email,
-      ctaUrl: signupUrl(token),
-    })
-    : await sendRetirementResultsEmail(
-      email,
-      result,
-      primary,
-      loginUrl(),
-      { existingAccount: true },
-    );
+  // See the Coast FIRE route: every stored lead gets the figure-free message.
+  const emailSent = await sendCalculatorReadyEmail({
+    calculator: 'retirement',
+    inputs: retirementInputRows(result),
+    email,
+    ctaUrl: continueUrl(token, existingAccount),
+    existingAccount,
+  });
 
   if (!emailSent) {
     res.status(502).json({
@@ -335,11 +325,7 @@ router.post('/email-results', emailRateLimit, async (req: Request, res: Response
   // response may sit in a shared cache.
   res.setHeader('Cache-Control', 'no-store');
   res.json({
-    // A new address was sent the figure-free ready email; only the fallback
-    // mails the results themselves.
-    message: handOff
-      ? 'Your retirement result is ready in Ask Linc.'
-      : 'Your retirement results are on their way.',
+    message: 'Your retirement result is ready in Ask Linc.',
     ref,
     // Lets the page send this visitor to sign in rather than to a signup that
     // would refuse the address.

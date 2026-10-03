@@ -10,6 +10,9 @@ import { NextResponse, type NextRequest } from 'next/server';
 import {
   HANDOVER_COOKIE_MAX_AGE_SECONDS,
   HANDOVER_COOKIE_PATH,
+  SIGN_IN_HANDOVER_COOKIE_PATH,
+  SIGN_IN_HANDOVER_PARAM,
+  SIGN_IN_HANDOVER_VALUE,
   isHandoverToken,
 } from './calculator-handover';
 
@@ -18,15 +21,19 @@ import {
  *
  * `destination` is always one of our own signup URLs, built from a constant
  * rather than from anything in the request, so this can never become an open
- * redirect.
+ * redirect. A link sent to an address that already has an account adds
+ * `to=sign-in`, which picks `signInDestination` — also a constant — and scopes
+ * the cookie to sign-in, the page that spends it there.
  */
 export function handoverRedirect(
   request: NextRequest,
-  options: { cookieName: string; destination: string },
+  options: { cookieName: string; destination: string; signInDestination: string },
 ): NextResponse {
   const ref = request.nextUrl.searchParams.get('ref');
+  const signIn =
+    request.nextUrl.searchParams.get(SIGN_IN_HANDOVER_PARAM) === SIGN_IN_HANDOVER_VALUE;
   const response = NextResponse.redirect(
-    new URL(options.destination, request.nextUrl.origin),
+    new URL(signIn ? options.signInDestination : options.destination, request.nextUrl.origin),
     // 302, not 308: the exchange is a one-time action, and a permanent
     // redirect is exactly the kind of thing a browser caches and replays.
     302,
@@ -40,7 +47,7 @@ export function handoverRedirect(
       httpOnly: false,
       sameSite: 'lax',
       secure: request.nextUrl.protocol === 'https:',
-      path: HANDOVER_COOKIE_PATH,
+      path: signIn ? SIGN_IN_HANDOVER_COOKIE_PATH : HANDOVER_COOKIE_PATH,
       maxAge: HANDOVER_COOKIE_MAX_AGE_SECONDS,
     });
   }

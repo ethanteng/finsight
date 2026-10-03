@@ -7,6 +7,7 @@
 
 import type { NextRequest } from 'next/server';
 import { handoverRedirect } from '@/lib/calculator-handover-redirect';
+import { COAST_FIRE_SIGN_IN_HREF } from '@/lib/calculator-lead-attach';
 import {
   COAST_FIRE_REF_COOKIE,
   COAST_FIRE_SIGNUP_HREF,
@@ -19,5 +20,6 @@ export function GET(request: NextRequest) {
   return handoverRedirect(request, {
     cookieName: COAST_FIRE_REF_COOKIE,
     destination: COAST_FIRE_SIGNUP_HREF,
+    signInDestination: COAST_FIRE_SIGN_IN_HREF,
   });
 }

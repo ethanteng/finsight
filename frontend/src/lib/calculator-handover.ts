@@ -30,6 +30,15 @@ export const HANDOVER_COOKIE_MAX_AGE_SECONDS = 10 * 60;
 /** Only /getstarted ever spends one, so only /getstarted is ever sent one. */
 export const HANDOVER_COOKIE_PATH = GET_STARTED_HREF;
 
+/**
+ * The same handover for an address that already has an account: its email
+ * links to sign-in, which spends the token by attaching the run, so the
+ * cookie is scoped there instead.
+ */
+export const SIGN_IN_HANDOVER_COOKIE_PATH = '/login';
+export const SIGN_IN_HANDOVER_PARAM = 'to';
+export const SIGN_IN_HANDOVER_VALUE = 'sign-in';
+
 export function isHandoverToken(value: unknown): value is string {
   return typeof value === 'string' && TOKEN_PATTERN.test(value);
 }
@@ -159,12 +168,12 @@ export function leaveForSignup(href: string): void {
  * which would leave the bearer token readable for the rest of its ten minutes
  * after the page believed it had spent it.
  */
-export function clearHandoverToken(cookieName: string): void {
+export function clearHandoverToken(cookieName: string, path: string = HANDOVER_COOKIE_PATH): void {
   if (typeof document === 'undefined') return;
   const secure =
     typeof window !== 'undefined' && window.location.protocol === 'https:'
       ? '; Secure'
       : '';
   document.cookie =
-    `${cookieName}=; Path=${HANDOVER_COOKIE_PATH}; Max-Age=0; SameSite=Lax${secure}`;
+    `${cookieName}=; Path=${path}; Max-Age=0; SameSite=Lax${secure}`;
 }

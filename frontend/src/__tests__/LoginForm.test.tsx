@@ -284,4 +284,67 @@ describe('LoginForm', () => {
       expect(screen.queryByText(/result is ready/i)).not.toBeInTheDocument();
     });
   });
+
+  /*
+   * An existing account's email links through `/<calculator>/continue?to=sign-in`,
+   * which leaves the token in a cookie scoped to sign-in. No stored context
+   * exists on this device, so the cookie is the only copy of the run.
+   */
+  describe('arriving from the emailed link', () => {
+    const TOKEN = 'f'.repeat(48);
+
+    beforeEach(() => {
+      window.history.pushState({}, '', '/login?source=retirement-calculator');
+      searchParams = new URLSearchParams('source=retirement-calculator');
+      document.cookie = `asklinc_rt_ref=${TOKEN}; Path=/login`;
+    });
+
+    afterEach(() => {
+      document.cookie = 'asklinc_rt_ref=; Path=/login; Max-Age=0';
+      window.history.pushState({}, '', '/');
+    });
+
+    it('takes the run from the cookie, spends it, and attaches it after sign-in', async () => {
+      global.fetch = jest.fn(async (url: RequestInfo | URL) => {
+        const target = String(url);
+        if (target.includes('/signup-context/')) {
+          return {
+            ok: true,
+            json: async () => ({
+              inputs: {
+                currentAge: 45, retirementAge: 65, investableAssets: 500_000,
+                annualSpending: 80_000, annualContributions: 20_000,
+                socialSecurityAnnual: 24_000, socialSecurityStartAge: 67,
+                lifeExpectancy: 92, allocation: 'balanced',
+              },
+              email: 'member@example.com',
+            }),
+          };
+        }
+        if (target.includes('/auth/login')) {
+          return { ok: true, json: async () => ({ token: 'secure-token', user: {} }) };
+        }
+        if (target.includes('/auth/calculator-lead')) {
+          return { ok: true, json: async () => ({ attached: true }) };
+        }
+        return { ok: true, json: async () => ({ status: 'active', accessLevel: 'full' }) };
+      }) as unknown as typeof fetch;
+
+      render(<LoginForm />);
+
+      expect(screen.getByText('Your retirement result is ready.')).toBeInTheDocument();
+      // Spent on arrival: a second visit is an ordinary sign-in.
+      expect(document.cookie).not.toContain(TOKEN);
+      // The lookup fills in the address the run was sent to.
+      await waitFor(() => expect(screen.getByLabelText('Email address')).toHaveValue('member@example.com'));
+
+      fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'correct-password' } });
+      fireEvent.click(screen.getByRole('button', { name: /Sign in to your workspace/i }));
+
+      await waitFor(() => expect(push).toHaveBeenCalledWith('/app'));
+      const attach = jest.mocked(global.fetch).mock.calls
+        .find(([url]) => String(url).includes('/auth/calculator-lead'))!;
+      expect(JSON.parse(String((attach[1] as RequestInit).body))).toEqual({ calculatorRef: TOKEN });
+    });
+  });
 });

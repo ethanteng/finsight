@@ -244,8 +244,10 @@ page and a GA4 pageview records the full URL, so a token sitting in the address
 of a rendered page would be handed to analytics and to every other tag in the
 container. `/coast-fire/continue` therefore does the handover before any page
 exists: it reads the token server-side, sets it as a cookie that lives ten
-minutes and is only sent on `/getstarted`, and redirects to an address with no
-token in it. The signup page spends the cookie and deletes it. A blocked cookie
+minutes and is only sent on `/getstarted` (or on `/login`, for a sign-in link),
+and redirects to an address with no token in it. The page it lands on spends
+the cookie and deletes it. `to=sign-in` is the only destination the link can
+choose, and both destinations are constants. A blocked cookie
 costs the personalization, not the signup.
 
 The token does still appear in first-party server logs for that one redirect.
@@ -277,12 +279,14 @@ signup, and what the visitor entered. It states no verdict and no figure the
 calculator produced. Mailing the answer would let the inbox stand in for the
 account, and the account is the point. It goes to every new address.
 
-An address that already has an account gets the full results email
-(`email/coast-fire-results.ts`) instead, with a "Sign in to Ask Linc" button.
-The page sends that visitor to sign in, where the run is attached; the email is
-the fallback for someone who leaves before signing in, and its plain `/login`
-link carries no run, so it states the result itself. Nothing is mailed when the
-lead did not store.
+An address that already has an account gets the same message, worded for
+sign-in ("Sign in to your Ask Linc account and your result opens there as a new
+decision"), and its link carries `&to=sign-in`. `/coast-fire/continue` then
+redirects to `/login?source=coast-fire-calculator` instead of signup, with the
+handover cookie scoped to `/login`. The sign-in form spends that cookie, fills
+in the address from `GET /api/coast-fire/signup-context/:token`, and attaches
+the run after sign-in. No email carries the answer, whoever it goes to. Nothing
+is mailed when the lead did not store.
 
 Every send includes an HTML part and a plain-text part with the same content,
 so a text-first client shows the message rather than a "view this in a

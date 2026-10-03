@@ -22,9 +22,10 @@ shares its machinery. This page covers what differs.
    straight to `/getstarted?source=retirement-calculator&entry=results_page`,
    where the visitor chooses a password. Registration skips the code and opens
    `/app` on the seeded first decision. An address that already has an account
-   gets the full results email with a sign-in link instead, and the page sends
-   it to `/login?source=retirement-calculator`, which attaches the run through
-   `POST /auth/calculator-lead` after sign-in and opens `/app`. A visitor
+   gets the same figure-free email worded for sign-in, linked to
+   `/retirement/continue?ref=<token>&to=sign-in`, and the page sends it to
+   `/login?source=retirement-calculator`. Either way, sign-in attaches the run
+   through `POST /auth/calculator-lead` and opens `/app`. A visitor
    already signed in as that address skips both: the run is attached and the
    page opens `/app` directly.
 4. After the response, the address is added to MailerLite, in the retirement

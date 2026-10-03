@@ -479,7 +479,7 @@ does that now.
 |---|---|
 | Capture posts the six numbers | `RetirementEmailCapture.tsx` → `POST /api/retirement-quickplan/email-results` |
 | Lead stored with the plan and the verdict | `services/retirement-leads.ts` |
-| Figure-free ready email (or full results if store failed) | `email/calculator-ready.ts` / `email/retirement-results.ts` |
+| Figure-free ready email (signup or sign-in link) | `email/calculator-ready.ts` |
 | Token stamped disclosed, then returned as `ref` | `markRetirementLeadTokenDisclosed` — before the response |
 | Page writes the same cookie and leaves for signup | `RetirementEmailCapture.tsx` → `writeHandoverToken`, `leaveForSignup` |
 | Email links to `/retirement/continue?ref=…` | `email/calculator-ready.ts` |
