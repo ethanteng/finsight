@@ -112,6 +112,25 @@ describe('buildCashFlowModel', () => {
     expect(built.typicalPayees.find(payee => payee.counterpartyKey === 'sitter')?.daily).toBeCloseTo(total / 90, 6);
   });
 
+  it('does not let refunds make repeating large purchases look like one-offs', () => {
+    // Three $3,000 purchases on an irregular cadence (not a monthly stream) are
+    // how the user lives. Two $3,000 refunds outside those windows must not net
+    // the rest to near zero and make each purchase stand out on its own.
+    const store = [
+      tx('card', '2026-07-08', 'expense', 3000, 'ACME STORE', { merchant_name: 'Acme Store' }),
+      tx('card', '2026-07-29', 'expense', 3000, 'ACME STORE', { merchant_name: 'Acme Store' }),
+      tx('card', '2026-09-12', 'expense', 3000, 'ACME STORE', { merchant_name: 'Acme Store' }),
+      tx('card', '2026-08-10', 'refund', 3000, 'ACME STORE', { merchant_name: 'Acme Store' }),
+      tx('card', '2026-08-25', 'refund', 3000, 'ACME STORE', { merchant_name: 'Acme Store' }),
+    ];
+    const before = model();
+    const built = model({ transactions: [...transactions, ...store] });
+    expect(built.streams.some(stream => stream.counterpartyKey === 'acme store')).toBe(false);
+    expect(built.oneOffs.some(entry => entry.counterpartyKey === 'acme store')).toBe(false);
+    // Net +$3,000 over the basis stays in the rate; refunds must not drive it to zero.
+    expect(built.typical.dailySpending).toBeCloseTo(before.typical.dailySpending + 3000 / 90, 6);
+  });
+
   it('forecasts recurring items on their dates plus typical spending by the day', () => {
     const built = model();
     const october = forecastTotals(built, '2026-10-01', '2026-11-01')!;

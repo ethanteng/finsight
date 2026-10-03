@@ -366,13 +366,19 @@ function learnFlows(
     residualByPayee.set(key, [...(residualByPayee.get(key) ?? []), entry]);
   }
   for (const entries of residualByPayee.values()) {
-    const payeeTotal = entries.reduce((sum, entry) => sum + entry.amount, 0);
     for (const entry of entries) {
+      // Sum the occasion signed (pieces of one move, or a charge and its
+      // same-trip refund), but measure everything else in absolute terms so
+      // unrelated refunds cannot cancel repeating purchases and make each
+      // one look like a stand-out.
       const occasion = entries
         .filter(other => Math.abs(daysBetween(entry.date, other.date)) <= ONE_OCCASION_DAYS)
         .reduce((sum, other) => sum + other.amount, 0);
+      const rest = entries
+        .filter(other => Math.abs(daysBetween(entry.date, other.date)) > ONE_OCCASION_DAYS)
+        .reduce((sum, other) => sum + Math.abs(other.amount), 0);
       const size = Math.abs(occasion);
-      if (size >= oneOffThresholds[entry.flow] && size >= ONE_OFF_STANDS_OUT * Math.abs(payeeTotal - occasion)) standsOut.add(entry.id);
+      if (size >= oneOffThresholds[entry.flow] && size >= ONE_OFF_STANDS_OUT * rest) standsOut.add(entry.id);
     }
   }
   const looksOneOff = (entry: CashFlowEntry) => (entry.counterpartyKey
