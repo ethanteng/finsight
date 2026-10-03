@@ -1,3 +1,4 @@
+import { addDays } from '../../cash-flow/calendar';
 import {
   buildCashFlowHighlights,
   buildCashFlowModel,
@@ -79,6 +80,36 @@ describe('buildCashFlowModel', () => {
     expect(built.transfers.oneOffs.map(entry => entry.amount)).toEqual([20000, 20000, 20000, 20000]);
     expect(built.transfers.dailyByAccount.get('checking')?.out ?? 0).toBeCloseTo(before.transfers.dailyByAccount.get('checking')?.out ?? 0, 6);
     expect(built.typical.dailySpending).toBeCloseTo(before.typical.dailySpending + 6000 / 90, 6);
+  });
+
+  it('leaves out a lump to a payee the user also pays regularly', () => {
+    const toBrokerage = { personal_finance_category: { primary: 'TRANSFER_OUT', detailed: 'TRANSFER_OUT_INVESTMENT_AND_RETIREMENT_FUNDS' } };
+    const toBroker = (date: string, amount: number, id: string) => tx('checking', date, 'transfer_out', amount, `BROKERAGE DES:ACH ID:XX${id}`, toBrokerage);
+    const lump = ['2026-08-11', '2026-08-13', '2026-08-14', '2026-08-17'].map((date, index) => toBroker(date, 20000, `${index}114`));
+    // A monthly contribution, one of them a few days before the lump...
+    const monthly = ['2026-06-05', '2026-07-06', '2026-08-05', '2026-09-08'].map((date, index) => toBroker(date, 500, `${index}500`));
+    // ...or small ones now and then.
+    const nowAndThen = [['2026-07-02', 200], ['2026-07-29', 350], ['2026-09-15', 275]] as const;
+    const irregular = nowAndThen.map(([date, amount], index) => toBroker(date, amount, `${index}900`));
+
+    for (const regular of [monthly, irregular]) {
+      const built = model({ transactions: [...transactions, ...regular, ...lump] });
+      expect(built.transfers.oneOffs.filter(entry => entry.amount === 20000)).toHaveLength(4);
+      // What stays in the rate is the small amounts, not the lump: about $500 a month, not $900 a day.
+      expect(built.transfers.dailyByAccount.get('checking')?.out ?? 0).toBeLessThan(20);
+    }
+  });
+
+  it('keeps a payee paid every few days in the rate, however large each payment', () => {
+    // Every three or eleven days, about $700: never a schedule, never a lump.
+    const dates: string[] = [];
+    for (let date = '2026-07-04', step = 3; date <= '2026-09-30'; date = addDays(date, step), step = step === 3 ? 11 : 3) dates.push(date);
+    const sitter = dates.map((date, index) => tx('checking', date, 'expense', 650 + (index % 3) * 50, 'SITTER CO'));
+    const built = model({ transactions: [...transactions, ...sitter] });
+    expect(built.oneOffs.some(entry => entry.counterpartyKey === 'sitter')).toBe(false);
+    expect(built.streams.some(stream => stream.counterpartyKey === 'sitter')).toBe(false);
+    const total = sitter.filter(item => String(item.date) >= '2026-07-03').reduce((sum, item) => sum + Number(item.amount), 0);
+    expect(built.typicalPayees.find(payee => payee.counterpartyKey === 'sitter')?.daily).toBeCloseTo(total / 90, 6);
   });
 
   it('forecasts recurring items on their dates plus typical spending by the day', () => {

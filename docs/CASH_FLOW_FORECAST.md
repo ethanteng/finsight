@@ -36,10 +36,13 @@ A forecast has three disclosed parts:
      - So dates that keep to a two-week step, each within two days of it, are biweekly however they fall in the month.
    - Annual charges are not recognised, because a year of history shows them once. They fall into typical spending as a daily rate.
 2. **Typical**: everything else, as a daily rate over at most the last 90 days.
-   - A large amount from a payee seen on only one occasion in that window is a one-off. It is left out of the rate and listed, because a past windfall or big purchase is not assumed to repeat.
-     - Amounts from one payee within ten days of each other, first to last, are one occasion, and their total is what counts as large. A sum moved in pieces is one move: a transfer limit can split $80,000 into four $20,000 transfers over a week.
-     - Before this rule, such pieces counted as a payee seen four times, and were spread over the window as a typical rate of about $900 a day, every day of the forecast. The same holds for transfers, which are learned the same way.
-     - A payee seen across more than ten days is part of how the user lives, however large.
+   - A one-off is a large amount that is not how the user deals with that payee. It is left out of the rate and listed, because a past windfall or big purchase is not assumed to repeat.
+     - The test: taken together with the payee's amounts within ten days of it, the amount is large for the user and at least twice everything else from that payee in the window.
+     - Amounts a few days apart count together. A transfer limit can split an $80,000 move into four $20,000 transfers over a week, and those pieces are one $80,000 occasion. Counted as a payee seen four times, they were spread over the window as about $900 a day, every day of the forecast.
+     - A payee's smaller amounts don't make a lump ordinary. A $500 monthly contribution to the same brokerage, or the odd small transfer, leaves the $80,000 a one-off.
+     - Only what no recurring stream projects is judged, so a stream's amounts never count against a lump.
+     - A payee whose large amounts recur is how the user lives, however large: two $3,000 payments to a roofer weeks apart stay in the rate.
+     - Income, spending and transfers are all judged this way, since all three are learned the same way.
    - A monthly income or expense override from the Finances page replaces the recurring and typical parts of that side.
 3. **Planned** (`planned-events.ts`): events the user saved.
 
