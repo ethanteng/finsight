@@ -48,7 +48,12 @@ const created = {
 const prisma = {
   user: {
     findUnique: jest.fn(async () => null),
-    create: jest.fn(async () => created),
+    // Echo the verified bit the route wrote so the response body contract is
+    // tested, not just the create args.
+    create: jest.fn(async (args: { data: { emailVerified: boolean } }) => ({
+      ...created,
+      emailVerified: args.data.emailVerified,
+    })),
     update: jest.fn(async () => created),
   },
   privacySettings: { create: jest.fn(async () => ({})) },
@@ -91,7 +96,10 @@ describe('a calculator lead token and the verification code', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     prisma.user.findUnique.mockResolvedValue(null as never);
-    prisma.user.create.mockResolvedValue(created as never);
+    prisma.user.create.mockImplementation(async (args: { data: { emailVerified: boolean } }) => ({
+      ...created,
+      emailVerified: args.data.emailVerified,
+    }));
   });
 
   it('accepts an emailed token as proof of the address', async () => {
@@ -102,6 +110,7 @@ describe('a calculator lead token and the verification code', () => {
 
     expect(res.status).toBe(201);
     expect(createdWithEmailVerified()).toBe(true);
+    expect(res.body.user.emailVerified).toBe(true);
     expect(sendVerificationCode).not.toHaveBeenCalled();
     expect(res.body.firstDecisionPending).toBe(true);
     expect(leads.seed).toHaveBeenCalled();
@@ -121,6 +130,7 @@ describe('a calculator lead token and the verification code', () => {
 
     expect(res.status).toBe(201);
     expect(createdWithEmailVerified()).toBe(false);
+    expect(res.body.user.emailVerified).toBe(false);
     expect(sendVerificationCode).not.toHaveBeenCalled();
     expect(prisma.emailVerificationCode.create).not.toHaveBeenCalled();
     expect(res.body.firstDecisionPending).toBe(true);
