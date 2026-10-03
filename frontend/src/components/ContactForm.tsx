@@ -1,9 +1,10 @@
 "use client";
 import { useState } from 'react';
+import BrandMark from '@/components/BrandMark';
 import { Button } from './ui/button';
 import { Card, CardContent } from './ui/card';
 import { Badge } from './ui/badge';
-import { Brain, MessageCircle, Send, CheckCircle, ExternalLink, Menu, X, ChevronDown } from 'lucide-react';
+import { MessageCircle, Send, CheckCircle, ExternalLink, Menu, X, ChevronDown } from 'lucide-react';
 import Link from 'next/link';
 import { pushBeginCheckout } from '@/lib/dataLayer';
 import SiteFooter from './SiteFooter';
@@ -100,7 +101,7 @@ export default function ContactForm() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <Link href="/" className="flex items-center space-x-2 hover:opacity-90 transition-opacity">
-              <Brain className="h-8 w-8 text-primary" />
+              <BrandMark />
               <span className="text-xl font-bold gradient-text">Ask Linc</span>
             </Link>
             <div className="hidden md:flex items-center space-x-8">

@@ -10,7 +10,7 @@
  * accounts.
  */
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   Bar,
   BarChart,
@@ -537,6 +537,27 @@ export function RetirementQuickPlan({
     setRunCount(readRunCount(RETIREMENT_RUN_COUNT_KEY));
   }, []);
 
+  /*
+   * Scroll to a new run only once it has committed with the results visible.
+   * These updates land after an await, so React schedules their render rather
+   * than flushing it inside the submit, and a frame callback can run first —
+   * Firefox's does. The results are still hidden then, so the scroll is a
+   * no-op, and when the render does land it hides the form above the
+   * viewport and leaves the visitor below the results instead of on them. A
+   * layout effect runs after the commit and before paint. Keep the flag until
+   * `showInputs` is false so a partial flush cannot clear it while the block
+   * is still hidden.
+   */
+  const scrollToResultsRef = useRef(false);
+  useLayoutEffect(() => {
+    if (!scrollToResultsRef.current || showInputs) return;
+    const node = resultsRef.current;
+    if (!node) return;
+    scrollToResultsRef.current = false;
+    node.focus({ preventScroll: true });
+    node.scrollIntoView({ behavior: "auto", block: "start" });
+  }, [runId, showInputs]);
+
   function editInputs() {
     if (locked) return;
     setShowInputs(true);
@@ -600,6 +621,8 @@ export function RetirementQuickPlan({
       }
 
       const answered = payload as QuickPlanResult;
+      // Arm before scheduling state so a layout pass cannot miss the intent.
+      scrollToResultsRef.current = true;
       setResult(answered);
       setRunId((current) => current + 1);
       setShowInputs(false);
@@ -615,11 +638,6 @@ export function RetirementQuickPlan({
        * with no way left to enter the full plan that would have been savable.
        */
       if (answered.primary) setRunCount(recordRun(RETIREMENT_RUN_COUNT_KEY, runCount));
-      // Let the results render before scrolling to them.
-      requestAnimationFrame(() => {
-        resultsRef.current?.focus({ preventScroll: true });
-        resultsRef.current?.scrollIntoView({ behavior: "auto", block: "start" });
-      });
     } catch {
       pushRetirementInteraction('retirement_request_error');
       setError("We couldn’t run the calculation. Please try again in a moment.");

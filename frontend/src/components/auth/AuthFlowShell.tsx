@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import BrandMark from '@/components/BrandMark';
 import { Check, ShieldCheck } from 'lucide-react';
 import SiteFooter from '../SiteFooter';
 
@@ -29,7 +30,7 @@ export default function AuthFlowShell({
       <header className="border-b border-[#123c2f]/10 bg-[#f5f1e8]">
         <div className="mx-auto flex h-20 w-full max-w-7xl items-center justify-between px-5 sm:px-8">
           <Link href="/" className="flex items-center gap-2.5 font-semibold tracking-tight" aria-label="Ask Linc home">
-            <span className="grid h-9 w-9 place-items-center rounded-[10px_10px_10px_3px] bg-[#102319] text-lg font-bold text-[#d9ff6f]">L</span>
+            <BrandMark />
             <span className="text-xl">Ask Linc</span>
           </Link>
           <Link href="/login" className="text-sm font-semibold text-[#34594e] transition hover:text-[#123c2f]">

@@ -1,6 +1,7 @@
 "use client";
 import { useState } from 'react';
-import { Brain, Menu, X, ChevronDown } from 'lucide-react';
+import BrandMark from '@/components/BrandMark';
+import { Menu, X, ChevronDown } from 'lucide-react';
 import Link from 'next/link';
 import { Button } from './ui/button';
 import { pushBeginCheckout } from '@/lib/dataLayer';
@@ -48,7 +49,7 @@ export default function SiteHeader() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
           <Link href="/" className="flex items-center space-x-2 hover:opacity-90 transition-opacity">
-            <Brain className="h-8 w-8 text-primary" />
+            <BrandMark />
             <span className="text-xl font-bold gradient-text">Ask Linc</span>
           </Link>
           <div className="hidden md:flex items-center space-x-8">

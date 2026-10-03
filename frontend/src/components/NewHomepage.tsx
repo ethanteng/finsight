@@ -1,5 +1,6 @@
 "use client";
 import { Button } from './ui/button';
+import BrandMark from '@/components/BrandMark';
 import { Card, CardContent } from './ui/card';
 import MailerLiteScript from './MailerLiteScript';
 import AnimatedPrompt from './AnimatedPrompt';
@@ -121,7 +122,7 @@ const NewHomepage = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center space-x-2">
-              <Brain className="h-8 w-8 text-primary" />
+              <BrandMark />
               <span className="text-xl font-bold gradient-text">Ask Linc</span>
             </div>
             <div className="hidden md:flex items-center space-x-8">
