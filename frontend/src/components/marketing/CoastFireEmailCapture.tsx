@@ -127,6 +127,7 @@ export function CoastFireEmailCapture({
 
       if (!response.ok) {
         const body = await response.json().catch(() => null) as { error?: string } | null;
+        // 503: the lead did not store, so nothing any account could open.
         setError(body?.error || "We could not save that just now. Please try again.");
         setStatus("idle");
         return;
@@ -136,9 +137,16 @@ export function CoastFireEmailCapture({
       const token = isHandoverToken(body?.ref) ? body.ref : null;
       if (!mounted.current) return;
       if (!token) {
-        // Nothing stored, so no account could open it. Not shown here either:
-        // the result belongs in Ask Linc, and a retry usually stores it.
-        setError("We could not save your result just now. Please try again in a moment.");
+        /*
+         * 200 without a ref: the lead stored and the ready email went out, but
+         * the disclosure stamp did not, so the token must not sit in this page.
+         * The emailed link still opens the run — a retry would only mint another.
+         */
+        setError(
+          body?.existingAccount === true
+            ? "Check your email for a sign-in link to open this result in Ask Linc."
+            : "Check your email for a link to open this result in Ask Linc.",
+        );
         setStatus("idle");
         return;
       }

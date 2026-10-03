@@ -280,6 +280,10 @@ is not allowed to stand between them and that:
 - A failed database write means no run for any account to open, so it is the
   one case the visitor is asked to retry (503). Nothing is mailed for it: a
   retry would send another.
+- A 200 with no `ref` means the lead stored and the ready email went out, but
+  the disclosure stamp did not, so the token must not sit in the page. The form
+  points at the inbox rather than inviting another lead; the emailed link still
+  opens the run.
 - MailerLite runs after the response and its outcome is recorded, never
   surfaced. A rejected address does not turn a delivered email into an error.
 - A failed *send* is the one case that returns an error (502), because there

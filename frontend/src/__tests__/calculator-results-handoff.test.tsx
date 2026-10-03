@@ -52,6 +52,8 @@ interface Api {
   plan?: unknown;
   /** What `email-results` answers. */
   send?: Record<string, unknown>;
+  /** HTTP status for `email-results` (default 200). */
+  sendStatus?: number;
   /** Whether `POST /auth/calculator-lead` attaches. */
   attached?: boolean;
   /** The signed-in account's address, for `GET /auth/verify`. */
@@ -60,7 +62,13 @@ interface Api {
 
 const calls: Array<{ url: string; init?: RequestInit }> = [];
 
-function mockApi({ plan = null, send = { message: 'sent', ref: REF }, attached = true, signedInAs }: Api = {}) {
+function mockApi({
+  plan = null,
+  send = { message: 'sent', ref: REF },
+  sendStatus = 200,
+  attached = true,
+  signedInAs,
+}: Api = {}) {
   global.fetch = jest.fn().mockImplementation((url: string, init?: RequestInit) => {
     calls.push({ url: String(url), init });
     if (String(url).includes('/auth/verify')) {
@@ -75,7 +83,11 @@ function mockApi({ plan = null, send = { message: 'sent', ref: REF }, attached =
       return Promise.resolve({ ok: true, json: async () => ({ allocations: [] }) });
     }
     if (String(url).includes('/email-results')) {
-      return Promise.resolve({ ok: true, json: async () => send });
+      return Promise.resolve({
+        ok: sendStatus >= 200 && sendStatus < 300,
+        status: sendStatus,
+        json: async () => send,
+      });
     }
     return Promise.resolve({ ok: true, json: async () => plan });
   }) as unknown as typeof fetch;
@@ -197,14 +209,33 @@ describe('Coast FIRE calculator', () => {
     expect(document.body).not.toHaveTextContent(COAST_FIRE_NUMBER);
   });
 
-  /* Nothing stored is nothing any account could open: an error to retry. */
+  /* Nothing stored is a 503: an error to retry, and no answer on the page. */
   it('asks for a retry, and shows no answer, when nothing was stored', async () => {
-    mockApi({ send: { message: 'sent', ref: null } });
+    mockApi({
+      send: { error: 'We could not save your result just now. Please try again in a moment.' },
+      sendStatus: 503,
+    });
     render(<CoastFireCalculator />);
     calculate();
     giveEmail();
 
     expect(await screen.findByRole('alert')).toHaveTextContent(/could not save your result/i);
+    expect(document.body).not.toHaveTextContent(COAST_FIRE_NUMBER);
+    expect(leaveForSignup).not.toHaveBeenCalled();
+  });
+
+  /*
+   * 200 without a ref means the ready email went out but the disclosure stamp
+   * did not, so the token must not sit in the page. Point at the inbox rather
+   * than inviting another lead.
+   */
+  it('points at the emailed link when the token cannot be handed to the page', async () => {
+    mockApi({ send: { message: 'sent', ref: null } });
+    render(<CoastFireCalculator />);
+    calculate();
+    giveEmail();
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/check your email/i);
     expect(document.body).not.toHaveTextContent(COAST_FIRE_NUMBER);
     expect(leaveForSignup).not.toHaveBeenCalled();
   });
@@ -339,13 +370,29 @@ describe('retirement calculator', () => {
   });
 
   it('asks for a retry, and shows no verdict, when nothing was stored', async () => {
-    mockApi({ plan: PLAN, send: { message: 'sent', ref: null } });
+    mockApi({
+      plan: PLAN,
+      send: { error: 'We could not save your result just now. Please try again in a moment.' },
+      sendStatus: 503,
+    });
     renderPage();
     await runTheModel();
     await screen.findByText('Your result is ready.');
     giveEmail();
 
     expect(await screen.findByRole('alert')).toHaveTextContent(/could not save your result/i);
+    expect(screen.queryByText(/retiring at 60 worked in/i)).not.toBeInTheDocument();
+    expect(leaveForSignup).not.toHaveBeenCalled();
+  });
+
+  it('points at the emailed link when the token cannot be handed to the page', async () => {
+    mockApi({ plan: PLAN, send: { message: 'sent', ref: null } });
+    renderPage();
+    await runTheModel();
+    await screen.findByText('Your result is ready.');
+    giveEmail();
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/check your email/i);
     expect(screen.queryByText(/retiring at 60 worked in/i)).not.toBeInTheDocument();
     expect(leaveForSignup).not.toHaveBeenCalled();
   });
