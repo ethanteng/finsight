@@ -440,7 +440,6 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
       const options = {
         email: context.email,
         sourceToken: token,
-        emailedOutcome: context.emailedOutcome,
       };
       storeCoastFireSignupContext(context.inputs, options);
       pushSignupEntryOpened('coast_fire_calculator');
@@ -511,7 +510,6 @@ function RegisterFormContent({ variant }: { variant: RegisterFormVariant }) {
       const options = {
         email: context.email,
         sourceToken: token,
-        emailedOutcome: context.emailedOutcome,
       };
       storeRetirementSignupContext(context.inputs, options);
       pushSignupEntryOpened('retirement_calculator');

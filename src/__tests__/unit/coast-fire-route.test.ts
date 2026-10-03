@@ -11,8 +11,6 @@ const ROUTE_MODULE = '../../routes/coast-fire';
  * to these holders instead.
  */
 const email = {
-  // The full results email. These routes never send it; kept as a guard.
-  send: jest.fn(async () => true),
   // The figure-free "ready in Ask Linc" email: the ordinary path.
   ready: jest.fn<Promise<boolean>, [{ calculator: string; inputs: Array<[string, string]>; email: string; ctaUrl: string; existingAccount?: boolean }]>(async () => true),
 };
@@ -26,12 +24,6 @@ const list = {
     async () => 'subscribed',
   ),
 };
-const reading = {
-  interpret: jest.fn<Promise<unknown>, unknown[]>(async () => null),
-};
-jest.mock('../../services/coast-fire-interpretation', () => ({
-  interpretCoastFire: (...args: unknown[]) => reading.interpret(...args),
-}));
 
 const leads = {
   record: jest.fn(async () => true),
@@ -43,7 +35,6 @@ const leads = {
 };
 
 jest.mock('../../auth/resend-email', () => ({
-  sendCoastFireResultsEmail: (...args: unknown[]) => email.send(...(args as [])),
   sendCalculatorReadyEmail: (...args: unknown[]) => email.ready(...(args as [never])),
 }));
 jest.mock('../../services/mailerlite-subscribe', () => ({
@@ -106,7 +97,6 @@ const settle = () => new Promise((resolve) => setImmediate(resolve));
 describe('POST /api/coast-fire/email-results', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    email.send.mockResolvedValue(true);
     email.ready.mockResolvedValue(true);
     list.subscribe.mockResolvedValue('subscribed');
     leads.record.mockResolvedValue(true);
@@ -131,7 +121,6 @@ describe('POST /api/coast-fire/email-results', () => {
     expect(response.body.ref).toMatch(/^[a-f0-9]{48}$/);
     expect(response.body.existingAccount).toBe(true);
     expect(leads.disclose).toHaveBeenCalledWith(response.body.ref);
-    expect(email.send).not.toHaveBeenCalled();
     const [options] = email.ready.mock.calls[0];
     expect(options.existingAccount).toBe(true);
     const ctaUrl = new URL(options.ctaUrl);
@@ -186,7 +175,6 @@ describe('POST /api/coast-fire/email-results', () => {
       .post('/api/coast-fire/email-results')
       .send({ ...SCENARIO, email: 'reader@example.com' });
 
-    expect(email.send).not.toHaveBeenCalled();
     const [options] = email.ready.mock.calls[0];
     expect(options.calculator).toBe('coast_fire');
     expect(options.email).toBe('reader@example.com');
@@ -209,7 +197,6 @@ describe('POST /api/coast-fire/email-results', () => {
     expect(response.status).toBe(503);
     expect(response.body.ref).toBeUndefined();
     expect(leads.disclose).not.toHaveBeenCalled();
-    expect(email.send).not.toHaveBeenCalled();
     expect(email.ready).not.toHaveBeenCalled();
   });
 
@@ -221,7 +208,6 @@ describe('POST /api/coast-fire/email-results', () => {
       .send({ ...SCENARIO, email: 'Reader@Example.com', coastFireNumber: 1 });
 
     expect(response.status).toBe(200);
-    expect(email.send).not.toHaveBeenCalled();
     const [options] = email.ready.mock.calls[0];
     expect(options.email).toBe('reader@example.com');
     expect(JSON.stringify(options)).not.toMatch(/369,?128|coastFireNumber/);
@@ -301,7 +287,6 @@ describe('POST /api/coast-fire/email-results', () => {
 
     expect(response.status).toBe(400);
     expect(response.body.field).toBe(field);
-    expect(email.send).not.toHaveBeenCalled();
     expect(email.ready).not.toHaveBeenCalled();
   });
 
@@ -312,7 +297,6 @@ describe('POST /api/coast-fire/email-results', () => {
 
     expect(response.status).toBe(400);
     expect(response.body.field).toBe('retirementAge');
-    expect(email.send).not.toHaveBeenCalled();
     expect(email.ready).not.toHaveBeenCalled();
   });
 
@@ -346,7 +330,7 @@ describe('GET /api/coast-fire/signup-context/:token', () => {
     leads.read.mockResolvedValue(null);
   });
 
-  it('returns the scenario behind a live token', async () => {
+  it('returns the scenario behind a live token, never its result', async () => {
     leads.read.mockResolvedValue({
       token: 'a'.repeat(48),
       email: 'reader@example.com',
@@ -361,8 +345,6 @@ describe('GET /api/coast-fire/signup-context/:token', () => {
     expect(response.body).toEqual({
       email: 'reader@example.com',
       inputs: SCENARIO,
-      coastFireNumber: 369_128.46,
-      hasReachedCoastFire: true,
     });
     // Personal to one link, so no intermediary may hold a copy.
     expect(response.headers['cache-control']).toBe('no-store');
@@ -392,74 +374,5 @@ describe('GET /api/coast-fire/signup-context/:token', () => {
     const context = await request(limited).get(`/api/coast-fire/signup-context/${'c'.repeat(48)}`);
 
     expect(context.status).toBe(404);
-  });
-});
-
-describe('POST /api/coast-fire/interpretation', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-    reading.interpret.mockResolvedValue(null);
-  });
-
-  /*
-   * The same rule the email route follows, for the same reason: prose under
-   * our branding may only describe figures we calculated. A caller-supplied
-   * result is ignored entirely.
-   */
-  it('reads figures it computed rather than figures it was handed', async () => {
-    reading.interpret.mockResolvedValue({ headline: 'A reading.', paragraphs: ['Body.'], watchOuts: [] });
-
-    const response = await request(buildApp())
-      .post('/api/coast-fire/interpretation')
-      .send({ ...SCENARIO, coastFireNumber: 1, hasReachedCoastFire: false });
-
-    expect(response.status).toBe(200);
-    const [result] = reading.interpret.mock.calls[0] as [{ coastFireNumber: number }];
-    expect(result.coastFireNumber).toBeCloseTo(369_128, 0);
-  });
-
-  /*
-   * A reading that could not be produced is the ordinary case, not an error:
-   * the page's answer was computed in the browser and is already complete.
-   */
-  it('answers 204 with no body when no reading was written', async () => {
-    const response = await request(buildApp()).post('/api/coast-fire/interpretation').send(SCENARIO);
-
-    expect(response.status).toBe(204);
-    expect(response.body).toEqual({});
-  });
-
-  it('refuses a scenario the formula would not accept, naming the field', async () => {
-    const response = await request(buildApp())
-      .post('/api/coast-fire/interpretation')
-      .send({ ...SCENARIO, withdrawalRate: 99 });
-
-    expect(response.status).toBe(400);
-    expect(response.body.field).toBe('withdrawalRate');
-    expect(reading.interpret).not.toHaveBeenCalled();
-  });
-
-  /* Every request past the cache is a model call we pay for, on a page with no
-   * account behind it. */
-  it('has its own window, tighter than the page itself', async () => {
-    const app = buildApp({ COAST_FIRE_INTERPRETATION_RATE_LIMIT: '1' });
-
-    await request(app).post('/api/coast-fire/interpretation').send(SCENARIO);
-    const second = await request(app).post('/api/coast-fire/interpretation').send(SCENARIO);
-
-    expect(second.status).toBe(429);
-    expect(reading.interpret).toHaveBeenCalledTimes(1);
-  });
-
-  /* And it is not spent by the send, nor does it spend the send's. */
-  it('does not share a window with the results email', async () => {
-    const app = buildApp({ COAST_FIRE_INTERPRETATION_RATE_LIMIT: '1' });
-
-    await request(app).post('/api/coast-fire/interpretation').send(SCENARIO);
-    const send = await request(app)
-      .post('/api/coast-fire/email-results')
-      .send({ ...SCENARIO, email: 'reader@example.com' });
-
-    expect(send.status).toBe(200);
   });
 });

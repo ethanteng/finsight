@@ -1,31 +1,27 @@
 /**
  * Public Coast FIRE endpoints.
  *
- * The seven-number formula itself still runs in the browser, and the result
- * panel still paints with no network at all. These routes exist for the three
- * things a browser cannot do on its own:
+ * The seven-number formula itself still runs in the browser. These routes
+ * exist for the two things a browser cannot do on its own:
  *
- *   POST /interpretation  have a model read the result back in plain language
- *   POST /email-results   send someone their result and put them on the list
- *   GET  /signup-context  hand the scenario back to /getstarted from the email
+ *   POST /email-results   store the run, email the visitor, put them on the list
+ *   GET  /signup-context  hand the scenario back to signup or sign-in
  *
- * All three are unauthenticated, because the whole point is reaching someone
- * who has no account yet. Each costs something different, so each has its own
- * window: the interpretation is a model call we pay for, the email puts mail
- * in an inbox chosen by the caller, and the context read is performed by a
- * recipient opening a link.
+ * Both are unauthenticated, because the whole point is reaching someone who
+ * has no account yet. Each costs something different, so each has its own
+ * window: the email puts mail in an inbox chosen by the caller, and the
+ * context read is performed by a recipient opening a link.
  *
- * Two of them recompute the result here rather than reading it out of the
- * request. Prose and mail carrying our branding may only describe figures we
- * calculated — otherwise either endpoint becomes a way to have Ask Linc state
- * an arbitrary number.
+ * The email route recomputes the result here rather than reading it out of
+ * the request: the run it stores becomes a decision in an account, so it may
+ * only hold figures we calculated.
  */
 
 import express, { Request, Response } from 'express';
 import { createFixedWindowRateLimit, positiveIntFromEnv } from './fixed-window-rate-limit';
 import { validateEmail } from '../auth/utils';
 import { sendCalculatorReadyEmail } from '../auth/resend-email';
-import { coastFireInputRows } from '../email/coast-fire-results';
+import { coastFireInputRows } from '../email/calculator-input-rows';
 import { getBaseUrl } from '../email/templates';
 import {
   calculateCoastFire,
@@ -40,7 +36,6 @@ import {
   readCoastFireLead,
   recordCoastFireLead,
 } from '../services/coast-fire-leads';
-import { interpretCoastFire } from '../services/coast-fire-interpretation';
 import { coastFireGroupIds, subscribeToMailerLite } from '../services/mailerlite-subscribe';
 import { parseCalculatorLeadAttribution } from '../services/calculator-lead-attribution';
 import { accountExistsForEmail } from '../services/calculator-account-lookup';
@@ -223,67 +218,11 @@ router.post('/email-results', emailRateLimit, async (req: Request, res: Response
 });
 
 /**
- * Tighter again than the email window, and for a different cost.
- *
- * Every accepted request that misses the cache is a model call we pay for, on
- * a page with no account behind it. The limit is set where a visitor trying
- * two or three variations of their scenario never notices it and a script
- * paying us to generate text does.
- */
-const INTERPRETATION_REQUESTS_PER_WINDOW = positiveIntFromEnv(
-  'COAST_FIRE_INTERPRETATION_RATE_LIMIT',
-  8,
-);
-
-const interpretationRateLimit = createFixedWindowRateLimit({
-  limit: INTERPRETATION_REQUESTS_PER_WINDOW,
-  trustedHops: TRUSTED_HOPS,
-});
-
-/**
- * The plain-language reading of a result, written by a model.
- *
- * Separate from the browser's own calculation on purpose. The formula is the
- * page's answer and paints with no network; this takes a model round trip, so
- * the page shows the number first and fills this in when it arrives. That
- * split is also what lets the reading fail — for a rate limit, a provider
- * outage, or a draft that stated a figure the formula never produced — without
- * taking the answer down with it.
- *
- * The seven inputs are re-run here rather than read out of the request, for
- * the same reason the email route re-runs them.
- *
- * A null interpretation is a 204, not an error. There is nothing wrong with
- * the request, and the page has nothing to show for it either way.
- */
-router.post('/interpretation', interpretationRateLimit, async (req: Request, res: Response) => {
-  let result;
-  try {
-    result = calculateCoastFire(parseCoastFireInputs(req.body));
-  } catch (error) {
-    if (error instanceof CoastFireValidationError) {
-      res.status(400).json({ error: error.message, field: error.field });
-      return;
-    }
-    console.error('❌ Coast FIRE interpretation failed to run the formula:', error);
-    res.status(400).json({ error: 'Check your numbers and try again.' });
-    return;
-  }
-
-  const interpretation = await interpretCoastFire(result);
-  if (!interpretation) {
-    res.status(204).end();
-    return;
-  }
-
-  res.json(interpretation);
-});
-
-/**
- * The scenario behind an emailed link, for the signup page to continue.
+ * The scenario behind an emailed link, for signup or sign-in to continue.
  *
  * Returns the seven inputs and the address the email went to, which is exactly
- * what the holder of this link already has in their inbox. An unknown or
+ * what the holder of this link already has in their inbox. Never the result:
+ * the answer opens in Ask Linc, not on the page that asks for this. An unknown or
  * expired token is a 404 with no detail, so the endpoint cannot be used to
  * test whether a token ever existed.
  */
@@ -302,14 +241,7 @@ router.get('/signup-context/:token', contextRateLimit, async (req: Request, res:
 
   // Never cached by an intermediary: the response is personal to one link.
   res.setHeader('Cache-Control', 'no-store');
-  // Include the emailed outcome, not just the inputs: signup must show the
-  // same Coast FIRE number the inbox carried, even after a formula change.
-  res.json({
-    email: lead.email,
-    inputs: lead.inputs,
-    coastFireNumber: lead.coastFireNumber,
-    hasReachedCoastFire: lead.hasReachedCoastFire,
-  });
+  res.json({ email: lead.email, inputs: lead.inputs });
 });
 
 export default router;

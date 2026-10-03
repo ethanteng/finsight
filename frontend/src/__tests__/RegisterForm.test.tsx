@@ -184,8 +184,6 @@ describe('RegisterForm', () => {
         json: async () => ({
           email: 'reader@example.com',
           inputs: COAST_FIRE_SCENARIO,
-          coastFireNumber: 545_371,
-          hasReachedCoastFire: false,
         }),
       })) as unknown as typeof fetch;
       global.fetch = fetchMock;
@@ -223,8 +221,6 @@ describe('RegisterForm', () => {
         json: async () => ({
           email: 'from-email@example.com',
           inputs: COAST_FIRE_SCENARIO,
-          coastFireNumber: 545_371,
-          hasReachedCoastFire: false,
         }),
       })) as unknown as typeof fetch;
 
@@ -289,7 +285,6 @@ describe('RegisterForm', () => {
         json: async () => ({
           email: 'reader@example.com',
           inputs: RETIREMENT_SCENARIO,
-          outcome: { survivalRate: 0.92, sequencesTested: 800, sequencesSurvived: 736 },
         }),
       })) as unknown as typeof fetch;
 
@@ -339,7 +334,6 @@ describe('RegisterForm', () => {
         json: async () => ({
           email: 'reader@example.com',
           inputs: RETIREMENT_SCENARIO,
-          outcome: { survivalRate: 0.92, sequencesTested: 800, sequencesSurvived: 736 },
         }),
       })) as unknown as typeof fetch;
 
@@ -361,7 +355,6 @@ describe('RegisterForm', () => {
         json: async () => ({
           email: 'reader@example.com',
           inputs: RETIREMENT_SCENARIO,
-          outcome: { survivalRate: 0.92, sequencesTested: 800, sequencesSurvived: 736 },
         }),
       })) as unknown as typeof fetch;
       global.fetch = fetchMock;
@@ -404,7 +397,6 @@ describe('RegisterForm', () => {
           json: async () => ({
             email: 'reader@example.com',
             inputs: RETIREMENT_SCENARIO,
-            outcome: { survivalRate: 0.92, sequencesTested: 800, sequencesSurvived: 736 },
           }),
         };
       }) as unknown as typeof fetch;
@@ -444,7 +436,6 @@ describe('RegisterForm', () => {
         json: async () => ({
           email: 'reader@example.com',
           inputs: RETIREMENT_SCENARIO,
-          outcome: { survivalRate: 0.92, sequencesTested: 800, sequencesSurvived: 736 },
         }),
       })) as unknown as typeof fetch;
 
@@ -479,8 +470,6 @@ describe('RegisterForm', () => {
         json: async () => ({
           email: 'reader@example.com',
           inputs: COAST_FIRE_SCENARIO,
-          coastFireNumber: 545_371,
-          hasReachedCoastFire: false,
         }),
       })) as unknown as typeof fetch;
 
@@ -534,7 +523,6 @@ describe('RegisterForm', () => {
           json: async () => ({
             email: 'reader@example.com',
             inputs: RETIREMENT_SCENARIO,
-            outcome: { survivalRate: 0.92, sequencesTested: 800, sequencesSurvived: 736 },
           }),
         };
       }) as unknown as typeof fetch;
@@ -591,7 +579,6 @@ describe('RegisterForm', () => {
           json: async () => ({
             email: 'reader@example.com',
             inputs: RETIREMENT_SCENARIO,
-            outcome: { survivalRate: 0.92, sequencesTested: 800, sequencesSurvived: 736 },
           }),
         };
       }) as unknown as typeof fetch;
@@ -629,7 +616,6 @@ describe('RegisterForm', () => {
           json: async () => ({
             email: 'reader@example.com',
             inputs: RETIREMENT_SCENARIO,
-            outcome: { survivalRate: 0.92, sequencesTested: 800, sequencesSurvived: 736 },
           }),
         };
       }) as unknown as typeof fetch;
@@ -668,7 +654,6 @@ describe('RegisterForm', () => {
           json: async () => ({
             email: 'reader@example.com',
             inputs: RETIREMENT_SCENARIO,
-            outcome: { survivalRate: 0.92, sequencesTested: 800, sequencesSurvived: 736 },
           }),
         };
       }) as unknown as typeof fetch;
@@ -722,7 +707,6 @@ describe('RegisterForm', () => {
             json: async () => ({
               email: 'reader@example.com',
               inputs: RETIREMENT_SCENARIO,
-              outcome: { survivalRate: 0.92, sequencesTested: 800, sequencesSurvived: 736 },
             }),
           };
         }) as unknown as typeof fetch;
@@ -803,9 +787,9 @@ describe('RegisterForm', () => {
 
     /*
      * The answer opens in the account, so the page before it states none —
-     * not even a verdict the lead carries from an older results email.
+     * not even a verdict an older backend still returns from the lookup.
      */
-    it('states no verdict, even one the lead carries', async () => {
+    it('states no verdict, even one an older lookup returns', async () => {
       searchParams = new URLSearchParams(`source=${RETIREMENT_SIGNUP_SOURCE}`);
       handOverRetirementRef('e'.repeat(48));
       global.fetch = jest.fn(async () => ({

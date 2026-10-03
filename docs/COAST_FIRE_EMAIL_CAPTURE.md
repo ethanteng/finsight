@@ -131,53 +131,13 @@ points at the capture instead. Shared with `/retirement-calculator` through
 setting that moves the number; the reasoning, and why it is a nudge rather than
 a control, is in `docs/RETIREMENT_QUICKPLAN.md`.
 
-## The reading under the number
+## No reading on this page
 
-**The Coast FIRE page no longer requests a reading.** It shows no result to
-read. The endpoint below still exists and is described as it stands; the
-answer the visitor sees in Ask Linc is the deterministic first decision, not
-this reading. The page used to post the same seven inputs to
-`POST /api/coast-fire/interpretation`, which re-runs the formula server-side and
-asks a model to say what the figures mean. The division is the one
-`docs/SCENARIO_MODELING.md` draws for the authenticated product: the formula
-produces every number, the model only describes them.
-
-`src/services/coast-fire-interpretation.ts` builds a fact block — every figure
-this run produced, plus a handful of published rates from named series — and
-`src/services/calculator-interpretation.ts` checks the draft against it. That
-check now only reports: a number that is not one of those facts, at the
-precision the draft wrote it to, is logged as `shipped with unverified figures`
-and the reading is shown anyway. The prompt is the only thing asking the model
-to stay inside the block. See "Why nothing is withheld" in
-`docs/RETIREMENT_QUICKPLAN.md`, which both pages share.
-
-A reading is still dropped when the model returns nothing usable — a provider
-error, a stall, or a response that never parses. That renders as nothing at
-all, which is why the endpoint answers `204` rather than an error.
-
-Three things are specific to this page rather than inherited from the quick
-plan:
-
-- **"Reached" is not permission to stop saving.** A green badge reads as one,
-  and the prompt forbids prescribing anything — stopping contributions,
-  changing jobs, spending more — in either direction.
-- **There is no probability here.** The quick plan tests a plan against
-  hundreds of real historical stretches and can report how many lasted. This
-  compounds one assumed return for a fixed number of years. The prompt forbids
-  "chance", "likely", and "on track to".
-- **The return and the withdrawal rate are the visitor's assumptions**, not our
-  estimates, and the fact labels say so.
-
-The rate labels are stored without digits (`thirty-year Treasury yield`, not
-`30-year`) and the as-of date is given to the month. Everything a fact shows the
-model is a number the model may then write, so a label reading "30-year" would
-license a bare `30` — and a draft could then state a horizon this scenario never
-ran.
-
-This is the one part of the page that is not computed in the browser. The form's
-note and the "is it free?" FAQ entry both say so: the number appears with no
-network round trip, and the reading beneath it sends the seven inputs and
-nothing else.
+The Coast FIRE page shows no result, so it no longer asks a model to describe
+one, and the `POST /api/coast-fire/interpretation` endpoint that did so has
+been removed. The answer the visitor sees in Ask Linc is the deterministic
+first decision. The only calculator reading left is the retirement page's
+published-rates mode; see `docs/RETIREMENT_QUICKPLAN.md`.
 
 ## Saving a run to an account
 
@@ -300,8 +260,6 @@ browser" stub. The HTML uses the shared email shell in `src/email/templates.ts`.
 | `MAILER_LITE_COAST_FIRE_GROUP_ID` | — | The Coast FIRE group. Unset means the address reaches the subscriber list without a group. |
 | `COAST_FIRE_EMAIL_RATE_LIMIT` | 5 | Sends per caller per minute. Far below the quick plan's 20: every accepted request puts mail in an address the caller chose. |
 | `COAST_FIRE_CONTEXT_RATE_LIMIT` | 30 | Token lookups per caller per minute, on its own window so a send does not spend it. |
-| `COAST_FIRE_INTERPRETATION_RATE_LIMIT` | 8 | Readings per caller per minute, on its own window. Every request past the cache is a model call we pay for on a page with no account behind it. |
-| `CALCULATOR_NARRATIVE_MODEL` | Haiku 4.5 | Shared with the retirement reading. See `src/openai/model-config.ts`. |
 | `COAST_FIRE_TRUSTED_PROXIES` | 1 | How many proxies sit in front of this process. See `routes/fixed-window-rate-limit.ts`. |
 | `RESEND_API_KEY` | — | Unset means no mail is sent and the endpoint reports success, matching the rest of the auth email path in development. |
 | `NEXT_PUBLIC_CALCULATOR_RUN_LIMIT` | 3 | Runs before the Calculate button locks, shared with the retirement calculator. **Frontend, so it is inlined at build time** — changing it needs a rebuild and redeploy, not a restart. Anything but a positive integer — unset, empty, `0`, `-1`, `2.5` — falls back to 3. There is no value meaning "no limit"; turning the nudge off belongs in code (or a very large number, which will read oddly in the lock copy). |

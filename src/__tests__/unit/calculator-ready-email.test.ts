@@ -7,7 +7,7 @@
  */
 
 import { buildCalculatorReadyEmail } from '../../email/calculator-ready';
-import { coastFireInputRows } from '../../email/coast-fire-results';
+import { coastFireInputRows } from '../../email/calculator-input-rows';
 import { calculateCoastFire } from '../../services/coast-fire';
 
 const RESULT = calculateCoastFire({

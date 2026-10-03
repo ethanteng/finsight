@@ -17,7 +17,7 @@ import express, { Request, Response } from 'express';
 import { createFixedWindowRateLimit, positiveIntFromEnv } from './fixed-window-rate-limit';
 import { validateEmail } from '../auth/utils';
 import { sendCalculatorReadyEmail } from '../auth/resend-email';
-import { retirementInputRows } from '../email/retirement-results';
+import { retirementInputRows } from '../email/calculator-input-rows';
 import { getBaseUrl } from '../email/templates';
 import {
   generateLeadToken,
@@ -360,12 +360,11 @@ router.post('/email-results', emailRateLimit, async (req: Request, res: Response
 });
 
 /**
- * The plan behind an emailed link, for the signup page to continue.
+ * The plan behind an emailed link, for signup or sign-in to continue.
  *
- * Returns the inputs, the verdict the email stated, and the address it went to
- * — exactly what the holder of this link already has in their inbox. The
- * stored verdict is returned rather than recomputed so the page cannot drift
- * away from the email as the engine and its dataset change. An unknown or
+ * Returns the inputs and the address the email went to — exactly what the
+ * holder of this link already has in their inbox. Never the verdict: the
+ * answer opens in Ask Linc, not on the page that asks for this. An unknown or
  * expired token is a 404 with no detail, so the endpoint cannot be used to
  * test whether a token was ever real.
  */
@@ -384,7 +383,7 @@ router.get('/signup-context/:token', contextRateLimit, async (req: Request, res:
 
   // Never cached by an intermediary: the response is personal to one link.
   res.setHeader('Cache-Control', 'no-store');
-  res.json({ email: lead.email, inputs: lead.inputs, outcome: lead.outcome });
+  res.json({ email: lead.email, inputs: lead.inputs });
 });
 
 export default router;

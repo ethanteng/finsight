@@ -45,17 +45,6 @@ export interface RetirementSignupInputs {
   allocation: 'conservative' | 'balanced' | 'growth';
 }
 
-/**
- * The verdict the email actually carried. Shown instead of anything recomputed:
- * the token lives for 90 days, and both the engine and the market dataset it
- * runs against change, so a fresh run could disagree with the inbox.
- */
-export interface RetirementEmailedOutcome {
-  survivalRate: number;
-  sequencesTested: number;
-  sequencesSurvived: number;
-}
-
 export interface RetirementSignupContext {
   version: typeof CONTEXT_VERSION;
   savedAt: number;
@@ -64,8 +53,6 @@ export interface RetirementSignupContext {
   email?: string;
   /** Token that produced this context, so a newer emailed link supersedes it. */
   sourceToken?: string;
-  /** Absent for a same-tab click-through, where nothing can have drifted. */
-  emailedOutcome?: RetirementEmailedOutcome;
 }
 
 function numberInRange(
@@ -120,25 +107,6 @@ function parseInputs(value: unknown): RetirementSignupInputs | null {
   };
 }
 
-/** Same rule as the inputs: a figure we would not have produced is discarded. */
-function parseEmailedOutcome(value: unknown): RetirementEmailedOutcome | null {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
-  const outcome = value as Record<string, unknown>;
-  if (
-    !numberInRange(outcome.survivalRate, 0, 1) ||
-    !numberInRange(outcome.sequencesTested, 1, 10_000, true) ||
-    !numberInRange(outcome.sequencesSurvived, 0, 10_000, true) ||
-    outcome.sequencesSurvived > outcome.sequencesTested
-  ) {
-    return null;
-  }
-  return {
-    survivalRate: outcome.survivalRate,
-    sequencesTested: outcome.sequencesTested,
-    sequencesSurvived: outcome.sequencesSurvived,
-  };
-}
-
 function removeStoredContext(): void {
   try {
     window.sessionStorage.removeItem(RETIREMENT_SIGNUP_STORAGE_KEY);
@@ -151,7 +119,6 @@ function removeStoredContext(): void {
 interface RetirementSignupOptions {
   email?: string;
   sourceToken?: string;
-  emailedOutcome?: RetirementEmailedOutcome;
   now?: number;
 }
 
@@ -176,10 +143,6 @@ export function buildRetirementSignupContext(
   const inputs = parseInputs(value);
   if (!inputs || !numberInRange(now, 0, Number.MAX_SAFE_INTEGER)) return null;
   if (options.sourceToken && !isHandoverToken(options.sourceToken)) return null;
-  const emailedOutcome = options.emailedOutcome
-    ? parseEmailedOutcome(options.emailedOutcome)
-    : null;
-  if (options.emailedOutcome && !emailedOutcome) return null;
 
   return {
     version: CONTEXT_VERSION,
@@ -187,7 +150,6 @@ export function buildRetirementSignupContext(
     inputs,
     ...(options.email ? { email: options.email } : {}),
     ...(options.sourceToken ? { sourceToken: options.sourceToken } : {}),
-    ...(emailedOutcome ? { emailedOutcome } : {}),
   };
 }
 
@@ -236,15 +198,13 @@ export function readRetirementSignupContext(
       return null;
     }
 
-    const emailedOutcome = parseEmailedOutcome(value.emailedOutcome);
     return {
       version: CONTEXT_VERSION,
       savedAt,
       inputs,
       ...(typeof value.email === 'string' ? { email: value.email } : {}),
       ...(isHandoverToken(value.sourceToken) ? { sourceToken: value.sourceToken } : {}),
-      ...(emailedOutcome ? { emailedOutcome } : {}),
-    };
+      };
   } catch {
     removeStoredContext();
     return null;
@@ -284,7 +244,6 @@ export async function fetchRetirementSignupContext(
 ): Promise<HandoverLookup<{
   inputs: RetirementSignupInputs;
   email?: string;
-  emailedOutcome?: RetirementEmailedOutcome;
 }>> {
   if (!isHandoverToken(token)) return { status: 'not-found' };
 
@@ -295,14 +254,12 @@ export async function fetchRetirementSignupContext(
     const body = await response.json() as {
       inputs?: unknown;
       email?: unknown;
-      outcome?: unknown;
     };
     const inputs = parseInputs(body?.inputs);
     // A 200 we cannot read is a problem with the stored row, not a passing
     // one, so the token is spent rather than retried forever.
     if (!inputs) return { status: 'not-found' };
 
-    const emailedOutcome = parseEmailedOutcome(body?.outcome);
     return {
       status: 'resolved',
       context: {
@@ -310,7 +267,6 @@ export async function fetchRetirementSignupContext(
         ...(typeof body.email === 'string' && body.email.includes('@')
           ? { email: body.email }
           : {}),
-        ...(emailedOutcome ? { emailedOutcome } : {}),
       },
     };
   } catch {
