@@ -85,6 +85,20 @@ read from the persisted manifest:
   canonical fact (`validation.deterministic.removals.keyNumbers`).
 - **Replaced answer** — the discarded text, when nothing survived and the user
   received the placeholder (`validation.deterministic.removals.replacedSummary`).
+- **Why the first draft was rejected** — what the first draft failed when it was
+  first checked, before any widening re-judged it: the reason recovery or a
+  retry ran (`validation.deterministic.initialIssues`). Shown only when it
+  differs from the shipped answer's own failures.
+- **Shipped the first draft** — the retry came back with no answer in it (not
+  the JSON object, or empty), so the first draft shipped in its place with its
+  unsupported parts removed (`validation.deterministic.shippedDraft`). A reply
+  in the wrong format counts as a failed generation even when every figure in
+  it is grounded; when neither generation is an answer, the user gets the
+  placeholder.
+- **Model calls** — each generation's provider, length, duration, stop reason
+  (`end_turn`, `max_tokens`, `stop`, `length`, ...) and whether it was the JSON
+  answer (`modelCalls[].stopReason`, `modelCalls[].responseFormat`). Shown when
+  there was a retry, a failed call, a malformed reply, or an early stop.
 - **Brave searches** — every standalone query, whether it was served from cache
   or cost a provider call, and the titles, links, and snippets it returned
   (`evidenceRefs.search.queryOutcomes`). A plan whose queries all failed has no

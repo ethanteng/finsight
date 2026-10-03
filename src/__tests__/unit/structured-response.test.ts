@@ -1,6 +1,7 @@
 import {
   parseDisplayText,
   parseStructuredResponse,
+  parseStructuredResponseWithFormat,
   formatKeyNumberValue,
   toDisplayText,
   AskLincResponse
@@ -77,6 +78,39 @@ describe('parseStructuredResponse', () => {
     expect(parseStructuredResponse('').summary).toBeTruthy();
     // @ts-expect-error testing runtime guard
     expect(parseStructuredResponse(null).summary).toBeTruthy();
+  });
+});
+
+describe('parseStructuredResponseWithFormat', () => {
+  it('calls a JSON answer structured, including one that needed repair', () => {
+    expect(parseStructuredResponseWithFormat('{"summary":"You are doing well.","insights":["A"]}').format)
+      .toBe('structured');
+    expect(parseStructuredResponseWithFormat('Here it is.\n```json\n{"summary":"Hi"}\n```').format)
+      .toBe('structured');
+    expect(parseStructuredResponseWithFormat('{"summary":"Hi","insights":["a","b"').format).toBe('structured');
+  });
+
+  it('calls plain text unstructured while still wrapping it as the summary', () => {
+    // The reply that shipped as a whole answer: one lead-in, no JSON around it.
+    const raw = "Based on your confirmation of $150,000/year in retirement spending, here's what the numbers show for your retirement plan.";
+    expect(parseStructuredResponseWithFormat(raw)).toEqual({
+      response: { summary: raw, insights: [], suggested_actions: [] },
+      format: 'unstructured',
+    });
+  });
+
+  it('calls nothing, or an object with nothing in it, empty', () => {
+    expect(parseStructuredResponseWithFormat('').format).toBe('empty');
+    expect(parseStructuredResponseWithFormat('   \n ').format).toBe('empty');
+    expect(parseStructuredResponseWithFormat(
+      '{"summary":"","key_numbers":{},"insights":[],"suggested_actions":[]}'
+    ).format).toBe('empty');
+  });
+
+  it('keeps an answer with no summary but real insights as structured', () => {
+    const parsed = parseStructuredResponseWithFormat('{"insights":["Cash covers six months."]}');
+    expect(parsed.format).toBe('structured');
+    expect(parsed.response.insights).toEqual(['Cash covers six months.']);
   });
 });
 

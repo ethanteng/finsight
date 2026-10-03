@@ -1,7 +1,7 @@
 import type { CanonicalFact } from './canonical-facts';
 import type { SalvageRemovals } from './response-facts';
 import type { ContextPackId } from './context-packs';
-import type { AskLincResponse } from './structured-response';
+import type { AskLincResponse, ResponseFormat } from './structured-response';
 import type { PlannedSearchQuery, SearchQueryEvidence } from '../data/search-types';
 import type {
   RetirementScenarioEvidence,
@@ -117,6 +117,18 @@ export interface EvidenceManifest {
     promptCharacters: number;
     responseCharacters: number;
     durationMs: number;
+    /**
+     * Why the provider stopped, in its own vocabulary: Claude's `stop_reason`
+     * (`end_turn`, `max_tokens`, ...) or OpenAI's `finish_reason` (`stop`,
+     * `length`, ...). Absent on failed calls, offline evaluation, and manifests
+     * persisted before it was recorded.
+     */
+    stopReason?: string;
+    /**
+     * Whether the reply was the JSON answer the prompt asks for. Absent on
+     * failed calls and manifests persisted before it was recorded.
+     */
+    responseFormat?: ResponseFormat;
   }>;
   timings: {
     /** Semantic preflight planner latency; absent on manifests from before context planning. */
@@ -148,6 +160,21 @@ export interface EvidenceManifest {
        * absent on manifests persisted before removals were recorded.
        */
       removals?: SalvageRemovals;
+      /**
+       * What the first draft failed when it was first checked, before any
+       * widening re-judged it. This is why recovery ran; `issues` above
+       * describes only the answer that shipped. Absent when the first draft
+       * passed, and on manifests persisted before it was recorded.
+       */
+      initialIssues?: string[];
+      /**
+       * Which generation the delivered answer was built from once a retry ran.
+       * `initial` means the retry came back with no answer in it and the first
+       * draft shipped in its place, with any unsupported parts removed. Absent
+       * when no retry ran, or when neither generation was an answer and the
+       * user received the placeholder.
+       */
+      shippedDraft?: 'initial' | 'retry';
     };
     secondary?: Array<{ phase: 'initial' | 'retry'; valid: boolean; issues: string[] }>;
   };

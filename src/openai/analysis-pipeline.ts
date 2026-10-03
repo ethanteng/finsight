@@ -17,7 +17,14 @@ import { buildPromptInputFromSnapshot, buildFinancialReasoningPrompt } from './f
 import { loadResponseToneConfig } from './prompt-config';
 import { loadModelConfig } from './model-config';
 import { askClaude, askClaudeStream, auditDataPacksWithClaude } from './claude-client';
-import { parseStructuredResponse, toDisplayText, extractPartialSummary, AskLincResponse } from './structured-response';
+import {
+  parseStructuredResponseWithFormat,
+  toDisplayText,
+  extractPartialSummary,
+  AskLincResponse,
+  RESPONSE_FORMAT_ISSUES,
+  type ResponseFormat,
+} from './structured-response';
 import { validateUserPrompt, getRejectionMessage } from '../security/prompt-validation';
 import { validateLLMResponse } from '../security/output-validation';
 import { logRejectedPrompt, logFlaggedOutput } from '../security/security-logger';
@@ -152,6 +159,11 @@ function evidenceTickers(
 
 function contextDigest(value: string | undefined): string | undefined {
   return value ? createHash('sha256').update(value).digest('hex') : undefined;
+}
+
+/** The validation issue a reply in the wrong format raises; none for a real answer. */
+function formatIssues(format: ResponseFormat): string[] {
+  return format === 'structured' ? [] : [RESPONSE_FORMAT_ISSUES[format]];
 }
 
 /**
@@ -531,88 +543,92 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
   const promptBuildMs = Date.now() - promptBuildStartedAt;
   const modelCalls: EvidenceManifest['modelCalls'] = [];
   const secondaryValidations: NonNullable<EvidenceManifest['validation']['secondary']> = [];
+  interface ModelReply {
+    rawResponse: string;
+    provider: 'claude' | 'openai';
+    response: AskLincResponse;
+    format: ResponseFormat;
+  }
   const callAnalysisModel = async (
     prompt: { systemPrompt: string; userMessage: string },
     phase: 'initial' | 'retry',
     preferredProvider: 'claude' | 'openai' = 'claude'
-  ): Promise<{ rawResponse: string; provider: 'claude' | 'openai' }> => {
+  ): Promise<ModelReply> => {
+    const promptCharacters = prompt.systemPrompt.length + prompt.userMessage.length;
+    const startedAt = Date.now();
+    let rawResponse: string;
+    let provider: 'claude' | 'openai';
+    // Written by the client's callback; a holder keeps TypeScript from
+    // narrowing it to its initial value at the read below.
+    const stop: { reason?: string } = {};
     if (evaluation) {
-      const startedAt = Date.now();
-      const rawResponse = await evaluation.model({
+      rawResponse = await evaluation.model({
         systemPrompt: prompt.systemPrompt,
         userMessage: prompt.userMessage,
         phase,
       });
-      modelCalls.push({
-        phase,
-        provider: 'claude',
-        outcome: 'success',
-        promptCharacters: prompt.systemPrompt.length + prompt.userMessage.length,
-        responseCharacters: rawResponse.length,
-        durationMs: Date.now() - startedAt,
+      provider = 'claude';
+    } else if (preferredProvider === 'openai') {
+      rawResponse = await askOpenAIWithPreparedPrompt(prompt.systemPrompt, prompt.userMessage, {
+        onFinishReason: (reason) => { stop.reason = reason ?? undefined; },
       });
-      return { rawResponse, provider: 'claude' };
+      provider = 'openai';
+    } else {
+      const onStopReason = (reason: string | null) => { stop.reason = reason ?? undefined; };
+      try {
+        rawResponse = onAnswerDelta
+          ? await askClaudeStream(prompt.systemPrompt, prompt.userMessage, makeAnswerStreamer(onAnswerDelta, () => {
+              firstAnswerTokenAt ??= Date.now();
+            }), { onStopReason })
+          : await askClaude(prompt.systemPrompt, prompt.userMessage, { onStopReason });
+        provider = 'claude';
+      } catch (error) {
+        modelCalls.push({
+          phase,
+          provider: 'claude',
+          outcome: 'failed',
+          promptCharacters,
+          responseCharacters: 0,
+          durationMs: Date.now() - startedAt,
+        });
+        console.error('Ask Linc: Claude failed; reusing the prepared context pack with OpenAI:', error);
+        onAnswerReset?.();
+        firstAnswerTokenAt = undefined;
+        onProgress?.('Primary model unavailable; using backup analysis model');
+        return callAnalysisModel(prompt, phase, 'openai');
+      }
     }
-    if (preferredProvider === 'openai') {
-      const startedAt = Date.now();
-      const rawResponse = await askOpenAIWithPreparedPrompt(prompt.systemPrompt, prompt.userMessage);
-      modelCalls.push({
-        phase,
-        provider: 'openai',
-        outcome: 'success',
-        promptCharacters: prompt.systemPrompt.length + prompt.userMessage.length,
-        responseCharacters: rawResponse.length,
-        durationMs: Date.now() - startedAt,
-      });
-      return {
-        rawResponse,
-        provider: 'openai',
-      };
-    }
-    const claudeStartedAt = Date.now();
-    try {
-      const raw = onAnswerDelta
-        ? await askClaudeStream(prompt.systemPrompt, prompt.userMessage, makeAnswerStreamer(onAnswerDelta, () => {
-            firstAnswerTokenAt ??= Date.now();
-          }))
-        : await askClaude(prompt.systemPrompt, prompt.userMessage);
-      modelCalls.push({
-        phase,
-        provider: 'claude',
-        outcome: 'success',
-        promptCharacters: prompt.systemPrompt.length + prompt.userMessage.length,
-        responseCharacters: raw.length,
-        durationMs: Date.now() - claudeStartedAt,
-      });
-      return { rawResponse: raw, provider: 'claude' };
-    } catch (error) {
-      modelCalls.push({
-        phase,
-        provider: 'claude',
-        outcome: 'failed',
-        promptCharacters: prompt.systemPrompt.length + prompt.userMessage.length,
-        responseCharacters: 0,
-        durationMs: Date.now() - claudeStartedAt,
-      });
-      console.error('Ask Linc: Claude failed; reusing the prepared context pack with OpenAI:', error);
-      onAnswerReset?.();
-      firstAnswerTokenAt = undefined;
-      onProgress?.('Primary model unavailable; using backup analysis model');
-      return callAnalysisModel(prompt, phase, 'openai');
-    }
+    const { response, format } = parseStructuredResponseWithFormat(rawResponse);
+    modelCalls.push({
+      phase,
+      provider,
+      outcome: 'success',
+      promptCharacters,
+      responseCharacters: rawResponse.length,
+      durationMs: Date.now() - startedAt,
+      ...(stop.reason && { stopReason: stop.reason }),
+      responseFormat: format,
+    });
+    return { rawResponse, provider, response, format };
   };
-  let { rawResponse, provider } = await callAnalysisModel({ systemPrompt, userMessage }, 'initial');
+  const initialReply = await callAnalysisModel({ systemPrompt, userMessage }, 'initial');
+  let { provider } = initialReply;
 
   // Step 4: Parse and validate the structured response locally.
   const validationStartedAt = Date.now();
-  let structuredResponse = canonicalizeResponseNumbers(parseStructuredResponse(rawResponse), factPack);
+  let structuredResponse = canonicalizeResponseNumbers(initialReply.response, factPack);
   let groundingResult = validateResponseFacts(structuredResponse, factPack);
   let deterministicOutcome: 'passed' | 'salvaged' | 'replaced' = 'passed';
   let salvageRemovals: SalvageRemovals | undefined;
+  let shippedDraft: 'initial' | 'retry' | undefined;
   let contextEscalated = false;
   let secondaryCaveat = false;
 
-  let validationIssues = groundingResult.issues;
+  // A reply that is not an answer fails here even when every figure it
+  // happens to contain is grounded; otherwise it ships as one.
+  const initialFormatIssues = formatIssues(initialReply.format);
+  const initialIssues = [...groundingResult.issues, ...initialFormatIssues];
+  let validationIssues = initialIssues;
 
   const runSecondaryValidation = async (phase: 'initial' | 'retry'): Promise<string[]> => {
     if (!enableValidation || !questionNeeds.needsSecondaryValidation) return [];
@@ -634,14 +650,16 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
 
   validationIssues = Array.from(new Set([
     ...validationIssues,
-    ...(await runSecondaryValidation('initial')),
+    // A reply that is not an answer has no reasoning to review.
+    ...(initialReply.format === 'structured' ? await runSecondaryValidation('initial') : []),
   ]));
 
   if (validationIssues.length > 0) {
     console.warn('Ask Linc: Response validation failed, regenerating with feedback:', validationIssues);
-    // Secondary validation reports reasoning, not fact citations, so widening the
-    // context cannot resolve those issues the way it can resolve a missing fact.
-    const secondaryIssues = validationIssues.filter((issue) => !groundingResult.issues.includes(issue));
+    // Secondary validation reports reasoning, not fact citations, and a reply in
+    // the wrong format is not missing a fact either, so widening the context
+    // cannot resolve these the way it can resolve a missing fact.
+    const nonGroundingIssues = validationIssues.filter((issue) => !groundingResult.issues.includes(issue));
 
     // The model reached for a number nobody gave it. Rather than re-prompting
     // against the same fact pack and hoping for restraint, widen the context and
@@ -721,9 +739,9 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
       // widened context just supplied — and when every issue resolves, the
       // answer was right all along and needs no second call at all.
       if (contextEscalated) {
-        structuredResponse = canonicalizeResponseNumbers(parseStructuredResponse(rawResponse), factPack);
+        structuredResponse = canonicalizeResponseNumbers(initialReply.response, factPack);
         groundingResult = validateResponseFacts(structuredResponse, factPack);
-        validationIssues = Array.from(new Set([...groundingResult.issues, ...secondaryIssues]));
+        validationIssues = Array.from(new Set([...groundingResult.issues, ...nonGroundingIssues]));
         if (validationIssues.length === 0) {
           console.warn('Ask Linc: Widened context grounded the original answer; skipping the retry.');
         }
@@ -731,6 +749,13 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
     }
 
     if (validationIssues.length > 0) {
+      // As judged against the final fact pack, so a fallback to it below is
+      // held to the same pack as the retry it stands in for.
+      const firstDraft = {
+        response: structuredResponse,
+        grounding: groundingResult,
+        format: initialReply.format,
+      };
       const retryPrompt = buildFinancialReasoningPrompt({
         ...promptInput,
         validationFeedback: selectValidationFeedback(validationIssues),
@@ -738,12 +763,44 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
       onAnswerReset?.();
       firstAnswerTokenAt = undefined;
       const retryResult = await callAnalysisModel(retryPrompt, 'retry', provider);
-      rawResponse = retryResult.rawResponse;
       provider = retryResult.provider;
-      structuredResponse = canonicalizeResponseNumbers(parseStructuredResponse(rawResponse), factPack);
-      groundingResult = validateResponseFacts(structuredResponse, factPack);
-      if (!groundingResult.valid) {
-        console.error('Ask Linc: Retry was still not grounded:', groundingResult.issues);
+      if (retryResult.format === 'structured') {
+        structuredResponse = canonicalizeResponseNumbers(retryResult.response, factPack);
+        groundingResult = validateResponseFacts(structuredResponse, factPack);
+        shippedDraft = 'retry';
+      } else if (firstDraft.format === 'structured') {
+        // The retry came back with no answer in it. The first draft was a real
+        // answer whose problems are already known, and salvage below can cut
+        // exactly those out. A retry that merely passes grounding is not a
+        // better answer when it says nothing: one such retry was a single
+        // lead-in sentence, and it replaced a full answer that had one
+        // unsupported figure.
+        console.error(`Ask Linc: Retry returned ${retryResult.format} output; keeping the first draft.`);
+        structuredResponse = firstDraft.response;
+        groundingResult = firstDraft.grounding;
+        shippedDraft = 'initial';
+      } else {
+        // Neither generation produced an answer, so there is nothing to salvage.
+        console.error(`Ask Linc: Both generations returned no answer (${firstDraft.format}, ${retryResult.format}).`);
+        groundingResult = {
+          valid: false,
+          issues: formatIssues(retryResult.format),
+          invalidKeyNumbers: [],
+          invalidSummary: true,
+        };
+        salvageRemovals = {
+          sentences: [],
+          keyNumbers: [],
+          ...(retryResult.rawResponse.trim() && { replacedSummary: retryResult.rawResponse.trim() }),
+        };
+        structuredResponse = { summary: UNVERIFIABLE_SUMMARY, insights: [], suggested_actions: [] };
+        deterministicOutcome = 'replaced';
+      }
+      if (deterministicOutcome !== 'replaced' && !groundingResult.valid) {
+        console.error(
+          `Ask Linc: ${shippedDraft === 'initial' ? 'First draft' : 'Retry'} was still not grounded:`,
+          groundingResult.issues
+        );
         // Keep the grounded part of the answer; the placeholder is the last resort.
         const salvage = salvageUngroundedResponseWithDetail(structuredResponse, factPack, groundingResult);
         structuredResponse = salvage.response;
@@ -865,6 +922,8 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
           issues: groundingResult.issues,
           outcome: deterministicOutcome,
           ...(salvageRemovals && { removals: salvageRemovals }),
+          ...(initialIssues.length > 0 && { initialIssues }),
+          ...(shippedDraft && { shippedDraft }),
         },
         ...(secondaryValidations.length > 0 && { secondary: secondaryValidations }),
       },

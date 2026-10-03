@@ -18,7 +18,11 @@ function getClient(): OpenAI {
 /** Use the exact already-built context pack when the primary provider is unavailable. */
 export async function askOpenAIWithPreparedPrompt(
   systemPrompt: string,
-  userMessage: string
+  userMessage: string,
+  options: {
+    /** Receives the completion's `finish_reason`, the counterpart of Claude's stop reason. */
+    onFinishReason?: (finishReason: string | null) => void;
+  } = {}
 ): Promise<string> {
   const model = getActiveModel('fallback');
   const response = await getClient().chat.completions.create({
@@ -45,6 +49,7 @@ export async function askOpenAIWithPreparedPrompt(
     console.warn(warning);
     Sentry.captureMessage(warning, 'warning');
   }
+  options.onFinishReason?.(response.choices[0]?.finish_reason ?? null);
 
   return response.choices[0]?.message?.content || '';
 }

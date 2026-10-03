@@ -57,10 +57,25 @@ export interface AnswerQualityObservation {
   details: AnswerQualityDetails;
 }
 
+/** One generation call, as the admin view needs to see it. */
+export type AnswerQualityModelCall = Pick<
+  EvidenceManifest['modelCalls'][number],
+  'phase' | 'provider' | 'outcome' | 'responseCharacters' | 'durationMs' | 'stopReason' | 'responseFormat'
+>;
+
 /** The per-answer record the admin view expands into. */
 export interface AnswerQualityDetails {
-  /** Deterministic grounding complaints, in the wording the validator produced. */
+  /** Deterministic grounding complaints about the answer that shipped, in the validator's wording. */
   groundingIssues: string[];
+  /**
+   * What the first draft failed when it was first checked: the reason any
+   * recovery or retry ran. Empty when it passed or the manifest predates it.
+   */
+  initialIssues: string[];
+  /** Which generation the delivered answer was built from, once a retry ran. */
+  shippedDraft?: 'initial' | 'retry';
+  /** Each generation call with how it ended, so a short or malformed reply is visible. */
+  modelCalls: AnswerQualityModelCall[];
   /** Reasoning objections raised by the secondary reviewer, by phase. */
   secondaryIssues: Array<{ phase: 'initial' | 'retry'; issues: string[] }>;
   /** Sentences cut out of the delivered answer, with the values that failed. */
@@ -115,12 +130,21 @@ function deliveryStatus(args: {
   outcome: AnswerQualityObservation['outcome'];
   rating: number | null;
   lateExpansion: boolean;
+  shippedDraft?: 'initial' | 'retry';
 }): Pick<AnswerQualityObservation, 'deliveryStatus' | 'statusReason'> {
   if (args.outcome === 'replaced') {
     return { deliveryStatus: 'failed', statusReason: 'The generated answer could not be verified, so the user received a fallback.' };
   }
   if (args.rating !== null && args.rating <= 2) {
     return { deliveryStatus: 'failed', statusReason: `The user rated this answer ${args.rating}/5.` };
+  }
+  if (args.shippedDraft === 'initial') {
+    return {
+      deliveryStatus: 'recovered',
+      statusReason: args.outcome === 'salvaged'
+        ? 'The retry came back with no answer in it, so the first draft shipped with its unsupported parts removed.'
+        : 'The retry came back with no answer in it, so the first draft shipped instead.',
+    };
   }
   if (args.outcome === 'salvaged') {
     return { deliveryStatus: 'recovered', statusReason: 'Unsupported parts were removed before the answer reached the user.' };
@@ -210,6 +234,17 @@ function toObservation(conversation: AnswerQualityConversation): AnswerQualityOb
     searchResultCount: searchEvidence?.resultCount ?? 0,
     details: {
       groundingIssues: deterministic?.issues ?? [],
+      initialIssues: deterministic?.initialIssues ?? [],
+      ...(deterministic?.shippedDraft && { shippedDraft: deterministic.shippedDraft }),
+      modelCalls: (manifest.modelCalls ?? []).map((call) => ({
+        phase: call.phase,
+        provider: call.provider,
+        outcome: call.outcome,
+        responseCharacters: call.responseCharacters,
+        durationMs: call.durationMs,
+        ...(call.stopReason && { stopReason: call.stopReason }),
+        ...(call.responseFormat && { responseFormat: call.responseFormat }),
+      })),
       secondaryIssues: (manifest.validation?.secondary ?? [])
         .filter((validation) => validation.issues.length > 0)
         .map((validation) => ({ phase: validation.phase, issues: validation.issues })),
@@ -219,7 +254,7 @@ function toObservation(conversation: AnswerQualityConversation): AnswerQualityOb
       plannedSearchQueries: finalSearchQueries,
       searchQueryOutcomes,
     },
-    ...deliveryStatus({ outcome, rating, lateExpansion }),
+    ...deliveryStatus({ outcome, rating, lateExpansion, shippedDraft: deterministic?.shippedDraft }),
   };
 }
 
