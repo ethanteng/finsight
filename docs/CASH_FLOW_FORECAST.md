@@ -41,6 +41,7 @@ A forecast has three disclosed parts:
      - Amounts a few days apart count together. A transfer limit can split an $80,000 move into four $20,000 transfers over a week, and those pieces are one $80,000 occasion. Counted as a payee seen four times, they were spread over the window as about $900 a day, every day of the forecast.
      - A payee's smaller amounts don't make a lump ordinary. A $500 monthly contribution to the same brokerage, or the odd small transfer, leaves the $80,000 a one-off.
      - Only what no recurring stream projects is judged, so a stream's amounts never count against a lump.
+     - "Everything else" is counted by sign: purchases against purchases, refunds against refunds. Netted, two unrelated $3,000 refunds would erase the evidence that three $3,000 purchases repeat and make all three one-offs. Counted this way, a refund of a one-off purchase is left out along with the purchase.
      - A payee whose large amounts recur is how the user lives, however large: two $3,000 payments to a roofer weeks apart stay in the rate.
      - Income, spending and transfers are all judged this way, since all three are learned the same way.
    - A monthly income or expense override from the Finances page replaces the recurring and typical parts of that side.

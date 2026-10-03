@@ -365,17 +365,16 @@ function learnFlows(
     const key = `${entry.flow}|${entry.counterpartyKey}`;
     residualByPayee.set(key, [...(residualByPayee.get(key) ?? []), entry]);
   }
+  // What else the payee has is counted by sign: purchases against purchases,
+  // refunds against refunds. Netted, two unrelated $3,000 refunds would erase
+  // the evidence that three $3,000 purchases repeat; this way a refund of a
+  // one-off purchase is left out with it, not left to pull the rate down.
   for (const entries of residualByPayee.values()) {
     for (const entry of entries) {
-      // Sum the occasion signed (pieces of one move, or a charge and its
-      // same-trip refund), but measure everything else in absolute terms so
-      // unrelated refunds cannot cancel repeating purchases and make each
-      // one look like a stand-out.
-      const occasion = entries
-        .filter(other => Math.abs(daysBetween(entry.date, other.date)) <= ONE_OCCASION_DAYS)
-        .reduce((sum, other) => sum + other.amount, 0);
+      const near = (other: CashFlowEntry) => Math.abs(daysBetween(entry.date, other.date)) <= ONE_OCCASION_DAYS;
+      const occasion = entries.filter(near).reduce((sum, other) => sum + other.amount, 0);
       const rest = entries
-        .filter(other => Math.abs(daysBetween(entry.date, other.date)) > ONE_OCCASION_DAYS)
+        .filter(other => !near(other) && Math.sign(other.amount) === Math.sign(occasion))
         .reduce((sum, other) => sum + Math.abs(other.amount), 0);
       const size = Math.abs(occasion);
       if (size >= oneOffThresholds[entry.flow] && size >= ONE_OFF_STANDS_OUT * rest) standsOut.add(entry.id);

@@ -100,6 +100,17 @@ describe('buildCashFlowModel', () => {
     }
   });
 
+  it('leaves a refund of a one-off purchase out with it', () => {
+    const sofa = [
+      tx('checking', '2026-08-03', 'expense', 5000, 'FURNITURE BARN'),
+      tx('checking', '2026-08-25', 'refund', 1500, 'FURNITURE BARN'),
+    ];
+    const built = model({ transactions: [...transactions, ...sofa] });
+    expect(built.oneOffs.filter(entry => entry.counterpartyKey === 'furniture barn').map(entry => entry.amount).sort((left, right) => left - right))
+      .toEqual([-1500, 5000]);
+    expect(built.typical.dailySpending).toBeCloseTo(model().typical.dailySpending, 6);
+  });
+
   it('keeps a payee paid every few days in the rate, however large each payment', () => {
     // Every three or eleven days, about $700: never a schedule, never a lump.
     const dates: string[] = [];
