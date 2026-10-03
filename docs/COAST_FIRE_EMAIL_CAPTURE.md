@@ -193,7 +193,12 @@ it came from. Seeding runs after the response and unawaited, and returns a
 reason rather than throwing — it may never fail a registration.
 
 See `docs/RETIREMENT_QUICKPLAN.md` for the deploy-ordering constraint this
-creates: **the frontend must ship first, or with the backend, never after.**
+creates: **for this Ask Linc handoff, deploy the backend (and the
+`Conversation.calculatorLeadToken` migration) first, or with the frontend,
+never after.** An older backend returns no `ref` for an existing account and
+has no attach route; a newer page that never reveals the answer would then
+strand that visitor. The older “frontend first” rule still applies only to the
+verification-code skip — see that doc.
 
 ## Why a token, and why it is not in the URL either
 

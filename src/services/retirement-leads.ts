@@ -107,7 +107,7 @@ export async function recordRetirementLead(params: {
  * what keeps a page-handed token from recording the address as verified, so a
  * token disclosed while the mark was lost would be one that still proves an
  * address nobody proved. Failing closed costs the page hand-off — the capture
- * shows the result on the page instead — and the emailed link still works.
+ * asks the visitor to use the emailed link instead — and that link still works.
  */
 export async function markRetirementLeadTokenDisclosed(token: string): Promise<boolean> {
   try {

@@ -413,7 +413,8 @@ on `emailVerified`, and the verify page has always offered "Skip for now", so
 the code was never what guarded the workspace. The owner of an address someone
 else registered can take the account back by resetting the password from their
 own inbox. If the stamp cannot be written, no token is returned and the page
-shows the result itself — there is no run to seed an account from.
+asks the visitor to use the emailed link — there is no run to seed from the
+page, and the page never shows the result itself.
 
 Going straight there also means no `/signup-context` exchange: the page stores
 the run in sessionStorage next to the cookie, carrying the same token, so
@@ -436,13 +437,16 @@ page tells the visitor to use the emailed link rather than putting an
 undisclosed token in the page. A lead read against a missing column errors too,
 which resolves to no lead, so the code is sent. More verification, never less.
 
-**For this Ask Linc handoff, deploy the backend first (or with the frontend).**
-An older backend still returns no `ref` for an existing account (and used to
-mail the full results instead). A newer page that never reveals the answer would
-then tell that visitor to retry, with no token to attach. The new backend returns
-the token for every stored lead and links existing accounts through sign-in, so
-that path only works once the backend is live. The older “frontend first” rule
-still applies to the verification-code skip alone:
+**For this Ask Linc handoff, deploy the backend first (or with the frontend),
+including the `Conversation.calculatorLeadToken` migration.** An older backend
+still returns no `ref` for an existing account (and used to mail the full
+results instead), and has no `POST /auth/calculator-lead`. A newer page that
+never reveals the answer would then point that visitor at an emailed link with
+no attach path behind it. The new backend returns the token for every stored
+lead, links existing accounts through sign-in, and writes
+`calculatorLeadToken` on seed and attach — so that path only works once the
+backend and its migration are live. The older “frontend first” rule still
+applies to the verification-code skip alone:
 
 - *Frontend first* is safe for registration fields. The new page sends
   `calculatorRef`, which an older backend ignores as an unknown body field, and

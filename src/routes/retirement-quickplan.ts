@@ -317,7 +317,7 @@ router.post('/email-results', emailRateLimit, async (req: Request, res: Response
    * Marked before it is returned, and not returned at all if the mark did not
    * take: a token loose in a page while the row still claims it was only
    * emailed would record a stranger's address as verified. Without a ref the
-   * page asks the visitor to try again; the emailed link still works.
+   * page asks the visitor to use the emailed link; that link still works.
    */
   const ref = (await markRetirementLeadTokenDisclosed(token)) ? token : null;
 
