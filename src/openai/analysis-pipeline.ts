@@ -651,8 +651,9 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
     // A reply that is not an answer has no reasoning to review.
     ...(initialReply.format === 'structured' ? await runSecondaryValidation('initial') : []),
   ]));
-  // Capture after the secondary merge and before widening re-judges grounding, so
-  // a Gemini-only rejection still records why recovery ran.
+  // Everything the first draft failed, as first checked: the reason any
+  // recovery or retry below runs. Widening re-judges the draft and replaces
+  // validationIssues, so this is the only record of the original verdict.
   const initialIssues = [...validationIssues];
 
   if (validationIssues.length > 0) {
@@ -925,10 +926,10 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
           issues: groundingResult.issues,
           outcome: deterministicOutcome,
           ...(salvageRemovals && { removals: salvageRemovals }),
-          ...(initialIssues.length > 0 && { initialIssues }),
           ...(shippedDraft && { shippedDraft }),
         },
         ...(secondaryValidations.length > 0 && { secondary: secondaryValidations }),
+        ...(initialIssues.length > 0 && { initialIssues }),
       },
       evidenceRefs: {
         tickers: evidenceTickers(snapshot, question),

@@ -1226,11 +1226,10 @@ describe('runAskLincAnalysis validation routing', () => {
     expect(result.structuredResponse.insights).toEqual(['Cash covers most of your net worth.']);
     expect(result.structuredResponse.suggested_actions).toEqual(['Keep your cash where it is.']);
     const manifest = result.showTheMathData!.evidenceManifest;
-    expect(manifest.validation.deterministic).toMatchObject({
-      outcome: 'salvaged',
-      shippedDraft: 'initial',
-      initialIssues: ['User-facing usd value 130000 is not present in the canonical fact pack.'],
-    });
+    expect(manifest.validation.deterministic).toMatchObject({ outcome: 'salvaged', shippedDraft: 'initial' });
+    expect(manifest.validation.initialIssues).toEqual([
+      'User-facing usd value 130000 is not present in the canonical fact pack.',
+    ]);
     expect(manifest.validation.deterministic.removals?.sentences.map((sentence) => sentence.text))
       .toEqual(['Plan for $130,000 a year.']);
     expect(manifest.modelCalls.map(({ phase, stopReason, responseFormat }) => ({ phase, stopReason, responseFormat })))
@@ -1283,8 +1282,10 @@ describe('runAskLincAnalysis validation routing', () => {
     expect(result.showTheMathData?.evidenceManifest.validation.deterministic).toMatchObject({
       outcome: 'passed',
       shippedDraft: 'retry',
-      initialIssues: [RESPONSE_FORMAT_ISSUES.unstructured],
     });
+    expect(result.showTheMathData?.evidenceManifest.validation.initialIssues).toEqual([
+      RESPONSE_FORMAT_ISSUES.unstructured,
+    ]);
   });
 
   it('gives the placeholder when neither generation is an answer', async () => {
@@ -1755,7 +1756,7 @@ describe('runAskLincAnalysis validation routing', () => {
     expect(result.showTheMathData?.evidenceManifest.secondaryCaveat).toBe(true);
     // The objection itself stays in the evidence, not in the user's answer.
     expect(result.structuredResponse.summary).not.toContain('ignores the cash position');
-    expect(result.showTheMathData?.evidenceManifest.validation.deterministic.initialIssues).toEqual([
+    expect(result.showTheMathData?.evidenceManifest.validation.initialIssues).toEqual([
       'Initial answer is unsupported.',
     ]);
     expect(result.showTheMathData?.evidenceManifest.validation.secondary).toEqual([

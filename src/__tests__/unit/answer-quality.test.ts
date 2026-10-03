@@ -101,9 +101,9 @@ function conversation(options: {
             issues: outcome === 'passed' ? [] : ['User-facing usd value 120000 is not present in the canonical fact pack.'],
             outcome,
             ...(options.removals ? { removals: options.removals } : {}),
-            ...(options.initialIssues && { initialIssues: options.initialIssues }),
             ...(options.shippedDraft && { shippedDraft: options.shippedDraft }),
           },
+          ...(options.initialIssues && { initialIssues: options.initialIssues }),
           ...(options.secondaryIssues && {
             secondary: [{ phase: 'retry', valid: false, issues: options.secondaryIssues }],
           }),

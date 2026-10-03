@@ -85,10 +85,11 @@ read from the persisted manifest:
   canonical fact (`validation.deterministic.removals.keyNumbers`).
 - **Replaced answer** — the discarded text, when nothing survived and the user
   received the placeholder (`validation.deterministic.removals.replacedSummary`).
-- **Why the first draft was rejected** — what the first draft failed when it was
-  first checked, before any widening re-judged it: the reason recovery or a
-  retry ran (`validation.deterministic.initialIssues`). Shown only when it
-  differs from the shipped answer's own failures.
+- **Why the first draft was rejected** — everything the first draft failed when
+  it was first checked, before any widening re-judged it: grounding, format, and
+  the secondary reviewer's objections, which together are the reason recovery
+  or a retry ran (`validation.initialIssues`). Shown only when it differs from
+  the shipped answer's own grounding failures.
 - **Shipped the first draft** — the retry came back with no answer in it (not
   the JSON object, or empty), so the first draft shipped in its place with its
   unsupported parts removed (`validation.deterministic.shippedDraft`). A reply

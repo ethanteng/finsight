@@ -161,14 +161,6 @@ export interface EvidenceManifest {
        */
       removals?: SalvageRemovals;
       /**
-       * What the first draft failed when it was first checked — grounding,
-       * format, and secondary — before any widening re-judged it. This is why
-       * recovery ran; `issues` above describes only the answer that shipped.
-       * Absent when the first draft passed, and on manifests persisted before
-       * it was recorded.
-       */
-      initialIssues?: string[];
-      /**
        * Which generation the delivered answer was built from once a retry ran.
        * `initial` means the retry came back with no answer in it and the first
        * draft shipped in its place, with any unsupported parts removed. Absent
@@ -178,6 +170,14 @@ export interface EvidenceManifest {
       shippedDraft?: 'initial' | 'retry';
     };
     secondary?: Array<{ phase: 'initial' | 'retry'; valid: boolean; issues: string[] }>;
+    /**
+     * Everything the first draft failed when it was first checked, before any
+     * widening re-judged it: grounding, format, and the secondary reviewer's
+     * objections. This is why recovery or a retry ran; `deterministic.issues`
+     * describes only the answer that shipped. Absent when the first draft
+     * passed, and on manifests persisted before it was recorded.
+     */
+    initialIssues?: string[];
   };
   evidenceRefs: {
     tickers: string[];

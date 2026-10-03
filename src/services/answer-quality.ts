@@ -234,7 +234,7 @@ function toObservation(conversation: AnswerQualityConversation): AnswerQualityOb
     searchResultCount: searchEvidence?.resultCount ?? 0,
     details: {
       groundingIssues: deterministic?.issues ?? [],
-      initialIssues: deterministic?.initialIssues ?? [],
+      initialIssues: manifest.validation?.initialIssues ?? [],
       ...(deterministic?.shippedDraft && { shippedDraft: deterministic.shippedDraft }),
       modelCalls: (manifest.modelCalls ?? []).map((call) => ({
         phase: call.phase,
