@@ -12,6 +12,7 @@ import {
   isFreeTrialSignupContinuation,
 } from '@/lib/trial-signup-flow';
 import { storeCoastFireSignupContext } from '@/lib/coast-fire-signup-context';
+import { resetSignInHandoverCache } from '@/lib/calculator-handover';
 
 const push = jest.fn();
 let searchParams = new URLSearchParams();
@@ -38,6 +39,7 @@ describe('LoginForm', () => {
     jest.clearAllMocks();
     localStorage.clear();
     sessionStorage.clear();
+    resetSignInHandoverCache();
     searchParams = new URLSearchParams();
   });
 
@@ -336,6 +338,54 @@ describe('LoginForm', () => {
       // Spent on arrival: a second visit is an ordinary sign-in.
       expect(document.cookie).not.toContain(TOKEN);
       // The lookup fills in the address the run was sent to.
+      await waitFor(() => expect(screen.getByLabelText('Email address')).toHaveValue('member@example.com'));
+
+      fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'correct-password' } });
+      fireEvent.click(screen.getByRole('button', { name: /Sign in to your workspace/i }));
+
+      await waitFor(() => expect(push).toHaveBeenCalledWith('/app'));
+      const attach = jest.mocked(global.fetch).mock.calls
+        .find(([url]) => String(url).includes('/auth/calculator-lead'))!;
+      expect(JSON.parse(String((attach[1] as RequestInit).body))).toEqual({ calculatorRef: TOKEN });
+    });
+
+    /*
+     * React Strict Mode remounts in development. Spending the cookie into a
+     * page-load stash keeps the run across that remount.
+     */
+    it('keeps the emailed run across a remount after the cookie is spent', async () => {
+      global.fetch = jest.fn(async (url: RequestInfo | URL) => {
+        const target = String(url);
+        if (target.includes('/signup-context/')) {
+          return {
+            ok: true,
+            json: async () => ({
+              inputs: {
+                currentAge: 45, retirementAge: 65, investableAssets: 500_000,
+                annualSpending: 80_000, annualContributions: 20_000,
+                socialSecurityAnnual: 24_000, socialSecurityStartAge: 67,
+                lifeExpectancy: 92, allocation: 'balanced',
+              },
+              email: 'member@example.com',
+            }),
+          };
+        }
+        if (target.includes('/auth/login')) {
+          return { ok: true, json: async () => ({ token: 'secure-token', user: {} }) };
+        }
+        if (target.includes('/auth/calculator-lead')) {
+          return { ok: true, json: async () => ({ attached: true }) };
+        }
+        return { ok: true, json: async () => ({ status: 'active', accessLevel: 'full' }) };
+      }) as unknown as typeof fetch;
+
+      const { unmount } = render(<LoginForm />);
+      expect(screen.getByText('Your retirement result is ready.')).toBeInTheDocument();
+      expect(document.cookie).not.toContain(TOKEN);
+      unmount();
+
+      render(<LoginForm />);
+      expect(screen.getByText('Your retirement result is ready.')).toBeInTheDocument();
       await waitFor(() => expect(screen.getByLabelText('Email address')).toHaveValue('member@example.com'));
 
       fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'correct-password' } });

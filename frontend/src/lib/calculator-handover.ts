@@ -39,6 +39,32 @@ export const SIGN_IN_HANDOVER_COOKIE_PATH = '/login';
 export const SIGN_IN_HANDOVER_PARAM = 'to';
 export const SIGN_IN_HANDOVER_VALUE = 'sign-in';
 
+/*
+ * A sign-in handover cookie is spent on arrival so a later visit is ordinary
+ * sign-in. React Strict Mode remounts in development, which would otherwise
+ * clear the cookie on the first mount and lose the run on the second. The
+ * page-load stash survives that remount the same way `pending-first-decision`
+ * survives one, and dies with a full reload.
+ */
+let signInHandoverThisPageLoad: { cookieName: string; ref: string } | undefined;
+
+/** Remember a spent sign-in handover for the rest of this page load. */
+export function rememberSignInHandover(cookieName: string, ref: string): void {
+  if (!isHandoverToken(ref)) return;
+  signInHandoverThisPageLoad = { cookieName, ref };
+}
+
+/** The handover this page load already spent, if any. */
+export function recalledSignInHandover(cookieName: string): string | null {
+  if (signInHandoverThisPageLoad?.cookieName !== cookieName) return null;
+  return signInHandoverThisPageLoad.ref;
+}
+
+/** Test seam: drop the page-load stash the way a fresh navigation would. */
+export function resetSignInHandoverCache(): void {
+  signInHandoverThisPageLoad = undefined;
+}
+
 export function isHandoverToken(value: unknown): value is string {
   return typeof value === 'string' && TOKEN_PATTERN.test(value);
 }

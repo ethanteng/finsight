@@ -39,6 +39,8 @@ import {
   SIGN_IN_HANDOVER_COOKIE_PATH,
   clearHandoverToken,
   readHandoverToken,
+  recalledSignInHandover,
+  rememberSignInHandover,
 } from '@/lib/calculator-handover';
 
 interface SubscriptionContext {
@@ -93,11 +95,16 @@ function LoginFormContent() {
     }
 
     // Arrived from the email instead. The cookie is spent here: the run is
-    // held in state for this visit, and a later visit is an ordinary sign-in.
+    // held for this page load (state + a remount-safe stash), and a later
+    // visit is an ordinary sign-in.
     const cookieName = isCoastFire ? COAST_FIRE_REF_COOKIE : RETIREMENT_REF_COOKIE;
-    const emailedRef = readHandoverToken(cookieName);
+    const fromCookie = readHandoverToken(cookieName);
+    if (fromCookie) {
+      rememberSignInHandover(cookieName, fromCookie);
+      clearHandoverToken(cookieName, SIGN_IN_HANDOVER_COOKIE_PATH);
+    }
+    const emailedRef = fromCookie ?? recalledSignInHandover(cookieName);
     if (!emailedRef) return;
-    clearHandoverToken(cookieName, SIGN_IN_HANDOVER_COOKIE_PATH);
     setCalculatorRun({ ref: emailedRef, label });
 
     // Best effort: the lookup only prefills the address.
