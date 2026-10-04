@@ -9,7 +9,7 @@ import { buildMarketingMetadata } from '@/lib/seo';
 
 const canonical = 'https://asklinc.com/cash-flow-forecast';
 const description =
-  'See how much money you may have left next month, next quarter, or next year. Ask Linc builds a personal cash flow forecast from your real accounts and lets you add upcoming expenses, income, and credit-card payments.';
+  'See what you are likely to have left after income, spending, and the things you already know are coming. Ask Linc builds a personal cash flow forecast from your real accounts.';
 
 export const metadata: Metadata = {
   ...buildMarketingMetadata({
@@ -52,24 +52,24 @@ const applicationSchema = {
 
 const faqs = [
   {
-    question: 'What is a personal cash flow forecast?',
+    question: 'Is this a budgeting app?',
     answer:
-      'It is an estimate of how much money may come in, go out, and remain over a future period. Ask Linc builds the forecast from connected account history, regular income and spending, and future items you add.',
+      'Not really. You do not have to put every dollar into a category or build a monthly budget. The point is to understand what you are likely to have left and how a decision changes that.',
   },
   {
-    question: 'Is this another budgeting app?',
+    question: 'Can I add something that has not happened yet?',
     answer:
-      'No. The cash flow view is focused on what your money may look like over the coming weeks and months, not on assigning every dollar to a category or enforcing a monthly budget.',
+      'Yes. Add future income or expenses like a bonus, trip, tuition bill, large purchase, or credit-card payment and see how they change your forecast.',
   },
   {
-    question: 'Can I add expenses or income that have not happened yet?',
+    question: 'How far ahead can I look?',
     answer:
-      'Yes. You can add planned items such as a bonus, vacation, tuition bill, large purchase, or credit-card payment and see how they change the forecast.',
+      'You can look ahead over the next month, quarter, year, or another period that matters to you.',
   },
   {
-    question: 'Does the AI calculate the cash flow numbers?',
+    question: 'Does AI calculate the forecast?',
     answer:
-      'No. The cash flow figures are calculated by Ask Linc’s backend financial engine. The AI can help explain the result and answer questions about it, but it does not invent the underlying arithmetic.',
+      'No. The underlying cash-flow numbers are calculated outside the language model. AI helps explain the result and reason through your options.',
   },
 ] as const;
 
@@ -84,17 +84,24 @@ const faqSchema = {
 };
 
 const forecastInputs = [
-  ['What normally comes in', 'Regular paychecks and other recurring income from the accounts you connect.'],
-  ['What normally goes out', 'Bills, everyday spending, credit-card activity, and the patterns in your transaction history.'],
-  ['What you already know is coming', 'Add a bonus, vacation, tuition bill, big purchase, or card payment that has not happened yet.'],
+  ['Money coming in', 'Paychecks and other recurring income from your connected accounts.'],
+  ['Money going out', 'Bills, everyday spending, credit cards, and other regular expenses.'],
+  ['Then add what’s coming', 'A trip. A bonus. Tuition. A big purchase. Paying off a card.'],
+] as const;
+
+const scenarios = [
+  ['Can I afford the trip?', 'Add the cost and timing. See what you will have left afterward.'],
+  ['What if my bonus is smaller?', 'Change the amount and see how the next few months look.'],
+  ['Should I pay off this card now?', 'See what happens to your cash — and what you could save in interest.'],
 ] as const;
 
 const questions = [
   'How much money will I have left?',
-  'Can I afford the trip?',
+  'Can I afford this?',
   'How much can I spend this month?',
-  'What if my bonus is smaller?',
-  'Should I pay off this card now?',
+  'Will I run short before my next paycheck?',
+  'What if this expense is bigger than I planned?',
+  'What happens if I pay this card off now?',
 ] as const;
 
 export default function CashFlowForecastPage() {
@@ -104,34 +111,28 @@ export default function CashFlowForecastPage() {
       <StructuredData data={faqSchema} />
       <SiteHeader />
 
-      <section className="subhero shell use-case-hero">
-        <div>
-          <p className="section-kicker">PERSONAL CASH FLOW FORECAST</p>
-          <h1>How much will you actually have left?</h1>
-          <p className="subhero-copy">
-            Connect your checking, savings, and credit cards. Ask Linc uses what normally comes in and goes out,
-            then lets you add the things you already know are coming — a bonus, a trip, tuition, a big purchase,
-            or paying down a card.
-          </p>
+      <section className="story-hero shell">
+        <p className="section-kicker">PERSONAL CASH FLOW FORECAST</p>
+        <h1>Can I afford this — and what will I have left?</h1>
+        <p className="story-hero-copy">
+          Forecast your cash using what you earn, spend, and already know is coming.
+        </p>
+        <div className="hero-actions">
           <MarketingGetStartedButton
             className="button button-primary"
             trackingLocation="cash_flow_hero"
             csOverrideId="cta-start-free-trial-cash-flow-hero"
             label="Build my forecast"
           />
-          <p className="microcopy">{TRIAL_CTA_MICROCOPY}</p>
         </div>
-
-        <TeaserVideo
-          configItem="cash-flow-video"
-          title="Ask Linc cash flow demo"
-        />
+        <p className="microcopy">{TRIAL_CTA_MICROCOPY}</p>
+        <TeaserVideo configItem="cash-flow-video" title="Ask Linc cash flow demo" />
       </section>
 
       <section className="decision-levers shell">
         <div className="editorial-heading">
-          <p className="section-kicker">WHAT THE FORECAST USES</p>
-          <h2>Start with what normally happens.<br /><em>Then add what&apos;s coming.</em></h2>
+          <p className="section-kicker">START WITH WHAT USUALLY HAPPENS</p>
+          <h2>Use your real cash flow.<br /><em>Then add what&apos;s coming.</em></h2>
         </div>
         <div className="lever-grid">
           {forecastInputs.map(([title, copy], index) => (
@@ -144,13 +145,29 @@ export default function CashFlowForecastPage() {
         </div>
       </section>
 
+      <section className="decision-levers shell">
+        <div className="editorial-heading">
+          <p className="section-kicker">CHANGE ONE THING</p>
+          <h2>See how one decision<br /><em>changes the rest.</em></h2>
+        </div>
+        <div className="lever-grid">
+          {scenarios.map(([title, copy], index) => (
+            <article key={title}>
+              <span>0{index + 1}</span>
+              <h3>“{title}”</h3>
+              <p>{copy}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+
       <section className="case-context dark-band">
         <div className="shell case-context-inner">
           <div>
-            <p className="section-kicker light">THE QUESTIONS THIS IS FOR</p>
-            <h2>Ask the thing you actually want to know.</h2>
+            <p className="section-kicker light">LOOK AHEAD</p>
+            <h2>Instead of just looking back.</h2>
           </div>
-          <div className="context-chips" aria-label="Example cash flow questions">
+          <div className="context-chips" aria-label="Questions Ask Linc can help answer">
             {questions.map((question) => <span key={question}>{question}</span>)}
           </div>
         </div>
@@ -158,14 +175,28 @@ export default function CashFlowForecastPage() {
 
       <section className="use-case-bridge">
         <div className="shell">
-          <p className="section-kicker">IF THE FORECAST GETS SOMETHING WRONG</p>
-          <h2>Fix the assumption instead of working around it.</h2>
+          <p className="section-kicker">IF SOMETHING LOOKS WRONG</p>
+          <h2>Fix the assumption.</h2>
           <p>
-            A one-time purchase should not become your normal monthly spending. An old subscription may be gone.
-            A paycheck that stopped may actually be continuing. Ask Linc shows what it thinks belongs in the forecast
-            and lets you change it. The cash-flow math is calculated by the financial engine rather than invented by
-            the language model. <Link href="/trust">See how Ask Linc checks the math →</Link>
+            Maybe that big charge was a one-time purchase. Maybe you canceled that subscription. Maybe an old paycheck
+            should still be counted. Ask Linc shows what it thinks belongs in your forecast so you can correct it instead
+            of working around a bad assumption.
           </p>
+        </div>
+      </section>
+
+      <section className="case-context dark-band">
+        <div className="shell case-context-inner">
+          <div>
+            <p className="section-kicker light">SHOW THE MATH</p>
+            <h2>The AI doesn&apos;t make up the math.</h2>
+          </div>
+          <div className="context-chips" aria-label="How Ask Linc calculates cash flow">
+            <span>Cash flow is calculated by the financial engine</span>
+            <span>AI helps explain the result</span>
+            <span>The underlying numbers stay inspectable</span>
+            <Link className="light-link" href="/trust">See how Ask Linc checks the math →</Link>
+          </div>
         </div>
       </section>
 
@@ -185,7 +216,8 @@ export default function CashFlowForecastPage() {
       </section>
 
       <PageCta
-        title="See what your next few months could look like."
+        title="Can I afford it?"
+        copy="See what you’ll have left before you decide."
         label="Build my forecast"
         csOverrideId="cta-start-free-trial-cash-flow-bottom"
       />
