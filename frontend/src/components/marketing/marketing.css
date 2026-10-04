@@ -1969,4 +1969,571 @@ footer { padding-block: 55px 28px; background: #0a1912; color: white; }.footer-i
   .demo-allocation > div { grid-template-columns: 1fr auto 80px 32px; }
 }
 
+
+/* Cash-flow acquisition page ------------------------------------------------ */
+.cash-flow-landing .cash-flow-hero {
+  display: grid;
+  grid-template-columns: minmax(0, .92fr) minmax(520px, 1.08fr);
+  align-items: center;
+  gap: 56px;
+  min-height: 700px;
+  padding-block: 66px 78px;
+}
+
+.cash-flow-hero-copy h1 {
+  max-width: 680px;
+  margin-bottom: 24px;
+  font-size: clamp(56px, 5.5vw, 82px);
+}
+
+.cash-flow-lede {
+  max-width: 650px;
+  margin: 0;
+  color: #435249;
+  font-size: 19px;
+  line-height: 1.62;
+}
+
+.cash-flow-lede-secondary {
+  margin-top: 14px;
+  color: #5e6b63;
+  font-size: 16px;
+}
+
+.cash-flow-preview {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid #bfc7ba;
+  border-radius: 30px;
+  background: var(--cream);
+  box-shadow: 0 28px 70px rgba(16,35,25,.14);
+}
+
+.cash-flow-preview::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto auto 0;
+  width: 100%;
+  height: 6px;
+  background: var(--lime);
+}
+
+.cash-flow-preview-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 26px 28px 20px;
+  border-bottom: 1px solid #e0e3da;
+}
+
+.cash-flow-preview-top > div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.cash-flow-preview-top small,
+.cash-flow-preview-top > span {
+  color: #6d7971;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+
+.cash-flow-preview-top strong {
+  font-family: var(--font-display);
+  font-size: 20px;
+  letter-spacing: -.035em;
+}
+
+.cash-flow-preview-top > span {
+  padding: 7px 10px;
+  border: 1px solid #d5d9cf;
+  border-radius: 999px;
+  background: #f2f1e9;
+  letter-spacing: .04em;
+  text-transform: none;
+}
+
+.cash-flow-preview-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  border-bottom: 1px solid #e0e3da;
+}
+
+.cash-flow-preview-metrics > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 6px;
+  padding: 22px 24px;
+  border-right: 1px solid #e0e3da;
+}
+
+.cash-flow-preview-metrics > div:last-child { border-right: 0; }
+
+.cash-flow-preview-metrics small {
+  color: #66736b;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.cash-flow-preview-metrics strong {
+  font-family: var(--font-display);
+  font-size: clamp(20px, 2vw, 27px);
+  letter-spacing: -.045em;
+}
+
+.cash-flow-preview-metrics > div:nth-child(2) strong { color: #28704d; }
+
+.cash-flow-preview-chart {
+  position: relative;
+  height: 260px;
+  margin: 20px 24px 0;
+  overflow: hidden;
+  border-radius: 17px;
+  background: linear-gradient(180deg, rgba(201,242,223,.34), rgba(243,242,233,.25));
+}
+
+.cash-flow-chart-grid {
+  position: absolute;
+  inset: 18px 0 28px;
+  background:
+    linear-gradient(to bottom, transparent 24%, rgba(16,35,25,.09) 25%, transparent 26%, transparent 49%, rgba(16,35,25,.09) 50%, transparent 51%, transparent 74%, rgba(16,35,25,.09) 75%, transparent 76%);
+}
+
+.cash-flow-preview-chart svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 215px;
+}
+
+.cash-flow-chart-area { fill: rgba(201,242,223,.48); }
+.cash-flow-chart-line {
+  fill: none;
+  stroke: #173c2c;
+  stroke-width: 5;
+  vector-effect: non-scaling-stroke;
+}
+
+.cash-flow-chart-labels {
+  position: absolute;
+  right: 10px;
+  bottom: 8px;
+  left: 10px;
+  display: flex;
+  justify-content: space-between;
+  color: #748078;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.cash-flow-preview-plans {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  padding: 18px 24px 24px;
+}
+
+.cash-flow-preview-plans > div {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 5px 8px;
+  min-width: 0;
+  padding: 12px 13px;
+  border: 1px solid #dde1d7;
+  border-radius: 13px;
+  background: #f7f6ee;
+  color: #5e6b63;
+  font-size: 11px;
+}
+
+.cash-flow-preview-plans strong {
+  grid-column: 2;
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.cash-flow-plan-dot {
+  grid-row: 1 / span 2;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+}
+
+.cash-flow-plan-dot.expense { background: #9b4137; }
+.cash-flow-plan-dot.income { background: #28704d; }
+.cash-flow-plan-dot.card { background: #486657; }
+
+.cash-flow-question-strip {
+  border-block: 1px solid rgba(16,35,25,.16);
+  background: #e7eadf;
+}
+
+.cash-flow-question-strip .shell {
+  display: grid;
+  grid-template-columns: 230px 1fr;
+  align-items: center;
+  gap: 32px;
+  padding-block: 27px;
+}
+
+.cash-flow-question-strip span {
+  color: #567062;
+  font-size: 11px;
+  font-weight: 850;
+  letter-spacing: .13em;
+}
+
+.cash-flow-question-strip div > div {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0;
+}
+
+.cash-flow-question-strip p {
+  margin: 0;
+  padding: 2px 24px;
+  border-left: 1px solid rgba(16,35,25,.15);
+  font-family: var(--font-display);
+  font-size: clamp(16px, 1.5vw, 20px);
+  font-weight: 650;
+  letter-spacing: -.025em;
+}
+
+.cash-flow-how {
+  padding-block: 112px;
+}
+
+.cash-flow-how .editorial-heading {
+  max-width: 820px;
+}
+
+.cash-flow-how .editorial-heading h2,
+.cash-flow-examples-heading h2,
+.cash-flow-correct h2,
+.cash-flow-math h2,
+.cash-flow-faq h2 {
+  font-size: clamp(39px, 4vw, 58px);
+  line-height: 1.02;
+  letter-spacing: -.055em;
+}
+
+.cash-flow-how .editorial-heading h2 em,
+.cash-flow-examples-heading h2 em,
+.cash-flow-correct h2 em,
+.cash-flow-math h2 em {
+  color: #52705f;
+  font-family: Georgia, serif;
+  font-weight: 400;
+}
+
+.cash-flow-how-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  margin-top: 46px;
+  border: 1px solid rgba(16,35,25,.16);
+  border-radius: 22px;
+  overflow: hidden;
+  background: var(--cream);
+}
+
+.cash-flow-how-grid article {
+  min-height: 268px;
+  padding: 28px 25px;
+  border-right: 1px solid rgba(16,35,25,.13);
+}
+
+.cash-flow-how-grid article:last-child { border-right: 0; }
+.cash-flow-how-grid article.cash-flow-how-result { background: var(--mint); }
+
+.cash-flow-how-grid article > span,
+.cash-flow-example-grid small {
+  color: #567062;
+  font-size: 11px;
+  font-weight: 850;
+  letter-spacing: .12em;
+}
+
+.cash-flow-how-grid h3 {
+  margin: 64px 0 10px;
+  font-family: var(--font-display);
+  font-size: 22px;
+  line-height: 1.08;
+  letter-spacing: -.04em;
+}
+
+.cash-flow-how-grid p {
+  margin: 0;
+  color: #5d6961;
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.cash-flow-examples {
+  padding-block: 100px;
+  background: var(--ink);
+  color: white;
+}
+
+.cash-flow-examples-heading {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(280px, .55fr);
+  align-items: end;
+  gap: 70px;
+}
+
+.cash-flow-examples-heading h2 { margin: 11px 0 0; color: white; }
+.cash-flow-examples-heading h2 em { color: #b7c9be; }
+
+.cash-flow-examples-heading > p {
+  margin: 0 0 7px;
+  color: #c4cec8;
+  font-size: 16px;
+  line-height: 1.65;
+}
+
+.cash-flow-example-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-top: 45px;
+}
+
+.cash-flow-example-grid article {
+  min-height: 275px;
+  padding: 26px;
+  border: 1px solid rgba(255,255,255,.15);
+  border-radius: 20px;
+  background: #173c2c;
+}
+
+.cash-flow-example-grid small { color: #a8c9b7; }
+.cash-flow-example-grid h3 {
+  margin: 56px 0 14px;
+  font-family: var(--font-display);
+  font-size: 27px;
+  line-height: 1.1;
+  letter-spacing: -.045em;
+}
+.cash-flow-example-grid p {
+  margin: 0;
+  color: #c9d4ce;
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.cash-flow-correct {
+  display: grid;
+  grid-template-columns: minmax(0, .9fr) minmax(470px, 1.1fr);
+  align-items: center;
+  gap: 78px;
+  padding-block: 112px;
+}
+
+.cash-flow-correct-copy > p:last-child {
+  max-width: 560px;
+  margin: 20px 0 0;
+  color: #536158;
+  font-size: 17px;
+  line-height: 1.7;
+}
+
+.cash-flow-assumptions {
+  overflow: hidden;
+  border: 1px solid #bdc6b9;
+  border-radius: 22px;
+  background: var(--cream);
+  box-shadow: 0 22px 50px rgba(16,35,25,.08);
+}
+
+.cash-flow-assumption-heading,
+.cash-flow-assumption-row {
+  display: grid;
+  grid-template-columns: 1.1fr .8fr auto;
+  align-items: center;
+  gap: 18px;
+  padding: 16px 20px;
+}
+
+.cash-flow-assumption-heading {
+  grid-template-columns: 1fr auto;
+  border-bottom: 1px solid #dde1d7;
+  color: #607067;
+  background: #eef0e8;
+  font-size: 10px;
+  font-weight: 850;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+
+.cash-flow-assumption-row {
+  min-height: 74px;
+  border-bottom: 1px solid #e4e7df;
+  font-size: 13px;
+}
+.cash-flow-assumption-row:last-child { border-bottom: 0; }
+.cash-flow-assumption-row.muted { background: #f3f2e9; }
+
+.cash-flow-assumption-row strong { font-size: 14px; }
+.cash-flow-assumption-row > span { color: #66736b; }
+.cash-flow-assumption-row button {
+  min-width: 76px;
+  padding: 8px 10px;
+  border: 1px solid rgba(16,35,25,.15);
+  border-radius: 999px;
+  background: white;
+  color: #315f47;
+  font-size: 11px;
+  font-weight: 800;
+  pointer-events: none;
+}
+.cash-flow-assumption-row.muted button { color: #777f79; }
+
+.cash-flow-math {
+  padding-block: 94px;
+  background: #173c2c;
+  color: white;
+}
+
+.cash-flow-math-inner {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(320px, .75fr);
+  align-items: end;
+  gap: 88px;
+}
+
+.cash-flow-math h2 { margin: 10px 0 0; color: white; }
+.cash-flow-math h2 em { color: #c3d4ca; }
+
+.cash-flow-math-inner > div:last-child > p {
+  margin: 0 0 24px;
+  color: #d0dad4;
+  font-size: 16px;
+  line-height: 1.72;
+}
+
+.cash-flow-faq {
+  display: grid;
+  grid-template-columns: minmax(280px, .7fr) minmax(0, 1.3fr);
+  gap: 90px;
+  padding-block: 112px;
+}
+
+.cash-flow-faq-heading h2 { margin-top: 10px; }
+
+.cash-flow-faq-list details {
+  border-top: 1px solid rgba(16,35,25,.16);
+}
+
+.cash-flow-faq-list details:last-child { border-bottom: 1px solid rgba(16,35,25,.16); }
+
+.cash-flow-faq-list summary {
+  display: flex;
+  min-height: 82px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  cursor: pointer;
+  list-style: none;
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -.025em;
+}
+
+.cash-flow-faq-list summary::-webkit-details-marker { display: none; }
+.cash-flow-faq-list summary span { color: #52705f; font-size: 23px; font-weight: 400; }
+.cash-flow-faq-list details[open] summary span { transform: rotate(45deg); }
+.cash-flow-faq-list details p {
+  max-width: 720px;
+  margin: -5px 0 24px;
+  color: #5e6b63;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+@media (max-width: 980px) {
+  .cash-flow-landing .cash-flow-hero {
+    grid-template-columns: 1fr;
+    gap: 46px;
+    min-height: 0;
+    padding-block: 54px 72px;
+  }
+  .cash-flow-hero-copy { max-width: 760px; }
+  .cash-flow-preview { width: min(760px, 100%); }
+  .cash-flow-question-strip .shell { grid-template-columns: 1fr; gap: 16px; }
+  .cash-flow-question-strip div > div { grid-template-columns: 1fr; }
+  .cash-flow-question-strip p {
+    padding: 10px 0;
+    border-top: 1px solid rgba(16,35,25,.13);
+    border-left: 0;
+  }
+  .cash-flow-how-grid { grid-template-columns: 1fr 1fr; }
+  .cash-flow-how-grid article:nth-child(2) { border-right: 0; }
+  .cash-flow-how-grid article:nth-child(-n+2) { border-bottom: 1px solid rgba(16,35,25,.13); }
+  .cash-flow-examples-heading,
+  .cash-flow-correct,
+  .cash-flow-math-inner,
+  .cash-flow-faq {
+    grid-template-columns: 1fr;
+    gap: 38px;
+  }
+  .cash-flow-correct { padding-block: 88px; }
+}
+
+@media (max-width: 700px) {
+  .cash-flow-landing .cash-flow-hero { padding-block: 42px 60px; }
+  .cash-flow-hero-copy h1 { font-size: clamp(48px, 14vw, 66px); }
+  .cash-flow-lede { font-size: 17px; }
+  .cash-flow-preview-top { padding: 22px 18px 17px; }
+  .cash-flow-preview-metrics { grid-template-columns: 1fr; }
+  .cash-flow-preview-metrics > div {
+    padding: 16px 18px;
+    border-right: 0;
+    border-bottom: 1px solid #e0e3da;
+  }
+  .cash-flow-preview-metrics > div:last-child { border-bottom: 0; }
+  .cash-flow-preview-chart { height: 220px; margin-inline: 14px; }
+  .cash-flow-preview-chart svg { height: 182px; }
+  .cash-flow-preview-plans {
+    grid-template-columns: 1fr;
+    padding: 14px 14px 18px;
+  }
+  .cash-flow-how { padding-block: 82px; }
+  .cash-flow-how-grid { grid-template-columns: 1fr; }
+  .cash-flow-how-grid article {
+    min-height: 220px;
+    border-right: 0;
+    border-bottom: 1px solid rgba(16,35,25,.13);
+  }
+  .cash-flow-how-grid article:nth-child(2) { border-right: 0; }
+  .cash-flow-how-grid article:last-child { border-bottom: 0; }
+  .cash-flow-how-grid h3 { margin-top: 42px; }
+  .cash-flow-examples { padding-block: 76px; }
+  .cash-flow-example-grid { grid-template-columns: 1fr; }
+  .cash-flow-example-grid article { min-height: 220px; }
+  .cash-flow-example-grid h3 { margin-top: 42px; }
+  .cash-flow-correct { grid-template-columns: 1fr; gap: 38px; padding-block: 82px; }
+  .cash-flow-assumption-heading { display: none; }
+  .cash-flow-assumption-row {
+    grid-template-columns: 1fr auto;
+    gap: 5px 12px;
+    padding: 15px;
+  }
+  .cash-flow-assumption-row > span { grid-column: 1; }
+  .cash-flow-assumption-row button { grid-column: 2; grid-row: 1 / span 2; }
+  .cash-flow-math { padding-block: 76px; }
+  .cash-flow-faq { gap: 32px; padding-block: 82px; }
+  .cash-flow-how .editorial-heading h2,
+  .cash-flow-examples-heading h2,
+  .cash-flow-correct h2,
+  .cash-flow-math h2,
+  .cash-flow-faq h2 { font-size: clamp(38px, 11vw, 52px); }
+}
+
 }
