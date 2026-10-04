@@ -1,14 +1,66 @@
-import { describe, expect, it } from '@jest/globals';
+import { describe, expect, it, jest } from '@jest/globals';
 import {
   coastFireContributionPath,
   coastFireScenarioCanonicalFacts,
   describeCoastFireScenarioExecution,
   parseCoastFireScenarioPlan,
-  runCoastFireScenario,
+  runCoastFireScenario as runWithEngine,
   type CompletedCoastFireScenarioExecution,
+  type QuickPlanRunner,
 } from '../../scenarios/coast-fire-scenario';
 import { calculateCoastFire } from '../../services/coast-fire';
 import { validateCanonicalFactPack } from '../../openai/canonical-facts';
+import type { RetirementQuickPlanRequest, RetirementQuickPlanResult } from '../../services/retirement-quickplan';
+
+/** The historical engine's answer, shaped like the quick plan's, at a fixed survival rate. */
+function fakeRunner(survivalRate = 0.02) {
+  return jest.fn(async (request: RetirementQuickPlanRequest): Promise<RetirementQuickPlanResult> => ({
+    version: 1,
+    computedAt: '2026-10-04T00:00:00.000Z',
+    durationMs: 1,
+    cached: false,
+    mode: 'plan',
+    assumed: [],
+    missing: [],
+    inputs: { ...request, lifeExpectancy: 95, allocation: request.allocation ?? 'balanced' } as any,
+    allocation: {} as any,
+    history: {
+      firstMonth: '1926-07',
+      lastMonth: '2025-12',
+      sequencesTested: 517,
+      horizonYears: 95 - request.currentAge,
+      firstStartMonth: '1926-07',
+      lastStartMonth: '1969-07',
+    },
+    primary: {
+      id: 'as-entered',
+      label: '',
+      change: null,
+      retirementAge: request.retirementAge,
+      annualSpending: request.annualSpending,
+      survivalRate,
+      sequencesTested: 517,
+      sequencesSurvived: Math.round(survivalRate * 517),
+      projectedPortfolioAtRetirement: 1_045_454,
+      firstYearPortfolioWithdrawal: request.annualSpending,
+      firstYearWithdrawalRate: 0.08,
+      depletionYears: null,
+      primaryObservation: '',
+      characteristics: {} as any,
+      tradeoffs: {} as any,
+    },
+    alternatives: [],
+    sustainableSpending: null,
+    sustainableSpendingRates: {} as any,
+    assumptions: [],
+    limitations: [],
+  }));
+}
+
+/** Most cases are about the straight line; a stub engine keeps them fast and exact. */
+function runCoastFireScenario(snapshot: any, plan: any, runner: QuickPlanRunner = fakeRunner() as QuickPlanRunner) {
+  return runWithEngine(snapshot, plan, runner);
+}
 
 const FIELDS = [
   'currentAge',
@@ -24,14 +76,18 @@ const FIELDS = [
 type Field = (typeof FIELDS)[number];
 
 /** A strict-schema variant: every field present, null where unstated. */
-function variant(values: Partial<Record<Field, number>>, sources: Partial<Record<Field, string>> = {}) {
+function variant(values: Partial<Record<Field, number>> & { allocation?: string }, sources: Partial<Record<Field, string>> = {}) {
   return {
     overrides: {
       ...Object.fromEntries(FIELDS.map((field) => [field, values[field] ?? null])),
-      sources: Object.fromEntries(FIELDS.map((field) => [
-        field,
-        sources[field] ?? (values[field] !== undefined ? `stated ${field}` : null),
-      ])),
+      allocation: values.allocation ?? 'unspecified',
+      sources: {
+        ...Object.fromEntries(FIELDS.map((field) => [
+          field,
+          sources[field] ?? (values[field] !== undefined ? `stated ${field}` : null),
+        ])),
+        allocation: values.allocation ? 'a growth mix' : null,
+      },
     },
   };
 }
@@ -46,7 +102,10 @@ const STATED = {
   withdrawalRatePercent: 4,
 };
 
-function plan(primary: Partial<Record<Field, number>>, comparison?: Partial<Record<Field, number>>) {
+function plan(
+  primary: Partial<Record<Field, number>> & { allocation?: string },
+  comparison?: Partial<Record<Field, number>> & { allocation?: string }
+) {
   const parsed = parseCoastFireScenarioPlan({
     requested: true,
     primary: variant(primary),
@@ -153,15 +212,34 @@ describe('Coast FIRE calculator', () => {
     expect(disclosure).toContain('You did not give a growth rate, so I used 5%, or a withdrawal rate, so I used 4%.');
   });
 
-  it('drops a real return that is a decimal fraction in disguise', () => {
-    const parsed = parseCoastFireScenarioPlan({
-      requested: true,
-      primary: variant({ ...STATED, realReturnRatePercent: 0.05 }),
-      comparison: variant({}),
+  describe('percentage points sent as decimal fractions', () => {
+    const parse = (realReturnRatePercent: number, source: string, withdrawal?: [number, string]) =>
+      parseCoastFireScenarioPlan({
+        requested: true,
+        primary: variant(
+          { ...STATED, realReturnRatePercent, ...(withdrawal && { withdrawalRatePercent: withdrawal[0] }) },
+          { realReturnRatePercent: source, ...(withdrawal && { withdrawalRatePercent: withdrawal[1] }) }
+        ),
+        comparison: variant({}),
+      })?.primary.overrides;
+
+    it('scales a fraction back to the percentage the user wrote', () => {
+      expect(parse(0.05, 'I assumed 5% growth a year after inflation')?.realReturnRatePercent).toBe(5);
+      // Out of the withdrawal range as sent, so it used to fall to the default
+      // while the disclosure said no rate was given.
+      expect(parse(5, '5% growth', [0.035, 'a 3.5 percent withdrawal rate'])?.withdrawalRatePercent).toBe(3.5);
     });
 
-    expect(parsed?.primary.overrides?.realReturnRatePercent).toBeUndefined();
-    expect(parsed?.primary.overrides?.currentAge).toBe(38);
+    it('keeps a low real return the user actually stated', () => {
+      expect(parse(0.1, 'assume 0.1% growth after inflation')?.realReturnRatePercent).toBe(0.1);
+      expect(parse(0, 'no growth after inflation')?.realReturnRatePercent).toBe(0);
+    });
+
+    it('drops a small value the wording does not support, leaving the disclosed default', () => {
+      const overrides = parse(0.05, 'a typical return');
+      expect(overrides?.realReturnRatePercent).toBeUndefined();
+      expect(overrides?.currentAge).toBe(38);
+    });
   });
 
   it('accepts a request with nothing stated yet, so the runner can ask', () => {
@@ -205,6 +283,112 @@ describe('Coast FIRE calculator', () => {
 
     expect(disclosure).toContain('5% a year after inflation, a 4% withdrawal rate, and no retirement income counted');
     expect(disclosure).toContain('single straight line');
-    expect(disclosure).not.toContain('You did not give');
+    expect(disclosure).not.toContain('You did not give a growth rate');
+  });
+
+  describe('market-history test while nothing is linked', () => {
+    it('runs today\'s savings, left alone, through history on a preset mix', async () => {
+      const runner = fakeRunner(0.0193);
+      const execution = await runCoastFireScenario(
+        EMPTY_SNAPSHOT,
+        plan({ ...STATED, annualContribution: 74_000 }, { annualContribution: 83_000 }),
+        runner as QuickPlanRunner
+      ) as CompletedCoastFireScenarioExecution;
+
+      // Coasting means no more contributions, so the range is one test, not two.
+      expect(runner).toHaveBeenCalledTimes(1);
+      expect(runner.mock.calls[0][0]).toEqual({
+        currentAge: 38,
+        retirementAge: 55,
+        investableAssets: 500_000,
+        annualSpending: 80_000,
+        annualContributions: 0,
+        socialSecurityAnnual: 0,
+        socialSecurityStartAge: 67,
+        allocation: 'balanced',
+      });
+      expect(execution.scenarios[0].historicalTest).toMatchObject({
+        allocation: { id: 'balanced', origin: 'default', usEquityPercent: 60 },
+        sequencesTested: 517,
+        sequencesSurvived: 10,
+        lifeExpectancy: 95,
+      });
+      expect(execution.scenarios[1].historicalTest).toBeUndefined();
+
+      const facts = coastFireScenarioCanonicalFacts(execution);
+      expect(facts.find((fact) => fact.id.endsWith('_history_survival_rate'))).toMatchObject({
+        value: 1.93,
+        unit: 'percent',
+        label: expect.stringContaining('Balanced preset, coasting from today'),
+      });
+      expect(facts.find((fact) => fact.id.endsWith('_history_sequences_survived'))?.value).toBe(10);
+      expect(validateCanonicalFactPack({ version: 1, facts })).toEqual([]);
+
+      const disclosure = describeCoastFireScenarioExecution(execution)!;
+      expect(disclosure).toContain('The market-history test ran the Balanced preset (60% US stocks / 35% bonds / 5% cash), not what you hold');
+      expect(disclosure).toContain('$500,000 left alone from 38 to 55, then paying $80,000 a year through age 95');
+      expect(disclosure).toContain('You did not name a mix, so I used the Balanced preset.');
+    });
+
+    it('counts retirement income from the retirement date and uses a named mix', async () => {
+      const runner = fakeRunner();
+      await runCoastFireScenario(
+        EMPTY_SNAPSHOT,
+        plan({ ...STATED, annualRetirementIncome: 20_000, allocation: 'growth' }),
+        runner as QuickPlanRunner
+      );
+
+      expect(runner.mock.calls[0][0]).toMatchObject({
+        socialSecurityAnnual: 20_000,
+        socialSecurityStartAge: 55,
+        allocation: 'growth',
+      });
+    });
+
+    it('leaves the history to the holdings-based projection once holdings are linked', async () => {
+      const runner = fakeRunner();
+      const execution = await runCoastFireScenario(
+        { investments: { holdings: [{ id: 'h1' }] } },
+        plan(STATED),
+        runner as QuickPlanRunner
+      ) as CompletedCoastFireScenarioExecution;
+
+      expect(runner).not.toHaveBeenCalled();
+      expect(execution.scenarios[0].historicalTest).toBeUndefined();
+    });
+
+    it('skips an income the engine cannot start that early, rather than bending it', async () => {
+      const runner = fakeRunner();
+      await runCoastFireScenario(
+        EMPTY_SNAPSHOT,
+        plan({ ...STATED, retirementAge: 45, annualRetirementIncome: 20_000 }),
+        runner as QuickPlanRunner
+      );
+      expect(runner).not.toHaveBeenCalled();
+    });
+
+    it('never costs the user the straight-line answer when the engine fails', async () => {
+      const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+      const runner = jest.fn(async () => {
+        throw new Error('engine down');
+      });
+      const execution = await runCoastFireScenario(EMPTY_SNAPSHOT, plan(STATED), runner as unknown as QuickPlanRunner);
+
+      expect(execution.status).toBe('completed');
+      expect((execution as CompletedCoastFireScenarioExecution).scenarios[0].historicalTest).toBeUndefined();
+      expect(describeCoastFireScenarioExecution(execution)).toContain('It is a single straight line');
+      warn.mockRestore();
+    });
+
+    it('runs on the real historical engine', async () => {
+      const execution = await runWithEngine(EMPTY_SNAPSHOT, plan(STATED)) as CompletedCoastFireScenarioExecution;
+      const test = execution.scenarios[0].historicalTest!;
+
+      expect(test.sequencesTested).toBeGreaterThan(100);
+      expect(test.sequencesSurvived).toBeLessThanOrEqual(test.sequencesTested);
+      expect(test.survivalRate).toBeGreaterThanOrEqual(0);
+      expect(test.survivalRate).toBeLessThanOrEqual(1);
+      expect(test.projectedPortfolioAtRetirement).toBeGreaterThan(0);
+    }, 120_000);
   });
 });

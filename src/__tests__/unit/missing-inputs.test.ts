@@ -97,6 +97,24 @@ describe('missing input asks', () => {
       expect(ask.message).toContain('Markets never deliver 5% every year');
     });
 
+    it('names the preset the Coast FIRE market-history test ran in place of their holdings', () => {
+      const [ask] = collectMissingInputAsks({
+        retirementAnalysisNeedsInfo: noHoldings,
+        scenarioExecutions: {
+          coast_fire: {
+            status: 'completed',
+            scenarios: [{
+              metrics: { currentAge: 38, retirementAge: 55, realReturnRate: 5, annualRetirementSpending: 80_000, annualRetirementIncome: 0 },
+              historicalTest: { allocation: { label: 'Balanced' } },
+            }],
+          },
+        },
+      } as any, RETIREMENT);
+
+      expect(ask.id).toBe('coast_fire_link_for_holdings');
+      expect(ask.message).toContain('run that market-history test on what you actually hold instead of the Balanced preset');
+    });
+
     it('stays out of the way while a calculator is asking for the figures itself', () => {
       expect(ids({
         retirementAnalysisNeedsInfo: noHoldings,

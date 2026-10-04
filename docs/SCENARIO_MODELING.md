@@ -110,7 +110,9 @@ The `coast_fire` calculator runs `services/coast-fire.ts`, the same formula the 
 
 Given what the user invests each year, it also finds the first birthday at which savings could stop receiving new money and still reach the target. Contributions are added once a year, at the end of the year, and reaching the target only in the retirement year is not reported as coasting. A stated range ("$74,000 to $83,000") is planned as two variants, low and high.
 
-It requires the retirement pack. Coast FIRE itself needs nothing linked, but a user who has linked holdings then also gets the historical projection of leaving them alone until retirement, which is the answer the straight line stands in for.
+Until holdings are linked, it also runs the savings through the public retirement calculator's engine on a disclosed preset mix (Balanced unless the user names Conservative or Growth): today's savings left alone until the retirement age, then spent through age 95, with any retirement income counted from the retirement date. The straight line says whether one average return clears the bar; the history says how often coasting from today actually would have. On the calculator lead in the screenshots that prompted this (38, $500,000, retiring at 55 on $80,000 a year), the money lasted in 10 of 517 historical sequences. The test runs once per distinct case, since contributions do not enter it, and it is skipped, never bent, when an input falls outside the engine's bounds (savings under $1,000, or retirement income starting before 50 or after 80). A failed test never costs the user the straight-line answer.
+
+It requires the retirement pack. Coast FIRE itself needs nothing linked, but a user who has linked holdings then gets the holdings-based projection of leaving them alone until retirement in place of the preset test.
 
 ### Retirement plan from stated figures
 
@@ -123,7 +125,7 @@ It declares `appliesTo`: once any holdings are linked it does not apply, its pla
 `collectMissingInputAsks` decides the note for a retirement question with no holdings linked, and it closes the answer, after every assumption disclosure:
 
 - after a stated plan ran: what linking would change about it (the real mix and balances instead of the preset);
-- after Coast FIRE ran: that linking adds a historical run of what the user holds, left alone to the retirement age;
+- after Coast FIRE ran: that linking runs the same market-history test on what the user holds instead of the preset (or, if the test was skipped, that linking adds one);
 - while either calculator is asking for figures: nothing, since that ask already offers linking;
 - otherwise: why the projection needs holdings, and that stated figures get a preset-mix run in the meantime.
 
