@@ -45,6 +45,7 @@ import {
   type RetirementQuickPlanRequest,
   type RetirementQuickPlanResult,
 } from '../services/retirement-quickplan';
+import { presetStandInReason } from './preset-stand-in';
 
 export const COAST_FIRE_CALCULATOR_ID = 'coast_fire' as const;
 export const COAST_FIRE_SCENARIO_VERSION = 1 as const;
@@ -583,9 +584,6 @@ const QUICKPLAN_MINIMUM_ASSETS = 1_000;
 const QUICKPLAN_MAXIMUM_INCOME = 250_000;
 const QUICKPLAN_INCOME_START_AGES = { minimum: 50, maximum: 80 };
 
-function noHoldingsLinked(snapshot: FinancialContextSnapshot): boolean {
-  return (snapshot.investments?.holdings?.length ?? 0) === 0;
-}
 
 /**
  * Leave today's savings alone until the retirement age, then spend from them,
@@ -717,7 +715,8 @@ export async function runCoastFireScenario(
     }
   }
 
-  const runHistory = noHoldingsLinked(snapshot);
+  // Only where the holdings-based projection cannot give the history itself.
+  const runHistory = presetStandInReason(snapshot) !== null;
   const testedKeys = new Set<string>();
   const scenarios: CoastFireScenarioResult[] = [];
   for (const [index, { variant, metrics }] of results.entries()) {
@@ -1065,12 +1064,14 @@ export const coastFireScenarioCalculator: ScenarioCalculatorDefinition<
     { id: 'real_return_rate_percent', label: 'Growth after inflation', description: 'Percentage points; 5% is 5.', valueType: 'percentage', minimum: 0, maximum: 12 },
     { id: 'withdrawal_rate_percent', label: 'Withdrawal rate', description: 'Percentage points; 4% is 4.', valueType: 'percentage', minimum: 2, maximum: 8 },
     { id: 'annual_contribution', label: 'Annual contributions', description: 'What the user invests each year now; used to find when savings can coast.', valueType: 'currency', minimum: 0, maximum: 10_000_000 },
+    { id: 'allocation', label: 'Preset asset mix', description: 'The mix for the market-history test that runs while holdings cannot be: conservative, balanced, or growth.', valueType: 'enum', options: ['conservative', 'balanced', 'growth'] },
   ],
   defaults: [
     { id: 'real_return_rate_percent', value: DEFAULT_COAST_FIRE_REAL_RETURN_PERCENT, description: 'The public Coast FIRE calculator\'s default growth after inflation.' },
     { id: 'withdrawal_rate_percent', value: DEFAULT_COAST_FIRE_WITHDRAWAL_RATE_PERCENT, description: 'The public Coast FIRE calculator\'s default withdrawal rate.' },
     { id: 'annual_retirement_income', value: 0, description: 'No retirement income unless the user states one.' },
     { id: 'annual_contribution', value: 0, description: 'No contribution path unless the user states what they invest.' },
+    { id: 'allocation', value: DEFAULT_ALLOCATION_ID, description: 'The public retirement calculator\'s default preset, for the market-history test.' },
   ],
   outputs: [
     { id: 'retirement_target', label: 'Portfolio needed at retirement', unit: 'usd', scope: 'variant', description: 'Spending not covered by retirement income, divided by the withdrawal rate.' },
@@ -1078,14 +1079,14 @@ export const coastFireScenarioCalculator: ScenarioCalculatorDefinition<
     { id: 'projected_savings_at_retirement', label: 'Savings at retirement with no further contributions', unit: 'usd', scope: 'variant', description: 'Current savings compounded at the real return.' },
     { id: 'savings_versus_coast_fire_number', label: 'Gap to the Coast FIRE number', unit: 'usd', scope: 'variant', description: 'Absolute difference between savings and the Coast FIRE number.' },
     { id: 'share_of_coast_fire_number', label: 'Share of the Coast FIRE number', unit: 'percent', scope: 'variant', description: 'Savings divided by the Coast FIRE number.' },
-    { id: 'age_at_coast_fire', label: 'Age savings can coast', unit: 'years', scope: 'variant', description: 'First birthday at which contributions could stop and the target still be reached.' },
+    { id: 'age_at_coast_fire', label: 'Age savings can coast', unit: 'age', scope: 'variant', description: 'First birthday at which contributions could stop and the target still be reached.' },
     { id: 'projected_savings_at_retirement_with_contributions', label: 'Savings at retirement with contributions', unit: 'usd', scope: 'variant', description: 'Savings if the stated contributions continue until retirement.' },
     { id: 'history_survival_rate', label: 'Market-history survival share', unit: 'percent', scope: 'variant', description: 'With no holdings linked: share of historical sequences in which today\'s savings, left alone on a preset mix until retirement and then spent, lasted the horizon.' },
     { id: 'history_median_portfolio_at_retirement', label: 'Market-history median at retirement', unit: 'usd', scope: 'variant', description: 'Median real portfolio at the retirement age across those sequences.' },
   ],
   planner: {
     jsonSchema: COAST_FIRE_SCENARIO_PLAN_JSON_SCHEMA,
-    instructions: `When the user asks whether they have reached Coast FIRE, what their Coast FIRE number is, when they will reach Coast FIRE, or changes an input of a Coast FIRE answer earlier in this decision, set requested=true. Coast FIRE means having enough invested today that growth alone, with no further contributions, reaches the retirement target by the retirement age. Fill primary.overrides with values the user stated anywhere in this decision, the newest revision winning, and put the user's short wording in overrides.sources: currentAge, retirementAge, currentSavings (invested retirement savings today), annualRetirementSpending (annual spending once retired, in today's dollars), annualRetirementIncome (pension or other income that starts at retirement), realReturnRatePercent (growth after inflation in percentage points: 5% is 5, never 0.05), withdrawalRatePercent (percentage points: 4% is 4), and annualContribution (what the user invests per year now; only used to find when they reach Coast FIRE). Until holdings are linked, application code also runs the savings through market history on a preset mix: set allocation to conservative (40% US stocks / 50% bonds / 10% cash), balanced (60% / 35% / 5%) or growth (80% / 18% / 2%) when the user, or an earlier answer in this decision, names one of those presets, and otherwise to unspecified with a null source. When the user gives a range for one value, put the low end in primary and only the high end in comparison. When the newest message changes an input of the earlier Coast FIRE case, put the earlier case in primary and only the changed values in comparison. Never estimate or supply typical values; application code applies disclosed defaults and asks for anything else missing, so request the calculation even when figures are missing. A Coast FIRE question does not by itself request any other calculator. The overrides object and every field and source are always present; use null for absent values. When there is no Coast FIRE question, set requested=false, allocation=unspecified, and null for every other value and every source in both variants.`,
+    instructions: `When the user asks whether they have reached Coast FIRE, what their Coast FIRE number is, when they will reach Coast FIRE, or changes an input of a Coast FIRE answer earlier in this decision, set requested=true. Coast FIRE means having enough invested today that growth alone, with no further contributions, reaches the retirement target by the retirement age. Fill primary.overrides with values the user stated anywhere in this decision, the newest revision winning, and put the user's short wording in overrides.sources: currentAge, retirementAge, currentSavings (invested retirement savings today), annualRetirementSpending (annual spending once retired, in today's dollars), annualRetirementIncome (pension or other income that starts at retirement), realReturnRatePercent (growth after inflation in percentage points: 5% is 5, never 0.05), withdrawalRatePercent (percentage points: 4% is 4), and annualContribution (what the user invests per year now; only used to find when they reach Coast FIRE). Until holdings are linked (or while none of the linked ones can be simulated), application code also runs the savings through market history on a preset mix: set allocation to conservative (40% US stocks / 50% bonds / 10% cash), balanced (60% / 35% / 5%) or growth (80% / 18% / 2%) when the user, or an earlier answer in this decision, names one of those presets, and otherwise to unspecified with a null source. When the user gives a range for one value, put the low end in primary and only the high end in comparison. When the newest message changes an input of the earlier Coast FIRE case, put the earlier case in primary and only the changed values in comparison. Never estimate or supply typical values; application code applies disclosed defaults and asks for anything else missing, so request the calculation even when figures are missing. A Coast FIRE question does not by itself request any other calculator. The overrides object and every field and source are always present; use null for absent values. When there is no Coast FIRE question, set requested=false, allocation=unspecified, and null for every other value and every source in both variants.`,
     parsePlan: parseCoastFireScenarioPlan,
   },
   execution: {

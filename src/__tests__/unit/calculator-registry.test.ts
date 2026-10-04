@@ -182,7 +182,7 @@ describe('scenario calculator registry', () => {
     expect(registry.applicablePlans({ linked: true } as any, plans)).toEqual({ fake: { value: 1 } });
   });
 
-  it('runs the stated retirement plan only while no holdings are linked', () => {
+  it('runs the stated retirement plan only where the holdings projection cannot', () => {
     const plans = { stated_retirement_plan: { requested: true, primary: {} } };
     expect(scenarioCalculatorRegistry.applicablePlans(
       { investments: { holdings: [] } } as any,
@@ -192,6 +192,42 @@ describe('scenario calculator registry', () => {
       { investments: { holdings: [{ id: 'h1' }] } } as any,
       plans
     )).toEqual({});
+    // Linked, but nothing the engine can simulate: the preset still stands in.
+    expect(scenarioCalculatorRegistry.applicablePlans(
+      {
+        investments: { holdings: [{ id: 'crypto' }] },
+        retirementAnalysisNeedsInfo: { missingParams: [], detectedParams: {}, unavailableCode: 'no_supported_simulation' },
+      } as any,
+      plans
+    )).toEqual(plans);
+  });
+
+  it('drops a plan that yields to another planned calculator', () => {
+    const coast = { ...fakeCalculator, id: 'coast' };
+    const stated = { ...fakeCalculator, id: 'stated', yieldsTo: ['coast'] };
+    const registry = new ScenarioCalculatorRegistry([coast, stated]);
+
+    expect(registry.applicablePlans({} as any, { coast: { value: 1 }, stated: { value: 2 } }))
+      .toEqual({ coast: { value: 1 } });
+    expect(registry.applicablePlans({} as any, { stated: { value: 2 } })).toEqual({ stated: { value: 2 } });
+  });
+
+  it('only yields to a calculator that itself applies', () => {
+    const coast = { ...fakeCalculator, id: 'coast', appliesTo: () => false };
+    const stated = { ...fakeCalculator, id: 'stated', yieldsTo: ['coast'] };
+    const registry = new ScenarioCalculatorRegistry([coast, stated]);
+
+    expect(registry.applicablePlans({} as any, { coast: { value: 1 }, stated: { value: 2 } }))
+      .toEqual({ stated: { value: 2 } });
+  });
+
+  it('never shows two market histories: the stated plan gives way to Coast FIRE', () => {
+    const plans = {
+      coast_fire: { requested: true, primary: {} },
+      stated_retirement_plan: { requested: true, primary: {} },
+    };
+    expect(scenarioCalculatorRegistry.applicablePlans({ investments: { holdings: [] } } as any, plans))
+      .toEqual({ coast_fire: plans.coast_fire });
   });
 
   it('rejects duplicate calculator ids at registry construction', () => {

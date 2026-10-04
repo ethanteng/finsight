@@ -15,7 +15,7 @@ export type ScenarioOverrideValueType =
   | 'number'
   | 'boolean'
   | 'enum';
-export type ScenarioOutputUnit = 'usd' | 'percent' | 'months' | 'years' | 'count' | 'ratio';
+export type ScenarioOutputUnit = 'usd' | 'percent' | 'months' | 'years' | 'age' | 'count' | 'ratio';
 
 export interface ScenarioOverrideDefinition {
   id: string;
@@ -76,6 +76,12 @@ export interface ScenarioCalculatorDefinition<
    * Absent means it always applies.
    */
   appliesTo?(snapshot: FinancialContextSnapshot): boolean;
+  /**
+   * Calculators that make this one redundant when they are planned for the
+   * same answer: two near-identical results under different headings read as
+   * a contradiction. This plan is dropped whenever one of them is present.
+   */
+  yieldsTo?: readonly string[];
   execute(snapshot: FinancialContextSnapshot, plan: Plan): Promise<Execution>;
   unavailable(startedAt: number, reason: string): Execution;
   compactEvidence(execution: Execution): Evidence;
@@ -212,12 +218,17 @@ export class ScenarioCalculatorRegistry {
    * a dropped plan was never a request this user could have had answered.
    */
   applicablePlans(snapshot: FinancialContextSnapshot, plans: ScenarioPlanRecord): ScenarioPlanRecord {
-    return Object.fromEntries(this.ids().flatMap((id) => {
+    const applicable: ScenarioPlanRecord = Object.fromEntries(this.ids().flatMap((id) => {
       const plan = plans[id];
       if (plan === undefined) return [];
       const appliesTo = this.require(id).appliesTo;
       return !appliesTo || appliesTo(snapshot) ? [[id, plan]] : [];
     }));
+    // Yield only to a plan that itself survived: a calculator that does not
+    // apply cannot make another one redundant.
+    return Object.fromEntries(Object.entries(applicable).filter(([id]) =>
+      !(this.require(id).yieldsTo ?? []).some((other) => applicable[other] !== undefined)
+    ));
   }
 
   requiredPacks(id: string): ContextPackId[] {

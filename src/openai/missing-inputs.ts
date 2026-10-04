@@ -137,6 +137,14 @@ function noHoldingsAsk(
   };
 }
 
+/** Whether a calculator already ran market history on a preset in place of the holdings. */
+function presetStoodIn(executions: FinancialContextSnapshot['scenarioExecutions']): boolean {
+  const stated = executions?.[STATED_RETIREMENT_PLAN_CALCULATOR_ID] as StatedRetirementPlanExecution | undefined;
+  const coastFire = executions?.[COAST_FIRE_CALCULATOR_ID] as CoastFireScenarioExecution | undefined;
+  return (stated?.status === 'completed' && stated.scenarios.length > 0) ||
+    (coastFire?.status === 'completed' && coastFire.scenarios.some((scenario) => scenario.historicalTest));
+}
+
 export function collectMissingInputAsks(
   snapshot: Pick<FinancialContextSnapshot,
     'retirementAnalysisNeedsInfo' | 'homeValueSummary' | 'financialSummary' | 'scenarioExecutions'>,
@@ -154,10 +162,15 @@ export function collectMissingInputAsks(
       const ask = noHoldingsAsk(snapshot.scenarioExecutions);
       if (ask) asks.push(ask);
     } else if (needsInfo?.unavailableCode === 'no_supported_simulation') {
+      // A preset may have stood in already; then this is the reason it did,
+      // not a projection that failed to happen.
+      const lead = presetStoodIn(snapshot.scenarioExecutions)
+        ? 'The preset stood in for your holdings because none of them map'
+        : 'I could not run a retirement projection because none of your holdings map';
       asks.push({
         id: 'retirement_no_supported_simulation',
         message:
-          'I could not run a retirement projection because none of your holdings map to a supported ' +
+          `${lead} to a supported ` +
           'historical return series (US equity, international equity, nominal US government bonds, or cash). ' +
           'TIPS, credit, international bonds, real assets, and unresolved equity geography are disclosed ' +
           'but not simulated.',

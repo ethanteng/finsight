@@ -34,6 +34,8 @@ import {
   type RetirementQuickPlanRequest,
   type RetirementQuickPlanResult,
 } from '../services/retirement-quickplan';
+import { presetStandInReason, type PresetStandInReason } from './preset-stand-in';
+import { COAST_FIRE_CALCULATOR_ID } from './coast-fire-scenario';
 
 export const STATED_RETIREMENT_PLAN_CALCULATOR_ID = 'stated_retirement_plan' as const;
 export const STATED_RETIREMENT_PLAN_VERSION = 1 as const;
@@ -173,6 +175,8 @@ export interface CompletedStatedRetirementPlanExecution {
   durationMs: number;
   scenarios: StatedRetirementPlanResult[];
   comparisonUnavailableReason?: string;
+  /** What the preset stood in for: no holdings, or linked holdings none of which can be simulated. */
+  standInFor: PresetStandInReason;
 }
 
 export interface UnavailableStatedRetirementPlanExecution {
@@ -184,6 +188,7 @@ export interface UnavailableStatedRetirementPlanExecution {
   reason: string;
   /** In the user's terms, when the only obstacle is a figure nobody stated. */
   missingInputs?: string[];
+  standInFor?: PresetStandInReason;
 }
 
 export type StatedRetirementPlanExecution =
@@ -295,9 +300,12 @@ export function parseStatedRetirementPlan(value: unknown): StatedRetirementPlan 
   };
 }
 
-/** Only an account with no linked holdings needs a stand-in projection. */
+/**
+ * Only an account the holdings-based projection cannot run for needs a
+ * stand-in: nothing linked, or nothing linked that the engine can simulate.
+ */
 export function statedRetirementPlanApplies(snapshot: FinancialContextSnapshot): boolean {
-  return (snapshot.investments?.holdings?.length ?? 0) === 0;
+  return presetStandInReason(snapshot) !== null;
 }
 
 function layer(
@@ -454,7 +462,8 @@ function scenarioId(variant: ResolvedVariant): string {
 function unavailable(
   startedAt: number,
   reason: string,
-  missingInputs?: string[]
+  missingInputs?: string[],
+  standInFor?: PresetStandInReason
 ): UnavailableStatedRetirementPlanExecution {
   return {
     version: STATED_RETIREMENT_PLAN_VERSION,
@@ -464,6 +473,7 @@ function unavailable(
     durationMs: Date.now() - startedAt,
     reason,
     ...(missingInputs && missingInputs.length > 0 && { missingInputs }),
+    ...(standInFor && { standInFor }),
   };
 }
 
@@ -540,6 +550,9 @@ export async function runStatedRetirementPlan(
   runQuickPlan: QuickPlanRunner = runRetirementQuickPlan
 ): Promise<StatedRetirementPlanExecution> {
   const startedAt = Date.now();
+  // The registry only runs this where a preset has to stand in; called
+  // directly, the conservative reading is that nothing is linked.
+  const standInFor = presetStandInReason(snapshot) ?? 'no_holdings';
   const primaryOverrides = layer({ sources: {} }, plan.primary.overrides);
   const layers = [primaryOverrides];
   if (plan.comparison?.overrides) layers.push(layer(primaryOverrides, plan.comparison.overrides));
@@ -550,7 +563,7 @@ export async function runStatedRetirementPlan(
     // The comparison inherits every primary value, so it can only be missing
     // what the primary was missing.
     if ('missing' in variant) {
-      return unavailable(startedAt, `Missing ${joinList(variant.missing)}.`, variant.missing);
+      return unavailable(startedAt, `Missing ${joinList(variant.missing)}.`, variant.missing, standInFor);
     }
     if (!variants.some((existing) => requestKey(existing) === requestKey(variant))) variants.push(variant);
   }
@@ -577,6 +590,7 @@ export async function runStatedRetirementPlan(
     durationMs: Date.now() - startedAt,
     scenarios,
     ...(comparisonUnavailableReason && { comparisonUnavailableReason }),
+    standInFor,
   };
 }
 
@@ -717,9 +731,15 @@ export function describeStatedRetirementPlanExecution(execution: StatedRetiremen
   if (execution.status === 'unavailable') {
     if (execution.missingInputs?.length) {
       const items = execution.missingInputs;
-      return 'I can test this against a century of market history before any accounts are linked, using a preset ' +
-        `mix — I just need ${joinList(items)}. Reply with ${items.length === 1 ? 'that' : 'those'} and I will run it. ` +
-        'Or link your investment accounts, and I will use what you actually hold.';
+      const reply = `Reply with ${items.length === 1 ? 'that' : 'those'} and I will run it.`;
+      // Someone whose holdings are linked but cannot be simulated has already
+      // linked; offering it again would be the wall in a new place.
+      return execution.standInFor === 'unsupported_holdings'
+        ? 'I can test this against a century of market history on a preset mix in place of your holdings — ' +
+          `I just need ${joinList(items)}. ${reply}`
+        : 'I can test this against a century of market history before any accounts are linked, using a preset ' +
+          `mix — I just need ${joinList(items)}. ${reply} ` +
+          'Or link your investment accounts, and I will use what you actually hold.';
     }
     return `I could not run your plan against market history: ${execution.reason}`;
   }
@@ -740,9 +760,12 @@ export function describeStatedRetirementPlanExecution(execution: StatedRetiremen
     ? ` You did not name a mix, so I used the ${primary.allocation.label} preset.`
     : '';
   const assets = assumptionOf(primary, 'investableAssets');
-  const assetsNotice = assets?.origin === 'snapshot'
-    ? ` The amount invested is your connected investment total of ${money(Number(assets.value))}; its holdings are not itemized, so they cannot be modeled directly.`
-    : '';
+  const unsupported = execution.standInFor === 'unsupported_holdings';
+  const assetsNotice = assets?.origin !== 'snapshot'
+    ? ''
+    : unsupported
+      ? ` The amount invested is your connected investment total of ${money(Number(assets.value))}.`
+      : ` The amount invested is your connected investment total of ${money(Number(assets.value))}; its holdings are not itemized, so they cannot be modeled directly.`;
   const age = assumptionOf(primary, 'currentAge');
   const ageNotice = age?.origin === 'profile' ? ` Your age, ${age.value}, is the one you told me earlier.` : '';
   const comparison = execution.scenarios.length > 1
@@ -752,8 +775,13 @@ export function describeStatedRetirementPlanExecution(execution: StatedRetiremen
     ? ` I could not run the comparison case: ${execution.comparisonUnavailableReason}`
     : '';
 
-  return `Plan assumptions: no investment holdings are linked, so this ran the ${primary.allocation.label} preset ` +
-    `(${primary.allocation.description}) rather than what you hold, against every overlapping ` +
+  const standIn = unsupported
+    ? `none of your linked holdings map to a return series I can simulate, so this ran the ${primary.allocation.label} ` +
+      `preset (${primary.allocation.description}) in their place`
+    : `no investment holdings are linked, so this ran the ${primary.allocation.label} preset ` +
+      `(${primary.allocation.description}) rather than what you hold`;
+
+  return `Plan assumptions: ${standIn}, against every overlapping ` +
     `${primary.history.horizonYears}-year stretch of US market returns and inflation that began between ` +
     `${readableMonth(primary.history.firstStartMonth)} and ${readableMonth(primary.history.lastStartMonth)}.` +
     `${comparison}${socialSecurity}${saving}${horizon}${mixDefault}${assetsNotice}${ageNotice}${comparisonNotice} ` +
@@ -799,7 +827,7 @@ export const statedRetirementPlanCalculator: ScenarioCalculatorDefinition<
   ],
   planner: {
     jsonSchema: STATED_RETIREMENT_PLAN_JSON_SCHEMA,
-    instructions: `Request this for any question about whether the user can retire, whether their savings will last, how much they can spend in retirement, or a change to such a plan stated earlier in this decision, including a plan the free retirement calculator answered. Application code runs it only when no investment holdings are linked, as a stand-in for the holdings-based projection, so request it for those questions even when the user has stated nothing yet; it asks for whatever is missing. Fill primary.overrides with values the user stated anywhere in this decision, the newest revision winning, and put the user's short wording in overrides.sources: currentAge, retirementAge, investableAssets (invested savings today), annualSpending (spending per year once retired, in today's dollars), annualContributions (saving per year until retirement), socialSecurityAnnual and socialSecurityStartAge, lifeExpectancy (the age the plan runs through), and allocation: conservative (40% US stocks / 50% bonds / 10% cash), balanced (60% / 35% / 5%) or growth (80% / 18% / 2%) when the user, or an earlier answer in this decision, names one of those presets; otherwise unspecified with a null source. When the newest message changes an input of a plan stated earlier, put the earlier plan in primary and only the changed values in comparison. When the user gives a range for one value, put the low end in primary and only the high end in comparison. Never estimate or supply typical values. Do not request it for a Coast FIRE question unless the user also asks whether that plan survives market history. The overrides object and every field and source are always present. When there is no such retirement question, set requested=false, allocation=unspecified, and null for every other value and every source in both variants.`,
+    instructions: `Request this for any question about whether the user can retire, whether their savings will last, how much they can spend in retirement, or a change to such a plan stated earlier in this decision, including a plan the free retirement calculator answered. Application code runs it only when no investment holdings are linked, or none of the linked ones can be simulated, as a stand-in for the holdings-based projection, so request it for those questions even when the user has stated nothing yet; it asks for whatever is missing. Fill primary.overrides with values the user stated anywhere in this decision, the newest revision winning, and put the user's short wording in overrides.sources: currentAge, retirementAge, investableAssets (invested savings today), annualSpending (spending per year once retired, in today's dollars), annualContributions (saving per year until retirement), socialSecurityAnnual and socialSecurityStartAge, lifeExpectancy (the age the plan runs through), and allocation: conservative (40% US stocks / 50% bonds / 10% cash), balanced (60% / 35% / 5%) or growth (80% / 18% / 2%) when the user, or an earlier answer in this decision, names one of those presets; otherwise unspecified with a null source. When the newest message changes an input of a plan stated earlier, put the earlier plan in primary and only the changed values in comparison. When the user gives a range for one value, put the low end in primary and only the high end in comparison. Never estimate or supply typical values. Do not request it for a Coast FIRE question unless the user also asks whether that plan survives market history. The overrides object and every field and source are always present. When there is no such retirement question, set requested=false, allocation=unspecified, and null for every other value and every source in both variants.`,
     parsePlan: parseStatedRetirementPlan,
   },
   execution: {
@@ -807,6 +835,10 @@ export const statedRetirementPlanCalculator: ScenarioCalculatorDefinition<
     failureMessage: 'The stated retirement plan could not be run against market history.',
   },
   appliesTo: statedRetirementPlanApplies,
+  // Coast FIRE runs the same engine on the same savings for its own
+  // market-history test. Both in one answer would be two near-identical
+  // histories under different headings.
+  yieldsTo: [COAST_FIRE_CALCULATOR_ID],
   execute: (snapshot, plan) => runStatedRetirementPlan(snapshot, plan),
   unavailable: (startedAt, reason) => unavailable(startedAt, reason),
   compactEvidence: compactStatedRetirementPlanExecution,

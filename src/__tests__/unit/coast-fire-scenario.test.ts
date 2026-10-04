@@ -357,6 +357,21 @@ describe('Coast FIRE calculator', () => {
       expect(execution.scenarios[0].historicalTest).toBeUndefined();
     });
 
+    it('also stands in for linked holdings none of which can be simulated', async () => {
+      const runner = fakeRunner();
+      const execution = await runCoastFireScenario(
+        {
+          investments: { holdings: [{ id: 'btc' }] },
+          retirementAnalysisNeedsInfo: { missingParams: [], detectedParams: {}, unavailableCode: 'no_supported_simulation' },
+        },
+        plan(STATED),
+        runner as QuickPlanRunner
+      ) as CompletedCoastFireScenarioExecution;
+
+      expect(runner).toHaveBeenCalledTimes(1);
+      expect(execution.scenarios[0].historicalTest).toBeDefined();
+    });
+
     it('skips an income the engine cannot start that early, rather than bending it', async () => {
       const runner = fakeRunner();
       await runCoastFireScenario(

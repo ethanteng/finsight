@@ -70,6 +70,12 @@ const LEAD = {
 /** A brand-new account from the calculator: nothing linked, nothing remembered. */
 const NO_HOLDINGS = { investments: { holdings: [], securities: [] } } as any;
 
+/** Linked, but nothing the historical engine can simulate (an all-crypto account, say). */
+const UNSUPPORTED_HOLDINGS = {
+  investments: { holdings: [{ id: 'btc' }], securities: [] },
+  retirementAnalysisNeedsInfo: { missingParams: [], detectedParams: {}, unavailableCode: 'no_supported_simulation' },
+} as any;
+
 /** A quick-plan result shaped like the engine's, with a survival rate per retirement age. */
 function fakeRunner(survivalByAge: Record<number, number> = {}) {
   return jest.fn(async (request: RetirementQuickPlanRequest): Promise<RetirementQuickPlanResult> => {
@@ -123,10 +129,25 @@ function fakeRunner(survivalByAge: Record<number, number> = {}) {
 }
 
 describe('retirement plan from stated figures', () => {
-  it('stands in only while no holdings are linked', () => {
+  it('stands in only where the holdings-based projection cannot run', () => {
     expect(statedRetirementPlanApplies(NO_HOLDINGS)).toBe(true);
     expect(statedRetirementPlanApplies({} as any)).toBe(true);
     expect(statedRetirementPlanApplies({ investments: { holdings: [{ id: 'h1' }] } } as any)).toBe(false);
+    expect(statedRetirementPlanApplies(UNSUPPORTED_HOLDINGS)).toBe(true);
+  });
+
+  it('says the preset stood in for holdings it could not simulate, without offering a link', async () => {
+    const execution = await runStatedRetirementPlan(UNSUPPORTED_HOLDINGS, plan(LEAD), fakeRunner() as QuickPlanRunner);
+    expect(execution).toMatchObject({ status: 'completed', standInFor: 'unsupported_holdings' });
+
+    const disclosure = describeStatedRetirementPlanExecution(execution)!;
+    expect(disclosure).toContain('none of your linked holdings map to a return series I can simulate, so this ran the Balanced preset');
+    expect(disclosure).not.toContain('no investment holdings are linked');
+
+    const missing = await runStatedRetirementPlan(UNSUPPORTED_HOLDINGS, plan({ retirementAge: 60 }), fakeRunner() as QuickPlanRunner);
+    const ask = describeStatedRetirementPlanExecution(missing)!;
+    expect(ask).toContain('on a preset mix in place of your holdings');
+    expect(ask).not.toContain('link');
   });
 
   it('answers "what if I retire at 62 instead?" for a calculator lead with nothing linked', async () => {
@@ -138,6 +159,7 @@ describe('retirement plan from stated figures', () => {
     ) as CompletedStatedRetirementPlanExecution;
 
     expect(execution.status).toBe('completed');
+    expect(execution.standInFor).toBe('no_holdings');
     expect(runner).toHaveBeenCalledTimes(2);
     expect(runner.mock.calls[1][0]).toMatchObject({ ...LEAD, retirementAge: 62, lifeExpectancy: 95 });
     expect(execution.scenarios.map((scenario) => [scenario.label, scenario.outcome.survivalRate])).toEqual([

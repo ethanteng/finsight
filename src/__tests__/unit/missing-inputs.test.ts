@@ -140,6 +140,25 @@ describe('missing input asks', () => {
     });
   });
 
+  it('gives the reason the preset stood in, not a failure, once one has', () => {
+    const [ask] = collectMissingInputAsks(
+      {
+        retirementAnalysisNeedsInfo: {
+          missingParams: [],
+          detectedParams: {},
+          unavailableCode: 'no_supported_simulation',
+        },
+        scenarioExecutions: {
+          stated_retirement_plan: { status: 'completed', scenarios: [{ allocation: { label: 'Balanced' } }] },
+        },
+      } as any,
+      { needsRetirement: true, needsHomeValue: false }
+    );
+
+    expect(ask.id).toBe('retirement_no_supported_simulation');
+    expect(ask.message).toMatch(/^The preset stood in for your holdings because none of them map/);
+  });
+
   it('explains when holdings exist but none are simulatable', () => {
     const asks = collectMissingInputAsks(
       {
