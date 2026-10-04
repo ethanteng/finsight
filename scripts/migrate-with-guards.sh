@@ -67,19 +67,62 @@ elif [ "$MIGRATE_STATUS_EXIT" -ne 0 ] && \
   exit 1
 fi
 
+# Prisma heads the pending list "Following migrations have not yet been applied:"
+# normally, and "The migrations have not yet been applied:" when it is reported
+# alongside database-only records — which production's legacy records above
+# produce whenever anything is pending.
+PENDING_MIGRATIONS=$(printf '%s\n' "$MIGRATE_STATUS" | awk '
+  /have not yet been applied:/ {
+    reading_pending = 1
+    next
+  }
+  reading_pending && /^[[:space:]]*$/ { next }
+  reading_pending && /^[[:space:]]*[0-9]+_[A-Za-z0-9_-]+[[:space:]]*$/ {
+    gsub(/^[[:space:]]+|[[:space:]]+$/, "")
+    print
+    next
+  }
+  reading_pending { exit }
+')
+
 if printf '%s\n' "$MIGRATE_STATUS" | grep -q "have not yet been applied"; then
+  if [ -z "$PENDING_MIGRATIONS" ]; then
+    echo "❌ Could not parse pending migrations; aborting instead of guessing"
+    exit 1
+  fi
   echo "📋 Pending migrations detected — will apply via migrate deploy"
 else
   echo "✅ No pending repository migrations detected; migrate deploy will verify"
 fi
 
-# 3) Safety: set conservative lock/statement timeouts for this session
-echo "⏱️  Setting timeouts"
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "SET lock_timeout='30s'; SET statement_timeout='5min';"
+# 3) Refuse destructive SQL that the migration does not explicitly opt in to
+echo "🔎 Checking pending migrations for destructive SQL"
+PENDING_DIRS=()
+while IFS= read -r migration; do
+  [ -n "$migration" ] && PENDING_DIRS+=("prisma/migrations/$migration")
+done <<< "$PENDING_MIGRATIONS"
+bash "$(dirname "$0")/check-destructive-migrations.sh" ${PENDING_DIRS[@]+"${PENDING_DIRS[@]}"}
 
-# 4) Apply migrations
+# 4) Conservative lock/statement timeouts on the connection Prisma migrates with.
+# They have to travel in the URL: a SET in a separate psql session ends with that
+# session and never reaches Prisma's connection. A migration that genuinely needs
+# longer can SET statement_timeout itself, since it runs on this connection.
+case "$DATABASE_URL" in
+  *\?options=* | *\&options=*)
+    echo "❌ DATABASE_URL already sets options=; refusing to guess how to merge timeouts into it"
+    exit 1
+    ;;
+esac
+case "$DATABASE_URL" in
+  *\?*) URL_SEPARATOR='&' ;;
+  *) URL_SEPARATOR='?' ;;
+esac
+MIGRATION_TIMEOUTS='options=-c%20lock_timeout%3D30s%20-c%20statement_timeout%3D5min'
+echo "⏱️  Migrating with lock_timeout=30s, statement_timeout=5min"
+
+# 5) Apply migrations
 echo "🚀 Applying migrations"
-npx prisma migrate deploy
+DATABASE_URL="${DATABASE_URL}${URL_SEPARATOR}${MIGRATION_TIMEOUTS}" npx prisma migrate deploy
 
 echo "✅ Migrations applied successfully"
 echo "🔒 Production database schema updated safely"

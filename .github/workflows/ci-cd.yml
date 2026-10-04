@@ -591,6 +591,10 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          # A PR checks out its merge commit; depth 2 brings in the base tip as
+          # HEAD^1 so the destructive-migration check can see what the PR adds.
+          fetch-depth: 2
 
       - name: Security Validation Check
         run: |
@@ -620,6 +624,15 @@ jobs:
 
       - name: Enforce no-migrate-in-build
         run: bash scripts/check-no-migrate-in-build.sh
+
+      # The same tripwire migrate-prod runs on main, applied here to the migrations
+      # this PR adds or edits, so a missing `-- allow-destructive:` opt-in is found
+      # in review rather than by a blocked production deploy after merge.
+      - name: Check new migrations for destructive SQL
+        if: github.event_name == 'pull_request'
+        run: |
+          MIGRATION_DIRS=$(git diff --name-only --diff-filter=AM HEAD^1 HEAD -- 'prisma/migrations/*/migration.sql' | xargs -r -n1 dirname)
+          bash scripts/check-destructive-migrations.sh $MIGRATION_DIRS
 
       - name: Verify backend build
         run: |

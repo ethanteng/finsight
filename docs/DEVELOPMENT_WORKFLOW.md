@@ -213,11 +213,12 @@ A comprehensive CI/CD safety system that prevents production data loss through m
 #### **3. Production Migration Job** 🔒
 - **Job**: `migrate-prod` runs before deployment, automatically, once every test and build job has passed
 - **No manual approval**: The job does not use the GitHub `production` environment, so nothing waits for a reviewer
-- **Guardrails**: Rejects unknown migration-history divergence before applying anything
+- **Guardrails**: Rejects unknown migration-history divergence and unacknowledged destructive SQL before applying anything, and bounds lock waits and statement time
 - **Result**: Merging to `main` is the decision to migrate production
 
 #### **4. Automated Safety Checks** 🤖
 - **Build Verification**: Ensures no migration commands in build scripts
+- **Destructive SQL Check**: On every PR, migrations the PR adds or edits are scanned for destructive SQL (see Migration Guards below)
 - **Test Validation**: All tests must pass before the migration job runs
 - **Job Timeout**: `migrate-prod` is bounded at 15 minutes
 
@@ -247,11 +248,17 @@ A comprehensive CI/CD safety system that prevents production data loss through m
 - Production migrations apply automatically on every push to `main` that passes CI
 - Code review on the pull request is the only human review a migration gets
 - Review `prisma/migrations/` in every PR as if it were being run against production, because it will be
+- Destructive SQL is the exception: it is refused unless the migration opts in explicitly (below)
 
 #### **Migration Guards** 🛡️
 - **Migration Preview**: Shows pending migrations before applying
 - **History Check**: Aborts on any database-only migration other than the four known legacy baseline records
-- **Not guarded**: Destructive SQL (`DROP`, `ALTER TYPE`, column removals) is **not** detected or blocked — it applies like any other migration
+- **Destructive SQL Check** (`scripts/check-destructive-migrations.sh`): Refuses a pending migration that drops a table, column, schema or type, changes a column's type, truncates, or deletes rows — unless its `migration.sql` carries an opt-in with a reason:
+  ```sql
+  -- allow-destructive: legacyField has been unread since the v2 sync rewrite
+  ```
+  The same check runs on every PR against the migrations it adds or edits, so a missing opt-in shows up in review, not as a blocked deploy. It is a tripwire, not a SQL parser: comments are ignored, and it matches the SQL Prisma generates plus common hand-written forms. `DROP CONSTRAINT`, `DROP INDEX`, `DROP DEFAULT` and `DROP NOT NULL` lose no data and are not flagged. Add the opt-in before the migration is applied — editing an applied migration changes its checksum.
+- **Timeouts**: Migrations run with `lock_timeout=30s` and `statement_timeout=5min`, passed in the connection URL Prisma migrates with. A migration that genuinely needs longer can `SET statement_timeout` at its top, since it runs on that same connection.
 
 #### **Complete Isolation** 🔒
 - **Render**: Build-only (never touches database)
@@ -292,8 +299,10 @@ git push origin main
 #### **If Migration Fails:**
 1. **Check migration logs** in GitHub Actions
 2. **Identify the issue** (usually syntax or constraint problems)
-3. **Fix locally** and test with `npx prisma migrate reset`
-4. **Push fix** to trigger new pipeline run
+3. **Blocked as destructive?** Nothing was applied. Add the `-- allow-destructive: <reason>` opt-in to that migration if the data loss is intended, or rewrite it if not, and push
+4. **Lock timeout (`P3018` … `canceling statement due to lock timeout`)?** The migration waited 30s behind a lock held by live traffic. Prisma sends a migration as one implicit transaction, so nothing it changed was kept — unless the file has its own `BEGIN`/`COMMIT` (Prisma writes these for enum changes), in which case check what landed before that `COMMIT`. Prisma recorded it as failed: mark it rolled back against production with `npx prisma migrate resolve --rolled-back <migration_name>`, then re-run the job
+5. **Otherwise, fix locally** and test with `npx prisma migrate reset`
+6. **Push fix** to trigger new pipeline run
 
 #### **If You Need to Cancel:**
 1. **Before migrate-prod starts**: Click "Cancel workflow" in GitHub Actions while the test jobs are still running
@@ -305,6 +314,8 @@ git push origin main
 - [ ] **Tests use real migrations** instead of `db push` ✅
 - [ ] **Production migration job** runs only after all tests and build verification pass ✅
 - [ ] **Migration guards** reject unknown migration-history divergence ✅
+- [ ] **Destructive SQL** requires an explicit `-- allow-destructive:` opt-in, checked on PRs and before applying ✅
+- [ ] **Lock and statement timeouts** apply to Prisma's own migration connection ✅
 - [ ] **Render configuration** is build-only ✅
 - [ ] **CI/CD pipeline** enforces all safety measures ✅
 
@@ -317,7 +328,7 @@ git push origin main
 5. **Audit Trail**: Every migration run is logged in GitHub Actions
 6. **Fast Recovery**: Easy to cancel or fix issues
 
-**RESULT: Production migrations run only from tested code on `main`. A destructive migration that passes review and CI will still apply — review migration SQL accordingly.**
+**RESULT: Production migrations run only from tested code on `main`, and destructive SQL applies only when the migration itself says why.**
 
 ## 📚 **Related Safety Documentation**
 
