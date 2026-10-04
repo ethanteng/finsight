@@ -17,6 +17,13 @@
  * stop receiving new money and still reach the target -- "when will I reach
  * Coast FIRE?". Contributions are added once a year, at the end of the year,
  * so the answer is a whole age rather than a false-precision fraction.
+ *
+ * And one the public page cannot make room for: until holdings are linked, the
+ * same savings are also run through the historical engine on a disclosed
+ * preset mix, left alone until the retirement age and then spent. The straight
+ * line says whether one average return clears the bar; the history says how
+ * often coasting from today actually would have, which is the answer linking
+ * would then make about the user's own holdings.
  */
 
 import { createHash } from 'crypto';
@@ -29,6 +36,15 @@ import {
   type CoastFireInputs,
   type CoastFireResult,
 } from '../services/coast-fire';
+import {
+  DEFAULT_ALLOCATION_ID,
+  DEFAULT_SOCIAL_SECURITY_START_AGE,
+  QUICKPLAN_ALLOCATIONS,
+  runRetirementQuickPlan,
+  type QuickPlanAllocationId,
+  type RetirementQuickPlanRequest,
+  type RetirementQuickPlanResult,
+} from '../services/retirement-quickplan';
 
 export const COAST_FIRE_CALCULATOR_ID = 'coast_fire' as const;
 export const COAST_FIRE_SCENARIO_VERSION = 1 as const;
@@ -53,17 +69,22 @@ export type CoastFireOverrideField = (typeof COAST_FIRE_OVERRIDE_FIELDS)[number]
 const NULLABLE_NUMBER = { type: ['number', 'null'] as const };
 const NULLABLE_STRING = { type: ['string', 'null'] as const };
 
+/** The historical test's preset mix; `unspecified` leaves the disclosed default. */
+const ALLOCATION_OPTIONS = ['unspecified', 'conservative', 'balanced', 'growth'] as const;
+const SOURCE_FIELDS = [...COAST_FIRE_OVERRIDE_FIELDS, 'allocation'] as const;
+
 const PLANNED_COAST_FIRE_OVERRIDES_JSON_SCHEMA = {
   type: 'object',
   additionalProperties: false,
-  required: [...COAST_FIRE_OVERRIDE_FIELDS, 'sources'],
+  required: [...SOURCE_FIELDS, 'sources'],
   properties: {
     ...Object.fromEntries(COAST_FIRE_OVERRIDE_FIELDS.map((field) => [field, NULLABLE_NUMBER])),
+    allocation: { type: 'string', enum: [...ALLOCATION_OPTIONS] },
     sources: {
       type: 'object',
       additionalProperties: false,
-      required: [...COAST_FIRE_OVERRIDE_FIELDS],
-      properties: Object.fromEntries(COAST_FIRE_OVERRIDE_FIELDS.map((field) => [field, NULLABLE_STRING])),
+      required: [...SOURCE_FIELDS],
+      properties: Object.fromEntries(SOURCE_FIELDS.map((field) => [field, NULLABLE_STRING])),
     },
   },
 } as const;
@@ -95,7 +116,8 @@ export interface PlannedCoastFireOverrides {
   realReturnRatePercent?: number;
   withdrawalRatePercent?: number;
   annualContribution?: number;
-  sources: Partial<Record<CoastFireOverrideField, string>>;
+  allocation?: QuickPlanAllocationId;
+  sources: Partial<Record<CoastFireOverrideField | 'allocation', string>>;
 }
 
 export interface CoastFireScenarioPlan {
@@ -134,13 +156,45 @@ export interface CoastFireContributionPath {
   projectedSavingsAtRetirementWithContributions: number;
 }
 
+/**
+ * The same savings left alone until the retirement age and then spent, run
+ * through the historical record on a preset mix. Present only while no
+ * holdings are linked; once they are, the holdings-based projection is the
+ * historical answer.
+ */
+export interface CoastFireHistoricalTest {
+  allocation: {
+    id: QuickPlanAllocationId;
+    label: string;
+    description: string;
+    /** Whether the user named the mix or it is the disclosed default. */
+    origin: 'user' | 'default';
+    usEquityPercent: number;
+    bondsPercent: number;
+    cashPercent: number;
+  };
+  /** The age the test runs through. */
+  lifeExpectancy: number;
+  survivalRate: number;
+  sequencesTested: number;
+  sequencesSurvived: number;
+  /** Median across the tested sequences, in today's dollars. */
+  projectedPortfolioAtRetirement: number;
+  firstStartMonth: string;
+  lastStartMonth: string;
+  horizonYears: number;
+}
+
 export interface CoastFireScenarioResult {
   id: string;
   label: string;
   assumptions: CoastFireAssumption[];
   metrics: CoastFireResult;
   contributionPath?: CoastFireContributionPath;
+  historicalTest?: CoastFireHistoricalTest;
 }
+
+export type QuickPlanRunner = (request: RetirementQuickPlanRequest) => Promise<RetirementQuickPlanResult>;
 
 export interface CompletedCoastFireScenarioExecution {
   version: number;
@@ -228,8 +282,13 @@ function parseOverrides(value: unknown): PlannedCoastFireOverrides | undefined {
     overrides[field] = numericValue;
     overrides.sources[field] = source;
   }
+  const allocationSource = shortSource(rawSources.allocation);
+  if (typeof record.allocation === 'string' && record.allocation in QUICKPLAN_ALLOCATIONS && allocationSource) {
+    overrides.allocation = record.allocation as QuickPlanAllocationId;
+    overrides.sources.allocation = allocationSource;
+  }
 
-  return COAST_FIRE_OVERRIDE_FIELDS.some((field) => overrides[field] !== undefined)
+  return [...COAST_FIRE_OVERRIDE_FIELDS, 'allocation' as const].some((field) => overrides[field] !== undefined)
     ? overrides
     : undefined;
 }
@@ -269,6 +328,10 @@ function layer(
     if (value === undefined || !source) continue;
     merged[field] = value;
     merged.sources[field] = source;
+  }
+  if (top.allocation && top.sources.allocation) {
+    merged.allocation = top.allocation;
+    merged.sources.allocation = top.sources.allocation;
   }
   return merged;
 }
@@ -311,6 +374,7 @@ interface ResolvedCoastFireVariant {
   inputs: CoastFireInputs;
   annualContribution: number;
   assumptions: CoastFireAssumption[];
+  allocation: { id: QuickPlanAllocationId; origin: 'user' | 'default' };
 }
 
 /**
@@ -382,6 +446,9 @@ function resolveVariant(
     },
     annualContribution: statedContribution ?? 0,
     assumptions,
+    allocation: overrides.allocation && overrides.sources.allocation
+      ? { id: overrides.allocation, origin: 'user' }
+      : { id: DEFAULT_ALLOCATION_ID, origin: 'default' },
   };
 }
 
@@ -462,11 +529,104 @@ function variantLabel(own: ResolvedCoastFireVariant, peer: ResolvedCoastFireVari
     ownValues.get(field) !== peerValues.get(field)
   );
   const described = differing.slice(0, 2).map((field) => describeField(field, ownValues.get(field) ?? 0));
+  if (described.length < 2 && own.allocation.id !== peer.allocation.id) {
+    described.push(`the ${QUICKPLAN_ALLOCATIONS[own.allocation.id].label} mix`);
+  }
   return described.length > 0 ? capitalize(described.join(' and ')) : 'Your Coast FIRE plan';
 }
 
 function variantKey(variant: ResolvedCoastFireVariant): string {
-  return JSON.stringify({ ...variant.inputs, annualContribution: variant.annualContribution });
+  return JSON.stringify({
+    ...variant.inputs,
+    annualContribution: variant.annualContribution,
+    allocation: variant.allocation.id,
+  });
+}
+
+/**
+ * What the historical test depends on. Contributions are not part of it --
+ * coasting means none -- so a contribution range runs the test once.
+ */
+function historicalTestKey(variant: ResolvedCoastFireVariant): string {
+  const { currentAge, retirementAge, currentSavings, annualRetirementSpending, annualRetirementIncome } = variant.inputs;
+  return JSON.stringify([currentAge, retirementAge, currentSavings, annualRetirementSpending, annualRetirementIncome, variant.allocation.id]);
+}
+
+/**
+ * The quick plan's own bounds that a Coast FIRE input can fall outside of.
+ * Its retirement income is modeled as Social Security, which it caps and only
+ * starts between 50 and 80; outside those, the test is skipped rather than
+ * run on an input it would have to bend.
+ */
+const QUICKPLAN_MINIMUM_ASSETS = 1_000;
+const QUICKPLAN_MAXIMUM_INCOME = 250_000;
+const QUICKPLAN_INCOME_START_AGES = { minimum: 50, maximum: 80 };
+
+function noHoldingsLinked(snapshot: FinancialContextSnapshot): boolean {
+  return (snapshot.investments?.holdings?.length ?? 0) === 0;
+}
+
+/**
+ * Leave today's savings alone until the retirement age, then spend from them,
+ * across every historical sequence the record covers, on a preset mix.
+ *
+ * Never fails the Coast FIRE answer: the straight line is what was asked, and
+ * this is the better reading of it. A skipped or failed test is simply absent.
+ */
+async function presetHistoricalTest(
+  variant: ResolvedCoastFireVariant,
+  runQuickPlan: QuickPlanRunner
+): Promise<CoastFireHistoricalTest | undefined> {
+  const inputs = variant.inputs;
+  const income = inputs.annualRetirementIncome;
+  if (inputs.currentSavings < QUICKPLAN_MINIMUM_ASSETS) return undefined;
+  if (income > 0 && (
+    income > QUICKPLAN_MAXIMUM_INCOME ||
+    inputs.retirementAge < QUICKPLAN_INCOME_START_AGES.minimum ||
+    inputs.retirementAge > QUICKPLAN_INCOME_START_AGES.maximum
+  )) {
+    return undefined;
+  }
+
+  try {
+    const run = await runQuickPlan({
+      currentAge: inputs.currentAge,
+      retirementAge: inputs.retirementAge,
+      investableAssets: inputs.currentSavings,
+      annualSpending: inputs.annualRetirementSpending,
+      // Coasting: nothing more goes in.
+      annualContributions: 0,
+      // Coast FIRE counts retirement income from the day the user retires.
+      socialSecurityAnnual: income,
+      socialSecurityStartAge: income > 0 ? inputs.retirementAge : DEFAULT_SOCIAL_SECURITY_START_AGE,
+      allocation: variant.allocation.id,
+    });
+    const evaluated = run.primary;
+    if (!evaluated) return undefined;
+    const mix = QUICKPLAN_ALLOCATIONS[run.inputs.allocation];
+    return {
+      allocation: {
+        id: mix.id,
+        label: mix.label,
+        description: mix.description,
+        origin: variant.allocation.origin,
+        usEquityPercent: Math.round(mix.usEquity * 100),
+        bondsPercent: Math.round(mix.bonds * 100),
+        cashPercent: Math.round(mix.cash * 100),
+      },
+      lifeExpectancy: run.inputs.lifeExpectancy,
+      survivalRate: evaluated.survivalRate,
+      sequencesTested: evaluated.sequencesTested,
+      sequencesSurvived: evaluated.sequencesSurvived,
+      projectedPortfolioAtRetirement: evaluated.projectedPortfolioAtRetirement,
+      firstStartMonth: run.history.firstStartMonth,
+      lastStartMonth: run.history.lastStartMonth,
+      horizonYears: run.history.horizonYears,
+    };
+  } catch (error) {
+    console.warn('Ask Linc: Coast FIRE historical test skipped:', error);
+    return undefined;
+  }
 }
 
 function scenarioId(variant: ResolvedCoastFireVariant): string {
@@ -502,7 +662,8 @@ function joinList(items: string[]): string {
 /** Run the stated Coast FIRE case and, when requested, one comparison case. */
 export async function runCoastFireScenario(
   snapshot: FinancialContextSnapshot,
-  plan: CoastFireScenarioPlan
+  plan: CoastFireScenarioPlan,
+  runQuickPlan: QuickPlanRunner = runRetirementQuickPlan
 ): Promise<CoastFireScenarioExecution> {
   const startedAt = Date.now();
   const primaryOverrides = layer({ sources: {} }, plan.primary.overrides);
@@ -535,9 +696,19 @@ export async function runCoastFireScenario(
     }
   }
 
-  const scenarios = results.map(({ variant, metrics }, index): CoastFireScenarioResult => {
+  const runHistory = noHoldingsLinked(snapshot);
+  const testedKeys = new Set<string>();
+  const scenarios: CoastFireScenarioResult[] = [];
+  for (const [index, { variant, metrics }] of results.entries()) {
     const peer = resolved[index === 0 ? 1 : 0];
-    return {
+    // Once per distinct test: a contribution range would otherwise put the
+    // same historical figures in the answer twice under two labels.
+    const testKey = historicalTestKey(variant);
+    const historicalTest = runHistory && !testedKeys.has(testKey)
+      ? await presetHistoricalTest(variant, runQuickPlan)
+      : undefined;
+    testedKeys.add(testKey);
+    scenarios.push({
       id: scenarioId(variant),
       label: variantLabel(variant, peer),
       assumptions: variant.assumptions,
@@ -545,8 +716,9 @@ export async function runCoastFireScenario(
       ...(variant.annualContribution > 0 && !metrics.hasReachedCoastFire && {
         contributionPath: coastFireContributionPath(metrics, variant.annualContribution),
       }),
-    };
-  });
+      ...(historicalTest && { historicalTest }),
+    });
+  }
 
   return {
     version: COAST_FIRE_SCENARIO_VERSION,
@@ -718,6 +890,31 @@ export function coastFireScenarioCanonicalFacts(execution: CoastFireScenarioExec
         'usd'
       );
     }
+
+    const test = scenario.historicalTest;
+    if (test) {
+      const mix = `Market-history test on the ${test.allocation.label} preset, coasting from today`;
+      add('scenario_input', 'history_us_stock_share', `${mix}: share in US stocks`, test.allocation.usEquityPercent, 'percent');
+      add('scenario_input', 'history_bond_share', `${mix}: share in bonds`, test.allocation.bondsPercent, 'percent');
+      add('scenario_input', 'history_cash_share', `${mix}: share in cash`, test.allocation.cashPercent, 'percent');
+      add('scenario_input', 'history_horizon_age', `${mix}: age the test runs through`, test.lifeExpectancy, 'age');
+      add(
+        'scenario_calculation',
+        'history_survival_rate',
+        `${mix}: share of tested historical sequences in which the money lasted through age ${test.lifeExpectancy}`,
+        Number((test.survivalRate * 100).toFixed(4)),
+        'percent'
+      );
+      add('scenario_calculation', 'history_sequences_tested', `${mix}: historical sequences tested`, test.sequencesTested, 'count');
+      add('scenario_calculation', 'history_sequences_survived', `${mix}: sequences in which the money lasted`, test.sequencesSurvived, 'count');
+      add(
+        'scenario_calculation',
+        'history_median_portfolio_at_retirement',
+        `${mix}: median portfolio at the retirement age across those sequences, in today's dollars`,
+        roundMoney(test.projectedPortfolioAtRetirement),
+        'usd'
+      );
+    }
   }
   return facts;
 }
@@ -734,6 +931,34 @@ export function compactCoastFireScenarioExecution(
 
 function assumptionOf(scenario: CoastFireScenarioResult, key: CoastFireOverrideField): CoastFireAssumption | undefined {
   return scenario.assumptions.find((assumption) => assumption.key === key);
+}
+
+const MONTH_NAMES = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+
+function readableMonth(month: string): string {
+  const match = /^(\d{4})-(\d{2})$/.exec(month);
+  return match ? `${MONTH_NAMES[Number(match[2]) - 1]} ${match[1]}` : month;
+}
+
+/** What the market-history test ran, stated the way the straight line's assumptions are. */
+function describeHistoricalTest(scenario: CoastFireScenarioResult): string {
+  const test = scenario.historicalTest;
+  if (!test) return '';
+  const m = scenario.metrics;
+  const spending = m.annualRetirementIncome > 0
+    ? `paying ${money(m.annualRetirementSpending)} a year, ${money(m.annualRetirementIncome)} of it from retirement income`
+    : `paying ${money(m.annualRetirementSpending)} a year`;
+  const mixDefault = test.allocation.origin === 'default'
+    ? ` You did not name a mix, so I used the ${test.allocation.label} preset.`
+    : '';
+  return ` The market-history test ran the ${test.allocation.label} preset (${test.allocation.description}), not ` +
+    `what you hold: ${money(m.currentSavings)} left alone from ${m.currentAge} to ${m.retirementAge}, then ` +
+    `${spending} through age ${test.lifeExpectancy}, against every overlapping ${test.horizonYears}-year stretch ` +
+    `of US market returns and inflation that began between ${readableMonth(test.firstStartMonth)} and ` +
+    `${readableMonth(test.lastStartMonth)}.${mixDefault}`;
 }
 
 /**
@@ -783,10 +1008,16 @@ export function describeCoastFireScenarioExecution(execution: CoastFireScenarioE
     ? ` I could not run the comparison case: ${execution.comparisonUnavailableReason}`
     : '';
 
+  const tested = execution.scenarios.filter((scenario) => scenario.historicalTest);
+  const historyNotice = tested.map(describeHistoricalTest).join('');
+  const straightLine = tested.length > 0
+    ? ' The Coast FIRE number itself is a single straight line — the same return every year. Neither part models taxes or fees.'
+    : ' It is a single straight line — the same return every year, with no taxes, fees or market swings.';
+
   return `Coast FIRE assumptions: ${rate(m.realReturnRate)} a year after inflation, a ${rate(m.withdrawalRate)} ` +
     `withdrawal rate, and ${income}, all in today's dollars.${comparison}${savingsNotice}${ageNotice}` +
-    `${defaultsNotice}${contributionNotice}${comparisonNotice} It is a single straight line — the same return ` +
-    'every year, with no taxes, fees or market swings. Change any of these and I will re-run it.';
+    `${defaultsNotice}${contributionNotice}${comparisonNotice}${historyNotice}${straightLine} ` +
+    'Change any of these and I will re-run it.';
 }
 
 export const coastFireScenarioCalculator: ScenarioCalculatorDefinition<
@@ -828,17 +1059,19 @@ export const coastFireScenarioCalculator: ScenarioCalculatorDefinition<
     { id: 'share_of_coast_fire_number', label: 'Share of the Coast FIRE number', unit: 'percent', scope: 'variant', description: 'Savings divided by the Coast FIRE number.' },
     { id: 'age_at_coast_fire', label: 'Age savings can coast', unit: 'years', scope: 'variant', description: 'First birthday at which contributions could stop and the target still be reached.' },
     { id: 'projected_savings_at_retirement_with_contributions', label: 'Savings at retirement with contributions', unit: 'usd', scope: 'variant', description: 'Savings if the stated contributions continue until retirement.' },
+    { id: 'history_survival_rate', label: 'Market-history survival share', unit: 'percent', scope: 'variant', description: 'With no holdings linked: share of historical sequences in which today\'s savings, left alone on a preset mix until retirement and then spent, lasted the horizon.' },
+    { id: 'history_median_portfolio_at_retirement', label: 'Market-history median at retirement', unit: 'usd', scope: 'variant', description: 'Median real portfolio at the retirement age across those sequences.' },
   ],
   planner: {
     jsonSchema: COAST_FIRE_SCENARIO_PLAN_JSON_SCHEMA,
-    instructions: `When the user asks whether they have reached Coast FIRE, what their Coast FIRE number is, when they will reach Coast FIRE, or changes an input of a Coast FIRE answer earlier in this decision, set requested=true. Coast FIRE means having enough invested today that growth alone, with no further contributions, reaches the retirement target by the retirement age. Fill primary.overrides with values the user stated anywhere in this decision, the newest revision winning, and put the user's short wording in overrides.sources: currentAge, retirementAge, currentSavings (invested retirement savings today), annualRetirementSpending (annual spending once retired, in today's dollars), annualRetirementIncome (pension or other income that starts at retirement), realReturnRatePercent (growth after inflation in percentage points: 5% is 5, never 0.05), withdrawalRatePercent (percentage points: 4% is 4), and annualContribution (what the user invests per year now; only used to find when they reach Coast FIRE). When the user gives a range for one value, put the low end in primary and only the high end in comparison. When the newest message changes an input of the earlier Coast FIRE case, put the earlier case in primary and only the changed values in comparison. Never estimate or supply typical values; application code applies disclosed defaults and asks for anything else missing, so request the calculation even when figures are missing. A Coast FIRE question does not by itself request any other calculator. The overrides object and every field and source are always present; use null for absent values. When there is no Coast FIRE question, set requested=false and return null for every value and source in both variants.`,
+    instructions: `When the user asks whether they have reached Coast FIRE, what their Coast FIRE number is, when they will reach Coast FIRE, or changes an input of a Coast FIRE answer earlier in this decision, set requested=true. Coast FIRE means having enough invested today that growth alone, with no further contributions, reaches the retirement target by the retirement age. Fill primary.overrides with values the user stated anywhere in this decision, the newest revision winning, and put the user's short wording in overrides.sources: currentAge, retirementAge, currentSavings (invested retirement savings today), annualRetirementSpending (annual spending once retired, in today's dollars), annualRetirementIncome (pension or other income that starts at retirement), realReturnRatePercent (growth after inflation in percentage points: 5% is 5, never 0.05), withdrawalRatePercent (percentage points: 4% is 4), and annualContribution (what the user invests per year now; only used to find when they reach Coast FIRE). Until holdings are linked, application code also runs the savings through market history on a preset mix: set allocation to conservative (40% US stocks / 50% bonds / 10% cash), balanced (60% / 35% / 5%) or growth (80% / 18% / 2%) when the user, or an earlier answer in this decision, names one of those presets, and otherwise to unspecified with a null source. When the user gives a range for one value, put the low end in primary and only the high end in comparison. When the newest message changes an input of the earlier Coast FIRE case, put the earlier case in primary and only the changed values in comparison. Never estimate or supply typical values; application code applies disclosed defaults and asks for anything else missing, so request the calculation even when figures are missing. A Coast FIRE question does not by itself request any other calculator. The overrides object and every field and source are always present; use null for absent values. When there is no Coast FIRE question, set requested=false, allocation=unspecified, and null for every other value and every source in both variants.`,
     parsePlan: parseCoastFireScenarioPlan,
   },
   execution: {
     progressMessage: 'Working out your Coast FIRE number',
     failureMessage: 'The Coast FIRE calculation could not be completed.',
   },
-  execute: runCoastFireScenario,
+  execute: (snapshot, plan) => runCoastFireScenario(snapshot, plan),
   unavailable: (startedAt, reason) => unavailable(startedAt, reason),
   compactEvidence: compactCoastFireScenarioExecution,
   canonicalFacts: coastFireScenarioCanonicalFacts,

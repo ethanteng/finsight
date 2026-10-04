@@ -425,10 +425,12 @@ export async function runAskLincEvalSet(): Promise<AskLincEvalResult[]> {
       passed: keyNumberValue(coastFollowUp, 'coast_fire_number') === 872_593.38 &&
         coastFollowUp.showTheMathData!.evidenceManifest.validation.deterministic.valid &&
         coastSummary.includes('Coast FIRE assumptions: 5% a year after inflation') &&
-        coastSummary.endsWith('not just whether one average return clears the bar.') &&
+        coastSummary.includes('The market-history test ran the Balanced preset') &&
+        coastFollowUp.showTheMathData!.evidenceManifest.facts.some(fact => fact.id.endsWith('_history_survival_rate')) &&
+        coastSummary.endsWith('get modeled against their own returns.') &&
         !coastSummary.includes('I could not run') &&
         coastSystemPrompt.includes('Never tell the user that a figure in an earlier answer is unverified'),
-      detail: 'A calculator lead with nothing linked gets the deterministic answer, its assumptions, and what linking would add -- not a refusal.',
+      detail: 'A calculator lead with nothing linked gets the deterministic answer, a market-history test on a preset mix, and what linking would add -- not a refusal.',
     },
     {
       id: 'retirement-does-not-default-withdrawal',

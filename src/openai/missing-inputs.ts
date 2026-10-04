@@ -94,6 +94,17 @@ function noHoldingsAsk(
     };
   }
   if (coastFire?.status === 'completed' && coastFire.scenarios[0]) {
+    // The market-history test already ran on a preset, so what linking adds
+    // is the user's own mix in its place.
+    const tested = coastFire.scenarios.find((scenario) => scenario.historicalTest)?.historicalTest;
+    if (tested) {
+      return {
+        id: 'coast_fire_link_for_holdings',
+        message: 'Link your investment accounts and ask again, and I will run that market-history test on what ' +
+          `you actually hold instead of the ${tested.allocation.label} preset. The mix is what decides how a ` +
+          'portfolio rides out a bad decade, and any international funds you hold get modeled against their own returns.',
+      };
+    }
     const m = coastFire.scenarios[0].metrics;
     // The holdings-based projection models spending, not a pension against it,
     // so the amount is named only when the two are the same thing.
