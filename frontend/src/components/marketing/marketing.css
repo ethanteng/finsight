@@ -2036,7 +2036,7 @@ footer { padding-block: 55px 28px; background: #0a1912; color: white; }.footer-i
 .cash-flow-preview-top small,
 .cash-flow-preview-top > span {
   color: #6d7971;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 800;
   letter-spacing: .12em;
   text-transform: uppercase;
@@ -2076,7 +2076,7 @@ footer { padding-block: 55px 28px; background: #0a1912; color: white; }.footer-i
 
 .cash-flow-preview-metrics small {
   color: #66736b;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
 }
 
@@ -2127,7 +2127,7 @@ footer { padding-block: 55px 28px; background: #0a1912; color: white; }.footer-i
   display: flex;
   justify-content: space-between;
   color: #748078;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 700;
 }
 
@@ -2149,7 +2149,7 @@ footer { padding-block: 55px 28px; background: #0a1912; color: white; }.footer-i
   border-radius: 13px;
   background: #f7f6ee;
   color: #5e6b63;
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .cash-flow-preview-plans strong {
@@ -2184,7 +2184,7 @@ footer { padding-block: 55px 28px; background: #0a1912; color: white; }.footer-i
 
 .cash-flow-question-strip span {
   color: #567062;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 850;
   letter-spacing: .13em;
 }
@@ -2254,7 +2254,7 @@ footer { padding-block: 55px 28px; background: #0a1912; color: white; }.footer-i
 .cash-flow-how-grid article > span,
 .cash-flow-example-grid small {
   color: #567062;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 850;
   letter-spacing: .12em;
 }
@@ -2365,7 +2365,7 @@ footer { padding-block: 55px 28px; background: #0a1912; color: white; }.footer-i
   border-bottom: 1px solid #dde1d7;
   color: #607067;
   background: #eef0e8;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 850;
   letter-spacing: .1em;
   text-transform: uppercase;
@@ -2388,7 +2388,7 @@ footer { padding-block: 55px 28px; background: #0a1912; color: white; }.footer-i
   border-radius: 999px;
   background: white;
   color: #315f47;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 800;
   pointer-events: none;
 }
