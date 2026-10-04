@@ -211,17 +211,15 @@ A comprehensive CI/CD safety system that prevents production data loss through m
 - **Safety**: Tests validate the complete migration workflow
 
 #### **3. Production Migration Job** 🔒
-- **New Job**: `migrate-prod` runs before deployment
-- **Manual Approval**: Requires human review via GitHub environment
-- **Safety Timer**: 1-minute countdown after approval (safety buffer)
-- **Guardrails**: Timeouts, destructive operation detection
-- **Result**: Complete control over when migrations run
+- **Job**: `migrate-prod` runs before deployment, automatically, once every test and build job has passed
+- **No manual approval**: The job does not use the GitHub `production` environment, so nothing waits for a reviewer
+- **Guardrails**: Rejects unknown migration-history divergence before applying anything
+- **Result**: Merging to `main` is the decision to migrate production
 
 #### **4. Automated Safety Checks** 🤖
 - **Build Verification**: Ensures no migration commands in build scripts
-- **Test Validation**: All tests must pass before migration approval
-- **Migration Safety**: Script blocks destructive operations
-- **Timeout Controls**: Prevents migrations from hanging indefinitely
+- **Test Validation**: All tests must pass before the migration job runs
+- **Job Timeout**: `migrate-prod` is bounded at 15 minutes
 
 ### **The New Safe Deployment Flow:**
 
@@ -234,38 +232,30 @@ A comprehensive CI/CD safety system that prevents production data loss through m
    ↓
 4. Build Verification (with migration guard)
    ↓
-5. Production Migration Job (requires approval)
+5. Production Migration Job (runs automatically)
    ↓
-6. Manual Approval + 1-minute safety timer
+6. Migrations Applied with Safety Guards
    ↓
-7. Migrations Applied with Safety Guards
+7. Deployment Proceeds (Vercel and Render deploy in parallel)
    ↓
-8. Deployment Proceeds (Vercel and Render deploy in parallel)
-   ↓
-9. Deploy Summary (fails the run if either half failed)
+8. Deploy Summary (fails the run if either half failed)
 ```
 
 ### **Production Migration Safety Features:**
 
-#### **Manual Approval Required** ✅
-- GitHub environment protection rules
-- Human review before any database changes
-- No automatic migrations
-
-#### **Safety Timer** ⏰
-- 1-minute countdown after approval
-- Gives you time to cancel if needed
-- Prevents forgotten deployments
+#### **No Manual Approval** ⚠️
+- Production migrations apply automatically on every push to `main` that passes CI
+- Code review on the pull request is the only human review a migration gets
+- Review `prisma/migrations/` in every PR as if it were being run against production, because it will be
 
 #### **Migration Guards** 🛡️
-- **Timeout Controls**: 30s lock timeout, 5min statement timeout
 - **Migration Preview**: Shows pending migrations before applying
-- **Destructive Operation Blocking**: Prevents DROP, ALTER TYPE operations
-- **Safe Execution**: Only applies non-destructive changes
+- **History Check**: Aborts on any database-only migration other than the four known legacy baseline records
+- **Not guarded**: Destructive SQL (`DROP`, `ALTER TYPE`, column removals) is **not** detected or blocked — it applies like any other migration
 
 #### **Complete Isolation** 🔒
 - **Render**: Build-only (never touches database)
-- **CI/CD**: Handles migrations with approval gates
+- **CI/CD**: Handles migrations in a dedicated job after all tests pass
 - **Build Scripts**: Never contain migration commands
 - **Tests**: Use real migrations to catch issues early
 
@@ -285,19 +275,17 @@ git add prisma/migrations/
 git commit -m "feat: add new feature + migration"
 git push origin main
 
-# 4. CI/CD handles the rest safely
+# 4. CI/CD handles the rest
 # - Tests run with real migrations
-# - Migration job requires your approval
-# - Deployment only happens after safe migration
+# - Migration job applies to production automatically once CI passes
+# - Deployment only happens after the migration succeeds
 ```
 
 #### **For Production Migrations:**
-1. **Push to main** triggers the pipeline
-2. **Wait for migrate-prod job** to reach production environment
-3. **Click "Review deployments"** when prompted
-4. **Approve the migration** (starts 1-minute timer)
-5. **Monitor migration execution** with safety guards
-6. **Deployment proceeds** after successful migration
+1. **Review the migration SQL in the PR** — merging is the approval
+2. **Push to main** triggers the pipeline
+3. **migrate-prod runs automatically** once tests and build verification pass
+4. **Deployment proceeds** after successful migration
 
 ### **Emergency Procedures:**
 
@@ -306,33 +294,30 @@ git push origin main
 2. **Identify the issue** (usually syntax or constraint problems)
 3. **Fix locally** and test with `npx prisma migrate reset`
 4. **Push fix** to trigger new pipeline run
-5. **Approve migration** again
 
 #### **If You Need to Cancel:**
-1. **During approval**: Don't approve, job will wait indefinitely
-2. **During timer**: Click "Cancel workflow" in GitHub Actions
-3. **During execution**: Use "Cancel workflow" button
+1. **Before migrate-prod starts**: Click "Cancel workflow" in GitHub Actions while the test jobs are still running
+2. **During execution**: Use "Cancel workflow" button — an interrupted run can leave a migration recorded as failed, which blocks later deploys until it is resolved with `prisma migrate resolve`
 
 ### **Verification Checklist:**
 
 - [ ] **Migration guard script** prevents build script migrations ✅
 - [ ] **Tests use real migrations** instead of `db push` ✅
-- [ ] **Production migration job** requires manual approval ✅
-- [ ] **Safety timer** provides cancellation window ✅
-- [ ] **Migration guards** block destructive operations ✅
+- [ ] **Production migration job** runs only after all tests and build verification pass ✅
+- [ ] **Migration guards** reject unknown migration-history divergence ✅
 - [ ] **Render configuration** is build-only ✅
 - [ ] **CI/CD pipeline** enforces all safety measures ✅
 
 ### **Benefits of the New System:**
 
-1. **Zero Risk**: No accidental database wipes possible
-2. **Complete Control**: You decide when migrations run
+1. **Build Isolation**: Builds and Render deploys never touch the database
+2. **Merge Is the Decision**: Migrations run when reviewed code lands on `main`
 3. **Early Detection**: Migration issues caught in CI
 4. **Automated Safety**: Multiple layers of protection
-5. **Audit Trail**: All migrations require approval and are logged
+5. **Audit Trail**: Every migration run is logged in GitHub Actions
 6. **Fast Recovery**: Easy to cancel or fix issues
 
-**🎉 RESULT: Your production database is now completely protected from accidental data loss! 🎉**
+**RESULT: Production migrations run only from tested code on `main`. A destructive migration that passes review and CI will still apply — review migration SQL accordingly.**
 
 ## 📚 **Related Safety Documentation**
 

@@ -81,7 +81,7 @@ npm run migrate:status             # Check migration status
 # Only in controlled CI/CD pipeline:
 - Test migrations locally first
 - Use separate migration job
-- Require manual approval
+- Run only after the full test suite passes
 ```
 
 ### **3. Safe Build Process**
