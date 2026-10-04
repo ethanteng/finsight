@@ -120,6 +120,7 @@ function pushBeforeNavigation(payload: Record<string, unknown>): Promise<void> {
 function getContentType(pathname: string): string {
   if (pathname === '/retirement-answers') return 'retirement_answers_hub';
   if (pathname === '/demo') return 'product_demo';
+  if (pathname === '/cash-flow-forecast') return 'cash_flow_forecast';
   // Its own type so the beachhead page's traffic cannot be silently folded
   // into the generic retirement baseline. Matched by prefix, which also keeps
   // any later /coast-fire-* variant out of the generic bucket by default.
