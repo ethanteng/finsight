@@ -165,7 +165,7 @@ export default function CashFlowForecastPage() {
         <div className="shell case-context-inner">
           <div>
             <p className="section-kicker light">LOOK AHEAD</p>
-            <h2>Instead of just looking back.</h2>
+            <h2>Your bank app tells you what you spent. Ask Linc helps answer what you can afford.</h2>
           </div>
           <div className="context-chips" aria-label="Questions Ask Linc can help answer">
             {questions.map((question) => <span key={question}>{question}</span>)}
