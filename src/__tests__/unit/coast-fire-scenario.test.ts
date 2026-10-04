@@ -212,15 +212,34 @@ describe('Coast FIRE calculator', () => {
     expect(disclosure).toContain('You did not give a growth rate, so I used 5%, or a withdrawal rate, so I used 4%.');
   });
 
-  it('drops a real return that is a decimal fraction in disguise', () => {
-    const parsed = parseCoastFireScenarioPlan({
-      requested: true,
-      primary: variant({ ...STATED, realReturnRatePercent: 0.05 }),
-      comparison: variant({}),
+  describe('percentage points sent as decimal fractions', () => {
+    const parse = (realReturnRatePercent: number, source: string, withdrawal?: [number, string]) =>
+      parseCoastFireScenarioPlan({
+        requested: true,
+        primary: variant(
+          { ...STATED, realReturnRatePercent, ...(withdrawal && { withdrawalRatePercent: withdrawal[0] }) },
+          { realReturnRatePercent: source, ...(withdrawal && { withdrawalRatePercent: withdrawal[1] }) }
+        ),
+        comparison: variant({}),
+      })?.primary.overrides;
+
+    it('scales a fraction back to the percentage the user wrote', () => {
+      expect(parse(0.05, 'I assumed 5% growth a year after inflation')?.realReturnRatePercent).toBe(5);
+      // Out of the withdrawal range as sent, so it used to fall to the default
+      // while the disclosure said no rate was given.
+      expect(parse(5, '5% growth', [0.035, 'a 3.5 percent withdrawal rate'])?.withdrawalRatePercent).toBe(3.5);
     });
 
-    expect(parsed?.primary.overrides?.realReturnRatePercent).toBeUndefined();
-    expect(parsed?.primary.overrides?.currentAge).toBe(38);
+    it('keeps a low real return the user actually stated', () => {
+      expect(parse(0.1, 'assume 0.1% growth after inflation')?.realReturnRatePercent).toBe(0.1);
+      expect(parse(0, 'no growth after inflation')?.realReturnRatePercent).toBe(0);
+    });
+
+    it('drops a small value the wording does not support, leaving the disclosed default', () => {
+      const overrides = parse(0.05, 'a typical return');
+      expect(overrides?.realReturnRatePercent).toBeUndefined();
+      expect(overrides?.currentAge).toBe(38);
+    });
   });
 
   it('accepts a request with nothing stated yet, so the runner can ask', () => {

@@ -237,12 +237,31 @@ const OVERRIDE_RANGES: Record<CoastFireOverrideField, { minimum: number; maximum
   annualContribution: { minimum: 0, maximum: 10_000_000 },
 };
 
+/** The two fields carried in percentage points, where 5% is 5. */
+const PERCENTAGE_POINT_FIELDS = new Set<CoastFireOverrideField>(['realReturnRatePercent', 'withdrawalRatePercent']);
+
+/** Every percentage the user's wording states: "5%" and "5 percent" are both 5. */
+function statedPercentages(source: string): number[] {
+  return Array.from(source.matchAll(/(\d+(?:\.\d+)?|\.\d+)\s*(?:%|percent\b)/gi), (match) => Number(match[1]));
+}
+
 /**
- * A real return between 0% and 0.2% is far more likely to be 5% sent as 0.05
- * than a rate anyone meant, and taking it would quietly multiply the Coast
- * FIRE number. Dropping it lets the disclosed default stand instead.
+ * Percentage-point fields can still arrive as a decimal fraction: 5% sent as
+ * 0.05 would quietly multiply the Coast FIRE number, and 3.5% sent as 0.035
+ * would fall outside the withdrawal range and be replaced by the default with
+ * a disclosure saying the user gave none. But 0.1% is also a rate someone can
+ * mean. A value below 1 is therefore read against the user's own wording: kept
+ * when they wrote it, scaled when they wrote a hundred times it, and dropped
+ * only when the wording supports neither.
  */
-const IMPLAUSIBLE_REAL_RETURN_CEILING = 0.2;
+function asPercentagePoints(value: number, source: string): number | undefined {
+  if (value === 0 || value >= 1) return value;
+  const stated = statedPercentages(source);
+  const wrote = (candidate: number) => stated.some((percent) => Math.abs(percent - candidate) < 1e-9);
+  if (wrote(value)) return value;
+  const scaled = Number((value * 100).toFixed(6));
+  return wrote(scaled) ? scaled : undefined;
+}
 
 function finiteNumber(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
@@ -266,15 +285,17 @@ function parseOverrides(value: unknown): PlannedCoastFireOverrides | undefined {
   const overrides: PlannedCoastFireOverrides = { sources: {} };
 
   for (const field of COAST_FIRE_OVERRIDE_FIELDS) {
-    const numericValue = finiteNumber(record[field]);
+    const rawValue = finiteNumber(record[field]);
     const source = shortSource(rawSources[field]);
     const range = OVERRIDE_RANGES[field];
+    const numericValue = rawValue !== undefined && source && PERCENTAGE_POINT_FIELDS.has(field)
+      ? asPercentagePoints(rawValue, source)
+      : rawValue;
     if (
       numericValue === undefined ||
       numericValue < range.minimum ||
       numericValue > range.maximum ||
       (range.integer && !Number.isInteger(numericValue)) ||
-      (field === 'realReturnRatePercent' && numericValue > 0 && numericValue < IMPLAUSIBLE_REAL_RETURN_CEILING) ||
       !source
     ) {
       continue;
