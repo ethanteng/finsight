@@ -108,13 +108,12 @@ function noHoldingsAsk(
         'coasting from today would actually have worked, not just whether one average return clears the bar.',
     };
   }
-  // The calculator is already asking for the figures that would answer this,
-  // and offering the link as the alternative. A second paragraph about the
-  // same gap would bury that ask.
-  if (
-    (stated?.status === 'unavailable' && stated.missingInputs?.length) ||
-    (coastFire?.status === 'unavailable' && coastFire.missingInputs?.length)
-  ) {
+  // The calculator already spoke: either it is asking for the figures, or it
+  // explained why the stated run could not finish (a bad age, a refused
+  // input). A second paragraph about linking would bury that, and for a
+  // validation failure it would also imply linking could fix something it
+  // cannot.
+  if (stated?.status === 'unavailable' || coastFire?.status === 'unavailable') {
     return null;
   }
   return {

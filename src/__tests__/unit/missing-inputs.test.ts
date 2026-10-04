@@ -105,6 +105,21 @@ describe('missing input asks', () => {
         },
       }, RETIREMENT)).toEqual([]);
     });
+
+    it('does not imply linking would fix a calculator validation failure', () => {
+      // Coast FIRE already disclosed "retirement age must be after current age".
+      // Appending the generic no-holdings wall buried that and suggested linking
+      // as the remedy.
+      expect(ids({
+        retirementAnalysisNeedsInfo: noHoldings,
+        scenarioExecutions: {
+          coast_fire: {
+            status: 'unavailable',
+            reason: 'Retirement age must be a whole number after your current age and no later than 95.',
+          },
+        },
+      }, RETIREMENT)).toEqual([]);
+    });
   });
 
   it('explains when holdings exist but none are simulatable', () => {
