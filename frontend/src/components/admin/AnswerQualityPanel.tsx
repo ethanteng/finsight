@@ -170,6 +170,8 @@ const PACK_LABELS: Record<string, string> = {
 const CALCULATOR_LABELS: Record<string, string> = {
   retirement: 'Retirement scenario',
   home_affordability: 'Home affordability',
+  coast_fire: 'Coast FIRE',
+  stated_retirement_plan: 'Stated retirement plan',
 };
 
 function calculatorLabel(id: string): string {

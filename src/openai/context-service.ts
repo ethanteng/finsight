@@ -584,8 +584,11 @@ export async function completeRetirementAnalysis(
       retirementAnalysisNeedsInfo: {
         missingParams: [],
         detectedParams: {},
+        // The application appends its own note about linking, tailored to
+        // whatever did answer. Telling the model to ask as well put the same
+        // wall at the top of the answer, ahead of the figures it could give.
         unavailableReason:
-          'No linked investment holdings are available for retirement analysis. Ask the user to connect investment accounts or provide portfolio details instead of estimating from net-worth aggregates alone.',
+          'No linked investment holdings are available, so the holdings-based historical retirement projection did not run. Do not estimate one from net-worth aggregates. Answer from the facts that are present, including any scenario_calculation facts. The application appends its own note about linking accounts, so do not open with this limitation or repeat it.',
         unavailableCode: 'no_holdings',
       },
     };

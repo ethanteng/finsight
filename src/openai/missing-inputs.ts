@@ -15,6 +15,14 @@
 
 import { describeMissingRetirementInputs } from './retirement-inputs';
 import type { FinancialContextSnapshot, QuestionNeeds } from './types';
+import {
+  COAST_FIRE_CALCULATOR_ID,
+  type CoastFireScenarioExecution,
+} from '../scenarios/coast-fire-scenario';
+import {
+  STATED_RETIREMENT_PLAN_CALCULATOR_ID,
+  type StatedRetirementPlanExecution,
+} from '../scenarios/stated-retirement-plan-scenario';
 
 export interface MissingInputAsk {
   /** Stable identifier for telemetry; never shown to the user. */
@@ -54,9 +62,92 @@ function describeHistoryLimit(
     `so ask again ${target} or earlier and I will run the projection without inventing returns.`;
 }
 
+function money(value: number): string {
+  return `$${Math.round(value).toLocaleString('en-US')}`;
+}
+
+/**
+ * What to say when a retirement question met an account with no holdings
+ * linked -- or nothing, when a calculator's own disclosure already asks the
+ * user for the figures that would answer it.
+ *
+ * This used to be one sentence: no projection, link an account. Everyone the
+ * public calculators send here arrives in exactly that state, so the first
+ * follow-up they asked ended on a wall with no reason given. Two calculators
+ * now answer those questions from stated figures, and when one has, linking
+ * is no longer the price of an answer. It is the upgrade, and the note says
+ * concretely what it would change about the answer they just read.
+ */
+function noHoldingsAsk(
+  executions: FinancialContextSnapshot['scenarioExecutions']
+): MissingInputAsk | null {
+  const stated = executions?.[STATED_RETIREMENT_PLAN_CALCULATOR_ID] as StatedRetirementPlanExecution | undefined;
+  const coastFire = executions?.[COAST_FIRE_CALCULATOR_ID] as CoastFireScenarioExecution | undefined;
+
+  if (stated?.status === 'completed' && stated.scenarios[0]) {
+    const mix = stated.scenarios[0].allocation;
+    return {
+      id: 'retirement_link_for_holdings',
+      message: 'Link your investment accounts and ask again, and I will run your actual holdings and balances ' +
+        `through the same history instead of the ${mix.label} preset. The mix is what decides how a portfolio ` +
+        'rides out a bad decade, and any international funds you hold get modeled against their own returns.',
+    };
+  }
+  if (coastFire?.status === 'completed' && coastFire.scenarios[0]) {
+    // The market-history test already ran on a preset, so what linking adds
+    // is the user's own mix in its place.
+    const tested = coastFire.scenarios.find((scenario) => scenario.historicalTest)?.historicalTest;
+    if (tested) {
+      return {
+        id: 'coast_fire_link_for_holdings',
+        message: 'Link your investment accounts and ask again, and I will run that market-history test on what ' +
+          `you actually hold instead of the ${tested.allocation.label} preset. The mix is what decides how a ` +
+          'portfolio rides out a bad decade, and any international funds you hold get modeled against their own returns.',
+      };
+    }
+    const m = coastFire.scenarios[0].metrics;
+    // The holdings-based projection models spending, not a pension against it,
+    // so the amount is named only when the two are the same thing.
+    const spending = m.annualRetirementIncome === 0
+      ? `, then paying ${money(m.annualRetirementSpending)} a year`
+      : '';
+    return {
+      id: 'coast_fire_link_for_holdings',
+      message: 'Link your investment accounts and ask again, and I will also run what you actually hold — left ' +
+        `alone from ${m.currentAge} to ${m.retirementAge}${spending} — through a century of real market history. ` +
+        `Markets never deliver ${Number(m.realReturnRate.toFixed(2))}% every year, so that shows how often ` +
+        'coasting from today would actually have worked, not just whether one average return clears the bar.',
+    };
+  }
+  // The calculator already spoke: either it is asking for the figures, or it
+  // explained why the stated run could not finish (a bad age, a refused
+  // input). A second paragraph about linking would bury that, and for a
+  // validation failure it would also imply linking could fix something it
+  // cannot.
+  if (stated?.status === 'unavailable' || coastFire?.status === 'unavailable') {
+    return null;
+  }
+  return {
+    id: 'retirement_no_holdings',
+    message: 'I have not run a historical retirement projection because no investment holdings are linked yet. ' +
+      'That projection runs your actual mix of stocks, bonds and cash through a century of real market ' +
+      'history, so it needs the holdings themselves, not just a total. Link an investment account and ask ' +
+      'again — or tell me roughly how much you have invested, what you expect to spend a year in retirement, ' +
+      'your age and when you want to retire, and I will test it on a preset mix in the meantime.',
+  };
+}
+
+/** Whether a calculator already ran market history on a preset in place of the holdings. */
+function presetStoodIn(executions: FinancialContextSnapshot['scenarioExecutions']): boolean {
+  const stated = executions?.[STATED_RETIREMENT_PLAN_CALCULATOR_ID] as StatedRetirementPlanExecution | undefined;
+  const coastFire = executions?.[COAST_FIRE_CALCULATOR_ID] as CoastFireScenarioExecution | undefined;
+  return (stated?.status === 'completed' && stated.scenarios.length > 0) ||
+    (coastFire?.status === 'completed' && coastFire.scenarios.some((scenario) => scenario.historicalTest));
+}
+
 export function collectMissingInputAsks(
   snapshot: Pick<FinancialContextSnapshot,
-    'retirementAnalysisNeedsInfo' | 'homeValueSummary' | 'financialSummary'>,
+    'retirementAnalysisNeedsInfo' | 'homeValueSummary' | 'financialSummary' | 'scenarioExecutions'>,
   needs: Pick<QuestionNeeds, 'needsRetirement' | 'needsHomeValue'>
 ): MissingInputAsk[] {
   const asks: MissingInputAsk[] = [];
@@ -68,16 +159,18 @@ export function collectMissingInputAsks(
     if (retirementAsk) {
       asks.push({ id: 'retirement_inputs', message: retirementAsk });
     } else if (needsInfo?.unavailableCode === 'no_holdings') {
-      asks.push({
-        id: 'retirement_no_holdings',
-        message: 'I could not run a retirement projection because no investment holdings are connected. ' +
-          'Link an investment account and ask again, and I will include it.',
-      });
+      const ask = noHoldingsAsk(snapshot.scenarioExecutions);
+      if (ask) asks.push(ask);
     } else if (needsInfo?.unavailableCode === 'no_supported_simulation') {
+      // A preset may have stood in already; then this is the reason it did,
+      // not a projection that failed to happen.
+      const lead = presetStoodIn(snapshot.scenarioExecutions)
+        ? 'The preset stood in for your holdings because none of them map'
+        : 'I could not run a retirement projection because none of your holdings map';
       asks.push({
         id: 'retirement_no_supported_simulation',
         message:
-          'I could not run a retirement projection because none of your holdings map to a supported ' +
+          `${lead} to a supported ` +
           'historical return series (US equity, international equity, nominal US government bonds, or cash). ' +
           'TIPS, credit, international bonds, real assets, and unresolved equity geography are disclosed ' +
           'but not simulated.',

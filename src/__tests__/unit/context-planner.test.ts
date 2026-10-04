@@ -47,10 +47,12 @@ function rawPlan(selected: string[] = []): any {
 describe('context planner', () => {
   it('builds the strict scenario object from registered calculator ids', () => {
     expect(CONTEXT_PLAN_JSON_SCHEMA.properties.scenarios).toMatchObject({
-      required: ['retirement', 'home_affordability'],
+      required: ['retirement', 'home_affordability', 'coast_fire', 'stated_retirement_plan'],
       properties: {
         retirement: { type: 'object' },
         home_affordability: { type: 'object' },
+        coast_fire: { type: 'object' },
+        stated_retirement_plan: { type: 'object' },
       },
     });
   });

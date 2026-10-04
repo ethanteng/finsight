@@ -137,6 +137,13 @@ export interface UnavailableRetirementScenarioExecution {
   computedAt: string;
   durationMs: number;
   reason: string;
+  /**
+   * The baseline did not run for a reason the answer already explains to the
+   * user -- no holdings linked, an input only they can supply. Saying "a
+   * completed baseline is required" after that repeats the same wall in
+   * vaguer words, so the disclosure stays silent.
+   */
+  baselineBlockerExplained?: boolean;
 }
 
 export type RetirementScenarioExecution =
@@ -477,7 +484,11 @@ function inheritedAssumptions(
   return assumptions;
 }
 
-function unavailable(startedAt: number, reason: string): UnavailableRetirementScenarioExecution {
+function unavailable(
+  startedAt: number,
+  reason: string,
+  baselineBlockerExplained = false
+): UnavailableRetirementScenarioExecution {
   return {
     version: RETIREMENT_SCENARIO_VERSION,
     calculator: 'retirement',
@@ -485,7 +496,21 @@ function unavailable(startedAt: number, reason: string): UnavailableRetirementSc
     computedAt: new Date().toISOString(),
     durationMs: Date.now() - startedAt,
     reason,
+    ...(baselineBlockerExplained && { baselineBlockerExplained }),
   };
+}
+
+/**
+ * Whether the reason the baseline did not run is one the answer already tells
+ * the user, in `collectMissingInputAsks`. A service failure is ours and is not
+ * described there, so the scenario still reports it.
+ */
+function baselineBlockerExplained(snapshot: FinancialContextSnapshot): boolean {
+  const needsInfo = snapshot.retirementAnalysisNeedsInfo;
+  if (!needsInfo) return false;
+  return needsInfo.missingParams.length > 0 ||
+    Boolean(needsInfo.confirmationRequiredParams?.length) ||
+    (needsInfo.unavailableCode !== undefined && needsInfo.unavailableCode !== 'service_error');
 }
 
 /**
@@ -511,10 +536,21 @@ export async function runRetirementScenario(
   const holdings = snapshot.investments?.holdings;
   const securities = snapshot.investments?.securities;
   if (!baseline || !stored) {
-    return unavailable(startedAt, 'A completed retirement baseline is required before scenarios can be compared.');
+    return unavailable(
+      startedAt,
+      'A completed retirement baseline is required before scenarios can be compared.',
+      baselineBlockerExplained(snapshot)
+    );
   }
   if (!holdings?.length || !securities?.length) {
-    return unavailable(startedAt, 'Investment holdings and security details are required to run a retirement scenario.');
+    // No holdings is already explained by the missing-input note (and by any
+    // stated-plan or Coast FIRE answer). Empty securities with holdings still
+    // present is ours to report -- collectMissingInputAsks does not cover it.
+    return unavailable(
+      startedAt,
+      'Investment holdings and security details are required to run a retirement scenario.',
+      !holdings?.length && baselineBlockerExplained(snapshot)
+    );
   }
   if (
     stored.currentAge == null ||
@@ -776,6 +812,7 @@ export function describeRetirementScenarioExecution(
   execution: RetirementScenarioExecution
 ): string | null {
   if (execution.status === 'unavailable') {
+    if (execution.baselineBlockerExplained) return null;
     return `I could not run the requested scenario comparison: ${execution.reason}`;
   }
   if (execution.scenarios.length === 0) return null;

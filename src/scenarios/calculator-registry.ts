@@ -3,6 +3,8 @@ import type { ContextPackId } from '../openai/context-packs';
 import type { CanonicalFact } from '../openai/canonical-facts';
 import { retirementScenarioCalculator } from './retirement-scenario';
 import { homeAffordabilityScenarioCalculator } from './home-affordability-scenario';
+import { coastFireScenarioCalculator } from './coast-fire-scenario';
+import { statedRetirementPlanCalculator } from './stated-retirement-plan-scenario';
 
 export type ScenarioOverrideValueType =
   | 'currency'
@@ -13,7 +15,7 @@ export type ScenarioOverrideValueType =
   | 'number'
   | 'boolean'
   | 'enum';
-export type ScenarioOutputUnit = 'usd' | 'percent' | 'months' | 'years' | 'count' | 'ratio';
+export type ScenarioOutputUnit = 'usd' | 'percent' | 'months' | 'years' | 'age' | 'count' | 'ratio';
 
 export interface ScenarioOverrideDefinition {
   id: string;
@@ -66,6 +68,20 @@ export interface ScenarioCalculatorDefinition<
     progressMessage: string;
     failureMessage: string;
   };
+  /**
+   * Whether this calculator has anything to add for this user's data. A
+   * calculator that stands in for missing data -- a projection from stated
+   * figures when no holdings are linked -- does not apply once the data is
+   * there, and its plan is dropped rather than reported as an unavailable run.
+   * Absent means it always applies.
+   */
+  appliesTo?(snapshot: FinancialContextSnapshot): boolean;
+  /**
+   * Calculators that make this one redundant when they are planned for the
+   * same answer: two near-identical results under different headings read as
+   * a contradiction. This plan is dropped whenever one of them is present.
+   */
+  yieldsTo?: readonly string[];
   execute(snapshot: FinancialContextSnapshot, plan: Plan): Promise<Execution>;
   unavailable(startedAt: number, reason: string): Execution;
   compactEvidence(execution: Execution): Evidence;
@@ -196,6 +212,25 @@ export class ScenarioCalculatorRegistry {
     return this.require<Plan, ScenarioExecutionBase, ScenarioExecutionBase>(id).planner.parsePlan(value);
   }
 
+  /**
+   * The plans whose calculators apply to this snapshot. Called once the final
+   * context is loaded, so the decision rests on the data the answer will use;
+   * a dropped plan was never a request this user could have had answered.
+   */
+  applicablePlans(snapshot: FinancialContextSnapshot, plans: ScenarioPlanRecord): ScenarioPlanRecord {
+    const applicable: ScenarioPlanRecord = Object.fromEntries(this.ids().flatMap((id) => {
+      const plan = plans[id];
+      if (plan === undefined) return [];
+      const appliesTo = this.require(id).appliesTo;
+      return !appliesTo || appliesTo(snapshot) ? [[id, plan]] : [];
+    }));
+    // Yield only to a plan that itself survived: a calculator that does not
+    // apply cannot make another one redundant.
+    return Object.fromEntries(Object.entries(applicable).filter(([id]) =>
+      !(this.require(id).yieldsTo ?? []).some((other) => applicable[other] !== undefined)
+    ));
+  }
+
   requiredPacks(id: string): ContextPackId[] {
     return [...this.require(id).requiredPacks];
   }
@@ -271,4 +306,6 @@ export class ScenarioCalculatorRegistry {
 export const scenarioCalculatorRegistry = new ScenarioCalculatorRegistry([
   retirementScenarioCalculator,
   homeAffordabilityScenarioCalculator,
+  coastFireScenarioCalculator,
+  statedRetirementPlanCalculator,
 ]);

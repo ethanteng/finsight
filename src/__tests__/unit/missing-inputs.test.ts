@@ -42,6 +42,123 @@ describe('missing input asks', () => {
     expect(asks[0].message).toContain('Link an investment account');
   });
 
+  describe('with no holdings linked', () => {
+    const noHoldings = {
+      missingParams: [],
+      detectedParams: {},
+      unavailableReason: 'No linked investment holdings are available.',
+      unavailableCode: 'no_holdings',
+    };
+    const RETIREMENT = { needsRetirement: true, needsHomeValue: false };
+
+    it('says why the projection needs holdings, and offers the stated-figures path', () => {
+      const [ask] = collectMissingInputAsks({ retirementAnalysisNeedsInfo: noHoldings } as any, RETIREMENT);
+
+      expect(ask.id).toBe('retirement_no_holdings');
+      expect(ask.message).toContain('needs the holdings themselves, not just a total');
+      expect(ask.message).toContain('I will test it on a preset mix in the meantime');
+    });
+
+    it('turns the wall into the upgrade once a stated retirement plan has answered', () => {
+      const [ask] = collectMissingInputAsks({
+        retirementAnalysisNeedsInfo: noHoldings,
+        scenarioExecutions: {
+          stated_retirement_plan: {
+            status: 'completed',
+            scenarios: [{ allocation: { label: 'Balanced' } }],
+          },
+        },
+      } as any, RETIREMENT);
+
+      expect(ask.id).toBe('retirement_link_for_holdings');
+      expect(ask.message).toContain('instead of the Balanced preset');
+      expect(ask.message).not.toContain('could not');
+    });
+
+    it('tells a Coast FIRE user what linking would add to the answer they just read', () => {
+      const [ask] = collectMissingInputAsks({
+        retirementAnalysisNeedsInfo: noHoldings,
+        scenarioExecutions: {
+          coast_fire: {
+            status: 'completed',
+            scenarios: [{ metrics: {
+              currentAge: 38,
+              retirementAge: 55,
+              realReturnRate: 5,
+              annualRetirementSpending: 80_000,
+              annualRetirementIncome: 0,
+            } }],
+          },
+        },
+      } as any, RETIREMENT);
+
+      expect(ask.id).toBe('coast_fire_link_for_holdings');
+      expect(ask.message).toContain('left alone from 38 to 55, then paying $80,000 a year');
+      expect(ask.message).toContain('Markets never deliver 5% every year');
+    });
+
+    it('names the preset the Coast FIRE market-history test ran in place of their holdings', () => {
+      const [ask] = collectMissingInputAsks({
+        retirementAnalysisNeedsInfo: noHoldings,
+        scenarioExecutions: {
+          coast_fire: {
+            status: 'completed',
+            scenarios: [{
+              metrics: { currentAge: 38, retirementAge: 55, realReturnRate: 5, annualRetirementSpending: 80_000, annualRetirementIncome: 0 },
+              historicalTest: { allocation: { label: 'Balanced' } },
+            }],
+          },
+        },
+      } as any, RETIREMENT);
+
+      expect(ask.id).toBe('coast_fire_link_for_holdings');
+      expect(ask.message).toContain('run that market-history test on what you actually hold instead of the Balanced preset');
+    });
+
+    it('stays out of the way while a calculator is asking for the figures itself', () => {
+      expect(ids({
+        retirementAnalysisNeedsInfo: noHoldings,
+        scenarioExecutions: {
+          stated_retirement_plan: { status: 'unavailable', missingInputs: ['your current age'] },
+        },
+      }, RETIREMENT)).toEqual([]);
+    });
+
+    it('does not imply linking would fix a calculator validation failure', () => {
+      // Coast FIRE already disclosed "retirement age must be after current age".
+      // Appending the generic no-holdings wall buried that and suggested linking
+      // as the remedy.
+      expect(ids({
+        retirementAnalysisNeedsInfo: noHoldings,
+        scenarioExecutions: {
+          coast_fire: {
+            status: 'unavailable',
+            reason: 'Retirement age must be a whole number after your current age and no later than 95.',
+          },
+        },
+      }, RETIREMENT)).toEqual([]);
+    });
+  });
+
+  it('gives the reason the preset stood in, not a failure, once one has', () => {
+    const [ask] = collectMissingInputAsks(
+      {
+        retirementAnalysisNeedsInfo: {
+          missingParams: [],
+          detectedParams: {},
+          unavailableCode: 'no_supported_simulation',
+        },
+        scenarioExecutions: {
+          stated_retirement_plan: { status: 'completed', scenarios: [{ allocation: { label: 'Balanced' } }] },
+        },
+      } as any,
+      { needsRetirement: true, needsHomeValue: false }
+    );
+
+    expect(ask.id).toBe('retirement_no_supported_simulation');
+    expect(ask.message).toMatch(/^The preset stood in for your holdings because none of them map/);
+  });
+
   it('explains when holdings exist but none are simulatable', () => {
     const asks = collectMissingInputAsks(
       {
