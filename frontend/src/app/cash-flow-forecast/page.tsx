@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import StructuredData from '@/components/StructuredData';
+import LincAvatar from '@/components/LincAvatar';
 import { MarketingGetStartedButton } from '@/components/marketing/MarketingGetStartedButton';
 import { PageCta, SiteFooter, SiteHeader } from '@/components/marketing/SiteShell';
 import { TRIAL_CTA_MICROCOPY } from '@/components/marketing/trial-copy';
@@ -82,171 +83,116 @@ const faqSchema = {
   })),
 };
 
-const examples = [
-  ['Can I afford the trip?', 'Add the cost and date. See what it does to your expected savings and lowest cash balance.'],
-  ['What if my bonus is smaller?', 'Add the amount you actually expect and compare the next few months again.'],
-  ['Should I pay off this card now?', 'Compare the cash you give up today with the balance and interest you may avoid later.'],
+const forecastInputs = [
+  ['What normally comes in', 'Regular paychecks and other recurring income from the accounts you connect.'],
+  ['What normally goes out', 'Bills, everyday spending, credit-card activity, and the patterns in your transaction history.'],
+  ['What you already know is coming', 'Add a bonus, vacation, tuition bill, big purchase, or card payment that has not happened yet.'],
+] as const;
+
+const questions = [
+  'How much money will I have left?',
+  'Can I afford the trip?',
+  'How much can I spend this month?',
+  'What if my bonus is smaller?',
+  'Should I pay off this card now?',
 ] as const;
 
 export default function CashFlowForecastPage() {
   return (
-    <main className="marketing-site subpage cash-flow-landing">
+    <main className="marketing-site subpage use-case-page lime">
       <StructuredData data={applicationSchema} />
       <StructuredData data={faqSchema} />
       <SiteHeader />
 
-      <section className="cash-flow-hero shell">
-        <div className="cash-flow-hero-copy">
+      <section className="subhero shell use-case-hero">
+        <div>
           <p className="section-kicker">PERSONAL CASH FLOW FORECAST</p>
-          <h1>How much will you <em>actually have left?</em></h1>
-          <p className="cash-flow-lede">
-            Connect your checking, savings, and credit cards. Ask Linc uses what normally comes in and goes out to estimate
-            what your cash could look like next month, next quarter, or next year.
+          <h1>How much will you actually have left?</h1>
+          <p className="subhero-copy">
+            Connect your checking, savings, and credit cards. Ask Linc uses what normally comes in and goes out,
+            then lets you add the things you already know are coming — a bonus, a trip, tuition, a big purchase,
+            or paying down a card.
           </p>
-          <p className="cash-flow-lede cash-flow-lede-secondary">
-            Then add the stuff your history can’t know yet — a bonus, a vacation, tuition, a big purchase, or paying down a card.
-          </p>
-          <div className="hero-actions">
-            <MarketingGetStartedButton
-              className="button button-primary"
-              trackingLocation="cash_flow_hero"
-              csOverrideId="cta-start-free-trial-cash-flow-hero"
-              label="Build my forecast"
-            />
-            <Link className="text-link" href="#examples">See what you can test</Link>
-          </div>
+          <MarketingGetStartedButton
+            className="button button-primary"
+            trackingLocation="cash_flow_hero"
+            csOverrideId="cta-start-free-trial-cash-flow-hero"
+            label="Build my forecast"
+          />
           <p className="microcopy">{TRIAL_CTA_MICROCOPY}</p>
         </div>
 
-        <div className="cash-flow-preview" aria-label="Example personal cash flow forecast">
-          <div className="cash-flow-preview-top">
-            <div>
-              <small>EXAMPLE FORECAST</small>
-              <strong>Next 3 months</strong>
-            </div>
-            <span>Sample data</span>
+        <article className="use-case-answer">
+          <div className="miniature-top">
+            <LincAvatar size={26} />
+            <b>EXAMPLE CASH FLOW</b>
+            <span>ILLUSTRATIVE</span>
           </div>
-          <div className="cash-flow-preview-metrics">
-            <div><small>Cash today</small><strong>$24,810</strong></div>
-            <div><small>Expected to save</small><strong>+$6,240</strong></div>
-            <div><small>Lowest point</small><strong>$17,920</strong></div>
+          <p>What will my cash look like over the next three months?</p>
+          <div className="use-case-verdict">
+            <small>THE SHORT ANSWER</small>
+            <h2>You&apos;re projected to save about $6,240.</h2>
+            <span>
+              That includes your usual income and spending plus the plans you added. Your projected cash stays above
+              $17,920 along the way.
+            </span>
           </div>
-          <div className="cash-flow-preview-chart" role="img" aria-label="Example cash balance changing over three months">
-            <div className="cash-flow-chart-grid" aria-hidden="true" />
-            <svg viewBox="0 0 620 230" preserveAspectRatio="none" aria-hidden="true">
-              <path className="cash-flow-chart-area" d="M0 126 C52 114, 84 154, 126 148 S203 102, 252 119 S328 168, 376 144 S461 76, 510 91 S570 61, 620 70 L620 230 L0 230 Z" />
-              <path className="cash-flow-chart-line" d="M0 126 C52 114, 84 154, 126 148 S203 102, 252 119 S328 168, 376 144 S461 76, 510 91 S570 61, 620 70" />
-            </svg>
-            <div className="cash-flow-chart-labels"><span>Now</span><span>Next month</span><span>3 months</span></div>
+          <div className="use-case-metrics">
+            <span><small>CASH TODAY</small><b>$24,810</b></span>
+            <span><small>EXPECTED TO SAVE</small><b>+$6,240</b></span>
+            <span><small>LOWEST POINT</small><b>$17,920</b></span>
           </div>
-          <div className="cash-flow-preview-plans">
-            <div><span className="cash-flow-plan-dot expense" />Vacation <strong>−$5,000</strong></div>
-            <div><span className="cash-flow-plan-dot income" />Bonus <strong>+$8,000</strong></div>
-            <div><span className="cash-flow-plan-dot card" />Card payment <strong>−$2,500</strong></div>
-          </div>
-        </div>
+          <div className="use-case-check">Add the trip, bonus, or card payment and recalculate the forecast.</div>
+        </article>
       </section>
 
-      <section className="cash-flow-question-strip">
-        <div className="shell">
-          <span>THE QUESTIONS THIS IS FOR</span>
-          <div>
-            <p>“How much money will I have left?”</p>
-            <p>“Can I afford this?”</p>
-            <p>“How much can I spend?”</p>
-          </div>
-        </div>
-      </section>
-
-      <section className="page-section shell cash-flow-how" aria-labelledby="cash-flow-how-title">
+      <section className="decision-levers shell">
         <div className="editorial-heading">
-          <p className="section-kicker">START WITH YOUR REAL MONEY</p>
-          <h2 id="cash-flow-how-title">See what usually happens. <em>Then add what you know is coming.</em></h2>
+          <p className="section-kicker">WHAT THE FORECAST USES</p>
+          <h2>Start with what normally happens.<br /><em>Then add what&apos;s coming.</em></h2>
         </div>
-        <div className="cash-flow-how-grid">
-          <article>
-            <span>01</span>
-            <h3>What normally comes in</h3>
-            <p>Regular paychecks and other recurring income from the accounts you connect.</p>
-          </article>
-          <article>
-            <span>02</span>
-            <h3>What normally goes out</h3>
-            <p>Bills, everyday spending, credit-card activity, and the patterns in your transaction history.</p>
-          </article>
-          <article>
-            <span>03</span>
-            <h3>What you already know is coming</h3>
-            <p>Add future income, expenses, and card payments that are not in your history yet.</p>
-          </article>
-          <article className="cash-flow-how-result">
-            <span>04</span>
-            <h3>What that leaves you with</h3>
-            <p>Expected savings or shortfall, projected cash balances, and the lowest point along the way.</p>
-          </article>
+        <div className="lever-grid">
+          {forecastInputs.map(([title, copy], index) => (
+            <article key={title}>
+              <span>0{index + 1}</span>
+              <h3>{title}</h3>
+              <p>{copy}</p>
+            </article>
+          ))}
         </div>
       </section>
 
-      <section className="cash-flow-examples" id="examples" aria-labelledby="cash-flow-examples-title">
+      <section className="case-context dark-band">
+        <div className="shell case-context-inner">
+          <div>
+            <p className="section-kicker light">THE QUESTIONS THIS IS FOR</p>
+            <h2>Ask the thing you actually want to know.</h2>
+          </div>
+          <div className="context-chips" aria-label="Example cash flow questions">
+            {questions.map((question) => <span key={question}>{question}</span>)}
+          </div>
+        </div>
+      </section>
+
+      <section className="use-case-bridge">
         <div className="shell">
-          <div className="cash-flow-examples-heading">
-            <div>
-              <p className="section-kicker light">TRY THE THING YOU’RE ACTUALLY WONDERING ABOUT</p>
-              <h2 id="cash-flow-examples-title">Change one thing. <em>See what it does to the rest.</em></h2>
-            </div>
-            <p>You do not have to rebuild a spreadsheet every time a plan changes.</p>
-          </div>
-          <div className="cash-flow-example-grid">
-            {examples.map(([question, answer]) => (
-              <article key={question}>
-                <small>ASK</small>
-                <h3>“{question}”</h3>
-                <p>{answer}</p>
-              </article>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <section className="page-section shell cash-flow-correct" aria-labelledby="cash-flow-correct-title">
-        <div className="cash-flow-correct-copy">
-          <p className="section-kicker">YOU CAN CORRECT IT</p>
-          <h2 id="cash-flow-correct-title">If a pattern is wrong, <em>change it.</em></h2>
+          <p className="section-kicker">IF THE FORECAST GETS SOMETHING WRONG</p>
+          <h2>Fix the assumption instead of working around it.</h2>
           <p>
-            Maybe a charge was a one-off. Maybe an old subscription is gone. Maybe a stopped paycheck is actually continuing.
-            Ask Linc shows what it thinks belongs in the forecast and lets you change it.
+            A one-time purchase should not become your normal monthly spending. An old subscription may be gone.
+            A paycheck that stopped may actually be continuing. Ask Linc shows what it thinks belongs in the forecast
+            and lets you change it. The cash-flow math is calculated by the financial engine rather than invented by
+            the language model. <Link href="/trust">See how Ask Linc checks the math →</Link>
           </p>
         </div>
-        <div className="cash-flow-assumptions" aria-label="Example forecast assumptions">
-          <div className="cash-flow-assumption-heading"><span>Count in forecast</span><span>Leave out</span></div>
-          <div className="cash-flow-assumption-row"><strong>Payroll</strong><span>Every 2 weeks</span><button type="button" tabIndex={-1}>Counted</button></div>
-          <div className="cash-flow-assumption-row"><strong>Mortgage</strong><span>Monthly</span><button type="button" tabIndex={-1}>Counted</button></div>
-          <div className="cash-flow-assumption-row muted"><strong>Furniture purchase</strong><span>One time</span><button type="button" tabIndex={-1}>Left out</button></div>
-        </div>
       </section>
 
-      <section className="cash-flow-math">
-        <div className="shell cash-flow-math-inner">
-          <div>
-            <p className="section-kicker light">THE AI DOESN’T GET TO MAKE UP THE NUMBERS</p>
-            <h2>The forecast is calculated. <em>Then AI can help you think about it.</em></h2>
-          </div>
-          <div>
-            <p>
-              Cash flow, projected balances, planned events, and credit-card outcomes are computed by Ask Linc’s financial
-              engine. The AI can explain the result and answer follow-up questions, but the arithmetic does not come from a chat response.
-            </p>
-            <Link className="light-link" href="/trust">See how Ask Linc checks the math <span aria-hidden="true">→</span></Link>
-          </div>
-        </div>
-      </section>
-
-      <section className="page-section shell cash-flow-faq" aria-labelledby="cash-flow-faq-title">
-        <div className="cash-flow-faq-heading">
-          <p className="section-kicker">PERSONAL CASH FLOW FORECAST FAQ</p>
+      <section className="page-section shell compact-faq" aria-labelledby="cash-flow-faq-title">
+        <div>
+          <p className="section-kicker">CASH FLOW FAQ</p>
           <h2 id="cash-flow-faq-title">A few things worth knowing.</h2>
         </div>
-        <div className="cash-flow-faq-list">
+        <div>
           {faqs.map((item) => (
             <details key={item.question}>
               <summary>{item.question}<span aria-hidden="true">+</span></summary>
@@ -256,7 +202,11 @@ export default function CashFlowForecastPage() {
         </div>
       </section>
 
-      <PageCta title="See what your next few months could look like." label="Build my forecast" csOverrideId="cta-start-free-trial-cash-flow-bottom" />
+      <PageCta
+        title="See what your next few months could look like."
+        label="Build my forecast"
+        csOverrideId="cta-start-free-trial-cash-flow-bottom"
+      />
       <SiteFooter />
     </main>
   );
