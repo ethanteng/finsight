@@ -5,6 +5,8 @@ import { Account, Transaction, UnifiedFinancialData, HomeData } from '../service
 import { TokenStatus } from '../services/token-validation-service';
 import { QuestionNeeds, FinancialContextSnapshot, TransactionSummaryItem, InvestmentSnapshot } from './types';
 import { buildAccountSummaries } from './account-summary';
+import { describeLinkedData, incomeLinked, NOTHING_LINKED, spendingLinked } from './linked-data';
+import type { AccountLike } from '../services/account-classifier';
 import {
   describeUnmodeledInvestmentValue,
   summarizeUnmodeledInvestmentValue,
@@ -12,7 +14,14 @@ import {
   type UnmodeledInvestmentValue,
 } from '../services/investment-coverage';
 import { buildCanonicalCashFlowAnalyses } from './cash-flow-context';
-import { resolveRetirementInputs, retirementPortfolioFingerprint, resolveStoredAsOfDate } from './retirement-inputs';
+import {
+  persistableAssumptions,
+  resolveRetirementInputs,
+  retirementPortfolioFingerprint,
+  resolveStoredAsOfDate,
+  sameAssumptions,
+  type AssumedRetirementInputs,
+} from './retirement-inputs';
 import { generateDisclaimers, calculateConfidenceCeiling } from '../retirement-analytics/interpretation/uncertainty-quantifier';
 import type { DataQualityReport } from '../retirement-analytics/types';
 import { RETIREMENT_ANALYSIS_VERSION } from '../retirement-analytics/version';
@@ -112,13 +121,19 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
   let financialSummary: FinancialContextSnapshot['financialSummary'] | null = null;
   let transactionSummary: FinancialContextSnapshot['transactionSummary'];
   let accountDisplayBalances: Record<string, unknown> = {};
+  // A signed-in user with no snapshot has linked nothing; an anonymous caller
+  // has no record at all, and keeps the behavior that predates it.
+  let linkedData: FinancialContextSnapshot['linkedData'] = userId ? { ...NOTHING_LINKED } : undefined;
 
   if (userId) {
     // Fetch the canonical snapshot with only the large JSON columns this
     // question needs. Aggregate financial and cash-flow truth is always loaded.
     const { getFinancialSnapshotForAnalysis } = await import('../services/financial-snapshot-persistence');
     const snapshot = await getFinancialSnapshotForAnalysis(userId, {
-      includeAccounts: questionNeeds.needsAccountDetails,
+      // Always: the list is small, and what is linked decides whether a zero
+      // total describes the user or an empty connection. Account details
+      // still reach the answer only when the question asks for them, below.
+      includeAccounts: true,
       includeTransactions: questionNeeds.needsTransactionDetails,
       includeInvestments: questionNeeds.needsInvestments || Boolean(questionNeeds.needsRetirement),
     });
@@ -139,7 +154,24 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
       // ✅ CRITICAL: snapshot.accounts is stored as JSON in the database
       // When retrieved, Prisma parses it, but we need to ensure it's an array
       const rawAccounts = snapshot.accounts as any;
-      accounts = Array.isArray(rawAccounts) ? rawAccounts as Account[] : [];
+      const linkedAccounts = Array.isArray(rawAccounts) ? rawAccounts as Account[] : [];
+      accounts = questionNeeds.needsAccountDetails ? linkedAccounts : [];
+      const summaryForCoverage = snapshot.transactionsSummary as { byMonth?: Record<string, unknown> } | null;
+      const transactionMonths = summaryForCoverage?.byMonth ? Object.keys(summaryForCoverage.byMonth).length : 0;
+      const holdingCount = (snapshot.investmentPortfolio as { holdingCount?: number } | null)?.holdingCount ?? 0;
+      const overviewForCoverage = snapshot.financialOverview as Record<string, unknown> | null;
+      const carriesData = transactionMonths > 0 || holdingCount > 0 || ['totalCash', 'totalInvestments', 'totalDebt']
+        .some((key) => typeof overviewForCoverage?.[key] === 'number' && overviewForCoverage[key] !== 0);
+      // Data with no account list behind it is a snapshot we cannot read
+      // coverage from, not proof that nothing is linked; it keeps the behavior
+      // that predates the record rather than having real figures nulled.
+      linkedData = linkedAccounts.length === 0 && carriesData
+        ? undefined
+        : describeLinkedData({
+            accounts: linkedAccounts as unknown as AccountLike[],
+            holdingCount,
+            transactionMonths,
+          });
 
       // Log account count and check for duplicates in snapshot
       console.log(`📊 gatherContextSnapshot: Retrieved ${accounts.length} accounts from snapshot for user ${userId}`);
@@ -465,15 +497,33 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
         }
       : null);
 
+  // A side with nothing linked to read it from is unknown, not zero: an
+  // account holding only investments has no paycheck and no bills in it, and
+  // a forecast built from that is an empty connection, not the user's month.
+  // A figure the user set themselves is theirs either way.
+  const knowsIncome = !linkedData || incomeLinked(linkedData);
+  const knowsSpending = !linkedData || spendingLinked(linkedData);
+  const knownExpected: FinancialContextSnapshot['expectedMonthly'] = expected
+    ? {
+        ...expected,
+        income: expected.incomeSource === 'override' || knowsIncome ? expected.income : null,
+        spending: expected.spendingSource === 'override' || knowsSpending ? expected.spending : null,
+      }
+    : null;
+  const expectedForAnswer = knownExpected && (knownExpected.income !== null || knownExpected.spending !== null)
+    ? knownExpected
+    : null;
+
   const { averages, incomeAnalysis, expenseAnalysis, monthlyAnalysis } = buildCanonicalCashFlowAnalyses(
     transactionSummary,
     financialSummary?.computedAt,
-    expected,
+    expectedForAnswer,
     questionNeeds.needsMonthlyCashFlow
   );
 
   const assembledSnapshot: FinancialContextSnapshot = {
     accounts: accountSummaries,
+    ...(linkedData && { linkedData }),
     bankingTransactions: transactionSummaries,
     investments: investmentsSnapshot,
     metadata,
@@ -481,12 +531,12 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
     incomeAnalysis,
     expenseAnalysis,
     monthlyCashFlowAnalysis: monthlyAnalysis,
-    averageMonthlyIncome: averages?.averageIncome ?? null,
-    averageMonthlyExpense: averages?.averageExpenses ?? null,
+    averageMonthlyIncome: knowsIncome ? averages?.averageIncome ?? null : null,
+    averageMonthlyExpense: knowsSpending ? averages?.averageExpenses ?? null : null,
     averageMonthlyMonths: averages && averages.firstMonth && averages.lastMonth
       ? { count: averages.monthCount, firstMonth: averages.firstMonth, lastMonth: averages.lastMonth }
       : null,
-    expectedMonthly: expected,
+    expectedMonthly: expectedForAnswer,
     transactionSummary,
     ...(cashFlowForecast && { cashFlowForecast }),
     contextSelection: {
@@ -596,12 +646,17 @@ export async function completeRetirementAnalysis(
 
   try {
     onProgress?.('Building your retirement snapshot');
+    const monthlySpending = snapshot.expectedMonthly?.spending;
     const result = await fetchOrCreateRetirementAnalysis({
       userId,
       question,
       recentTurns,
       plannedRetirementInputs,
       useExistingRetirementBaseline,
+      // Already null where nothing linked could say what the user spends.
+      currentAnnualSpending: typeof monthlySpending === 'number' && Number.isFinite(monthlySpending)
+        ? monthlySpending * 12
+        : null,
       userProfile: snapshot.userProfile || '',
       holdings,
       securities,
@@ -657,6 +712,8 @@ async function fetchOrCreateRetirementAnalysis(args: {
   securities: any[];
   unmodeledInvestments?: UnmodeledInvestmentValue | null;
   asOfDate?: string;
+  /** What the user spends a year now, from linked cash flow; the fallback for retirement spending. */
+  currentAnnualSpending?: number | null;
 }): Promise<RetirementAnalysisResolution> {
   const {
     userId,
@@ -669,6 +726,7 @@ async function fetchOrCreateRetirementAnalysis(args: {
     securities,
     unmodeledInvestments,
     asOfDate,
+    currentAnnualSpending,
   } = args;
 
   // Parse retirement parameters from the question and the turns that set it up.
@@ -787,9 +845,13 @@ async function fetchOrCreateRetirementAnalysis(args: {
       disclaimers: note ? [note, ...carried] : carried,
     };
   };
+  // Filled in once inputs are resolved, below; every return path after that
+  // states which of them were assumed.
+  let assumedInputs: AssumedRetirementInputs = {};
   const withSources = (analysis: RetirementAnalysis): RetirementAnalysisResolution => {
     const covered = withCoverage(analysis);
-    return inputSources ? { analysis: { ...covered, _inputSources: inputSources } } : { analysis: covered };
+    const assumed = Object.keys(assumedInputs).length > 0 ? { _assumedInputs: assumedInputs } : {};
+    return { analysis: { ...covered, ...(inputSources && { _inputSources: inputSources }), ...assumed } };
   };
 
   // Extract age from profile if not in question
@@ -808,6 +870,17 @@ async function fetchOrCreateRetirementAnalysis(args: {
   });
   const storedAnalysisInput = (recentAnalysis?.analysisInput || {}) as Record<string, unknown>;
   const storedInput = storedAnalysisInput as Record<string, number | null | undefined>;
+  // A value a previous run assumed is never the user's plan. Left in, the next
+  // question would read the assumed 65 or the spending of a month ago back as
+  // something the user said.
+  const storedAssumptions = persistableAssumptions(
+    storedAnalysisInput.assumedInputs && typeof storedAnalysisInput.assumedInputs === 'object'
+      ? storedAnalysisInput.assumedInputs as AssumedRetirementInputs
+      : {}
+  );
+  const storedInputForResolution: Record<string, number | null | undefined> = { ...storedInput };
+  for (const field of Object.keys(storedAssumptions)) delete storedInputForResolution[field];
+  if (storedAssumptions.retirementAge) delete storedInputForResolution.withdrawalStartAge;
   const { getHistoricalDatasetVersion } = await import('../retirement-analytics/engine/historical-data-loader');
   const historicalDatasetVersion = getHistoricalDatasetVersion();
   const confirmsStoredAnnualWithdrawal =
@@ -820,13 +893,18 @@ async function fetchOrCreateRetirementAnalysis(args: {
     lifeExpectancy,
     missingParams,
     confirmationRequiredParams,
+    assumed,
   } = resolveRetirementInputs({
     questionParams,
     profileAge,
     profileRetirementAge,
-    storedInput,
+    storedInput: storedInputForResolution,
     allowStoredAnnualWithdrawal: confirmsStoredAnnualWithdrawal || useExistingRetirementBaseline,
+    // Answer with a disclosed assumption rather than stopping to ask: the
+    // user's earlier figure or current spending for spending, 65 for the age.
+    assumeWhenMissing: { currentAnnualSpending },
   });
+  assumedInputs = assumed;
 
   if (
     missingParams.length > 0 ||
@@ -875,6 +953,7 @@ async function fetchOrCreateRetirementAnalysis(args: {
       storedInput.annualWithdrawalAmount === annualWithdrawalAmount &&
       storedInput.withdrawalStartAge === withdrawalStartAge &&
       (storedInput.lifeExpectancy ?? 95) === lifeExpectancy &&
+      sameAssumptions(storedAssumptions, persistableAssumptions(assumed)) &&
       storedAnalysisInput.analysisVersion === RETIREMENT_ANALYSIS_VERSION &&
       storedAnalysisInput.historicalDatasetVersion === historicalDatasetVersion &&
       storedAsOfDate === effectiveAsOfDate
@@ -964,6 +1043,10 @@ async function fetchOrCreateRetirementAnalysis(args: {
       lifeExpectancy,
       annualWithdrawalAmount,
       withdrawalStartAge,
+      // Which of these were assumed, so a later run never reads them back as
+      // the user's plan. A figure from an earlier conversation is theirs and
+      // is not listed.
+      assumedInputs: persistableAssumptions(assumed),
       analysisVersion: RETIREMENT_ANALYSIS_VERSION,
       historicalDatasetVersion,
     };

@@ -104,6 +104,25 @@ export interface InvestmentExternalData {
 
 export interface FinancialContextSnapshot {
   accounts: AccountSummaryItem[];
+  /**
+   * What the user has linked, by kind. A total for a kind with nothing linked
+   * describes an empty connection, not the user, so it is never quoted as a
+   * fact about them. Absent on paths that predate it, which then behave as
+   * they always have. See `openai/linked-data.ts`.
+   */
+  linkedData?: {
+    accounts: number;
+    cash: number;
+    credit: number;
+    /** Loans and mortgages. */
+    loans: number;
+    /** Brokerage and retirement accounts. */
+    investments: number;
+    /** Itemized holdings across those accounts. */
+    holdings: number;
+    /** Calendar months the transaction summary has any activity in. */
+    transactionMonths: number;
+  };
   bankingTransactions: TransactionSummaryItem[];
   investments?: InvestmentSnapshot;
   metadata: UnifiedFinancialData['metadata'];
@@ -312,6 +331,8 @@ export interface FinancialContextSnapshot {
      * answer states which words it acted on and the user can correct a misread
      * in one reply instead of finding it in the math.
      */
+    /** Inputs a disclosed assumption filled, and why. See `retirement-inputs.ts`. */
+    _assumedInputs?: Partial<Record<'retirementAge' | 'annualWithdrawalAmount', 'earlier' | 'current_spending' | 'convention'>>;
     _inputSources?: {
       currentAge?: string;
       retirementAge?: string;

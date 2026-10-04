@@ -35,6 +35,7 @@ import {
   type RetirementQuickPlanResult,
 } from '../services/retirement-quickplan';
 import { presetStandInReason, type PresetStandInReason } from './preset-stand-in';
+import { CONVENTIONAL_RETIREMENT_AGE } from '../openai/retirement-inputs';
 import { COAST_FIRE_CALCULATOR_ID } from './coast-fire-scenario';
 
 export const STATED_RETIREMENT_PLAN_CALCULATOR_ID = 'stated_retirement_plan' as const;
@@ -140,6 +141,13 @@ export interface StatedRetirementAlternative {
 export interface StatedRetirementPlanResult {
   id: string;
   label: string;
+  /**
+   * `plan` evaluated a spending level. `rates` had none to evaluate -- nobody
+   * stated one and nothing linked says what the user spends -- so instead of
+   * a verdict it reports what the mix sustained, which still answers "how
+   * much could I spend?".
+   */
+  mode: 'plan' | 'rates';
   assumptions: StatedRetirementAssumption[];
   inputs: RetirementQuickPlanResult['inputs'];
   allocation: {
@@ -152,7 +160,8 @@ export interface StatedRetirementPlanResult {
   };
   history: Pick<RetirementQuickPlanResult['history'],
     'firstStartMonth' | 'lastStartMonth' | 'sequencesTested' | 'horizonYears'>;
-  outcome: {
+  /** The verdict on the stated spending level; absent in `rates` mode. */
+  outcome?: {
     survivalRate: number;
     sequencesTested: number;
     sequencesSurvived: number;
@@ -221,11 +230,15 @@ const LABELS: Record<StatedRetirementPlanField, string> = {
   allocation: 'Preset asset mix',
 };
 
+/**
+ * The two figures nothing can stand in for. A retirement age has a
+ * conventional default and spending has the user's current spending or the
+ * sustained-spending answer; how much someone has and how old they are have
+ * neither.
+ */
 const MISSING_INPUT_PROMPTS: Partial<Record<StatedRetirementPlanField, string>> = {
   investableAssets: 'roughly how much you have invested today',
-  annualSpending: 'what you expect to spend a year in retirement, in today\'s dollars',
   currentAge: 'your current age',
-  retirementAge: 'the age you want to retire',
 };
 
 function finiteNumber(value: unknown): number | undefined {
@@ -325,7 +338,8 @@ function layer(
 }
 
 interface ResolvedVariant {
-  request: Required<RetirementQuickPlanRequest>;
+  /** No spending level runs the engine in `rates` mode. */
+  request: Omit<Required<RetirementQuickPlanRequest>, 'annualSpending'> & { annualSpending?: number };
   assumptions: StatedRetirementAssumption[];
 }
 
@@ -372,17 +386,36 @@ function resolveVariant(
     ? connectedTotal
     : undefined;
 
+  // Already null where nothing linked could say what the user spends.
+  const monthlySpending = snapshot.expectedMonthly?.spending;
+  const annualFromCashFlow = typeof monthlySpending === 'number' && Number.isFinite(monthlySpending)
+    ? Math.round(monthlySpending * 12)
+    : undefined;
+  const knownSpending = annualFromCashFlow !== undefined &&
+    annualFromCashFlow >= RANGES.annualSpending.minimum && annualFromCashFlow <= RANGES.annualSpending.maximum
+    ? annualFromCashFlow
+    : undefined;
+
   const investableAssets = take<number>(
     'investableAssets',
     knownAssets !== undefined ? { value: knownAssets, origin: 'snapshot' } : undefined
   );
-  const annualSpending = take<number>('annualSpending');
   const currentAge = take<number>(
     'currentAge',
     knownAge !== undefined ? { value: knownAge, origin: 'profile' } : undefined
   );
-  const retirementAge = take<number>('retirementAge');
   if (missing.length > 0) return { missing };
+  // The conventional planning age, or now for someone already past it.
+  const retirementAge = take<number>('retirementAge', {
+    value: Math.max(currentAge!, CONVENTIONAL_RETIREMENT_AGE),
+    origin: 'default',
+  })!;
+  // What the user spends now, when their accounts say; otherwise no spending
+  // level at all, and the engine answers with what the mix sustained.
+  const annualSpending = take<number>(
+    'annualSpending',
+    knownSpending !== undefined ? { value: knownSpending, origin: 'snapshot' } : undefined
+  );
 
   const annualContributions = take<number>('annualContributions', { value: 0, origin: 'default' })!;
   const socialSecurityAnnual = take<number>('socialSecurityAnnual', { value: 0, origin: 'default' })!;
@@ -400,9 +433,9 @@ function resolveVariant(
   return {
     request: {
       currentAge: currentAge!,
-      retirementAge: retirementAge!,
+      retirementAge,
       investableAssets: investableAssets!,
-      annualSpending: annualSpending!,
+      ...(annualSpending !== undefined && { annualSpending }),
       annualContributions,
       socialSecurityAnnual,
       socialSecurityStartAge,
@@ -441,9 +474,11 @@ function variantLabel(own: ResolvedVariant, peer: ResolvedVariant | undefined): 
     (own.request as unknown as Record<string, unknown>)[field] !==
       (peer.request as unknown as Record<string, unknown>)[field]
   );
-  const described = differing.slice(0, 2).map((field) =>
-    describeField(field, (own.request as unknown as Record<string, number | string>)[field])
-  );
+  const values = own.request as unknown as Record<string, number | string | undefined>;
+  const described = differing
+    .filter((field) => values[field] !== undefined)
+    .slice(0, 2)
+    .map((field) => describeField(field, values[field]!));
   return described.length > 0 ? capitalize(described.join(' and ')) : 'Your plan';
 }
 
@@ -489,15 +524,17 @@ function toResult(
   run: RetirementQuickPlanResult,
   includeAlternatives: boolean
 ): StatedRetirementPlanResult {
-  // Both money figures were supplied, so the quick plan answered in `plan`
-  // mode and evaluated this plan. A null here would be an engine contract
-  // break, not a missing input.
+  // With a spending level the quick plan evaluates the plan; without one it
+  // answers in `rates` mode and `primary` is null by design.
   const evaluated = run.primary;
-  if (!evaluated) throw new Error('The retirement engine did not evaluate the stated plan.');
+  if (variant.request.annualSpending !== undefined && !evaluated) {
+    throw new Error('The retirement engine did not evaluate the stated plan.');
+  }
   const allocation = QUICKPLAN_ALLOCATIONS[run.inputs.allocation];
   return {
     id: scenarioId(variant),
     label,
+    mode: evaluated ? 'plan' : 'rates',
     assumptions: variant.assumptions,
     inputs: run.inputs,
     allocation: {
@@ -514,15 +551,17 @@ function toResult(
       sequencesTested: run.history.sequencesTested,
       horizonYears: run.history.horizonYears,
     },
-    outcome: {
-      survivalRate: evaluated.survivalRate,
-      sequencesTested: evaluated.sequencesTested,
-      sequencesSurvived: evaluated.sequencesSurvived,
-      projectedPortfolioAtRetirement: evaluated.projectedPortfolioAtRetirement,
-      firstYearPortfolioWithdrawal: evaluated.firstYearPortfolioWithdrawal,
-      firstYearWithdrawalRate: evaluated.firstYearWithdrawalRate,
-      depletionYears: evaluated.depletionYears,
-    },
+    ...(evaluated && {
+      outcome: {
+        survivalRate: evaluated.survivalRate,
+        sequencesTested: evaluated.sequencesTested,
+        sequencesSurvived: evaluated.sequencesSurvived,
+        projectedPortfolioAtRetirement: evaluated.projectedPortfolioAtRetirement,
+        firstYearPortfolioWithdrawal: evaluated.firstYearPortfolioWithdrawal,
+        firstYearWithdrawalRate: evaluated.firstYearWithdrawalRate,
+        depletionYears: evaluated.depletionYears,
+      },
+    }),
     ...(run.sustainableSpending && {
       sustainableSpending: { p10: run.sustainableSpending.p10, p50: run.sustainableSpending.p50 },
     }),
@@ -572,7 +611,7 @@ export async function runStatedRetirementPlan(
   let comparisonUnavailableReason: string | undefined;
   for (const [index, variant] of variants.entries()) {
     try {
-      const run = await runQuickPlan(variant.request);
+      const run = await runQuickPlan(variant.request as RetirementQuickPlanRequest);
       const peer = variants[index === 0 ? 1 : 0];
       scenarios.push(toResult(variant, variantLabel(variant, peer), run, index === 0));
     } catch (error) {
@@ -668,20 +707,22 @@ export function statedRetirementPlanCanonicalFacts(execution: StatedRetirementPl
     add('scenario_input', 'cash_share', `${mix} share in cash`, scenario.allocation.cashPercent, 'percent');
 
     const outcome = scenario.outcome;
-    add('scenario_calculation', 'historical_survival_rate', 'Share of tested historical sequences in which the money lasted', asPercent(outcome.survivalRate), 'percent');
-    add('scenario_calculation', 'historical_sequences_tested', 'Historical sequences tested', outcome.sequencesTested, 'count');
-    add('scenario_calculation', 'historical_sequences_survived', 'Historical sequences in which the money lasted', outcome.sequencesSurvived, 'count');
-    add('scenario_calculation', 'median_portfolio_at_retirement', 'Median portfolio at retirement across those sequences, in today\'s dollars', roundMoney(outcome.projectedPortfolioAtRetirement), 'usd');
-    add('scenario_calculation', 'first_year_portfolio_withdrawal', 'Spending the portfolio itself covers in the first year of retirement', roundMoney(outcome.firstYearPortfolioWithdrawal), 'usd');
-    add('scenario_calculation', 'first_year_withdrawal_rate', 'First-year withdrawal rate from the median portfolio', asPercent(outcome.firstYearWithdrawalRate), 'percent');
-    for (const percentile of ['p10', 'p25', 'p50'] as const) {
-      add(
-        'scenario_calculation',
-        `depletion_years_${percentile}`,
-        `${percentile} years from retirement until the money ran out, among sequences where it did`,
-        outcome.depletionYears?.[percentile],
-        'years'
-      );
+    add('scenario_calculation', 'historical_sequences_tested', 'Historical sequences tested', scenario.history.sequencesTested, 'count');
+    if (outcome) {
+      add('scenario_calculation', 'historical_survival_rate', 'Share of tested historical sequences in which the money lasted', asPercent(outcome.survivalRate), 'percent');
+      add('scenario_calculation', 'historical_sequences_survived', 'Historical sequences in which the money lasted', outcome.sequencesSurvived, 'count');
+      add('scenario_calculation', 'median_portfolio_at_retirement', 'Median portfolio at retirement across those sequences, in today\'s dollars', roundMoney(outcome.projectedPortfolioAtRetirement), 'usd');
+      add('scenario_calculation', 'first_year_portfolio_withdrawal', 'Spending the portfolio itself covers in the first year of retirement', roundMoney(outcome.firstYearPortfolioWithdrawal), 'usd');
+      add('scenario_calculation', 'first_year_withdrawal_rate', 'First-year withdrawal rate from the median portfolio', asPercent(outcome.firstYearWithdrawalRate), 'percent');
+      for (const percentile of ['p10', 'p25', 'p50'] as const) {
+        add(
+          'scenario_calculation',
+          `depletion_years_${percentile}`,
+          `${percentile} years from retirement until the money ran out, among sequences where it did`,
+          outcome.depletionYears?.[percentile],
+          'years'
+        );
+      }
     }
     if (scenario.sustainableSpending) {
       add('scenario_calculation', 'sustainable_spending_p10', 'Annual spending this mix sustained in the 10th-percentile sequence, in today\'s dollars', roundMoney(scenario.sustainableSpending.p10), 'usd');
@@ -774,6 +815,23 @@ export function describeStatedRetirementPlanExecution(execution: StatedRetiremen
   const comparisonNotice = execution.comparisonUnavailableReason
     ? ` I could not run the comparison case: ${execution.comparisonUnavailableReason}`
     : '';
+  // The two figures this answer assumed rather than heard, named so they are
+  // the easiest ones to correct.
+  const retirementAge = assumptionOf(primary, 'retirementAge');
+  const retirementAgeNotice = retirementAge?.origin !== 'default'
+    ? ''
+    : inputs.retirementAge > CONVENTIONAL_RETIREMENT_AGE
+      ? ' You did not name a retirement age, so I modeled retiring now.'
+      : ` You did not name a retirement age, so I used ${CONVENTIONAL_RETIREMENT_AGE}.`;
+  const spending = assumptionOf(primary, 'annualSpending');
+  const spendingNotice = primary.mode === 'rates'
+    ? ' You did not give a spending level, so instead of a verdict this shows what the mix sustained: the most it ' +
+      'could pay out each year, in today\'s dollars, in a bad stretch of history and in a typical one. Tell me what ' +
+      'you expect to spend and I will test that.'
+    : spending?.origin === 'snapshot'
+      ? ` The spending level is what you spend now according to your linked accounts, ${money(Number(spending.value))} ` +
+        'a year; I assumed retirement costs the same.'
+      : '';
 
   const standIn = unsupported
     ? `none of your linked holdings map to a return series I can simulate, so this ran the ${primary.allocation.label} ` +
@@ -784,7 +842,8 @@ export function describeStatedRetirementPlanExecution(execution: StatedRetiremen
   return `Plan assumptions: ${standIn}, against every overlapping ` +
     `${primary.history.horizonYears}-year stretch of US market returns and inflation that began between ` +
     `${readableMonth(primary.history.firstStartMonth)} and ${readableMonth(primary.history.lastStartMonth)}.` +
-    `${comparison}${socialSecurity}${saving}${horizon}${mixDefault}${assetsNotice}${ageNotice}${comparisonNotice} ` +
+    `${comparison}${retirementAgeNotice}${spendingNotice}${socialSecurity}${saving}${horizon}${mixDefault}` +
+    `${assetsNotice}${ageNotice}${comparisonNotice} ` +
     'Fund fees, taxes and account types are not modeled. Change any of these and I will re-run it.';
 }
 
@@ -827,7 +886,7 @@ export const statedRetirementPlanCalculator: ScenarioCalculatorDefinition<
   ],
   planner: {
     jsonSchema: STATED_RETIREMENT_PLAN_JSON_SCHEMA,
-    instructions: `Request this for any question about whether the user can retire, whether their savings will last, how much they can spend in retirement, or a change to such a plan stated earlier in this decision, including a plan the free retirement calculator answered. Application code runs it only when no investment holdings are linked, or none of the linked ones can be simulated, as a stand-in for the holdings-based projection, so request it for those questions even when the user has stated nothing yet; it asks for whatever is missing. Fill primary.overrides with values the user stated anywhere in this decision, the newest revision winning, and put the user's short wording in overrides.sources: currentAge, retirementAge, investableAssets (invested savings today), annualSpending (spending per year once retired, in today's dollars), annualContributions (saving per year until retirement), socialSecurityAnnual and socialSecurityStartAge, lifeExpectancy (the age the plan runs through), and allocation: conservative (40% US stocks / 50% bonds / 10% cash), balanced (60% / 35% / 5%) or growth (80% / 18% / 2%) when the user, or an earlier answer in this decision, names one of those presets; otherwise unspecified with a null source. When the newest message changes an input of a plan stated earlier, put the earlier plan in primary and only the changed values in comparison. When the user gives a range for one value, put the low end in primary and only the high end in comparison. Never estimate or supply typical values. Do not request it for a Coast FIRE question unless the user also asks whether that plan survives market history. The overrides object and every field and source are always present. When there is no such retirement question, set requested=false, allocation=unspecified, and null for every other value and every source in both variants.`,
+    instructions: `Request this for any question about whether the user can retire, whether their savings will last, how much they can spend in retirement, or a change to such a plan stated earlier in this decision, including a plan the free retirement calculator answered. Application code runs it only when no investment holdings are linked, or none of the linked ones can be simulated, as a stand-in for the holdings-based projection, so request it for those questions even when the user has stated nothing yet; it asks for whatever is missing. Fill primary.overrides with values the user stated anywhere in this decision, the newest revision winning, and put the user's short wording in overrides.sources: currentAge, retirementAge, investableAssets (invested savings today), annualSpending (spending per year once retired, in today's dollars), annualContributions (saving per year until retirement), socialSecurityAnnual and socialSecurityStartAge, lifeExpectancy (the age the plan runs through), and allocation: conservative (40% US stocks / 50% bonds / 10% cash), balanced (60% / 35% / 5%) or growth (80% / 18% / 2%) when the user, or an earlier answer in this decision, names one of those presets; otherwise unspecified with a null source. When the newest message changes an input of a plan stated earlier, put the earlier plan in primary and only the changed values in comparison. When the user gives a range for one value, put the low end in primary and only the high end in comparison. Never estimate or supply typical values; application code uses the conventional retirement age when none is stated, the user's current spending when their accounts show it, and otherwise reports what the mix sustained instead of a verdict. Do not request it for a Coast FIRE question unless the user also asks whether that plan survives market history. The overrides object and every field and source are always present. When there is no such retirement question, set requested=false, allocation=unspecified, and null for every other value and every source in both variants.`,
     parsePlan: parseStatedRetirementPlan,
   },
   execution: {

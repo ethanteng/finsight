@@ -160,11 +160,17 @@ function extractTrustedNumericValues(text: string): TrustedNumericValue[] {
   return values;
 }
 
+/** How far back, and how many figures, the user's earlier messages contribute. */
+const MAX_EARLIER_USER_MESSAGES = 6;
+const MAX_EARLIER_USER_FACTS = 24;
+
 /** Build the only numeric facts the model may display for this question. */
 export function buildCanonicalFactPack(
   snapshot: FinancialContextSnapshot,
   question: string,
-  needs: QuestionNeeds
+  needs: QuestionNeeds,
+  /** The user's own earlier messages in this decision, oldest first. Never assistant text. */
+  earlierUserMessages: readonly string[] = []
 ): CanonicalFactPack {
   const computedAt = isoString(snapshot.financialSummary?.computedAt);
   const asOf = isoString(snapshot.financialSummary?.asOf) ?? isoString(snapshot.metadata.persistedAsOf);
@@ -287,10 +293,36 @@ export function buildCanonicalFactPack(
     ? homeObservedAt
     : undefined;
   if (overview) {
-    addSnapshotFact('net_worth', 'Net worth', overview.netWorth, 'usd', 'financialSummary.financialOverview.netWorth');
-    addSnapshotFact('total_cash', 'Total cash', overview.totalCash, 'usd', 'financialSummary.financialOverview.totalCash');
-    addSnapshotFact('total_investments', 'Total investments', overview.totalInvestments, 'usd', 'financialSummary.financialOverview.totalInvestments');
-    addSnapshotFact('total_debt', 'Total debt', overview.totalDebt, 'usd', 'financialSummary.financialOverview.totalDebt');
+    // A zero from a kind of account nobody linked describes an empty
+    // connection, not the user, and quoting it produced "your net worth is $0"
+    // for people who had simply not linked anything yet. A nonzero total is
+    // real money from somewhere and stays. Without the record, as before.
+    const linked = snapshot.linkedData;
+    const emptyConnection = (linkedCount: number | undefined, value: unknown) =>
+      linked !== undefined && linkedCount === 0 && (!finite(value) || value === 0);
+    if (linked?.accounts !== 0) {
+      const partial = [
+        linked?.cash === 0 ? 'cash accounts' : null,
+        linked?.investments === 0 ? 'investment accounts' : null,
+        linked && linked.credit + linked.loans === 0 ? 'credit cards or loans' : null,
+      ].filter((item): item is string => Boolean(item));
+      addSnapshotFact(
+        'net_worth',
+        partial.length > 0 ? `Net worth across linked accounts only (no ${partial.join(', no ')} linked)` : 'Net worth',
+        overview.netWorth,
+        'usd',
+        'financialSummary.financialOverview.netWorth'
+      );
+      if (!emptyConnection(linked?.cash, overview.totalCash)) {
+        addSnapshotFact('total_cash', 'Total cash', overview.totalCash, 'usd', 'financialSummary.financialOverview.totalCash');
+      }
+      if (!emptyConnection(linked?.investments, overview.totalInvestments)) {
+        addSnapshotFact('total_investments', 'Total investments', overview.totalInvestments, 'usd', 'financialSummary.financialOverview.totalInvestments');
+      }
+      if (!emptyConnection(linked && linked.credit + linked.loans, overview.totalDebt)) {
+        addSnapshotFact('total_debt', 'Total debt', overview.totalDebt, 'usd', 'financialSummary.financialOverview.totalDebt');
+      }
+    }
     addSnapshotFact('home_value', 'Home value', overview.homeValue, 'usd', 'financialSummary.financialOverview.homeValue', true, homeMidpointAsOf);
   }
 
@@ -532,8 +564,14 @@ export function buildCanonicalFactPack(
   const holdingCountSource = portfolio?.holdingCount !== undefined || portfolio?.holdingsCount !== undefined
     ? 'financialSummary.investmentPortfolio.holdingCount'
     : 'investments.holdingCount';
-  addSnapshotFact('portfolio_value', 'Portfolio value', portfolioValue, 'usd', portfolioValueSource);
-  addSnapshotFact('portfolio_holding_count', 'Portfolio holding count', holdingCount, 'count', holdingCountSource);
+  // With no investment account linked, a zero portfolio is an empty
+  // connection; see the aggregates above.
+  const noInvestmentsLinked = snapshot.linkedData?.investments === 0 &&
+    (!finite(portfolioValue) || portfolioValue === 0);
+  if (!noInvestmentsLinked) {
+    addSnapshotFact('portfolio_value', 'Portfolio value', portfolioValue, 'usd', portfolioValueSource);
+    addSnapshotFact('portfolio_holding_count', 'Portfolio holding count', holdingCount, 'count', holdingCountSource);
+  }
   // Merge before emitting: the fact id is case-folded, so "etf" and "ETF" rows
   // collide and the last one written would silently replace the other.
   for (const allocation of mergeAssetAllocation(portfolio?.assetAllocation)) {
@@ -706,8 +744,29 @@ export function buildCanonicalFactPack(
       );
     }
     addSnapshotFact('retirement_current_age', 'Current age', retirement._storedInputParams?.currentAge, 'age', 'retirementAnalysis.inputs.currentAge');
-    addSnapshotFact('retirement_age', 'Retirement age', retirement._storedInputParams?.retirementAge, 'age', 'retirementAnalysis.inputs.retirementAge');
-    addSnapshotFact('annual_withdrawal_amount', 'Annual withdrawal amount', retirement._storedInputParams?.annualWithdrawalAmount, 'usd', 'retirementAnalysis.inputs.annualWithdrawalAmount');
+    // An assumed input says so in its label, so the answer can never present
+    // it as something the user told us.
+    const assumedInputs = retirement._assumedInputs ?? {};
+    addSnapshotFact(
+      'retirement_age',
+      assumedInputs.retirementAge === 'convention'
+        ? 'Retirement age (assumed: conventional age, the user named none)'
+        : 'Retirement age',
+      retirement._storedInputParams?.retirementAge,
+      'age',
+      'retirementAnalysis.inputs.retirementAge'
+    );
+    addSnapshotFact(
+      'annual_withdrawal_amount',
+      assumedInputs.annualWithdrawalAmount === 'current_spending'
+        ? 'Annual withdrawal amount (assumed: equal to the user\'s current annual spending)'
+        : assumedInputs.annualWithdrawalAmount === 'earlier'
+          ? 'Annual withdrawal amount (the figure the user gave in an earlier conversation)'
+          : 'Annual withdrawal amount',
+      retirement._storedInputParams?.annualWithdrawalAmount,
+      'usd',
+      'retirementAnalysis.inputs.annualWithdrawalAmount'
+    );
     addSnapshotFact('withdrawal_start_age', 'Withdrawal start age', retirement._storedInputParams?.withdrawalStartAge, 'age', 'retirementAnalysis.inputs.withdrawalStartAge');
 
     // Investment value deliberately excluded from the projection because its
@@ -949,6 +1008,19 @@ export function buildCanonicalFactPack(
   // This lets the model repeat a user-provided purchase price or a fetched market rate
   // without weakening validation for numbers it invents itself.
   addTrustedTextFacts(question, 'user_input', 'User-provided', 'user_input', 'userQuestion', undefined, 12);
+  // Figures the user stated earlier in this decision. Only their own messages:
+  // a prior answer was written by a model and is never a source of facts. The
+  // most recent messages are kept when there are many, since a revision there
+  // is the figure the user means now.
+  addTrustedTextFacts(
+    earlierUserMessages.slice(-MAX_EARLIER_USER_MESSAGES).join('\n'),
+    'user_input_earlier',
+    'User-provided earlier in this conversation',
+    'user_input',
+    'conversationHistory.userMessages',
+    undefined,
+    MAX_EARLIER_USER_FACTS
+  );
   if (needs.needsMarketContext) {
     addTrustedTextFacts(
       snapshot.marketContext,

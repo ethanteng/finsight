@@ -14,10 +14,45 @@ export interface StoredRetirementInputs {
   lifeExpectancy?: number | null;
 }
 
+/**
+ * Why an input the user did not state this time has a value anyway:
+ *  - `earlier`: the figure they gave in an earlier conversation;
+ *  - `current_spending`: what their cash flow says they spend now;
+ *  - `convention`: the conventional planning age, 65 (or now, if past it).
+ * Every one of them is stated in the answer, and none is ever stored as the
+ * user's own plan.
+ */
+export type RetirementAssumptionOrigin = 'earlier' | 'current_spending' | 'convention';
+export type AssumedRetirementInputs = Partial<Record<'retirementAge' | 'annualWithdrawalAmount', RetirementAssumptionOrigin>>;
+
+/**
+ * The assumptions worth remembering as assumptions. A figure from an earlier
+ * conversation is the user's own and is not one of them: listing it would
+ * strip it from the next run, which would then fall back to current spending
+ * and lose what they said retirement would cost.
+ */
+export function persistableAssumptions(assumed: AssumedRetirementInputs): AssumedRetirementInputs {
+  return Object.fromEntries(
+    Object.entries(assumed).filter(([, origin]) => origin === 'current_spending' || origin === 'convention')
+  ) as AssumedRetirementInputs;
+}
+
+/** Same fields assumed for the same reasons, regardless of key order. */
+export function sameAssumptions(left: AssumedRetirementInputs, right: AssumedRetirementInputs): boolean {
+  const normalize = (value: AssumedRetirementInputs) =>
+    JSON.stringify(Object.entries(value).sort(([a], [b]) => a.localeCompare(b)));
+  return normalize(left) === normalize(right);
+}
+
+/** The conventional age a plan assumes when nobody has named one. */
+export const CONVENTIONAL_RETIREMENT_AGE = 65;
+
 export interface ResolvedRetirementInputs extends StoredRetirementInputs {
   lifeExpectancy: number;
   missingParams: MissingRetirementInput[];
   confirmationRequiredParams: Array<'annualWithdrawalAmount'>;
+  /** Inputs filled by a disclosed assumption rather than the user's words. */
+  assumed: AssumedRetirementInputs;
 }
 
 function finiteOrNull(value: unknown): number | null {
@@ -65,7 +100,7 @@ export function describeMissingRetirementInputs(needsInfo: RetirementNeedsInfo |
   const list = asks.length === 1
     ? asks[0]
     : `${asks.slice(0, -1).join(', ')} and ${asks[asks.length - 1]}`;
-  return `I could not run a retirement projection because I am missing ${list}. Reply with ${asks.length === 1 ? 'that' : 'those'} and I will work it into the next answer.`;
+  return `To run your retirement projection I need ${list}. Reply with ${asks.length === 1 ? 'that' : 'those'} and I will work it into the next answer.`;
 }
 
 /** Stable signature for every portfolio field that can affect retirement analysis. */
@@ -99,13 +134,28 @@ export function retirementPortfolioFingerprint(holdings: readonly any[], securit
   return JSON.stringify({ holdings: normalizedHoldings, securities: normalizedSecurities });
 }
 
-/** Resolve only explicit question, profile, or persisted inputs—never financial-rule defaults. */
+/**
+ * Resolve explicit question, profile, or persisted inputs -- and, only when
+ * the caller passes `assumeWhenMissing`, fill the gaps with disclosed
+ * assumptions instead of stopping the projection to ask.
+ *
+ * Without it nothing is assumed, which is what every caller got before: a
+ * question about a plan nobody has described cannot borrow a rule-of-thumb
+ * spending level. With it, a spending level comes from the user's own
+ * earlier figure or their current spending, and a retirement age from the
+ * conventional 65; the current age is never assumed, because nothing the
+ * application holds can stand in for it.
+ */
 export function resolveRetirementInputs(args: {
   questionParams: RetirementQuestionParams;
   profileAge: number | null;
   profileRetirementAge: number | null;
   storedInput?: StoredRetirementInputs;
   allowStoredAnnualWithdrawal?: boolean;
+  assumeWhenMissing?: {
+    /** Annual spending read from the user's linked cash flow, when known. */
+    currentAnnualSpending?: number | null;
+  };
 }): ResolvedRetirementInputs {
   const {
     questionParams,
@@ -113,15 +163,36 @@ export function resolveRetirementInputs(args: {
     profileRetirementAge,
     storedInput = {},
     allowStoredAnnualWithdrawal = false,
+    assumeWhenMissing,
   } = args;
+  const assumed: AssumedRetirementInputs = {};
   const currentAge = questionParams.currentAge ?? profileAge ?? storedInput.currentAge;
-  const retirementAge = questionParams.retirementAge ?? profileRetirementAge ?? storedInput.retirementAge;
+  let retirementAge = questionParams.retirementAge ?? profileRetirementAge ?? storedInput.retirementAge;
+  if (retirementAge == null && assumeWhenMissing && currentAge != null) {
+    retirementAge = Math.max(currentAge, CONVENTIONAL_RETIREMENT_AGE);
+    assumed.retirementAge = 'convention';
+  }
+  const storedAnnualWithdrawal = storedInput.annualWithdrawalAmount ?? undefined;
+  const statedAnnualWithdrawal = questionParams.annualWithdrawalAmount
+    ?? (allowStoredAnnualWithdrawal ? storedAnnualWithdrawal : undefined);
+  const currentSpending = assumeWhenMissing?.currentAnnualSpending;
+  let annualWithdrawalAmount = statedAnnualWithdrawal;
+  if (annualWithdrawalAmount == null && assumeWhenMissing) {
+    // The user's own earlier figure outranks what they spend now: it is what
+    // they said retirement would cost.
+    if (storedAnnualWithdrawal != null) {
+      annualWithdrawalAmount = storedAnnualWithdrawal;
+      assumed.annualWithdrawalAmount = 'earlier';
+    } else if (typeof currentSpending === 'number' && Number.isFinite(currentSpending) && currentSpending > 0) {
+      annualWithdrawalAmount = Math.round(currentSpending);
+      assumed.annualWithdrawalAmount = 'current_spending';
+    }
+  }
   const storedAnnualWithdrawalNeedsConfirmation =
+    annualWithdrawalAmount == null &&
     questionParams.annualWithdrawalAmount == null &&
-    storedInput.annualWithdrawalAmount != null &&
+    storedAnnualWithdrawal != null &&
     !allowStoredAnnualWithdrawal;
-  const annualWithdrawalAmount = questionParams.annualWithdrawalAmount
-    ?? (allowStoredAnnualWithdrawal ? storedInput.annualWithdrawalAmount : undefined);
   const withdrawalStartAge = questionParams.withdrawalStartAge
     ?? questionParams.retirementAge
     ?? profileRetirementAge
@@ -145,6 +216,7 @@ export function resolveRetirementInputs(args: {
     confirmationRequiredParams: storedAnnualWithdrawalNeedsConfirmation
       ? ['annualWithdrawalAmount']
       : [],
+    assumed,
   };
 }
 

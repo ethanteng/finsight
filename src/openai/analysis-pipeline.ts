@@ -866,7 +866,9 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
   // server-authored: these values come from persisted state, not the model.
   // Last, so the answer closes on what the user can do next -- after the
   // assumptions it would change, not before them.
-  const missingInputsAsk = describeMissingInputs(snapshot, plannedQuestionNeeds);
+  const missingInputsAsk = describeMissingInputs(snapshot, plannedQuestionNeeds, {
+    personalDataQuestion: contextPlan.personalDataQuestion,
+  });
   if (missingInputsAsk) {
     structuredResponse = appendNotice(structuredResponse, missingInputsAsk);
   }

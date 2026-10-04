@@ -35,6 +35,13 @@ const LABELS: Record<ReportedField, string> = {
   currentAge: 'age today',
 };
 
+/** Why a value nobody stated this time is in the projection. */
+const ASSUMPTION_REASONS: Record<'earlier' | 'current_spending' | 'convention', string> = {
+  earlier: 'the figure you gave me before',
+  current_spending: 'which is what you spend now (I assumed retirement costs the same)',
+  convention: 'a conventional age I assumed because you did not name one',
+};
+
 function formatValue(field: ReportedField, value: number): string {
   if (field !== 'annualWithdrawalAmount') return String(value);
   return `$${Math.round(value).toLocaleString('en-US')} a year`;
@@ -69,15 +76,21 @@ export function describeRetirementAssumptions(
   if (!analysis || !values) return null;
 
   const sources = analysis._inputSources || {};
+  const assumed = analysis._assumedInputs || {};
   const parts: string[] = [];
   for (const field of REPORTED_FIELDS) {
     const value = values[field];
     if (typeof value !== 'number' || !Number.isFinite(value)) continue;
-    const quote = sources[field] ? formatQuote(sources[field]!) : null;
+    // An assumed value has no quote to show: say where it came from instead,
+    // so the one figure the user never gave is the easiest one to correct.
+    const origin = field === 'currentAge' ? undefined : assumed[field];
+    const quote = !origin && sources[field] ? formatQuote(sources[field]!) : null;
     parts.push(
-      quote
-        ? `${LABELS[field]} ${formatValue(field, value)}, from “${quote}”`
-        : `${LABELS[field]} ${formatValue(field, value)}`
+      origin
+        ? `${LABELS[field]} ${formatValue(field, value)}, ${ASSUMPTION_REASONS[origin]}`
+        : quote
+          ? `${LABELS[field]} ${formatValue(field, value)}, from “${quote}”`
+          : `${LABELS[field]} ${formatValue(field, value)}`
     );
   }
   if (parts.length === 0) return null;

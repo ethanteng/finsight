@@ -212,6 +212,28 @@ describe('Coast FIRE calculator', () => {
     expect(disclosure).toContain('You did not give a growth rate, so I used 5%, or a withdrawal rate, so I used 4%.');
   });
 
+  it('assumes the conventional retirement age and current spending, and says so', async () => {
+    const execution = await runCoastFireScenario(
+      { expectedMonthly: { spending: 6_000, income: 10_000 } },
+      plan({ currentAge: 38, currentSavings: 500_000 })
+    ) as CompletedCoastFireScenarioExecution;
+
+    const [scenario] = execution.scenarios;
+    expect(scenario.metrics.retirementAge).toBe(65);
+    expect(scenario.metrics.annualRetirementSpending).toBe(72_000);
+    const disclosure = describeCoastFireScenarioExecution(execution)!;
+    expect(disclosure).toContain('You did not name a retirement age, so I used 65.');
+    expect(disclosure).toContain('Retirement spending is what you spend now according to your linked accounts, $72,000 a year');
+  });
+
+  it('still asks for spending when nothing linked says what the user spends', async () => {
+    const execution = await runCoastFireScenario(EMPTY_SNAPSHOT, plan({ currentAge: 38, currentSavings: 500_000 }));
+    expect(execution).toMatchObject({
+      status: 'unavailable',
+      missingInputs: ['roughly how much you expect to spend a year once you stop working, in today\'s dollars'],
+    });
+  });
+
   describe('percentage points sent as decimal fractions', () => {
     const parse = (realReturnRatePercent: number, source: string, withdrawal?: [number, string]) =>
       parseCoastFireScenarioPlan({

@@ -45,6 +45,14 @@ function rawPlan(selected: string[] = []): any {
 }
 
 describe('context planner', () => {
+  it('reads whether the question is about the user\'s own money, and leans personal when the flag is absent', () => {
+    expect(CONTEXT_PLAN_JSON_SCHEMA.required).toContain('personalDataQuestion');
+    expect(parseContextPlan({ ...rawPlan([]), personalDataQuestion: false }).personalDataQuestion).toBe(false);
+    expect(parseContextPlan({ ...rawPlan([]), personalDataQuestion: true }).personalDataQuestion).toBe(true);
+    expect(parseContextPlan(rawPlan([])).personalDataQuestion).toBe(true);
+    expect(fallbackContextPlan().personalDataQuestion).toBe(true);
+  });
+
   it('builds the strict scenario object from registered calculator ids', () => {
     expect(CONTEXT_PLAN_JSON_SCHEMA.properties.scenarios).toMatchObject({
       required: ['retirement', 'home_affordability', 'coast_fire', 'stated_retirement_plan'],

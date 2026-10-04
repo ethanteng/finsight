@@ -14,6 +14,7 @@ import { mergeAssetAllocation } from '../services/asset-class';
 import { MAX_UNMODELED_REASON_FACTS } from './canonical-facts';
 import { getActiveModel, getActiveNumericGenerationSetting } from './model-config';
 import { cashFlowForecastFacts } from './cash-flow-forecast-context';
+import { describeLinkedDataForModel } from './linked-data';
 
 
 const GOOGLE_AI_API_KEY = process.env.GOOGLE_AI_API_KEY || process.env.GEMINI_API_KEY || '';
@@ -115,6 +116,12 @@ function boundedPersonalContext(profile: string): string {
  */
 export function buildSnapshotSummaryForValidation(snapshot: FinancialContextSnapshot): string {
   const parts: string[] = [];
+
+  // The answer is told what is not linked and may say so; without the same
+  // statement here the reviewer read "you have not linked a brokerage" as an
+  // invented claim about the user.
+  const linkedNote = describeLinkedDataForModel(snapshot.linkedData);
+  if (linkedNote) parts.push(`Linked data: ${linkedNote}`);
 
   // The primary model is shown this block whenever the plan asks for it, so an
   // answer may legitimately say the user is retired or 77. Leaving it out here

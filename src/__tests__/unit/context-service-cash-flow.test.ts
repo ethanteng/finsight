@@ -129,4 +129,62 @@ describe('gatherContextSnapshot cash flow', () => {
     expect(result.averageMonthlyIncome).toBe(10_500);
     expect(result.cashFlowForecast).toEqual({ status: 'unavailable', reason: 'error' });
   });
+
+  describe('what is linked', () => {
+    it('reads the account list on every question, and keeps account details for questions that ask', async () => {
+      const current = await mockGetSnapshot();
+      mockGetSnapshot.mockResolvedValue({
+        ...current,
+        accounts: [
+          { account_id: 'chk', name: 'Checking', type: 'depository', subtype: 'checking', balance: { current: 20_000 } },
+          { account_id: 'card', name: 'Card', type: 'credit', subtype: 'credit card', balance: { current: 1_000 } },
+        ],
+      });
+
+      const result = await gather();
+      expect(mockGetSnapshot).toHaveBeenLastCalledWith('user-1', expect.objectContaining({ includeAccounts: true }));
+      expect(result.linkedData).toEqual({
+        accounts: 2, cash: 1, credit: 1, loans: 0, investments: 0, holdings: 0, transactionMonths: 4,
+      });
+      expect(result.accounts).toEqual([]);
+      expect(result.averageMonthlyIncome).toBe(10_500);
+    });
+
+    it('treats a forecast with no cash account behind it as unknown, not zero', async () => {
+      const current = await mockGetSnapshot();
+      mockGetSnapshot.mockResolvedValue({
+        ...current,
+        accounts: [{ account_id: 'ira', name: 'IRA', type: 'investment', subtype: 'ira', balance: { current: 90_000 } }],
+        transactionsSummary: { reportingCurrency: 'USD', byCategory: {}, byMonth: {} },
+      });
+
+      const result = await gather();
+      expect(result.linkedData).toMatchObject({ accounts: 1, investments: 1, cash: 0, transactionMonths: 0 });
+      expect(result.expectedMonthly).toBeNull();
+      expect(result.averageMonthlyIncome).toBeNull();
+      expect(result.averageMonthlyExpense).toBeNull();
+    });
+
+    it('keeps a figure the user set even with nothing linked to read it from', async () => {
+      const current = await mockGetSnapshot();
+      mockGetSnapshot.mockResolvedValue({ ...current, accounts: [], transactionsSummary: { byMonth: {} },
+        financialOverview: { netWorth: 0, totalCash: 0, totalInvestments: 0, totalDebt: 0, homeValue: null } });
+      mockLoadCashFlowModel.mockResolvedValue(null);
+      mockFindUser.mockResolvedValue({ monthlyIncomeOverride: null, monthlyExpenseOverride: 6_000 });
+
+      const result = await gather();
+      expect(result.linkedData).toMatchObject({ accounts: 0 });
+      expect(result.expectedMonthly).toMatchObject({ income: null, spending: 6_000, spendingSource: 'override' });
+    });
+
+    it('records nothing linked for a signed-in user with no snapshot at all', async () => {
+      mockGetSnapshot.mockResolvedValue(null);
+      mockLoadCashFlowModel.mockResolvedValue(null);
+
+      const result = await gather();
+      expect(result.linkedData).toEqual({
+        accounts: 0, cash: 0, credit: 0, loans: 0, investments: 0, holdings: 0, transactionMonths: 0,
+      });
+    });
+  });
 });

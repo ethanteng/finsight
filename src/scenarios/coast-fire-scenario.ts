@@ -46,6 +46,7 @@ import {
   type RetirementQuickPlanResult,
 } from '../services/retirement-quickplan';
 import { presetStandInReason } from './preset-stand-in';
+import { CONVENTIONAL_RETIREMENT_AGE } from '../openai/retirement-inputs';
 
 export const COAST_FIRE_CALCULATOR_ID = 'coast_fire' as const;
 export const COAST_FIRE_SCENARIO_VERSION = 1 as const;
@@ -385,6 +386,15 @@ function profileAge(snapshot: FinancialContextSnapshot): number | undefined {
     : undefined;
 }
 
+/** Annual spending from linked cash flow; null there already where nothing linked says. */
+function currentAnnualSpending(snapshot: FinancialContextSnapshot): number | undefined {
+  const monthly = snapshot.expectedMonthly?.spending;
+  if (typeof monthly !== 'number' || !Number.isFinite(monthly)) return undefined;
+  const annual = Math.round(monthly * 12);
+  const range = OVERRIDE_RANGES.annualRetirementSpending;
+  return annual >= range.minimum && annual <= range.maximum ? annual : undefined;
+}
+
 function connectedInvestmentTotal(snapshot: FinancialContextSnapshot): number | undefined {
   const total = snapshot.financialSummary?.financialOverview?.totalInvestments;
   return typeof total === 'number' && Number.isFinite(total) && total > 0 && total <= OVERRIDE_RANGES.currentSavings.maximum
@@ -433,13 +443,26 @@ function resolveVariant(
 
   const knownAge = profileAge(snapshot);
   const connectedTotal = connectedInvestmentTotal(snapshot);
+  const knownSpending = currentAnnualSpending(snapshot);
   const currentAge = take('currentAge', knownAge !== undefined ? { value: knownAge, origin: 'profile' } : undefined);
-  const retirementAge = take('retirementAge');
+  // The conventional planning age, while it is still ahead of them. Past it,
+  // there is no coasting to work out, so it is asked for instead.
+  const retirementAge = take(
+    'retirementAge',
+    currentAge !== undefined && currentAge < CONVENTIONAL_RETIREMENT_AGE
+      ? { value: CONVENTIONAL_RETIREMENT_AGE, origin: 'default' }
+      : undefined
+  );
   const currentSavings = take(
     'currentSavings',
     connectedTotal !== undefined ? { value: connectedTotal, origin: 'snapshot' } : undefined
   );
-  const annualRetirementSpending = take('annualRetirementSpending');
+  // What they spend now, when linked accounts say; I assume retirement costs
+  // the same and say so.
+  const annualRetirementSpending = take(
+    'annualRetirementSpending',
+    knownSpending !== undefined ? { value: knownSpending, origin: 'snapshot' } : undefined
+  );
   const annualRetirementIncome = take('annualRetirementIncome', { value: 0, origin: 'default' });
   const realReturnRate = take('realReturnRatePercent', {
     value: DEFAULT_COAST_FIRE_REAL_RETURN_PERCENT,
@@ -1009,6 +1032,14 @@ export function describeCoastFireScenarioExecution(execution: CoastFireScenarioE
     : '';
   const age = assumptionOf(primary, 'currentAge');
   const ageNotice = age?.origin === 'profile' ? ` Your age, ${age.value}, is the one you told me earlier.` : '';
+  const retirementAgeNotice = assumptionOf(primary, 'retirementAge')?.origin === 'default'
+    ? ` You did not name a retirement age, so I used ${CONVENTIONAL_RETIREMENT_AGE}.`
+    : '';
+  const spending = assumptionOf(primary, 'annualRetirementSpending');
+  const spendingNotice = spending?.origin === 'snapshot'
+    ? ` Retirement spending is what you spend now according to your linked accounts, ${money(spending.value)} a year; ` +
+      'I assumed retirement costs the same.'
+    : '';
   const defaults = [
     assumptionOf(primary, 'realReturnRatePercent')?.origin === 'default'
       ? `a growth rate, so I used ${rate(DEFAULT_COAST_FIRE_REAL_RETURN_PERCENT)}`
@@ -1035,7 +1066,8 @@ export function describeCoastFireScenarioExecution(execution: CoastFireScenarioE
     : ' It is a single straight line — the same return every year, with no taxes, fees or market swings.';
 
   return `Coast FIRE assumptions: ${rate(m.realReturnRate)} a year after inflation, a ${rate(m.withdrawalRate)} ` +
-    `withdrawal rate, and ${income}, all in today's dollars.${comparison}${savingsNotice}${ageNotice}` +
+    `withdrawal rate, and ${income}, all in today's dollars.${comparison}${retirementAgeNotice}${spendingNotice}` +
+    `${savingsNotice}${ageNotice}` +
     `${defaultsNotice}${contributionNotice}${comparisonNotice}${historyNotice}${straightLine} ` +
     'Change any of these and I will re-run it.';
 }

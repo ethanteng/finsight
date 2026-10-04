@@ -144,6 +144,7 @@ function contextPlan(packs: ContextPackId[] = [], secondary = false): ContextPla
     selectedPacks,
     questionNeeds: questionNeedsFromPacks(selectedPacks, secondary),
     needsSecondaryValidation: secondary,
+    personalDataQuestion: false,
     retirementInputs: { sources: {} },
     scenarioPlans: {},
     searchQueries: packs.includes('search_context')
