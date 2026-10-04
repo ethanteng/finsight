@@ -44,6 +44,7 @@ export function SiteFooter() {
         <div className="footer-column">
           <b>PRODUCT</b>
           <Link href="/features">How It Works</Link>
+          <Link href="/cash-flow-forecast">Cash Flow Forecast</Link>
           <Link href="/demo">Interactive Demo</Link>
           <Link href="/use-cases">What You Can Ask</Link>
           <Link href="/integrations">Accounts &amp; Data</Link>

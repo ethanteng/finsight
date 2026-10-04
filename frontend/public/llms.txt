@@ -18,6 +18,7 @@ Households planning retirement and major money decisions who are tired of dashbo
 
 - Homepage: https://asklinc.com/
 - Product / features: https://asklinc.com/features
+- Personal cash flow forecast: https://asklinc.com/cash-flow-forecast
 - Pricing: https://asklinc.com/pricing
 - FAQ: https://asklinc.com/faq
 - Get started: https://asklinc.com/signup
