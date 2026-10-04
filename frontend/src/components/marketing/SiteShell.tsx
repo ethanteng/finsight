@@ -84,10 +84,12 @@ export function SiteFooter() {
 
 export function PageCta({
   title = "What are you trying to figure out?",
+  copy,
   label = "Start free",
   csOverrideId,
 }: {
   title?: string;
+  copy?: string;
   label?: string;
   csOverrideId: string;
 }) {
@@ -96,6 +98,7 @@ export function PageCta({
       <div className="page-cta-inner shell">
         <p className="section-kicker light">START WITH THE DECISION</p>
         <h2>{title}</h2>
+        {copy ? <p className="page-cta-copy">{copy}</p> : null}
         <MarketingGetStartedButton className="button button-primary" trackingLocation="page_cta" csOverrideId={csOverrideId} label={label} />
         <p className="microcopy">{TRIAL_CTA_MICROCOPY}</p>
       </div>
