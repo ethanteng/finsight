@@ -1,8 +1,8 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import StructuredData from '@/components/StructuredData';
-import LincAvatar from '@/components/LincAvatar';
 import { MarketingGetStartedButton } from '@/components/marketing/MarketingGetStartedButton';
+import { TeaserVideo } from '@/components/marketing/TeaserVideo';
 import { PageCta, SiteFooter, SiteHeader } from '@/components/marketing/SiteShell';
 import { TRIAL_CTA_MICROCOPY } from '@/components/marketing/trial-copy';
 import { buildMarketingMetadata } from '@/lib/seo';
@@ -122,28 +122,10 @@ export default function CashFlowForecastPage() {
           <p className="microcopy">{TRIAL_CTA_MICROCOPY}</p>
         </div>
 
-        <article className="use-case-answer">
-          <div className="miniature-top">
-            <LincAvatar size={26} />
-            <b>EXAMPLE CASH FLOW</b>
-            <span>ILLUSTRATIVE</span>
-          </div>
-          <p>What will my cash look like over the next three months?</p>
-          <div className="use-case-verdict">
-            <small>THE SHORT ANSWER</small>
-            <h2>You&apos;re projected to save about $6,240.</h2>
-            <span>
-              That includes your usual income and spending plus the plans you added. Your projected cash stays above
-              $17,920 along the way.
-            </span>
-          </div>
-          <div className="use-case-metrics">
-            <span><small>CASH TODAY</small><b>$24,810</b></span>
-            <span><small>EXPECTED TO SAVE</small><b>+$6,240</b></span>
-            <span><small>LOWEST POINT</small><b>$17,920</b></span>
-          </div>
-          <div className="use-case-check">Add the trip, bonus, or card payment and recalculate the forecast.</div>
-        </article>
+        <TeaserVideo
+          configItem="cash-flow-video"
+          title="Ask Linc cash flow demo"
+        />
       </section>
 
       <section className="decision-levers shell">

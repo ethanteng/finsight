@@ -74,6 +74,14 @@ describe('TeaserVideo autoplay', () => {
     expect(srcOf(container)).toBe('/video/embed?autoplay=1');
   });
 
+  it('keeps the same autoplay behavior for a feature-specific video item', () => {
+    const { container } = render(<TeaserVideo configItem="cash-flow-video" />);
+
+    expect(srcOf(container)).toBe('/video/embed?item=cash-flow-video');
+    scroll(observers[0], true);
+    expect(srcOf(container)).toBe('/video/embed?item=cash-flow-video&autoplay=1');
+  });
+
   it('stops watching when the page goes', () => {
     const { unmount } = render(<TeaserVideo />);
 

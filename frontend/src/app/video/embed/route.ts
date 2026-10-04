@@ -9,9 +9,11 @@ import { NextResponse, type NextRequest } from 'next/server';
 import {
   PLAYER_POLICY,
   TEASER_VIDEO_CACHE_CONTROL,
+  DEFAULT_VIDEO_ITEM,
   playerPage,
   teaserEmbedUrl,
   teaserVideo,
+  videoConfigItem,
 } from '@/lib/teaser-video';
 
 /** Read on request, never frozen into the build; the CDN does the caching. */
@@ -19,7 +21,8 @@ export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
   const autoplay = request.nextUrl.searchParams.get('autoplay') === '1';
-  const video = await teaserVideo();
+  const item = videoConfigItem(request.nextUrl.searchParams.get('item'));
+  const video = await teaserVideo(process.env, item);
   if ('youtube' in video) {
     const response = NextResponse.redirect(teaserEmbedUrl(video.youtube, autoplay), 302);
     response.headers.set('Cache-Control', TEASER_VIDEO_CACHE_CONTROL);
@@ -27,7 +30,10 @@ export async function GET(request: NextRequest) {
     // YouTube refuses to play an embed that arrives without a referrer.
     return response;
   }
-  return new Response(playerPage(video, autoplay), {
+  const captionsPath = item === DEFAULT_VIDEO_ITEM
+    ? '/video/captions'
+    : `/video/captions?item=${encodeURIComponent(item)}`;
+  return new Response(playerPage(video, autoplay, captionsPath), {
     headers: {
       'Content-Type': 'text/html; charset=utf-8',
       'Cache-Control': TEASER_VIDEO_CACHE_CONTROL,

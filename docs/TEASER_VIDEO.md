@@ -1,10 +1,10 @@
 # Marketing teaser video
 
-The homepage and `/features` show the teaser video in `TeaserVideo`, a lazy-loaded player that spans the 1200px page width on desktop and runs edge to edge at 760px and under. It starts by itself, muted, the first time half of it is on screen: an `IntersectionObserver` swaps the iframe to `/video/embed?autoplay=1` then, so nobody scrolls down to find it already partway through (the lazy frame loads well before it is visible). Browsers only allow muted autoplay, and iOS only inline, so visitors unmute with the player's own control. Visitors who ask for reduced motion or to save data, and anyone without JavaScript or `IntersectionObserver`, get the player waiting for Play. The video can be changed without a deploy. The same approach runs Uncloud's landing page (ethanteng/homebase).
+The homepage, `/features`, and `/cash-flow-forecast` use `TeaserVideo`, a lazy-loaded player that spans the 1200px page width on desktop and runs edge to edge at 760px and under. It starts by itself, muted, the first time half of it is on screen: an `IntersectionObserver` swaps the iframe to `/video/embed?autoplay=1` then, so nobody scrolls down to find it already partway through (the lazy frame loads well before it is visible). Browsers only allow muted autoplay, and iOS only inline, so visitors unmute with the player's own control. Visitors who ask for reduced motion or to save data, and anyone without JavaScript or `IntersectionObserver`, get the player waiting for Play. The video can be changed without a deploy. The same approach runs Uncloud's landing page (ethanteng/homebase).
 
 ## How the video is chosen
 
-The page doesn't name a video. The player loads `/video/embed`, a route handler in `frontend/src/app/video/embed/route.ts`, and the logic lives in `frontend/src/lib/teaser-video.ts`. The video is the **`video`** item in the Vercel Global Config (formerly Edge Config) connected to the frontend project. Edit it in the dashboard and visitors get the new video within a minute or two, because the CDN holds each answer for 60 seconds. The item is one of:
+The page doesn't name a video URL. The player loads `/video/embed`, a route handler in `frontend/src/app/video/embed/route.ts`, and the logic lives in `frontend/src/lib/teaser-video.ts`. The homepage and `/features` read the **`video`** item; `/cash-flow-forecast` reads **`cash-flow-video`**. Both live in the Vercel Global Config (formerly Edge Config) connected to the frontend project. Edit either item in the dashboard and visitors get the new video within a minute or two, because the CDN holds each answer for 60 seconds. Each item is one of:
 
 | Value | What visitors get |
 | --- | --- |
@@ -17,14 +17,14 @@ If Global Config isn't connected, the item is missing, Global Config is slow or 
 ## One-time setup
 
 1. In the Ask Linc frontend's Vercel project, open **Storage**, choose **Create Database**, pick **Global Config**, and create a store. Creating it from the project connects it and adds the `GLOBAL_CONFIG` variable.
-2. Under **Items**, add `"video": "<ID, link, or object>"` and save.
+2. Under **Items**, add `"video": "<ID, link, or object>"` for the main teaser and `"cash-flow-video": "<ID, link, or object>"` for the cash-flow demo, then save.
 3. Redeploy once so the functions see `GLOBAL_CONFIG`. After that, only the item changes.
 
 A store connected before the rename, as `EDGE_CONFIG`, works too. Locally, without either variable, the teaser always plays the default.
 
 ## Self-hosting the video
 
-Video files live in a **public** Vercel Blob store (Storage → Create Database → Blob; public or private is fixed when the store is created), never in this repository, where every swap would be a deploy. Upload the MP4, and optionally a poster image and a `.vtt` captions file, in the store's file browser, then put their URLs in the `video` item.
+Video files live in a **public** Vercel Blob store (Storage → Create Database → Blob; public or private is fixed when the store is created), never in this repository, where every swap would be a deploy. Upload the MP4, and optionally a poster image and a `.vtt` captions file, in the store's file browser, then put their URLs in the appropriate Global Config item (`video` or `cash-flow-video`).
 
 - **Give each version a new filename** (`teaser-2026-10.mp4`). Browsers and Vercel's CDN keep a public blob for up to a month, so a file replaced under the same name keeps playing the old version for returning visitors.
 - **Encode for the web:** H.264 video and AAC audio in an MP4, with the index at the front so playback starts before the download finishes. For example: `ffmpeg -i teaser.mov -c:v libx264 -crf 23 -preset slow -vf "scale=-2:1080" -c:a aac -b:a 128k -movflags +faststart teaser-2026-10.mp4`. One file serves every connection, so keep it lean. A still from the video makes a good poster: `ffmpeg -ss 2 -i teaser-2026-10.mp4 -frames:v 1 -q:v 3 teaser-2026-10.jpg`.

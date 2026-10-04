@@ -23,7 +23,11 @@
  */
 
 export const DEFAULT_VIDEO = 'GRBboPyuL5U';
-const ITEM = 'video';
+export const DEFAULT_VIDEO_ITEM = 'video';
+export const CASH_FLOW_VIDEO_ITEM = 'cash-flow-video';
+export const CASH_FLOW_DEFAULT_VIDEO = 'https://yl8kvnxayhtpx27d.public.blob.vercel-storage.com/Cash%20Flow%20Demo%20compressed.mp4';
+export type VideoConfigItem = typeof DEFAULT_VIDEO_ITEM | typeof CASH_FLOW_VIDEO_ITEM;
+const VIDEO_CONFIG_ITEMS = new Set<VideoConfigItem>([DEFAULT_VIDEO_ITEM, CASH_FLOW_VIDEO_ITEM]);
 const VIDEO_ID = /^[A-Za-z0-9_-]{11}$/;
 const READ_TIMEOUT_MS = 1500;
 const CAPTIONS_TIMEOUT_MS = 5000;
@@ -113,7 +117,13 @@ export function chooseVideo(value: unknown): TeaserVideoSource | null {
  * for a store connected before Edge Config was renamed. Read by hand, as
  * Uncloud's landing page does, rather than adding an SDK for one item.
  */
-async function configuredVideo(env: NodeJS.ProcessEnv): Promise<unknown> {
+export function videoConfigItem(value: unknown): VideoConfigItem {
+  return typeof value === 'string' && VIDEO_CONFIG_ITEMS.has(value as VideoConfigItem)
+    ? value as VideoConfigItem
+    : DEFAULT_VIDEO_ITEM;
+}
+
+async function configuredVideo(env: NodeJS.ProcessEnv, item: VideoConfigItem): Promise<unknown> {
   let connection: URL;
   try {
     connection = new URL(env.GLOBAL_CONFIG || env.EDGE_CONFIG || '');
@@ -124,7 +134,7 @@ async function configuredVideo(env: NodeJS.ProcessEnv): Promise<unknown> {
   if (!token) return undefined;
   try {
     const response = await fetch(
-      `${connection.origin}${connection.pathname}/item/${ITEM}`,
+      `${connection.origin}${connection.pathname}/item/${item}`,
       {
         headers: { Authorization: `Bearer ${token}` },
         // The CDN already holds each answer for a minute; Next's data cache
@@ -140,8 +150,18 @@ async function configuredVideo(env: NodeJS.ProcessEnv): Promise<unknown> {
 }
 
 /** What the teaser should play right now. */
-export async function teaserVideo(env: NodeJS.ProcessEnv = process.env): Promise<TeaserVideoSource> {
-  return chooseVideo(await configuredVideo(env)) ?? { youtube: DEFAULT_VIDEO };
+function fallbackVideo(item: VideoConfigItem): TeaserVideoSource {
+  if (item === CASH_FLOW_VIDEO_ITEM) {
+    return chooseVideo(CASH_FLOW_DEFAULT_VIDEO)!;
+  }
+  return { youtube: DEFAULT_VIDEO };
+}
+
+export async function teaserVideo(
+  env: NodeJS.ProcessEnv = process.env,
+  item: VideoConfigItem = DEFAULT_VIDEO_ITEM,
+): Promise<TeaserVideoSource> {
+  return chooseVideo(await configuredVideo(env, item)) ?? fallbackVideo(item);
 }
 
 /**
@@ -170,13 +190,14 @@ const attribute = (value: string) =>
 export function playerPage(
   { mp4, poster, captions }: Extract<TeaserVideoSource, { mp4: string }>,
   autoplay = false,
+  captionsPath = '/video/captions',
 ): string {
   const posterAttribute = poster ? ` poster="${attribute(poster)}"` : '';
   const start = autoplay ? 'autoplay muted' : `preload="${poster ? 'none' : 'metadata'}"`;
   // Same-origin, relayed by /video/captions, so the captions never depend on
   // the file host's CORS.
   const track = captions
-    ? '\n  <track kind="captions" src="/video/captions" srclang="en" label="English">'
+    ? `\n  <track kind="captions" src="${attribute(captionsPath)}" srclang="en" label="English">`
     : '';
   return `<!doctype html>
 <html lang="en">

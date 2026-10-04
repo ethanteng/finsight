@@ -2,11 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 
-// The player loads /video/embed, which shows whichever video is configured in
-// Global Config: a redirect to YouTube, or our own player page for a video
-// file (see lib/teaser-video). The video can change without a deploy.
-const TEASER_VIDEO_SRC = "/video/embed";
-const TEASER_AUTOPLAY_SRC = "/video/embed?autoplay=1";
+const DEFAULT_CONFIG_ITEM = "video";
+type VideoConfigItem = "video" | "cash-flow-video";
 
 // An `allow` feature with no origins is granted only to the origin in `src`,
 // which is ours, and would not follow the redirect to YouTube. Naming both
@@ -26,16 +23,31 @@ const PLAYER_FEATURES = [
 
 type SaveDataNavigator = Navigator & { connection?: { saveData?: boolean } };
 
+function playerSrc(configItem: VideoConfigItem, autoplay: boolean): string {
+  const params = new URLSearchParams();
+  if (configItem !== DEFAULT_CONFIG_ITEM) params.set("item", configItem);
+  if (autoplay) params.set("autoplay", "1");
+  const query = params.toString();
+  return `/video/embed${query ? `?${query}` : ""}`;
+}
+
 /**
- * The teaser starts by itself, muted, the first time half of it is on screen,
- * so nobody scrolls down to find it already partway through (the lazy frame
- * loads well before it is visible). The page renders the plain player; this
- * swaps in the autoplay address then, and the route makes that a muted
- * autoplay, since no browser lets a page start sound on its own. Skipped for
+ * The video starts by itself, muted, the first time half of it is on screen,
+ * so nobody scrolls down to find it already partway through. Skipped for
  * anyone who asks for reduced motion or to save data, and without JavaScript
  * or IntersectionObserver the player simply waits for Play.
+ *
+ * `configItem` selects which allowlisted Vercel Global Config item the shared
+ * /video/embed route reads. The homepage keeps the original `video` item;
+ * feature pages can use their own item without duplicating player behavior.
  */
-export function TeaserVideo() {
+export function TeaserVideo({
+  configItem = DEFAULT_CONFIG_ITEM,
+  title = "Ask Linc teaser video",
+}: {
+  configItem?: VideoConfigItem;
+  title?: string;
+}) {
   const frame = useRef<HTMLIFrameElement>(null);
   const [autoplay, setAutoplay] = useState(false);
 
@@ -65,8 +77,8 @@ export function TeaserVideo() {
     <div className="teaser-video">
       <iframe
         ref={frame}
-        src={autoplay ? TEASER_AUTOPLAY_SRC : TEASER_VIDEO_SRC}
-        title="Ask Linc teaser video"
+        src={playerSrc(configItem, autoplay)}
+        title={title}
         loading="lazy"
         allow={PLAYER_FEATURES}
         // YouTube refuses to play an embed that arrives without a referrer.
