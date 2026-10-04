@@ -28,14 +28,14 @@ This guide explains how to prevent migration drift between your local developmen
 ### **What We've Built:**
 - ✅ **Migration Guard Script** - Prevents migrations in build scripts
 - ✅ **Real Migrations in Tests** - Issues caught in CI before production
-- ✅ **Production Migration Job** - Manual approval required
+- ✅ **Production Migration Job** - Runs automatically after all tests pass
 - ✅ **Complete Build Isolation** - Render never touches database
 
 ### **Why Drift is Much Less Likely Now:**
 1. **CI/CD catches issues** before they reach production
 2. **Tests validate migrations** end-to-end
 3. **Build scripts cannot run migrations** (automatically blocked)
-4. **Production migrations require approval** (no accidental changes)
+4. **Production migrations run only from `main`** after the full suite passes
 
 ## 🚀 **NEW SIMPLIFIED APPROACH: Database Reset Instead of Drift Detection**
 

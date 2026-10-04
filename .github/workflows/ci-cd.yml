@@ -637,15 +637,28 @@ jobs:
       # already prove, at similar cost.
 
   # Production Migration (only on main branch)
+  #
+  # Runs automatically once build-verification passes — there is no manual
+  # approval step. The job deliberately has no `environment:`: referencing the
+  # `production` environment is what applied its required-reviewer rule, so
+  # DATABASE_URL_PROD must be a repository secret, not a production-environment
+  # one. The first step fails loudly if it is not.
   migrate-prod:
-    # Generous: this job sits behind the production environment's manual approval,
-    # so the clock includes however long a human takes to click approve.
-    timeout-minutes: 30
+    # Observed runs take ~30s; this bounds a hung migration, not a human.
+    timeout-minutes: 15
     needs: [build-verification]
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    environment: production   # requires manual approval in GitHub
     steps:
+      - name: Require production database secret
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "::error::DATABASE_URL_PROD is empty. This job no longer uses the 'production' environment, so the secret must be a repository secret (Settings → Secrets and variables → Actions → Repository secrets)."
+            exit 1
+          fi
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL_PROD }}
+
       - name: Checkout code
         uses: actions/checkout@v4
 
