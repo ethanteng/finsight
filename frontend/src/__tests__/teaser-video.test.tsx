@@ -10,7 +10,7 @@ import { GET as captionsGET } from '@/app/video/captions/route';
 import { GET as embedGET } from '@/app/video/embed/route';
 import { TeaserVideo } from '@/components/marketing/TeaserVideo';
 import { CSP_HEADER_SOURCE, buildContentSecurityPolicy } from '@/lib/csp';
-import { DEFAULT_VIDEO, videoId } from '@/lib/teaser-video';
+import { CASH_FLOW_DEFAULT_VIDEO, CASH_FLOW_VIDEO_ITEM, DEFAULT_VIDEO, videoId } from '@/lib/teaser-video';
 
 const CONNECTION = 'https://global-config.vercel.com/ecfg_test?token=read-token';
 const OTHER = 'dQw4w9WgXcQ';
@@ -61,7 +61,8 @@ async function call(
 
 const visit = (options?: Parameters<typeof call>[1], path = '/video/embed') =>
   call(() => embedGET(new NextRequest(`https://asklinc.com${path}`)), options);
-const captions = (options?: Parameters<typeof call>[1]) => call(captionsGET, options);
+const captions = (options?: Parameters<typeof call>[1], path = '/video/captions') =>
+  call(() => captionsGET(new NextRequest(`https://asklinc.com${path}`)), options);
 
 /** Global Config answers with `item`; any other address answers with `files[address]`, or 404. */
 function serving(item: unknown, files: Record<string, string> = {}) {
@@ -103,6 +104,37 @@ describe('/video/embed with a YouTube video', () => {
       'Bearer read-token',
     );
     expect(asked[0].init?.cache).toBe('no-store');
+  });
+
+  it('reads the cash-flow video from its own allowlisted Global Config item', async () => {
+    const { response, asked } = await visit(
+      { connection: CONNECTION, answer: MP4 },
+      '/video/embed?item=cash-flow-video',
+    );
+
+    expect(response.status).toBe(200);
+    expect(asked[0].to).toBe('https://global-config.vercel.com/ecfg_test/item/cash-flow-video');
+    expect(await response.text()).toContain(`<source src="${MP4}" type="video/mp4">`);
+  });
+
+  it('does not let an arbitrary item name become a Global Config path', async () => {
+    const { asked } = await visit(
+      { connection: CONNECTION, answer: OTHER },
+      '/video/embed?item=anything-else',
+    );
+
+    expect(asked[0].to).toBe('https://global-config.vercel.com/ecfg_test/item/video');
+  });
+
+  it('falls back to the cash-flow demo when that config item is missing', async () => {
+    const { response } = await visit(
+      { connection: CONNECTION, answer: () => new Response('', { status: 404 }) },
+      '/video/embed?item=cash-flow-video',
+    );
+    const body = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(body).toContain(`<source src="${CASH_FLOW_DEFAULT_VIDEO}" type="video/mp4">`);
   });
 
   it('still works with a store connected as EDGE_CONFIG, before the rename', async () => {
@@ -266,6 +298,17 @@ describe('/video/captions', () => {
     expect(withBom.response.status).toBe(200);
   });
 
+  it('uses the matching config item when feature-specific captions are requested', async () => {
+    const item = { mp4: MP4, captions: CAPTIONS };
+    const { response, asked } = await captions(
+      { connection: CONNECTION, answer: serving(item, { [CAPTIONS]: VTT }) },
+      '/video/captions?item=cash-flow-video',
+    );
+
+    expect(response.status).toBe(200);
+    expect(asked[0].to).toBe('https://global-config.vercel.com/ecfg_test/item/cash-flow-video');
+  });
+
   it("is a 404 when there are no captions, or they aren't WebVTT", async () => {
     const cases: Record<string, Answer> = {
       'a YouTube video': serving(OTHER),
@@ -324,6 +367,15 @@ describe('TeaserVideo', () => {
     expect(markup).toContain('src="/video/embed"');
     expect(markup).not.toMatch(/src="[^"]*youtube/);
     expect(markup).toContain('referrerPolicy="strict-origin-when-cross-origin"');
+  });
+
+  it('can point the shared player at a feature-specific config item', () => {
+    const markup = renderToStaticMarkup(
+      <TeaserVideo configItem={CASH_FLOW_VIDEO_ITEM} title="Ask Linc cash flow demo" />,
+    );
+
+    expect(markup).toContain('src="/video/embed?item=cash-flow-video"');
+    expect(markup).toContain('title="Ask Linc cash flow demo"');
   });
 
   /*
