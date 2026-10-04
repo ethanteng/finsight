@@ -294,6 +294,16 @@ describe('retirement scenario runner', () => {
       retirementAnalysisNeedsInfo: { missingParams: ['annualWithdrawalAmount'], detectedParams: {} },
     } as any, { requested: true, primary: { type: 'flat_nominal' } });
     expect(describeRetirementScenarioExecution(missingInput)).toBeNull();
+
+    // A stale baseline with holdings gone: same wall, same silence. Reporting
+    // "holdings are required" after the missing-input note repeated it.
+    const staleBaseline = await runRetirementScenario({
+      retirementAnalysis: { _storedInputParams: { currentAge: 40, retirementAge: 65 } },
+      retirementAnalysisNeedsInfo: { missingParams: [], detectedParams: {}, unavailableCode: 'no_holdings' },
+      investments: { holdings: [], securities: [] },
+    } as any, { requested: true, primary: { type: 'flat_nominal' } });
+    expect(staleBaseline).toMatchObject({ status: 'unavailable', baselineBlockerExplained: true });
+    expect(describeRetirementScenarioExecution(staleBaseline)).toBeNull();
   });
 
   it('still reports a baseline that failed for a reason the user is not told about', async () => {

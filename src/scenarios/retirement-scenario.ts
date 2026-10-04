@@ -543,7 +543,14 @@ export async function runRetirementScenario(
     );
   }
   if (!holdings?.length || !securities?.length) {
-    return unavailable(startedAt, 'Investment holdings and security details are required to run a retirement scenario.');
+    // No holdings is already explained by the missing-input note (and by any
+    // stated-plan or Coast FIRE answer). Empty securities with holdings still
+    // present is ours to report -- collectMissingInputAsks does not cover it.
+    return unavailable(
+      startedAt,
+      'Investment holdings and security details are required to run a retirement scenario.',
+      !holdings?.length && baselineBlockerExplained(snapshot)
+    );
   }
   if (
     stored.currentAge == null ||
