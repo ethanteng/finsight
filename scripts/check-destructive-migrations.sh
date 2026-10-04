@@ -23,9 +23,29 @@ if [ "$#" -eq 0 ]; then
   exit 0
 fi
 
-# Extended regex, matched case-insensitively against the migration with comments
-# removed and all whitespace collapsed to single spaces.
-DESTRUCTIVE_PATTERN='DROP (TABLE|COLUMN|SCHEMA|DATABASE|TYPE)\b|DROP (IF EXISTS )?"|ALTER COLUMN ("[^"]+"|[^ ]+) (SET DATA )?TYPE\b|\bTRUNCATE\b|\bDELETE FROM\b'
+# Prints each destructive match in a migration.sql, after removing comments and
+# collapsing whitespace. Perl rather than grep -E: telling a column drop from
+# DROP CONSTRAINT needs a lookahead, because PostgreSQL makes COLUMN optional in
+# both `DROP [COLUMN] name` and `ALTER [COLUMN] name [SET DATA] TYPE`.
+# shellcheck disable=SC2016  # $-sigils below are Perl's, not the shell's
+FIND_DESTRUCTIVE='
+  s{/\*.*?\*/}{ }gs; s{--[^\n]*}{}g; s{\s+}{ }g;
+  my $id = qr/(?:"[^"]+"|[^\s,;()"]+)/;
+  my @patterns = (
+    # DROP TABLE / COLUMN / SCHEMA / DATABASE / TYPE statements and actions
+    qr/\bDROP (?:TABLE|COLUMN|SCHEMA|DATABASE|TYPE)\b/i,
+    # A column drop without COLUMN: in ALTER TABLE action position (right after
+    # the table name, or after a comma in an action list) DROP is either
+    # DROP CONSTRAINT or a column drop
+    qr/(?:\bALTER TABLE (?:IF EXISTS )?(?:ONLY )?$id(?:\.$id)? |, ?)\KDROP (?!CONSTRAINT\b|COLUMN\b)(?:IF EXISTS )?$id/i,
+    # A column type change, with or without COLUMN. Without it, the lookahead
+    # keeps ALTER TABLE/TYPE on something named "type" from reading as one
+    qr/\bALTER (?:COLUMN |(?!(?:COLUMN|TABLE|TYPE)\b))$id (?:SET DATA )?TYPE\b/i,
+    qr/\bTRUNCATE\b/i,
+    qr/\bDELETE FROM\b/i,
+  );
+  for my $pattern (@patterns) { print "$&\n" while /$pattern/g }
+'
 OPT_IN_PATTERN='^[[:space:]]*--[[:space:]]*allow-destructive:[[:space:]]*[^[:space:]]'
 
 blocked=0
@@ -40,8 +60,7 @@ for dir in "$@"; do
     continue
   fi
 
-  hits=$(perl -0777 -pe 's{/\*.*?\*/}{ }gs; s{--[^\n]*}{}g; s{\s+}{ }g' "$sql" \
-    | grep -oiE "$DESTRUCTIVE_PATTERN" | sort | uniq -c || true)
+  hits=$(perl -0777 -ne "$FIND_DESTRUCTIVE" "$sql" | sort | uniq -c)
 
   if [ -z "$hits" ]; then
     echo "✅ $name: no destructive SQL"
