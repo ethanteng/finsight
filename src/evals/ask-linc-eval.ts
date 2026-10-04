@@ -3,13 +3,15 @@ import { resolveRetirementInputs } from '../openai/retirement-inputs';
 import type { FinancialContextSnapshot } from '../openai/types';
 import { normalizeContextPacks, questionNeedsFromPacks } from '../openai/context-packs';
 import type { ContextPlan } from '../openai/context-planner';
+import { scenarioCalculatorRegistry } from '../scenarios/calculator-registry';
 
 export type AskLincEvalCategory =
   | 'numerical_accuracy'
   | 'follow_up'
   | 'stale_data'
   | 'missing_data'
-  | 'retirement';
+  | 'retirement'
+  | 'calculator_follow_up';
 
 export interface AskLincEvalResult {
   id: string;
@@ -287,6 +289,70 @@ export async function runAskLincEvalSet(): Promise<AskLincEvalResult[]> {
     },
   });
 
+  // The first follow-up of someone the Coast FIRE calculator sent here: the
+  // same question, asked again in Ask Linc, with nothing linked. This used to
+  // end on "link an investment account" and told them the calculator's own
+  // figures were unconfirmed.
+  const coastQuestion = 'Have I reached Coast FIRE? I am 38 now and plan to retire at 55. I have $500,000 ' +
+    'in retirement savings and expect to spend $80,000 a year once I stop. I assumed 5% growth a year after ' +
+    'inflation and a 4% withdrawal rate.';
+  const coastSnapshot = baseSnapshot();
+  coastSnapshot.retirementAnalysisNeedsInfo = {
+    missingParams: [],
+    detectedParams: {},
+    unavailableReason: 'No linked investment holdings are available.',
+    unavailableCode: 'no_holdings',
+  };
+  const coastPacks = normalizeContextPacks(['retirement_analysis']);
+  const coastStated = { currentAge: 38, retirementAge: 55, currentSavings: 500_000, annualRetirementSpending: 80_000, realReturnRatePercent: 5, withdrawalRatePercent: 4 };
+  const coastFields = ['currentAge', 'retirementAge', 'currentSavings', 'annualRetirementSpending', 'annualRetirementIncome', 'realReturnRatePercent', 'withdrawalRatePercent', 'annualContribution'];
+  const coastVariant = (values: Record<string, number>) => ({
+    overrides: {
+      ...Object.fromEntries(coastFields.map(field => [field, values[field] ?? null])),
+      sources: Object.fromEntries(coastFields.map(field => [field, values[field] !== undefined ? coastQuestion.slice(0, 60) : null])),
+    },
+  });
+  const coastPlan: ContextPlan = {
+    source: 'context_planner',
+    requestedPacks: ['retirement_analysis'],
+    selectedPacks: coastPacks,
+    questionNeeds: questionNeedsFromPacks(coastPacks, true),
+    needsSecondaryValidation: true,
+    retirementInputs: { sources: {} },
+    scenarioPlans: scenarioCalculatorRegistry.parsePlans({
+      coast_fire: { requested: true, primary: coastVariant(coastStated), comparison: coastVariant({}) },
+    }),
+    searchQueries: [],
+    summary: 'A Coast FIRE question from the calculator run that opened this decision.',
+    model: 'offline-context-planner',
+    durationMs: 0,
+  };
+  let coastSystemPrompt = '';
+  const coastFollowUp = await runAskLincAnalysis({
+    question: coastQuestion,
+    conversationHistory: [{
+      id: 'calculator-first-decision',
+      question: coastQuestion,
+      answer: 'On the assumptions you entered, not yet. Your Coast FIRE number was $872,593, and you have $500,000.',
+      createdAt: new Date('2026-08-14T11:00:00.000Z'),
+    }],
+    enableValidation: false,
+    evaluation: {
+      snapshot: coastSnapshot,
+      contextPlan: coastPlan,
+      skipToneConfig: true,
+      model: ({ systemPrompt, userMessage }) => {
+        coastSystemPrompt = systemPrompt;
+        const factId = /"(coast_fire_scenario_[0-9a-f]+_coast_fire_number)"/.exec(userMessage)?.[1] ?? 'missing';
+        return jsonResponse(
+          'Not yet on these assumptions: your Coast FIRE number is $872,593 and you have $500,000.',
+          { coast_fire_number: { value: 872_593.38, unit: 'usd', provenance: factId } }
+        );
+      },
+    },
+  });
+  const coastSummary = coastFollowUp.structuredResponse.summary;
+
   const retirementInputs = resolveRetirementInputs({
     questionParams: { retirementAge: 65 } as any,
     profileAge: 45,
@@ -352,6 +418,17 @@ export async function runAskLincEvalSet(): Promise<AskLincEvalResult[]> {
         keyNumberValue(retirement, 'withdrawal_rate') === 4 &&
         retirement.showTheMathData!.evidenceManifest.validation.deterministic.valid,
       detail: 'The real pipeline explains deterministic retirement-start facts and carries the accumulation assumption.',
+    },
+    {
+      id: 'calculator-follow-up-answers-without-linked-holdings',
+      category: 'calculator_follow_up',
+      passed: keyNumberValue(coastFollowUp, 'coast_fire_number') === 872_593.38 &&
+        coastFollowUp.showTheMathData!.evidenceManifest.validation.deterministic.valid &&
+        coastSummary.includes('Coast FIRE assumptions: 5% a year after inflation') &&
+        coastSummary.endsWith('not just whether one average return clears the bar.') &&
+        !coastSummary.includes('I could not run') &&
+        coastSystemPrompt.includes('Never tell the user that a figure in an earlier answer is unverified'),
+      detail: 'A calculator lead with nothing linked gets the deterministic answer, its assumptions, and what linking would add -- not a refusal.',
     },
     {
       id: 'retirement-does-not-default-withdrawal',

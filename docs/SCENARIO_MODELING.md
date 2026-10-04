@@ -2,7 +2,7 @@
 
 Ask Linc can answer a supported what-if question with newly calculated, conditional results. A scenario result is not an observed financial fact and is not a forecast or guarantee. It is a deterministic model output produced from the user's canonical data plus a disclosed assumption ledger.
 
-The registered calculators cover retirement withdrawal planning and target-home affordability. The scenario boundary lives under `src/scenarios/` so additional domains can add their own validated plans, packs, defaults, outputs, and execution without moving arithmetic into an LLM.
+The registered calculators cover retirement withdrawal planning, target-home affordability, Coast FIRE, and a retirement plan from stated figures for accounts with no holdings linked. The scenario boundary lives under `src/scenarios/` so additional domains can add their own validated plans, packs, defaults, outputs, and execution without moving arithmetic into an LLM.
 
 ## Request flow
 
@@ -100,6 +100,35 @@ Outputs include mortgage principal, principal and interest, all-in monthly owner
 
 A completed variant also names its binding constraint: the first failing constraint in the order upfront cash, monthly cash flow, a stated take-home-funded retirement contribution, emergency-fund floor, or `none` when all of them clear. Closing is impossible without the upfront cash, a negative operating surplus is structural, and the reserve floor is a cushion rather than a payment obligation. The binding constraint is withheld while the assessment is `incomplete`, because a missing input is not a shortfall. Two requested variants also receive deterministic monthly-cost and upfront-cash comparisons.
 
+## Before anything is linked
+
+Everyone the public calculators send to Ask Linc arrives with no accounts linked, and their first follow-up is about the run that opened their account. The holdings-based retirement projection has nothing to run for them, so those follow-ups used to end on "link an investment account" with no reason given. Two calculators answer them from the figures the user states instead, and linking becomes the upgrade rather than the price of an answer.
+
+### Coast FIRE
+
+The `coast_fire` calculator runs `services/coast-fire.ts`, the same formula the public page uses, on stated figures. Current age falls back to an age the user told Linc earlier and savings to the connected investment total; the return (5%) and withdrawal rate (4%) fall back to the public calculator's defaults, and retirement income to none. Each fallback is named in the disclosure. Age, retirement age, savings and spending are never defaulted: a request missing one asks for it ("no linked accounts needed") instead of running.
+
+Given what the user invests each year, it also finds the first birthday at which savings could stop receiving new money and still reach the target. Contributions are added once a year, at the end of the year, and reaching the target only in the retirement year is not reported as coasting. A stated range ("$74,000 to $83,000") is planned as two variants, low and high.
+
+It requires the retirement pack. Coast FIRE itself needs nothing linked, but a user who has linked holdings then also gets the historical projection of leaving them alone until retirement, which is the answer the straight line stands in for.
+
+### Retirement plan from stated figures
+
+The `stated_retirement_plan` calculator runs the public retirement calculator's engine (`services/retirement-quickplan.ts`): the user's stated plan against the full historical record, on a disclosed preset mix rather than their holdings. It never defaults the amount invested, spending, current age or retirement age; it asks for them, and offers linking as the alternative. The mix defaults to the Balanced preset and the horizon to age 95. A change to an earlier plan ("what if I retire at 62 instead?") runs as a comparison against the plan as first stated. The engine's fixed levers (retire two or five years later, spend 10% less) are promoted as facts for the primary case.
+
+It declares `appliesTo`: once any holdings are linked it does not apply, its plan is dropped before execution, and the holdings-based projection answers instead. A dropped plan is not recorded as a request, so Answer Quality does not count it as a scenario that failed to run.
+
+### What the answer says about linking
+
+`collectMissingInputAsks` decides the note for a retirement question with no holdings linked, and it closes the answer, after every assumption disclosure:
+
+- after a stated plan ran: what linking would change about it (the real mix and balances instead of the preset);
+- after Coast FIRE ran: that linking adds a historical run of what the user holds, left alone to the retirement age;
+- while either calculator is asking for figures: nothing, since that ask already offers linking;
+- otherwise: why the projection needs holdings, and that stated figures get a preset-mix run in the meantime.
+
+The retirement scenario's "a completed retirement baseline is required" disclosure is suppressed whenever the baseline was blocked by something that note, or another missing-input ask, already explains.
+
 ## Evidence and persistence
 
 Each scenario ID is a SHA-256 content fingerprint of its validated inputs, calculator version, and core outputs. Retirement IDs include the portfolio/security boundary, planning inputs, and withdrawal policy. Home-affordability IDs include the resolved purchase, mortgage, ownership-cost, cash, and cash-flow assumptions. The compact execution record includes:
@@ -118,6 +147,9 @@ Records are persisted inside the conversation's Show the Math evidence manifest 
 | `src/scenarios/calculator-registry.ts` | Calculator manifest, lookup, parsing, execution, and evidence contracts |
 | `src/scenarios/retirement-scenario.ts` | Plan schema, validation, execution, IDs, assumption ledger, canonical facts, disclosure, and compact evidence |
 | `src/scenarios/home-affordability-scenario.ts` | Target-home inputs, mortgage and ownership-cost math, lower-bound coverage rules, cash-flow outputs, canonical facts, and disclosure |
+| `src/scenarios/coast-fire-scenario.ts` | Coast FIRE from stated figures, the contribution path to coasting, canonical facts, and disclosure |
+| `src/scenarios/stated-retirement-plan-scenario.ts` | The quick-plan engine on stated figures while no holdings are linked, canonical facts, and disclosure |
+| `src/openai/missing-inputs.ts` | The closing note when no holdings are linked, tailored to the calculator that answered |
 | `src/retirement-analytics/engine/withdrawal-simulator.ts` | Withdrawal policy mechanics |
 | `src/openai/context-planner.ts` | Semantic scenario identification in the preflight pass |
 | `src/openai/claude-client.ts` | Scenario audit in the primary model's forced tool call |

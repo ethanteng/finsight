@@ -507,6 +507,16 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
   // late recovery path can replace questionNeeds with its exhaustive selection.
   const plannedQuestionNeeds = { ...questionNeeds };
 
+  // A calculator that stands in for missing data has nothing to add once the
+  // data is there. Dropping its plan here, against the final snapshot, keeps a
+  // user with linked holdings from being reported as a request that did not run.
+  scenarioPlans = scenarioCalculatorRegistry.applicablePlans(snapshot, scenarioPlans);
+  if (contextTool?.scenarios) {
+    const applicableToolScenarios = scenarioCalculatorRegistry.applicablePlans(snapshot, contextTool.scenarios);
+    if (Object.keys(applicableToolScenarios).length > 0) contextTool.scenarios = applicableToolScenarios;
+    else delete contextTool.scenarios;
+  }
+
   const scenarioExecutions = await scenarioCalculatorRegistry.executePlans(
     snapshot,
     scenarioPlans,
@@ -833,14 +843,6 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
 
   onProgress?.('Formatting response');
 
-  // When something the question needed is missing and the user is the one who
-  // can supply it, ask for it. Appended after validation because it is
-  // server-authored: these values come from persisted state, not the model.
-  const missingInputsAsk = describeMissingInputs(snapshot, plannedQuestionNeeds);
-  if (missingInputsAsk) {
-    structuredResponse = appendNotice(structuredResponse, missingInputsAsk);
-  }
-
   // A projection is only as right as the inputs read out of the conversation.
   // Stating them — with the user's own words where they are known — turns a
   // misread from something found later in the math into something corrected in
@@ -857,6 +859,16 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
   }
   for (const disclosure of scenarioCalculatorRegistry.assumptionDisclosures(scenarioExecutions)) {
     structuredResponse = appendNotice(structuredResponse, disclosure);
+  }
+
+  // When something the question needed is missing and the user is the one who
+  // can supply it, ask for it. Appended after validation because it is
+  // server-authored: these values come from persisted state, not the model.
+  // Last, so the answer closes on what the user can do next -- after the
+  // assumptions it would change, not before them.
+  const missingInputsAsk = describeMissingInputs(snapshot, plannedQuestionNeeds);
+  if (missingInputsAsk) {
+    structuredResponse = appendNotice(structuredResponse, missingInputsAsk);
   }
 
   // Step 6: Output validation (security)

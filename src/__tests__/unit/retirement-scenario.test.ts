@@ -1,6 +1,7 @@
 import {
   DEFAULT_FIXED_WITHDRAWAL_GROWTH_RATE,
   compactRetirementScenarioExecution,
+  describeRetirementScenarioExecution,
   parseRetirementScenarioPlan,
   runRetirementScenario,
 } from '../../scenarios/retirement-scenario';
@@ -278,6 +279,28 @@ describe('retirement scenario runner', () => {
       status: 'unavailable',
       reason: expect.stringMatching(/baseline/i),
     });
+  });
+
+  it('stays silent when the answer already explains why the baseline did not run', async () => {
+    // No holdings linked: the missing-input note says so, and what linking adds.
+    // "A completed retirement baseline is required" after it repeated the wall.
+    const blocked = await runRetirementScenario({
+      retirementAnalysisNeedsInfo: { missingParams: [], detectedParams: {}, unavailableCode: 'no_holdings' },
+    } as any, { requested: true, primary: { type: 'flat_nominal' } });
+    expect(blocked).toMatchObject({ status: 'unavailable', baselineBlockerExplained: true });
+    expect(describeRetirementScenarioExecution(blocked)).toBeNull();
+
+    const missingInput = await runRetirementScenario({
+      retirementAnalysisNeedsInfo: { missingParams: ['annualWithdrawalAmount'], detectedParams: {} },
+    } as any, { requested: true, primary: { type: 'flat_nominal' } });
+    expect(describeRetirementScenarioExecution(missingInput)).toBeNull();
+  });
+
+  it('still reports a baseline that failed for a reason the user is not told about', async () => {
+    const execution = await runRetirementScenario({
+      retirementAnalysisNeedsInfo: { missingParams: [], detectedParams: {}, unavailableCode: 'service_error' },
+    } as any, { requested: true, primary: { type: 'flat_nominal' } });
+    expect(describeRetirementScenarioExecution(execution)).toMatch(/could not run the requested scenario/);
   });
 
   it('treats an empty securities list as missing investment details', async () => {

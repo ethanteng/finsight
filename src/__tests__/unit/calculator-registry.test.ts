@@ -10,6 +10,8 @@ import {
   type RetirementScenarioPlan,
 } from '../../scenarios/retirement-scenario';
 import { HOME_AFFORDABILITY_CALCULATOR_ID } from '../../scenarios/home-affordability-scenario';
+import { COAST_FIRE_CALCULATOR_ID } from '../../scenarios/coast-fire-scenario';
+import { STATED_RETIREMENT_PLAN_CALCULATOR_ID } from '../../scenarios/stated-retirement-plan-scenario';
 
 describe('scenario calculator registry', () => {
   const fakeCalculator: ScenarioCalculatorDefinition<
@@ -71,6 +73,8 @@ describe('scenario calculator registry', () => {
     expect(scenarioCalculatorRegistry.ids()).toEqual([
       RETIREMENT_CALCULATOR_ID,
       HOME_AFFORDABILITY_CALCULATOR_ID,
+      COAST_FIRE_CALCULATOR_ID,
+      STATED_RETIREMENT_PLAN_CALCULATOR_ID,
     ]);
     expect(scenarioCalculatorRegistry.manifests()).toContainEqual(expect.objectContaining({
       id: 'retirement',
@@ -148,6 +152,46 @@ describe('scenario calculator registry', () => {
       withdrawalStartAge: 65,
       lifeExpectancy: 100,
     });
+  });
+
+  it('publishes the two stated-figure calculators with the retirement pack they ride on', () => {
+    const manifests = scenarioCalculatorRegistry.manifests();
+    expect(manifests).toContainEqual(expect.objectContaining({
+      id: 'coast_fire',
+      requiredPacks: ['retirement_analysis'],
+      defaults: expect.arrayContaining([
+        expect.objectContaining({ id: 'real_return_rate_percent', value: 5 }),
+        expect.objectContaining({ id: 'withdrawal_rate_percent', value: 4 }),
+      ]),
+    }));
+    expect(manifests).toContainEqual(expect.objectContaining({
+      id: 'stated_retirement_plan',
+      requiredPacks: ['retirement_analysis'],
+      defaults: expect.arrayContaining([
+        expect.objectContaining({ id: 'allocation', value: 'balanced' }),
+      ]),
+    }));
+  });
+
+  it('drops the plans of calculators that do not apply to this snapshot', () => {
+    const standIn = { ...fakeCalculator, id: 'stand_in', appliesTo: (snapshot: any) => !snapshot.linked };
+    const registry = new ScenarioCalculatorRegistry([fakeCalculator, standIn]);
+    const plans = { fake: { value: 1 }, stand_in: { value: 2 } };
+
+    expect(registry.applicablePlans({ linked: false } as any, plans)).toEqual(plans);
+    expect(registry.applicablePlans({ linked: true } as any, plans)).toEqual({ fake: { value: 1 } });
+  });
+
+  it('runs the stated retirement plan only while no holdings are linked', () => {
+    const plans = { stated_retirement_plan: { requested: true, primary: {} } };
+    expect(scenarioCalculatorRegistry.applicablePlans(
+      { investments: { holdings: [] } } as any,
+      plans
+    )).toEqual(plans);
+    expect(scenarioCalculatorRegistry.applicablePlans(
+      { investments: { holdings: [{ id: 'h1' }] } } as any,
+      plans
+    )).toEqual({});
   });
 
   it('rejects duplicate calculator ids at registry construction', () => {

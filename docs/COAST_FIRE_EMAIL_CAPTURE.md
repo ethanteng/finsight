@@ -130,6 +130,10 @@ The capture is keyed on each run rather than on its inputs, so an identical
 re-run gets a fresh form. A send still in flight when the visitor re-runs is
 ignored when it returns.
 
+### Follow-ups in Ask Linc
+
+The visitor's next question is about this run, and they have linked nothing. Ask Linc answers it from their figures rather than asking them to link an account first: the `coast_fire` calculator for Coast FIRE, and the `stated_retirement_plan` calculator for a retirement-calculator plan. Linking is offered at the end of the answer as what would make it better. See "Before anything is linked" in `docs/SCENARIO_MODELING.md`.
+
 ## Three runs, then the save
 
 The Calculate button locks after three completed runs, and a line under it
