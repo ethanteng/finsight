@@ -25,6 +25,7 @@
 export const DEFAULT_VIDEO = 'GRBboPyuL5U';
 export const DEFAULT_VIDEO_ITEM = 'video';
 export const CASH_FLOW_VIDEO_ITEM = 'cash-flow-video';
+export const CASH_FLOW_DEFAULT_VIDEO = 'https://yl8kvnxayhtpx27d.public.blob.vercel-storage.com/Cash%20Flow%20Demo%20compressed.mp4';
 export type VideoConfigItem = typeof DEFAULT_VIDEO_ITEM | typeof CASH_FLOW_VIDEO_ITEM;
 const VIDEO_CONFIG_ITEMS = new Set<VideoConfigItem>([DEFAULT_VIDEO_ITEM, CASH_FLOW_VIDEO_ITEM]);
 const VIDEO_ID = /^[A-Za-z0-9_-]{11}$/;
@@ -149,11 +150,18 @@ async function configuredVideo(env: NodeJS.ProcessEnv, item: VideoConfigItem): P
 }
 
 /** What the teaser should play right now. */
+function fallbackVideo(item: VideoConfigItem): TeaserVideoSource {
+  if (item === CASH_FLOW_VIDEO_ITEM) {
+    return chooseVideo(CASH_FLOW_DEFAULT_VIDEO)!;
+  }
+  return { youtube: DEFAULT_VIDEO };
+}
+
 export async function teaserVideo(
   env: NodeJS.ProcessEnv = process.env,
   item: VideoConfigItem = DEFAULT_VIDEO_ITEM,
 ): Promise<TeaserVideoSource> {
-  return chooseVideo(await configuredVideo(env, item)) ?? { youtube: DEFAULT_VIDEO };
+  return chooseVideo(await configuredVideo(env, item)) ?? fallbackVideo(item);
 }
 
 /**
