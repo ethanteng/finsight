@@ -86,6 +86,45 @@ export function unlinkedCategories(linked: LinkedData | undefined): string[] {
   return missing;
 }
 
+export type OverviewTotal = 'netWorth' | 'totalCash' | 'totalInvestments' | 'totalDebt';
+
+const isZeroOrMissing = (value: unknown): boolean =>
+  typeof value !== 'number' || !Number.isFinite(value) || value === 0;
+
+/**
+ * Which overview totals describe the user rather than an empty connection, and
+ * what net worth leaves out. A zero from a kind of account nobody linked is an
+ * empty connection; a nonzero total is real money from somewhere and stays.
+ * With nothing linked there is no net worth to state. Without the record,
+ * every total shows, as it always has. The fact pack and the reviewer both
+ * read this, so neither is shown a zero the other is told to ignore.
+ */
+export function linkedOverview(
+  linked: LinkedData | undefined,
+  overview: { totalCash?: unknown; totalInvestments?: unknown; totalDebt?: unknown }
+): { shown: Set<OverviewTotal>; netWorthLeavesOut: string[] } {
+  if (!linked) return { shown: new Set(['netWorth', 'totalCash', 'totalInvestments', 'totalDebt']), netWorthLeavesOut: [] };
+  if (linked.accounts === 0) return { shown: new Set(), netWorthLeavesOut: [] };
+  const debtLinked = linked.credit + linked.loans;
+  const shown = new Set<OverviewTotal>(['netWorth']);
+  if (!(linked.cash === 0 && isZeroOrMissing(overview.totalCash))) shown.add('totalCash');
+  if (!(linked.investments === 0 && isZeroOrMissing(overview.totalInvestments))) shown.add('totalInvestments');
+  if (!(debtLinked === 0 && isZeroOrMissing(overview.totalDebt))) shown.add('totalDebt');
+  return {
+    shown,
+    netWorthLeavesOut: [
+      linked.cash === 0 ? 'cash accounts' : null,
+      linked.investments === 0 ? 'investment accounts' : null,
+      debtLinked === 0 ? 'credit cards or loans' : null,
+    ].filter((item): item is string => item !== null),
+  };
+}
+
+/** A zero portfolio with no investment account linked: an empty connection. */
+export function emptyPortfolio(linked: LinkedData | undefined, value: unknown): boolean {
+  return linked?.investments === 0 && isZeroOrMissing(value);
+}
+
 /**
  * A short, model-facing statement of what is and is not linked, so a zero
  * from an empty connection is never repeated as a fact about the user. Null

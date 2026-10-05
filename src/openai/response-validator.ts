@@ -14,7 +14,7 @@ import { mergeAssetAllocation } from '../services/asset-class';
 import { MAX_UNMODELED_REASON_FACTS } from './canonical-facts';
 import { getActiveModel, getActiveNumericGenerationSetting } from './model-config';
 import { cashFlowForecastFacts } from './cash-flow-forecast-context';
-import { describeLinkedDataForModel } from './linked-data';
+import { describeLinkedDataForModel, emptyPortfolio, linkedOverview } from './linked-data';
 
 
 const GOOGLE_AI_API_KEY = process.env.GOOGLE_AI_API_KEY || process.env.GEMINI_API_KEY || '';
@@ -163,11 +163,22 @@ export function buildSnapshotSummaryForValidation(snapshot: FinancialContextSnap
     }
   }
 
+  // The same totals the fact pack publishes: a zero from a kind nobody linked
+  // is left out here too, or the reviewer would be told both that the user's
+  // cash is not zero and that it is.
   const overview = snapshot.financialSummary?.financialOverview;
   if (overview) {
-    parts.push(
-      `Financial overview: netWorth=${overview.netWorth}, totalCash=${overview.totalCash}, totalInvestments=${overview.totalInvestments}, totalDebt=${overview.totalDebt}, homeValue=${overview.homeValue ?? 'null'}`
-    );
+    const { shown, netWorthLeavesOut } = linkedOverview(snapshot.linkedData, overview);
+    const totals = [
+      shown.has('netWorth')
+        ? `netWorth=${overview.netWorth}${netWorthLeavesOut.length > 0 ? ` (linked accounts only; no ${netWorthLeavesOut.join(', no ')} linked)` : ''}`
+        : null,
+      shown.has('totalCash') ? `totalCash=${overview.totalCash}` : null,
+      shown.has('totalInvestments') ? `totalInvestments=${overview.totalInvestments}` : null,
+      shown.has('totalDebt') ? `totalDebt=${overview.totalDebt}` : null,
+      `homeValue=${overview.homeValue ?? 'null'}`,
+    ].filter((item): item is string => item !== null);
+    parts.push(`Financial overview: ${totals.join(', ')}`);
   }
 
   // The primary model is handed the account list only when the plan asks for
@@ -191,7 +202,7 @@ export function buildSnapshotSummaryForValidation(snapshot: FinancialContextSnap
 
   const invPortfolio = snapshot.financialSummary?.investmentPortfolio;
   const invSnapshot = snapshot.investments;
-  if (invPortfolio) {
+  if (invPortfolio && !emptyPortfolio(snapshot.linkedData, invPortfolio.totalValue)) {
     parts.push(
       `Investment portfolio: totalValue=${invPortfolio.totalValue}, holdingsCount=${invPortfolio.holdingsCount}`
     );

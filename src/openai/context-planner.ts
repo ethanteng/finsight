@@ -376,7 +376,10 @@ export function fallbackContextPlan(
     selectedPacks,
     questionNeeds: questionNeedsFromPacks(selectedPacks, true),
     needsSecondaryValidation: true,
-    personalDataQuestion: true,
+    // Nothing here knows what the question means, and with every pack
+    // selected the packs cannot say either. No closing note beats a note about
+    // linking a checking account on "What is a Roth IRA?".
+    personalDataQuestion: false,
     scenarioPlans: {},
     searchQueries: [],
     summary,

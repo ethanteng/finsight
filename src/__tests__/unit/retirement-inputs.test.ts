@@ -3,6 +3,7 @@ import {
   resolveRetirementInputs,
   retirementPortfolioFingerprint,
   sameAssumptions,
+  withoutStoredAssumptions,
 } from '../../openai/retirement-inputs';
 import { describeRetirementAssumptions } from '../../openai/retirement-assumptions';
 
@@ -176,6 +177,16 @@ describe('resolveRetirementInputs with assumptions allowed', () => {
       { annualWithdrawalAmount: 'current_spending', retirementAge: 'convention' }
     )).toBe(true);
     expect(sameAssumptions({}, { retirementAge: 'convention' })).toBe(false);
+  });
+
+  it('forgets an assumed age, and the withdrawal age that followed it, but not one the user named', () => {
+    const stored = { currentAge: 45, retirementAge: 65, annualWithdrawalAmount: 66_000, withdrawalStartAge: 65 };
+    expect(withoutStoredAssumptions(stored, { retirementAge: 'convention', annualWithdrawalAmount: 'current_spending' }))
+      .toEqual({ currentAge: 45 });
+    // "I would start withdrawing at 70", with no retirement age named.
+    expect(withoutStoredAssumptions({ ...stored, withdrawalStartAge: 70 }, { retirementAge: 'convention' }))
+      .toEqual({ currentAge: 45, annualWithdrawalAmount: 66_000, withdrawalStartAge: 70 });
+    expect(withoutStoredAssumptions(stored, {})).toEqual(stored);
   });
 
   it('says where each assumed figure came from in the answer', () => {

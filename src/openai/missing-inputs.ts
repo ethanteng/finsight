@@ -172,7 +172,9 @@ function linkingAsk(
   needs: AskNeeds,
   personalDataQuestion: boolean
 ): MissingInputAsk | null {
-  if (!linked) return null;
+  // A general question is the same for anyone, whatever packs it drew: the
+  // fallback plan selects every pack, so packs alone cannot say it is personal.
+  if (!linked || !personalDataQuestion) return null;
   const cashFlowNeeded = Boolean(
     needs.needsTransactionDetails || needs.needsMonthlyCashFlow || needs.needsCashFlowForecast
   );
@@ -198,7 +200,7 @@ function linkingAsk(
         'mix of stocks and bonds, what each fund charges, and where you are concentrated.',
     };
   }
-  if (personalDataQuestion && linked.accounts === 0) {
+  if (linked.accounts === 0) {
     return {
       id: 'link_anything',
       message: 'Link your accounts and I will answer this from your real numbers instead of what you have told ' +

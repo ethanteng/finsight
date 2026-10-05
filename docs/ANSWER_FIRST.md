@@ -19,7 +19,7 @@ This holds for every user: linked or not, partly linked, arriving from a calcula
 
 - **Fact pack.** With nothing linked, no balance totals are published. With some kinds unlinked, a zero total for an unlinked kind is dropped, and net worth is labelled "across linked accounts only (no … linked)". A nonzero total is real money from somewhere and always stays.
 - **Cash flow.** Income is read only from cash accounts, since a paycheck never lands on a card. Spending is read from cash accounts or cards. With nothing to read a side from, the observed average and the forecast's expected month are null, never zero. A figure the user set themselves is kept either way. The side also comes out of the monthly history (net with it, since net needs both sides) and, for spending, the category totals. With no cash account, the forecast publishes no income or net: its spending, cards and the user's own plans stay.
-- **Prompt.** A short "What the User Has Linked" block says what is not linked, and the reviewer gets the same statement.
+- **Prompt.** A short "What the User Has Linked" block says what is not linked, and the reviewer gets the same statement. The reviewer's overview shows the same totals as the fact pack (`linkedOverview`), so it is never told both that a zero is not the user's and that it is.
 - **Uncertain snapshots.** A snapshot that carries data but no account list keeps the behavior that predates the record. The record only claims "nothing linked" when that is plainly true.
 
 ### The answer prompt (`src/openai/financial-reasoning-prompt.ts`)
@@ -44,7 +44,7 @@ Numbers in the user's earlier messages in the same decision are `user_input` fac
 
 Current age, how much someone has invested, and (for Coast FIRE) spending with nothing to read it from are still asked for. Nothing the application holds can stand in for them.
 
-An assumed retirement input is persisted with the analysis under `assumedInputs`. It is stripped before the next resolution, so an assumed 65 or last month's spending is never read back as the user's plan. A figure the user gave in an earlier conversation is theirs and is not listed there. Fact labels mark assumed inputs ("assumed: equal to the user's current annual spending"), so the model cannot present them as something the user said.
+An assumed retirement input is persisted with the analysis under `assumedInputs`. It is stripped before the next resolution, so an assumed 65 or last month's spending is never read back as the user's plan. A withdrawal start age that followed an assumed retirement age goes with it; one the user named apart from it stays. A figure the user gave in an earlier conversation is theirs and is not listed there. Fact labels mark assumed inputs ("assumed: equal to the user's current annual spending"), so the model cannot present them as something the user said.
 
 ### The closing note (`src/openai/missing-inputs.ts`)
 
@@ -55,7 +55,7 @@ At most one note, the most specific that applies:
 - A retirement question with no holdings: the notes in `docs/SCENARIO_MODELING.md` ("Before anything is linked"), which name the preset the calculators used.
 - Otherwise, a question about the user's own money with nothing linked at all.
 
-The last case needs the context planner's `personalDataQuestion` flag. "What is my net worth?" selects no optional pack, because the totals are always present, so packs alone cannot tell it from "What is a Roth IRA?". The planner decides from meaning; a plan without the flag reads as personal.
+Every case needs the context planner's `personalDataQuestion` flag. "What is my net worth?" selects no optional pack, because the totals are always present, so packs alone cannot tell it from "What is a Roth IRA?". The planner decides from meaning; a plan without the flag reads as personal. When the planner fails, the fallback plan selects every pack and knows nothing about meaning, so it sets the flag false and the answer closes on no note rather than a wrong one.
 
 Debt is never raised. No linked card or loan is as likely to mean no debt as unlinked debt. Nothing is said for an account that is linked but has not reported yet, since the user cannot act on that.
 

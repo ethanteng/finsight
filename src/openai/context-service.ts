@@ -16,6 +16,7 @@ import {
 import { buildCanonicalCashFlowAnalyses, withoutUnknownSides } from './cash-flow-context';
 import {
   persistableAssumptions,
+  withoutStoredAssumptions,
   resolveRetirementInputs,
   retirementPortfolioFingerprint,
   resolveStoredAsOfDate,
@@ -887,9 +888,7 @@ async function fetchOrCreateRetirementAnalysis(args: {
       ? storedAnalysisInput.assumedInputs as AssumedRetirementInputs
       : {}
   );
-  const storedInputForResolution: Record<string, number | null | undefined> = { ...storedInput };
-  for (const field of Object.keys(storedAssumptions)) delete storedInputForResolution[field];
-  if (storedAssumptions.retirementAge) delete storedInputForResolution.withdrawalStartAge;
+  const storedInputForResolution = withoutStoredAssumptions(storedInput, storedAssumptions);
   const { getHistoricalDatasetVersion } = await import('../retirement-analytics/engine/historical-data-loader');
   const historicalDatasetVersion = getHistoricalDatasetVersion();
   const confirmsStoredAnnualWithdrawal =

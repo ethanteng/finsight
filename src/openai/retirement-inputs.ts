@@ -37,6 +37,24 @@ export function persistableAssumptions(assumed: AssumedRetirementInputs): Assume
   ) as AssumedRetirementInputs;
 }
 
+/**
+ * A stored input with what a previous run assumed taken out, so the next run
+ * never reads an assumed 65 or a month-old spending level back as the user's
+ * plan. A withdrawal start age equal to the assumed retirement age followed
+ * it and goes with it; one the user named apart from it is theirs and stays.
+ */
+export function withoutStoredAssumptions<T extends Record<string, unknown>>(
+  storedInput: T,
+  assumptions: AssumedRetirementInputs
+): Partial<T> {
+  const kept: Partial<T> = { ...storedInput };
+  for (const field of Object.keys(assumptions)) delete kept[field];
+  if (assumptions.retirementAge && storedInput.withdrawalStartAge === storedInput.retirementAge) {
+    delete kept.withdrawalStartAge;
+  }
+  return kept;
+}
+
 /** Same fields assumed for the same reasons, regardless of key order. */
 export function sameAssumptions(left: AssumedRetirementInputs, right: AssumedRetirementInputs): boolean {
   const normalize = (value: AssumedRetirementInputs) =>

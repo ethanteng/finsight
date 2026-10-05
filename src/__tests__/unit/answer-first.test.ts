@@ -15,6 +15,8 @@ import { buildCanonicalFactPack } from '../../openai/canonical-facts';
 import { buildFinancialReasoningPrompt, buildPromptInputFromSnapshot } from '../../openai/financial-reasoning-prompt';
 import { collectMissingInputAsks } from '../../openai/missing-inputs';
 import { questionNeedsFromPacks, type ContextPackId } from '../../openai/context-packs';
+import { fallbackContextPlan } from '../../openai/context-planner';
+import { buildSnapshotSummaryForValidation } from '../../openai/response-validator';
 
 const needs = (...packs: ContextPackId[]) => questionNeedsFromPacks(packs, false);
 
@@ -118,6 +120,29 @@ describe('the fact pack never quotes an empty connection', () => {
   });
 });
 
+describe('the reviewer is shown the same totals as the answer', () => {
+  it('leaves out a zero for a kind nobody linked, and names what net worth leaves out', () => {
+    const data = snapshot({
+      linkedData: linked({ accounts: 1, cash: 1, transactionMonths: 3 }),
+      financialSummary: {
+        computedAt: '2026-10-01T00:00:00.000Z',
+        financialOverview: { netWorth: 12_000, totalCash: 12_000, totalInvestments: 0, totalDebt: 0, homeValue: null },
+        investmentPortfolio: { totalValue: 0, holdingsCount: 0, assetAllocation: [] },
+      },
+    });
+    const summary = buildSnapshotSummaryForValidation(data);
+
+    expect(summary).toContain('Financial overview: netWorth=12000 (linked accounts only; no investment accounts, no credit cards or loans linked), totalCash=12000, homeValue=null');
+    expect(summary).not.toMatch(/totalInvestments=|totalDebt=|Investment portfolio:/);
+  });
+
+  it('shows no balances when nothing is linked', () => {
+    const summary = buildSnapshotSummaryForValidation(snapshot({ linkedData: NOTHING_LINKED }));
+    expect(summary).toContain('Financial overview: homeValue=null');
+    expect(summary).not.toMatch(/netWorth=|totalCash=/);
+  });
+});
+
 describe('the answer prompt answers first', () => {
   const { systemPrompt, userMessage } = buildFinancialReasoningPrompt(
     buildPromptInputFromSnapshot('What is my net worth?', snapshot({ linkedData: NOTHING_LINKED }), needs(), [])
@@ -137,7 +162,7 @@ describe('the answer prompt answers first', () => {
 });
 
 describe('the closing note says what linking would change', () => {
-  const ask = (data: Record<string, unknown>, packs: ContextPackId[], personalDataQuestion = false) =>
+  const ask = (data: Record<string, unknown>, packs: ContextPackId[], personalDataQuestion = true) =>
     collectMissingInputAsks(data as any, needs(...packs), { personalDataQuestion });
 
   it('names the account and the better answer for a spending question', () => {
@@ -162,6 +187,15 @@ describe('the closing note says what linking would change', () => {
     expect(ask({ linkedData: NOTHING_LINKED }, [], true).map((note) => note.id)).toEqual(['link_anything']);
     // A general question is the same for anyone; no note.
     expect(ask({ linkedData: NOTHING_LINKED }, [], false)).toEqual([]);
+  });
+
+  it('says nothing for a general question, whatever packs it drew', () => {
+    // The fallback plan selects every pack and claims nothing about meaning.
+    const fallback = fallbackContextPlan();
+    expect(collectMissingInputAsks({ linkedData: NOTHING_LINKED } as any, fallback.questionNeeds, {
+      personalDataQuestion: fallback.personalDataQuestion,
+    })).toEqual([]);
+    expect(ask({ linkedData: NOTHING_LINKED }, ['transaction_details', 'investment_details'], false)).toEqual([]);
   });
 
   it('says nothing when the account is linked and only has not reported yet', () => {
